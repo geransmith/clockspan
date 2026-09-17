@@ -20,7 +20,8 @@ has the user-facing description.
 - Backend: Express 5 (ESM, `NodeNext`, imports use `.js` extensions), `better-sqlite3` (native),
   `openid-client` v6 for OIDC, `cookie` for cookie parsing. Passwords: `node:crypto` scrypt (async).
 - Tests: Vitest 5. Lint: ESLint flat config (`eslint.config.js`: typescript-eslint + react-hooks,
-  syntax rules only). CI: `.github/workflows/ci.yml` runs typecheck, lint, test, build.
+  syntax rules only). CI: `.github/workflows/ci.yml` runs typecheck, lint, test, build on
+  every PR and push; on `main` it also publishes the `edge` image, on `v*` tags the release.
 - One `package.json` for both sides; `tsconfig.json` = client + shared, `tsconfig.server.json` =
   server + shared (`rootDir: .`, so `dist/server` and `dist/shared`).
 
@@ -96,7 +97,9 @@ scripts/screenshots.mjs `npm run screenshots`: dev server (reused or started) + 
                         Chromium over CDP → docs/screenshots/*.png for the README
 docs/screenshots/       committed PNGs the README embeds; regenerate after a visible UI change
 docker/entrypoint.sh    PUID/PGID (default 1000/1000) → chown /data + su-exec; 0 keeps root
-Dockerfile docker-compose.yml .env.example README.md eslint.config.js .github/workflows/ci.yml
+Dockerfile docker-compose.yml .env.example README.md eslint.config.js
+CONTRIBUTING.md         PR and release rules (imported by CLAUDE.md; see "Branches, PRs and releases")
+.github/workflows/ci.yml  check → image (ghcr.io) → release; .github/release.yml groups notes by label
 ```
 
 ## Commands
@@ -115,12 +118,19 @@ npm run screenshots    # regenerate docs/screenshots/ (starts the dev server if 
 npm run build          # dist/client + dist/server + dist/shared
 npm start              # node dist/server/index.js (PORT default 3000; Docker sets 8080)
 npm run reset-password -- <username>
-docker compose up -d --build
+docker compose pull && docker compose up -d   # the published image; see README for building locally
 ```
 
 Dev DB: `./data/focus.db` (gitignored). Delete it to start fresh. `AUTH_MODE=local npm run dev`
 to exercise the setup/login pages. The `prod` config in `.claude/launch.json` builds and serves
 the real bundle on :8090 with the real headers; the `web` config is the dev server.
+
+## Branches, PRs and releases
+
+`main` is protected. Every change is a branch → PR → `check` green → squash merge, and a
+release is a version-bump PR followed by a tag pushed from `main`. The checklist, the PR
+requirements (title, one label, what must pass) and the version rule are in `CONTRIBUTING.md`.
+Follow it as written; it is not advice.
 
 ## Dev data is disposable
 
@@ -363,5 +373,7 @@ Prove a change at the cheapest level that can show it, and stop there:
   `DUMMY_HASH` is computed at import with a top-level `await`, so `password.ts` is ESM-only.
 - `window` `focus` events fire on ordinary clicks in some embedded browsers; timer re-sync is
   throttled and seq-guarded for that reason. Don't add unthrottled focus-driven refetches.
+- `npm version` without `--no-git-tag-version` tags the branch commit, which is not the squash
+  commit that lands on `main`; the release checklist tags `main` after the merge for that reason.
 - Prettier is not configured: the tree was never consistently formatted, so a `--check` would
   touch most files. Match the surrounding style by hand.

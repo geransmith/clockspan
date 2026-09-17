@@ -2,7 +2,10 @@
 
 *Vibe coded — built almost entirely with AI ([Claude Code](https://claude.com/claude-code)), with light human review.*
 
-**Clockspan** is a self-hosted, single-day focus sheet for getting through a workday with ADHD. One page: a punch-style timeclock that works out when lunch is due and when the day ends, the few things that would make today a win, a focus timer that logs what you did, and a retrospective that puts the plan next to what happened. Every day is saved; alarms fire as deadlines approach. Runs as one Docker container with a SQLite file; works on phones and installs to the Home Screen.
+[![Release](https://img.shields.io/github/v/release/geransmith/clockspan)](https://github.com/geransmith/clockspan/releases)
+[![CI](https://github.com/geransmith/clockspan/actions/workflows/ci.yml/badge.svg)](https://github.com/geransmith/clockspan/actions/workflows/ci.yml)
+
+**Clockspan** is a self-hosted, single-day focus sheet for getting through a workday with ADHD: work smart, not hard. One page: a punch-style timeclock that works out when lunch is due and when the day ends, the few things that would make today a win, a focus timer that logs what you did, and a retrospective that puts the plan next to what happened. Every day is saved; alarms fire as deadlines approach. Runs as one Docker container with a SQLite file; works on phones and installs to the Home Screen.
 
 <p align="center">
   <img src="docs/screenshots/sheet-phone-light.png" width="300" alt="The sheet on a phone, light mode: running timer bar, timeclock with the lunch-by and clock-out tiles, and today's priorities">
@@ -113,21 +116,34 @@ For OIDC you need a reachable provider; see [Authentik](#authentik-oidc) below a
 
 ## Docker
 
+Images are published to GitHub Container Registry for `linux/amd64`:
+
+| Tag | What it is |
+| --- | --- |
+| `ghcr.io/geransmith/clockspan:latest` | the newest release |
+| `ghcr.io/geransmith/clockspan:0.1.0`, `:0.1` | a specific release |
+| `ghcr.io/geransmith/clockspan:edge` | the latest commit on `main`; it has passed CI and nothing else |
+
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
 Then open <http://localhost:8080>. The database lives in the mounted `/data` volume. Equivalent `docker run`:
 
 ```bash
-docker build -t clockspan .
 docker run -d --name clockspan -p 8080:8080 -v /path/on/host:/data \
-  -e AUTH_MODE=local clockspan
+  -e AUTH_MODE=local ghcr.io/geransmith/clockspan:latest
 ```
 
 The container drops to an unprivileged user (uid/gid 1000 by default; set `PUID`/`PGID` to match the owner of the host directory) after taking ownership of `/data`.
 
-To update: pull the latest code, rebuild the image, and restart the container — the database in the mounted volume is untouched.
+To update:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+The database in the mounted volume is untouched. To build from source instead, `docker build -t ghcr.io/geransmith/clockspan:latest .` and then `docker compose up -d`; the local image wins over the registry.
 
 ### Environment variables
 
@@ -243,5 +259,7 @@ Deleting old days (Settings → Data, or `RETENTION_DAYS`) is permanent and comp
 ## Development notes
 
 See [AGENTS.md](AGENTS.md) for the repo map, architecture rules and checklists for adding cards, settings, alarms and routes.
+
+Every change is a squash-merged pull request with CI green; a release is a version-bump PR followed by a tag, which builds the image and writes the release notes. The rules and the checklist are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 The screenshots above come from `npm run screenshots`. It starts the dev server if one isn't running, seeds sample data with the clock pinned to 10:30, drives a local Chromium headless and writes `docs/screenshots/*.png`. It looks for Chrome, Chromium, Edge or Brave and otherwise fetches a Chrome for Testing build into `node_modules/.cache` the first time; set `CHROME_BIN` to force a particular browser.
