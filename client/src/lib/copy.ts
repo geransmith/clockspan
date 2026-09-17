@@ -53,3 +53,11 @@ export const GENTLE_WARNINGS = [
   "If it won't make today a win, park it for tomorrow.",
   'Is that a priority, or a worry in a to-do costume?',
 ];
+
+/** Settings dialog save indicator, shown in the dialog header. */
+export const SAVE_STATUS = {
+  saving: 'Saving…',
+  saved: 'Saved',
+  failed: 'Not saved',
+  failedDetail: "The last change didn't save and was put back.",
+} as const;

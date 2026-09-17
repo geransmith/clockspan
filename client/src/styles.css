@@ -296,6 +296,10 @@ button {
   background: var(--accent-soft);
   color: var(--accent);
 }
+.pill--danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
 .chip {
   display: inline-flex;
   align-items: center;
@@ -1246,6 +1250,25 @@ button {
   justify-content: space-between;
   padding: 14px 12px 10px 20px;
   border-bottom: 1px solid var(--border);
+}
+/* The title takes the slack so the save pill sits beside the close button. */
+.dialog-head h2 {
+  flex: 1;
+  min-width: 0;
+}
+.save-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 4px;
+}
+.save-status.pill {
+  animation: slide-in 0.2s ease-out;
+}
+/* Icons draw at 20px, too large for the pill's type size. */
+.save-status svg {
+  width: 14px;
+  height: 14px;
 }
 .dialog-body {
   overflow: auto;

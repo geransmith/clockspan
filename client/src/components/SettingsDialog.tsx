@@ -1,11 +1,12 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import * as api from '../api';
 import { useAuth } from '../auth/AuthGate';
 import { useSettings } from '../hooks/useSettings';
 import { chime, notificationPermission, requestNotificationPermission, unlockAudio } from '../lib/alerts';
+import { SAVE_STATUS } from '../lib/copy';
 import { DEFAULT_LAYOUT } from '../lib/layout';
 import type { AlarmId, AlarmSettings, PublicUser, Settings } from '../types';
-import { X } from './Icons';
+import { Check, X } from './Icons';
 
 const LEAD_CHOICES = [30, 15, 10, 5, 1];
 const REPEAT_CHOICES = [0, 1, 2, 5, 10, 15];
@@ -13,6 +14,7 @@ const REPEAT_CHOICES = [0, 1, 2, 5, 10, 15];
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const { settings, update } = useSettings();
   const { auth } = useAuth();
+  const { saveState, save } = useSaveStatus(update);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -26,7 +28,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     };
   }, [onClose]);
 
-  const set = (patch: Partial<Settings>) => void update(patch);
+  const set = (patch: Partial<Settings>) => void save(patch);
   const setAlarm = (id: AlarmId, patch: Partial<AlarmSettings>) =>
     set({ alarms: { ...settings.alarms, [id]: { ...settings.alarms[id], ...patch } } });
 
@@ -35,11 +37,13 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <header className="dialog-head">
           <h2 id="settings-title">Settings</h2>
+          <SaveStatus state={saveState} />
           <button className="btn btn-icon" onClick={onClose} aria-label="Close settings">
             <X />
           </button>
         </header>
         <div className="dialog-body">
+          {saveState === 'failed' && <p className="notice notice--danger">{SAVE_STATUS.failedDetail}</p>}
           <Section title="Timeclock" hint="Used to compute your lunch deadline, clock-out time and second meal period.">
             <DurationField label="Work day" minutes={settings.workMinutes} onCommit={(m) => set({ workMinutes: m })} />
             <DurationField label="Lunch must start within" minutes={settings.lunchDeadlineMinutes} onCommit={(m) => set({ lunchDeadlineMinutes: m })} />
@@ -118,6 +122,71 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         </div>
       </div>
     </div>
+  );
+}
+
+type SaveState = 'idle' | 'saving' | 'saved' | 'failed';
+
+/**
+ * Tracks in-flight settings saves so the header can say "Saving…", then "Saved" once the server
+ * has confirmed, or "Not saved" when the provider had to roll the change back. In-flight saves
+ * are counted so a burst of chip clicks reads as one save instead of flickering between states.
+ */
+function useSaveStatus(update: (patch: Partial<Settings>) => Promise<void>) {
+  const [saveState, setSaveState] = useState<SaveState>('idle');
+  const pending = useRef(0);
+  const failed = useRef(false);
+  const timer = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (timer.current) window.clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  const save = useCallback(
+    async (patch: Partial<Settings>) => {
+      if (pending.current === 0) failed.current = false;
+      pending.current++;
+      if (timer.current) window.clearTimeout(timer.current);
+      setSaveState('saving');
+      try {
+        await update(patch);
+      } catch {
+        // The provider already put the old value back; all that is left is to say so.
+        failed.current = true;
+      } finally {
+        pending.current--;
+        if (pending.current === 0) {
+          if (failed.current) setSaveState('failed');
+          else {
+            setSaveState('saved');
+            timer.current = window.setTimeout(() => setSaveState('idle'), 2500);
+          }
+        }
+      }
+    },
+    [update],
+  );
+
+  return { saveState, save };
+}
+
+/** Always rendered, empty when idle: a live region has to exist before its text changes to be announced. */
+function SaveStatus({ state }: { state: SaveState }) {
+  const pill = state === 'saved' ? ' pill pill--ok' : state === 'failed' ? ' pill pill--danger' : state === 'saving' ? ' pill' : '';
+  return (
+    <span className={`save-status${pill}`} role="status" aria-live="polite">
+      {state === 'saving' && SAVE_STATUS.saving}
+      {state === 'saved' && (
+        <>
+          <Check />
+          {SAVE_STATUS.saved}
+        </>
+      )}
+      {state === 'failed' && SAVE_STATUS.failed}
+    </span>
   );
 }
 
