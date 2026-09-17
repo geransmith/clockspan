@@ -1,10 +1,12 @@
 # ---- build ----
 FROM node:24-alpine AS build
 WORKDIR /app
-# better-sqlite3 13+ bundles N-API prebuilds (including linux-musl x64/arm64) and has no
-# install script, so no compiler toolchain is needed here.
 COPY package.json package-lock.json ./
-RUN npm ci
+# --ignore-scripts: better-sqlite3 ships prebuilds (including linux-musl) and loads them when
+# no build/ dir exists, but its binding.gyp makes npm run `node-gyp rebuild` by default, and
+# whether the allowScripts policy blocks that differs between npm 11 and 12 (npm 12 in this
+# image ran it and failed for lack of python). esbuild's postinstall is only an optimisation.
+RUN npm ci --ignore-scripts
 COPY tsconfig.json tsconfig.server.json vite.config.ts ./
 COPY client ./client
 COPY server ./server
