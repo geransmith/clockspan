@@ -11,6 +11,7 @@ export const CARDS: CardDef[] = [
   { id: 'priorities', title: 'Top priorities' },
   { id: 'timer', title: 'Focus timer' },
   { id: 'log', title: 'Day log' },
+  { id: 'retro', title: 'Retrospective' },
 ];
 
 export const DEFAULT_LAYOUT: Settings['layout'] = CARDS.map((c) => ({ id: c.id, visible: true }));

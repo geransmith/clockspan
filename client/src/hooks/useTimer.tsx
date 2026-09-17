@@ -15,7 +15,7 @@ interface TimerCtx {
   elapsedSeconds: number;
   /** 0..1 */
   progress: number;
-  start: (date: string, plannedSeconds: number, label: string) => Promise<void>;
+  start: (date: string, plannedSeconds: number, label: string, priorityUid?: string | null) => Promise<void>;
   adjust: (deltaSeconds: number) => Promise<void>;
   setLabel: (label: string) => Promise<void>;
   finish: () => Promise<void>;
@@ -104,11 +104,11 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     document.title = running ? `${formatCountdown(remainingSeconds)}${running.label ? ` · ${running.label}` : ''} — ${BASE_TITLE}` : BASE_TITLE;
   }, [running, remainingSeconds]);
 
-  const start = useCallback(async (date: string, plannedSeconds: number, label: string) => {
+  const start = useCallback(async (date: string, plannedSeconds: number, label: string, priorityUid: string | null = null) => {
     unlockAudio(); // user gesture: lets the completion chime play later on iOS
     mutationSeq.current++;
     try {
-      const { session } = await api.startSession(date, plannedSeconds, label);
+      const { session } = await api.startSession(date, plannedSeconds, label, priorityUid);
       setRunning(session);
       store.applySession(session);
     } catch (err) {

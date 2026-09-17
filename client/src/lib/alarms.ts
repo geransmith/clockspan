@@ -134,9 +134,36 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
   const target = formatTime(e.target);
   const clockIn = formatTime(ctx.clockIn);
   const day = fmtMinutes(ctx.workMinutes);
-  const alarm = e.id === 'lunchBy' ? 'Lunch alarm' : e.id === 'secondMeal' ? '2nd meal alarm' : 'Clock-out alarm';
+  const alarm = e.id === 'lunchBy' ? 'Lunch alarm' : e.id === 'secondMeal' ? '2nd meal alarm' : e.id === 'retro' ? 'Retrospective' : 'Clock-out alarm';
   const mealHours = fmtMinutes(ctx.secondMealAfterMinutes);
   const mealWhy = `Your ${mealHours} of work ends at ${target}. California requires a second 30-minute meal period before then unless you've waived it.`;
+
+  // The retrospective isn't a deadline: its target is the clock-out instant and the copy
+  // stays at "warn" throughout.
+  if (e.id === 'retro') {
+    if (e.kind === 'lead') {
+      return {
+        kicker: `${alarm} · ${fmtMinutes(e.minutes)} before clock-out`,
+        title: 'Look back before you clock out',
+        body: `Your day ends at ${target}. Compare what you planned with what you did while it's fresh.`,
+        tone: 'warn',
+      };
+    }
+    if (e.kind === 'due') {
+      return {
+        kicker: `${alarm} · clock-out`,
+        title: 'Clocking out? Do the retrospective first.',
+        body: `It's ${target}. Two minutes on what went to plan and what didn't.`,
+        tone: 'warn',
+      };
+    }
+    return {
+      kicker: `${alarm} · ${fmtMinutes(e.minutes)} overdue`,
+      title: `Retrospective is ${fmtMinutes(e.minutes)} overdue`,
+      body: `Your day ended at ${target}. The retrospective card is on today's sheet.`,
+      tone: 'warn',
+    };
+  }
 
   if (e.kind === 'lead') {
     const kicker = `${alarm} · ${fmtMinutes(e.minutes)} warning`;

@@ -1,29 +1,41 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import type { Day, Priority, Punch, Session } from '../types';
+import { newUid, placePriority } from '../lib/priorities';
 import { normalizePunches } from '../lib/timeclock';
+import { useSettings } from './useSettings';
 
 interface DayStore {
   days: Record<string, Day>;
   load: (date: string) => Promise<void>;
   setPunches: (date: string, punches: Punch[]) => Promise<void>;
   setPriorities: (date: string, priorities: Priority[]) => Promise<void>;
+  /** Add a priority from outside the card (the timer). Resolves to its uid. */
+  addPriority: (date: string, text: string) => Promise<string>;
   setOvertimeApproved: (date: string, approved: boolean) => Promise<void>;
+  setRetro: (date: string, patch: { note?: string; done?: boolean }) => Promise<void>;
   /** Insert or replace a session in its day (used by the timer when one completes). */
   applySession: (session: Session) => void;
   removeSession: (date: string, id: number) => Promise<void>;
-  updateSession: (id: number, patch: { label?: string; notes?: string }) => Promise<void>;
+  updateSession: (id: number, patch: { label?: string; notes?: string; priorityUid?: string | null }) => Promise<void>;
 }
 
 const Ctx = createContext<DayStore | null>(null);
 
 function withDay(days: Record<string, Day>, date: string, fn: (d: Day) => Day): Record<string, Day> {
-  const current = days[date] ?? { date, punches: normalizePunches([]), priorities: [], overtimeApproved: false, sessions: [] };
+  const current = days[date] ?? { date, punches: normalizePunches([]), priorities: [], overtimeApproved: false, retroNote: '', retroAt: null, sessions: [] };
   return { ...days, [date]: fn(current) };
 }
 
 export function DayProvider({ children }: { children: ReactNode }) {
   const [days, setDays] = useState<Record<string, Day>>({});
+  // Latest value for callbacks that read before they write (addPriority), so a click right
+  // after a priority blur-flush sees the flushed list, not the render it closed over.
+  const latest = useRef(days);
+  latest.current = days;
+  const { settings } = useSettings();
+  const priorityCount = useRef(settings.priorityCount);
+  priorityCount.current = settings.priorityCount;
   const inflight = useRef(new Map<string, Promise<void>>());
 
   const load = useCallback((date: string) => {
@@ -66,6 +78,37 @@ export function DayProvider({ children }: { children: ReactNode }) {
     [load],
   );
 
+  const addPriority = useCallback(
+    async (date: string, text: string) => {
+      const uid = newUid();
+      const next = placePriority(latest.current[date]?.priorities ?? [], priorityCount.current, text, uid, Date.now());
+      if (!next) throw new Error('The priorities list is full.');
+      await setPriorities(date, next);
+      return uid;
+    },
+    [setPriorities],
+  );
+
+  const setRetro = useCallback(
+    async (date: string, patch: { note?: string; done?: boolean }) => {
+      setDays((prev) =>
+        withDay(prev, date, (d) => ({
+          ...d,
+          retroNote: patch.note ?? d.retroNote,
+          retroAt: patch.done === undefined ? d.retroAt : patch.done ? (d.retroAt ?? Date.now()) : null,
+        })),
+      );
+      try {
+        const saved = await api.putRetro(date, patch);
+        setDays((prev) => withDay(prev, date, (d) => ({ ...d, retroAt: saved.retroAt })));
+      } catch (err) {
+        void load(date);
+        throw err;
+      }
+    },
+    [load],
+  );
+
   const setOvertimeApproved = useCallback(
     async (date: string, approved: boolean) => {
       setDays((prev) => withDay(prev, date, (d) => ({ ...d, overtimeApproved: approved })));
@@ -96,7 +139,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateSession = useCallback(
-    async (id: number, patch: { label?: string; notes?: string }) => {
+    async (id: number, patch: { label?: string; notes?: string; priorityUid?: string | null }) => {
       const { session } = await api.patchSession(id, patch);
       applySession(session);
     },
@@ -104,8 +147,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ days, load, setPunches, setPriorities, setOvertimeApproved, applySession, removeSession, updateSession }),
-    [days, load, setPunches, setPriorities, setOvertimeApproved, applySession, removeSession, updateSession],
+    () => ({ days, load, setPunches, setPriorities, addPriority, setOvertimeApproved, setRetro, applySession, removeSession, updateSession }),
+    [days, load, setPunches, setPriorities, addPriority, setOvertimeApproved, setRetro, applySession, removeSession, updateSession],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

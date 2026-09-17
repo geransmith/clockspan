@@ -78,7 +78,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       case 'alarms':
         return (
           <>
-            <Section title="Alarms" hint="Alerts as lunch, clock-out and the second meal period approach.">
+            <Section title="Alarms" hint="Alerts as lunch, clock-out and the second meal period approach, and a nudge to look back before the day ends.">
               <AlarmEditor title="Lunch deadline" alarm={settings.alarms.lunchBy} onChange={(p) => setAlarm('lunchBy', p)} />
               <AlarmEditor title="Clock-out" alarm={settings.alarms.clockOut} onChange={(p) => setAlarm('clockOut', p)} />
               <AlarmEditor
@@ -86,6 +86,12 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 hint="California: due before the end of the 10th hour worked on days over 10 hours (waivable when the day is 12 hours or less). Only arms on a day that's heading past the threshold. Turn off if you've waived it."
                 alarm={settings.alarms.secondMeal}
                 onChange={(p) => setAlarm('secondMeal', p)}
+              />
+              <AlarmEditor
+                title="Retrospective"
+                hint="Compare the plan with the day log before you clock out. 'Warn before' is how long before clock-out. Overtime approval doesn't silence it."
+                alarm={settings.alarms.retro}
+                onChange={(p) => setAlarm('retro', p)}
               />
             </Section>
             <Section title="How you're alerted" hint="Every alarm also shows an in-app banner.">

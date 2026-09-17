@@ -15,6 +15,7 @@ import { SettingsProvider, useSettings } from './hooks/useSettings';
 import { TimerProvider, useTimer } from './hooks/useTimer';
 import { todayKey } from './lib/format';
 import { computeTimeclock } from './lib/timeclock';
+import type { CardId } from './types';
 
 export function App() {
   return (
@@ -34,6 +35,7 @@ function Shell() {
   const [route, navigate] = useRoute();
   const [customize, setCustomize] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [jumpTo, setJumpTo] = useState<CardId | null>(null);
   const { settings } = useSettings();
   const { running } = useTimer();
   const now = useNow(1000);
@@ -48,7 +50,19 @@ function Shell() {
   // A day flagged while the feature was on stays silent only while it is still on.
   const overtimeApproved = settings.overtimeApproval && Boolean(todayDay?.overtimeApproved);
   const approveOvertime = useCallback(() => void store.setOvertimeApproved(today, true), [store, today]);
-  useAlarms(today, todayTc, settings, now, overtimeApproved, settings.overtimeApproval ? approveOvertime : undefined);
+  // The banner's button lands on today's sheet at the retrospective card, wherever the
+  // user was when the alarm fired.
+  const openRetro = useCallback(() => {
+    navigate({ view: 'sheet', date: today });
+    setJumpTo('retro');
+  }, [navigate, today]);
+  const onJumped = useCallback(() => setJumpTo(null), []);
+  useAlarms(today, todayTc, settings, now, {
+    overtimeApproved,
+    retroDone: Boolean(todayDay?.retroAt),
+    approveOvertime: settings.overtimeApproval ? approveOvertime : undefined,
+    openRetro,
+  });
 
   return (
     <div className={`app${running ? ' app--has-bar' : ''}`}>
@@ -64,7 +78,7 @@ function Shell() {
       />
       <main className="main">
         {route.view === 'sheet' ? (
-          <Sheet date={route.date} today={today} now={now} customize={customize} />
+          <Sheet date={route.date} today={today} now={now} customize={customize} jumpTo={jumpTo} onJumped={onJumped} />
         ) : (
           <History today={today} now={now} onOpen={(date) => navigate({ view: 'sheet', date })} />
         )}

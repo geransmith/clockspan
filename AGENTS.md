@@ -5,9 +5,12 @@
 A self-hosted, single-day **focus sheet** for working through a workday with ADHD: a punch-style
 timeclock that computes when lunch must start and when the day ends (with a small celebration
 when it does), the day's top priorities (default three, configurable, with a gentle nudge when
-the list grows), a Pomodoro-style focus timer that logs what was done, and alarms as lunch,
-clock-out and the second meal period approach. A per-day "Overtime approved" switch silences
-the clock-out alarm only. Every day is persisted so past days can be revisited. Data is **per
+the list grows and a different one once some rows are ticked), a Pomodoro-style focus timer
+that logs what was done and which priority it was for, a retrospective card that lines the plan
+up against the log (with a "why" note and a nudge before clock-out), a week / month / quarter
+review of those retrospectives, and alarms as lunch, clock-out and the second meal period
+approach. A per-day "Overtime approved" switch silences the clock-out alarm only. Every day is
+persisted so past days can be revisited. Data is **per
 user**; auth is optional (`AUTH_MODE=none | local | oidc`). Runs as one Docker container with
 SQLite on a `/data` volume. Mobile-first and installable (PWA manifest, pass-through service
 worker). Meal-period defaults follow California rules; everything is adjustable.
@@ -38,10 +41,11 @@ server/                 Express API → dist/server (tsc)
   auth/local.ts         /api/auth: me, setup, login (rate-limited), logout, password, users (admin)
   auth/oidc.ts          /api/auth/{me,logout} + /auth/{login,callback}; lazy discovery w/ retry
   routes/shared.ts      isValidDateKey, findDay/ensureDay, SessionRow → JSON
-  routes/days.ts        GET /days (history summaries), GET /days/:date, PUT punches,
-                        PUT priorities (full replace, sparse rows), PUT overtime
-  routes/sessions.ts    POST /days/:date/sessions (start), GET /sessions/running,
-                        PATCH/:id, POST /:id/finish, POST /:id/cancel, DELETE /:id
+  routes/days.ts        GET /days (history summaries), GET /days/range?from&to (full days),
+                        GET /days/:date, PUT punches, PUT priorities (full replace, sparse
+                        rows, uid/addedAt), PUT overtime, PUT retro (note, done)
+  routes/sessions.ts    POST /days/:date/sessions (start, optional priorityUid), GET /sessions/running,
+                        PATCH/:id (label, notes, priorityUid), POST /:id/finish, POST /:id/cancel, DELETE /:id
   routes/settings.ts    DEFAULT_SETTINGS + mergeSettings() validator; GET/PUT/DELETE /settings
 client/                 Vite root → dist/client
   index.html            viewport-fit=cover, theme-color, manifest, apple-mobile-web-app meta
@@ -54,21 +58,26 @@ client/                 Vite root → dist/client
                         normalizePunches/clockOutPosition/extraPairs (row model), secondMealApplies
   src/lib/alarms.ts     PURE: dueEvents(...) scheduler + describeEvent() copy
   src/lib/alerts.ts     the ONLY place that plays audio / calls Notification / pushes banners
-  src/lib/copy.ts       every editable phrase (celebrations, gentle warnings) — no logic
+  src/lib/copy.ts       every editable phrase (celebrations, the three warning pools, retro prompt) — no logic
   src/lib/celebrate.ts  PURE: pickCelebration(seed) for the end-of-day notice
-  src/lib/priorities.ts PURE: padPriorities(), warnThreshold(), pickWarning(), MAX_PRIORITIES
-  src/lib/format.ts     date keys, time/duration formatting, <input type=time> conversions
+  src/lib/priorities.ts PURE: padPriorities(), warnThreshold(), warningKind(), pickWarning(kind),
+                        newUid(), placePriority() (timer → priorities), MAX_PRIORITIES
+  src/lib/retro.ts      PURE: reviewDay(priorities, sessions) → on/off-plan time, mid-day rows
+  src/lib/review.ts     PURE: periodRange(kind, today, offset) (Mon-start weeks), reviewRange(days)
+  src/lib/format.ts     date keys, time/duration formatting, <input type=time> conversions,
+                        startOfWeek/Month/Quarter, addMonths, formatDateSpan/Month/Weekday
   src/lib/layout.ts     card registry (CARDS), DEFAULT_LAYOUT, normalizeLayout()
   src/hooks/useSettings.tsx  SettingsProvider: settings + update(patch) (optimistic, PUT)
-  src/hooks/useDay.tsx       DayProvider: per-date cache, setPunches/setPriorities/setOvertimeApproved,
-                             session upserts
+  src/hooks/useDay.tsx       DayProvider: per-date cache, setPunches/setPriorities/addPriority/
+                             setOvertimeApproved/setRetro, session upserts
   src/hooks/useTimer.tsx     TimerProvider: running session, remaining/progress, start/adjust/
                              finish/cancel, completion + chime, wake lock, tab title, re-sync
   src/hooks/useAlarms.ts     app-level alarm engine (fired keys in localStorage per day)
   src/hooks/useNow.ts useRoute.ts useSettled.ts useWakeLock.ts useMediaQuery.ts
   src/auth/              AuthGate (mode/user → Setup | Login | OIDC button | app), pages
   src/components/        Header, RunningTimerBar, Banners, Sheet (dnd-kit) + CardShell,
-                         Timeclock, Priorities, FocusTimer, SessionLog, History, SettingsDialog, Icons
+                         Timeclock, Priorities, FocusTimer, SessionLog, Retro, History (Days | Review),
+                         Review, SettingsDialog, Icons
 docker/entrypoint.sh    PUID/PGID → chown /data + su-exec
 Dockerfile docker-compose.yml .env.example README.md
 ```
@@ -127,6 +136,19 @@ to exercise the setup/login pages.
   1..n, contiguous, ≤ 20) and never stores `done` on an empty row; the client pads to
   `settings.priorityCount` with `padPriorities()`. `PUT /days/:date/priorities` is a full
   replace, so removing a row is sending the list without it.
+- **A priority's identity is its `uid`, never its position.** The client mints it
+  (`newUid()`) the first time a row gets text and stamps `addedAt`; both survive a text clear
+  and a renumber. `sessions.priority_uid` points at it (null = unplanned; a uid whose row was
+  removed reads as unplanned too). The server only fills in a missing uid/addedAt for a row
+  with text (an older client), so never rely on it for new rows. `POST/PATCH` sessions check
+  the uid exists on that day.
+- **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
+  tests). "Added mid-day" means `addedAt` is after the day's first completed session started —
+  one rule, no clock-in fallback. `GET /days/range` returns full days and the client does the
+  rollup; register any new literal path under `/days` before `/:date`.
+- **The `retro` alarm target is the clock-out instant** ("warn before" = minutes before the
+  end of the day) and is **not** silenced by overtime approval; marking the day reviewed
+  (`days.retro_at`) disarms it. Its banner button jumps to the card (`jumpTo` in `App.tsx`).
 - **Alarm event keys embed the target minute** (`eventKey`), so a moved target re-arms and a
   reload never re-fires. Fired keys live in `localStorage` under `focus:alarms:<date>` and are
   pruned to today. Today's punches are settled for 3 s (`useSettled`) before evaluation.
@@ -146,15 +168,16 @@ to exercise the setup/login pages.
   control to the right tab in `SettingsDialog.tsx` (Timeclock · Alarms · Sheet · Account; each
   is a `case` in `panel()`) using `DurationField` / `MinutesField` — it takes a `unit` suffix,
   default "min" — / `Toggle`.
-- **An alarm target** (existing: `lunchBy`, `clockOut`, `secondMeal`): expose the instant from
+- **An alarm target** (existing: `lunchBy`, `clockOut`, `secondMeal`, `retro`): expose the instant from
   `computeTimeclock` → add a target in `useAlarms.ts` (`targets[]`, with an `armed` rule; put
   a rule the card also needs in a pure helper like `secondMealApplies`) → add its default
   under `alarms` on both sides and the `AlarmId` union → add an `AlarmEditor` in
   `SettingsDialog.tsx` → copy in `describeEvent()`: a `kicker` naming the alarm + rule
   ("X alarm · 15 min warning"), a title, and a body that says where the deadline came from
   (it gets an `EventContext`; extend that if the new target needs more inputs). A banner can
-  carry one `action` button (see the clock-out alarm's "Overtime approved").
-- **A per-day field** (like `overtimeApproved`): append a migration adding the column to
+  carry one `action` button (see the clock-out alarm's "Overtime approved" and the retro
+  alarm's "Open retrospective", chosen in `useAlarms` from the `AlarmDayState` callbacks).
+- **A per-day field** (like `overtimeApproved`, `retroNote`/`retroAt`): append a migration adding the column to
   `days` → read it in `findDay` (`routes/shared.ts`) and return it from `GET /days/:date` →
   add a `PUT /days/:date/<field>` route → `Day` type + `api.ts` → an optimistic setter in
   `useDay.tsx` (mirror `setOvertimeApproved`) → pass it from `Sheet.tsx` to the card, and from
@@ -193,7 +216,15 @@ to exercise the setup/login pages.
   celebration), "Add extra out / in" after it (old Clock out becomes Out N), and removing that
   pair (time returns to Clock out).
 - If you touched alarms: with "Overtime approved" on, the clock-out banner must stop and the
-  lunch tile must keep counting down.
+  lunch tile must keep counting down. The retro banner must still fire, and "Mark reviewed"
+  must clear it without a repeat.
+- If you touched priorities or the timer: tick one row and press Add priority (the notice
+  lists the ticked row, buttons read "Add anyway / Finish what's open"); tap a chip in the
+  timer, start, and the log row shows the number; type a new label with "Also add to today's
+  priorities" and the first empty row fills; reassign a log row via its select.
+- If you touched the retro or review: a day with one linked and one unlinked session must
+  split On plan / Off plan to the same total as the log, and History → Review → Week must add
+  the day's numbers to its tiles.
 
 ## Gotchas
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { describeEvent, dueEvents, eventKey, type AlarmEvent, type AlarmTarget } from './alarms';
-import type { AlarmSettings } from '../types';
+import type { AlarmId, AlarmSettings } from '../types';
 
 const M = 60_000;
 const T = new Date(2026, 8, 16, 13, 0).getTime();
@@ -12,8 +12,13 @@ const cfg = (over: Partial<AlarmSettings> = {}): AlarmSettings => ({
   overdueEveryMinutes: 5,
   ...over,
 });
-const alarms = (lunch = cfg(), clock = cfg(), meal = cfg()) => ({ lunchBy: lunch, clockOut: clock, secondMeal: meal });
-const target = (at: number, id: 'lunchBy' | 'clockOut' | 'secondMeal' = 'clockOut', armed = true): AlarmTarget => ({ id, at, armed });
+const alarms = (lunch = cfg(), clock = cfg(), meal = cfg(), retro = cfg({ leadMinutes: [30], onDue: false, overdueEveryMinutes: 0 })) => ({
+  lunchBy: lunch,
+  clockOut: clock,
+  secondMeal: meal,
+  retro,
+});
+const target = (at: number, id: AlarmId = 'clockOut', armed = true): AlarmTarget => ({ id, at, armed });
 
 describe('dueEvents', () => {
   it('fires nothing before the first lead', () => {
@@ -94,7 +99,7 @@ describe('describeEvent', () => {
   // 8:32 clock-in, 8h day, lunch within 4h.
   const clockIn = new Date(2026, 8, 16, 8, 32).getTime();
   const ctx = { clockIn, workMinutes: 480, lunchDeadlineMinutes: 240, secondMealAfterMinutes: 600 };
-  const ev = (id: 'lunchBy' | 'clockOut' | 'secondMeal', kind: AlarmEvent['kind'], minutes: number, target: number): AlarmEvent => ({
+  const ev = (id: AlarmId, kind: AlarmEvent['kind'], minutes: number, target: number): AlarmEvent => ({
     key: eventKey(D, id, kind, minutes, target),
     id,
     kind,
@@ -126,6 +131,16 @@ describe('describeEvent', () => {
     const over = describeEvent(ev('clockOut', 'overdue', 10, T), ctx);
     expect(over.title).toBe('Clock out is 10 min overdue');
     expect(over.body).toContain('past your 8h target');
+  });
+
+  it('frames the retrospective as a nudge before clock-out, never a deadline', () => {
+    const lead = describeEvent(ev('retro', 'lead', 30, T), ctx);
+    expect(lead.kicker).toBe('Retrospective · 30 min before clock-out');
+    expect(lead.title).toBe('Look back before you clock out');
+    expect(lead.body).toContain('1:00');
+    expect(lead.tone).toBe('warn');
+    expect(describeEvent(ev('retro', 'due', 0, T), ctx).tone).toBe('warn');
+    expect(describeEvent(ev('retro', 'overdue', 10, T), ctx).title).toBe('Retrospective is 10 min overdue');
   });
 
   it('explains the lunch deadline window', () => {

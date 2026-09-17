@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSettings } from '../hooks/useSettings';
-import { MAX_PRIORITIES, padPriorities, pickWarning, warnThreshold } from '../lib/priorities';
+import { WARNING_ACTIONS } from '../lib/copy';
+import { MAX_PRIORITIES, newUid, padPriorities, pickWarning, warnThreshold, warningKind, type WarningKind } from '../lib/priorities';
 import type { Priority } from '../types';
-import { Plus, X } from './Icons';
+import { Check, Plus, X } from './Icons';
 
 interface Props {
   date: string;
@@ -18,7 +19,7 @@ export function Priorities({ date, priorities, onChange }: Props) {
   const { settings } = useSettings();
   const count = settings.priorityCount;
   const [local, setLocal] = useState(() => padPriorities(priorities, count));
-  const [warning, setWarning] = useState<string | null>(null);
+  const [warning, setWarning] = useState<{ kind: WarningKind; text: string } | null>(null);
   const lastWarning = useRef<string | undefined>(undefined);
   const dirty = useRef(false);
   const timer = useRef<number | null>(null);
@@ -50,8 +51,11 @@ export function Priorities({ date, priorities, onChange }: Props) {
     const next = local.map((p) => {
       if (p.position !== position) return p;
       const merged = { ...p, ...patch };
-      // An empty row can't be done; clearing the text also clears the tick.
-      return merged.text.trim() ? merged : { ...merged, done: false };
+      // An empty row can't be done; clearing the text also clears the tick. The uid is
+      // minted the first time a row gets text and survives a clear, so a session that
+      // pointed at it still does.
+      if (!merged.text.trim()) return { ...merged, done: false };
+      return merged.uid ? merged : { ...merged, uid: newUid(), addedAt: Date.now() };
     });
     setLocal(next);
     dirty.current = true;
@@ -59,16 +63,21 @@ export function Priorities({ date, priorities, onChange }: Props) {
     if (immediate) flush(next);
     else timer.current = window.setTimeout(() => flush(next), 400);
   };
+  const doneRows = local.filter((p) => p.done && p.text.trim());
+  const done = doneRows.length;
+  const total = local.filter((p) => p.text.trim()).length;
+
   const addRow = (force = false) => {
     if (local.length >= MAX_PRIORITIES) return;
     if (!force && local.length >= warnThreshold(count)) {
-      const w = pickWarning(Math.random, lastWarning.current);
+      const kind = warningKind(done, total);
+      const w = pickWarning(kind, Math.random, lastWarning.current);
       lastWarning.current = w;
-      setWarning(w);
+      setWarning({ kind, text: w });
       return;
     }
     setWarning(null);
-    const next = [...local, { position: local.length + 1, text: '', done: false }];
+    const next = [...local, { position: local.length + 1, text: '', done: false, uid: null, addedAt: null }];
     focusNext.current = next.length;
     setLocal(next);
     flush(next);
@@ -78,9 +87,6 @@ export function Priorities({ date, priorities, onChange }: Props) {
     setLocal(next);
     flush(next);
   };
-
-  const done = local.filter((p) => p.done && p.text.trim()).length;
-  const total = local.filter((p) => p.text.trim()).length;
 
   return (
     <div className="priorities">
@@ -123,13 +129,28 @@ export function Priorities({ date, priorities, onChange }: Props) {
       })}
       {warning && (
         <div className="notice notice--gentle" role="status">
-          <span>{warning}</span>
+          {warning.kind !== 'fresh' && (
+            <div className="notice-done">
+              <strong>
+                {done} of {total} done
+              </strong>
+              <ul>
+                {doneRows.map((p) => (
+                  <li key={p.position}>
+                    <Check />
+                    <span>{p.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <span>{warning.text}</span>
           <span className="notice-actions">
             <button className="btn btn-ghost" onClick={() => addRow(true)}>
-              Add anyway
+              {WARNING_ACTIONS[warning.kind].add}
             </button>
             <button className="btn btn-ghost" onClick={() => setWarning(null)}>
-              Keep it short
+              {WARNING_ACTIONS[warning.kind].keep}
             </button>
           </span>
         </div>

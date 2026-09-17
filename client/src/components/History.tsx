@@ -4,6 +4,8 @@ import { useSettings } from '../hooks/useSettings';
 import { addDays, endOfDay, formatDateLong, formatDuration } from '../lib/format';
 import { computeTimeclock } from '../lib/timeclock';
 import type { DaySummary } from '../types';
+import { Check } from './Icons';
+import { Review } from './Review';
 
 interface Props {
   today: string;
@@ -11,7 +13,26 @@ interface Props {
   onOpen: (date: string) => void;
 }
 
+type Tab = 'days' | 'review';
+
 export function History({ today, now, onOpen }: Props) {
+  const [tab, setTab] = useState<Tab>('days');
+  return (
+    <div className="history-view">
+      <div className="segmented" role="tablist" aria-label="History view">
+        <button className={`segment${tab === 'days' ? ' is-on' : ''}`} role="tab" aria-selected={tab === 'days'} onClick={() => setTab('days')}>
+          Days
+        </button>
+        <button className={`segment${tab === 'review' ? ' is-on' : ''}`} role="tab" aria-selected={tab === 'review'} onClick={() => setTab('review')}>
+          Review
+        </button>
+      </div>
+      {tab === 'days' ? <Days today={today} now={now} onOpen={onOpen} /> : <Review today={today} now={now} onOpen={onOpen} />}
+    </div>
+  );
+}
+
+function Days({ today, now, onOpen }: Props) {
   const { settings } = useSettings();
   const [days, setDays] = useState<DaySummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +63,14 @@ export function History({ today, now, onOpen }: Props) {
             <li key={d.date}>
               <button className="history-row" onClick={() => onOpen(d.date)}>
                 <span className="history-date">
-                  <strong>{name}</strong>
+                  <strong>
+                    {name}
+                    {d.retroAt != null && (
+                      <span className="history-reviewed" title="Retrospective reviewed" aria-label="Retrospective reviewed">
+                        <Check />
+                      </span>
+                    )}
+                  </strong>
                   {(d.date === today || d.date === addDays(today, -1)) && <span className="muted small">{formatDateLong(d.date)}</span>}
                 </span>
                 <span className="history-stat">

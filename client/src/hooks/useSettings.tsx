@@ -26,6 +26,7 @@ const FALLBACK: Settings = {
     lunchBy: { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 },
     clockOut: { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 },
     secondMeal: { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 },
+    retro: { enabled: true, leadMinutes: [30], onDue: false, overdueEveryMinutes: 0 },
   },
   layout: normalizeLayout(undefined),
 };

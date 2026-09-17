@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSettings } from '../hooks/useSettings';
 import { useTimer } from '../hooks/useTimer';
 import { formatCountdown, formatDuration } from '../lib/format';
+import type { Priority } from '../types';
 import { Check, Minus, Plus, X } from './Icons';
 
 const QUICK = [15, 25, 50];
@@ -9,20 +10,46 @@ const QUICK = [15, 25, 50];
 interface Props {
   date: string;
   isToday: boolean;
+  priorities: Priority[];
+  /** Adds a row to today's priorities and resolves to its uid. */
+  onAddPriority: (text: string) => Promise<string>;
 }
 
-export function FocusTimer({ date, isToday }: Props) {
+export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) {
   const timer = useTimer();
   const [label, setLabel] = useState('');
+  const [linked, setLinked] = useState<string | null>(null);
+  const [addAsPriority, setAddAsPriority] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (timer.running) return <Running />;
 
+  // Open rows only: a done priority isn't something to start a session for.
+  const open = priorities.filter((p) => p.uid && p.text.trim() && !p.done);
+  const linkedStillOpen = linked != null && open.some((p) => p.uid === linked);
+  const trimmed = label.trim();
+  // New work typed in, not tied to a row: offer to put it on the plan as well.
+  const offerAdd = isToday && trimmed !== '' && !linkedStillOpen;
+
+  const pick = (p: Priority) => {
+    if (linked === p.uid) {
+      setLinked(null);
+      return;
+    }
+    setLinked(p.uid);
+    setLabel(p.text);
+    setAddAsPriority(false);
+  };
+
   const start = async (minutes: number) => {
     setError(null);
     try {
-      await timer.start(date, minutes * 60, label.trim());
+      let uid = linkedStillOpen ? linked : null;
+      if (!uid && offerAdd && addAsPriority) uid = await onAddPriority(trimmed);
+      await timer.start(date, minutes * 60, trimmed, uid);
       setLabel('');
+      setLinked(null);
+      setAddAsPriority(false);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -39,6 +66,31 @@ export function FocusTimer({ date, isToday }: Props) {
         disabled={!isToday}
         aria-label="Session label"
       />
+      {isToday && open.length > 0 && (
+        <div className="timer-priorities">
+          <span className="muted small">Working on</span>
+          <span className="chips">
+            {open.map((p) => (
+              <button
+                key={p.uid}
+                className={`chip${linked === p.uid ? ' is-on' : ''}`}
+                onClick={() => pick(p)}
+                aria-pressed={linked === p.uid}
+                title={linked === p.uid ? 'Unlink from this priority' : `Start a session for priority ${p.position}`}
+              >
+                <span className="chip-num">{p.position}</span>
+                <span className="chip-text">{p.text}</span>
+              </button>
+            ))}
+          </span>
+        </div>
+      )}
+      {offerAdd && (
+        <label className="inline-check timer-add-priority">
+          <input type="checkbox" className="checkbox" checked={addAsPriority} onChange={(e) => setAddAsPriority(e.target.checked)} />
+          <span>Also add to today's priorities</span>
+        </label>
+      )}
       <div className="timer-quick">
         {QUICK.map((m) => (
           <button key={m} className="btn btn-quick" onClick={() => void start(m)} disabled={!isToday}>

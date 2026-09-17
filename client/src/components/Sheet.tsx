@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import {
   DndContext,
   KeyboardSensor,
@@ -20,6 +20,7 @@ import type { CardId } from '../types';
 import { CardShell } from './CardShell';
 import { FocusTimer } from './FocusTimer';
 import { Priorities } from './Priorities';
+import { Retro } from './Retro';
 import { SessionLog } from './SessionLog';
 import { Timeclock } from './Timeclock';
 
@@ -28,9 +29,12 @@ interface Props {
   today: string;
   now: number;
   customize: boolean;
+  /** A card to scroll into view once the sheet has rendered (a banner's "Open …" button). */
+  jumpTo?: CardId | null;
+  onJumped?: () => void;
 }
 
-export function Sheet({ date, today, now, customize }: Props) {
+export function Sheet({ date, today, now, customize, jumpTo, onJumped }: Props) {
   const { settings, update } = useSettings();
   const { day, store } = useDay(date);
   const isToday = date === today;
@@ -68,6 +72,13 @@ export function Sheet({ date, today, now, customize }: Props) {
     void update({ layout: layout.map((l) => (l.id === id ? { ...l, visible: v } : l)) });
   };
 
+  const ready = Boolean(day && tc);
+  useEffect(() => {
+    if (!jumpTo || !ready) return;
+    document.getElementById(`card-${jumpTo}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    onJumped?.();
+  }, [jumpTo, ready, onJumped]);
+
   if (!day || !tc) return <div className="sheet-loading" aria-busy="true" />;
 
   const render = (id: CardId) => {
@@ -88,9 +99,20 @@ export function Sheet({ date, today, now, customize }: Props) {
       case 'priorities':
         return <Priorities date={date} priorities={day.priorities} onChange={(p) => void store.setPriorities(date, p)} />;
       case 'timer':
-        return <FocusTimer date={date} isToday={isToday} />;
+        return <FocusTimer date={date} isToday={isToday} priorities={day.priorities} onAddPriority={(text) => store.addPriority(date, text)} />;
       case 'log':
-        return <SessionLog date={date} sessions={day.sessions} now={now} />;
+        return <SessionLog date={date} sessions={day.sessions} priorities={day.priorities} now={now} />;
+      case 'retro':
+        return (
+          <Retro
+            date={date}
+            priorities={day.priorities}
+            sessions={day.sessions}
+            note={day.retroNote}
+            reviewedAt={day.retroAt}
+            onChange={(patch) => void store.setRetro(date, patch)}
+          />
+        );
     }
   };
 
@@ -152,7 +174,7 @@ function SortableCard({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: !customize });
   const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 2 : undefined, opacity: isDragging ? 0.85 : undefined };
   return (
-    <div ref={setNodeRef} style={style} className="sortable">
+    <div ref={setNodeRef} style={style} className="sortable" id={`card-${id}`}>
       <CardShell
         title={cardTitle(id)}
         aside={aside}

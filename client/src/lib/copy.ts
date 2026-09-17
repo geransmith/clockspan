@@ -54,6 +54,44 @@ export const GENTLE_WARNINGS = [
   'Is that a priority, or a worry in a to-do costume?',
 ];
 
+/** Shown instead when some rows are already ticked. Counts live in the notice header, not here. */
+export const PROGRESS_WARNINGS = [
+  'Some of this is already done. Are you adding, or avoiding what is left?',
+  'You have cleared part of the list. The open rows still need the rest of the day.',
+  'A few are ticked. Do the open ones fit before this new one?',
+  'There is still an open row. Is this more important than it?',
+  'You have done real work already. A new row does not count more than that.',
+  'Adding now, with rows still open, means one of them slips. Which one?',
+  'Part of the plan is done. Is this the rest of it, or a new plan?',
+  'Good progress. Does this belong today, or is it leaking in from tomorrow?',
+  "The ticked ones are today's win. Don't bury them under new rows.",
+  'You have momentum. Spend it on the open rows first?',
+];
+
+/** Shown when every row is ticked. */
+export const COMPLETE_WARNINGS = [
+  'Everything is ticked. Anything you add now is extra, not owed.',
+  "The plan is done. This one is a bonus, or it is tomorrow's first row.",
+  "You finished the list. Adding more means today can't end as a clean win.",
+  "All done. Sure you're not just filling the quiet?",
+  'Plan complete. A new row now is optional. Treat it that way.',
+  'Nothing is open. Is this urgent, or just available?',
+  "You did what you said you'd do. Stop there, or add one with a light grip.",
+  'List cleared. If you add this, it is allowed to stay unfinished.',
+  "Done means done. Tomorrow's sheet has empty rows.",
+  "The day is already a win. Don't renegotiate it.",
+];
+
+/** Buttons under the warning, by how much of the list is done. */
+export const WARNING_ACTIONS = {
+  fresh: { add: 'Add anyway', keep: 'Keep it short' },
+  progress: { add: 'Add anyway', keep: "Finish what's open" },
+  complete: { add: 'Add a bonus', keep: 'Stop here' },
+} as const;
+
+/** Placeholder for the day's retrospective note. */
+export const RETRO_PROMPT = 'What got in the way? What went to plan?';
+
 /** Settings dialog save indicator, shown in the dialog header. */
 export const SAVE_STATUS = {
   saving: 'Saving…',

@@ -12,11 +12,16 @@ export function isValidDateKey(s: unknown): s is string {
 export interface DayRow {
   id: number;
   overtime_approved: number;
+  retro_note: string;
+  retro_at: number | null;
 }
 
 export function findDay(db: DB, userId: number, date: string): DayRow | undefined {
-  return db.prepare(`SELECT id, overtime_approved FROM days WHERE user_id = ? AND date = ?`).get(userId, date) as DayRow | undefined;
+  return db.prepare(`SELECT id, overtime_approved, retro_note, retro_at FROM days WHERE user_id = ? AND date = ?`).get(userId, date) as DayRow | undefined;
 }
+
+/** Client-minted priority ids (12 hex chars); the server only checks the shape. */
+export const UID_RE = /^[a-z0-9]{8,32}$/i;
 
 export function ensureDay(db: DB, userId: number, date: string): number {
   const existing = findDay(db, userId, date);
@@ -35,6 +40,7 @@ export interface SessionRow {
   started_at: number;
   ended_at: number | null;
   status: 'running' | 'completed' | 'cancelled';
+  priority_uid: string | null;
 }
 
 export function sessionRowToJson(s: SessionRow & { date: string }) {
@@ -48,5 +54,6 @@ export function sessionRowToJson(s: SessionRow & { date: string }) {
     endedAt: s.ended_at,
     status: s.status,
     durationSeconds: s.ended_at != null ? Math.round((s.ended_at - s.started_at) / 1000) : null,
+    priorityUid: s.priority_uid,
   };
 }

@@ -69,6 +69,20 @@ const MIGRATIONS: string[] = [
   `,
   // Per-day "overtime approved" flag: silences that day's clock-out alarm only.
   `ALTER TABLE days ADD COLUMN overtime_approved INTEGER NOT NULL DEFAULT 0;`,
+  // Plan vs. actual: a stable id per priority so sessions can point at one after rows are
+  // renumbered, when it was written, and the day's retrospective note / reviewed-at.
+  `
+  ALTER TABLE priorities ADD COLUMN uid TEXT;
+  ALTER TABLE priorities ADD COLUMN added_at INTEGER;
+  UPDATE priorities SET uid = lower(hex(randomblob(6))) WHERE uid IS NULL AND text <> '';
+  UPDATE priorities SET added_at = (
+    SELECT MIN(d.created_at, COALESCE((SELECT MIN(s.started_at) FROM sessions s WHERE s.day_id = d.id), d.created_at))
+    FROM days d WHERE d.id = priorities.day_id
+  ) WHERE added_at IS NULL AND text <> '';
+  ALTER TABLE sessions ADD COLUMN priority_uid TEXT;
+  ALTER TABLE days ADD COLUMN retro_note TEXT NOT NULL DEFAULT '';
+  ALTER TABLE days ADD COLUMN retro_at INTEGER;
+  `,
 ];
 
 export function openDatabase(dbPath: string): DB {

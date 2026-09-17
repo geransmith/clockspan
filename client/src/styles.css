@@ -364,6 +364,39 @@ button {
   gap: 4px;
   margin-left: auto;
 }
+/* What is already ticked, listed above the phrase so the nudge starts from the work done. */
+.notice-done {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 6px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid color-mix(in srgb, var(--warn) 25%, transparent);
+}
+.notice-done ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.notice-done li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.88rem;
+  color: var(--ok);
+}
+.notice-done li svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.notice-done li span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
 /* End-of-day notice on the timeclock. */
 .notice--celebrate {
   background: var(--accent-soft);
@@ -809,6 +842,42 @@ button {
   flex-direction: column;
   gap: 12px;
 }
+/* Open priorities as chips under the label: tap one to start a session for it. */
+.timer-priorities {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.timer-priorities .chip {
+  max-width: 100%;
+  text-align: left;
+}
+.chip-num {
+  flex: none;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+.chip.is-on .chip-num {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.timer-add-priority {
+  font-size: 0.92rem;
+  min-height: 32px;
+}
 .timer-quick {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1140,6 +1209,33 @@ button {
 .log-label-input {
   min-height: 38px;
 }
+/* Label + priority select stacked while a row is being edited. */
+.log-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.log-plan-select {
+  min-height: 38px;
+  font-size: 0.9rem;
+}
+/* Which priority the session was for, shown before the label. */
+.log-plan {
+  display: inline-block;
+  vertical-align: 1px;
+  min-width: 18px;
+  height: 18px;
+  margin-right: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
 .log-duration {
   font-variant-numeric: tabular-nums;
   font-weight: 650;
@@ -1162,7 +1258,7 @@ button {
     grid-area: time;
   }
   .log-label,
-  .log-label-input {
+  .log-edit {
     grid-area: label;
   }
   .log-duration {
@@ -1173,7 +1269,189 @@ button {
   }
 }
 
+/* ---------- retrospective ---------- */
+.retro {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.retro-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.retro-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+.retro-heading .muted {
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.retro-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* Phone: text on the first line, time under it. Wider: one line with the time on the right. */
+.retro-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    'tick text'
+    'tick time';
+  column-gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.retro-row:first-child {
+  border-top: 0;
+}
+.retro-tick {
+  grid-area: tick;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border-radius: 6px;
+  border: 1.5px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-text);
+}
+.retro-tick.is-done {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+.retro-tick svg {
+  width: 14px;
+  height: 14px;
+}
+.retro-row--unplanned .retro-tick {
+  border-style: dashed;
+  border-color: var(--warn);
+}
+.retro-text {
+  grid-area: text;
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.retro-row.is-done .retro-text {
+  color: var(--text-2);
+}
+.retro-num {
+  display: inline-block;
+  min-width: 18px;
+  margin-right: 6px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+.retro-late {
+  margin-left: 8px;
+  vertical-align: 1px;
+}
+.retro-when {
+  white-space: nowrap;
+}
+.retro-time {
+  grid-area: time;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+  color: var(--text-2);
+}
+.retro-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 0.92rem;
+}
+.retro-summary strong {
+  font-variant-numeric: tabular-nums;
+}
+.retro-textarea {
+  min-height: 88px;
+  padding: 10px 12px;
+  resize: vertical;
+  line-height: 1.4;
+  font-family: inherit;
+}
+.retro-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.retro-foot .pill svg {
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+}
+@media (min-width: 640px) {
+  .retro-row {
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas: 'tick text time';
+    align-items: center;
+  }
+  .retro-time {
+    text-align: right;
+    white-space: nowrap;
+  }
+}
+
 /* ---------- history ---------- */
+.history-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+/* Days | Review switch. */
+.segmented {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--surface-3);
+}
+.segment {
+  min-height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-2);
+  font-weight: 600;
+}
+.segment.is-on {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.history-reviewed {
+  display: inline-flex;
+  vertical-align: -2px;
+  margin-left: 6px;
+  color: var(--ok);
+}
+.history-reviewed svg {
+  width: 14px;
+  height: 14px;
+}
 .history li + li {
   border-top: 1px solid var(--border);
 }
@@ -1210,6 +1488,102 @@ button {
   .history-stat:nth-child(4) {
     display: none;
   }
+}
+
+/* ---------- review (week / month / quarter) ---------- */
+.review .card-head {
+  flex-wrap: wrap;
+}
+.review-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px 0;
+}
+.review-period {
+  min-width: 9ch;
+  text-align: center;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.review-empty {
+  padding: 14px 16px 18px;
+}
+.review-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 14px 16px 16px;
+}
+.review-tiles {
+  margin-bottom: 0;
+}
+.review-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.review-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.review-list li + li {
+  border-top: 1px solid var(--border);
+}
+.review-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 6px;
+  margin: 0 -6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+}
+.review-row:hover {
+  background: var(--surface-2);
+}
+.review-text {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.review-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+.review-time {
+  min-width: 4.5ch;
+  text-align: right;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.review-row--note {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+.review-note-head {
+  justify-content: space-between;
+}
+.review-note-head .pill svg {
+  width: 12px;
+  height: 12px;
+  margin-right: 3px;
+}
+.review-note {
+  white-space: pre-wrap;
+  color: var(--text-2);
+  font-size: 0.92rem;
+  line-height: 1.4;
 }
 
 /* ---------- settings dialog ---------- */

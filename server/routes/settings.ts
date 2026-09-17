@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 
-export const CARD_IDS = ['timeclock', 'priorities', 'timer', 'log'] as const;
+export const CARD_IDS = ['timeclock', 'priorities', 'timer', 'log', 'retro'] as const;
 export type CardId = (typeof CARD_IDS)[number];
 
 export interface AlarmSettings {
@@ -25,11 +25,13 @@ export interface Settings {
   keepScreenAwake: boolean;
   /** Show the per-day "Overtime approved" switch and banner action. */
   overtimeApproval: boolean;
-  alarms: { lunchBy: AlarmSettings; clockOut: AlarmSettings; secondMeal: AlarmSettings };
+  alarms: { lunchBy: AlarmSettings; clockOut: AlarmSettings; secondMeal: AlarmSettings; retro: AlarmSettings };
   layout: { id: CardId; visible: boolean }[];
 }
 
 const DEFAULT_ALARM: AlarmSettings = { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 };
+// The retrospective is one nudge before the day ends, not a deadline: no repeat by default.
+const DEFAULT_RETRO_ALARM: AlarmSettings = { enabled: true, leadMinutes: [30], onDue: false, overdueEveryMinutes: 0 };
 
 export const DEFAULT_SETTINGS: Settings = {
   workMinutes: 480,
@@ -42,7 +44,7 @@ export const DEFAULT_SETTINGS: Settings = {
   notifications: true,
   keepScreenAwake: true,
   overtimeApproval: true,
-  alarms: { lunchBy: { ...DEFAULT_ALARM }, clockOut: { ...DEFAULT_ALARM }, secondMeal: { ...DEFAULT_ALARM } },
+  alarms: { lunchBy: { ...DEFAULT_ALARM }, clockOut: { ...DEFAULT_ALARM }, secondMeal: { ...DEFAULT_ALARM }, retro: { ...DEFAULT_RETRO_ALARM } },
   layout: CARD_IDS.map((id) => ({ id, visible: true })),
 };
 
@@ -105,6 +107,7 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
       lunchBy: mergeAlarm(base.alarms.lunchBy, alarms.lunchBy),
       clockOut: mergeAlarm(base.alarms.clockOut, alarms.clockOut),
       secondMeal: mergeAlarm(base.alarms.secondMeal, alarms.secondMeal),
+      retro: mergeAlarm(base.alarms.retro, alarms.retro),
     },
     layout,
   };

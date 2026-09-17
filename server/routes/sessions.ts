@@ -1,10 +1,23 @@
 import { Router } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
-import { ensureDay, isValidDateKey, sessionRowToJson, type SessionRow } from './shared.js';
+import { ensureDay, isValidDateKey, sessionRowToJson, UID_RE, type SessionRow } from './shared.js';
 
 const MIN_PLANNED = 60;
 const MAX_PLANNED = 8 * 3600;
+
+/**
+ * A session's priority link: undefined = not mentioned, null = unplanned, a uid that must
+ * exist on that day. Returns an error message for anything else.
+ */
+function parsePriorityUid(db: DB, dayId: number, raw: unknown): { uid: string | null | undefined; error?: string } {
+  if (raw === undefined) return { uid: undefined };
+  if (raw === null) return { uid: null };
+  if (typeof raw !== 'string' || !UID_RE.test(raw)) return { uid: undefined, error: 'priorityUid must be a priority id or null.' };
+  const uid = raw.toLowerCase();
+  const hit = db.prepare(`SELECT 1 FROM priorities WHERE day_id = ? AND uid = ?`).get(dayId, uid);
+  return hit ? { uid } : { uid: undefined, error: 'That priority is not on this day.' };
+}
 
 function getOwned(db: DB, userId: number, id: number): (SessionRow & { date: string }) | undefined {
   return db
@@ -29,7 +42,7 @@ export function sessionStartRouter(db: DB): Router {
       res.status(400).json({ error: 'Invalid date.' });
       return;
     }
-    const { label, plannedSeconds } = (req.body ?? {}) as { label?: unknown; plannedSeconds?: unknown };
+    const { label, plannedSeconds, priorityUid } = (req.body ?? {}) as { label?: unknown; plannedSeconds?: unknown; priorityUid?: unknown };
     if (!(typeof plannedSeconds === 'number' && Number.isInteger(plannedSeconds) && plannedSeconds >= MIN_PLANNED && plannedSeconds <= MAX_PLANNED)) {
       res.status(400).json({ error: `plannedSeconds must be between ${MIN_PLANNED} and ${MAX_PLANNED}.` });
       return;
@@ -39,17 +52,23 @@ export function sessionStartRouter(db: DB): Router {
       res.status(409).json({ error: 'A timer is already running.', session: sessionRowToJson(existing) });
       return;
     }
-    const id = db.transaction(() => {
+    const result = db.transaction((): { id: number } | { error: string } => {
       const dayId = ensureDay(db, user.id, date);
+      const link = parsePriorityUid(db, dayId, priorityUid);
+      if (link.error) return { error: link.error };
       const info = db
         .prepare(
-          `INSERT INTO sessions (day_id, user_id, label, notes, planned_seconds, started_at, ended_at, status)
-           VALUES (?, ?, ?, '', ?, ?, NULL, 'running')`,
+          `INSERT INTO sessions (day_id, user_id, label, notes, planned_seconds, started_at, ended_at, status, priority_uid)
+           VALUES (?, ?, ?, '', ?, ?, NULL, 'running', ?)`,
         )
-        .run(dayId, user.id, typeof label === 'string' ? label.slice(0, 200) : '', plannedSeconds, Date.now());
-      return Number(info.lastInsertRowid);
+        .run(dayId, user.id, typeof label === 'string' ? label.slice(0, 200) : '', plannedSeconds, Date.now(), link.uid ?? null);
+      return { id: Number(info.lastInsertRowid) };
     })();
-    res.status(201).json({ session: sessionRowToJson(getOwned(db, user.id, id)!) });
+    if ('error' in result) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.status(201).json({ session: sessionRowToJson(getOwned(db, user.id, result.id)!) });
   });
 
   return r;
@@ -70,12 +89,19 @@ export function sessionsRouter(db: DB): Router {
       res.status(404).json({ error: 'Session not found.' });
       return;
     }
-    const { plannedSeconds, label, notes } = (req.body ?? {}) as Record<string, unknown>;
+    const { plannedSeconds, label, notes, priorityUid } = (req.body ?? {}) as Record<string, unknown>;
     const next = {
       planned: s.planned_seconds,
       label: s.label,
       notes: s.notes,
+      priorityUid: s.priority_uid,
     };
+    const link = parsePriorityUid(db, s.day_id, priorityUid);
+    if (link.error) {
+      res.status(400).json({ error: link.error });
+      return;
+    }
+    if (link.uid !== undefined) next.priorityUid = link.uid;
     if (plannedSeconds !== undefined) {
       if (!(typeof plannedSeconds === 'number' && Number.isInteger(plannedSeconds) && plannedSeconds >= MIN_PLANNED && plannedSeconds <= MAX_PLANNED)) {
         res.status(400).json({ error: `plannedSeconds must be between ${MIN_PLANNED} and ${MAX_PLANNED}.` });
@@ -89,7 +115,7 @@ export function sessionsRouter(db: DB): Router {
     }
     if (label !== undefined) next.label = typeof label === 'string' ? label.slice(0, 200) : s.label;
     if (notes !== undefined) next.notes = typeof notes === 'string' ? notes.slice(0, 2000) : s.notes;
-    db.prepare(`UPDATE sessions SET planned_seconds = ?, label = ?, notes = ? WHERE id = ?`).run(next.planned, next.label, next.notes, s.id);
+    db.prepare(`UPDATE sessions SET planned_seconds = ?, label = ?, notes = ?, priority_uid = ? WHERE id = ?`).run(next.planned, next.label, next.notes, next.priorityUid, s.id);
     res.json({ session: sessionRowToJson(getOwned(db, user.id, s.id)!) });
   });
 

@@ -33,9 +33,34 @@ export function endOfDay(key: string): number {
   return d.getTime() - 1;
 }
 
+/** Monday of the key's week: the review follows the work week, not the calendar one. */
+export function startOfWeek(key: string): string {
+  const d = parseDateKey(key);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return dateKey(d);
+}
+
+export function startOfMonth(key: string): string {
+  return `${key.slice(0, 7)}-01`;
+}
+
+export function startOfQuarter(key: string): string {
+  const [y, m] = key.split('-').map(Number) as [number, number];
+  return `${y}-${pad(Math.floor((m - 1) / 3) * 3 + 1)}-01`;
+}
+
+/** `n` months from the first of the key's month, clamped to a first-of-month key. */
+export function addMonths(key: string, n: number): string {
+  const [y, m] = key.split('-').map(Number) as [number, number];
+  return dateKey(new Date(y, m - 1 + n, 1));
+}
+
 const timeFmt = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
 const dateLongFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 const dateFullFmt = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+const monthFmt = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' });
+const dayShortFmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+const weekdayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
 
 export function formatTime(ms: number): string {
   return timeFmt.format(new Date(ms));
@@ -47,6 +72,24 @@ export function formatDateLong(key: string): string {
 
 export function formatDateFull(key: string): string {
   return dateFullFmt.format(parseDateKey(key));
+}
+
+/** "September 2026" */
+export function formatMonth(key: string): string {
+  return monthFmt.format(parseDateKey(key));
+}
+
+/** "Sep 14 – 20" or "Sep 28 – Oct 4": an inclusive span of date keys. */
+export function formatDateSpan(from: string, to: string): string {
+  const a = parseDateKey(from);
+  const b = parseDateKey(to);
+  if (from.slice(0, 7) === to.slice(0, 7)) return `${dayShortFmt.format(a)} – ${b.getDate()}`;
+  return `${dayShortFmt.format(a)} – ${dayShortFmt.format(b)}`;
+}
+
+/** "Wed" */
+export function formatWeekday(key: string): string {
+  return weekdayFmt.format(parseDateKey(key));
 }
 
 /** "1h 12m", "45m", "0m". Negative values are shown as positive. */

@@ -58,12 +58,15 @@ export const putPriorities = (date: string, priorities: Priority[]) =>
   request<{ priorities: Priority[] }>('PUT', `/api/days/${date}/priorities`, { priorities });
 export const putOvertime = (date: string, approved: boolean) =>
   request<{ overtimeApproved: boolean }>('PUT', `/api/days/${date}/overtime`, { approved });
+export const putRetro = (date: string, patch: { note?: string; done?: boolean }) =>
+  request<{ retroNote: string; retroAt: number | null }>('PUT', `/api/days/${date}/retro`, patch);
+export const getRange = (from: string, to: string) => request<{ days: Day[] }>('GET', `/api/days/range?from=${from}&to=${to}`);
 
 // ----- sessions -----
 export const getRunning = () => request<{ session: Session | null }>('GET', '/api/sessions/running');
-export const startSession = (date: string, plannedSeconds: number, label: string) =>
-  request<{ session: Session }>('POST', `/api/days/${date}/sessions`, { plannedSeconds, label });
-export const patchSession = (id: number, patch: { plannedSeconds?: number; label?: string; notes?: string }) =>
+export const startSession = (date: string, plannedSeconds: number, label: string, priorityUid: string | null = null) =>
+  request<{ session: Session }>('POST', `/api/days/${date}/sessions`, { plannedSeconds, label, priorityUid });
+export const patchSession = (id: number, patch: { plannedSeconds?: number; label?: string; notes?: string; priorityUid?: string | null }) =>
   request<{ session: Session }>('PATCH', `/api/sessions/${id}`, patch);
 export const finishSession = (id: number) => request<{ session: Session }>('POST', `/api/sessions/${id}/finish`);
 export const cancelSession = (id: number) => request<{ session: Session }>('POST', `/api/sessions/${id}/cancel`);

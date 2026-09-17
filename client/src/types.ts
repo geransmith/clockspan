@@ -1,4 +1,4 @@
-export type CardId = 'timeclock' | 'priorities' | 'timer' | 'log';
+export type CardId = 'timeclock' | 'priorities' | 'timer' | 'log' | 'retro';
 
 export interface AlarmSettings {
   enabled: boolean;
@@ -7,7 +7,7 @@ export interface AlarmSettings {
   overdueEveryMinutes: number;
 }
 
-export type AlarmId = 'lunchBy' | 'clockOut' | 'secondMeal';
+export type AlarmId = 'lunchBy' | 'clockOut' | 'secondMeal' | 'retro';
 
 export interface Settings {
   workMinutes: number;
@@ -37,11 +37,16 @@ export interface Punch {
   at: number | null;
 }
 
-/** Positions are 1-based and contiguous; only rows that exist are stored. */
+/**
+ * Positions are 1-based and contiguous; only rows that exist are stored. `uid` is the
+ * stable id sessions point at (null until the row has text); `addedAt` is when it got text.
+ */
 export interface Priority {
   position: number;
   text: string;
   done: boolean;
+  uid: string | null;
+  addedAt: number | null;
 }
 
 export type SessionStatus = 'running' | 'completed' | 'cancelled';
@@ -56,6 +61,8 @@ export interface Session {
   endedAt: number | null;
   status: SessionStatus;
   durationSeconds: number | null;
+  /** The priority this session was for; null (or a removed row's uid) means unplanned. */
+  priorityUid: string | null;
 }
 
 export interface Day {
@@ -64,6 +71,9 @@ export interface Day {
   priorities: Priority[];
   /** Silences this day's clock-out alarm only; meal alarms are unaffected. */
   overtimeApproved: boolean;
+  /** The retrospective's "why" note and when it was marked reviewed (null = not yet). */
+  retroNote: string;
+  retroAt: number | null;
   sessions: Session[];
 }
 
@@ -73,6 +83,7 @@ export interface DaySummary {
   focusSeconds: number;
   prioritiesDone: number;
   prioritiesTotal: number;
+  retroAt: number | null;
 }
 
 export type AuthMode = 'none' | 'local' | 'oidc';
