@@ -8,9 +8,13 @@ export type ChimeKind = 'timer' | 'lead' | 'due' | 'overdue' | 'test';
 
 export interface Banner {
   id: number;
+  /** Small line above the title naming the source, e.g. "Clock-out alarm · 15 min warning". */
+  kicker?: string;
   title: string;
   body?: string;
   tone: Tone;
+  /** When it was raised, so a sticky banner seen later still says when it fired. */
+  at: number;
   /** Sticky banners stay until dismissed; others auto-dismiss. */
   sticky: boolean;
   /** Groups banners so a newer one replaces an older one of the same tag. */
@@ -137,9 +141,9 @@ export function dismissByTag(tag: string): void {
   emit();
 }
 
-function pushBanner(b: Omit<Banner, 'id'>): void {
+function pushBanner(b: Omit<Banner, 'id' | 'at'>): void {
   // One banner per tag so "clock out in 5" replaces "clock out in 15".
-  const banner: Banner = { ...b, id: nextId++ };
+  const banner: Banner = { ...b, id: nextId++, at: Date.now() };
   banners = [...banners.filter((x) => x.tag !== b.tag), banner];
   emit();
   if (!b.sticky) setTimeout(() => dismissBanner(banner.id), 8000);
@@ -147,6 +151,7 @@ function pushBanner(b: Omit<Banner, 'id'>): void {
 
 // ----- the one entry point -----
 export interface AlertOptions {
+  kicker?: string;
   title: string;
   body?: string;
   tone: Tone;
@@ -161,5 +166,5 @@ export interface AlertOptions {
 export function alert(o: AlertOptions): void {
   if (o.sound && o.chime) chime(o.chime);
   if (o.notifications) notify(o.title, o.body, o.tag);
-  pushBanner({ title: o.title, body: o.body, tone: o.tone, sticky: o.sticky ?? false, tag: o.tag });
+  pushBanner({ kicker: o.kicker, title: o.title, body: o.body, tone: o.tone, sticky: o.sticky ?? false, tag: o.tag });
 }

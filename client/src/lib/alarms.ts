@@ -1,4 +1,5 @@
 import type { AlarmId, AlarmSettings } from '../types';
+import { formatTime } from './format';
 
 export interface AlarmTarget {
   id: AlarmId;
@@ -104,14 +105,69 @@ function fmtMinutes(m: number): string {
   return rest ? `${h}h ${rest}m` : `${h}h`;
 }
 
-/** Human copy for an event. */
-export function describeEvent(e: AlarmEvent): { title: string; body: string; tone: 'info' | 'warn' | 'danger' } {
-  const what = e.id === 'lunchBy' ? 'Lunch' : 'Clock out';
+/** What the copy needs beyond the event itself: how the deadline was derived. */
+export interface EventContext {
+  /** Clock-in instant, for "clocked in at 8:32 AM". */
+  clockIn: number;
+  /** Work-day target in minutes (settings.workMinutes). */
+  workMinutes: number;
+  /** Lunch deadline window in minutes (settings.lunchDeadlineMinutes). */
+  lunchDeadlineMinutes: number;
+}
+
+export interface EventCopy {
+  /** Which alarm and which rule fired, e.g. "Clock-out alarm · 15 min warning". */
+  kicker: string;
+  title: string;
+  /** Why: the computed deadline and how it was derived. */
+  body: string;
+  tone: 'warn' | 'danger';
+}
+
+/**
+ * Human copy for an event. A chime on its own just says "something happened"; the banner
+ * has to answer which alarm, which rule, and where the deadline came from.
+ */
+export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
+  const target = formatTime(e.target);
+  const clockIn = formatTime(ctx.clockIn);
+  const day = fmtMinutes(ctx.workMinutes);
+  const alarm = e.id === 'lunchBy' ? 'Lunch alarm' : 'Clock-out alarm';
+
   if (e.kind === 'lead') {
-    return { title: `${what} in ${fmtMinutes(e.minutes)}`, body: e.id === 'lunchBy' ? 'Start wrapping up for your break.' : 'Time to land the plane.', tone: 'warn' };
+    const kicker = `${alarm} · ${fmtMinutes(e.minutes)} warning`;
+    return e.id === 'lunchBy'
+      ? {
+          kicker,
+          title: `Lunch in ${fmtMinutes(e.minutes)}`,
+          body: `Lunch must start by ${target} — ${fmtMinutes(ctx.lunchDeadlineMinutes)} after clocking in at ${clockIn}.`,
+          tone: 'warn',
+        }
+      : {
+          kicker,
+          title: `Clock out in ${fmtMinutes(e.minutes)}`,
+          body: `Your ${day} day ends at ${target} (clocked in ${clockIn}). Start wrapping up.`,
+          tone: 'warn',
+        };
   }
   if (e.kind === 'due') {
-    return { title: e.id === 'lunchBy' ? 'Take lunch now' : 'Time to clock out', body: e.id === 'lunchBy' ? 'Your lunch deadline is now.' : 'You have hit your hours for today.', tone: 'danger' };
+    const kicker = `${alarm} · time's up`;
+    return e.id === 'lunchBy'
+      ? { kicker, title: 'Take lunch now', body: `Your lunch deadline is ${target}. Start your break.`, tone: 'danger' }
+      : { kicker, title: 'Time to clock out', body: `It's ${target} — you've worked your ${day} for today. Punch out now.`, tone: 'danger' };
   }
-  return { title: `${what} is ${fmtMinutes(e.minutes)} overdue`, body: e.id === 'lunchBy' ? 'Your lunch break is past due.' : 'You are past your clock-out time.', tone: 'danger' };
+  const kicker = `${alarm} · ${fmtMinutes(e.minutes)} overdue`;
+  return e.id === 'lunchBy'
+    ? {
+        kicker,
+        title: `Lunch is ${fmtMinutes(e.minutes)} overdue`,
+        body: `Your lunch deadline was ${target}. Start your break as soon as you can.`,
+        tone: 'danger',
+      }
+    : {
+        kicker,
+        title: `Clock out is ${fmtMinutes(e.minutes)} overdue`,
+        body: `Your day ended at ${target}. You're working past your ${day} target.`,
+        tone: 'danger',
+      };
 }

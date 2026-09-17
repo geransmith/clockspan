@@ -124,7 +124,9 @@ to exercise the setup/login pages.
 - **An alarm target**: expose the instant from `computeTimeclock` → add a target in
   `useAlarms.ts` (`targets[]`, with an `armed` rule) → add its default under `alarms` on both
   sides and the `AlarmId` union → add an `AlarmEditor` in `SettingsDialog.tsx` → copy in
-  `describeEvent()`.
+  `describeEvent()`: a `kicker` naming the alarm + rule ("X alarm · 15 min warning"), a
+  title, and a body that says where the deadline came from (it gets an `EventContext`;
+  extend that if the new target needs more inputs).
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
   `currentUser(req).id`, validate input, return `{ error }` JSON on failure → add the call to
   `client/src/api.ts` and types to `types.ts`.

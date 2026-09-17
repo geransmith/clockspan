@@ -59,13 +59,18 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     for (const k of crossed) fired.current.set.add(k);
     saveFired(dateKey, fired.current.set);
 
+    // Every alarm banner is sticky: the chime is what grabs attention, and the banner has to
+    // still be there — saying which alarm and why — when the user looks up. The next
+    // threshold replaces it (same tag) and a moved/disarmed target clears it (above).
+    const ctx = { clockIn: tc.clockIn, workMinutes: settings.workMinutes, lunchDeadlineMinutes: settings.lunchDeadlineMinutes };
     for (const e of fire) {
-      const { title, body, tone } = describeEvent(e);
+      const { kicker, title, body, tone } = describeEvent(e, ctx);
       alert({
+        kicker,
         title,
         body,
         tone,
-        sticky: e.kind !== 'lead',
+        sticky: true,
         chime: e.kind,
         tag: `alarm:${e.id}`,
         sound: settings.sound,
