@@ -11,7 +11,7 @@ const FLOW_COOKIE = 'fs_oidc';
 const FLOW_TTL_SEC = 600;
 
 /** The two error pages are HTML with a retry link; anything interpolated into them goes through this. */
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
@@ -45,7 +45,8 @@ class Discovery {
         return;
       } catch (err) {
         console.error(`[oidc] discovery failed (${(err as Error).message}); retrying in ${delay / 1000}s`);
-        await new Promise((r) => setTimeout(r, delay));
+        // unref: a provider that never answers must not keep the process (or a test) alive.
+        await new Promise((r) => setTimeout(r, delay).unref());
         delay = Math.min(delay * 2, 60_000);
       }
     }
@@ -56,7 +57,7 @@ class Discovery {
   }
 }
 
-function upsertOidcUser(db: DB, sub: string, displayName: string): UserRow {
+export function upsertOidcUser(db: DB, sub: string, displayName: string): UserRow {
   const existing = db.prepare(`SELECT * FROM users WHERE oidc_sub = ?`).get(sub) as UserRow | undefined;
   if (existing) {
     if (existing.display_name !== displayName) {

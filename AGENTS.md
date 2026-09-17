@@ -127,6 +127,7 @@ npm install
 npm run dev            # API on :3000 (tsx watch, PORT pinned) + Vite on :5173 (proxies /api, /auth)
 npm test               # vitest: shared + client lib tests + server API tests (~1.5 s)
 npm test -- server/routes/days   # one file
+npm run test:coverage  # the same run with a v8 report (text + coverage/index.html); server, shared, client libs
 npm run typecheck      # client + server (tsconfig.server.test.json also covers dev/ and tests)
 npm run lint           # eslint .
 npm run seed           # fill data/focus.db with sample days; see "Dev data is disposable"

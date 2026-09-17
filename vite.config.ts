@@ -23,5 +23,14 @@ export default defineConfig({
     environment: 'node',
     include: ['client/src/**/*.test.ts', 'server/**/*.test.ts', 'shared/**/*.test.ts'],
     root: '.',
+    // `npm run test:coverage`. Only what the suite is meant to cover: the server, shared, and
+    // the pure client libs. Components and hooks are verified in the browser, not here.
+    coverage: {
+      provider: 'v8',
+      include: ['server/**', 'shared/**', 'client/src/lib/**'],
+      exclude: ['server/dev/**', 'server/index.ts', 'server/cli.ts', '**/*.test.ts'],
+      reporter: ['text', 'html'],
+      reportsDirectory: 'coverage',
+    },
   },
 });

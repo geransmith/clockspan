@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { SEED_TODAY, startTestApp, type TestApp } from '../dev/harness.js';
+import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from '../dev/harness.js';
+import { ensureLocalUsers, LOCAL_USERS, seedDatabase } from '../dev/seed.js';
 import { MAX_PRIORITIES } from '../../shared/settings.js';
 
 let app: TestApp;
@@ -228,5 +229,50 @@ describe('GET /api/days/range', () => {
     expect((await app.api.get('/api/days/range?from=2025-01-01&to=2026-09-16')).status).toBe(400);
     expect((await app.api.get('/api/days/range?from=x&to=2026-09-16')).status).toBe(400);
     expect((await app.api.get('/api/days/range')).status).toBe(400);
+  });
+});
+
+describe('days are scoped to the signed-in user', () => {
+  // The file-level hooks give every test a seeded AUTH_MODE=none app; this block swaps it for
+  // a local-auth one with two users (the outer afterEach still closes it).
+  beforeEach(async () => {
+    await app.close();
+    app = await startTestApp({ authMode: 'local' });
+  });
+
+  it('keeps every read and write on the caller\'s own rows', async () => {
+    const { admin, member } = await ensureLocalUsers(app.db);
+    const a = app.client();
+    const b = app.client();
+    expect((await a.post('/api/auth/login', { username: LOCAL_USERS.admin, password: LOCAL_USERS.password })).status).toBe(200);
+    expect((await b.post('/api/auth/login', { username: LOCAL_USERS.member, password: LOCAL_USERS.password })).status).toBe(200);
+    // A has a seeded history; B starts empty.
+    const seeded = seedDatabase(app.db, { userId: admin.id, today: SEED_TODAY, now: SEED_NOW, days: 3 });
+    const date = seeded.days[0]!.date;
+    expect((await a.get(`/api/days/${date}`)).body.punches.length).toBeGreaterThan(0);
+
+    // Reads: B sees nothing of A's.
+    expect((await b.get(`/api/days/${date}`)).body).toMatchObject({ date, punches: [], priorities: [], sessions: [] });
+    expect((await b.get('/api/days')).body.days).toEqual([]);
+    expect((await b.get(`/api/days/range?from=${date}&to=${SEED_TODAY}`)).body.days).toEqual([]);
+    expect((await b.get(`/api/days/prune?before=2099-01-01`)).body).toMatchObject({ matching: 0, total: 0, oldest: null });
+
+    // Writes on the same date land on B's own day and leave A's untouched.
+    const before = (await a.get(`/api/days/${date}`)).body;
+    expect((await b.put(`/api/days/${date}/punches`, { punches: [{ at: 1 }, { at: null }, { at: null }, { at: null }] })).status).toBe(200);
+    expect((await b.put(`/api/days/${date}/priorities`, { priorities: [{ text: 'Mine' }] })).status).toBe(200);
+    expect((await b.put(`/api/days/${date}/overtime`, { approved: true })).status).toBe(200);
+    expect((await b.put(`/api/days/${date}/retro`, { note: 'b', done: true })).status).toBe(200);
+    expect((await a.get(`/api/days/${date}`)).body).toEqual(before);
+    const bDay = (await b.get(`/api/days/${date}`)).body;
+    expect(bDay.priorities.map((p: { text: string }) => p.text)).toEqual(['Mine']);
+    expect(bDay.overtimeApproved).toBe(true);
+    expect(bDay.retroNote).toBe('b');
+    expect(app.db.prepare(`SELECT user_id FROM days WHERE date = ? ORDER BY user_id`).all(date)).toEqual([{ user_id: admin.id }, { user_id: member.id }]);
+
+    // A prune by B deletes only B's days.
+    expect((await b.post('/api/days/prune', { before: '2099-01-01' })).body).toEqual({ deleted: 1 });
+    expect((await a.get('/api/days')).body.days).toHaveLength(seeded.days.length);
+    expect((await a.get(`/api/days/${date}`)).body).toEqual(before);
   });
 });

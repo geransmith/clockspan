@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { startTestApp, type TestApp } from '../dev/harness.js';
+import { ensureLocalUsers, LOCAL_USERS } from '../dev/seed.js';
 import { CARD_DEFAULT_VISIBLE, CARD_IDS, DEFAULT_SETTINGS } from '../../shared/settings.js';
 import { mergeSettings } from './settings.js';
 
@@ -93,6 +94,30 @@ describe('/api/settings', () => {
     expect(r.body).toEqual(DEFAULT_SETTINGS);
     expect((await app.api.get('/api/settings')).body).toEqual(DEFAULT_SETTINGS);
     expect(app.db.prepare(`SELECT COUNT(*) AS n FROM settings`).get()).toEqual({ n: 0 });
+  });
+});
+
+describe('settings are scoped to the signed-in user', () => {
+  it('saves, reads and resets one user\'s row without touching another\'s', async () => {
+    const app = await startTestApp({ authMode: 'local' });
+    try {
+      await ensureLocalUsers(app.db);
+      const a = app.client();
+      const b = app.client();
+      expect((await a.post('/api/auth/login', { username: LOCAL_USERS.admin, password: LOCAL_USERS.password })).status).toBe(200);
+      expect((await b.post('/api/auth/login', { username: LOCAL_USERS.member, password: LOCAL_USERS.password })).status).toBe(200);
+
+      expect((await a.put('/api/settings', { workMinutes: 420 })).body.workMinutes).toBe(420);
+      expect((await b.get('/api/settings')).body).toEqual(DEFAULT_SETTINGS);
+      expect((await b.put('/api/settings', { workMinutes: 300 })).body.workMinutes).toBe(300);
+      expect((await a.get('/api/settings')).body.workMinutes).toBe(420);
+
+      expect((await b.del('/api/settings')).body).toEqual(DEFAULT_SETTINGS);
+      expect((await a.get('/api/settings')).body.workMinutes).toBe(420);
+      expect(app.db.prepare(`SELECT COUNT(*) AS n FROM settings`).get()).toEqual({ n: 1 });
+    } finally {
+      await app.close();
+    }
   });
 });
 
