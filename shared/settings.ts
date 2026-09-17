@@ -4,8 +4,18 @@
  * settings arrive). Pure data, no imports, so either side can pull it in.
  */
 
-export const CARD_IDS = ['timeclock', 'priorities', 'timer', 'log', 'retro'] as const;
+export const CARD_IDS = ['timeclock', 'priorities', 'timer', 'log', 'retro', 'stickers'] as const;
 export type CardId = (typeof CARD_IDS)[number];
+
+/** Whether a card shows until the user says otherwise; a card missing from a saved layout gets this. */
+export const CARD_DEFAULT_VISIBLE: Record<CardId, boolean> = {
+  timeclock: true,
+  priorities: true,
+  timer: true,
+  log: true,
+  retro: true,
+  stickers: false,
+};
 
 export type AlarmId = 'lunchBy' | 'clockOut' | 'secondMeal' | 'retro';
 
@@ -73,6 +83,6 @@ export const DEFAULT_SETTINGS: Settings = {
   overtimeApproval: true,
   celebrations: true,
   alarms: { lunchBy: { ...DEFAULT_ALARM }, clockOut: { ...DEFAULT_ALARM }, secondMeal: { ...DEFAULT_ALARM }, retro: { ...DEFAULT_RETRO_ALARM } },
-  layout: CARD_IDS.map((id) => ({ id, visible: true })),
+  layout: CARD_IDS.map((id) => ({ id, visible: CARD_DEFAULT_VISIBLE[id] })),
   retention: { enabled: false, days: 365 },
 };

@@ -7,6 +7,12 @@
 /** Shown once the day is done. One is picked per clock-out. */
 export const CELEBRATION_EMOJI = ['🎉', '🥳', '🌟', '✨', '🙌', '💪', '🏆', '🎈', '🚀', '🌈', '🍀', '🎊', '👏', '😎', '🔥', '🥇', '🌻', '🫶', '🏁', '🧠'];
 
+/** The sticker chart's stickers: one per thing a day did, drawn at random from here. */
+export const STICKER_EMOJI = ['🐱', '🐶', '🐰', '🦊', '🐻', '🐼', '🐨', '🐸', '🦄', '🐥', '🐢', '🦋', '🐝', '🐧', '🦉', '🐹', '🐣', '🌸', '🌷', '🍓'];
+
+/** The sticker chart before any day in its window has earned one. */
+export const STICKERS_EMPTY = 'Nothing here yet. Stickers appear as days get logged.';
+
 export const CELEBRATION_PHRASES = [
   'Nice work today.',
   "That's a wrap.",

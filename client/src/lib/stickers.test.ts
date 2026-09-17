@@ -1,0 +1,117 @@
+import { describe, expect, it } from 'vitest';
+import type { Day, DaySummary, Punch } from '../types';
+import { STICKER_EMOJI } from './copy';
+import { countStickers, daySummaryOf, STICKER_REASONS, stickerEmoji, stickersForDay, stickerWeeks } from './stickers';
+import { emptyPunches } from './timeclock';
+
+const settings = { workMinutes: 480, lunchDeadlineMinutes: 300, lunchMinutes: 30, secondMealAfterMinutes: 600 };
+const TODAY = '2026-09-17'; // a Thursday
+const NOW = new Date(2026, 8, 17, 15, 0).getTime();
+
+function punches(date: string, times: (string | null)[]): Punch[] {
+  const rows = emptyPunches();
+  times.forEach((t, i) => {
+    if (!t) return;
+    const [h, m] = t.split(':').map(Number);
+    const d = new Date(`${date}T00:00:00`);
+    d.setHours(h!, m!, 0, 0);
+    rows[i]!.at = d.getTime();
+  });
+  return rows;
+}
+
+function summary(date: string, patch: Partial<DaySummary> = {}): DaySummary {
+  return { date, punches: emptyPunches(), focusSeconds: 0, prioritiesDone: 0, prioritiesTotal: 0, retroAt: null, ...patch };
+}
+
+describe('stickersForDay', () => {
+  it('earns nothing for an empty day', () => {
+    expect(stickersForDay(summary('2026-09-14'), settings, TODAY, NOW)).toEqual([]);
+  });
+
+  it('earns one sticker per thing the day did', () => {
+    const full = summary('2026-09-14', {
+      punches: punches('2026-09-14', ['08:00', '12:00', '12:30', '16:30']),
+      focusSeconds: 1500,
+      prioritiesDone: 3,
+      prioritiesTotal: 3,
+      retroAt: 1,
+    });
+    expect(stickersForDay(full, settings, TODAY, NOW)).toEqual(['clockedOut', 'lunch', 'priorities', 'focus', 'reviewed']);
+  });
+
+  it('judges each reason on its own', () => {
+    const lunchOnly = summary('2026-09-14', { punches: punches('2026-09-14', ['08:00', '12:00', null, null]) });
+    expect(stickersForDay(lunchOnly, settings, TODAY, NOW)).toEqual(['clockedOut', 'lunch']); // a past day off the clock is done
+    const halfPlan = summary('2026-09-14', { prioritiesDone: 1, prioritiesTotal: 2 });
+    expect(stickersForDay(halfPlan, settings, TODAY, NOW)).toEqual([]);
+    const openToday = summary(TODAY, { punches: punches(TODAY, ['08:00', null, null, null]), focusSeconds: 60 });
+    expect(stickersForDay(openToday, settings, TODAY, NOW)).toEqual(['focus']);
+  });
+});
+
+describe('stickerEmoji', () => {
+  it('is fixed per day and reason, drawn from the pool, and never repeats within a day', () => {
+    const a = stickerEmoji('2026-09-14', 'lunch');
+    expect(stickerEmoji('2026-09-14', 'lunch')).toBe(a);
+    expect(STICKER_EMOJI).toContain(a);
+    for (let d = 1; d <= 30; d++) {
+      const date = `2026-09-${String(d).padStart(2, '0')}`;
+      expect(new Set(STICKER_REASONS.map((r) => stickerEmoji(date, r.id))).size).toBe(STICKER_REASONS.length);
+    }
+    const picks = new Set(STICKER_REASONS.flatMap((r) => ['2026-09-14', '2026-09-15', '2026-09-16'].map((d) => stickerEmoji(d, r.id))));
+    expect(picks.size).toBeGreaterThan(5);
+  });
+});
+
+describe('daySummaryOf', () => {
+  it('counts completed sessions and rows with text, like GET /days', () => {
+    const day: Day = {
+      date: TODAY,
+      punches: emptyPunches(),
+      priorities: [
+        { position: 1, text: 'a', done: true, uid: 'u1', addedAt: 1 },
+        { position: 2, text: '  ', done: false, uid: null, addedAt: null },
+        { position: 3, text: 'b', done: false, uid: 'u3', addedAt: 1 },
+      ],
+      overtimeApproved: false,
+      retroNote: '',
+      retroAt: 5,
+      sessions: [
+        { id: 1, date: TODAY, label: '', notes: '', plannedSeconds: 1500, startedAt: 1, endedAt: 2, status: 'completed', durationSeconds: 1500, priorityUid: null },
+        { id: 2, date: TODAY, label: '', notes: '', plannedSeconds: 1500, startedAt: 3, endedAt: 4, status: 'cancelled', durationSeconds: 100, priorityUid: null },
+        { id: 3, date: TODAY, label: '', notes: '', plannedSeconds: 1500, startedAt: 5, endedAt: null, status: 'running', durationSeconds: null, priorityUid: null },
+      ],
+    };
+    expect(daySummaryOf(day)).toEqual({ date: TODAY, punches: day.punches, focusSeconds: 1500, prioritiesDone: 1, prioritiesTotal: 2, retroAt: 5 });
+  });
+});
+
+describe('stickerWeeks / countStickers', () => {
+  it('lays out four Monday-start weeks ending with this one and places the days', () => {
+    const days = [summary('2026-09-14', { retroAt: 1 }), summary('2026-08-24', { focusSeconds: 10 })];
+    const weeks = stickerWeeks(days, settings, TODAY, NOW);
+    expect(weeks).toHaveLength(4);
+    expect(weeks.map((w) => w.length)).toEqual([7, 7, 7, 7]);
+    expect(weeks[0]![0]!.date).toBe('2026-08-24');
+    expect(weeks[3]![0]!.date).toBe('2026-09-14');
+    expect(weeks[3]![6]!.date).toBe('2026-09-20');
+    expect(weeks[3]![0]).toEqual({ date: '2026-09-14', stickers: ['reviewed'], hasData: true, isFuture: false });
+    expect(weeks[0]![0]!.stickers).toEqual(['focus']);
+    expect(weeks[3]![3]!.isFuture).toBe(false); // today
+    expect(weeks[3]![4]!.isFuture).toBe(true);
+    expect(weeks[3]![4]!.hasData).toBe(false);
+    expect(countStickers(weeks)).toEqual({ total: 2, full: 0 });
+  });
+
+  it('counts a day with every sticker as full', () => {
+    const full = summary('2026-09-15', {
+      punches: punches('2026-09-15', ['08:00', '12:00', '12:30', '16:30']),
+      focusSeconds: 1,
+      prioritiesDone: 1,
+      prioritiesTotal: 1,
+      retroAt: 1,
+    });
+    expect(countStickers(stickerWeeks([full], settings, TODAY, NOW))).toEqual({ total: 5, full: 1 });
+  });
+});

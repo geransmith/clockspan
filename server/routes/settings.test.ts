@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { startTestApp, type TestApp } from '../dev/harness.js';
-import { CARD_IDS, DEFAULT_SETTINGS } from '../../shared/settings.js';
+import { CARD_DEFAULT_VISIBLE, CARD_IDS, DEFAULT_SETTINGS } from '../../shared/settings.js';
 import { mergeSettings } from './settings.js';
 
 describe('/api/settings', () => {
@@ -51,15 +51,23 @@ describe('/api/settings', () => {
     expect((await app.api.put('/api/settings', { timeFormat: 'auto' })).body.timeFormat).toBe('auto');
   });
 
-  it('keeps layout order, drops unknown cards and appends missing ones visible', async () => {
+  it('keeps layout order, drops unknown cards and appends missing ones with their default', async () => {
     const r = await app.api.put('/api/settings', {
       layout: [{ id: 'timer', visible: false }, { id: 'nope' }, { id: 'timer', visible: true }, { id: 'log' }],
     });
     expect(r.body.layout).toEqual([
       { id: 'timer', visible: false },
       { id: 'log', visible: true },
-      ...CARD_IDS.filter((id) => id !== 'timer' && id !== 'log').map((id) => ({ id, visible: true })),
+      ...CARD_IDS.filter((id) => id !== 'timer' && id !== 'log').map((id) => ({ id, visible: CARD_DEFAULT_VISIBLE[id] })),
     ]);
+  });
+
+  it('keeps the sticker chart hidden for a layout saved before it existed', async () => {
+    const r = await app.api.put('/api/settings', {
+      layout: CARD_IDS.filter((id) => id !== 'stickers').map((id) => ({ id, visible: true })),
+    });
+    expect(r.body.layout.at(-1)).toEqual({ id: 'stickers', visible: false });
+    expect((await app.api.put('/api/settings', { layout: [{ id: 'stickers', visible: true }] })).body.layout[0]).toEqual({ id: 'stickers', visible: true });
   });
 
   it('resets on DELETE', async () => {
