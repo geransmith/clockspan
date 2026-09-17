@@ -1,7 +1,6 @@
 services:
   clockspan:
-    build: .
-    image: clockspan:latest
+    image: ghcr.io/geransmith/clockspan:latest
     container_name: clockspan
     restart: unless-stopped
     ports:
