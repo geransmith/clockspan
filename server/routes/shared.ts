@@ -1,0 +1,47 @@
+import type { DB } from '../db.js';
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export function isValidDateKey(s: unknown): s is string {
+  if (typeof s !== 'string' || !DATE_RE.test(s)) return false;
+  const [y, m, d] = s.split('-').map(Number) as [number, number, number];
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+export function findDay(db: DB, userId: number, date: string): { id: number } | undefined {
+  return db.prepare(`SELECT id FROM days WHERE user_id = ? AND date = ?`).get(userId, date) as { id: number } | undefined;
+}
+
+export function ensureDay(db: DB, userId: number, date: string): number {
+  const existing = findDay(db, userId, date);
+  if (existing) return existing.id;
+  const info = db.prepare(`INSERT INTO days (user_id, date, created_at) VALUES (?, ?, ?)`).run(userId, date, Date.now());
+  return Number(info.lastInsertRowid);
+}
+
+export interface SessionRow {
+  id: number;
+  day_id: number;
+  user_id: number;
+  label: string;
+  notes: string;
+  planned_seconds: number;
+  started_at: number;
+  ended_at: number | null;
+  status: 'running' | 'completed' | 'cancelled';
+}
+
+export function sessionRowToJson(s: SessionRow & { date: string }) {
+  return {
+    id: s.id,
+    date: s.date,
+    label: s.label,
+    notes: s.notes,
+    plannedSeconds: s.planned_seconds,
+    startedAt: s.started_at,
+    endedAt: s.ended_at,
+    status: s.status,
+    durationSeconds: s.ended_at != null ? Math.round((s.ended_at - s.started_at) / 1000) : null,
+  };
+}

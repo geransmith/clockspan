@@ -1,0 +1,72 @@
+import { useMemo, useState } from 'react';
+import { AuthGate } from './auth/AuthGate';
+import { Banners } from './components/Banners';
+import { Header } from './components/Header';
+import { History } from './components/History';
+import { RunningTimerBar } from './components/RunningTimerBar';
+import { SettingsDialog } from './components/SettingsDialog';
+import { Sheet } from './components/Sheet';
+import { useAlarms } from './hooks/useAlarms';
+import { DayProvider, useDay } from './hooks/useDay';
+import { useNow } from './hooks/useNow';
+import { useRoute } from './hooks/useRoute';
+import { useSettled } from './hooks/useSettled';
+import { SettingsProvider, useSettings } from './hooks/useSettings';
+import { TimerProvider, useTimer } from './hooks/useTimer';
+import { todayKey } from './lib/format';
+import { computeTimeclock } from './lib/timeclock';
+
+export function App() {
+  return (
+    <AuthGate>
+      <SettingsProvider>
+        <DayProvider>
+          <TimerProvider>
+            <Shell />
+          </TimerProvider>
+        </DayProvider>
+      </SettingsProvider>
+    </AuthGate>
+  );
+}
+
+function Shell() {
+  const [route, navigate] = useRoute();
+  const [customize, setCustomize] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const { settings } = useSettings();
+  const { running } = useTimer();
+  const now = useNow(1000);
+
+  // Alarms always watch *today*, whatever the sheet is showing. Punches settle for a
+  // few seconds first so back-filling three times in a row doesn't fire for each
+  // half-entered state.
+  const today = todayKey(now);
+  const { day: todayDay } = useDay(today);
+  const punches = useSettled(todayDay?.punches, 3000);
+  const todayTc = useMemo(() => (punches ? computeTimeclock(punches, settings, now) : null), [punches, settings, now]);
+  useAlarms(today, todayTc, settings, now);
+
+  return (
+    <div className={`app${running ? ' app--has-bar' : ''}`}>
+      {running && <RunningTimerBar />}
+      <Banners />
+      <Header
+        route={route}
+        today={today}
+        customize={customize}
+        onNavigate={navigate}
+        onToggleCustomize={() => setCustomize((c) => !c)}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
+      <main className="main">
+        {route.view === 'sheet' ? (
+          <Sheet date={route.date} today={today} now={now} customize={customize} />
+        ) : (
+          <History today={today} now={now} onOpen={(date) => navigate({ view: 'sheet', date })} />
+        )}
+      </main>
+      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
+    </div>
+  );
+}

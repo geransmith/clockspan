@@ -1,0 +1,34 @@
+services:
+  focus-sheet:
+    build: .
+    image: focus-sheet:latest
+    container_name: focus-sheet
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # Unraid: keep the SQLite database in appdata so it survives container updates.
+      - /mnt/user/appdata/focus-sheet:/data
+    environment:
+      # Unraid's default file owner/group. Remove both to run as root instead.
+      PUID: "99"
+      PGID: "100"
+
+      # none  = no sign-in (LAN / behind your own proxy auth)
+      # local = first visit creates the admin account; admin adds more users in Settings
+      # oidc  = sign in with Authentik (or any OpenID Connect provider)
+      AUTH_MODE: none
+
+      # Required for oidc, recommended whenever you reach the app through a domain.
+      # Must match the redirect URI registered in your provider: ${APP_URL}/auth/callback
+      # APP_URL: https://focus.example.com
+
+      # Set when a reverse proxy (Nginx Proxy Manager, SWAG, Traefik) sits in front.
+      # TRUST_PROXY: "true"
+      # COOKIE_SECURE: "true"   # defaults to true when APP_URL is https
+
+      # OIDC (Authentik): Providers → your provider → "OpenID Configuration Issuer"
+      # OIDC_ISSUER: https://auth.example.com/application/o/focus-sheet/
+      # OIDC_CLIENT_ID: ...
+      # OIDC_CLIENT_SECRET: ...
+      # OIDC_SCOPES: openid profile email
