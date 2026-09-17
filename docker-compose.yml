@@ -28,6 +28,9 @@ services:
       # TRUST_PROXY: "true"
       # COOKIE_SECURE: "true"   # defaults to true when APP_URL is https
 
+      # Delete every user's days older than this many days (30 or more). Unset = keep everything.
+      # RETENTION_DAYS: "730"
+
       # OIDC (Authentik): Providers → your provider → "OpenID Configuration Issuer"
       # OIDC_ISSUER: https://auth.example.com/application/o/clockspan/
       # OIDC_CLIENT_ID: ...

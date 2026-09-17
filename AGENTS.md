@@ -10,7 +10,8 @@ that logs what was done and which priority it was for, a retrospective card that
 up against the log (with a "why" note and a nudge before clock-out), a week / month / quarter
 review of those retrospectives, and alarms as lunch, clock-out and the second meal period
 approach. A per-day "Overtime approved" switch silences the clock-out alarm only. Every day is
-persisted so past days can be revisited. Data is **per
+persisted so past days can be revisited; old days can be deleted by hand or pruned
+automatically (per-user setting, optional `RETENTION_DAYS` ceiling). Data is **per
 user**; auth is optional (`AUTH_MODE=none | local | oidc`). Runs as one Docker container with
 SQLite on a `/data` volume. Mobile-first and installable (PWA manifest, pass-through service
 worker). Meal-period defaults follow California rules; everything is adjustable.
@@ -34,10 +35,12 @@ server/                 Express API → dist/server (tsc)
                         data routers behind requireAuth, static dist/client + SPA fallback
   config.ts             env parsing; throws with a clear message on bad/missing config
   db.ts                 open + pragmas (WAL, foreign_keys), append-only MIGRATIONS, default user
+  retention.ts          old-day cleanup: cutoffKey, countDays, pruneDays, runRetention (all users,
+                        user setting capped by RETENTION_DAYS), scheduleRetention (30 s + 6 h)
   cli.ts                `reset-password <username> [password]`
   dev/seed.ts           seedDatabase(db, opts) → SeedManifest: deterministic sample days;
                         ensureLocalUsers(). Dev + tests only, excluded from the build
-  dev/seed-cli.ts       `npm run seed` (flags: --fresh --running --days N --quarter --today)
+  dev/seed-cli.ts       `npm run seed` (flags: --fresh --running --days N --quarter --today --now)
   dev/harness.ts        startTestApp(): real app on an in-memory DB + fetch client w/ cookie jar
   **/*.test.ts          route/auth/db tests beside the code they cover (Vitest, via the harness)
   auth/session.ts       cookie session (token hashed in DB, sliding 30d expiry)
@@ -52,6 +55,7 @@ server/                 Express API → dist/server (tsc)
   routes/sessions.ts    POST /days/:date/sessions (start, optional priorityUid), GET /sessions/running,
                         PATCH/:id (label, notes, priorityUid), POST /:id/finish, POST /:id/cancel, DELETE /:id
   routes/settings.ts    DEFAULT_SETTINGS + mergeSettings() validator; GET/PUT/DELETE /settings
+                        (incl. retention { enabled, days })
 client/                 Vite root → dist/client
   index.html            viewport-fit=cover, theme-color, manifest, apple-mobile-web-app meta
   public/               manifest.webmanifest, icons/, sw.js (pass-through)
@@ -82,7 +86,10 @@ client/                 Vite root → dist/client
   src/auth/              AuthGate (mode/user → Setup | Login | OIDC button | app), pages
   src/components/        Header, RunningTimerBar, Banners, Sheet (dnd-kit) + CardShell,
                          Timeclock, Priorities, FocusTimer, SessionLog, Retro, History (Days | Review),
-                         Review, SettingsDialog, Icons
+                         Review, SettingsDialog (tabs incl. Data: retention + delete-before), Icons
+scripts/screenshots.mjs `npm run screenshots`: dev server (reused or started) + seed + headless
+                        Chromium over CDP → docs/screenshots/*.png for the README
+docs/screenshots/       committed PNGs the README embeds; regenerate after a visible UI change
 docker/entrypoint.sh    PUID/PGID → chown /data + su-exec
 Dockerfile docker-compose.yml .env.example README.md
 ```
@@ -97,6 +104,8 @@ npm test               # vitest: client lib tests + server API tests (~1 s)
 npm test -- server/routes/days   # one file
 npm run typecheck      # client + server (tsconfig.server.test.json also covers dev/ and tests)
 npm run seed           # fill data/focus.db with sample days; see "Dev data is disposable"
+npm run screenshots    # regenerate docs/screenshots/ (starts the dev server if needed; finds or
+                       # fetches a Chromium into node_modules/.cache; CHROME_BIN to force one)
 npm run build          # dist/client + dist/server
 npm start              # node dist/server/index.js (PORT default 3000; Docker sets 8080)
 npm run reset-password -- <username>
@@ -123,7 +132,9 @@ day, an unreviewed day with a cancelled session, a half day with no lunch), plus
 in two hours ago with one done priority and two sessions. Dates are relative to the day you
 run it. Flags: `--running` (leave a 25-min timer going), `--fresh` (also reset settings and
 logins), `--days N`, `--quarter` (every weekday since the start of the previous calendar
-quarter, so Review → Quarter and Month have data), `--today YYYY-MM-DD`. Under
+quarter, so Review → Quarter and Month have data), `--today YYYY-MM-DD`, `--now HH:MM`
+(today's clock-in and timer built around that local time instead of two hours ago; the
+screenshot script shifts the browser's clock to match). Under
 `AUTH_MODE=local` it creates `admin` and `sam` (password `clockspan-dev`) and seeds both. It
 replaces the user's days each run, leaves settings alone unless `--fresh`, never deletes
 user rows (the running server caches the default user), and is safe while `npm run dev` is
@@ -155,6 +166,16 @@ repo or the session scratchpad.
 
 - **The server stores epoch milliseconds and never decides what "today" is.** The client sends
   the local date key `YYYY-MM-DD` (`lib/format.ts: todayKey`). The container's TZ is irrelevant.
+  The one exception is `cutoffKey` in `server/retention.ts`, which turns "keep the last N
+  days" into a UTC date key: the minimum is 30 days, so a day of zone slop changes nothing,
+  and no user zone is known server-side.
+- **Old-day deletion goes through `pruneDays` (`server/retention.ts`)**, whether from the
+  Data tab's button (`POST /days/prune`) or the scheduled `runRetention`. It deletes `days`
+  rows before a date key (cascades take punches, priorities, sessions), never a day with a
+  running session, and never settings. The per-user setting `retention { enabled, days }` is
+  capped by `RETENTION_DAYS` (`config.retentionDays`) via `effectiveKeepDays`; a user with no
+  settings row still gets the cap. `reclaimSpace` (VACUUM + WAL checkpoint) runs after any
+  deletion so the file actually shrinks; it must not run inside a transaction.
 - **Every data query is scoped by `req.user.id`** (`currentUser(req)`). In `AUTH_MODE=none` that
   is the single `kind='default'` user. Never add a data route outside the `requireAuth` router
   in `app.ts`.
@@ -291,6 +312,12 @@ Prove a change at the cheapest level that can show it, and stop there:
 - If you touched the retro or review: `retro.test.ts` / `review.test.ts` prove the split and
   the rollup; the browser check is one look at a seeded day's retro card and at History →
   Review → Week (`--quarter` for Month / Quarter).
+- If you touched retention: `server/retention.test.ts` and the `/prune` block in
+  `days.test.ts` prove the cutoff, the cap, the running-session guard and the cascade; the
+  browser check is one look at Settings → Data (count line, toggle saves), with the delete
+  itself driven by curl (`POST /api/days/prune`) because of the confirm dialog.
+- If the change is visible in a README screenshot (sheet, retro, review, settings), run
+  `npm run screenshots` and commit the PNGs that changed.
 
 ## Gotchas
 

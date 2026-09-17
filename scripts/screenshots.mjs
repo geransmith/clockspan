@@ -135,10 +135,29 @@ function findBrowser() {
       if (isExecutable(p)) return p;
     }
   }
-  return fetchBrowser();
+  return cachedBrowser() ?? fetchBrowser();
 }
 
-/** No browser on this machine: fetch Chrome for Testing once. Re-runs find the cached copy without downloading again. */
+const CACHED_EXE_NAMES = new Set(['Google Chrome for Testing', 'chrome', 'chrome.exe']);
+
+/** A Chrome for Testing build a previous run fetched, if any. */
+function cachedBrowser() {
+  const walk = (dir, depth) => {
+    if (depth > 8 || !fs.existsSync(dir)) return null;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, entry.name);
+      if (entry.isFile() && CACHED_EXE_NAMES.has(entry.name) && isExecutable(p)) return p;
+      if (entry.isDirectory()) {
+        const found = walk(p, depth + 1);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+  return walk(BROWSER_CACHE, 0);
+}
+
+/** No browser on this machine: fetch Chrome for Testing once into node_modules/.cache. */
 function fetchBrowser() {
   log('no Chromium found; fetching Chrome for Testing into node_modules/.cache (one time, ~150 MB)');
   const r = spawnSync('npx', ['--yes', '@puppeteer/browsers', 'install', 'chrome@stable', '--path', BROWSER_CACHE], {

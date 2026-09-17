@@ -23,6 +23,9 @@
 - To exercise alarms quickly: Settings → Work day and Second meal due after = a few minutes
   each, then clock in. "Overtime approved" on the card or on the clock-out banner
   is the quick way to silence the clock-out alarm mid-test; lunch must keep counting down.
+- `npm run screenshots` regenerates the README images on its own (it starts the dev server
+  if none is up, seeds, and drives a headless Chromium; the first run on a machine with no
+  Chrome fetches one into `node_modules/.cache`). Run it after a UI change the README shows.
 - Never commit `data/` or `.env`.
 - If you change layout defaults, settings defaults, or alarm definitions, update the
   "How to add…" checklists in AGENTS.md so they stay true.
