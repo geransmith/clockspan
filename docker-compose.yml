@@ -11,7 +11,8 @@ services:
       # This path follows Unraid's appdata convention; point it at any host directory.
       - /mnt/user/appdata/clockspan:/data
     environment:
-      # File owner/group to run as (99/100 is Unraid's convention). Remove both to run as root.
+      # User/group that owns /data and runs the app (image default 1000/1000; 99/100 is
+      # Unraid's convention). Set both to 0 to run as root.
       PUID: "99"
       PGID: "100"
 
@@ -24,8 +25,10 @@ services:
       # Must match the redirect URI registered in your provider: ${APP_URL}/auth/callback
       # APP_URL: https://focus.example.com
 
-      # Set when a reverse proxy (Nginx Proxy Manager, SWAG, Traefik) sits in front.
-      # TRUST_PROXY: "true"
+      # Behind a reverse proxy (Nginx Proxy Manager, SWAG, Traefik): the number of proxies
+      # between the internet and this container, usually 1. Not "true": that trusts whatever
+      # X-Forwarded-For a client sends, which defeats the login rate limit.
+      # TRUST_PROXY: "1"
       # COOKIE_SECURE: "true"   # defaults to true when APP_URL is https
 
       # Delete every user's days older than this many days (30 or more). Unset = keep everything.

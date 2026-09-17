@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { loadConfig } from './config.js';
 import { SEED_NOW, startTestApp, type TestApp } from './dev/harness.js';
 import { cutoffKey, effectiveKeepDays, runRetention } from './retention.js';
-import { DEFAULT_SETTINGS } from './routes/settings.js';
+import { DEFAULT_SETTINGS } from '../shared/settings.js';
 
 describe('cutoffKey', () => {
   it('is the UTC date `keepDays` before now', () => {

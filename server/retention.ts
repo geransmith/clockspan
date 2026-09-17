@@ -1,6 +1,7 @@
 import type { Config } from './config.js';
 import type { DB } from './db.js';
-import { loadSettings, type Settings } from './routes/settings.js';
+import type { Settings } from '../shared/settings.js';
+import { loadSettings } from './routes/settings.js';
 
 /**
  * Old days are deleted two ways: the user's "Delete old days now" button and an automatic
@@ -8,9 +9,6 @@ import { loadSettings, type Settings } from './routes/settings.js';
  * go through `pruneDays` so the rules are in one place. Deleting a `days` row cascades to
  * its punches, priorities and sessions; settings and logins are never touched.
  */
-
-export const MIN_RETENTION_DAYS = 30;
-export const MAX_RETENTION_DAYS = 3650;
 
 const DAY_MS = 86_400_000;
 const RUN_AFTER_BOOT_MS = 30_000;

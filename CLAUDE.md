@@ -3,29 +3,25 @@
 ## Claude Code notes
 
 - Verify UI changes in the built-in browser: `preview_start` the `web` config from
-  `.claude/launch.json` (it sources nvm and runs `npm run dev`), then `resize_window` to the
-  `mobile` preset for the phone pass and `colorScheme: light` for the light-mode check.
-- `window.confirm` dialogs (cancel timer, delete session/user) are awkward to drive in the
-  pane; hit the API with curl for those steps.
-- Run `npm test` and `npm run typecheck` before reporting a change as done.
-- A change in `server/` is verified by adding or extending a test in that router's
-  `*.test.ts` (see `server/dev/harness.ts`), not by driving the browser. Browser passes are
-  for visible UI changes only, scoped to what changed; see "Verification expectations" in
-  AGENTS.md.
-- Run `npm run seed` (add `--running` for timer work, `--quarter` for Month / Quarter
-  review) before any browser check so the page has data. It is safe while the dev server
-  is running; reload the page.
-- The dev DB (`data/focus.db`) migrates itself when the server starts; a schema change only
-  needs a new entry in `MIGRATIONS` (`server/db.ts`).
-- The dev DB is disposable. `npm run seed` is the normal way to fill it; insert, change, or
-  delete rows with curl or `sqlite3`, or delete the file, without asking. Details under
-  "Dev data is disposable" in AGENTS.md.
+  `.claude/launch.json` (nvm + `npm run dev`), then `resize_window` to the `mobile` preset for
+  the phone pass and `colorScheme: light` for the light-mode check. The `prod` config builds
+  and serves the real bundle on :8090 with the real response headers; use it for anything that
+  touches `server/security.ts`, `index.html` or how assets load, and read the console for CSP
+  violations.
+- `window.confirm` dialogs (cancel timer, delete session/user, delete old days) are awkward to
+  drive in the pane; hit the API with curl for those steps.
+- Run `npm test`, `npm run typecheck` and `npm run lint` before reporting a change as done.
+- A change in `server/` or `shared/` is verified by a test next to the code (harness tests for
+  routes, see `server/dev/harness.ts`), not by driving the browser. Browser passes are for
+  visible UI changes only, scoped to what changed; see "Verification expectations" in AGENTS.md.
+- Run `npm run seed` (`--running` for timer work, `--quarter` for Month / Quarter review)
+  before any browser check. The dev DB is disposable and migrates itself; see "Dev data is
+  disposable" in AGENTS.md.
 - To exercise alarms quickly: Settings → Work day and Second meal due after = a few minutes
   each, then clock in. "Overtime approved" on the card or on the clock-out banner
   is the quick way to silence the clock-out alarm mid-test; lunch must keep counting down.
-- `npm run screenshots` regenerates the README images on its own (it starts the dev server
-  if none is up, seeds, and drives a headless Chromium; the first run on a machine with no
-  Chrome fetches one into `node_modules/.cache`). Run it after a UI change the README shows.
+- `npm run screenshots` regenerates the README images on its own. Run it after a UI change the
+  README shows.
 - Never commit `data/` or `.env`.
-- If you change layout defaults, settings defaults, or alarm definitions, update the
-  "How to add…" checklists in AGENTS.md so they stay true.
+- If you change layout defaults, settings defaults, alarm definitions, or response headers,
+  update the "How to add…" checklists in AGENTS.md so they stay true.

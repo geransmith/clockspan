@@ -28,6 +28,12 @@ describe('AUTH_MODE=local', () => {
     expect((await setup(app.client())).status).toBe(403);
   });
 
+  it('lets only one of two racing first visitors become admin', async () => {
+    const [a, b] = await Promise.all([setup(app.client()), app.client().post('/api/auth/setup', { username: 'second', password: 'also long enough' })]);
+    expect([a.status, b.status].sort()).toEqual([201, 403]);
+    expect((await app.api.get('/api/auth/me')).body.setupRequired).toBe(false);
+  });
+
   it('validates the setup form', async () => {
     expect((await app.api.post('/api/auth/setup', { username: 'a', password: ADMIN.password })).status).toBe(400);
     expect((await app.api.post('/api/auth/setup', { username: 'ok name', password: ADMIN.password })).status).toBe(400);
@@ -65,6 +71,26 @@ describe('AUTH_MODE=local', () => {
     const c = app.client();
     expect((await c.post('/api/auth/login', { username: 'geran', password: ADMIN.password })).status).toBe(401);
     expect((await c.post('/api/auth/login', { username: 'geran', password: 'new password' })).status).toBe(200);
+  });
+
+  it('signs the other sessions out when the password changes, and keeps this one', async () => {
+    await setup();
+    const phone = app.client();
+    expect((await phone.post('/api/auth/login', { username: 'geran', password: ADMIN.password })).status).toBe(200);
+    expect((await phone.get('/api/settings')).status).toBe(200);
+
+    expect((await app.api.post('/api/auth/password', { currentPassword: ADMIN.password, newPassword: 'new password' })).status).toBe(200);
+    expect((await app.api.get('/api/settings')).status).toBe(200);
+    expect((await phone.get('/api/settings')).status).toBe(401);
+  });
+
+  it('answers an unknown username exactly like a wrong password', async () => {
+    await setup();
+    const c = app.client();
+    const unknown = await c.post('/api/auth/login', { username: 'nobody', password: ADMIN.password });
+    const wrong = await c.post('/api/auth/login', { username: 'geran', password: 'wrong' });
+    expect(unknown.status).toBe(401);
+    expect(unknown.body).toEqual(wrong.body);
   });
 
   it('lets an admin manage users, and deleting one drops their data', async () => {

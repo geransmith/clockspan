@@ -1,12 +1,19 @@
+import type { RequestHandler } from 'express';
 import type { DB } from '../db.js';
+import { isValidDateKey } from '../../shared/dates.js';
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** Guards a `/:date` route: 400 unless the param is a real `YYYY-MM-DD`. Works under `mergeParams` too. */
+export const requireDate: RequestHandler = (req, res, next) => {
+  if (!isValidDateKey(req.params.date)) {
+    res.status(400).json({ error: 'Invalid date.' });
+    return;
+  }
+  next();
+};
 
-export function isValidDateKey(s: unknown): s is string {
-  if (typeof s !== 'string' || !DATE_RE.test(s)) return false;
-  const [y, m, d] = s.split('-').map(Number) as [number, number, number];
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+/** The `:date` param after `requireDate`; typed so handlers don't repeat the cast. */
+export function dateParam(req: { params: Record<string, string | string[] | undefined> }): string {
+  return req.params.date as string;
 }
 
 export interface DayRow {

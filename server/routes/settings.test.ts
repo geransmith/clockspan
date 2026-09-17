@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { startTestApp, type TestApp } from '../dev/harness.js';
-import { CARD_IDS, DEFAULT_SETTINGS, mergeSettings } from './settings.js';
+import { CARD_IDS, DEFAULT_SETTINGS } from '../../shared/settings.js';
+import { mergeSettings } from './settings.js';
 
 describe('/api/settings', () => {
   let app: TestApp;

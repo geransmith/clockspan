@@ -2,8 +2,10 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as api from '../api';
 import type { Session } from '../types';
 import { alert, unlockAudio } from '../lib/alerts';
+import { TIMER_DONE } from '../lib/copy';
 import { formatCountdown } from '../lib/format';
 import { useDayStore } from './useDay';
+import { useLatest } from './useLatest';
 import { useNow } from './useNow';
 import { useSettings } from './useSettings';
 import { useWakeLock } from './useWakeLock';
@@ -28,8 +30,7 @@ const BASE_TITLE = 'Clockspan';
 export function TimerProvider({ children }: { children: ReactNode }) {
   const [running, setRunning] = useState<Session | null>(null);
   // Latest value for callbacks so rapid clicks (−5m, −5m) compound instead of racing.
-  const runningRef = useRef<Session | null>(null);
-  runningRef.current = running;
+  const runningRef = useLatest<Session | null>(running);
   const now = useNow(1000);
   const { settings } = useSettings();
   const store = useDayStore();
@@ -83,8 +84,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         store.applySession(done);
         setRunning(null);
         alert({
-          title: 'Focus session complete',
-          body: session.label ? `${session.label} — ${formatCountdown(done.durationSeconds ?? 0)}` : 'Nice work. Take a breath.',
+          title: TIMER_DONE.title,
+          body: TIMER_DONE.body(session.label, formatCountdown(done.durationSeconds ?? 0)),
           tone: 'success',
           chime: 'timer',
           tag: 'timer-complete',
@@ -143,7 +144,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         setRunning(cur);
       }
     },
-    [store],
+    [store, runningRef],
   );
 
   const setLabel = useCallback(async (label: string) => {
@@ -153,23 +154,25 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     setRunning({ ...cur, label });
     const { session } = await api.patchSession(cur.id, { label });
     setRunning((latest) => (latest && latest.id === session.id ? { ...latest, label: session.label } : latest));
-  }, []);
+  }, [runningRef]);
 
   const finish = useCallback(async () => {
-    if (!running) return;
+    const cur = runningRef.current;
+    if (!cur) return;
     mutationSeq.current++;
-    const { session } = await api.finishSession(running.id);
+    const { session } = await api.finishSession(cur.id);
     store.applySession(session);
     setRunning(null);
-  }, [running, store]);
+  }, [store, runningRef]);
 
   const cancel = useCallback(async () => {
-    if (!running) return;
+    const cur = runningRef.current;
+    if (!cur) return;
     mutationSeq.current++;
-    const { session } = await api.cancelSession(running.id);
+    const { session } = await api.cancelSession(cur.id);
     store.applySession(session);
     setRunning(null);
-  }, [running, store]);
+  }, [store, runningRef]);
 
   const value = useMemo(
     () => ({ running, remainingSeconds, elapsedSeconds, progress, start, adjust, setLabel, finish, cancel }),

@@ -9,6 +9,7 @@ import { localAuthRouter, publicUser } from './auth/local.js';
 import { oidcAuthRouter } from './auth/oidc.js';
 import { purgeExpiredSessions } from './auth/session.js';
 import { scheduleRetention } from './retention.js';
+import { securityHeaders } from './security.js';
 import { daysRouter } from './routes/days.js';
 import { sessionStartRouter, sessionsRouter } from './routes/sessions.js';
 import { settingsRouter } from './routes/settings.js';
@@ -17,6 +18,7 @@ export function createApp(db: DB, config: Config): Express {
   const app = express();
   app.disable('x-powered-by');
   if (config.trustProxy !== false) app.set('trust proxy', config.trustProxy);
+  app.use(securityHeaders(config));
   app.use(express.json({ limit: '256kb' }));
 
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
@@ -51,7 +53,17 @@ export function createApp(db: DB, config: Config): Express {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const clientDir = path.resolve(here, '../client');
   if (fs.existsSync(path.join(clientDir, 'index.html'))) {
-    app.use(express.static(clientDir, { index: false, maxAge: '1h' }));
+    // Vite fingerprints everything under /assets, so those can be cached for good; the
+    // manifest, icons and service worker keep the short default so an update shows up.
+    app.use(
+      express.static(clientDir, {
+        index: false,
+        maxAge: '1h',
+        setHeaders: (res, filePath) => {
+          if (filePath.includes(`${path.sep}assets${path.sep}`)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        },
+      }),
+    );
     app.get('/{*splat}', (_req, res) => {
       res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(path.join(clientDir, 'index.html'));

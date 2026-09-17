@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- response bodies are whatever the route sent; tests assert on them loosely */
 import os from 'node:os';
 import type { AddressInfo } from 'node:net';
 import { createApp } from '../app.js';
@@ -118,7 +119,8 @@ export async function startTestApp(opts: StartOptions = {}): Promise<TestApp> {
       new Promise<void>((resolve, reject) => {
         server.close((err) => {
           db.close();
-          err ? reject(err) : resolve();
+          if (err) reject(err);
+          else resolve();
         });
       }),
   };

@@ -3,11 +3,16 @@ import { parse as parseCookie, serialize as serializeCookie } from 'cookie';
 import * as oidc from 'openid-client';
 import type { DB, UserRow } from '../db.js';
 import type { Config } from '../config.js';
-import { createSession, destroySession } from './session.js';
+import { cookieOptions, createSession, destroySession } from './session.js';
 import { publicUser } from './local.js';
 
 const FLOW_COOKIE = 'fs_oidc';
 const FLOW_TTL_SEC = 600;
+
+/** The two error pages are HTML with a retry link; anything interpolated into them goes through this. */
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+}
 
 /**
  * Discovery is retried lazily with backoff so the app still boots (and serves the
@@ -100,7 +105,7 @@ export function oidcAuthRouter(db: DB, config: Config): { api: Router; web: Rout
     try {
       c = await discovery.get();
     } catch (err) {
-      res.status(503).send(`Identity provider is unreachable: ${(err as Error).message}`);
+      res.status(503).send(`Identity provider is unreachable: ${escapeHtml((err as Error).message)}`);
       return;
     }
     const codeVerifier = oidc.randomPKCECodeVerifier();
@@ -114,13 +119,7 @@ export function oidcAuthRouter(db: DB, config: Config): { api: Router; web: Rout
     });
     res.setHeader(
       'Set-Cookie',
-      serializeCookie(FLOW_COOKIE, JSON.stringify({ codeVerifier, state }), {
-        httpOnly: true,
-        sameSite: 'lax',
-        secure: config.cookieSecure,
-        path: '/auth',
-        maxAge: FLOW_TTL_SEC,
-      }),
+      serializeCookie(FLOW_COOKIE, JSON.stringify({ codeVerifier, state }), { ...cookieOptions(config, '/auth'), maxAge: FLOW_TTL_SEC }),
     );
     res.redirect(url.href);
   });
@@ -131,7 +130,7 @@ export function oidcAuthRouter(db: DB, config: Config): { api: Router; web: Rout
       res.status(400).send('Sign-in session expired. <a href="/auth/login">Try again</a>.');
       return;
     }
-    const clearFlow = serializeCookie(FLOW_COOKIE, '', { path: '/auth', maxAge: 0, httpOnly: true, sameSite: 'lax', secure: config.cookieSecure });
+    const clearFlow = serializeCookie(FLOW_COOKIE, '', { ...cookieOptions(config, '/auth'), maxAge: 0 });
     try {
       const { codeVerifier, state } = JSON.parse(raw) as { codeVerifier: string; state: string };
       const c = await discovery.get();
@@ -160,7 +159,7 @@ export function oidcAuthRouter(db: DB, config: Config): { api: Router; web: Rout
     } catch (err) {
       console.error('[oidc] callback failed:', err);
       res.setHeader('Set-Cookie', clearFlow);
-      res.status(400).send(`Sign-in failed: ${(err as Error).message}. <a href="/auth/login">Try again</a>.`);
+      res.status(400).send(`Sign-in failed: ${escapeHtml((err as Error).message)}. <a href="/auth/login">Try again</a>.`);
     }
   });
 

@@ -1,3 +1,4 @@
+import { CARD_IDS, DEFAULT_SETTINGS } from '../../../shared/settings.js';
 import type { CardId, Settings } from '../types';
 
 export interface CardDef {
@@ -5,16 +6,19 @@ export interface CardDef {
   title: string;
 }
 
-/** Registry of cards. Order here is the default order; all are visible by default. */
-export const CARDS: CardDef[] = [
-  { id: 'timeclock', title: 'Timeclock' },
-  { id: 'priorities', title: 'Top priorities' },
-  { id: 'timer', title: 'Focus timer' },
-  { id: 'log', title: 'Day log' },
-  { id: 'retro', title: 'Retrospective' },
-];
+/** A title for every card id; adding an id to CARD_IDS without one is a type error. */
+const CARD_TITLES: Record<CardId, string> = {
+  timeclock: 'Timeclock',
+  priorities: 'Top priorities',
+  timer: 'Focus timer',
+  log: 'Day log',
+  retro: 'Retrospective',
+};
 
-export const DEFAULT_LAYOUT: Settings['layout'] = CARDS.map((c) => ({ id: c.id, visible: true }));
+/** Registry of cards in default order; all are visible by default. */
+export const CARDS: CardDef[] = CARD_IDS.map((id) => ({ id, title: CARD_TITLES[id] }));
+
+export const DEFAULT_LAYOUT: Settings['layout'] = DEFAULT_SETTINGS.layout;
 
 export function cardTitle(id: CardId): string {
   return CARDS.find((c) => c.id === id)?.title ?? id;

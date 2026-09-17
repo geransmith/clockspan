@@ -1,6 +1,7 @@
 import { loadConfig } from '../config.js';
 import { ensureDefaultUser, openDatabase } from '../db.js';
-import { DEFAULT_HISTORY_DAYS, LOCAL_USERS, ensureLocalUsers, localDateKey, seedDatabase, startOfQuarter, weekdaysSince, type SeedManifest } from './seed.js';
+import { todayKey } from '../../shared/dates.js';
+import { DEFAULT_HISTORY_DAYS, LOCAL_USERS, ensureLocalUsers, quarterStart, seedDatabase, weekdaysSince, type SeedManifest } from './seed.js';
 
 // Usage: npm run seed [-- --fresh] [--running] [--days N | --quarter] [--today YYYY-MM-DD] [--now HH:MM]
 // Fills the dev DB (DATA_DIR, default ./data) with sample days for the default user, or for
@@ -30,7 +31,7 @@ for (let i = 0; i < args.length; i++) {
 }
 
 let now = Date.now();
-const today = opts.today ?? localDateKey(now);
+const today = opts.today ?? todayKey(now);
 if (!/^\d{4}-\d{2}-\d{2}$/.test(today)) {
   console.error(`--today must be YYYY-MM-DD (got "${today}").`);
   process.exit(2);
@@ -52,7 +53,7 @@ if (opts.quarter && opts.days !== undefined) {
 }
 const daysRaw = opts.days;
 // --quarter covers the previous calendar quarter too, so Review → Quarter has a step back.
-const days = opts.quarter ? weekdaysSince(startOfQuarter(today, 1), today) : daysRaw === undefined ? DEFAULT_HISTORY_DAYS : Number(daysRaw);
+const days = opts.quarter ? weekdaysSince(quarterStart(today, 1), today) : daysRaw === undefined ? DEFAULT_HISTORY_DAYS : Number(daysRaw);
 if (!Number.isInteger(days) || days < 0 || days > 400) {
   console.error(`--days must be a whole number from 0 to 400 (got "${daysRaw}").`);
   process.exit(2);
@@ -64,7 +65,7 @@ const db = openDatabase(config.dbPath);
 
 const seeded: { name: string; manifest: SeedManifest }[] = [];
 if (config.authMode === 'local') {
-  const { admin, member } = ensureLocalUsers(db);
+  const { admin, member } = await ensureLocalUsers(db);
   seeded.push({ name: admin.username!, manifest: seedDatabase(db, { userId: admin.id, today, now, days, running, fresh }) });
   // Fewer days and no timer, so the two accounts are easy to tell apart.
   seeded.push({ name: member.username!, manifest: seedDatabase(db, { userId: member.id, today, now, days: Math.min(days, 3), fresh }) });

@@ -6,7 +6,6 @@ import type { Priority, Session } from '../types';
 import { Check } from './Icons';
 
 interface Props {
-  date: string;
   priorities: Priority[];
   sessions: Session[];
   note: string;
@@ -17,22 +16,19 @@ interface Props {
 /**
  * Plan vs. actual for one day: each priority with the focus time logged against it,
  * the sessions that weren't on the plan, and a note on why. The note saves 800 ms after
- * the last keystroke or on blur; "Mark reviewed" saves immediately.
+ * the last keystroke or on blur; "Mark reviewed" saves immediately. Keyed by date in the
+ * sheet, so a new day mounts with its own note.
  */
-export function Retro({ date, priorities, sessions, note, reviewedAt, onChange }: Props) {
+export function Retro({ priorities, sessions, note, reviewedAt, onChange }: Props) {
   const review = reviewDay(priorities, sessions);
   const [draft, setDraft] = useState(note);
   const dirty = useRef(false);
   const timer = useRef<number | null>(null);
 
-  // Adopt the stored note when the day changes or when nothing is being typed.
+  // Adopt the stored note whenever nothing is being typed.
   useEffect(() => {
     if (!dirty.current) setDraft(note);
   }, [note]);
-  useEffect(() => {
-    dirty.current = false;
-    setDraft(note);
-  }, [date]);
   useEffect(
     () => () => {
       if (timer.current) window.clearTimeout(timer.current);

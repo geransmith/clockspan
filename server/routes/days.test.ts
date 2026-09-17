@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SEED_TODAY, startTestApp, type TestApp } from '../dev/harness.js';
-import { MAX_PRIORITIES } from './settings.js';
+import { MAX_PRIORITIES } from '../../shared/settings.js';
 
 let app: TestApp;
 beforeEach(async () => {

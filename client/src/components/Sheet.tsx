@@ -14,8 +14,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useDay } from '../hooks/useDay';
 import { useSettings } from '../hooks/useSettings';
 import { cardTitle } from '../lib/layout';
-import { computeTimeclock } from '../lib/timeclock';
-import { endOfDay } from '../lib/format';
+import { clampToDay, timeclockForDate, type TimeclockState } from '../lib/timeclock';
 import type { CardId } from '../types';
 import { CardShell } from './CardShell';
 import { FocusTimer } from './FocusTimer';
@@ -38,12 +37,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped }: Props) 
   const { settings, update } = useSettings();
   const { day, store } = useDay(date);
   const isToday = date === today;
-  // A past day is frozen at its end so an unclosed clock-in doesn't count forever.
-  const effectiveNow = isToday ? now : Math.min(now, endOfDay(date));
-  const tc = useMemo(
-    () => (day ? computeTimeclock(day.punches, settings, effectiveNow, { frozen: !isToday }) : null),
-    [day, settings, effectiveNow, isToday],
-  );
+  const tc = useMemo(() => (day ? timeclockForDate(day.punches, settings, date, today, now) : null), [day, settings, date, today, now]);
 
   const layout = settings.layout;
   const visible = layout.filter((l) => l.visible);
@@ -88,7 +82,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped }: Props) 
           <Timeclock
             date={date}
             isToday={isToday}
-            now={effectiveNow}
+            now={clampToDay(date, today, now)}
             punches={day.punches}
             tc={tc}
             overtimeApproved={day.overtimeApproved}
@@ -97,7 +91,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped }: Props) 
           />
         );
       case 'priorities':
-        return <Priorities date={date} priorities={day.priorities} onChange={(p) => void store.setPriorities(date, p)} />;
+        return <Priorities key={date} priorities={day.priorities} onChange={(p) => void store.setPriorities(date, p)} />;
       case 'timer':
         return <FocusTimer date={date} isToday={isToday} priorities={day.priorities} onAddPriority={(text) => store.addPriority(date, text)} />;
       case 'log':
@@ -105,7 +99,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped }: Props) 
       case 'retro':
         return (
           <Retro
-            date={date}
+            key={date}
             priorities={day.priorities}
             sessions={day.sessions}
             note={day.retroNote}
@@ -186,7 +180,7 @@ function SortableCard({
   );
 }
 
-function StatePill({ state }: { state: ReturnType<typeof computeTimeclock>['state'] }) {
+function StatePill({ state }: { state: TimeclockState }) {
   const map = {
     'not-started': ['Not clocked in', ''],
     working: ['Working', 'pill--ok'],

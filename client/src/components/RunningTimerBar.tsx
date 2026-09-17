@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useSettings } from '../hooks/useSettings';
 import { useTimer } from '../hooks/useTimer';
+import { CONFIRM } from '../lib/copy';
 import { formatCountdown } from '../lib/format';
 import { Check, Minus, Plus, X } from './Icons';
 
@@ -67,7 +68,7 @@ export function RunningTimerBar() {
           <button
             className="btn btn-icon running-cancel"
             onClick={() => {
-              if (window.confirm('Cancel this session? It will not be logged.')) void cancel();
+              if (window.confirm(CONFIRM.cancelSession)) void cancel();
             }}
             aria-label="Cancel session"
             title="Cancel"

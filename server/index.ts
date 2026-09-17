@@ -10,6 +10,10 @@ try {
   process.exit(1);
 }
 
+if (config.authMode === 'none') {
+  console.warn('[auth] AUTH_MODE=none: anyone who can reach this port has full access. Set AUTH_MODE=local or oidc before exposing it.');
+}
+
 const db = openDatabase(config.dbPath);
 const app = createApp(db, config);
 

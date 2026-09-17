@@ -1,12 +1,15 @@
 import { Router } from 'express';
 import type { DB, UserRow } from '../db.js';
 import type { Config } from '../config.js';
-import { hashPassword, validatePassword, validateUsername, verifyPassword } from './password.js';
-import { createSession, destroySession } from './session.js';
+import { DUMMY_HASH, hashPassword, validatePassword, validateUsername, verifyPassword } from './password.js';
+import { createSession, destroySession, revokeOtherSessions } from './session.js';
 import { currentUser, requireAdmin, requireAuth } from './middleware.js';
 
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60_000;
+// Expired entries are swept once the map grows past this, so a spray of addresses can't
+// make it grow without bound.
+const SWEEP_ABOVE = 1000;
 
 /** Simple per-IP login limiter. In-memory is fine for a single-process self-hosted app. */
 class LoginLimiter {
@@ -23,6 +26,9 @@ class LoginLimiter {
 
   fail(ip: string): void {
     const now = Date.now();
+    if (this.attempts.size >= SWEEP_ABOVE) {
+      for (const [k, v] of this.attempts) if (v.resetAt <= now) this.attempts.delete(k);
+    }
     const entry = this.attempts.get(ip);
     if (!entry || entry.resetAt <= now) this.attempts.set(ip, { count: 1, resetAt: now + WINDOW_MS });
     else entry.count += 1;
@@ -53,7 +59,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
     });
   });
 
-  r.post('/setup', (req, res) => {
+  r.post('/setup', async (req, res) => {
     if (userCount(db) > 0) {
       res.status(403).json({ error: 'Setup has already been completed.' });
       return;
@@ -64,18 +70,25 @@ export function localAuthRouter(db: DB, config: Config): Router {
       res.status(400).json({ error: err });
       return;
     }
+    const hash = await hashPassword(password);
+    // Re-check after the await: two first visitors racing each other must not both become
+    // admin. The check and the insert below run without yielding, so this one is decisive.
+    if (userCount(db) > 0) {
+      res.status(403).json({ error: 'Setup has already been completed.' });
+      return;
+    }
     const info = db
       .prepare(
         `INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at)
          VALUES ('local', ?, ?, ?, 1, ?)`,
       )
-      .run(username.trim(), hashPassword(password), username.trim(), Date.now());
+      .run(username.trim(), hash, username.trim(), Date.now());
     createSession(db, config, res, Number(info.lastInsertRowid));
     const user = db.prepare(`SELECT * FROM users WHERE id = ?`).get(info.lastInsertRowid) as UserRow;
     res.status(201).json({ user: publicUser(user) });
   });
 
-  r.post('/login', (req, res) => {
+  r.post('/login', async (req, res) => {
     const ip = req.ip ?? 'unknown';
     const gate = limiter.check(ip);
     if (!gate.ok) {
@@ -90,7 +103,9 @@ export function localAuthRouter(db: DB, config: Config): Router {
             | UserRow
             | undefined)
         : undefined;
-    const ok = user?.password_hash && typeof password === 'string' && verifyPassword(password, user.password_hash);
+    // Always run the hash, against a dummy when the name is unknown, so timing can't tell
+    // a wrong username from a wrong password.
+    const ok = typeof password === 'string' && (await verifyPassword(password, user?.password_hash ?? DUMMY_HASH));
     if (!ok || !user) {
       limiter.fail(ip);
       res.status(401).json({ error: 'Incorrect username or password.' });
@@ -106,10 +121,10 @@ export function localAuthRouter(db: DB, config: Config): Router {
     res.json({ ok: true });
   });
 
-  r.post('/password', requireAuth, (req, res) => {
+  r.post('/password', requireAuth, async (req, res) => {
     const user = currentUser(req);
     const { currentPassword, newPassword } = req.body ?? {};
-    if (!user.password_hash || typeof currentPassword !== 'string' || !verifyPassword(currentPassword, user.password_hash)) {
+    if (!user.password_hash || typeof currentPassword !== 'string' || !(await verifyPassword(currentPassword, user.password_hash))) {
       res.status(400).json({ error: 'Current password is incorrect.' });
       return;
     }
@@ -118,7 +133,9 @@ export function localAuthRouter(db: DB, config: Config): Router {
       res.status(400).json({ error: err });
       return;
     }
-    db.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).run(hashPassword(newPassword), user.id);
+    db.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).run(await hashPassword(newPassword), user.id);
+    // A changed password is usually "someone else may have the old one": drop every other session.
+    revokeOtherSessions(db, req, user.id);
     res.json({ ok: true });
   });
 
@@ -128,7 +145,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
     res.json({ users: rows.map(publicUser) });
   });
 
-  r.post('/users', requireAdmin, (req, res) => {
+  r.post('/users', requireAdmin, async (req, res) => {
     const { username, password } = req.body ?? {};
     const err = validateUsername(username) ?? validatePassword(password);
     if (err) {
@@ -145,7 +162,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
         `INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at)
          VALUES ('local', ?, ?, ?, 0, ?)`,
       )
-      .run(name, hashPassword(password), name, Date.now());
+      .run(name, await hashPassword(password), name, Date.now());
     const user = db.prepare(`SELECT * FROM users WHERE id = ?`).get(info.lastInsertRowid) as UserRow;
     res.status(201).json({ user: publicUser(user) });
   });

@@ -1,8 +1,8 @@
 import type { Priority } from '../types';
+import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { COMPLETE_WARNINGS, GENTLE_WARNINGS, PROGRESS_WARNINGS } from './copy';
 
-/** Mirrors the server cap. */
-export const MAX_PRIORITIES = 20;
+export { MAX_PRIORITIES };
 
 /**
  * The server stores only the rows that exist; the card shows at least `count` rows and

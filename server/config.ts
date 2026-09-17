@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS } from './retention.js';
+import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS } from '../shared/settings.js';
 
 export type AuthMode = 'none' | 'local' | 'oidc';
 

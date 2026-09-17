@@ -64,6 +64,7 @@ Other commands:
 ```bash
 npm test               # unit tests (timeclock math, alarms) + API tests against an in-memory DB
 npm run typecheck      # client + server type check
+npm run lint           # eslint (typescript + react-hooks rules)
 npm run seed           # fill the local database with sample days (see below)
 npm run build          # production build → dist/
 npm start              # serve the production build on http://localhost:8080
@@ -121,8 +122,10 @@ Then open <http://localhost:8080>. The database lives in the mounted `/data` vol
 ```bash
 docker build -t clockspan .
 docker run -d --name clockspan -p 8080:8080 -v /path/on/host:/data \
-  -e PUID=1000 -e PGID=1000 -e AUTH_MODE=local clockspan
+  -e AUTH_MODE=local clockspan
 ```
+
+The container drops to an unprivileged user (uid/gid 1000 by default; set `PUID`/`PGID` to match the owner of the host directory) after taking ownership of `/data`.
 
 To update: pull the latest code, rebuild the image, and restart the container — the database in the mounted volume is untouched.
 
@@ -134,14 +137,14 @@ To update: pull the latest code, rebuild the image, and restart the container �
 | `DATA_DIR` | `/data` (Docker) / `./data` | Where `focus.db` lives |
 | `AUTH_MODE` | `none` | `none`, `local` or `oidc` |
 | `APP_URL` | — | Public URL of the app. Required for `oidc`; also turns on Secure cookies when `https` |
-| `TRUST_PROXY` | `false` | `true` or a hop count when behind a reverse proxy |
+| `TRUST_PROXY` | `false` | Number of reverse proxies in front of the app (usually `1`). Prefer a count over `true`, which trusts any `X-Forwarded-For` a client sends |
 | `COOKIE_SECURE` | derived from `APP_URL` | Force session cookies to `Secure` on/off |
 | `SESSION_TTL_DAYS` | `30` | Sliding session lifetime |
 | `RETENTION_DAYS` | unset | Server-wide ceiling on history: every user's days older than this many days (30 or more) are deleted every few hours. Unset keeps everything; users can still choose a shorter limit in Settings → Data |
 | `OIDC_ISSUER` | — | Provider issuer URL (discovery is done from it) |
 | `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | — | Confidential client credentials |
 | `OIDC_SCOPES` | `openid profile email` | Scopes to request |
-| `PUID` / `PGID` | — | Docker only: run as this user and own `/data` |
+| `PUID` / `PGID` | `1000` / `1000` | Docker only: own `/data` and run as this user; `0` keeps root |
 
 ---
 
@@ -162,7 +165,7 @@ docker exec clockspan node dist/server/cli.js reset-password <username>
 # or locally: npm run reset-password -- <username>
 ```
 
-Login is rate-limited to 5 attempts per 15 minutes per IP (set `TRUST_PROXY` behind a proxy so that's the real client IP).
+Login is rate-limited to 5 attempts per 15 minutes per IP (set `TRUST_PROXY` behind a proxy so that's the real client IP). Changing your password signs out every other session.
 
 ### Authentik (OIDC)
 
@@ -181,7 +184,7 @@ Login is rate-limited to 5 attempts per 15 minutes per IP (set `TRUST_PROXY` beh
    OIDC_ISSUER=https://auth.example.com/application/o/clockspan/
    OIDC_CLIENT_ID=...
    OIDC_CLIENT_SECRET=...
-   TRUST_PROXY=true
+   TRUST_PROXY=1
    ```
 
 The app refuses to start with a clear message if any of these are missing. If Authentik is briefly unreachable at startup the app still boots and retries discovery in the background. Sign out also ends the Authentik session when the provider advertises an end-session endpoint.
@@ -215,9 +218,17 @@ sqlite3 /path/on/host/focus.db \
 - **Past days.** Use ◀ ▶ or the date picker; History shows every recorded day with worked / focused / priorities and a tick once its retrospective is reviewed. Past days are editable; timers can only start on today.
 - **Phone.** Add to Home Screen (Android: *Install app*; iOS: Share → *Add to Home Screen*). Browser notifications on iOS only work from the installed app. *Keep screen awake* keeps the countdown and chime live while the app is open; if the phone sleeps anyway, the alert fires when you come back.
 
-## Reverse proxy notes
+## Exposing it to the internet
 
-Set `TRUST_PROXY=true` so the app sees real client IPs (rate limiting) and `APP_URL=https://…` so session cookies are marked Secure. WebSockets are not used.
+The app is built to sit behind a reverse proxy on your own domain. Before opening the port:
+
+- **Use `AUTH_MODE=local` or `oidc`.** `none` means anyone who reaches the port owns the data; the server logs a warning at startup when it's running that way.
+- **Terminate HTTPS at the proxy** and set `APP_URL=https://your.domain`. That marks the session cookie `Secure` and turns on HSTS.
+- **Set `TRUST_PROXY` to the number of proxies** between the internet and the container, usually `1`. With `true`, Express believes whatever `X-Forwarded-For` a client sends, which lets an attacker dodge the login rate limit.
+- **Finish setup first.** In `local` mode the first visitor creates the admin account, so do that from the LAN before the proxy goes live.
+- Keep `/data` backed up (below). WebSockets are not used, so any proxy works.
+
+What the app does on its own: a strict same-origin Content-Security-Policy plus `nosniff`, `frame-ancestors 'none'` and `Referrer-Policy` on every response; HttpOnly, SameSite=Lax session cookies with the token stored hashed; scrypt password hashes; a per-IP login limit; a non-root container user. It is still a small self-hosted app: keep it updated and behind the protections your proxy already gives you.
 
 ## Backups
 

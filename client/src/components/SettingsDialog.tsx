@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS } from '../../../shared/settings.js';
 import * as api from '../api';
 import { useAuth } from '../auth/AuthGate';
 import { useSettings } from '../hooks/useSettings';
 import { chime, notificationPermission, requestNotificationPermission, unlockAudio } from '../lib/alerts';
-import { DELETE_DAYS, RESET_SETTINGS, SAVE_STATUS } from '../lib/copy';
+import { CONFIRM, DELETE_DAYS, RESET_SETTINGS, SAVE_STATUS } from '../lib/copy';
 import { addDays, formatDateFull, todayKey } from '../lib/format';
 import { DEFAULT_LAYOUT } from '../lib/layout';
 import type { AlarmId, AlarmSettings, PruneInfo, PublicUser, Settings } from '../types';
@@ -20,9 +21,6 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'data', label: 'Data' },
   { id: 'account', label: 'Account' },
 ];
-/** Bounds for "keep the last N days"; the server enforces the same (MIN/MAX_RETENTION_DAYS). */
-const RETENTION_DAYS_MIN = 30;
-const RETENTION_DAYS_MAX = 3650;
 const TAB_STORAGE_KEY = 'focus:settingsTab';
 
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
@@ -153,8 +151,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 label="Keep the last"
                 unit="days"
                 minutes={settings.retention.days}
-                min={RETENTION_DAYS_MIN}
-                max={RETENTION_DAYS_MAX}
+                min={MIN_RETENTION_DAYS}
+                max={MAX_RETENTION_DAYS}
                 disabled={!settings.retention.enabled}
                 onCommit={(m) => set({ retention: { ...settings.retention, days: m } })}
               />
@@ -334,10 +332,14 @@ function Toggle({ label, hint, checked, onChange }: { label: string; hint?: stri
 function DurationField({ label, minutes, onCommit }: { label: string; minutes: number; onCommit: (m: number) => void }) {
   const [h, setH] = useState(String(Math.floor(minutes / 60)));
   const [m, setM] = useState(String(minutes % 60));
-  useEffect(() => {
+  // A new value from outside (save confirmed, reset) replaces the draft; React's
+  // "adjust state while rendering" form, so it lands in the same render.
+  const [seen, setSeen] = useState(minutes);
+  if (minutes !== seen) {
+    setSeen(minutes);
     setH(String(Math.floor(minutes / 60)));
     setM(String(minutes % 60));
-  }, [minutes]);
+  }
   const commit = () => {
     const total = Math.max(1, Math.min(24 * 60, (Number(h) || 0) * 60 + (Number(m) || 0)));
     if (total !== minutes) onCommit(total);
@@ -379,7 +381,11 @@ function MinutesField({
   onCommit: (m: number) => void;
 }) {
   const [v, setV] = useState(String(minutes));
-  useEffect(() => setV(String(minutes)), [minutes]);
+  const [seen, setSeen] = useState(minutes);
+  if (minutes !== seen) {
+    setSeen(minutes);
+    setV(String(minutes));
+  }
   const commit = () => {
     const n = Math.max(min, Math.min(max, Math.round(Number(v) || 0)));
     if (n !== minutes) onCommit(n);
@@ -584,7 +590,7 @@ function Users({ me }: { me: PublicUser }) {
     }
   };
   const remove = async (u: PublicUser) => {
-    if (!window.confirm(`Delete ${u.name} and ALL of their data? This cannot be undone.`)) return;
+    if (!window.confirm(CONFIRM.deleteUser(u.name))) return;
     try {
       await api.deleteUser(u.id);
       await load();

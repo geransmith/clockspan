@@ -1,3 +1,4 @@
+import { endOfDay } from '../../../shared/dates.js';
 import type { Punch, Settings } from '../types';
 
 export type TimeclockState = 'not-started' | 'working' | 'at-lunch' | 'on-break' | 'done';
@@ -208,6 +209,19 @@ export function computeTimeclock(
     secondMealStatus,
     error,
   };
+}
+
+/** "Now" as a day sees it: live today, never past the end of an earlier day. */
+export function clampToDay(date: string, today: string, now: number): number {
+  return date === today ? now : Math.min(now, endOfDay(date));
+}
+
+/**
+ * The timeclock for the sheet or a history row: today runs live; a past day is frozen at its
+ * end so an unclosed clock-in doesn't count forever.
+ */
+export function timeclockForDate(punches: Punch[], settings: TimeclockSettings, date: string, today: string, now: number): TimeclockResult {
+  return computeTimeclock(punches, settings, clampToDay(date, today, now), { frozen: date !== today });
 }
 
 /**

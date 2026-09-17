@@ -17,14 +17,17 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [auth, setAuth] = useState<AuthInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    try {
-      setAuth(await api.getAuth());
-      setError(null);
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }, []);
+  const refresh = useCallback(
+    () =>
+      api.getAuth().then(
+        (next) => {
+          setAuth(next);
+          setError(null);
+        },
+        (err: Error) => setError(err.message),
+      ),
+    [],
+  );
 
   useEffect(() => {
     void refresh();

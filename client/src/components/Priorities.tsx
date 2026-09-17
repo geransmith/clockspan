@@ -6,16 +6,16 @@ import type { Priority } from '../types';
 import { Check, Plus, X } from './Icons';
 
 interface Props {
-  date: string;
   priorities: Priority[];
   onChange: (priorities: Priority[]) => void;
 }
 
 /**
  * Starts with `priorityCount` rows and grows on demand. Text saves 400 ms after the last
- * keystroke; checkboxes, add and remove save immediately.
+ * keystroke; checkboxes, add and remove save immediately. Keyed by date in the sheet, so a
+ * new day mounts fresh instead of carrying drafts over.
  */
-export function Priorities({ date, priorities, onChange }: Props) {
+export function Priorities({ priorities, onChange }: Props) {
   const { settings } = useSettings();
   const count = settings.priorityCount;
   const [local, setLocal] = useState(() => padPriorities(priorities, count));
@@ -26,15 +26,10 @@ export function Priorities({ date, priorities, onChange }: Props) {
   const inputs = useRef(new Map<number, HTMLInputElement>());
   const focusNext = useRef<number | null>(null);
 
-  // Adopt server state when the day changes or when we have no unsaved edits.
+  // Adopt server state whenever there are no unsaved edits.
   useEffect(() => {
     if (!dirty.current) setLocal(padPriorities(priorities, count));
-  }, [priorities, date, count]);
-  useEffect(() => {
-    dirty.current = false;
-    setLocal(padPriorities(priorities, count));
-    setWarning(null);
-  }, [date]);
+  }, [priorities, count]);
   useEffect(() => {
     if (focusNext.current == null) return;
     inputs.current.get(focusNext.current)?.focus();

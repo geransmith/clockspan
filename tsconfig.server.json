@@ -9,10 +9,10 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "outDir": "dist/server",
-    "rootDir": "server",
+    "outDir": "dist",
+    "rootDir": ".",
     "types": ["node"]
   },
-  "include": ["server"],
-  "exclude": ["server/dev", "server/**/*.test.ts"]
+  "include": ["server", "shared"],
+  "exclude": ["server/dev", "**/*.test.ts"]
 }

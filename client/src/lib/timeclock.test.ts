@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clockOutPosition, computeTimeclock, emptyPunches, extraPairs, normalizePunches, secondMealApplies } from './timeclock';
+import { clampToDay, clockOutPosition, computeTimeclock, emptyPunches, extraPairs, normalizePunches, secondMealApplies, timeclockForDate } from './timeclock';
 import type { Punch } from '../types';
 
 const settings = { workMinutes: 480, lunchDeadlineMinutes: 300, lunchMinutes: 30, secondMealAfterMinutes: 600 };
@@ -230,5 +230,31 @@ describe('frozen (past day)', () => {
     const r = computeTimeclock(punches([T0, null, null]), settings, T0 + 16 * H, { frozen: true });
     expect(r.state).toBe('working');
     expect(r.workedSeconds).toBe(16 * 3600);
+  });
+});
+
+describe('timeclockForDate', () => {
+  const today = '2026-09-17';
+  const yesterday = '2026-09-16';
+  const nowToday = new Date(2026, 8, 17, 10, 0).getTime();
+
+  it('runs today live', () => {
+    expect(clampToDay(today, today, nowToday)).toBe(nowToday);
+    const r = timeclockForDate(punches([T0 + 24 * H, null, null]), settings, today, today, nowToday);
+    expect(r.state).toBe('working');
+    expect(r.workedSeconds).toBe(2 * 3600);
+  });
+
+  it('stops a past day with an unclosed clock-in at the end of that day', () => {
+    expect(clampToDay(yesterday, today, nowToday)).toBe(new Date(2026, 8, 17, 0, 0).getTime() - 1);
+    const r = timeclockForDate(punches([T0, null, null]), settings, yesterday, today, nowToday);
+    expect(r.state).toBe('working');
+    expect(r.workedSeconds).toBe(16 * 3600 - 1);
+  });
+
+  it('marks a past day done once it is off the clock, target or not', () => {
+    const r = timeclockForDate(punches([T0, null, null, T0 + 3 * H]), settings, yesterday, today, nowToday);
+    expect(r.state).toBe('done');
+    expect(r.clockOutAt).toBe(T0 + 3 * H);
   });
 });

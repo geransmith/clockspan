@@ -4,8 +4,9 @@ import type { Config } from '../config.js';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { countDays, pruneDays, reclaimSpace } from '../retention.js';
-import { ensureDay, findDay, isValidDateKey, sessionRowToJson, UID_RE, type DayRow, type SessionRow } from './shared.js';
-import { MAX_PRIORITIES } from './settings.js';
+import { isValidDateKey } from '../../shared/dates.js';
+import { dateParam, ensureDay, findDay, requireDate, sessionRowToJson, UID_RE, type DayRow, type SessionRow } from './shared.js';
+import { MAX_PRIORITIES } from '../../shared/settings.js';
 
 const MAX_RANGE_DAYS = 400;
 const MAX_RETRO_NOTE = 4000;
@@ -136,25 +137,17 @@ export function daysRouter(db: DB, config: Config): Router {
     res.json({ deleted });
   });
 
-  r.get('/:date', (req, res) => {
+  r.get('/:date', requireDate, (req, res) => {
     const user = currentUser(req);
-    const { date } = req.params;
-    if (!isValidDateKey(date)) {
-      res.status(400).json({ error: 'Invalid date.' });
-      return;
-    }
+    const date = dateParam(req);
     const day = findDay(db, user.id, date);
     res.json(day ? dayJson(db, day, date) : emptyDayJson(date));
   });
 
   // Full replace. Position parity defines kind: even = in, odd = out.
-  r.put('/:date/punches', (req, res) => {
+  r.put('/:date/punches', requireDate, (req, res) => {
     const user = currentUser(req);
-    const { date } = req.params;
-    if (!isValidDateKey(date)) {
-      res.status(400).json({ error: 'Invalid date.' });
-      return;
-    }
+    const date = dateParam(req);
     const input = (req.body as { punches?: unknown })?.punches;
     if (!Array.isArray(input) || input.length > 40) {
       res.status(400).json({ error: 'punches must be an array.' });
@@ -181,13 +174,9 @@ export function daysRouter(db: DB, config: Config): Router {
 
   // Full replace, like punches: array order is the position, so removing a row is just
   // sending the list without it. An empty row can never be "done".
-  r.put('/:date/priorities', (req, res) => {
+  r.put('/:date/priorities', requireDate, (req, res) => {
     const user = currentUser(req);
-    const { date } = req.params;
-    if (!isValidDateKey(date)) {
-      res.status(400).json({ error: 'Invalid date.' });
-      return;
-    }
+    const date = dateParam(req);
     const input = (req.body as { priorities?: unknown })?.priorities;
     if (!Array.isArray(input) || input.length > MAX_PRIORITIES) {
       res.status(400).json({ error: `priorities must be an array of at most ${MAX_PRIORITIES}.` });
@@ -221,13 +210,9 @@ export function daysRouter(db: DB, config: Config): Router {
     res.json({ priorities: rows });
   });
 
-  r.put('/:date/overtime', (req, res) => {
+  r.put('/:date/overtime', requireDate, (req, res) => {
     const user = currentUser(req);
-    const { date } = req.params;
-    if (!isValidDateKey(date)) {
-      res.status(400).json({ error: 'Invalid date.' });
-      return;
-    }
+    const date = dateParam(req);
     const approved = (req.body as { approved?: unknown })?.approved;
     if (typeof approved !== 'boolean') {
       res.status(400).json({ error: 'approved must be a boolean.' });
@@ -240,13 +225,9 @@ export function daysRouter(db: DB, config: Config): Router {
 
   // The day's retrospective: a free-text "why" and whether it has been reviewed. Marking it
   // reviewed keeps the first reviewed-at; un-marking clears it.
-  r.put('/:date/retro', (req, res) => {
+  r.put('/:date/retro', requireDate, (req, res) => {
     const user = currentUser(req);
-    const { date } = req.params;
-    if (!isValidDateKey(date)) {
-      res.status(400).json({ error: 'Invalid date.' });
-      return;
-    }
+    const date = dateParam(req);
     const { note, done } = (req.body ?? {}) as { note?: unknown; done?: unknown };
     if (note !== undefined && typeof note !== 'string') {
       res.status(400).json({ error: 'note must be a string.' });

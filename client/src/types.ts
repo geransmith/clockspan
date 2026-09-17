@@ -1,33 +1,4 @@
-export type CardId = 'timeclock' | 'priorities' | 'timer' | 'log' | 'retro';
-
-export interface AlarmSettings {
-  enabled: boolean;
-  leadMinutes: number[];
-  onDue: boolean;
-  overdueEveryMinutes: number;
-}
-
-export type AlarmId = 'lunchBy' | 'clockOut' | 'secondMeal' | 'retro';
-
-export interface Settings {
-  workMinutes: number;
-  lunchDeadlineMinutes: number;
-  lunchMinutes: number;
-  /** Hours *worked* after which a second meal period is due (California: 10 h). */
-  secondMealAfterMinutes: number;
-  adjustStepMinutes: number;
-  /** Rows a fresh day's priorities card starts with. */
-  priorityCount: number;
-  sound: boolean;
-  notifications: boolean;
-  keepScreenAwake: boolean;
-  /** Show the per-day "Overtime approved" switch and banner action. */
-  overtimeApproval: boolean;
-  alarms: Record<AlarmId, AlarmSettings>;
-  layout: { id: CardId; visible: boolean }[];
-  /** Automatic prune of this user's days older than `days`; off by default. */
-  retention: { enabled: boolean; days: number };
-}
+export type { AlarmId, AlarmSettings, CardId, Settings } from '../../shared/settings.js';
 
 /** What `GET /days/prune?before=` would delete, plus the server-wide ceiling if one is set. */
 export interface PruneInfo {

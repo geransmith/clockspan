@@ -1,7 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import type { Settings } from '../types';
+import { DEFAULT_SETTINGS } from '../../../shared/settings.js';
 import { normalizeLayout } from '../lib/layout';
+import { useLatest } from './useLatest';
 
 interface SettingsCtx {
   settings: Settings;
@@ -10,35 +12,13 @@ interface SettingsCtx {
   reset: () => Promise<void>;
 }
 
-/** Client-side mirror of the server defaults; replaced by the real settings on load. */
-const FALLBACK: Settings = {
-  workMinutes: 480,
-  lunchDeadlineMinutes: 300,
-  lunchMinutes: 30,
-  secondMealAfterMinutes: 600,
-  adjustStepMinutes: 5,
-  priorityCount: 3,
-  sound: true,
-  notifications: true,
-  keepScreenAwake: true,
-  overtimeApproval: true,
-  alarms: {
-    lunchBy: { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 },
-    clockOut: { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 },
-    secondMeal: { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 },
-    retro: { enabled: true, leadMinutes: [30], onDue: false, overdueEveryMinutes: 0 },
-  },
-  layout: normalizeLayout(undefined),
-  retention: { enabled: false, days: 365 },
-};
-
 const Ctx = createContext<SettingsCtx | null>(null);
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
-  const [settings, setSettings] = useState<Settings>(FALLBACK);
+  // The shared defaults stand in until the server answers, so nothing renders against a guess.
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [loaded, setLoaded] = useState(false);
-  const latest = useRef(settings);
-  latest.current = settings;
+  const latest = useLatest(settings);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,10 +45,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setSettings(prev);
       throw err;
     }
-  }, []);
+  }, [latest]);
 
-  // Not optimistic: the client's FALLBACK is only a mirror, so the server's answer is the
-  // first trustworthy copy of the defaults.
+  // Not optimistic: the server's answer is the copy of the defaults that counts.
   const reset = useCallback(async () => {
     const saved = await api.resetSettings();
     setSettings({ ...saved, layout: normalizeLayout(saved.layout) });

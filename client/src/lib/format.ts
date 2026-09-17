@@ -1,59 +1,8 @@
+import { addDays, parseDateKey } from '../../../shared/dates.js';
+
+export { addDays, addMonths, dateKey, endOfDay, isValidDateKey, parseDateKey, startOfMonth, startOfQuarter, startOfWeek, todayKey } from '../../../shared/dates.js';
+
 const pad = (n: number) => String(n).padStart(2, '0');
-
-/** Local-date key, e.g. 2026-09-16. The client owns "today"; the server never guesses. */
-export function dateKey(d: Date): string {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-export function todayKey(now: number = Date.now()): string {
-  return dateKey(new Date(now));
-}
-
-/** Midnight (local) for a date key. */
-export function parseDateKey(key: string): Date {
-  const [y, m, d] = key.split('-').map(Number) as [number, number, number];
-  return new Date(y, m - 1, d);
-}
-
-export function isValidDateKey(key: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return false;
-  const d = parseDateKey(key);
-  return dateKey(d) === key;
-}
-
-export function addDays(key: string, n: number): string {
-  const d = parseDateKey(key);
-  d.setDate(d.getDate() + n);
-  return dateKey(d);
-}
-
-export function endOfDay(key: string): number {
-  const d = parseDateKey(key);
-  d.setDate(d.getDate() + 1);
-  return d.getTime() - 1;
-}
-
-/** Monday of the key's week: the review follows the work week, not the calendar one. */
-export function startOfWeek(key: string): string {
-  const d = parseDateKey(key);
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-  return dateKey(d);
-}
-
-export function startOfMonth(key: string): string {
-  return `${key.slice(0, 7)}-01`;
-}
-
-export function startOfQuarter(key: string): string {
-  const [y, m] = key.split('-').map(Number) as [number, number];
-  return `${y}-${pad(Math.floor((m - 1) / 3) * 3 + 1)}-01`;
-}
-
-/** `n` months from the first of the key's month, clamped to a first-of-month key. */
-export function addMonths(key: string, n: number): string {
-  const [y, m] = key.split('-').map(Number) as [number, number];
-  return dateKey(new Date(y, m - 1 + n, 1));
-}
 
 const timeFmt = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
 const dateLongFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
@@ -85,6 +34,13 @@ export function formatDateSpan(from: string, to: string): string {
   const b = parseDateKey(to);
   if (from.slice(0, 7) === to.slice(0, 7)) return `${dayShortFmt.format(a)} – ${b.getDate()}`;
   return `${dayShortFmt.format(a)} – ${dayShortFmt.format(b)}`;
+}
+
+/** "Today", "Yesterday", or the short date: how the header and the history list name a day. */
+export function dayName(key: string, today: string): string {
+  if (key === today) return 'Today';
+  if (key === addDays(today, -1)) return 'Yesterday';
+  return formatDateLong(key);
 }
 
 /** "Wed" */

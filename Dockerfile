@@ -8,6 +8,7 @@ RUN npm ci
 COPY tsconfig.json tsconfig.server.json vite.config.ts ./
 COPY client ./client
 COPY server ./server
+COPY shared ./shared
 RUN npm run build && npm prune --omit=dev
 
 # ---- runtime ----
@@ -20,10 +21,14 @@ COPY package.json ./
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh && mkdir -p /data
 
+# PUID/PGID: the entrypoint owns /data as this user and drops root before starting node.
+# Override to match the host directory's owner (Unraid: 99/100); 0/0 keeps root.
 ENV NODE_ENV=production \
     PORT=8080 \
     DATA_DIR=/data \
-    AUTH_MODE=none
+    AUTH_MODE=none \
+    PUID=1000 \
+    PGID=1000
 
 EXPOSE 8080
 VOLUME ["/data"]

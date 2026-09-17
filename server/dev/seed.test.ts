@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ensureDefaultUser, openDatabase } from '../db.js';
 import { SEED_NOW, SEED_TODAY } from './harness.js';
-import { DEFAULT_HISTORY_DAYS, ensureLocalUsers, kindForDistance, seedDatabase, startOfQuarter, weekdaysBefore, weekdaysSince } from './seed.js';
+import { DEFAULT_HISTORY_DAYS, ensureLocalUsers, kindForDistance, quarterStart, seedDatabase, weekdaysBefore, weekdaysSince } from './seed.js';
 
 const counts = (db: ReturnType<typeof openDatabase>) =>
   Object.fromEntries(['days', 'punches', 'priorities', 'sessions', 'settings', 'auth_sessions'].map((t) => [t, (db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as { n: number }).n]));
@@ -93,10 +93,10 @@ describe('seedDatabase', () => {
     db.close();
   });
 
-  it('seeds one user without touching another', () => {
+  it('seeds one user without touching another', async () => {
     const db = openDatabase(':memory:');
-    const { admin, member } = ensureLocalUsers(db);
-    expect(ensureLocalUsers(db)).toEqual({ admin, member });
+    const { admin, member } = await ensureLocalUsers(db);
+    expect(await ensureLocalUsers(db)).toEqual({ admin, member });
     seedDatabase(db, { userId: admin.id, today: SEED_TODAY, now: SEED_NOW, days: 2 });
     seedDatabase(db, { userId: member.id, today: SEED_TODAY, now: SEED_NOW, days: 1 });
     seedDatabase(db, { userId: admin.id, today: SEED_TODAY, now: SEED_NOW, days: 3 });
@@ -127,13 +127,13 @@ describe('calendar helpers', () => {
   });
 
   it('finds quarter starts and counts the weekdays since', () => {
-    expect(startOfQuarter('2026-09-16')).toBe('2026-07-01');
-    expect(startOfQuarter('2026-09-16', 1)).toBe('2026-04-01');
-    expect(startOfQuarter('2026-01-15', 1)).toBe('2025-10-01');
+    expect(quarterStart('2026-09-16')).toBe('2026-07-01');
+    expect(quarterStart('2026-09-16', 1)).toBe('2026-04-01');
+    expect(quarterStart('2026-01-15', 1)).toBe('2025-10-01');
     expect(weekdaysSince('2026-09-14', '2026-09-16')).toBe(2);
     expect(weekdaysSince('2026-09-11', '2026-09-14')).toBe(1);
     // Two full quarters back to April land at the quarter start on the first weekday.
-    const n = weekdaysSince(startOfQuarter('2026-09-16', 1), '2026-09-16');
+    const n = weekdaysSince(quarterStart('2026-09-16', 1), '2026-09-16');
     expect(weekdaysBefore('2026-09-16', n)[0]).toBe('2026-04-01');
   });
 

@@ -1,6 +1,6 @@
 import { useAuth } from '../auth/AuthGate';
 import type { Route } from '../hooks/useRoute';
-import { addDays, formatDateLong } from '../lib/format';
+import { addDays, dayName, formatDateLong } from '../lib/format';
 import { ChevronLeft, ChevronRight, Gear, Layout, List } from './Icons';
 
 interface Props {
@@ -16,7 +16,6 @@ export function Header({ route, today, customize, onNavigate, onToggleCustomize,
   const { auth, signOut } = useAuth();
   const onSheet = route.view === 'sheet';
   const isToday = route.date === today;
-  const label = isToday ? 'Today' : route.date === addDays(today, -1) ? 'Yesterday' : formatDateLong(route.date);
 
   return (
     <header className="topbar">
@@ -66,7 +65,7 @@ export function Header({ route, today, customize, onNavigate, onToggleCustomize,
             <ChevronLeft />
           </button>
           <label className="datenav-label">
-            <span className="datenav-text">{label}</span>
+            <span className="datenav-text">{dayName(route.date, today)}</span>
             {!isToday && <span className="datenav-sub">{formatDateLong(route.date)}</span>}
             <input
               className="datenav-input"

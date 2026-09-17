@@ -1,5 +1,6 @@
 import type { DB, UserRow } from '../db.js';
 import { hashPassword } from '../auth/password.js';
+import { addDays, addMonths, parseDateKey, startOfQuarter } from '../../shared/dates.js';
 
 /**
  * Deterministic sample data for the dev DB and for API tests. Rows are written with plain
@@ -74,31 +75,16 @@ export const LOCAL_USERS = { admin: 'admin', member: 'sam', password: 'clockspan
 
 const MIN = 60_000;
 
-// ----- local-date helpers (the dev machine's zone, which is what the browser shows) -----
-
-function parseKey(key: string): [number, number, number] {
-  const [y, m, d] = key.split('-').map(Number);
-  return [y!, m!, d!];
-}
-
-export function localDateKey(ms: number): string {
-  const d = new Date(ms);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+// ----- calendar helpers (the dev machine's zone, which is what the browser shows) -----
 
 function at(key: string, hour: number, minute: number): number {
-  const [y, m, d] = parseKey(key);
-  return new Date(y, m - 1, d, hour, minute).getTime();
-}
-
-function addDays(key: string, n: number): string {
-  const [y, m, d] = parseKey(key);
-  return localDateKey(new Date(y, m - 1, d + n).getTime());
+  const d = parseDateKey(key);
+  d.setHours(hour, minute, 0, 0);
+  return d.getTime();
 }
 
 function isWeekend(key: string): boolean {
-  const [y, m, d] = parseKey(key);
-  const wd = new Date(y, m - 1, d).getDay();
+  const wd = parseDateKey(key).getDay();
   return wd === 0 || wd === 6;
 }
 
@@ -110,10 +96,8 @@ export function weekdaysSince(from: string, key: string): number {
 }
 
 /** First day of the calendar quarter `quartersBack` before the one holding `key`. */
-export function startOfQuarter(key: string, quartersBack = 0): string {
-  const [y, m] = parseKey(key);
-  const monthIndex = Math.floor((m - 1) / 3) * 3 - 3 * quartersBack;
-  return localDateKey(new Date(y, monthIndex, 1).getTime());
+export function quarterStart(key: string, quartersBack = 0): string {
+  return addMonths(startOfQuarter(key), -3 * quartersBack);
 }
 
 /** The `n` weekdays before `key`, oldest first. */
@@ -410,15 +394,15 @@ export function seedDatabase(db: DB, opts: SeedOptions): SeedManifest {
 }
 
 /** The two local-auth users the seed fills in under AUTH_MODE=local. Idempotent. */
-export function ensureLocalUsers(db: DB): { admin: UserRow; member: UserRow } {
+export async function ensureLocalUsers(db: DB): Promise<{ admin: UserRow; member: UserRow }> {
   const get = (username: string) => db.prepare(`SELECT * FROM users WHERE kind = 'local' AND username = ?`).get(username) as UserRow | undefined;
-  const create = (username: string, isAdmin: boolean): UserRow => {
+  const create = async (username: string, isAdmin: boolean): Promise<UserRow> => {
     const existing = get(username);
     if (existing) return existing;
     db.prepare(
       `INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at) VALUES ('local', ?, ?, ?, ?, ?)`,
-    ).run(username, hashPassword(LOCAL_USERS.password), username, isAdmin ? 1 : 0, Date.now());
+    ).run(username, await hashPassword(LOCAL_USERS.password), username, isAdmin ? 1 : 0, Date.now());
     return get(username)!;
   };
-  return { admin: create(LOCAL_USERS.admin, true), member: create(LOCAL_USERS.member, false) };
+  return { admin: await create(LOCAL_USERS.admin, true), member: await create(LOCAL_USERS.member, false) };
 }

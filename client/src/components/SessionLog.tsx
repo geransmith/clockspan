@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useDayStore } from '../hooks/useDay';
+import { CONFIRM } from '../lib/copy';
 import { formatDuration, formatTime } from '../lib/format';
 import type { Priority, Session } from '../types';
 import { Trash } from './Icons';
@@ -137,7 +138,7 @@ function Row({
       <button
         className="btn btn-icon log-delete"
         onClick={() => {
-          if (window.confirm('Delete this session from the log?')) onDelete();
+          if (window.confirm(CONFIRM.deleteSession)) onDelete();
         }}
         aria-label="Delete session"
         title="Delete"

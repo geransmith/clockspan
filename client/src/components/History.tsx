@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import * as api from '../api';
 import { useSettings } from '../hooks/useSettings';
-import { addDays, endOfDay, formatDateLong, formatDuration } from '../lib/format';
-import { computeTimeclock } from '../lib/timeclock';
+import { addDays, dayName, formatDateLong, formatDuration } from '../lib/format';
+import { timeclockForDate } from '../lib/timeclock';
 import type { DaySummary } from '../types';
 import { Check } from './Icons';
 import { Review } from './Review';
@@ -56,9 +56,8 @@ function Days({ today, now, onOpen }: Props) {
       </header>
       <ul className="history">
         {days.map((d) => {
-          const frozenNow = d.date === today ? now : Math.min(now, endOfDay(d.date));
-          const tc = computeTimeclock(d.punches, settings, frozenNow, { frozen: d.date !== today });
-          const name = d.date === today ? 'Today' : d.date === addDays(today, -1) ? 'Yesterday' : formatDateLong(d.date);
+          const tc = timeclockForDate(d.punches, settings, d.date, today, now);
+          const name = dayName(d.date, today);
           return (
             <li key={d.date}>
               <button className="history-row" onClick={() => onOpen(d.date)}>

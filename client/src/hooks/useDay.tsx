@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as api from '../api';
 import type { Day, Priority, Punch, Session } from '../types';
 import { newUid, placePriority } from '../lib/priorities';
-import { normalizePunches } from '../lib/timeclock';
+import { emptyPunches, normalizePunches } from '../lib/timeclock';
+import { useLatest } from './useLatest';
 import { useSettings } from './useSettings';
 
 interface DayStore {
@@ -23,19 +24,17 @@ interface DayStore {
 const Ctx = createContext<DayStore | null>(null);
 
 function withDay(days: Record<string, Day>, date: string, fn: (d: Day) => Day): Record<string, Day> {
-  const current = days[date] ?? { date, punches: normalizePunches([]), priorities: [], overtimeApproved: false, retroNote: '', retroAt: null, sessions: [] };
+  const current = days[date] ?? { date, punches: emptyPunches(), priorities: [], overtimeApproved: false, retroNote: '', retroAt: null, sessions: [] };
   return { ...days, [date]: fn(current) };
 }
 
 export function DayProvider({ children }: { children: ReactNode }) {
   const [days, setDays] = useState<Record<string, Day>>({});
-  // Latest value for callbacks that read before they write (addPriority), so a click right
-  // after a priority blur-flush sees the flushed list, not the render it closed over.
-  const latest = useRef(days);
-  latest.current = days;
+  // For callbacks that read before they write (addPriority): a click right after a priority
+  // blur-flush must see the flushed list, not the render it closed over.
+  const latest = useLatest(days);
   const { settings } = useSettings();
-  const priorityCount = useRef(settings.priorityCount);
-  priorityCount.current = settings.priorityCount;
+  const priorityCount = useLatest(settings.priorityCount);
   const inflight = useRef(new Map<string, Promise<void>>());
 
   const load = useCallback((date: string) => {
@@ -86,7 +85,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       await setPriorities(date, next);
       return uid;
     },
-    [setPriorities],
+    [setPriorities, latest, priorityCount],
   );
 
   const setRetro = useCallback(
@@ -165,6 +164,6 @@ export function useDay(date: string): { day: Day | undefined; store: DayStore } 
   const day = store.days[date];
   useEffect(() => {
     if (!day) void store.load(date);
-  }, [date, day === undefined]);
+  }, [date, day, store]);
   return { day, store };
 }

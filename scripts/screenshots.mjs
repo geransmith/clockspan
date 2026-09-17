@@ -82,7 +82,7 @@ async function startDevServer() {
     await waitFor(healthy, `${BASE}/api/health`);
   } catch (err) {
     stopGroup(child);
-    throw new Error(`${err.message}\n${tail.join('\n')}`);
+    throw new Error(`${err.message}\n${tail.join('\n')}`, { cause: err });
   }
   return child;
 }

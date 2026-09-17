@@ -26,26 +26,29 @@ export function Review({ today, now, onOpen }: Props) {
   const { settings } = useSettings();
   const [kind, setKind] = useState<PeriodKind>('week');
   const [offset, setOffset] = useState(0);
-  const [days, setDays] = useState<Day[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const period = periodRange(kind, today, offset);
+  // The answer is tagged with the range it is for, so stepping to another period reads as
+  // "loading" straight away without clearing state inside the effect.
+  const rangeKey = `${period.from}:${period.to}`;
+  const [fetched, setFetched] = useState<{ key: string; days?: Day[]; error?: string } | null>(null);
+  const current = fetched?.key === rangeKey ? fetched : null;
+  const days = current?.days ?? null;
+  const error = current?.error ?? null;
 
   useEffect(() => {
     let cancelled = false;
-    setDays(null);
-    setError(null);
     api
       .getRange(period.from, period.to)
       .then((r) => {
-        if (!cancelled) setDays(r.days);
+        if (!cancelled) setFetched({ key: rangeKey, days: r.days });
       })
       .catch((err) => {
-        if (!cancelled) setError((err as Error).message);
+        if (!cancelled) setFetched({ key: rangeKey, error: (err as Error).message });
       });
     return () => {
       cancelled = true;
     };
-  }, [period.from, period.to]);
+  }, [period.from, period.to, rangeKey]);
 
   const pickKind = (k: PeriodKind) => {
     setKind(k);

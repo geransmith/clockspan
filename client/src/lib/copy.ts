@@ -89,6 +89,19 @@ export const WARNING_ACTIONS = {
   complete: { add: 'Add a bonus', keep: 'Stop here' },
 } as const;
 
+/** Confirm dialogs. Each names what goes and that it stays gone. */
+export const CONFIRM = {
+  cancelSession: 'Cancel this session? It will not be logged.',
+  deleteSession: 'Delete this session from the log?',
+  deleteUser: (name: string) => `Delete ${name} and ALL of their data? This cannot be undone.`,
+} as const;
+
+/** The alert when a focus timer reaches zero. */
+export const TIMER_DONE = {
+  title: 'Focus session complete',
+  body: (label: string, duration: string) => (label ? `${label} · ${duration}` : `${duration} logged.`),
+} as const;
+
 /** Placeholder for the day's retrospective note. */
 export const RETRO_PROMPT = 'What got in the way? What went to plan?';
 

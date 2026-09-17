@@ -1,8 +1,8 @@
 #!/bin/sh
-# If PUID/PGID are given (Unraid convention: 99/100), own /data as that user and drop
-# privileges. Otherwise run as-is (root), which is the simplest thing on most hosts.
+# Own /data as PUID:PGID (image default 1000/1000, Unraid convention 99/100) and drop
+# privileges before starting node. 0/0 or empty values keep the process as root.
 set -e
-if [ -n "$PUID" ] && [ -n "$PGID" ]; then
+if [ -n "$PUID" ] && [ -n "$PGID" ] && [ "$PUID" != "0" ]; then
   # A passwd entry is nice-to-have only; su-exec works with numeric ids regardless.
   addgroup -g "$PGID" app 2>/dev/null || true
   adduser -D -H -u "$PUID" -G "$(awk -F: -v g="$PGID" '$3==g{print $1; exit}' /etc/group)" app 2>/dev/null || true
