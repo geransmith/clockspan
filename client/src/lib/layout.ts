@@ -1,4 +1,4 @@
-import { CARD_IDS, DEFAULT_SETTINGS } from '../../../shared/settings.js';
+import { CARD_DEFAULT_VISIBLE, CARD_IDS, DEFAULT_SETTINGS } from '../../../shared/settings.js';
 import type { CardId, Settings } from '../types';
 
 export interface CardDef {
@@ -13,9 +13,10 @@ const CARD_TITLES: Record<CardId, string> = {
   timer: 'Focus timer',
   log: 'Day log',
   retro: 'Retrospective',
+  stickers: 'Sticker chart',
 };
 
-/** Registry of cards in default order; all are visible by default. */
+/** Registry of cards in default order; `CARD_DEFAULT_VISIBLE` says which start hidden. */
 export const CARDS: CardDef[] = CARD_IDS.map((id) => ({ id, title: CARD_TITLES[id] }));
 
 export const DEFAULT_LAYOUT: Settings['layout'] = DEFAULT_SETTINGS.layout;
@@ -24,7 +25,7 @@ export function cardTitle(id: CardId): string {
   return CARDS.find((c) => c.id === id)?.title ?? id;
 }
 
-/** Drop unknown ids, append missing ones visible — mirrors the server merge. */
+/** Drop unknown ids, append missing ones with their default — mirrors the server merge. */
 export function normalizeLayout(layout: Settings['layout'] | undefined): Settings['layout'] {
   const known = new Set(CARDS.map((c) => c.id));
   const seen = new Set<CardId>();
@@ -34,6 +35,6 @@ export function normalizeLayout(layout: Settings['layout'] | undefined): Setting
     seen.add(item.id);
     out.push({ id: item.id, visible: item.visible !== false });
   }
-  for (const c of CARDS) if (!seen.has(c.id)) out.push({ id: c.id, visible: true });
+  for (const c of CARDS) if (!seen.has(c.id)) out.push({ id: c.id, visible: CARD_DEFAULT_VISIBLE[c.id] });
   return out;
 }

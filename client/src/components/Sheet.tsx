@@ -21,6 +21,7 @@ import { FocusTimer } from './FocusTimer';
 import { Priorities } from './Priorities';
 import { Retro } from './Retro';
 import { SessionLog } from './SessionLog';
+import { Stickers } from './Stickers';
 import { Timeclock } from './Timeclock';
 
 interface Props {
@@ -111,6 +112,8 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
             onChange={(patch) => void store.setRetro(date, patch)}
           />
         );
+      case 'stickers':
+        return <Stickers today={today} now={now} />;
     }
   };
 

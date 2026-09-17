@@ -866,6 +866,95 @@ button {
   }
 }
 
+/* ---------- sticker chart ---------- */
+.stickers {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.stickers-count {
+  margin: 0;
+  color: var(--text-2);
+}
+.stickers-count strong {
+  color: var(--text);
+  font-size: 1.15rem;
+}
+.stickers-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+.stickers-weekday {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-3);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sticker-day {
+  min-height: 56px;
+  padding: 4px 3px 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.sticker-day.is-empty,
+.sticker-day.is-future {
+  background: transparent;
+  opacity: 0.55;
+}
+.sticker-day.is-today {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+/* Every sticker earned: the day itself gets the gold star. */
+.sticker-day.is-full {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  opacity: 1;
+}
+.sticker-daynum {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-2);
+  line-height: 1;
+}
+.sticker-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px 2px;
+  font-size: 0.95rem;
+  line-height: 1.1;
+}
+.stickers-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 0.85rem;
+  color: var(--text-2);
+}
+@media (min-width: 640px) {
+  .stickers-grid {
+    gap: 6px;
+  }
+  .sticker-day {
+    min-height: 64px;
+    padding: 6px 6px 4px;
+  }
+  .sticker-row {
+    font-size: 1.1rem;
+  }
+}
+
 /* ---------- priorities ---------- */
 .priorities {
   display: flex;

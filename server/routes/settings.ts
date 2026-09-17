@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import {
+  CARD_DEFAULT_VISIBLE,
   CARD_IDS,
   DEFAULT_SETTINGS,
   MAX_RETENTION_DAYS,
@@ -58,10 +59,10 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
       const { id, visible } = item as Record<string, unknown>;
       if (!CARD_IDS.includes(id as CardId) || seen.has(id as CardId)) continue;
       seen.add(id as CardId);
-      next.push({ id: id as CardId, visible: isBool(visible) ? visible : true });
+      next.push({ id: id as CardId, visible: isBool(visible) ? visible : CARD_DEFAULT_VISIBLE[id as CardId] });
     }
-    // Any card the client omitted (e.g. added after they last saved) is appended visible.
-    for (const id of CARD_IDS) if (!seen.has(id)) next.push({ id, visible: true });
+    // Any card the client omitted (e.g. added after they last saved) is appended with its default.
+    for (const id of CARD_IDS) if (!seen.has(id)) next.push({ id, visible: CARD_DEFAULT_VISIBLE[id] });
     layout = next;
   }
 

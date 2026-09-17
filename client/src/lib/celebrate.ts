@@ -6,7 +6,7 @@ export interface Celebration {
 }
 
 /** Small integer hash so one seed gives independent emoji and phrase picks. */
-function hash(n: number, salt: number): number {
+export function hash(n: number, salt: number): number {
   let h = (Math.floor(n) ^ salt) >>> 0;
   h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0;
   h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0;

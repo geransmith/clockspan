@@ -82,6 +82,9 @@ client/                 Vite root → dist/client
   src/lib/priorities.ts PURE: padPriorities(), warnThreshold(), warningKind(), pickWarning(kind),
                         newUid(), placePriority() (timer → priorities)
   src/lib/retro.ts      PURE: reviewDay(priorities, sessions) → on/off-plan time, mid-day rows
+  src/lib/stickers.ts   PURE: stickersForDay(summary) (clocked out, lunch, all priorities, focus,
+                        reviewed), stickerEmoji(date, id) (fixed, distinct per day), daySummaryOf(day)
+                        (the GET /days rollup, for a live today), stickerWeeks(), countStickers()
   src/lib/review.ts     PURE: periodRange(kind, today, offset) (Mon-start weeks), reviewRange(days)
   src/lib/format.ts     Intl formatting (time, dates, durations, dayName); formatTime(ms, hour12)
                         + resolveHour12(timeFormat); re-exports shared/dates
@@ -98,7 +101,7 @@ client/                 Vite root → dist/client
                         Timeclock + TimeField (React Aria hour/minute/AM-PM segments), Priorities,
                         Burst (emoji flying from an anchor, portalled to body; off under reduced
                         motion and the `celebrations` setting), FocusTimer, SessionLog, Retro,
-                        History (Days | Review), Review,
+                        Stickers (4-week sticker chart; hidden by default), History (Days | Review), Review,
                         SettingsDialog (tabs incl. Data: retention + delete-before), Icons
 scripts/screenshots.mjs `npm run screenshots`: dev server (reused or started) + seed + headless
                         Chromium over CDP → docs/screenshots/*.png for the README
@@ -275,10 +278,12 @@ repo or the session scratchpad.
 
 ## How to add…
 
-- **A card**: add the id to `CARD_IDS` in `shared/settings.ts` and its title to `CARD_TITLES`
-  in `client/src/lib/layout.ts` (the type makes a missing title an error) → write the
-  component → add a `case` in `Sheet.tsx`'s `render()`. Existing users get it automatically
-  (visible) because layouts merge with the registry.
+- **A card**: add the id to `CARD_IDS` and its default under `CARD_DEFAULT_VISIBLE` in
+  `shared/settings.ts`, and its title to `CARD_TITLES` in `client/src/lib/layout.ts` (the
+  types make a missing entry an error) → write the component → add a `case` in `Sheet.tsx`'s
+  `render()`. Existing users get it automatically because layouts merge with the registry on
+  both sides (`normalizeLayout`, `mergeSettings`), appended with that default; a card that
+  starts hidden (the sticker chart) shows up under Customize → Hidden → Show.
 - **A per-user setting**: add it to the `Settings` type and `DEFAULT_SETTINGS` in
   `shared/settings.ts` → validate it in `mergeSettings()` (`server/routes/settings.ts`) → add
   the control to the right tab in `SettingsDialog.tsx` (Timeclock · Alarms · Sheet · Data ·
