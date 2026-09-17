@@ -142,6 +142,14 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 onChange={(v) => set({ keepScreenAwake: v })}
               />
             </Section>
+            <Section title="Celebrations">
+              <Toggle
+                label="Emoji bursts"
+                hint="A short burst when you tick a priority or finish the day."
+                checked={settings.celebrations}
+                onChange={(v) => set({ celebrations: v })}
+              />
+            </Section>
             <Section title="Layout" hint="Use Customize on the sheet to drag cards or hide them.">
               <div className="setting-row">
                 <span className="muted">

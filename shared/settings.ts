@@ -40,6 +40,8 @@ export interface Settings {
   keepScreenAwake: boolean;
   /** Show the per-day "Overtime approved" switch and banner action. */
   overtimeApproval: boolean;
+  /** Emoji bursts when a priority is ticked or the day ends. */
+  celebrations: boolean;
   alarms: Record<AlarmId, AlarmSettings>;
   layout: { id: CardId; visible: boolean }[];
   /** Automatic prune of this user's days older than `days`; off by default. */
@@ -69,6 +71,7 @@ export const DEFAULT_SETTINGS: Settings = {
   notifications: true,
   keepScreenAwake: true,
   overtimeApproval: true,
+  celebrations: true,
   alarms: { lunchBy: { ...DEFAULT_ALARM }, clockOut: { ...DEFAULT_ALARM }, secondMeal: { ...DEFAULT_ALARM }, retro: { ...DEFAULT_RETRO_ALARM } },
   layout: CARD_IDS.map((id) => ({ id, visible: true })),
   retention: { enabled: false, days: 365 },

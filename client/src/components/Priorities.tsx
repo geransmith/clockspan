@@ -3,6 +3,7 @@ import { useSettings } from '../hooks/useSettings';
 import { WARNING_ACTIONS } from '../lib/copy';
 import { MAX_PRIORITIES, newUid, padPriorities, pickWarning, warnThreshold, warningKind, type WarningKind } from '../lib/priorities';
 import type { Priority } from '../types';
+import { Burst, BURST_MS } from './Burst';
 import { Check, Plus, X } from './Icons';
 
 interface Props {
@@ -25,6 +26,13 @@ export function Priorities({ priorities, onChange }: Props) {
   const timer = useRef<number | null>(null);
   const inputs = useRef(new Map<number, HTMLInputElement>());
   const focusNext = useRef<number | null>(null);
+  // A tick gets a burst from its checkbox; the burst goes away on its own.
+  const [burst, setBurst] = useState<{ seed: number; anchor: DOMRect } | null>(null);
+  useEffect(() => {
+    if (!burst) return;
+    const id = window.setTimeout(() => setBurst(null), BURST_MS);
+    return () => window.clearTimeout(id);
+  }, [burst]);
 
   // Adopt server state whenever there are no unsaved edits.
   useEffect(() => {
@@ -98,7 +106,10 @@ export function Priorities({ priorities, onChange }: Props) {
               className="checkbox"
               checked={p.done}
               disabled={empty}
-              onChange={(e) => edit(p.position, { done: e.target.checked }, true)}
+              onChange={(e) => {
+                if (e.target.checked && settings.celebrations) setBurst({ seed: Date.now(), anchor: e.target.getBoundingClientRect() });
+                edit(p.position, { done: e.target.checked }, true);
+              }}
               aria-label={`Priority ${p.position} done`}
               title={empty ? 'Write the priority first' : undefined}
             />
@@ -150,6 +161,7 @@ export function Priorities({ priorities, onChange }: Props) {
           </span>
         </div>
       )}
+      {burst && <Burst key={burst.seed} seed={burst.seed} anchor={burst.anchor} />}
       <div className="priorities-foot">
         {local.length < MAX_PRIORITIES ? (
           <button className="btn btn-ghost priority-add" onClick={() => addRow()}>
