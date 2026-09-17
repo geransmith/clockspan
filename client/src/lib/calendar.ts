@@ -16,22 +16,25 @@ export interface CalendarDay {
 
 /**
  * The month that starts on `monthStart` as Monday-to-Sunday rows, oldest first, padded to
- * whole weeks with `outside` cells. The days are looked up by date; anything else the cell
- * shows is derived by the caller from the same summaries.
+ * whole weeks with `outside` cells; Monday-to-Friday rows when weekends are off, so a
+ * weekend day is simply not on the calendar and never counted. The days are looked up by
+ * date; anything else the cell shows is derived by the caller from the same summaries.
  */
-export function calendarMonth(days: DaySummary[], settings: TimeclockSettings, today: string, now: number, monthStart: string): CalendarDay[][] {
+export function calendarMonth(days: DaySummary[], settings: TimeclockSettings, today: string, now: number, monthStart: string, showWeekends = true): CalendarDay[][] {
   const byDate = new Map(days.map((d) => [d.date, d]));
   const monthEnd = addDays(addMonths(monthStart, 1), -1);
+  const width = showWeekends ? 7 : 5;
   const out: CalendarDay[][] = [];
   for (let monday = startOfWeek(monthStart); monday <= monthEnd; monday = addDays(monday, 7)) {
     const row: CalendarDay[] = [];
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < width; i++) {
       const date = addDays(monday, i);
       const outside = date < monthStart || date > monthEnd;
       const d = outside ? undefined : byDate.get(date);
       row.push({ date, outside, isFuture: date > today, hasData: d != null, stickers: d ? stickersForDay(d, settings, today, now) : [] });
     }
-    out.push(row);
+    // A month that starts on a Saturday would otherwise open with a row of nothing but filler.
+    if (row.some((d) => !d.outside)) out.push(row);
   }
   return out;
 }

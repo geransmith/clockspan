@@ -84,6 +84,7 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     overtimeApproval: isBool(p.overtimeApproval) ? p.overtimeApproval : base.overtimeApproval,
     celebrations: isBool(p.celebrations) ? p.celebrations : base.celebrations,
     stickers: isBool(p.stickers) ? p.stickers : stickers,
+    showWeekends: isBool(p.showWeekends) ? p.showWeekends : base.showWeekends,
     alarms: {
       lunchBy: mergeAlarm(base.alarms.lunchBy, alarms.lunchBy),
       clockOut: mergeAlarm(base.alarms.clockOut, alarms.clockOut),

@@ -81,6 +81,12 @@ describe('/api/settings', () => {
     expect((await app.api.put('/api/settings', { stickers: 'yes' })).body.stickers).toBe(false);
   });
 
+  it('takes the weekends switch as a boolean only', async () => {
+    expect((await app.api.put('/api/settings', { showWeekends: false })).body.showWeekends).toBe(false);
+    expect((await app.api.put('/api/settings', { showWeekends: 'no' })).body.showWeekends).toBe(false);
+    expect((await app.api.put('/api/settings', { showWeekends: true })).body.showWeekends).toBe(true);
+  });
+
   it('resets on DELETE', async () => {
     await app.api.put('/api/settings', { workMinutes: 1 });
     const r = await app.api.del('/api/settings');

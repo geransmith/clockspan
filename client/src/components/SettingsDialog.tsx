@@ -157,6 +157,12 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 checked={settings.stickers}
                 onChange={(v) => set({ stickers: v })}
               />
+              <Toggle
+                label="Show weekends"
+                hint="Off hides Saturday and Sunday from the calendar and its sticker counts."
+                checked={settings.showWeekends}
+                onChange={(v) => set({ showWeekends: v })}
+              />
             </Section>
             <Section title="Layout" hint="Use Customize on the sheet to drag cards or hide them.">
               <div className="setting-row">

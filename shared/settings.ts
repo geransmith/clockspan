@@ -53,6 +53,8 @@ export interface Settings {
   celebrations: boolean;
   /** Stickers on the History calendar: one per thing a day did. Off by default. */
   stickers: boolean;
+  /** Saturday and Sunday columns on the History calendar; off drops them and their stickers from the counts. */
+  showWeekends: boolean;
   alarms: Record<AlarmId, AlarmSettings>;
   layout: { id: CardId; visible: boolean }[];
   /** Automatic prune of this user's days older than `days`; off by default. */
@@ -84,6 +86,7 @@ export const DEFAULT_SETTINGS: Settings = {
   overtimeApproval: true,
   celebrations: true,
   stickers: false,
+  showWeekends: true,
   alarms: { lunchBy: { ...DEFAULT_ALARM }, clockOut: { ...DEFAULT_ALARM }, secondMeal: { ...DEFAULT_ALARM }, retro: { ...DEFAULT_RETRO_ALARM } },
   layout: CARD_IDS.map((id) => ({ id, visible: CARD_DEFAULT_VISIBLE[id] })),
   retention: { enabled: false, days: 365 },

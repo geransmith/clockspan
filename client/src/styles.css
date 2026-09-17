@@ -1558,6 +1558,9 @@ button {
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 4px;
 }
+.calendar-grid--work .calendar-row {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
 .calendar-weekday {
   font-size: 0.72rem;
   font-weight: 600;
