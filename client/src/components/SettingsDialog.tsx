@@ -150,6 +150,14 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 onChange={(v) => set({ celebrations: v })}
               />
             </Section>
+            <Section title="History">
+              <Toggle
+                label="Sticker chart"
+                hint="Every day on the calendar wears a sticker for each thing it did: clocked out, lunch taken, all priorities done, a focus session logged, retrospective reviewed."
+                checked={settings.stickers}
+                onChange={(v) => set({ stickers: v })}
+              />
+            </Section>
             <Section title="Layout" hint="Use Customize on the sheet to drag cards or hide them.">
               <div className="setting-row">
                 <span className="muted">

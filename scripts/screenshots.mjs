@@ -6,8 +6,8 @@
  *
  * It reuses a running `npm run dev` (BASE_URL, default http://localhost:5173) or starts one,
  * seeds the dev DB (`--running --quarter`, with the clock pinned to 10:30 so every run looks
- * the same), drives a local Chromium over the DevTools protocol, and stops whatever it
- * started. The browser is CHROME_BIN, else an installed Chrome / Chromium / Edge / Brave,
+ * the same) and turns the sticker chart on for the history shot, drives a local Chromium over
+ * the DevTools protocol, and stops whatever it started. The browser is CHROME_BIN, else an installed Chrome / Chromium / Edge / Brave,
  * else a Chrome for Testing build fetched once into node_modules/.cache. (Vivaldi is left
  * out on purpose: its headless mode starts but never lets DevTools drive a tab.) The dev
  * server has to be in AUTH_MODE=none (the default): the script does not sign in.
@@ -99,6 +99,12 @@ function seed() {
   log(`seeding (--running --quarter --now ${CLOCK})`);
   const r = spawnSync('npm', ['run', 'seed', '--', '--running', '--quarter', '--now', CLOCK], { cwd: ROOT, stdio: 'inherit' });
   if (r.status !== 0) throw new Error('npm run seed failed');
+}
+
+/** The sticker chart is off by default; the history shot shows it on. No other shot reads it. */
+async function enableStickers() {
+  const res = await fetch(`${BASE}/api/settings`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ stickers: true }) });
+  if (!res.ok) throw new Error(`PUT /api/settings failed (${res.status})`);
 }
 
 // ----- browser -----
@@ -347,7 +353,7 @@ const SHOTS = [
   { name: 'sheet-desktop', url: '/', device: DESKTOP, scheme: 'dark', ready: READY_SHEET, fullPage: true },
   { name: 'retro', url: `/?date=${lastWeekday()}`, device: PHONE, scheme: 'light', ready: '#card-retro .card', clip: '#card-retro' },
   // The route's date picks the day, so the panel is filled before the first paint settles.
-  { name: 'history', url: `/?view=history&date=${lastWeekday()}`, device: PHONE_TALL, scheme: 'light', ready: '.calendar-detail .tile' },
+  { name: 'history', url: `/?view=history&date=${lastWeekday()}`, device: PHONE, scheme: 'light', ready: '.calendar-detail .tile', fullPage: true },
   {
     name: 'review',
     url: '/?view=history',
@@ -389,6 +395,7 @@ async function main() {
       log(`using the server at ${BASE}`);
     }
     seed();
+    await enableStickers();
 
     const bin = findBrowser();
     log(`browser: ${bin}`);

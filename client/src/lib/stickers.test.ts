@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Day, DaySummary, Punch } from '../types';
 import { STICKER_EMOJI } from './copy';
-import { countStickers, daySummaryOf, STICKER_REASONS, stickerEmoji, stickersForDay, stickerWeeks } from './stickers';
+import { calendarMonth } from './calendar';
+import { countStickers, daySummaryOf, STICKER_REASONS, stickerEmoji, stickersForDay } from './stickers';
 import { emptyPunches } from './timeclock';
 
 const settings = { workMinutes: 480, lunchDeadlineMinutes: 300, lunchMinutes: 30, secondMealAfterMinutes: 600 };
@@ -87,24 +88,8 @@ describe('daySummaryOf', () => {
   });
 });
 
-describe('stickerWeeks / countStickers', () => {
-  it('lays out four Monday-start weeks ending with this one and places the days', () => {
-    const days = [summary('2026-09-14', { retroAt: 1 }), summary('2026-08-24', { focusSeconds: 10 })];
-    const weeks = stickerWeeks(days, settings, TODAY, NOW);
-    expect(weeks).toHaveLength(4);
-    expect(weeks.map((w) => w.length)).toEqual([7, 7, 7, 7]);
-    expect(weeks[0]![0]!.date).toBe('2026-08-24');
-    expect(weeks[3]![0]!.date).toBe('2026-09-14');
-    expect(weeks[3]![6]!.date).toBe('2026-09-20');
-    expect(weeks[3]![0]).toEqual({ date: '2026-09-14', stickers: ['reviewed'], hasData: true, isFuture: false });
-    expect(weeks[0]![0]!.stickers).toEqual(['focus']);
-    expect(weeks[3]![3]!.isFuture).toBe(false); // today
-    expect(weeks[3]![4]!.isFuture).toBe(true);
-    expect(weeks[3]![4]!.hasData).toBe(false);
-    expect(countStickers(weeks)).toEqual({ total: 2, full: 0 });
-  });
-
-  it('counts a day with every sticker as full', () => {
+describe('countStickers', () => {
+  it('totals the month by reason and counts a day with every sticker as full', () => {
     const full = summary('2026-09-15', {
       punches: punches('2026-09-15', ['08:00', '12:00', '12:30', '16:30']),
       focusSeconds: 1,
@@ -112,6 +97,11 @@ describe('stickerWeeks / countStickers', () => {
       prioritiesTotal: 1,
       retroAt: 1,
     });
-    expect(countStickers(stickerWeeks([full], settings, TODAY, NOW))).toEqual({ total: 5, full: 1 });
+    const days = [full, summary('2026-09-14', { retroAt: 1 }), summary('2026-09-02', { focusSeconds: 10 })];
+    expect(countStickers(calendarMonth(days, settings, TODAY, NOW, '2026-09-01'))).toEqual({
+      total: 7,
+      full: 1,
+      byReason: { clockedOut: 1, lunch: 1, priorities: 1, focus: 2, reviewed: 2 },
+    });
   });
 });

@@ -866,95 +866,6 @@ button {
   }
 }
 
-/* ---------- sticker chart ---------- */
-.stickers {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.stickers-count {
-  margin: 0;
-  color: var(--text-2);
-}
-.stickers-count strong {
-  color: var(--text);
-  font-size: 1.15rem;
-}
-.stickers-grid {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 4px;
-}
-.stickers-weekday {
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--text-3);
-  text-align: center;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.sticker-day {
-  min-height: 56px;
-  padding: 4px 3px 3px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.sticker-day.is-empty,
-.sticker-day.is-future {
-  background: transparent;
-  opacity: 0.55;
-}
-.sticker-day.is-today {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-soft);
-}
-/* Every sticker earned: the day itself gets the gold star. */
-.sticker-day.is-full {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  opacity: 1;
-}
-.sticker-daynum {
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--text-2);
-  line-height: 1;
-}
-.sticker-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1px 2px;
-  font-size: 0.95rem;
-  line-height: 1.1;
-}
-.stickers-legend {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
-  font-size: 0.85rem;
-  color: var(--text-2);
-}
-@media (min-width: 640px) {
-  .stickers-grid {
-    gap: 6px;
-  }
-  .sticker-day {
-    min-height: 64px;
-    padding: 6px 6px 4px;
-  }
-  .sticker-row {
-    font-size: 1.1rem;
-  }
-}
-
 /* ---------- priorities ---------- */
 .priorities {
   display: flex;
@@ -1618,6 +1529,7 @@ button {
 /* ◀ label ▶ under a card head; the review and the calendar share it. */
 .period-nav {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   padding: 10px 16px 0;
@@ -1627,6 +1539,11 @@ button {
   text-align: center;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* "This month" sits at the right, or drops to its own line when a long label needs the room. */
+.period-nav .btn-ghost {
+  margin-left: auto;
 }
 
 /* ---------- calendar (History → Days) ---------- */
@@ -1678,6 +1595,12 @@ button {
 .calendar-day.is-today .calendar-daynum {
   color: var(--accent);
 }
+/* Every sticker earned: the day itself gets the gold star. */
+.calendar-day.is-full {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  opacity: 1;
+}
 .calendar-day.is-selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent);
@@ -1696,6 +1619,27 @@ button {
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
   color: var(--text-2);
+}
+/* Two stickers per line in a phone-width cell (three from 640px), whichever emoji font the browser has. */
+.sticker-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  justify-items: center;
+  gap: 1px 0;
+  font-size: 0.85rem;
+  line-height: 1.1;
+}
+.calendar-count {
+  margin: 0;
+  padding: 12px 16px 0;
+  color: var(--text-2);
+}
+.calendar-count strong {
+  color: var(--text);
+  font-size: 1.15rem;
+}
+.calendar-legend {
+  margin: 12px 16px 0;
 }
 /* A day with something on it but no clock-in. */
 .calendar-dot {
@@ -1751,6 +1695,10 @@ button {
   }
   .calendar-worked {
     font-size: 0.8rem;
+  }
+  .sticker-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    font-size: 1.1rem;
   }
 }
 

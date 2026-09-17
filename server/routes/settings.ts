@@ -51,12 +51,16 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
   const alarms = (p.alarms && typeof p.alarms === 'object' ? p.alarms : {}) as Record<string, unknown>;
 
   let layout = base.layout;
+  // Until 0.3 the sticker chart was a sheet card; a row saved then carries its choice in the
+  // layout. Honour it until the user's next save writes the setting itself.
+  let stickers = base.stickers;
   if (Array.isArray(p.layout)) {
     const seen = new Set<CardId>();
     const next: Settings['layout'] = [];
     for (const item of p.layout) {
       if (!item || typeof item !== 'object') continue;
       const { id, visible } = item as Record<string, unknown>;
+      if (id === 'stickers' && visible === true) stickers = true;
       if (!CARD_IDS.includes(id as CardId) || seen.has(id as CardId)) continue;
       seen.add(id as CardId);
       next.push({ id: id as CardId, visible: isBool(visible) ? visible : CARD_DEFAULT_VISIBLE[id as CardId] });
@@ -79,6 +83,7 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     keepScreenAwake: isBool(p.keepScreenAwake) ? p.keepScreenAwake : base.keepScreenAwake,
     overtimeApproval: isBool(p.overtimeApproval) ? p.overtimeApproval : base.overtimeApproval,
     celebrations: isBool(p.celebrations) ? p.celebrations : base.celebrations,
+    stickers: isBool(p.stickers) ? p.stickers : stickers,
     alarms: {
       lunchBy: mergeAlarm(base.alarms.lunchBy, alarms.lunchBy),
       clockOut: mergeAlarm(base.alarms.clockOut, alarms.clockOut),
