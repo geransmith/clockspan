@@ -11,7 +11,8 @@ import { useSettings } from './useSettings';
 /**
  * The setters are optimistic and never reject: a failed save puts the server's copy back and
  * raises a banner, so a `void store.x()` call site is complete. `setPriorities` also says
- * whether it saved, for the one caller that chains on it (`addPriority`).
+ * whether it saved, for the one caller that chains on it (`addPriority`). Punch saves are
+ * queued per day (one in flight, the newest waiting) so a burst of arrow keys lands in order.
  */
 interface DayStore {
   days: Record<string, Day>;
@@ -43,6 +44,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const { settings } = useSettings();
   const priorityCount = useLatest(settings.priorityCount);
   const inflight = useRef(new Map<string, Promise<void>>());
+  const punchQueue = useRef(new Map<string, { latest: Punch[]; inflight: boolean }>());
 
   const load = useCallback((date: string) => {
     const existing = inflight.current.get(date);
@@ -74,11 +76,28 @@ export function DayProvider({ children }: { children: ReactNode }) {
     [load],
   );
 
+  // A PUT replaces the whole day's punches, so two in flight could land out of order. Only
+  // one runs per day; a newer set waits and goes out after it, and the sets in between are
+  // skipped. A failed save drops the queue: `persist` has reloaded the day by then.
   const setPunches = useCallback(
     async (date: string, punches: Punch[]) => {
       const normalized = normalizePunches(punches);
       setDays((prev) => withDay(prev, date, (d) => ({ ...d, punches: normalized })));
-      await persist(date, () => api.putPunches(date, normalized));
+      const q = punchQueue.current.get(date) ?? { latest: normalized, inflight: false };
+      q.latest = normalized;
+      punchQueue.current.set(date, q);
+      if (q.inflight) return;
+      q.inflight = true;
+      try {
+        let sent: Punch[] | null = null;
+        while (sent !== q.latest) {
+          sent = q.latest;
+          const batch = sent;
+          if (!(await persist(date, () => api.putPunches(date, batch)))) break;
+        }
+      } finally {
+        punchQueue.current.delete(date);
+      }
     },
     [persist],
   );

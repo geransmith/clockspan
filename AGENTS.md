@@ -15,8 +15,9 @@ has the user-facing description.
 ## Stack & versions
 
 - Node **24** (Active LTS). `nvm use 24` locally; `node:24-alpine` in Docker.
-- Frontend: React 19 + TypeScript + Vite 8. Drag/drop: `@dnd-kit/sortable`. No router lib — the
-  date and view live in the URL query (`hooks/useRoute.ts`). No CSS framework.
+- Frontend: React 19 + TypeScript + Vite 8. Drag/drop: `@dnd-kit/sortable`. Punch time entry:
+  `react-aria` + `react-stately` (`useTimeField`, segments) with `@internationalized/date`.
+  No router lib — the date and view live in the URL query (`hooks/useRoute.ts`). No CSS framework.
 - Backend: Express 5 (ESM, `NodeNext`, imports use `.js` extensions), `better-sqlite3` (native),
   `openid-client` v6 for OIDC, `cookie` for cookie parsing. Passwords: `node:crypto` scrypt (async).
 - Tests: Vitest 5. Lint: ESLint flat config (`eslint.config.js`: typescript-eslint + react-hooks,
@@ -81,8 +82,10 @@ client/                 Vite root → dist/client
                         newUid(), placePriority() (timer → priorities)
   src/lib/retro.ts      PURE: reviewDay(priorities, sessions) → on/off-plan time, mid-day rows
   src/lib/review.ts     PURE: periodRange(kind, today, offset) (Mon-start weeks), reviewRange(days)
-  src/lib/format.ts     Intl formatting (time, dates, durations, dayName), <input type=time>
-                        conversions; re-exports shared/dates
+  src/lib/format.ts     Intl formatting (time, dates, durations, dayName), resolveHour12();
+                        re-exports shared/dates
+  src/lib/timefield.ts  PURE: msToTime/timeToMs (epoch ms ↔ @internationalized/date Time on a
+                        date key), guessPeriod() (the AM/PM the time field fills in)
   src/lib/layout.ts     CARDS (titles for CARD_IDS), DEFAULT_LAYOUT, normalizeLayout()
   src/hooks/            useSettings (SettingsProvider, optimistic PUT), useDay (per-date cache +
                         setters), useTimer (running session, remaining/progress, mutationSeq re-sync,
@@ -91,8 +94,9 @@ client/                 Vite root → dist/client
                         useSettled, useWakeLock
   src/auth/             AuthGate (mode/user → Setup | Login | OIDC button | app), pages
   src/components/       Header, RunningTimerBar, Banners, Sheet (dnd-kit) + CardShell,
-                        Timeclock, Priorities, FocusTimer, SessionLog, Retro, History (Days | Review),
-                        Review, SettingsDialog (tabs incl. Data: retention + delete-before), Icons
+                        Timeclock + TimeField (React Aria hour/minute/AM-PM segments), Priorities,
+                        FocusTimer, SessionLog, Retro, History (Days | Review), Review,
+                        SettingsDialog (tabs incl. Data: retention + delete-before), Icons
 scripts/screenshots.mjs `npm run screenshots`: dev server (reused or started) + seed + headless
                         Chromium over CDP → docs/screenshots/*.png for the README
 docs/screenshots/       committed PNGs the README embeds; regenerate after a visible UI change
@@ -221,6 +225,13 @@ repo or the session scratchpad.
   Clock out that is the latest punch ends the day even if the target isn't met. "Add extra
   out / in" appends two rows, so the old Clock out becomes the new pair's Out. Lunch semantics
   come only from positions 1 and 2.
+- **A punch row saves only complete times.** `TimeField` (React Aria segments) commits the
+  moment hour, minute and period are all filled, and throws a half-typed draft away when
+  focus leaves the field, so the row never shows a time the server doesn't have. In 12-hour
+  mode the period is filled in as the hour is typed (`guessPeriod` in `lib/timefield.ts`: 5–11
+  → AM, 12 and 1–4 → PM, kept after the day's clock-in), and left alone once the user has
+  touched that segment. Clearing is the row's × button only. `setPunches` queues PUTs per day
+  (one in flight, the newest waiting) because each PUT replaces the whole day.
 - **Overtime approval (`days.overtime_approved`) silences only the `clockOut` alarm target.**
   Lunch and the second meal period stay armed: California Labor Code §512 still requires them
   on an overtime day. The setting `overtimeApproval` only shows/hides the switch and banner
@@ -334,7 +345,11 @@ Prove a change at the cheapest level that can show it, and stop there:
   short timer expire — the log must show the planned duration and one chime.
 - If you touched punches: walk a pair added before lunch, an early Clock out (done +
   celebration), "Add extra out / in" after it (old Clock out becomes Out N), and removing that
-  pair (time returns to Clock out).
+  pair (time returns to Clock out). For the time field: clear Clock in, press `0` `7` `3` `0`
+  (the hour advances, the period fills, the tiles move with no further key), `p` flips it, ↑/↓
+  on a segment saves each step, and a half-typed row reverts when you click away. In the
+  browser pane send single `key` presses; the `type` action pastes the whole string into one
+  segment.
 - If you touched alarms: with "Overtime approved" on, the clock-out banner must stop and the
   lunch tile must keep counting down. The retro banner must still fire, and "Mark reviewed"
   must clear it without a repeat.

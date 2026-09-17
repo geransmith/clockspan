@@ -1,9 +1,10 @@
 import { useSettings } from '../hooks/useSettings';
 import { pickCelebration } from '../lib/celebrate';
-import { formatDuration, formatDurationCeil, formatTime, fromTimeInput, roundToMinute, toTimeInput } from '../lib/format';
+import { formatDuration, formatDurationCeil, formatTime, resolveHour12, roundToMinute } from '../lib/format';
 import { clockOutPosition, extraPairs, kindForPosition, secondMealApplies, type ExtraPair, type TimeclockResult } from '../lib/timeclock';
 import type { Punch } from '../types';
 import { Plus, Trash, X } from './Icons';
+import { TimeField } from './TimeField';
 
 interface Props {
   date: string;
@@ -101,9 +102,15 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
   const after = pairs.filter((p) => !p.beforeLunch);
   const clockOutPos = clockOutPosition(punches);
 
+  const hour12 = resolveHour12();
+  // A punch after the clock-in is expected to come after it; the time field's AM/PM guess uses that.
+  const clockInAt = byPos.get(0)?.at ?? null;
+  const row = (punch: Punch, label: string) => (
+    <PunchRow key={punch.position} label={label} punch={punch} date={date} isToday={isToday} hour12={hour12} anchorAt={punch.position === 0 ? null : clockInAt} onSet={(at) => setAt(punch.position, at)} />
+  );
   const fixedRow = (position: number, label: string) => {
     const p = byPos.get(position);
-    return p ? <PunchRow key={position} label={label} punch={p} date={date} isToday={isToday} onSet={(at) => setAt(position, at)} /> : null;
+    return p ? row(p, label) : null;
   };
   // Pairs are numbered in display order. A pair whose Out is edited across the lunch
   // boundary re-mounts in the other block; its time is already saved by then. The remove
@@ -116,8 +123,8 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
           return (
             <div key={pair.out.position} className="punch-pair">
               <div className="punch-pair-rows">
-                <PunchRow label={`Out ${n}`} punch={pair.out} date={date} isToday={isToday} onSet={(at) => setAt(pair.out.position, at)} />
-                <PunchRow label={`In ${n}`} punch={pair.in} date={date} isToday={isToday} onSet={(at) => setAt(pair.in.position, at)} />
+                {row(pair.out, `Out ${n}`)}
+                {row(pair.in, `In ${n}`)}
               </div>
               <button
                 className="btn btn-icon punch-remove"
@@ -195,17 +202,27 @@ function Tile({ label, value, sub, tone }: { label: string; value: string; sub: 
   );
 }
 
-function PunchRow({ label, punch, date, isToday, onSet }: { label: string; punch: Punch; date: string; isToday: boolean; onSet: (at: number | null) => void }) {
+function PunchRow({
+  label,
+  punch,
+  date,
+  isToday,
+  hour12,
+  anchorAt,
+  onSet,
+}: {
+  label: string;
+  punch: Punch;
+  date: string;
+  isToday: boolean;
+  hour12: boolean;
+  anchorAt: number | null;
+  onSet: (at: number | null) => void;
+}) {
   return (
     <div className={`punch-row punch-row--${punch.kind}${punch.at != null ? ' is-set' : ''}`}>
       <span className="punch-label">{label}</span>
-      <input
-        className="input punch-input"
-        type="time"
-        value={toTimeInput(punch.at)}
-        onChange={(e) => onSet(fromTimeInput(date, e.target.value))}
-        aria-label={`${label} time`}
-      />
+      <TimeField value={punch.at} date={date} hour12={hour12} anchorAt={anchorAt} label={label} onCommit={onSet} />
       <button className="btn btn-ghost punch-now" onClick={() => onSet(roundToMinute(Date.now()))} disabled={!isToday} title={isToday ? 'Use the current time' : 'Only available today'}>
         Now
       </button>

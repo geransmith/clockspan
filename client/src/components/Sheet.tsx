@@ -80,6 +80,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped }: Props) 
       case 'timeclock':
         return (
           <Timeclock
+            key={date}
             date={date}
             isToday={isToday}
             now={clampToDay(date, today, now)}

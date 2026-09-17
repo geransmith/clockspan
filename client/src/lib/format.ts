@@ -71,20 +71,9 @@ export function formatCountdown(seconds: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
 }
 
-/** Value for <input type="time"> from an epoch ms, in local time. */
-export function toTimeInput(ms: number | null): string {
-  if (ms == null) return '';
-  const d = new Date(ms);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-/** Epoch ms for a "HH:MM" on the given local date; null when empty/invalid. */
-export function fromTimeInput(key: string, value: string): number | null {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(value);
-  if (!m) return null;
-  const d = parseDateKey(key);
-  d.setHours(Number(m[1]), Number(m[2]), 0, 0);
-  return d.getTime();
+/** Whether the browser locale writes times with AM/PM (the time field follows `formatTime`). */
+export function resolveHour12(): boolean {
+  return new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions().hour12 ?? true;
 }
 
 /** Round to the nearest minute (punch times are minute-granular in the UI). */
