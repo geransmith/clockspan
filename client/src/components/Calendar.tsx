@@ -62,7 +62,10 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
     if (liveToday && today >= period.from && today <= period.to) byDate.set(today, liveToday);
     return byDate;
   }, [current, liveToday, today, period.from, period.to]);
-  const weeks = useMemo(() => (days ? calendarMonth([...days.values()].map(daySummaryOf), settings, today, now, period.from) : null), [days, settings, today, now, period.from]);
+  const weeks = useMemo(
+    () => (days ? calendarMonth([...days.values()].map(daySummaryOf), settings, today, now, period.from, settings.showWeekends) : null),
+    [days, settings, today, now, period.from],
+  );
   const stickers = settings.stickers;
   const count = useMemo(() => (weeks && stickers ? countStickers(weeks) : null), [weeks, stickers]);
 
@@ -94,7 +97,7 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
               )}
             </p>
           )}
-          <div className="calendar-grid" role="grid" aria-label={period.label}>
+          <div className={`calendar-grid${settings.showWeekends ? '' : ' calendar-grid--work'}`} role="grid" aria-label={period.label}>
             <div className="calendar-row" role="row">
               {weeks[0]!.map((d) => (
                 <div key={d.date} className="calendar-weekday" role="columnheader">

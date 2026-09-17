@@ -88,8 +88,9 @@ client/                 Vite root → dist/client
                         days, per reason)
   src/lib/review.ts     PURE: periodRange(kind, today, offset) (Mon-start weeks), periodOffset(kind, today,
                         date) (the offset that lands on a date's period), reviewRange(days)
-  src/lib/calendar.ts   PURE: calendarMonth(days, settings, today, now, monthStart) → Mon-start rows
-                        of CalendarDay (outside / future / hasData / stickers) for History → Days
+  src/lib/calendar.ts   PURE: calendarMonth(days, settings, today, now, monthStart, showWeekends) →
+                        Mon-start rows of CalendarDay (outside / future / hasData / stickers) for
+                        History → Days; 5-wide rows without weekends, so hidden days are never counted
   src/lib/format.ts     Intl formatting (time, dates, durations, dayName); formatTime(ms, hour12)
                         + resolveHour12(timeFormat); re-exports shared/dates
   src/lib/timefield.ts  PURE: msToTime/timeToMs (epoch ms ↔ @internationalized/date Time on a
@@ -394,7 +395,8 @@ Prove a change at the cheapest level that can show it, and stop there:
   seeded month, tap a day, **Open day** and back through the header, **Review this week** lands
   on that week). With the sticker chart on (Settings → Sheet → History, or `PUT /api/settings
   {"stickers":true}`): the count line, a chip narrows the grid to one sticker and a second tap
-  clears it.
+  clears it. With Show weekends off: five columns, and a seeded weekend day's stickers leave
+  the counts.
 - If you touched retention: `server/retention.test.ts` and the `/prune` block in
   `days.test.ts` prove the cutoff, the cap, the running-session guard and the cascade; the
   browser check is one look at Settings → Data (count line, toggle saves), with the delete
