@@ -29,6 +29,7 @@ const FALLBACK: Settings = {
     retro: { enabled: true, leadMinutes: [30], onDue: false, overdueEveryMinutes: 0 },
   },
   layout: normalizeLayout(undefined),
+  retention: { enabled: false, days: 365 },
 };
 
 const Ctx = createContext<SettingsCtx | null>(null);

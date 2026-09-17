@@ -105,3 +105,13 @@ export const RESET_SETTINGS = {
   button: 'Reset all settings',
   confirm: 'Reset every setting to its default? Days, punches and sessions are kept.',
 } as const;
+
+/** Settings → Data: the confirm before old days are deleted, and the result line. */
+export const DELETE_DAYS = {
+  confirm: (n: number, before: string) => `Delete ${days(n)} before ${before}? This cannot be undone.`,
+  done: (n: number) => `Deleted ${days(n)}.`,
+} as const;
+
+function days(n: number): string {
+  return `${n} day${n === 1 ? '' : 's'}`;
+}

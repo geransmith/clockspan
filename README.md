@@ -2,17 +2,47 @@
 
 *Vibe coded — built almost entirely with AI ([Claude Code](https://claude.com/claude-code)), with light human review.*
 
-**Clockspan** is a self-hosted, single-day focus sheet for getting through a workday with ADHD. One page, four cards:
+**Clockspan** is a self-hosted, single-day focus sheet for getting through a workday with ADHD. One page: a punch-style timeclock that works out when lunch is due and when the day ends, the few things that would make today a win, a focus timer that logs what you did, and a retrospective that puts the plan next to what happened. Every day is saved; alarms fire as deadlines approach. Runs as one Docker container with a SQLite file; works on phones and installs to the Home Screen.
 
-- **Timeclock** — clock in, punch out for lunch, punch back in, clock out (plus any extra out/in pairs, before or after lunch). The sheet tells you **when lunch must start by** (default: within 5 hours) and **when your day ends** (default: 8 hours worked + 30-minute lunch), live, and re-plans if lunch runs long. Clocking out ends the day with a small celebration.
-- **Top priorities** — the few things that would make today a win. Starts at three (adjustable); you can add more, with a gentle nudge when the list gets long. Once some rows are ticked the nudge changes: it shows what you've already finished and asks whether there's room for more.
-- **Focus timer** — 15 / 25 / 50-minute sessions with a label. Tap one of your open priorities to work on it, or type something new and tick *Also add to today's priorities* when a task lands mid-day. Extend or shorten with ± while running, finish early, and it logs what you did and for how long. The running timer floats at the top of the page on every view.
-- **Day log** — every session with its actual duration, which priority it was for, and the day's total focused time.
-- **Retrospective** — the plan next to what actually happened: time logged against each priority, the sessions that weren't on the plan, rows that were added mid-day, and a note on why. A reminder fires 30 minutes before clock-out (adjustable). History → **Review** rolls the days up by week, month or quarter: how much time went off plan and to what, which priorities never got done, and every day's note.
+<p align="center">
+  <img src="docs/screenshots/sheet-phone-light.png" width="300" alt="The sheet on a phone, light mode: running timer bar, timeclock with the lunch-by and clock-out tiles, and today's priorities">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/sheet-phone-dark.png" width="300" alt="The same sheet in dark mode">
+</p>
 
-Every day is saved. Step back through previous days from the date picker or the History view. **Alarms** warn you as lunch, clock-out and (on long days) the second meal period approach (chime, browser notification, in-app banner). If overtime was approved, one switch silences the clock-out alarm for that day. Cards can be reordered or hidden per user. Works on phones and can be added to the Home Screen.
+## Features
 
-Data is **per user**. Sign-in is optional: run it open on your LAN, create a local account on first launch, or sign in through Authentik (OIDC).
+**Timeclock that plans the day for you.** Tap *Now* on *Clock in* and the sheet tells you when lunch must start (default: within 5 hours) and when your day ends (default: 8 hours worked + 30-minute lunch), live, re-planning if lunch runs long. Extra out/in pairs for appointments, before or after lunch. An explicit clock-out ends the day, early or not, with a small celebration.
+
+**Three priorities, on purpose.** New days start with three rows (adjustable). You can add more, and the sheet asks first: the nudge changes once some rows are ticked, and again once they all are. Rows can only be ticked once they have text.
+
+**A focus timer that knows what it's for.** 15 / 25 / 50-minute sessions, ± while running, finish early, and it logs the real duration. Tap one of your open priorities to link the session to it, or type something new and tick *Also add to today's priorities* when a task lands mid-day. The running timer floats at the top of every view; the start time lives on the server, so it survives reloads and phone sleep.
+
+**Day log.** Every session with its actual duration, which priority it was for (editable after the fact), and the day's total focused time.
+
+<p align="center">
+  <img src="docs/screenshots/retro.png" width="360" alt="The retrospective card: time logged against each priority, sessions that were not on the plan, a row added mid-day, and the note">
+</p>
+
+**Retrospective.** The plan next to what actually happened: time logged against each priority, the sessions that weren't on the plan, rows that were added mid-day, and a note on why. A reminder fires 30 minutes before clock-out (adjustable) so you write it while you still remember.
+
+<p align="center">
+  <img src="docs/screenshots/review.png" width="360" alt="History → Review → Month: days and hours worked, focused time on and off plan, what went off the plan, what never got done, and each day's note">
+</p>
+
+**Week / month / quarter review.** History → **Review** rolls the retrospectives up: how much focused time went off plan and to what, which priorities never got done, and every day's note. Tap a row to open that day.
+
+<p align="center">
+  <img src="docs/screenshots/settings-alarms.png" width="300" alt="Settings → Alarms: per-alarm warn-before chips, when reached, repeat while over">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/settings-data.png" width="300" alt="Settings → Data: delete old days automatically after N days, or delete everything before a date">
+</p>
+
+**Alarms.** Chime, browser notification and in-app banner as lunch, clock-out and (on long days) the second meal period approach, each with its own warn-before, when-reached and repeat rules. Tiles turn amber inside the first warning window and red when you're over. An *Overtime approved* switch silences that day's clock-out alarm only; meal alarms stay on.
+
+**Your data, your server.** Per-user sheets, history, settings and layout. Sign-in is optional: run it open on your LAN, create local accounts, or sign in through Authentik (OIDC). Old days can be deleted by hand or pruned automatically after a number of days you choose, with an optional server-wide ceiling for admins. Cards can be reordered or hidden per user.
+
+**Phone first.** Mobile layout, 44 px tap targets, installable (Android *Install app*, iOS *Add to Home Screen*), and a *keep screen awake* option so the countdown and chime stay live.
 
 ---
 
@@ -65,6 +95,7 @@ npm run seed -- --quarter         # every weekday since the start of last quarte
 npm run seed -- --days 30         # a specific number of past weekdays
 npm run seed -- --fresh           # also reset settings and sign everyone out
 npm run seed -- --today 2026-03-02   # build the sample around another date
+npm run seed -- --now 10:30       # today's clock-in and timer pinned to that time of day
 ```
 
 ### Trying the auth modes locally
@@ -106,6 +137,7 @@ To update: pull the latest code, rebuild the image, and restart the container �
 | `TRUST_PROXY` | `false` | `true` or a hop count when behind a reverse proxy |
 | `COOKIE_SECURE` | derived from `APP_URL` | Force session cookies to `Secure` on/off |
 | `SESSION_TTL_DAYS` | `30` | Sliding session lifetime |
+| `RETENTION_DAYS` | unset | Server-wide ceiling on history: every user's days older than this many days (30 or more) are deleted every few hours. Unset keeps everything; users can still choose a shorter limit in Settings → Data |
 | `OIDC_ISSUER` | — | Provider issuer URL (discovery is done from it) |
 | `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | — | Confidential client credentials |
 | `OIDC_SCOPES` | `openid profile email` | Scopes to request |
@@ -178,7 +210,8 @@ sqlite3 /path/on/host/focus.db \
   - **Overtime approved.** A switch on the timeclock card, and a button on the clock-out alarm banner, that silences that day's clock-out alarm. Meal alarms stay on. If overtime doesn't apply to you, turn off *Settings → Timeclock → Overtime approval* and both disappear.
   - **About the defaults.** Lunch within 5 hours, a second meal period after 10 hours worked, and keeping meal alarms on during approved overtime all follow California labor rules, because that's where the author works. Other states and countries differ. Everything is adjustable in Settings, and pull requests that add presets or rules for other places are welcome.
 - **Layout.** Tap **Customize** to drag cards (long-press on phones), use ▲/▼, or hide a card. Hidden cards appear in a strip at the bottom while customizing. *Settings → Sheet → Layout → Reset to default* restores everything.
-- **Settings.** Four tabs: *Timeclock* (day length, lunch, second meal, overtime approval), *Alarms* (per-alarm rules, sound, notifications), *Sheet* (priorities, timer, layout) and *Account* (local accounts only). **Reset all settings** in the dialog footer puts every setting back to its default; days, punches and sessions are untouched.
+- **Settings.** Five tabs: *Timeclock* (day length, lunch, second meal, overtime approval), *Alarms* (per-alarm rules, sound, notifications), *Sheet* (priorities, timer, layout), *Data* (old-day cleanup) and *Account* (local accounts only). **Reset all settings** in the dialog footer puts every setting back to its default; days, punches and sessions are untouched.
+- **Data.** Settings → Data. *Delete old days automatically* keeps the last N days (30 to 3650) and drops the rest, with their punches, priorities, sessions and notes; the server checks every few hours. *Delete days before* a date does the same once, after showing how many days it will remove. Today and a day with a running timer are never deleted; settings are kept. If the admin set `RETENTION_DAYS`, the tab says so and that ceiling applies whatever you choose.
 - **Past days.** Use ◀ ▶ or the date picker; History shows every recorded day with worked / focused / priorities and a tick once its retrospective is reviewed. Past days are editable; timers can only start on today.
 - **Phone.** Add to Home Screen (Android: *Install app*; iOS: Share → *Add to Home Screen*). Browser notifications on iOS only work from the installed app. *Keep screen awake* keeps the countdown and chime live while the app is open; if the phone sleeps anyway, the alert fires when you come back.
 
@@ -194,6 +227,10 @@ The whole state is one file: `focus.db` (plus `-wal`/`-shm` while running). Eith
 sqlite3 /path/on/host/focus.db ".backup /path/to/backups/focus-$(date +%F).db"
 ```
 
+Deleting old days (Settings → Data, or `RETENTION_DAYS`) is permanent and compacts the file afterwards, so take a backup first if you might want them back.
+
 ## Development notes
 
 See [AGENTS.md](AGENTS.md) for the repo map, architecture rules and checklists for adding cards, settings, alarms and routes.
+
+The screenshots above come from `npm run screenshots`. It starts the dev server if one isn't running, seeds sample data with the clock pinned to 10:30, drives a local Chromium headless and writes `docs/screenshots/*.png`. It looks for Chrome, Chromium, Edge or Brave and otherwise fetches a Chrome for Testing build into `node_modules/.cache` the first time; set `CHROME_BIN` to force a particular browser.

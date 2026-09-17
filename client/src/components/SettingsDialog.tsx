@@ -3,21 +3,26 @@ import * as api from '../api';
 import { useAuth } from '../auth/AuthGate';
 import { useSettings } from '../hooks/useSettings';
 import { chime, notificationPermission, requestNotificationPermission, unlockAudio } from '../lib/alerts';
-import { RESET_SETTINGS, SAVE_STATUS } from '../lib/copy';
+import { DELETE_DAYS, RESET_SETTINGS, SAVE_STATUS } from '../lib/copy';
+import { addDays, formatDateFull, todayKey } from '../lib/format';
 import { DEFAULT_LAYOUT } from '../lib/layout';
-import type { AlarmId, AlarmSettings, PublicUser, Settings } from '../types';
+import type { AlarmId, AlarmSettings, PruneInfo, PublicUser, Settings } from '../types';
 import { Check, X } from './Icons';
 
 const LEAD_CHOICES = [30, 15, 10, 5, 1];
 const REPEAT_CHOICES = [0, 1, 2, 5, 10, 15];
 
-type TabId = 'timeclock' | 'alarms' | 'sheet' | 'account';
+type TabId = 'timeclock' | 'alarms' | 'sheet' | 'data' | 'account';
 const TABS: { id: TabId; label: string }[] = [
   { id: 'timeclock', label: 'Timeclock' },
   { id: 'alarms', label: 'Alarms' },
   { id: 'sheet', label: 'Sheet' },
+  { id: 'data', label: 'Data' },
   { id: 'account', label: 'Account' },
 ];
+/** Bounds for "keep the last N days"; the server enforces the same (MIN/MAX_RETENTION_DAYS). */
+const RETENTION_DAYS_MIN = 30;
+const RETENTION_DAYS_MAX = 3650;
 const TAB_STORAGE_KEY = 'focus:settingsTab';
 
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
@@ -137,6 +142,24 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 </button>
               </div>
             </Section>
+          </>
+        );
+      case 'data':
+        return (
+          <>
+            <Section title="Automatic cleanup" hint="Deletes days older than this, with their punches, priorities, sessions and notes. Settings are kept. Runs on the server every few hours.">
+              <Toggle label="Delete old days automatically" checked={settings.retention.enabled} onChange={(v) => set({ retention: { ...settings.retention, enabled: v } })} />
+              <MinutesField
+                label="Keep the last"
+                unit="days"
+                minutes={settings.retention.days}
+                min={RETENTION_DAYS_MIN}
+                max={RETENTION_DAYS_MAX}
+                disabled={!settings.retention.enabled}
+                onCommit={(m) => set({ retention: { ...settings.retention, days: m } })}
+              />
+            </Section>
+            <DeleteOldDays />
           </>
         );
       case 'account':
@@ -344,6 +367,7 @@ function MinutesField({
   min,
   max,
   unit = 'min',
+  disabled,
   onCommit,
 }: {
   label: string;
@@ -351,6 +375,7 @@ function MinutesField({
   min: number;
   max: number;
   unit?: string;
+  disabled?: boolean;
   onCommit: (m: number) => void;
 }) {
   const [v, setV] = useState(String(minutes));
@@ -364,7 +389,7 @@ function MinutesField({
     <div className="setting-row">
       <span>{label}</span>
       <span className="duration-inputs">
-        <input className="input input-num" inputMode="numeric" value={v} onChange={(e) => setV(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} aria-label={label} />
+        <input className="input input-num" inputMode="numeric" value={v} onChange={(e) => setV(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} aria-label={label} disabled={disabled} />
         <span className="muted">{unit}</span>
       </span>
     </div>
@@ -431,6 +456,68 @@ function NotificationsRow({ enabled, onChange }: { enabled: boolean; onChange: (
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * Settings → Data → "Delete old days now". The count line is the server's answer for the
+ * chosen cutoff, so the confirm names exactly what will go. Not a settings save: nothing here
+ * goes through the header's Saving/Saved pill.
+ */
+function DeleteOldDays() {
+  const today = todayKey();
+  const [before, setBefore] = useState(() => addDays(today, -365));
+  const [info, setInfo] = useState<PruneInfo | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getPruneInfo(before)
+      .then((r) => !cancelled && setInfo(r))
+      .catch((err) => !cancelled && setMsg({ ok: false, text: (err as Error).message }));
+    return () => {
+      cancelled = true;
+    };
+  }, [before]);
+
+  const remove = async () => {
+    if (!info || !window.confirm(DELETE_DAYS.confirm(info.matching, formatDateFull(before)))) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const { deleted } = await api.pruneDays(before);
+      setMsg({ ok: true, text: DELETE_DAYS.done(deleted) });
+      setInfo(await api.getPruneInfo(before));
+    } catch (err) {
+      setMsg({ ok: false, text: (err as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const stored = !info
+    ? null
+    : info.total === 0
+      ? 'No days stored.'
+      : `${info.total} day${info.total === 1 ? '' : 's'} stored, oldest ${formatDateFull(info.oldest!)}. ${info.matching} before this date.`;
+
+  return (
+    <Section title="Delete old days now" hint="Removes every day before the date, with its punches, priorities, sessions and notes. Today and a day with a running timer are always kept.">
+      <div className="setting-row">
+        <span>Delete days before</span>
+        <span className="duration-inputs">
+          <input className="input" type="date" value={before} max={today} onChange={(e) => e.target.value && setBefore(e.target.value)} aria-label="Delete days before" />
+          <button className="btn btn-ghost btn-danger-text" onClick={() => void remove()} disabled={busy || !info || info.matching === 0}>
+            Delete…
+          </button>
+        </span>
+      </div>
+      {stored && <p className="muted small">{stored}</p>}
+      {info?.serverMaxDays != null && <p className="muted small">This server keeps at most {info.serverMaxDays} days for every user.</p>}
+      {msg && <p className={msg.ok ? 'success' : 'error'}>{msg.text}</p>}
+    </Section>
   );
 }
 

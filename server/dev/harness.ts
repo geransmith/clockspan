@@ -45,6 +45,8 @@ export interface StartOptions {
   authMode?: 'none' | 'local';
   /** Seed the default user (AUTH_MODE=none only); pass options to override the defaults. */
   seed?: boolean | Partial<Omit<SeedOptions, 'userId'>>;
+  /** Extra environment for `loadConfig`, e.g. `{ RETENTION_DAYS: '30' }`. */
+  env?: Record<string, string>;
 }
 
 /** A Wednesday, so "this week" in a review holds seeded days on both sides. */
@@ -88,7 +90,7 @@ function makeClient(baseUrl: string): Client {
 
 export async function startTestApp(opts: StartOptions = {}): Promise<TestApp> {
   const authMode = opts.authMode ?? 'none';
-  const config = loadConfig({ AUTH_MODE: authMode, DATA_DIR: os.tmpdir(), PORT: '0' });
+  const config = loadConfig({ AUTH_MODE: authMode, DATA_DIR: os.tmpdir(), PORT: '0', ...opts.env });
   const db = openDatabase(':memory:');
   const app = createApp(db, config);
   const server = await new Promise<import('node:http').Server>((resolve) => {

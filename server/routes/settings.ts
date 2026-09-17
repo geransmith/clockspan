@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
+import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS } from '../retention.js';
 
 export const CARD_IDS = ['timeclock', 'priorities', 'timer', 'log', 'retro'] as const;
 export type CardId = (typeof CARD_IDS)[number];
@@ -27,6 +28,13 @@ export interface Settings {
   overtimeApproval: boolean;
   alarms: { lunchBy: AlarmSettings; clockOut: AlarmSettings; secondMeal: AlarmSettings; retro: AlarmSettings };
   layout: { id: CardId; visible: boolean }[];
+  /** Automatic prune: delete this user's days older than `days` (off by default). */
+  retention: RetentionSettings;
+}
+
+export interface RetentionSettings {
+  enabled: boolean;
+  days: number;
 }
 
 const DEFAULT_ALARM: AlarmSettings = { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 };
@@ -46,6 +54,7 @@ export const DEFAULT_SETTINGS: Settings = {
   overtimeApproval: true,
   alarms: { lunchBy: { ...DEFAULT_ALARM }, clockOut: { ...DEFAULT_ALARM }, secondMeal: { ...DEFAULT_ALARM }, retro: { ...DEFAULT_RETRO_ALARM } },
   layout: CARD_IDS.map((id) => ({ id, visible: true })),
+  retention: { enabled: false, days: 365 },
 };
 
 export const MAX_PRIORITIES = 20;
@@ -64,6 +73,15 @@ function mergeAlarm(base: AlarmSettings, patch: unknown): AlarmSettings {
       : base.leadMinutes,
     onDue: isBool(p.onDue) ? p.onDue : base.onDue,
     overdueEveryMinutes: isInt(p.overdueEveryMinutes, 0, 120) ? p.overdueEveryMinutes : base.overdueEveryMinutes,
+  };
+}
+
+function mergeRetention(base: RetentionSettings, patch: unknown): RetentionSettings {
+  if (!patch || typeof patch !== 'object') return base;
+  const p = patch as Record<string, unknown>;
+  return {
+    enabled: isBool(p.enabled) ? p.enabled : base.enabled,
+    days: isInt(p.days, MIN_RETENTION_DAYS, MAX_RETENTION_DAYS) ? p.days : base.days,
   };
 }
 
@@ -110,6 +128,7 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
       retro: mergeAlarm(base.alarms.retro, alarms.retro),
     },
     layout,
+    retention: mergeRetention(base.retention, p.retention),
   };
 }
 

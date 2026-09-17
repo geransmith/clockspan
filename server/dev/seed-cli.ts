@@ -2,7 +2,7 @@ import { loadConfig } from '../config.js';
 import { ensureDefaultUser, openDatabase } from '../db.js';
 import { DEFAULT_HISTORY_DAYS, LOCAL_USERS, ensureLocalUsers, localDateKey, seedDatabase, startOfQuarter, weekdaysSince, type SeedManifest } from './seed.js';
 
-// Usage: npm run seed [-- --fresh] [--running] [--days N | --quarter] [--today YYYY-MM-DD]
+// Usage: npm run seed [-- --fresh] [--running] [--days N | --quarter] [--today YYYY-MM-DD] [--now HH:MM]
 // Fills the dev DB (DATA_DIR, default ./data) with sample days for the default user, or for
 // the `admin` and `sam` local users when AUTH_MODE=local. Safe to run while `npm run dev`
 // is up; reload the page afterwards.
@@ -12,7 +12,7 @@ if (process.env.NODE_ENV === 'production') {
   process.exit(2);
 }
 
-const opts: { fresh: boolean; running: boolean; quarter: boolean; days?: string; today?: string } = { fresh: false, running: false, quarter: false };
+const opts: { fresh: boolean; running: boolean; quarter: boolean; days?: string; today?: string; now?: string } = { fresh: false, running: false, quarter: false };
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
   const [name, inline] = args[i]!.split('=', 2) as [string, string | undefined];
@@ -22,17 +22,29 @@ for (let i = 0; i < args.length; i++) {
   else if (name === '--quarter') opts.quarter = true;
   else if (name === '--days') opts.days = next();
   else if (name === '--today') opts.today = next();
+  else if (name === '--now') opts.now = next();
   else {
-    console.error(`Unknown option ${name}. Options: --fresh --running --days N --quarter --today YYYY-MM-DD`);
+    console.error(`Unknown option ${name}. Options: --fresh --running --days N --quarter --today YYYY-MM-DD --now HH:MM`);
     process.exit(2);
   }
 }
 
-const now = Date.now();
+let now = Date.now();
 const today = opts.today ?? localDateKey(now);
 if (!/^\d{4}-\d{2}-\d{2}$/.test(today)) {
   console.error(`--today must be YYYY-MM-DD (got "${today}").`);
   process.exit(2);
+}
+// --now pins today's clock-in and running timer to a local time of day (the screenshot
+// script shifts the browser's clock to match), instead of "two hours ago".
+if (opts.now !== undefined) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(opts.now);
+  if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) {
+    console.error(`--now must be HH:MM (got "${opts.now}").`);
+    process.exit(2);
+  }
+  const [y, mo, d] = today.split('-').map(Number) as [number, number, number];
+  now = new Date(y, mo - 1, d, Number(m[1]), Number(m[2])).getTime();
 }
 if (opts.quarter && opts.days !== undefined) {
   console.error('Pass --days or --quarter, not both.');

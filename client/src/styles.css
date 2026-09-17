@@ -221,6 +221,9 @@ button {
   outline: none;
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
+.input:disabled {
+  opacity: 0.5;
+}
 .input-num {
   width: 64px;
   text-align: center;
@@ -1648,13 +1651,15 @@ button {
 .tabs {
   flex: none;
   display: flex;
-  padding: 0 12px;
+  padding: 0 8px;
   border-bottom: 1px solid var(--border);
   overflow-x: auto;
 }
+/* Sized so all five tabs (local accounts add Account) fit a 375 px phone without scrolling. */
 .tab {
   min-height: 44px;
-  padding: 0 12px;
+  padding: 0 9px;
+  font-size: 0.94rem;
   background: transparent;
   border: 0;
   border-bottom: 2px solid transparent;

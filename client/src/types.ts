@@ -25,6 +25,17 @@ export interface Settings {
   overtimeApproval: boolean;
   alarms: Record<AlarmId, AlarmSettings>;
   layout: { id: CardId; visible: boolean }[];
+  /** Automatic prune of this user's days older than `days`; off by default. */
+  retention: { enabled: boolean; days: number };
+}
+
+/** What `GET /days/prune?before=` would delete, plus the server-wide ceiling if one is set. */
+export interface PruneInfo {
+  before: string;
+  matching: number;
+  total: number;
+  oldest: string | null;
+  serverMaxDays: number | null;
 }
 
 /**

@@ -154,6 +154,64 @@ describe('GET /api/days', () => {
   });
 });
 
+describe('/api/days/prune', () => {
+  const seededDates = () => app.seeded!.days.map((d) => d.date);
+  const storedDates = () => (app.db.prepare(`SELECT date FROM days ORDER BY date`).all() as { date: string }[]).map((d) => d.date);
+
+  it('previews what a cutoff would delete', async () => {
+    const dates = seededDates();
+    const before = dates[3]!;
+    const r = await app.api.get(`/api/days/prune?before=${before}`);
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ before, matching: 3, total: dates.length, oldest: dates[0], serverMaxDays: null });
+    expect((await app.api.get(`/api/days/prune?before=${dates[0]}`)).body.matching).toBe(0);
+    expect((await app.api.get('/api/days/prune?before=x')).status).toBe(400);
+    expect((await app.api.get('/api/days/prune')).status).toBe(400);
+  });
+
+  it('reports the server cap when one is set', async () => {
+    await app.close();
+    app = await startTestApp({ seed: true, env: { RETENTION_DAYS: '90' } });
+    expect((await app.api.get('/api/days/prune?before=2020-01-01')).body.serverMaxDays).toBe(90);
+  });
+
+  it('deletes the days before the cutoff with everything hanging off them, for this user only', async () => {
+    const dates = seededDates();
+    const before = dates[3]!;
+    const doomed = app.seeded!.days.slice(0, 3);
+    const ids = (app.db.prepare(`SELECT id FROM days WHERE date < ?`).all(before) as { id: number }[]).map((d) => d.id);
+    const count = (table: string) =>
+      (app.db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE day_id IN (${ids.join(',')})`).get() as { n: number }).n;
+    expect(count('punches')).toBe(doomed.reduce((n, d) => n + d.punches.length, 0));
+    expect(count('sessions')).toBe(doomed.reduce((n, d) => n + d.sessions.length, 0));
+
+    // Another user's day on the same date must survive.
+    const other = Number(app.db.prepare(`INSERT INTO users (kind, display_name, created_at) VALUES ('local', 'Other', 0)`).run().lastInsertRowid);
+    app.db.prepare(`INSERT INTO days (user_id, date, created_at) VALUES (?, ?, 0)`).run(other, dates[0]);
+
+    const r = await app.api.post('/api/days/prune', { before });
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ deleted: 3 });
+    expect(storedDates()).toEqual([dates[0], ...dates.slice(3)]);
+    expect(app.db.prepare(`SELECT user_id FROM days WHERE date = ?`).all(dates[0])).toEqual([{ user_id: other }]);
+    expect(count('punches')).toBe(0);
+    expect(count('priorities')).toBe(0);
+    expect(count('sessions')).toBe(0);
+    expect((await app.api.post('/api/days/prune', { before })).body).toEqual({ deleted: 0 });
+    expect((await app.api.post('/api/days/prune', { before: 'soon' })).status).toBe(400);
+    expect((await app.api.post('/api/days/prune', {})).status).toBe(400);
+  });
+
+  it('never deletes a day with a running timer', async () => {
+    await app.close();
+    app = await startTestApp({ seed: { running: true } });
+    const r = await app.api.post('/api/days/prune', { before: '2099-01-01' });
+    expect(r.body).toEqual({ deleted: app.seeded!.days.length - 1 });
+    expect(storedDates()).toEqual([SEED_TODAY]);
+    expect((await app.api.get('/api/sessions/running')).body.session).not.toBeNull();
+  });
+});
+
 describe('GET /api/days/range', () => {
   it('returns full days that exist, in order', async () => {
     const r = await app.api.get(`/api/days/range?from=2026-09-14&to=${SEED_TODAY}`);

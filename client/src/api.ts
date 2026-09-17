@@ -1,4 +1,4 @@
-import type { AuthInfo, Day, DaySummary, Priority, PublicUser, Punch, Session, Settings } from './types';
+import type { AuthInfo, Day, DaySummary, Priority, PruneInfo, PublicUser, Punch, Session, Settings } from './types';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public body?: unknown) {
@@ -61,6 +61,8 @@ export const putOvertime = (date: string, approved: boolean) =>
 export const putRetro = (date: string, patch: { note?: string; done?: boolean }) =>
   request<{ retroNote: string; retroAt: number | null }>('PUT', `/api/days/${date}/retro`, patch);
 export const getRange = (from: string, to: string) => request<{ days: Day[] }>('GET', `/api/days/range?from=${from}&to=${to}`);
+export const getPruneInfo = (before: string) => request<PruneInfo>('GET', `/api/days/prune?before=${before}`);
+export const pruneDays = (before: string) => request<{ deleted: number }>('POST', '/api/days/prune', { before });
 
 // ----- sessions -----
 export const getRunning = () => request<{ session: Session | null }>('GET', '/api/sessions/running');

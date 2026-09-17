@@ -8,6 +8,7 @@ import { requireAuth, resolveUser } from './auth/middleware.js';
 import { localAuthRouter, publicUser } from './auth/local.js';
 import { oidcAuthRouter } from './auth/oidc.js';
 import { purgeExpiredSessions } from './auth/session.js';
+import { scheduleRetention } from './retention.js';
 import { daysRouter } from './routes/days.js';
 import { sessionStartRouter, sessionsRouter } from './routes/sessions.js';
 import { settingsRouter } from './routes/settings.js';
@@ -40,7 +41,7 @@ export function createApp(db: DB, config: Config): Express {
   api.use(requireAuth);
   api.use('/settings', settingsRouter(db));
   api.use('/days/:date/sessions', sessionStartRouter(db));
-  api.use('/days', daysRouter(db));
+  api.use('/days', daysRouter(db, config));
   api.use('/sessions', sessionsRouter(db));
   app.use('/api', api);
 
@@ -65,6 +66,7 @@ export function createApp(db: DB, config: Config): Express {
   });
 
   setInterval(() => purgeExpiredSessions(db), 6 * 3_600_000).unref();
+  scheduleRetention(db, config);
 
   return app;
 }

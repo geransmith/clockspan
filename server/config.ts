@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS } from './retention.js';
 
 export type AuthMode = 'none' | 'local' | 'oidc';
 
@@ -11,6 +12,8 @@ export interface Config {
   cookieSecure: boolean;
   trustProxy: boolean | number;
   sessionTtlMs: number;
+  /** Server-wide ceiling on how many days of history any user keeps; null = no ceiling. */
+  retentionDays: number | null;
   oidc: {
     issuer: string;
     clientId: string;
@@ -62,6 +65,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const dataDir = path.resolve(env.DATA_DIR ?? './data');
   const ttlDays = Number(env.SESSION_TTL_DAYS ?? 30);
 
+  let retentionDays: number | null = null;
+  if (env.RETENTION_DAYS) {
+    const n = Number(env.RETENTION_DAYS);
+    if (!Number.isInteger(n) || n < MIN_RETENTION_DAYS || n > MAX_RETENTION_DAYS) {
+      throw new Error(`RETENTION_DAYS must be a whole number of days from ${MIN_RETENTION_DAYS} to ${MAX_RETENTION_DAYS}, or unset to keep everything (got "${env.RETENTION_DAYS}")`);
+    }
+    retentionDays = n;
+  }
+
   return {
     port: Number(env.PORT ?? 3000),
     dataDir,
@@ -71,6 +83,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     cookieSecure,
     trustProxy: parseTrustProxy(env.TRUST_PROXY),
     sessionTtlMs: (Number.isFinite(ttlDays) && ttlDays > 0 ? ttlDays : 30) * 86_400_000,
+    retentionDays,
     oidc,
   };
 }

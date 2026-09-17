@@ -1,7 +1,9 @@
 import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
+import type { Config } from '../config.js';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
+import { countDays, pruneDays, reclaimSpace } from '../retention.js';
 import { ensureDay, findDay, isValidDateKey, sessionRowToJson, UID_RE, type DayRow, type SessionRow } from './shared.js';
 import { MAX_PRIORITIES } from './settings.js';
 
@@ -59,7 +61,7 @@ function emptyDayJson(date: string) {
   return { date, punches: [], priorities: [], overtimeApproved: false, retroNote: '', retroAt: null, sessions: [] };
 }
 
-export function daysRouter(db: DB): Router {
+export function daysRouter(db: DB, config: Config): Router {
   const r = Router();
 
   // Recent days with enough data for the history list. Worked time is computed on the
@@ -110,6 +112,28 @@ export function daysRouter(db: DB): Router {
       .prepare(`SELECT id, date, overtime_approved, retro_note, retro_at FROM days WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date`)
       .all(user.id, from, to) as (DayRow & { date: string })[];
     res.json({ days: rows.map((d) => dayJson(db, d, d.date)) });
+  });
+
+  // Old-day cleanup. GET is the preview the Data tab shows before asking; POST deletes.
+  // Literal paths, so they sit before /:date like /range.
+  r.get('/prune', (req, res) => {
+    const { before } = req.query;
+    if (!isValidDateKey(before)) {
+      res.status(400).json({ error: 'before must be a date (YYYY-MM-DD).' });
+      return;
+    }
+    res.json({ before, ...countDays(db, currentUser(req).id, before), serverMaxDays: config.retentionDays });
+  });
+
+  r.post('/prune', (req, res) => {
+    const before = (req.body as { before?: unknown })?.before;
+    if (!isValidDateKey(before)) {
+      res.status(400).json({ error: 'before must be a date (YYYY-MM-DD).' });
+      return;
+    }
+    const deleted = pruneDays(db, currentUser(req).id, before);
+    if (deleted > 0) reclaimSpace(db);
+    res.json({ deleted });
   });
 
   r.get('/:date', (req, res) => {
