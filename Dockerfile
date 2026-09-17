@@ -1,3 +1,7 @@
+# check=skip=SecretsUsedInArgOrEnv
+# The directive above must be the first line. It silences one build-check rule: the linter
+# reads "AUTH" in ENV AUTH_MODE as a secret, but that is a mode switch (none | local | oidc).
+# The secrets this app takes (OIDC_CLIENT_SECRET) are passed at run time, never baked in.
 # ---- build ----
 FROM node:24-alpine AS build
 WORKDIR /app
