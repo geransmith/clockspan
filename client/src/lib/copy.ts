@@ -111,10 +111,24 @@ export const TIMER_DONE = {
 /** Placeholder for the day's retrospective note. */
 export const RETRO_PROMPT = 'What got in the way? What went to plan?';
 
-/** Banner when a punch, priority, note or log edit fails to reach the server. */
+/** Banner when a punch, priority, note, log edit, timer action or layout change fails to reach the server. */
 export const SAVE_FAILED = {
   title: 'Change not saved',
   body: 'The server did not answer. The sheet shows what is stored.',
+} as const;
+
+/** In place of a sheet whose day could not be fetched; the button asks again. */
+export const LOAD_FAILED = {
+  title: 'Could not load this day',
+  body: 'The server did not answer.',
+  retry: 'Try again',
+} as const;
+
+/** The whole page, when something threw while rendering. */
+export const RENDER_FAILED = {
+  title: 'Something went wrong',
+  body: 'The page hit an error it could not recover from. Reloading usually clears it.',
+  reload: 'Reload',
 } as const;
 
 /** Settings dialog save indicator, shown in the dialog header. */

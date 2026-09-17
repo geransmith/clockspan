@@ -13,6 +13,8 @@ import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, v
 import { CSS } from '@dnd-kit/utilities';
 import { useDay } from '../hooks/useDay';
 import { useSettings } from '../hooks/useSettings';
+import { warnQuietly } from '../lib/alerts';
+import { LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
 import { cardTitle } from '../lib/layout';
 import { clampToDay, timeclockForDate, type TimeclockState } from '../lib/timeclock';
 import type { CardId } from '../types';
@@ -52,10 +54,13 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
+  // The provider puts the old layout back on failure; the banner is the only sign it happened.
+  const saveLayout = (next: typeof layout) =>
+    update({ layout: next }).catch(() => warnQuietly({ title: SAVE_FAILED.title, body: SAVE_FAILED.body, tag: 'save-failed' }));
   const reorder = (from: number, to: number) => {
     if (from === to || to < 0 || to >= visible.length) return;
     const nextVisible = arrayMove(visible, from, to);
-    void update({ layout: [...nextVisible, ...hidden] });
+    void saveLayout([...nextVisible, ...hidden]);
   };
   const onDragEnd = (e: DragEndEvent) => {
     if (!e.over || e.active.id === e.over.id) return;
@@ -65,7 +70,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
     );
   };
   const setVisible = (id: CardId, v: boolean) => {
-    void update({ layout: layout.map((l) => (l.id === id ? { ...l, visible: v } : l)) });
+    void saveLayout(layout.map((l) => (l.id === id ? { ...l, visible: v } : l)));
   };
 
   const ready = Boolean(day && tc);
@@ -75,7 +80,21 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
     onJumped?.();
   }, [jumpTo, ready, onJumped]);
 
-  if (!day || !tc) return <div className="sheet-loading" aria-busy="true" />;
+  if (!day || !tc) {
+    if (store.errors[date]) {
+      return (
+        <div className="notice notice--danger sheet-error" role="alert">
+          <span>
+            <strong>{LOAD_FAILED.title}.</strong> {LOAD_FAILED.body}
+          </span>
+          <button className="btn" onClick={() => void store.load(date)}>
+            {LOAD_FAILED.retry}
+          </button>
+        </div>
+      );
+    }
+    return <div className="sheet-loading" aria-busy="true" />;
+  }
 
   const render = (id: CardId) => {
     switch (id) {
