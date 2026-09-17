@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSettings } from '../hooks/useSettings';
 import { useTimer } from '../hooks/useTimer';
 import { CONFIRM } from '../lib/copy';
+import { LIMITS } from '../types';
 import { formatCountdown } from '../lib/format';
 import { Check, Minus, Plus, X } from './Icons';
 
@@ -35,6 +36,7 @@ export function RunningTimerBar() {
               if (e.key === 'Escape') setEditing(false);
             }}
             placeholder="What are you working on?"
+            maxLength={LIMITS.sessionLabel}
             aria-label="Session label"
           />
         ) : (

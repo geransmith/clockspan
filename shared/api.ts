@@ -1,8 +1,19 @@
 /**
  * The JSON the API speaks, shared by the server that builds it and the client that reads
  * it. Server builders are annotated with these types so a renamed field is a type error on
- * both sides, not a test failure. Pure types, no imports (settings have their own file).
+ * both sides, not a test failure. No imports (settings have their own file).
  */
+
+/**
+ * How long each free-text field may be. The server cuts anything longer; the inputs set
+ * `maxLength` from the same numbers so a user never types past what will be kept.
+ */
+export const LIMITS = {
+  sessionLabel: 200,
+  sessionNotes: 2000,
+  priorityText: 500,
+  retroNote: 4000,
+} as const;
 
 /**
  * Position 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in pairs, and the last

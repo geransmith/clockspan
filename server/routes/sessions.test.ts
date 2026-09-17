@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SEED_TODAY, startTestApp, type TestApp } from '../dev/harness.js';
 import { LOCAL_USERS, ensureLocalUsers, seedDatabase } from '../dev/seed.js';
+import { LIMITS } from '../../shared/api.js';
 
 const DATE = '2026-09-01';
 
@@ -54,9 +55,9 @@ describe('sessions', () => {
     const prio = await app.api.put(`/api/days/${DATE}/priorities`, { priorities: [{ text: 'Plan' }] });
     const uid: string = prio.body.priorities[0].uid;
     const { id } = (await start()).body.session;
-    const p = await app.api.patch(`/api/sessions/${id}`, { label: 'x'.repeat(300), notes: 'why', priorityUid: uid, plannedSeconds: 600 });
+    const p = await app.api.patch(`/api/sessions/${id}`, { label: 'x'.repeat(LIMITS.sessionLabel + 100), notes: 'y'.repeat(LIMITS.sessionNotes + 100), priorityUid: uid, plannedSeconds: 600 });
     expect(p.status).toBe(200);
-    expect(p.body.session).toMatchObject({ label: 'x'.repeat(200), notes: 'why', priorityUid: uid, plannedSeconds: 600 });
+    expect(p.body.session).toMatchObject({ label: 'x'.repeat(LIMITS.sessionLabel), notes: 'y'.repeat(LIMITS.sessionNotes), priorityUid: uid, plannedSeconds: 600 });
     expect((await app.api.patch(`/api/sessions/${id}`, { priorityUid: 'bad!' })).status).toBe(400);
     expect((await app.api.patch(`/api/sessions/${id}`, { plannedSeconds: 10 })).status).toBe(400);
     // A wrong type is a 400 like everywhere else, not silently kept.
@@ -64,7 +65,7 @@ describe('sessions', () => {
     expect(badLabel.status).toBe(400);
     expect(badLabel.body.error).toMatch(/label must be a string/);
     expect((await app.api.patch(`/api/sessions/${id}`, { notes: ['x'] })).status).toBe(400);
-    expect((await app.api.get(`/api/days/${DATE}`)).body.sessions[0].label).toBe('x'.repeat(200));
+    expect((await app.api.get(`/api/days/${DATE}`)).body.sessions[0].label).toBe('x'.repeat(LIMITS.sessionLabel));
     // Unlinking is explicit null; leaving it out keeps the link.
     expect((await app.api.patch(`/api/sessions/${id}`, { notes: 'still' })).body.session.priorityUid).toBe(uid);
     expect((await app.api.patch(`/api/sessions/${id}`, { priorityUid: null })).body.session.priorityUid).toBeNull();

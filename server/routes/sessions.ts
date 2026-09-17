@@ -2,6 +2,7 @@ import { Router, type RequestHandler, type Response } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { dateParam, ensureDay, requireDate, sessionRowToJson, UID_RE, type SessionRow } from './shared.js';
+import { LIMITS } from '../../shared/api.js';
 
 const MIN_PLANNED = 60;
 const MAX_PLANNED = 8 * 3600;
@@ -66,7 +67,7 @@ export function sessionStartRouter(db: DB): Router {
           `INSERT INTO sessions (day_id, user_id, label, notes, planned_seconds, started_at, ended_at, status, priority_uid)
            VALUES (?, ?, ?, '', ?, ?, NULL, 'running', ?)`,
         )
-        .run(dayId, user.id, typeof label === 'string' ? label.slice(0, 200) : '', planned.seconds, Date.now(), link.uid ?? null);
+        .run(dayId, user.id, typeof label === 'string' ? label.slice(0, LIMITS.sessionLabel) : '', planned.seconds, Date.now(), link.uid ?? null);
       return { id: Number(info.lastInsertRowid) };
     })();
     if ('error' in result) {
@@ -133,14 +134,14 @@ export function sessionsRouter(db: DB): Router {
         res.status(400).json({ error: 'label must be a string.' });
         return;
       }
-      next.label = label.slice(0, 200);
+      next.label = label.slice(0, LIMITS.sessionLabel);
     }
     if (notes !== undefined) {
       if (typeof notes !== 'string') {
         res.status(400).json({ error: 'notes must be a string.' });
         return;
       }
-      next.notes = notes.slice(0, 2000);
+      next.notes = notes.slice(0, LIMITS.sessionNotes);
     }
     db.prepare(`UPDATE sessions SET planned_seconds = ?, label = ?, notes = ?, priority_uid = ? WHERE id = ?`).run(next.planned, next.label, next.notes, next.priorityUid, s.id);
     reply(res, s.user_id, s.id);

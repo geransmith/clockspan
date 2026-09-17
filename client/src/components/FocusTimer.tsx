@@ -3,7 +3,7 @@ import { useSettings } from '../hooks/useSettings';
 import { useTimer } from '../hooks/useTimer';
 import { CONFIRM } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
-import type { Priority } from '../types';
+import { LIMITS, type Priority } from '../types';
 import { Check, Minus, Plus, X } from './Icons';
 
 const QUICK = [15, 25, 50];
@@ -63,7 +63,7 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
         value={label}
         onChange={(e) => setLabel(e.target.value)}
         placeholder="What are you working on?"
-        maxLength={200}
+        maxLength={LIMITS.sessionLabel}
         disabled={!isToday}
         aria-label="Session label"
       />

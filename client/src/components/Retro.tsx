@@ -3,7 +3,7 @@ import { RETRO_PROMPT } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { formatDuration } from '../lib/format';
 import { reviewDay } from '../lib/retro';
-import type { Priority, Session } from '../types';
+import { LIMITS, type Priority, type Session } from '../types';
 import { Check } from './Icons';
 
 interface Props {
@@ -137,7 +137,7 @@ export function Retro({ priorities, sessions, note, reviewedAt, onChange }: Prop
           value={draft}
           placeholder={RETRO_PROMPT}
           rows={3}
-          maxLength={4000}
+          maxLength={LIMITS.retroNote}
           onChange={(e) => edit(e.target.value)}
           onBlur={() => flush(draft)}
         />

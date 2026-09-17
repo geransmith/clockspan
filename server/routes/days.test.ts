@@ -3,6 +3,7 @@ import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from '../dev/harness
 import { ensureLocalUsers, LOCAL_USERS, seedDatabase } from '../dev/seed.js';
 import { MAX_PRIORITIES } from '../../shared/settings.js';
 import { punchWindow } from '../../shared/dates.js';
+import { LIMITS } from '../../shared/api.js';
 
 /** An instant on 2026-09-01 in any zone: its UTC midnight plus a few hours. */
 const T0 = Date.UTC(2026, 8, 1);
@@ -106,6 +107,11 @@ describe('PUT /api/days/:date/priorities', () => {
     expect(typeof c.addedAt).toBe('number');
   });
 
+  it('cuts text at the shared limit', async () => {
+    const r = await app.api.put('/api/days/2026-09-01/priorities', { priorities: [{ text: 'p'.repeat(LIMITS.priorityText + 50) }] });
+    expect(r.body.priorities[0].text).toHaveLength(LIMITS.priorityText);
+  });
+
   it('is a full replace: omitting a row removes it', async () => {
     await app.api.put('/api/days/2026-09-01/priorities', { priorities: [{ text: 'One' }, { text: 'Two' }, { text: 'Three' }] });
     const r = await app.api.put('/api/days/2026-09-01/priorities', { priorities: [{ text: 'Three' }] });
@@ -150,8 +156,8 @@ describe('PUT /api/days/:date/overtime', () => {
 
 describe('PUT /api/days/:date/retro', () => {
   it('stores the note, keeps the first reviewed-at, and clears it on undo', async () => {
-    const note = await app.api.put('/api/days/2026-09-01/retro', { note: 'x'.repeat(5000) });
-    expect(note.body.retroNote).toHaveLength(4000);
+    const note = await app.api.put('/api/days/2026-09-01/retro', { note: 'x'.repeat(LIMITS.retroNote + 1000) });
+    expect(note.body.retroNote).toHaveLength(LIMITS.retroNote);
     expect(note.body.retroAt).toBeNull();
     const first = await app.api.put('/api/days/2026-09-01/retro', { done: true });
     expect(typeof first.body.retroAt).toBe('number');
