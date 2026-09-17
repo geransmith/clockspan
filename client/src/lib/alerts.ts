@@ -19,6 +19,13 @@ export interface Banner {
   sticky: boolean;
   /** Groups banners so a newer one replaces an older one of the same tag. */
   tag: string;
+  /** One optional button, e.g. "Overtime approved" on the clock-out alarm. */
+  action?: BannerAction;
+}
+
+export interface BannerAction {
+  label: string;
+  run: () => void;
 }
 
 // ----- audio -----
@@ -159,6 +166,7 @@ export interface AlertOptions {
   chime?: ChimeKind;
   /** Groups banners so a newer one replaces an older one of the same tag. */
   tag: string;
+  action?: BannerAction;
   sound: boolean;
   notifications: boolean;
 }
@@ -166,5 +174,5 @@ export interface AlertOptions {
 export function alert(o: AlertOptions): void {
   if (o.sound && o.chime) chime(o.chime);
   if (o.notifications) notify(o.title, o.body, o.tag);
-  pushBanner({ kicker: o.kicker, title: o.title, body: o.body, tone: o.tone, sticky: o.sticky ?? false, tag: o.tag });
+  pushBanner({ kicker: o.kicker, title: o.title, body: o.body, tone: o.tone, sticky: o.sticky ?? false, tag: o.tag, action: o.action });
 }

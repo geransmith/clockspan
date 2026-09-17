@@ -40,15 +40,33 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           </button>
         </header>
         <div className="dialog-body">
-          <Section title="Timeclock" hint="Used to compute your lunch deadline and clock-out time.">
+          <Section title="Timeclock" hint="Used to compute your lunch deadline, clock-out time and second meal period.">
             <DurationField label="Work day" minutes={settings.workMinutes} onCommit={(m) => set({ workMinutes: m })} />
             <DurationField label="Lunch must start within" minutes={settings.lunchDeadlineMinutes} onCommit={(m) => set({ lunchDeadlineMinutes: m })} />
             <MinutesField label="Lunch length" minutes={settings.lunchMinutes} min={0} max={480} onCommit={(m) => set({ lunchMinutes: m })} />
+            <DurationField label="Second meal due after (hours worked)" minutes={settings.secondMealAfterMinutes} onCommit={(m) => set({ secondMealAfterMinutes: m })} />
           </Section>
 
-          <Section title="Alarms" hint="Alerts as lunch and clock-out approach. Chime, browser notification and an in-app banner.">
+          <Section title="Priorities">
+            <MinutesField label="Rows per day" unit="rows" minutes={settings.priorityCount} min={1} max={10} onCommit={(m) => set({ priorityCount: m })} />
+            <p className="muted small">New days start with this many rows. Add more on the sheet any time.</p>
+          </Section>
+
+          <Section title="Alarms" hint="Alerts as lunch, clock-out and the second meal period approach. Chime, browser notification and an in-app banner.">
             <AlarmEditor title="Lunch deadline" alarm={settings.alarms.lunchBy} onChange={(p) => setAlarm('lunchBy', p)} />
             <AlarmEditor title="Clock-out" alarm={settings.alarms.clockOut} onChange={(p) => setAlarm('clockOut', p)} />
+            <AlarmEditor
+              title="Second meal period"
+              hint="California: due before the end of the 10th hour worked on days over 10 hours (waivable when the day is 12 hours or less). Only arms on a day that's heading past the threshold. Turn off if you've waived it."
+              alarm={settings.alarms.secondMeal}
+              onChange={(p) => setAlarm('secondMeal', p)}
+            />
+            <Toggle
+              label="Overtime approval"
+              hint="Adds an 'Overtime approved' switch to the timeclock and to the clock-out alarm. It silences that day's clock-out alarm only; meal alarms stay on. Turn off if overtime doesn't apply to you."
+              checked={settings.overtimeApproval}
+              onChange={(v) => set({ overtimeApproval: v })}
+            />
             <div className="setting-row">
               <Toggle label="Sound" checked={settings.sound} onChange={(v) => set({ sound: v })} />
               <button
@@ -155,7 +173,22 @@ function DurationField({ label, minutes, onCommit }: { label: string; minutes: n
   );
 }
 
-function MinutesField({ label, minutes, min, max, onCommit }: { label: string; minutes: number; min: number; max: number; onCommit: (m: number) => void }) {
+/** A single whole-number input; `unit` is the suffix ("min" by default). */
+function MinutesField({
+  label,
+  minutes,
+  min,
+  max,
+  unit = 'min',
+  onCommit,
+}: {
+  label: string;
+  minutes: number;
+  min: number;
+  max: number;
+  unit?: string;
+  onCommit: (m: number) => void;
+}) {
   const [v, setV] = useState(String(minutes));
   useEffect(() => setV(String(minutes)), [minutes]);
   const commit = () => {
@@ -168,20 +201,20 @@ function MinutesField({ label, minutes, min, max, onCommit }: { label: string; m
       <span>{label}</span>
       <span className="duration-inputs">
         <input className="input input-num" inputMode="numeric" value={v} onChange={(e) => setV(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} aria-label={label} />
-        <span className="muted">min</span>
+        <span className="muted">{unit}</span>
       </span>
     </div>
   );
 }
 
-function AlarmEditor({ title, alarm, onChange }: { title: string; alarm: AlarmSettings; onChange: (p: Partial<AlarmSettings>) => void }) {
+function AlarmEditor({ title, hint, alarm, onChange }: { title: string; hint?: string; alarm: AlarmSettings; onChange: (p: Partial<AlarmSettings>) => void }) {
   const toggleLead = (m: number) => {
     const has = alarm.leadMinutes.includes(m);
     onChange({ leadMinutes: (has ? alarm.leadMinutes.filter((x) => x !== m) : [...alarm.leadMinutes, m]).sort((a, b) => b - a) });
   };
   return (
     <div className={`alarm-editor${alarm.enabled ? '' : ' is-off'}`}>
-      <Toggle label={title} checked={alarm.enabled} onChange={(v) => onChange({ enabled: v })} />
+      <Toggle label={title} hint={hint} checked={alarm.enabled} onChange={(v) => onChange({ enabled: v })} />
       <div className="alarm-fields">
         <div className="setting-row">
           <span className="muted small">Warn before</span>

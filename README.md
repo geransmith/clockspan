@@ -4,12 +4,12 @@
 
 **Clockspan** is a self-hosted, single-day focus sheet for getting through a workday with ADHD. One page, four cards:
 
-- **Timeclock** — punch in, punch out for lunch, punch back in (plus any extra out/in pairs). The sheet tells you **when lunch must start by** (default: within 5 hours) and **when your day ends** (default: 8 hours worked + 30-minute lunch), live, and re-plans if lunch runs long.
-- **Top 3 priorities** — the three things that would make today a win.
+- **Timeclock** — clock in, punch out for lunch, punch back in, clock out (plus any extra out/in pairs, before or after lunch). The sheet tells you **when lunch must start by** (default: within 5 hours) and **when your day ends** (default: 8 hours worked + 30-minute lunch), live, and re-plans if lunch runs long. Clocking out ends the day with a small celebration.
+- **Top priorities** — the few things that would make today a win. Starts at three (adjustable); you can add more, with a gentle nudge when the list gets long.
 - **Focus timer** — 15 / 25 / 50-minute sessions with a label. Extend or shorten with ± while running, finish early, and it logs what you did and for how long. The running timer floats at the top of the page on every view.
 - **Day log** — every session with its actual duration and the day's total focused time.
 
-Every day is saved. Step back through previous days from the date picker or the History view. **Alarms** warn you as lunch and clock-out approach (chime, browser notification, in-app banner). Cards can be reordered or hidden per user. Works on phones and can be added to the Home Screen.
+Every day is saved. Step back through previous days from the date picker or the History view. **Alarms** warn you as lunch, clock-out and (on long days) the second meal period approach (chime, browser notification, in-app banner). If overtime was approved, one switch silences the clock-out alarm for that day. Cards can be reordered or hidden per user. Works on phones and can be added to the Home Screen.
 
 Data is **per user**. Sign-in is optional: run it open on your LAN, create a local account on first launch, or sign in through Authentik (OIDC).
 
@@ -135,9 +135,13 @@ sqlite3 /path/on/host/focus.db \
 
 ## Using it
 
-- **Timeclock.** Tap **Now** on *Clock in* when you start. The *Lunch by* tile counts down; punch *Lunch out* / *Lunch in* around your break. Need to step out for an appointment? **Add clock out / in** for as many extra pairs as you need — they can be before or after lunch. Your projected *Clock out at* accounts for everything. A final *Out* with no *In* ends the day.
+- **Timeclock.** Tap **Now** on *Clock in* when you start. The *Lunch by* tile counts down; punch *Lunch out* / *Lunch in* around your break, and *Clock out* when you leave. Clocking out ends the day, even if you left early. Need to step out for an appointment? **Add extra out / in** for as many pairs as you need. A pair you add before lunch is punched sits above lunch; otherwise it sits below. Your projected *Clock out at* accounts for everything. Came back after clocking out? Tap **Add extra out / in**: your clock-out time becomes that pair's *Out*, tap **Now** on its *In*, and you get a fresh *Clock out* row.
+- **Top priorities.** A row can only be ticked once it has text. **Add priority** adds a row; past three (or your configured count) it asks first, gently. Rows beyond your default can be removed with the ×. *Settings → Priorities → Rows per day* sets how many rows a new day starts with.
 - **Timer.** Type what you're about to do, tap 15/25/50. The bar at the top follows you around; **−5m / +5m** adjust the current session, **Finish** ends it early and logs the real duration, and reaching zero ends it automatically with a chime. Timers keep correct time across reloads and phone sleep because the start time lives on the server.
 - **Alarms.** Settings → Alarms. Per alarm: warn-before chips (30/15/10/5/1 min), *when reached*, and *repeat while over*. The tiles turn amber when you're inside the first warning window and red when you're over.
+  - **Second meal period.** On a day heading past 10 hours worked (overtime approved, already over your target, or a target that long) the sheet shows when your 10th hour ends and alarms before it. Any break after lunch counts as taken. Adjust the threshold under *Settings → Timeclock*, or turn the alarm off if you've waived it.
+  - **Overtime approved.** A switch on the timeclock card, and a button on the clock-out alarm banner, that silences that day's clock-out alarm. Meal alarms stay on. If overtime doesn't apply to you, turn off *Settings → Alarms → Overtime approval* and both disappear.
+  - **About the defaults.** Lunch within 5 hours, a second meal period after 10 hours worked, and keeping meal alarms on during approved overtime all follow California labor rules, because that's where the author works. Other states and countries differ. Everything is adjustable in Settings, and pull requests that add presets or rules for other places are welcome.
 - **Layout.** Tap **Customize** to drag cards (long-press on phones), use ▲/▼, or hide a card. Hidden cards appear in a strip at the bottom while customizing. *Settings → Layout → Reset to default* restores everything.
 - **Past days.** Use ◀ ▶ or the date picker; History shows every recorded day with worked / focused / priorities. Past days are editable; timers can only start on today.
 - **Phone.** Add to Home Screen (Android: *Install app*; iOS: Share → *Add to Home Screen*). Browser notifications on iOS only work from the installed app. *Keep screen awake* keeps the countdown and chime live while the app is open; if the phone sleeps anyway, the alert fires when you come back.

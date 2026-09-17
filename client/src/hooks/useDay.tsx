@@ -8,6 +8,7 @@ interface DayStore {
   load: (date: string) => Promise<void>;
   setPunches: (date: string, punches: Punch[]) => Promise<void>;
   setPriorities: (date: string, priorities: Priority[]) => Promise<void>;
+  setOvertimeApproved: (date: string, approved: boolean) => Promise<void>;
   /** Insert or replace a session in its day (used by the timer when one completes). */
   applySession: (session: Session) => void;
   removeSession: (date: string, id: number) => Promise<void>;
@@ -17,12 +18,8 @@ interface DayStore {
 const Ctx = createContext<DayStore | null>(null);
 
 function withDay(days: Record<string, Day>, date: string, fn: (d: Day) => Day): Record<string, Day> {
-  const current = days[date] ?? { date, punches: normalizePunches([]), priorities: emptyPriorities(), sessions: [] };
+  const current = days[date] ?? { date, punches: normalizePunches([]), priorities: [], overtimeApproved: false, sessions: [] };
   return { ...days, [date]: fn(current) };
-}
-
-function emptyPriorities(): Priority[] {
-  return [1, 2, 3].map((position) => ({ position: position as 1 | 2 | 3, text: '', done: false }));
 }
 
 export function DayProvider({ children }: { children: ReactNode }) {
@@ -69,6 +66,19 @@ export function DayProvider({ children }: { children: ReactNode }) {
     [load],
   );
 
+  const setOvertimeApproved = useCallback(
+    async (date: string, approved: boolean) => {
+      setDays((prev) => withDay(prev, date, (d) => ({ ...d, overtimeApproved: approved })));
+      try {
+        await api.putOvertime(date, approved);
+      } catch (err) {
+        void load(date);
+        throw err;
+      }
+    },
+    [load],
+  );
+
   const applySession = useCallback((session: Session) => {
     setDays((prev) =>
       withDay(prev, session.date, (d) => {
@@ -94,8 +104,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ days, load, setPunches, setPriorities, applySession, removeSession, updateSession }),
-    [days, load, setPunches, setPriorities, applySession, removeSession, updateSession],
+    () => ({ days, load, setPunches, setPriorities, setOvertimeApproved, applySession, removeSession, updateSession }),
+    [days, load, setPunches, setPriorities, setOvertimeApproved, applySession, removeSession, updateSession],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

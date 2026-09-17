@@ -16,11 +16,16 @@ export interface Settings {
   workMinutes: number;
   lunchDeadlineMinutes: number;
   lunchMinutes: number;
+  /** Hours *worked* after which a second meal period is due (California: 10 h). */
+  secondMealAfterMinutes: number;
   adjustStepMinutes: number;
+  priorityCount: number;
   sound: boolean;
   notifications: boolean;
   keepScreenAwake: boolean;
-  alarms: { lunchBy: AlarmSettings; clockOut: AlarmSettings };
+  /** Show the per-day "Overtime approved" switch and banner action. */
+  overtimeApproval: boolean;
+  alarms: { lunchBy: AlarmSettings; clockOut: AlarmSettings; secondMeal: AlarmSettings };
   layout: { id: CardId; visible: boolean }[];
 }
 
@@ -30,13 +35,18 @@ export const DEFAULT_SETTINGS: Settings = {
   workMinutes: 480,
   lunchDeadlineMinutes: 300,
   lunchMinutes: 30,
+  secondMealAfterMinutes: 600,
   adjustStepMinutes: 5,
+  priorityCount: 3,
   sound: true,
   notifications: true,
   keepScreenAwake: true,
-  alarms: { lunchBy: { ...DEFAULT_ALARM }, clockOut: { ...DEFAULT_ALARM } },
+  overtimeApproval: true,
+  alarms: { lunchBy: { ...DEFAULT_ALARM }, clockOut: { ...DEFAULT_ALARM }, secondMeal: { ...DEFAULT_ALARM } },
   layout: CARD_IDS.map((id) => ({ id, visible: true })),
 };
+
+export const MAX_PRIORITIES = 20;
 
 const isBool = (v: unknown): v is boolean => typeof v === 'boolean';
 const isInt = (v: unknown, min: number, max: number): v is number =>
@@ -84,13 +94,17 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     workMinutes: isInt(p.workMinutes, 1, 24 * 60) ? p.workMinutes : base.workMinutes,
     lunchDeadlineMinutes: isInt(p.lunchDeadlineMinutes, 1, 24 * 60) ? p.lunchDeadlineMinutes : base.lunchDeadlineMinutes,
     lunchMinutes: isInt(p.lunchMinutes, 0, 8 * 60) ? p.lunchMinutes : base.lunchMinutes,
+    secondMealAfterMinutes: isInt(p.secondMealAfterMinutes, 1, 24 * 60) ? p.secondMealAfterMinutes : base.secondMealAfterMinutes,
     adjustStepMinutes: isInt(p.adjustStepMinutes, 1, 60) ? p.adjustStepMinutes : base.adjustStepMinutes,
+    priorityCount: isInt(p.priorityCount, 1, 10) ? p.priorityCount : base.priorityCount,
     sound: isBool(p.sound) ? p.sound : base.sound,
     notifications: isBool(p.notifications) ? p.notifications : base.notifications,
     keepScreenAwake: isBool(p.keepScreenAwake) ? p.keepScreenAwake : base.keepScreenAwake,
+    overtimeApproval: isBool(p.overtimeApproval) ? p.overtimeApproval : base.overtimeApproval,
     alarms: {
       lunchBy: mergeAlarm(base.alarms.lunchBy, alarms.lunchBy),
       clockOut: mergeAlarm(base.alarms.clockOut, alarms.clockOut),
+      secondMeal: mergeAlarm(base.alarms.secondMeal, alarms.secondMeal),
     },
     layout,
   };

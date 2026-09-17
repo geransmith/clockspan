@@ -12,8 +12,8 @@ const cfg = (over: Partial<AlarmSettings> = {}): AlarmSettings => ({
   overdueEveryMinutes: 5,
   ...over,
 });
-const alarms = (lunch = cfg(), clock = cfg()) => ({ lunchBy: lunch, clockOut: clock });
-const target = (at: number, id: 'lunchBy' | 'clockOut' = 'clockOut', armed = true): AlarmTarget => ({ id, at, armed });
+const alarms = (lunch = cfg(), clock = cfg(), meal = cfg()) => ({ lunchBy: lunch, clockOut: clock, secondMeal: meal });
+const target = (at: number, id: 'lunchBy' | 'clockOut' | 'secondMeal' = 'clockOut', armed = true): AlarmTarget => ({ id, at, armed });
 
 describe('dueEvents', () => {
   it('fires nothing before the first lead', () => {
@@ -81,17 +81,20 @@ describe('dueEvents', () => {
     expect(dueEvents(D, [target(T)], a, new Set(), T + 60 * M).fire).toEqual([]);
   });
 
-  it('handles both targets independently', () => {
-    const r = dueEvents(D, [target(T, 'lunchBy'), target(T + 3 * 60 * M, 'clockOut')], alarms(), new Set(), T);
-    expect(r.fire.map((e) => [e.id, e.kind])).toEqual([['lunchBy', 'due']]);
+  it('handles each target independently', () => {
+    const r = dueEvents(D, [target(T, 'lunchBy'), target(T + 3 * 60 * M, 'clockOut'), target(T + 15 * M, 'secondMeal')], alarms(), new Set(), T);
+    expect(r.fire.map((e) => [e.id, e.kind])).toEqual([
+      ['lunchBy', 'due'],
+      ['secondMeal', 'lead'],
+    ]);
   });
 });
 
 describe('describeEvent', () => {
   // 8:32 clock-in, 8h day, lunch within 4h.
   const clockIn = new Date(2026, 8, 16, 8, 32).getTime();
-  const ctx = { clockIn, workMinutes: 480, lunchDeadlineMinutes: 240 };
-  const ev = (id: 'lunchBy' | 'clockOut', kind: AlarmEvent['kind'], minutes: number, target: number): AlarmEvent => ({
+  const ctx = { clockIn, workMinutes: 480, lunchDeadlineMinutes: 240, secondMealAfterMinutes: 600 };
+  const ev = (id: 'lunchBy' | 'clockOut' | 'secondMeal', kind: AlarmEvent['kind'], minutes: number, target: number): AlarmEvent => ({
     key: eventKey(D, id, kind, minutes, target),
     id,
     kind,
@@ -131,6 +134,18 @@ describe('describeEvent', () => {
     expect(lead.body).toContain('4h after clocking in');
     expect(describeEvent(ev('lunchBy', 'due', 0, T), ctx).title).toBe('Take lunch now');
     expect(describeEvent(ev('lunchBy', 'overdue', 5, T), ctx).title).toBe('Lunch is 5 min overdue');
+  });
+
+  it('explains the second meal period rule', () => {
+    const lead = describeEvent(ev('secondMeal', 'lead', 15, T), ctx);
+    expect(lead.kicker).toBe('2nd meal alarm · 15 min warning');
+    expect(lead.title).toBe('Second meal break in 15 min');
+    expect(lead.body).toContain('10h of work ends at');
+    expect(lead.body).toContain('California');
+    expect(describeEvent(ev('secondMeal', 'due', 0, T), ctx).title).toBe('Take your second meal break');
+    const over = describeEvent(ev('secondMeal', 'overdue', 5, T), ctx);
+    expect(over.title).toBe('Second meal break is 5 min overdue');
+    expect(over.tone).toBe('danger');
   });
 
   it('formats a non-round work day', () => {

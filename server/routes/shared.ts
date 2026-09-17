@@ -9,8 +9,13 @@ export function isValidDateKey(s: unknown): s is string {
   return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
 }
 
-export function findDay(db: DB, userId: number, date: string): { id: number } | undefined {
-  return db.prepare(`SELECT id FROM days WHERE user_id = ? AND date = ?`).get(userId, date) as { id: number } | undefined;
+export interface DayRow {
+  id: number;
+  overtime_approved: number;
+}
+
+export function findDay(db: DB, userId: number, date: string): DayRow | undefined {
+  return db.prepare(`SELECT id, overtime_approved FROM days WHERE user_id = ? AND date = ?`).get(userId, date) as DayRow | undefined;
 }
 
 export function ensureDay(db: DB, userId: number, date: string): number {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { AuthGate } from './auth/AuthGate';
 import { Banners } from './components/Banners';
 import { Header } from './components/Header';
@@ -42,10 +42,13 @@ function Shell() {
   // few seconds first so back-filling three times in a row doesn't fire for each
   // half-entered state.
   const today = todayKey(now);
-  const { day: todayDay } = useDay(today);
+  const { day: todayDay, store } = useDay(today);
   const punches = useSettled(todayDay?.punches, 3000);
   const todayTc = useMemo(() => (punches ? computeTimeclock(punches, settings, now) : null), [punches, settings, now]);
-  useAlarms(today, todayTc, settings, now);
+  // A day flagged while the feature was on stays silent only while it is still on.
+  const overtimeApproved = settings.overtimeApproval && Boolean(todayDay?.overtimeApproved);
+  const approveOvertime = useCallback(() => void store.setOvertimeApproved(today, true), [store, today]);
+  useAlarms(today, todayTc, settings, now, overtimeApproved, settings.overtimeApproval ? approveOvertime : undefined);
 
   return (
     <div className={`app${running ? ' app--has-bar' : ''}`}>

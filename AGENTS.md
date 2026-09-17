@@ -3,11 +3,14 @@
 ## What this is
 
 A self-hosted, single-day **focus sheet** for working through a workday with ADHD: a punch-style
-timeclock that computes when lunch must start and when the day ends, the top three priorities
-for the day, a Pomodoro-style focus timer that logs what was done, and alarms as lunch/clock-out
-approach. Every day is persisted so past days can be revisited. Data is **per user**; auth is
-optional (`AUTH_MODE=none | local | oidc`). Runs as one Docker container with SQLite on a
-`/data` volume. Mobile-first and installable (PWA manifest, pass-through service worker).
+timeclock that computes when lunch must start and when the day ends (with a small celebration
+when it does), the day's top priorities (default three, configurable, with a gentle nudge when
+the list grows), a Pomodoro-style focus timer that logs what was done, and alarms as lunch,
+clock-out and the second meal period approach. A per-day "Overtime approved" switch silences
+the clock-out alarm only. Every day is persisted so past days can be revisited. Data is **per
+user**; auth is optional (`AUTH_MODE=none | local | oidc`). Runs as one Docker container with
+SQLite on a `/data` volume. Mobile-first and installable (PWA manifest, pass-through service
+worker). Meal-period defaults follow California rules; everything is adjustable.
 
 ## Stack & versions
 
@@ -35,7 +38,8 @@ server/                 Express API → dist/server (tsc)
   auth/local.ts         /api/auth: me, setup, login (rate-limited), logout, password, users (admin)
   auth/oidc.ts          /api/auth/{me,logout} + /auth/{login,callback}; lazy discovery w/ retry
   routes/shared.ts      isValidDateKey, findDay/ensureDay, SessionRow → JSON
-  routes/days.ts        GET /days (history summaries), GET /days/:date, PUT punches, PUT priorities
+  routes/days.ts        GET /days (history summaries), GET /days/:date, PUT punches,
+                        PUT priorities (full replace, sparse rows), PUT overtime
   routes/sessions.ts    POST /days/:date/sessions (start), GET /sessions/running,
                         PATCH/:id, POST /:id/finish, POST /:id/cancel, DELETE /:id
   routes/settings.ts    DEFAULT_SETTINGS + mergeSettings() validator; GET/PUT /settings
@@ -46,13 +50,18 @@ client/                 Vite root → dist/client
   src/api.ts            fetch wrapper; dispatches UNAUTHENTICATED_EVENT on 401
   src/types.ts          shared client types (mirror of server JSON shapes)
   src/styles.css        design tokens (:root, dark via prefers-color-scheme), all component CSS
-  src/lib/timeclock.ts  PURE: computeTimeclock(punches, settings, now, {frozen}) → tiles/state
+  src/lib/timeclock.ts  PURE: computeTimeclock(punches, settings, now, {frozen}) → tiles/state,
+                        normalizePunches/clockOutPosition/extraPairs (row model), secondMealApplies
   src/lib/alarms.ts     PURE: dueEvents(...) scheduler + describeEvent() copy
   src/lib/alerts.ts     the ONLY place that plays audio / calls Notification / pushes banners
+  src/lib/copy.ts       every editable phrase (celebrations, gentle warnings) — no logic
+  src/lib/celebrate.ts  PURE: pickCelebration(seed) for the end-of-day notice
+  src/lib/priorities.ts PURE: padPriorities(), warnThreshold(), pickWarning(), MAX_PRIORITIES
   src/lib/format.ts     date keys, time/duration formatting, <input type=time> conversions
   src/lib/layout.ts     card registry (CARDS), DEFAULT_LAYOUT, normalizeLayout()
   src/hooks/useSettings.tsx  SettingsProvider: settings + update(patch) (optimistic, PUT)
-  src/hooks/useDay.tsx       DayProvider: per-date cache, setPunches/setPriorities, session upserts
+  src/hooks/useDay.tsx       DayProvider: per-date cache, setPunches/setPriorities/setOvertimeApproved,
+                             session upserts
   src/hooks/useTimer.tsx     TimerProvider: running session, remaining/progress, start/adjust/
                              finish/cancel, completion + chime, wake lock, tab title, re-sync
   src/hooks/useAlarms.ts     app-level alarm engine (fired keys in localStorage per day)
@@ -102,8 +111,21 @@ to exercise the setup/login pages.
   tick — never a client-side counter. `useTimer` keeps a `mutationSeq` so a slow `GET
   /sessions/running` can't overwrite an optimistic update; keep that pattern for new mutations.
 - **Punch positions are fixed**: 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in
-  pairs; kind is parity (`kindForPosition`). The math evaluates *set* punches chronologically,
-  so extra breaks may precede lunch. Lunch semantics come only from positions 1 and 2.
+  pairs, and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches`
+  enforces it and drops an unset trailing `in` from pre-Clock-out data). Kind is parity
+  (`kindForPosition`). The math evaluates *set* punches chronologically, so storage order is
+  not time order: `extraPairs()` decides where the card *shows* a pair (before lunch until
+  lunch is punched, then by its out time). An explicit Clock out that is the latest punch ends
+  the day even if the target isn't met. "Add extra out / in" appends two rows, so the old
+  Clock out becomes the new pair's Out. Lunch semantics come only from positions 1 and 2.
+- **Overtime approval (`days.overtime_approved`) silences only the `clockOut` alarm target.**
+  Lunch and the second meal period stay armed: California Labor Code §512 still requires them
+  on an overtime day. The setting `overtimeApproval` only shows/hides the switch and banner
+  button; a flagged day is silent only while the setting is on (`App.tsx`).
+- **Priorities are stored sparse**: the server keeps only the rows that exist (positions
+  1..n, contiguous, ≤ 20) and never stores `done` on an empty row; the client pads to
+  `settings.priorityCount` with `padPriorities()`. `PUT /days/:date/priorities` is a full
+  replace, so removing a row is sending the list without it.
 - **Alarm event keys embed the target minute** (`eventKey`), so a moved target re-arms and a
   reload never re-fires. Fired keys live in `localStorage` under `focus:alarms:<date>` and are
   pruned to today. Today's punches are settled for 3 s (`useSettled`) before evaluation.
@@ -120,13 +142,21 @@ to exercise the setup/login pages.
   automatically (visible) because layouts merge with the registry.
 - **A per-user setting**: add to `DEFAULT_SETTINGS` + `mergeSettings()` validation (server),
   the `Settings` type (`client/src/types.ts`) and `FALLBACK` (`hooks/useSettings.tsx`) → add the
-  control to `SettingsDialog.tsx` (use `DurationField` / `MinutesField` / `Toggle`).
-- **An alarm target**: expose the instant from `computeTimeclock` → add a target in
-  `useAlarms.ts` (`targets[]`, with an `armed` rule) → add its default under `alarms` on both
-  sides and the `AlarmId` union → add an `AlarmEditor` in `SettingsDialog.tsx` → copy in
-  `describeEvent()`: a `kicker` naming the alarm + rule ("X alarm · 15 min warning"), a
-  title, and a body that says where the deadline came from (it gets an `EventContext`;
-  extend that if the new target needs more inputs).
+  control to `SettingsDialog.tsx` (use `DurationField` / `MinutesField` — it takes a `unit`
+  suffix, default "min" — / `Toggle`).
+- **An alarm target** (existing: `lunchBy`, `clockOut`, `secondMeal`): expose the instant from
+  `computeTimeclock` → add a target in `useAlarms.ts` (`targets[]`, with an `armed` rule; put
+  a rule the card also needs in a pure helper like `secondMealApplies`) → add its default
+  under `alarms` on both sides and the `AlarmId` union → add an `AlarmEditor` in
+  `SettingsDialog.tsx` → copy in `describeEvent()`: a `kicker` naming the alarm + rule
+  ("X alarm · 15 min warning"), a title, and a body that says where the deadline came from
+  (it gets an `EventContext`; extend that if the new target needs more inputs). A banner can
+  carry one `action` button (see the clock-out alarm's "Overtime approved").
+- **A per-day field** (like `overtimeApproved`): append a migration adding the column to
+  `days` → read it in `findDay` (`routes/shared.ts`) and return it from `GET /days/:date` →
+  add a `PUT /days/:date/<field>` route → `Day` type + `api.ts` → an optimistic setter in
+  `useDay.tsx` (mirror `setOvertimeApproved`) → pass it from `Sheet.tsx` to the card, and from
+  `App.tsx` into `useAlarms` if alarms depend on it.
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
   `currentUser(req).id`, validate input, return `{ error }` JSON on failure → add the call to
   `client/src/api.ts` and types to `types.ts`.
@@ -144,6 +174,11 @@ to exercise the setup/login pages.
   400 ms; punches and checkboxes save immediately.
 - Comments explain *why* (browser quirks, math), not what.
 - No new runtime dependency without stating the reason in the commit message.
+- **Copy**: phrases the app says (celebrations, gentle warnings) live in
+  `client/src/lib/copy.ts`, never inline. Write them plainly and check new ones against
+  Wikipedia's "Signs of AI writing" (https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing):
+  no "not just X, but Y", no rule-of-three flourishes, no em-dash chains, no "Gentle
+  reminder:" / "Deep breath." openers, no cheerleading, no puffery words. Short, dry, specific.
 
 ## Verification expectations
 
@@ -152,6 +187,11 @@ to exercise the setup/login pages.
 - Check light and dark if you touched CSS.
 - If you touched the timer or alarms: reload mid-timer, background/foreground the tab, and let a
   short timer expire — the log must show the planned duration and one chime.
+- If you touched punches: walk a pair added before lunch, an early Clock out (done +
+  celebration), "Add extra out / in" after it (old Clock out becomes Out N), and removing that
+  pair (time returns to Clock out).
+- If you touched alarms: with "Overtime approved" on, the clock-out banner must stop and the
+  lunch tile must keep counting down.
 
 ## Gotchas
 

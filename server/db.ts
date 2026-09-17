@@ -67,6 +67,8 @@ const MIGRATIONS: string[] = [
   CREATE INDEX sessions_day ON sessions(day_id);
   CREATE INDEX sessions_running ON sessions(user_id) WHERE status = 'running';
   `,
+  // Per-day "overtime approved" flag: silences that day's clock-out alarm only.
+  `ALTER TABLE days ADD COLUMN overtime_approved INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 export function openDatabase(dbPath: string): DB {

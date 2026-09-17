@@ -346,6 +346,39 @@ button {
   background: var(--danger-soft);
   color: var(--danger);
 }
+/* Priorities nudge: warm but not alarming, with its two buttons on the next line on phones. */
+.notice--gentle {
+  background: var(--warn-soft);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+}
+.notice-actions {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+}
+/* End-of-day notice on the timeclock. */
+.notice--celebrate {
+  background: var(--accent-soft);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.celebrate-emoji {
+  font-size: 1.8rem;
+  line-height: 1;
+  animation: pop 0.5s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+@keyframes pop {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+}
 
 /* ---------- gate (auth pages) ---------- */
 .gate {
@@ -624,6 +657,20 @@ button {
   }
 }
 
+.timeclock-note {
+  margin: -4px 0 12px;
+  font-size: 0.88rem;
+  color: var(--text-2);
+}
+.timeclock-note--danger {
+  color: var(--danger);
+}
+.ot-row {
+  margin-bottom: 12px;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
 .punches {
   display: flex;
   flex-direction: column;
@@ -631,7 +678,7 @@ button {
 }
 .punch-row {
   display: grid;
-  grid-template-columns: 84px 1fr auto auto auto;
+  grid-template-columns: 84px 1fr auto auto;
   align-items: center;
   gap: 6px;
 }
@@ -649,8 +696,31 @@ button {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 8px 0 8px 12px;
+}
+/* One box per out/in pair; its remove button spans both rows so it clearly acts on the pair. */
+.punch-pair {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 8px 12px;
+  border: 1px solid var(--border);
   border-left: 3px solid var(--surface-3);
+  border-radius: var(--radius-sm);
+}
+.punch-pair-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+@media (max-width: 639px) {
+  .punch-pair-rows {
+    order: 1;
+  }
+}
+.punch-pair .punch-row {
+  grid-template-columns: 62px 1fr auto auto;
 }
 .punch-add {
   align-self: flex-start;
@@ -662,7 +732,19 @@ button {
 }
 @media (max-width: 639px) {
   .punch-row {
-    grid-template-columns: 76px 1fr auto auto auto;
+    grid-template-columns: 76px 1fr auto auto;
+  }
+  /* No room beside the rows on a phone: the remove button sits in the box's top-right corner. */
+  .punch-pair {
+    grid-template-columns: 1fr;
+    padding: 6px 8px 8px 12px;
+  }
+  .punch-pair .punch-remove {
+    justify-self: end;
+    min-height: 36px;
+  }
+  .punch-pair .punch-row {
+    grid-template-columns: 60px 1fr auto auto;
   }
   .punch-now {
     padding: 0 10px;
@@ -685,6 +767,16 @@ button {
   align-items: center;
   gap: 10px;
 }
+.priority-row--removable {
+  grid-template-columns: 24px 22px 1fr auto;
+}
+.priority-remove {
+  color: var(--text-3);
+}
+.checkbox:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
 .priority-num {
   font-weight: 700;
   color: var(--text-3);
@@ -694,9 +786,17 @@ button {
   text-decoration: line-through;
   color: var(--text-3);
 }
+.priorities-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.priority-add {
+  color: var(--accent);
+}
 .priorities-summary {
   font-size: 0.85rem;
-  padding-left: 56px;
 }
 
 /* ---------- focus timer ---------- */
@@ -962,6 +1062,13 @@ button {
 }
 .banner-body {
   color: var(--text-2);
+}
+.banner-action {
+  align-self: flex-start;
+  margin-top: 4px;
+  min-height: 36px;
+  border: 1px solid var(--banner-tone, var(--accent));
+  color: var(--banner-tone, var(--accent));
 }
 .banner-close {
   min-height: 32px;

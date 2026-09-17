@@ -55,6 +55,8 @@ export const putPunches = (date: string, punches: Punch[]) =>
   request<{ punches: Punch[] }>('PUT', `/api/days/${date}/punches`, { punches: punches.map((p) => ({ at: p.at })) });
 export const putPriorities = (date: string, priorities: Priority[]) =>
   request<{ priorities: Priority[] }>('PUT', `/api/days/${date}/priorities`, { priorities });
+export const putOvertime = (date: string, approved: boolean) =>
+  request<{ overtimeApproved: boolean }>('PUT', `/api/days/${date}/overtime`, { approved });
 
 // ----- sessions -----
 export const getRunning = () => request<{ session: Session | null }>('GET', '/api/sessions/running');

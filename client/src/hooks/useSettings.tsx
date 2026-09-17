@@ -14,13 +14,17 @@ const FALLBACK: Settings = {
   workMinutes: 480,
   lunchDeadlineMinutes: 300,
   lunchMinutes: 30,
+  secondMealAfterMinutes: 600,
   adjustStepMinutes: 5,
+  priorityCount: 3,
   sound: true,
   notifications: true,
   keepScreenAwake: true,
+  overtimeApproval: true,
   alarms: {
     lunchBy: { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 },
     clockOut: { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 },
+    secondMeal: { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 },
   },
   layout: normalizeLayout(undefined),
 };

@@ -8,7 +8,7 @@ export interface CardDef {
 /** Registry of cards. Order here is the default order; all are visible by default. */
 export const CARDS: CardDef[] = [
   { id: 'timeclock', title: 'Timeclock' },
-  { id: 'priorities', title: 'Top 3 priorities' },
+  { id: 'priorities', title: 'Top priorities' },
   { id: 'timer', title: 'Focus timer' },
   { id: 'log', title: 'Day log' },
 ];

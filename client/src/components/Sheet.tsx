@@ -73,7 +73,18 @@ export function Sheet({ date, today, now, customize }: Props) {
   const render = (id: CardId) => {
     switch (id) {
       case 'timeclock':
-        return <Timeclock date={date} isToday={isToday} now={effectiveNow} punches={day.punches} tc={tc} onChange={(p) => void store.setPunches(date, p)} />;
+        return (
+          <Timeclock
+            date={date}
+            isToday={isToday}
+            now={effectiveNow}
+            punches={day.punches}
+            tc={tc}
+            overtimeApproved={day.overtimeApproved}
+            onChange={(p) => void store.setPunches(date, p)}
+            onOvertimeChange={(v) => void store.setOvertimeApproved(date, v)}
+          />
+        );
       case 'priorities':
         return <Priorities date={date} priorities={day.priorities} onChange={(p) => void store.setPriorities(date, p)} />;
       case 'timer':

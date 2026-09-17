@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { computeTimeclock, emptyPunches } from './timeclock';
+import { clockOutPosition, computeTimeclock, emptyPunches, extraPairs, normalizePunches, secondMealApplies } from './timeclock';
 import type { Punch } from '../types';
 
-const settings = { workMinutes: 480, lunchDeadlineMinutes: 300, lunchMinutes: 30 };
+const settings = { workMinutes: 480, lunchDeadlineMinutes: 300, lunchMinutes: 30, secondMealAfterMinutes: 600 };
 const H = 3_600_000;
 const M = 60_000;
 const T0 = new Date(2026, 8, 16, 8, 0).getTime(); // 8:00 local
@@ -105,6 +105,115 @@ describe('computeTimeclock', () => {
     const p = punches([T0, T0 + 2 * H, T0 + 1 * H]);
     const r = computeTimeclock(p, settings, T0 + 3 * H);
     expect(r.error).not.toBeNull();
+  });
+
+  it('ends the day at an explicit Clock out even when short of the target', () => {
+    // Clock in, no lunch, Clock out (position 3) at 15:00 on an 8h day.
+    const p = punches([T0, null, null, T0 + 7 * H]);
+    const r = computeTimeclock(p, settings, T0 + 7 * H + 5 * M);
+    expect(r.state).toBe('done');
+    expect(r.clockOutStatus).toBe('done');
+    expect(r.clockOutAt).toBe(T0 + 7 * H);
+    expect(r.remainingSeconds).toBe(3600);
+    expect(r.secondMealBy).toBeNull();
+  });
+
+  it('is on a break, not done, when a later pair is open after an early clock-out', () => {
+    // 15:00 out (was the clock out), came back: Out 1 = 15:00, In 1 unset, Clock out unset.
+    const p = punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 7 * H, null, null]);
+    const r = computeTimeclock(p, settings, T0 + 7 * H + 30 * M);
+    expect(r.state).toBe('on-break');
+  });
+
+  it('anchors the clock-out target to the latest clock-in after a break', () => {
+    // 8:00 in, lunch 12:00–12:30, out 14:00, back 15:00: 5.5h worked, 2.5h to go from 15:00.
+    const p = punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 6 * H, T0 + 7 * H, null]);
+    const r = computeTimeclock(p, settings, T0 + 7 * H + 10 * M);
+    expect(r.state).toBe('working');
+    expect(r.clockOutAt).toBe(T0 + 9.5 * H);
+    // Same instant a minute later: the target doesn't drift while working.
+    expect(computeTimeclock(p, settings, T0 + 7 * H + 11 * M).clockOutAt).toBe(T0 + 9.5 * H);
+  });
+
+  it('re-anchors at the re-clock-in once the target was already met', () => {
+    // Worked 8h (8:00–12:00, 12:30–16:30), clocked out, came back at 19:00.
+    const p = punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 8.5 * H, T0 + 11 * H, null]);
+    const r = computeTimeclock(p, settings, T0 + 11 * H + 20 * M);
+    expect(r.clockOutStatus).toBe('over');
+    expect(r.clockOutAt).toBe(T0 + 11 * H);
+  });
+});
+
+describe('second meal period', () => {
+  it('projects the instant the 10th hour of work ends and holds it while working', () => {
+    const p = punches([T0, T0 + 4 * H, T0 + 4.5 * H, null]);
+    const r = computeTimeclock(p, settings, T0 + 6 * H);
+    expect(r.secondMealBy).toBe(T0 + 10.5 * H);
+    expect(r.secondMealStatus).toBe('upcoming');
+    expect(computeTimeclock(p, settings, T0 + 9 * H).secondMealBy).toBe(T0 + 10.5 * H);
+  });
+
+  it('drifts later during a break and is overdue once passed', () => {
+    const p = punches([T0, T0 + 4 * H, null, null]);
+    expect(computeTimeclock(p, settings, T0 + 4 * H + 10 * M).secondMealBy).toBe(T0 + 10 * H + 10 * M);
+    const over = computeTimeclock(punches([T0, T0 + 4 * H, T0 + 4.5 * H, null]), settings, T0 + 11 * H);
+    expect(over.secondMealStatus).toBe('overdue');
+    expect(over.secondMealBy).toBe(T0 + 10.5 * H);
+  });
+
+  it('counts any break after lunch as taken, but not one before it', () => {
+    const afterLunch = punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 8 * H, T0 + 8.5 * H, null]);
+    expect(computeTimeclock(afterLunch, settings, T0 + 9 * H).secondMealStatus).toBe('taken');
+    const beforeLunch = punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 1.5 * H, T0 + 2 * H, null]);
+    expect(computeTimeclock(beforeLunch, settings, T0 + 9 * H).secondMealStatus).toBe('upcoming');
+  });
+
+  it('only applies when a long day is actually in play', () => {
+    const p = punches([T0, T0 + 4 * H, T0 + 4.5 * H, null]);
+    const normal = computeTimeclock(p, settings, T0 + 6 * H);
+    expect(secondMealApplies(normal, settings, false)).toBe(false);
+    expect(secondMealApplies(normal, settings, true)).toBe(true);
+    expect(secondMealApplies(normal, { ...settings, workMinutes: 600 }, false)).toBe(true);
+    const over = computeTimeclock(p, settings, T0 + 9 * H);
+    expect(secondMealApplies(over, settings, false)).toBe(true);
+    const taken = computeTimeclock(punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 8 * H, T0 + 8.5 * H, null]), settings, T0 + 9 * H);
+    expect(secondMealApplies(taken, settings, true)).toBe(false);
+    const atLunch = computeTimeclock(punches([T0, T0 + 4 * H, null, null]), settings, T0 + 4 * H + 5 * M);
+    expect(secondMealApplies(atLunch, settings, true)).toBe(false);
+  });
+});
+
+describe('punch rows', () => {
+  it('starts with four rows ending in the clock out', () => {
+    expect(emptyPunches().map((p) => p.kind)).toEqual(['in', 'out', 'in', 'out']);
+    expect(clockOutPosition(emptyPunches())).toBe(3);
+    expect(clockOutPosition(punches([T0, null, null]))).toBeNull();
+  });
+
+  it('normalizes to a contiguous list whose last row is an out', () => {
+    expect(normalizePunches([]).map((p) => p.position)).toEqual([0, 1, 2, 3]);
+    // A complete extra pair gets a fresh clock out after it.
+    const withPair = normalizePunches(punches([T0, null, null, T0 + H, T0 + 2 * H]));
+    expect(withPair.map((p) => p.at)).toEqual([T0, null, null, T0 + H, T0 + 2 * H, null]);
+    expect(clockOutPosition(withPair)).toBe(5);
+  });
+
+  it('turns an old-style final out (pair with unset in) into the clock out', () => {
+    const old = normalizePunches(punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 8.5 * H, null]));
+    expect(old.map((p) => p.at)).toEqual([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 8.5 * H]);
+    expect(clockOutPosition(old)).toBe(3);
+  });
+
+  it('places extra pairs before lunch until lunch is punched or time says otherwise', () => {
+    const unsetLunch = normalizePunches(punches([T0, null, null, null, null, null]));
+    expect(extraPairs(unsetLunch).map((p) => p.beforeLunch)).toEqual([true]);
+    const lunchSet = normalizePunches(punches([T0, T0 + 4 * H, T0 + 4.5 * H, null, null, null]));
+    expect(extraPairs(lunchSet).map((p) => p.beforeLunch)).toEqual([false]);
+    const early = normalizePunches(punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + H, T0 + 2 * H, null]));
+    expect(extraPairs(early).map((p) => p.beforeLunch)).toEqual([true]);
+    const late = normalizePunches(punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 6 * H, T0 + 7 * H, null]));
+    expect(extraPairs(late).map((p) => [p.out.position, p.in.position, p.beforeLunch])).toEqual([[3, 4, false]]);
+    expect(extraPairs(emptyPunches())).toEqual([]);
   });
 });
 

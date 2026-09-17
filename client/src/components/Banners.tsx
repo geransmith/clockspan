@@ -26,6 +26,17 @@ export function Banners() {
             )}
             <strong className="banner-title">{b.title}</strong>
             {b.body && <span className="banner-body">{b.body}</span>}
+            {b.action && (
+              <button
+                className="btn btn-ghost banner-action"
+                onClick={() => {
+                  b.action!.run();
+                  dismissBanner(b.id);
+                }}
+              >
+                {b.action.label}
+              </button>
+            )}
           </div>
           <button className="btn btn-icon banner-close" onClick={() => dismissBanner(b.id)} aria-label="Dismiss">
             <X />

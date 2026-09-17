@@ -113,6 +113,8 @@ export interface EventContext {
   workMinutes: number;
   /** Lunch deadline window in minutes (settings.lunchDeadlineMinutes). */
   lunchDeadlineMinutes: number;
+  /** Hours worked after which the second meal period is due (settings.secondMealAfterMinutes). */
+  secondMealAfterMinutes: number;
 }
 
 export interface EventCopy {
@@ -132,42 +134,55 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
   const target = formatTime(e.target);
   const clockIn = formatTime(ctx.clockIn);
   const day = fmtMinutes(ctx.workMinutes);
-  const alarm = e.id === 'lunchBy' ? 'Lunch alarm' : 'Clock-out alarm';
+  const alarm = e.id === 'lunchBy' ? 'Lunch alarm' : e.id === 'secondMeal' ? '2nd meal alarm' : 'Clock-out alarm';
+  const mealHours = fmtMinutes(ctx.secondMealAfterMinutes);
+  const mealWhy = `Your ${mealHours} of work ends at ${target}. California requires a second 30-minute meal period before then unless you've waived it.`;
 
   if (e.kind === 'lead') {
     const kicker = `${alarm} · ${fmtMinutes(e.minutes)} warning`;
-    return e.id === 'lunchBy'
-      ? {
-          kicker,
-          title: `Lunch in ${fmtMinutes(e.minutes)}`,
-          body: `Lunch must start by ${target} — ${fmtMinutes(ctx.lunchDeadlineMinutes)} after clocking in at ${clockIn}.`,
-          tone: 'warn',
-        }
-      : {
-          kicker,
-          title: `Clock out in ${fmtMinutes(e.minutes)}`,
-          body: `Your ${day} day ends at ${target} (clocked in ${clockIn}). Start wrapping up.`,
-          tone: 'warn',
-        };
+    if (e.id === 'lunchBy') {
+      return {
+        kicker,
+        title: `Lunch in ${fmtMinutes(e.minutes)}`,
+        body: `Lunch must start by ${target} — ${fmtMinutes(ctx.lunchDeadlineMinutes)} after clocking in at ${clockIn}.`,
+        tone: 'warn',
+      };
+    }
+    if (e.id === 'secondMeal') return { kicker, title: `Second meal break in ${fmtMinutes(e.minutes)}`, body: mealWhy, tone: 'warn' };
+    return {
+      kicker,
+      title: `Clock out in ${fmtMinutes(e.minutes)}`,
+      body: `Your ${day} day ends at ${target} (clocked in ${clockIn}). Start wrapping up.`,
+      tone: 'warn',
+    };
   }
   if (e.kind === 'due') {
     const kicker = `${alarm} · time's up`;
-    return e.id === 'lunchBy'
-      ? { kicker, title: 'Take lunch now', body: `Your lunch deadline is ${target}. Start your break.`, tone: 'danger' }
-      : { kicker, title: 'Time to clock out', body: `It's ${target} — you've worked your ${day} for today. Punch out now.`, tone: 'danger' };
+    if (e.id === 'lunchBy') return { kicker, title: 'Take lunch now', body: `Your lunch deadline is ${target}. Start your break.`, tone: 'danger' };
+    if (e.id === 'secondMeal') return { kicker, title: 'Take your second meal break', body: mealWhy, tone: 'danger' };
+    return { kicker, title: 'Time to clock out', body: `It's ${target} — you've worked your ${day} for today. Punch out now.`, tone: 'danger' };
   }
   const kicker = `${alarm} · ${fmtMinutes(e.minutes)} overdue`;
-  return e.id === 'lunchBy'
-    ? {
-        kicker,
-        title: `Lunch is ${fmtMinutes(e.minutes)} overdue`,
-        body: `Your lunch deadline was ${target}. Start your break as soon as you can.`,
-        tone: 'danger',
-      }
-    : {
-        kicker,
-        title: `Clock out is ${fmtMinutes(e.minutes)} overdue`,
-        body: `Your day ended at ${target}. You're working past your ${day} target.`,
-        tone: 'danger',
-      };
+  if (e.id === 'lunchBy') {
+    return {
+      kicker,
+      title: `Lunch is ${fmtMinutes(e.minutes)} overdue`,
+      body: `Your lunch deadline was ${target}. Start your break as soon as you can.`,
+      tone: 'danger',
+    };
+  }
+  if (e.id === 'secondMeal') {
+    return {
+      kicker,
+      title: `Second meal break is ${fmtMinutes(e.minutes)} overdue`,
+      body: `Your ${mealHours} of work ended at ${target}. Take a 30-minute break as soon as you can.`,
+      tone: 'danger',
+    };
+  }
+  return {
+    kicker,
+    title: `Clock out is ${fmtMinutes(e.minutes)} overdue`,
+    body: `Your day ended at ${target}. You're working past your ${day} target.`,
+    tone: 'danger',
+  };
 }

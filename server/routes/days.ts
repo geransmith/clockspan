@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { ensureDay, findDay, isValidDateKey, sessionRowToJson, type SessionRow } from './shared.js';
+import { MAX_PRIORITIES } from './settings.js';
 
 export interface PunchRow {
   id: number;
@@ -23,12 +24,11 @@ function punchesJson(rows: PunchRow[]) {
   return rows.map((p) => ({ position: p.position, kind: p.kind, at: p.at }));
 }
 
+// Only the rows that exist are returned; the client pads to the user's `priorityCount`.
 function prioritiesJson(rows: PriorityRow[]) {
-  const byPos = new Map(rows.map((r) => [r.position, r]));
-  return [1, 2, 3].map((position) => {
-    const r = byPos.get(position);
-    return { position, text: r?.text ?? '', done: Boolean(r?.done) };
-  });
+  return [...rows]
+    .sort((a, b) => a.position - b.position)
+    .map((r) => ({ position: r.position, text: r.text, done: Boolean(r.done) }));
 }
 
 export function daysRouter(db: DB): Router {
@@ -45,7 +45,7 @@ export function daysRouter(db: DB): Router {
         `SELECT d.id, d.date,
            (SELECT COALESCE(SUM(ended_at - started_at), 0) FROM sessions s
               WHERE s.day_id = d.id AND s.status = 'completed') AS focus_ms,
-           (SELECT COUNT(*) FROM priorities p WHERE p.day_id = d.id AND p.done = 1) AS priorities_done,
+           (SELECT COUNT(*) FROM priorities p WHERE p.day_id = d.id AND p.done = 1 AND p.text <> '') AS priorities_done,
            (SELECT COUNT(*) FROM priorities p WHERE p.day_id = d.id AND p.text <> '') AS priorities_total
          FROM days d WHERE d.user_id = ? ORDER BY d.date DESC LIMIT ?`,
       )
@@ -71,7 +71,7 @@ export function daysRouter(db: DB): Router {
     }
     const day = findDay(db, user.id, date);
     if (!day) {
-      res.json({ date, punches: [], priorities: prioritiesJson([]), sessions: [] });
+      res.json({ date, punches: [], priorities: [], overtimeApproved: false, sessions: [] });
       return;
     }
     const punches = db.prepare(`SELECT * FROM punches WHERE day_id = ? ORDER BY position`).all(day.id) as PunchRow[];
@@ -83,6 +83,7 @@ export function daysRouter(db: DB): Router {
       date,
       punches: punchesJson(punches),
       priorities: prioritiesJson(priorities),
+      overtimeApproved: Boolean(day.overtime_approved),
       sessions: sessions.map(sessionRowToJson),
     });
   });
@@ -119,6 +120,8 @@ export function daysRouter(db: DB): Router {
     res.json({ punches });
   });
 
+  // Full replace, like punches: array order is the position, so removing a row is just
+  // sending the list without it. An empty row can never be "done".
   r.put('/:date/priorities', (req, res) => {
     const user = currentUser(req);
     const { date } = req.params;
@@ -127,28 +130,40 @@ export function daysRouter(db: DB): Router {
       return;
     }
     const input = (req.body as { priorities?: unknown })?.priorities;
-    if (!Array.isArray(input)) {
-      res.status(400).json({ error: 'priorities must be an array.' });
+    if (!Array.isArray(input) || input.length > MAX_PRIORITIES) {
+      res.status(400).json({ error: `priorities must be an array of at most ${MAX_PRIORITIES}.` });
       return;
     }
     const rows: { position: number; text: string; done: boolean }[] = [];
-    for (const item of input as Record<string, unknown>[]) {
-      const position = item?.position;
-      if (position !== 1 && position !== 2 && position !== 3) continue;
+    for (let i = 0; i < input.length; i++) {
+      const item = (input[i] ?? {}) as Record<string, unknown>;
       const text = typeof item.text === 'string' ? item.text.slice(0, 500) : '';
-      rows.push({ position, text, done: Boolean(item.done) });
+      rows.push({ position: i + 1, text, done: text.trim() !== '' && Boolean(item.done) });
     }
     db.transaction(() => {
       const dayId = ensureDay(db, user.id, date);
-      const up = db.prepare(
-        `INSERT INTO priorities (day_id, position, text, done) VALUES (?, ?, ?, ?)
-         ON CONFLICT(day_id, position) DO UPDATE SET text = excluded.text, done = excluded.done`,
-      );
-      for (const p of rows) up.run(dayId, p.position, p.text, p.done ? 1 : 0);
+      db.prepare(`DELETE FROM priorities WHERE day_id = ?`).run(dayId);
+      const ins = db.prepare(`INSERT INTO priorities (day_id, position, text, done) VALUES (?, ?, ?, ?)`);
+      for (const p of rows) ins.run(dayId, p.position, p.text, p.done ? 1 : 0);
     })();
-    const dayId = findDay(db, user.id, date)!.id;
-    const priorities = db.prepare(`SELECT * FROM priorities WHERE day_id = ?`).all(dayId) as PriorityRow[];
-    res.json({ priorities: prioritiesJson(priorities) });
+    res.json({ priorities: rows });
+  });
+
+  r.put('/:date/overtime', (req, res) => {
+    const user = currentUser(req);
+    const { date } = req.params;
+    if (!isValidDateKey(date)) {
+      res.status(400).json({ error: 'Invalid date.' });
+      return;
+    }
+    const approved = (req.body as { approved?: unknown })?.approved;
+    if (typeof approved !== 'boolean') {
+      res.status(400).json({ error: 'approved must be a boolean.' });
+      return;
+    }
+    const dayId = ensureDay(db, user.id, date);
+    db.prepare(`UPDATE days SET overtime_approved = ? WHERE id = ?`).run(approved ? 1 : 0, dayId);
+    res.json({ overtimeApproved: approved });
   });
 
   return r;
