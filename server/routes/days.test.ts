@@ -2,6 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from '../dev/harness.js';
 import { ensureLocalUsers, LOCAL_USERS, seedDatabase } from '../dev/seed.js';
 import { MAX_PRIORITIES } from '../../shared/settings.js';
+import { punchWindow } from '../../shared/dates.js';
+
+/** An instant on 2026-09-01 in any zone: its UTC midnight plus a few hours. */
+const T0 = Date.UTC(2026, 8, 1);
+const HOUR = 3_600_000;
 
 let app: TestApp;
 beforeEach(async () => {
@@ -47,15 +52,15 @@ describe('GET /api/days/:date', () => {
 
 describe('PUT /api/days/:date/punches', () => {
   it('replaces the rows and derives kind from position parity', async () => {
-    const r = await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: 1000.4 }, { at: null }, { at: null }, { at: 5000 }] });
+    const r = await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: T0 + 8 * HOUR + 0.4 }, { at: null }, { at: null }, { at: T0 + 17 * HOUR }] });
     expect(r.status).toBe(200);
     expect(r.body.punches).toEqual([
-      { position: 0, kind: 'in', at: 1000 },
+      { position: 0, kind: 'in', at: T0 + 8 * HOUR },
       { position: 1, kind: 'out', at: null },
       { position: 2, kind: 'in', at: null },
-      { position: 3, kind: 'out', at: 5000 },
+      { position: 3, kind: 'out', at: T0 + 17 * HOUR },
     ]);
-    const again = await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: 2000 }, { at: null }] });
+    const again = await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: T0 + 9 * HOUR }, { at: null }] });
     expect(again.body.punches).toHaveLength(2);
     expect((await app.api.get('/api/days/2026-09-01')).body.punches).toHaveLength(2);
   });
@@ -63,6 +68,18 @@ describe('PUT /api/days/:date/punches', () => {
   it('validates the body', async () => {
     expect((await app.api.put('/api/days/2026-09-01/punches', { punches: 'x' })).status).toBe(400);
     expect((await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: 'noon' }] })).status).toBe(400);
+    // A time the client could never format would break every render of that day.
+    for (const at of [1e308, -1e308, 2 ** 53, Number.MAX_SAFE_INTEGER]) {
+      const r = await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at }] });
+      expect(r.status, String(at)).toBe(400);
+      expect(r.body.error).toBe('Punch 0 has an invalid time.');
+    }
+    // A punch belongs to its day, with a day of slack for the zone that wrote it.
+    const { from, to } = punchWindow('2026-09-01');
+    expect((await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: from }, { at: to }] })).status).toBe(200);
+    expect((await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: from - 1 }] })).status).toBe(400);
+    expect((await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: null }, { at: to + 1 }] })).body.error).toBe('Punch 1 has an invalid time.');
+    expect((await app.api.get('/api/days/2026-09-01')).body.punches.map((p: { at: number }) => p.at)).toEqual([from, to]);
     const tooMany = await app.api.put('/api/days/2026-09-01/punches', { punches: Array(41).fill({ at: null }) });
     expect(tooMany.status).toBe(400);
     expect(tooMany.body.error).toMatch(/limited to 40/);
@@ -95,6 +112,22 @@ describe('PUT /api/days/:date/priorities', () => {
     expect(r.body.priorities).toHaveLength(1);
     const day = await app.api.get('/api/days/2026-09-01');
     expect(day.body.priorities.map((p: { text: string; position: number }) => [p.position, p.text])).toEqual([[1, 'Three']]);
+  });
+
+  it('rejects an addedAt it could not have stamped', async () => {
+    const bad = async (addedAt: unknown) => {
+      const r = await app.api.put('/api/days/2026-09-01/priorities', { priorities: [{ text: 'x', addedAt }] });
+      expect(r.status, String(addedAt)).toBe(400);
+      expect(r.body.error).toBe('Priority 1 has an invalid addedAt.');
+    };
+    await bad(1e308);
+    await bad(-1);
+    await bad(Date.now() + 2 * 86_400_000);
+    await bad('yesterday');
+    // Absent or null is fine: the server stamps a text row itself.
+    const ok = await app.api.put('/api/days/2026-09-01/priorities', { priorities: [{ text: 'x', addedAt: null }, { text: 'y' }] });
+    expect(ok.status).toBe(200);
+    for (const p of ok.body.priorities) expect(typeof p.addedAt).toBe('number');
   });
 
   it('rejects duplicate ids and oversized lists', async () => {
@@ -259,7 +292,7 @@ describe('days are scoped to the signed-in user', () => {
 
     // Writes on the same date land on B's own day and leave A's untouched.
     const before = (await a.get(`/api/days/${date}`)).body;
-    expect((await b.put(`/api/days/${date}/punches`, { punches: [{ at: 1 }, { at: null }, { at: null }, { at: null }] })).status).toBe(200);
+    expect((await b.put(`/api/days/${date}/punches`, { punches: [{ at: punchWindow(date).from + 44 * HOUR }, { at: null }, { at: null }, { at: null }] })).status).toBe(200);
     expect((await b.put(`/api/days/${date}/priorities`, { priorities: [{ text: 'Mine' }] })).status).toBe(200);
     expect((await b.put(`/api/days/${date}/overtime`, { approved: true })).status).toBe(200);
     expect((await b.put(`/api/days/${date}/retro`, { note: 'b', done: true })).status).toBe(200);

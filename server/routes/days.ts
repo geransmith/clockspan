@@ -4,7 +4,7 @@ import type { Config } from '../config.js';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { countDays, pruneDays, reclaimSpace } from '../retention.js';
-import { isValidDateKey } from '../../shared/dates.js';
+import { isValidDateKey, punchWindow } from '../../shared/dates.js';
 import { dateParam, ensureDay, findDay, requireDate, sessionRowToJson, UID_RE, type DayRow, type SessionRow } from './shared.js';
 import { MAX_PRIORITIES } from '../../shared/settings.js';
 import type { Day, DaySummary, Priority, PruneInfo, Punch } from '../../shared/api.js';
@@ -12,6 +12,18 @@ import type { Day, DaySummary, Priority, PruneInfo, Punch } from '../../shared/a
 const MAX_RANGE_DAYS = 400;
 const MAX_RETRO_NOTE = 4000;
 const MAX_PUNCHES = 40;
+const DAY_MS = 86_400_000;
+
+/**
+ * A stored instant is a safe integer the client can format; anything else (1e308, say) would
+ * throw in `Intl.DateTimeFormat` on every render of that day. Rounded, since the client may
+ * send sub-millisecond floats.
+ */
+function parseInstant(raw: unknown, from: number, to: number): number | null {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return null;
+  const ms = Math.round(raw);
+  return Number.isSafeInteger(ms) && ms >= from && ms <= to ? ms : null;
+}
 
 export interface PunchRow {
   id: number;
@@ -159,15 +171,18 @@ export function daysRouter(db: DB, config: Config): Router {
       res.status(400).json({ error: `punches is limited to ${MAX_PUNCHES} rows.` });
       return;
     }
+    // A punch belongs to its day: a time days away from the key is a client bug, not data.
+    const window = punchWindow(date);
     const punches: { position: number; kind: 'in' | 'out'; at: number | null }[] = [];
     for (let i = 0; i < input.length; i++) {
       const item = input[i] as Record<string, unknown> | null;
-      const at = item?.at;
-      if (at !== null && at !== undefined && !(typeof at === 'number' && Number.isFinite(at))) {
+      const raw = item?.at;
+      const at = raw == null ? null : parseInstant(raw, window.from, window.to);
+      if (raw != null && at == null) {
         res.status(400).json({ error: `Punch ${i} has an invalid time.` });
         return;
       }
-      punches.push({ position: i, kind: i % 2 === 0 ? 'in' : 'out', at: at == null ? null : Math.round(at) });
+      punches.push({ position: i, kind: i % 2 === 0 ? 'in' : 'out', at });
     }
     db.transaction(() => {
       const dayId = ensureDay(db, user.id, date);
@@ -203,7 +218,12 @@ export function daysRouter(db: DB, config: Config): Router {
       }
       if (!uid && hasText) uid = randomBytes(6).toString('hex');
       if (uid) seen.add(uid);
-      let addedAt = typeof item.addedAt === 'number' && Number.isFinite(item.addedAt) ? Math.round(item.addedAt) : null;
+      // Stamped by the client when the row first got text; never in the future.
+      let addedAt = item.addedAt == null ? null : parseInstant(item.addedAt, 0, Date.now() + DAY_MS);
+      if (item.addedAt != null && addedAt == null) {
+        res.status(400).json({ error: `Priority ${i + 1} has an invalid addedAt.` });
+        return;
+      }
       if (addedAt == null && hasText) addedAt = Date.now();
       rows.push({ position: i + 1, text, done: hasText && Boolean(item.done), uid, addedAt });
     }
