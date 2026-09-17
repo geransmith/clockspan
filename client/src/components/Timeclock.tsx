@@ -1,6 +1,7 @@
 import { useSettings } from '../hooks/useSettings';
+import { useTimeFormat } from '../hooks/useTimeFormat';
 import { pickCelebration } from '../lib/celebrate';
-import { formatDuration, formatDurationCeil, formatTime, resolveHour12, roundToMinute } from '../lib/format';
+import { formatDuration, formatDurationCeil, roundToMinute } from '../lib/format';
 import { clockOutPosition, extraPairs, kindForPosition, secondMealApplies, type ExtraPair, type TimeclockResult } from '../lib/timeclock';
 import type { Punch } from '../types';
 import { Plus, Trash, X } from './Icons';
@@ -21,6 +22,7 @@ interface Props {
 
 export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, onChange, onOvertimeChange, onEditingChange }: Props) {
   const { settings } = useSettings();
+  const { hour12, formatTime } = useTimeFormat();
   // A day flagged while the feature was on only counts while it is still on.
   const otOn = settings.overtimeApproval && overtimeApproved;
 
@@ -104,7 +106,6 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
   const after = pairs.filter((p) => !p.beforeLunch);
   const clockOutPos = clockOutPosition(punches);
 
-  const hour12 = resolveHour12();
   // A punch after the clock-in is expected to come after it; the time field's AM/PM guess uses that.
   const clockInAt = byPos.get(0)?.at ?? null;
   const row = (punch: Punch, label: string) => (

@@ -109,6 +109,8 @@ function fmtMinutes(m: number): string {
 export interface EventContext {
   /** Clock-in instant, for "clocked in at 8:32 AM". */
   clockIn: number;
+  /** Write times with AM/PM (see `resolveHour12`). */
+  hour12: boolean;
   /** Work-day target in minutes (settings.workMinutes). */
   workMinutes: number;
   /** Lunch deadline window in minutes (settings.lunchDeadlineMinutes). */
@@ -131,8 +133,8 @@ export interface EventCopy {
  * has to answer which alarm, which rule, and where the deadline came from.
  */
 export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
-  const target = formatTime(e.target);
-  const clockIn = formatTime(ctx.clockIn);
+  const target = formatTime(e.target, ctx.hour12);
+  const clockIn = formatTime(ctx.clockIn, ctx.hour12);
   const day = fmtMinutes(ctx.workMinutes);
   const alarm = e.id === 'lunchBy' ? 'Lunch alarm' : e.id === 'secondMeal' ? '2nd meal alarm' : e.id === 'retro' ? 'Retrospective' : 'Clock-out alarm';
   const mealHours = fmtMinutes(ctx.secondMealAfterMinutes);

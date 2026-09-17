@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dayName, formatCountdown, formatDuration, formatDurationCeil } from './format';
+import { dayName, formatCountdown, formatDuration, formatDurationCeil, formatTime, resolveHour12 } from './format';
 
 describe('dayName', () => {
   it('names today and yesterday, and dates everything else', () => {
@@ -27,5 +27,20 @@ describe('durations', () => {
     expect(formatCountdown(59)).toBe('0:59');
     expect(formatCountdown(25 * 60)).toBe('25:00');
     expect(formatCountdown(3661)).toBe('1:01:01');
+  });
+});
+
+describe('formatTime', () => {
+  const at = new Date(2026, 8, 16, 7, 5).getTime();
+  it('writes the 12-hour and 24-hour clocks whatever the runner locale', () => {
+    expect(formatTime(at, true)).toMatch(/^7:05\s?[AaPp]/);
+    expect(formatTime(at, false)).toMatch(/^0?7:05$/);
+    expect(formatTime(new Date(2026, 8, 16, 0, 0).getTime(), false)).toMatch(/^0?0:00$/);
+  });
+
+  it('resolves the fixed formats and falls back to the locale for auto', () => {
+    expect(resolveHour12('12h')).toBe(true);
+    expect(resolveHour12('24h')).toBe(false);
+    expect(typeof resolveHour12('auto')).toBe('boolean');
   });
 });

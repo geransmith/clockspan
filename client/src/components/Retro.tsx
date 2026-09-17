@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { RETRO_PROMPT } from '../lib/copy';
-import { formatDuration, formatTime } from '../lib/format';
+import { useTimeFormat } from '../hooks/useTimeFormat';
+import { formatDuration } from '../lib/format';
 import { reviewDay } from '../lib/retro';
 import type { Priority, Session } from '../types';
 import { Check } from './Icons';
@@ -20,6 +21,7 @@ interface Props {
  * sheet, so a new day mounts with its own note.
  */
 export function Retro({ priorities, sessions, note, reviewedAt, onChange }: Props) {
+  const { formatTime } = useTimeFormat();
   const review = reviewDay(priorities, sessions);
   const [draft, setDraft] = useState(note);
   const dirty = useRef(false);

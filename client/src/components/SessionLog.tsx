@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import { useDayStore } from '../hooks/useDay';
 import { CONFIRM } from '../lib/copy';
-import { formatDuration, formatTime } from '../lib/format';
+import { useTimeFormat } from '../hooks/useTimeFormat';
+import { formatDuration } from '../lib/format';
 import type { Priority, Session } from '../types';
 import { Trash } from './Icons';
 
@@ -60,6 +61,7 @@ function Row({
   onEdit: (patch: { label?: string; priorityUid?: string | null }) => void;
   onDelete: () => void;
 }) {
+  const { formatTime } = useTimeFormat();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(s.label);
   const editBox = useRef<HTMLSpanElement>(null);

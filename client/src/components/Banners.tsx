@@ -1,10 +1,11 @@
 import { useSyncExternalStore } from 'react';
 import { dismissBanner, getBanners, subscribeBanners } from '../lib/alerts';
-import { formatTime } from '../lib/format';
+import { useTimeFormat } from '../hooks/useTimeFormat';
 import { Bell, X } from './Icons';
 
 export function Banners() {
   const banners = useSyncExternalStore(subscribeBanners, getBanners, getBanners);
+  const { formatTime } = useTimeFormat();
   if (banners.length === 0) return null;
   return (
     <div className="banners" aria-live="polite">

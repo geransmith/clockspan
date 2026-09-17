@@ -3,6 +3,7 @@ import type { Settings } from '../types';
 import { secondMealApplies, type TimeclockResult } from '../lib/timeclock';
 import { describeEvent, dueEvents, type AlarmTarget } from '../lib/alarms';
 import { alert, dismissByTag } from '../lib/alerts';
+import { resolveHour12 } from '../lib/format';
 
 const STORAGE_PREFIX = 'focus:alarms:';
 
@@ -81,6 +82,7 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     // threshold replaces it (same tag) and a moved/disarmed target clears it (above).
     const ctx = {
       clockIn: tc.clockIn,
+      hour12: resolveHour12(settings.timeFormat),
       workMinutes: settings.workMinutes,
       lunchDeadlineMinutes: settings.lunchDeadlineMinutes,
       secondMealAfterMinutes: settings.secondMealAfterMinutes,
