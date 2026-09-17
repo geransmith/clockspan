@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FocusEvent, type KeyboardEvent } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type KeyboardEvent } from 'react';
 import { mergeProps, useDateSegment, useLocale, useTimeField } from 'react-aria';
 import { useTimeFieldState, type DateFieldState, type DateSegment } from 'react-stately';
 import type { Time } from '@internationalized/date';
@@ -50,13 +50,15 @@ function Field({ value, date, hour12, anchorAt, label, onCommit, onDiscard }: Pr
 
   // React Stately fills the period from its placeholder (AM) as soon as an hour is typed.
   // Replace that with the guess while the hour is still being typed: once the minute is in,
-  // the value is complete and saved, and a change to the hour then is a deliberate edit.
+  // the value is complete and saved, and a change to the hour then is a deliberate edit. A
+  // layout effect so the correction lands in the same commit, before the next keystroke can
+  // build on the uncorrected state.
   const hourSeg = state.segments.find((s) => s.type === 'hour');
   const hourValue = hourSeg && !hourSeg.isPlaceholder ? (hourSeg.value ?? null) : null;
   const minuteEmpty = state.segments.find((s) => s.type === 'minute')?.isPlaceholder !== false;
   // `state` is a new object every render; the effect only has to run when the hour changes.
   const latest = useLatest(state);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!hour12 || hourValue == null || !minuteEmpty || periodTouched.current) return;
     const wanted = guessPeriod(hourValue, 0, date, anchorAt) === 'AM' ? 0 : 1;
     const period = latest.current.segments.find((s) => s.type === 'dayPeriod');
