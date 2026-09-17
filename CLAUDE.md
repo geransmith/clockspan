@@ -10,6 +10,9 @@
 - Run `npm test` and `npm run typecheck` before reporting a change as done.
 - The dev DB (`data/focus.db`) migrates itself when the server starts; a schema change only
   needs a new entry in `MIGRATIONS` (`server/db.ts`).
+- The dev DB is disposable. Insert, change, or delete rows with curl or `sqlite3`, or delete
+  the file, without asking; seed whatever state a check or test needs. Details under
+  "Dev data is disposable" in AGENTS.md.
 - To exercise alarms quickly: Settings → Work day and Second meal due after = a few minutes
   each, then clock in. "Overtime approved" on the card or on the clock-out banner
   is the quick way to silence the clock-out alarm mid-test; lunch must keep counting down.

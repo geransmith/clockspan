@@ -99,6 +99,34 @@ docker compose up -d --build
 Dev DB: `./data/focus.db` (gitignored). Delete it to start fresh. `AUTH_MODE=local npm run dev`
 to exercise the setup/login pages.
 
+## Dev data is disposable
+
+On a dev checkout, `./data/focus.db` is test data and nothing else. Add, edit, and delete
+rows, users, days, punches, sessions, and settings as the task needs; delete the file to start
+over. None of this needs confirmation. Production data lives only on the Docker `/data` volume,
+which the dev machine cannot reach; the only local state worth protecting is the source tree.
+
+Use this to make checks real instead of reasoned about. Seed what a flow needs (past days,
+punches, a running session, a second user under `AUTH_MODE=local`) and then walk it. Run the
+destructive paths for real: delete a session or user, cancel a timer, `DELETE /api/settings`.
+
+Ways in:
+
+- The UI in the preview pane.
+- `curl` against `http://localhost:3000/api/...` while `npm run dev` is up (`:5173` proxies
+  the same routes). The API accepts the same JSON the client sends.
+- `sqlite3 data/focus.db` for direct inserts or a look at what a route wrote.
+- `DATA_DIR=<scratch dir> npm run dev` for a separate DB when the current one should survive.
+
+Tests: pure-function tests in `client/src/lib` stay the default. When a behavior cannot be
+covered that way (a route, `mergeSettings`, a migration that backfills existing rows like the
+`priorities.uid` one), a test may call `openDatabase(<temp path>)`, insert the rows it needs,
+and remove the file afterwards. `vite.config.ts` `test.include` only matches
+`client/src/**/*.test.ts` today; extend it when the first server test lands.
+
+Limits that still hold: never commit `data/` or `.env`, and never point `DATA_DIR` outside the
+repo or the session scratchpad.
+
 ## Architecture rules (do not break)
 
 - **The server stores epoch milliseconds and never decides what "today" is.** The client sends
@@ -207,6 +235,9 @@ to exercise the setup/login pages.
 
 ## Verification expectations
 
+- Seed the state a check needs (past days, linked and unlinked sessions, a second user)
+  instead of skipping it because the DB is empty. The retro and review bullets below
+  depend on this.
 - `npm test` green and `npm run typecheck` clean.
 - Walk the flow you touched at desktop width **and** the 375 px mobile preset.
 - Check light and dark if you touched CSS.
