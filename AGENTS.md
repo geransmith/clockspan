@@ -82,8 +82,8 @@ client/                 Vite root → dist/client
                         newUid(), placePriority() (timer → priorities)
   src/lib/retro.ts      PURE: reviewDay(priorities, sessions) → on/off-plan time, mid-day rows
   src/lib/review.ts     PURE: periodRange(kind, today, offset) (Mon-start weeks), reviewRange(days)
-  src/lib/format.ts     Intl formatting (time, dates, durations, dayName), resolveHour12();
-                        re-exports shared/dates
+  src/lib/format.ts     Intl formatting (time, dates, durations, dayName); formatTime(ms, hour12)
+                        + resolveHour12(timeFormat); re-exports shared/dates
   src/lib/timefield.ts  PURE: msToTime/timeToMs (epoch ms ↔ @internationalized/date Time on a
                         date key), guessPeriod() (the AM/PM the time field fills in)
   src/lib/layout.ts     CARDS (titles for CARD_IDS), DEFAULT_LAYOUT, normalizeLayout()
@@ -91,7 +91,7 @@ client/                 Vite root → dist/client
                         setters), useTimer (running session, remaining/progress, mutationSeq re-sync,
                         wake lock, tab title), useAlarms (fired keys in localStorage per day),
                         useLatest (ref that tracks a value for callbacks), useNow, useRoute,
-                        useSettled, useWakeLock
+                        useSettled, useTimeFormat ({ hour12, formatTime } from the setting), useWakeLock
   src/auth/             AuthGate (mode/user → Setup | Login | OIDC button | app), pages
   src/components/       Header, RunningTimerBar, Banners, Sheet (dnd-kit) + CardShell,
                         Timeclock + TimeField (React Aria hour/minute/AM-PM segments), Priorities,
@@ -212,6 +212,10 @@ repo or the session scratchpad.
   `client/src/lib/alarms.ts`.** Both are pure functions of `(inputs, settings, now)` with tests.
   Components and hooks never re-derive these. Past days go through `timeclockForDate`
   (`now = min(now, endOfDay)` and `{ frozen: true }`).
+- **Times are written through `useTimeFormat()`** (components) or `formatTime(ms, hour12)` with
+  an explicit `hour12` (pure libs: `describeEvent` takes it on `EventContext`). The setting is
+  `timeFormat: 'auto' | '12h' | '24h'`; `resolveHour12('auto')` asks the browser locale, so the
+  default changes nothing for anyone. `TimeField` shows its AM/PM segment from the same answer.
 - **All user-facing alerts go through `client/src/lib/alerts.ts`** (`alert()`, `chime()`,
   banners). Never call `new Notification(...)` or create an `AudioContext` anywhere else.
   `unlockAudio()` must be called from a user gesture (timer start does this) for iOS.

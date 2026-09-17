@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
-import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS } from '../../../shared/settings.js';
+import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS, type TimeFormat } from '../../../shared/settings.js';
 import * as api from '../api';
 import { useAuth } from '../auth/AuthGate';
 import { useLatest } from '../hooks/useLatest';
@@ -74,6 +74,14 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             <DurationField label="Lunch must start within" minutes={settings.lunchDeadlineMinutes} onCommit={(m) => set({ lunchDeadlineMinutes: m })} />
             <MinutesField label="Lunch length" minutes={settings.lunchMinutes} min={0} max={480} onCommit={(m) => set({ lunchMinutes: m })} />
             <DurationField label="Second meal due after (hours worked)" minutes={settings.secondMealAfterMinutes} onCommit={(m) => set({ secondMealAfterMinutes: m })} />
+            <div className="setting-row">
+              <span>Time format</span>
+              <select className="input select" value={settings.timeFormat} onChange={(e) => set({ timeFormat: e.target.value as TimeFormat })} aria-label="Time format">
+                <option value="auto">Automatic</option>
+                <option value="12h">12-hour</option>
+                <option value="24h">24-hour</option>
+              </select>
+            </div>
             <Toggle
               label="Overtime approval"
               hint="Adds an 'Overtime approved' switch to the timeclock and to the clock-out alarm. It silences that day's clock-out alarm only; meal alarms stay on. Turn off if overtime doesn't apply to you."

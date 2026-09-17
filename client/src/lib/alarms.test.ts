@@ -98,7 +98,7 @@ describe('dueEvents', () => {
 describe('describeEvent', () => {
   // 8:32 clock-in, 8h day, lunch within 4h.
   const clockIn = new Date(2026, 8, 16, 8, 32).getTime();
-  const ctx = { clockIn, workMinutes: 480, lunchDeadlineMinutes: 240, secondMealAfterMinutes: 600 };
+  const ctx = { clockIn, hour12: true, workMinutes: 480, lunchDeadlineMinutes: 240, secondMealAfterMinutes: 600 };
   const ev = (id: AlarmId, kind: AlarmEvent['kind'], minutes: number, target: number): AlarmEvent => ({
     key: eventKey(D, id, kind, minutes, target),
     id,

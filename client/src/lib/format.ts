@@ -1,18 +1,26 @@
 import { addDays, parseDateKey } from '../../../shared/dates.js';
+import type { TimeFormat } from '../../../shared/settings.js';
 
 export { addDays, addMonths, dateKey, endOfDay, isValidDateKey, parseDateKey, startOfMonth, startOfQuarter, startOfWeek, todayKey } from '../../../shared/dates.js';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
-const timeFmt = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+// One formatter per clock; the locale decides everything else (separators, AM/PM spelling).
+const timeFmts = new Map<boolean, Intl.DateTimeFormat>();
 const dateLongFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 const dateFullFmt = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 const monthFmt = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' });
 const dayShortFmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
 const weekdayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
 
-export function formatTime(ms: number): string {
-  return timeFmt.format(new Date(ms));
+/** "8:32 AM" or "08:32", by the user's time format (`resolveHour12`). */
+export function formatTime(ms: number, hour12: boolean): string {
+  let fmt = timeFmts.get(hour12);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', hourCycle: hour12 ? 'h12' : 'h23' });
+    timeFmts.set(hour12, fmt);
+  }
+  return fmt.format(new Date(ms));
 }
 
 export function formatDateLong(key: string): string {
@@ -71,8 +79,10 @@ export function formatCountdown(seconds: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
 }
 
-/** Whether the browser locale writes times with AM/PM (the time field follows `formatTime`). */
-export function resolveHour12(): boolean {
+/** Whether times get AM/PM: the setting, or for 'auto' whatever the browser locale does. */
+export function resolveHour12(pref: TimeFormat = 'auto'): boolean {
+  if (pref === '12h') return true;
+  if (pref === '24h') return false;
   return new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions().hour12 ?? true;
 }
 

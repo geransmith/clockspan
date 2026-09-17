@@ -6,10 +6,12 @@ import {
   DEFAULT_SETTINGS,
   MAX_RETENTION_DAYS,
   MIN_RETENTION_DAYS,
+  TIME_FORMATS,
   type AlarmSettings,
   type CardId,
   type RetentionSettings,
   type Settings,
+  type TimeFormat,
 } from '../../shared/settings.js';
 
 const isBool = (v: unknown): v is boolean => typeof v === 'boolean';
@@ -68,6 +70,7 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     lunchDeadlineMinutes: isInt(p.lunchDeadlineMinutes, 1, 24 * 60) ? p.lunchDeadlineMinutes : base.lunchDeadlineMinutes,
     lunchMinutes: isInt(p.lunchMinutes, 0, 8 * 60) ? p.lunchMinutes : base.lunchMinutes,
     secondMealAfterMinutes: isInt(p.secondMealAfterMinutes, 1, 24 * 60) ? p.secondMealAfterMinutes : base.secondMealAfterMinutes,
+    timeFormat: TIME_FORMATS.includes(p.timeFormat as TimeFormat) ? (p.timeFormat as TimeFormat) : base.timeFormat,
     adjustStepMinutes: isInt(p.adjustStepMinutes, 1, 60) ? p.adjustStepMinutes : base.adjustStepMinutes,
     priorityCount: isInt(p.priorityCount, 1, 10) ? p.priorityCount : base.priorityCount,
     sound: isBool(p.sound) ? p.sound : base.sound,

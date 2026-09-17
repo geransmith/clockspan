@@ -9,6 +9,10 @@ export type CardId = (typeof CARD_IDS)[number];
 
 export type AlarmId = 'lunchBy' | 'clockOut' | 'secondMeal' | 'retro';
 
+/** How times are written: the browser locale's way, or 12-hour / 24-hour regardless. */
+export const TIME_FORMATS = ['auto', '12h', '24h'] as const;
+export type TimeFormat = (typeof TIME_FORMATS)[number];
+
 export interface AlarmSettings {
   enabled: boolean;
   leadMinutes: number[];
@@ -27,6 +31,7 @@ export interface Settings {
   lunchMinutes: number;
   /** Hours *worked* after which a second meal period is due (California: 10 h). */
   secondMealAfterMinutes: number;
+  timeFormat: TimeFormat;
   adjustStepMinutes: number;
   /** Rows a fresh day's priorities card starts with. */
   priorityCount: number;
@@ -57,6 +62,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lunchDeadlineMinutes: 300,
   lunchMinutes: 30,
   secondMealAfterMinutes: 600,
+  timeFormat: 'auto',
   adjustStepMinutes: 5,
   priorityCount: 3,
   sound: true,

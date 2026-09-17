@@ -38,6 +38,13 @@ describe('/api/settings', () => {
     expect((await app.api.get('/api/settings')).body).toEqual(next.body);
   });
 
+  it('accepts a known time format and falls back for anything else', async () => {
+    expect((await app.api.put('/api/settings', { timeFormat: '24h' })).body.timeFormat).toBe('24h');
+    expect((await app.api.put('/api/settings', { timeFormat: '25h' })).body.timeFormat).toBe('24h');
+    expect((await app.api.put('/api/settings', { timeFormat: 12 })).body.timeFormat).toBe('24h');
+    expect((await app.api.put('/api/settings', { timeFormat: 'auto' })).body.timeFormat).toBe('auto');
+  });
+
   it('keeps layout order, drops unknown cards and appends missing ones visible', async () => {
     const r = await app.api.put('/api/settings', {
       layout: [{ id: 'timer', visible: false }, { id: 'nope' }, { id: 'timer', visible: true }, { id: 'log' }],
