@@ -35,6 +35,11 @@ server/                 Express API → dist/server (tsc)
   config.ts             env parsing; throws with a clear message on bad/missing config
   db.ts                 open + pragmas (WAL, foreign_keys), append-only MIGRATIONS, default user
   cli.ts                `reset-password <username> [password]`
+  dev/seed.ts           seedDatabase(db, opts) → SeedManifest: deterministic sample days;
+                        ensureLocalUsers(). Dev + tests only, excluded from the build
+  dev/seed-cli.ts       `npm run seed` (flags: --fresh --running --days N --quarter --today)
+  dev/harness.ts        startTestApp(): real app on an in-memory DB + fetch client w/ cookie jar
+  **/*.test.ts          route/auth/db tests beside the code they cover (Vitest, via the harness)
   auth/session.ts       cookie session (token hashed in DB, sliding 30d expiry)
   auth/password.ts      scrypt hash/verify + username/password validation
   auth/middleware.ts    resolveUser / requireAuth / requireAdmin / currentUser(req)
@@ -88,8 +93,10 @@ Dockerfile docker-compose.yml .env.example README.md
 nvm use 24
 npm install
 npm run dev            # API on :3000 (tsx watch, PORT pinned) + Vite on :5173 (proxies /api, /auth)
-npm test               # vitest
-npm run typecheck      # both tsconfigs
+npm test               # vitest: client lib tests + server API tests (~1 s)
+npm test -- server/routes/days   # one file
+npm run typecheck      # client + server (tsconfig.server.test.json also covers dev/ and tests)
+npm run seed           # fill data/focus.db with sample days; see "Dev data is disposable"
 npm run build          # dist/client + dist/server
 npm start              # node dist/server/index.js (PORT default 3000; Docker sets 8080)
 npm run reset-password -- <username>
@@ -106,23 +113,40 @@ rows, users, days, punches, sessions, and settings as the task needs; delete the
 over. None of this needs confirmation. Production data lives only on the Docker `/data` volume,
 which the dev machine cannot reach; the only local state worth protecting is the source tree.
 
-Use this to make checks real instead of reasoned about. Seed what a flow needs (past days,
-punches, a running session, a second user under `AUTH_MODE=local`) and then walk it. Run the
-destructive paths for real: delete a session or user, cancel a timer, `DELETE /api/settings`.
+Use this to make checks real instead of reasoned about. Run the destructive paths for real:
+delete a session or user, cancel a timer, `DELETE /api/settings`.
 
-Ways in:
+Start from `npm run seed`, not from an empty DB. It writes, for the default user, the last 10
+weekdays with punches, priorities, linked/unlinked/cancelled sessions and retro notes
+(templates: a normal day, an extra out/in pair with a mid-day priority, an approved-overtime
+day, an unreviewed day with a cancelled session, a half day with no lunch), plus today clocked
+in two hours ago with one done priority and two sessions. Dates are relative to the day you
+run it. Flags: `--running` (leave a 25-min timer going), `--fresh` (also reset settings and
+logins), `--days N`, `--quarter` (every weekday since the start of the previous calendar
+quarter, so Review → Quarter and Month have data), `--today YYYY-MM-DD`. Under
+`AUTH_MODE=local` it creates `admin` and `sam` (password `clockspan-dev`) and seeds both. It
+replaces the user's days each run, leaves settings alone unless `--fresh`, never deletes
+user rows (the running server caches the default user), and is safe while `npm run dev` is
+up; reload the page.
 
-- The UI in the preview pane.
+Ways in, cheapest first:
+
+- `npm test`: server tests boot the real app on an in-memory DB through
+  `startTestApp()` (`server/dev/harness.ts`) and hit it with `fetch`. `seed: true` gives the
+  test the same sample days and a manifest of exactly what was inserted, so assertions read
+  from `app.seeded` instead of hardcoding. Reach into `app.db` to set up what the API cannot
+  (a session that started an hour ago). One app per test (`beforeEach`/`afterEach`).
 - `curl` against `http://localhost:3000/api/...` while `npm run dev` is up (`:5173` proxies
   the same routes). The API accepts the same JSON the client sends.
 - `sqlite3 data/focus.db` for direct inserts or a look at what a route wrote.
-- `DATA_DIR=<scratch dir> npm run dev` for a separate DB when the current one should survive.
+- `DATA_DIR=<scratch dir> npm run seed && DATA_DIR=<scratch dir> npm run dev` for a separate
+  DB when the current one should survive.
+- The UI in the preview pane, for what only the UI shows.
 
-Tests: pure-function tests in `client/src/lib` stay the default. When a behavior cannot be
-covered that way (a route, `mergeSettings`, a migration that backfills existing rows like the
-`priorities.uid` one), a test may call `openDatabase(<temp path>)`, insert the rows it needs,
-and remove the file afterwards. `vite.config.ts` `test.include` only matches
-`client/src/**/*.test.ts` today; extend it when the first server test lands.
+Tests: pure-function tests in `client/src/lib` for math and copy; harness tests in
+`server/**/*.test.ts` for routes, validation, scoping, `mergeSettings`, and migrations
+(`migrate(db, upTo)` stops early so a backfill can be tested against old rows, see
+`server/db.test.ts`). No temp files: `openDatabase(':memory:')`.
 
 Limits that still hold: never commit `data/` or `.env`, and never point `DATA_DIR` outside the
 repo or the session scratchpad.
@@ -212,7 +236,9 @@ repo or the session scratchpad.
   `App.tsx` into `useAlarms` if alarms depend on it.
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
   `currentUser(req).id`, validate input, return `{ error }` JSON on failure → add the call to
-  `client/src/api.ts` and types to `types.ts`.
+  `client/src/api.ts` and types to `types.ts` → cover it in that router's `*.test.ts` (happy
+  path, each 400, and that another user gets a 404/empty result). If the seed should carry
+  the new field, add it to `server/dev/seed.ts` and its manifest.
 - **A schema change**: append a migration string to `MIGRATIONS` in `db.ts`. Never edit an
   existing entry.
 
@@ -235,12 +261,21 @@ repo or the session scratchpad.
 
 ## Verification expectations
 
-- Seed the state a check needs (past days, linked and unlinked sessions, a second user)
-  instead of skipping it because the DB is empty. The retro and review bullets below
-  depend on this.
+Prove a change at the cheapest level that can show it, and stop there:
+
+1. Pure functions (`client/src/lib`): a unit test.
+2. Anything in `server/`: a harness test in the router's `*.test.ts`. Route behavior,
+   validation, scoping, persistence and migrations are proven here, never by clicking.
+3. One-off looks at live data: `curl` against the seeded dev DB.
+4. The browser, only for what the API cannot show: how a card renders, drag/drop, banners
+   and alarms firing, the timer bar, light/dark, the 375 px pass. Run `npm run seed` first
+   (with `--running` for timer work) so the pass starts with data. Scope it to the surface
+   you touched; one pass at the mobile preset is enough unless the change is desktop-only
+   layout. Do not re-walk flows a test already covers.
+
 - `npm test` green and `npm run typecheck` clean.
-- Walk the flow you touched at desktop width **and** the 375 px mobile preset.
-- Check light and dark if you touched CSS.
+- If you touched CSS or a component: walk the touched surface at the 375 px mobile preset
+  (and desktop width if the change has a desktop-only branch); check light and dark.
 - If you touched the timer or alarms: reload mid-timer, background/foreground the tab, and let a
   short timer expire — the log must show the planned duration and one chime.
 - If you touched punches: walk a pair added before lunch, an early Clock out (done +
@@ -253,9 +288,9 @@ repo or the session scratchpad.
   lists the ticked row, buttons read "Add anyway / Finish what's open"); tap a chip in the
   timer, start, and the log row shows the number; type a new label with "Also add to today's
   priorities" and the first empty row fills; reassign a log row via its select.
-- If you touched the retro or review: a day with one linked and one unlinked session must
-  split On plan / Off plan to the same total as the log, and History → Review → Week must add
-  the day's numbers to its tiles.
+- If you touched the retro or review: `retro.test.ts` / `review.test.ts` prove the split and
+  the rollup; the browser check is one look at a seeded day's retro card and at History →
+  Review → Week (`--quarter` for Month / Quarter).
 
 ## Gotchas
 

@@ -5,7 +5,7 @@ import Database from 'better-sqlite3';
 export type DB = Database.Database;
 
 // Append-only. Each entry runs once, in order, guarded by PRAGMA user_version.
-const MIGRATIONS: string[] = [
+export const MIGRATIONS: string[] = [
   `
   CREATE TABLE users (
     id            INTEGER PRIMARY KEY,
@@ -95,9 +95,10 @@ export function openDatabase(dbPath: string): DB {
   return db;
 }
 
-function migrate(db: DB): void {
+/** Runs pending migrations up to `upTo` (all of them by default; tests stop early). */
+export function migrate(db: DB, upTo: number = MIGRATIONS.length): void {
   const current = db.pragma('user_version', { simple: true }) as number;
-  for (let v = current; v < MIGRATIONS.length; v++) {
+  for (let v = current; v < upTo; v++) {
     const sql = MIGRATIONS[v]!;
     db.transaction(() => {
       db.exec(sql);

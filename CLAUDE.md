@@ -8,10 +8,17 @@
 - `window.confirm` dialogs (cancel timer, delete session/user) are awkward to drive in the
   pane; hit the API with curl for those steps.
 - Run `npm test` and `npm run typecheck` before reporting a change as done.
+- A change in `server/` is verified by adding or extending a test in that router's
+  `*.test.ts` (see `server/dev/harness.ts`), not by driving the browser. Browser passes are
+  for visible UI changes only, scoped to what changed; see "Verification expectations" in
+  AGENTS.md.
+- Run `npm run seed` (add `--running` for timer work, `--quarter` for Month / Quarter
+  review) before any browser check so the page has data. It is safe while the dev server
+  is running; reload the page.
 - The dev DB (`data/focus.db`) migrates itself when the server starts; a schema change only
   needs a new entry in `MIGRATIONS` (`server/db.ts`).
-- The dev DB is disposable. Insert, change, or delete rows with curl or `sqlite3`, or delete
-  the file, without asking; seed whatever state a check or test needs. Details under
+- The dev DB is disposable. `npm run seed` is the normal way to fill it; insert, change, or
+  delete rows with curl or `sqlite3`, or delete the file, without asking. Details under
   "Dev data is disposable" in AGENTS.md.
 - To exercise alarms quickly: Settings → Work day and Second meal due after = a few minutes
   each, then clock in. "Overtime approved" on the card or on the clock-out banner

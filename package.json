@@ -18,7 +18,8 @@
     "start": "node dist/server/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "seed": "tsx server/dev/seed-cli.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.test.json",
     "reset-password": "tsx server/cli.ts reset-password"
   },
   "dependencies": {

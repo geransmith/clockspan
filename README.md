@@ -32,16 +32,47 @@ npm run dev
 Other commands:
 
 ```bash
-npm test               # unit tests for the timeclock math and alarm scheduling
+npm test               # unit tests (timeclock math, alarms) + API tests against an in-memory DB
 npm run typecheck      # client + server type check
+npm run seed           # fill the local database with sample days (see below)
 npm run build          # production build → dist/
 npm start              # serve the production build on http://localhost:8080
+```
+
+### Sample data
+
+A fresh checkout has an empty database, so History, the retrospective and the week / month
+/ quarter review have nothing to show. `npm run seed` fills `./data/focus.db` with sample
+days so you can try those screens without punching a fortnight by hand:
+
+- the last ten weekdays, each with clock in / lunch / clock out punches, three or four
+  priorities (some ticked), a few focus sessions (most linked to a priority, one not) and a
+  retrospective note. Among them: a day with an extra break, a day worked late with
+  "Overtime approved", a half day with no lunch, a day that was never reviewed, and one
+  cancelled session;
+- today, clocked in two hours ago with one priority done and two sessions logged.
+
+Dates are relative to the day you run it, so the sample always lands in the current week.
+Run it again whenever you want the sample back: it replaces the seeded days but leaves your
+settings alone. It only writes to the local database (`DATA_DIR`, default `./data`); it
+never touches a Docker `/data` volume. Safe to run while `npm run dev` is up; reload the page.
+
+```bash
+npm run seed                      # the default set above
+npm run seed -- --running         # also leave a 25-minute focus timer running
+npm run seed -- --quarter         # every weekday since the start of last quarter, for the
+                                  # month and quarter reviews
+npm run seed -- --days 30         # a specific number of past weekdays
+npm run seed -- --fresh           # also reset settings and sign everyone out
+npm run seed -- --today 2026-03-02   # build the sample around another date
 ```
 
 ### Trying the auth modes locally
 
 ```bash
 AUTH_MODE=local npm run dev       # first visit shows the "create account" page
+AUTH_MODE=local npm run seed      # creates users "admin" (admin) and "sam", password
+                                  # clockspan-dev, each with their own sample days
 ```
 
 For OIDC you need a reachable provider; see [Authentik](#authentik-oidc) below and run with the `OIDC_*` and `APP_URL` variables set (`APP_URL=http://localhost:5173` while developing).
