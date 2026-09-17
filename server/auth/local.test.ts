@@ -73,6 +73,34 @@ describe('AUTH_MODE=local', () => {
     expect((await c.post('/api/auth/login', { username: 'geran', password: 'new password' })).status).toBe(200);
   });
 
+  it('rate-limits current-password guesses per account, whatever the address', async () => {
+    await setup();
+    for (let i = 0; i < 5; i++) {
+      expect((await app.api.post('/api/auth/password', { currentPassword: `guess ${i}`, newPassword: 'new password' })).status).toBe(400);
+    }
+    const locked = await app.api.post('/api/auth/password', { currentPassword: ADMIN.password, newPassword: 'new password' });
+    expect(locked.status).toBe(429);
+    expect(Number(locked.headers.get('retry-after'))).toBeGreaterThan(0);
+    // Still the old password: nothing was changed while locked.
+    expect((await app.client().post('/api/auth/login', { username: 'geran', password: ADMIN.password })).status).toBe(200);
+    // The lock is on the account, not the caller: another session of the same user is locked too.
+    const other = app.client();
+    await other.post('/api/auth/login', { username: 'geran', password: ADMIN.password });
+    expect((await other.post('/api/auth/password', { currentPassword: ADMIN.password, newPassword: 'new password' })).status).toBe(429);
+    // A login failure and a password-change failure count in separate buckets (address vs account).
+    expect((await app.client().post('/api/auth/login', { username: 'geran', password: 'wrong' })).status).toBe(401);
+  });
+
+  it('answers 409, not 500, when two admins add the same username at once', async () => {
+    await setup();
+    const [a, b] = await Promise.all([
+      app.api.post('/api/auth/users', { username: 'twin', password: 'twin password' }),
+      app.api.post('/api/auth/users', { username: 'twin', password: 'twin password' }),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([201, 409]);
+    expect(app.db.prepare(`SELECT COUNT(*) AS n FROM users WHERE username = 'twin'`).get()).toEqual({ n: 1 });
+  });
+
   it('signs the other sessions out when the password changes, and keeps this one', async () => {
     await setup();
     const phone = app.client();
@@ -106,7 +134,7 @@ describe('AUTH_MODE=local', () => {
     await sam.post('/api/auth/login', { username: 'sam', password: 'sam password' });
     expect((await sam.get('/api/auth/users')).status).toBe(403);
     expect((await sam.post('/api/auth/users', { username: 'eve', password: 'eve password' })).status).toBe(403);
-    await sam.put('/api/days/2026-09-01/punches', { punches: [{ at: 1 }, { at: null }, { at: null }, { at: null }] });
+    await sam.put('/api/days/2026-09-01/punches', { punches: [{ at: Date.UTC(2026, 8, 1, 8) }, { at: null }, { at: null }, { at: null }] });
     expect(app.db.prepare(`SELECT COUNT(*) AS n FROM days`).get()).toEqual({ n: 1 });
 
     expect((await app.api.del(`/api/auth/users/${created.body.user.id}`)).body).toEqual({ ok: true });

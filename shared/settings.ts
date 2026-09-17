@@ -72,7 +72,16 @@ const DEFAULT_ALARM: AlarmSettings = { enabled: true, leadMinutes: [15, 5, 1], o
 // The retrospective is one nudge before the day ends, not a deadline: no repeat by default.
 const DEFAULT_RETRO_ALARM: AlarmSettings = { enabled: true, leadMinutes: [30], onDue: false, overdueEveryMinutes: 0 };
 
-export const DEFAULT_SETTINGS: Settings = {
+/** Frozen all the way down: both sides hand this object out as-is when there is nothing to merge. */
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const v of Object.values(value)) deepFreeze(v);
+  }
+  return value;
+}
+
+export const DEFAULT_SETTINGS: Settings = deepFreeze({
   workMinutes: 480,
   lunchDeadlineMinutes: 300,
   lunchMinutes: 30,
@@ -90,4 +99,4 @@ export const DEFAULT_SETTINGS: Settings = {
   alarms: { lunchBy: { ...DEFAULT_ALARM }, clockOut: { ...DEFAULT_ALARM }, secondMeal: { ...DEFAULT_ALARM }, retro: { ...DEFAULT_RETRO_ALARM } },
   layout: CARD_IDS.map((id) => ({ id, visible: CARD_DEFAULT_VISIBLE[id] })),
   retention: { enabled: false, days: 365 },
-};
+});

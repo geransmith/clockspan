@@ -9,6 +9,8 @@ import type { AuthInfo } from '../../shared/api.js';
 
 const FLOW_COOKIE = 'fs_oidc';
 const FLOW_TTL_SEC = 600;
+/** The provider's claim is stored as-is otherwise; a name is a label, not a document. */
+const MAX_DISPLAY_NAME = 100;
 
 /** The two error pages are HTML with a retry link; anything interpolated into them goes through this. */
 export function escapeHtml(s: string): string {
@@ -57,7 +59,8 @@ class Discovery {
   }
 }
 
-export function upsertOidcUser(db: DB, sub: string, displayName: string): UserRow {
+export function upsertOidcUser(db: DB, sub: string, rawName: string): UserRow {
+  const displayName = rawName.slice(0, MAX_DISPLAY_NAME);
   const existing = db.prepare(`SELECT * FROM users WHERE oidc_sub = ?`).get(sub) as UserRow | undefined;
   if (existing) {
     if (existing.display_name !== displayName) {

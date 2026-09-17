@@ -127,6 +127,18 @@ describe('mergeSettings', () => {
     expect(mergeSettings(DEFAULT_SETTINGS, 'x')).toBe(DEFAULT_SETTINGS);
   });
 
+  it('hands out defaults nobody can change in place', () => {
+    expect(Object.isFrozen(DEFAULT_SETTINGS)).toBe(true);
+    expect(Object.isFrozen(DEFAULT_SETTINGS.alarms.lunchBy)).toBe(true);
+    expect(Object.isFrozen(DEFAULT_SETTINGS.alarms.lunchBy.leadMinutes)).toBe(true);
+    expect(Object.isFrozen(DEFAULT_SETTINGS.layout[0])).toBe(true);
+    expect(() => (DEFAULT_SETTINGS.alarms.lunchBy.leadMinutes as number[]).push(1)).toThrow();
+    // A merge that keeps an untouched alarm returns the frozen default; a patched one is a fresh object.
+    const out = mergeSettings(DEFAULT_SETTINGS, { alarms: { lunchBy: { onDue: false } } });
+    expect(Object.isFrozen(out.alarms.clockOut)).toBe(true);
+    expect(Object.isFrozen(out.alarms.lunchBy)).toBe(false);
+  });
+
   it('keeps retention within bounds, field by field', () => {
     expect(mergeSettings(DEFAULT_SETTINGS, { retention: { enabled: true, days: 90 } }).retention).toEqual({ enabled: true, days: 90 });
     expect(mergeSettings(DEFAULT_SETTINGS, { retention: { enabled: 'yes', days: 7 } }).retention).toEqual(DEFAULT_SETTINGS.retention);

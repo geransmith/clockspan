@@ -30,6 +30,20 @@ export function isValidDateKey(s: unknown): s is string {
   return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
 }
 
+const HOUR_MS = 3_600_000;
+
+/**
+ * The epoch range a punch on this key can plausibly have, whatever zone wrote it. The UI
+ * only ever places a time on the key's own local day; with zones from UTC-12 to UTC+14 every
+ * such instant lies within the key's UTC midnight -14 h .. +36 h, so a day of slack either
+ * side is generous. Computed in UTC like `isValidDateKey`, so the server never needs a zone.
+ */
+export function punchWindow(key: string): { from: number; to: number } {
+  const [y, m, d] = key.split('-').map(Number) as [number, number, number];
+  const midnightUtc = Date.UTC(y, m - 1, d);
+  return { from: midnightUtc - 36 * HOUR_MS, to: midnightUtc + 60 * HOUR_MS };
+}
+
 export function addDays(key: string, n: number): string {
   const d = parseDateKey(key);
   d.setDate(d.getDate() + n);

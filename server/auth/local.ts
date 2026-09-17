@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type Database from 'better-sqlite3';
 import type { DB, UserRow } from '../db.js';
 import type { Config } from '../config.js';
 import { DUMMY_HASH, hashPassword, validatePassword, validateUsername, verifyPassword } from './password.js';
@@ -123,13 +124,24 @@ export function localAuthRouter(db: DB, config: Config): Router {
     res.json({ ok: true });
   });
 
+  // The current-password check is a login in disguise: a stolen cookie must not be able to
+  // guess it at scrypt speed. Same limiter, keyed by the account rather than the address.
   r.post('/password', requireAuth, async (req, res) => {
     const user = currentUser(req);
+    const key = `user:${user.id}`;
+    const gate = limiter.check(key);
+    if (!gate.ok) {
+      res.setHeader('Retry-After', String(gate.retryAfterSec));
+      res.status(429).json({ error: `Too many attempts. Try again in ${Math.ceil(gate.retryAfterSec / 60)} min.` });
+      return;
+    }
     const { currentPassword, newPassword } = req.body ?? {};
     if (!user.password_hash || typeof currentPassword !== 'string' || !(await verifyPassword(currentPassword, user.password_hash))) {
+      limiter.fail(key);
       res.status(400).json({ error: 'Current password is incorrect.' });
       return;
     }
+    limiter.reset(key);
     const err = validatePassword(newPassword);
     if (err) {
       res.status(400).json({ error: err });
@@ -159,12 +171,23 @@ export function localAuthRouter(db: DB, config: Config): Router {
       res.status(409).json({ error: 'That username is already taken.' });
       return;
     }
-    const info = db
-      .prepare(
-        `INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at)
-         VALUES ('local', ?, ?, ?, 0, ?)`,
-      )
-      .run(name, await hashPassword(password), name, Date.now());
+    const hash = await hashPassword(password);
+    let info: Database.RunResult;
+    try {
+      info = db
+        .prepare(
+          `INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at)
+           VALUES ('local', ?, ?, ?, 0, ?)`,
+        )
+        .run(name, hash, name, Date.now());
+    } catch (err) {
+      // The check above ran before the hash; a second create for the same name can land in between.
+      if ((err as { code?: string }).code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        res.status(409).json({ error: 'That username is already taken.' });
+        return;
+      }
+      throw err;
+    }
     const user = db.prepare(`SELECT * FROM users WHERE id = ?`).get(info.lastInsertRowid) as UserRow;
     res.status(201).json({ user: publicUser(user) });
   });
