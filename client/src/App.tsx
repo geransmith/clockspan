@@ -40,12 +40,14 @@ function Shell() {
   const { running } = useTimer();
   const now = useNow(1000);
 
-  // Alarms always watch *today*, whatever the sheet is showing. Punches settle for a
-  // few seconds first so back-filling three times in a row doesn't fire for each
-  // half-entered state.
+  // Alarms always watch *today*, whatever the sheet is showing. They wait while focus is
+  // inside the punch rows and for a few seconds after it leaves, so back-filling a day
+  // (clock in, think, lunch out) is judged on the finished set, not on each half-entered
+  // state. A focused row means the user is at the card; nothing here is finer than a minute.
   const today = todayKey(now);
   const { day: todayDay, store } = useDay(today);
-  const punches = useSettled(todayDay?.punches, 3000);
+  const [editingPunches, setEditingPunches] = useState(false);
+  const punches = useSettled(todayDay?.punches, 3000, editingPunches);
   const todayTc = useMemo(() => (punches ? computeTimeclock(punches, settings, now) : null), [punches, settings, now]);
   // A day flagged while the feature was on stays silent only while it is still on.
   const overtimeApproved = settings.overtimeApproval && Boolean(todayDay?.overtimeApproved);
@@ -78,7 +80,7 @@ function Shell() {
       />
       <main className="main">
         {route.view === 'sheet' ? (
-          <Sheet date={route.date} today={today} now={now} customize={customize} jumpTo={jumpTo} onJumped={onJumped} />
+          <Sheet date={route.date} today={today} now={now} customize={customize} jumpTo={jumpTo} onJumped={onJumped} onPunchEditing={setEditingPunches} />
         ) : (
           <History today={today} now={now} onOpen={(date) => navigate({ view: 'sheet', date })} />
         )}
