@@ -166,7 +166,8 @@ function cachedBrowser() {
 /** No browser on this machine: fetch Chrome for Testing once into node_modules/.cache. */
 function fetchBrowser() {
   log('no Chromium found; fetching Chrome for Testing into node_modules/.cache (one time, ~150 MB)');
-  const r = spawnSync('npx', ['--yes', '@puppeteer/browsers', 'install', 'chrome@stable', '--path', BROWSER_CACHE], {
+  // Pinned: `npx --yes` runs whatever it downloads, so the package version is fixed here.
+  const r = spawnSync('npx', ['--yes', '@puppeteer/browsers@3.2.2', 'install', 'chrome@stable', '--path', BROWSER_CACHE], {
     cwd: ROOT,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'inherit'],
