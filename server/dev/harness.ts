@@ -43,7 +43,8 @@ export interface TestApp {
 }
 
 export interface StartOptions {
-  authMode?: 'none' | 'local';
+  /** `oidc` points discovery at a port nothing listens on: the routes that don't need the provider can still be tested. */
+  authMode?: 'none' | 'local' | 'oidc';
   /** Seed the default user (AUTH_MODE=none only); pass options to override the defaults. */
   seed?: boolean | Partial<Omit<SeedOptions, 'userId'>>;
   /** Extra environment for `loadConfig`, e.g. `{ RETENTION_DAYS: '30' }`. */
@@ -91,7 +92,11 @@ function makeClient(baseUrl: string): Client {
 
 export async function startTestApp(opts: StartOptions = {}): Promise<TestApp> {
   const authMode = opts.authMode ?? 'none';
-  const config = loadConfig({ AUTH_MODE: authMode, DATA_DIR: os.tmpdir(), PORT: '0', ...opts.env });
+  const oidcEnv =
+    authMode === 'oidc'
+      ? { OIDC_ISSUER: 'http://127.0.0.1:1/', OIDC_CLIENT_ID: 'clockspan', OIDC_CLIENT_SECRET: 'secret', APP_URL: 'http://localhost' }
+      : {};
+  const config = loadConfig({ AUTH_MODE: authMode, DATA_DIR: os.tmpdir(), PORT: '0', ...oidcEnv, ...opts.env });
   const db = openDatabase(':memory:');
   const app = createApp(db, config);
   const server = await new Promise<import('node:http').Server>((resolve) => {
