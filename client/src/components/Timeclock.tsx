@@ -15,9 +15,11 @@ interface Props {
   overtimeApproved: boolean;
   onChange: (punches: Punch[]) => void;
   onOvertimeChange: (approved: boolean) => void;
+  /** Focus entered or left the punch rows: the app holds alarms while a time is being typed. */
+  onEditingChange?: (editing: boolean) => void;
 }
 
-export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, onChange, onOvertimeChange }: Props) {
+export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, onChange, onOvertimeChange, onEditingChange }: Props) {
   const { settings } = useSettings();
   // A day flagged while the feature was on only counts while it is still on.
   const otOn = settings.overtimeApproval && overtimeApproved;
@@ -176,7 +178,13 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
         </label>
       )}
 
-      <div className="punches">
+      <div
+        className="punches"
+        onFocus={() => onEditingChange?.(true)}
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) onEditingChange?.(false);
+        }}
+      >
         {fixedRow(0, 'Clock in')}
         {pairBlock(before, 0)}
         {fixedRow(1, 'Lunch out')}

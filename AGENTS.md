@@ -252,7 +252,8 @@ repo or the session scratchpad.
   (`days.retro_at`) disarms it. Its banner button jumps to the card (`jumpTo` in `App.tsx`).
 - **Alarm event keys embed the target minute** (`eventKey`), so a moved target re-arms and a
   reload never re-fires. Fired keys live in `localStorage` under `focus:alarms:<date>` and are
-  pruned to today. Today's punches are settled for 3 s (`useSettled`) before evaluation.
+  pruned to today. Today's punches are held while focus is inside the punch rows and settle
+  for 3 s after it leaves (`useSettled(value, ms, hold)`, wired in `App.tsx`) before evaluation.
 - **Per-date card drafts reset by remounting**: `Sheet.tsx` keys `Priorities` and `Retro` by
   date, so neither needs a "date changed" effect. Local drafts that mirror a prop use the
   "adjust state while rendering" form (see `DurationField`), not a `useEffect` + `setState`,

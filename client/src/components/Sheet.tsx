@@ -31,9 +31,11 @@ interface Props {
   /** A card to scroll into view once the sheet has rendered (a banner's "Open …" button). */
   jumpTo?: CardId | null;
   onJumped?: () => void;
+  /** See `Timeclock.onEditingChange`. */
+  onPunchEditing?: (editing: boolean) => void;
 }
 
-export function Sheet({ date, today, now, customize, jumpTo, onJumped }: Props) {
+export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEditing }: Props) {
   const { settings, update } = useSettings();
   const { day, store } = useDay(date);
   const isToday = date === today;
@@ -89,6 +91,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped }: Props) 
             overtimeApproved={day.overtimeApproved}
             onChange={(p) => void store.setPunches(date, p)}
             onOvertimeChange={(v) => void store.setOvertimeApproved(date, v)}
+            onEditingChange={onPunchEditing}
           />
         );
       case 'priorities':
