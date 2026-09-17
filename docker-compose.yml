@@ -7,10 +7,11 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      # Unraid: keep the SQLite database in appdata so it survives container updates.
+      # Persist the SQLite database on the host so it survives image rebuilds.
+      # This path follows Unraid's appdata convention; point it at any host directory.
       - /mnt/user/appdata/clockspan:/data
     environment:
-      # Unraid's default file owner/group. Remove both to run as root instead.
+      # File owner/group to run as (99/100 is Unraid's convention). Remove both to run as root.
       PUID: "99"
       PGID: "100"
 

@@ -1,5 +1,7 @@
 # Clockspan
 
+*Vibe coded — built almost entirely with AI ([Claude Code](https://claude.com/claude-code)), with light human review.*
+
 **Clockspan** is a self-hosted, single-day focus sheet for getting through a workday with ADHD. One page, four cards:
 
 - **Timeclock** — punch in, punch out for lunch, punch back in (plus any extra out/in pairs). The sheet tells you **when lunch must start by** (default: within 5 hours) and **when your day ends** (default: 8 hours worked + 30-minute lunch), live, and re-plans if lunch runs long.
@@ -59,33 +61,7 @@ docker run -d --name clockspan -p 8080:8080 -v /path/on/host:/data \
   -e PUID=1000 -e PGID=1000 -e AUTH_MODE=local clockspan
 ```
 
-### Unraid
-
-There is no Community Applications template yet, so use one of these:
-
-**Option A — Compose Manager plugin.** Install *Compose Manager* from Community Applications, create a new stack, paste `docker-compose.yml`, put the repository next to it (or point `build:` at wherever you cloned it), and start the stack. The compose file already maps `/mnt/user/appdata/clockspan:/data` and sets `PUID=99` / `PGID=100`.
-
-**Option B — build over SSH, add the container in the Docker tab.**
-
-```bash
-ssh root@tower
-cd /mnt/user/appdata && git clone <this repo> clockspan-src && cd clockspan-src
-docker build -t clockspan .
-```
-
-Then Docker tab → *Add Container* → toggle *Advanced view*:
-
-| Field | Value |
-| --- | --- |
-| Repository | `clockspan` |
-| Port | `8080` → `8080` |
-| Path | container `/data` → host `/mnt/user/appdata/clockspan` |
-| Variable | `PUID=99`, `PGID=100` |
-| Variable | `AUTH_MODE=none` / `local` / `oidc` |
-| Variable (oidc) | `APP_URL`, `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` |
-| Variable (behind a proxy) | `TRUST_PROXY=true` |
-
-To update: pull, `docker build -t clockspan .` again, and restart the container. Data is untouched.
+To update: pull the latest code, rebuild the image, and restart the container — the database in the mounted volume is untouched.
 
 ### Environment variables
 
@@ -149,7 +125,7 @@ The app refuses to start with a clear message if any of these are missing. If Au
 **Switching modes later.** Data is keyed by user. Going from `none` to `local` creates a fresh admin; the old implicit user's data stays in the database. To hand it to the new account:
 
 ```bash
-sqlite3 /mnt/user/appdata/clockspan/focus.db \
+sqlite3 /path/on/host/focus.db \
   "UPDATE days SET user_id = (SELECT id FROM users WHERE kind='local' ORDER BY id LIMIT 1) WHERE user_id = (SELECT id FROM users WHERE kind='default');"
 ```
 
@@ -175,7 +151,7 @@ Set `TRUST_PROXY=true` so the app sees real client IPs (rate limiting) and `APP_
 The whole state is one file: `focus.db` (plus `-wal`/`-shm` while running). Either stop the container and copy the directory, or take a consistent snapshot live:
 
 ```bash
-sqlite3 /mnt/user/appdata/clockspan/focus.db ".backup /mnt/user/backups/focus-$(date +%F).db"
+sqlite3 /path/on/host/focus.db ".backup /path/to/backups/focus-$(date +%F).db"
 ```
 
 ## Development notes

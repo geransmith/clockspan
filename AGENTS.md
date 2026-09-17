@@ -6,8 +6,8 @@ A self-hosted, single-day **focus sheet** for working through a workday with ADH
 timeclock that computes when lunch must start and when the day ends, the top three priorities
 for the day, a Pomodoro-style focus timer that logs what was done, and alarms as lunch/clock-out
 approach. Every day is persisted so past days can be revisited. Data is **per user**; auth is
-optional (`AUTH_MODE=none | local | oidc`). Runs as one Docker container on Unraid with SQLite
-on a `/data` volume. Mobile-first and installable (PWA manifest, pass-through service worker).
+optional (`AUTH_MODE=none | local | oidc`). Runs as one Docker container with SQLite on a
+`/data` volume. Mobile-first and installable (PWA manifest, pass-through service worker).
 
 ## Stack & versions
 
@@ -156,7 +156,8 @@ to exercise the setup/login pages.
 ## Gotchas
 
 - `better-sqlite3` is native. The Dockerfile installs alpine build deps so it compiles when no
-  prebuilt binary matches. Docker is verified on Unraid, not on the dev Mac (no Docker here).
+  prebuilt binary matches. Docker is verified only in the deployed environment, not on the dev
+  Mac (no Docker here).
 - The preview harness exports `PORT=5173`; that's why `dev:server` pins `PORT=3000`.
 - `client/public/sw.js` is intentionally a pass-through service worker (installability only).
   Do not add caching without a versioning strategy or users will see stale assets.
