@@ -14,7 +14,7 @@ const db = openDatabase(config.dbPath);
 const app = createApp(db, config);
 
 const server = app.listen(config.port, () => {
-  console.log(`Focus Sheet listening on :${config.port} (auth: ${config.authMode}, db: ${config.dbPath})`);
+  console.log(`Clockspan listening on :${config.port} (auth: ${config.authMode}, db: ${config.dbPath})`);
 });
 
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {

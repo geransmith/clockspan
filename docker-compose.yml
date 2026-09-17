@@ -1,14 +1,14 @@
 services:
-  focus-sheet:
+  clockspan:
     build: .
-    image: focus-sheet:latest
-    container_name: focus-sheet
+    image: clockspan:latest
+    container_name: clockspan
     restart: unless-stopped
     ports:
       - "8080:8080"
     volumes:
       # Unraid: keep the SQLite database in appdata so it survives container updates.
-      - /mnt/user/appdata/focus-sheet:/data
+      - /mnt/user/appdata/clockspan:/data
     environment:
       # Unraid's default file owner/group. Remove both to run as root instead.
       PUID: "99"
@@ -28,7 +28,7 @@ services:
       # COOKIE_SECURE: "true"   # defaults to true when APP_URL is https
 
       # OIDC (Authentik): Providers → your provider → "OpenID Configuration Issuer"
-      # OIDC_ISSUER: https://auth.example.com/application/o/focus-sheet/
+      # OIDC_ISSUER: https://auth.example.com/application/o/clockspan/
       # OIDC_CLIENT_ID: ...
       # OIDC_CLIENT_SECRET: ...
       # OIDC_SCOPES: openid profile email

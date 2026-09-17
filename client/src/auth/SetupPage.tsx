@@ -29,7 +29,7 @@ export function SetupPage({ onDone }: { onDone: () => Promise<void> }) {
   return (
     <div className="gate">
       <form className="gate-card" onSubmit={submit}>
-        <h1>Welcome to Focus Sheet</h1>
+        <h1>Welcome to Clockspan</h1>
         <p className="muted">Create the first account. This account is the admin and can add others later.</p>
         <label className="field">
           <span>Username</span>

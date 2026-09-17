@@ -1,4 +1,4 @@
-# Focus Sheet — agent guide
+# Clockspan — agent guide
 
 ## What this is
 

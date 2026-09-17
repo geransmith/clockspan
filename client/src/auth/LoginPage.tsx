@@ -24,7 +24,7 @@ export function LoginPage({ onDone }: { onDone: () => Promise<void> }) {
   return (
     <div className="gate">
       <form className="gate-card" onSubmit={submit}>
-        <h1>Focus Sheet</h1>
+        <h1>Clockspan</h1>
         <label className="field">
           <span>Username</span>
           <input className="input" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required autoFocus />
@@ -46,7 +46,7 @@ export function OidcLoginPage() {
   return (
     <div className="gate">
       <div className="gate-card">
-        <h1>Focus Sheet</h1>
+        <h1>Clockspan</h1>
         <p className="muted">Sign in with your identity provider to continue.</p>
         <a className="btn btn-primary btn-lg" href="/auth/login">
           Sign in

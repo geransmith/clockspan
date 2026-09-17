@@ -23,7 +23,7 @@ export function Header({ route, today, customize, onNavigate, onToggleCustomize,
       <div className="topbar-row">
         <button className="brand" onClick={() => onNavigate({ view: 'sheet', date: today })} aria-label="Go to today">
           <span className="brand-dot" aria-hidden="true" />
-          Focus Sheet
+          Clockspan
         </button>
         <div className="topbar-actions">
           {onSheet && (

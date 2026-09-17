@@ -1,6 +1,6 @@
 {
-  "name": "Focus Sheet",
-  "short_name": "Focus",
+  "name": "Clockspan",
+  "short_name": "Clockspan",
   "description": "A single-day focus sheet: timeclock, top-3 priorities and a focus timer.",
   "start_url": "/",
   "scope": "/",

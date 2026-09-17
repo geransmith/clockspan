@@ -96,7 +96,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             </Section>
           )}
 
-          <p className="muted small center">Focus Sheet · data stays on your server</p>
+          <p className="muted small center">Clockspan · data stays on your server</p>
         </div>
       </div>
     </div>

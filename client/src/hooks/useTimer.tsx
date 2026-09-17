@@ -23,7 +23,7 @@ interface TimerCtx {
 }
 
 const Ctx = createContext<TimerCtx | null>(null);
-const BASE_TITLE = 'Focus Sheet';
+const BASE_TITLE = 'Clockspan';
 
 export function TimerProvider({ children }: { children: ReactNode }) {
   const [running, setRunning] = useState<Session | null>(null);

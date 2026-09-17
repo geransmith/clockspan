@@ -48,7 +48,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     return (
       <div className="gate">
         <div className="gate-card">
-          <h1>Focus Sheet</h1>
+          <h1>Clockspan</h1>
           <p className="error">Can’t reach the server: {error}</p>
           <button className="btn btn-primary" onClick={() => void refresh()}>
             Retry
