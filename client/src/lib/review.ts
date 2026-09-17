@@ -1,5 +1,5 @@
 import type { Day, Session, Settings } from '../types';
-import { addDays, addMonths, endOfDay, formatDateSpan, formatMonth, startOfMonth, startOfQuarter, startOfWeek } from './format';
+import { addDays, addMonths, endOfDay, formatDateSpan, formatMonth, parseDateKey, startOfMonth, startOfQuarter, startOfWeek } from './format';
 import { reviewDay } from './retro';
 import { computeTimeclock } from './timeclock';
 
@@ -31,6 +31,24 @@ export function periodRange(kind: PeriodKind, today: string, offset: number): Pe
   const to = addDays(addMonths(from, 3), -1);
   const [y, m] = from.split('-').map(Number) as [number, number];
   return { kind, from, to, label: `Q${Math.floor((m - 1) / 3) + 1} ${y}` };
+}
+
+/**
+ * The `offset` that makes `periodRange` land on the period holding `date`: 0 for today's
+ * period and for any future date (the review never steps forward). The calendar opens on
+ * the month of the day being viewed, and "Review this week" jumps to a past week with it.
+ */
+export function periodOffset(kind: PeriodKind, today: string, date: string): number {
+  if (date >= today) return 0;
+  if (kind === 'week') {
+    // Whole weeks between the two Mondays; rounding absorbs a DST hour.
+    const ms = parseDateKey(startOfWeek(today)).getTime() - parseDateKey(startOfWeek(date)).getTime();
+    return Math.max(0, Math.round(ms / (7 * 86_400_000)));
+  }
+  const [ty, tm] = today.split('-').map(Number) as [number, number];
+  const [dy, dm] = date.split('-').map(Number) as [number, number];
+  if (kind === 'month') return Math.max(0, (ty - dy) * 12 + (tm - dm));
+  return Math.max(0, (ty - dy) * 4 + Math.floor((tm - 1) / 3) - Math.floor((dm - 1) / 3));
 }
 
 export interface UnplannedWork {

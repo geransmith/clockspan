@@ -32,8 +32,12 @@
 **Retrospective.** The plan next to what actually happened: time logged against each priority, the sessions that weren't on the plan, rows that were added mid-day, and a note on why. A reminder fires 30 minutes before clock-out (adjustable) so you write it while you still remember.
 
 <p align="center">
-  <img src="docs/screenshots/review.png" width="360" alt="History → Review → Month: days and hours worked, focused time on and off plan, what went off the plan, what never got done, and each day's note">
+  <img src="docs/screenshots/history.png" width="300" alt="History → Days: a month calendar with the hours worked on each day, and the picked day's worked, focused and priorities under it with Open day and Review this week">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/review.png" width="300" alt="History → Review → Month: days and hours worked, focused time on and off plan, what went off the plan, what never got done, and each day's note">
 </p>
+
+**History.** A month calendar with each day's hours on it; step back as far as your data goes. Tap a day for its worked, focused and priorities numbers and its note, then **Open day** or **Review this week**.
 
 **Week / month / quarter review.** History → **Review** rolls the retrospectives up: how much focused time went off plan and to what, which priorities never got done, and every day's note. Tap a row to open that day.
 
@@ -234,7 +238,7 @@ sqlite3 /path/on/host/focus.db \
 - **Layout.** Tap **Customize** to drag cards (long-press on phones), use ▲/▼, or hide a card. Hidden cards appear in a strip at the bottom while customizing. *Settings → Sheet → Layout → Reset to default* restores everything.
 - **Settings.** Five tabs: *Timeclock* (day length, lunch, second meal, time format, overtime approval), *Alarms* (per-alarm rules, sound, notifications), *Sheet* (priorities, timer, celebrations, layout), *Data* (old-day cleanup) and *Account* (local accounts only). **Reset all settings** in the dialog footer puts every setting back to its default; days, punches and sessions are untouched.
 - **Data.** Settings → Data. *Delete old days automatically* keeps the last N days (30 to 3650) and drops the rest, with their punches, priorities, sessions and notes; the server checks every few hours. *Delete days before* a date does the same once, after showing how many days it will remove. Today and a day with a running timer are never deleted; settings are kept. If the admin set `RETENTION_DAYS`, the tab says so and that ceiling applies whatever you choose.
-- **Past days.** Use ◀ ▶ or the date picker; History shows every recorded day with worked / focused / priorities and a tick once its retrospective is reviewed. Past days are editable; timers can only start on today.
+- **Past days.** Use ◀ ▶ or the date picker on the sheet, or **History** → **Days**: a month calendar (step back with ◀) with the hours worked on each day. Tap a day to see its worked, focused and priorities numbers, a tick once its retrospective is reviewed, and its note; **Open day** goes to that sheet and **Review this week** to that week's review. Past days are editable; timers can only start on today.
 - **Phone.** Add to Home Screen (Android: *Install app*; iOS: Share → *Add to Home Screen*). Browser notifications on iOS only work from the installed app. *Keep screen awake* keeps the countdown and chime live while the app is open; if the phone sleeps anyway, the alert fires when you come back.
 
 ## Exposing it to the internet

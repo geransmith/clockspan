@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Day, Priority, Session } from '../types';
 import { addMonths, startOfQuarter, startOfWeek } from './format';
-import { periodRange, reviewRange } from './review';
+import { periodOffset, periodRange, reviewRange } from './review';
 
 const settings = { workMinutes: 480, lunchDeadlineMinutes: 300, lunchMinutes: 30, secondMealAfterMinutes: 600 };
 const at = (key: string, h: number, m = 0) => {
@@ -44,6 +44,27 @@ describe('periodRange', () => {
     expect(periodRange('month', '2026-03-16', 1)).toMatchObject({ from: '2026-02-01', to: '2026-02-28' });
     expect(periodRange('quarter', '2026-09-16', 0)).toMatchObject({ from: '2026-07-01', to: '2026-09-30', label: 'Q3 2026' });
     expect(periodRange('quarter', '2026-02-01', 1)).toMatchObject({ from: '2025-10-01', to: '2025-12-31', label: 'Q4 2025' });
+  });
+});
+
+describe('periodOffset', () => {
+  it('counts periods back from today, never forward', () => {
+    expect(periodOffset('week', '2026-09-16', '2026-09-14')).toBe(0);
+    expect(periodOffset('week', '2026-09-16', '2026-09-13')).toBe(1); // the Sunday before
+    expect(periodOffset('week', '2026-09-16', '2026-01-02')).toBe(37); // across the year and a DST change
+    expect(periodOffset('month', '2026-09-16', '2026-09-01')).toBe(0);
+    expect(periodOffset('month', '2026-03-16', '2025-11-30')).toBe(4);
+    expect(periodOffset('quarter', '2026-09-16', '2026-07-01')).toBe(0);
+    expect(periodOffset('quarter', '2026-02-01', '2025-06-30')).toBe(3);
+    expect(periodOffset('week', '2026-09-16', '2026-09-21')).toBe(0);
+    expect(periodOffset('month', '2026-09-16', '2026-10-01')).toBe(0);
+    // Round trip: the offset always lands periodRange on the period holding the date.
+    for (const kind of ['week', 'month', 'quarter'] as const) {
+      for (const date of ['2025-12-30', '2026-01-01', '2026-09-15']) {
+        const range = periodRange(kind, '2026-09-16', periodOffset(kind, '2026-09-16', date));
+        expect(range.from <= date && date <= range.to, `${kind} ${date}`).toBe(true);
+      }
+    }
   });
 });
 
