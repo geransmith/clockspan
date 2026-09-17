@@ -15,7 +15,7 @@ has the user-facing description.
 ## Stack & versions
 
 - Node **24** (Active LTS). `nvm use 24` locally; `node:24-alpine` in Docker.
-- Frontend: React 19 + TypeScript + Vite 7. Drag/drop: `@dnd-kit/sortable`. No router lib — the
+- Frontend: React 19 + TypeScript + Vite 8. Drag/drop: `@dnd-kit/sortable`. No router lib — the
   date and view live in the URL query (`hooks/useRoute.ts`). No CSS framework.
 - Backend: Express 5 (ESM, `NodeNext`, imports use `.js` extensions), `better-sqlite3` (native),
   `openid-client` v6 for OIDC, `cookie` for cookie parsing. Passwords: `node:crypto` scrypt (async).
@@ -29,6 +29,8 @@ has the user-facing description.
 ```
 shared/                 Imported by BOTH sides (always with a `.js` suffix); pure data + functions
   settings.ts           Settings type, DEFAULT_SETTINGS, CARD_IDS, MAX_PRIORITIES, retention bounds
+  api.ts                the wire types (Day, Session, Punch, Priority, DaySummary, PruneInfo, AuthInfo…);
+                        server JSON builders are annotated with them, the client reads them
   dates.ts              date keys: dateKey/todayKey/parseDateKey/isValidDateKey/addDays/endOfDay,
                         startOfWeek/Month/Quarter, addMonths (+ dates.test.ts)
 server/                 Express API → dist/server (tsc)
@@ -64,7 +66,7 @@ client/                 Vite root → dist/client
   public/               manifest.webmanifest, icons/, sw.js (pass-through)
   src/App.tsx           provider stack + Shell (route, customize, settings, today's alarms)
   src/api.ts            fetch wrapper; dispatches UNAUTHENTICATED_EVENT on 401
-  src/types.ts          client JSON shapes (Day, Session, …); re-exports the shared Settings types
+  src/types.ts          re-exports only: the shared wire types (api.ts) and Settings types
   src/styles.css        design tokens (:root, dark via prefers-color-scheme), all component CSS
   src/lib/timeclock.ts  PURE: computeTimeclock(punches, settings, now, {frozen}) → tiles/state,
                         timeclockForDate/clampToDay (past days freeze at their end), normalizePunches/
@@ -159,9 +161,12 @@ repo or the session scratchpad.
 
 ## Architecture rules (do not break)
 
-- **Anything both sides need lives in `shared/`** (`settings.ts`, `dates.ts`) and is imported
-  from there with a `.js` suffix. Never mirror a constant, default or type into the other tree;
-  the client's `types.ts` re-exports the shared types so component imports stay short.
+- **Anything both sides need lives in `shared/`** (`settings.ts`, `dates.ts`, `api.ts`) and is
+  imported from there with a `.js` suffix. Never mirror a constant, default or type into the
+  other tree; the client's `types.ts` re-exports the shared types so component imports stay
+  short, and every server function that builds a response body is annotated with the
+  `shared/api.ts` type it returns (`sessionRowToJson(): Session`, `dayJson(): Day`, …) so a
+  field renamed on one side fails `typecheck` on the other.
 - **Response headers are set only in `server/security.ts`** (applied first in `createApp`).
   The CSP is same-origin with no `unsafe-inline`, so no inline `<script>`/`<style>` in
   `index.html` and no third-party assets; React `style={{}}` props are fine (CSSOM). Changing
@@ -229,9 +234,11 @@ repo or the session scratchpad.
   pruned to today. Today's punches are settled for 3 s (`useSettled`) before evaluation.
 - **Per-date card drafts reset by remounting**: `Sheet.tsx` keys `Priorities` and `Retro` by
   date, so neither needs a "date changed" effect. Local drafts that mirror a prop use the
-  "adjust state while rendering" form (see `DurationField`), not a `useEffect` + `setState`.
-  Callbacks that must read the latest value use `useLatest()`, never a ref written in render
-  (the react-hooks lint enforces both).
+  "adjust state while rendering" form (see `DurationField`), not a `useEffect` + `setState`,
+  unless the draft is gated by a dirty flag (`Priorities`, `Retro`): a ref can't be read during
+  render, so there the effect form is the one the react-hooks rules allow. Callbacks that must
+  read the latest value use `useLatest()`, never a ref written in render (the react-hooks lint
+  enforces both).
 - Static assets are public; **all data is behind `/api/*`**. The SPA fallback serves
   `index.html` for any non-API path. `/assets/*` is fingerprinted and cached immutable.
 - **Migrations are append-only** in `server/db.ts` (`MIGRATIONS[]`, `PRAGMA user_version`).
@@ -259,13 +266,16 @@ repo or the session scratchpad.
   alarm's "Open retrospective", chosen in `useAlarms` from the `AlarmDayState` callbacks).
 - **A per-day field** (like `overtimeApproved`, `retroNote`/`retroAt`): append a migration adding the column to
   `days` → read it in `findDay` (`routes/shared.ts`) and return it from `GET /days/:date` →
-  add a `PUT /days/:date/<field>` route (with `requireDate`) → `Day` type + `api.ts` → an
-  optimistic setter in `useDay.tsx` (mirror `setOvertimeApproved`) → pass it from `Sheet.tsx`
+  add a `PUT /days/:date/<field>` route (with `requireDate`) → `Day` in `shared/api.ts` +
+  `client/src/api.ts` → an optimistic setter in `useDay.tsx` that goes through `persist()`
+  (mirror `setOvertimeApproved`; failures reload the day and raise the "Change not saved"
+  banner, so the setter never rejects) → pass it from `Sheet.tsx`
   to the card, and from `App.tsx` into `useAlarms` if alarms depend on it.
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
   `currentUser(req).id` (`requireDate` / `loadOwnedSession` where they fit), validate input,
-  return `{ error }` JSON on failure → add the call to `client/src/api.ts` and types to
-  `types.ts` → cover it in that router's `*.test.ts`: happy path, each 400, and that another
+  return `{ error }` JSON on failure → add the call to `client/src/api.ts` and the response
+  type to `shared/api.ts` (annotate the server builder with it) → cover it in that router's
+  `*.test.ts`: happy path, each 400, and that another
   user gets a 404/empty result (the scoping test is not optional). If the seed should carry
   the new field, add it to `server/dev/seed.ts` and its manifest.
 - **A schema change**: append a migration string to `MIGRATIONS` in `db.ts`. Never edit an
@@ -335,9 +345,10 @@ Prove a change at the cheapest level that can show it, and stop there:
 
 ## Gotchas
 
-- `better-sqlite3` is native. The Dockerfile installs alpine build deps so it compiles when no
-  prebuilt binary matches. Docker is verified only in the deployed environment, not on the dev
-  Mac (no Docker here).
+- `better-sqlite3` is native. Since v13 it bundles N-API prebuilds for every platform the
+  image can run on (including linux-musl) and has no install script, so the Dockerfile needs no
+  compiler toolchain and `allowScripts` in `package.json` no longer lists it. Docker is verified
+  only in the deployed environment, not on the dev Mac (no Docker here).
 - The preview harness exports `PORT=5173`; that's why `dev:server` pins `PORT=3000` and the
   `prod` config pins `PORT=8090`.
 - `client/public/sw.js` is intentionally a pass-through service worker (installability only).

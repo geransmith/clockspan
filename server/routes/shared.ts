@@ -1,6 +1,7 @@
 import type { RequestHandler } from 'express';
 import type { DB } from '../db.js';
 import { isValidDateKey } from '../../shared/dates.js';
+import type { Session } from '../../shared/api.js';
 
 /** Guards a `/:date` route: 400 unless the param is a real `YYYY-MM-DD`. Works under `mergeParams` too. */
 export const requireDate: RequestHandler = (req, res, next) => {
@@ -50,7 +51,7 @@ export interface SessionRow {
   priority_uid: string | null;
 }
 
-export function sessionRowToJson(s: SessionRow & { date: string }) {
+export function sessionRowToJson(s: SessionRow & { date: string }): Session {
   return {
     id: s.id,
     date: s.date,

@@ -67,7 +67,7 @@ npm run typecheck      # client + server type check
 npm run lint           # eslint (typescript + react-hooks rules)
 npm run seed           # fill the local database with sample days (see below)
 npm run build          # production build → dist/
-npm start              # serve the production build on http://localhost:8080
+npm start              # serve the production build on http://localhost:3000 (PORT to change; Docker sets 8080)
 ```
 
 ### Sample data
@@ -137,7 +137,7 @@ To update: pull the latest code, rebuild the image, and restart the container �
 | `DATA_DIR` | `/data` (Docker) / `./data` | Where `focus.db` lives |
 | `AUTH_MODE` | `none` | `none`, `local` or `oidc` |
 | `APP_URL` | — | Public URL of the app. Required for `oidc`; also turns on Secure cookies when `https` |
-| `TRUST_PROXY` | `false` | Number of reverse proxies in front of the app (usually `1`). Prefer a count over `true`, which trusts any `X-Forwarded-For` a client sends |
+| `TRUST_PROXY` | `false` | Number of reverse proxies in front of the app (usually `1`); Express string forms such as `loopback` or a CIDR list are passed through. Never `true`, which trusts any `X-Forwarded-For` a client sends |
 | `COOKIE_SECURE` | derived from `APP_URL` | Force session cookies to `Secure` on/off |
 | `SESSION_TTL_DAYS` | `30` | Sliding session lifetime |
 | `RETENTION_DAYS` | unset | Server-wide ceiling on history: every user's days older than this many days (30 or more) are deleted every few hours. Unset keeps everything; users can still choose a shorter limit in Settings → Data |

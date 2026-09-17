@@ -5,18 +5,21 @@ import { promisify } from 'node:util';
 // without invalidating existing hashes.
 const LOG2_N = 15;
 const KEYLEN = 64;
-// Node's default maxmem (32 MB) is exactly what N=2^15, r=8 needs, so it throws; allow
-// headroom so LOG2_N can be raised later without touching this.
-const SCRYPT_OPTS = (log2N: number) => ({ N: 2 ** log2N, maxmem: 256 * 1024 * 1024 });
+const R = 8;
+// scrypt's working set is 128 * r * N bytes, and Node's default maxmem (32 MB) is exactly
+// that for N=2^15, so it throws. Deriving the limit from N (with 2x headroom) means a hash
+// at any cost verifyPassword accepts can be checked, and LOG2_N can be raised on its own.
+const SCRYPT_OPTS = (log2N: number) => ({ N: 2 ** log2N, r: R, maxmem: 2 * 128 * R * 2 ** log2N });
 
 // The async form runs on the libuv pool: ~60 ms of key stretching per attempt must not
 // stall every other request while the login limiter is doing its job.
 const scryptAsync = promisify<string, Buffer, number, ReturnType<typeof SCRYPT_OPTS>, Buffer>(scrypt);
 
-export async function hashPassword(password: string): Promise<string> {
+/** `log2N` is only overridable so tests can cover verifying at another cost. */
+export async function hashPassword(password: string, log2N: number = LOG2_N): Promise<string> {
   const salt = randomBytes(16);
-  const hash = await scryptAsync(password, salt, KEYLEN, SCRYPT_OPTS(LOG2_N));
-  return `scrypt$${LOG2_N}$${salt.toString('base64')}$${hash.toString('base64')}`;
+  const hash = await scryptAsync(password, salt, KEYLEN, SCRYPT_OPTS(log2N));
+  return `scrypt$${log2N}$${salt.toString('base64')}$${hash.toString('base64')}`;
 }
 
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {

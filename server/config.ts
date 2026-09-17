@@ -10,7 +10,8 @@ export interface Config {
   authMode: AuthMode;
   appUrl: string | null;
   cookieSecure: boolean;
-  trustProxy: boolean | number;
+  /** Express's `trust proxy` value: a hop count, or one of its string forms (`loopback`, an IP, a CIDR list). */
+  trustProxy: boolean | number | string;
   sessionTtlMs: number;
   /** Server-wide ceiling on how many days of history any user keeps; null = no ceiling. */
   retentionDays: number | null;
@@ -22,11 +23,34 @@ export interface Config {
   } | null;
 }
 
-function parseTrustProxy(raw: string | undefined): boolean | number {
+/**
+ * A hop count is the documented form. Express also takes `loopback`, an IP or a CIDR list as
+ * a string, so those pass through untouched: turning an unknown string into `true` would
+ * trust whatever X-Forwarded-For a client sends, which is exactly what the docs warn against.
+ */
+function parseTrustProxy(raw: string | undefined): boolean | number | string {
   if (!raw || raw === 'false' || raw === '0') return false;
   if (raw === 'true') return true;
   const n = Number(raw);
-  return Number.isFinite(n) ? n : true;
+  return Number.isFinite(n) ? n : raw;
+}
+
+function parsePort(raw: string | undefined): number {
+  if (!raw) return 3000;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0 || n > 65535) {
+    throw new Error(`PORT must be a whole number from 0 to 65535 (got "${raw}")`);
+  }
+  return n;
+}
+
+function parseSessionTtlDays(raw: string | undefined): number {
+  if (!raw) return 30;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error(`SESSION_TTL_DAYS must be a positive number of days (got "${raw}")`);
+  }
+  return n;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -63,7 +87,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
 
   const dataDir = path.resolve(env.DATA_DIR ?? './data');
-  const ttlDays = Number(env.SESSION_TTL_DAYS ?? 30);
 
   let retentionDays: number | null = null;
   if (env.RETENTION_DAYS) {
@@ -75,14 +98,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
 
   return {
-    port: Number(env.PORT ?? 3000),
+    port: parsePort(env.PORT),
     dataDir,
     dbPath: path.join(dataDir, 'focus.db'),
     authMode,
     appUrl,
     cookieSecure,
     trustProxy: parseTrustProxy(env.TRUST_PROXY),
-    sessionTtlMs: (Number.isFinite(ttlDays) && ttlDays > 0 ? ttlDays : 30) * 86_400_000,
+    sessionTtlMs: parseSessionTtlDays(env.SESSION_TTL_DAYS) * 86_400_000,
     retentionDays,
     oidc,
   };

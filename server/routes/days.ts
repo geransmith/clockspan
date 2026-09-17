@@ -7,9 +7,11 @@ import { countDays, pruneDays, reclaimSpace } from '../retention.js';
 import { isValidDateKey } from '../../shared/dates.js';
 import { dateParam, ensureDay, findDay, requireDate, sessionRowToJson, UID_RE, type DayRow, type SessionRow } from './shared.js';
 import { MAX_PRIORITIES } from '../../shared/settings.js';
+import type { Day, DaySummary, Priority, PruneInfo, Punch } from '../../shared/api.js';
 
 const MAX_RANGE_DAYS = 400;
 const MAX_RETRO_NOTE = 4000;
+const MAX_PUNCHES = 40;
 
 export interface PunchRow {
   id: number;
@@ -29,19 +31,19 @@ export interface PriorityRow {
   added_at: number | null;
 }
 
-function punchesJson(rows: PunchRow[]) {
+function punchesJson(rows: PunchRow[]): Punch[] {
   return rows.map((p) => ({ position: p.position, kind: p.kind, at: p.at }));
 }
 
 // Only the rows that exist are returned; the client pads to the user's `priorityCount`.
-function prioritiesJson(rows: PriorityRow[]) {
+function prioritiesJson(rows: PriorityRow[]): Priority[] {
   return [...rows]
     .sort((a, b) => a.position - b.position)
     .map((r) => ({ position: r.position, text: r.text, done: Boolean(r.done), uid: r.uid, addedAt: r.added_at }));
 }
 
 /** The full JSON for one existing day; shared by GET /:date and GET /range. */
-function dayJson(db: DB, day: DayRow, date: string) {
+function dayJson(db: DB, day: DayRow, date: string): Day {
   const punches = db.prepare(`SELECT * FROM punches WHERE day_id = ? ORDER BY position`).all(day.id) as PunchRow[];
   const priorities = db.prepare(`SELECT * FROM priorities WHERE day_id = ?`).all(day.id) as PriorityRow[];
   const sessions = db
@@ -58,7 +60,7 @@ function dayJson(db: DB, day: DayRow, date: string) {
   };
 }
 
-function emptyDayJson(date: string) {
+function emptyDayJson(date: string): Day {
   return { date, punches: [], priorities: [], overtimeApproved: false, retroNote: '', retroAt: null, sessions: [] };
 }
 
@@ -82,16 +84,15 @@ export function daysRouter(db: DB, config: Config): Router {
       )
       .all(user.id, limit) as { id: number; date: string; retro_at: number | null; focus_ms: number; priorities_done: number; priorities_total: number }[];
     const punchStmt = db.prepare(`SELECT * FROM punches WHERE day_id = ? ORDER BY position`);
-    res.json({
-      days: days.map((d) => ({
-        date: d.date,
-        punches: punchesJson(punchStmt.all(d.id) as PunchRow[]),
-        focusSeconds: Math.round(d.focus_ms / 1000),
-        prioritiesDone: d.priorities_done,
-        prioritiesTotal: d.priorities_total,
-        retroAt: d.retro_at,
-      })),
-    });
+    const summaries: DaySummary[] = days.map((d) => ({
+      date: d.date,
+      punches: punchesJson(punchStmt.all(d.id) as PunchRow[]),
+      focusSeconds: Math.round(d.focus_ms / 1000),
+      prioritiesDone: d.priorities_done,
+      prioritiesTotal: d.priorities_total,
+      retroAt: d.retro_at,
+    }));
+    res.json({ days: summaries });
   });
 
   // Full days for a date range, for the week / month / quarter review. Only days that exist
@@ -123,7 +124,8 @@ export function daysRouter(db: DB, config: Config): Router {
       res.status(400).json({ error: 'before must be a date (YYYY-MM-DD).' });
       return;
     }
-    res.json({ before, ...countDays(db, currentUser(req).id, before), serverMaxDays: config.retentionDays });
+    const info: PruneInfo = { before, ...countDays(db, currentUser(req).id, before), serverMaxDays: config.retentionDays };
+    res.json(info);
   });
 
   r.post('/prune', (req, res) => {
@@ -149,8 +151,12 @@ export function daysRouter(db: DB, config: Config): Router {
     const user = currentUser(req);
     const date = dateParam(req);
     const input = (req.body as { punches?: unknown })?.punches;
-    if (!Array.isArray(input) || input.length > 40) {
+    if (!Array.isArray(input)) {
       res.status(400).json({ error: 'punches must be an array.' });
+      return;
+    }
+    if (input.length > MAX_PUNCHES) {
+      res.status(400).json({ error: `punches is limited to ${MAX_PUNCHES} rows.` });
       return;
     }
     const punches: { position: number; kind: 'in' | 'out'; at: number | null }[] = [];
@@ -184,7 +190,7 @@ export function daysRouter(db: DB, config: Config): Router {
     }
     // The client mints uids and stamps addedAt when a row first gets text; the server only
     // fills them in for a row with text that arrived without (an older client).
-    const rows: { position: number; text: string; done: boolean; uid: string | null; addedAt: number | null }[] = [];
+    const rows: Priority[] = [];
     const seen = new Set<string>();
     for (let i = 0; i < input.length; i++) {
       const item = (input[i] ?? {}) as Record<string, unknown>;

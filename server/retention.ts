@@ -24,14 +24,15 @@ export function cutoffKey(now: number, keepDays: number): string {
   return new Date(now - keepDays * DAY_MS).toISOString().slice(0, 10);
 }
 
-export interface PruneInfo {
+/** The counts behind `GET /days/prune`; the route adds the cutoff and the server cap. */
+export interface PruneCounts {
   /** Days that `pruneDays(before)` would delete. */
   matching: number;
   total: number;
   oldest: string | null;
 }
 
-export function countDays(db: DB, userId: number, before: string): PruneInfo {
+export function countDays(db: DB, userId: number, before: string): PruneCounts {
   const row = db
     .prepare(
       `SELECT COUNT(*) AS total, MIN(date) AS oldest,

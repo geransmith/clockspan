@@ -1,8 +1,8 @@
 # ---- build ----
 FROM node:24-alpine AS build
 WORKDIR /app
-# better-sqlite3 ships prebuilt binaries for alpine; these let it compile if none match.
-RUN apk add --no-cache python3 make g++
+# better-sqlite3 13+ bundles N-API prebuilds (including linux-musl x64/arm64) and has no
+# install script, so no compiler toolchain is needed here.
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig.json tsconfig.server.json vite.config.ts ./

@@ -35,6 +35,10 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   const { settings } = useSettings();
   const store = useDayStore();
   const completing = useRef(false);
+  // After a failed finish (server unreachable) wait before trying again, doubling up to a
+  // minute. The server clamps ended_at to the planned end, so a late finish still logs the
+  // planned duration; all a wait costs is the chime's promptness.
+  const retry = useRef({ at: 0, delay: 0 });
 
   // Re-sync with the server on load, when the tab comes back, and every minute. A
   // response is dropped if a local mutation happened after the request was sent, so a
@@ -74,13 +78,14 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // Completion: the planned end has passed. Also covers a timer that expired while the
   // page was closed — the server clamps ended_at to the planned end.
   useEffect(() => {
-    if (!running || now < endAt || completing.current) return;
+    if (!running || now < endAt || completing.current || now < retry.current.at) return;
     completing.current = true;
     mutationSeq.current++;
     const session = running;
     api
       .finishSession(session.id)
       .then(({ session: done }) => {
+        retry.current = { at: 0, delay: 0 };
         store.applySession(done);
         setRunning(null);
         alert({
@@ -93,7 +98,10 @@ export function TimerProvider({ children }: { children: ReactNode }) {
           notifications: settings.notifications,
         });
       })
-      .catch(() => {})
+      .catch(() => {
+        const delay = Math.min(60_000, retry.current.delay ? retry.current.delay * 2 : 2_000);
+        retry.current = { at: Date.now() + delay, delay };
+      })
       .finally(() => {
         completing.current = false;
       });

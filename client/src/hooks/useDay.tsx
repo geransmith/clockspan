@@ -1,17 +1,24 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import type { Day, Priority, Punch, Session } from '../types';
+import { alert } from '../lib/alerts';
+import { SAVE_FAILED } from '../lib/copy';
 import { newUid, placePriority } from '../lib/priorities';
 import { emptyPunches, normalizePunches } from '../lib/timeclock';
 import { useLatest } from './useLatest';
 import { useSettings } from './useSettings';
 
+/**
+ * The setters are optimistic and never reject: a failed save puts the server's copy back and
+ * raises a banner, so a `void store.x()` call site is complete. `setPriorities` also says
+ * whether it saved, for the one caller that chains on it (`addPriority`).
+ */
 interface DayStore {
   days: Record<string, Day>;
   load: (date: string) => Promise<void>;
   setPunches: (date: string, punches: Punch[]) => Promise<void>;
-  setPriorities: (date: string, priorities: Priority[]) => Promise<void>;
-  /** Add a priority from outside the card (the timer). Resolves to its uid. */
+  setPriorities: (date: string, priorities: Priority[]) => Promise<boolean>;
+  /** Add a priority from outside the card (the timer). Resolves to its uid; rejects if it could not be saved. */
   addPriority: (date: string, text: string) => Promise<string>;
   setOvertimeApproved: (date: string, approved: boolean) => Promise<void>;
   setRetro: (date: string, patch: { note?: string; done?: boolean }) => Promise<void>;
@@ -50,31 +57,38 @@ export function DayProvider({ children }: { children: ReactNode }) {
     return p;
   }, []);
 
-  const setPunches = useCallback(
-    async (date: string, punches: Punch[]) => {
-      const normalized = normalizePunches(punches);
-      setDays((prev) => withDay(prev, date, (d) => ({ ...d, punches: normalized })));
+  // Every write ends here: on failure the server's copy replaces an optimistic guess (`date`
+  // null when there was none) and a banner says so, since the edit vanishing on its own would
+  // look like the app losing data.
+  const persist = useCallback(
+    async (date: string | null, run: () => Promise<unknown>): Promise<boolean> => {
       try {
-        await api.putPunches(date, normalized);
-      } catch (err) {
-        void load(date);
-        throw err;
+        await run();
+        return true;
+      } catch {
+        if (date) void load(date);
+        alert({ title: SAVE_FAILED.title, body: SAVE_FAILED.body, tone: 'danger', tag: 'save-failed', sound: false, notifications: false });
+        return false;
       }
     },
     [load],
   );
 
+  const setPunches = useCallback(
+    async (date: string, punches: Punch[]) => {
+      const normalized = normalizePunches(punches);
+      setDays((prev) => withDay(prev, date, (d) => ({ ...d, punches: normalized })));
+      await persist(date, () => api.putPunches(date, normalized));
+    },
+    [persist],
+  );
+
   const setPriorities = useCallback(
     async (date: string, priorities: Priority[]) => {
       setDays((prev) => withDay(prev, date, (d) => ({ ...d, priorities })));
-      try {
-        await api.putPriorities(date, priorities);
-      } catch (err) {
-        void load(date);
-        throw err;
-      }
+      return persist(date, () => api.putPriorities(date, priorities));
     },
-    [load],
+    [persist],
   );
 
   const addPriority = useCallback(
@@ -82,7 +96,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
       const uid = newUid();
       const next = placePriority(latest.current[date]?.priorities ?? [], priorityCount.current, text, uid, Date.now());
       if (!next) throw new Error('The priorities list is full.');
-      await setPriorities(date, next);
+      // A timer must not start against a uid the server never stored.
+      if (!(await setPriorities(date, next))) throw new Error(SAVE_FAILED.title);
       return uid;
     },
     [setPriorities, latest, priorityCount],
@@ -97,28 +112,20 @@ export function DayProvider({ children }: { children: ReactNode }) {
           retroAt: patch.done === undefined ? d.retroAt : patch.done ? (d.retroAt ?? Date.now()) : null,
         })),
       );
-      try {
+      await persist(date, async () => {
         const saved = await api.putRetro(date, patch);
         setDays((prev) => withDay(prev, date, (d) => ({ ...d, retroAt: saved.retroAt })));
-      } catch (err) {
-        void load(date);
-        throw err;
-      }
+      });
     },
-    [load],
+    [persist],
   );
 
   const setOvertimeApproved = useCallback(
     async (date: string, approved: boolean) => {
       setDays((prev) => withDay(prev, date, (d) => ({ ...d, overtimeApproved: approved })));
-      try {
-        await api.putOvertime(date, approved);
-      } catch (err) {
-        void load(date);
-        throw err;
-      }
+      await persist(date, () => api.putOvertime(date, approved));
     },
-    [load],
+    [persist],
   );
 
   const applySession = useCallback((session: Session) => {
@@ -132,17 +139,24 @@ export function DayProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  const removeSession = useCallback(async (date: string, id: number) => {
-    setDays((prev) => withDay(prev, date, (d) => ({ ...d, sessions: d.sessions.filter((s) => s.id !== id) })));
-    await api.deleteSession(id);
-  }, []);
+  const removeSession = useCallback(
+    async (date: string, id: number) => {
+      setDays((prev) => withDay(prev, date, (d) => ({ ...d, sessions: d.sessions.filter((s) => s.id !== id) })));
+      await persist(date, () => api.deleteSession(id));
+    },
+    [persist],
+  );
 
+  // Not optimistic (the row keeps the stored label until the PATCH answers), so nothing to
+  // put back; the banner still applies: the user pressed Enter and nothing changed.
   const updateSession = useCallback(
     async (id: number, patch: { label?: string; notes?: string; priorityUid?: string | null }) => {
-      const { session } = await api.patchSession(id, patch);
-      applySession(session);
+      await persist(null, async () => {
+        const { session } = await api.patchSession(id, patch);
+        applySession(session);
+      });
     },
-    [applySession],
+    [applySession, persist],
   );
 
   const value = useMemo(
