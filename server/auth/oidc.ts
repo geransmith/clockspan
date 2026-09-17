@@ -1,10 +1,11 @@
 import { Router } from 'express';
-import { parse as parseCookie, serialize as serializeCookie } from 'cookie';
+import { parseCookie, stringifySetCookie } from 'cookie';
 import * as oidc from 'openid-client';
 import type { DB, UserRow } from '../db.js';
 import type { Config } from '../config.js';
 import { cookieOptions, createSession, destroySession } from './session.js';
 import { publicUser } from './local.js';
+import type { AuthInfo } from '../../shared/api.js';
 
 const FLOW_COOKIE = 'fs_oidc';
 const FLOW_TTL_SEC = 600;
@@ -83,7 +84,8 @@ export function oidcAuthRouter(db: DB, config: Config): { api: Router; web: Rout
   const web = Router();
 
   api.get('/me', (req, res) => {
-    res.json({ mode: 'oidc', setupRequired: false, user: req.user ? publicUser(req.user) : null });
+    const info: AuthInfo = { mode: 'oidc', setupRequired: false, user: req.user ? publicUser(req.user) : null };
+    res.json(info);
   });
 
   api.post('/logout', async (req, res) => {
@@ -119,7 +121,7 @@ export function oidcAuthRouter(db: DB, config: Config): { api: Router; web: Rout
     });
     res.setHeader(
       'Set-Cookie',
-      serializeCookie(FLOW_COOKIE, JSON.stringify({ codeVerifier, state }), { ...cookieOptions(config, '/auth'), maxAge: FLOW_TTL_SEC }),
+      stringifySetCookie({ name: FLOW_COOKIE, value: JSON.stringify({ codeVerifier, state }), ...cookieOptions(config, '/auth'), maxAge: FLOW_TTL_SEC }),
     );
     res.redirect(url.href);
   });
@@ -130,7 +132,7 @@ export function oidcAuthRouter(db: DB, config: Config): { api: Router; web: Rout
       res.status(400).send('Sign-in session expired. <a href="/auth/login">Try again</a>.');
       return;
     }
-    const clearFlow = serializeCookie(FLOW_COOKIE, '', { ...cookieOptions(config, '/auth'), maxAge: 0 });
+    const clearFlow = stringifySetCookie({ name: FLOW_COOKIE, value: '', ...cookieOptions(config, '/auth'), maxAge: 0 });
     try {
       const { codeVerifier, state } = JSON.parse(raw) as { codeVerifier: string; state: string };
       const c = await discovery.get();

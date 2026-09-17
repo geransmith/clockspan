@@ -128,8 +128,20 @@ export function sessionsRouter(db: DB): Router {
       }
       next.planned = planned.seconds;
     }
-    if (label !== undefined) next.label = typeof label === 'string' ? label.slice(0, 200) : s.label;
-    if (notes !== undefined) next.notes = typeof notes === 'string' ? notes.slice(0, 2000) : s.notes;
+    if (label !== undefined) {
+      if (typeof label !== 'string') {
+        res.status(400).json({ error: 'label must be a string.' });
+        return;
+      }
+      next.label = label.slice(0, 200);
+    }
+    if (notes !== undefined) {
+      if (typeof notes !== 'string') {
+        res.status(400).json({ error: 'notes must be a string.' });
+        return;
+      }
+      next.notes = notes.slice(0, 2000);
+    }
     db.prepare(`UPDATE sessions SET planned_seconds = ?, label = ?, notes = ?, priority_uid = ? WHERE id = ?`).run(next.planned, next.label, next.notes, next.priorityUid, s.id);
     reply(res, s.user_id, s.id);
   });

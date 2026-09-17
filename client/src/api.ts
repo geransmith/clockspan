@@ -24,7 +24,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   }
   if (!res.ok) {
     const message = (data as { error?: string } | null)?.error ?? `Request failed (${res.status})`;
-    if (res.status === 401) window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT));
+    // The login route answers 401 for a wrong password; that is not a lost session.
+    if (res.status === 401 && path !== '/api/auth/login') window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT));
     throw new ApiError(res.status, message, data);
   }
   return data as T;

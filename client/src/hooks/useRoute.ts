@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { isValidDateKey, todayKey } from '../lib/format';
+import { useLatest } from './useLatest';
 
 export interface Route {
   view: 'sheet' | 'history';
@@ -28,17 +29,21 @@ function write(route: Route, replace = false): void {
 /** The sheet's date and view live in the URL so reloads and back/forward behave. */
 export function useRoute(): [Route, (next: Partial<Route>) => void] {
   const [route, setRoute] = useState<Route>(read);
+  // Read through a ref rather than inside the updater: React runs updaters twice under
+  // StrictMode, and a pushState in there would push two history entries per navigation.
+  const current = useLatest(route);
   useEffect(() => {
     const onPop = () => setRoute(read());
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
-  const navigate = useCallback((next: Partial<Route>) => {
-    setRoute((cur) => {
-      const merged = { ...cur, ...next };
+  const navigate = useCallback(
+    (next: Partial<Route>) => {
+      const merged = { ...current.current, ...next };
       write(merged);
-      return merged;
-    });
-  }, []);
+      setRoute(merged);
+    },
+    [current],
+  );
   return [route, navigate];
 }

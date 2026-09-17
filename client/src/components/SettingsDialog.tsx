@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type Keyboard
 import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS } from '../../../shared/settings.js';
 import * as api from '../api';
 import { useAuth } from '../auth/AuthGate';
+import { useLatest } from '../hooks/useLatest';
 import { useSettings } from '../hooks/useSettings';
 import { chime, notificationPermission, requestNotificationPermission, unlockAudio } from '../lib/alerts';
 import { CONFIRM, DELETE_DAYS, RESET_SETTINGS, SAVE_STATUS } from '../lib/copy';
@@ -31,9 +32,12 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const tabs = TABS.filter((t) => t.id !== 'account' || auth.mode === 'local');
   const [tab, setTab] = useLastTab(tabs);
 
+  // The shell re-renders every second and hands over a fresh onClose each time; going through
+  // a ref keeps this listener bound once for the dialog's lifetime.
+  const close = useLatest(onClose);
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') close.current();
     };
     window.addEventListener('keydown', onKey);
     document.body.classList.add('no-scroll');
@@ -41,7 +45,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       window.removeEventListener('keydown', onKey);
       document.body.classList.remove('no-scroll');
     };
-  }, [onClose]);
+  }, [close]);
 
   const set = (patch: Partial<Settings>) => void save(() => update(patch));
   const setAlarm = (id: AlarmId, patch: Partial<AlarmSettings>) =>

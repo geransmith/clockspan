@@ -62,7 +62,9 @@ describe('PUT /api/days/:date/punches', () => {
   it('validates the body', async () => {
     expect((await app.api.put('/api/days/2026-09-01/punches', { punches: 'x' })).status).toBe(400);
     expect((await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: 'noon' }] })).status).toBe(400);
-    expect((await app.api.put('/api/days/2026-09-01/punches', { punches: Array(41).fill({ at: null }) })).status).toBe(400);
+    const tooMany = await app.api.put('/api/days/2026-09-01/punches', { punches: Array(41).fill({ at: null }) });
+    expect(tooMany.status).toBe(400);
+    expect(tooMany.body.error).toMatch(/limited to 40/);
     expect((await app.api.put('/api/days/bad/punches', { punches: [] })).status).toBe(400);
   });
 });

@@ -105,6 +105,12 @@ export const TIMER_DONE = {
 /** Placeholder for the day's retrospective note. */
 export const RETRO_PROMPT = 'What got in the way? What went to plan?';
 
+/** Banner when a punch, priority, note or log edit fails to reach the server. */
+export const SAVE_FAILED = {
+  title: 'Change not saved',
+  body: 'The server did not answer. The sheet shows what is stored.',
+} as const;
+
 /** Settings dialog save indicator, shown in the dialog header. */
 export const SAVE_STATUS = {
   saving: 'Saving…',

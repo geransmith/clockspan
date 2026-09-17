@@ -59,6 +59,12 @@ describe('sessions', () => {
     expect(p.body.session).toMatchObject({ label: 'x'.repeat(200), notes: 'why', priorityUid: uid, plannedSeconds: 600 });
     expect((await app.api.patch(`/api/sessions/${id}`, { priorityUid: 'bad!' })).status).toBe(400);
     expect((await app.api.patch(`/api/sessions/${id}`, { plannedSeconds: 10 })).status).toBe(400);
+    // A wrong type is a 400 like everywhere else, not silently kept.
+    const badLabel = await app.api.patch(`/api/sessions/${id}`, { label: 42 });
+    expect(badLabel.status).toBe(400);
+    expect(badLabel.body.error).toMatch(/label must be a string/);
+    expect((await app.api.patch(`/api/sessions/${id}`, { notes: ['x'] })).status).toBe(400);
+    expect((await app.api.get(`/api/days/${DATE}`)).body.sessions[0].label).toBe('x'.repeat(200));
     // Unlinking is explicit null; leaving it out keeps the link.
     expect((await app.api.patch(`/api/sessions/${id}`, { notes: 'still' })).body.session.priorityUid).toBe(uid);
     expect((await app.api.patch(`/api/sessions/${id}`, { priorityUid: null })).body.session.priorityUid).toBeNull();

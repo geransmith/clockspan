@@ -4,6 +4,7 @@ import type { Config } from '../config.js';
 import { DUMMY_HASH, hashPassword, validatePassword, validateUsername, verifyPassword } from './password.js';
 import { createSession, destroySession, revokeOtherSessions } from './session.js';
 import { currentUser, requireAdmin, requireAuth } from './middleware.js';
+import type { AuthInfo, PublicUser } from '../../shared/api.js';
 
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60_000;
@@ -39,7 +40,7 @@ class LoginLimiter {
   }
 }
 
-export function publicUser(u: UserRow) {
+export function publicUser(u: UserRow): PublicUser {
   return { id: u.id, name: u.display_name, username: u.username, isAdmin: Boolean(u.is_admin), kind: u.kind };
 }
 
@@ -52,11 +53,12 @@ export function localAuthRouter(db: DB, config: Config): Router {
   const limiter = new LoginLimiter();
 
   r.get('/me', (req, res) => {
-    res.json({
+    const info: AuthInfo = {
       mode: 'local',
       setupRequired: userCount(db) === 0,
       user: req.user ? publicUser(req.user) : null,
-    });
+    };
+    res.json(info);
   });
 
   r.post('/setup', async (req, res) => {

@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { parse as parseCookie, serialize as serializeCookie, type SerializeOptions } from 'cookie';
+import { parseCookie, stringifySetCookie, type SetCookie } from 'cookie';
 import type { Request, Response } from 'express';
 import type { DB, UserRow } from '../db.js';
 import type { Config } from '../config.js';
@@ -11,7 +11,9 @@ function hashToken(token: string): string {
 }
 
 /** The attributes every cookie this app sets shares; `secure` follows the deployment. */
-export function cookieOptions(config: Config, path = '/'): SerializeOptions {
+export type CookieOptions = Omit<SetCookie, 'name' | 'value'>;
+
+export function cookieOptions(config: Config, path = '/'): CookieOptions {
   return { httpOnly: true, sameSite: 'lax', secure: config.cookieSecure, path };
 }
 
@@ -22,7 +24,7 @@ export function createSession(db: DB, config: Config, res: Response, userId: num
     `INSERT INTO auth_sessions (user_id, token_hash, created_at, expires_at, last_seen_at)
      VALUES (?, ?, ?, ?, ?)`,
   ).run(userId, hashToken(token), now, now + config.sessionTtlMs, now);
-  res.setHeader('Set-Cookie', serializeCookie(SESSION_COOKIE, token, { ...cookieOptions(config), maxAge: Math.floor(config.sessionTtlMs / 1000) }));
+  res.setHeader('Set-Cookie', stringifySetCookie({ name: SESSION_COOKIE, value: token, ...cookieOptions(config), maxAge: Math.floor(config.sessionTtlMs / 1000) }));
 }
 
 export function readSessionToken(req: Request): string | null {
@@ -63,7 +65,7 @@ export function resolveSession(db: DB, config: Config, req: Request): UserRow | 
 export function destroySession(db: DB, config: Config, req: Request, res: Response): void {
   const token = readSessionToken(req);
   if (token) db.prepare(`DELETE FROM auth_sessions WHERE token_hash = ?`).run(hashToken(token));
-  res.setHeader('Set-Cookie', serializeCookie(SESSION_COOKIE, '', { ...cookieOptions(config), maxAge: 0 }));
+  res.setHeader('Set-Cookie', stringifySetCookie({ name: SESSION_COOKIE, value: '', ...cookieOptions(config), maxAge: 0 }));
 }
 
 /** Signs the user out everywhere except the request's own session (after a password change). */

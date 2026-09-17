@@ -13,6 +13,7 @@ import { securityHeaders } from './security.js';
 import { daysRouter } from './routes/days.js';
 import { sessionStartRouter, sessionsRouter } from './routes/sessions.js';
 import { settingsRouter } from './routes/settings.js';
+import type { AuthInfo } from '../shared/api.js';
 
 export function createApp(db: DB, config: Config): Express {
   const app = express();
@@ -34,7 +35,8 @@ export function createApp(db: DB, config: Config): Express {
     app.use('/auth', web);
   } else {
     app.get('/api/auth/me', (req, res) => {
-      res.json({ mode: 'none', setupRequired: false, user: req.user ? publicUser(req.user) : null });
+      const info: AuthInfo = { mode: 'none', setupRequired: false, user: req.user ? publicUser(req.user) : null };
+      res.json(info);
     });
   }
 
