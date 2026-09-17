@@ -729,8 +729,49 @@ button {
 .punch-row--out .punch-label {
   color: var(--text-2);
 }
-.punch-input {
+/* Segmented time field (React Aria): the box reads as an input, each segment is its own spinbutton. */
+.timefield {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
   min-width: 0;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  cursor: text;
+}
+.timefield:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+/* Some segments typed, some not: nothing is saved until every one is in. */
+.timefield.is-partial {
+  border-color: var(--warn);
+}
+.timefield-seg {
+  padding: 2px 3px;
+  border-radius: 4px;
+  outline: none;
+  white-space: nowrap;
+}
+.timefield-seg[data-placeholder] {
+  color: var(--text-3);
+}
+.timefield-seg:focus {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.timefield-seg--literal {
+  padding: 2px 0;
+  color: var(--text-2);
+}
+.timefield-seg--dayPeriod {
+  margin-left: 6px;
+  min-width: 2.4em;
+  text-align: center;
 }
 .punch-extras {
   display: flex;
@@ -788,10 +829,6 @@ button {
   }
   .punch-now {
     padding: 0 10px;
-  }
-  /* Phones open the native picker from the field itself; the indicator only steals width. */
-  .punch-input::-webkit-calendar-picker-indicator {
-    display: none;
   }
 }
 
