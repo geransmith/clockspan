@@ -7,8 +7,8 @@ describe('normalizeLayout', () => {
     const out = normalizeLayout([{ id: 'retro', visible: false }, { id: 'nope' as never, visible: true }, { id: 'retro', visible: true }]);
     expect(out[0]).toEqual({ id: 'retro', visible: false });
     expect(out.map((l) => l.id)).toEqual(['retro', ...CARD_IDS.filter((id) => id !== 'retro')]);
-    expect(out.find((l) => l.id === 'stickers')).toEqual({ id: 'stickers', visible: false });
     expect(out.find((l) => l.id === 'timeclock')).toEqual({ id: 'timeclock', visible: true });
+    expect(normalizeLayout([{ id: 'log', visible: false }, { id: 'stickers' as never, visible: true }]).map((l) => l.id)).not.toContain('stickers');
   });
 
   it('gives every card its default when nothing is saved', () => {

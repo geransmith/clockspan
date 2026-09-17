@@ -62,12 +62,23 @@ describe('/api/settings', () => {
     ]);
   });
 
-  it('keeps the sticker chart hidden for a layout saved before it existed', async () => {
-    const r = await app.api.put('/api/settings', {
-      layout: CARD_IDS.filter((id) => id !== 'stickers').map((id) => ({ id, visible: true })),
-    });
-    expect(r.body.layout.at(-1)).toEqual({ id: 'stickers', visible: false });
-    expect((await app.api.put('/api/settings', { layout: [{ id: 'stickers', visible: true }] })).body.layout[0]).toEqual({ id: 'stickers', visible: true });
+  it('carries a 0.2 layout with the sticker card shown over to the stickers setting', async () => {
+    // A row saved by 0.2: the card id is no longer a layout entry, but the choice it recorded survives.
+    const userId = (app.db.prepare(`SELECT id FROM users WHERE kind = 'default'`).get() as { id: number }).id;
+    app.db.prepare(`INSERT INTO settings (user_id, json) VALUES (?, ?)`).run(userId, JSON.stringify({ layout: [{ id: 'stickers', visible: true }, { id: 'retro', visible: false }] }));
+    const stored = await app.api.get('/api/settings');
+    expect(stored.body.stickers).toBe(true);
+    expect(stored.body.layout.map((l: { id: string }) => l.id)).not.toContain('stickers');
+    const shown = await app.api.put('/api/settings', { workMinutes: 420 });
+    expect(shown.body.stickers).toBe(true);
+    // The first save wrote the setting itself, so the layout stops mattering.
+    expect((await app.api.get('/api/settings')).body.stickers).toBe(true);
+    expect((await app.api.put('/api/settings', { stickers: false })).body.stickers).toBe(false);
+    expect((await app.api.get('/api/settings')).body.stickers).toBe(false);
+    // An explicit value wins over the layout, and a hidden card changes nothing.
+    expect((await app.api.put('/api/settings', { stickers: false, layout: [{ id: 'stickers', visible: true }] })).body.stickers).toBe(false);
+    expect((await app.api.put('/api/settings', { layout: [{ id: 'stickers', visible: false }] })).body.stickers).toBe(false);
+    expect((await app.api.put('/api/settings', { stickers: 'yes' })).body.stickers).toBe(false);
   });
 
   it('resets on DELETE', async () => {

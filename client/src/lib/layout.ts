@@ -13,7 +13,6 @@ const CARD_TITLES: Record<CardId, string> = {
   timer: 'Focus timer',
   log: 'Day log',
   retro: 'Retrospective',
-  stickers: 'Sticker chart',
 };
 
 /** Registry of cards in default order; `CARD_DEFAULT_VISIBLE` says which start hidden. */

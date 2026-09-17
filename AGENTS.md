@@ -84,11 +84,12 @@ client/                 Vite root → dist/client
   src/lib/retro.ts      PURE: reviewDay(priorities, sessions) → on/off-plan time, mid-day rows
   src/lib/stickers.ts   PURE: stickersForDay(summary) (clocked out, lunch, all priorities, focus,
                         reviewed), stickerEmoji(date, id) (fixed, distinct per day), daySummaryOf(day)
-                        (the GET /days rollup, for a live today), stickerWeeks(), countStickers()
+                        (the GET /days rollup, for a live today), countStickers(weeks) (total, full
+                        days, per reason)
   src/lib/review.ts     PURE: periodRange(kind, today, offset) (Mon-start weeks), periodOffset(kind, today,
                         date) (the offset that lands on a date's period), reviewRange(days)
-  src/lib/calendar.ts   PURE: calendarMonth(days, today, monthStart) → Mon-start rows of CalendarDay
-                        (outside / future / hasData) for History → Days
+  src/lib/calendar.ts   PURE: calendarMonth(days, settings, today, now, monthStart) → Mon-start rows
+                        of CalendarDay (outside / future / hasData / stickers) for History → Days
   src/lib/format.ts     Intl formatting (time, dates, durations, dayName); formatTime(ms, hour12)
                         + resolveHour12(timeFormat); re-exports shared/dates
   src/lib/timefield.ts  PURE: msToTime/timeToMs (epoch ms ↔ @internationalized/date Time on a
@@ -104,8 +105,8 @@ client/                 Vite root → dist/client
                         Timeclock + TimeField (React Aria hour/minute/AM-PM segments), Priorities,
                         Burst (emoji flying from an anchor, portalled to body; off under reduced
                         motion and the `celebrations` setting), FocusTimer, SessionLog, Retro,
-                        Stickers (4-week sticker chart; hidden by default), History (Days | Review; owns the
-                        review period so the calendar can point it at a week), Calendar (month grid +
+                        History (Days | Review; owns the review period so the calendar can point it at a
+                        week), Calendar (month grid, stickers when `settings.stickers`, legend filter,
                         picked-day panel), Review (controlled by History), PeriodNav (◀ label ▶, shared),
                         SettingsDialog (tabs incl. Data: retention + delete-before), Icons
 scripts/screenshots.mjs `npm run screenshots`: dev server (reused or started) + seed + headless
@@ -294,13 +295,17 @@ repo or the session scratchpad.
   `shared/settings.ts`, and its title to `CARD_TITLES` in `client/src/lib/layout.ts` (the
   types make a missing entry an error) → write the component → add a `case` in `Sheet.tsx`'s
   `render()`. Existing users get it automatically because layouts merge with the registry on
-  both sides (`normalizeLayout`, `mergeSettings`), appended with that default; a card that
-  starts hidden (the sticker chart) shows up under Customize → Hidden → Show.
+  both sides (`normalizeLayout`, `mergeSettings`), appended with that default; a card whose
+  default is hidden shows up under Customize → Hidden → Show. Removing a card is the reverse
+  (drop the id everywhere; both merges discard it from saved layouts), and if the card
+  recorded a choice worth keeping, `mergeSettings` can read it off the old layout entry the
+  way the sticker chart's `stickers` setting does.
 - **A per-user setting**: add it to the `Settings` type and `DEFAULT_SETTINGS` in
   `shared/settings.ts` → validate it in `mergeSettings()` (`server/routes/settings.ts`) → add
   the control to the right tab in `SettingsDialog.tsx` (Timeclock · Alarms · Sheet · Data ·
-  Account; each is a `case` in `panel()`) using `DurationField` / `MinutesField` — it takes a
-  `unit` suffix, default "min" — / `Toggle`. Nothing else to mirror.
+  Account; each is a `case` in `panel()`; the Sheet tab's "History" section holds the
+  calendar's switches) using `DurationField` / `MinutesField` — it takes a `unit` suffix,
+  default "min" — / `Toggle`. Nothing else to mirror.
 - **An alarm target** (existing: `lunchBy`, `clockOut`, `secondMeal`, `retro`): expose the instant from
   `computeTimeclock` → add a target in `useAlarms.ts` (`targets[]`, with an `armed` rule; put
   a rule the card also needs in a pure helper like `secondMealApplies`) → add its default
@@ -387,7 +392,9 @@ Prove a change at the cheapest level that can show it, and stop there:
 - If you touched the History calendar: `calendar.test.ts` proves the grid and `review.test.ts`
   the `periodOffset` round trip; the browser check is one month at the mobile preset (◀ to a
   seeded month, tap a day, **Open day** and back through the header, **Review this week** lands
-  on that week).
+  on that week). With the sticker chart on (Settings → Sheet → History, or `PUT /api/settings
+  {"stickers":true}`): the count line, a chip narrows the grid to one sticker and a second tap
+  clears it.
 - If you touched retention: `server/retention.test.ts` and the `/prune` block in
   `days.test.ts` prove the cutoff, the cap, the running-session guard and the cascade; the
   browser check is one look at Settings → Data (count line, toggle saves), with the delete
