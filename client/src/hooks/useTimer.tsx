@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import type { Session } from '../types';
-import { alert, unlockAudio } from '../lib/alerts';
-import { TIMER_DONE } from '../lib/copy';
+import { alert, unlockAudio, warnQuietly } from '../lib/alerts';
+import { SAVE_FAILED, TIMER_DONE } from '../lib/copy';
 import { formatCountdown } from '../lib/format';
 import { useDayStore } from './useDay';
 import { useLatest } from './useLatest';
@@ -127,60 +127,89 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     }
   }, [store]);
 
+  // The bar and the card call these with `void`, so a failure has to be reported here: the
+  // running state is what the server last confirmed, and the banner says the press was lost.
+  const attempt = useCallback(async (run: () => Promise<void>) => {
+    try {
+      await run();
+    } catch {
+      warnQuietly({ title: SAVE_FAILED.title, body: SAVE_FAILED.body, tag: 'save-failed' });
+    }
+  }, []);
+
   const adjust = useCallback(
-    async (deltaSeconds: number) => {
-      const cur = runningRef.current;
-      if (!cur) return;
-      mutationSeq.current++;
-      const elapsed = Math.floor((Date.now() - cur.startedAt) / 1000);
-      const next = Math.max(60, cur.plannedSeconds + deltaSeconds);
-      if (next <= elapsed) {
-        // Shrinking below what's already elapsed means "I'm done now".
+    (deltaSeconds: number) =>
+      attempt(async () => {
+        const cur = runningRef.current;
+        if (!cur) return;
+        mutationSeq.current++;
+        const elapsed = Math.floor((Date.now() - cur.startedAt) / 1000);
+        const next = Math.max(60, cur.plannedSeconds + deltaSeconds);
+        if (next <= elapsed) {
+          // Shrinking below what's already elapsed means "I'm done now".
+          const { session } = await api.finishSession(cur.id);
+          store.applySession(session);
+          setRunning(null);
+          return;
+        }
+        const optimistic = { ...cur, plannedSeconds: next };
+        runningRef.current = optimistic;
+        setRunning(optimistic);
+        try {
+          const { session } = await api.patchSession(cur.id, { plannedSeconds: next });
+          // Only adopt the response if nothing newer happened meanwhile.
+          setRunning((latest) => (latest && latest.id === session.id && latest.plannedSeconds === next ? session : latest));
+        } catch (err) {
+          setRunning(cur);
+          throw err;
+        }
+      }),
+    [attempt, store, runningRef],
+  );
+
+  const setLabel = useCallback(
+    (label: string) =>
+      attempt(async () => {
+        const cur = runningRef.current;
+        if (!cur) return;
+        mutationSeq.current++;
+        setRunning({ ...cur, label });
+        try {
+          const { session } = await api.patchSession(cur.id, { label });
+          setRunning((latest) => (latest && latest.id === session.id ? { ...latest, label: session.label } : latest));
+        } catch (err) {
+          setRunning((latest) => (latest && latest.id === cur.id ? { ...latest, label: cur.label } : latest));
+          throw err;
+        }
+      }),
+    [attempt, runningRef],
+  );
+
+  const finish = useCallback(
+    () =>
+      attempt(async () => {
+        const cur = runningRef.current;
+        if (!cur) return;
+        mutationSeq.current++;
         const { session } = await api.finishSession(cur.id);
         store.applySession(session);
         setRunning(null);
-        return;
-      }
-      const optimistic = { ...cur, plannedSeconds: next };
-      runningRef.current = optimistic;
-      setRunning(optimistic);
-      try {
-        const { session } = await api.patchSession(cur.id, { plannedSeconds: next });
-        // Only adopt the response if nothing newer happened meanwhile.
-        setRunning((latest) => (latest && latest.id === session.id && latest.plannedSeconds === next ? session : latest));
-      } catch {
-        setRunning(cur);
-      }
-    },
-    [store, runningRef],
+      }),
+    [attempt, store, runningRef],
   );
 
-  const setLabel = useCallback(async (label: string) => {
-    const cur = runningRef.current;
-    if (!cur) return;
-    mutationSeq.current++;
-    setRunning({ ...cur, label });
-    const { session } = await api.patchSession(cur.id, { label });
-    setRunning((latest) => (latest && latest.id === session.id ? { ...latest, label: session.label } : latest));
-  }, [runningRef]);
-
-  const finish = useCallback(async () => {
-    const cur = runningRef.current;
-    if (!cur) return;
-    mutationSeq.current++;
-    const { session } = await api.finishSession(cur.id);
-    store.applySession(session);
-    setRunning(null);
-  }, [store, runningRef]);
-
-  const cancel = useCallback(async () => {
-    const cur = runningRef.current;
-    if (!cur) return;
-    mutationSeq.current++;
-    const { session } = await api.cancelSession(cur.id);
-    store.applySession(session);
-    setRunning(null);
-  }, [store, runningRef]);
+  const cancel = useCallback(
+    () =>
+      attempt(async () => {
+        const cur = runningRef.current;
+        if (!cur) return;
+        mutationSeq.current++;
+        const { session } = await api.cancelSession(cur.id);
+        store.applySession(session);
+        setRunning(null);
+      }),
+    [attempt, store, runningRef],
+  );
 
   const value = useMemo(
     () => ({ running, remainingSeconds, elapsedSeconds, progress, start, adjust, setLabel, finish, cancel }),

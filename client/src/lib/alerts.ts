@@ -176,3 +176,8 @@ export function alert(o: AlertOptions): void {
   if (o.notifications) notify(o.title, o.body, o.tag);
   pushBanner({ kicker: o.kicker, title: o.title, body: o.body, tone: o.tone, sticky: o.sticky ?? false, tag: o.tag, action: o.action });
 }
+
+/** A request failed: a danger banner with no chime and no notification, one per tag. */
+export function warnQuietly(o: { title: string; body?: string; tag: string }): void {
+  alert({ ...o, tone: 'danger', sound: false, notifications: false });
+}

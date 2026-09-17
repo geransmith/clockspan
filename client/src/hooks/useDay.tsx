@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import type { Day, Priority, Punch, Session } from '../types';
-import { alert } from '../lib/alerts';
-import { SAVE_FAILED } from '../lib/copy';
+import { dismissByTag, warnQuietly } from '../lib/alerts';
+import { LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
 import { newUid, placePriority } from '../lib/priorities';
 import { emptyPunches, normalizePunches } from '../lib/timeclock';
 import { useLatest } from './useLatest';
@@ -16,6 +16,9 @@ import { useSettings } from './useSettings';
  */
 interface DayStore {
   days: Record<string, Day>;
+  /** Dates whose first fetch failed, with the message; cleared by a load that succeeds. */
+  errors: Record<string, string>;
+  /** Fetch a day. Never rejects: a failure is recorded in `errors` and raised as a banner. */
   load: (date: string) => Promise<void>;
   setPunches: (date: string, punches: Punch[]) => Promise<void>;
   setPriorities: (date: string, priorities: Priority[]) => Promise<boolean>;
@@ -38,6 +41,7 @@ function withDay(days: Record<string, Day>, date: string, fn: (d: Day) => Day): 
 
 export function DayProvider({ children }: { children: ReactNode }) {
   const [days, setDays] = useState<Record<string, Day>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
   // For callbacks that read before they write (addPriority): a click right after a priority
   // blur-flush must see the flushed list, not the render it closed over.
   const latest = useLatest(days);
@@ -46,18 +50,35 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const inflight = useRef(new Map<string, Promise<void>>());
   const punchQueue = useRef(new Map<string, { latest: Punch[]; inflight: boolean }>());
 
-  const load = useCallback((date: string) => {
-    const existing = inflight.current.get(date);
-    if (existing) return existing;
-    const p = api
-      .getDay(date)
-      .then((d) => {
-        setDays((prev) => ({ ...prev, [date]: { ...d, punches: normalizePunches(d.punches) } }));
-      })
-      .finally(() => inflight.current.delete(date));
-    inflight.current.set(date, p);
-    return p;
-  }, []);
+  const load = useCallback(
+    (date: string) => {
+      const existing = inflight.current.get(date);
+      if (existing) return existing;
+      const p = api
+        .getDay(date)
+        .then((d) => {
+          setDays((prev) => ({ ...prev, [date]: { ...d, punches: normalizePunches(d.punches) } }));
+          setErrors((prev) => {
+            if (!(date in prev)) return prev;
+            const next = { ...prev };
+            delete next[date];
+            return next;
+          });
+          dismissByTag('load-failed');
+        })
+        .catch((err: Error) => {
+          // A refresh after a failed save has a copy to keep showing, and that save's banner
+          // already said the server is not answering. A first load has nothing: say so.
+          if (latest.current[date]) return;
+          setErrors((prev) => ({ ...prev, [date]: err.message }));
+          warnQuietly({ title: LOAD_FAILED.title, body: LOAD_FAILED.body, tag: 'load-failed' });
+        })
+        .finally(() => inflight.current.delete(date));
+      inflight.current.set(date, p);
+      return p;
+    },
+    [latest],
+  );
 
   // Every write ends here: on failure the server's copy replaces an optimistic guess (`date`
   // null when there was none) and a banner says so, since the edit vanishing on its own would
@@ -69,7 +90,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
         return true;
       } catch {
         if (date) void load(date);
-        alert({ title: SAVE_FAILED.title, body: SAVE_FAILED.body, tone: 'danger', tag: 'save-failed', sound: false, notifications: false });
+        warnQuietly({ title: SAVE_FAILED.title, body: SAVE_FAILED.body, tag: 'save-failed' });
         return false;
       }
     },
@@ -179,8 +200,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ days, load, setPunches, setPriorities, addPriority, setOvertimeApproved, setRetro, applySession, removeSession, updateSession }),
-    [days, load, setPunches, setPriorities, addPriority, setOvertimeApproved, setRetro, applySession, removeSession, updateSession],
+    () => ({ days, errors, load, setPunches, setPriorities, addPriority, setOvertimeApproved, setRetro, applySession, removeSession, updateSession }),
+    [days, errors, load, setPunches, setPriorities, addPriority, setOvertimeApproved, setRetro, applySession, removeSession, updateSession],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -191,12 +212,13 @@ export function useDayStore(): DayStore {
   return v;
 }
 
-/** The day for a date key, loading it on first use. */
+/** The day for a date key, loading it on first use. A failed load waits for `store.load` again (the sheet's Try again). */
 export function useDay(date: string): { day: Day | undefined; store: DayStore } {
   const store = useDayStore();
   const day = store.days[date];
+  const failed = date in store.errors;
   useEffect(() => {
-    if (!day) void store.load(date);
-  }, [date, day, store]);
+    if (!day && !failed) void store.load(date);
+  }, [date, day, failed, store]);
   return { day, store };
 }

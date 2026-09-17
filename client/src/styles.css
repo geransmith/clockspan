@@ -496,6 +496,14 @@ button {
 .sheet-loading {
   min-height: 200px;
 }
+/* A day that would not load: the message and its retry button, side by side when they fit. */
+.sheet-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 
 /* ---------- top bar ---------- */
 .topbar {
