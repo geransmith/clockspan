@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSettings } from '../hooks/useSettings';
 import { WARNING_ACTIONS } from '../lib/copy';
 import { MAX_PRIORITIES, newUid, padPriorities, pickWarning, warnThreshold, warningKind, type WarningKind } from '../lib/priorities';
-import type { Priority } from '../types';
+import { LIMITS, type Priority } from '../types';
 import { Burst, BURST_MS } from './Burst';
 import { Check, Plus, X } from './Icons';
 
@@ -123,7 +123,7 @@ export function Priorities({ priorities, onChange }: Props) {
               placeholder={p.position === 1 ? 'The one thing that would make today a win' : `Priority ${p.position}`}
               onChange={(e) => edit(p.position, { text: e.target.value })}
               onBlur={() => dirty.current && flush(local)}
-              maxLength={500}
+              maxLength={LIMITS.priorityText}
             />
             {removable && (
               <button className="btn btn-icon priority-remove" onClick={() => removeRow(p.position)} aria-label={`Remove priority ${p.position}`} title="Remove">

@@ -3,7 +3,7 @@ import { useDayStore } from '../hooks/useDay';
 import { CONFIRM } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { formatDuration } from '../lib/format';
-import type { Priority, Session } from '../types';
+import { LIMITS, type Priority, type Session } from '../types';
 import { Trash } from './Icons';
 
 interface Props {
@@ -98,7 +98,7 @@ function Row({
               if (e.key === 'Enter') commit();
               if (e.key === 'Escape') setEditing(false);
             }}
-            maxLength={200}
+            maxLength={LIMITS.sessionLabel}
             aria-label="Session label"
           />
           {planned.length > 0 && (

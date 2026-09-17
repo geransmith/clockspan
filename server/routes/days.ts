@@ -7,10 +7,9 @@ import { countDays, pruneDays, reclaimSpace } from '../retention.js';
 import { isValidDateKey, punchWindow } from '../../shared/dates.js';
 import { dateParam, ensureDay, findDay, requireDate, sessionRowToJson, UID_RE, type DayRow, type SessionRow } from './shared.js';
 import { MAX_PRIORITIES } from '../../shared/settings.js';
-import type { Day, DaySummary, Priority, PruneInfo, Punch } from '../../shared/api.js';
+import { LIMITS, type Day, type DaySummary, type Priority, type PruneInfo, type Punch } from '../../shared/api.js';
 
 const MAX_RANGE_DAYS = 400;
-const MAX_RETRO_NOTE = 4000;
 const MAX_PUNCHES = 40;
 const DAY_MS = 86_400_000;
 
@@ -209,7 +208,7 @@ export function daysRouter(db: DB, config: Config): Router {
     const seen = new Set<string>();
     for (let i = 0; i < input.length; i++) {
       const item = (input[i] ?? {}) as Record<string, unknown>;
-      const text = typeof item.text === 'string' ? item.text.slice(0, 500) : '';
+      const text = typeof item.text === 'string' ? item.text.slice(0, LIMITS.priorityText) : '';
       const hasText = text.trim() !== '';
       let uid = typeof item.uid === 'string' && UID_RE.test(item.uid) ? item.uid.toLowerCase() : null;
       if (uid && seen.has(uid)) {
@@ -264,7 +263,7 @@ export function daysRouter(db: DB, config: Config): Router {
       return;
     }
     const dayId = ensureDay(db, user.id, date);
-    if (note !== undefined) db.prepare(`UPDATE days SET retro_note = ? WHERE id = ?`).run(note.slice(0, MAX_RETRO_NOTE), dayId);
+    if (note !== undefined) db.prepare(`UPDATE days SET retro_note = ? WHERE id = ?`).run(note.slice(0, LIMITS.retroNote), dayId);
     if (done === true) db.prepare(`UPDATE days SET retro_at = COALESCE(retro_at, ?) WHERE id = ?`).run(Date.now(), dayId);
     if (done === false) db.prepare(`UPDATE days SET retro_at = NULL WHERE id = ?`).run(dayId);
     const day = findDay(db, user.id, date)!;
