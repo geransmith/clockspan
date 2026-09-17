@@ -1270,12 +1270,53 @@ button {
   width: 14px;
   height: 14px;
 }
+/* flex: none — overflow-x drops the flex min-height to 0, so a tall panel would squash the strip. */
+.tabs {
+  flex: none;
+  display: flex;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+.tab {
+  min-height: 44px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--text-2);
+  font-weight: 550;
+  white-space: nowrap;
+}
+.tab:hover:not(.is-active) {
+  color: var(--text);
+}
+.tab.is-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
 .dialog-body {
+  flex: 1;
   overflow: auto;
-  padding: 8px 20px calc(24px + var(--safe-bottom));
+  padding: 8px 20px 24px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+/* Pinned under the scrolling body; carries the home-indicator inset on phones. */
+.dialog-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px calc(8px + var(--safe-bottom)) 20px;
+  border-top: 1px solid var(--border);
+}
+/* Stays on the right when the tagline forces a wrap on narrow phones. */
+.dialog-foot .btn {
+  margin-left: auto;
 }
 .settings-section {
   padding: 14px 0;

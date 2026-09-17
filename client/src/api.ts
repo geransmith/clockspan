@@ -47,6 +47,7 @@ export const deleteUser = (id: number) => request<{ ok: true }>('DELETE', `/api/
 // ----- settings -----
 export const getSettings = () => request<Settings>('GET', '/api/settings');
 export const putSettings = (patch: Partial<Settings>) => request<Settings>('PUT', '/api/settings', patch);
+export const resetSettings = () => request<Settings>('DELETE', '/api/settings');
 
 // ----- days -----
 export const listDays = (limit = 60) => request<{ days: DaySummary[] }>('GET', `/api/days?limit=${limit}`);

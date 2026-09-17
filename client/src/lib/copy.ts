@@ -61,3 +61,9 @@ export const SAVE_STATUS = {
   failed: 'Not saved',
   failedDetail: "The last change didn't save and was put back.",
 } as const;
+
+/** Settings dialog footer: the button and the confirm before every setting goes back to default. */
+export const RESET_SETTINGS = {
+  button: 'Reset all settings',
+  confirm: 'Reset every setting to its default? Days, punches and sessions are kept.',
+} as const;

@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import * as api from '../api';
 import { useAuth } from '../auth/AuthGate';
 import { useSettings } from '../hooks/useSettings';
 import { chime, notificationPermission, requestNotificationPermission, unlockAudio } from '../lib/alerts';
-import { SAVE_STATUS } from '../lib/copy';
+import { RESET_SETTINGS, SAVE_STATUS } from '../lib/copy';
 import { DEFAULT_LAYOUT } from '../lib/layout';
 import type { AlarmId, AlarmSettings, PublicUser, Settings } from '../types';
 import { Check, X } from './Icons';
@@ -11,13 +11,25 @@ import { Check, X } from './Icons';
 const LEAD_CHOICES = [30, 15, 10, 5, 1];
 const REPEAT_CHOICES = [0, 1, 2, 5, 10, 15];
 
+type TabId = 'timeclock' | 'alarms' | 'sheet' | 'account';
+const TABS: { id: TabId; label: string }[] = [
+  { id: 'timeclock', label: 'Timeclock' },
+  { id: 'alarms', label: 'Alarms' },
+  { id: 'sheet', label: 'Sheet' },
+  { id: 'account', label: 'Account' },
+];
+const TAB_STORAGE_KEY = 'focus:settingsTab';
+
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
-  const { settings, update } = useSettings();
+  const { settings, update, reset } = useSettings();
   const { auth } = useAuth();
-  const { saveState, save } = useSaveStatus(update);
+  const { saveState, save } = useSaveStatus();
+  // Account holds password + users, which only exist with local accounts.
+  const tabs = TABS.filter((t) => t.id !== 'account' || auth.mode === 'local');
+  const [tab, setTab] = useLastTab(tabs);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', onKey);
@@ -28,9 +40,114 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     };
   }, [onClose]);
 
-  const set = (patch: Partial<Settings>) => void save(patch);
+  const set = (patch: Partial<Settings>) => void save(() => update(patch));
   const setAlarm = (id: AlarmId, patch: Partial<AlarmSettings>) =>
     set({ alarms: { ...settings.alarms, [id]: { ...settings.alarms[id], ...patch } } });
+  const onReset = () => {
+    if (window.confirm(RESET_SETTINGS.confirm)) void save(reset);
+  };
+
+  // Left/Right move between tabs, as the ARIA tabs pattern expects.
+  const onTabKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const i = tabs.findIndex((t) => t.id === tab);
+    const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+    if (!next) return;
+    setTab(next.id);
+    document.getElementById(`tab-${next.id}`)?.focus();
+  };
+
+  const panel = () => {
+    switch (tab) {
+      case 'timeclock':
+        return (
+          <Section title="Timeclock" hint="Used to compute your lunch deadline, clock-out time and second meal period.">
+            <DurationField label="Work day" minutes={settings.workMinutes} onCommit={(m) => set({ workMinutes: m })} />
+            <DurationField label="Lunch must start within" minutes={settings.lunchDeadlineMinutes} onCommit={(m) => set({ lunchDeadlineMinutes: m })} />
+            <MinutesField label="Lunch length" minutes={settings.lunchMinutes} min={0} max={480} onCommit={(m) => set({ lunchMinutes: m })} />
+            <DurationField label="Second meal due after (hours worked)" minutes={settings.secondMealAfterMinutes} onCommit={(m) => set({ secondMealAfterMinutes: m })} />
+            <Toggle
+              label="Overtime approval"
+              hint="Adds an 'Overtime approved' switch to the timeclock and to the clock-out alarm. It silences that day's clock-out alarm only; meal alarms stay on. Turn off if overtime doesn't apply to you."
+              checked={settings.overtimeApproval}
+              onChange={(v) => set({ overtimeApproval: v })}
+            />
+          </Section>
+        );
+      case 'alarms':
+        return (
+          <>
+            <Section title="Alarms" hint="Alerts as lunch, clock-out and the second meal period approach.">
+              <AlarmEditor title="Lunch deadline" alarm={settings.alarms.lunchBy} onChange={(p) => setAlarm('lunchBy', p)} />
+              <AlarmEditor title="Clock-out" alarm={settings.alarms.clockOut} onChange={(p) => setAlarm('clockOut', p)} />
+              <AlarmEditor
+                title="Second meal period"
+                hint="California: due before the end of the 10th hour worked on days over 10 hours (waivable when the day is 12 hours or less). Only arms on a day that's heading past the threshold. Turn off if you've waived it."
+                alarm={settings.alarms.secondMeal}
+                onChange={(p) => setAlarm('secondMeal', p)}
+              />
+            </Section>
+            <Section title="How you're alerted" hint="Every alarm also shows an in-app banner.">
+              <div className="setting-row">
+                <Toggle label="Sound" checked={settings.sound} onChange={(v) => set({ sound: v })} />
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    unlockAudio();
+                    chime('test');
+                  }}
+                >
+                  Test sound
+                </button>
+              </div>
+              <NotificationsRow enabled={settings.notifications} onChange={(v) => set({ notifications: v })} />
+            </Section>
+          </>
+        );
+      case 'sheet':
+        return (
+          <>
+            <Section title="Priorities">
+              <MinutesField label="Rows per day" unit="rows" minutes={settings.priorityCount} min={1} max={10} onCommit={(m) => set({ priorityCount: m })} />
+              <p className="muted small">New days start with this many rows. Add more on the sheet any time.</p>
+            </Section>
+            <Section title="Focus timer">
+              <MinutesField label="Adjust step (± buttons)" minutes={settings.adjustStepMinutes} min={1} max={60} onCommit={(m) => set({ adjustStepMinutes: m })} />
+              <Toggle
+                label="Keep screen awake while a timer runs"
+                hint="Stops phones from sleeping mid-session so the chime can play."
+                checked={settings.keepScreenAwake}
+                onChange={(v) => set({ keepScreenAwake: v })}
+              />
+            </Section>
+            <Section title="Layout" hint="Use Customize on the sheet to drag cards or hide them.">
+              <div className="setting-row">
+                <span className="muted">
+                  {settings.layout.filter((l) => l.visible).length} of {settings.layout.length} cards visible
+                </span>
+                <button className="btn btn-ghost" onClick={() => set({ layout: DEFAULT_LAYOUT })}>
+                  Reset to default
+                </button>
+              </div>
+            </Section>
+          </>
+        );
+      case 'account':
+        return (
+          <>
+            <Section title="Password">
+              <ChangePassword />
+            </Section>
+            {auth.user?.isAdmin && (
+              <Section title="Users" hint="Each user has their own sheet, history and settings.">
+                <Users me={auth.user} />
+              </Section>
+            )}
+          </>
+        );
+    }
+  };
 
   return (
     <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -42,87 +159,61 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             <X />
           </button>
         </header>
-        <div className="dialog-body">
-          {saveState === 'failed' && <p className="notice notice--danger">{SAVE_STATUS.failedDetail}</p>}
-          <Section title="Timeclock" hint="Used to compute your lunch deadline, clock-out time and second meal period.">
-            <DurationField label="Work day" minutes={settings.workMinutes} onCommit={(m) => set({ workMinutes: m })} />
-            <DurationField label="Lunch must start within" minutes={settings.lunchDeadlineMinutes} onCommit={(m) => set({ lunchDeadlineMinutes: m })} />
-            <MinutesField label="Lunch length" minutes={settings.lunchMinutes} min={0} max={480} onCommit={(m) => set({ lunchMinutes: m })} />
-            <DurationField label="Second meal due after (hours worked)" minutes={settings.secondMealAfterMinutes} onCommit={(m) => set({ secondMealAfterMinutes: m })} />
-          </Section>
-
-          <Section title="Priorities">
-            <MinutesField label="Rows per day" unit="rows" minutes={settings.priorityCount} min={1} max={10} onCommit={(m) => set({ priorityCount: m })} />
-            <p className="muted small">New days start with this many rows. Add more on the sheet any time.</p>
-          </Section>
-
-          <Section title="Alarms" hint="Alerts as lunch, clock-out and the second meal period approach. Chime, browser notification and an in-app banner.">
-            <AlarmEditor title="Lunch deadline" alarm={settings.alarms.lunchBy} onChange={(p) => setAlarm('lunchBy', p)} />
-            <AlarmEditor title="Clock-out" alarm={settings.alarms.clockOut} onChange={(p) => setAlarm('clockOut', p)} />
-            <AlarmEditor
-              title="Second meal period"
-              hint="California: due before the end of the 10th hour worked on days over 10 hours (waivable when the day is 12 hours or less). Only arms on a day that's heading past the threshold. Turn off if you've waived it."
-              alarm={settings.alarms.secondMeal}
-              onChange={(p) => setAlarm('secondMeal', p)}
-            />
-            <Toggle
-              label="Overtime approval"
-              hint="Adds an 'Overtime approved' switch to the timeclock and to the clock-out alarm. It silences that day's clock-out alarm only; meal alarms stay on. Turn off if overtime doesn't apply to you."
-              checked={settings.overtimeApproval}
-              onChange={(v) => set({ overtimeApproval: v })}
-            />
-            <div className="setting-row">
-              <Toggle label="Sound" checked={settings.sound} onChange={(v) => set({ sound: v })} />
-              <button
-                className="btn btn-ghost"
-                onClick={() => {
-                  unlockAudio();
-                  chime('test');
-                }}
-              >
-                Test sound
-              </button>
-            </div>
-            <NotificationsRow enabled={settings.notifications} onChange={(v) => set({ notifications: v })} />
-          </Section>
-
-          <Section title="Timer">
-            <MinutesField label="Adjust step (± buttons)" minutes={settings.adjustStepMinutes} min={1} max={60} onCommit={(m) => set({ adjustStepMinutes: m })} />
-            <Toggle
-              label="Keep screen awake while a timer runs"
-              hint="Stops phones from sleeping mid-session so the chime can play."
-              checked={settings.keepScreenAwake}
-              onChange={(v) => set({ keepScreenAwake: v })}
-            />
-          </Section>
-
-          <Section title="Layout" hint="Use Customize on the sheet to drag cards or hide them.">
-            <div className="setting-row">
-              <span className="muted">
-                {settings.layout.filter((l) => l.visible).length} of {settings.layout.length} cards visible
-              </span>
-              <button className="btn btn-ghost" onClick={() => set({ layout: DEFAULT_LAYOUT })}>
-                Reset to default
-              </button>
-            </div>
-          </Section>
-
-          {auth.mode === 'local' && (
-            <Section title="Account">
-              <ChangePassword />
-            </Section>
-          )}
-          {auth.mode === 'local' && auth.user?.isAdmin && (
-            <Section title="Users" hint="Each user has their own sheet, history and settings.">
-              <Users me={auth.user} />
-            </Section>
-          )}
-
-          <p className="muted small center">Clockspan · data stays on your server</p>
+        <div className="tabs" role="tablist" aria-label="Settings sections" onKeyDown={onTabKey}>
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              id={`tab-${t.id}`}
+              aria-selected={tab === t.id}
+              aria-controls={`panel-${t.id}`}
+              tabIndex={tab === t.id ? 0 : -1}
+              className={`tab${tab === t.id ? ' is-active' : ''}`}
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
+        {/* Keyed so switching tabs starts each panel at the top instead of mid-scroll. */}
+        <div key={tab} className="dialog-body" role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
+          {saveState === 'failed' && <p className="notice notice--danger">{SAVE_STATUS.failedDetail}</p>}
+          {panel()}
+        </div>
+        <footer className="dialog-foot">
+          <span className="muted small">Clockspan · data stays on your server</span>
+          <button className="btn btn-ghost btn-danger-text" onClick={onReset}>
+            {RESET_SETTINGS.button}
+          </button>
+        </footer>
       </div>
     </div>
   );
+}
+
+/**
+ * The tab you were on last time, so reopening the dialog to tweak the same thing doesn't start
+ * over. Storage can be missing or blocked (private mode), so both sides are guarded.
+ */
+function useLastTab(tabs: { id: TabId }[]): [TabId, (t: TabId) => void] {
+  const [tab, setTab] = useState<TabId>(() => {
+    try {
+      const stored = localStorage.getItem(TAB_STORAGE_KEY);
+      if (tabs.some((t) => t.id === stored)) return stored as TabId;
+    } catch {
+      // Fall through to the first tab.
+    }
+    return tabs[0]?.id ?? 'timeclock';
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(TAB_STORAGE_KEY, tab);
+    } catch {
+      // Remembering the tab is a nicety; nothing to do if storage is unavailable.
+    }
+  }, [tab]);
+  return [tab, setTab];
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'failed';
@@ -131,8 +222,9 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'failed';
  * Tracks in-flight settings saves so the header can say "Saving…", then "Saved" once the server
  * has confirmed, or "Not saved" when the provider had to roll the change back. In-flight saves
  * are counted so a burst of chip clicks reads as one save instead of flickering between states.
+ * `run` is any provider call that settles when the server has answered (update or reset).
  */
-function useSaveStatus(update: (patch: Partial<Settings>) => Promise<void>) {
+function useSaveStatus() {
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const pending = useRef(0);
   const failed = useRef(false);
@@ -145,30 +237,27 @@ function useSaveStatus(update: (patch: Partial<Settings>) => Promise<void>) {
     [],
   );
 
-  const save = useCallback(
-    async (patch: Partial<Settings>) => {
-      if (pending.current === 0) failed.current = false;
-      pending.current++;
-      if (timer.current) window.clearTimeout(timer.current);
-      setSaveState('saving');
-      try {
-        await update(patch);
-      } catch {
-        // The provider already put the old value back; all that is left is to say so.
-        failed.current = true;
-      } finally {
-        pending.current--;
-        if (pending.current === 0) {
-          if (failed.current) setSaveState('failed');
-          else {
-            setSaveState('saved');
-            timer.current = window.setTimeout(() => setSaveState('idle'), 2500);
-          }
+  const save = useCallback(async (run: () => Promise<void>) => {
+    if (pending.current === 0) failed.current = false;
+    pending.current++;
+    if (timer.current) window.clearTimeout(timer.current);
+    setSaveState('saving');
+    try {
+      await run();
+    } catch {
+      // The provider already put the old value back; all that is left is to say so.
+      failed.current = true;
+    } finally {
+      pending.current--;
+      if (pending.current === 0) {
+        if (failed.current) setSaveState('failed');
+        else {
+          setSaveState('saved');
+          timer.current = window.setTimeout(() => setSaveState('idle'), 2500);
         }
       }
-    },
-    [update],
-  );
+    }
+  }, []);
 
   return { saveState, save };
 }

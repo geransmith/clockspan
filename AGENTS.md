@@ -42,7 +42,7 @@ server/                 Express API → dist/server (tsc)
                         PUT priorities (full replace, sparse rows), PUT overtime
   routes/sessions.ts    POST /days/:date/sessions (start), GET /sessions/running,
                         PATCH/:id, POST /:id/finish, POST /:id/cancel, DELETE /:id
-  routes/settings.ts    DEFAULT_SETTINGS + mergeSettings() validator; GET/PUT /settings
+  routes/settings.ts    DEFAULT_SETTINGS + mergeSettings() validator; GET/PUT/DELETE /settings
 client/                 Vite root → dist/client
   index.html            viewport-fit=cover, theme-color, manifest, apple-mobile-web-app meta
   public/               manifest.webmanifest, icons/, sw.js (pass-through)
@@ -100,6 +100,7 @@ to exercise the setup/login pages.
 - **Settings are stored sparse** and merged with `DEFAULT_SETTINGS` by `mergeSettings()` on every
   read and write (`server/routes/settings.ts`). Unknown keys are dropped, invalid values fall
   back. Add settings by adding a default + validation there, never by migrating rows.
+  `DELETE /api/settings` drops the user's row, which is what "Reset all settings" does.
 - **Timeclock math lives only in `client/src/lib/timeclock.ts`; alarm scheduling only in
   `client/src/lib/alarms.ts`.** Both are pure functions of `(inputs, settings, now)` with tests.
   Components and hooks never re-derive these. Past days call `computeTimeclock` with
@@ -142,8 +143,9 @@ to exercise the setup/login pages.
   automatically (visible) because layouts merge with the registry.
 - **A per-user setting**: add to `DEFAULT_SETTINGS` + `mergeSettings()` validation (server),
   the `Settings` type (`client/src/types.ts`) and `FALLBACK` (`hooks/useSettings.tsx`) → add the
-  control to `SettingsDialog.tsx` (use `DurationField` / `MinutesField` — it takes a `unit`
-  suffix, default "min" — / `Toggle`).
+  control to the right tab in `SettingsDialog.tsx` (Timeclock · Alarms · Sheet · Account; each
+  is a `case` in `panel()`) using `DurationField` / `MinutesField` — it takes a `unit` suffix,
+  default "min" — / `Toggle`.
 - **An alarm target** (existing: `lunchBy`, `clockOut`, `secondMeal`): expose the instant from
   `computeTimeclock` → add a target in `useAlarms.ts` (`targets[]`, with an `armed` rule; put
   a rule the card also needs in a pure helper like `secondMealApplies`) → add its default

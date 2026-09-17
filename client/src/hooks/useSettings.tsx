@@ -7,6 +7,7 @@ interface SettingsCtx {
   settings: Settings;
   loaded: boolean;
   update: (patch: Partial<Settings>) => Promise<void>;
+  reset: () => Promise<void>;
 }
 
 /** Client-side mirror of the server defaults; replaced by the real settings on load. */
@@ -64,7 +65,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const value = useMemo(() => ({ settings, loaded, update }), [settings, loaded, update]);
+  // Not optimistic: the client's FALLBACK is only a mirror, so the server's answer is the
+  // first trustworthy copy of the defaults.
+  const reset = useCallback(async () => {
+    const saved = await api.resetSettings();
+    setSettings({ ...saved, layout: normalizeLayout(saved.layout) });
+  }, []);
+
+  const value = useMemo(() => ({ settings, loaded, update, reset }), [settings, loaded, update, reset]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
