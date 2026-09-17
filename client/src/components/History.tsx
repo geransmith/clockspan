@@ -1,22 +1,25 @@
-import { useEffect, useState } from 'react';
-import * as api from '../api';
-import { useSettings } from '../hooks/useSettings';
-import { addDays, dayName, formatDateLong, formatDuration } from '../lib/format';
-import { timeclockForDate } from '../lib/timeclock';
-import type { DaySummary } from '../types';
-import { Check } from './Icons';
-import { Review } from './Review';
+import { useState } from 'react';
+import { periodOffset } from '../lib/review';
+import { Calendar } from './Calendar';
+import { Review, type ReviewPeriod } from './Review';
 
 interface Props {
   today: string;
   now: number;
+  /** The sheet's date, which the calendar opens on. */
+  date: string;
   onOpen: (date: string) => void;
 }
 
 type Tab = 'days' | 'review';
 
-export function History({ today, now, onOpen }: Props) {
+export function History({ today, now, date, onOpen }: Props) {
   const [tab, setTab] = useState<Tab>('days');
+  const [period, setPeriod] = useState<ReviewPeriod>({ kind: 'week', offset: 0 });
+  const reviewWeek = (d: string) => {
+    setPeriod({ kind: 'week', offset: periodOffset('week', today, d) });
+    setTab('review');
+  };
   return (
     <div className="history-view">
       <div className="segmented" role="tablist" aria-label="History view">
@@ -27,68 +30,11 @@ export function History({ today, now, onOpen }: Props) {
           Review
         </button>
       </div>
-      {tab === 'days' ? <Days today={today} now={now} onOpen={onOpen} /> : <Review today={today} now={now} onOpen={onOpen} />}
+      {tab === 'days' ? (
+        <Calendar today={today} now={now} date={date} onOpen={onOpen} onReviewWeek={reviewWeek} />
+      ) : (
+        <Review today={today} now={now} period={period} onPeriod={setPeriod} onOpen={onOpen} />
+      )}
     </div>
-  );
-}
-
-function Days({ today, now, onOpen }: Props) {
-  const { settings } = useSettings();
-  const [days, setDays] = useState<DaySummary[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api
-      .listDays(90)
-      .then((r) => setDays(r.days))
-      .catch((err) => setError((err as Error).message));
-  }, []);
-
-  if (error) return <p className="error">{error}</p>;
-  if (!days) return <div className="sheet-loading" aria-busy="true" />;
-  if (days.length === 0) return <p className="muted center">No days recorded yet.</p>;
-
-  return (
-    <section className="card">
-      <header className="card-head">
-        <h2 className="card-title">History</h2>
-        <span className="muted">{days.length} day{days.length === 1 ? "" : "s"}</span>
-      </header>
-      <ul className="history">
-        {days.map((d) => {
-          const tc = timeclockForDate(d.punches, settings, d.date, today, now);
-          const name = dayName(d.date, today);
-          return (
-            <li key={d.date}>
-              <button className="history-row" onClick={() => onOpen(d.date)}>
-                <span className="history-date">
-                  <strong>
-                    {name}
-                    {d.retroAt != null && (
-                      <span className="history-reviewed" title="Retrospective reviewed" aria-label="Retrospective reviewed">
-                        <Check />
-                      </span>
-                    )}
-                  </strong>
-                  {(d.date === today || d.date === addDays(today, -1)) && <span className="muted small">{formatDateLong(d.date)}</span>}
-                </span>
-                <span className="history-stat">
-                  <span className="muted small">Worked</span>
-                  {tc.clockIn != null ? formatDuration(tc.workedSeconds) : '—'}
-                </span>
-                <span className="history-stat">
-                  <span className="muted small">Focused</span>
-                  {d.focusSeconds > 0 ? formatDuration(d.focusSeconds) : '—'}
-                </span>
-                <span className="history-stat">
-                  <span className="muted small">Priorities</span>
-                  {d.prioritiesTotal > 0 ? `${d.prioritiesDone}/${d.prioritiesTotal}` : '—'}
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
   );
 }

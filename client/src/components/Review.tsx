@@ -4,7 +4,8 @@ import { useSettings } from '../hooks/useSettings';
 import { formatDateLong, formatDuration, formatWeekday } from '../lib/format';
 import { periodRange, reviewRange, type PeriodKind } from '../lib/review';
 import type { Day } from '../types';
-import { Check, ChevronLeft, ChevronRight } from './Icons';
+import { Check } from './Icons';
+import { PeriodNav } from './PeriodNav';
 
 const KINDS: { id: PeriodKind; label: string }[] = [
   { id: 'week', label: 'Week' },
@@ -12,9 +13,17 @@ const KINDS: { id: PeriodKind; label: string }[] = [
   { id: 'quarter', label: 'Quarter' },
 ];
 
+export interface ReviewPeriod {
+  kind: PeriodKind;
+  offset: number;
+}
+
 interface Props {
   today: string;
   now: number;
+  /** Owned by History so the calendar's "Review this week" can point it at a week. */
+  period: ReviewPeriod;
+  onPeriod: (next: ReviewPeriod) => void;
   onOpen: (date: string) => void;
 }
 
@@ -22,10 +31,8 @@ interface Props {
  * The daily retrospectives rolled up: how the period's time split between the plan and
  * everything else, which priorities never got done, and each day's note on why.
  */
-export function Review({ today, now, onOpen }: Props) {
+export function Review({ today, now, period: { kind, offset }, onPeriod, onOpen }: Props) {
   const { settings } = useSettings();
-  const [kind, setKind] = useState<PeriodKind>('week');
-  const [offset, setOffset] = useState(0);
   const period = periodRange(kind, today, offset);
   // The answer is tagged with the range it is for, so stepping to another period reads as
   // "loading" straight away without clearing state inside the effect.
@@ -50,10 +57,7 @@ export function Review({ today, now, onOpen }: Props) {
     };
   }, [period.from, period.to, rangeKey]);
 
-  const pickKind = (k: PeriodKind) => {
-    setKind(k);
-    setOffset(0);
-  };
+  const pickKind = (k: PeriodKind) => onPeriod({ kind: k, offset: 0 });
   const dayName = (date: string) => `${formatWeekday(date)} ${formatDateLong(date).replace(/^\w+,?\s*/, '')}`;
 
   return (
@@ -68,20 +72,7 @@ export function Review({ today, now, onOpen }: Props) {
           ))}
         </span>
       </header>
-      <div className="review-nav">
-        <button className="btn btn-icon" onClick={() => setOffset((o) => o + 1)} aria-label={`Previous ${kind}`}>
-          <ChevronLeft />
-        </button>
-        <span className="review-period">{period.label}</span>
-        <button className="btn btn-icon" onClick={() => setOffset((o) => Math.max(0, o - 1))} aria-label={`Next ${kind}`} disabled={offset === 0}>
-          <ChevronRight />
-        </button>
-        {offset > 0 && (
-          <button className="btn btn-ghost" onClick={() => setOffset(0)}>
-            This {kind}
-          </button>
-        )}
-      </div>
+      <PeriodNav kind={kind} label={period.label} offset={offset} onOffset={(o) => onPeriod({ kind, offset: o })} />
 
       {error && <p className="error">{error}</p>}
       {!error && !days && <div className="sheet-loading" aria-busy="true" />}

@@ -1615,59 +1615,148 @@ button {
   width: 14px;
   height: 14px;
 }
-.history li + li {
+/* ◀ label ▶ under a card head; the review and the calendar share it. */
+.period-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px 0;
+}
+.period-label {
+  min-width: 9ch;
+  text-align: center;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- calendar (History → Days) ---------- */
+.calendar-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 16px 0;
+}
+.calendar-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+.calendar-weekday {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-3);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.calendar-day {
+  min-height: 52px;
+  padding: 4px 3px 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.calendar-day:disabled {
+  cursor: default;
+}
+.calendar-day.is-outside {
+  border-color: transparent;
+  background: none;
+}
+.calendar-day.is-empty,
+.calendar-day.is-future {
+  background: transparent;
+  opacity: 0.55;
+}
+.calendar-day.is-today .calendar-daynum {
+  color: var(--accent);
+}
+.calendar-day.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+  opacity: 1;
+}
+.calendar-daynum {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-2);
+  line-height: 1;
+}
+/* "7h 39m" wraps at the space in a phone-width cell and sits on one line from 640px. */
+.calendar-worked {
+  font-size: 0.68rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  color: var(--text-2);
+}
+/* A day with something on it but no clock-in. */
+.calendar-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-3);
+  margin: 2px 0 0 1px;
+}
+.calendar-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px 16px 16px;
   border-top: 1px solid var(--border);
 }
-.history-row {
-  width: 100%;
-  display: grid;
-  grid-template-columns: 1fr repeat(3, auto);
-  gap: 14px;
-  align-items: center;
-  padding: 12px 16px;
-  border: 0;
-  background: none;
-  text-align: left;
-}
-.history-row:hover {
-  background: var(--surface-2);
-}
-.history-date {
+.calendar-detail-head {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
 }
-.history-stat {
+.calendar-tiles {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 0;
+}
+.calendar-tiles .tile {
+  display: block;
+  padding: 10px 12px;
+}
+.calendar-tiles .tile-value {
+  margin-top: 2px;
+  font-size: 1.05rem;
+  white-space: nowrap;
+}
+.calendar-note {
+  margin: 0;
+}
+.calendar-actions {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  min-width: 56px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
-@media (max-width: 480px) {
-  .history-row {
-    grid-template-columns: 1fr auto auto;
+@media (min-width: 640px) {
+  .calendar-grid,
+  .calendar-row {
+    gap: 6px;
   }
-  .history-stat:nth-child(4) {
-    display: none;
+  .calendar-day {
+    min-height: 64px;
+    padding: 6px 6px 4px;
+  }
+  .calendar-worked {
+    font-size: 0.8rem;
   }
 }
 
 /* ---------- review (week / month / quarter) ---------- */
 .review .card-head {
   flex-wrap: wrap;
-}
-.review-nav {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 16px 0;
-}
-.review-period {
-  min-width: 9ch;
-  text-align: center;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
 }
 .review-empty {
   padding: 14px 16px 18px;

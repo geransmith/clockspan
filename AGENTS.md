@@ -85,7 +85,10 @@ client/                 Vite root → dist/client
   src/lib/stickers.ts   PURE: stickersForDay(summary) (clocked out, lunch, all priorities, focus,
                         reviewed), stickerEmoji(date, id) (fixed, distinct per day), daySummaryOf(day)
                         (the GET /days rollup, for a live today), stickerWeeks(), countStickers()
-  src/lib/review.ts     PURE: periodRange(kind, today, offset) (Mon-start weeks), reviewRange(days)
+  src/lib/review.ts     PURE: periodRange(kind, today, offset) (Mon-start weeks), periodOffset(kind, today,
+                        date) (the offset that lands on a date's period), reviewRange(days)
+  src/lib/calendar.ts   PURE: calendarMonth(days, today, monthStart) → Mon-start rows of CalendarDay
+                        (outside / future / hasData) for History → Days
   src/lib/format.ts     Intl formatting (time, dates, durations, dayName); formatTime(ms, hour12)
                         + resolveHour12(timeFormat); re-exports shared/dates
   src/lib/timefield.ts  PURE: msToTime/timeToMs (epoch ms ↔ @internationalized/date Time on a
@@ -101,7 +104,9 @@ client/                 Vite root → dist/client
                         Timeclock + TimeField (React Aria hour/minute/AM-PM segments), Priorities,
                         Burst (emoji flying from an anchor, portalled to body; off under reduced
                         motion and the `celebrations` setting), FocusTimer, SessionLog, Retro,
-                        Stickers (4-week sticker chart; hidden by default), History (Days | Review), Review,
+                        Stickers (4-week sticker chart; hidden by default), History (Days | Review; owns the
+                        review period so the calendar can point it at a week), Calendar (month grid +
+                        picked-day panel), Review (controlled by History), PeriodNav (◀ label ▶, shared),
                         SettingsDialog (tabs incl. Data: retention + delete-before), Icons
 scripts/screenshots.mjs `npm run screenshots`: dev server (reused or started) + seed + headless
                         Chromium over CDP → docs/screenshots/*.png for the README
@@ -256,7 +261,14 @@ repo or the session scratchpad.
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started —
   one rule, no clock-in fallback. `GET /days/range` returns full days and the client does the
-  rollup; register any new literal path under `/days` before `/:date`.
+  rollup (the review and the History calendar both fetch it, one period at a time); register
+  any new literal path under `/days` before `/:date`.
+- **History → Days opens on the route's date.** `App.tsx` passes `route.date` to `History`;
+  the calendar starts on that month with that day picked (`periodOffset('month', …)`), and
+  only "Open day" navigates. So the header's History button lands on the month of the day
+  being viewed, and browser Back from a day returns to it. The month grid is
+  `calendarMonth()` (pure); the panel's numbers come from `timeclockForDate` + `daySummaryOf`,
+  the same math as the sheet.
 - **The `retro` alarm target is the clock-out instant** ("warn before" = minutes before the
   end of the day) and is **not** silenced by overtime approval; marking the day reviewed
   (`days.retro_at`) disarms it. Its banner button jumps to the card (`jumpTo` in `App.tsx`).
@@ -372,6 +384,10 @@ Prove a change at the cheapest level that can show it, and stop there:
 - If you touched the retro or review: `retro.test.ts` / `review.test.ts` prove the split and
   the rollup; the browser check is one look at a seeded day's retro card and at History →
   Review → Week (`--quarter` for Month / Quarter).
+- If you touched the History calendar: `calendar.test.ts` proves the grid and `review.test.ts`
+  the `periodOffset` round trip; the browser check is one month at the mobile preset (◀ to a
+  seeded month, tap a day, **Open day** and back through the header, **Review this week** lands
+  on that week).
 - If you touched retention: `server/retention.test.ts` and the `/prune` block in
   `days.test.ts` prove the cutoff, the cap, the running-session guard and the cascade; the
   browser check is one look at Settings → Data (count line, toggle saves), with the delete

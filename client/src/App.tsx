@@ -82,7 +82,7 @@ function Shell() {
         {route.view === 'sheet' ? (
           <Sheet date={route.date} today={today} now={now} customize={customize} jumpTo={jumpTo} onJumped={onJumped} onPunchEditing={setEditingPunches} />
         ) : (
-          <History today={today} now={now} onOpen={(date) => navigate({ view: 'sheet', date })} />
+          <History today={today} now={now} date={route.date} onOpen={(date) => navigate({ view: 'sheet', date })} />
         )}
       </main>
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
