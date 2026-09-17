@@ -1,9 +1,11 @@
+import { useEffect, useRef, useState } from 'react';
 import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { pickCelebration } from '../lib/celebrate';
 import { formatDuration, formatDurationCeil, roundToMinute } from '../lib/format';
 import { clockOutPosition, extraPairs, kindForPosition, secondMealApplies, type ExtraPair, type TimeclockResult } from '../lib/timeclock';
 import type { Punch } from '../types';
+import { Burst, BURST_MS } from './Burst';
 import { Plus, Trash, X } from './Icons';
 import { TimeField } from './TimeField';
 
@@ -97,6 +99,27 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
           : `${formatDurationCeil(tc.remainingSeconds)} to go`;
 
   const celebration = tc.state === 'done' && tc.clockOutAt != null ? pickCelebration(tc.clockOutAt) : null;
+  // The burst marks the day *becoming* done while the card is open, not a day that already
+  // was when it mounted (the sheet keys this card by date). "Adjust state while rendering".
+  const doneNow = celebration != null;
+  const [wasDone, setWasDone] = useState(doneNow);
+  const [burstSeed, setBurstSeed] = useState<number | null>(null);
+  if (doneNow !== wasDone) {
+    setWasDone(doneNow);
+    if (doneNow && settings.celebrations) setBurstSeed(tc.clockOutAt);
+  }
+  const notice = useRef<HTMLDivElement>(null);
+  const [burstAnchor, setBurstAnchor] = useState<DOMRect | null>(null);
+  useEffect(() => {
+    if (burstSeed == null) return;
+    // The notice has to be on screen before it can be measured.
+    setBurstAnchor(notice.current?.getBoundingClientRect() ?? null);
+    const id = window.setTimeout(() => {
+      setBurstSeed(null);
+      setBurstAnchor(null);
+    }, BURST_MS);
+    return () => window.clearTimeout(id);
+  }, [burstSeed]);
   const secondMeal = secondMealApplies(tc, settings, otOn) && tc.secondMealBy != null ? tc.secondMealBy : null;
 
   // ----- rows -----
@@ -152,8 +175,8 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
       </div>
 
       {celebration && (
-        <div className="notice notice--celebrate" role="status">
-          <span className="celebrate-emoji" aria-hidden="true">
+        <div className="notice notice--celebrate" role="status" ref={notice}>
+          <span key={tc.clockOutAt} className="celebrate-emoji" aria-hidden="true">
             {celebration.emoji}
           </span>
           <span>
@@ -161,6 +184,8 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
           </span>
         </div>
       )}
+
+      {burstSeed != null && burstAnchor && <Burst key={burstSeed} seed={burstSeed} anchor={burstAnchor} big />}
 
       {secondMeal != null && (
         <p className={`timeclock-note${tc.secondMealStatus === 'overdue' ? ' timeclock-note--danger' : ''}`}>

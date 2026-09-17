@@ -38,6 +38,12 @@ describe('/api/settings', () => {
     expect((await app.api.get('/api/settings')).body).toEqual(next.body);
   });
 
+  it('takes booleans for the switches and ignores anything else', async () => {
+    expect((await app.api.put('/api/settings', { celebrations: false })).body.celebrations).toBe(false);
+    expect((await app.api.put('/api/settings', { celebrations: 'no' })).body.celebrations).toBe(false);
+    expect((await app.api.put('/api/settings', { celebrations: true })).body.celebrations).toBe(true);
+  });
+
   it('accepts a known time format and falls back for anything else', async () => {
     expect((await app.api.put('/api/settings', { timeFormat: '24h' })).body.timeFormat).toBe('24h');
     expect((await app.api.put('/api/settings', { timeFormat: '25h' })).body.timeFormat).toBe('24h');

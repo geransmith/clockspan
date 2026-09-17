@@ -77,6 +77,7 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     notifications: isBool(p.notifications) ? p.notifications : base.notifications,
     keepScreenAwake: isBool(p.keepScreenAwake) ? p.keepScreenAwake : base.keepScreenAwake,
     overtimeApproval: isBool(p.overtimeApproval) ? p.overtimeApproval : base.overtimeApproval,
+    celebrations: isBool(p.celebrations) ? p.celebrations : base.celebrations,
     alarms: {
       lunchBy: mergeAlarm(base.alarms.lunchBy, alarms.lunchBy),
       clockOut: mergeAlarm(base.alarms.clockOut, alarms.clockOut),

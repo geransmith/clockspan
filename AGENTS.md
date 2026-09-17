@@ -77,7 +77,8 @@ client/                 Vite root → dist/client
   src/lib/alerts.ts     the ONLY place that plays audio / calls Notification / pushes banners
   src/lib/copy.ts       every editable phrase (celebrations, warning pools, confirms, timer-done,
                         retro prompt, settings status) — no logic
-  src/lib/celebrate.ts  PURE: pickCelebration(seed) for the end-of-day notice
+  src/lib/celebrate.ts  PURE: pickCelebration(seed) for the end-of-day notice, pickBurst(seed, n)
+                        for the emoji burst (pieces + flight)
   src/lib/priorities.ts PURE: padPriorities(), warnThreshold(), warningKind(), pickWarning(kind),
                         newUid(), placePriority() (timer → priorities)
   src/lib/retro.ts      PURE: reviewDay(priorities, sessions) → on/off-plan time, mid-day rows
@@ -95,7 +96,9 @@ client/                 Vite root → dist/client
   src/auth/             AuthGate (mode/user → Setup | Login | OIDC button | app), pages
   src/components/       Header, RunningTimerBar, Banners, Sheet (dnd-kit) + CardShell,
                         Timeclock + TimeField (React Aria hour/minute/AM-PM segments), Priorities,
-                        FocusTimer, SessionLog, Retro, History (Days | Review), Review,
+                        Burst (emoji flying from an anchor, portalled to body; off under reduced
+                        motion and the `celebrations` setting), FocusTimer, SessionLog, Retro,
+                        History (Days | Review), Review,
                         SettingsDialog (tabs incl. Data: retention + delete-before), Icons
 scripts/screenshots.mjs `npm run screenshots`: dev server (reused or started) + seed + headless
                         Chromium over CDP → docs/screenshots/*.png for the README
