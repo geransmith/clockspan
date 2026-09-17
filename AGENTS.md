@@ -217,10 +217,12 @@ repo or the session scratchpad.
   is the single `kind='default'` user. Never add a data route outside the `requireAuth` router
   in `app.ts`. `/:date` routes take `requireDate`; `/sessions/:id` routes take
   `loadOwnedSession`, which is where the ownership check lives.
-- **Settings are stored sparse** and merged with `DEFAULT_SETTINGS` by `mergeSettings()` on every
-  read and write (`server/routes/settings.ts`). Unknown keys are dropped, invalid values fall
-  back. Add settings by adding a default (shared) + validation there, never by migrating rows.
-  `DELETE /api/settings` drops the user's row, which is what "Reset all settings" does.
+- **Settings go through `mergeSettings()` on every read and write** (`server/routes/settings.ts`):
+  the stored JSON is merged onto `DEFAULT_SETTINGS`, unknown keys are dropped, invalid values
+  fall back, and a PUT stores the merged result (so a key missing from an old row takes the
+  current default, while a value a user has saved stays put). Add settings by adding a default
+  (shared) + validation there, never by migrating rows. `DELETE /api/settings` drops the user's
+  row, which is what "Reset all settings" does.
 - **Timeclock math lives only in `client/src/lib/timeclock.ts`; alarm scheduling only in
   `client/src/lib/alarms.ts`.** Both are pure functions of `(inputs, settings, now)` with tests.
   Components and hooks never re-derive these. Past days go through `timeclockForDate`
