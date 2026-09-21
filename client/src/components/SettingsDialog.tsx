@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type Keyboard
 import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS, type TimeFormat } from '../../../shared/settings.js';
 import * as api from '../api';
 import { useAuth } from '../auth/AuthGate';
-import { useLatest } from '../hooks/useLatest';
 import { useSettings } from '../hooks/useSettings';
 import { chime, notificationPermission, requestNotificationPermission, unlockAudio } from '../lib/alerts';
 import { CONFIRM, DELETE_DAYS, RESET_SETTINGS, SAVE_STATUS } from '../lib/copy';
@@ -32,20 +31,22 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const tabs = TABS.filter((t) => t.id !== 'account' || auth.mode === 'local');
   const [tab, setTab] = useLastTab(tabs);
 
-  // The shell re-renders every second and hands over a fresh onClose each time; going through
-  // a ref keeps this listener bound once for the dialog's lifetime.
-  const close = useLatest(onClose);
+  // A native modal dialog: the browser traps focus inside it, puts it in the top layer and turns
+  // Escape into a `cancel` event. Rendered closed, then opened here, so nothing flashes. Focus
+  // lands on the dialog itself (its title is read out; Tab reaches the controls) rather than on
+  // the Close button showModal() would pick, where Enter would shut what was just opened. The
+  // page behind still needs the scroll lock on iOS.
+  const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
-    const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === 'Escape') close.current();
-    };
-    window.addEventListener('keydown', onKey);
+    const el = dialog.current!;
+    el.showModal();
+    el.focus();
     document.body.classList.add('no-scroll');
     return () => {
-      window.removeEventListener('keydown', onKey);
+      el.close();
       document.body.classList.remove('no-scroll');
     };
-  }, [close]);
+  }, []);
 
   const set = (patch: Partial<Settings>) => void save(() => update(patch));
   const setAlarm = (id: AlarmId, patch: Partial<AlarmSettings>) => set({ alarms: { ...settings.alarms, [id]: { ...settings.alarms[id], ...patch } } });
@@ -233,8 +234,24 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    // A press on the ::backdrop lands on the dialog element itself (the only place it can be
+    // heard); anything inside hits the inner surface, so the check on the target tells them apart.
+    // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the backdrop has no element of its own
+    <dialog
+      ref={dialog}
+      className="dialog"
+      tabIndex={-1}
+      aria-labelledby="settings-title"
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
+      // `cancel` covers the browser's own close gestures (Escape, Android back); the key handler
+      // keeps Escape working where a browser routes it differently, and closing twice is harmless.
+      onKeyDown={(e) => e.key === 'Escape' && onClose()}
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="dialog-inner">
         <header className="dialog-head">
           <h2 id="settings-title">Settings</h2>
           <SaveStatus state={saveState} />
@@ -272,7 +289,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           </button>
         </footer>
       </div>
-    </div>
+    </dialog>
   );
 }
 
