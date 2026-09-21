@@ -336,6 +336,11 @@ repo or the session scratchpad.
 - **A schema change**: append a migration string to `MIGRATIONS` in `db.ts`. Never edit an
   existing entry.
 - **A response header or CSP source**: `server/security.ts` only, then the `prod` config check.
+- **A config env var**: parse and validate it in `server/config.ts` (throw with a clear
+  message on a bad value) → cover it in `server/config.test.ts` → document it in
+  `.env.example` (commented out, with its default) and the README's variables table.
+  `.env.example` is the only place the container is configured; `docker-compose.yml` never
+  lists variables, it only passes `.env` through (`env_file`).
 
 ## Conventions
 
