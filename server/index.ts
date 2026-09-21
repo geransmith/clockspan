@@ -26,8 +26,20 @@ const server = app.listen(config.port, () => {
   console.log(`Clockspan listening on :${config.port} (auth: ${config.authMode}, db: ${config.dbPath})`);
 });
 
+// Docker sends SIGKILL 10 s after SIGTERM. close() waits for requests in flight, so a stuck
+// one would take the container the hard way; exit a little before that instead. The timer
+// is unref'd so a clean close is not held up by it. Only the first signal starts a shutdown.
+const SHUTDOWN_DEADLINE_MS = 8_000;
+let stopping = false;
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
+    if (stopping) return;
+    stopping = true;
+    console.log(`[server] ${sig}: closing`);
+    setTimeout(() => {
+      console.error(`[server] still open after ${SHUTDOWN_DEADLINE_MS / 1000}s; exiting`);
+      process.exit(1);
+    }, SHUTDOWN_DEADLINE_MS).unref();
     server.close(() => {
       db.close();
       process.exit(0);
