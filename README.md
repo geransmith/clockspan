@@ -255,7 +255,7 @@ The app is built to sit behind a reverse proxy on your own domain. Before openin
 - **Finish setup first.** In `local` mode the first visitor creates the admin account, so do that from the LAN before the proxy goes live.
 - Keep `/data` backed up (below). WebSockets are not used, so any proxy works.
 
-What the app does on its own: a strict same-origin Content-Security-Policy plus `nosniff`, `frame-ancestors 'none'` and `Referrer-Policy` on every response; HttpOnly, SameSite=Lax session cookies with the token stored hashed; scrypt password hashes; a per-IP login limit; a non-root container user. It is still a small self-hosted app: keep it updated and behind the protections your proxy already gives you.
+What the app does on its own: a strict same-origin Content-Security-Policy plus `nosniff`, `frame-ancestors 'none'` and `Referrer-Policy` on every response, and `Cache-Control: no-store` on every API answer; HttpOnly, SameSite=Lax session cookies with the token stored hashed; scrypt password hashes; a per-IP login limit; a non-root container user. It is still a small self-hosted app: keep it updated and behind the protections your proxy already gives you.
 
 ## Backups
 

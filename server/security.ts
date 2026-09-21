@@ -28,12 +28,16 @@ export function securityHeaders(config: Config): RequestHandler {
   // HSTS only makes sense on https, and browsers ignore it on plain http anyway; tying it
   // to cookieSecure keeps one switch for "this deployment is https".
   const hsts = config.cookieSecure ? `max-age=${ONE_YEAR_SEC}` : null;
-  return (_req, res, next) => {
+  return (req, res, next) => {
     res.setHeader('Content-Security-Policy', CSP);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'same-origin');
     if (hsts) res.setHeader('Strict-Transport-Security', hsts);
+    // Every API answer is per-user JSON. Express adds an ETag and nothing else, so without
+    // this a browser or a cache in front of the app could keep one; the static files set
+    // their own caching in app.ts.
+    if (req.path.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
     next();
   };
 }
