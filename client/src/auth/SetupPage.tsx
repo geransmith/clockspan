@@ -1,7 +1,14 @@
 import { useState, type FormEvent } from 'react';
 import * as api from '../api';
+import type { AuthInfo } from '../types';
 
-export function SetupPage({ onDone }: { onDone: () => Promise<void> }) {
+interface Props {
+  onDone: () => Promise<AuthInfo | null>;
+  /** See `LoginPage`. */
+  hint?: string | null;
+}
+
+export function SetupPage({ onDone, hint }: Props) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -30,6 +37,7 @@ export function SetupPage({ onDone }: { onDone: () => Promise<void> }) {
     <div className="gate">
       <form className="gate-card" onSubmit={submit}>
         <h1>Welcome to Clockspan</h1>
+        {hint && <p className="error">{hint}</p>}
         <p className="muted">Create the first account. This account is the admin and can add others later.</p>
         <label className="field">
           <span>Username</span>

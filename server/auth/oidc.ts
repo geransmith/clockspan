@@ -86,7 +86,7 @@ export function oidcAuthRouter(db: DB, config: Config): { api: Router; web: Rout
   const web = Router();
 
   api.get('/me', (req, res) => {
-    const info: AuthInfo = { mode: 'oidc', setupRequired: false, user: req.user ? publicUser(req.user) : null };
+    const info: AuthInfo = { mode: 'oidc', setupRequired: false, user: req.user ? publicUser(req.user) : null, cookieSecure: config.cookieSecure };
     res.json(info);
   });
 

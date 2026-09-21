@@ -17,7 +17,7 @@ describe('AUTH_MODE=local', () => {
   const setup = (client: Client = app.api) => client.post('/api/auth/setup', ADMIN);
 
   it('asks for setup until the first user exists, then signs that user in', async () => {
-    expect((await app.api.get('/api/auth/me')).body).toEqual({ mode: 'local', setupRequired: true, user: null });
+    expect((await app.api.get('/api/auth/me')).body).toEqual({ mode: 'local', setupRequired: true, user: null, cookieSecure: false });
     expect((await app.api.get('/api/settings')).status).toBe(401);
 
     const r = await setup();
@@ -29,6 +29,12 @@ describe('AUTH_MODE=local', () => {
 
     // Setup is one-shot.
     expect((await setup(app.client())).status).toBe(403);
+  });
+
+  it('tells the sign-in page when the cookie is Secure, so it can warn a plain-http visitor', async () => {
+    await app.close();
+    app = await startTestApp({ authMode: 'local', env: { APP_URL: 'https://focus.example.com' } });
+    expect((await app.api.get('/api/auth/me')).body.cookieSecure).toBe(true);
   });
 
   it('lets only one of two racing first visitors become admin', async () => {
@@ -222,7 +228,7 @@ describe('AUTH_MODE=none', () => {
     const app = await startTestApp();
     try {
       const r = await app.api.get('/api/auth/me');
-      expect(r.body).toMatchObject({ mode: 'none', setupRequired: false, user: { kind: 'default', isAdmin: true } });
+      expect(r.body).toMatchObject({ mode: 'none', setupRequired: false, user: { kind: 'default', isAdmin: true }, cookieSecure: false });
       expect((await app.api.get('/api/health')).body).toEqual({ ok: true });
       expect((await app.api.post('/api/auth/login', {})).status).toBe(404);
       expect((await app.api.get('/api/nope')).body).toEqual({ error: 'Not found.' });

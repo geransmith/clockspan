@@ -252,7 +252,7 @@ The app is built to sit behind a reverse proxy on your own domain. Before openin
 - **Use `AUTH_MODE=local` or `oidc`.** `none` means anyone who reaches the port owns the data; the server logs a warning at startup when it's running that way.
 - **Terminate HTTPS at the proxy** and set `APP_URL=https://your.domain`. That marks the session cookie `Secure` and turns on HSTS.
 - **Set `TRUST_PROXY` to the number of proxies** between the internet and the container, usually `1`. With `true`, Express believes whatever `X-Forwarded-For` a client sends, which lets an attacker dodge the login rate limit.
-- **Finish setup first.** In `local` mode the first visitor creates the admin account, so do that from the LAN before the proxy goes live.
+- **Finish setup first.** In `local` mode the first visitor creates the admin account, so do that before the proxy is open to the internet. Once `APP_URL` is https the session cookie is Secure and only an https page can keep it, so sign in through the proxy's https address (the sign-in page says so when it is opened over plain http); for a one-off LAN setup, start with `COOKIE_SECURE=false` and remove it afterwards.
 - Keep `/data` backed up (below). WebSockets are not used, so any proxy works.
 
 What the app does on its own: a strict same-origin Content-Security-Policy plus `nosniff`, `frame-ancestors 'none'` and `Referrer-Policy` on every response, and `Cache-Control: no-store` on every API answer; HttpOnly, SameSite=Lax session cookies with the token stored hashed; scrypt password hashes; a per-IP login limit; a non-root container user. It is still a small self-hosted app: keep it updated and behind the protections your proxy already gives you.

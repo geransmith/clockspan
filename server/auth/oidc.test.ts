@@ -23,7 +23,7 @@ describe('AUTH_MODE=oidc', () => {
   const raw = (path: string, cookie?: string) => fetch(app.url + path, { redirect: 'manual', headers: cookie ? { cookie } : {} });
 
   it('reports the mode with no user and keeps the data routes closed', async () => {
-    expect((await app.api.get('/api/auth/me')).body).toEqual({ mode: 'oidc', setupRequired: false, user: null });
+    expect((await app.api.get('/api/auth/me')).body).toEqual({ mode: 'oidc', setupRequired: false, user: null, cookieSecure: false });
     expect((await app.api.get('/api/settings')).status).toBe(401);
     expect((await app.api.get('/api/days')).status).toBe(401);
     // The password routes are not mounted: they sit behind the auth gate like any unknown path.

@@ -1,7 +1,16 @@
 import { useState, type FormEvent } from 'react';
 import * as api from '../api';
+import { HTTPS_ONLY } from '../lib/copy';
+import type { AuthInfo } from '../types';
 
-export function LoginPage({ onDone }: { onDone: () => Promise<void> }) {
+interface GateProps {
+  /** Re-reads the auth state; the answer says whether the sign-in stuck. */
+  onDone: () => Promise<AuthInfo | null>;
+  /** A line above the form when a sign-in from this page cannot work (plain http, Secure cookie). */
+  hint?: string | null;
+}
+
+export function LoginPage({ onDone, hint }: GateProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -13,7 +22,9 @@ export function LoginPage({ onDone }: { onDone: () => Promise<void> }) {
     setError(null);
     try {
       await api.login(username.trim(), password);
-      await onDone();
+      // A 200 with no session on the next request: the browser dropped the cookie.
+      const next = await onDone();
+      if (next && !next.user) setError(HTTPS_ONLY.notKept);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -25,6 +36,7 @@ export function LoginPage({ onDone }: { onDone: () => Promise<void> }) {
     <div className="gate">
       <form className="gate-card" onSubmit={submit}>
         <h1>Clockspan</h1>
+        {hint && <p className="error">{hint}</p>}
         <label className="field">
           <span>Username</span>
           <input className="input" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required autoFocus />
@@ -42,11 +54,12 @@ export function LoginPage({ onDone }: { onDone: () => Promise<void> }) {
   );
 }
 
-export function OidcLoginPage() {
+export function OidcLoginPage({ hint }: { hint?: string | null }) {
   return (
     <div className="gate">
       <div className="gate-card">
         <h1>Clockspan</h1>
+        {hint && <p className="error">{hint}</p>}
         <p className="muted">Sign in with your identity provider to continue.</p>
         <a className="btn btn-primary btn-lg" href="/auth/login">
           Sign in
