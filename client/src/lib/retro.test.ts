@@ -45,6 +45,17 @@ describe('reviewDay', () => {
     expect(r.offPlanSeconds).toBe(900);
   });
 
+  it('counts a completed session with no duration as zero and skips rows that never got a uid', () => {
+    // Old data: a row saved before uids existed, and a completed session whose end was never written.
+    const priorities = [row(1, 'Before uids', { uid: null }), row(2, 'Planned')];
+    const r = reviewDay(priorities, [session(1, 10_000, 600, { durationSeconds: null, priorityUid: 'uid200000000' })]);
+    expect(r.planned.map((p) => [p.priority.position, p.focusedSeconds, p.sessions])).toEqual([
+      [1, 0, 0],
+      [2, 0, 1],
+    ]);
+    expect(r.onPlanSeconds).toBe(0);
+  });
+
   it('ignores running and cancelled sessions', () => {
     const r = reviewDay([row(1, 'A')], [session(1, 10_000, 600, { status: 'running', endedAt: null, durationSeconds: null, priorityUid: 'uid100000000' })]);
     expect(r.onPlanSeconds).toBe(0);

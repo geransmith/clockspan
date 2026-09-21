@@ -44,6 +44,15 @@ describe('sessions', () => {
     expect((await start({ plannedSeconds: 8 * 3600 + 1 })).status).toBe(400);
     expect((await start({ plannedSeconds: 90.5 })).status).toBe(400);
     expect((await app.api.post('/api/days/nope/sessions', { plannedSeconds: 1500 })).status).toBe(400);
+    // No body at all: the same 400, not a crash on reading a field of undefined.
+    expect((await fetch(`${app.url}/api/days/${DATE}/sessions`, { method: 'POST' })).status).toBe(400);
+  });
+
+  it('leaves a session as it is when patched with no body', async () => {
+    const { id } = (await start()).body.session;
+    const r = await fetch(`${app.url}/api/sessions/${id}`, { method: 'PATCH' });
+    expect(r.status).toBe(200);
+    expect(((await r.json()) as { session: { label: string; plannedSeconds: number } }).session).toMatchObject({ label: 'Work', plannedSeconds: 1500 });
   });
 
   it('links only to a priority that exists on that day', async () => {

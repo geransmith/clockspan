@@ -94,7 +94,8 @@ export function formatCountdown(seconds: number): string {
 export function resolveHour12(pref: TimeFormat = 'auto'): boolean {
   if (pref === '12h') return true;
   if (pref === '24h') return false;
-  return new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions().hour12 ?? true;
+  // `hour12` is always resolved once `hour` is in the options; the comparison keeps 12-hour as the default.
+  return new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions().hour12 !== false;
 }
 
 /** Round to the nearest minute (punch times are minute-granular in the UI). */

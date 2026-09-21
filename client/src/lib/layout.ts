@@ -7,7 +7,7 @@ export interface CardDef {
 }
 
 /** A title for every card id; adding an id to CARD_IDS without one is a type error. */
-const CARD_TITLES: Record<CardId, string> = {
+export const CARD_TITLES: Record<CardId, string> = {
   timeclock: 'Timeclock',
   priorities: 'Top priorities',
   timer: 'Focus timer',
@@ -21,7 +21,7 @@ export const CARDS: CardDef[] = CARD_IDS.map((id) => ({ id, title: CARD_TITLES[i
 export const DEFAULT_LAYOUT: Settings['layout'] = DEFAULT_SETTINGS.layout;
 
 export function cardTitle(id: CardId): string {
-  return CARDS.find((c) => c.id === id)?.title ?? id;
+  return CARD_TITLES[id];
 }
 
 /** Drop unknown ids, append missing ones with their default — mirrors the server merge. */

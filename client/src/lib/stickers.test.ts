@@ -118,6 +118,9 @@ describe('daySummaryOf', () => {
       ],
     };
     expect(daySummaryOf(day)).toEqual({ date: TODAY, punches: day.punches, focusSeconds: 1500, prioritiesDone: 1, prioritiesTotal: 2, retroAt: 5 });
+    // A completed session whose end was never written counts for nothing rather than NaN.
+    const unfinished = { ...day, sessions: [{ ...day.sessions[0]!, durationSeconds: null }] };
+    expect(daySummaryOf(unfinished).focusSeconds).toBe(0);
   });
 });
 

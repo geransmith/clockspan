@@ -54,7 +54,7 @@ describe('/api/settings', () => {
 
   it('keeps layout order, drops unknown cards and appends missing ones with their default', async () => {
     const r = await app.api.put('/api/settings', {
-      layout: [{ id: 'timer', visible: false }, { id: 'nope' }, { id: 'timer', visible: true }, { id: 'log' }],
+      layout: [{ id: 'timer', visible: false }, { id: 'nope' }, null, 'retro', { id: 'timer', visible: true }, { id: 'log' }],
     });
     expect(r.body.layout).toEqual([
       { id: 'timer', visible: false },
@@ -94,6 +94,15 @@ describe('/api/settings', () => {
     expect((await app.api.put('/api/settings', { showWeekends: false })).body.showWeekends).toBe(false);
     expect((await app.api.put('/api/settings', { showWeekends: 'no' })).body.showWeekends).toBe(false);
     expect((await app.api.put('/api/settings', { showWeekends: true })).body.showWeekends).toBe(true);
+  });
+
+  it('serves the defaults when the stored row is not JSON', async () => {
+    const user = (app.db.prepare(`SELECT id FROM users`).get() as { id: number }).id;
+    app.db.prepare(`INSERT INTO settings (user_id, json) VALUES (?, ?)`).run(user, '{not json');
+    expect((await app.api.get('/api/settings')).body).toEqual(DEFAULT_SETTINGS);
+    // The next save writes a clean row over it.
+    expect((await app.api.put('/api/settings', { workMinutes: 1 })).body.workMinutes).toBe(1);
+    expect((await app.api.get('/api/settings')).body.workMinutes).toBe(1);
   });
 
   it('resets on DELETE', async () => {

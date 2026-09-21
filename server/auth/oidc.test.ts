@@ -77,6 +77,8 @@ describe('AUTH_MODE=oidc', () => {
     expect(renamed.display_name).toBe('Ada L.');
     expect(renamed.is_admin).toBe(1);
     expect(app.db.prepare(`SELECT display_name FROM users WHERE id = ?`).get(first.id)).toEqual({ display_name: 'Ada L.' });
+    // The same name again is a plain read.
+    expect(upsertOidcUser(app.db, 'issuer|1', 'Ada L.')).toMatchObject({ id: first.id, display_name: 'Ada L.' });
     expect(app.db.prepare(`SELECT COUNT(*) AS n FROM users WHERE kind = 'oidc'`).get()).toEqual({ n: 2 });
     // A name is a label: a provider that sends a paragraph gets the first 100 characters.
     expect(upsertOidcUser(app.db, 'issuer|3', 'n'.repeat(500)).display_name).toBe('n'.repeat(100));

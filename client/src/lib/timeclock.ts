@@ -126,7 +126,8 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
       openIn = p.at;
       expect = 'out';
     } else {
-      if (openIn != null) workedMs += Math.max(0, p.at - openIn);
+      // `expect` only reaches 'out' after an 'in' set `openIn`.
+      workedMs += Math.max(0, p.at - openIn!);
       openIn = null;
       lastOut = p.at;
       expect = 'in';

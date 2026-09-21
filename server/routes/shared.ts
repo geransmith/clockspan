@@ -28,7 +28,7 @@ export function findDay(db: DB, userId: number, date: string): DayRow | undefine
   return db.prepare(`SELECT id, overtime_approved, retro_note, retro_at FROM days WHERE user_id = ? AND date = ?`).get(userId, date) as DayRow | undefined;
 }
 
-/** Client-minted priority ids (12 hex chars); the server only checks the shape. */
+/** Priority ids: the client mints 12 hex chars (`newUid`); the server only checks the shape, loosely. */
 export const UID_RE = /^[a-z0-9]{8,32}$/i;
 
 export function ensureDay(db: DB, userId: number, date: string): number {

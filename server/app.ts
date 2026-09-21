@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import express, { type Express } from 'express';
 import type { Config } from './config.js';
 import type { DB } from './db.js';
-import { requireAuth, resolveUser } from './auth/middleware.js';
+import { currentUser, requireAuth, resolveUser } from './auth/middleware.js';
 import { localAuthRouter, publicUser } from './auth/local.js';
 import { oidcAuthRouter } from './auth/oidc.js';
 import { purgeExpiredSessions } from './auth/session.js';
@@ -15,7 +15,12 @@ import { sessionStartRouter, sessionsRouter } from './routes/sessions.js';
 import { settingsRouter } from './routes/settings.js';
 import type { AuthInfo } from '../shared/api.js';
 
-export function createApp(db: DB, config: Config): Express {
+export interface AppOptions {
+  /** Where the built client lives; the default is `dist/client` next to the built server. */
+  clientDir?: string;
+}
+
+export function createApp(db: DB, config: Config, opts: AppOptions = {}): Express {
   const app = express();
   app.disable('x-powered-by');
   if (config.trustProxy !== false) app.set('trust proxy', config.trustProxy);
@@ -35,7 +40,8 @@ export function createApp(db: DB, config: Config): Express {
     app.use('/auth', web);
   } else {
     app.get('/api/auth/me', (req, res) => {
-      const info: AuthInfo = { mode: 'none', setupRequired: false, user: req.user ? publicUser(req.user) : null };
+      // resolveUser attaches the default user to every request in this mode.
+      const info: AuthInfo = { mode: 'none', setupRequired: false, user: publicUser(currentUser(req)) };
       res.json(info);
     });
   }
@@ -52,8 +58,7 @@ export function createApp(db: DB, config: Config): Express {
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found.' }));
 
   // ----- static SPA (production build) -----
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const clientDir = path.resolve(here, '../client');
+  const clientDir = opts.clientDir ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../client');
   if (fs.existsSync(path.join(clientDir, 'index.html'))) {
     // Vite fingerprints everything under /assets, so those can be cached for good; the
     // manifest, icons and service worker keep the short default so an update shows up.
@@ -79,7 +84,7 @@ export function createApp(db: DB, config: Config): Express {
     res.status(status).json({ error: status >= 500 ? 'Internal error.' : (err as Error).message });
   });
 
-  setInterval(() => purgeExpiredSessions(db), 6 * 3_600_000).unref();
+  setInterval(purgeExpiredSessions, 6 * 3_600_000, db).unref();
   scheduleRetention(db, config);
 
   return app;

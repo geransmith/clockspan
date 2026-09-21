@@ -27,7 +27,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run format:check
-      - run: npm test
+      - run: npm run test:coverage
       - run: npm run build
       - name: Tag matches package.json version
         if: startsWith(github.ref, 'refs/tags/v')

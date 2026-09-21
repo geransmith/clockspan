@@ -57,3 +57,15 @@ describe('AUTH_MODE', () => {
     expect(() => loadConfig({ AUTH_MODE: 'oidc' })).toThrow(/OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, APP_URL/);
   });
 });
+
+describe('COOKIE_SECURE', () => {
+  it('follows the APP_URL scheme unless set explicitly', () => {
+    expect(load().cookieSecure).toBe(false);
+    expect(load({ APP_URL: 'https://focus.example.com/' }).cookieSecure).toBe(true);
+    expect(load({ APP_URL: 'https://focus.example.com/' }).appUrl).toBe('https://focus.example.com');
+    expect(load({ APP_URL: 'http://focus.lan' }).cookieSecure).toBe(false);
+    // Explicit wins both ways: TLS terminated at a proxy, or a plain-http test of an https URL.
+    expect(load({ APP_URL: 'http://focus.lan', COOKIE_SECURE: 'true' }).cookieSecure).toBe(true);
+    expect(load({ APP_URL: 'https://focus.example.com', COOKIE_SECURE: 'false' }).cookieSecure).toBe(false);
+  });
+});

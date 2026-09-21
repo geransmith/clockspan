@@ -34,13 +34,15 @@ export function stickersForDay(d: DaySummary, settings: TimeclockSettings, today
 export function stickerEmoji(date: string, id: StickerId): string {
   const seed = Number(date.replace(/-/g, ''));
   const taken = new Set<number>();
-  for (const [i, reason] of STICKER_REASONS.entries()) {
-    let at = hash(seed, i * 0x9e37 + 0x5c1e) % STICKER_EMOJI.length;
+  // Each reason's pick depends on the ones before it in legend order, so walk up to this one.
+  const want = STICKER_REASONS.findIndex((r) => r.id === id);
+  let at = 0;
+  for (let i = 0; i <= want; i++) {
+    at = hash(seed, i * 0x9e37 + 0x5c1e) % STICKER_EMOJI.length;
     while (taken.has(at)) at = (at + 1) % STICKER_EMOJI.length;
     taken.add(at);
-    if (reason.id === id) return STICKER_EMOJI[at]!;
   }
-  return STICKER_EMOJI[0]!;
+  return STICKER_EMOJI[at]!;
 }
 
 /** The `GET /days` row for a full day: completed sessions, rows with text. Keeps today's cell live. */

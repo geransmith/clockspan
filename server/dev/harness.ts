@@ -1,4 +1,5 @@
 import os from 'node:os';
+import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { createApp } from '../app.js';
 import { loadConfig, type Config } from '../config.js';
@@ -49,6 +50,8 @@ export interface StartOptions {
   seed?: boolean | Partial<Omit<SeedOptions, 'userId'>>;
   /** Extra environment for `loadConfig`, e.g. `{ RETENTION_DAYS: '30' }`. */
   env?: Record<string, string>;
+  /** A directory to serve as the built client; by default nothing is served outside /api. */
+  clientDir?: string;
 }
 
 /** A Wednesday, so "this week" in a review holds seeded days on both sides. */
@@ -96,7 +99,8 @@ export async function startTestApp(opts: StartOptions = {}): Promise<TestApp> {
     authMode === 'oidc' ? { OIDC_ISSUER: 'http://127.0.0.1:1/', OIDC_CLIENT_ID: 'clockspan', OIDC_CLIENT_SECRET: 'secret', APP_URL: 'http://localhost' } : {};
   const config = loadConfig({ AUTH_MODE: authMode, DATA_DIR: os.tmpdir(), PORT: '0', ...oidcEnv, ...opts.env });
   const db = openDatabase(':memory:');
-  const app = createApp(db, config);
+  // No client dir means the static block stays off, so /api tests never see index.html.
+  const app = createApp(db, config, { clientDir: opts.clientDir ?? path.join(os.tmpdir(), 'clockspan-no-client') });
   const server = await new Promise<import('node:http').Server>((resolve) => {
     const s = app.listen(0, '127.0.0.1', () => resolve(s));
   });

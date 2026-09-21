@@ -131,4 +131,18 @@ describe('reviewRange', () => {
   it('is all zeros for no days', () => {
     expect(reviewRange([], settings, '2026-09-16', now).days).toBe(0);
   });
+
+  it('orders equally long unplanned sessions by date and reads a missing duration as zero', () => {
+    const later = day('2026-09-15', { sessions: [session(3, '2026-09-15', at('2026-09-15', 9), 600)] });
+    const earlier = day('2026-09-14', {
+      sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600), session(2, '2026-09-14', at('2026-09-14', 11), 900, { durationSeconds: null })],
+    });
+    const r = reviewRange([later, earlier], settings, '2026-09-16', now);
+    expect(r.unplanned.map((u) => [u.date, u.session.id])).toEqual([
+      ['2026-09-14', 1],
+      ['2026-09-15', 3],
+      ['2026-09-14', 2],
+    ]);
+    expect(r.focusedSeconds).toBe(1200);
+  });
 });

@@ -1,6 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startTestApp, type Client, type TestApp } from '../dev/harness.js';
 import { SESSION_COOKIE } from './session.js';
+import { LoginLimiter } from './local.js';
+import { currentUser } from './middleware.js';
+import type { Request } from 'express';
 
 const ADMIN = { username: 'geran', password: 'correct horse' };
 
@@ -146,6 +149,17 @@ describe('AUTH_MODE=local', () => {
     expect((await app.api.del(`/api/auth/users/${me}`)).status).toBe(400);
   });
 
+  it('answers the same errors when a request carries no body at all', async () => {
+    const bare = (path: string, cookie?: string) => fetch(app.url + path, { method: 'POST', headers: cookie ? { cookie } : {} });
+    expect((await bare('/api/auth/setup')).status).toBe(400);
+    await setup();
+    expect((await bare('/api/auth/login')).status).toBe(401);
+    expect((await app.api.post('/api/auth/login', { username: 42, password: ADMIN.password })).status).toBe(401);
+    const cookie = `${SESSION_COOKIE}=${app.api.cookies()[SESSION_COOKIE]}`;
+    expect((await bare('/api/auth/password', cookie)).status).toBe(400);
+    expect((await bare('/api/auth/users', cookie)).status).toBe(400);
+  });
+
   it('answers 401 as JSON for unauthenticated data routes', async () => {
     // Unknown /api paths sit behind the same gate, so they are 401 too, not 404.
     for (const path of ['/api/days', '/api/days/2026-09-01', '/api/sessions/running', '/api/nope']) {
@@ -153,6 +167,53 @@ describe('AUTH_MODE=local', () => {
       expect(r.status).toBe(401);
       expect(r.body).toEqual({ error: 'unauthenticated' });
     }
+    // The admin routes are not behind the data gate; they answer 401 themselves before 403.
+    const r = await app.api.get('/api/auth/users');
+    expect(r.status).toBe(401);
+    expect(r.body).toEqual({ error: 'unauthenticated' });
+  });
+});
+
+describe('currentUser', () => {
+  it('refuses to be used on a request that never went through requireAuth', () => {
+    expect(() => currentUser({} as Request)).toThrow(/requireAuth/);
+  });
+});
+
+describe('LoginLimiter', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('locks an address after five failures for fifteen minutes, and a success clears it', () => {
+    vi.useFakeTimers();
+    const limiter = new LoginLimiter();
+    for (let i = 0; i < 4; i++) limiter.fail('a');
+    expect(limiter.check('a')).toEqual({ ok: true, retryAfterSec: 0 });
+    limiter.fail('a');
+    expect(limiter.check('a')).toEqual({ ok: false, retryAfterSec: 15 * 60 });
+    vi.advanceTimersByTime(14 * 60_000);
+    expect(limiter.check('a')).toEqual({ ok: false, retryAfterSec: 60 });
+    vi.advanceTimersByTime(60_000);
+    expect(limiter.check('a')).toEqual({ ok: true, retryAfterSec: 0 });
+    // A failure after the window starts a fresh count rather than adding to the stale one.
+    limiter.fail('a');
+    expect(limiter.check('a').ok).toBe(true);
+    limiter.reset('a');
+    for (let i = 0; i < 5; i++) limiter.fail('a');
+    expect(limiter.check('a').ok).toBe(false);
+  });
+
+  it('sweeps expired entries once the map grows past a thousand addresses', () => {
+    vi.useFakeTimers();
+    const limiter = new LoginLimiter();
+    const size = () => (limiter as unknown as { attempts: Map<string, unknown> }).attempts.size;
+    for (let i = 0; i < 1000; i++) limiter.fail(`10.0.${Math.floor(i / 256)}.${i % 256}`);
+    expect(size()).toBe(1000);
+    // Still within the window: nothing to sweep, the map keeps growing.
+    limiter.fail('fresh');
+    expect(size()).toBe(1001);
+    vi.advanceTimersByTime(15 * 60_000);
+    limiter.fail('after');
+    expect(size()).toBe(1);
   });
 });
 
