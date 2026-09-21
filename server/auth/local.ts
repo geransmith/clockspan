@@ -57,6 +57,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
       mode: 'local',
       setupRequired: userCount(db) === 0,
       user: req.user ? publicUser(req.user) : null,
+      cookieSecure: config.cookieSecure,
     };
     res.json(info);
   });

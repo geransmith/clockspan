@@ -41,7 +41,7 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
   } else {
     app.get('/api/auth/me', (req, res) => {
       // resolveUser attaches the default user to every request in this mode.
-      const info: AuthInfo = { mode: 'none', setupRequired: false, user: publicUser(currentUser(req)) };
+      const info: AuthInfo = { mode: 'none', setupRequired: false, user: publicUser(currentUser(req)), cookieSecure: config.cookieSecure };
       res.json(info);
     });
   }

@@ -2,12 +2,14 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import * as api from '../api';
 import { UNAUTHENTICATED_EVENT } from '../api';
 import type { AuthInfo } from '../types';
+import { HTTPS_ONLY } from '../lib/copy';
 import { LoginPage, OidcLoginPage } from './LoginPage';
 import { SetupPage } from './SetupPage';
 
 interface AuthCtx {
   auth: AuthInfo;
-  refresh: () => Promise<void>;
+  /** Re-reads `/api/auth/me`; resolves with the answer, or null when the server did not answer. */
+  refresh: () => Promise<AuthInfo | null>;
   signOut: () => Promise<void>;
 }
 
@@ -23,8 +25,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
         (next) => {
           setAuth(next);
           setError(null);
+          return next;
         },
-        (err: Error) => setError(err.message),
+        (err: Error) => {
+          setError(err.message);
+          return null;
+        },
       ),
     [],
   );
@@ -62,9 +68,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }
   if (!auth || !value) return <div className="gate" aria-busy="true" />;
   if (auth.mode === 'none' || auth.user) return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
-  if (auth.mode === 'local' && auth.setupRequired) return <SetupPage onDone={refresh} />;
-  if (auth.mode === 'local') return <LoginPage onDone={refresh} />;
-  return <OidcLoginPage />;
+  // A Secure cookie set from a plain-http page is discarded by the browser, so the sign-in
+  // would look like it did nothing. Say so up front (localhost counts as secure in most
+  // browsers, but a dev server never sets APP_URL to https anyway).
+  const hint = auth.cookieSecure && window.location.protocol === 'http:' ? HTTPS_ONLY.hint : null;
+  if (auth.mode === 'local' && auth.setupRequired) return <SetupPage onDone={refresh} hint={hint} />;
+  if (auth.mode === 'local') return <LoginPage onDone={refresh} hint={hint} />;
+  return <OidcLoginPage hint={hint} />;
 }
 
 export function useAuth(): AuthCtx {

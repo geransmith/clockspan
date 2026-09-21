@@ -100,4 +100,6 @@ export interface AuthInfo {
   mode: AuthMode;
   setupRequired: boolean;
   user: PublicUser | null;
+  /** The session cookie is marked Secure (APP_URL is https): a page opened over plain http cannot keep it. */
+  cookieSecure: boolean;
 }

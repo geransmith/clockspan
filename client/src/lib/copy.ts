@@ -130,6 +130,15 @@ export const LOAD_FAILED = {
   retry: 'Try again',
 } as const;
 
+/**
+ * Sign-in pages. `hint` shows when the server marks its cookie Secure and the page was opened
+ * over plain http; `notKept` when a sign-in answered 2xx but the next request had no session.
+ */
+export const HTTPS_ONLY = {
+  hint: 'This server keeps sessions over https only. Open the app through its https address before signing in.',
+  notKept: 'Signed in, but the browser did not keep the session cookie. Open the app through its https address and try again.',
+} as const;
+
 /** The whole page, when something threw while rendering. */
 export const RENDER_FAILED = {
   title: 'Something went wrong',
