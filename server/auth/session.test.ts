@@ -55,21 +55,26 @@ describe('cookie sessions', () => {
     expect((await app.api.get('/api/auth/me')).body.user).toBeNull();
   });
 
-  it('slides the expiry once an hour, not on every request', async () => {
-    await app.api.post('/api/auth/setup', USER);
+  it('slides the expiry once an hour, not on every request, and hands the browser the cookie again', async () => {
+    const issued = setCookie(await app.api.post('/api/auth/setup', USER));
     const first = only();
-    // Within the hour: nothing written.
-    await app.api.get('/api/settings');
+    // Within the hour: nothing written, nothing re-sent.
+    const quiet = await app.api.get('/api/settings');
     expect(only()).toEqual(first);
-    // An hour old: both timestamps move forward by the full TTL from now.
+    expect(setCookie(quiet)).toBe('');
+    // An hour old: both timestamps move forward by the full TTL from now, and the same token
+    // goes back out with a full Max-Age so the browser's copy slides too.
     const before = Date.now();
     app.db
       .prepare(`UPDATE auth_sessions SET last_seen_at = ?, expires_at = ? WHERE id = ?`)
       .run(first.last_seen_at - 2 * HOUR, first.expires_at - 2 * HOUR, first.id);
-    expect((await app.api.get('/api/settings')).status).toBe(200);
+    const slidRes = await app.api.get('/api/settings');
+    expect(slidRes.status).toBe(200);
     const slid = only();
     expect(slid.last_seen_at).toBeGreaterThanOrEqual(before);
     expect(slid.expires_at).toBe(slid.last_seen_at + app.config.sessionTtlMs);
+    expect(setCookie(slidRes)).toBe(issued);
+    expect(issued).toMatch(new RegExp(`; Max-Age=${Math.floor(app.config.sessionTtlMs / 1000)}(;|$)`, 'i'));
   });
 
   it('logout drops only the calling session', async () => {
