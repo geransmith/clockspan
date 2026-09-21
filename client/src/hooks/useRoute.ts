@@ -40,6 +40,9 @@ export function useRoute(): [Route, (next: Partial<Route>) => void] {
   const navigate = useCallback(
     (next: Partial<Route>) => {
       const merged = { ...current.current, ...next };
+      // Already there (the brand button on today's sheet): a push would add an entry Back
+      // has to step through without anything changing.
+      if (merged.view === current.current.view && merged.date === current.current.date) return;
       write(merged);
       setRoute(merged);
     },

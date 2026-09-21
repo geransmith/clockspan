@@ -26,6 +26,10 @@ export function Retro({ priorities, sessions, note, reviewedAt, onChange }: Prop
   const [draft, setDraft] = useState(note);
   const dirty = useRef(false);
   const timer = useRef<number | null>(null);
+  // What the timer would run. Leaving the day inside the 800 ms (browser Back, a swipe)
+  // unmounts the card without a blur, so the unmount runs it instead of dropping the note;
+  // the store outlives the card and the save still lands.
+  const pending = useRef<(() => void) | null>(null);
 
   // Adopt the stored note whenever nothing is being typed.
   useEffect(() => {
@@ -34,6 +38,7 @@ export function Retro({ priorities, sessions, note, reviewedAt, onChange }: Prop
   useEffect(
     () => () => {
       if (timer.current) window.clearTimeout(timer.current);
+      pending.current?.();
     },
     [],
   );
@@ -41,6 +46,7 @@ export function Retro({ priorities, sessions, note, reviewedAt, onChange }: Prop
   const flush = (value: string) => {
     if (timer.current) window.clearTimeout(timer.current);
     timer.current = null;
+    pending.current = null;
     if (!dirty.current) return;
     dirty.current = false;
     if (value !== note) onChange({ note: value });
@@ -49,7 +55,8 @@ export function Retro({ priorities, sessions, note, reviewedAt, onChange }: Prop
     setDraft(value);
     dirty.current = true;
     if (timer.current) window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => flush(value), 800);
+    pending.current = () => flush(value);
+    timer.current = window.setTimeout(pending.current, 800);
   };
 
   if (review.total === 0 && review.unplanned.length === 0) {
