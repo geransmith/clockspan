@@ -1,0 +1,34 @@
+# Weekly dependency updates. Every PR is labelled skip-changelog (the release notes exclude
+# the dependabot author anyway) and merges like any other once `check` is green.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    labels: [skip-changelog]
+    # .npmrc pins exact versions; bump the pin rather than widening it to a range.
+    versioning-strategy: increase
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # @types/node tracks the Node major in `engines`, the Dockerfile and CI, not npm's latest.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels: [skip-changelog]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    labels: [skip-changelog]
+    ignore:
+      # A Node major is a deliberate move across `engines`, nvm, CI and the Dockerfile together.
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
