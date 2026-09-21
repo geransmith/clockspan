@@ -61,3 +61,24 @@ describe('migration 3: priority ids and added-at backfill', () => {
     db.close();
   });
 });
+
+describe('migration 4: one running session per user', () => {
+  it('refuses a second running row for a user, and only that', () => {
+    const db = openDatabase(':memory:');
+    const user = ensureDefaultUser(db);
+    const other = Number(db.prepare(`INSERT INTO users (kind, username, display_name, created_at) VALUES ('local', 'sam', 'Sam', 1)`).run().lastInsertRowid);
+    const day = db.prepare(`INSERT INTO days (user_id, date, created_at) VALUES (?, '2026-09-01', 1000)`).run(user.id).lastInsertRowid;
+    const otherDay = db.prepare(`INSERT INTO days (user_id, date, created_at) VALUES (?, '2026-09-01', 1000)`).run(other).lastInsertRowid;
+    const insert = db.prepare(
+      `INSERT INTO sessions (day_id, user_id, label, planned_seconds, started_at, ended_at, status) VALUES (?, ?, '', 600, 1000, ?, ?)`,
+    );
+    insert.run(day, user.id, 1500, 'completed');
+    insert.run(day, user.id, null, 'running');
+    expect(() => insert.run(day, user.id, null, 'running')).toThrow(/UNIQUE/);
+    // Another user, and an ended row, are unaffected.
+    insert.run(otherDay, other, null, 'running');
+    insert.run(day, user.id, 1600, 'cancelled');
+    expect(db.prepare(`SELECT COUNT(*) AS n FROM sessions`).get()).toEqual({ n: 4 });
+    db.close();
+  });
+});

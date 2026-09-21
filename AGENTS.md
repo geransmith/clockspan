@@ -242,6 +242,10 @@ repo or the session scratchpad.
 - **Timer remaining time is derived from the server's `startedAt + plannedSeconds`** on every
   tick — never a client-side counter. `useTimer` keeps a `mutationSeq` so a slow `GET
   /sessions/running` can't overwrite an optimistic update; keep that pattern for new mutations.
+  **One running session per user is a schema invariant** (a unique partial index), and another
+  device may own it: a 409 on start is adopted with a banner, a sync whose answer differs from
+  the session shown reloads that day so the log catches up, a 404/409 on adjust/finish/cancel
+  re-syncs at once, and the completion chime only plays when the server says `completed`.
 - **Punch positions are fixed**: 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in
   pairs, and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches`
   enforces it). Kind is parity (`kindForPosition`). The math evaluates *set* punches

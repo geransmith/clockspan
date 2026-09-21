@@ -108,6 +108,12 @@ export const TIMER_DONE = {
   body: (label: string, duration: string) => (label ? `${label} · ${duration}` : `${duration} logged.`),
 } as const;
 
+/** Banner when a start finds a timer already running, started on another device. */
+export const TIMER_ELSEWHERE = {
+  title: 'A timer is already running',
+  body: 'It was started on another device. This sheet now shows that one.',
+} as const;
+
 /** Placeholder for the day's retrospective note. */
 export const RETRO_PROMPT = 'What got in the way? What went to plan?';
 
