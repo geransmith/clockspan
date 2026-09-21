@@ -4,7 +4,7 @@ import * as oidc from 'openid-client';
 import type { DB, UserRow } from '../db.js';
 import type { Config } from '../config.js';
 import { cookieOptions, createSession, destroySession } from './session.js';
-import { publicUser } from './local.js';
+import { logName, publicUser } from './local.js';
 import type { AuthInfo } from '../../shared/api.js';
 
 const FLOW_COOKIE = 'fs_oidc';
@@ -157,6 +157,7 @@ export function oidcAuthRouter(db: DB, config: Config): { api: Router; web: Rout
       }
       const user = upsertOidcUser(db, `${o.issuer}|${claims.sub}`, name ?? claims.sub);
       createSession(db, config, res, user.id);
+      console.log(`[oidc] ${logName(user.display_name)} (#${user.id}) signed in`);
       // createSession set the session cookie; also clear the one-time flow cookie.
       res.setHeader('Set-Cookie', [res.getHeader('Set-Cookie') as string, clearFlow]);
       res.redirect('/');

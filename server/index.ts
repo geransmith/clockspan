@@ -13,6 +13,11 @@ try {
 if (config.authMode === 'none') {
   console.warn('[auth] AUTH_MODE=none: anyone who can reach this port has full access. Set AUTH_MODE=local or oidc before exposing it.');
 }
+if (config.trustProxy === true) {
+  console.warn(
+    '[proxy] TRUST_PROXY=true trusts any X-Forwarded-For a client sends, which defeats the login rate limit. Set it to the number of proxies in front of the app, usually 1.',
+  );
+}
 
 const db = openDatabase(config.dbPath);
 const app = createApp(db, config);
