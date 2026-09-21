@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any -- response bodies are whatever the route sent; tests assert on them loosely */
 import os from 'node:os';
 import type { AddressInfo } from 'node:net';
 import { createApp } from '../app.js';
@@ -10,7 +9,8 @@ import { seedDatabase, type SeedManifest, type SeedOptions } from './seed.js';
  * Boots the real Express app on an in-memory SQLite DB and talks to it over HTTP with
  * Node's fetch. No mocks: a test exercises the same middleware, validation and SQL the
  * client hits. Start one per test (`beforeEach`) — boot is a few milliseconds and it keeps
- * the DB and the per-app login limiter isolated.
+ * the DB and the per-app login limiter isolated. Response bodies are typed `any` on purpose:
+ * they are whatever the route sent, and tests assert on them loosely.
  */
 
 export interface ApiResponse<T = any> {

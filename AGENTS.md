@@ -15,13 +15,13 @@ has the user-facing description.
 ## Stack & versions
 
 - Node **24** (Active LTS). `nvm use 24` locally; `node:24-alpine` in Docker.
-- Frontend: React 19 + TypeScript + Vite 8. Drag/drop: `@dnd-kit/sortable`. Punch time entry:
+- Frontend: React 19 + TypeScript 7 (the native `tsc`) + Vite 8. Drag/drop: `@dnd-kit/sortable`. Punch time entry:
   `react-aria` + `react-stately` (`useTimeField`, segments) with `@internationalized/date`.
   No router lib — the date and view live in the URL query (`hooks/useRoute.ts`). No CSS framework.
 - Backend: Express 5 (ESM, `NodeNext`, imports use `.js` extensions), `better-sqlite3` (native),
   `openid-client` v6 for OIDC, `cookie` for cookie parsing. Passwords: `node:crypto` scrypt (async).
-- Tests: Vitest 5. Lint: ESLint flat config (`eslint.config.js`: typescript-eslint + react-hooks,
-  syntax rules only). CI: `.github/workflows/ci.yml` runs typecheck, lint, test, build on
+- Tests: Vitest 5. Lint: oxlint (`.oxlintrc.json`: correctness + typescript + react-hooks rules,
+  syntax level only; it parses TS itself, which is what lets TypeScript be 7). CI: `.github/workflows/ci.yml` runs typecheck, lint, test, build on
   every PR and push; on `main` it also publishes the `edge` image, on `v*` tags the release.
 - One `package.json` for both sides; `tsconfig.json` = client + shared, `tsconfig.server.json` =
   server + shared (`rootDir: .`, so `dist/server` and `dist/shared`).
@@ -114,7 +114,7 @@ scripts/screenshots.mjs `npm run screenshots`: dev server (reused or started) + 
                         Chromium over CDP → docs/screenshots/*.png for the README
 docs/screenshots/       committed PNGs the README embeds; regenerate after a visible UI change
 docker/entrypoint.sh    PUID/PGID (default 1000/1000) → chown /data + su-exec; 0 keeps root
-Dockerfile docker-compose.yml .env.example README.md eslint.config.js
+Dockerfile docker-compose.yml .env.example README.md .oxlintrc.json
 CONTRIBUTING.md         PR and release rules (imported by CLAUDE.md; see "Branches, PRs and releases")
 .github/workflows/ci.yml  check → image (ghcr.io) → release; .github/release.yml groups notes by label
 ```
@@ -129,7 +129,7 @@ npm test               # vitest: shared + client lib tests + server API tests (~
 npm test -- server/routes/days   # one file
 npm run test:coverage  # the same run with a v8 report (text + coverage/index.html); server, shared, client libs
 npm run typecheck      # client + server (tsconfig.server.test.json also covers dev/ and tests)
-npm run lint           # eslint .
+npm run lint           # oxlint
 npm run seed           # fill data/focus.db with sample days; see "Dev data is disposable"
 npm run screenshots    # regenerate docs/screenshots/ (starts the dev server if needed; finds or
                        # fetches a Chromium into node_modules/.cache; CHROME_BIN to force one)
@@ -441,3 +441,8 @@ Prove a change at the cheapest level that can show it, and stop there:
   commit that lands on `main`; the release checklist tags `main` after the merge for that reason.
 - Prettier is not configured: the tree was never consistently formatted, so a `--check` would
   touch most files. Match the surrounding style by hand.
+- oxlint ignores a misspelled rule name without a word. After editing `.oxlintrc.json`, check
+  `npx oxlint --print-config` lists what you meant, and that a deliberately bad snippet is caught.
+- TypeScript 7 is the native compiler: the `typescript` package has no `tsserver` or JS API.
+  Editors need the native TypeScript extension for IntelliSense (VS Code's bundled TS still
+  works for that); `npm run typecheck` is the source of truth either way.

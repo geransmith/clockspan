@@ -73,7 +73,7 @@ Other commands:
 ```bash
 npm test               # unit tests (timeclock math, alarms) + API tests against an in-memory DB
 npm run typecheck      # client + server type check
-npm run lint           # eslint (typescript + react-hooks rules)
+npm run lint           # oxlint (typescript + react-hooks rules)
 npm run seed           # fill the local database with sample days (see below)
 npm run build          # production build → dist/
 npm start              # serve the production build on http://localhost:3000 (PORT to change; Docker sets 8080)
