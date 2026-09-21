@@ -258,6 +258,11 @@ repo or the session scratchpad.
   device may own it: a 409 on start is adopted with a banner, a sync whose answer differs from
   the session shown reloads that day so the log catches up, a 404/409 on adjust/finish/cancel
   re-syncs at once, and the completion chime only plays when the server says `completed`.
+  **Today's day is kept in step the same way** (`useRefreshDay` in `useDay.tsx`: a refresh
+  when the tab comes back, throttled, and every minute; `DayProvider.refresh` is skipped
+  while a write is out and its answer dropped if `mutationSeq` moved), so the alarms in
+  `App.tsx` judge the server's copy of the punches, not one from hours ago; they wait while a
+  come-back refresh is out.
 - **Punch positions are fixed**: 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in
   pairs, and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches`
   enforces it). Kind is parity (`kindForPosition`). The math evaluates *set* punches

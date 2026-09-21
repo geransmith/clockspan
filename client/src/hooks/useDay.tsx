@@ -20,6 +20,11 @@ interface DayStore {
   errors: Record<string, string>;
   /** Fetch a day. Never rejects: a failure is recorded in `errors` and raised as a banner. */
   load: (date: string) => Promise<void>;
+  /**
+   * Re-fetch a day already on screen, since another device may have changed it. Quiet: a
+   * failure keeps the copy shown, and nothing is sent while a save is out. Resolves when done.
+   */
+  refresh: (date: string) => Promise<void>;
   setPunches: (date: string, punches: Punch[]) => Promise<void>;
   setPriorities: (date: string, priorities: Priority[]) => Promise<boolean>;
   /** Add a priority from outside the card (the timer). Resolves to its uid; rejects if it could not be saved. */
@@ -49,6 +54,11 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const priorityCount = useLatest(settings.priorityCount);
   const inflight = useRef(new Map<string, Promise<void>>());
   const punchQueue = useRef(new Map<string, { latest: Punch[]; inflight: boolean }>());
+  // A refresh sent before a write and answered after it would put the older copy back, so
+  // every write bumps this and a refresh answer is dropped when it has moved (the timer's
+  // `mutationSeq`). `saving` counts writes in flight so no refresh is sent during one.
+  const mutationSeq = useRef(0);
+  const saving = useRef(0);
 
   const load = useCallback(
     (date: string) => {
@@ -85,6 +95,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
   // look like the app losing data.
   const persist = useCallback(
     async (date: string | null, run: () => Promise<unknown>): Promise<boolean> => {
+      mutationSeq.current++;
+      saving.current++;
       try {
         await run();
         return true;
@@ -92,9 +104,27 @@ export function DayProvider({ children }: { children: ReactNode }) {
         if (date) void load(date);
         warnQuietly({ title: SAVE_FAILED.title, body: SAVE_FAILED.body, tag: 'save-failed' });
         return false;
+      } finally {
+        saving.current--;
       }
     },
     [load],
+  );
+
+  const refresh = useCallback(
+    (date: string) => {
+      // Not loaded yet (useDay's first fetch owns that), still loading, or a write is out.
+      if (!latest.current[date] || inflight.current.has(date) || saving.current > 0) return Promise.resolve();
+      const seq = mutationSeq.current;
+      return api
+        .getDay(date)
+        .then((d) => {
+          if (mutationSeq.current !== seq) return;
+          setDays((prev) => ({ ...prev, [date]: { ...d, punches: normalizePunches(d.punches) } }));
+        })
+        .catch(() => {});
+    },
+    [latest],
   );
 
   // A PUT replaces the whole day's punches, so two in flight could land out of order. Only
@@ -169,6 +199,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
   );
 
   const applySession = useCallback((session: Session) => {
+    // The server just confirmed this row: fresher than any refresh already on its way.
+    mutationSeq.current++;
     setDays((prev) =>
       withDay(prev, session.date, (d) => {
         const others = d.sessions.filter((s) => s.id !== session.id);
@@ -200,8 +232,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ days, errors, load, setPunches, setPriorities, addPriority, setOvertimeApproved, setRetro, applySession, removeSession, updateSession }),
-    [days, errors, load, setPunches, setPriorities, addPriority, setOvertimeApproved, setRetro, applySession, removeSession, updateSession],
+    () => ({ days, errors, load, refresh, setPunches, setPriorities, addPriority, setOvertimeApproved, setRetro, applySession, removeSession, updateSession }),
+    [days, errors, load, refresh, setPunches, setPriorities, addPriority, setOvertimeApproved, setRetro, applySession, removeSession, updateSession],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -221,4 +253,38 @@ export function useDay(date: string): { day: Day | undefined; store: DayStore } 
     if (!day && !failed) void store.load(date);
   }, [date, day, failed, store]);
   return { day, store };
+}
+
+/**
+ * Keeps a day that is on screen in step with the server: a refresh when the tab comes back
+ * (throttled, like the timer's sync; no `focus` listener, see the gotcha in AGENTS.md) and
+ * every minute. Returns true while a come-back refresh is out, so the caller can wait for
+ * the answer before judging alarms on a copy that may be hours old.
+ */
+export function useRefreshDay(date: string): boolean {
+  const { refresh } = useDayStore();
+  const [pending, setPending] = useState(false);
+  useEffect(() => {
+    let last = 0;
+    const tick = (): Promise<void> | null => {
+      const t = Date.now();
+      if (t - last < 5000) return null;
+      last = t;
+      return refresh(date);
+    };
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      const p = tick();
+      if (!p) return;
+      setPending(true);
+      void p.finally(() => setPending(false));
+    };
+    const id = setInterval(tick, 60_000);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [date, refresh]);
+  return pending;
 }
