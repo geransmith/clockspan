@@ -1,10 +1,12 @@
 /**
- * Single delivery point for every user-facing alert: chime, browser Notification, and
+ * Single delivery point for every user-facing alert: sound, browser Notification, and
  * the in-app banner queue. Nothing else in the app plays audio or calls Notification.
  */
 
+import type { ClipId, SoundId, SynthId } from '../../../shared/sounds.js';
+import { clipUrl } from './sounds';
+
 export type Tone = 'info' | 'warn' | 'danger' | 'success';
-export type ChimeKind = 'timer' | 'lead' | 'due' | 'overdue' | 'test';
 
 export interface Banner {
   id: number;
@@ -54,35 +56,83 @@ function beep(ctx: AudioContext, at: number, freq: number, dur: number, gain = 0
   osc.stop(at + dur + 0.05);
 }
 
-export function chime(kind: ChimeKind): void {
+/** The synthesized patterns: one per `kind: 'synth'` entry in the catalog (the type enforces it). */
+const SYNTH: Record<SynthId, (ctx: AudioContext, t: number) => void> = {
+  triad: (ctx, t) => {
+    // rising major triad: done, and it's good news
+    beep(ctx, t, 523, 0.18);
+    beep(ctx, t + 0.18, 659, 0.18);
+    beep(ctx, t + 0.36, 784, 0.35);
+  },
+  taps: (ctx, t) => {
+    // two soft taps
+    beep(ctx, t, 660, 0.12, 0.12);
+    beep(ctx, t + 0.2, 660, 0.12, 0.12);
+  },
+  notes: (ctx, t) => {
+    // three firm notes
+    beep(ctx, t, 880, 0.15);
+    beep(ctx, t + 0.22, 880, 0.15);
+    beep(ctx, t + 0.44, 1100, 0.3);
+  },
+  double: (ctx, t) => {
+    // insistent low double
+    beep(ctx, t, 440, 0.25, 0.22);
+    beep(ctx, t + 0.35, 440, 0.25, 0.22);
+  },
+};
+
+function isSynth(id: SoundId): id is SynthId {
+  return id in SYNTH;
+}
+
+/** The clips come from different recordings; one knob keeps them in line with the beeps. */
+const CLIP_GAIN = 0.8;
+
+const clips = new Map<ClipId, Promise<AudioBuffer | null>>();
+
+/**
+ * Fetch and decode a clip once per page load. A failed fetch or decode resolves null (the
+ * event goes on without its sound) and is forgotten, so the next play tries again.
+ */
+function loadClip(ctx: AudioContext, id: ClipId): Promise<AudioBuffer | null> {
+  let loading = clips.get(id);
+  if (!loading) {
+    loading = fetch(clipUrl(id))
+      .then((res) => {
+        if (!res.ok) throw new Error(`${res.status}`);
+        return res.arrayBuffer();
+      })
+      .then((bytes) => ctx.decodeAudioData(bytes))
+      .catch(() => {
+        clips.delete(id);
+        return null;
+      });
+    clips.set(id, loading);
+  }
+  return loading;
+}
+
+function playClip(ctx: AudioContext, id: ClipId): void {
+  void loadClip(ctx, id).then((buffer) => {
+    if (!buffer) return;
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    const g = ctx.createGain();
+    g.gain.value = CLIP_GAIN;
+    src.connect(g).connect(ctx.destination);
+    src.start();
+  });
+}
+
+/** Play a catalog sound now; `none` is silence. Unlocks and resumes the context on the way. */
+export function playSound(id: SoundId): void {
+  if (id === 'none') return;
   if (!ctx) unlockAudio();
   if (!ctx) return;
   if (ctx.state === 'suspended') void ctx.resume();
-  const t = ctx.currentTime + 0.02;
-  switch (kind) {
-    case 'timer': // rising major triad: done, and it's good news
-      beep(ctx, t, 523, 0.18);
-      beep(ctx, t + 0.18, 659, 0.18);
-      beep(ctx, t + 0.36, 784, 0.35);
-      break;
-    case 'lead': // two soft taps
-      beep(ctx, t, 660, 0.12, 0.12);
-      beep(ctx, t + 0.2, 660, 0.12, 0.12);
-      break;
-    case 'due': // three firm notes
-      beep(ctx, t, 880, 0.15);
-      beep(ctx, t + 0.22, 880, 0.15);
-      beep(ctx, t + 0.44, 1100, 0.3);
-      break;
-    case 'overdue': // insistent low double
-      beep(ctx, t, 440, 0.25, 0.22);
-      beep(ctx, t + 0.35, 440, 0.25, 0.22);
-      break;
-    case 'test':
-      beep(ctx, t, 660, 0.15);
-      beep(ctx, t + 0.2, 880, 0.25);
-      break;
-  }
+  if (isSynth(id)) SYNTH[id](ctx, ctx.currentTime + 0.02);
+  else playClip(ctx, id);
 }
 
 // ----- notifications -----
@@ -162,7 +212,8 @@ export interface AlertOptions {
   body?: string;
   tone: Tone;
   sticky?: boolean;
-  chime?: ChimeKind;
+  /** What to play, gated by `sound`; `none` (or nothing) is silent. */
+  chime?: SoundId;
   /** Groups banners so a newer one replaces an older one of the same tag. */
   tag: string;
   action?: BannerAction;
@@ -171,7 +222,7 @@ export interface AlertOptions {
 }
 
 export function alert(o: AlertOptions): void {
-  if (o.sound && o.chime) chime(o.chime);
+  if (o.sound && o.chime) playSound(o.chime);
   if (o.notifications) notify(o.title, o.body, o.tag);
   pushBanner({ kicker: o.kicker, title: o.title, body: o.body, tone: o.tone, sticky: o.sticky ?? false, tag: o.tag, action: o.action });
 }

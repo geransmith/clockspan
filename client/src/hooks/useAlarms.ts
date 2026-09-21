@@ -101,7 +101,7 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
         body,
         tone,
         sticky: true,
-        chime: e.kind,
+        chime: settings.sounds[e.kind],
         tag: `alarm:${e.id}`,
         action,
         sound: settings.sound,

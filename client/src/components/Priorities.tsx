@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSettings } from '../hooks/useSettings';
+import { playSound } from '../lib/alerts';
 import { WARNING_ACTIONS } from '../lib/copy';
 import { MAX_PRIORITIES, newUid, padPriorities, pickWarning, warnThreshold, warningKind, type WarningKind } from '../lib/priorities';
 import { LIMITS, type Priority } from '../types';
@@ -107,7 +108,10 @@ export function Priorities({ priorities, onChange }: Props) {
               checked={p.done}
               disabled={empty}
               onChange={(e) => {
-                if (e.target.checked && settings.celebrations) setBurst({ seed: Date.now(), anchor: e.target.getBoundingClientRect() });
+                if (e.target.checked) {
+                  if (settings.sound) playSound(settings.sounds.priorityDone);
+                  if (settings.celebrations) setBurst({ seed: Date.now(), anchor: e.target.getBoundingClientRect() });
+                }
                 edit(p.position, { done: e.target.checked }, true);
               }}
               aria-label={`Priority ${p.position} done`}

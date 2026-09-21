@@ -1,8 +1,9 @@
 /**
  * Per-user settings: the shape, the defaults and the bounds. Imported by the server
  * (`mergeSettings` validates against these) and the client (first render before the real
- * settings arrive). Pure data, no imports, so either side can pull it in.
+ * settings arrive). Pure data (the one import is the sound catalog), so either side can pull it in.
  */
+import type { SoundEvent, SoundId } from './sounds.js';
 
 export const CARD_IDS = ['timeclock', 'priorities', 'timer', 'log', 'retro'] as const;
 export type CardId = (typeof CARD_IDS)[number];
@@ -49,6 +50,8 @@ export interface Settings {
   keepScreenAwake: boolean;
   /** Show the per-day "Overtime approved" switch and banner action. */
   overtimeApproval: boolean;
+  /** Which sound each event plays; `sound` above is the master switch over all of them. */
+  sounds: Record<SoundEvent, SoundId>;
   /** Emoji bursts when a priority is ticked or the day ends. */
   celebrations: boolean;
   /** Stickers on the History calendar: one per thing a day did. Off by default. */
@@ -93,6 +96,7 @@ export const DEFAULT_SETTINGS: Settings = deepFreeze({
   notifications: true,
   keepScreenAwake: true,
   overtimeApproval: true,
+  sounds: { timer: 'triad', lead: 'taps', due: 'notes', overdue: 'double', dayDone: 'yay', priorityDone: 'none' },
   celebrations: true,
   stickers: false,
   showWeekends: true,

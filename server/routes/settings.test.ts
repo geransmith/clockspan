@@ -45,6 +45,20 @@ describe('/api/settings', () => {
     expect((await app.api.put('/api/settings', { celebrations: true })).body.celebrations).toBe(true);
   });
 
+  it('takes a catalog id per sound event and keeps the rest', async () => {
+    const r = await app.api.put('/api/settings', { sounds: { dayDone: 'none', timer: 'yay', lead: 'kazoo', due: 7, bogus: 'pop' } });
+    expect(r.body.sounds).toEqual({ ...DEFAULT_SETTINGS.sounds, dayDone: 'none', timer: 'yay' });
+    // A later partial patch builds on what was stored; a non-object leaves it alone.
+    expect((await app.api.put('/api/settings', { sounds: { priorityDone: 'pop' } })).body.sounds).toEqual({
+      ...DEFAULT_SETTINGS.sounds,
+      dayDone: 'none',
+      timer: 'yay',
+      priorityDone: 'pop',
+    });
+    expect((await app.api.put('/api/settings', { sounds: 'loud' })).body.sounds.priorityDone).toBe('pop');
+    expect((await app.api.get('/api/settings')).body.sounds.timer).toBe('yay');
+  });
+
   it('accepts a known time format and falls back for anything else', async () => {
     expect((await app.api.put('/api/settings', { timeFormat: '24h' })).body.timeFormat).toBe('24h');
     expect((await app.api.put('/api/settings', { timeFormat: '25h' })).body.timeFormat).toBe('24h');

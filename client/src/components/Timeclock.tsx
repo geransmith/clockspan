@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+import { useLatest } from '../hooks/useLatest';
 import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
+import { playSound, unlockAudio } from '../lib/alerts';
 import { pickCelebration } from '../lib/celebrate';
 import { formatDuration, formatDurationCeil, roundToMinute } from '../lib/format';
 import { clockOutPosition, extraPairs, kindForPosition, secondMealApplies, type ExtraPair, type TimeclockResult } from '../lib/timeclock';
@@ -28,7 +30,12 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
   // A day flagged while the feature was on only counts while it is still on.
   const otOn = settings.overtimeApproval && overtimeApproved;
 
-  const setAt = (position: number, at: number | null) => onChange(punches.map((p) => (p.position === position ? { ...p, at } : p)));
+  const setAt = (position: number, at: number | null) => {
+    // A punch is typed or tapped: the gesture iOS wants before any sound, so the day-complete
+    // clip (played after the save comes back) and the day's alarms can be heard.
+    unlockAudio();
+    onChange(punches.map((p) => (p.position === position ? { ...p, at } : p)));
+  };
   // Appending two rows turns the current Clock out into the new pair's Out (keeping its time)
   // and adds an empty In and a fresh Clock out: "I clocked out, then came back".
   const addPair = () => {
@@ -99,15 +106,27 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
           : `${formatDurationCeil(tc.remainingSeconds)} to go`;
 
   const celebration = tc.state === 'done' && tc.clockOutAt != null ? pickCelebration(tc.clockOutAt) : null;
-  // The burst marks the day *becoming* done while the card is open, not a day that already
-  // was when it mounted (the sheet keys this card by date). "Adjust state while rendering".
+  // The burst and the sound mark the day *becoming* done while the card is open, not a day
+  // that already was when it mounted (the sheet keys this card by date). "Adjust state while
+  // rendering"; the sound is a side effect, so the moment is recorded (a fresh object each
+  // time, so the same clock-out set again still counts) and played from an effect.
   const doneNow = celebration != null;
   const [wasDone, setWasDone] = useState(doneNow);
   const [burstSeed, setBurstSeed] = useState<number | null>(null);
+  const [celebrate, setCelebrate] = useState<{ at: number | null } | null>(null);
   if (doneNow !== wasDone) {
     setWasDone(doneNow);
-    if (doneNow && settings.celebrations) setBurstSeed(tc.clockOutAt);
+    if (doneNow) {
+      setCelebrate({ at: tc.clockOutAt });
+      if (settings.celebrations) setBurstSeed(tc.clockOutAt);
+    }
   }
+  const latest = useLatest(settings);
+  useEffect(() => {
+    if (!celebrate) return;
+    const { sound, sounds } = latest.current;
+    if (sound) playSound(sounds.dayDone);
+  }, [celebrate, latest]);
   const notice = useRef<HTMLDivElement>(null);
   const [burstAnchor, setBurstAnchor] = useState<DOMRect | null>(null);
   useEffect(() => {

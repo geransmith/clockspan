@@ -14,6 +14,7 @@ import {
   type Settings,
   type TimeFormat,
 } from '../../shared/settings.js';
+import { SOUND_EVENTS, SOUND_IDS, type SoundEvent, type SoundId } from '../../shared/sounds.js';
 
 const isBool = (v: unknown): v is boolean => typeof v === 'boolean';
 const isInt = (v: unknown, min: number, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
@@ -29,6 +30,14 @@ function mergeAlarm(base: AlarmSettings, patch: unknown): AlarmSettings {
     onDue: isBool(p.onDue) ? p.onDue : base.onDue,
     overdueEveryMinutes: isInt(p.overdueEveryMinutes, 0, 120) ? p.overdueEveryMinutes : base.overdueEveryMinutes,
   };
+}
+
+function mergeSounds(base: Record<SoundEvent, SoundId>, patch: unknown): Record<SoundEvent, SoundId> {
+  if (!patch || typeof patch !== 'object') return base;
+  const p = patch as Record<string, unknown>;
+  const next = { ...base };
+  for (const event of SOUND_EVENTS) if (SOUND_IDS.includes(p[event] as SoundId)) next[event] = p[event] as SoundId;
+  return next;
 }
 
 function mergeRetention(base: RetentionSettings, patch: unknown): RetentionSettings {
@@ -81,6 +90,7 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     notifications: isBool(p.notifications) ? p.notifications : base.notifications,
     keepScreenAwake: isBool(p.keepScreenAwake) ? p.keepScreenAwake : base.keepScreenAwake,
     overtimeApproval: isBool(p.overtimeApproval) ? p.overtimeApproval : base.overtimeApproval,
+    sounds: mergeSounds(base.sounds, p.sounds),
     celebrations: isBool(p.celebrations) ? p.celebrations : base.celebrations,
     stickers: isBool(p.stickers) ? p.stickers : stickers,
     showWeekends: isBool(p.showWeekends) ? p.showWeekends : base.showWeekends,
