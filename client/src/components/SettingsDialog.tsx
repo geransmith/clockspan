@@ -54,7 +54,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   };
 
   // Left/Right move between tabs, as the ARIA tabs pattern expects.
-  const onTabKey = (e: KeyboardEvent<HTMLDivElement>) => {
+  // Roving tabindex: arrows move between the tabs, bound on each tab (the focusable element).
+  const onTabKey = (e: KeyboardEvent<HTMLButtonElement>) => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
     const i = tabs.findIndex((t) => t.id === tab);
@@ -232,7 +233,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="dialog-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <header className="dialog-head">
           <h2 id="settings-title">Settings</h2>
@@ -241,7 +242,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             <X />
           </button>
         </header>
-        <div className="tabs" role="tablist" aria-label="Settings sections" onKeyDown={onTabKey}>
+        <div className="tabs" role="tablist" aria-label="Settings sections">
           {tabs.map((t) => (
             <button
               key={t.id}
@@ -253,6 +254,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               tabIndex={tab === t.id ? 0 : -1}
               className={`tab${tab === t.id ? ' is-active' : ''}`}
               onClick={() => setTab(t.id)}
+              onKeyDown={onTabKey}
             >
               {t.label}
             </button>
@@ -378,7 +380,7 @@ function Toggle({ label, hint, checked, onChange }: { label: string; hint?: stri
         <span>{label}</span>
         {hint && <span className="muted small">{hint}</span>}
       </span>
-      <input type="checkbox" role="switch" className="switch" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <input type="checkbox" role="switch" aria-checked={checked} className="switch" checked={checked} onChange={(e) => onChange(e.target.checked)} />
     </label>
   );
 }

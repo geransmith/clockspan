@@ -20,8 +20,8 @@ has the user-facing description.
   No router lib — the date and view live in the URL query (`hooks/useRoute.ts`). No CSS framework.
 - Backend: Express 5 (ESM, `NodeNext`, imports use `.js` extensions), `better-sqlite3` (native),
   `openid-client` v6 for OIDC, `cookie` for cookie parsing. Passwords: `node:crypto` scrypt (async).
-- Tests: Vitest 5. Lint: oxlint (`.oxlintrc.json`: correctness + typescript + react-hooks rules,
-  syntax level only; it parses TS itself, which is what lets TypeScript be 7). CI: `.github/workflows/ci.yml` runs typecheck, lint, test, build on
+- Tests: Vitest 5. Lint: oxlint (`.oxlintrc.json`: correctness + typescript + react-hooks +
+  jsx-a11y rules, syntax level only; it parses TS itself, which is what lets TypeScript be 7). CI: `.github/workflows/ci.yml` runs typecheck, lint, test, build on
   every PR and push; on `main` it also publishes the `edge` image, on `v*` tags the release.
 - One `package.json` for both sides; `tsconfig.json` = client + shared, `tsconfig.server.json` =
   server + shared (`rootDir: .`, so `dist/server` and `dist/shared`).
