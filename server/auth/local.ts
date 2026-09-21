@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import type Database from 'better-sqlite3';
 import type { DB, UserRow } from '../db.js';
 import type { Config } from '../config.js';
 import { DUMMY_HASH, hashPassword, validatePassword, validateUsername, verifyPassword } from './password.js';
@@ -14,7 +13,7 @@ const WINDOW_MS = 15 * 60_000;
 const SWEEP_ABOVE = 1000;
 
 /** Simple per-IP login limiter. In-memory is fine for a single-process self-hosted app. */
-class LoginLimiter {
+export class LoginLimiter {
   private attempts = new Map<string, { count: number; resetAt: number }>();
 
   check(ip: string): { ok: boolean; retryAfterSec: number } {
@@ -92,7 +91,8 @@ export function localAuthRouter(db: DB, config: Config): Router {
   });
 
   r.post('/login', async (req, res) => {
-    const ip = req.ip ?? 'unknown';
+    // Only undefined once the socket is gone, when no answer can be sent anyway.
+    const ip = String(req.ip);
     const gate = limiter.check(ip);
     if (!gate.ok) {
       res.setHeader('Retry-After', String(gate.retryAfterSec));
@@ -165,26 +165,18 @@ export function localAuthRouter(db: DB, config: Config): Router {
       return;
     }
     const name = username.trim();
-    if (db.prepare(`SELECT 1 FROM users WHERE username = ?`).get(name)) {
+    const hash = await hashPassword(password);
+    // The uniqueness check is the insert itself: a pre-check before the hash could be overtaken
+    // by a second create for the same name while this one was hashing.
+    const info = db
+      .prepare(
+        `INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at)
+         VALUES ('local', ?, ?, ?, 0, ?) ON CONFLICT(username) DO NOTHING`,
+      )
+      .run(name, hash, name, Date.now());
+    if (info.changes === 0) {
       res.status(409).json({ error: 'That username is already taken.' });
       return;
-    }
-    const hash = await hashPassword(password);
-    let info: Database.RunResult;
-    try {
-      info = db
-        .prepare(
-          `INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at)
-           VALUES ('local', ?, ?, ?, 0, ?)`,
-        )
-        .run(name, hash, name, Date.now());
-    } catch (err) {
-      // The check above ran before the hash; a second create for the same name can land in between.
-      if ((err as { code?: string }).code === 'SQLITE_CONSTRAINT_UNIQUE') {
-        res.status(409).json({ error: 'That username is already taken.' });
-        return;
-      }
-      throw err;
     }
     const user = db.prepare(`SELECT * FROM users WHERE id = ?`).get(info.lastInsertRowid) as UserRow;
     res.status(201).json({ user: publicUser(user) });

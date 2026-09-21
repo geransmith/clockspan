@@ -144,6 +144,13 @@ describe('PUT /api/days/:date/priorities', () => {
     expect(big.status).toBe(400);
     expect((await app.api.put('/api/days/2026-09-01/priorities', { priorities: null })).status).toBe(400);
   });
+
+  it('reads a null row as an empty one', async () => {
+    const r = await app.api.put('/api/days/2026-09-01/priorities', { priorities: [null, { text: 'b' }] });
+    expect(r.status).toBe(200);
+    expect(r.body.priorities[0]).toEqual({ position: 1, text: '', done: false, uid: null, addedAt: null });
+    expect(r.body.priorities[1]).toMatchObject({ position: 2, text: 'b' });
+  });
 });
 
 describe('PUT /api/days/:date/overtime', () => {
@@ -171,6 +178,12 @@ describe('PUT /api/days/:date/retro', () => {
   it('validates types', async () => {
     expect((await app.api.put('/api/days/2026-09-01/retro', { note: 1 })).status).toBe(400);
     expect((await app.api.put('/api/days/2026-09-01/retro', { done: 'yes' })).status).toBe(400);
+  });
+
+  it('treats no body at all as an empty patch', async () => {
+    const r = await fetch(`${app.url}/api/days/2026-09-01/retro`, { method: 'PUT' });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ retroNote: '', retroAt: null });
   });
 });
 

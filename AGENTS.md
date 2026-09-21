@@ -127,7 +127,8 @@ npm install
 npm run dev            # API on :3000 (tsx watch, PORT pinned) + Vite on :5173 (proxies /api, /auth)
 npm test               # vitest: shared + client lib tests + server API tests (~1.5 s)
 npm test -- server/routes/days   # one file
-npm run test:coverage  # the same run with a v8 report (text + coverage/index.html); server, shared, client libs
+npm run test:coverage  # the gate CI runs: the same suite, and every file in server/, shared/ and
+                       # client/src/lib must be 100% covered (text table of gaps + coverage/index.html)
 npm run typecheck      # client + server (tsconfig.server.test.json also covers dev/ and tests)
 npm run lint           # oxlint
 npm run format         # prettier --write . (format:check is what CI runs)
@@ -379,7 +380,12 @@ Prove a change at the cheapest level that can show it, and stop there:
    you touched; one pass at the mobile preset is enough unless the change is desktop-only
    layout. Do not re-walk flows a test already covers.
 
-- `npm test` green, `npm run typecheck` clean, `npm run lint` clean.
+- `npm run test:coverage` green, `npm run typecheck` clean, `npm run lint` clean,
+  `npm run format:check` clean. The coverage run is the gate: every file under `server/`,
+  `shared/` and `client/src/lib/` (minus the two process entrypoints and `server/dev/`) must be
+  100% on statements, branches, functions and lines, so new code in those trees ships with the
+  tests that reach it. A branch that cannot be reached is deleted, never hidden behind a
+  `v8 ignore` comment; `alerts.ts` shows how a browser-only module is tested (stub the globals).
 - If you touched CSS or a component: walk the touched surface at the 375 px mobile preset
   (and desktop width if the change has a desktop-only branch); check light and dark.
 - If you touched `security.ts`, `index.html`, or how assets load: run the `prod` config and

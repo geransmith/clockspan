@@ -107,6 +107,14 @@ describe('computeTimeclock', () => {
     expect(r.error).not.toBeNull();
   });
 
+  it('keeps row order for two punches at the same minute', () => {
+    // Lunch out and back in at the same instant: a zero-length lunch, not an error.
+    const r = computeTimeclock(punches([T0, T0 + 4 * H, T0 + 4 * H, null]), settings, T0 + 5 * H);
+    expect(r.error).toBeNull();
+    expect(r.state).toBe('working');
+    expect(r.workedSeconds).toBe(5 * 3600);
+  });
+
   it('ends the day at an explicit Clock out even when short of the target', () => {
     // Clock in, no lunch, Clock out (position 3) at 15:00 on an 8h day.
     const p = punches([T0, null, null, T0 + 7 * H]);
@@ -214,6 +222,14 @@ describe('punch rows', () => {
     const late = normalizePunches(punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 6 * H, T0 + 7 * H, null]));
     expect(extraPairs(late).map((p) => [p.out.position, p.in.position, p.beforeLunch])).toEqual([[3, 4, false]]);
     expect(extraPairs(emptyPunches())).toEqual([]);
+  });
+
+  it('lists no extra pairs for rows without a clock-out row, and stops at a gap', () => {
+    // Un-normalized input (old data, tests): no odd last row means no pairs to place.
+    expect(extraPairs(punches([T0, null, null]))).toEqual([]);
+    // Positions 3-4 are a pair; 5 is missing, so 6 cannot pair with anything and 7 is the clock out.
+    const gapped = punches([T0, null, null, null, null, null, null, null]).filter((p) => p.position !== 5);
+    expect(extraPairs(gapped).map((p) => [p.out.position, p.in.position])).toEqual([[3, 4]]);
   });
 });
 

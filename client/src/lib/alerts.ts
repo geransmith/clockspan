@@ -41,8 +41,7 @@ export function unlockAudio(): void {
   }
 }
 
-function beep(at: number, freq: number, dur: number, gain = 0.18): void {
-  if (!ctx) return;
+function beep(ctx: AudioContext, at: number, freq: number, dur: number, gain = 0.18): void {
   const osc = ctx.createOscillator();
   const g = ctx.createGain();
   osc.type = 'sine';
@@ -62,26 +61,26 @@ export function chime(kind: ChimeKind): void {
   const t = ctx.currentTime + 0.02;
   switch (kind) {
     case 'timer': // rising major triad: done, and it's good news
-      beep(t, 523, 0.18);
-      beep(t + 0.18, 659, 0.18);
-      beep(t + 0.36, 784, 0.35);
+      beep(ctx, t, 523, 0.18);
+      beep(ctx, t + 0.18, 659, 0.18);
+      beep(ctx, t + 0.36, 784, 0.35);
       break;
     case 'lead': // two soft taps
-      beep(t, 660, 0.12, 0.12);
-      beep(t + 0.2, 660, 0.12, 0.12);
+      beep(ctx, t, 660, 0.12, 0.12);
+      beep(ctx, t + 0.2, 660, 0.12, 0.12);
       break;
     case 'due': // three firm notes
-      beep(t, 880, 0.15);
-      beep(t + 0.22, 880, 0.15);
-      beep(t + 0.44, 1100, 0.3);
+      beep(ctx, t, 880, 0.15);
+      beep(ctx, t + 0.22, 880, 0.15);
+      beep(ctx, t + 0.44, 1100, 0.3);
       break;
     case 'overdue': // insistent low double
-      beep(t, 440, 0.25, 0.22);
-      beep(t + 0.35, 440, 0.25, 0.22);
+      beep(ctx, t, 440, 0.25, 0.22);
+      beep(ctx, t + 0.35, 440, 0.25, 0.22);
       break;
     case 'test':
-      beep(t, 660, 0.15);
-      beep(t + 0.2, 880, 0.25);
+      beep(ctx, t, 660, 0.15);
+      beep(ctx, t + 0.2, 880, 0.25);
       break;
   }
 }

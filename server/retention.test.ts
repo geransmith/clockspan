@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadConfig } from './config.js';
-import { SEED_NOW, startTestApp, type TestApp } from './dev/harness.js';
-import { cutoffKey, effectiveKeepDays, runRetention } from './retention.js';
+import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from './dev/harness.js';
+import { ensureDefaultUser, openDatabase } from './db.js';
+import { cutoffKey, effectiveKeepDays, runRetention, scheduleRetention } from './retention.js';
 import { DEFAULT_SETTINGS } from '../shared/settings.js';
 
 describe('cutoffKey', () => {
@@ -75,5 +76,37 @@ describe('runRetention', () => {
     app = await startTestApp({ seed: { days: 60 }, env: { RETENTION_DAYS: '30' } });
     await app.api.put('/api/settings', { retention: { enabled: true, days: 3650 } });
     expect(runRetention(app.db, app.config, SEED_NOW)).toBe(seeded.filter((d) => d < cutoff).length);
+  });
+});
+
+describe('scheduleRetention', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('runs shortly after boot, then every few hours, and logs a failure instead of throwing', () => {
+    vi.useFakeTimers({ now: SEED_NOW });
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const db = openDatabase(':memory:');
+    const user = ensureDefaultUser(db);
+    // One day past the cutoff and one inside it.
+    const insert = db.prepare(`INSERT INTO days (user_id, date, created_at) VALUES (?, ?, ?)`);
+    insert.run(user.id, cutoffKey(SEED_NOW, 31), SEED_NOW);
+    insert.run(user.id, SEED_TODAY, SEED_NOW);
+    const dates = () => (db.prepare(`SELECT date FROM days`).all() as { date: string }[]).map((d) => d.date);
+
+    scheduleRetention(db, loadConfig({ RETENTION_DAYS: '30' }));
+    vi.advanceTimersByTime(29_999);
+    expect(dates()).toHaveLength(2);
+    vi.advanceTimersByTime(1);
+    expect(dates()).toEqual([SEED_TODAY]);
+    expect(log).toHaveBeenCalledWith('[retention] deleted 1 day');
+
+    // The periodic run finds the database gone: reported, not fatal.
+    db.close();
+    vi.advanceTimersByTime(6 * 3_600_000);
+    expect(error).toHaveBeenCalledWith('[retention]', expect.objectContaining({ message: expect.stringMatching(/not open/) }));
   });
 });

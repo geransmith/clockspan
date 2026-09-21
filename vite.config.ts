@@ -23,14 +23,21 @@ export default defineConfig({
     environment: 'node',
     include: ['client/src/**/*.test.ts', 'server/**/*.test.ts', 'shared/**/*.test.ts'],
     root: '.',
-    // `npm run test:coverage`. Only what the suite is meant to cover: the server, shared, and
-    // the pure client libs. Components and hooks are verified in the browser, not here.
+    // `npm run test:coverage` is the gate: every file below must be fully covered on all four
+    // metrics or the run fails. The set is what the suite is meant to prove: the server, shared,
+    // and the pure client libs. Left out on purpose: the two process entrypoints (index.ts and
+    // cli.ts only wire things up and call process.exit), dev tooling (seed, harness), and the
+    // components and hooks, which are verified in the browser. An unreachable branch is deleted,
+    // never hidden behind a v8 ignore comment.
     coverage: {
       provider: 'v8',
       include: ['server/**', 'shared/**', 'client/src/lib/**'],
       exclude: ['server/dev/**', 'server/index.ts', 'server/cli.ts', '**/*.test.ts'],
       reporter: ['text', 'html'],
       reportsDirectory: 'coverage',
+      // Only files short of 100% are listed, so a clean run prints one summary line.
+      skipFull: true,
+      thresholds: { 100: true, perFile: true },
     },
   },
 });

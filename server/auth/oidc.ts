@@ -21,9 +21,8 @@ export function escapeHtml(s: string): string {
  * Discovery is retried lazily with backoff so the app still boots (and serves the
  * sign-in page) when the identity provider is briefly unavailable.
  */
-class Discovery {
+export class Discovery {
   private promise: Promise<oidc.Configuration> | null = null;
-  private lastError: unknown = null;
 
   constructor(
     private readonly issuer: string,
@@ -34,7 +33,6 @@ class Discovery {
   get(): Promise<oidc.Configuration> {
     if (!this.promise) {
       this.promise = oidc.discovery(new URL(this.issuer), this.clientId, this.clientSecret).catch((err) => {
-        this.lastError = err;
         this.promise = null;
         throw err;
       });
@@ -56,10 +54,6 @@ class Discovery {
         delay = Math.min(delay * 2, 60_000);
       }
     }
-  }
-
-  get error(): unknown {
-    return this.lastError;
   }
 }
 

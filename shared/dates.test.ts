@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, addMonths, endOfDay, isValidDateKey, parseDateKey, punchWindow, startOfMonth, startOfQuarter, startOfWeek } from './dates.js';
+import {
+  addDays,
+  addMonths,
+  dateKey,
+  endOfDay,
+  isValidDateKey,
+  parseDateKey,
+  punchWindow,
+  startOfMonth,
+  startOfQuarter,
+  startOfWeek,
+  todayKey,
+} from './dates.js';
 
 describe('isValidDateKey', () => {
   it('accepts real calendar dates only', () => {
@@ -52,5 +64,12 @@ describe('punchWindow', () => {
     expect(midnightUtc - 14 * 3_600_000).toBeGreaterThanOrEqual(from);
     expect(midnightUtc + 36 * 3_600_000 - 1).toBeLessThanOrEqual(to);
     expect(to - from).toBe(96 * 3_600_000);
+  });
+});
+
+describe('todayKey', () => {
+  it('is the local date of the instant, now by default', () => {
+    expect(todayKey(new Date(2026, 8, 16, 23, 59).getTime())).toBe('2026-09-16');
+    expect(todayKey()).toBe(dateKey(new Date()));
   });
 });

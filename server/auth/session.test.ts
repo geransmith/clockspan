@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { startTestApp, type TestApp } from '../dev/harness.js';
-import { purgeExpiredSessions, SESSION_COOKIE } from './session.js';
+import { purgeExpiredSessions, revokeOtherSessions, SESSION_COOKIE } from './session.js';
+import type { Request } from 'express';
 
 const USER = { username: 'geran', password: 'correct horse' };
 const HOUR = 3_600_000;
@@ -80,6 +81,15 @@ describe('cookie sessions', () => {
     expect(rows()).toHaveLength(1);
     expect((await app.api.get('/api/settings')).status).toBe(200);
     expect((await phone.get('/api/settings')).status).toBe(401);
+  });
+
+  it('revokeOtherSessions without a cookie of its own signs the user out everywhere', async () => {
+    await app.api.post('/api/auth/setup', USER);
+    await app.client().post('/api/auth/login', USER);
+    expect(rows()).toHaveLength(2);
+    const userId = (app.db.prepare(`SELECT user_id FROM auth_sessions LIMIT 1`).get() as { user_id: number }).user_id;
+    revokeOtherSessions(app.db, { headers: {} } as Request, userId);
+    expect(rows()).toHaveLength(0);
   });
 
   it('purgeExpiredSessions removes exactly the expired rows', async () => {
