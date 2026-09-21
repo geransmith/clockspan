@@ -43,7 +43,7 @@ describe('date arithmetic', () => {
 });
 
 describe('punchWindow', () => {
-  it('spans a day of slack either side of the key, in UTC, so any zone\'s local day fits', () => {
+  it("spans a day of slack either side of the key, in UTC, so any zone's local day fits", () => {
     const { from, to } = punchWindow('2026-09-01');
     const midnightUtc = Date.UTC(2026, 8, 1);
     expect(from).toBe(midnightUtc - 36 * 3_600_000);

@@ -14,8 +14,8 @@ updates:
         update-types: [minor, patch]
     ignore:
       # @types/node tracks the Node major in `engines`, the Dockerfile and CI, not npm's latest.
-      - dependency-name: "@types/node"
-        update-types: ["version-update:semver-major"]
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: github-actions
     directory: /
@@ -31,4 +31,4 @@ updates:
     ignore:
       # A Node major is a deliberate move across `engines`, nvm, CI and the Dockerfile together.
       - dependency-name: node
-        update-types: ["version-update:semver-major"]
+        update-types: ['version-update:semver-major']

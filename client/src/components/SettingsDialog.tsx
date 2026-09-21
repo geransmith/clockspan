@@ -48,8 +48,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   }, [close]);
 
   const set = (patch: Partial<Settings>) => void save(() => update(patch));
-  const setAlarm = (id: AlarmId, patch: Partial<AlarmSettings>) =>
-    set({ alarms: { ...settings.alarms, [id]: { ...settings.alarms[id], ...patch } } });
+  const setAlarm = (id: AlarmId, patch: Partial<AlarmSettings>) => set({ alarms: { ...settings.alarms, [id]: { ...settings.alarms[id], ...patch } } });
   const onReset = () => {
     if (window.confirm(RESET_SETTINGS.confirm)) void save(reset);
   };
@@ -73,10 +72,19 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             <DurationField label="Work day" minutes={settings.workMinutes} onCommit={(m) => set({ workMinutes: m })} />
             <DurationField label="Lunch must start within" minutes={settings.lunchDeadlineMinutes} onCommit={(m) => set({ lunchDeadlineMinutes: m })} />
             <MinutesField label="Lunch length" minutes={settings.lunchMinutes} min={0} max={480} onCommit={(m) => set({ lunchMinutes: m })} />
-            <DurationField label="Second meal due after (hours worked)" minutes={settings.secondMealAfterMinutes} onCommit={(m) => set({ secondMealAfterMinutes: m })} />
+            <DurationField
+              label="Second meal due after (hours worked)"
+              minutes={settings.secondMealAfterMinutes}
+              onCommit={(m) => set({ secondMealAfterMinutes: m })}
+            />
             <div className="setting-row">
               <span>Time format</span>
-              <select className="input select" value={settings.timeFormat} onChange={(e) => set({ timeFormat: e.target.value as TimeFormat })} aria-label="Time format">
+              <select
+                className="input select"
+                value={settings.timeFormat}
+                onChange={(e) => set({ timeFormat: e.target.value as TimeFormat })}
+                aria-label="Time format"
+              >
                 <option value="auto">Automatic</option>
                 <option value="12h">12-hour</option>
                 <option value="24h">24-hour</option>
@@ -134,7 +142,13 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               <p className="muted small">New days start with this many rows. Add more on the sheet any time.</p>
             </Section>
             <Section title="Focus timer">
-              <MinutesField label="Adjust step (± buttons)" minutes={settings.adjustStepMinutes} min={1} max={60} onCommit={(m) => set({ adjustStepMinutes: m })} />
+              <MinutesField
+                label="Adjust step (± buttons)"
+                minutes={settings.adjustStepMinutes}
+                min={1}
+                max={60}
+                onCommit={(m) => set({ adjustStepMinutes: m })}
+              />
               <Toggle
                 label="Keep screen awake while a timer runs"
                 hint="Stops phones from sleeping mid-session so the chime can play."
@@ -179,8 +193,15 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       case 'data':
         return (
           <>
-            <Section title="Automatic cleanup" hint="Deletes days older than this, with their punches, priorities, sessions and notes. Settings are kept. Runs on the server every few hours.">
-              <Toggle label="Delete old days automatically" checked={settings.retention.enabled} onChange={(v) => set({ retention: { ...settings.retention, enabled: v } })} />
+            <Section
+              title="Automatic cleanup"
+              hint="Deletes days older than this, with their punches, priorities, sessions and notes. Settings are kept. Runs on the server every few hours."
+            >
+              <Toggle
+                label="Delete old days automatically"
+                checked={settings.retention.enabled}
+                onChange={(v) => set({ retention: { ...settings.retention, enabled: v } })}
+              />
               <MinutesField
                 label="Keep the last"
                 unit="days"
@@ -387,9 +408,25 @@ function DurationField({ label, minutes, onCommit }: { label: string; minutes: n
     <div className="setting-row">
       <span>{label}</span>
       <span className="duration-inputs">
-        <input className="input input-num" inputMode="numeric" value={h} onChange={(e) => setH(e.target.value)} onBlur={commit} onKeyDown={onKey} aria-label={`${label} hours`} />
+        <input
+          className="input input-num"
+          inputMode="numeric"
+          value={h}
+          onChange={(e) => setH(e.target.value)}
+          onBlur={commit}
+          onKeyDown={onKey}
+          aria-label={`${label} hours`}
+        />
         <span className="muted">h</span>
-        <input className="input input-num" inputMode="numeric" value={m} onChange={(e) => setM(e.target.value)} onBlur={commit} onKeyDown={onKey} aria-label={`${label} minutes`} />
+        <input
+          className="input input-num"
+          inputMode="numeric"
+          value={m}
+          onChange={(e) => setM(e.target.value)}
+          onBlur={commit}
+          onKeyDown={onKey}
+          aria-label={`${label} minutes`}
+        />
         <span className="muted">m</span>
       </span>
     </div>
@@ -429,7 +466,16 @@ function MinutesField({
     <div className="setting-row">
       <span>{label}</span>
       <span className="duration-inputs">
-        <input className="input input-num" inputMode="numeric" value={v} onChange={(e) => setV(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} aria-label={label} disabled={disabled} />
+        <input
+          className="input input-num"
+          inputMode="numeric"
+          value={v}
+          onChange={(e) => setV(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+          aria-label={label}
+          disabled={disabled}
+        />
         <span className="muted">{unit}</span>
       </span>
     </div>
@@ -449,7 +495,13 @@ function AlarmEditor({ title, hint, alarm, onChange }: { title: string; hint?: s
           <span className="muted small">Warn before</span>
           <span className="chips">
             {LEAD_CHOICES.map((m) => (
-              <button key={m} className={`chip${alarm.leadMinutes.includes(m) ? ' is-on' : ''}`} onClick={() => toggleLead(m)} disabled={!alarm.enabled} aria-pressed={alarm.leadMinutes.includes(m)}>
+              <button
+                key={m}
+                className={`chip${alarm.leadMinutes.includes(m) ? ' is-on' : ''}`}
+                onClick={() => toggleLead(m)}
+                disabled={!alarm.enabled}
+                aria-pressed={alarm.leadMinutes.includes(m)}
+              >
                 {m}m
               </button>
             ))}
@@ -457,12 +509,23 @@ function AlarmEditor({ title, hint, alarm, onChange }: { title: string; hint?: s
         </div>
         <div className="setting-row">
           <label className="inline-check">
-            <input type="checkbox" className="checkbox" checked={alarm.onDue} onChange={(e) => onChange({ onDue: e.target.checked })} disabled={!alarm.enabled} />
+            <input
+              type="checkbox"
+              className="checkbox"
+              checked={alarm.onDue}
+              onChange={(e) => onChange({ onDue: e.target.checked })}
+              disabled={!alarm.enabled}
+            />
             <span>When reached</span>
           </label>
           <label className="inline-check">
             <span className="muted small">Repeat while over</span>
-            <select className="input select" value={alarm.overdueEveryMinutes} onChange={(e) => onChange({ overdueEveryMinutes: Number(e.target.value) })} disabled={!alarm.enabled}>
+            <select
+              className="input select"
+              value={alarm.overdueEveryMinutes}
+              onChange={(e) => onChange({ overdueEveryMinutes: Number(e.target.value) })}
+              disabled={!alarm.enabled}
+            >
               {REPEAT_CHOICES.map((m) => (
                 <option key={m} value={m}>
                   {m === 0 ? 'Off' : `every ${m} min`}
@@ -544,11 +607,21 @@ function DeleteOldDays() {
       : `${info.total} day${info.total === 1 ? '' : 's'} stored, oldest ${formatDateFull(info.oldest!)}. ${info.matching} before this date.`;
 
   return (
-    <Section title="Delete old days now" hint="Removes every day before the date, with its punches, priorities, sessions and notes. Today and a day with a running timer are always kept.">
+    <Section
+      title="Delete old days now"
+      hint="Removes every day before the date, with its punches, priorities, sessions and notes. Today and a day with a running timer are always kept."
+    >
       <div className="setting-row">
         <span>Delete days before</span>
         <span className="duration-inputs">
-          <input className="input" type="date" value={before} max={today} onChange={(e) => e.target.value && setBefore(e.target.value)} aria-label="Delete days before" />
+          <input
+            className="input"
+            type="date"
+            value={before}
+            max={today}
+            onChange={(e) => e.target.value && setBefore(e.target.value)}
+            aria-label="Delete days before"
+          />
           <button className="btn btn-ghost btn-danger-text" onClick={() => void remove()} disabled={busy || !info || info.matching === 0}>
             Delete…
           </button>
@@ -591,7 +664,15 @@ function ChangePassword() {
       </label>
       <label className="field">
         <span>Confirm new password</span>
-        <input className="input" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} minLength={8} required />
+        <input
+          className="input"
+          type="password"
+          autoComplete="new-password"
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          minLength={8}
+          required
+        />
       </label>
       {msg && <p className={msg.ok ? 'success' : 'error'}>{msg.text}</p>}
       <div>
@@ -608,7 +689,11 @@ function Users({ me }: { me: PublicUser }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const load = () => api.listUsers().then((r) => setUsers(r.users)).catch((err) => setError((err as Error).message));
+  const load = () =>
+    api
+      .listUsers()
+      .then((r) => setUsers(r.users))
+      .catch((err) => setError((err as Error).message));
   useEffect(() => void load(), []);
 
   const add = async (e: FormEvent) => {
@@ -656,7 +741,16 @@ function Users({ me }: { me: PublicUser }) {
       </ul>
       <form className="user-add" onSubmit={add}>
         <input className="input" placeholder="Username" autoComplete="off" value={username} onChange={(e) => setUsername(e.target.value)} required />
-        <input className="input" type="password" placeholder="Temporary password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required />
+        <input
+          className="input"
+          type="password"
+          placeholder="Temporary password"
+          autoComplete="new-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          minLength={8}
+          required
+        />
         <button className="btn btn-primary" type="submit">
           Add user
         </button>

@@ -27,7 +27,5 @@
     "react-hooks/error-boundaries": "error",
     "react-hooks/globals": "error"
   },
-  "overrides": [
-    { "files": ["client/public/sw.js"], "env": { "serviceworker": true } }
-  ]
+  "overrides": [{ "files": ["client/public/sw.js"], "env": { "serviceworker": true } }]
 }

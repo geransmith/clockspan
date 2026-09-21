@@ -113,19 +113,23 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     document.title = running ? `${formatCountdown(remainingSeconds)}${running.label ? ` · ${running.label}` : ''} — ${BASE_TITLE}` : BASE_TITLE;
   }, [running, remainingSeconds]);
 
-  const start = useCallback(async (date: string, plannedSeconds: number, label: string, priorityUid: string | null = null) => {
-    unlockAudio(); // user gesture: lets the completion chime play later on iOS
-    mutationSeq.current++;
-    try {
-      const { session } = await api.startSession(date, plannedSeconds, label, priorityUid);
-      setRunning(session);
-      store.applySession(session);
-    } catch (err) {
-      const body = (err as { body?: { session?: Session } }).body;
-      if (body?.session) setRunning(body.session); // 409: adopt the one already running
-      else throw err;
-    }
-  }, [store]);
+  const start = useCallback(
+    async (date: string, plannedSeconds: number, label: string, priorityUid: string | null = null) => {
+      unlockAudio(); // user gesture: lets the completion chime play later on iOS
+      mutationSeq.current++;
+      try {
+        const { session } = await api.startSession(date, plannedSeconds, label, priorityUid);
+        setRunning(session);
+        store.applySession(session);
+      } catch (err) {
+        const body = (err as { body?: { session?: Session } }).body;
+        if (body?.session)
+          setRunning(body.session); // 409: adopt the one already running
+        else throw err;
+      }
+    },
+    [store],
+  );
 
   // The bar and the card call these with `void`, so a failure has to be reported here: the
   // running state is what the server last confirmed, and the banner says the press was lost.

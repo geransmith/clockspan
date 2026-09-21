@@ -136,7 +136,7 @@ const PRIORITY_TEXTS = [
   'Reply to the vendor about the invoice',
   'Draft the release notes',
   'Fix the login timeout bug',
-  'Review Sam\'s pull request',
+  "Review Sam's pull request",
   'Update the onboarding doc',
   'Call the bank about the card',
   'Plan next sprint',
@@ -146,13 +146,7 @@ const PRIORITY_TEXTS = [
   'File the timesheet',
 ];
 
-const UNPLANNED_LABELS = [
-  'Inbox',
-  'Helped Sam debug the deploy',
-  'Standup follow-ups',
-  'Support ticket that came in',
-  'Expense receipts',
-];
+const UNPLANNED_LABELS = ['Inbox', 'Helped Sam debug the deploy', 'Standup follow-ups', 'Support ticket that came in', 'Expense receipts'];
 
 const RETRO_NOTES = [
   'Morning went to plan. The afternoon went to the vendor call.',
@@ -177,9 +171,7 @@ interface Insert {
 function insertDay(ctx: Insert, day: Omit<SeededDay, 'sessions'> & { sessions: Omit<SeededSession, 'id'>[] }): SeededDay {
   const { db, userId } = ctx;
   const info = db
-    .prepare(
-      `INSERT INTO days (user_id, date, created_at, overtime_approved, retro_note, retro_at) VALUES (?, ?, ?, ?, ?, ?)`,
-    )
+    .prepare(`INSERT INTO days (user_id, date, created_at, overtime_approved, retro_note, retro_at) VALUES (?, ?, ?, ?, ?, ?)`)
     .run(userId, day.date, day.createdAt, day.overtimeApproved ? 1 : 0, day.retroNote, day.retroAt);
   const dayId = Number(info.lastInsertRowid);
   const punch = db.prepare(`INSERT INTO punches (day_id, position, kind, at) VALUES (?, ?, ?, ?)`);
@@ -206,9 +198,14 @@ function completed(label: string, startedAt: number, minutes: number, priorityUi
 }
 
 /** Builds one past weekday. `index` counts from the oldest day; `kind` picks the template. */
-function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today'>, rand: () => number): Omit<SeededDay, 'sessions'> & { sessions: Omit<SeededSession, 'id'>[] } {
+function buildPastDay(
+  date: string,
+  index: number,
+  kind: Exclude<DayKind, 'today'>,
+  rand: () => number,
+): Omit<SeededDay, 'sessions'> & { sessions: Omit<SeededSession, 'id'>[] } {
   const jitter = (spread: number) => Math.round((rand() - 0.5) * 2 * spread);
-  const pick = <T,>(arr: readonly T[]): T => arr[Math.floor(rand() * arr.length)]!;
+  const pick = <T>(arr: readonly T[]): T => arr[Math.floor(rand() * arr.length)]!;
   const texts = shuffle(PRIORITY_TEXTS, rand);
 
   const clockIn = at(date, 8, 30) + jitter(10) * MIN;
@@ -253,7 +250,11 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
   if (kind === 'overtime') {
     const earlyIn = at(date, 8, 15);
     const lateOut = at(date, 19, 0);
-    const priorities = [priority(1, texts[0]!, true, earlyIn - 4 * MIN), priority(2, texts[1]!, true, earlyIn - 4 * MIN), priority(3, texts[2]!, true, earlyIn - 4 * MIN)];
+    const priorities = [
+      priority(1, texts[0]!, true, earlyIn - 4 * MIN),
+      priority(2, texts[1]!, true, earlyIn - 4 * MIN),
+      priority(3, texts[2]!, true, earlyIn - 4 * MIN),
+    ];
     return {
       ...base,
       createdAt: earlyIn - 4 * MIN,
@@ -280,7 +281,15 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
       sessions: [
         completed(texts[0]!, clockIn + 20 * MIN, 25, priorities[0]!.uid),
         // Cancelled a few minutes in: must not count anywhere.
-        { label: texts[1]!, notes: '', plannedSeconds: 25 * 60, startedAt: clockIn + 60 * MIN, endedAt: clockIn + 65 * MIN, status: 'cancelled', priorityUid: priorities[1]!.uid },
+        {
+          label: texts[1]!,
+          notes: '',
+          plannedSeconds: 25 * 60,
+          startedAt: clockIn + 60 * MIN,
+          endedAt: clockIn + 65 * MIN,
+          status: 'cancelled',
+          priorityUid: priorities[1]!.uid,
+        },
         completed(pick(UNPLANNED_LABELS), lunchIn + 30 * MIN, 25, null),
       ],
       retroNote: '',
@@ -341,7 +350,7 @@ function buildToday(today: string, now: number, index: number, running: boolean)
   const priorities: SeededPriority[] = [
     { position: 1, text: 'Ship the timeclock fix', done: true, uid: uidFor(index, 1), addedAt: createdAt },
     { position: 2, text: 'Answer the two open support threads', done: false, uid: uidFor(index, 2), addedAt: createdAt },
-    { position: 3, text: 'Write up Friday\'s plan', done: false, uid: uidFor(index, 3), addedAt: createdAt },
+    { position: 3, text: "Write up Friday's plan", done: false, uid: uidFor(index, 3), addedAt: createdAt },
   ];
   const sessions: Omit<SeededSession, 'id'>[] = [
     completed('Ship the timeclock fix', clockIn + 10 * MIN, 50, priorities[0]!.uid),
@@ -399,9 +408,13 @@ export async function ensureLocalUsers(db: DB): Promise<{ admin: UserRow; member
   const create = async (username: string, isAdmin: boolean): Promise<UserRow> => {
     const existing = get(username);
     if (existing) return existing;
-    db.prepare(
-      `INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at) VALUES ('local', ?, ?, ?, ?, ?)`,
-    ).run(username, await hashPassword(LOCAL_USERS.password), username, isAdmin ? 1 : 0, Date.now());
+    db.prepare(`INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at) VALUES ('local', ?, ?, ?, ?, ?)`).run(
+      username,
+      await hashPassword(LOCAL_USERS.password),
+      username,
+      isAdmin ? 1 : 0,
+      Date.now(),
+    );
     return get(username)!;
   };
   return { admin: await create(LOCAL_USERS.admin, true), member: await create(LOCAL_USERS.member, false) };

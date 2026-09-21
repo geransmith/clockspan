@@ -1,7 +1,18 @@
 import { addDays, parseDateKey } from '../../../shared/dates.js';
 import type { TimeFormat } from '../../../shared/settings.js';
 
-export { addDays, addMonths, dateKey, endOfDay, isValidDateKey, parseDateKey, startOfMonth, startOfQuarter, startOfWeek, todayKey } from '../../../shared/dates.js';
+export {
+  addDays,
+  addMonths,
+  dateKey,
+  endOfDay,
+  isValidDateKey,
+  parseDateKey,
+  startOfMonth,
+  startOfQuarter,
+  startOfWeek,
+  todayKey,
+} from '../../../shared/dates.js';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 

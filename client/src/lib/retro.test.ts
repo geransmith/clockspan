@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { Priority, Session } from '../types';
 import { reviewDay } from './retro';
 
-const row = (position: number, text: string, extra: Partial<Priority> = {}): Priority => ({ position, text, done: false, uid: `uid${position}00000000`, addedAt: 1000, ...extra });
+const row = (position: number, text: string, extra: Partial<Priority> = {}): Priority => ({
+  position,
+  text,
+  done: false,
+  uid: `uid${position}00000000`,
+  addedAt: 1000,
+  ...extra,
+});
 const session = (id: number, startedAt: number, seconds: number, extra: Partial<Session> = {}): Session => ({
   id,
   date: '2026-09-16',

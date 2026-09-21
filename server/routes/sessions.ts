@@ -29,15 +29,13 @@ function parsePriorityUid(db: DB, dayId: number, raw: unknown): { uid: string | 
 }
 
 function getOwned(db: DB, userId: number, id: number): OwnedSession | undefined {
-  return db
-    .prepare(`SELECT s.*, d.date FROM sessions s JOIN days d ON d.id = s.day_id WHERE s.id = ? AND s.user_id = ?`)
-    .get(id, userId) as OwnedSession | undefined;
+  return db.prepare(`SELECT s.*, d.date FROM sessions s JOIN days d ON d.id = s.day_id WHERE s.id = ? AND s.user_id = ?`).get(id, userId) as
+    OwnedSession | undefined;
 }
 
 function running(db: DB, userId: number): OwnedSession | undefined {
-  return db
-    .prepare(`SELECT s.*, d.date FROM sessions s JOIN days d ON d.id = s.day_id WHERE s.user_id = ? AND s.status = 'running' LIMIT 1`)
-    .get(userId) as OwnedSession | undefined;
+  return db.prepare(`SELECT s.*, d.date FROM sessions s JOIN days d ON d.id = s.day_id WHERE s.user_id = ? AND s.status = 'running' LIMIT 1`).get(userId) as
+    OwnedSession | undefined;
 }
 
 /** Mounted at /api/days/:date/sessions (start) — separate router so params flow cleanly. */
@@ -143,7 +141,13 @@ export function sessionsRouter(db: DB): Router {
       }
       next.notes = notes.slice(0, LIMITS.sessionNotes);
     }
-    db.prepare(`UPDATE sessions SET planned_seconds = ?, label = ?, notes = ?, priority_uid = ? WHERE id = ?`).run(next.planned, next.label, next.notes, next.priorityUid, s.id);
+    db.prepare(`UPDATE sessions SET planned_seconds = ?, label = ?, notes = ?, priority_uid = ? WHERE id = ?`).run(
+      next.planned,
+      next.label,
+      next.notes,
+      next.priorityUid,
+      s.id,
+    );
     reply(res, s.user_id, s.id);
   });
 

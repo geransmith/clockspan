@@ -30,8 +30,8 @@ git switch main && git pull
   under "Other changes" in the notes.
 - **Body**: what changed, why, and how it was verified. A few lines is enough.
 - **Before opening**:
-  - `npm test`, `npm run typecheck` and `npm run lint` pass locally. CI runs the same plus
-    `npm run build`.
+  - `npm test`, `npm run typecheck`, `npm run lint` and `npm run format:check` pass locally.
+    CI runs the same plus `npm run build`. `npm run format` fixes formatting.
   - `npm run screenshots` has been re-run if a README image changed, and the PNGs are in the diff.
   - The "How to add…" checklists in `AGENTS.md` still hold if defaults, alarms, settings or
     response headers changed.

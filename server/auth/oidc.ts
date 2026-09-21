@@ -25,7 +25,11 @@ class Discovery {
   private promise: Promise<oidc.Configuration> | null = null;
   private lastError: unknown = null;
 
-  constructor(private readonly issuer: string, private readonly clientId: string, private readonly clientSecret: string) {}
+  constructor(
+    private readonly issuer: string,
+    private readonly clientId: string,
+    private readonly clientSecret: string,
+  ) {}
 
   get(): Promise<oidc.Configuration> {
     if (!this.promise) {

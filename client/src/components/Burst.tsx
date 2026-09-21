@@ -29,7 +29,14 @@ export function Burst({ seed, anchor, big = false }: Props) {
         <span
           key={i}
           className="burst-emoji"
-          style={{ '--dx': `${Math.round(p.dx * reach)}px`, '--dy': `${-Math.round(p.dy * reach)}px`, '--delay': `${p.delay}s`, '--rot': `${Math.round(p.rot * 90)}deg` } as CSSProperties}
+          style={
+            {
+              '--dx': `${Math.round(p.dx * reach)}px`,
+              '--dy': `${-Math.round(p.dy * reach)}px`,
+              '--delay': `${p.delay}s`,
+              '--rot': `${Math.round(p.rot * 90)}deg`,
+            } as CSSProperties
+          }
         >
           {p.emoji}
         </span>

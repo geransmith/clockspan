@@ -227,9 +227,21 @@ function DayDetail({
       </header>
       {s && tc ? (
         <div className="tiles calendar-tiles">
-          <Tile label="Worked" value={tc.clockIn != null ? formatDuration(tc.workedSeconds) : '—'} sub={tc.clockIn == null ? 'no clock-in' : tc.lunchStatus === 'taken' ? 'lunch taken' : ''} />
-          <Tile label="Focused" value={s.focusSeconds > 0 ? formatDuration(s.focusSeconds) : '—'} sub={sessions > 0 ? `${sessions} session${sessions === 1 ? '' : 's'}` : ''} />
-          <Tile label="Priorities" value={s.prioritiesTotal > 0 ? `${s.prioritiesDone}/${s.prioritiesTotal}` : '—'} sub={s.prioritiesTotal > 0 && s.prioritiesDone === s.prioritiesTotal ? 'all done' : ''} />
+          <Tile
+            label="Worked"
+            value={tc.clockIn != null ? formatDuration(tc.workedSeconds) : '—'}
+            sub={tc.clockIn == null ? 'no clock-in' : tc.lunchStatus === 'taken' ? 'lunch taken' : ''}
+          />
+          <Tile
+            label="Focused"
+            value={s.focusSeconds > 0 ? formatDuration(s.focusSeconds) : '—'}
+            sub={sessions > 0 ? `${sessions} session${sessions === 1 ? '' : 's'}` : ''}
+          />
+          <Tile
+            label="Priorities"
+            value={s.prioritiesTotal > 0 ? `${s.prioritiesDone}/${s.prioritiesTotal}` : '—'}
+            sub={s.prioritiesTotal > 0 && s.prioritiesDone === s.prioritiesTotal ? 'all done' : ''}
+          />
         </div>
       ) : (
         <p className="muted small">Nothing recorded.</p>

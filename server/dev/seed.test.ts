@@ -4,7 +4,12 @@ import { SEED_NOW, SEED_TODAY } from './harness.js';
 import { DEFAULT_HISTORY_DAYS, ensureLocalUsers, kindForDistance, quarterStart, seedDatabase, weekdaysBefore, weekdaysSince } from './seed.js';
 
 const counts = (db: ReturnType<typeof openDatabase>) =>
-  Object.fromEntries(['days', 'punches', 'priorities', 'sessions', 'settings', 'auth_sessions'].map((t) => [t, (db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as { n: number }).n]));
+  Object.fromEntries(
+    ['days', 'punches', 'priorities', 'sessions', 'settings', 'auth_sessions'].map((t) => [
+      t,
+      (db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as { n: number }).n,
+    ]),
+  );
 
 describe('seedDatabase', () => {
   it('writes rows that satisfy the same rules the routes enforce', () => {
@@ -74,7 +79,7 @@ describe('seedDatabase', () => {
     db.close();
   });
 
-  it('is repeatable and replaces only the user\'s days unless fresh', () => {
+  it("is repeatable and replaces only the user's days unless fresh", () => {
     const db = openDatabase(':memory:');
     const user = ensureDefaultUser(db);
     db.prepare(`INSERT INTO settings (user_id, json) VALUES (?, '{"workMinutes":1}')`).run(user.id);

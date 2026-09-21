@@ -24,7 +24,10 @@ export function createSession(db: DB, config: Config, res: Response, userId: num
     `INSERT INTO auth_sessions (user_id, token_hash, created_at, expires_at, last_seen_at)
      VALUES (?, ?, ?, ?, ?)`,
   ).run(userId, hashToken(token), now, now + config.sessionTtlMs, now);
-  res.setHeader('Set-Cookie', stringifySetCookie({ name: SESSION_COOKIE, value: token, ...cookieOptions(config), maxAge: Math.floor(config.sessionTtlMs / 1000) }));
+  res.setHeader(
+    'Set-Cookie',
+    stringifySetCookie({ name: SESSION_COOKIE, value: token, ...cookieOptions(config), maxAge: Math.floor(config.sessionTtlMs / 1000) }),
+  );
 }
 
 export function readSessionToken(req: Request): string | null {
@@ -52,11 +55,7 @@ export function resolveSession(db: DB, config: Config, req: Request): UserRow | 
   }
   // Slide expiry at most once an hour to keep writes cheap.
   if (now - row.last_seen_at > 3_600_000) {
-    db.prepare(`UPDATE auth_sessions SET last_seen_at = ?, expires_at = ? WHERE id = ?`).run(
-      now,
-      now + config.sessionTtlMs,
-      row.session_id,
-    );
+    db.prepare(`UPDATE auth_sessions SET last_seen_at = ?, expires_at = ? WHERE id = ?`).run(now, now + config.sessionTtlMs, row.session_id);
   }
   const { session_id: _s, expires_at: _e, last_seen_at: _l, ...user } = row;
   return user;

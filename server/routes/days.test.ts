@@ -91,11 +91,7 @@ describe('PUT /api/days/:date/punches', () => {
 describe('PUT /api/days/:date/priorities', () => {
   it('renumbers, keeps client ids, and mints ids only for text rows without one', async () => {
     const r = await app.api.put('/api/days/2026-09-01/priorities', {
-      priorities: [
-        { text: 'Kept', done: true, uid: 'ABCDEF123456', addedAt: 100 },
-        { text: '', done: true },
-        { text: 'Minted' },
-      ],
+      priorities: [{ text: 'Kept', done: true, uid: 'ABCDEF123456', addedAt: 100 }, { text: '', done: true }, { text: 'Minted' }],
     });
     expect(r.status).toBe(200);
     const [a, b, c] = r.body.priorities;
@@ -137,7 +133,12 @@ describe('PUT /api/days/:date/priorities', () => {
   });
 
   it('rejects duplicate ids and oversized lists', async () => {
-    const dup = await app.api.put('/api/days/2026-09-01/priorities', { priorities: [{ text: 'a', uid: 'aaaaaaaaaaaa' }, { text: 'b', uid: 'AAAAAAAAAAAA' }] });
+    const dup = await app.api.put('/api/days/2026-09-01/priorities', {
+      priorities: [
+        { text: 'a', uid: 'aaaaaaaaaaaa' },
+        { text: 'b', uid: 'AAAAAAAAAAAA' },
+      ],
+    });
     expect(dup.status).toBe(400);
     const big = await app.api.put('/api/days/2026-09-01/priorities', { priorities: Array(MAX_PRIORITIES + 1).fill({ text: 'x' }) });
     expect(big.status).toBe(400);
@@ -222,8 +223,7 @@ describe('/api/days/prune', () => {
     const before = dates[3]!;
     const doomed = app.seeded!.days.slice(0, 3);
     const ids = (app.db.prepare(`SELECT id FROM days WHERE date < ?`).all(before) as { id: number }[]).map((d) => d.id);
-    const count = (table: string) =>
-      (app.db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE day_id IN (${ids.join(',')})`).get() as { n: number }).n;
+    const count = (table: string) => (app.db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE day_id IN (${ids.join(',')})`).get() as { n: number }).n;
     expect(count('punches')).toBe(doomed.reduce((n, d) => n + d.punches.length, 0));
     expect(count('sessions')).toBe(doomed.reduce((n, d) => n + d.sessions.length, 0));
 
@@ -279,7 +279,7 @@ describe('days are scoped to the signed-in user', () => {
     app = await startTestApp({ authMode: 'local' });
   });
 
-  it('keeps every read and write on the caller\'s own rows', async () => {
+  it("keeps every read and write on the caller's own rows", async () => {
     const { admin, member } = await ensureLocalUsers(app.db);
     const a = app.client();
     const b = app.client();
@@ -298,7 +298,9 @@ describe('days are scoped to the signed-in user', () => {
 
     // Writes on the same date land on B's own day and leave A's untouched.
     const before = (await a.get(`/api/days/${date}`)).body;
-    expect((await b.put(`/api/days/${date}/punches`, { punches: [{ at: punchWindow(date).from + 44 * HOUR }, { at: null }, { at: null }, { at: null }] })).status).toBe(200);
+    expect(
+      (await b.put(`/api/days/${date}/punches`, { punches: [{ at: punchWindow(date).from + 44 * HOUR }, { at: null }, { at: null }, { at: null }] })).status,
+    ).toBe(200);
     expect((await b.put(`/api/days/${date}/priorities`, { priorities: [{ text: 'Mine' }] })).status).toBe(200);
     expect((await b.put(`/api/days/${date}/overtime`, { approved: true })).status).toBe(200);
     expect((await b.put(`/api/days/${date}/retro`, { note: 'b', done: true })).status).toBe(200);

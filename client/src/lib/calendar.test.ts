@@ -6,7 +6,15 @@ import { emptyPunches } from './timeclock';
 const settings = { workMinutes: 480, lunchDeadlineMinutes: 300, lunchMinutes: 30, secondMealAfterMinutes: 600 };
 const TODAY = '2026-09-17'; // a Thursday
 const NOW = new Date(2026, 8, 17, 15, 0).getTime();
-const summary = (date: string, patch: Partial<DaySummary> = {}): DaySummary => ({ date, punches: emptyPunches(), focusSeconds: 0, prioritiesDone: 0, prioritiesTotal: 0, retroAt: null, ...patch });
+const summary = (date: string, patch: Partial<DaySummary> = {}): DaySummary => ({
+  date,
+  punches: emptyPunches(),
+  focusSeconds: 0,
+  prioritiesDone: 0,
+  prioritiesTotal: 0,
+  retroAt: null,
+  ...patch,
+});
 
 describe('calendarMonth', () => {
   it('pads the month to Monday-start weeks and places the days with their stickers', () => {
@@ -30,7 +38,12 @@ describe('calendarMonth', () => {
     expect(weeks.flat().map((d) => d.date)).not.toContain('2026-09-12');
     expect(weeks[1]![4]!.date).toBe('2026-09-11');
     expect(weeks[2]![0]).toMatchObject({ date: '2026-09-14', stickers: ['reviewed'] });
-    expect(weeks.flat().filter((d) => d.stickers.length).map((d) => d.date)).toEqual(['2026-09-14']);
+    expect(
+      weeks
+        .flat()
+        .filter((d) => d.stickers.length)
+        .map((d) => d.date),
+    ).toEqual(['2026-09-14']);
     // August 2026 starts on a Saturday: its first work week is the 3rd, not a row of filler.
     const august = calendarMonth([], settings, TODAY, NOW, '2026-08-01', false);
     expect(august[0]![0]!.date).toBe('2026-08-03');

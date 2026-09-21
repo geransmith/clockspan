@@ -258,7 +258,9 @@ class Page {
     const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
     const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
     const page = new Page(cdp, sessionId);
-    const silent = new Promise((_, reject) => setTimeout(() => reject(new Error('The browser opened a tab but never answered DevTools. Try another Chromium via CHROME_BIN.')), 15_000).unref());
+    const silent = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('The browser opened a tab but never answered DevTools. Try another Chromium via CHROME_BIN.')), 15_000).unref(),
+    );
     await Promise.race([page.send('Page.enable'), silent]);
     await page.send('Runtime.enable');
     // The sheet reads the clock through Date, so shifting Date shifts the whole app: the

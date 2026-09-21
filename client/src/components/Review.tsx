@@ -108,7 +108,11 @@ function Body({
       <div className="tiles review-tiles">
         <Tile label="Days" value={String(r.days)} sub={`worked ${formatDuration(r.workedSeconds)}`} />
         <Tile label="Focused" value={formatDuration(r.focusedSeconds)} sub={onPlanPct == null ? 'no sessions' : `${onPlanPct}% on plan`} />
-        <Tile label="Priorities" value={r.prioritiesTotal > 0 ? `${r.prioritiesDone}/${r.prioritiesTotal}` : '—'} sub={`${r.retrosDone} of ${r.days} reviewed`} />
+        <Tile
+          label="Priorities"
+          value={r.prioritiesTotal > 0 ? `${r.prioritiesDone}/${r.prioritiesTotal}` : '—'}
+          sub={`${r.retrosDone} of ${r.days} reviewed`}
+        />
       </div>
 
       <section className="review-section">

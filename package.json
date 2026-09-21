@@ -23,6 +23,8 @@
     "screenshots": "node scripts/screenshots.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.test.json",
     "lint": "oxlint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "reset-password": "tsx server/cli.ts reset-password"
   },
   "dependencies": {
@@ -49,6 +51,7 @@
     "@vitest/coverage-v8": "5.0.1",
     "concurrently": "10.0.5",
     "oxlint": "1.83.0",
+    "prettier": "3.9.8",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
     "vite": "8.3.0",
