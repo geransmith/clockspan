@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as api from '../api';
 import type { Session } from '../types';
 import { alert, unlockAudio, warnQuietly } from '../lib/alerts';
-import { SAVE_FAILED, TIMER_DONE } from '../lib/copy';
+import { SAVE_FAILED, TIMER_DONE, TIMER_ELSEWHERE } from '../lib/copy';
 import { formatCountdown } from '../lib/format';
 import { useDayStore } from './useDay';
 import { useLatest } from './useLatest';
@@ -34,6 +34,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   const now = useNow(1000);
   const { settings } = useSettings();
   const store = useDayStore();
+  // `sync` reads the store through a ref so it stays one function for the provider's lifetime.
+  const storeRef = useLatest(store);
   const completing = useRef(false);
   // After a failed finish (server unreachable) wait before trying again, doubling up to a
   // minute. The server clamps ended_at to the planned end, so a late finish still logs the
@@ -42,21 +44,30 @@ export function TimerProvider({ children }: { children: ReactNode }) {
 
   // Re-sync with the server on load, when the tab comes back, and every minute. A
   // response is dropped if a local mutation happened after the request was sent, so a
-  // slow GET can never overwrite a fresh optimistic update.
+  // slow GET can never overwrite a fresh optimistic update. A different answer than the one
+  // shown means another device started or ended a timer: its day is reloaded so the log
+  // shows the row this device never wrote.
   const mutationSeq = useRef(0);
   const lastSync = useRef(0);
-  const sync = useCallback((force = false) => {
-    const t = Date.now();
-    if (!force && t - lastSync.current < 5000) return;
-    lastSync.current = t;
-    const seq = mutationSeq.current;
-    api
-      .getRunning()
-      .then(({ session }) => {
-        if (mutationSeq.current === seq) setRunning(session);
-      })
-      .catch(() => {});
-  }, []);
+  const sync = useCallback(
+    (force = false) => {
+      const t = Date.now();
+      if (!force && t - lastSync.current < 5000) return;
+      lastSync.current = t;
+      const seq = mutationSeq.current;
+      api
+        .getRunning()
+        .then(({ session }) => {
+          if (mutationSeq.current !== seq) return;
+          const prev = runningRef.current;
+          setRunning(session);
+          if (prev?.id === session?.id) return;
+          for (const date of new Set([prev?.date, session?.date])) if (date) void storeRef.current.load(date);
+        })
+        .catch(() => {});
+    },
+    [runningRef, storeRef],
+  );
   useEffect(() => {
     sync(true);
     const onVisible = () => {
@@ -88,6 +99,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         retry.current = { at: 0, delay: 0 };
         store.applySession(done);
         setRunning(null);
+        // Cancelled on another device before this one heard: nothing to celebrate.
+        if (done.status !== 'completed') return;
         alert({
           title: TIMER_DONE.title,
           body: TIMER_DONE.body(session.label, formatCountdown(done.durationSeconds ?? 0)),
@@ -123,9 +136,12 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         store.applySession(session);
       } catch (err) {
         const body = (err as { body?: { session?: Session } }).body;
-        if (body?.session)
-          setRunning(body.session); // 409: adopt the one already running
-        else throw err;
+        if (!body?.session) throw err;
+        // 409: a timer is already running, started on another device. Follow it, fetch its
+        // day so the log has the row, and say why what was typed here went nowhere.
+        setRunning(body.session);
+        void store.load(body.session.date);
+        alert({ ...TIMER_ELSEWHERE, tone: 'info', tag: 'timer-elsewhere', sound: false, notifications: false });
       }
     },
     [store],
@@ -133,13 +149,20 @@ export function TimerProvider({ children }: { children: ReactNode }) {
 
   // The bar and the card call these with `void`, so a failure has to be reported here: the
   // running state is what the server last confirmed, and the banner says the press was lost.
-  const attempt = useCallback(async (run: () => Promise<void>) => {
-    try {
-      await run();
-    } catch {
-      warnQuietly({ title: SAVE_FAILED.title, body: SAVE_FAILED.body, tag: 'save-failed' });
-    }
-  }, []);
+  const attempt = useCallback(
+    async (run: () => Promise<void>) => {
+      try {
+        await run();
+      } catch (err) {
+        warnQuietly({ title: SAVE_FAILED.title, body: SAVE_FAILED.body, tag: 'save-failed' });
+        // Gone, or no longer running: it ended on another device. Show that now, not at the
+        // next poll.
+        const status = (err as { status?: number }).status;
+        if (status === 404 || status === 409) sync(true);
+      }
+    },
+    [sync],
+  );
 
   const adjust = useCallback(
     (deltaSeconds: number) =>

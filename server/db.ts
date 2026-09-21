@@ -83,6 +83,12 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE days ADD COLUMN retro_note TEXT NOT NULL DEFAULT '';
   ALTER TABLE days ADD COLUMN retro_at INTEGER;
   `,
+  // One running timer per user, in the schema. The handlers are synchronous so the API never
+  // made two, but the timer bar, GET /sessions/running and the prune guard all assume it.
+  `
+  DROP INDEX sessions_running;
+  CREATE UNIQUE INDEX sessions_running ON sessions(user_id) WHERE status = 'running';
+  `,
 ];
 
 export function openDatabase(dbPath: string): DB {

@@ -128,6 +128,9 @@ describe('sessions', () => {
     expect((await app.api.get('/api/sessions/running')).body.session).toBeNull();
     expect((await app.api.post(`/api/sessions/${id}/cancel`)).body.session.status).toBe('cancelled');
     expect((await app.api.post('/api/sessions/999/cancel')).status).toBe(404);
+    // A finish that arrives after the cancel (the other device's timer ran out) changes nothing:
+    // the client reads the status to know whether to celebrate.
+    expect((await app.api.post(`/api/sessions/${id}/finish`)).body.session.status).toBe('cancelled');
   });
 
   it('deletes once', async () => {
