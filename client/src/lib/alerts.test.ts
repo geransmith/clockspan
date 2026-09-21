@@ -40,13 +40,24 @@ class FakeOscillator extends FakeNode {
 class FakeGain extends FakeNode {
   gain = new FakeParam();
 }
+class FakeBufferSource extends FakeNode {
+  buffer: unknown = null;
+  started = 0;
+  start() {
+    this.started++;
+  }
+}
 class FakeAudioContext {
   static instances: FakeAudioContext[] = [];
   static failConstructor = false;
+  static failDecode = false;
   state: 'suspended' | 'running' = 'running';
   currentTime = 10;
   destination = {};
   oscillators: FakeOscillator[] = [];
+  sources: FakeBufferSource[] = [];
+  gains: FakeGain[] = [];
+  decoded: number[] = [];
   resumed = 0;
   constructor() {
     if (FakeAudioContext.failConstructor) throw new Error('no audio');
@@ -58,7 +69,19 @@ class FakeAudioContext {
     return o;
   }
   createGain() {
-    return new FakeGain();
+    const g = new FakeGain();
+    this.gains.push(g);
+    return g;
+  }
+  createBufferSource() {
+    const s = new FakeBufferSource();
+    this.sources.push(s);
+    return s;
+  }
+  decodeAudioData(bytes: ArrayBuffer) {
+    if (FakeAudioContext.failDecode) return Promise.reject(new Error('bad mp3'));
+    this.decoded.push(bytes.byteLength);
+    return Promise.resolve({ duration: bytes.byteLength });
   }
   resume() {
     this.resumed++;
@@ -87,11 +110,19 @@ class FakeNotification {
 
 let alerts: Alerts;
 const focus = vi.fn();
+/** One fake response per call; the default is a 3-byte "file". */
+const fetchMock = vi.fn();
+const fileResponse = (ok = true, size = 3) => Promise.resolve({ ok, status: ok ? 200 : 404, arrayBuffer: () => Promise.resolve(new ArrayBuffer(size)) });
+const flush = () => new Promise((r) => setTimeout(r, 0));
 
 beforeEach(async () => {
   vi.resetModules();
   FakeAudioContext.instances = [];
   FakeAudioContext.failConstructor = false;
+  FakeAudioContext.failDecode = false;
+  fetchMock.mockReset();
+  fetchMock.mockImplementation(() => fileResponse());
+  vi.stubGlobal('fetch', fetchMock);
   FakeNotification.created = [];
   FakeNotification.failConstructor = false;
   FakeNotification.permission = 'granted';
@@ -122,28 +153,74 @@ describe('audio', () => {
   it('gives up quietly when the context cannot be created', () => {
     FakeAudioContext.failConstructor = true;
     alerts.unlockAudio();
-    alerts.chime('timer');
+    alerts.playSound('triad');
+    alerts.playSound('yay');
     expect(FakeAudioContext.instances).toHaveLength(0);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('plays a distinct pattern per chime, unlocking and resuming on the way', () => {
+  it('plays a distinct pattern per synthesized sound, unlocking and resuming on the way', () => {
+    alerts.playSound('none');
+    expect(FakeAudioContext.instances).toHaveLength(0);
     const notes: Record<string, number> = {};
-    for (const kind of ['timer', 'lead', 'due', 'overdue', 'test'] as const) {
+    for (const id of ['triad', 'taps', 'notes', 'double'] as const) {
       const before = FakeAudioContext.instances[0]?.oscillators.length ?? 0;
-      alerts.chime(kind);
-      notes[kind] = FakeAudioContext.instances[0]!.oscillators.length - before;
+      alerts.playSound(id);
+      notes[id] = FakeAudioContext.instances[0]!.oscillators.length - before;
     }
-    expect(notes).toEqual({ timer: 3, lead: 2, due: 3, overdue: 2, test: 2 });
+    expect(notes).toEqual({ triad: 3, taps: 2, notes: 3, double: 2 });
     const ctx = FakeAudioContext.instances[0]!;
     const first = ctx.oscillators[0]!;
     expect(first.type).toBe('sine');
     expect(first.frequency.value).toBe(523);
     expect(first.started).toEqual([ctx.currentTime + 0.02]);
     expect(first.stopped[0]).toBeGreaterThan(first.started[0]!);
-    // A context the browser suspended (tab in the background) is resumed before the chime.
+    // A context the browser suspended (tab in the background) is resumed before the sound.
     ctx.state = 'suspended';
-    alerts.chime('lead');
+    alerts.playSound('taps');
     expect(ctx.resumed).toBe(1);
+  });
+
+  it('fetches and decodes a clip once, then plays it from the decoded buffer', async () => {
+    alerts.playSound('yay');
+    alerts.playSound('yay');
+    await flush();
+    const ctx = FakeAudioContext.instances[0]!;
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0]![0]).toMatch(/yay(-[\w-]+)?\.mp3$/);
+    expect(ctx.decoded).toEqual([3]);
+    expect(ctx.sources).toHaveLength(2);
+    expect(ctx.sources[0]!.buffer).toEqual({ duration: 3 });
+    expect(ctx.sources.map((s) => s.started)).toEqual([1, 1]);
+    expect(ctx.gains.map((g) => g.gain.value)).toEqual([0.8, 0.8]);
+    expect(ctx.oscillators).toHaveLength(0);
+    // Another clip is its own fetch; a played one is not fetched again.
+    alerts.playSound('pop');
+    alerts.playSound('yay');
+    await flush();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(ctx.sources).toHaveLength(4);
+  });
+
+  it('stays quiet when a clip cannot be fetched or decoded, and tries again next time', async () => {
+    fetchMock.mockImplementationOnce(() => Promise.reject(new Error('offline')));
+    alerts.playSound('bell');
+    await flush();
+    fetchMock.mockImplementationOnce(() => fileResponse(false));
+    alerts.playSound('bell');
+    await flush();
+    FakeAudioContext.failDecode = true;
+    alerts.playSound('bell');
+    await flush();
+    const ctx = FakeAudioContext.instances[0]!;
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(ctx.sources).toHaveLength(0);
+    // The failures were not cached: the next play fetches again and this time plays.
+    FakeAudioContext.failDecode = false;
+    alerts.playSound('bell');
+    await flush();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(ctx.sources).toHaveLength(1);
   });
 });
 
@@ -226,11 +303,12 @@ describe('banners', () => {
     expect(alerts.getBanners().map((b) => b.title)).toEqual(['stay']);
   });
 
-  it('chimes only when asked to and sound is on', () => {
-    alerts.alert({ title: 'a', tone: 'info', tag: 'a', chime: 'due', sound: true, notifications: false });
+  it('plays only when asked to and sound is on', () => {
+    alerts.alert({ title: 'a', tone: 'info', tag: 'a', chime: 'notes', sound: true, notifications: false });
     expect(FakeAudioContext.instances[0]!.oscillators).toHaveLength(3);
-    alerts.alert({ title: 'b', tone: 'info', tag: 'b', chime: 'due', sound: false, notifications: false });
+    alerts.alert({ title: 'b', tone: 'info', tag: 'b', chime: 'notes', sound: false, notifications: false });
     alerts.alert({ title: 'c', tone: 'info', tag: 'c', sound: true, notifications: false });
+    alerts.alert({ title: 'd', tone: 'info', tag: 'd', chime: 'none', sound: true, notifications: false });
     expect(FakeAudioContext.instances[0]!.oscillators).toHaveLength(3);
   });
 

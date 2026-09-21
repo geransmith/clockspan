@@ -105,7 +105,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
           title: TIMER_DONE.title,
           body: TIMER_DONE.body(session.label, formatCountdown(done.durationSeconds ?? 0)),
           tone: 'success',
-          chime: 'timer',
+          chime: settings.sounds.timer,
           tag: 'timer-complete',
           sound: settings.sound,
           notifications: settings.notifications,
@@ -118,7 +118,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       .finally(() => {
         completing.current = false;
       });
-  }, [running, now, endAt, store, settings.sound, settings.notifications]);
+  }, [running, now, endAt, store, settings.sound, settings.sounds.timer, settings.notifications]);
 
   useWakeLock(running != null && settings.keepScreenAwake);
 

@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS, type TimeFormat } from '../../../shared/settings.js';
+import { SOUND_EVENTS, SOUNDS } from '../../../shared/sounds.js';
 import * as api from '../api';
 import { useAuth } from '../auth/AuthGate';
 import { useSettings } from '../hooks/useSettings';
-import { chime, notificationPermission, requestNotificationPermission, unlockAudio } from '../lib/alerts';
+import { notificationPermission, playSound, requestNotificationPermission, unlockAudio } from '../lib/alerts';
 import { CONFIRM, DELETE_DAYS, RESET_SETTINGS, SAVE_STATUS } from '../lib/copy';
 import { addDays, formatDateFull, todayKey } from '../lib/format';
 import { DEFAULT_LAYOUT } from '../lib/layout';
-import type { AlarmId, AlarmSettings, PruneInfo, PublicUser, Settings } from '../types';
+import { SOUND_EVENT_LABELS } from '../lib/sounds';
+import type { AlarmId, AlarmSettings, PruneInfo, PublicUser, Settings, SoundEvent, SoundId } from '../types';
 import { Check, X } from './Icons';
 
 const LEAD_CHOICES = [30, 15, 10, 5, 1];
@@ -50,6 +52,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 
   const set = (patch: Partial<Settings>) => void save(() => update(patch));
   const setAlarm = (id: AlarmId, patch: Partial<AlarmSettings>) => set({ alarms: { ...settings.alarms, [id]: { ...settings.alarms[id], ...patch } } });
+  const setSound = (event: SoundEvent, id: SoundId) => set({ sounds: { ...settings.sounds, [event]: id } });
   const onReset = () => {
     if (window.confirm(RESET_SETTINGS.confirm)) void save(reset);
   };
@@ -120,19 +123,13 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               />
             </Section>
             <Section title="How you're alerted" hint="Every alarm also shows an in-app banner.">
-              <div className="setting-row">
-                <Toggle label="Sound" checked={settings.sound} onChange={(v) => set({ sound: v })} />
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => {
-                    unlockAudio();
-                    chime('test');
-                  }}
-                >
-                  Test sound
-                </button>
-              </div>
+              <Toggle label="Sound" checked={settings.sound} onChange={(v) => set({ sound: v })} />
               <NotificationsRow enabled={settings.notifications} onChange={(v) => set({ notifications: v })} />
+            </Section>
+            <Section title="Sounds" hint="What plays for each event. The Sound switch above silences all of them.">
+              {SOUND_EVENTS.map((event) => (
+                <SoundRow key={event} event={event} value={settings.sounds[event]} disabled={!settings.sound} onChange={(id) => setSound(event, id)} />
+              ))}
             </Section>
           </>
         );
@@ -554,6 +551,36 @@ function AlarmEditor({ title, hint, alarm, onChange }: { title: string; hint?: s
           </label>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** One event's sound: a pick from the catalog and a Test button that plays the pick. */
+function SoundRow({ event, value, disabled, onChange }: { event: SoundEvent; value: SoundId; disabled: boolean; onChange: (id: SoundId) => void }) {
+  const label = SOUND_EVENT_LABELS[event];
+  return (
+    <div className="setting-row">
+      <span>{label}</span>
+      <span className="duration-inputs">
+        <select className="input select" value={value} onChange={(e) => onChange(e.target.value as SoundId)} disabled={disabled} aria-label={`${label} sound`}>
+          {SOUNDS.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+        <button
+          className="btn btn-ghost"
+          onClick={() => {
+            unlockAudio();
+            playSound(value);
+          }}
+          disabled={disabled || value === 'none'}
+          aria-label={`Test ${label} sound`}
+        >
+          Test
+        </button>
+      </span>
     </div>
   );
 }

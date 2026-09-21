@@ -31,6 +31,8 @@ has the user-facing description.
 ```
 shared/                 Imported by BOTH sides (always with a `.js` suffix); pure data + functions
   settings.ts           Settings type, DEFAULT_SETTINGS, CARD_IDS, MAX_PRIORITIES, retention bounds
+  sounds.ts             the sound catalog: SOUNDS (id, label, kind none|synth|clip), SOUND_IDS, CLIP_IDS,
+                        SOUND_EVENTS (timer, lead, due, overdue, dayDone, priorityDone)
   api.ts                the wire types (Day, Session, Punch, Priority, DaySummary, PruneInfo, AuthInfo…);
                         server JSON builders are annotated with them, the client reads them
   dates.ts              date keys: dateKey/todayKey/parseDateKey/isValidDateKey/addDays/endOfDay,
@@ -74,7 +76,13 @@ client/                 Vite root → dist/client
                         timeclockForDate/clampToDay (past days freeze at their end), normalizePunches/
                         clockOutPosition/extraPairs (row model), secondMealApplies
   src/lib/alarms.ts     PURE: dueEvents(...) scheduler + describeEvent() copy
-  src/lib/alerts.ts     the ONLY place that plays audio / calls Notification / pushes banners
+  src/lib/alerts.ts     the ONLY place that plays audio / calls Notification / pushes banners:
+                        playSound(id) runs a synth pattern (SYNTH) or a bundled clip (fetched +
+                        decoded once through the one AudioContext)
+  src/lib/sounds.ts     clipUrl(id) from one import.meta.glob over src/sounds/,
+                        SOUND_EVENT_LABELS (the rows of Settings → Alarms → Sounds)
+  src/sounds/           the bundled clips, <id>.mp3, all CC0; README.md there records each
+                        clip's title, author and source (the only place provenance lives)
   src/lib/copy.ts       every editable phrase (celebrations, warning pools, confirms, timer-done,
                         retro prompt, settings status) — no logic
   src/lib/celebrate.ts  PURE: pickCelebration(seed) for the end-of-day notice, pickBurst(seed, n)
@@ -236,9 +244,13 @@ repo or the session scratchpad.
   an explicit `hour12` (pure libs: `describeEvent` takes it on `EventContext`). The setting is
   `timeFormat: 'auto' | '12h' | '24h'`; `resolveHour12('auto')` asks the browser locale, so the
   default changes nothing for anyone. `TimeField` shows its AM/PM segment from the same answer.
-- **All user-facing alerts go through `client/src/lib/alerts.ts`** (`alert()`, `chime()`,
-  banners). Never call `new Notification(...)` or create an `AudioContext` anywhere else.
-  `unlockAudio()` must be called from a user gesture (timer start does this) for iOS.
+- **All user-facing alerts go through `client/src/lib/alerts.ts`** (`alert()`, `playSound()`,
+  banners). Never call `new Notification(...)`, create an `AudioContext` or fetch a clip
+  anywhere else. `unlockAudio()` must be called from a user gesture (timer start and every
+  punch commit do this) for iOS. What plays is `settings.sounds[event]`, an id from the
+  catalog in `shared/sounds.ts`; `settings.sound` is the master switch over all of them, and
+  `none` is the per-event off. The day-complete sound fires with the burst in `Timeclock.tsx`
+  (the day *becoming* done while the card is mounted, never a done day opening).
 - **Timer remaining time is derived from the server's `startedAt + plannedSeconds`** on every
   tick — never a client-side counter. `useTimer` keeps a `mutationSeq` so a slow `GET
   /sessions/running` can't overwrite an optimistic update; keep that pattern for new mutations.
@@ -318,6 +330,16 @@ repo or the session scratchpad.
   Account; each is a `case` in `panel()`; the Sheet tab's "History" section holds the
   calendar's switches) using `DurationField` / `MinutesField` — it takes a `unit` suffix,
   default "min" — / `Toggle`. Nothing else to mirror.
+- **A sound**: drop the clip in as `client/src/sounds/<id>.mp3` (CC0 only, MP3 so Safari can
+  decode it, a couple of seconds at most) → add `{ id, label, kind: 'clip' }` to `SOUNDS` in
+  `shared/sounds.ts` → add its title, author and source line to `client/src/sounds/README.md`.
+  Nothing else: the settings selects, the validator (`mergeSounds`), the `SoundId` type and the
+  Test buttons read the catalog, and `client/src/lib/sounds.test.ts` fails if the folder and
+  the catalog disagree. A synthesized pattern is an entry with `kind: 'synth'` plus its
+  `beep()` sequence in the `SYNTH` map in `alerts.ts` (the type makes a missing one an error).
+  A new event that can make a noise is an id in `SOUND_EVENTS`, a default in
+  `DEFAULT_SETTINGS.sounds`, a label in `SOUND_EVENT_LABELS`, and a `playSound(settings.sounds.<event>)`
+  call gated by `settings.sound`.
 - **An alarm target** (existing: `lunchBy`, `clockOut`, `secondMeal`, `retro`): expose the instant from
   `computeTimeclock` → add a target in `useAlarms.ts` (`targets[]`, with an `armed` rule; put
   a rule the card also needs in a pure helper like `secondMealApplies`) → add its default
@@ -396,6 +418,11 @@ Prove a change at the cheapest level that can show it, and stop there:
   read the console for CSP violations; `curl -sI localhost:8090/api/health` shows the headers.
 - If you touched the timer or alarms: reload mid-timer, background/foreground the tab, and let a
   short timer expire — the log must show the planned duration and one chime.
+- If you touched sounds: `alerts.test.ts` proves the patterns, the one fetch per clip and the
+  quiet failure; `sounds.test.ts` the catalog ↔ folder match. The browser check is Settings →
+  Alarms → Sounds at the mobile preset: Test on a clip row fetches the file once (the network
+  list), a second Test fetches nothing, and a clock-out set today plays the day-complete sound
+  once (one request) with no repeat on reload.
 - If you touched punches: walk a pair added before lunch, an early Clock out (done +
   celebration), "Add extra out / in" after it (old Clock out becomes Out N), and removing that
   pair (time returns to Clock out). For the time field: clear Clock in, press `0` `7` `3` `0`
