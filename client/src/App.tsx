@@ -7,7 +7,7 @@ import { RunningTimerBar } from './components/RunningTimerBar';
 import { SettingsDialog } from './components/SettingsDialog';
 import { Sheet } from './components/Sheet';
 import { useAlarms } from './hooks/useAlarms';
-import { DayProvider, useDay } from './hooks/useDay';
+import { DayProvider, useDay, useRefreshDay } from './hooks/useDay';
 import { useNow } from './hooks/useNow';
 import { useRoute } from './hooks/useRoute';
 import { useSettled } from './hooks/useSettled';
@@ -44,11 +44,16 @@ function Shell() {
   // inside the punch rows and for a few seconds after it leaves, so back-filling a day
   // (clock in, think, lunch out) is judged on the finished set, not on each half-entered
   // state. A focused row means the user is at the card; nothing here is finer than a minute.
+  // Another device may have punched meanwhile: the copy here is re-fetched when the tab
+  // comes back and every minute, and the alarms sit out a come-back refresh (and the settle
+  // after its answer) rather than fire on a lunch this tab never saw taken.
   const today = todayKey(now);
   const { day: todayDay, store } = useDay(today);
+  const refreshing = useRefreshDay(today);
   const [editingPunches, setEditingPunches] = useState(false);
   const punches = useSettled(todayDay?.punches, 3000, editingPunches);
-  const todayTc = useMemo(() => (punches ? computeTimeclock(punches, settings, now) : null), [punches, settings, now]);
+  const settled = punches != null && punches === todayDay?.punches && !refreshing;
+  const todayTc = useMemo(() => (settled ? computeTimeclock(punches, settings, now) : null), [settled, punches, settings, now]);
   // A day flagged while the feature was on stays silent only while it is still on.
   const overtimeApproved = settings.overtimeApproval && Boolean(todayDay?.overtimeApproved);
   const approveOvertime = useCallback(() => void store.setOvertimeApproved(today, true), [store, today]);
