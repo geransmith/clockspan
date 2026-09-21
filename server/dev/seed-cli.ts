@@ -13,7 +13,11 @@ if (process.env.NODE_ENV === 'production') {
   process.exit(2);
 }
 
-const opts: { fresh: boolean; running: boolean; quarter: boolean; days?: string; today?: string; now?: string } = { fresh: false, running: false, quarter: false };
+const opts: { fresh: boolean; running: boolean; quarter: boolean; days?: string; today?: string; now?: string } = {
+  fresh: false,
+  running: false,
+  quarter: false,
+};
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
   const [name, inline] = args[i]!.split('=', 2) as [string, string | undefined];

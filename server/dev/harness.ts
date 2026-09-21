@@ -57,7 +57,7 @@ export const SEED_NOW = new Date(2026, 8, 16, 14, 0).getTime();
 
 function makeClient(baseUrl: string): Client {
   const jar = new Map<string, string>();
-  const request = async <T,>(method: string, path: string, body?: unknown): Promise<ApiResponse<T>> => {
+  const request = async <T>(method: string, path: string, body?: unknown): Promise<ApiResponse<T>> => {
     const headers: Record<string, string> = {};
     if (body !== undefined) headers['content-type'] = 'application/json';
     if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
@@ -93,9 +93,7 @@ function makeClient(baseUrl: string): Client {
 export async function startTestApp(opts: StartOptions = {}): Promise<TestApp> {
   const authMode = opts.authMode ?? 'none';
   const oidcEnv =
-    authMode === 'oidc'
-      ? { OIDC_ISSUER: 'http://127.0.0.1:1/', OIDC_CLIENT_ID: 'clockspan', OIDC_CLIENT_SECRET: 'secret', APP_URL: 'http://localhost' }
-      : {};
+    authMode === 'oidc' ? { OIDC_ISSUER: 'http://127.0.0.1:1/', OIDC_CLIENT_ID: 'clockspan', OIDC_CLIENT_SECRET: 'secret', APP_URL: 'http://localhost' } : {};
   const config = loadConfig({ AUTH_MODE: authMode, DATA_DIR: os.tmpdir(), PORT: '0', ...oidcEnv, ...opts.env });
   const db = openDatabase(':memory:');
   const app = createApp(db, config);

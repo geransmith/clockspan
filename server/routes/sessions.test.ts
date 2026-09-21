@@ -17,7 +17,15 @@ describe('sessions', () => {
   it('starts a timer and reports it as running', async () => {
     const r = await start();
     expect(r.status).toBe(201);
-    expect(r.body.session).toMatchObject({ date: DATE, label: 'Work', plannedSeconds: 1500, status: 'running', endedAt: null, durationSeconds: null, priorityUid: null });
+    expect(r.body.session).toMatchObject({
+      date: DATE,
+      label: 'Work',
+      plannedSeconds: 1500,
+      status: 'running',
+      endedAt: null,
+      durationSeconds: null,
+      priorityUid: null,
+    });
     const running = await app.api.get('/api/sessions/running');
     expect(running.body.session.id).toBe(r.body.session.id);
     // The day now exists and lists the running session.
@@ -55,9 +63,19 @@ describe('sessions', () => {
     const prio = await app.api.put(`/api/days/${DATE}/priorities`, { priorities: [{ text: 'Plan' }] });
     const uid: string = prio.body.priorities[0].uid;
     const { id } = (await start()).body.session;
-    const p = await app.api.patch(`/api/sessions/${id}`, { label: 'x'.repeat(LIMITS.sessionLabel + 100), notes: 'y'.repeat(LIMITS.sessionNotes + 100), priorityUid: uid, plannedSeconds: 600 });
+    const p = await app.api.patch(`/api/sessions/${id}`, {
+      label: 'x'.repeat(LIMITS.sessionLabel + 100),
+      notes: 'y'.repeat(LIMITS.sessionNotes + 100),
+      priorityUid: uid,
+      plannedSeconds: 600,
+    });
     expect(p.status).toBe(200);
-    expect(p.body.session).toMatchObject({ label: 'x'.repeat(LIMITS.sessionLabel), notes: 'y'.repeat(LIMITS.sessionNotes), priorityUid: uid, plannedSeconds: 600 });
+    expect(p.body.session).toMatchObject({
+      label: 'x'.repeat(LIMITS.sessionLabel),
+      notes: 'y'.repeat(LIMITS.sessionNotes),
+      priorityUid: uid,
+      plannedSeconds: 600,
+    });
     expect((await app.api.patch(`/api/sessions/${id}`, { priorityUid: 'bad!' })).status).toBe(400);
     expect((await app.api.patch(`/api/sessions/${id}`, { plannedSeconds: 10 })).status).toBe(400);
     // A wrong type is a 400 like everywhere else, not silently kept.
@@ -127,7 +145,7 @@ describe('sessions are scoped to the signed-in user', () => {
   });
   afterEach(() => app.close());
 
-  it('hides one user\'s sessions from another', async () => {
+  it("hides one user's sessions from another", async () => {
     const { admin, member } = await ensureLocalUsers(app.db);
     const a = app.client();
     const b = app.client();

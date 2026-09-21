@@ -46,10 +46,7 @@ describe('dueEvents', () => {
   });
 
   it('repeats while overdue at the configured interval', () => {
-    const fired = new Set([
-      ...[15, 5, 1].map((m) => eventKey(D, 'clockOut', 'lead', m, T)),
-      eventKey(D, 'clockOut', 'due', 0, T),
-    ]);
+    const fired = new Set([...[15, 5, 1].map((m) => eventKey(D, 'clockOut', 'lead', m, T)), eventKey(D, 'clockOut', 'due', 0, T)]);
     expect(dueEvents(D, [target(T)], alarms(), fired, T + 4 * M).fire).toEqual([]);
     const r = dueEvents(D, [target(T)], alarms(), fired, T + 5 * M);
     expect(r.fire.map((e) => [e.kind, e.minutes])).toEqual([['overdue', 5]]);

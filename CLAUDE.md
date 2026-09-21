@@ -11,7 +11,8 @@
   violations.
 - `window.confirm` dialogs (cancel timer, delete session/user, delete old days) are awkward to
   drive in the pane; hit the API with curl for those steps.
-- Run `npm test`, `npm run typecheck` and `npm run lint` before reporting a change as done.
+- Run `npm test`, `npm run typecheck`, `npm run lint` and `npm run format:check` before reporting
+  a change as done (`npm run format` fixes formatting).
 - A change in `server/` or `shared/` is verified by a test next to the code (harness tests for
   routes, see `server/dev/harness.ts`), not by driving the browser. Browser passes are for
   visible UI changes only, scoped to what changed; see "Verification expectations" in AGENTS.md.

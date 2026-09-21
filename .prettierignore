@@ -1,0 +1,9 @@
+# Generated or not ours.
+dist
+coverage
+data
+node_modules
+docs/screenshots
+package-lock.json
+# The docs have hand-laid tables and wrapping; realigning them is churn with no gain.
+*.md

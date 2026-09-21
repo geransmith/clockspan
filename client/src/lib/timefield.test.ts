@@ -13,7 +13,7 @@ describe('msToTime / timeToMs', () => {
     expect(msToTime(null)).toBeNull();
   });
 
-  it('places the time on the date key, not on the instant\'s own day', () => {
+  it("places the time on the date key, not on the instant's own day", () => {
     expect(timeToMs(new Time(7, 30), '2026-09-17')).toBe(new Date(2026, 8, 17, 7, 30).getTime());
   });
 });

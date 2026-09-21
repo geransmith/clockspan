@@ -8,7 +8,14 @@ const at = (key: string, h: number, m = 0) => {
   const [y, mo, d] = key.split('-').map(Number) as [number, number, number];
   return new Date(y, mo - 1, d, h, m).getTime();
 };
-const row = (position: number, text: string, extra: Partial<Priority> = {}): Priority => ({ position, text, done: false, uid: `uid${position}00000000`, addedAt: 0, ...extra });
+const row = (position: number, text: string, extra: Partial<Priority> = {}): Priority => ({
+  position,
+  text,
+  done: false,
+  uid: `uid${position}00000000`,
+  addedAt: 0,
+  ...extra,
+});
 const session = (id: number, date: string, startedAt: number, seconds: number, extra: Partial<Session> = {}): Session => ({
   id,
   date,
@@ -22,7 +29,16 @@ const session = (id: number, date: string, startedAt: number, seconds: number, e
   priorityUid: null,
   ...extra,
 });
-const day = (date: string, extra: Partial<Day> = {}): Day => ({ date, punches: [], priorities: [], overtimeApproved: false, retroNote: '', retroAt: null, sessions: [], ...extra });
+const day = (date: string, extra: Partial<Day> = {}): Day => ({
+  date,
+  punches: [],
+  priorities: [],
+  overtimeApproved: false,
+  retroNote: '',
+  retroAt: null,
+  sessions: [],
+  ...extra,
+});
 
 describe('period helpers', () => {
   it('starts weeks on Monday and quarters on the calendar quarter', () => {
@@ -78,13 +94,19 @@ describe('reviewRange', () => {
       { position: 3, kind: 'out', at: at('2026-09-14', 16, 30) },
     ],
     priorities: [row(1, 'Ship it', { done: true }), row(2, 'Write the proposal')],
-    sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 3000, { priorityUid: 'uid100000000' }), session(2, '2026-09-14', at('2026-09-14', 14), 1200, { label: 'Fire drill' })],
+    sessions: [
+      session(1, '2026-09-14', at('2026-09-14', 9), 3000, { priorityUid: 'uid100000000' }),
+      session(2, '2026-09-14', at('2026-09-14', 14), 1200, { label: 'Fire drill' }),
+    ],
     retroNote: 'Slack ate the afternoon.',
     retroAt: at('2026-09-14', 16),
   });
   const d2 = day('2026-09-15', {
     priorities: [row(1, 'Call the bank', { done: true })],
-    sessions: [session(3, '2026-09-15', at('2026-09-15', 9), 600, { priorityUid: 'uid100000000' }), session(4, '2026-09-15', at('2026-09-15', 10), 2400, { label: 'Help Sam' })],
+    sessions: [
+      session(3, '2026-09-15', at('2026-09-15', 9), 600, { priorityUid: 'uid100000000' }),
+      session(4, '2026-09-15', at('2026-09-15', 10), 2400, { label: 'Help Sam' }),
+    ],
   });
   const empty = day('2026-09-16');
 

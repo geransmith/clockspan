@@ -70,7 +70,10 @@ export function Retro({ priorities, sessions, note, reviewedAt, onChange }: Prop
       {review.total > 0 && (
         <section className="retro-section">
           <h3 className="retro-heading">
-            Planned <span className="muted">{review.done} of {review.total} done</span>
+            Planned{' '}
+            <span className="muted">
+              {review.done} of {review.total} done
+            </span>
           </h3>
           <ul className="retro-list">
             {review.planned.map(({ priority: p, focusedSeconds, sessions: n, addedMidDay }) => (

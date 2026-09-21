@@ -16,8 +16,7 @@ import {
 } from '../../shared/settings.js';
 
 const isBool = (v: unknown): v is boolean => typeof v === 'boolean';
-const isInt = (v: unknown, min: number, max: number): v is number =>
-  typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
+const isInt = (v: unknown, min: number, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
 
 function mergeAlarm(base: AlarmSettings, patch: unknown): AlarmSettings {
   if (!patch || typeof patch !== 'object') return base;

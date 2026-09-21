@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     ports:
       # host:container. Change the left side to serve on another host port.
-      - "8080:8080"
+      - '8080:8080'
     volumes:
       # The SQLite database. DATA_PATH comes from .env (default ./data next to this file);
       # the container takes ownership of it as PUID:PGID.

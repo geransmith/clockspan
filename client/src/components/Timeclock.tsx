@@ -132,7 +132,16 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
   // A punch after the clock-in is expected to come after it; the time field's AM/PM guess uses that.
   const clockInAt = byPos.get(0)?.at ?? null;
   const row = (punch: Punch, label: string) => (
-    <PunchRow key={punch.position} label={label} punch={punch} date={date} isToday={isToday} hour12={hour12} anchorAt={punch.position === 0 ? null : clockInAt} onSet={(at) => setAt(punch.position, at)} />
+    <PunchRow
+      key={punch.position}
+      label={label}
+      punch={punch}
+      date={date}
+      isToday={isToday}
+      hour12={hour12}
+      anchorAt={punch.position === 0 ? null : clockInAt}
+      onSet={(at) => setAt(punch.position, at)}
+    />
   );
   const fixedRow = (position: number, label: string) => {
     const p = byPos.get(position);
@@ -189,8 +198,8 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
 
       {secondMeal != null && (
         <p className={`timeclock-note${tc.secondMealStatus === 'overdue' ? ' timeclock-note--danger' : ''}`}>
-          2nd meal period {tc.secondMealStatus === 'overdue' ? 'was due' : 'due'} by {formatTime(secondMeal)} ({formatDuration(settings.secondMealAfterMinutes * 60)}{' '}
-          worked)
+          2nd meal period {tc.secondMealStatus === 'overdue' ? 'was due' : 'due'} by {formatTime(secondMeal)} (
+          {formatDuration(settings.secondMealAfterMinutes * 60)} worked)
         </p>
       )}
 
@@ -198,7 +207,9 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
         <label className="toggle-row ot-row">
           <span className="toggle-text">
             <span>Overtime approved</span>
-            <span className="muted small">{overtimeApproved ? 'Clock-out alarm is off for today. Meal alarms stay on.' : 'Silences the clock-out alarm for this day.'}</span>
+            <span className="muted small">
+              {overtimeApproved ? 'Clock-out alarm is off for today. Meal alarms stay on.' : 'Silences the clock-out alarm for this day.'}
+            </span>
           </span>
           <input type="checkbox" role="switch" className="switch" checked={overtimeApproved} onChange={(e) => onOvertimeChange(e.target.checked)} />
         </label>
@@ -257,7 +268,12 @@ function PunchRow({
     <div className={`punch-row punch-row--${punch.kind}${punch.at != null ? ' is-set' : ''}`}>
       <span className="punch-label">{label}</span>
       <TimeField value={punch.at} date={date} hour12={hour12} anchorAt={anchorAt} label={label} onCommit={onSet} />
-      <button className="btn btn-ghost punch-now" onClick={() => onSet(roundToMinute(Date.now()))} disabled={!isToday} title={isToday ? 'Use the current time' : 'Only available today'}>
+      <button
+        className="btn btn-ghost punch-now"
+        onClick={() => onSet(roundToMinute(Date.now()))}
+        disabled={!isToday}
+        title={isToday ? 'Use the current time' : 'Only available today'}
+      >
         Now
       </button>
       <button className="btn btn-icon punch-clear" onClick={() => onSet(null)} disabled={punch.at == null} aria-label={`Clear ${label}`} title="Clear">

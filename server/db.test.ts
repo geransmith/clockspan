@@ -45,7 +45,12 @@ describe('migration 3: priority ids and added-at backfill', () => {
     migrate(db);
     expect(db.pragma('user_version', { simple: true })).toBe(MIGRATIONS.length);
 
-    const rows = db.prepare(`SELECT day_id, position, uid, added_at FROM priorities ORDER BY day_id, position`).all() as { day_id: number; position: number; uid: string | null; added_at: number | null }[];
+    const rows = db.prepare(`SELECT day_id, position, uid, added_at FROM priorities ORDER BY day_id, position`).all() as {
+      day_id: number;
+      position: number;
+      uid: string | null;
+      added_at: number | null;
+    }[];
     expect(rows[0]!.uid).toMatch(/^[0-9a-f]{12}$/);
     // Earlier of the day's creation and its first session: the session started first here.
     expect(rows[0]!.added_at).toBe(500);

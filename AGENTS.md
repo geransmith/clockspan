@@ -130,6 +130,7 @@ npm test -- server/routes/days   # one file
 npm run test:coverage  # the same run with a v8 report (text + coverage/index.html); server, shared, client libs
 npm run typecheck      # client + server (tsconfig.server.test.json also covers dev/ and tests)
 npm run lint           # oxlint
+npm run format         # prettier --write . (format:check is what CI runs)
 npm run seed           # fill data/focus.db with sample days; see "Dev data is disposable"
 npm run screenshots    # regenerate docs/screenshots/ (starts the dev server if needed; finds or
                        # fetches a Chromium into node_modules/.cache; CHROME_BIN to force one)
@@ -347,7 +348,8 @@ repo or the session scratchpad.
 ## Conventions
 
 - TypeScript `strict` + `noUncheckedIndexedAccess`. Named exports. Server and shared imports
-  end in `.js`. `npm run lint` must pass; `_`-prefixed names are the only allowed unused vars.
+  end in `.js`. `npm run lint` and `npm run format:check` must pass; `_`-prefixed names are the
+  only allowed unused vars.
 - CSS: tokens on `:root` in `client/src/styles.css`, dark mode via `prefers-color-scheme`,
   **mobile-first** (base = phone; `@media (min-width: 640px)` enhances). Tap targets ≥ 44 px
   (`.btn`, `.input` set `min-height: 44px`). Inputs are 16 px so iOS doesn't zoom. No external
@@ -441,8 +443,9 @@ Prove a change at the cheapest level that can show it, and stop there:
   throttled and seq-guarded for that reason. Don't add unthrottled focus-driven refetches.
 - `npm version` without `--no-git-tag-version` tags the branch commit, which is not the squash
   commit that lands on `main`; the release checklist tags `main` after the merge for that reason.
-- Prettier is not configured: the tree was never consistently formatted, so a `--check` would
-  touch most files. Match the surrounding style by hand.
+- Formatting is Prettier's (`.prettierrc`: single quotes, trailing commas, 160 columns to match
+  the tree's long lines). `npm run format` before committing; CI runs `format:check`. Markdown
+  is left alone (`.prettierignore`): the docs have hand-laid tables and wrapping.
 - oxlint ignores a misspelled rule name without a word. After editing `.oxlintrc.json`, check
   `npx oxlint --print-config` lists what you meant, and that a deliberately bad snippet is caught.
 - TypeScript 7 is the native compiler: the `typescript` package has no `tsserver` or JS API.

@@ -22,7 +22,16 @@ describe('hashPassword / verifyPassword', () => {
   it('answers false, never throws, for malformed or out-of-range stored values', async () => {
     const good = await hashPassword('anything');
     const [, , salt, hash] = good.split('$');
-    for (const bad of ['', 'plain', 'bcrypt$10$x$y', `scrypt$9$${salt}$${hash}`, `scrypt$21$${salt}$${hash}`, `scrypt$abc$${salt}$${hash}`, `scrypt$15$$${hash}`, `scrypt$15$${salt}$`]) {
+    for (const bad of [
+      '',
+      'plain',
+      'bcrypt$10$x$y',
+      `scrypt$9$${salt}$${hash}`,
+      `scrypt$21$${salt}$${hash}`,
+      `scrypt$abc$${salt}$${hash}`,
+      `scrypt$15$$${hash}`,
+      `scrypt$15$${salt}$`,
+    ]) {
       expect(await verifyPassword('anything', bad)).toBe(false);
     }
   });

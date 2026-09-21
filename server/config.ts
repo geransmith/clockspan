@@ -61,16 +61,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const authMode = authModeRaw as AuthMode;
 
   const appUrl = env.APP_URL ? env.APP_URL.replace(/\/+$/, '') : null;
-  const cookieSecure =
-    env.COOKIE_SECURE !== undefined
-      ? env.COOKIE_SECURE === 'true'
-      : Boolean(appUrl && appUrl.startsWith('https://'));
+  const cookieSecure = env.COOKIE_SECURE !== undefined ? env.COOKIE_SECURE === 'true' : Boolean(appUrl && appUrl.startsWith('https://'));
 
   let oidc: Config['oidc'] = null;
   if (authMode === 'oidc') {
-    const missing = ['OIDC_ISSUER', 'OIDC_CLIENT_ID', 'OIDC_CLIENT_SECRET', 'APP_URL'].filter(
-      (k) => !env[k],
-    );
+    const missing = ['OIDC_ISSUER', 'OIDC_CLIENT_ID', 'OIDC_CLIENT_SECRET', 'APP_URL'].filter((k) => !env[k]);
     if (missing.length) {
       throw new Error(
         `AUTH_MODE=oidc requires ${missing.join(', ')}. ` +
@@ -92,7 +87,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (env.RETENTION_DAYS) {
     const n = Number(env.RETENTION_DAYS);
     if (!Number.isInteger(n) || n < MIN_RETENTION_DAYS || n > MAX_RETENTION_DAYS) {
-      throw new Error(`RETENTION_DAYS must be a whole number of days from ${MIN_RETENTION_DAYS} to ${MAX_RETENTION_DAYS}, or unset to keep everything (got "${env.RETENTION_DAYS}")`);
+      throw new Error(
+        `RETENTION_DAYS must be a whole number of days from ${MIN_RETENTION_DAYS} to ${MAX_RETENTION_DAYS}, or unset to keep everything (got "${env.RETENTION_DAYS}")`,
+      );
     }
     retentionDays = n;
   }

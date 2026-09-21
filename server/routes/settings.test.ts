@@ -66,7 +66,15 @@ describe('/api/settings', () => {
   it('carries a 0.2 layout with the sticker card shown over to the stickers setting', async () => {
     // A row saved by 0.2: the card id is no longer a layout entry, but the choice it recorded survives.
     const userId = (app.db.prepare(`SELECT id FROM users WHERE kind = 'default'`).get() as { id: number }).id;
-    app.db.prepare(`INSERT INTO settings (user_id, json) VALUES (?, ?)`).run(userId, JSON.stringify({ layout: [{ id: 'stickers', visible: true }, { id: 'retro', visible: false }] }));
+    app.db.prepare(`INSERT INTO settings (user_id, json) VALUES (?, ?)`).run(
+      userId,
+      JSON.stringify({
+        layout: [
+          { id: 'stickers', visible: true },
+          { id: 'retro', visible: false },
+        ],
+      }),
+    );
     const stored = await app.api.get('/api/settings');
     expect(stored.body.stickers).toBe(true);
     expect(stored.body.layout.map((l: { id: string }) => l.id)).not.toContain('stickers');
@@ -98,7 +106,7 @@ describe('/api/settings', () => {
 });
 
 describe('settings are scoped to the signed-in user', () => {
-  it('saves, reads and resets one user\'s row without touching another\'s', async () => {
+  it("saves, reads and resets one user's row without touching another's", async () => {
     const app = await startTestApp({ authMode: 'local' });
     try {
       await ensureLocalUsers(app.db);

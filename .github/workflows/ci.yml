@@ -3,8 +3,8 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]      # check + `edge` image
-    tags: ['v*']          # check + versioned image + GitHub Release
+    branches: [main] # check + `edge` image
+    tags: ['v*'] # check + versioned image + GitHub Release
 
 # Read-only by default: `check` runs on every PR and needs nothing more. The jobs that
 # publish ask for exactly what they write.
@@ -26,6 +26,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
+      - run: npm run format:check
       - run: npm test
       - run: npm run build
       - name: Tag matches package.json version
@@ -40,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write       # push to ghcr.io
+      packages: write # push to ghcr.io
     steps:
       - uses: actions/checkout@v7
       - uses: docker/login-action@v4
@@ -75,7 +76,7 @@ jobs:
     needs: image
     runs-on: ubuntu-latest
     permissions:
-      contents: write       # create the release
+      contents: write # create the release
     steps:
       - name: Write release body
         run: |

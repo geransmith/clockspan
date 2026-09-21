@@ -20,7 +20,14 @@ export interface CalendarDay {
  * weekend day is simply not on the calendar and never counted. The days are looked up by
  * date; anything else the cell shows is derived by the caller from the same summaries.
  */
-export function calendarMonth(days: DaySummary[], settings: TimeclockSettings, today: string, now: number, monthStart: string, showWeekends = true): CalendarDay[][] {
+export function calendarMonth(
+  days: DaySummary[],
+  settings: TimeclockSettings,
+  today: string,
+  now: number,
+  monthStart: string,
+  showWeekends = true,
+): CalendarDay[][] {
   const byDate = new Map(days.map((d) => [d.date, d]));
   const monthEnd = addDays(addMonths(monthStart, 1), -1);
   const width = showWeekends ? 7 : 5;

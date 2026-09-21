@@ -126,7 +126,12 @@ export function Priorities({ priorities, onChange }: Props) {
               maxLength={LIMITS.priorityText}
             />
             {removable && (
-              <button className="btn btn-icon priority-remove" onClick={() => removeRow(p.position)} aria-label={`Remove priority ${p.position}`} title="Remove">
+              <button
+                className="btn btn-icon priority-remove"
+                onClick={() => removeRow(p.position)}
+                aria-label={`Remove priority ${p.position}`}
+                title="Remove"
+              >
                 <X />
               </button>
             )}

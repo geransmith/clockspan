@@ -1,7 +1,11 @@
 import type { AuthInfo, Day, DaySummary, Priority, PruneInfo, PublicUser, Punch, Session, Settings } from './types';
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string, public body?: unknown) {
+  constructor(
+    public status: number,
+    message: string,
+    public body?: unknown,
+  ) {
     super(message);
   }
 }
@@ -33,16 +37,13 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 // ----- auth -----
 export const getAuth = () => request<AuthInfo>('GET', '/api/auth/me');
-export const setup = (username: string, password: string) =>
-  request<{ user: PublicUser }>('POST', '/api/auth/setup', { username, password });
-export const login = (username: string, password: string) =>
-  request<{ user: PublicUser }>('POST', '/api/auth/login', { username, password });
+export const setup = (username: string, password: string) => request<{ user: PublicUser }>('POST', '/api/auth/setup', { username, password });
+export const login = (username: string, password: string) => request<{ user: PublicUser }>('POST', '/api/auth/login', { username, password });
 export const logout = () => request<{ ok: true; redirect?: string | null }>('POST', '/api/auth/logout');
 export const changePassword = (currentPassword: string, newPassword: string) =>
   request<{ ok: true }>('POST', '/api/auth/password', { currentPassword, newPassword });
 export const listUsers = () => request<{ users: PublicUser[] }>('GET', '/api/auth/users');
-export const addUser = (username: string, password: string) =>
-  request<{ user: PublicUser }>('POST', '/api/auth/users', { username, password });
+export const addUser = (username: string, password: string) => request<{ user: PublicUser }>('POST', '/api/auth/users', { username, password });
 export const deleteUser = (id: number) => request<{ ok: true }>('DELETE', `/api/auth/users/${id}`);
 
 // ----- settings -----
@@ -57,8 +58,7 @@ export const putPunches = (date: string, punches: Punch[]) =>
   request<{ punches: Punch[] }>('PUT', `/api/days/${date}/punches`, { punches: punches.map((p) => ({ at: p.at })) });
 export const putPriorities = (date: string, priorities: Priority[]) =>
   request<{ priorities: Priority[] }>('PUT', `/api/days/${date}/priorities`, { priorities });
-export const putOvertime = (date: string, approved: boolean) =>
-  request<{ overtimeApproved: boolean }>('PUT', `/api/days/${date}/overtime`, { approved });
+export const putOvertime = (date: string, approved: boolean) => request<{ overtimeApproved: boolean }>('PUT', `/api/days/${date}/overtime`, { approved });
 export const putRetro = (date: string, patch: { note?: string; done?: boolean }) =>
   request<{ retroNote: string; retroAt: number | null }>('PUT', `/api/days/${date}/retro`, patch);
 export const getRange = (from: string, to: string) => request<{ days: Day[] }>('GET', `/api/days/range?from=${from}&to=${to}`);

@@ -42,8 +42,7 @@ describe('bad request bodies', () => {
   });
   afterEach(() => app.close());
 
-  const send = (body: string, type = 'application/json') =>
-    fetch(`${app.url}/api/settings`, { method: 'PUT', headers: { 'content-type': type }, body });
+  const send = (body: string, type = 'application/json') => fetch(`${app.url}/api/settings`, { method: 'PUT', headers: { 'content-type': type }, body });
 
   it('turns malformed JSON into a 400 with a JSON error and no stack trace', async () => {
     const res = await send('{"workMinutes": ');

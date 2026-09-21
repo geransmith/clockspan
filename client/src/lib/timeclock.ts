@@ -72,12 +72,7 @@ export interface TimeclockOptions {
  * punches are evaluated in chronological order, so storage order never matters: an extra
  * break can be logged before lunch and the clock-out row can be re-punched after a return.
  */
-export function computeTimeclock(
-  punches: Punch[],
-  settings: TimeclockSettings,
-  now: number,
-  opts: TimeclockOptions = {},
-): TimeclockResult {
+export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, now: number, opts: TimeclockOptions = {}): TimeclockResult {
   const byPos = new Map(punches.map((p) => [p.position, p.at]));
   const clockIn = byPos.get(0) ?? null;
   const lunchOut = byPos.get(LUNCH_OUT_POSITION) ?? null;
@@ -147,27 +142,17 @@ export function computeTimeclock(
   const atLunch = !clockedIn && lunchOut != null && lunchIn == null && lastOut === lunchOut;
   // The day is over when the target is met, when the explicit Clock out row is the latest
   // punch (leaving early is still leaving), or on a past day once off the clock.
-  const done =
-    !clockedIn && (remainingSeconds === 0 || (finalOut != null && lastOut === finalOut) || (opts.frozen === true && lastOut != null));
+  const done = !clockedIn && (remainingSeconds === 0 || (finalOut != null && lastOut === finalOut) || (opts.frozen === true && lastOut != null));
   const openOffMs = !clockedIn && lastOut != null && !done ? Math.max(0, effectiveNow - lastOut) : 0;
   const offClockSeconds = Math.floor((offClosedMs + openOffMs) / 1000);
 
-  const state: TimeclockState = error
-    ? 'working'
-    : done
-      ? 'done'
-      : clockedIn
-        ? 'working'
-        : atLunch
-          ? 'at-lunch'
-          : 'on-break';
+  const state: TimeclockState = error ? 'working' : done ? 'done' : clockedIn ? 'working' : atLunch ? 'at-lunch' : 'on-break';
 
   const lunchBy = clockIn + settings.lunchDeadlineMinutes * MIN;
   const lunchStatus: LunchStatus = lunchOut != null ? 'taken' : now < lunchBy ? 'upcoming' : 'overdue';
 
   // Time still expected off the clock before the day can end.
-  const futureOffSeconds =
-    lunchOut == null ? lunchSeconds : lunchIn == null && atLunch ? Math.max(0, lunchSeconds - openOffMs / 1000) : 0;
+  const futureOffSeconds = lunchOut == null ? lunchSeconds : lunchIn == null && atLunch ? Math.max(0, lunchSeconds - openOffMs / 1000) : 0;
 
   let clockOutAt: number | null;
   let clockOutStatus: ClockOutStatus;
@@ -229,11 +214,7 @@ export function timeclockForDate(punches: Punch[], settings: TimeclockSettings, 
  * when a day past the threshold is actually expected (overtime approved, already over the
  * target, or a target that long). A normal 8 h day never hears about it.
  */
-export function secondMealApplies(
-  tc: TimeclockResult,
-  settings: Pick<Settings, 'workMinutes' | 'secondMealAfterMinutes'>,
-  overtimeApproved: boolean,
-): boolean {
+export function secondMealApplies(tc: TimeclockResult, settings: Pick<Settings, 'workMinutes' | 'secondMealAfterMinutes'>, overtimeApproved: boolean): boolean {
   return (
     tc.state === 'working' &&
     tc.secondMealBy != null &&

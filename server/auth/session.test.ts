@@ -62,7 +62,9 @@ describe('cookie sessions', () => {
     expect(only()).toEqual(first);
     // An hour old: both timestamps move forward by the full TTL from now.
     const before = Date.now();
-    app.db.prepare(`UPDATE auth_sessions SET last_seen_at = ?, expires_at = ? WHERE id = ?`).run(first.last_seen_at - 2 * HOUR, first.expires_at - 2 * HOUR, first.id);
+    app.db
+      .prepare(`UPDATE auth_sessions SET last_seen_at = ?, expires_at = ? WHERE id = ?`)
+      .run(first.last_seen_at - 2 * HOUR, first.expires_at - 2 * HOUR, first.id);
     expect((await app.api.get('/api/settings')).status).toBe(200);
     const slid = only();
     expect(slid.last_seen_at).toBeGreaterThanOrEqual(before);

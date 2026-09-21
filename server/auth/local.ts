@@ -102,9 +102,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
     const { username, password } = req.body ?? {};
     const user =
       typeof username === 'string'
-        ? (db.prepare(`SELECT * FROM users WHERE kind = 'local' AND username = ?`).get(username.trim()) as
-            | UserRow
-            | undefined)
+        ? (db.prepare(`SELECT * FROM users WHERE kind = 'local' AND username = ?`).get(username.trim()) as UserRow | undefined)
         : undefined;
     // Always run the hash, against a dummy when the name is unknown, so timing can't tell
     // a wrong username from a wrong password.
