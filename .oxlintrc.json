@@ -1,0 +1,33 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // Syntax-level rules only (no type-aware linting): `npm run typecheck` does the type work.
+  // oxlint ignores a misspelled rule name without a word; check `npx oxlint --print-config`
+  // after editing this file.
+  "plugins": ["typescript", "react", "oxc", "unicorn"],
+  "categories": { "correctness": "error" },
+  "env": { "browser": true, "node": true },
+  "ignorePatterns": ["dist/", "node_modules/", "data/", "docs/", "coverage/"],
+  "rules": {
+    // `_`-prefixed names are the convention for "deliberately unused" (rest-destructuring a
+    // row to drop columns, unused handler params).
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_", "destructuredArrayIgnorePattern": "^_" }],
+    // The automatic JSX runtime needs no React import.
+    "react/react-in-jsx-scope": "off",
+    // eslint-plugin-react-hooks' recommended set, including the React Compiler rules.
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "error",
+    "react-hooks/refs": "error",
+    "react-hooks/set-state-in-effect": "error",
+    "react-hooks/set-state-in-render": "error",
+    "react-hooks/purity": "error",
+    "react-hooks/immutability": "error",
+    "react-hooks/static-components": "error",
+    "react-hooks/use-memo": "error",
+    "react-hooks/preserve-manual-memoization": "error",
+    "react-hooks/error-boundaries": "error",
+    "react-hooks/globals": "error"
+  },
+  "overrides": [
+    { "files": ["client/public/sw.js"], "env": { "serviceworker": true } }
+  ]
+}

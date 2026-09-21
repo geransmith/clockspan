@@ -14,7 +14,7 @@ describe('seedDatabase', () => {
 
     expect(m.days).toHaveLength(DEFAULT_HISTORY_DAYS + 1);
     expect(m.days.at(-1)!.date).toBe(SEED_TODAY);
-    expect(m.days.map((d) => d.date)).toEqual([...m.days.map((d) => d.date)].sort());
+    expect(m.days.map((d) => d.date)).toEqual(m.days.map((d) => d.date).sort());
     for (const day of m.days) {
       const [y, mo, d] = day.date.split('-').map(Number) as [number, number, number];
       expect([0, 6]).not.toContain(new Date(y, mo - 1, d).getDay());

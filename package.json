@@ -22,7 +22,7 @@
     "seed": "tsx server/dev/seed-cli.ts",
     "screenshots": "node scripts/screenshots.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.test.json",
-    "lint": "eslint .",
+    "lint": "oxlint",
     "reset-password": "tsx server/cli.ts reset-password"
   },
   "dependencies": {
@@ -40,7 +40,6 @@
     "react-stately": "3.50.0"
   },
   "devDependencies": {
-    "@eslint/js": "10.0.1",
     "@types/better-sqlite3": "9.6.0",
     "@types/express": "5.0.6",
     "@types/node": "24.13.5",
@@ -49,12 +48,9 @@
     "@vitejs/plugin-react": "6.1.1",
     "@vitest/coverage-v8": "5.0.1",
     "concurrently": "10.0.5",
-    "eslint": "10.10.0",
-    "eslint-plugin-react-hooks": "7.1.1",
-    "globals": "17.12.0",
+    "oxlint": "1.83.0",
     "tsx": "4.23.13",
-    "typescript": "6.0.3",
-    "typescript-eslint": "8.70.0",
+    "typescript": "7.0.2",
     "vite": "8.3.0",
     "vitest": "5.0.1"
   },
