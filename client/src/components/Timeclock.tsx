@@ -211,7 +211,14 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
               {overtimeApproved ? 'Clock-out alarm is off for today. Meal alarms stay on.' : 'Silences the clock-out alarm for this day.'}
             </span>
           </span>
-          <input type="checkbox" role="switch" className="switch" checked={overtimeApproved} onChange={(e) => onOvertimeChange(e.target.checked)} />
+          <input
+            type="checkbox"
+            role="switch"
+            aria-checked={overtimeApproved}
+            className="switch"
+            checked={overtimeApproved}
+            onChange={(e) => onOvertimeChange(e.target.checked)}
+          />
         </label>
       )}
 

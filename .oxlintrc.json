@@ -3,7 +3,7 @@
   // Syntax-level rules only (no type-aware linting): `npm run typecheck` does the type work.
   // oxlint ignores a misspelled rule name without a word; check `npx oxlint --print-config`
   // after editing this file.
-  "plugins": ["typescript", "react", "oxc", "unicorn"],
+  "plugins": ["typescript", "react", "jsx-a11y", "oxc", "unicorn"],
   "categories": { "correctness": "error" },
   "env": { "browser": true, "node": true },
   "ignorePatterns": ["dist/", "node_modules/", "data/", "docs/", "coverage/"],
@@ -25,7 +25,15 @@
     "react-hooks/use-memo": "error",
     "react-hooks/preserve-manual-memoization": "error",
     "react-hooks/error-boundaries": "error",
-    "react-hooks/globals": "error"
+    "react-hooks/globals": "error",
+    // The toggle-row pattern nests its text two spans deep inside the label.
+    "jsx-a11y/label-has-associated-control": ["error", { "depth": 3 }],
+    // Off on purpose: the History calendar is an ARIA grid over a CSS grid, and `role="status"`
+    // on a div is valid ARIA; the rule would want <table> and <output> for them.
+    "jsx-a11y/prefer-tag-over-role": "off",
+    // Off on purpose: the four uses are a single-purpose login form and two edit-in-place
+    // inputs the user just opened, where moving focus there is the expected behaviour.
+    "jsx-a11y/no-autofocus": "off"
   },
   "overrides": [{ "files": ["client/public/sw.js"], "env": { "serviceworker": true } }]
 }
