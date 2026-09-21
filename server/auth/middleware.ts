@@ -19,8 +19,8 @@ export function resolveUser(db: DB, config: Config): RequestHandler {
       next();
     };
   }
-  return (req, _res, next) => {
-    const user = resolveSession(db, config, req);
+  return (req, res, next) => {
+    const user = resolveSession(db, config, req, res);
     if (user) req.user = user;
     next();
   };

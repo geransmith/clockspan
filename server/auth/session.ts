@@ -17,6 +17,11 @@ export function cookieOptions(config: Config, path = '/'): CookieOptions {
   return { httpOnly: true, sameSite: 'lax', secure: config.cookieSecure, path };
 }
 
+/** The session cookie with a full TTL ahead of it; sent at login and again whenever the expiry slides. */
+function sessionCookie(config: Config, token: string): string {
+  return stringifySetCookie({ name: SESSION_COOKIE, value: token, ...cookieOptions(config), maxAge: Math.floor(config.sessionTtlMs / 1000) });
+}
+
 export function createSession(db: DB, config: Config, res: Response, userId: number): void {
   const token = randomBytes(32).toString('base64url');
   const now = Date.now();
@@ -24,10 +29,7 @@ export function createSession(db: DB, config: Config, res: Response, userId: num
     `INSERT INTO auth_sessions (user_id, token_hash, created_at, expires_at, last_seen_at)
      VALUES (?, ?, ?, ?, ?)`,
   ).run(userId, hashToken(token), now, now + config.sessionTtlMs, now);
-  res.setHeader(
-    'Set-Cookie',
-    stringifySetCookie({ name: SESSION_COOKIE, value: token, ...cookieOptions(config), maxAge: Math.floor(config.sessionTtlMs / 1000) }),
-  );
+  res.setHeader('Set-Cookie', sessionCookie(config, token));
 }
 
 export function readSessionToken(req: Request): string | null {
@@ -37,7 +39,7 @@ export function readSessionToken(req: Request): string | null {
 }
 
 /** Returns the user for a valid session and slides its expiry; null otherwise. */
-export function resolveSession(db: DB, config: Config, req: Request): UserRow | null {
+export function resolveSession(db: DB, config: Config, req: Request, res: Response): UserRow | null {
   const token = readSessionToken(req);
   if (!token) return null;
   const now = Date.now();
@@ -53,9 +55,12 @@ export function resolveSession(db: DB, config: Config, req: Request): UserRow | 
     db.prepare(`DELETE FROM auth_sessions WHERE id = ?`).run(row.session_id);
     return null;
   }
-  // Slide expiry at most once an hour to keep writes cheap.
+  // Slide expiry at most once an hour to keep writes cheap. The cookie's Max-Age was set at
+  // login, so the browser is handed it again with a fresh one: the row sliding on its own
+  // would still have the browser drop the cookie a TTL after login.
   if (now - row.last_seen_at > 3_600_000) {
     db.prepare(`UPDATE auth_sessions SET last_seen_at = ?, expires_at = ? WHERE id = ?`).run(now, now + config.sessionTtlMs, row.session_id);
+    res.setHeader('Set-Cookie', sessionCookie(config, token));
   }
   const { session_id: _s, expires_at: _e, last_seen_at: _l, ...user } = row;
   return user;
