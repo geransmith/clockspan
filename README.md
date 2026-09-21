@@ -131,17 +131,18 @@ Images are published to GitHub Container Registry for `linux/amd64`:
 | `ghcr.io/geransmith/clockspan:edge` | the latest commit on `main`; it has passed CI and nothing else |
 
 ```bash
+cp .env.example .env   # optional: sign-in mode, public URL, OIDC; without it there is no sign-in
 docker compose up -d
 ```
 
-Then open <http://localhost:8080>. The database lives in the mounted `/data` volume. Equivalent `docker run`:
+Then open <http://localhost:8080>. The database is in `./data` next to the compose file (`DATA_PATH` in `.env` moves it). Equivalent `docker run`:
 
 ```bash
 docker run -d --name clockspan -p 8080:8080 -v /path/on/host:/data \
   -e AUTH_MODE=local ghcr.io/geransmith/clockspan:latest
 ```
 
-The container drops to an unprivileged user (uid/gid 1000 by default; set `PUID`/`PGID` to match the owner of the host directory) after taking ownership of `/data`.
+The container drops to an unprivileged user (uid/gid 1000 by default; set `PUID`/`PGID` in `.env` to match the owner of the host directory) after taking ownership of `/data`.
 
 To update:
 
@@ -152,6 +153,8 @@ docker compose pull && docker compose up -d
 The database in the mounted volume is untouched. To build from source instead, `docker build -t ghcr.io/geransmith/clockspan:latest .` and then `docker compose up -d`; the local image wins over the registry.
 
 ### Environment variables
+
+Set these in `.env` (start from `.env.example`, which documents each one).
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -167,6 +170,7 @@ The database in the mounted volume is untouched. To build from source instead, `
 | `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | — | Confidential client credentials |
 | `OIDC_SCOPES` | `openid profile email` | Scopes to request |
 | `PUID` / `PGID` | `1000` / `1000` | Docker only: own `/data` and run as this user; `0` keeps root |
+| `DATA_PATH` | `./data` | Docker only: the host directory mounted at `/data`. Read by `docker-compose.yml`, not by the app |
 
 ---
 
@@ -198,7 +202,7 @@ Login is rate-limited to 5 attempts per 15 minutes per IP (set `TRUST_PROXY` beh
    - Note the *Client ID* and *Client Secret*.
 2. **Applications → Applications → Create.** Name it, pick the provider you just made, and set the slug (e.g. `clockspan`). Use *Policy / Group / User Bindings* on this application to control who may sign in.
 3. Open the provider and copy its **OpenID Configuration Issuer** URL, e.g. `https://auth.example.com/application/o/clockspan/`.
-4. Configure the container:
+4. In `.env`:
 
    ```
    AUTH_MODE=oidc

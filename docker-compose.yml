@@ -4,37 +4,14 @@ services:
     container_name: clockspan
     restart: unless-stopped
     ports:
+      # host:container. Change the left side to serve on another host port.
       - "8080:8080"
     volumes:
-      # Persist the SQLite database on the host so it survives image rebuilds.
-      # This path follows Unraid's appdata convention; point it at any host directory.
-      - /mnt/user/appdata/clockspan:/data
-    environment:
-      # User/group that owns /data and runs the app (image default 1000/1000; 99/100 is
-      # Unraid's convention). Set both to 0 to run as root.
-      PUID: "99"
-      PGID: "100"
-
-      # none  = no sign-in (LAN / behind your own proxy auth)
-      # local = first visit creates the admin account; admin adds more users in Settings
-      # oidc  = sign in with Authentik (or any OpenID Connect provider)
-      AUTH_MODE: none
-
-      # Required for oidc, recommended whenever you reach the app through a domain.
-      # Must match the redirect URI registered in your provider: ${APP_URL}/auth/callback
-      # APP_URL: https://focus.example.com
-
-      # Behind a reverse proxy (Nginx Proxy Manager, SWAG, Traefik): the number of proxies
-      # between the internet and this container, usually 1. Not "true": that trusts whatever
-      # X-Forwarded-For a client sends, which defeats the login rate limit.
-      # TRUST_PROXY: "1"
-      # COOKIE_SECURE: "true"   # defaults to true when APP_URL is https
-
-      # Delete every user's days older than this many days (30 or more). Unset = keep everything.
-      # RETENTION_DAYS: "730"
-
-      # OIDC (Authentik): Providers → your provider → "OpenID Configuration Issuer"
-      # OIDC_ISSUER: https://auth.example.com/application/o/clockspan/
-      # OIDC_CLIENT_ID: ...
-      # OIDC_CLIENT_SECRET: ...
-      # OIDC_SCOPES: openid profile email
+      # The SQLite database. DATA_PATH comes from .env (default ./data next to this file);
+      # the container takes ownership of it as PUID:PGID.
+      - ${DATA_PATH:-./data}:/data
+    # Configuration lives in .env next to this file; copy .env.example to start. Without a
+    # .env the image defaults apply: no sign-in, port 8080. `required` needs Compose 2.24+.
+    env_file:
+      - path: .env
+        required: false
