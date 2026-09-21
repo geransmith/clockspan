@@ -148,7 +148,9 @@ the real bundle on :8090 with the real headers; the `web` config is the dev serv
 `main` is protected. Every change is a branch → PR → `check` green → squash merge, and a
 release is a version-bump PR followed by a tag pushed from `main`. The checklist, the PR
 requirements (title, one label, what must pass) and the version rule are in `CONTRIBUTING.md`.
-Follow it as written; it is not advice.
+Follow it as written; it is not advice. Dependabot (`.github/dependabot.yml`) opens weekly
+`skip-changelog` PRs for npm (minor + patch grouped, majors on their own), GitHub Actions and
+the Docker base image; they merge like any other PR once `check` is green.
 
 ## Dev data is disposable
 
