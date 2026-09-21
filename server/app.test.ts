@@ -28,6 +28,15 @@ describe('response headers', () => {
     expect(res.headers.get('strict-transport-security')).toBeNull();
   });
 
+  it('marks every API answer no-store, and only those', async () => {
+    app = await startTestApp();
+    expect((await app.api.get('/api/health')).headers.get('cache-control')).toBe('no-store');
+    expect((await app.api.get('/api/settings')).headers.get('cache-control')).toBe('no-store');
+    expect((await app.api.get('/api/nope')).headers.get('cache-control')).toBe('no-store');
+    // Outside /api nothing is set here; the static block in app.ts decides.
+    expect((await fetch(`${app.url}/`)).headers.get('cache-control')).toBeNull();
+  });
+
   it('adds HSTS once the deployment is https', async () => {
     app = await startTestApp({ env: { APP_URL: 'https://focus.example.com' } });
     const res = await app.api.get('/api/health');

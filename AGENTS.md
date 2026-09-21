@@ -41,7 +41,7 @@ server/                 Express API → dist/server (tsc)
   index.ts              boot: load config, warn if AUTH_MODE=none, open DB, listen, SIGTERM
   app.ts                createApp(): trust proxy, securityHeaders, /api/health, resolveUser, auth
                         routers, data routers behind requireAuth, static dist/client + SPA fallback
-  security.ts           the ONLY place response headers (CSP, nosniff, frame, referrer, HSTS) are set
+  security.ts           the ONLY place response headers (CSP, nosniff, frame, referrer, HSTS, no-store on /api) are set
   config.ts             env parsing; throws with a clear message on bad/missing config
   db.ts                 open + pragmas (WAL, foreign_keys), append-only MIGRATIONS, default user
   retention.ts          old-day cleanup: cutoffKey, countDays, pruneDays, runRetention (all users,
