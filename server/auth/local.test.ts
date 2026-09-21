@@ -9,10 +9,18 @@ const ADMIN = { username: 'geran', password: 'correct horse' };
 
 describe('AUTH_MODE=local', () => {
   let app: TestApp;
+  // Every auth event writes a log line; keep them out of the test output.
+  let log: ReturnType<typeof vi.spyOn>;
+  let warn: ReturnType<typeof vi.spyOn>;
   beforeEach(async () => {
+    log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     app = await startTestApp({ authMode: 'local' });
   });
-  afterEach(() => app.close());
+  afterEach(async () => {
+    await app.close();
+    vi.restoreAllMocks();
+  });
 
   const setup = (client: Client = app.api) => client.post('/api/auth/setup', ADMIN);
 
@@ -70,6 +78,23 @@ describe('AUTH_MODE=local', () => {
     const locked = await d.post('/api/auth/login', { username: 'geran', password: ADMIN.password });
     expect(locked.status).toBe(429);
     expect(Number(locked.headers.get('retry-after'))).toBeGreaterThan(0);
+
+    // The log says who signed in and which attempts failed, with the name quoted so a typed
+    // newline cannot forge a line, and never the password.
+    expect(log).toHaveBeenCalledWith('[auth] "geran" signed in from 127.0.0.1');
+    expect(warn).toHaveBeenCalledWith('[auth] login failed for "nobody" from 127.0.0.1');
+    expect(warn).toHaveBeenCalledWith('[auth] login blocked from 127.0.0.1: too many attempts');
+    const lines = [...log.mock.calls, ...warn.mock.calls].map((c) => String(c[0]));
+    expect(lines.some((l) => l.includes(ADMIN.password) || l.includes('wrong'))).toBe(false);
+  });
+
+  it('cuts a long or odd username short in the log', async () => {
+    await setup();
+    const c = app.client();
+    expect((await c.post('/api/auth/login', { username: `a\n${'b'.repeat(60)}`, password: 'x' })).status).toBe(401);
+    expect(warn).toHaveBeenCalledWith(`[auth] login failed for ${JSON.stringify(`a\n${'b'.repeat(38)}`)} from 127.0.0.1`);
+    expect((await c.post('/api/auth/login', { username: 42, password: 'x' })).status).toBe(401);
+    expect(warn).toHaveBeenCalledWith('[auth] login failed for "" from 127.0.0.1');
   });
 
   it('changes the password only with the current one', async () => {

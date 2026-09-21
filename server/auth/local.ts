@@ -40,6 +40,16 @@ export class LoginLimiter {
   }
 }
 
+/**
+ * A name as it goes into a log line: quoted and cut short, so whatever was typed into the
+ * login form (a newline, say) cannot forge a line of its own. Every auth event is logged once
+ * because, with the port on the internet, the log is how a password-guessing run or a locked
+ * out household member gets noticed.
+ */
+export function logName(name: unknown): string {
+  return JSON.stringify(typeof name === 'string' ? name.slice(0, 40) : '');
+}
+
 export function publicUser(u: UserRow): PublicUser {
   return { id: u.id, name: u.display_name, username: u.username, isAdmin: Boolean(u.is_admin), kind: u.kind };
 }
@@ -88,6 +98,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
       .run(username.trim(), hash, username.trim(), Date.now());
     createSession(db, config, res, Number(info.lastInsertRowid));
     const user = db.prepare(`SELECT * FROM users WHERE id = ?`).get(info.lastInsertRowid) as UserRow;
+    console.log(`[auth] setup: admin ${logName(user.username)} created from ${req.ip}`);
     res.status(201).json({ user: publicUser(user) });
   });
 
@@ -96,6 +107,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
     const ip = String(req.ip);
     const gate = limiter.check(ip);
     if (!gate.ok) {
+      console.warn(`[auth] login blocked from ${ip}: too many attempts`);
       res.setHeader('Retry-After', String(gate.retryAfterSec));
       res.status(429).json({ error: `Too many attempts. Try again in ${Math.ceil(gate.retryAfterSec / 60)} min.` });
       return;
@@ -110,11 +122,13 @@ export function localAuthRouter(db: DB, config: Config): Router {
     const ok = typeof password === 'string' && (await verifyPassword(password, user?.password_hash ?? DUMMY_HASH));
     if (!ok || !user) {
       limiter.fail(ip);
+      console.warn(`[auth] login failed for ${logName(username)} from ${ip}`);
       res.status(401).json({ error: 'Incorrect username or password.' });
       return;
     }
     limiter.reset(ip);
     createSession(db, config, res, user.id);
+    console.log(`[auth] ${logName(user.username)} signed in from ${ip}`);
     res.json({ user: publicUser(user) });
   });
 
@@ -130,6 +144,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
     const key = `user:${user.id}`;
     const gate = limiter.check(key);
     if (!gate.ok) {
+      console.warn(`[auth] password change blocked for ${logName(user.username)}: too many attempts`);
       res.setHeader('Retry-After', String(gate.retryAfterSec));
       res.status(429).json({ error: `Too many attempts. Try again in ${Math.ceil(gate.retryAfterSec / 60)} min.` });
       return;
@@ -137,6 +152,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
     const { currentPassword, newPassword } = req.body ?? {};
     if (!user.password_hash || typeof currentPassword !== 'string' || !(await verifyPassword(currentPassword, user.password_hash))) {
       limiter.fail(key);
+      console.warn(`[auth] password change refused for ${logName(user.username)}: current password wrong`);
       res.status(400).json({ error: 'Current password is incorrect.' });
       return;
     }
@@ -149,6 +165,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
     db.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).run(await hashPassword(newPassword), user.id);
     // A changed password is usually "someone else may have the old one": drop every other session.
     revokeOtherSessions(db, req, user.id);
+    console.log(`[auth] password changed for ${logName(user.username)}; other sessions signed out`);
     res.json({ ok: true });
   });
 
@@ -180,6 +197,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
       return;
     }
     const user = db.prepare(`SELECT * FROM users WHERE id = ?`).get(info.lastInsertRowid) as UserRow;
+    console.log(`[auth] user ${logName(name)} created by ${logName(currentUser(req).username)}`);
     res.status(201).json({ user: publicUser(user) });
   });
 
@@ -195,6 +213,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
       res.status(404).json({ error: 'User not found.' });
       return;
     }
+    console.log(`[auth] user #${id} and their data deleted by ${logName(me.username)}`);
     res.json({ ok: true });
   });
 
