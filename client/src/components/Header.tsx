@@ -76,7 +76,7 @@ export function Header({ route, today, customize, onNavigate, onToggleCustomize,
               aria-label="Pick a date"
             />
           </label>
-          <button className="btn btn-icon" onClick={() => onNavigate({ date: addDays(route.date, 1) })} aria-label="Next day" disabled={isToday}>
+          <button className="btn btn-icon" onClick={() => onNavigate({ date: addDays(route.date, 1) })} aria-label="Next day" disabled={route.date >= today}>
             <ChevronRight />
           </button>
           {!isToday && (
