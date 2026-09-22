@@ -42,6 +42,11 @@ export function formatDateFull(key: string): string {
   return dateFullFmt.format(parseDateKey(key));
 }
 
+/** "Sep 16": the day without its weekday, for a line that writes the weekday itself. */
+export function formatDateShort(key: string): string {
+  return dayShortFmt.format(parseDateKey(key));
+}
+
 /** "September 2026" */
 export function formatMonth(key: string): string {
   return monthFmt.format(parseDateKey(key));
