@@ -177,15 +177,22 @@ export function sessionsRouter(db: DB): Router {
     reply(res, s.user_id, s.id);
   });
 
-  // Ends now, but never later than the planned end: a timer that expired while the
-  // tab was closed is recorded with its planned duration. A session finished while paused
-  // ends when the pause began (no work happened since), so the log excludes every pause.
-  r.post('/:id/finish', loadOwnedSession, (_req, res) => {
+  // Ends now, but never later than the planned end: a timer that ran out unattended is
+  // recorded with its planned duration. `countOverrun: true` is the user choosing to log the
+  // time past the end as well (they were there for it). A session finished while paused ends
+  // when the pause began (no work happened since), so the log excludes every pause.
+  r.post('/:id/finish', loadOwnedSession, (req, res) => {
     const s = owned(res);
+    const { countOverrun } = (req.body ?? {}) as { countOverrun?: unknown };
+    if (countOverrun !== undefined && typeof countOverrun !== 'boolean') {
+      res.status(400).json({ error: 'countOverrun must be a boolean.' });
+      return;
+    }
     if (s.status === 'running') {
       const now = Date.now();
       const timing = { startedAt: s.started_at, plannedSeconds: s.planned_seconds, pausedSeconds: s.paused_seconds, pausedAt: s.paused_at };
-      const endedAt = Math.min(s.paused_at ?? now, plannedEndAt(timing, now));
+      const until = s.paused_at ?? now;
+      const endedAt = countOverrun ? until : Math.min(until, plannedEndAt(timing, now));
       db.prepare(`UPDATE sessions SET ended_at = ?, paused_at = NULL, status = 'completed' WHERE id = ?`).run(endedAt, s.id);
     }
     reply(res, s.user_id, s.id);

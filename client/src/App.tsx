@@ -4,6 +4,7 @@ import { Banners } from './components/Banners';
 import { Header } from './components/Header';
 import { History } from './components/History';
 import { RunningTimerBar } from './components/RunningTimerBar';
+import { FinishChoice } from './components/FinishChoice';
 import { SettingsDialog } from './components/SettingsDialog';
 import { Sheet } from './components/Sheet';
 import { useAlarms } from './hooks/useAlarms';
@@ -91,6 +92,7 @@ function Shell() {
         )}
       </main>
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
+      <FinishChoice />
     </div>
   );
 }

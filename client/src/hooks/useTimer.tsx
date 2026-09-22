@@ -1,10 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import type { Session } from '../types';
-import { alert, unlockAudio, warnQuietly } from '../lib/alerts';
-import { SAVE_FAILED, TIMER_DONE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
+import { alert, dismissByTag, unlockAudio, warnQuietly } from '../lib/alerts';
+import { SAVE_FAILED, TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
-import { activeMs, PAUSE_LIMIT_SECONDS, timerView, type TimerView } from '../lib/timer';
+import { activeMs, DUE_GRACE_SECONDS, dueKey, PAUSE_LIMIT_SECONDS, timerView, type TimerView } from '../lib/timer';
 import { useDayStore } from './useDay';
 import { useLatest } from './useLatest';
 import { useNow } from './useNow';
@@ -19,25 +19,57 @@ interface TimerCtx {
   /** 0..1 */
   progress: number;
   paused: boolean;
+  /** The planned time is used up; the session waits for more time or a finish. */
+  due: boolean;
+  overrunSeconds: number;
   start: (date: string, plannedSeconds: number, label: string, priorityUid?: string | null) => Promise<void>;
+  /** Mid-session, ± the planned length; once due, +N is N more minutes from now. */
   adjust: (deltaSeconds: number) => Promise<void>;
   setLabel: (label: string) => Promise<void>;
   pause: () => Promise<void>;
   resume: () => Promise<void>;
-  finish: () => Promise<void>;
+  /** `countOverrun` logs the time past the planned end too; otherwise a late finish logs the plan. */
+  finish: (countOverrun?: boolean) => Promise<void>;
+  /**
+   * The Finish button: finishes now, unless the timer is a whole minute or more past its end,
+   * where the planned and the worked length differ and `finishChoice` asks which one to log.
+   */
+  requestFinish: () => void;
+  finishChoice: boolean;
+  dismissFinishChoice: () => void;
   cancel: () => Promise<void>;
 }
 
 const Ctx = createContext<TimerCtx | null>(null);
 const BASE_TITLE = 'Clockspan';
-const IDLE: TimerView = { elapsedSeconds: 0, remainingSeconds: 0, progress: 0, endAt: 0, paused: false, pausedForSeconds: 0 };
+const IDLE: TimerView = { elapsedSeconds: 0, remainingSeconds: 0, progress: 0, endAt: 0, paused: false, pausedForSeconds: 0, due: false, overrunSeconds: 0 };
+
+// The last planned end that was announced, kept across reloads so the chime plays once per end.
+const DUE_STORAGE_KEY = 'focus:timer-due';
+function readDueKey(): string | null {
+  try {
+    return localStorage.getItem(DUE_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+function writeDueKey(key: string): void {
+  try {
+    localStorage.setItem(DUE_STORAGE_KEY, key);
+  } catch {
+    // Storage blocked (private mode): a reload may chime again, nothing worse.
+  }
+}
 
 export function TimerProvider({ children }: { children: ReactNode }) {
   const [running, setRunning] = useState<Session | null>(null);
+  const [finishChoice, setFinishChoice] = useState(false);
   // Latest value for callbacks so rapid clicks (−5m, −5m) compound instead of racing.
   const runningRef = useLatest<Session | null>(running);
   const now = useNow(1000);
-  const { settings } = useSettings();
+  // `loaded` gates the two effects that alert: on a fresh load the running session can answer
+  // before the settings do, and an alert then would use the default sound and volume switch.
+  const { settings, loaded } = useSettings();
   const store = useDayStore();
   // `sync` reads the store through a ref so it stays one function for the provider's lifetime.
   const storeRef = useLatest(store);
@@ -86,15 +118,16 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     };
   }, [sync]);
 
-  const { elapsedSeconds, remainingSeconds, progress, endAt, paused, pausedForSeconds } = running ? timerView(running, now) : IDLE;
+  const { elapsedSeconds, remainingSeconds, progress, endAt, paused, pausedForSeconds, due, overrunSeconds } = running ? timerView(running, now) : IDLE;
 
-  // Completion: the planned end has passed (also a timer that expired while the page was
-  // closed — the server clamps ended_at to the planned end), or a pause was left for an hour
-  // (the server ends the session where the pause began, so nothing after it is logged).
+  // Completion without the user: a timer that ran out and waited DUE_GRACE_SECONDS for an
+  // answer (or expired while the page was closed — the server clamps ended_at to the planned
+  // end either way), or a pause left for an hour (the server ends the session where the pause
+  // began, so nothing after it is logged).
   useEffect(() => {
-    if (!running || completing.current || now < retry.current.at) return;
+    if (!running || !loaded || completing.current || now < retry.current.at) return;
     const forgotten = pausedForSeconds >= PAUSE_LIMIT_SECONDS;
-    if (now < endAt && !forgotten) return;
+    if (!(due && overrunSeconds >= DUE_GRACE_SECONDS) && !forgotten) return;
     completing.current = true;
     mutationSeq.current++;
     const session = running;
@@ -117,14 +150,16 @@ export function TimerProvider({ children }: { children: ReactNode }) {
           });
           return;
         }
+        // The chime played when the end came, unless the page was closed then.
+        const chimed = readDueKey() === dueKey(session.id, endAt);
         alert({
           title: TIMER_DONE.title,
           body: TIMER_DONE.body(session.label, formatCountdown(done.durationSeconds ?? 0)),
           tone: 'success',
           chime: settings.sounds.timer,
           tag: 'timer-complete',
-          sound: settings.sound,
-          notifications: settings.notifications,
+          sound: !chimed && settings.sound,
+          notifications: !chimed && settings.notifications,
         });
       })
       .catch(() => {
@@ -134,15 +169,15 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       .finally(() => {
         completing.current = false;
       });
-  }, [running, now, endAt, pausedForSeconds, store, settings.sound, settings.sounds.timer, settings.notifications]);
+  }, [running, loaded, now, endAt, due, overrunSeconds, pausedForSeconds, store, settings.sound, settings.sounds.timer, settings.notifications]);
 
-  useWakeLock(running != null && !paused && settings.keepScreenAwake);
+  useWakeLock(running != null && !paused && !due && settings.keepScreenAwake);
 
   useEffect(() => {
     document.title = running
-      ? `${paused ? 'Paused ' : ''}${formatCountdown(remainingSeconds)}${running.label ? ` · ${running.label}` : ''} — ${BASE_TITLE}`
+      ? `${paused ? 'Paused ' : ''}${formatCountdown(due ? -overrunSeconds : remainingSeconds)}${running.label ? ` · ${running.label}` : ''} — ${BASE_TITLE}`
       : BASE_TITLE;
-  }, [running, remainingSeconds, paused]);
+  }, [running, remainingSeconds, overrunSeconds, paused, due]);
 
   const start = useCallback(
     async (date: string, plannedSeconds: number, label: string, priorityUid: string | null = null) => {
@@ -189,7 +224,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         if (!cur) return;
         mutationSeq.current++;
         const elapsed = Math.floor(activeMs(cur, Date.now()) / 1000);
-        const next = Math.max(60, cur.plannedSeconds + deltaSeconds);
+        // Once the plan is used up, "+5" means five more minutes from now, not from the end.
+        const next = Math.max(60, Math.max(cur.plannedSeconds, elapsed) + deltaSeconds);
         if (next <= elapsed) {
           // Shrinking below what's already elapsed means "I'm done now".
           const { session } = await api.finishSession(cur.id);
@@ -275,21 +311,33 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   );
 
   const finish = useCallback(
-    () =>
+    (countOverrun = false) =>
       attempt(async () => {
+        setFinishChoice(false);
         const cur = runningRef.current;
         if (!cur) return;
         mutationSeq.current++;
-        const { session } = await api.finishSession(cur.id);
+        const { session } = await api.finishSession(cur.id, countOverrun);
         store.applySession(session);
         setRunning(null);
       }),
     [attempt, store, runningRef],
   );
 
+  const requestFinish = useCallback(() => {
+    const cur = runningRef.current;
+    if (!cur) return;
+    const v = timerView(cur, Date.now());
+    // Under a minute over, both lengths read the same: nothing to ask.
+    if (v.due && formatDuration(v.elapsedSeconds) !== formatDuration(cur.plannedSeconds)) setFinishChoice(true);
+    else void finish();
+  }, [finish, runningRef]);
+  const dismissFinishChoice = useCallback(() => setFinishChoice(false), []);
+
   const cancel = useCallback(
     () =>
       attempt(async () => {
+        setFinishChoice(false);
         const cur = runningRef.current;
         if (!cur) return;
         mutationSeq.current++;
@@ -300,9 +348,75 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     [attempt, store, runningRef],
   );
 
+  // Time's up: announce once per (session, planned end) and leave the session open for an
+  // answer. A reload inside the grace shows the banner again but does not chime (the key is
+  // in localStorage); adding time moves the end and re-arms. The banner goes when the timer
+  // is no longer due: finished, given time, cancelled, or ended on another device.
+  const announced = useRef<string | null>(null);
+  const step = settings.adjustStepMinutes;
+  useEffect(() => {
+    if (!running || !due) {
+      dismissByTag('timer-due');
+      return;
+    }
+    if (!loaded || overrunSeconds >= DUE_GRACE_SECONDS) return;
+    const key = dueKey(running.id, endAt);
+    if (announced.current === key) return;
+    announced.current = key;
+    const fresh = readDueKey() !== key;
+    writeDueKey(key);
+    alert({
+      title: TIMER_DUE.title,
+      body: TIMER_DUE.body(running.label, formatDuration(running.plannedSeconds)),
+      tone: 'info',
+      sticky: true,
+      chime: settings.sounds.timer,
+      tag: 'timer-due',
+      action: { label: TIMER_DUE.more(step), run: () => void adjust(step * 60) },
+      sound: fresh && settings.sound,
+      notifications: fresh && settings.notifications,
+    });
+  }, [running, loaded, due, overrunSeconds, endAt, step, adjust, settings.sound, settings.sounds.timer, settings.notifications]);
+
   const value = useMemo(
-    () => ({ running, remainingSeconds, elapsedSeconds, progress, paused, start, adjust, setLabel, pause, resume, finish, cancel }),
-    [running, remainingSeconds, elapsedSeconds, progress, paused, start, adjust, setLabel, pause, resume, finish, cancel],
+    () => ({
+      running,
+      remainingSeconds,
+      elapsedSeconds,
+      progress,
+      paused,
+      due,
+      overrunSeconds,
+      start,
+      adjust,
+      setLabel,
+      pause,
+      resume,
+      finish,
+      requestFinish,
+      finishChoice: finishChoice && running != null,
+      dismissFinishChoice,
+      cancel,
+    }),
+    [
+      running,
+      remainingSeconds,
+      elapsedSeconds,
+      progress,
+      paused,
+      due,
+      overrunSeconds,
+      start,
+      adjust,
+      setLabel,
+      pause,
+      resume,
+      finish,
+      requestFinish,
+      finishChoice,
+      dismissFinishChoice,
+      cancel,
+    ],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

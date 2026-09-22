@@ -102,7 +102,26 @@ export const CONFIRM = {
   deleteUser: (name: string) => `Delete ${name} and ALL of their data? This cannot be undone.`,
 } as const;
 
-/** The alert when a focus timer reaches zero. */
+/**
+ * The alert when a focus timer reaches zero: the session stays open until it is finished or
+ * given more time. `more` is the banner button.
+ */
+export const TIMER_DUE = {
+  title: "Time's up",
+  body: (label: string, planned: string) => `${label ? `${label} · ` : ''}${planned}. Finish, or add more time.`,
+  more: (minutes: number) => `Add ${minutes} min`,
+} as const;
+
+/** The dialog when Finish is pressed a whole minute or more past the end: which length to log. */
+export const FINISH_CHOICE = {
+  title: 'How much to log?',
+  body: (over: string | null) => (over ? `The timer ran out ${over} ago.` : 'The timer just ran out.'),
+  planned: (duration: string) => `Planned · ${duration}`,
+  worked: (duration: string) => `Worked · ${duration}`,
+  back: 'Back',
+} as const;
+
+/** The alert when a timer that ran out got no answer and was logged at its planned length. */
 export const TIMER_DONE = {
   title: 'Focus session complete',
   body: (label: string, duration: string) => (label ? `${label} · ${duration}` : `${duration} logged.`),

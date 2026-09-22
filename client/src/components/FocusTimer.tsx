@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useSettings } from '../hooks/useSettings';
 import { useTimer } from '../hooks/useTimer';
-import { CONFIRM } from '../lib/copy';
+import { CONFIRM, TIMER_DUE } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
 import { LIMITS, type Priority } from '../types';
 import { Check, Minus, Pause, Play, Plus, X } from './Icons';
@@ -107,15 +107,17 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
 }
 
 function Running() {
-  const { running, remainingSeconds, progress, paused, adjust, pause, resume, finish, cancel } = useTimer();
+  const { running, remainingSeconds, progress, paused, due, overrunSeconds, adjust, pause, resume, requestFinish, cancel } = useTimer();
   const { settings } = useSettings();
   if (!running) return null;
   const step = settings.adjustStepMinutes;
   const r = 54;
   const circ = 2 * Math.PI * r;
+  // Past the end the countdown goes negative; the sub-line says why.
+  const subline = due ? TIMER_DUE.title : paused ? 'Paused' : `of ${formatDuration(running.plannedSeconds)}`;
 
   return (
-    <div className={`timer timer--running${paused ? ' is-paused' : ''}`}>
+    <div className={`timer timer--running${paused ? ' is-paused' : ''}${due ? ' is-due' : ''}`}>
       <div className="ring-wrap">
         <svg className="ring" viewBox="0 0 120 120" aria-hidden="true">
           <circle className="ring-track" cx="60" cy="60" r={r} />
@@ -123,29 +125,32 @@ function Running() {
         </svg>
         <div className="ring-center">
           <div className="countdown" role="timer" aria-live="off">
-            {formatCountdown(remainingSeconds)}
+            {formatCountdown(due ? -overrunSeconds : remainingSeconds)}
           </div>
-          <div className="muted small">{paused ? 'Paused' : `of ${formatDuration(running.plannedSeconds)}`}</div>
+          <div className="muted small">{subline}</div>
         </div>
       </div>
       <div className="timer-running-label">{running.label || <span className="muted">Untitled session</span>}</div>
       <div className="timer-controls">
-        <button className="btn" onClick={() => void adjust(-step * 60)}>
-          <Minus /> {step}m
-        </button>
+        {!due && (
+          <button className="btn" onClick={() => void adjust(-step * 60)}>
+            <Minus /> {step}m
+          </button>
+        )}
         <button className="btn" onClick={() => void adjust(step * 60)}>
           <Plus /> {step}m
         </button>
-        {paused ? (
-          <button className="btn" onClick={() => void resume()}>
-            <Play /> Resume
-          </button>
-        ) : (
-          <button className="btn" onClick={() => void pause()}>
-            <Pause /> Pause
-          </button>
-        )}
-        <button className="btn btn-primary" onClick={() => void finish()}>
+        {!due &&
+          (paused ? (
+            <button className="btn" onClick={() => void resume()}>
+              <Play /> Resume
+            </button>
+          ) : (
+            <button className="btn" onClick={() => void pause()}>
+              <Pause /> Pause
+            </button>
+          ))}
+        <button className="btn btn-primary" onClick={requestFinish}>
           <Check /> Finish
         </button>
         <button

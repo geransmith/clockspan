@@ -81,13 +81,14 @@ export function formatDurationCeil(seconds: number): string {
   return formatDuration(Math.ceil(Math.abs(seconds) / 60) * 60);
 }
 
-/** mm:ss, or h:mm:ss above an hour. */
+/** mm:ss, or h:mm:ss above an hour; a negative count (a timer past its end) gets a leading minus. */
 export function formatCountdown(seconds: number): string {
-  const s = Math.max(0, Math.round(seconds));
+  const s = Math.abs(Math.round(seconds));
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
-  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
+  const sign = Math.round(seconds) < 0 ? '−' : '';
+  return `${sign}${h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`}`;
 }
 
 /** Whether times get AM/PM: the setting, or for 'auto' whatever the browser locale does. */

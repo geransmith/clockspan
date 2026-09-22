@@ -52,6 +52,8 @@ describe('durations', () => {
     expect(formatCountdown(59)).toBe('0:59');
     expect(formatCountdown(25 * 60)).toBe('25:00');
     expect(formatCountdown(3661)).toBe('1:01:01');
+    expect(formatCountdown(-83)).toBe('−1:23');
+    expect(formatCountdown(-0.4)).toBe('0:00');
   });
 });
 
