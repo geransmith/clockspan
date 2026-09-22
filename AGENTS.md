@@ -181,7 +181,7 @@ The checklist, the PR requirements (title, one label, what must pass) and the ve
 in `CONTRIBUTING.md`.
 Follow it as written; it is not advice. Dependabot (`.github/dependabot.yml`) opens weekly
 `skip-changelog` PRs for npm (minor + patch grouped, majors on their own), GitHub Actions and
-the Docker base image; they merge like any other PR once `check` is green.
+the Docker base image (pinned by digest in both stages); they merge like any other PR once `check` is green.
 
 ## Dev data is disposable
 

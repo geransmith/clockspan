@@ -24,6 +24,8 @@ updates:
       interval: weekly
     labels: [skip-changelog]
 
+  # The Dockerfile pins node:24-alpine by digest; a PR here moves the digest when the tag does,
+  # and CI's image-smoke job builds and boots it before it can merge.
   - package-ecosystem: docker
     directory: /
     schedule:

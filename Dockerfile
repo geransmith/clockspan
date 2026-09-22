@@ -2,8 +2,11 @@
 # The directive above must be the first line. It silences one build-check rule: the linter
 # reads "AUTH" in ENV AUTH_MODE as a secret, but that is a mode switch (none | local | oidc).
 # The secrets this app takes (OIDC_CLIENT_SECRET) are passed at run time, never baked in.
+# Both stages name the same base by digest, not just the tag: a tag moves when Node or Alpine
+# ships a fix, and an unpinned build would change under a release without anything in git
+# saying so. Dependabot opens a PR when the tag moves, and CI's image-smoke boots it first.
 # ---- build ----
-FROM node:24-alpine AS build
+FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 # --ignore-scripts: better-sqlite3 ships prebuilds (including linux-musl) and loads them when
@@ -18,7 +21,7 @@ COPY shared ./shared
 RUN npm run build && npm prune --omit=dev
 
 # ---- runtime ----
-FROM node:24-alpine
+FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1
 WORKDIR /app
 # su-exec drops root in the entrypoint. The HEALTHCHECK's wget is busybox's, already in the
 # base image; CI's image-smoke job runs that exact command inside the container.
