@@ -277,7 +277,9 @@ repo or the session scratchpad.
   the end is logged too. The Finish buttons call `requestFinish()`: it finishes at once unless
   the planned and worked lengths differ by a whole minute, where `finishChoice` opens the
   `FinishChoice` sheet (Planned · Nm / Worked · Mm / Back). Both alerting effects wait for
-  `settings.loaded`, or an alert raised on load would use the default sound and switch.
+  `settings.loaded`, or an alert raised on load would use the default sound and switch; the
+  alarms in `App.tsx` wait for it the same way (`settled`), or a longer work day than the
+  default would ring the clock-out alarm on load.
   `useTimer` keeps a `mutationSeq` so a slow `GET /sessions/running` can't overwrite an
   optimistic update; keep that pattern for new mutations.
   **One running session per user is a schema invariant** (a unique partial index), and another

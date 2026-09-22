@@ -37,7 +37,7 @@ function Shell() {
   const [customize, setCustomize] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [jumpTo, setJumpTo] = useState<CardId | null>(null);
-  const { settings } = useSettings();
+  const { settings, loaded } = useSettings();
   const { running } = useTimer();
   const now = useNow(1000);
 
@@ -47,13 +47,15 @@ function Shell() {
   // state. A focused row means the user is at the card; nothing here is finer than a minute.
   // Another device may have punched meanwhile: the copy here is re-fetched when the tab
   // comes back and every minute, and the alarms sit out a come-back refresh (and the settle
-  // after its answer) rather than fire on a lunch this tab never saw taken.
+  // after its answer) rather than fire on a lunch this tab never saw taken. They also wait
+  // for the settings, like the timer's alerts: judged against the defaults, a longer work day
+  // would ring the clock-out alarm on load, with the default sound.
   const today = todayKey(now);
   const { day: todayDay, store } = useDay(today);
   const refreshing = useRefreshDay(today);
   const [editingPunches, setEditingPunches] = useState(false);
   const punches = useSettled(todayDay?.punches, 3000, editingPunches);
-  const settled = punches != null && punches === todayDay?.punches && !refreshing;
+  const settled = loaded && punches != null && punches === todayDay?.punches && !refreshing;
   const todayTc = useMemo(() => (settled ? computeTimeclock(punches, settings, now) : null), [settled, punches, settings, now]);
   // A day flagged while the feature was on stays silent only while it is still on.
   const overtimeApproved = settings.overtimeApproval && Boolean(todayDay?.overtimeApproved);
