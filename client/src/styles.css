@@ -529,13 +529,6 @@ button {
   letter-spacing: -0.01em;
   margin-right: auto;
 }
-.brand-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 4px var(--accent-soft);
-}
 .topbar-actions {
   display: flex;
   gap: 6px;
