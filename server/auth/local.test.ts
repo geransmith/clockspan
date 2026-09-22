@@ -88,6 +88,13 @@ describe('AUTH_MODE=local', () => {
     expect(lines.some((l) => l.includes(ADMIN.password) || l.includes('wrong'))).toBe(false);
   });
 
+  it('counts attempts sent at once, so a burst cannot get past the limit while the first is hashing', async () => {
+    await setup();
+    const c = app.client();
+    const burst = await Promise.all(Array.from({ length: 10 }, () => c.post('/api/auth/login', { username: 'geran', password: 'wrong' })));
+    expect(burst.map((r) => r.status).sort()).toEqual([...Array<number>(5).fill(401), ...Array<number>(5).fill(429)]);
+  });
+
   it('cuts a long or odd username short in the log', async () => {
     await setup();
     const c = app.client();
@@ -123,6 +130,14 @@ describe('AUTH_MODE=local', () => {
     expect((await other.post('/api/auth/password', { currentPassword: ADMIN.password, newPassword: 'new password' })).status).toBe(429);
     // A login failure and a password-change failure count in separate buckets (address vs account).
     expect((await app.client().post('/api/auth/login', { username: 'geran', password: 'wrong' })).status).toBe(401);
+  });
+
+  it('counts current-password guesses sent at once the same way', async () => {
+    await setup();
+    const burst = await Promise.all(
+      Array.from({ length: 10 }, (_, i) => app.api.post('/api/auth/password', { currentPassword: `guess ${i}`, newPassword: 'new password' })),
+    );
+    expect(burst.map((r) => r.status).sort()).toEqual([...Array<number>(5).fill(400), ...Array<number>(5).fill(429)]);
   });
 
   it('answers 409, not 500, when two admins add the same username at once', async () => {

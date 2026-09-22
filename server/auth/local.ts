@@ -112,6 +112,10 @@ export function localAuthRouter(db: DB, config: Config): Router {
       res.status(429).json({ error: `Too many attempts. Try again in ${Math.ceil(gate.retryAfterSec / 60)} min.` });
       return;
     }
+    // Counted now, before the hash: the check above and this line run without yielding, so
+    // each of a burst of requests sees the ones before it. Counted after the await, a burst
+    // would all pass the gate while the first was still hashing. A correct password clears it.
+    limiter.fail(ip);
     const { username, password } = req.body ?? {};
     const user =
       typeof username === 'string'
@@ -121,7 +125,6 @@ export function localAuthRouter(db: DB, config: Config): Router {
     // a wrong username from a wrong password.
     const ok = typeof password === 'string' && (await verifyPassword(password, user?.password_hash ?? DUMMY_HASH));
     if (!ok || !user) {
-      limiter.fail(ip);
       console.warn(`[auth] login failed for ${logName(username)} from ${ip}`);
       res.status(401).json({ error: 'Incorrect username or password.' });
       return;
@@ -149,9 +152,10 @@ export function localAuthRouter(db: DB, config: Config): Router {
       res.status(429).json({ error: `Too many attempts. Try again in ${Math.ceil(gate.retryAfterSec / 60)} min.` });
       return;
     }
+    // Counted before the hash, like a login.
+    limiter.fail(key);
     const { currentPassword, newPassword } = req.body ?? {};
     if (!user.password_hash || typeof currentPassword !== 'string' || !(await verifyPassword(currentPassword, user.password_hash))) {
-      limiter.fail(key);
       console.warn(`[auth] password change refused for ${logName(user.username)}: current password wrong`);
       res.status(400).json({ error: 'Current password is incorrect.' });
       return;
