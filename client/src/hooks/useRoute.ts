@@ -4,7 +4,11 @@ import { useLatest } from './useLatest';
 
 export interface Route {
   view: 'sheet' | 'history';
-  date: string;
+  /**
+   * The date on screen, or null for today. Today is kept as null rather than as its key so a
+   * sheet left open past midnight moves to the new day, the way a reload of the same URL does.
+   */
+  date: string | null;
 }
 
 function read(): Route {
@@ -12,18 +16,16 @@ function read(): Route {
   const date = params.get('date');
   return {
     view: params.get('view') === 'history' ? 'history' : 'sheet',
-    date: date && isValidDateKey(date) ? date : todayKey(),
+    date: date && isValidDateKey(date) && date !== todayKey() ? date : null,
   };
 }
 
-function write(route: Route, replace = false): void {
+function write(route: Route): void {
   const params = new URLSearchParams();
   if (route.view === 'history') params.set('view', 'history');
-  if (route.date !== todayKey()) params.set('date', route.date);
+  if (route.date != null) params.set('date', route.date);
   const qs = params.toString();
-  const url = `${window.location.pathname}${qs ? `?${qs}` : ''}`;
-  if (replace) history.replaceState(null, '', url);
-  else history.pushState(null, '', url);
+  history.pushState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
 }
 
 /** The sheet's date and view live in the URL so reloads and back/forward behave. */
@@ -40,6 +42,7 @@ export function useRoute(): [Route, (next: Partial<Route>) => void] {
   const navigate = useCallback(
     (next: Partial<Route>) => {
       const merged = { ...current.current, ...next };
+      if (merged.date === todayKey()) merged.date = null;
       // Already there (the brand button on today's sheet): a push would add an entry Back
       // has to step through without anything changing.
       if (merged.view === current.current.view && merged.date === current.current.date) return;

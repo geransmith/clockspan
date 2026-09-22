@@ -17,7 +17,8 @@ has the user-facing description.
 - Node **24** (Active LTS). `nvm use 24` locally; `node:24-alpine` in Docker.
 - Frontend: React 19 + TypeScript 7 (the native `tsc`) + Vite 8. Drag/drop: `@dnd-kit/sortable`. Punch time entry:
   `react-aria` + `react-stately` (`useTimeField`, segments) with `@internationalized/date`.
-  No router lib — the date and view live in the URL query (`hooks/useRoute.ts`). No CSS framework.
+  No router lib — the date and view live in the URL query (`hooks/useRoute.ts`; today is
+  `date: null`, so a sheet left open over midnight moves to the new day). No CSS framework.
 - Backend: Express 5 (ESM, `NodeNext`, imports use `.js` extensions), `better-sqlite3` (native),
   `openid-client` v6 for OIDC, `cookie` for cookie parsing. Passwords: `node:crypto` scrypt (async).
 - Tests: Vitest 5. Lint: oxlint (`.oxlintrc.json`: correctness + typescript + react-hooks +
@@ -329,7 +330,7 @@ repo or the session scratchpad.
   one rule, no clock-in fallback. `GET /days/range` returns full days and the client does the
   rollup (the review and the History calendar both fetch it, one period at a time); register
   any new literal path under `/days` before `/:date`.
-- **History → Days opens on the route's date.** `App.tsx` passes `route.date` to `History`;
+- **History → Days opens on the route's date.** `App.tsx` passes `route.date ?? today` to `History`;
   the calendar starts on that month with that day picked (`periodOffset('month', …)`), and
   only "Open day" navigates. So the header's History button lands on the month of the day
   being viewed, and browser Back from a day returns to it. The month grid is
