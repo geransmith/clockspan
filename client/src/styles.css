@@ -7,6 +7,7 @@
   --border: #e2e5ec;
   --text: #171a20;
   --text-2: #5b6473;
+  /* About 3:1 on the surfaces: icons, placeholders and struck-through done rows. Other text uses --text-2 (4.5:1 and up). */
   --text-3: #8a94a4;
   --accent: #3b6cf6;
   --accent-strong: #2a56cf;
@@ -897,7 +898,7 @@ button {
 }
 .priority-num {
   font-weight: 700;
-  color: var(--text-3);
+  color: var(--text-2);
   text-align: center;
 }
 .priority-row.is-done .priority-input {
@@ -1457,7 +1458,7 @@ button {
   display: inline-block;
   min-width: 18px;
   margin-right: 6px;
-  color: var(--text-3);
+  color: var(--text-2);
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   font-size: 0.85rem;
@@ -1593,7 +1594,7 @@ button {
 .calendar-weekday {
   font-size: 0.72rem;
   font-weight: 600;
-  color: var(--text-3);
+  color: var(--text-2);
   text-align: center;
   text-transform: uppercase;
   letter-spacing: 0.04em;
