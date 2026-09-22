@@ -55,7 +55,7 @@ server/                 Express API → dist/server (tsc)
                         user setting capped by RETENTION_DAYS), scheduleRetention (30 s + 6 h)
   cli.ts                `reset-password <username> [password]`
   dev/seed.ts           seedDatabase(db, opts) → SeedManifest; ensureLocalUsers(). Dev + tests only
-  dev/seed-cli.ts       `npm run seed` (flags: --fresh --running --days N --quarter --today --now)
+  dev/seed-cli.ts       `npm run seed` (flags: --fresh --running --days N --quarter --today --now --auth --sessions)
   dev/harness.ts        startTestApp(): real app on an in-memory DB + fetch client w/ cookie jar
   **/*.test.ts          route/auth/db/header tests beside the code they cover (Vitest, via the harness)
   auth/session.ts       cookie session (token hashed in DB, sliding 30d expiry), cookieOptions(),
@@ -168,7 +168,10 @@ docker compose pull && docker compose up -d   # the published image; see README 
 
 Dev DB: `./data/focus.db` (gitignored). Delete it to start fresh. `AUTH_MODE=local npm run dev`
 to exercise the setup/login pages. The `prod` config in `.claude/launch.json` builds and serves
-the real bundle on :8090 with the real headers; the `web` config is the dev server.
+the real bundle on :8090 with the real headers; the `web` config is the dev server, and
+`web-local` / `web-oidc` are the same dev server under `AUTH_MODE=local` / `oidc` (the OIDC one
+points at a provider that isn't there, so discovery logs a retry now and then; the sign-in
+button can't complete, everything after sign-in works). One at a time: they share :5173.
 
 ## Branches, PRs and releases
 
@@ -195,8 +198,16 @@ Start from `npm run seed`, not from an empty DB: the last 10 weekdays for the de
 day with a cancelled session, a half day with no lunch) plus today clocked in two hours ago.
 Flags are in the `seed-cli.ts` header (`--running` for timer work, `--quarter` for Month /
 Quarter review, `--fresh` to also reset settings and logins). Under `AUTH_MODE=local` it
-creates `admin` and `sam` (password `clockspan-dev`). It replaces the user's days each run,
-never deletes user rows, and is safe while `npm run dev` is up; reload the page.
+creates `admin` and `sam` (password `clockspan-dev`); under `AUTH_MODE=oidc`, one "Dev User".
+`--auth local|oidc` stands in for the env var (with placeholder OIDC values), and `--sessions`
+signs every seeded user in and prints a `document.cookie = 'fs_session=…'` line per user: run
+it in the page and reload to be that user, with no password typed and no provider. It replaces
+the user's days each run, never deletes user rows, and is safe while `npm run dev` is up;
+reload the page.
+
+A signed-in browser check, local or OIDC: `preview_start` `web-local` (or `web-oidc`), then
+`npm run seed -- --auth local --sessions` (or `--auth oidc`), and set the printed cookie with
+`javascript_tool`.
 
 Ways in, cheapest first:
 

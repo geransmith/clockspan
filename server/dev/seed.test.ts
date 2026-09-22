@@ -1,7 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ensureDefaultUser, openDatabase } from '../db.js';
-import { SEED_NOW, SEED_TODAY } from './harness.js';
-import { DEFAULT_HISTORY_DAYS, ensureLocalUsers, kindForDistance, quarterStart, seedDatabase, weekdaysBefore, weekdaysSince } from './seed.js';
+import { insertSession, SESSION_COOKIE } from '../auth/session.js';
+import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from './harness.js';
+import {
+  DEFAULT_HISTORY_DAYS,
+  ensureLocalUsers,
+  ensureOidcDevUser,
+  kindForDistance,
+  LOCAL_USERS,
+  OIDC_DEV_USER,
+  quarterStart,
+  seedDatabase,
+  weekdaysBefore,
+  weekdaysSince,
+} from './seed.js';
 
 const counts = (db: ReturnType<typeof openDatabase>) =>
   Object.fromEntries(
@@ -146,5 +158,36 @@ describe('calendar helpers', () => {
     expect([0, 1, 2, 3, 4].map(kindForDistance)).toEqual(['normal', 'extraPair', 'overtime', 'unreviewed', 'noLunch']);
     const kinds = new Set(Array.from({ length: 60 }, (_, i) => kindForDistance(i + 5)));
     expect(kinds).toEqual(new Set(['normal', 'extraPair', 'overtime', 'unreviewed', 'noLunch']));
+  });
+});
+
+describe('--sessions', () => {
+  // What a browser check does with the printed line: send the cookie, be that user.
+  const me = (app: TestApp, token: string) =>
+    fetch(`${app.url}/api/auth/me`, { headers: { cookie: `${SESSION_COOKIE}=${token}` } }).then((r) => r.json() as Promise<{ user: unknown }>);
+
+  it('signs a seeded local user in without the password', async () => {
+    const app = await startTestApp({ authMode: 'local' });
+    try {
+      const { member } = await ensureLocalUsers(app.db);
+      expect((await me(app, insertSession(app.db, app.config, member.id))).user).toMatchObject({ username: LOCAL_USERS.member, isAdmin: false });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('makes one OIDC dev user, stored like a real sign-in, and signs it in the same way', async () => {
+    // Discovery retries against a port nothing listens on and logs each failure.
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const app = await startTestApp({ authMode: 'oidc' });
+    try {
+      const user = ensureOidcDevUser(app.db, app.config);
+      expect(ensureOidcDevUser(app.db, app.config).id).toBe(user.id);
+      expect(user.oidc_sub).toBe(`${app.config.oidc!.issuer}|${OIDC_DEV_USER.sub}`);
+      expect((await me(app, insertSession(app.db, app.config, user.id))).user).toMatchObject({ name: OIDC_DEV_USER.name, kind: 'oidc' });
+    } finally {
+      await app.close();
+      quiet.mockRestore();
+    }
   });
 });

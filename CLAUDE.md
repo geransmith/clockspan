@@ -20,6 +20,11 @@
 - Run `npm run seed` (`--running` for timer work, `--quarter` for Month / Quarter review)
   before any browser check. The dev DB is disposable and migrates itself; see "Dev data is
   disposable" in AGENTS.md.
+- Never type a password into the pane, not even the dev one. For a signed-in check under
+  local or OIDC auth, `preview_start` `web-local` / `web-oidc`, run
+  `npm run seed -- --auth local --sessions` (or `--auth oidc`), and set the cookie it prints.
+  `window.confirm` can be stubbed in the page (`window.confirm = () => true`) when a step sits
+  behind a confirm.
 - To exercise alarms quickly: Settings → Work day and Second meal due after = a few minutes
   each, then clock in. "Overtime approved" on the card or on the clock-out banner
   is the quick way to silence the clock-out alarm mid-test; lunch must keep counting down.
