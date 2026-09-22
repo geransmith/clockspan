@@ -1436,29 +1436,34 @@ button {
 .retro-row:first-child {
   border-top: 0;
 }
+/* Marks, not controls: a check for done, a dash for not done, an amber dot for work off the
+   plan. Nothing box-shaped, since a square here read as a checkbox waiting to be ticked. */
 .retro-tick {
   grid-area: tick;
   width: 20px;
   height: 20px;
   margin-top: 1px;
-  border-radius: 6px;
-  border: 1.5px solid var(--border);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--accent-text);
+  color: var(--ok);
 }
-.retro-tick.is-done {
-  background: var(--ok);
-  border-color: var(--ok);
+.retro-tick:not(.is-done)::before {
+  content: '';
+  width: 10px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--text-3);
 }
 .retro-tick svg {
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
 }
-.retro-row--unplanned .retro-tick {
-  border-style: dashed;
-  border-color: var(--warn);
+.retro-row--unplanned .retro-tick::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn);
 }
 .retro-text {
   grid-area: text;
