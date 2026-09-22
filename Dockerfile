@@ -20,7 +20,9 @@ RUN npm run build && npm prune --omit=dev
 # ---- runtime ----
 FROM node:24-alpine
 WORKDIR /app
-RUN apk add --no-cache su-exec wget
+# su-exec drops root in the entrypoint. The HEALTHCHECK's wget is busybox's, already in the
+# base image; CI's image-smoke job runs that exact command inside the container.
+RUN apk add --no-cache su-exec
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./
