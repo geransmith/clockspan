@@ -1,22 +1,37 @@
 import { loadConfig } from '../config.js';
 import { ensureDefaultUser, openDatabase } from '../db.js';
+import { insertSession, SESSION_COOKIE } from '../auth/session.js';
 import { todayKey } from '../../shared/dates.js';
-import { DEFAULT_HISTORY_DAYS, LOCAL_USERS, ensureLocalUsers, quarterStart, seedDatabase, weekdaysSince, type SeedManifest } from './seed.js';
+import {
+  DEFAULT_HISTORY_DAYS,
+  LOCAL_USERS,
+  ensureLocalUsers,
+  ensureOidcDevUser,
+  quarterStart,
+  seedDatabase,
+  weekdaysSince,
+  type SeedManifest,
+} from './seed.js';
 
 // Usage: npm run seed [-- --fresh] [--running] [--days N | --quarter] [--today YYYY-MM-DD] [--now HH:MM]
-// Fills the dev DB (DATA_DIR, default ./data) with sample days for the default user, or for
-// the `admin` and `sam` local users when AUTH_MODE=local. Safe to run while `npm run dev`
-// is up; reload the page afterwards.
+//                     [--auth none|local|oidc] [--sessions]
+// Fills the dev DB (DATA_DIR, default ./data) with sample days for the default user, for the
+// `admin` and `sam` local users when AUTH_MODE=local, or for one OIDC dev user when
+// AUTH_MODE=oidc. --sessions also signs each of them in and prints the cookie, so a browser
+// check sets it instead of typing a password (or, for OIDC, going to a provider). --auth
+// stands in for AUTH_MODE (and fills placeholder OIDC_* values, since the seed never contacts
+// a provider). Safe to run while `npm run dev` is up; reload the page afterwards.
 
 if (process.env.NODE_ENV === 'production') {
   console.error('Refusing to seed with NODE_ENV=production. This is dev data.');
   process.exit(2);
 }
 
-const opts: { fresh: boolean; running: boolean; quarter: boolean; days?: string; today?: string; now?: string } = {
+const opts: { fresh: boolean; running: boolean; quarter: boolean; sessions: boolean; auth?: string; days?: string; today?: string; now?: string } = {
   fresh: false,
   running: false,
   quarter: false,
+  sessions: false,
 };
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
@@ -25,11 +40,13 @@ for (let i = 0; i < args.length; i++) {
   if (name === '--fresh') opts.fresh = true;
   else if (name === '--running') opts.running = true;
   else if (name === '--quarter') opts.quarter = true;
+  else if (name === '--sessions') opts.sessions = true;
+  else if (name === '--auth') opts.auth = next();
   else if (name === '--days') opts.days = next();
   else if (name === '--today') opts.today = next();
   else if (name === '--now') opts.now = next();
   else {
-    console.error(`Unknown option ${name}. Options: --fresh --running --days N --quarter --today YYYY-MM-DD --now HH:MM`);
+    console.error(`Unknown option ${name}. Options: --fresh --running --days N --quarter --today YYYY-MM-DD --now HH:MM --auth MODE --sessions`);
     process.exit(2);
   }
 }
@@ -64,19 +81,36 @@ if (!Number.isInteger(days) || days < 0 || days > 400) {
 }
 const { fresh, running } = opts;
 
-const config = loadConfig();
+if (opts.auth !== undefined && !['none', 'local', 'oidc'].includes(opts.auth)) {
+  console.error(`--auth must be none, local or oidc (got "${opts.auth}").`);
+  process.exit(2);
+}
+const env: NodeJS.ProcessEnv = { ...process.env, ...(opts.auth ? { AUTH_MODE: opts.auth } : {}) };
+if (env.AUTH_MODE === 'oidc') {
+  env.OIDC_ISSUER ??= 'http://127.0.0.1:9/';
+  env.OIDC_CLIENT_ID ??= 'clockspan-dev';
+  env.OIDC_CLIENT_SECRET ??= 'dev';
+  env.APP_URL ??= 'http://localhost:5173';
+}
+const config = loadConfig(env);
 const db = openDatabase(config.dbPath);
 
-const seeded: { name: string; manifest: SeedManifest }[] = [];
+const seeded: { name: string; userId: number; manifest: SeedManifest }[] = [];
 if (config.authMode === 'local') {
   const { admin, member } = await ensureLocalUsers(db);
-  seeded.push({ name: admin.username!, manifest: seedDatabase(db, { userId: admin.id, today, now, days, running, fresh }) });
+  seeded.push({ name: admin.username!, userId: admin.id, manifest: seedDatabase(db, { userId: admin.id, today, now, days, running, fresh }) });
   // Fewer days and no timer, so the two accounts are easy to tell apart.
-  seeded.push({ name: member.username!, manifest: seedDatabase(db, { userId: member.id, today, now, days: Math.min(days, 3), fresh }) });
+  seeded.push({ name: member.username!, userId: member.id, manifest: seedDatabase(db, { userId: member.id, today, now, days: Math.min(days, 3), fresh }) });
+} else if (config.authMode === 'oidc') {
+  // The default user is never signed in under OIDC; seed an account this mode can show.
+  const user = ensureOidcDevUser(db, config);
+  seeded.push({ name: user.display_name, userId: user.id, manifest: seedDatabase(db, { userId: user.id, today, now, days, running, fresh }) });
 } else {
   const user = ensureDefaultUser(db);
-  seeded.push({ name: 'default user', manifest: seedDatabase(db, { userId: user.id, today, now, days, running, fresh }) });
+  seeded.push({ name: 'default user', userId: user.id, manifest: seedDatabase(db, { userId: user.id, today, now, days, running, fresh }) });
 }
+// After the seed, which drops logins under --fresh.
+const cookies = opts.sessions && config.authMode !== 'none' ? seeded.map((s) => ({ name: s.name, token: insertSession(db, config, s.userId) })) : [];
 db.close();
 
 console.log(`Seeded ${config.dbPath} (AUTH_MODE=${config.authMode})`);
@@ -90,5 +124,10 @@ for (const { name, manifest } of seeded) {
 }
 if (config.authMode === 'local') {
   console.log(`  Log in as ${LOCAL_USERS.admin} (admin) or ${LOCAL_USERS.member}, password "${LOCAL_USERS.password}".`);
+}
+if (opts.sessions && config.authMode === 'none') console.log('  --sessions: AUTH_MODE=none has no sign-in, so there is no cookie to set.');
+if (cookies.length) {
+  console.log('  Signed in. In the page, run one line and reload:');
+  for (const c of cookies) console.log(`    ${c.name}: document.cookie = '${SESSION_COOKIE}=${c.token}; path=/'`);
 }
 if (fresh) console.log('  Settings and logins were reset.');

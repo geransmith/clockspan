@@ -22,14 +22,19 @@ function sessionCookie(config: Config, token: string): string {
   return stringifySetCookie({ name: SESSION_COOKIE, value: token, ...cookieOptions(config), maxAge: Math.floor(config.sessionTtlMs / 1000) });
 }
 
-export function createSession(db: DB, config: Config, res: Response, userId: number): void {
+/** Stores a new session for the user and returns its token; only the hash is kept. Login and the dev seed's `--sessions` both come here. */
+export function insertSession(db: DB, config: Config, userId: number): string {
   const token = randomBytes(32).toString('base64url');
   const now = Date.now();
   db.prepare(
     `INSERT INTO auth_sessions (user_id, token_hash, created_at, expires_at, last_seen_at)
      VALUES (?, ?, ?, ?, ?)`,
   ).run(userId, hashToken(token), now, now + config.sessionTtlMs, now);
-  res.setHeader('Set-Cookie', sessionCookie(config, token));
+  return token;
+}
+
+export function createSession(db: DB, config: Config, res: Response, userId: number): void {
+  res.setHeader('Set-Cookie', sessionCookie(config, insertSession(db, config, userId)));
 }
 
 export function readSessionToken(req: Request): string | null {

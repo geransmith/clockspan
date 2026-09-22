@@ -1,4 +1,6 @@
+import type { Config } from '../config.js';
 import type { DB, UserRow } from '../db.js';
+import { upsertOidcUser } from '../auth/oidc.js';
 import { hashPassword } from '../auth/password.js';
 import { addDays, addMonths, parseDateKey, startOfQuarter } from '../../shared/dates.js';
 
@@ -418,4 +420,12 @@ export async function ensureLocalUsers(db: DB): Promise<{ admin: UserRow; member
     return get(username)!;
   };
   return { admin: await create(LOCAL_USERS.admin, true), member: await create(LOCAL_USERS.member, false) };
+}
+
+/** The account the seed fills under AUTH_MODE=oidc. The provider never sees it; a browser signs in with a `--sessions` cookie. */
+export const OIDC_DEV_USER = { sub: 'clockspan-dev', name: 'Dev User' } as const;
+
+/** Idempotent, and stored the way a real sign-in would store the provider's subject. */
+export function ensureOidcDevUser(db: DB, config: Config): UserRow {
+  return upsertOidcUser(db, `${config.oidc!.issuer}|${OIDC_DEV_USER.sub}`, OIDC_DEV_USER.name);
 }
