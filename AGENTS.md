@@ -527,9 +527,10 @@ Prove a change at the cheapest level that can show it, and stop there:
 
 - `better-sqlite3` is native. Since v13 it bundles N-API prebuilds for every platform the
   image can run on (including linux-musl), so no compiler toolchain is needed, but its
-  `binding.gyp` still makes npm try `node-gyp rebuild`; the Dockerfile runs
+  `binding.gyp` still makes npm try `node-gyp rebuild`; the Dockerfile and CI run
   `npm ci --ignore-scripts` so the prebuild is used regardless of which npm version (11 or 12)
-  is in the base image and how it applies `allowScripts`. Docker is verified only in the
+  is in the base image and how it applies `allowScripts` (and so no dependency's install
+  script runs in CI; `npm audit signatures` then checks every package's registry signature). Docker is verified only in the
   deployed environment, not on the dev Mac (no Docker here); the `image-smoke` job on every
   PR (build, boot, `/api/health`, the healthcheck command) is the earliest signal.
 - The preview harness exports `PORT=5173`; that's why `dev:server` pins `PORT=3000` and the
