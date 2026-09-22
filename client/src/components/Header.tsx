@@ -18,6 +18,9 @@ export function Header({ view, date, today, customize, onNavigate, onToggleCusto
   const { auth, signOut } = useAuth();
   const onSheet = view === 'sheet';
   const isToday = date === today;
+  // "Yesterday" gets the date underneath; an older day's name already is the date.
+  const name = dayName(date, today);
+  const long = formatDateLong(date);
 
   return (
     <header className="topbar">
@@ -67,8 +70,8 @@ export function Header({ view, date, today, customize, onNavigate, onToggleCusto
             <ChevronLeft />
           </button>
           <label className="datenav-label">
-            <span className="datenav-text">{dayName(date, today)}</span>
-            {!isToday && <span className="datenav-sub">{formatDateLong(date)}</span>}
+            <span className="datenav-text">{name}</span>
+            {!isToday && name !== long && <span className="datenav-sub">{long}</span>}
             <input
               className="datenav-input"
               type="date"
