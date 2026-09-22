@@ -90,6 +90,8 @@ describe('daySummaryOf', () => {
           status: 'completed',
           durationSeconds: 1500,
           priorityUid: null,
+          pausedSeconds: 0,
+          pausedAt: null,
         },
         {
           id: 2,
@@ -102,6 +104,8 @@ describe('daySummaryOf', () => {
           status: 'cancelled',
           durationSeconds: 100,
           priorityUid: null,
+          pausedSeconds: 0,
+          pausedAt: null,
         },
         {
           id: 3,
@@ -114,6 +118,8 @@ describe('daySummaryOf', () => {
           status: 'running',
           durationSeconds: null,
           priorityUid: null,
+          pausedSeconds: 0,
+          pausedAt: null,
         },
       ],
     };

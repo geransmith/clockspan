@@ -108,6 +108,12 @@ export const TIMER_DONE = {
   body: (label: string, duration: string) => (label ? `${label} · ${duration}` : `${duration} logged.`),
 } as const;
 
+/** Banner when a pause was left for an hour: the session was closed where the pause began. */
+export const TIMER_PAUSED_OUT = {
+  title: 'Focus session closed',
+  body: (label: string, duration: string) => `${label ? `${label} · ` : ''}${duration} logged. It sat paused for an hour, so it ended where the pause began.`,
+} as const;
+
 /** Banner when a start finds a timer already running, started on another device. */
 export const TIMER_ELSEWHERE = {
   title: 'A timer is already running',

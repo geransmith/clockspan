@@ -37,6 +37,8 @@ shared/                 Imported by BOTH sides (always with a `.js` suffix); pur
                         server JSON builders are annotated with them, the client reads them
   dates.ts              date keys: dateKey/todayKey/parseDateKey/isValidDateKey/addDays/endOfDay,
                         startOfWeek/Month/Quarter, addMonths (+ dates.test.ts)
+  timer.ts              pause-aware session timing: activeMs(session, until) (the span minus its pauses;
+                        stops at pausedAt), plannedEndAt(session, now) (moves while paused) (+ timer.test.ts)
 server/                 Express API → dist/server (tsc)
   index.ts              boot: load config, warn if AUTH_MODE=none, open DB, listen, SIGTERM
   app.ts                createApp(): trust proxy, securityHeaders, /api/health, resolveUser, auth
@@ -62,8 +64,8 @@ server/                 Express API → dist/server (tsc)
                         GET|POST /days/prune, GET /days/:date, PUT punches, PUT priorities (full
                         replace, sparse rows, uid/addedAt), PUT overtime, PUT retro (note, done)
   routes/sessions.ts    POST /days/:date/sessions (start, optional priorityUid), GET /sessions/running,
-                        PATCH/:id (label, notes, planned, priorityUid), POST /:id/finish|cancel, DELETE /:id
-                        (`loadOwnedSession` does the 404 + scoping for every /:id route)
+                        PATCH/:id (label, notes, planned, priorityUid), POST /:id/pause|resume|finish|cancel,
+                        DELETE /:id (`loadOwnedSession` does the 404 + scoping for every /:id route)
   routes/settings.ts    mergeSettings() validator; GET/PUT/DELETE /settings
 client/                 Vite root → dist/client
   index.html            viewport-fit=cover, theme-color, manifest, apple-mobile-web-app meta
@@ -103,10 +105,13 @@ client/                 Vite root → dist/client
                         + resolveHour12(timeFormat); re-exports shared/dates
   src/lib/timefield.ts  PURE: msToTime/timeToMs (epoch ms ↔ @internationalized/date Time on a
                         date key), guessPeriod() (the AM/PM the time field fills in)
+  src/lib/timer.ts      PURE: timerView(session, now) → elapsed/remaining/progress/endAt/paused/
+                        pausedForSeconds (what the countdown shows), PAUSE_LIMIT_SECONDS
   src/lib/layout.ts     CARDS (titles for CARD_IDS), DEFAULT_LAYOUT, normalizeLayout()
   src/hooks/            useSettings (SettingsProvider, optimistic PUT), useDay (per-date cache +
-                        setters), useTimer (running session, remaining/progress, mutationSeq re-sync,
-                        wake lock, tab title), useAlarms (fired keys in localStorage per day),
+                        setters), useTimer (running session, timerView per tick, pause/resume, the
+                        auto-finish for a run-out or a forgotten pause, mutationSeq re-sync, wake lock,
+                        tab title), useAlarms (fired keys in localStorage per day),
                         useLatest (ref that tracks a value for callbacks), useNow, useRoute,
                         useSettled, useTimeFormat ({ hour12, formatTime } from the setting), useWakeLock
   src/auth/             AuthGate (mode/user → Setup | Login | OIDC button | app), pages
@@ -251,9 +256,14 @@ repo or the session scratchpad.
   catalog in `shared/sounds.ts`; `settings.sound` is the master switch over all of them, and
   `none` is the per-event off. The day-complete sound fires with the burst in `Timeclock.tsx`
   (the day *becoming* done while the card is mounted, never a done day opening).
-- **Timer remaining time is derived from the server's `startedAt + plannedSeconds`** on every
-  tick — never a client-side counter. `useTimer` keeps a `mutationSeq` so a slow `GET
-  /sessions/running` can't overwrite an optimistic update; keep that pattern for new mutations.
+- **Timer remaining time is derived from the server's `startedAt`, `plannedSeconds` and pauses**
+  on every tick (`timerView()` in `client/src/lib/timer.ts`, on `shared/timer.ts`) — never a
+  client-side counter. A paused session is still `status = 'running'` with `pausedAt` set;
+  `pausedSeconds` holds the pauses that have ended, and the planned end moves forward while
+  paused. A finish while paused ends the session where the pause began, and a pause left for
+  `PAUSE_LIMIT_SECONDS` (an hour) is finished by the client with a quiet banner. `useTimer`
+  keeps a `mutationSeq` so a slow `GET /sessions/running` can't overwrite an optimistic update;
+  keep that pattern for new mutations.
   **One running session per user is a schema invariant** (a unique partial index), and another
   device may own it: a 409 on start is adopted with a banner, a sync whose answer differs from
   the session shown reloads that day so the log catches up, a 404/409 on adjust/finish/cancel
@@ -422,7 +432,9 @@ Prove a change at the cheapest level that can show it, and stop there:
 - If you touched `security.ts`, `index.html`, or how assets load: run the `prod` config and
   read the console for CSP violations; `curl -sI localhost:8090/api/health` shows the headers.
 - If you touched the timer or alarms: reload mid-timer, background/foreground the tab, and let a
-  short timer expire — the log must show the planned duration and one chime.
+  short timer expire — the log must show the planned duration and one chime. Pause, reload,
+  resume: the countdown holds and continues, the log row's pill follows, and the finished row's
+  duration excludes the pause (`curl /api/days/<today>` agrees).
 - If you touched sounds: `alerts.test.ts` proves the patterns, the one fetch per clip and the
   quiet failure; `sounds.test.ts` the catalog ↔ folder match. The browser check is Settings →
   Alarms → Sounds at the mobile preset: Test on a clip row fetches the file once (the network

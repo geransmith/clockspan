@@ -1017,6 +1017,9 @@ button {
   stroke-linecap: round;
   transition: stroke-dashoffset 0.9s linear;
 }
+.timer--running.is-paused .ring-fill {
+  stroke: var(--text-3);
+}
 .ring-center {
   position: absolute;
   inset: 0;
@@ -1071,6 +1074,10 @@ button {
   background: var(--accent);
   animation: pulse 2s infinite;
   flex: none;
+}
+.running-dot.is-paused {
+  background: var(--text-3);
+  animation: none;
 }
 .running-label {
   flex: 1;

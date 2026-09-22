@@ -3,6 +3,7 @@ import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { dateParam, ensureDay, requireDate, sessionRowToJson, UID_RE, type SessionRow } from './shared.js';
 import { LIMITS } from '../../shared/api.js';
+import { plannedEndAt } from '../../shared/timer.js';
 
 const MIN_PLANNED = 60;
 const MAX_PLANNED = 8 * 3600;
@@ -151,13 +152,41 @@ export function sessionsRouter(db: DB): Router {
     reply(res, s.user_id, s.id);
   });
 
+  // A paused session stays 'running' with paused_at set; resuming folds the pause into
+  // paused_seconds. Both are idempotent like finish and cancel: the row is answered as it is.
+  r.post('/:id/pause', loadOwnedSession, (_req, res) => {
+    const s = owned(res);
+    if (s.status !== 'running') {
+      res.status(409).json({ error: 'Only a running timer can be paused.' });
+      return;
+    }
+    if (s.paused_at == null) db.prepare(`UPDATE sessions SET paused_at = ? WHERE id = ?`).run(Date.now(), s.id);
+    reply(res, s.user_id, s.id);
+  });
+
+  r.post('/:id/resume', loadOwnedSession, (_req, res) => {
+    const s = owned(res);
+    if (s.status !== 'running') {
+      res.status(409).json({ error: 'Only a running timer can be resumed.' });
+      return;
+    }
+    if (s.paused_at != null) {
+      const paused = Math.round((Date.now() - s.paused_at) / 1000);
+      db.prepare(`UPDATE sessions SET paused_seconds = paused_seconds + ?, paused_at = NULL WHERE id = ?`).run(paused, s.id);
+    }
+    reply(res, s.user_id, s.id);
+  });
+
   // Ends now, but never later than the planned end: a timer that expired while the
-  // tab was closed is recorded with its planned duration.
+  // tab was closed is recorded with its planned duration. A session finished while paused
+  // ends when the pause began (no work happened since), so the log excludes every pause.
   r.post('/:id/finish', loadOwnedSession, (_req, res) => {
     const s = owned(res);
     if (s.status === 'running') {
-      const endedAt = Math.min(Date.now(), s.started_at + s.planned_seconds * 1000);
-      db.prepare(`UPDATE sessions SET ended_at = ?, status = 'completed' WHERE id = ?`).run(endedAt, s.id);
+      const now = Date.now();
+      const timing = { startedAt: s.started_at, plannedSeconds: s.planned_seconds, pausedSeconds: s.paused_seconds, pausedAt: s.paused_at };
+      const endedAt = Math.min(s.paused_at ?? now, plannedEndAt(timing, now));
+      db.prepare(`UPDATE sessions SET ended_at = ?, paused_at = NULL, status = 'completed' WHERE id = ?`).run(endedAt, s.id);
     }
     reply(res, s.user_id, s.id);
   });
@@ -165,7 +194,7 @@ export function sessionsRouter(db: DB): Router {
   r.post('/:id/cancel', loadOwnedSession, (_req, res) => {
     const s = owned(res);
     if (s.status === 'running') {
-      db.prepare(`UPDATE sessions SET ended_at = ?, status = 'cancelled' WHERE id = ?`).run(Date.now(), s.id);
+      db.prepare(`UPDATE sessions SET ended_at = ?, paused_at = NULL, status = 'cancelled' WHERE id = ?`).run(Date.now(), s.id);
     }
     reply(res, s.user_id, s.id);
   });

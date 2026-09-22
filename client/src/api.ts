@@ -71,6 +71,8 @@ export const startSession = (date: string, plannedSeconds: number, label: string
   request<{ session: Session }>('POST', `/api/days/${date}/sessions`, { plannedSeconds, label, priorityUid });
 export const patchSession = (id: number, patch: { plannedSeconds?: number; label?: string; notes?: string; priorityUid?: string | null }) =>
   request<{ session: Session }>('PATCH', `/api/sessions/${id}`, patch);
+export const pauseSession = (id: number) => request<{ session: Session }>('POST', `/api/sessions/${id}/pause`);
+export const resumeSession = (id: number) => request<{ session: Session }>('POST', `/api/sessions/${id}/resume`);
 export const finishSession = (id: number) => request<{ session: Session }>('POST', `/api/sessions/${id}/finish`);
 export const cancelSession = (id: number) => request<{ session: Session }>('POST', `/api/sessions/${id}/cancel`);
 export const deleteSession = (id: number) => request<{ ok: true }>('DELETE', `/api/sessions/${id}`);

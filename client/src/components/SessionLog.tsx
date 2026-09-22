@@ -3,6 +3,7 @@ import { useDayStore } from '../hooks/useDay';
 import { CONFIRM } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { formatDuration } from '../lib/format';
+import { activeMs } from '../lib/timer';
 import { LIMITS, type Priority, type Session } from '../types';
 import { Trash } from './Icons';
 
@@ -66,7 +67,9 @@ function Row({
   const [draft, setDraft] = useState(s.label);
   const editBox = useRef<HTMLSpanElement>(null);
   const running = s.status === 'running';
-  const seconds = running ? Math.floor((now - s.startedAt) / 1000) : (s.durationSeconds ?? 0);
+  const paused = running && s.pausedAt != null;
+  // A running row counts its focus so far, which holds still while paused.
+  const seconds = running ? Math.floor(activeMs(s, now) / 1000) : (s.durationSeconds ?? 0);
   // A link to a row that was since removed reads as unplanned.
   const linked = s.priorityUid ? planned.find((p) => p.uid === s.priorityUid) : undefined;
   // One PATCH per edit: label and link together, so two responses can't land out of order.
@@ -135,7 +138,7 @@ function Row({
         </button>
       )}
       <span className="log-duration">
-        {running && <span className="pill pill--ok">running</span>} {formatDuration(seconds)}
+        {running && <span className={`pill ${paused ? 'pill--warn' : 'pill--ok'}`}>{paused ? 'paused' : 'running'}</span>} {formatDuration(seconds)}
       </span>
       <button
         className="btn btn-icon log-delete"
