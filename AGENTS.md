@@ -22,7 +22,8 @@ has the user-facing description.
   `openid-client` v6 for OIDC, `cookie` for cookie parsing. Passwords: `node:crypto` scrypt (async).
 - Tests: Vitest 5. Lint: oxlint (`.oxlintrc.json`: correctness + typescript + react-hooks +
   jsx-a11y rules, syntax level only; it parses TS itself, which is what lets TypeScript be 7). CI: `.github/workflows/ci.yml` runs typecheck, lint, test, build on
-  every PR and push; on `main` it also publishes the `edge` image, and a commit that changed
+  every PR and push, and on a PR also builds and boots the image (`image-smoke`, never pushed);
+  on `main` it publishes the `edge` image, and a commit that changed
   `package.json`'s version (the merged bump PR) also gets the versioned image, the tag and the
   GitHub Release.
 - One `package.json` for both sides; `tsconfig.json` = client + shared, `tsconfig.server.json` =
@@ -135,7 +136,7 @@ docs/screenshots/       committed PNGs the README embeds; regenerate after a vis
 docker/entrypoint.sh    PUID/PGID (default 1000/1000) → chown /data + su-exec; 0 keeps root
 Dockerfile docker-compose.yml .env.example README.md .oxlintrc.json
 CONTRIBUTING.md         PR and release rules (imported by CLAUDE.md; see "Branches, PRs and releases")
-.github/workflows/ci.yml  check → image (ghcr.io) → release (on a version bump); .github/release.yml groups notes by label
+.github/workflows/ci.yml  check (+ image-smoke on PRs) → image (ghcr.io) → release (on a version bump); .github/release.yml groups notes by label
 ```
 
 ## Commands
@@ -512,8 +513,8 @@ Prove a change at the cheapest level that can show it, and stop there:
   `binding.gyp` still makes npm try `node-gyp rebuild`; the Dockerfile runs
   `npm ci --ignore-scripts` so the prebuild is used regardless of which npm version (11 or 12)
   is in the base image and how it applies `allowScripts`. Docker is verified only in the
-  deployed environment, not on the dev Mac (no Docker here); the `edge` image build on CI is
-  the earliest signal.
+  deployed environment, not on the dev Mac (no Docker here); the `image-smoke` job on every
+  PR (build, boot, `/api/health`, the healthcheck command) is the earliest signal.
 - The preview harness exports `PORT=5173`; that's why `dev:server` pins `PORT=3000` and the
   `prod` config pins `PORT=8090`.
 - `client/public/sw.js` is intentionally a pass-through service worker (installability only).
