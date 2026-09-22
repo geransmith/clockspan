@@ -71,7 +71,7 @@ export interface Day {
   sessions: Session[];
 }
 
-/** One row of `GET /days`. */
+/** A day rolled up for the History calendar; built on the client (`daySummaryOf`) from a full `Day`. */
 export interface DaySummary {
   date: string;
   punches: Punch[];

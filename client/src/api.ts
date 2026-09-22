@@ -1,4 +1,4 @@
-import type { AuthInfo, Day, DaySummary, Priority, PruneInfo, PublicUser, Punch, Session, Settings } from './types';
+import type { AuthInfo, Day, Priority, PruneInfo, PublicUser, Punch, Session, Settings } from './types';
 
 export class ApiError extends Error {
   constructor(
@@ -52,7 +52,6 @@ export const putSettings = (patch: Partial<Settings>) => request<Settings>('PUT'
 export const resetSettings = () => request<Settings>('DELETE', '/api/settings');
 
 // ----- days -----
-export const listDays = (limit = 60) => request<{ days: DaySummary[] }>('GET', `/api/days?limit=${limit}`);
 export const getDay = (date: string) => request<Day>('GET', `/api/days/${date}`);
 export const putPunches = (date: string, punches: Punch[]) =>
   request<{ punches: Punch[] }>('PUT', `/api/days/${date}/punches`, { punches: punches.map((p) => ({ at: p.at })) });
