@@ -23,6 +23,11 @@ updates:
     schedule:
       interval: weekly
     labels: [skip-changelog]
+    # One PR for the week's action bumps: the four docker/* actions often release together.
+    # Majors are included; the grouped PR runs the same required checks as any other.
+    groups:
+      actions:
+        patterns: ['*']
 
   # The Dockerfile pins node:24-alpine by digest; a PR here moves the digest when the tag does,
   # and CI's image-smoke job builds and boots it before it can merge.
