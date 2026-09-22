@@ -4,6 +4,7 @@ import type { Session } from '../types';
 import { alert, dismissByTag, unlockAudio, warnQuietly } from '../lib/alerts';
 import { SAVE_FAILED, TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
+import { readStored, writeStored } from '../lib/storage';
 import { activeMs, DUE_GRACE_SECONDS, dueKey, PAUSE_LIMIT_SECONDS, timerView, type TimerView } from '../lib/timer';
 import { useDayStore } from './useDay';
 import { useLatest } from './useLatest';
@@ -44,22 +45,9 @@ const Ctx = createContext<TimerCtx | null>(null);
 const BASE_TITLE = 'Clockspan';
 const IDLE: TimerView = { elapsedSeconds: 0, remainingSeconds: 0, progress: 0, endAt: 0, paused: false, pausedForSeconds: 0, due: false, overrunSeconds: 0 };
 
-// The last planned end that was announced, kept across reloads so the chime plays once per end.
+// The last planned end that was announced, kept across reloads so the chime plays once per
+// end. With storage blocked (private mode) a reload may chime again, nothing worse.
 const DUE_STORAGE_KEY = 'focus:timer-due';
-function readDueKey(): string | null {
-  try {
-    return localStorage.getItem(DUE_STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-function writeDueKey(key: string): void {
-  try {
-    localStorage.setItem(DUE_STORAGE_KEY, key);
-  } catch {
-    // Storage blocked (private mode): a reload may chime again, nothing worse.
-  }
-}
 
 export function TimerProvider({ children }: { children: ReactNode }) {
   const [running, setRunning] = useState<Session | null>(null);
@@ -151,7 +139,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
           return;
         }
         // The chime played when the end came, unless the page was closed then.
-        const chimed = readDueKey() === dueKey(session.id, endAt);
+        const chimed = readStored(DUE_STORAGE_KEY) === dueKey(session.id, endAt);
         alert({
           title: TIMER_DONE.title,
           body: TIMER_DONE.body(session.label, formatCountdown(done.durationSeconds ?? 0)),
@@ -363,8 +351,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     const key = dueKey(running.id, endAt);
     if (announced.current === key) return;
     announced.current = key;
-    const fresh = readDueKey() !== key;
-    writeDueKey(key);
+    const fresh = readStored(DUE_STORAGE_KEY) !== key;
+    writeStored(DUE_STORAGE_KEY, key);
     alert({
       title: TIMER_DUE.title,
       body: TIMER_DUE.body(running.label, formatDuration(running.plannedSeconds)),

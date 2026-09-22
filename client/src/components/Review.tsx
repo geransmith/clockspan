@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
-import * as api from '../api';
+import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
+import { UNTITLED_SESSION } from '../lib/copy';
 import { formatDateShort, formatDuration, formatWeekday } from '../lib/format';
 import { periodRange, reviewRange, type PeriodKind } from '../lib/review';
 import type { Day } from '../types';
 import { Check } from './Icons';
 import { PeriodNav } from './PeriodNav';
+import { Tile } from './Tile';
 
 const KINDS: { id: PeriodKind; label: string }[] = [
   { id: 'week', label: 'Week' },
@@ -34,31 +35,10 @@ interface Props {
 export function Review({ today, now, period: { kind, offset }, onPeriod, onOpen }: Props) {
   const { settings } = useSettings();
   const period = periodRange(kind, today, offset);
-  // The answer is tagged with the range it is for, so stepping to another period reads as
-  // "loading" straight away without clearing state inside the effect.
-  const rangeKey = `${period.from}:${period.to}`;
-  const [fetched, setFetched] = useState<{ key: string; days?: Day[]; error?: string } | null>(null);
-  const current = fetched?.key === rangeKey ? fetched : null;
-  const days = current?.days ?? null;
-  const error = current?.error ?? null;
-
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .getRange(period.from, period.to)
-      .then((r) => {
-        if (!cancelled) setFetched({ key: rangeKey, days: r.days });
-      })
-      .catch((err) => {
-        if (!cancelled) setFetched({ key: rangeKey, error: (err as Error).message });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [period.from, period.to, rangeKey]);
+  const { days, error } = useRange(period.from, period.to);
 
   const pickKind = (k: PeriodKind) => onPeriod({ kind: k, offset: 0 });
-  const dayName = (date: string) => `${formatWeekday(date)} ${formatDateShort(date)}`;
+  const dayLabel = (date: string) => `${formatWeekday(date)} ${formatDateShort(date)}`;
 
   return (
     <section className="card review">
@@ -76,7 +56,7 @@ export function Review({ today, now, period: { kind, offset }, onPeriod, onOpen 
 
       {error && <p className="error">{error}</p>}
       {!error && !days && <div className="sheet-loading" aria-busy="true" />}
-      {days && <Body days={days} today={today} now={now} kind={kind} onOpen={onOpen} dayName={dayName} settings={settings} />}
+      {days && <Body days={days} today={today} now={now} kind={kind} onOpen={onOpen} dayLabel={dayLabel} settings={settings} />}
     </section>
   );
 }
@@ -87,7 +67,7 @@ function Body({
   now,
   kind,
   onOpen,
-  dayName,
+  dayLabel,
   settings,
 }: {
   days: Day[];
@@ -95,13 +75,13 @@ function Body({
   now: number;
   kind: PeriodKind;
   onOpen: (date: string) => void;
-  dayName: (date: string) => string;
+  dayLabel: (date: string) => string;
   settings: ReturnType<typeof useSettings>['settings'];
 }) {
   const r = reviewRange(days, settings, today, now);
   if (r.days === 0) return <p className="muted center review-empty">Nothing recorded this {kind}.</p>;
   const onPlanPct = r.focusedSeconds > 0 ? Math.round((r.onPlanSeconds / r.focusedSeconds) * 100) : null;
-  const when = (date: string) => (kind === 'week' ? formatWeekday(date) : dayName(date));
+  const when = (date: string) => (kind === 'week' ? formatWeekday(date) : dayLabel(date));
 
   return (
     <div className="review-body">
@@ -126,7 +106,7 @@ function Body({
             {r.unplanned.map(({ date, session }) => (
               <li key={session.id}>
                 <button className="review-row" onClick={() => onOpen(date)}>
-                  <span className="review-text">{session.label || <span className="muted">Untitled session</span>}</span>
+                  <span className="review-text">{session.label || <span className="muted">{UNTITLED_SESSION}</span>}</span>
                   <span className="review-meta">
                     <span className="muted small">{when(date)}</span>
                     <span className="review-time">{formatDuration(session.durationSeconds ?? 0)}</span>
@@ -174,7 +154,7 @@ function Body({
               <li key={n.date}>
                 <button className="review-row review-row--note" onClick={() => onOpen(n.date)}>
                   <span className="review-meta review-note-head">
-                    <strong>{dayName(n.date)}</strong>
+                    <strong>{dayLabel(n.date)}</strong>
                     {n.reviewedAt != null && (
                       <span className="pill pill--ok">
                         <Check /> reviewed
@@ -188,16 +168,6 @@ function Body({
           </ul>
         )}
       </section>
-    </div>
-  );
-}
-
-function Tile({ label, value, sub }: { label: string; value: string; sub: string }) {
-  return (
-    <div className="tile">
-      <div className="tile-label">{label}</div>
-      <div className="tile-value">{value}</div>
-      <div className="tile-sub">{sub}</div>
     </div>
   );
 }

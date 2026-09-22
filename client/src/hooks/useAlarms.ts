@@ -4,6 +4,7 @@ import { secondMealApplies, type TimeclockResult } from '../lib/timeclock';
 import { describeEvent, dueEvents, type AlarmTarget } from '../lib/alarms';
 import { alert, dismissByTag } from '../lib/alerts';
 import { resolveHour12 } from '../lib/format';
+import { writeStored } from '../lib/storage';
 
 const STORAGE_PREFIX = 'focus:alarms:';
 
@@ -18,14 +19,6 @@ function loadFired(dateKey: string): Set<string> {
     return new Set(raw ? (JSON.parse(raw) as string[]) : []);
   } catch {
     return new Set();
-  }
-}
-
-function saveFired(dateKey: string, fired: Set<string>): void {
-  try {
-    localStorage.setItem(STORAGE_PREFIX + dateKey, JSON.stringify([...fired]));
-  } catch {
-    // Private mode / quota: alarms may repeat after a reload, which is acceptable.
   }
 }
 
@@ -75,7 +68,8 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     const { fire, crossed } = dueEvents(dateKey, targets, settings.alarms, fired.current.set, now);
     if (crossed.length === 0) return;
     for (const k of crossed) fired.current.set.add(k);
-    saveFired(dateKey, fired.current.set);
+    // With storage blocked (private mode, quota) alarms may repeat after a reload, which is acceptable.
+    writeStored(STORAGE_PREFIX + dateKey, JSON.stringify([...fired.current.set]));
 
     // Every alarm banner is sticky: the chime is what grabs attention, and the banner has to
     // still be there — saying which alarm and why — when the user looks up. The next

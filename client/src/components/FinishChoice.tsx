@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useModalDialog } from '../hooks/useModalDialog';
 import { useTimer } from '../hooks/useTimer';
 import { FINISH_CHOICE } from '../lib/copy';
 import { formatDuration } from '../lib/format';
@@ -15,34 +15,11 @@ export function FinishChoice() {
 
 function Choice() {
   const { running, elapsedSeconds, overrunSeconds, finish, dismissFinishChoice } = useTimer();
-  // Same native modal as Settings: rendered closed, opened here, focus on the frame so the
-  // title is read out and Enter can't fire a button before the question is seen.
-  const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const el = dialog.current!;
-    el.showModal();
-    el.focus();
-    document.body.classList.add('no-scroll');
-    return () => {
-      el.close();
-      document.body.classList.remove('no-scroll');
-    };
-  }, []);
+  // Same native modal as Settings: focus on the frame, so Enter can't fire a button before the question is seen.
+  const dialog = useModalDialog(dismissFinishChoice);
   if (!running) return null;
   return (
-    // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the backdrop has no element of its own
-    <dialog
-      ref={dialog}
-      className="dialog finish-choice"
-      tabIndex={-1}
-      aria-labelledby="finish-choice-title"
-      onCancel={(e) => {
-        e.preventDefault();
-        dismissFinishChoice();
-      }}
-      onKeyDown={(e) => e.key === 'Escape' && dismissFinishChoice()}
-      onMouseDown={(e) => e.target === e.currentTarget && dismissFinishChoice()}
-    >
+    <dialog {...dialog} className="dialog finish-choice" aria-labelledby="finish-choice-title">
       <div className="dialog-inner">
         <header className="dialog-head">
           <h2 id="finish-choice-title">{FINISH_CHOICE.title}</h2>

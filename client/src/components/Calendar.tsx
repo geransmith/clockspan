@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import * as api from '../api';
+import { useMemo, useState } from 'react';
 import { useDay } from '../hooks/useDay';
+import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
 import { calendarMonth } from '../lib/calendar';
 import { STICKERS_EMPTY } from '../lib/copy';
@@ -11,6 +11,7 @@ import { timeclockForDate } from '../lib/timeclock';
 import type { Day } from '../types';
 import { Check } from './Icons';
 import { PeriodNav, PeriodReset } from './PeriodNav';
+import { Tile } from './Tile';
 
 interface Props {
   today: string;
@@ -33,35 +34,16 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
   const [selected, setSelected] = useState<string | null>(date > today ? null : date);
   const [filter, setFilter] = useState<StickerId | null>(null);
   const period = periodRange('month', today, offset);
-  // Tagged with its range, like the review, so a step reads as loading straight away.
-  const rangeKey = `${period.from}:${period.to}`;
-  const [fetched, setFetched] = useState<{ key: string; days?: Day[]; error?: string } | null>(null);
-  const current = fetched?.key === rangeKey ? fetched : null;
-  const error = current?.error ?? null;
+  const { days: fetched, error } = useRange(period.from, period.to);
   // Today comes from the live day so a punch or a tick shows without a refetch.
   const { day: liveToday } = useDay(today);
 
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .getRange(period.from, period.to)
-      .then((r) => {
-        if (!cancelled) setFetched({ key: rangeKey, days: r.days });
-      })
-      .catch((err) => {
-        if (!cancelled) setFetched({ key: rangeKey, error: (err as Error).message });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [period.from, period.to, rangeKey]);
-
   const days = useMemo(() => {
-    if (!current?.days) return null;
-    const byDate = new Map(current.days.map((d) => [d.date, d]));
+    if (!fetched) return null;
+    const byDate = new Map(fetched.map((d) => [d.date, d]));
     if (liveToday && today >= period.from && today <= period.to) byDate.set(today, liveToday);
     return byDate;
-  }, [current, liveToday, today, period.from, period.to]);
+  }, [fetched, liveToday, today, period.from, period.to]);
   const weeks = useMemo(
     () => (days ? calendarMonth([...days.values()].map(daySummaryOf), settings, today, now, period.from, settings.showWeekends) : null),
     [days, settings, today, now, period.from],
@@ -256,15 +238,5 @@ function DayDetail({
         </button>
       </div>
     </>
-  );
-}
-
-function Tile({ label, value, sub }: { label: string; value: string; sub: string }) {
-  return (
-    <div className="tile">
-      <div className="tile-label">{label}</div>
-      <div className="tile-value">{value}</div>
-      {sub && <div className="tile-sub">{sub}</div>}
-    </div>
   );
 }

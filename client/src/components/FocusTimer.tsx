@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useSettings } from '../hooks/useSettings';
 import { useTimer } from '../hooks/useTimer';
-import { CONFIRM, TIMER_DUE } from '../lib/copy';
+import { CONFIRM, TIMER_DUE, UNTITLED_SESSION } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
 import { LIMITS, type Priority } from '../types';
 import { Check, Minus, Pause, Play, Plus, X } from './Icons';
@@ -130,7 +130,7 @@ function Running() {
           <div className="muted small">{subline}</div>
         </div>
       </div>
-      <div className="timer-running-label">{running.label || <span className="muted">Untitled session</span>}</div>
+      <div className="timer-running-label">{running.label || <span className="muted">{UNTITLED_SESSION}</span>}</div>
       <div className="timer-controls">
         {!due && (
           <button className="btn" onClick={() => void adjust(-step * 60)}>

@@ -1,7 +1,7 @@
-import type { Day, Session, Settings } from '../types';
-import { addDays, addMonths, endOfDay, formatDateSpan, formatMonth, parseDateKey, startOfMonth, startOfQuarter, startOfWeek } from './format';
+import type { Day, Session } from '../types';
+import { addDays, addMonths, formatDateSpan, formatMonth, parseDateKey, startOfMonth, startOfQuarter, startOfWeek } from './format';
 import { reviewDay } from './retro';
-import { computeTimeclock } from './timeclock';
+import { timeclockForDate, type TimeclockSettings } from './timeclock';
 
 export type PeriodKind = 'week' | 'month' | 'quarter';
 
@@ -81,13 +81,11 @@ export interface RangeReview {
   notes: { date: string; note: string; reviewedAt: number | null }[];
 }
 
-type TcSettings = Pick<Settings, 'workMinutes' | 'lunchDeadlineMinutes' | 'lunchMinutes' | 'secondMealAfterMinutes'>;
-
 /**
  * Roll a range of full days up into one review. Worked time comes from the same timeclock
  * math as the sheet, frozen for past days; everything else reuses `reviewDay`.
  */
-export function reviewRange(days: Day[], settings: TcSettings, today: string, now: number): RangeReview {
+export function reviewRange(days: Day[], settings: TimeclockSettings, today: string, now: number): RangeReview {
   const out: RangeReview = {
     days: 0,
     workedSeconds: 0,
@@ -102,8 +100,7 @@ export function reviewRange(days: Day[], settings: TcSettings, today: string, no
     notes: [],
   };
   for (const day of [...days].sort((a, b) => a.date.localeCompare(b.date))) {
-    const isToday = day.date === today;
-    const tc = computeTimeclock(day.punches, settings, isToday ? now : Math.min(now, endOfDay(day.date)), { frozen: !isToday });
+    const tc = timeclockForDate(day.punches, settings, day.date, today, now);
     const r = reviewDay(day.priorities, day.sessions);
     const hasSomething = tc.clockIn != null || r.total > 0 || r.unplanned.length > 0 || r.onPlanSeconds > 0 || day.retroNote.trim() !== '';
     if (!hasSomething) continue;

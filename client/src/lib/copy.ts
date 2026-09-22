@@ -139,6 +139,9 @@ export const TIMER_ELSEWHERE = {
   body: 'It was started on another device. This sheet now shows that one.',
 } as const;
 
+/** A session logged without a label, wherever sessions are listed. */
+export const UNTITLED_SESSION = 'Untitled session';
+
 /** Placeholder for the day's retrospective note. */
 export const RETRO_PROMPT = 'What got in the way? What went to plan?';
 

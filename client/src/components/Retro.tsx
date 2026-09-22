@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { RETRO_PROMPT } from '../lib/copy';
+import { RETRO_PROMPT, UNTITLED_SESSION } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { formatDuration } from '../lib/format';
 import { reviewDay } from '../lib/retro';
@@ -113,7 +113,7 @@ export function Retro({ priorities, sessions, note, reviewedAt, onChange }: Prop
               <li key={s.id} className="retro-row retro-row--unplanned">
                 <span className="retro-tick" aria-hidden="true" />
                 <span className="retro-text">
-                  {s.label || <span className="muted">Untitled session</span>}
+                  {s.label || <span className="muted">{UNTITLED_SESSION}</span>}
                   <span className="muted small retro-when"> {formatTime(s.startedAt)}</span>
                 </span>
                 <span className="retro-time">{formatDuration(s.durationSeconds ?? 0)}</span>
