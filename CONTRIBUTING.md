@@ -92,9 +92,11 @@ gh run rerun <run-id> --failed
 
 | Event | Jobs | Result |
 | --- | --- | --- |
-| Pull request | `check` | typecheck, lint, test, build; a version that already has a tag fails |
+| Pull request | `check`, `image-smoke` | typecheck, lint, test, build; a version that already has a tag fails. The image is built and booted (health, SPA shell, `/data` owner, the healthcheck command) and never pushed |
 | Push to `main` | `check`, `image` | `ghcr.io/geransmith/clockspan:edge` |
 | Push to `main` that changes the version | `check`, `image`, `release` | `:edge`, `:X.Y.Z`, `:X.Y`, `:latest`, the tag `vX.Y.Z` and the GitHub Release |
+
+A newer push to a pull request cancels that PR's older run; runs on `main` are never cancelled.
 
 Image tags: `latest` is the newest release, `X.Y.Z` and `X.Y` pin a release, `edge` is the
 latest commit on `main` and has only passed CI.
