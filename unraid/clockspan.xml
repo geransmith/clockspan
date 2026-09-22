@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>clockspan</Name>
+  <Repository>ghcr.io/geransmith/clockspan:latest</Repository>
+  <Registry>https://github.com/geransmith/clockspan/pkgs/container/clockspan</Registry>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/geransmith/clockspan/issues</Support>
+  <Project>https://github.com/geransmith/clockspan</Project>
+  <Overview>Clockspan is a self-hosted, single-day focus sheet for getting through a workday with ADHD. One page: a punch-style timeclock that works out when lunch is due and when the day ends, the few things that would make today a win, a focus timer that logs what you did, and a retrospective that puts the plan next to what happened. Every day is saved, and alarms fire as deadlines approach. It works on phones and installs to the Home Screen.
+
+The default sign-in mode, none, has no login: use it on a LAN or behind your reverse proxy's own authentication. Pick local or oidc before you expose Clockspan to the internet.</Overview>
+  <Category>Productivity: Tools:Utilities</Category>
+  <ExtraSearchTerms>adhd timeclock punch clock focus timer pomodoro priorities time tracking</ExtraSearchTerms>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/geransmith/clockspan/main/unraid/clockspan.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/geransmith/clockspan/main/client/public/icons/icon-512.png</Icon>
+  <License>MIT</License>
+  <Screenshot>https://raw.githubusercontent.com/geransmith/clockspan/main/docs/screenshots/sheet-phone-light.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/geransmith/clockspan/main/docs/screenshots/sheet-desktop.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/geransmith/clockspan/main/docs/screenshots/history.png</Screenshot>
+  <Config Name="Web UI port" Target="8080" Default="8080" Mode="tcp" Description="Port for the web UI." Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/clockspan" Mode="rw" Description="Folder for the database (focus.db). The container takes ownership of it as PUID:PGID." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/clockspan</Config>
+  <Config Name="Sign-in mode" Target="AUTH_MODE" Default="none|local|oidc" Description="none: no sign-in (LAN, or behind your proxy's own auth). local: the first visit creates the admin account, and the admin adds users in Settings. oidc: sign in with Authentik or another OpenID Connect provider; needs App URL and the OIDC fields." Type="Variable" Display="always" Required="true" Mask="false">none</Config>
+  <Config Name="App URL" Target="APP_URL" Default="" Description="Public URL of the app, e.g. https://focus.example.com. Required for oidc, and recommended whenever you reach the app through a domain. With https the session cookie is Secure and HSTS is on. Your provider's redirect URI must be this URL followed by /auth/callback." Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="Trusted proxies" Target="TRUST_PROXY" Default="" Description="Behind a reverse proxy (Nginx Proxy Manager, SWAG, Traefik): the number of proxies between the internet and the container, usually 1. Blank: none. Never true, which trusts any X-Forwarded-For a client sends and defeats the login rate limit." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Secure cookie" Target="COOKIE_SECURE" Default="" Description="true or false forces the session cookie's Secure flag. Blank: Secure when App URL is https." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Session days" Target="SESSION_TTL_DAYS" Default="30" Description="Sliding session lifetime in days." Type="Variable" Display="advanced" Required="false" Mask="false">30</Config>
+  <Config Name="Keep days" Target="RETENTION_DAYS" Default="" Description="Server-wide ceiling on history, in days (30 or more): every user's older days are deleted every few hours. Blank keeps everything; users can pick a shorter limit in Settings → Data." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="OIDC issuer" Target="OIDC_ISSUER" Default="" Description="For oidc. Authentik: Providers → your provider → OpenID Configuration Issuer." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="OIDC client ID" Target="OIDC_CLIENT_ID" Default="" Description="For oidc: the client ID from your provider." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="OIDC client secret" Target="OIDC_CLIENT_SECRET" Default="" Description="For oidc: the client secret from your provider." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="OIDC scopes" Target="OIDC_SCOPES" Default="openid profile email" Description="For oidc: the scopes to request." Type="Variable" Display="advanced" Required="false" Mask="false">openid profile email</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Description="User ID that owns the data folder and runs the app. 99 is Unraid's nobody; 0 keeps root." Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Description="Group ID for the same. 100 is Unraid's users." Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
+</Container>

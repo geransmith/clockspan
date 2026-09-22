@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<CommunityApplications>
+  <Profile>This repository holds **Clockspan**, a self-hosted, single-day focus sheet for a workday with ADHD: a punch-style timeclock with lunch and clock-out alarms, the day's priorities, and a focus timer that logs what you did. The README covers setup, sign-in modes and backups. Questions and bug reports go to [GitHub Issues](https://github.com/geransmith/clockspan/issues).</Profile>
+  <Icon>https://raw.githubusercontent.com/geransmith/clockspan/main/client/public/icons/icon-512.png</Icon>
+  <WebPage>https://github.com/geransmith/clockspan</WebPage>
+</CommunityApplications>

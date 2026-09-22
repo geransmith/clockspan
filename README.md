@@ -152,9 +152,19 @@ docker compose pull && docker compose up -d
 
 The database in the mounted volume is untouched. To build from source instead, `docker build -t ghcr.io/geransmith/clockspan:latest .` and then `docker compose up -d`; the local image wins over the registry.
 
+### Unraid
+
+The Unraid template, [`unraid/clockspan.xml`](unraid/clockspan.xml), keeps the database in `/mnt/user/appdata/clockspan`, runs the app as `99:100` (`PUID`/`PGID`) and serves it on port 8080. Every variable below is a field on its form: the sign-in mode is a dropdown, and the rest are under *Show more settings*. Fields left blank take the defaults.
+
+If Clockspan isn't in the Apps tab yet, add the template by hand from the Unraid terminal, then pick **clockspan** under *Docker → Add Container → Template*:
+
+```bash
+wget -O /boot/config/plugins/dockerMan/templates-user/my-clockspan.xml https://raw.githubusercontent.com/geransmith/clockspan/main/unraid/clockspan.xml
+```
+
 ### Environment variables
 
-Set these in `.env` (start from `.env.example`, which documents each one). A variable set to an empty value counts as unset, so its default applies.
+Set these in `.env` (start from `.env.example`, which documents each one) or in the Unraid template's fields. A variable set to an empty value counts as unset, so its default applies.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
