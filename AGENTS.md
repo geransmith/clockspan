@@ -142,6 +142,8 @@ docker/entrypoint.sh    PUID/PGID (default 1000/1000) → chown /data + su-exec;
 Dockerfile docker-compose.yml .env.example README.md .oxlintrc.json
 CONTRIBUTING.md         PR and release rules (imported by CLAUDE.md; see "Branches, PRs and releases")
 .github/workflows/ci.yml  check (+ image-smoke on PRs) → image (ghcr.io) → release (on a version bump); .github/release.yml groups notes by label
+.github/workflows/dependabot-automerge.yml  squash auto-merge for Dependabot PRs that pass (not majors)
+.github/workflows/workflow-lint.yml  zizmor on any change under .github/ (not a required check)
 ```
 
 ## Commands
