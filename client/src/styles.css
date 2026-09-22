@@ -1936,6 +1936,10 @@ dialog.dialog::backdrop {
   flex-direction: column;
   gap: 8px;
 }
+/* A dialog without a footer (settings): the body clears the home indicator itself. */
+.dialog-body:last-child {
+  padding-bottom: calc(24px + var(--safe-bottom));
+}
 /* Pinned under the scrolling body; carries the home-indicator inset on phones. */
 .dialog-foot {
   flex: none;
