@@ -79,7 +79,8 @@ export function daysRouter(db: DB, config: Config): Router {
   const r = Router();
 
   // Recent days with enough data for the history list. Worked time is computed on the
-  // client from punches so the timeclock math has a single home.
+  // client from punches so the timeclock math has a single home. focus_ms is `activeMs`
+  // (shared/timer.ts) in SQL: a finished session's span minus its pauses.
   r.get('/', (req, res) => {
     const user = currentUser(req);
     const limitRaw = Number(req.query.limit ?? 60);
@@ -87,7 +88,7 @@ export function daysRouter(db: DB, config: Config): Router {
     const days = db
       .prepare(
         `SELECT d.id, d.date, d.retro_at,
-           (SELECT COALESCE(SUM(ended_at - started_at), 0) FROM sessions s
+           (SELECT COALESCE(SUM(ended_at - started_at - paused_seconds * 1000), 0) FROM sessions s
               WHERE s.day_id = d.id AND s.status = 'completed') AS focus_ms,
            (SELECT COUNT(*) FROM priorities p WHERE p.day_id = d.id AND p.done = 1 AND p.text <> '') AS priorities_done,
            (SELECT COUNT(*) FROM priorities p WHERE p.day_id = d.id AND p.text <> '') AS priorities_total

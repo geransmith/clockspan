@@ -2,8 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as api from '../api';
 import type { Session } from '../types';
 import { alert, unlockAudio, warnQuietly } from '../lib/alerts';
-import { SAVE_FAILED, TIMER_DONE, TIMER_ELSEWHERE } from '../lib/copy';
-import { formatCountdown } from '../lib/format';
+import { SAVE_FAILED, TIMER_DONE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
+import { formatCountdown, formatDuration } from '../lib/format';
+import { activeMs, PAUSE_LIMIT_SECONDS, timerView, type TimerView } from '../lib/timer';
 import { useDayStore } from './useDay';
 import { useLatest } from './useLatest';
 import { useNow } from './useNow';
@@ -12,20 +13,24 @@ import { useWakeLock } from './useWakeLock';
 
 interface TimerCtx {
   running: Session | null;
-  /** Seconds left; 0 once complete. Derived from the server's startedAt every tick. */
+  /** Seconds left; 0 once complete. Derived from the server's startedAt and pauses every tick. */
   remainingSeconds: number;
   elapsedSeconds: number;
   /** 0..1 */
   progress: number;
+  paused: boolean;
   start: (date: string, plannedSeconds: number, label: string, priorityUid?: string | null) => Promise<void>;
   adjust: (deltaSeconds: number) => Promise<void>;
   setLabel: (label: string) => Promise<void>;
+  pause: () => Promise<void>;
+  resume: () => Promise<void>;
   finish: () => Promise<void>;
   cancel: () => Promise<void>;
 }
 
 const Ctx = createContext<TimerCtx | null>(null);
 const BASE_TITLE = 'Clockspan';
+const IDLE: TimerView = { elapsedSeconds: 0, remainingSeconds: 0, progress: 0, endAt: 0, paused: false, pausedForSeconds: 0 };
 
 export function TimerProvider({ children }: { children: ReactNode }) {
   const [running, setRunning] = useState<Session | null>(null);
@@ -81,15 +86,15 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     };
   }, [sync]);
 
-  const endAt = running ? running.startedAt + running.plannedSeconds * 1000 : 0;
-  const elapsedSeconds = running ? Math.max(0, Math.floor((now - running.startedAt) / 1000)) : 0;
-  const remainingSeconds = running ? Math.max(0, Math.ceil((endAt - now) / 1000)) : 0;
-  const progress = running ? Math.min(1, elapsedSeconds / running.plannedSeconds) : 0;
+  const { elapsedSeconds, remainingSeconds, progress, endAt, paused, pausedForSeconds } = running ? timerView(running, now) : IDLE;
 
-  // Completion: the planned end has passed. Also covers a timer that expired while the
-  // page was closed — the server clamps ended_at to the planned end.
+  // Completion: the planned end has passed (also a timer that expired while the page was
+  // closed — the server clamps ended_at to the planned end), or a pause was left for an hour
+  // (the server ends the session where the pause began, so nothing after it is logged).
   useEffect(() => {
-    if (!running || now < endAt || completing.current || now < retry.current.at) return;
+    if (!running || completing.current || now < retry.current.at) return;
+    const forgotten = pausedForSeconds >= PAUSE_LIMIT_SECONDS;
+    if (now < endAt && !forgotten) return;
     completing.current = true;
     mutationSeq.current++;
     const session = running;
@@ -101,6 +106,17 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         setRunning(null);
         // Cancelled on another device before this one heard: nothing to celebrate.
         if (done.status !== 'completed') return;
+        if (forgotten) {
+          alert({
+            title: TIMER_PAUSED_OUT.title,
+            body: TIMER_PAUSED_OUT.body(session.label, formatDuration(done.durationSeconds ?? 0)),
+            tone: 'info',
+            tag: 'timer-complete',
+            sound: false,
+            notifications: false,
+          });
+          return;
+        }
         alert({
           title: TIMER_DONE.title,
           body: TIMER_DONE.body(session.label, formatCountdown(done.durationSeconds ?? 0)),
@@ -118,13 +134,15 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       .finally(() => {
         completing.current = false;
       });
-  }, [running, now, endAt, store, settings.sound, settings.sounds.timer, settings.notifications]);
+  }, [running, now, endAt, pausedForSeconds, store, settings.sound, settings.sounds.timer, settings.notifications]);
 
-  useWakeLock(running != null && settings.keepScreenAwake);
+  useWakeLock(running != null && !paused && settings.keepScreenAwake);
 
   useEffect(() => {
-    document.title = running ? `${formatCountdown(remainingSeconds)}${running.label ? ` · ${running.label}` : ''} — ${BASE_TITLE}` : BASE_TITLE;
-  }, [running, remainingSeconds]);
+    document.title = running
+      ? `${paused ? 'Paused ' : ''}${formatCountdown(remainingSeconds)}${running.label ? ` · ${running.label}` : ''} — ${BASE_TITLE}`
+      : BASE_TITLE;
+  }, [running, remainingSeconds, paused]);
 
   const start = useCallback(
     async (date: string, plannedSeconds: number, label: string, priorityUid: string | null = null) => {
@@ -170,7 +188,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         const cur = runningRef.current;
         if (!cur) return;
         mutationSeq.current++;
-        const elapsed = Math.floor((Date.now() - cur.startedAt) / 1000);
+        const elapsed = Math.floor(activeMs(cur, Date.now()) / 1000);
         const next = Math.max(60, cur.plannedSeconds + deltaSeconds);
         if (next <= elapsed) {
           // Shrinking below what's already elapsed means "I'm done now".
@@ -212,6 +230,50 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     [attempt, runningRef],
   );
 
+  // Pause and resume are optimistic like adjust; the server's row is adopted only if the
+  // user hasn't flipped it again meanwhile, and a failure puts the pause fields back.
+  const pause = useCallback(
+    () =>
+      attempt(async () => {
+        const cur = runningRef.current;
+        if (!cur || cur.pausedAt != null) return;
+        mutationSeq.current++;
+        const optimistic = { ...cur, pausedAt: Date.now() };
+        runningRef.current = optimistic;
+        setRunning(optimistic);
+        try {
+          const { session } = await api.pauseSession(cur.id);
+          store.applySession(session); // the log row's pill reads the day's copy
+          setRunning((latest) => (latest && latest.id === session.id && latest.pausedAt != null ? session : latest));
+        } catch (err) {
+          setRunning((latest) => (latest && latest.id === cur.id ? { ...latest, pausedAt: cur.pausedAt, pausedSeconds: cur.pausedSeconds } : latest));
+          throw err;
+        }
+      }),
+    [attempt, store, runningRef],
+  );
+
+  const resume = useCallback(
+    () =>
+      attempt(async () => {
+        const cur = runningRef.current;
+        if (!cur || cur.pausedAt == null) return;
+        mutationSeq.current++;
+        const optimistic = { ...cur, pausedAt: null, pausedSeconds: cur.pausedSeconds + Math.round((Date.now() - cur.pausedAt) / 1000) };
+        runningRef.current = optimistic;
+        setRunning(optimistic);
+        try {
+          const { session } = await api.resumeSession(cur.id);
+          store.applySession(session);
+          setRunning((latest) => (latest && latest.id === session.id && latest.pausedAt == null ? session : latest));
+        } catch (err) {
+          setRunning((latest) => (latest && latest.id === cur.id ? { ...latest, pausedAt: cur.pausedAt, pausedSeconds: cur.pausedSeconds } : latest));
+          throw err;
+        }
+      }),
+    [attempt, store, runningRef],
+  );
+
   const finish = useCallback(
     () =>
       attempt(async () => {
@@ -239,8 +301,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ running, remainingSeconds, elapsedSeconds, progress, start, adjust, setLabel, finish, cancel }),
-    [running, remainingSeconds, elapsedSeconds, progress, start, adjust, setLabel, finish, cancel],
+    () => ({ running, remainingSeconds, elapsedSeconds, progress, paused, start, adjust, setLabel, pause, resume, finish, cancel }),
+    [running, remainingSeconds, elapsedSeconds, progress, paused, start, adjust, setLabel, pause, resume, finish, cancel],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

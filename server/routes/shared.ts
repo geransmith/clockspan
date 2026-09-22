@@ -2,6 +2,7 @@ import type { RequestHandler } from 'express';
 import type { DB } from '../db.js';
 import { isValidDateKey } from '../../shared/dates.js';
 import type { Session } from '../../shared/api.js';
+import { activeMs } from '../../shared/timer.js';
 
 /** Guards a `/:date` route: 400 unless the param is a real `YYYY-MM-DD`. Works under `mergeParams` too. */
 export const requireDate: RequestHandler = (req, res, next) => {
@@ -49,9 +50,12 @@ export interface SessionRow {
   ended_at: number | null;
   status: 'running' | 'completed' | 'cancelled';
   priority_uid: string | null;
+  paused_seconds: number;
+  paused_at: number | null;
 }
 
 export function sessionRowToJson(s: SessionRow & { date: string }): Session {
+  const timing = { startedAt: s.started_at, pausedSeconds: s.paused_seconds, pausedAt: s.paused_at };
   return {
     id: s.id,
     date: s.date,
@@ -61,7 +65,9 @@ export function sessionRowToJson(s: SessionRow & { date: string }): Session {
     startedAt: s.started_at,
     endedAt: s.ended_at,
     status: s.status,
-    durationSeconds: s.ended_at != null ? Math.round((s.ended_at - s.started_at) / 1000) : null,
+    pausedSeconds: s.paused_seconds,
+    pausedAt: s.paused_at,
+    durationSeconds: s.ended_at != null ? Math.round(activeMs(timing, s.ended_at) / 1000) : null,
     priorityUid: s.priority_uid,
   };
 }

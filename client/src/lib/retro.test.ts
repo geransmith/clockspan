@@ -19,6 +19,8 @@ const session = (id: number, startedAt: number, seconds: number, extra: Partial<
   startedAt,
   endedAt: startedAt + seconds * 1000,
   status: 'completed',
+  pausedSeconds: 0,
+  pausedAt: null,
   durationSeconds: seconds,
   priorityUid: null,
   ...extra,

@@ -48,6 +48,11 @@ export interface Session {
   startedAt: number;
   endedAt: number | null;
   status: SessionStatus;
+  /** Pauses that have ended, in total; the open one (`pausedAt`) is not in here yet. */
+  pausedSeconds: number;
+  /** When the current pause began; null while counting down or once ended. */
+  pausedAt: number | null;
+  /** Focus time once ended: the span minus its pauses. */
   durationSeconds: number | null;
   /** The priority this session was for; null (or a removed row's uid) means unplanned. */
   priorityUid: string | null;

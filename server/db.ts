@@ -89,6 +89,12 @@ export const MIGRATIONS: string[] = [
   DROP INDEX sessions_running;
   CREATE UNIQUE INDEX sessions_running ON sessions(user_id) WHERE status = 'running';
   `,
+  // Pause: a paused session stays 'running' (one per user, the bar, the prune guard) with
+  // paused_at set; paused_seconds is the total of the pauses that have already ended.
+  `
+  ALTER TABLE sessions ADD COLUMN paused_seconds INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE sessions ADD COLUMN paused_at INTEGER;
+  `,
 ];
 
 export function openDatabase(dbPath: string): DB {
