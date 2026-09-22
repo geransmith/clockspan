@@ -261,10 +261,34 @@ describe('notifications', () => {
     expect(FakeNotification.created).toHaveLength(1);
   });
 
-  it('swallows a constructor that only works from a service worker', () => {
+  it('shows it through the service worker where the constructor is refused (Chrome on Android)', async () => {
     FakeNotification.failConstructor = true;
-    expect(() => alerts.alert({ title: 'x', tone: 'info', tag: 'x', sound: false, notifications: true })).not.toThrow();
+    const shown: [string, NotificationOptions][] = [];
+    const showNotification = (title: string, options: NotificationOptions) => {
+      shown.push([title, options]);
+      return Promise.resolve();
+    };
+    vi.stubGlobal('navigator', { serviceWorker: { getRegistration: () => Promise.resolve({ showNotification }) } });
+    alerts.alert({ title: 'Clock out', body: 'now', tone: 'danger', tag: 'co', sound: false, notifications: true });
+    await flush();
+    expect(shown).toEqual([['Clock out', { body: 'now', tag: 'co', silent: true }]]);
     expect(alerts.getBanners()).toHaveLength(1);
+  });
+
+  it('leaves just the banner when there is no worker to ask, or it refuses', async () => {
+    FakeNotification.failConstructor = true;
+    const raise = (tag: string) => alerts.alert({ title: tag, tone: 'info', tag, sound: false, notifications: true });
+    // Plain http on the LAN: no serviceWorker at all.
+    vi.stubGlobal('navigator', {});
+    expect(() => raise('http')).not.toThrow();
+    // A dev build registers none.
+    vi.stubGlobal('navigator', { serviceWorker: { getRegistration: () => Promise.resolve(undefined) } });
+    raise('dev');
+    // The browser says no.
+    vi.stubGlobal('navigator', { serviceWorker: { getRegistration: () => Promise.reject(new Error('refused')) } });
+    raise('refused');
+    await flush();
+    expect(alerts.getBanners().map((b) => b.tag)).toEqual(['http', 'dev', 'refused']);
   });
 });
 

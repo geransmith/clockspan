@@ -155,14 +155,29 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 
 function notify(title: string, body: string | undefined, tag: string): void {
   if (!notificationsSupported() || Notification.permission !== 'granted') return;
+  const options: NotificationOptions = { body, tag, silent: true };
   try {
-    const n = new Notification(title, { body, tag, silent: true });
+    const n = new Notification(title, options);
     n.onclick = () => {
       window.focus();
       n.close();
     };
   } catch {
-    // Some browsers only allow notifications from a service worker; silently skip.
+    // Chrome on Android (and, it seems, installed iOS web apps) refuse the constructor and
+    // only show a notification through the service worker; its `notificationclick` handler
+    // in public/sw.js brings the app forward.
+    void notifyFromWorker(title, options);
+  }
+}
+
+async function notifyFromWorker(title: string, options: NotificationOptions): Promise<void> {
+  try {
+    // `serviceWorker` is missing outside a secure context (plain http on the LAN), and a dev
+    // build registers no worker; the banner is still there either way.
+    const registration = await navigator.serviceWorker?.getRegistration();
+    await registration?.showNotification(title, options);
+  } catch {
+    // The browser refused; the banner is still there.
   }
 }
 
