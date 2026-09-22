@@ -23,6 +23,11 @@ updates:
     schedule:
       interval: weekly
     labels: [skip-changelog]
+    # One PR for the week's action bumps: the four docker/* actions often release together.
+    # Majors are included; the grouped PR runs the same required checks as any other.
+    groups:
+      actions:
+        patterns: ['*']
 
   - package-ecosystem: docker
     directory: /
