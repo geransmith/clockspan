@@ -4,7 +4,9 @@ import { addDays, dayName, formatDateLong } from '../lib/format';
 import { ChevronLeft, ChevronRight, Gear, Layout, List } from './Icons';
 
 interface Props {
-  route: Route;
+  view: Route['view'];
+  /** The date on screen (today when the route holds none). */
+  date: string;
   today: string;
   customize: boolean;
   onNavigate: (next: Partial<Route>) => void;
@@ -12,10 +14,10 @@ interface Props {
   onOpenSettings: () => void;
 }
 
-export function Header({ route, today, customize, onNavigate, onToggleCustomize, onOpenSettings }: Props) {
+export function Header({ view, date, today, customize, onNavigate, onToggleCustomize, onOpenSettings }: Props) {
   const { auth, signOut } = useAuth();
-  const onSheet = route.view === 'sheet';
-  const isToday = route.date === today;
+  const onSheet = view === 'sheet';
+  const isToday = date === today;
 
   return (
     <header className="topbar">
@@ -61,22 +63,22 @@ export function Header({ route, today, customize, onNavigate, onToggleCustomize,
       </div>
       {onSheet && (
         <div className="topbar-row datenav">
-          <button className="btn btn-icon" onClick={() => onNavigate({ date: addDays(route.date, -1) })} aria-label="Previous day">
+          <button className="btn btn-icon" onClick={() => onNavigate({ date: addDays(date, -1) })} aria-label="Previous day">
             <ChevronLeft />
           </button>
           <label className="datenav-label">
-            <span className="datenav-text">{dayName(route.date, today)}</span>
-            {!isToday && <span className="datenav-sub">{formatDateLong(route.date)}</span>}
+            <span className="datenav-text">{dayName(date, today)}</span>
+            {!isToday && <span className="datenav-sub">{formatDateLong(date)}</span>}
             <input
               className="datenav-input"
               type="date"
-              value={route.date}
+              value={date}
               max={today}
               onChange={(e) => e.target.value && onNavigate({ date: e.target.value })}
               aria-label="Pick a date"
             />
           </label>
-          <button className="btn btn-icon" onClick={() => onNavigate({ date: addDays(route.date, 1) })} aria-label="Next day" disabled={route.date >= today}>
+          <button className="btn btn-icon" onClick={() => onNavigate({ date: addDays(date, 1) })} aria-label="Next day" disabled={date >= today}>
             <ChevronRight />
           </button>
           {!isToday && (

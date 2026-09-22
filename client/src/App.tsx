@@ -51,6 +51,8 @@ function Shell() {
   // for the settings, like the timer's alerts: judged against the defaults, a longer work day
   // would ring the clock-out alarm on load, with the default sound.
   const today = todayKey(now);
+  // The route keeps today as null, so the sheet follows the date over midnight.
+  const date = route.date ?? today;
   const { day: todayDay, store } = useDay(today);
   const refreshing = useRefreshDay(today);
   const [editingPunches, setEditingPunches] = useState(false);
@@ -79,7 +81,8 @@ function Shell() {
       {running && <RunningTimerBar />}
       <Banners />
       <Header
-        route={route}
+        view={route.view}
+        date={date}
         today={today}
         customize={customize}
         onNavigate={navigate}
@@ -88,9 +91,9 @@ function Shell() {
       />
       <main className="main">
         {route.view === 'sheet' ? (
-          <Sheet date={route.date} today={today} now={now} customize={customize} jumpTo={jumpTo} onJumped={onJumped} onPunchEditing={setEditingPunches} />
+          <Sheet date={date} today={today} now={now} customize={customize} jumpTo={jumpTo} onJumped={onJumped} onPunchEditing={setEditingPunches} />
         ) : (
-          <History today={today} now={now} date={route.date} onOpen={(date) => navigate({ view: 'sheet', date })} />
+          <History today={today} now={now} date={date} onOpen={(d) => navigate({ view: 'sheet', date: d })} />
         )}
       </main>
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
