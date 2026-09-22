@@ -434,7 +434,9 @@ repo or the session scratchpad.
   message on a bad value) → cover it in `server/config.test.ts` → document it in
   `.env.example` (commented out, with its default) and the README's variables table.
   `.env.example` is the only place the container is configured; `docker-compose.yml` never
-  lists variables, it only passes `.env` through (`env_file`).
+  lists variables, it only passes `.env` through (`env_file`). `loadConfig` drops empty values
+  before parsing (Unraid passes every template field, blank or not), so an empty variable
+  already means its default; don't test for `''` in the parser.
 
 ## Conventions
 

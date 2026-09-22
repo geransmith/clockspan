@@ -53,7 +53,10 @@ function parseSessionTtlDays(raw: string | undefined): number {
   return n;
 }
 
-export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
+export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env): Config {
+  // Blank means unset. Unraid passes every template field, empty ones included (-e 'NAME'=''),
+  // and so does a compose .env line like `COOKIE_SECURE=`; left in, '' would beat the defaults.
+  const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(rawEnv).filter(([, value]) => value !== ''));
   const authModeRaw = (env.AUTH_MODE ?? 'none').toLowerCase();
   if (!['none', 'local', 'oidc'].includes(authModeRaw)) {
     throw new Error(`AUTH_MODE must be one of none|local|oidc (got "${authModeRaw}")`);

@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from './config.js';
 
@@ -55,6 +56,34 @@ describe('AUTH_MODE', () => {
   it('rejects unknown modes and requires the OIDC settings for oidc', () => {
     expect(() => loadConfig({ AUTH_MODE: 'basic' })).toThrow(/AUTH_MODE must be one of/);
     expect(() => loadConfig({ AUTH_MODE: 'oidc' })).toThrow(/OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, APP_URL/);
+  });
+});
+
+describe('blank values', () => {
+  it('count as unset, so the defaults apply', () => {
+    expect(loadConfig({ AUTH_MODE: '' }).authMode).toBe('none');
+    expect(load({ APP_URL: 'https://focus.example.com', COOKIE_SECURE: '' }).cookieSecure).toBe(true);
+    expect(load({ PORT: '', DATA_DIR: '', APP_URL: '', RETENTION_DAYS: '' })).toMatchObject({
+      port: 3000,
+      dataDir: path.resolve('./data'),
+      appUrl: null,
+      retentionDays: null,
+    });
+    const oidc = loadConfig({
+      AUTH_MODE: 'oidc',
+      APP_URL: 'https://focus.example.com',
+      OIDC_ISSUER: 'https://auth.example.com/',
+      OIDC_CLIENT_ID: 'clockspan',
+      OIDC_CLIENT_SECRET: 'secret',
+      OIDC_SCOPES: '',
+    });
+    expect(oidc.oidc?.scopes).toBe('openid profile email');
+  });
+
+  it('still leave a required OIDC setting missing', () => {
+    expect(() =>
+      loadConfig({ AUTH_MODE: 'oidc', APP_URL: 'https://focus.example.com', OIDC_ISSUER: '', OIDC_CLIENT_ID: 'c', OIDC_CLIENT_SECRET: 's' }),
+    ).toThrow(/requires OIDC_ISSUER\./);
   });
 });
 

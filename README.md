@@ -154,7 +154,7 @@ The database in the mounted volume is untouched. To build from source instead, `
 
 ### Environment variables
 
-Set these in `.env` (start from `.env.example`, which documents each one).
+Set these in `.env` (start from `.env.example`, which documents each one). A variable set to an empty value counts as unset, so its default applies.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
