@@ -75,6 +75,8 @@ server/                 Express API → dist/server (tsc)
 client/                 Vite root → dist/client
   index.html            viewport-fit=cover, theme-color, manifest, apple-mobile-web-app meta
   public/               manifest.webmanifest, icons/, sw.js (pass-through fetch; notificationclick)
+  public/icons/icon.svg the app icon's one source (favicon, manifest); the PNGs next to it,
+                        apple-touch-icon.png included, come from `npm run icons`
   src/App.tsx           provider stack + Shell (route, customize, settings, today's alarms)
   src/api.ts            fetch wrapper; dispatches UNAUTHENTICATED_EVENT on 401
   src/types.ts          re-exports only: the shared wire types (api.ts) and Settings types
@@ -137,6 +139,9 @@ client/                 Vite root → dist/client
                         value / sub, shared by the timeclock, the day panel and the review), Icons
 scripts/screenshots.mjs `npm run screenshots`: dev server (reused or started) + seed + headless
                         Chromium over CDP → docs/screenshots/*.png for the README
+scripts/icons.mjs       `npm run icons`: icon.svg → icon-192/512.png (transparent corners),
+                        icon-maskable-512.png and apple-touch-icon.png (full-bleed)
+scripts/browser.mjs     the headless Chromium both scripts drive: findBrowser, launchBrowser, Cdp, openBrowser
 docs/screenshots/       committed PNGs the README embeds; regenerate after a visible UI change
 docker/entrypoint.sh    PUID/PGID (default 1000/1000) → chown /data + su-exec; 0 keeps root
 Dockerfile docker-compose.yml .env.example README.md .oxlintrc.json
@@ -162,6 +167,7 @@ npm run format         # prettier --write . (format:check is what CI runs)
 npm run seed           # fill data/focus.db with sample days; see "Dev data is disposable"
 npm run screenshots    # regenerate docs/screenshots/ (starts the dev server if needed; finds or
                        # fetches a Chromium into node_modules/.cache; CHROME_BIN to force one)
+npm run icons          # render the PNG icons from client/public/icons/icon.svg (same Chromium)
 npm run build          # dist/client + dist/server + dist/shared
 npm start              # node dist/server/index.js (PORT default 3000; Docker sets 8080)
 npm run reset-password -- <username>
