@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from './config.js';
@@ -96,5 +97,26 @@ describe('COOKIE_SECURE', () => {
     // Explicit wins both ways: TLS terminated at a proxy, or a plain-http test of an https URL.
     expect(load({ APP_URL: 'http://focus.lan', COOKIE_SECURE: 'true' }).cookieSecure).toBe(true);
     expect(load({ APP_URL: 'https://focus.example.com', COOKIE_SECURE: 'false' }).cookieSecure).toBe(false);
+  });
+});
+
+describe('Unraid template', () => {
+  // unraid/clockspan.xml is the form Unraid users configure the container with, so a variable
+  // .env.example documents but the template lacks is one they cannot set.
+  const read = (file: string) => fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+  const fields = [...read('unraid/clockspan.xml').matchAll(/<Config\b[^>]*>/g)].map(([tag]) =>
+    Object.fromEntries([...tag.matchAll(/(\w+)="([^"]*)"/g)].map(([, name, value]) => [name, value])),
+  );
+  const targets = (type: string) => fields.filter((field) => field.Type === type).map((field) => field.Target);
+
+  it('has a field for every variable in .env.example, and no others', () => {
+    // DATA_PATH is Compose's name for the host folder; in the template that is the /data path.
+    const documented = [...read('.env.example').matchAll(/^#?([A-Z][A-Z0-9_]*)=/gm)].map(([, name]) => name).filter((name) => name !== 'DATA_PATH');
+    expect(targets('Variable').sort()).toEqual([...new Set(documented)].sort());
+  });
+
+  it('maps the folder and the port the image uses', () => {
+    expect(targets('Path')).toEqual(['/data']);
+    expect(targets('Port')).toEqual(['8080']);
   });
 });

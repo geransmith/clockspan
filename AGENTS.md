@@ -145,6 +145,12 @@ scripts/browser.mjs     the headless Chromium both scripts drive: findBrowser, l
 docs/screenshots/       committed PNGs the README embeds; regenerate after a visible UI change
 docker/entrypoint.sh    PUID/PGID (default 1000/1000) → chown /data + su-exec; 0 keeps root
 Dockerfile docker-compose.yml .env.example README.md .oxlintrc.json
+unraid/clockspan.xml    the Unraid Community Apps template: a field per .env.example variable
+                        (config.test.ts checks), /data → appdata, PUID/PGID 99/100; its TemplateURL is
+                        its own raw URL on main, so edits reach Unraid users when they merge
+ca_profile.xml          the repository's Community Apps profile; the portal requires it at the root.
+                        Both files point at client/public/icons/icon-512.png and docs/screenshots/*.png
+                        by raw URL on main: moving those files breaks the listing
 CONTRIBUTING.md         PR and release rules (imported by CLAUDE.md; see "Branches, PRs and releases")
 .github/workflows/ci.yml  check (+ image-smoke on PRs) → image (ghcr.io) → release (on a version bump); .github/release.yml groups notes by label
 .github/workflows/dependabot-automerge.yml  squash auto-merge for Dependabot PRs that pass (not majors)
@@ -438,7 +444,8 @@ repo or the session scratchpad.
   `server/app.test.ts`), then the `prod` config check.
 - **A config env var**: parse and validate it in `server/config.ts` (throw with a clear
   message on a bad value) → cover it in `server/config.test.ts` → document it in
-  `.env.example` (commented out, with its default) and the README's variables table.
+  `.env.example` (commented out, with its default) and the README's variables table → add a
+  `Config` field for it to `unraid/clockspan.xml` (`config.test.ts` fails otherwise).
   `.env.example` is the only place the container is configured; `docker-compose.yml` never
   lists variables, it only passes `.env` through (`env_file`). `loadConfig` drops empty values
   before parsing (Unraid passes every template field, blank or not), so an empty variable
