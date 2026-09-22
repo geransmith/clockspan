@@ -97,6 +97,7 @@ gh run rerun <run-id> --failed
 | Push to `main` that changes the version | `check`, `image`, `release` | `:edge`, `:X.Y.Z`, `:X.Y`, `:latest`, the tag `vX.Y.Z` and the GitHub Release |
 
 A newer push to a pull request cancels that PR's older run; runs on `main` are never cancelled.
+Actions are pinned to commit SHAs; Dependabot bumps them (SHA and version comment together).
 
 Image tags: `latest` is the newest release, `X.Y.Z` and `X.Y` pin a release, `edge` is the
 latest commit on `main` and has only passed CI.
