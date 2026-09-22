@@ -6,7 +6,8 @@ on:
     branches: [main] # check + `edge` image; a version bump also publishes the release
 
 # Read-only by default: `check` runs on every PR and needs nothing more. The jobs that
-# publish ask for exactly what they write.
+# publish ask for exactly what they write. Every action is pinned to a commit SHA (a tag can be
+# moved to other code, a SHA can't); Dependabot bumps the SHA and its version comment together.
 permissions:
   contents: read
 
@@ -29,10 +30,10 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       minor: ${{ steps.version.outputs.minor }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2 # HEAD~1, for the version comparison below
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: npm
@@ -81,9 +82,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/build-push-action@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           platforms: linux/amd64
@@ -120,14 +121,14 @@ jobs:
       contents: read
       packages: write # push to ghcr.io
     steps:
-      - uses: actions/checkout@v7
-      - uses: docker/login-action@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.IMAGE }}
           # Every push to main is `edge`; a version bump is also X.Y.Z, X.Y and latest.
@@ -136,8 +137,8 @@ jobs:
             type=raw,value=${{ needs.check.outputs.version }},enable=${{ needs.check.outputs.release == 'true' }}
             type=raw,value=${{ needs.check.outputs.minor }},enable=${{ needs.check.outputs.release == 'true' }}
             type=raw,value=latest,enable=${{ needs.check.outputs.release == 'true' }}
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/build-push-action@v7
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           platforms: linux/amd64
