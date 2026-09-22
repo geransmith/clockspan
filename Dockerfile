@@ -42,4 +42,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
   CMD wget -qO- http://127.0.0.1:${PORT}/api/health >/dev/null || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["node", "dist/server/missing.js"]
+CMD ["node", "dist/server/index.js"]
