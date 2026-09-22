@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CONFIRM, DELETE_DAYS, TIMER_DONE, TIMER_PAUSED_OUT } from './copy';
+import { CONFIRM, DELETE_DAYS, FINISH_CHOICE, TIMER_DONE, TIMER_DUE, TIMER_PAUSED_OUT } from './copy';
 
 describe('copy builders', () => {
   it('names the user in the delete confirm', () => {
@@ -9,6 +9,19 @@ describe('copy builders', () => {
   it('describes a finished timer with or without a label', () => {
     expect(TIMER_DONE.body('Write the report', '25:00')).toBe('Write the report · 25:00');
     expect(TIMER_DONE.body('', '25:00')).toBe('25:00 logged.');
+  });
+
+  it('asks what to do with a timer that ran out', () => {
+    expect(TIMER_DUE.body('Write the report', '25m')).toBe('Write the report · 25m. Finish, or add more time.');
+    expect(TIMER_DUE.body('', '25m')).toBe('25m. Finish, or add more time.');
+    expect(TIMER_DUE.more(5)).toBe('Add 5 min');
+  });
+
+  it('offers both lengths when a late finish has to choose', () => {
+    expect(FINISH_CHOICE.body('3m')).toBe('The timer ran out 3m ago.');
+    expect(FINISH_CHOICE.body(null)).toBe('The timer just ran out.');
+    expect(FINISH_CHOICE.planned('25m')).toBe('Planned · 25m');
+    expect(FINISH_CHOICE.worked('28m')).toBe('Worked · 28m');
   });
 
   it('describes a session closed after a forgotten pause', () => {

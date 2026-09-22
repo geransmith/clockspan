@@ -73,6 +73,7 @@ export const patchSession = (id: number, patch: { plannedSeconds?: number; label
   request<{ session: Session }>('PATCH', `/api/sessions/${id}`, patch);
 export const pauseSession = (id: number) => request<{ session: Session }>('POST', `/api/sessions/${id}/pause`);
 export const resumeSession = (id: number) => request<{ session: Session }>('POST', `/api/sessions/${id}/resume`);
-export const finishSession = (id: number) => request<{ session: Session }>('POST', `/api/sessions/${id}/finish`);
+export const finishSession = (id: number, countOverrun = false) =>
+  request<{ session: Session }>('POST', `/api/sessions/${id}/finish`, countOverrun ? { countOverrun } : undefined);
 export const cancelSession = (id: number) => request<{ session: Session }>('POST', `/api/sessions/${id}/cancel`);
 export const deleteSession = (id: number) => request<{ ok: true }>('DELETE', `/api/sessions/${id}`);

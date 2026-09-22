@@ -106,17 +106,20 @@ client/                 Vite root → dist/client
   src/lib/timefield.ts  PURE: msToTime/timeToMs (epoch ms ↔ @internationalized/date Time on a
                         date key), guessPeriod() (the AM/PM the time field fills in)
   src/lib/timer.ts      PURE: timerView(session, now) → elapsed/remaining/progress/endAt/paused/
-                        pausedForSeconds (what the countdown shows), PAUSE_LIMIT_SECONDS
+                        pausedForSeconds/due/overrunSeconds (what the countdown shows), dueKey(),
+                        PAUSE_LIMIT_SECONDS, DUE_GRACE_SECONDS
   src/lib/layout.ts     CARDS (titles for CARD_IDS), DEFAULT_LAYOUT, normalizeLayout()
   src/hooks/            useSettings (SettingsProvider, optimistic PUT), useDay (per-date cache +
                         setters), useTimer (running session, timerView per tick, pause/resume, the
-                        auto-finish for a run-out or a forgotten pause, mutationSeq re-sync, wake lock,
-                        tab title), useAlarms (fired keys in localStorage per day),
+                        "time's up" prompt, requestFinish → the finish choice, and the auto-finish after
+                        the grace or a forgotten pause, mutationSeq re-sync, wake lock, tab title),
+                        useAlarms (fired keys in localStorage per day),
                         useLatest (ref that tracks a value for callbacks), useNow, useRoute,
                         useSettled, useTimeFormat ({ hour12, formatTime } from the setting), useWakeLock
   src/auth/             AuthGate (mode/user → Setup | Login | OIDC button | app), pages
   src/components/       Header, RunningTimerBar, Banners, Sheet (dnd-kit) + CardShell,
                         Timeclock + TimeField (React Aria hour/minute/AM-PM segments), Priorities,
+                        FinishChoice (the "How much to log?" sheet a late Finish opens; mounted once in App),
                         Burst (emoji flying from an anchor, portalled to body; off under reduced
                         motion and the `celebrations` setting), FocusTimer, SessionLog, Retro,
                         History (Days | Review; owns the review period so the calendar can point it at a
@@ -261,9 +264,19 @@ repo or the session scratchpad.
   client-side counter. A paused session is still `status = 'running'` with `pausedAt` set;
   `pausedSeconds` holds the pauses that have ended, and the planned end moves forward while
   paused. A finish while paused ends the session where the pause began, and a pause left for
-  `PAUSE_LIMIT_SECONDS` (an hour) is finished by the client with a quiet banner. `useTimer`
-  keeps a `mutationSeq` so a slow `GET /sessions/running` can't overwrite an optimistic update;
-  keep that pattern for new mutations.
+  `PAUSE_LIMIT_SECONDS` (an hour) is finished by the client with a quiet banner. **A timer that
+  runs out is not finished by the client**: it is `due`, announced once per (session, planned
+  end) — `dueKey`, kept in `localStorage['focus:timer-due']` so a reload shows the banner again
+  without a second chime — and waits `DUE_GRACE_SECONDS` (10 min) for an answer before the
+  auto-finish (which chimes only if nothing has for that end). While due the countdown shows
+  the overrun as a negative number, `adjust(+N)` is N minutes from now, `finish()` logs the
+  planned length (the server's clamp) and `finish(true)` sends `countOverrun` so the time past
+  the end is logged too. The Finish buttons call `requestFinish()`: it finishes at once unless
+  the planned and worked lengths differ by a whole minute, where `finishChoice` opens the
+  `FinishChoice` sheet (Planned · Nm / Worked · Mm / Back). Both alerting effects wait for
+  `settings.loaded`, or an alert raised on load would use the default sound and switch.
+  `useTimer` keeps a `mutationSeq` so a slow `GET /sessions/running` can't overwrite an
+  optimistic update; keep that pattern for new mutations.
   **One running session per user is a schema invariant** (a unique partial index), and another
   device may own it: a 409 on start is adopted with a banner, a sync whose answer differs from
   the session shown reloads that day so the log catches up, a 404/409 on adjust/finish/cancel
@@ -432,9 +445,16 @@ Prove a change at the cheapest level that can show it, and stop there:
 - If you touched `security.ts`, `index.html`, or how assets load: run the `prod` config and
   read the console for CSP violations; `curl -sI localhost:8090/api/health` shows the headers.
 - If you touched the timer or alarms: reload mid-timer, background/foreground the tab, and let a
-  short timer expire — the log must show the planned duration and one chime. Pause, reload,
-  resume: the countdown holds and continues, the log row's pill follows, and the finished row's
-  duration excludes the pause (`curl /api/days/<today>` agrees).
+  short timer run out (PATCH `plannedSeconds` to elapsed + 30 on the seeded session, then
+  reload so the client has the new plan): one chime, the "Time's up" banner with **Add 5 min**,
+  the countdown goes negative in the bar and the card; a reload inside the grace brings the
+  banner back with no second chime; **Add 5 min** counts down again from 5:00; under a minute
+  over, **Finish** logs the planned length at once; a minute or more over it opens "How much to
+  log?", where **Worked** logs the elapsed time and **Planned** the plan; a session found 20 min
+  over on load (backdate `started_at`) is logged at its planned length with one chime. Pause,
+  reload, resume: the
+  countdown holds and continues, the log row's pill follows, and the finished row's duration
+  excludes the pause (`curl /api/days/<today>` agrees).
 - If you touched sounds: `alerts.test.ts` proves the patterns, the one fetch per clip and the
   quiet failure; `sounds.test.ts` the catalog ↔ folder match. The browser check is Settings →
   Alarms → Sounds at the mobile preset: Test on a clip row fetches the file once (the network

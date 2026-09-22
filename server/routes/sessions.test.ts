@@ -166,6 +166,35 @@ describe('sessions', () => {
     expect(r.body.session).toMatchObject({ status: 'cancelled', pausedAt: null });
   });
 
+  it('logs the time past the planned end only when asked to', async () => {
+    const { id } = (await start({ plannedSeconds: 600 })).body.session;
+    app.db.prepare(`UPDATE sessions SET started_at = ? WHERE id = ?`).run(Date.now() - 3_600_000, id);
+    expect((await app.api.post(`/api/sessions/${id}/finish`, { countOverrun: 'yes' })).status).toBe(400);
+    // No body at all (curl) reads as "not asked", not a crash.
+    const bare = await fetch(`${app.url}/api/sessions/${id}/finish`, { method: 'POST' });
+    expect(bare.status).toBe(200);
+    expect(((await bare.json()) as { session: { durationSeconds: number } }).session.durationSeconds).toBe(600);
+    // Finishing again with the flag changes nothing: it is already over.
+    const r = await app.api.post(`/api/sessions/${id}/finish`, { countOverrun: true });
+    expect(r.body.session.durationSeconds).toBe(600);
+    // A fresh one, an hour in, asked to count the overrun.
+    app.db.prepare(`DELETE FROM sessions WHERE id = ?`).run(id);
+    const again = (await start({ plannedSeconds: 600 })).body.session;
+    app.db.prepare(`UPDATE sessions SET started_at = ? WHERE id = ?`).run(Date.now() - 3_600_000, again.id);
+    r.body.session = (await app.api.post(`/api/sessions/${again.id}/finish`, { countOverrun: true })).body.session;
+    expect(r.body.session.status).toBe('completed');
+    expect(r.body.session.durationSeconds).toBeGreaterThanOrEqual(3600);
+    expect(r.body.session.durationSeconds).toBeLessThan(3605);
+    // A paused session still ends where the pause began, overrun or not.
+    const second = (await start({ plannedSeconds: 600 })).body.session;
+    await app.api.post(`/api/sessions/${second.id}/pause`);
+    app.db.prepare(`UPDATE sessions SET started_at = started_at - 3600000, paused_at = paused_at - 60000 WHERE id = ?`).run(second.id);
+    const done = await app.api.post(`/api/sessions/${second.id}/finish`, { countOverrun: true });
+    expect(done.body.session.durationSeconds).toBeGreaterThanOrEqual(3540);
+    expect(done.body.session.durationSeconds).toBeLessThan(3545);
+    expect(Date.now() - done.body.session.endedAt).toBeGreaterThanOrEqual(60_000);
+  });
+
   it('finishes early with the elapsed time', async () => {
     const { id } = (await start({ plannedSeconds: 1500 })).body.session;
     const r = await app.api.post(`/api/sessions/${id}/finish`);

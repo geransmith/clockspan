@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { timerView } from './timer';
+import { DUE_GRACE_SECONDS, dueKey, timerView } from './timer';
 
 const T0 = 1_700_000_000_000;
 const MIN = 60_000;
@@ -39,7 +39,29 @@ describe('timerView', () => {
     expect(v.elapsedSeconds).toBe(1800);
   });
 
+  it('is due from the planned end on, counting the overrun', () => {
+    expect(timerView(session(), T0 + 25 * MIN - 1)).toMatchObject({ due: false, overrunSeconds: 0 });
+    expect(timerView(session(), T0 + 25 * MIN)).toMatchObject({ due: true, overrunSeconds: 0 });
+    expect(timerView(session(), T0 + 28 * MIN + 500)).toMatchObject({ due: true, overrunSeconds: 180 });
+    expect(timerView(session(), T0 + 25 * MIN + DUE_GRACE_SECONDS * 1000).overrunSeconds).toBe(DUE_GRACE_SECONDS);
+  });
+
+  it('is never due while paused, even with nothing left', () => {
+    const v = timerView(session({ pausedAt: T0 + 25 * MIN }), T0 + 40 * MIN);
+    expect(v).toMatchObject({ remainingSeconds: 0, paused: true, due: false, overrunSeconds: 0 });
+  });
+
   it('never reports a pause of negative length', () => {
     expect(timerView(session({ pausedAt: T0 + 10 * MIN }), T0 + 10 * MIN - 1).pausedForSeconds).toBe(0);
+  });
+});
+
+describe('dueKey', () => {
+  it('names the session and its planned end, so added time re-arms and a reload does not', () => {
+    const at = timerView(session(), T0 + 26 * MIN).endAt;
+    expect(dueKey(7, at)).toBe(`7:${T0 + 25 * MIN}`);
+    expect(dueKey(7, timerView(session(), T0 + 27 * MIN).endAt)).toBe(dueKey(7, at));
+    expect(dueKey(7, timerView({ ...session(), plannedSeconds: 1800 }, T0 + 27 * MIN).endAt)).not.toBe(dueKey(7, at));
+    expect(dueKey(8, at)).not.toBe(dueKey(7, at));
   });
 });

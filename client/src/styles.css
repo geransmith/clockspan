@@ -1020,6 +1020,12 @@ button {
 .timer--running.is-paused .ring-fill {
   stroke: var(--text-3);
 }
+.timer--running.is-due .ring-fill {
+  stroke: var(--warn);
+}
+.timer--running.is-due .countdown {
+  color: var(--warn);
+}
 .ring-center {
   position: absolute;
   inset: 0;
@@ -1078,6 +1084,15 @@ button {
 .running-dot.is-paused {
   background: var(--text-3);
   animation: none;
+}
+.running-dot.is-due {
+  background: var(--warn);
+}
+.running-bar.is-due .running-time {
+  color: var(--warn);
+}
+.running-bar.is-due .running-progress {
+  background: var(--warn);
 }
 .running-label {
   flex: 1;
@@ -1924,6 +1939,29 @@ dialog.dialog::backdrop {
 /* Stays on the right when the tagline forces a wrap on narrow phones. */
 .dialog-foot .btn {
   margin-left: auto;
+}
+/* The finish question: choices stacked full-width on a phone (the default on top), a row with
+   Back on the left from 640px. */
+.finish-choice .dialog-foot {
+  flex-direction: column;
+  align-items: stretch;
+}
+.finish-choice .dialog-foot .btn {
+  margin-left: 0;
+}
+@media (min-width: 640px) {
+  dialog.finish-choice {
+    max-width: 440px;
+  }
+  .finish-choice .dialog-foot {
+    flex-direction: row;
+    justify-content: flex-end;
+    align-items: center;
+  }
+  .finish-choice .dialog-foot .btn-ghost {
+    order: -1;
+    margin-right: auto;
+  }
 }
 .settings-section {
   padding: 14px 0;
