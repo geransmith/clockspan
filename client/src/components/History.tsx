@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { periodOffset } from '../lib/review';
 import { Calendar } from './Calendar';
 import { Review, type ReviewPeriod } from './Review';
@@ -13,7 +13,8 @@ interface Props {
 
 type Tab = 'days' | 'review';
 
-export function History({ today, now, date, onOpen }: Props) {
+/** Memoized: App re-renders every second, and nothing here needs more than the minute it is handed. */
+export const History = memo(function History({ today, now, date, onOpen }: Props) {
   const [tab, setTab] = useState<Tab>('days');
   const [period, setPeriod] = useState<ReviewPeriod>({ kind: 'week', offset: 0 });
   const reviewWeek = (d: string) => {
@@ -37,4 +38,4 @@ export function History({ today, now, date, onOpen }: Props) {
       )}
     </div>
   );
-}
+});

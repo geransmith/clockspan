@@ -69,6 +69,10 @@ function Shell() {
     setJumpTo('retro');
   }, [navigate, today]);
   const onJumped = useCallback(() => setJumpTo(null), []);
+  // History shows nothing finer than a minute. Handed the clock floored to the minute (and
+  // memoized), it renders once a minute instead of redoing the month or quarter every second.
+  const minute = now - (now % 60_000);
+  const openDay = useCallback((d: string) => navigate({ view: 'sheet', date: d }), [navigate]);
   useAlarms(today, todayTc, settings, now, {
     overtimeApproved,
     retroDone: Boolean(todayDay?.retroAt),
@@ -93,7 +97,7 @@ function Shell() {
         {route.view === 'sheet' ? (
           <Sheet date={date} today={today} now={now} customize={customize} jumpTo={jumpTo} onJumped={onJumped} onPunchEditing={setEditingPunches} />
         ) : (
-          <History today={today} now={now} date={date} onOpen={(d) => navigate({ view: 'sheet', date: d })} />
+          <History today={today} now={minute} date={date} onOpen={openDay} />
         )}
       </main>
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
