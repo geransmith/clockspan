@@ -253,6 +253,16 @@ describe('GET /api/days/range', () => {
     expect((await app.api.get('/api/days/range?from=2020-01-01&to=2020-01-31')).body.days).toEqual([]);
   });
 
+  it('answers each day exactly as GET /:date does, including a day row with nothing on it', async () => {
+    const dates = app.seeded!.days.map((d) => d.date).sort();
+    // A weekend inside the seed span: a day row with no punches, priorities or sessions.
+    expect((await app.api.put('/api/days/2026-09-13/overtime', { approved: true })).status).toBe(200);
+    const range = await app.api.get(`/api/days/range?from=${dates[0]}&to=${SEED_TODAY}`);
+    const one = await Promise.all(range.body.days.map((d: { date: string }) => app.api.get(`/api/days/${d.date}`)));
+    expect(range.body.days).toEqual(one.map((r) => r.body));
+    expect(range.body.days.map((d: { date: string }) => d.date)).toEqual([...new Set([...dates, '2026-09-13'])].sort());
+  });
+
   it('validates the range', async () => {
     expect((await app.api.get('/api/days/range?from=2026-09-16&to=2026-09-15')).status).toBe(400);
     expect((await app.api.get('/api/days/range?from=2025-01-01&to=2026-09-16')).status).toBe(400);
