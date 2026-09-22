@@ -12,8 +12,15 @@ export function useWakeLock(active: boolean): void {
 
     const acquire = async () => {
       if (cancelled || document.visibilityState !== 'visible') return;
+      // One lock at a time: a visibilitychange that finds the last one still held (the page
+      // never went hidden) must not stack a second request on top of it.
+      if (sentinel && !sentinel.released) return;
       try {
-        sentinel = await navigator.wakeLock.request('screen');
+        const lock = await navigator.wakeLock.request('screen');
+        // `active` went false (pause, setting off) while the request was out: this lock would
+        // otherwise be held until the page hides, with nothing left that can release it.
+        if (cancelled) void lock.release();
+        else sentinel = lock;
       } catch {
         // Denied (low battery, not allowed) — nothing to do.
       }
