@@ -1,6 +1,6 @@
 {
   "name": "clockspan",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "private": true,
   "license": "MIT",
   "description": "Work smart, not hard. A self-hosted one-page focus sheet for ADHD: punch clock with lunch and clock-out alarms, the day's top priorities, and a Pomodoro-style timer that logs what you did.",
