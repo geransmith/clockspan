@@ -29,7 +29,10 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
 
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
-  app.use(resolveUser(db, config));
+  // Only the API reads req.user. Resolving the session for a static file would slide its
+  // expiry and hand the token back in a Set-Cookie on an answer marked `public` and cacheable;
+  // a shared cache that stores it would serve one user's session to the next.
+  app.use('/api', resolveUser(db, config));
 
   // ----- auth -----
   if (config.authMode === 'local') {

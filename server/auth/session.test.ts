@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { startTestApp, type TestApp } from '../dev/harness.js';
 import { purgeExpiredSessions, revokeOtherSessions, SESSION_COOKIE } from './session.js';
@@ -41,6 +44,8 @@ describe('cookie sessions', () => {
     const stranger = app.client();
     const r = await fetch(`${app.url}/api/settings`, { headers: { cookie: `${SESSION_COOKIE}=${'x'.repeat(43)}` } });
     expect(r.status).toBe(401);
+    // A cookie header with no session cookie in it is the same as none.
+    expect((await fetch(`${app.url}/api/settings`, { headers: { cookie: 'theme=dark' } })).status).toBe(401);
     expect((await stranger.get('/api/settings')).status).toBe(401);
     expect(rows()).toHaveLength(1);
   });
@@ -75,6 +80,36 @@ describe('cookie sessions', () => {
     expect(slid.expires_at).toBe(slid.last_seen_at + app.config.sessionTtlMs);
     expect(setCookie(slidRes)).toBe(issued);
     expect(issued).toMatch(new RegExp(`; Max-Age=${Math.floor(app.config.sessionTtlMs / 1000)}(;|$)`, 'i'));
+  });
+
+  it('never slides on a static file, whose answer is publicly cacheable', async () => {
+    // A stand-in for dist/client: the shell and one fingerprinted asset.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clockspan-client-'));
+    fs.mkdirSync(path.join(dir, 'assets'));
+    fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><title>shell</title>');
+    fs.writeFileSync(path.join(dir, 'assets', 'index-abc123.js'), 'console.log(1)');
+    await app.close();
+    app = await startTestApp({ authMode: 'local', clientDir: dir });
+    try {
+      const issued = setCookie(await app.api.post('/api/auth/setup', USER));
+      const first = only();
+      app.db
+        .prepare(`UPDATE auth_sessions SET last_seen_at = ?, expires_at = ? WHERE id = ?`)
+        .run(first.last_seen_at - 2 * HOUR, first.expires_at - 2 * HOUR, first.id);
+      // An hour-old session and a cookie on the request: the asset and the shell still answer
+      // without a Set-Cookie, and the row is untouched.
+      for (const p of ['/assets/index-abc123.js', '/']) {
+        const r = await app.api.get(p);
+        expect(r.status).toBe(200);
+        expect(r.headers.getSetCookie()).toEqual([]);
+      }
+      expect(only().last_seen_at).toBe(first.last_seen_at - 2 * HOUR);
+      // The next API call slides as usual.
+      expect(setCookie(await app.api.get('/api/settings'))).toBe(issued);
+      expect(only().last_seen_at).toBeGreaterThan(first.last_seen_at);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('logout drops only the calling session', async () => {

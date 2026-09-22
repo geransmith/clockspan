@@ -222,7 +222,9 @@ repo or the session scratchpad.
   The CSP is same-origin with no `unsafe-inline`, so no inline `<script>`/`<style>` in
   `index.html` and no third-party assets; React `style={{}}` props are fine (CSSOM). Changing
   it means one look at the `prod` config's console. Cookies are set only through
-  `cookieOptions()` (`auth/session.ts`). Never interpolate request data or an error message
+  `cookieOptions()` (`auth/session.ts`), and the session is resolved under `/api` only
+  (`resolveUser` is mounted there), so a static answer, which is publicly cacheable, never
+  carries a `Set-Cookie`. Never interpolate request data or an error message
   into HTML without `escapeHtml` (see `auth/oidc.ts`). Password hashing is async
   (`scrypt`, never `scryptSync`); login verifies against `DUMMY_HASH` when the user is unknown.
 - **The server stores epoch milliseconds and never decides what "today" is.** The client sends
