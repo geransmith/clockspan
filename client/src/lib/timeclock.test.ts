@@ -92,6 +92,26 @@ describe('computeTimeclock', () => {
     expect(r.clockOutAt).toBe(T0 + 8.5 * H); // anchored to the moment the target was hit
   });
 
+  it('keeps the targets on one instant across ticks, whatever the sub-second phase of now', () => {
+    // A clock-in with seconds on it (the API takes any instant) and ticks whose milliseconds
+    // drift, as setInterval's do. The alarm keys round the target to the minute, so a target
+    // that wandered by up to a second would flip keys around :30 and fire twice.
+    const clockIn = T0 + 29_600;
+    const p = punches([clockIn, null, null, null]);
+    const before = new Set<number>();
+    const meal = new Set<number>();
+    const over = new Set<number>();
+    for (let i = 0; i < 20; i++) {
+      const jitter = (i * 137) % 1000;
+      before.add(computeTimeclock(p, settings, clockIn + 4 * H + i * 1000 + jitter).clockOutAt!);
+      meal.add(computeTimeclock(p, settings, clockIn + 4 * H + i * 1000 + jitter).secondMealBy!);
+      over.add(computeTimeclock(p, settings, clockIn + 9 * H + i * 1000 + jitter).clockOutAt!);
+    }
+    expect([...before]).toEqual([clockIn + 8.5 * H]); // 8h work + 30m assumed lunch
+    expect([...meal]).toEqual([clockIn + 10 * H]);
+    expect([...over]).toEqual([clockIn + 8 * H]); // the moment the target was hit, no lunch taken
+  });
+
   it('is done after a final clock-out with the target met', () => {
     const p = punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 8.5 * H, null]);
     const r = computeTimeclock(p, settings, T0 + 12 * H);
