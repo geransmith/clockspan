@@ -1,5 +1,6 @@
 import { useAuth } from '../auth/AuthGate';
 import type { Route } from '../hooks/useRoute';
+import { CONFIRM } from '../lib/copy';
 import { addDays, dayName, formatDateLong } from '../lib/format';
 import { ChevronLeft, ChevronRight, Gear, Layout, List } from './Icons';
 
@@ -55,7 +56,14 @@ export function Header({ view, date, today, customize, onNavigate, onToggleCusto
             <span className="btn-text">Settings</span>
           </button>
           {auth.mode !== 'none' && auth.user && (
-            <button className="btn btn-ghost user-chip" onClick={() => void signOut()} title={`Signed in as ${auth.user.name}. Click to sign out.`}>
+            <button
+              className="btn btn-ghost user-chip"
+              // On a phone the avatar is all there is and the title never shows: ask before a stray tap signs out.
+              onClick={() => {
+                if (window.confirm(CONFIRM.signOut)) void signOut();
+              }}
+              title={`Signed in as ${auth.user.name}. Click to sign out.`}
+            >
               <span className="avatar" aria-hidden="true">
                 {auth.user.name.slice(0, 1).toUpperCase()}
               </span>

@@ -100,6 +100,7 @@ export const CONFIRM = {
   cancelSession: 'Cancel this session? It will not be logged.',
   deleteSession: 'Delete this session from the log?',
   deleteUser: (name: string) => `Delete ${name} and ALL of their data? This cannot be undone.`,
+  signOut: 'Sign out of Clockspan on this device?',
 } as const;
 
 /**
