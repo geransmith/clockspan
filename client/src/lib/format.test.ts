@@ -3,6 +3,7 @@ import {
   dayName,
   formatCountdown,
   formatDateFull,
+  formatDateShort,
   formatDuration,
   formatDurationCeil,
   formatTime,
@@ -26,6 +27,10 @@ describe('dates', () => {
     expect(formatDateFull('2026-09-16')).toMatch(/2026/);
     expect(formatDateFull('2026-09-16')).toMatch(/16/);
     expect(formatWeekday('2026-09-16')).toBe(new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(new Date(2026, 8, 16)));
+    // The short date carries the day and month and nothing of the weekday, in any locale.
+    const short = formatDateShort('2026-09-16');
+    expect(short).toBe(new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(2026, 8, 16)));
+    expect(short).not.toContain(formatWeekday('2026-09-16'));
   });
 
   it('rounds an instant to the nearest minute', () => {

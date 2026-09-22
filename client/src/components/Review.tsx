@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import * as api from '../api';
 import { useSettings } from '../hooks/useSettings';
-import { formatDateLong, formatDuration, formatWeekday } from '../lib/format';
+import { formatDateShort, formatDuration, formatWeekday } from '../lib/format';
 import { periodRange, reviewRange, type PeriodKind } from '../lib/review';
 import type { Day } from '../types';
 import { Check } from './Icons';
@@ -58,7 +58,7 @@ export function Review({ today, now, period: { kind, offset }, onPeriod, onOpen 
   }, [period.from, period.to, rangeKey]);
 
   const pickKind = (k: PeriodKind) => onPeriod({ kind: k, offset: 0 });
-  const dayName = (date: string) => `${formatWeekday(date)} ${formatDateLong(date).replace(/^\w+,?\s*/, '')}`;
+  const dayName = (date: string) => `${formatWeekday(date)} ${formatDateShort(date)}`;
 
   return (
     <section className="card review">
