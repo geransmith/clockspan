@@ -22,7 +22,9 @@ has the user-facing description.
   `openid-client` v6 for OIDC, `cookie` for cookie parsing. Passwords: `node:crypto` scrypt (async).
 - Tests: Vitest 5. Lint: oxlint (`.oxlintrc.json`: correctness + typescript + react-hooks +
   jsx-a11y rules, syntax level only; it parses TS itself, which is what lets TypeScript be 7). CI: `.github/workflows/ci.yml` runs typecheck, lint, test, build on
-  every PR and push; on `main` it also publishes the `edge` image, on `v*` tags the release.
+  every PR and push; on `main` it also publishes the `edge` image, and a commit that changed
+  `package.json`'s version (the merged bump PR) also gets the versioned image, the tag and the
+  GitHub Release.
 - One `package.json` for both sides; `tsconfig.json` = client + shared, `tsconfig.server.json` =
   server + shared (`rootDir: .`, so `dist/server` and `dist/shared`).
 
@@ -132,7 +134,7 @@ docs/screenshots/       committed PNGs the README embeds; regenerate after a vis
 docker/entrypoint.sh    PUID/PGID (default 1000/1000) → chown /data + su-exec; 0 keeps root
 Dockerfile docker-compose.yml .env.example README.md .oxlintrc.json
 CONTRIBUTING.md         PR and release rules (imported by CLAUDE.md; see "Branches, PRs and releases")
-.github/workflows/ci.yml  check → image (ghcr.io) → release; .github/release.yml groups notes by label
+.github/workflows/ci.yml  check → image (ghcr.io) → release (on a version bump); .github/release.yml groups notes by label
 ```
 
 ## Commands
@@ -164,8 +166,9 @@ the real bundle on :8090 with the real headers; the `web` config is the dev serv
 ## Branches, PRs and releases
 
 `main` is protected. Every change is a branch → PR → `check` green → squash merge, and a
-release is a version-bump PR followed by a tag pushed from `main`. The checklist, the PR
-requirements (title, one label, what must pass) and the version rule are in `CONTRIBUTING.md`.
+release is a version-bump PR: CI tags and publishes from the merge, nothing is tagged by hand.
+The checklist, the PR requirements (title, one label, what must pass) and the version rule are
+in `CONTRIBUTING.md`.
 Follow it as written; it is not advice. Dependabot (`.github/dependabot.yml`) opens weekly
 `skip-changelog` PRs for npm (minor + patch grouped, majors on their own), GitHub Actions and
 the Docker base image; they merge like any other PR once `check` is green.
@@ -516,7 +519,8 @@ Prove a change at the cheapest level that can show it, and stop there:
 - `window` `focus` events fire on ordinary clicks in some embedded browsers; timer re-sync is
   throttled and seq-guarded for that reason. Don't add unthrottled focus-driven refetches.
 - `npm version` without `--no-git-tag-version` tags the branch commit, which is not the squash
-  commit that lands on `main`; the release checklist tags `main` after the merge for that reason.
+  commit that lands on `main`. CI creates the `vX.Y.Z` tag on the merge; a local tag would only
+  mislead `git describe`.
 - Formatting is Prettier's (`.prettierrc`: single quotes, trailing commas, 160 columns to match
   the tree's long lines). `npm run format` before committing; CI runs `format:check`. Markdown
   is left alone (`.prettierignore`): the docs have hand-laid tables and wrapping.

@@ -27,8 +27,9 @@
   README shows.
 - Never commit on `main`. Every change goes through the PR flow in CONTRIBUTING.md (branch →
   `gh pr create` with one label → checks → squash merge). After opening a PR, use the app's PR
-  pane to watch checks. "Release" or "cut a version" means the release checklist there, in
-  order: version-bump PR first, tag from `main` second; report the release URL when done.
+  pane to watch checks. "Release" or "cut a version" means the release checklist there: the
+  version-bump PR, whose merge makes CI tag and publish; watch that `main` run and report the
+  release URL when done.
 - Never commit `data/` or `.env`.
 - If you change layout defaults, settings defaults, alarm definitions, or response headers,
   update the "How to add…" checklists in AGENTS.md so they stay true.
