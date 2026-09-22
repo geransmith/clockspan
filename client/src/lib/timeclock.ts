@@ -137,6 +137,11 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
   const clockedIn = openIn != null;
   if (clockedIn) workedMs += Math.max(0, effectiveNow - openIn!);
   const workedSeconds = Math.floor(workedMs / 1000);
+  // The part of the worked time the floor dropped. The targets below are "now plus what is
+  // left", so without it they would carry the sub-second phase of `now` and land on a
+  // different millisecond every tick; the alarm keys round to the minute and would flip
+  // between two minutes for a target that sits within a second of :30.
+  const subSecondMs = workedMs - workedSeconds * 1000;
   const remainingSeconds = Math.max(0, workTarget - workedSeconds);
   const overSeconds = Math.max(0, workedSeconds - workTarget);
 
@@ -161,10 +166,10 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
     clockOutAt = lastOut;
     clockOutStatus = 'done';
   } else if (remainingSeconds > 0) {
-    clockOutAt = effectiveNow + (remainingSeconds + futureOffSeconds) * 1000;
+    clockOutAt = effectiveNow - subSecondMs + (remainingSeconds + futureOffSeconds) * 1000;
     clockOutStatus = 'upcoming';
   } else {
-    clockOutAt = effectiveNow - overSeconds * 1000;
+    clockOutAt = effectiveNow - subSecondMs - overSeconds * 1000;
     clockOutStatus = 'over';
   }
 
@@ -173,7 +178,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
   let secondMealBy: number | null = null;
   let secondMealStatus: SecondMealStatus = 'none';
   if (!done) {
-    secondMealBy = effectiveNow + (secondMealTarget - workedSeconds) * 1000;
+    secondMealBy = effectiveNow - subSecondMs + (secondMealTarget - workedSeconds) * 1000;
     const taken = lunchOut != null && set.some((p) => p.kind === 'out' && p.position !== LUNCH_OUT_POSITION && p.at > lunchOut);
     secondMealStatus = taken ? 'taken' : now < secondMealBy ? 'upcoming' : 'overdue';
   }
