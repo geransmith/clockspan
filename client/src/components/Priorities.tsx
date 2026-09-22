@@ -125,6 +125,7 @@ export function Priorities({ priorities, onChange }: Props) {
               className="input priority-input"
               value={p.text}
               placeholder={p.position === 1 ? 'The one thing that would make today a win' : `Priority ${p.position}`}
+              aria-label={`Priority ${p.position}`}
               onChange={(e) => edit(p.position, { text: e.target.value })}
               onBlur={() => dirty.current && flush(local)}
               maxLength={LIMITS.priorityText}
