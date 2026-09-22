@@ -7,7 +7,7 @@ import { countDays, pruneDays, reclaimSpace } from '../retention.js';
 import { isValidDateKey, punchWindow } from '../../shared/dates.js';
 import { dateParam, ensureDay, findDay, requireDate, sessionRowToJson, UID_RE, type DayRow, type SessionRow } from './shared.js';
 import { MAX_PRIORITIES } from '../../shared/settings.js';
-import { LIMITS, type Day, type DaySummary, type Priority, type PruneInfo, type Punch } from '../../shared/api.js';
+import { LIMITS, type Day, type Priority, type PruneInfo, type Punch } from '../../shared/api.js';
 
 const MAX_RANGE_DAYS = 400;
 const MAX_PUNCHES = 40;
@@ -78,36 +78,7 @@ function emptyDayJson(date: string): Day {
 export function daysRouter(db: DB, config: Config): Router {
   const r = Router();
 
-  // Recent days with enough data for the history list. Worked time is computed on the
-  // client from punches so the timeclock math has a single home. focus_ms is `activeMs`
-  // (shared/timer.ts) in SQL: a finished session's span minus its pauses.
-  r.get('/', (req, res) => {
-    const user = currentUser(req);
-    const limitRaw = Number(req.query.limit ?? 60);
-    const limit = Number.isInteger(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 365) : 60;
-    const days = db
-      .prepare(
-        `SELECT d.id, d.date, d.retro_at,
-           (SELECT COALESCE(SUM(ended_at - started_at - paused_seconds * 1000), 0) FROM sessions s
-              WHERE s.day_id = d.id AND s.status = 'completed') AS focus_ms,
-           (SELECT COUNT(*) FROM priorities p WHERE p.day_id = d.id AND p.done = 1 AND p.text <> '') AS priorities_done,
-           (SELECT COUNT(*) FROM priorities p WHERE p.day_id = d.id AND p.text <> '') AS priorities_total
-         FROM days d WHERE d.user_id = ? ORDER BY d.date DESC LIMIT ?`,
-      )
-      .all(user.id, limit) as { id: number; date: string; retro_at: number | null; focus_ms: number; priorities_done: number; priorities_total: number }[];
-    const punchStmt = db.prepare(`SELECT * FROM punches WHERE day_id = ? ORDER BY position`);
-    const summaries: DaySummary[] = days.map((d) => ({
-      date: d.date,
-      punches: punchesJson(punchStmt.all(d.id) as PunchRow[]),
-      focusSeconds: Math.round(d.focus_ms / 1000),
-      prioritiesDone: d.priorities_done,
-      prioritiesTotal: d.priorities_total,
-      retroAt: d.retro_at,
-    }));
-    res.json({ days: summaries });
-  });
-
-  // Full days for a date range, for the week / month / quarter review. Only days that exist
+  // Full days for a date range, for the review and the History calendar. Only days that exist
   // are returned; the client does the math. Registered before /:date so "range" isn't
   // read as a date.
   r.get('/range', (req, res) => {

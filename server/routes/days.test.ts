@@ -187,29 +187,6 @@ describe('PUT /api/days/:date/retro', () => {
   });
 });
 
-describe('GET /api/days', () => {
-  it('summarises each day from completed sessions and text rows only', async () => {
-    const r = await app.api.get('/api/days');
-    expect(r.status).toBe(200);
-    expect(r.body.days.map((d: { date: string }) => d.date)).toEqual([...app.seeded!.days].reverse().map((d) => d.date));
-    for (const summary of r.body.days) {
-      const day = app.seeded!.days.find((d) => d.date === summary.date)!;
-      const focus = day.sessions.filter((s) => s.status === 'completed').reduce((n, s) => n + (s.endedAt! - s.startedAt), 0);
-      expect(summary.focusSeconds).toBe(Math.round(focus / 1000));
-      expect(summary.prioritiesTotal).toBe(day.priorities.filter((p) => p.text).length);
-      expect(summary.prioritiesDone).toBe(day.priorities.filter((p) => p.text && p.done).length);
-      expect(summary.retroAt).toBe(day.retroAt);
-      expect(summary.punches).toEqual(day.punches);
-    }
-  });
-
-  it('honours and clamps limit', async () => {
-    expect((await app.api.get('/api/days?limit=2')).body.days).toHaveLength(2);
-    expect((await app.api.get('/api/days?limit=0')).body.days).toHaveLength(app.seeded!.days.length);
-    expect((await app.api.get('/api/days?limit=abc')).body.days).toHaveLength(app.seeded!.days.length);
-  });
-});
-
 describe('/api/days/prune', () => {
   const seededDates = () => app.seeded!.days.map((d) => d.date);
   const storedDates = () => (app.db.prepare(`SELECT date FROM days ORDER BY date`).all() as { date: string }[]).map((d) => d.date);
@@ -305,7 +282,6 @@ describe('days are scoped to the signed-in user', () => {
 
     // Reads: B sees nothing of A's.
     expect((await b.get(`/api/days/${date}`)).body).toMatchObject({ date, punches: [], priorities: [], sessions: [] });
-    expect((await b.get('/api/days')).body.days).toEqual([]);
     expect((await b.get(`/api/days/range?from=${date}&to=${SEED_TODAY}`)).body.days).toEqual([]);
     expect((await b.get(`/api/days/prune?before=2099-01-01`)).body).toMatchObject({ matching: 0, total: 0, oldest: null });
 
@@ -326,7 +302,7 @@ describe('days are scoped to the signed-in user', () => {
 
     // A prune by B deletes only B's days.
     expect((await b.post('/api/days/prune', { before: '2099-01-01' })).body).toEqual({ deleted: 1 });
-    expect((await a.get('/api/days')).body.days).toHaveLength(seeded.days.length);
+    expect((await a.get(`/api/days/range?from=${date}&to=${SEED_TODAY}`)).body.days).toHaveLength(seeded.days.length);
     expect((await a.get(`/api/days/${date}`)).body).toEqual(before);
   });
 });

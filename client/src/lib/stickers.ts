@@ -45,7 +45,7 @@ export function stickerEmoji(date: string, id: StickerId): string {
   return STICKER_EMOJI[at]!;
 }
 
-/** The `GET /days` row for a full day: completed sessions, rows with text. Keeps today's cell live. */
+/** A full day rolled up for the calendar: completed sessions, rows with text. Keeps today's cell live. */
 export function daySummaryOf(day: Day): DaySummary {
   const withText = day.priorities.filter((p) => p.text.trim() !== '');
   return {

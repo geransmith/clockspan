@@ -62,7 +62,7 @@ server/                 Express API → dist/server (tsc)
   auth/local.ts         /api/auth: me, setup, login (rate-limited), logout, password, users (admin)
   auth/oidc.ts          /api/auth/{me,logout} + /auth/{login,callback}; lazy discovery w/ retry
   routes/shared.ts      requireDate + dateParam, findDay/ensureDay, UID_RE, SessionRow → JSON
-  routes/days.ts        GET /days (history summaries), GET /days/range?from&to (full days),
+  routes/days.ts        GET /days/range?from&to (full days, for the review and the calendar),
                         GET|POST /days/prune, GET /days/:date, PUT punches, PUT priorities (full
                         replace, sparse rows, uid/addedAt), PUT overtime, PUT retro (note, done)
   routes/sessions.ts    POST /days/:date/sessions (start, optional priorityUid), GET /sessions/running,
@@ -96,7 +96,7 @@ client/                 Vite root → dist/client
   src/lib/retro.ts      PURE: reviewDay(priorities, sessions) → on/off-plan time, mid-day rows
   src/lib/stickers.ts   PURE: stickersForDay(summary) (clocked out, lunch, all priorities, focus,
                         reviewed), stickerEmoji(date, id) (fixed, distinct per day), daySummaryOf(day)
-                        (the GET /days rollup, for a live today), countStickers(weeks) (total, full
+                        (a full day rolled up to a DaySummary), countStickers(weeks) (total, full
                         days, per reason)
   src/lib/review.ts     PURE: periodRange(kind, today, offset) (Mon-start weeks), periodOffset(kind, today,
                         date) (the offset that lands on a date's period), reviewRange(days)

@@ -140,9 +140,6 @@ describe('sessions', () => {
     // Span: started 300 s ago, pause began 30 s ago → 270 s, minus the 90 s pause = 180 s.
     expect(done.body.session.durationSeconds).toBe(180);
     expect(Date.now() - done.body.session.endedAt).toBeGreaterThanOrEqual(30_000);
-    // The day rollup agrees with the row.
-    const days = await app.api.get('/api/days');
-    expect(days.body.days.find((d: { date: string }) => d.date === DATE).focusSeconds).toBe(180);
     // Ended sessions can't be paused or resumed.
     expect((await app.api.post(`/api/sessions/${id}/pause`)).status).toBe(409);
     expect((await app.api.post(`/api/sessions/${id}/resume`)).status).toBe(409);
@@ -257,9 +254,10 @@ describe('sessions are scoped to the signed-in user', () => {
     expect((await b.post(`/api/sessions/${id}/finish`)).status).toBe(404);
     expect((await b.del(`/api/sessions/${id}`)).status).toBe(404);
     expect((await b.get(`/api/days/${DATE}`)).body.sessions).toEqual([]);
-    // B has their own seeded day; A does not see it.
-    expect((await b.get('/api/days')).body.days).toHaveLength(2);
-    expect((await a.get('/api/days')).body.days.map((d: { date: string }) => d.date)).toEqual([DATE]);
+    // B has their own seeded days; A does not see them.
+    const range = '/api/days/range?from=2026-01-01&to=2026-12-31';
+    expect((await b.get(range)).body.days).toHaveLength(2);
+    expect((await a.get(range)).body.days.map((d: { date: string }) => d.date)).toEqual([DATE]);
     // B can start a timer while A's is running: the "one running timer" rule is per user.
     expect((await b.post(`/api/days/${DATE}/sessions`, { plannedSeconds: 900 })).status).toBe(201);
   });
