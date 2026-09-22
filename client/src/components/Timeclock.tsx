@@ -9,6 +9,7 @@ import { clockOutPosition, extraPairs, kindForPosition, secondMealApplies, type 
 import type { Punch } from '../types';
 import { Burst, BURST_MS } from './Burst';
 import { Plus, Trash, X } from './Icons';
+import { Tile } from './Tile';
 import { TimeField } from './TimeField';
 
 interface Props {
@@ -259,16 +260,6 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
           Add extra out / in
         </button>
       </div>
-    </div>
-  );
-}
-
-function Tile({ label, value, sub, tone }: { label: string; value: string; sub: string; tone: string }) {
-  return (
-    <div className={`tile ${tone}`}>
-      <div className="tile-label">{label}</div>
-      <div className="tile-value">{value}</div>
-      <div className="tile-sub">{sub}</div>
     </div>
   );
 }

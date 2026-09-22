@@ -3,12 +3,14 @@ import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS, type TimeFormat } from '../../.
 import { SOUND_EVENTS, SOUNDS } from '../../../shared/sounds.js';
 import * as api from '../api';
 import { useAuth } from '../auth/AuthGate';
+import { useModalDialog } from '../hooks/useModalDialog';
 import { useSettings } from '../hooks/useSettings';
 import { notificationPermission, playSound, requestNotificationPermission, unlockAudio } from '../lib/alerts';
 import { CONFIRM, DELETE_DAYS, RESET_SETTINGS, SAVE_STATUS } from '../lib/copy';
 import { addDays, formatDateFull, todayKey } from '../lib/format';
 import { DEFAULT_LAYOUT } from '../lib/layout';
 import { SOUND_EVENT_LABELS } from '../lib/sounds';
+import { readStored, writeStored } from '../lib/storage';
 import type { AlarmId, AlarmSettings, PruneInfo, PublicUser, Settings, SoundEvent, SoundId } from '../types';
 import { Check, X } from './Icons';
 
@@ -33,22 +35,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const tabs = TABS.filter((t) => t.id !== 'account' || auth.mode === 'local');
   const [tab, setTab] = useLastTab(tabs);
 
-  // A native modal dialog: the browser traps focus inside it, puts it in the top layer and turns
-  // Escape into a `cancel` event. Rendered closed, then opened here, so nothing flashes. Focus
-  // lands on the dialog itself (its title is read out; Tab reaches the controls) rather than on
-  // the Close button showModal() would pick, where Enter would shut what was just opened. The
-  // page behind still needs the scroll lock on iOS.
-  const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const el = dialog.current!;
-    el.showModal();
-    el.focus();
-    document.body.classList.add('no-scroll');
-    return () => {
-      el.close();
-      document.body.classList.remove('no-scroll');
-    };
-  }, []);
+  // Focus lands on the dialog, not on the Close button, where Enter would shut what was just opened.
+  const dialog = useModalDialog(onClose);
 
   const set = (patch: Partial<Settings>) => void save(() => update(patch));
   const setAlarm = (id: AlarmId, patch: Partial<AlarmSettings>) => set({ alarms: { ...settings.alarms, [id]: { ...settings.alarms[id], ...patch } } });
@@ -231,23 +219,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    // A press on the ::backdrop lands on the dialog element itself (the only place it can be
-    // heard); anything inside hits the inner surface, so the check on the target tells them apart.
-    // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the backdrop has no element of its own
-    <dialog
-      ref={dialog}
-      className="dialog"
-      tabIndex={-1}
-      aria-labelledby="settings-title"
-      onCancel={(e) => {
-        e.preventDefault();
-        onClose();
-      }}
-      // `cancel` covers the browser's own close gestures (Escape, Android back); the key handler
-      // keeps Escape working where a browser routes it differently, and closing twice is harmless.
-      onKeyDown={(e) => e.key === 'Escape' && onClose()}
-      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
-    >
+    <dialog {...dialog} className="dialog" aria-labelledby="settings-title">
       <div className="dialog-inner">
         <header className="dialog-head">
           <h2 id="settings-title">Settings</h2>
@@ -290,27 +262,13 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-/**
- * The tab you were on last time, so reopening the dialog to tweak the same thing doesn't start
- * over. Storage can be missing or blocked (private mode), so both sides are guarded.
- */
+/** The tab you were on last time, so reopening the dialog to tweak the same thing doesn't start over. */
 function useLastTab(tabs: { id: TabId }[]): [TabId, (t: TabId) => void] {
   const [tab, setTab] = useState<TabId>(() => {
-    try {
-      const stored = localStorage.getItem(TAB_STORAGE_KEY);
-      if (tabs.some((t) => t.id === stored)) return stored as TabId;
-    } catch {
-      // Fall through to the first tab.
-    }
-    return tabs[0]?.id ?? 'timeclock';
+    const stored = readStored(TAB_STORAGE_KEY);
+    return tabs.find((t) => t.id === stored)?.id ?? tabs[0]?.id ?? 'timeclock';
   });
-  useEffect(() => {
-    try {
-      localStorage.setItem(TAB_STORAGE_KEY, tab);
-    } catch {
-      // Remembering the tab is a nicety; nothing to do if storage is unavailable.
-    }
-  }, [tab]);
+  useEffect(() => writeStored(TAB_STORAGE_KEY, tab), [tab]);
   return [tab, setTab];
 }
 

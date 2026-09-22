@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useDayStore } from '../hooks/useDay';
-import { CONFIRM } from '../lib/copy';
+import { CONFIRM, UNTITLED_SESSION } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { formatDuration } from '../lib/format';
 import { activeMs } from '../lib/timer';
@@ -134,7 +134,7 @@ function Row({
               {linked.position}
             </span>
           )}
-          {s.label || <span className="muted">Untitled session</span>}
+          {s.label || <span className="muted">{UNTITLED_SESSION}</span>}
         </button>
       )}
       <span className="log-duration">

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useSettings } from '../hooks/useSettings';
 import { useTimer } from '../hooks/useTimer';
-import { CONFIRM } from '../lib/copy';
+import { CONFIRM, UNTITLED_SESSION } from '../lib/copy';
 import { LIMITS } from '../types';
 import { formatCountdown } from '../lib/format';
 import { Check, Minus, Pause, Play, Plus, X } from './Icons';
@@ -48,7 +48,7 @@ export function RunningTimerBar() {
             }}
             title="Edit label"
           >
-            {running.label || <span className="muted">Untitled session</span>}
+            {running.label || <span className="muted">{UNTITLED_SESSION}</span>}
           </button>
         )}
         <span className="running-time" aria-label={due ? 'Time over' : 'Time remaining'}>

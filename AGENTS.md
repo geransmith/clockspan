@@ -114,12 +114,15 @@ client/                 Vite root → dist/client
                         pausedForSeconds/due/overrunSeconds (what the countdown shows), dueKey(),
                         PAUSE_LIMIT_SECONDS, DUE_GRACE_SECONDS
   src/lib/layout.ts     CARDS (titles for CARD_IDS), DEFAULT_LAYOUT, normalizeLayout()
+  src/lib/storage.ts    readStored/writeStored: localStorage that never throws (private mode, quota)
   src/hooks/            useSettings (SettingsProvider, optimistic PUT), useDay (per-date cache +
                         setters), useTimer (running session, timerView per tick, pause/resume, the
                         "time's up" prompt, requestFinish → the finish choice, and the auto-finish after
                         the grace or a forgotten pause, mutationSeq re-sync, wake lock, tab title),
                         useAlarms (fired keys in localStorage per day),
                         useLatest (ref that tracks a value for callbacks), useNow, useRoute,
+                        useModalDialog (native <dialog>: open on mount, cancel/Escape/backdrop close),
+                        useRange (keyed GET /days/range for Calendar and Review),
                         useSettled, useTimeFormat ({ hour12, formatTime } from the setting), useWakeLock
   src/auth/             AuthGate (mode/user → Setup | Login | OIDC button | app), pages
   src/components/       Header, RunningTimerBar, Banners, Sheet (dnd-kit) + CardShell,
@@ -130,7 +133,8 @@ client/                 Vite root → dist/client
                         History (Days | Review; owns the review period so the calendar can point it at a
                         week), Calendar (month grid, stickers when `settings.stickers`, legend filter,
                         picked-day panel), Review (controlled by History), PeriodNav (◀ label ▶, shared),
-                        SettingsDialog (tabs incl. Data: retention + delete-before), Icons
+                        SettingsDialog (tabs incl. Data: retention + delete-before), Tile (label /
+                        value / sub, shared by the timeclock, the day panel and the review), Icons
 scripts/screenshots.mjs `npm run screenshots`: dev server (reused or started) + seed + headless
                         Chromium over CDP → docs/screenshots/*.png for the README
 docs/screenshots/       committed PNGs the README embeds; regenerate after a visible UI change
