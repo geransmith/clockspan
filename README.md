@@ -271,7 +271,7 @@ Deleting old days (Settings → Data, or `RETENTION_DAYS`) is permanent and comp
 
 See [AGENTS.md](AGENTS.md) for the repo map, architecture rules and checklists for adding cards, settings, alarms and routes.
 
-Every change is a squash-merged pull request with CI green; a release is a version-bump PR followed by a tag, which builds the image and writes the release notes. The rules and the checklist are in [CONTRIBUTING.md](CONTRIBUTING.md).
+Every change is a squash-merged pull request with CI green; a release is a version-bump PR, and merging it builds the image, tags it and writes the release notes. The rules and the checklist are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 The bundled sounds are CC0 clips from Freesound; [client/src/sounds/README.md](client/src/sounds/README.md) lists each one's author and source.
 

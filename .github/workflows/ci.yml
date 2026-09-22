@@ -3,8 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main] # check + `edge` image
-    tags: ['v*'] # check + versioned image + GitHub Release
+    branches: [main] # check + `edge` image; a version bump also publishes the release
 
 # Read-only by default: `check` runs on every PR and needs nothing more. The jobs that
 # publish ask for exactly what they write.
@@ -17,8 +16,14 @@ env:
 jobs:
   check:
     runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.version.outputs.release }}
+      version: ${{ steps.version.outputs.version }}
+      minor: ${{ steps.version.outputs.minor }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2 # HEAD~1, for the version comparison below
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -29,11 +34,36 @@ jobs:
       - run: npm run format:check
       - run: npm run test:coverage
       - run: npm run build
-      - name: Tag matches package.json version
-        if: startsWith(github.ref, 'refs/tags/v')
+      # A commit that changes package.json's version is a release: the merge of the bump PR
+      # publishes the versioned image and the GitHub Release (no tag is pushed by hand). On a
+      # PR the same comparison, against the base branch, refuses a version that already has a
+      # tag before anything is built.
+      - name: Detect a version bump
+        id: version
         run: |
           pkg="$(node -p "require('./package.json').version")"
-          [ "v$pkg" = "$GITHUB_REF_NAME" ] || { echo "package.json is $pkg but the tag is $GITHUB_REF_NAME; bump the version in a PR first (CONTRIBUTING.md)"; exit 1; }
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            git fetch --depth=1 origin "$base"
+          else
+            base="$(git rev-parse HEAD~1)"
+          fi
+          git show "$base:package.json" > /tmp/prev-package.json
+          prev="$(node -p "require('/tmp/prev-package.json').version")"
+          changed=false
+          [ "$pkg" != "$prev" ] && changed=true
+          if [ "$changed" = true ] && git ls-remote --exit-code --tags origin "refs/tags/v$pkg" >/dev/null; then
+            echo "v$pkg is already released; a version is never reused (CONTRIBUTING.md)"
+            exit 1
+          fi
+          release=false
+          [ "$changed" = true ] && [ "$GITHUB_EVENT_NAME" = push ] && release=true
+          echo "version $prev -> $pkg (changed: $changed, release: $release)"
+          {
+            echo "release=$release"
+            echo "version=$pkg"
+            echo "minor=${pkg%.*}"
+          } >> "$GITHUB_OUTPUT"
 
   image:
     if: github.event_name == 'push'
@@ -53,11 +83,12 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
-          # `latest` is added automatically on semver tags (flavor latest=auto).
+          # Every push to main is `edge`; a version bump is also X.Y.Z, X.Y and latest.
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
             type=edge,branch=main
+            type=raw,value=${{ needs.check.outputs.version }},enable=${{ needs.check.outputs.release == 'true' }}
+            type=raw,value=${{ needs.check.outputs.minor }},enable=${{ needs.check.outputs.release == 'true' }}
+            type=raw,value=latest,enable=${{ needs.check.outputs.release == 'true' }}
       - uses: docker/setup-buildx-action@v4
       - uses: docker/build-push-action@v7
         with:
@@ -72,15 +103,19 @@ jobs:
           provenance: false
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: image
+    if: github.event_name == 'push' && needs.check.outputs.release == 'true'
+    needs: [check, image]
     runs-on: ubuntu-latest
     permissions:
-      contents: write # create the release
+      contents: write # create the tag and the release
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
     steps:
       - name: Write release body
         run: |
-          printf '## Docker\n\n```\ndocker pull %s:%s\n```\n\n' "$IMAGE" "${GITHUB_REF_NAME#v}" > body.md
-      - run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$GITHUB_REF_NAME" --notes-file body.md --generate-notes
+          printf '## Docker\n\n```\ndocker pull %s:%s\n```\n\n' "$IMAGE" "$VERSION" > body.md
+      # The tag does not exist yet: gh creates it at --target, the squash commit that bumped the
+      # version. A tag made with GITHUB_TOKEN starts no workflow, so nothing runs twice.
+      - run: gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "v$VERSION" --notes-file body.md --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}

@@ -6,7 +6,7 @@ and expected everywhere else. They apply to the maintainer and to Claude Code al
 ## How changes land
 
 `main` is protected: no direct pushes, no force pushes, no deletion. Every change is a pull
-request, squash-merged, with the `check` job green. Only collaborators can push branches or
+request, squash-merged, with the `check` job green. A release is one such PR: the version bump. Only collaborators can push branches or
 merge. Outsiders can open a PR from a fork; its CI run waits for a collaborator to approve it,
 and a fork PR can never publish an image or a release.
 
@@ -46,10 +46,10 @@ migration. Several PRs can share one release. Docs-only changes need no release.
 
 **Version.** `0.x` until the author calls it `1.0.0`. `patch` for fixes, `minor` for new
 behaviour, settings or migrations. A version is never reused: a bad release is followed by a
-patch, not re-tagged.
+patch, not re-published.
 
-**Checklist, in order.** The tag has to point at the squash commit on `main`, which is why
-the bump is a PR first and the tag comes second.
+**Checklist.** The release is the version-bump PR. Merging it is the last step by hand; CI
+does the rest from the squash commit on `main`.
 
 1. Bump the version in a PR:
 
@@ -61,17 +61,10 @@ the bump is a PR first and the tag comes second.
    gh pr create --fill --label skip-changelog
    gh pr checks --watch
    gh pr merge --squash --delete-branch
-   ```
-
-2. Tag `main`:
-
-   ```bash
    git switch main && git pull
-   git tag -a vX.Y.Z -m "vX.Y.Z"
-   git push origin vX.Y.Z
    ```
 
-3. Watch and check:
+2. Watch and check:
 
    ```bash
    gh run watch
@@ -81,24 +74,27 @@ the bump is a PR first and the tag comes second.
    The notes list the PRs merged since the last release, grouped by label, with a
    `docker pull` line on top. Reword a line on GitHub if it reads badly.
 
-**What the tag does.** `check` runs first and fails if `package.json` does not match the tag.
-Then the image is built and pushed as `ghcr.io/geransmith/clockspan:X.Y.Z`, `:X.Y` and
-`:latest`, and the GitHub Release is created with generated notes.
+**What the merge does.** `check` sees that `package.json`'s version differs from the previous
+commit's and refuses to go on if a tag for it already exists. Then the image is built once and
+pushed as `ghcr.io/geransmith/clockspan:edge`, `:X.Y.Z`, `:X.Y` and `:latest`, and the tag
+`vX.Y.Z` and the GitHub Release are created on that commit with generated notes. No tag is
+pushed by hand, and the tag CI creates starts no second run.
 
-**If the run fails.** Nothing has been published. Fix the cause through a normal PR, then
-drop the tag and tag again:
+**If the run fails.** `check` failed: nothing was published; fix the cause through a normal PR
+and bump again (the skipped version stays unused). `image` or `release` failed: re-run the
+failed jobs, which is safe to repeat:
 
 ```bash
-git tag -d vX.Y.Z && git push origin :refs/tags/vX.Y.Z
+gh run rerun <run-id> --failed
 ```
 
 ## What CI does
 
 | Event | Jobs | Result |
 | --- | --- | --- |
-| Pull request | `check` | typecheck, lint, test, build |
+| Pull request | `check` | typecheck, lint, test, build; a version that already has a tag fails |
 | Push to `main` | `check`, `image` | `ghcr.io/geransmith/clockspan:edge` |
-| Push tag `vX.Y.Z` | `check`, `image`, `release` | `:X.Y.Z`, `:X.Y`, `:latest` and the GitHub Release |
+| Push to `main` that changes the version | `check`, `image`, `release` | `:edge`, `:X.Y.Z`, `:X.Y`, `:latest`, the tag `vX.Y.Z` and the GitHub Release |
 
 Image tags: `latest` is the newest release, `X.Y.Z` and `X.Y` pin a release, `edge` is the
 latest commit on `main` and has only passed CI.
