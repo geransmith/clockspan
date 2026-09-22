@@ -200,6 +200,14 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               />
             </Section>
             <DeleteOldDays />
+            <Section title="Reset" hint={RESET_SETTINGS.hint}>
+              <div>
+                <button className="btn btn-ghost btn-danger-text" onClick={onReset}>
+                  {RESET_SETTINGS.button}
+                </button>
+              </div>
+            </Section>
+            <p className="muted small">Clockspan · data stays on your server</p>
           </>
         );
       case 'account':
@@ -251,12 +259,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           {saveState === 'failed' && <p className="notice notice--danger">{SAVE_STATUS.failedDetail}</p>}
           {panel()}
         </div>
-        <footer className="dialog-foot">
-          <span className="muted small">Clockspan · data stays on your server</span>
-          <button className="btn btn-ghost btn-danger-text" onClick={onReset}>
-            {RESET_SETTINGS.button}
-          </button>
-        </footer>
       </div>
     </dialog>
   );
