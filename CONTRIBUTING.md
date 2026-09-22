@@ -6,9 +6,14 @@ and expected everywhere else. They apply to the maintainer and to Claude Code al
 ## How changes land
 
 `main` is protected: no direct pushes, no force pushes, no deletion. Every change is a pull
-request, squash-merged, with the `check` job green. A release is one such PR: the version bump. Only collaborators can push branches or
+request, squash-merged, with the `check` and `image-smoke` jobs green. A release is one such PR: the version bump. Only collaborators can push branches or
 merge. Outsiders can open a PR from a fork; its CI run waits for a collaborator to approve it,
 and a fork PR can never publish an image or a release.
+
+Dependabot's PRs merge themselves (`.github/workflows/dependabot-automerge.yml`): once the
+required checks pass, each is squash-merged, except a major version bump, which waits for a
+review. Version updates are only proposed 7 days after the release (`cooldown` in
+`.github/dependabot.yml`); security updates come at once.
 
 ```bash
 git switch -c <topic>            # never work on main

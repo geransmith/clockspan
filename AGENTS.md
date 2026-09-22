@@ -180,8 +180,11 @@ release is a version-bump PR: CI tags and publishes from the merge, nothing is t
 The checklist, the PR requirements (title, one label, what must pass) and the version rule are
 in `CONTRIBUTING.md`.
 Follow it as written; it is not advice. Dependabot (`.github/dependabot.yml`) opens weekly
-`skip-changelog` PRs for npm (minor + patch grouped, majors on their own), GitHub Actions and
-the Docker base image (pinned by digest in both stages); they merge like any other PR once `check` is green.
+`skip-changelog` PRs for npm (minor + patch grouped, majors on their own), GitHub Actions
+(grouped) and the Docker base image (pinned by digest in both stages), each release at least 7
+days old (`cooldown`; security updates don't wait). `dependabot-automerge.yml` squash-merges
+them on their own once `check` and `image-smoke` pass, except a major version bump (or a group
+holding one), which waits for a review like an outside PR.
 
 ## Dev data is disposable
 

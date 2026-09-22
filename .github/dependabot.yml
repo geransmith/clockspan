@@ -1,11 +1,18 @@
 # Weekly dependency updates. Every PR is labelled skip-changelog (the release notes exclude
-# the dependabot author anyway) and merges like any other once `check` is green.
+# the dependabot author anyway). workflows/dependabot-automerge.yml squash-merges each one once
+# the required checks pass, except a major version bump, which waits for a review.
+#
+# Every ecosystem waits 7 days after a release before proposing it (GitHub's default is 3).
+# With merges unattended, that week is the margin for a hijacked release to be caught and
+# pulled first. Security updates never wait.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     labels: [skip-changelog]
     # .npmrc pins exact versions; bump the pin rather than widening it to a range.
     versioning-strategy: increase
@@ -22,9 +29,11 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     labels: [skip-changelog]
     # One PR for the week's action bumps: the four docker/* actions often release together.
-    # Majors are included; the grouped PR runs the same required checks as any other.
+    # Majors are included; a group holding one waits for a review instead of auto-merging.
     groups:
       actions:
         patterns: ['*']
@@ -35,6 +44,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     labels: [skip-changelog]
     ignore:
       # A Node major is a deliberate move across `engines`, nvm, CI and the Dockerfile together.
