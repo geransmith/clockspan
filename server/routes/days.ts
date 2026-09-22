@@ -53,21 +53,54 @@ function prioritiesJson(rows: PriorityRow[]): Priority[] {
     .map((r) => ({ position: r.position, text: r.text, done: Boolean(r.done), uid: r.uid, addedAt: r.added_at }));
 }
 
-/** The full JSON for one existing day; shared by GET /:date and GET /range. */
-function dayJson(db: DB, day: DayRow, date: string): Day {
-  const punches = db.prepare(`SELECT * FROM punches WHERE day_id = ? ORDER BY position`).all(day.id) as PunchRow[];
-  const priorities = db.prepare(`SELECT * FROM priorities WHERE day_id = ?`).all(day.id) as PriorityRow[];
+/** A day's child rows: punches by position, sessions by start, cancelled ones left out. */
+interface DayRows {
+  punches: PunchRow[];
+  priorities: PriorityRow[];
+  sessions: (SessionRow & { date: string })[];
+}
+
+function dayRows(db: DB, dayId: number): DayRows {
+  return {
+    punches: db.prepare(`SELECT * FROM punches WHERE day_id = ? ORDER BY position`).all(dayId) as PunchRow[],
+    priorities: db.prepare(`SELECT * FROM priorities WHERE day_id = ?`).all(dayId) as PriorityRow[],
+    sessions: db
+      .prepare(`SELECT s.*, d.date FROM sessions s JOIN days d ON d.id = s.day_id WHERE s.day_id = ? AND s.status <> 'cancelled' ORDER BY s.started_at`)
+      .all(dayId) as DayRows['sessions'],
+  };
+}
+
+/**
+ * The same rows for every day of a user's range, one query per table instead of three per
+ * day (a quarter would otherwise be ~280 queries). Grouping keeps each query's order.
+ */
+function rangeRows(db: DB, userId: number, from: string, to: string): Map<number, DayRows> {
+  const inRange = `JOIN days d ON d.id = x.day_id WHERE d.user_id = ? AND d.date >= ? AND d.date <= ?`;
+  const out = new Map<number, DayRows>();
+  const rowsFor = (dayId: number) => {
+    let rows = out.get(dayId);
+    if (!rows) out.set(dayId, (rows = { punches: [], priorities: [], sessions: [] }));
+    return rows;
+  };
+  for (const p of db.prepare(`SELECT x.* FROM punches x ${inRange} ORDER BY x.position`).all(userId, from, to) as PunchRow[]) rowsFor(p.day_id).punches.push(p);
+  for (const p of db.prepare(`SELECT x.* FROM priorities x ${inRange}`).all(userId, from, to) as PriorityRow[]) rowsFor(p.day_id).priorities.push(p);
   const sessions = db
-    .prepare(`SELECT s.*, d.date FROM sessions s JOIN days d ON d.id = s.day_id WHERE s.day_id = ? AND s.status <> 'cancelled' ORDER BY s.started_at`)
-    .all(day.id) as (SessionRow & { date: string })[];
+    .prepare(`SELECT x.*, d.date FROM sessions x ${inRange} AND x.status <> 'cancelled' ORDER BY x.started_at`)
+    .all(userId, from, to) as DayRows['sessions'];
+  for (const s of sessions) rowsFor(s.day_id).sessions.push(s);
+  return out;
+}
+
+/** The full JSON for one existing day; shared by GET /:date and GET /range. */
+function dayJson(day: DayRow, date: string, rows: DayRows): Day {
   return {
     date,
-    punches: punchesJson(punches),
-    priorities: prioritiesJson(priorities),
+    punches: punchesJson(rows.punches),
+    priorities: prioritiesJson(rows.priorities),
     overtimeApproved: Boolean(day.overtime_approved),
     retroNote: day.retro_note,
     retroAt: day.retro_at,
-    sessions: sessions.map(sessionRowToJson),
+    sessions: rows.sessions.map(sessionRowToJson),
   };
 }
 
@@ -96,7 +129,9 @@ export function daysRouter(db: DB, config: Config): Router {
     const rows = db
       .prepare(`SELECT id, date, overtime_approved, retro_note, retro_at FROM days WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date`)
       .all(user.id, from, to) as (DayRow & { date: string })[];
-    res.json({ days: rows.map((d) => dayJson(db, d, d.date)) });
+    const children = rangeRows(db, user.id, from, to);
+    const none: DayRows = { punches: [], priorities: [], sessions: [] };
+    res.json({ days: rows.map((d) => dayJson(d, d.date, children.get(d.id) ?? none)) });
   });
 
   // Old-day cleanup. GET is the preview the Data tab shows before asking; POST deletes.
@@ -126,7 +161,7 @@ export function daysRouter(db: DB, config: Config): Router {
     const user = currentUser(req);
     const date = dateParam(req);
     const day = findDay(db, user.id, date);
-    res.json(day ? dayJson(db, day, date) : emptyDayJson(date));
+    res.json(day ? dayJson(day, date, dayRows(db, day.id)) : emptyDayJson(date));
   });
 
   // Full replace. Position parity defines kind: even = in, odd = out.
