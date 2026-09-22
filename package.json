@@ -21,6 +21,7 @@
     "test:coverage": "vitest run --coverage",
     "seed": "tsx server/dev/seed-cli.ts",
     "screenshots": "node scripts/screenshots.mjs",
+    "icons": "node scripts/icons.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.test.json",
     "lint": "oxlint",
     "format": "prettier --write .",
