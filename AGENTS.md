@@ -74,7 +74,7 @@ server/                 Express API → dist/server (tsc)
   routes/settings.ts    mergeSettings() validator; GET/PUT/DELETE /settings
 client/                 Vite root → dist/client
   index.html            viewport-fit=cover, theme-color, manifest, apple-mobile-web-app meta
-  public/               manifest.webmanifest, icons/, sw.js (pass-through)
+  public/               manifest.webmanifest, icons/, sw.js (pass-through fetch; notificationclick)
   src/App.tsx           provider stack + Shell (route, customize, settings, today's alarms)
   src/api.ts            fetch wrapper; dispatches UNAUTHENTICATED_EVENT on 401
   src/types.ts          re-exports only: the shared wire types (api.ts) and Settings types
@@ -265,7 +265,8 @@ repo or the session scratchpad.
   `timeFormat: 'auto' | '12h' | '24h'`; `resolveHour12('auto')` asks the browser locale, so the
   default changes nothing for anyone. `TimeField` shows its AM/PM segment from the same answer.
 - **All user-facing alerts go through `client/src/lib/alerts.ts`** (`alert()`, `playSound()`,
-  banners). Never call `new Notification(...)`, create an `AudioContext` or fetch a clip
+  banners). Never call `new Notification(...)` or `showNotification()` (its fallback where the
+  constructor is refused, Chrome on Android), create an `AudioContext` or fetch a clip
   anywhere else. `unlockAudio()` must be called from a user gesture (timer start and every
   punch commit do this) for iOS. What plays is `settings.sounds[event]`, an id from the
   catalog in `shared/sounds.ts`; `settings.sound` is the master switch over all of them, and
@@ -518,7 +519,9 @@ Prove a change at the cheapest level that can show it, and stop there:
   PR (build, boot, `/api/health`, the healthcheck command) is the earliest signal.
 - The preview harness exports `PORT=5173`; that's why `dev:server` pins `PORT=3000` and the
   `prod` config pins `PORT=8090`.
-- `client/public/sw.js` is intentionally a pass-through service worker (installability only).
+- `client/public/sw.js` is intentionally a pass-through service worker: installability, plus
+  the `notificationclick` handler for notifications `alerts.ts` shows through it (Chrome on
+  Android refuses `new Notification()`; the worker is only registered in a production build).
   Do not add caching without a versioning strategy or users will see stale assets.
 - `vite.config.ts` imports `defineConfig` from `vitest/config` so the `test` block type-checks.
 - OIDC: `APP_URL` must match the redirect URI registered in Authentik exactly
