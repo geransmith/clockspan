@@ -24,6 +24,26 @@ const CSP = [
 
 const ONE_YEAR_SEC = 31_536_000;
 
+const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+/**
+ * Refuses an API write that the browser says another site sent. SameSite=Lax keeps the
+ * session cookie off a cross-site POST, but under AUTH_MODE=none there is no cookie, and a
+ * "simple" POST (a form, or fetch in no-cors mode) needs no preflight: any page the user
+ * visits could finish or cancel their running timer. `same-site` is refused too, because a
+ * sibling app on the same domain counts as same-site for the cookie. The app's own requests
+ * are always same-origin. A request without the header (curl, Safari before 16.4) passes,
+ * and SameSite is all that covers those browsers.
+ */
+export const rejectCrossSiteWrites: RequestHandler = (req, res, next) => {
+  const site = req.get('sec-fetch-site');
+  if (!READ_METHODS.has(req.method) && (site === 'cross-site' || site === 'same-site')) {
+    res.status(403).json({ error: 'Cross-site request refused.' });
+    return;
+  }
+  next();
+};
+
 export function securityHeaders(config: Config): RequestHandler {
   // HSTS only makes sense on https, and browsers ignore it on plain http anyway; tying it
   // to cookieSecure keeps one switch for "this deployment is https".

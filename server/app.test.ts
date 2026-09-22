@@ -51,6 +51,50 @@ describe('response headers', () => {
   });
 });
 
+describe('cross-site writes', () => {
+  let app: TestApp;
+  beforeEach(async () => {
+    app = await startTestApp();
+  });
+  afterEach(() => app.close());
+
+  // A browser sets Sec-Fetch-Site itself; fetch here can send any value, which is the point.
+  const send = (method: string, path: string, site?: string, body = '{}') =>
+    fetch(`${app.url}${path}`, {
+      method,
+      headers: { 'content-type': 'application/json', ...(site ? { 'sec-fetch-site': site } : {}) },
+      body: method === 'GET' ? undefined : body,
+    });
+
+  it('refuses a write that another site sent, so a page cannot cancel a running timer', async () => {
+    const started = await app.api.post('/api/days/2026-09-22/sessions', { plannedSeconds: 1500, label: 'focus' });
+    // What a page elsewhere can send with no preflight: a POST with a text/plain body.
+    const forged = await fetch(`${app.url}/api/sessions/${started.body.session.id}/cancel`, {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain', 'sec-fetch-site': 'cross-site' },
+      body: '',
+    });
+    expect(forged.status).toBe(403);
+    expect(await forged.json()).toEqual({ error: 'Cross-site request refused.' });
+    expect((await app.api.get('/api/sessions/running')).body.session.status).toBe('running');
+  });
+
+  it('refuses same-site writes too: a sibling app on the domain is same-site for the cookie', async () => {
+    expect((await send('PUT', '/api/settings', 'same-site')).status).toBe(403);
+    expect((await send('DELETE', '/api/settings', 'cross-site')).status).toBe(403);
+  });
+
+  it("lets the app's own writes through, and clients that send no Sec-Fetch-Site", async () => {
+    expect((await send('PUT', '/api/settings', 'same-origin')).status).toBe(200);
+    expect((await send('PUT', '/api/settings', 'none')).status).toBe(200);
+    expect((await send('PUT', '/api/settings')).status).toBe(200);
+  });
+
+  it('leaves reads alone, whoever sent them', async () => {
+    expect((await send('GET', '/api/settings', 'cross-site')).status).toBe(200);
+  });
+});
+
 describe('bad request bodies', () => {
   let app: TestApp;
   beforeEach(async () => {

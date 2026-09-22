@@ -9,7 +9,7 @@ import { localAuthRouter, publicUser } from './auth/local.js';
 import { oidcAuthRouter } from './auth/oidc.js';
 import { purgeExpiredSessions } from './auth/session.js';
 import { scheduleRetention } from './retention.js';
-import { securityHeaders } from './security.js';
+import { rejectCrossSiteWrites, securityHeaders } from './security.js';
 import { daysRouter } from './routes/days.js';
 import { sessionStartRouter, sessionsRouter } from './routes/sessions.js';
 import { settingsRouter } from './routes/settings.js';
@@ -28,6 +28,7 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
   app.use(express.json({ limit: '256kb' }));
 
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
+  app.use('/api', rejectCrossSiteWrites);
 
   // Only the API reads req.user. Resolving the session for a static file would slide its
   // expiry and hand the token back in a Set-Cookie on an answer marked `public` and cacheable;

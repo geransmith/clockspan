@@ -45,7 +45,8 @@ server/                 Express API → dist/server (tsc)
   index.ts              boot: load config, warn if AUTH_MODE=none, open DB, listen, SIGTERM
   app.ts                createApp(): trust proxy, securityHeaders, /api/health, resolveUser, auth
                         routers, data routers behind requireAuth, static dist/client + SPA fallback
-  security.ts           the ONLY place response headers (CSP, nosniff, frame, referrer, HSTS, no-store on /api) are set
+  security.ts           the ONLY place response headers (CSP, nosniff, frame, referrer, HSTS, no-store on /api) are set;
+                        also rejectCrossSiteWrites (403 for a non-GET /api request marked Sec-Fetch-Site cross-site/same-site)
   config.ts             env parsing; throws with a clear message on bad/missing config
   db.ts                 open + pragmas (WAL, foreign_keys), append-only MIGRATIONS, default user
   retention.ts          old-day cleanup: cutoffKey, countDays, pruneDays, runRetention (all users,
@@ -224,7 +225,11 @@ repo or the session scratchpad.
   it means one look at the `prod` config's console. Cookies are set only through
   `cookieOptions()` (`auth/session.ts`), and the session is resolved under `/api` only
   (`resolveUser` is mounted there), so a static answer, which is publicly cacheable, never
-  carries a `Set-Cookie`. Never interpolate request data or an error message
+  carries a `Set-Cookie`. `rejectCrossSiteWrites` (also in `security.ts`, mounted on `/api`
+  before `resolveUser`) refuses any non-GET request the browser marks `Sec-Fetch-Site:
+  cross-site` or `same-site`: under `AUTH_MODE=none` there is no cookie for SameSite to hold
+  back, and a body-less POST (finish, cancel) needs no preflight. Keep write routes under
+  `/api` so it covers them. Never interpolate request data or an error message
   into HTML without `escapeHtml` (see `auth/oidc.ts`). Password hashing is async
   (`scrypt`, never `scryptSync`); login verifies against `DUMMY_HASH` when the user is unknown.
 - **The server stores epoch milliseconds and never decides what "today" is.** The client sends
@@ -400,7 +405,8 @@ repo or the session scratchpad.
   the new field, add it to `server/dev/seed.ts` and its manifest.
 - **A schema change**: append a migration string to `MIGRATIONS` in `db.ts`. Never edit an
   existing entry.
-- **A response header or CSP source**: `server/security.ts` only, then the `prod` config check.
+- **A response header, CSP source or request guard**: `server/security.ts` only (tests in
+  `server/app.test.ts`), then the `prod` config check.
 - **A config env var**: parse and validate it in `server/config.ts` (throw with a clear
   message on a bad value) → cover it in `server/config.test.ts` → document it in
   `.env.example` (commented out, with its default) and the README's variables table.
