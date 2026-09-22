@@ -1,0 +1,36 @@
+name: Dependabot auto-merge
+
+# Dependabot's PRs squash-merge on their own once the required checks (check, image-smoke)
+# pass. A major version bump waits for a review instead: that is where an upgrade can change
+# behaviour the tests don't reach (the components have no automated tests). Version updates
+# also wait out a 7-day cooldown in dependabot.yml before they are proposed at all. Nothing
+# here checks out or runs the PR's code.
+on: pull_request
+
+permissions: {}
+
+# A newer push to the same PR replaces a run still going.
+concurrency:
+  group: dependabot-automerge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  automerge:
+    # The PR's author, not github.actor: the actor is whoever caused the latest event, so it
+    # can read "dependabot[bot]" on a PR someone else opened.
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.repository == 'geransmith/clockspan'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write # the merge itself
+      pull-requests: write # turning on auto-merge
+    steps:
+      - id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+      # A grouped PR reports its largest change, so one major in a group holds the whole group.
+      - name: Queue the squash merge
+        if: steps.meta.outputs.update-type != 'version-update:semver-major'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ github.token }}
