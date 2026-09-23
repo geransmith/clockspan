@@ -1,7 +1,7 @@
 import type { RequestHandler } from 'express';
 import type { DB } from '../db.js';
 import { isValidDateKey } from '../../shared/dates.js';
-import type { Session } from '../../shared/api.js';
+import type { Session, SessionStatus } from '../../shared/api.js';
 import { activeMs } from '../../shared/timer.js';
 
 /** Guards a `/:date` route: 400 unless the param is a real `YYYY-MM-DD`. Works under `mergeParams` too. */
@@ -48,7 +48,7 @@ export interface SessionRow {
   planned_seconds: number;
   started_at: number;
   ended_at: number | null;
-  status: 'running' | 'completed' | 'cancelled';
+  status: SessionStatus;
   priority_uid: string | null;
   paused_seconds: number;
   paused_at: number | null;

@@ -7,7 +7,19 @@ import { countDays, pruneDays, reclaimSpace } from '../retention.js';
 import { isValidDateKey, punchWindow } from '../../shared/dates.js';
 import { dateParam, ensureDay, findDay, requireDate, sessionRowToJson, UID_RE, type DayRow, type SessionRow } from './shared.js';
 import { MAX_PRIORITIES } from '../../shared/settings.js';
-import { LIMITS, type Day, type Priority, type PruneInfo, type Punch } from '../../shared/api.js';
+import {
+  LIMITS,
+  type Day,
+  type OvertimeResponse,
+  type PrioritiesResponse,
+  type Priority,
+  type PruneInfo,
+  type PruneResult,
+  type Punch,
+  type PunchesResponse,
+  type RangeResponse,
+  type RetroResponse,
+} from '../../shared/api.js';
 
 const MAX_RANGE_DAYS = 400;
 const MAX_PUNCHES = 40;
@@ -131,7 +143,7 @@ export function daysRouter(db: DB, config: Config): Router {
       .all(user.id, from, to) as (DayRow & { date: string })[];
     const children = rangeRows(db, user.id, from, to);
     const none: DayRows = { punches: [], priorities: [], sessions: [] };
-    res.json({ days: rows.map((d) => dayJson(d, d.date, children.get(d.id) ?? none)) });
+    res.json({ days: rows.map((d) => dayJson(d, d.date, children.get(d.id) ?? none)) } satisfies RangeResponse);
   });
 
   // Old-day cleanup. GET is the preview the Data tab shows before asking; POST deletes.
@@ -142,8 +154,7 @@ export function daysRouter(db: DB, config: Config): Router {
       res.status(400).json({ error: 'before must be a date (YYYY-MM-DD).' });
       return;
     }
-    const info: PruneInfo = { before, ...countDays(db, currentUser(req).id, before), serverMaxDays: config.retentionDays };
-    res.json(info);
+    res.json({ before, ...countDays(db, currentUser(req).id, before), serverMaxDays: config.retentionDays } satisfies PruneInfo);
   });
 
   r.post('/prune', (req, res) => {
@@ -154,7 +165,7 @@ export function daysRouter(db: DB, config: Config): Router {
     }
     const deleted = pruneDays(db, currentUser(req).id, before);
     if (deleted > 0) reclaimSpace(db);
-    res.json({ deleted });
+    res.json({ deleted } satisfies PruneResult);
   });
 
   r.get('/:date', requireDate, (req, res) => {
@@ -179,7 +190,7 @@ export function daysRouter(db: DB, config: Config): Router {
     }
     // A punch belongs to its day: a time days away from the key is a client bug, not data.
     const window = punchWindow(date);
-    const punches: { position: number; kind: 'in' | 'out'; at: number | null }[] = [];
+    const punches: Punch[] = [];
     for (let i = 0; i < input.length; i++) {
       const item = input[i] as Record<string, unknown> | null;
       const raw = item?.at;
@@ -196,7 +207,7 @@ export function daysRouter(db: DB, config: Config): Router {
       const ins = db.prepare(`INSERT INTO punches (day_id, position, kind, at) VALUES (?, ?, ?, ?)`);
       for (const p of punches) ins.run(dayId, p.position, p.kind, p.at);
     })();
-    res.json({ punches });
+    res.json({ punches } satisfies PunchesResponse);
   });
 
   // Full replace, like punches: array order is the position, so removing a row is just
@@ -239,7 +250,7 @@ export function daysRouter(db: DB, config: Config): Router {
       const ins = db.prepare(`INSERT INTO priorities (day_id, position, text, done, uid, added_at) VALUES (?, ?, ?, ?, ?, ?)`);
       for (const p of rows) ins.run(dayId, p.position, p.text, p.done ? 1 : 0, p.uid, p.addedAt);
     })();
-    res.json({ priorities: rows });
+    res.json({ priorities: rows } satisfies PrioritiesResponse);
   });
 
   r.put('/:date/overtime', requireDate, (req, res) => {
@@ -252,7 +263,7 @@ export function daysRouter(db: DB, config: Config): Router {
     }
     const dayId = ensureDay(db, user.id, date);
     db.prepare(`UPDATE days SET overtime_approved = ? WHERE id = ?`).run(approved ? 1 : 0, dayId);
-    res.json({ overtimeApproved: approved });
+    res.json({ overtimeApproved: approved } satisfies OvertimeResponse);
   });
 
   // The day's retrospective: a free-text "why" and whether it has been reviewed. Marking it
@@ -274,7 +285,7 @@ export function daysRouter(db: DB, config: Config): Router {
     if (done === true) db.prepare(`UPDATE days SET retro_at = COALESCE(retro_at, ?) WHERE id = ?`).run(Date.now(), dayId);
     if (done === false) db.prepare(`UPDATE days SET retro_at = NULL WHERE id = ?`).run(dayId);
     const day = findDay(db, user.id, date)!;
-    res.json({ retroNote: day.retro_note, retroAt: day.retro_at });
+    res.json({ retroNote: day.retro_note, retroAt: day.retro_at } satisfies RetroResponse);
   });
 
   return r;
