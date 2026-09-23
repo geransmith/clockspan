@@ -32,11 +32,15 @@ export interface PruneCounts {
   oldest: string | null;
 }
 
+// A day with a running timer is kept whatever its date: the timer bar would otherwise point at
+// a session whose day no longer exists. The preview's count and the delete share this test.
+const NO_RUNNING_TIMER = `NOT EXISTS (SELECT 1 FROM sessions s WHERE s.day_id = days.id AND s.status = 'running')`;
+
 export function countDays(db: DB, userId: number, before: string): PruneCounts {
   const row = db
     .prepare(
       `SELECT COUNT(*) AS total, MIN(date) AS oldest,
-              SUM(CASE WHEN date < ? THEN 1 ELSE 0 END) AS matching
+              SUM(CASE WHEN date < ? AND ${NO_RUNNING_TIMER} THEN 1 ELSE 0 END) AS matching
        FROM days WHERE user_id = ?`,
     )
     .get(before, userId) as { total: number; oldest: string | null; matching: number | null };
@@ -45,14 +49,7 @@ export function countDays(db: DB, userId: number, before: string): PruneCounts {
 
 /** Deletes the user's days before `before` (YYYY-MM-DD, exclusive) and returns how many. */
 export function pruneDays(db: DB, userId: number, before: string): number {
-  // A day with a running timer is kept whatever its date: the timer bar would otherwise
-  // point at a session whose day no longer exists.
-  return db
-    .prepare(
-      `DELETE FROM days WHERE user_id = ? AND date < ?
-         AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.day_id = days.id AND s.status = 'running')`,
-    )
-    .run(userId, before).changes;
+  return db.prepare(`DELETE FROM days WHERE user_id = ? AND date < ? AND ${NO_RUNNING_TIMER}`).run(userId, before).changes;
 }
 
 /**
