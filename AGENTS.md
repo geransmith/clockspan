@@ -160,7 +160,6 @@ ca_profile.xml          the repository's Community Apps profile; the portal requ
 CONTRIBUTING.md         PR and release rules (imported by CLAUDE.md; see "Branches, PRs and releases")
 SECURITY.md             how to report a vulnerability (GitHub private reporting), supported versions, scope
 .github/workflows/ci.yml  check (+ image-smoke on PRs) → image (ghcr.io) → release (on a version bump); .github/release.yml groups notes by label
-.github/workflows/dependabot-automerge.yml  squash auto-merge for Dependabot PRs that pass (not majors)
 .github/workflows/workflow-lint.yml  zizmor on any change under .github/ (not a required check)
 ```
 
@@ -203,11 +202,9 @@ in `CONTRIBUTING.md`.
 Follow it as written; it is not advice. Dependabot (`.github/dependabot.yml`) opens weekly
 `skip-changelog` PRs for npm (minor + patch grouped, majors on their own), GitHub Actions
 (grouped) and the Docker base image (pinned by digest in both stages), each release at least 7
-days old (`cooldown`; security updates don't wait). `dependabot-automerge.yml` squash-merges
-them on their own once `check` and `image-smoke` pass, except a major version bump (or a group
-holding one), which waits for a review like an outside PR. It queues the merge with the
-repository's GitHub App token (setup in CONTRIBUTING.md), because a merge queued with
-`GITHUB_TOKEN` starts no `main` run.
+days old (`cooldown`; security updates don't wait). They are merged by hand, as a batch, like
+any other PR; a major version bump is read like an outside PR first. CONTRIBUTING.md has the
+routine and says when a dependency merge calls for a patch release.
 
 ## Dev data is disposable
 
@@ -601,8 +598,8 @@ Prove a change at the cheapest level that can show it, and stop there:
   `npx oxlint --print-config` lists what you meant, and that a deliberately bad snippet is caught.
 - GitHub starts no workflow for an event `GITHUB_TOKEN` caused (except `workflow_dispatch` and
   `repository_dispatch`). A push, merge, tag or release a workflow makes with it runs nothing
-  downstream: that is why the release job's tag starts no second run, and why the Dependabot
-  auto-merge uses the app token instead. A workflow step that must trigger CI needs that token.
+  downstream: that is why the release job's tag starts no second run. A workflow step that
+  must trigger CI needs a GitHub App or personal token instead.
 - TypeScript 7 is the native compiler: the `typescript` package has no `tsserver` or JS API.
   Editors need the native TypeScript extension for IntelliSense (VS Code's bundled TS still
   works for that); `npm run typecheck` is the source of truth either way.

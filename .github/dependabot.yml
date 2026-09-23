@@ -1,10 +1,9 @@
 # Weekly dependency updates. Every PR is labelled skip-changelog (the release notes exclude
-# the dependabot author anyway). workflows/dependabot-automerge.yml squash-merges each one once
-# the required checks pass, except a major version bump, which waits for a review.
+# the dependabot author anyway) and is merged by hand, like any other PR (CONTRIBUTING.md).
 #
-# Every ecosystem waits 7 days after a release before proposing it (GitHub's default is 3).
-# With merges unattended, that week is the margin for a hijacked release to be caught and
-# pulled first. Security updates never wait.
+# Every ecosystem waits 7 days after a release before proposing it (GitHub's default is 3):
+# that week is the margin for a hijacked release to be caught and pulled first. Security
+# updates never wait.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -33,7 +32,7 @@ updates:
       default-days: 7
     labels: [skip-changelog]
     # One PR for the week's action bumps: the four docker/* actions often release together.
-    # Majors are included; a group holding one waits for a review instead of auto-merging.
+    # Majors are included.
     groups:
       actions:
         patterns: ['*']
