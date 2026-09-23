@@ -468,8 +468,13 @@ repo or the session scratchpad.
   end in `.js`. `npm run lint` and `npm run format:check` must pass; `_`-prefixed names are the
   only allowed unused vars.
 - CSS: tokens on `:root` in `client/src/styles.css`, dark mode via `prefers-color-scheme`,
-  **mobile-first** (base = phone; `@media (min-width: 640px)` enhances). Tap targets ≥ 44 px
-  (`.btn`, `.input` set `min-height: 44px`). Inputs are 16 px so iOS doesn't zoom. No external
+  **mobile-first** (base = phone; `@media (min-width: 640px)` enhances). Tap targets are
+  44 px on a touch screen: `.btn` and `.input` set `min-height: 44px`, and a compact control
+  (chip, segment, running-bar button, banner close/action, log delete) keeps its drawn size
+  and gets the rest from the `@media (pointer: coarse)` block at the end of `styles.css`, an
+  empty `::after` reaching past its edge (a control that clips its overflow grows its padding
+  instead). Where two controls sit closer than that, each reaches half the gap. A new compact
+  control joins that block. Inputs are 16 px so iOS doesn't zoom. No external
   fonts or assets (the CSP would block them anyway). Safe-area insets via `--safe-top` / `--safe-bottom`.
 - Numeric settings inputs commit on blur/Enter (never on every keystroke); priorities debounce
   400 ms; punches and checkboxes save immediately.

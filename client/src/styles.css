@@ -2063,6 +2063,80 @@ dialog.dialog::backdrop {
   }
 }
 
+/* ---------- touch targets ---------- */
+/* On a touch screen a tap needs about 44 px to land, while the compact controls keep the size
+   they are drawn at: an empty ::after reaches past the drawn edge and takes the tap. Where two
+   controls sit closer than that, each reaches half the gap at most, so a tap between them goes
+   to the nearer one. The inset counts from the padding edge, one px inside a 1 px border. A
+   card clips its overflow, so nothing reaches past a card's edge. */
+@media (pointer: coarse) {
+  .chip,
+  .segment,
+  .running-controls .btn,
+  .banner-close,
+  .banner-action,
+  .log-delete,
+  .punch-pair .punch-remove,
+  .timer-add-priority {
+    position: relative;
+  }
+  .chip::after,
+  .segment::after,
+  .running-controls .btn::after,
+  .banner-close::after,
+  .banner-action::after,
+  .log-delete::after,
+  .punch-pair .punch-remove::after,
+  .timer-add-priority::after {
+    content: '';
+    position: absolute;
+    inset: var(--hit-inset);
+  }
+  /* 36 px, 6 px from the next chip or row: 42 px. */
+  .chip {
+    --hit-inset: -4px -1px;
+  }
+  /* 36 px on a row of its own: 44 px. */
+  .segment {
+    --hit-inset: -4px 0;
+  }
+  /* 38 px square, 4 px apart in the 56 px bar: 44 px tall, 42 px wide. */
+  .running-controls .btn {
+    --hit-inset: -4px -3px;
+  }
+  /* 32 px square, nothing else to tap within 10 px: 44 px. */
+  .banner-close {
+    --hit-inset: -6px;
+  }
+  /* 36 px at the foot of the banner: 44 px. */
+  .banner-action {
+    --hit-inset: -5px -1px;
+  }
+  /* 36 px square inside the row's 8 px padding: 44 px. */
+  .log-delete {
+    --hit-inset: -5px;
+  }
+  /* 36 px, 6 px above the pair's first row: 42 px. */
+  .punch-pair .punch-remove {
+    --hit-inset: -4px -1px;
+  }
+  /* 32 px, 12 px from the chips above and the quick buttons below: 44 px. */
+  .timer-add-priority {
+    --hit-inset: -6px 0;
+  }
+  /* These two clip their overflow (a long label ends in an ellipsis), which would cut off an
+     ::after as well; more padding, taken back by a negative margin, grows the button instead
+     and leaves the layout as it was. About 34 px of text becomes 44 px. */
+  .running-label {
+    padding-block: 11px;
+    margin-block: -5px;
+  }
+  .log-label {
+    padding-block: 11px;
+    margin-block: -11px;
+  }
+}
+
 /* ---------- motion ---------- */
 @media (prefers-reduced-motion: reduce) {
   *,
