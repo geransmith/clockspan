@@ -173,7 +173,7 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
       return {
         kicker,
         title: `Lunch in ${fmtMinutes(e.minutes)}`,
-        body: `Lunch must start by ${target} — ${fmtMinutes(ctx.lunchDeadlineMinutes)} after clocking in at ${clockIn}.`,
+        body: `Lunch must start by ${target}, ${fmtMinutes(ctx.lunchDeadlineMinutes)} after clocking in at ${clockIn}.`,
         tone: 'warn',
       };
     }
@@ -189,7 +189,7 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
     const kicker = `${alarm} · time's up`;
     if (e.id === 'lunchBy') return { kicker, title: 'Take lunch now', body: `Your lunch deadline is ${target}. Start your break.`, tone: 'danger' };
     if (e.id === 'secondMeal') return { kicker, title: 'Take your second meal break', body: mealWhy, tone: 'danger' };
-    return { kicker, title: 'Time to clock out', body: `It's ${target} — you've worked your ${day} for today. Punch out now.`, tone: 'danger' };
+    return { kicker, title: 'Time to clock out', body: `It's ${target}. You've worked your ${day} for today. Punch out now.`, tone: 'danger' };
   }
   const kicker = `${alarm} · ${fmtMinutes(e.minutes)} overdue`;
   if (e.id === 'lunchBy') {

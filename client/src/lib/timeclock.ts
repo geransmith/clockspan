@@ -1,5 +1,6 @@
 import { endOfDay } from '../../../shared/dates.js';
 import type { Punch, Settings } from '../types';
+import { PUNCH_ORDER } from './copy';
 
 export type TimeclockState = 'not-started' | 'working' | 'at-lunch' | 'on-break' | 'done';
 export type LunchStatus = 'none' | 'upcoming' | 'overdue' | 'taken';
@@ -118,7 +119,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
   let expect: 'in' | 'out' = 'in';
   for (const p of set) {
     if (p.kind !== expect) {
-      error = 'Punch times are out of order — check that ins and outs alternate.';
+      error = PUNCH_ORDER;
       break;
     }
     if (p.kind === 'in') {

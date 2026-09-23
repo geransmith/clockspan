@@ -96,8 +96,8 @@ client/                 Vite root → dist/client
                         SOUND_EVENT_LABELS (the rows of Settings → Alarms → Sounds)
   src/sounds/           the bundled clips, <id>.mp3, all CC0; README.md there records each
                         clip's title, author and source (the only place provenance lives)
-  src/lib/copy.ts       every editable phrase (celebrations, warning pools, confirms, timer-done,
-                        retro prompt, settings status) — no logic
+  src/lib/copy.ts       what the app raises at the user (celebrations, warning pools, confirms,
+                        alerts, banners, notices, retro prompt, settings status); no logic
   src/lib/celebrate.ts  PURE: pickCelebration(seed) for the end-of-day notice, pickBurst(seed, n)
                         for the emoji burst (pieces + flight)
   src/lib/priorities.ts PURE: padPriorities(), warnThreshold(), warningKind(), pickWarning(kind),
@@ -476,9 +476,12 @@ repo or the session scratchpad.
 - Comments explain *why* (browser quirks, math), not what.
 - No new dependency (a server one or a client library the bundle carries) without stating the
   reason in the commit message.
-- **Copy**: phrases the app says (celebrations, gentle warnings, confirms, the timer-done
-  alert) live in `client/src/lib/copy.ts`, never inline. Write them plainly and check new
-  ones against Wikipedia's "Signs of AI writing"
+- **Copy**: what the app raises at the user (celebrations, the priority warnings, confirms,
+  alerts and banners, the sheet's notices) lives in `client/src/lib/copy.ts`, never inline;
+  alarm lines are built in `describeEvent()`. Labels, settings hints and empty-state lines sit
+  beside the control or view they describe, and must not assume a card order the user can
+  change ("above", "at the bottom"). Write all of it plainly and check new ones against
+  Wikipedia's "Signs of AI writing"
   (https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing): no "not just X, but Y", no
   rule-of-three flourishes, no em-dash chains, no "Gentle reminder:" / "Deep breath." openers,
   no cheerleading, no puffery words. Short, dry, specific.

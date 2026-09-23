@@ -21,7 +21,7 @@ export function SessionLog({ date, sessions, priorities, now }: Props) {
   const planned = priorities.filter((p) => p.uid && p.text.trim());
 
   if (sessions.length === 0) {
-    return <p className="muted center">No focus sessions yet. Start one above and it will show up here.</p>;
+    return <p className="muted center">No focus sessions yet. Sessions from the focus timer show up here.</p>;
   }
 
   return (
