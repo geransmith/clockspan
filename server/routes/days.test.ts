@@ -234,11 +234,13 @@ describe('/api/days/prune', () => {
     expect((await app.api.post('/api/days/prune', {})).status).toBe(400);
   });
 
-  it('never deletes a day with a running timer', async () => {
+  it('never deletes a day with a running timer, and the preview does not count it', async () => {
     await app.close();
     app = await startTestApp({ seed: { running: true } });
+    const preview = (await app.api.get('/api/days/prune?before=2099-01-01')).body;
+    expect(preview).toMatchObject({ matching: app.seeded!.days.length - 1, total: app.seeded!.days.length });
     const r = await app.api.post('/api/days/prune', { before: '2099-01-01' });
-    expect(r.body).toEqual({ deleted: app.seeded!.days.length - 1 });
+    expect(r.body).toEqual({ deleted: preview.matching });
     expect(storedDates()).toEqual([SEED_TODAY]);
     expect((await app.api.get('/api/sessions/running')).body.session).not.toBeNull();
   });
