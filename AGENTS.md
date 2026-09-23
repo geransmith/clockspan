@@ -24,7 +24,8 @@ has the user-facing description.
 - Tests: Vitest 5. Lint: oxlint (`.oxlintrc.json`: correctness + typescript + react-hooks +
   jsx-a11y rules, syntax level only; it parses TS itself, which is what lets TypeScript be 7). CI: `.github/workflows/ci.yml` runs typecheck, lint, test, build on
   every PR and push, and on a PR also builds and boots the image (`image-smoke`, never pushed);
-  on `main` it publishes the `edge` image, and a commit that changed
+  on `main` it builds, boots (the same `scripts/smoke-image.sh`) and then publishes the `edge`
+  image, and a commit that changed
   `package.json`'s version (the merged bump PR) also gets the versioned image, the tag and the
   GitHub Release.
 - One `package.json` for both sides; `tsconfig.json` = client + shared, `tsconfig.server.json` =
@@ -142,6 +143,8 @@ scripts/screenshots.mjs `npm run screenshots`: dev server (reused or started) + 
 scripts/icons.mjs       `npm run icons`: icon.svg → icon-192/512.png (transparent corners),
                         icon-maskable-512.png and apple-touch-icon.png (full-bleed)
 scripts/browser.mjs     the headless Chromium both scripts drive: findBrowser, launchBrowser, Cdp, openBrowser
+scripts/smoke-image.sh  boots a built image and checks it (health, SPA shell, /data owner, PID 1 not
+                        root, the HEALTHCHECK command); CI's image-smoke and image jobs run it
 docs/screenshots/       committed PNGs the README embeds; regenerate after a visible UI change
 docker/entrypoint.sh    PUID/PGID (default 1000/1000) → chown /data + su-exec; 0 keeps root
 Dockerfile docker-compose.yml .env.example README.md .oxlintrc.json
@@ -552,7 +555,8 @@ Prove a change at the cheapest level that can show it, and stop there:
   is in the base image and how it applies `allowScripts` (and so no dependency's install
   script runs in CI; `npm audit signatures` then checks every package's registry signature). Docker is verified only in the
   deployed environment, not on the dev Mac (no Docker here); the `image-smoke` job on every
-  PR (build, boot, `/api/health`, the healthcheck command) is the earliest signal.
+  PR (`scripts/smoke-image.sh`: build, boot, `/api/health`, root dropped, the healthcheck
+  command) is the earliest signal, and `main` runs the same script before it pushes a tag.
 - The preview harness exports `PORT=5173`; that's why `dev:server` pins `PORT=3000` and the
   `prod` config pins `PORT=8090`.
 - `client/public/sw.js` is intentionally a pass-through service worker: installability, plus
