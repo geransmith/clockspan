@@ -15,6 +15,24 @@ required checks pass, each is squash-merged, except a major version bump, which 
 review. Version updates are only proposed 7 days after the release (`cooldown` in
 `.github/dependabot.yml`); security updates come at once.
 
+The merge is queued with a token from the repository's own GitHub App, not with
+`GITHUB_TOKEN`: GitHub starts no workflow for a merge that token caused, so `main` would get no
+CI run and no new `edge` image. The app is set up once and has nothing to renew:
+
+1. **Settings → Developer settings → GitHub Apps → New GitHub App** (your account). Any name
+   (e.g. `clockspan-automerge`), homepage the repository URL, **Webhook → Active** unticked.
+   Repository permissions: **Contents**, **Pull requests** and **Workflows**, all *Read and
+   write*. "Only on this account". Create it.
+2. On the app's page, note the **Client ID**, then **Generate a private key** (a `.pem` file
+   downloads).
+3. **Install App** → your account → **Only select repositories** → `clockspan`.
+4. In the repository, **Settings → Secrets and variables → Dependabot** (not Actions: a
+   Dependabot run only sees these): `AUTOMERGE_APP_CLIENT_ID` = the client ID,
+   `AUTOMERGE_APP_PRIVATE_KEY` = the whole `.pem` file. Delete the downloaded file afterwards.
+
+Without those two secrets the workflow falls back to `GITHUB_TOKEN`: the PR still merges, and
+`main` catches up at the next merge that isn't Dependabot's.
+
 ```bash
 git switch -c <topic>            # never work on main
 # edit, commit
