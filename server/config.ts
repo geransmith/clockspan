@@ -1,7 +1,6 @@
 import path from 'node:path';
+import { AUTH_MODES, type AuthMode } from '../shared/api.js';
 import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS } from '../shared/settings.js';
-
-export type AuthMode = 'none' | 'local' | 'oidc';
 
 export interface Config {
   port: number;
@@ -58,8 +57,8 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env): Config {
   // and so does a compose .env line like `COOKIE_SECURE=`; left in, '' would beat the defaults.
   const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(rawEnv).filter(([, value]) => value !== ''));
   const authModeRaw = (env.AUTH_MODE ?? 'none').toLowerCase();
-  if (!['none', 'local', 'oidc'].includes(authModeRaw)) {
-    throw new Error(`AUTH_MODE must be one of none|local|oidc (got "${authModeRaw}")`);
+  if (!AUTH_MODES.includes(authModeRaw as AuthMode)) {
+    throw new Error(`AUTH_MODE must be one of ${AUTH_MODES.join('|')} (got "${authModeRaw}")`);
   }
   const authMode = authModeRaw as AuthMode;
 

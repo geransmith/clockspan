@@ -4,7 +4,7 @@ import type { Config } from '../config.js';
 import { DUMMY_HASH, hashPassword, validatePassword, validateUsername, verifyPassword } from './password.js';
 import { createSession, destroySession, revokeOtherSessions } from './session.js';
 import { currentUser, requireAdmin, requireAuth } from './middleware.js';
-import type { AuthInfo, PublicUser } from '../../shared/api.js';
+import type { AuthInfo, OkResponse, PublicUser, UserResponse, UsersResponse } from '../../shared/api.js';
 
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60_000;
@@ -63,13 +63,12 @@ export function localAuthRouter(db: DB, config: Config): Router {
   const limiter = new LoginLimiter();
 
   r.get('/me', (req, res) => {
-    const info: AuthInfo = {
+    res.json({
       mode: 'local',
       setupRequired: userCount(db) === 0,
       user: req.user ? publicUser(req.user) : null,
       cookieSecure: config.cookieSecure,
-    };
-    res.json(info);
+    } satisfies AuthInfo);
   });
 
   r.post('/setup', async (req, res) => {
@@ -99,7 +98,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
     createSession(db, config, res, Number(info.lastInsertRowid));
     const user = db.prepare(`SELECT * FROM users WHERE id = ?`).get(info.lastInsertRowid) as UserRow;
     console.log(`[auth] setup: admin ${logName(user.username)} created from ${req.ip}`);
-    res.status(201).json({ user: publicUser(user) });
+    res.status(201).json({ user: publicUser(user) } satisfies UserResponse);
   });
 
   r.post('/login', async (req, res) => {
@@ -132,12 +131,12 @@ export function localAuthRouter(db: DB, config: Config): Router {
     limiter.reset(ip);
     createSession(db, config, res, user.id);
     console.log(`[auth] ${logName(user.username)} signed in from ${ip}`);
-    res.json({ user: publicUser(user) });
+    res.json({ user: publicUser(user) } satisfies UserResponse);
   });
 
   r.post('/logout', (req, res) => {
     destroySession(db, config, req, res);
-    res.json({ ok: true });
+    res.json({ ok: true } satisfies OkResponse);
   });
 
   // The current-password check is a login in disguise: a stolen cookie must not be able to
@@ -170,13 +169,13 @@ export function localAuthRouter(db: DB, config: Config): Router {
     // A changed password is usually "someone else may have the old one": drop every other session.
     revokeOtherSessions(db, req, user.id);
     console.log(`[auth] password changed for ${logName(user.username)}; other sessions signed out`);
-    res.json({ ok: true });
+    res.json({ ok: true } satisfies OkResponse);
   });
 
   // Admin user management. Deleting a user cascades all of their data.
   r.get('/users', requireAdmin, (_req, res) => {
     const rows = db.prepare(`SELECT * FROM users WHERE kind = 'local' ORDER BY created_at`).all() as UserRow[];
-    res.json({ users: rows.map(publicUser) });
+    res.json({ users: rows.map(publicUser) } satisfies UsersResponse);
   });
 
   r.post('/users', requireAdmin, async (req, res) => {
@@ -202,7 +201,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
     }
     const user = db.prepare(`SELECT * FROM users WHERE id = ?`).get(info.lastInsertRowid) as UserRow;
     console.log(`[auth] user ${logName(name)} created by ${logName(currentUser(req).username)}`);
-    res.status(201).json({ user: publicUser(user) });
+    res.status(201).json({ user: publicUser(user) } satisfies UserResponse);
   });
 
   r.delete('/users/:id', requireAdmin, (req, res) => {
@@ -218,7 +217,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
       return;
     }
     console.log(`[auth] user #${id} and their data deleted by ${logName(me.username)}`);
-    res.json({ ok: true });
+    res.json({ ok: true } satisfies OkResponse);
   });
 
   return r;

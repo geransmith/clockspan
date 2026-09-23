@@ -5,7 +5,7 @@ import type { DB, UserRow } from '../db.js';
 import type { Config } from '../config.js';
 import { cookieOptions, createSession, destroySession } from './session.js';
 import { logName, publicUser } from './local.js';
-import type { AuthInfo } from '../../shared/api.js';
+import type { AuthInfo, LogoutResponse } from '../../shared/api.js';
 
 const FLOW_COOKIE = 'fs_oidc';
 const FLOW_TTL_SEC = 600;
@@ -86,8 +86,7 @@ export function oidcAuthRouter(db: DB, config: Config): { api: Router; web: Rout
   const web = Router();
 
   api.get('/me', (req, res) => {
-    const info: AuthInfo = { mode: 'oidc', setupRequired: false, user: req.user ? publicUser(req.user) : null, cookieSecure: config.cookieSecure };
-    res.json(info);
+    res.json({ mode: 'oidc', setupRequired: false, user: req.user ? publicUser(req.user) : null, cookieSecure: config.cookieSecure } satisfies AuthInfo);
   });
 
   api.post('/logout', async (req, res) => {
@@ -101,7 +100,7 @@ export function oidcAuthRouter(db: DB, config: Config): { api: Router; web: Rout
     } catch {
       // Provider unreachable; local logout is enough.
     }
-    res.json({ ok: true, redirect: endSession });
+    res.json({ ok: true, redirect: endSession } satisfies LogoutResponse);
   });
 
   web.get('/login', async (_req, res) => {

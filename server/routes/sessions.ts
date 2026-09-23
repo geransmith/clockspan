@@ -2,7 +2,7 @@ import { Router, type RequestHandler, type Response } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { dateParam, ensureDay, requireDate, sessionRowToJson, UID_RE, type SessionRow } from './shared.js';
-import { LIMITS } from '../../shared/api.js';
+import { LIMITS, type OkResponse, type RunningResponse, type SessionConflict, type SessionResponse } from '../../shared/api.js';
 import { plannedEndAt } from '../../shared/timer.js';
 
 const MIN_PLANNED = 60;
@@ -54,7 +54,7 @@ export function sessionStartRouter(db: DB): Router {
     }
     const existing = running(db, user.id);
     if (existing) {
-      res.status(409).json({ error: 'A timer is already running.', session: sessionRowToJson(existing) });
+      res.status(409).json({ error: 'A timer is already running.', session: sessionRowToJson(existing) } satisfies SessionConflict);
       return;
     }
     const result = db.transaction((): { id: number } | { error: string } => {
@@ -73,7 +73,7 @@ export function sessionStartRouter(db: DB): Router {
       res.status(400).json({ error: result.error });
       return;
     }
-    res.status(201).json({ session: sessionRowToJson(getOwned(db, user.id, result.id)!) });
+    res.status(201).json({ session: sessionRowToJson(getOwned(db, user.id, result.id)!) } satisfies SessionResponse);
   });
 
   return r;
@@ -84,7 +84,7 @@ export function sessionsRouter(db: DB): Router {
 
   r.get('/running', (req, res) => {
     const s = running(db, currentUser(req).id);
-    res.json({ session: s ? sessionRowToJson(s) : null });
+    res.json({ session: s ? sessionRowToJson(s) : null } satisfies RunningResponse);
   });
 
   // Every /:id route below works on the caller's own session or answers 404; the row is
@@ -99,7 +99,7 @@ export function sessionsRouter(db: DB): Router {
     next();
   };
   const owned = (res: Response) => res.locals.session as OwnedSession;
-  const reply = (res: Response, userId: number, id: number) => res.json({ session: sessionRowToJson(getOwned(db, userId, id)!) });
+  const reply = (res: Response, userId: number, id: number) => res.json({ session: sessionRowToJson(getOwned(db, userId, id)!) } satisfies SessionResponse);
 
   r.patch('/:id', loadOwnedSession, (req, res) => {
     const s = owned(res);
@@ -208,7 +208,7 @@ export function sessionsRouter(db: DB): Router {
 
   r.delete('/:id', loadOwnedSession, (_req, res) => {
     db.prepare(`DELETE FROM sessions WHERE id = ?`).run(owned(res).id);
-    res.json({ ok: true });
+    res.json({ ok: true } satisfies OkResponse);
   });
 
   return r;

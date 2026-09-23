@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
+import type { PublicUser } from '../shared/api.js';
 
 export type DB = Database.Database;
 
@@ -121,7 +122,7 @@ export function migrate(db: DB, upTo: number = MIGRATIONS.length): void {
 
 export interface UserRow {
   id: number;
-  kind: 'default' | 'local' | 'oidc';
+  kind: PublicUser['kind'];
   username: string | null;
   password_hash: string | null;
   oidc_sub: string | null;

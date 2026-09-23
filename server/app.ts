@@ -13,7 +13,7 @@ import { rejectCrossSiteWrites, securityHeaders } from './security.js';
 import { daysRouter } from './routes/days.js';
 import { sessionStartRouter, sessionsRouter } from './routes/sessions.js';
 import { settingsRouter } from './routes/settings.js';
-import type { AuthInfo } from '../shared/api.js';
+import type { AuthInfo, OkResponse } from '../shared/api.js';
 
 export interface AppOptions {
   /** Where the built client lives; the default is `dist/client` next to the built server. */
@@ -27,7 +27,7 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
   app.use(securityHeaders(config));
   app.use(express.json({ limit: '256kb' }));
 
-  app.get('/api/health', (_req, res) => res.json({ ok: true }));
+  app.get('/api/health', (_req, res) => res.json({ ok: true } satisfies OkResponse));
   app.use('/api', rejectCrossSiteWrites);
 
   // Only the API reads req.user. Resolving the session for a static file would slide its
@@ -45,8 +45,7 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
   } else {
     app.get('/api/auth/me', (req, res) => {
       // resolveUser attaches the default user to every request in this mode.
-      const info: AuthInfo = { mode: 'none', setupRequired: false, user: publicUser(currentUser(req)), cookieSecure: config.cookieSecure };
-      res.json(info);
+      res.json({ mode: 'none', setupRequired: false, user: publicUser(currentUser(req)), cookieSecure: config.cookieSecure } satisfies AuthInfo);
     });
   }
 

@@ -258,9 +258,11 @@ repo or the session scratchpad.
 - **Anything both sides need lives in `shared/`** (`settings.ts`, `dates.ts`, `api.ts`) and is
   imported from there with a `.js` suffix. Never mirror a constant, default or type into the
   other tree; the client's `types.ts` re-exports the shared types so component imports stay
-  short, and every server function that builds a response body is annotated with the
-  `shared/api.ts` type it returns (`sessionRowToJson(): Session`, `dayJson(): Day`, …) so a
-  field renamed on one side fails `typecheck` on the other.
+  short. Every response body has a `shared/api.ts` type: builders are annotated with it
+  (`sessionRowToJson(): Session`, `dayJson(): Day`, …) and each route's answer names its
+  envelope with `satisfies` (`res.json({ deleted } satisfies PruneResult)`), while
+  `client/src/api.ts` reads the same types, so a field renamed on one side fails `typecheck`
+  on the other. Server-only row types (`UserRow`, `SessionRow`) take their unions from there too.
 - **Response headers are set only in `server/security.ts`** (applied first in `createApp`).
   The CSP is same-origin with no `unsafe-inline`, so no inline `<script>`/`<style>` in
   `index.html` and no third-party assets; React `style={{}}` props are fine (CSSOM). Changing
@@ -442,7 +444,8 @@ repo or the session scratchpad.
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
   `currentUser(req).id` (`requireDate` / `loadOwnedSession` where they fit), validate input,
   return `{ error }` JSON on failure → add the call to `client/src/api.ts` and the response
-  type to `shared/api.ts` (annotate the server builder with it) → cover it in that router's
+  type to `shared/api.ts` (the route's `res.json(… satisfies <Type>)` and the client's
+  `request<Type>` both name it) → cover it in that router's
   `*.test.ts`: happy path, each 400, and that another
   user gets a 404/empty result (the scoping test is not optional). If the seed should carry
   the new field, add it to `server/dev/seed.ts` and its manifest.

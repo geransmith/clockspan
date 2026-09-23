@@ -90,7 +90,60 @@ export interface PruneInfo {
   serverMaxDays: number | null;
 }
 
-export type AuthMode = 'none' | 'local' | 'oidc';
+/** `GET /days/range?from&to`: the days that exist in the range, oldest first. */
+export interface RangeResponse {
+  days: Day[];
+}
+
+/** `POST /days/prune`: how many days went. */
+export interface PruneResult {
+  deleted: number;
+}
+
+/** `PUT /days/:date/punches`: the rows as stored, kinds filled in. */
+export interface PunchesResponse {
+  punches: Punch[];
+}
+
+/** `PUT /days/:date/priorities`: the rows as stored, uids and addedAt filled in. */
+export interface PrioritiesResponse {
+  priorities: Priority[];
+}
+
+/** `PUT /days/:date/overtime`. */
+export interface OvertimeResponse {
+  overtimeApproved: boolean;
+}
+
+/** `PUT /days/:date/retro`: the note and the first reviewed-at, as stored. */
+export interface RetroResponse {
+  retroNote: string;
+  retroAt: number | null;
+}
+
+/** Every session route that answers with one session: start, PATCH, pause, resume, finish, cancel. */
+export interface SessionResponse {
+  session: Session;
+}
+
+/** `GET /sessions/running`. */
+export interface RunningResponse {
+  session: Session | null;
+}
+
+/** The 409 from starting a timer while one runs (on this device or another): the one that runs. */
+export interface SessionConflict {
+  error: string;
+  session: Session;
+}
+
+/** A write with nothing else to report (logout, password change, a delete). */
+export interface OkResponse {
+  ok: true;
+}
+
+export const AUTH_MODES = ['none', 'local', 'oidc'] as const;
+export type AuthMode = (typeof AUTH_MODES)[number];
 
 export interface PublicUser {
   id: number;
@@ -107,4 +160,20 @@ export interface AuthInfo {
   user: PublicUser | null;
   /** The session cookie is marked Secure (APP_URL is https): a page opened over plain http cannot keep it. */
   cookieSecure: boolean;
+}
+
+/** `POST /auth/setup`, `POST /auth/login` and an admin's `POST /auth/users`. */
+export interface UserResponse {
+  user: PublicUser;
+}
+
+/** An admin's `GET /auth/users`. */
+export interface UsersResponse {
+  users: PublicUser[];
+}
+
+/** `POST /auth/logout`: under OIDC, where to send the browser to end the provider's session too. */
+export interface LogoutResponse {
+  ok: true;
+  redirect?: string | null;
 }

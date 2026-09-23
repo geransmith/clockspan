@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
-import type { Session } from '../types';
+import type { Session, SessionConflict } from '../types';
 import { alert, dismissByTag, unlockAudio, warnQuietly } from '../lib/alerts';
 import { SAVE_FAILED, TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
@@ -176,7 +176,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         setRunning(session);
         store.applySession(session);
       } catch (err) {
-        const body = (err as { body?: { session?: Session } }).body;
+        const body = (err as { body?: Partial<SessionConflict> }).body;
         if (!body?.session) throw err;
         // 409: a timer is already running, started on another device. Follow it, fetch its
         // day so the log has the row, and say why what was typed here went nowhere.
