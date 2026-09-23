@@ -4,22 +4,16 @@ import { secondMealApplies, type TimeclockResult } from '../lib/timeclock';
 import { describeEvent, dueEvents, type AlarmTarget } from '../lib/alarms';
 import { alert, dismissByTag } from '../lib/alerts';
 import { resolveHour12 } from '../lib/format';
-import { writeStored } from '../lib/storage';
+import { pruneStored, readStoredJson, writeStored } from '../lib/storage';
 
 const STORAGE_PREFIX = 'focus:alarms:';
 
+/** Today's fired keys; other days' are dropped so the store never grows. */
 function loadFired(dateKey: string): Set<string> {
-  try {
-    // Prune other days so the store never grows.
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const k = localStorage.key(i);
-      if (k?.startsWith(STORAGE_PREFIX) && k !== STORAGE_PREFIX + dateKey) localStorage.removeItem(k);
-    }
-    const raw = localStorage.getItem(STORAGE_PREFIX + dateKey);
-    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
-  } catch {
-    return new Set();
-  }
+  const key = STORAGE_PREFIX + dateKey;
+  pruneStored(STORAGE_PREFIX, key);
+  const stored = readStoredJson(key);
+  return new Set(Array.isArray(stored) ? stored.filter((k): k is string => typeof k === 'string') : []);
 }
 
 export interface AlarmDayState {

@@ -157,8 +157,8 @@ export function oidcAuthRouter(db: DB, config: Config): { api: Router; web: Rout
       const user = upsertOidcUser(db, `${o.issuer}|${claims.sub}`, name ?? claims.sub);
       createSession(db, config, res, user.id);
       console.log(`[oidc] ${logName(user.display_name)} (#${user.id}) signed in`);
-      // createSession set the session cookie; also clear the one-time flow cookie.
-      res.setHeader('Set-Cookie', [res.getHeader('Set-Cookie') as string, clearFlow]);
+      // createSession set the session cookie; this clears the one-time flow cookie beside it.
+      res.append('Set-Cookie', clearFlow);
       res.redirect('/');
     } catch (err) {
       console.error('[oidc] callback failed:', err);
