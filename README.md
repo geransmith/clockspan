@@ -15,13 +15,13 @@
 
 ## Features
 
-**Timeclock that plans the day for you.** Tap *Now* on *Clock in* and the sheet tells you when lunch must start (default: within 5 hours) and when your day ends (default: 8 hours worked + 30-minute lunch), live, re-planning if lunch runs long. Forgot to punch? Type the time: `0730` fills the hour, the minute and a sensible AM/PM, and saves. Times follow your browser's clock; *Settings → Timeclock → Time format* forces 12-hour or 24-hour. Extra out/in pairs for appointments, before or after lunch. An explicit clock-out ends the day, early or not, with a small celebration: a line, a burst of emoji and a "yay", and ticking a priority gets a smaller burst (*Settings → Sheet → Celebrations* turns the bursts off; the OS "reduce motion" setting does too; the sound is picked under *Settings → Alarms → Sounds*).
+**Timeclock that plans the day for you.** Tap *Now* on *Clock in* and the sheet works out when lunch must start (default: within 5 hours) and when your day ends (default: 8 hours worked plus a 30-minute lunch), and re-plans if lunch runs long. Forgot to punch? Type the time. Extra out/in pairs cover appointments before or after lunch. Clocking out ends the day, early or not, with a small celebration.
 
 **A sticker chart, if you want one.** Off by default. With it on, every day on the History calendar wears a little creature for each thing it did: clocked out, lunch taken, all priorities done, a focus session logged, retrospective reviewed. The legend counts them for the month and narrows the calendar to one kind.
 
 **Three priorities, on purpose.** New days start with three rows (adjustable). You can add more, and the sheet asks first: the nudge changes once some rows are ticked, and again once they all are. Rows can only be ticked once they have text.
 
-**A focus timer that knows what it's for.** 15 / 25 / 50-minute sessions, ± while running, pause for the door or the bathroom (paused time isn't logged), finish early, and it logs the real duration. When it runs out it chimes and counts into the negative while it waits: add five more minutes, or finish and, if you ran over, choose between the planned length and what you actually worked. Tap one of your open priorities to link the session to it, or type something new and tick *Also add to today's priorities* when a task lands mid-day. The running timer floats at the top of every view; the start time lives on the server, so it survives reloads and phone sleep.
+**A focus timer that knows what it's for.** 15, 25 or 50-minute sessions you can stretch, shorten or pause (paused time isn't logged). When one runs out it chimes and waits for you to add time or finish. Link a session to one of your open priorities, or put a new task on the plan as you start it. The running timer stays at the top of every view, and since its start time lives on the server it survives reloads and phone sleep.
 
 **Day log.** Every session with its actual duration, which priority it was for (editable after the fact), and the day's total focused time.
 
@@ -47,11 +47,11 @@
   <img src="docs/screenshots/settings-data.png" width="300" alt="Settings → Data: delete old days automatically after N days, or delete everything before a date">
 </p>
 
-**Alarms.** Sound, browser notification and in-app banner as lunch, clock-out and (on long days) the second meal period approach, each with its own warn-before, when-reached and repeat rules. Each event (a warning, a deadline reached, a repeat, the timer finishing, the day completing, a priority ticked) has its own sound, picked from a few chimes and bundled clips, or none. Tiles turn amber inside the first warning window and red when you're over. An *Overtime approved* switch silences that day's clock-out alarm only; meal alarms stay on.
+**Alarms.** Sound, browser notification and in-app banner as lunch, clock-out and (on long days) the second meal period approach, each with its own warn-before, when-reached and repeat rules, and a sound per kind of event. An *Overtime approved* switch silences that day's clock-out alarm only; meal alarms stay on.
 
 **Your data, your server.** Per-user sheets, history, settings and layout. Sign-in is optional: run it open on your LAN, create local accounts, or sign in through Authentik (OIDC). Old days can be deleted by hand or pruned automatically after a number of days you choose, with an optional server-wide ceiling for admins. Cards can be reordered or hidden per user.
 
-**Phone first.** Mobile layout, 44 px tap targets, installable (Android *Install app*, iOS *Add to Home Screen*), and a *keep screen awake* option so the countdown and chime stay live.
+**Phone first.** Mobile layout, 44 px touch targets, installable (Android *Install app*, iOS *Add to Home Screen*), and a *keep screen awake* option so the countdown and chime stay live.
 
 ---
 
@@ -72,8 +72,10 @@ Other commands:
 
 ```bash
 npm test               # unit tests (timeclock math, alarms) + API tests against an in-memory DB
+npm run test:coverage  # the same, failing unless server/, shared/ and the client libs are 100% covered (CI runs this)
 npm run typecheck      # client + server type check
-npm run lint           # oxlint (typescript + react-hooks rules)
+npm run lint           # oxlint (correctness, TypeScript, React hooks and accessibility rules)
+npm run format         # Prettier (CI runs format:check)
 npm run seed           # fill the local database with sample days (see below)
 npm run build          # production build → dist/
 npm start              # serve the production build on http://localhost:3000 (PORT to change; Docker sets 8080)
@@ -127,7 +129,7 @@ Images are published to GitHub Container Registry for `linux/amd64`:
 | Tag | What it is |
 | --- | --- |
 | `ghcr.io/geransmith/clockspan:latest` | the newest release |
-| `ghcr.io/geransmith/clockspan:0.1.0`, `:0.1` | a specific release |
+| `ghcr.io/geransmith/clockspan:X.Y.Z`, `:X.Y` | a specific release (`:X.Y` follows its patch releases) |
 | `ghcr.io/geransmith/clockspan:edge` | the latest commit on `main`; it has passed CI and nothing else |
 
 ```bash
@@ -189,7 +191,7 @@ Set these in `.env` (start from `.env.example`, which documents each one) or in 
 | Mode | Who can use it | Sign-in | Users |
 | --- | --- | --- | --- |
 | `none` | Anyone who can reach the port | none | one implicit user |
-| `local` | Accounts you create | username + password | first account is admin; admin adds/removes users in **Settings → Users** |
+| `local` | Accounts you create | username + password | first account is admin; admin adds/removes users in **Settings → Account** |
 | `oidc` | Whoever your provider admits | redirect to the provider | created automatically on first sign-in |
 
 Each user has their own sheet, history, settings and layout.
@@ -225,26 +227,35 @@ Login is rate-limited to 5 attempts per 15 minutes per IP (set `TRUST_PROXY` beh
 
 The app refuses to start with a clear message if any of these are missing. If Authentik is briefly unreachable at startup the app still boots and retries discovery in the background. Sign out also ends the Authentik session when the provider advertises an end-session endpoint.
 
-**Switching modes later.** Data is keyed by user. Going from `none` to `local` creates a fresh admin; the old implicit user's data stays in the database. To hand it to the new account:
+**Switching modes later.** Data is keyed by user. Going from `none` to `local` creates a fresh admin; the old implicit user's data stays in the database. To hand it to the new account, stop the container and run the script below before the new account records a day of its own (a user has one row per date, so a date both accounts used stops the script and nothing moves). Days and their sessions move together: a session belongs to a user as well as a day. The last two statements bring the old settings along, replacing any the admin saved; leave them out to keep the admin's.
 
 ```bash
-sqlite3 /path/on/host/focus.db \
-  "UPDATE days SET user_id = (SELECT id FROM users WHERE kind='local' ORDER BY id LIMIT 1) WHERE user_id = (SELECT id FROM users WHERE kind='default');"
+sqlite3 /path/on/host/focus.db <<'SQL'
+.bail on
+BEGIN;
+UPDATE days     SET user_id = (SELECT id FROM users WHERE kind = 'local' ORDER BY id LIMIT 1)
+                WHERE user_id = (SELECT id FROM users WHERE kind = 'default');
+UPDATE sessions SET user_id = (SELECT id FROM users WHERE kind = 'local' ORDER BY id LIMIT 1)
+                WHERE user_id = (SELECT id FROM users WHERE kind = 'default');
+DELETE FROM settings WHERE user_id = (SELECT id FROM users WHERE kind = 'local' ORDER BY id LIMIT 1)
+                AND EXISTS (SELECT 1 FROM settings WHERE user_id = (SELECT id FROM users WHERE kind = 'default'));
+UPDATE settings SET user_id = (SELECT id FROM users WHERE kind = 'local' ORDER BY id LIMIT 1)
+                WHERE user_id = (SELECT id FROM users WHERE kind = 'default');
+COMMIT;
+SQL
 ```
-
-(Repeat for `sessions` and `settings` if you want those too.)
 
 ---
 
 ## Using it
 
-- **Timeclock.** Tap **Now** on *Clock in* when you start. The *Lunch by* tile counts down; punch *Lunch out* / *Lunch in* around your break, and *Clock out* when you leave. Clocking out ends the day, even if you left early. To enter a time by hand, click the hour and type: `0730` moves through hour and minute on its own, fills in AM or PM (morning for 5–11, afternoon for 12 and 1–4; a punch after your clock-in stays after it) and saves as soon as the last part is in; press `a` or `p`, or ↑/↓ on any part, to change it. A half-typed time is dropped when you click away, so what the row shows is what is stored. Need to step out for an appointment? **Add extra out / in** for as many pairs as you need. A pair you add before lunch is punched sits above lunch; otherwise it sits below. Your projected *Clock out at* accounts for everything. Came back after clocking out? Tap **Add extra out / in**: your clock-out time becomes that pair's *Out*, tap **Now** on its *In*, and you get a fresh *Clock out* row.
+- **Timeclock.** Tap **Now** on *Clock in* when you start. The *Lunch by* tile counts down; punch *Lunch out* / *Lunch in* around your break, and *Clock out* when you leave. Clocking out ends the day, even if you left early. To enter a time by hand, click the hour and type: `0730` moves through hour and minute on its own, fills in AM or PM (morning for 5–11, afternoon for 12 and 1–4; a punch after your clock-in stays after it) and saves as soon as the last part is in; press `a` or `p`, or ↑/↓ on any part, to change it. A half-typed time is dropped when you click away, so what the row shows is what is stored. Times follow your browser's clock; *Settings → Timeclock → Time format* forces 12-hour or 24-hour. Need to step out for an appointment? **Add extra out / in** for as many pairs as you need. A pair you add before lunch is punched sits above lunch; otherwise it sits below. Your projected *Clock out at* accounts for everything. Came back after clocking out? Tap **Add extra out / in**: your clock-out time becomes that pair's *Out*, tap **Now** on its *In*, and you get a fresh *Clock out* row. The day-complete line comes with a burst of emoji and a sound, and ticking a priority gets a smaller burst: *Settings → Sheet → Celebrations* turns the bursts off (so does the system's reduce-motion setting), and *Settings → Alarms → Sounds* picks the sounds.
 - **Top priorities.** A row can only be ticked once it has text. **Add priority** adds a row; past three (or your configured count) it asks first, gently. With some rows ticked, the notice lists what's done and the buttons read *Add anyway / Finish what's open*; with everything ticked, *Add a bonus / Stop here*. Rows beyond your default can be removed with the ×. *Settings → Sheet → Priorities → Rows per day* sets how many rows a new day starts with.
 - **Timer.** Type what you're about to do, tap 15/25/50. Or tap one of the *Working on* chips (your open priorities) and the session is linked to that row. New task from your manager? Type it, tick **Also add to today's priorities**, start: the first empty row fills in and the session is linked. The bar at the top follows you around; **−5m / +5m** adjust the current session, **Pause** stops the clock for a break (the time away isn't logged, and a pause left for an hour closes the session where it began), **Finish** ends it early and logs the real duration. Reaching zero chimes and the countdown goes negative while it waits: **+5m** keeps going, and **Finish** logs the planned length, or, once you are a minute or more over, asks whether to log the planned length or the time you actually worked; left unanswered for ten minutes it logs the planned length on its own. Timers keep correct time across reloads and phone sleep because the start time lives on the server.
 - **Day log.** Rows show a small number when the session was for a priority. Tap a label to edit it, or to change which priority it was for (*Unplanned* unlinks it).
-- **Retrospective.** The card at the bottom of the sheet. *Planned* is each priority with the focused time logged against it (rows written after your first session are marked *added HH:MM*); *Not on the plan* is every session without a priority. Write why the day went the way it did and tap **Mark reviewed**. *Settings → Alarms → Retrospective* controls the reminder (default: 30 minutes before clock-out; it isn't silenced by overtime approval, and marking the day reviewed clears it). The banner's **Open retrospective** button takes you to the card.
+- **Retrospective.** The last card on the sheet, unless you move it. *Planned* is each priority with the focused time logged against it (rows written after your first session are marked *added HH:MM*); *Not on the plan* is every session without a priority. Write why the day went the way it did and tap **Mark reviewed**. *Settings → Alarms → Retrospective* controls the reminder (default: 30 minutes before clock-out; it isn't silenced by overtime approval, and marking the day reviewed clears it). The banner's **Open retrospective** button takes you to the card.
 - **Review.** History → **Review**. Pick *Week* (Monday to Sunday), *Month* or *Quarter* and step back with ◀. Tiles show days and hours worked, focused time and how much of it was on plan, priorities done and days reviewed. Below: *Off the plan* (unplanned sessions, longest first), *Not done* (priorities never ticked) and *Why* (each day's note). Tap any row to open that day.
-- **Alarms.** Settings → Alarms. Per alarm: warn-before chips (30/15/10/5/1 min), *when reached*, and *repeat while over*. The tiles turn amber when you're inside the first warning window and red when you're over.
+- **Alarms.** Settings → Alarms. Per alarm: warn-before chips (30/15/10/5/1 min), *when reached*, and *repeat while over*. Under *Sounds*, each event (a warning, a deadline reached, a repeat, the timer finishing, the day completing, a priority ticked) gets one of a few chimes or bundled clips, or none, with a Test button. The tiles turn amber when you're inside the first warning window and red when you're over.
   - **Second meal period.** On a day heading past 10 hours worked (overtime approved, already over your target, or a target that long) the sheet shows when your 10th hour ends and alarms before it. Any break after lunch counts as taken. Adjust the threshold under *Settings → Timeclock*, or turn the alarm off if you've waived it.
   - **Overtime approved.** A switch on the timeclock card, and a button on the clock-out alarm banner, that silences that day's clock-out alarm. Meal alarms stay on. If overtime doesn't apply to you, turn off *Settings → Timeclock → Overtime approval* and both disappear.
   - **About the defaults.** Lunch within 5 hours, a second meal period after 10 hours worked, and keeping meal alarms on during approved overtime all follow California labor rules, because that's where the author works. Other states and countries differ. Everything is adjustable in Settings, and pull requests that add presets or rules for other places are welcome.
@@ -265,7 +276,7 @@ The app is built to sit behind a reverse proxy on your own domain. Before openin
 - **Finish setup first.** In `local` mode the first visitor creates the admin account, so do that before the proxy is open to the internet. Once `APP_URL` is https the session cookie is Secure and only an https page can keep it, so sign in through the proxy's https address (the sign-in page says so when it is opened over plain http); for a one-off LAN setup, start with `COOKIE_SECURE=false` and remove it afterwards.
 - Keep `/data` backed up (below). WebSockets are not used, so any proxy works.
 
-What the app does on its own: a strict same-origin Content-Security-Policy plus `nosniff`, `frame-ancestors 'none'` and `Referrer-Policy` on every response, and `Cache-Control: no-store` on every API answer; API writes that the browser marks as sent from another site are refused (this also covers `AUTH_MODE=none`, where there is no cookie); HttpOnly, SameSite=Lax session cookies with the token stored hashed; scrypt password hashes; a per-IP login limit; a non-root container user. It is still a small self-hosted app: keep it updated and behind the protections your proxy already gives you.
+What the app does on its own: a strict same-origin Content-Security-Policy plus `nosniff`, `frame-ancestors 'none'` and `Referrer-Policy` on every response, and `Cache-Control: no-store` on every API answer; API writes that the browser marks as sent from another site are refused (this also covers `AUTH_MODE=none`, where there is no cookie); HttpOnly, SameSite=Lax session cookies with the token stored hashed; scrypt password hashes; a per-IP login limit; a non-root container user. It is still a small self-hosted app: keep it updated and behind the protections your proxy already gives you. Found a hole? [SECURITY.md](SECURITY.md) says how to report it privately.
 
 ## Backups
 
