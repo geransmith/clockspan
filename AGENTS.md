@@ -411,7 +411,7 @@ repo or the session scratchpad.
   `shared/settings.ts` → validate it in `mergeSettings()` (`server/routes/settings.ts`) → add
   the control to the right tab in `SettingsDialog.tsx` (Timeclock · Alarms · Sheet · Data ·
   Account; each is a `case` in `panel()`; the Sheet tab's "History" section holds the
-  calendar's switches) using `DurationField` / `MinutesField` — it takes a `unit` suffix,
+  calendar's switches) using `DurationField` / `NumberField` — it takes a `unit` suffix,
   default "min" — / `Toggle`. Nothing else to mirror.
 - **A sound**: drop the clip in as `client/src/sounds/<id>.mp3` (CC0 only, MP3 so Safari can
   decode it, a couple of seconds at most) → add `{ id, label, kind: 'clip' }` to `SOUNDS` in

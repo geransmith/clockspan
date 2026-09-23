@@ -132,8 +132,8 @@ export function settingsRouter(db: DB): Router {
     res.json(next);
   });
 
-  // Settings are stored sparse and merged onto DEFAULT_SETTINGS on every read, so dropping the
-  // row is the reset. The response is what the next GET will serve.
+  // With no row, a read serves DEFAULT_SETTINGS, so dropping the row is the reset. The
+  // response is what the next GET will serve.
   r.delete('/', (req, res) => {
     db.prepare(`DELETE FROM settings WHERE user_id = ?`).run(currentUser(req).id);
     res.json(DEFAULT_SETTINGS);

@@ -45,8 +45,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     if (window.confirm(RESET_SETTINGS.confirm)) void save(reset);
   };
 
-  // Left/Right move between tabs, as the ARIA tabs pattern expects.
-  // Roving tabindex: arrows move between the tabs, bound on each tab (the focusable element).
+  // The ARIA tabs pattern: Left/Right move between the tabs (roving tabindex), so the handler
+  // sits on each tab, the element that has focus.
   const onTabKey = (e: KeyboardEvent<HTMLButtonElement>) => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
@@ -64,7 +64,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           <Section title="Timeclock" hint="Used to compute your lunch deadline, clock-out time and second meal period.">
             <DurationField label="Work day" minutes={settings.workMinutes} onCommit={(m) => set({ workMinutes: m })} />
             <DurationField label="Lunch must start within" minutes={settings.lunchDeadlineMinutes} onCommit={(m) => set({ lunchDeadlineMinutes: m })} />
-            <MinutesField label="Lunch length" minutes={settings.lunchMinutes} min={0} max={480} onCommit={(m) => set({ lunchMinutes: m })} />
+            <NumberField label="Lunch length" value={settings.lunchMinutes} min={0} max={480} onCommit={(m) => set({ lunchMinutes: m })} />
             <DurationField
               label="Second meal due after (hours worked)"
               minutes={settings.secondMealAfterMinutes}
@@ -125,13 +125,13 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         return (
           <>
             <Section title="Priorities">
-              <MinutesField label="Rows per day" unit="rows" minutes={settings.priorityCount} min={1} max={10} onCommit={(m) => set({ priorityCount: m })} />
+              <NumberField label="Rows per day" unit="rows" value={settings.priorityCount} min={1} max={10} onCommit={(m) => set({ priorityCount: m })} />
               <p className="muted small">New days start with this many rows. Add more on the sheet any time.</p>
             </Section>
             <Section title="Focus timer">
-              <MinutesField
+              <NumberField
                 label="Adjust step (± buttons)"
-                minutes={settings.adjustStepMinutes}
+                value={settings.adjustStepMinutes}
                 min={1}
                 max={60}
                 onCommit={(m) => set({ adjustStepMinutes: m })}
@@ -189,10 +189,10 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 checked={settings.retention.enabled}
                 onChange={(v) => set({ retention: { ...settings.retention, enabled: v } })}
               />
-              <MinutesField
+              <NumberField
                 label="Keep the last"
                 unit="days"
-                minutes={settings.retention.days}
+                value={settings.retention.days}
                 min={MIN_RETENTION_DAYS}
                 max={MAX_RETENTION_DAYS}
                 disabled={!settings.retention.enabled}
@@ -379,7 +379,7 @@ function DurationField({ label, minutes, onCommit }: { label: string; minutes: n
       setM(String(minutes % 60));
     }
   };
-  const onKey = (e: React.KeyboardEvent) => e.key === 'Enter' && (e.target as HTMLInputElement).blur();
+  const onKey = (e: KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && e.currentTarget.blur();
   return (
     <div className="setting-row">
       <span>{label}</span>
@@ -409,10 +409,10 @@ function DurationField({ label, minutes, onCommit }: { label: string; minutes: n
   );
 }
 
-/** A single whole-number input; `unit` is the suffix ("min" by default). */
-function MinutesField({
+/** A single whole number between `min` and `max` (minutes, rows, days); `unit` is the suffix, "min" by default. */
+function NumberField({
   label,
-  minutes,
+  value,
   min,
   max,
   unit = 'min',
@@ -420,23 +420,23 @@ function MinutesField({
   onCommit,
 }: {
   label: string;
-  minutes: number;
+  value: number;
   min: number;
   max: number;
   unit?: string;
   disabled?: boolean;
-  onCommit: (m: number) => void;
+  onCommit: (n: number) => void;
 }) {
-  const [v, setV] = useState(String(minutes));
-  const [seen, setSeen] = useState(minutes);
-  if (minutes !== seen) {
-    setSeen(minutes);
-    setV(String(minutes));
+  const [v, setV] = useState(String(value));
+  const [seen, setSeen] = useState(value);
+  if (value !== seen) {
+    setSeen(value);
+    setV(String(value));
   }
   const commit = () => {
     const n = Math.max(min, Math.min(max, Math.round(Number(v) || 0)));
-    if (n !== minutes) onCommit(n);
-    else setV(String(minutes));
+    if (n !== value) onCommit(n);
+    else setV(String(value));
   };
   return (
     <div className="setting-row">
@@ -448,7 +448,7 @@ function MinutesField({
           value={v}
           onChange={(e) => setV(e.target.value)}
           onBlur={commit}
-          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
           aria-label={label}
           disabled={disabled}
         />

@@ -19,7 +19,6 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     body: body !== undefined ? JSON.stringify(body) : undefined,
     credentials: 'same-origin',
   });
-  if (res.status === 204) return undefined as T;
   let data: unknown = null;
   try {
     data = await res.json();
