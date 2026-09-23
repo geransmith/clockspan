@@ -201,7 +201,9 @@ Follow it as written; it is not advice. Dependabot (`.github/dependabot.yml`) op
 (grouped) and the Docker base image (pinned by digest in both stages), each release at least 7
 days old (`cooldown`; security updates don't wait). `dependabot-automerge.yml` squash-merges
 them on their own once `check` and `image-smoke` pass, except a major version bump (or a group
-holding one), which waits for a review like an outside PR.
+holding one), which waits for a review like an outside PR. It queues the merge with the
+repository's GitHub App token (setup in CONTRIBUTING.md), because a merge queued with
+`GITHUB_TOKEN` starts no `main` run.
 
 ## Dev data is disposable
 
@@ -581,6 +583,10 @@ Prove a change at the cheapest level that can show it, and stop there:
   is left alone (`.prettierignore`): the docs have hand-laid tables and wrapping.
 - oxlint ignores a misspelled rule name without a word. After editing `.oxlintrc.json`, check
   `npx oxlint --print-config` lists what you meant, and that a deliberately bad snippet is caught.
+- GitHub starts no workflow for an event `GITHUB_TOKEN` caused (except `workflow_dispatch` and
+  `repository_dispatch`). A push, merge, tag or release a workflow makes with it runs nothing
+  downstream: that is why the release job's tag starts no second run, and why the Dependabot
+  auto-merge uses the app token instead. A workflow step that must trigger CI needs that token.
 - TypeScript 7 is the native compiler: the `typescript` package has no `tsserver` or JS API.
   Editors need the native TypeScript extension for IntelliSense (VS Code's bundled TS still
   works for that); `npm run typecheck` is the source of truth either way.
