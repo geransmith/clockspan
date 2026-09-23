@@ -29,20 +29,16 @@
     "reset-password": "tsx server/cli.ts reset-password"
   },
   "dependencies": {
+    "better-sqlite3": "13.0.3",
+    "cookie": "2.0.1",
+    "express": "5.2.1",
+    "openid-client": "6.8.8"
+  },
+  "devDependencies": {
     "@dnd-kit/core": "6.3.1",
     "@dnd-kit/sortable": "10.0.0",
     "@dnd-kit/utilities": "3.2.2",
     "@internationalized/date": "3.12.4",
-    "better-sqlite3": "13.0.3",
-    "cookie": "2.0.1",
-    "express": "5.2.1",
-    "openid-client": "6.8.8",
-    "react": "19.3.0",
-    "react-aria": "3.52.1",
-    "react-dom": "19.3.0",
-    "react-stately": "3.50.0"
-  },
-  "devDependencies": {
     "@types/better-sqlite3": "9.6.0",
     "@types/express": "5.0.6",
     "@types/node": "24.13.6",
@@ -53,6 +49,10 @@
     "concurrently": "10.0.5",
     "oxlint": "1.83.0",
     "prettier": "3.9.8",
+    "react": "19.3.0",
+    "react-aria": "3.52.1",
+    "react-dom": "19.3.0",
+    "react-stately": "3.50.0",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
     "vite": "8.3.0",
