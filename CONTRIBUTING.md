@@ -10,28 +10,20 @@ request, squash-merged, with the `check` and `image-smoke` jobs green. A release
 merge. Outsiders can open a PR from a fork; its CI run waits for a collaborator to approve it,
 and a fork PR can never publish an image or a release.
 
-Dependabot's PRs merge themselves (`.github/workflows/dependabot-automerge.yml`): once the
-required checks pass, each is squash-merged, except a major version bump, which waits for a
-review. Version updates are only proposed 7 days after the release (`cooldown` in
-`.github/dependabot.yml`); security updates come at once.
+Dependabot (`.github/dependabot.yml`) opens a few `skip-changelog` PRs a week: npm, GitHub
+Actions and the Docker base image. Version updates are only proposed 7 days after the release
+(`cooldown`); security updates come at once. They are merged by hand like any other PR, as a
+batch once `check` and `image-smoke` are green:
 
-The merge is queued with a token from the repository's own GitHub App, not with
-`GITHUB_TOKEN`: GitHub starts no workflow for a merge that token caused, so `main` would get no
-CI run and no new `edge` image. The app is set up once and has nothing to renew:
+```bash
+gh pr list --author app/dependabot
+gh pr merge <number> --squash --delete-branch   # for each one that passed
+```
 
-1. **Settings → Developer settings → GitHub Apps → New GitHub App** (your account). Any name
-   (e.g. `clockspan-automerge`), homepage the repository URL, **Webhook → Active** unticked.
-   Repository permissions: **Contents**, **Pull requests** and **Workflows**, all *Read and
-   write*. "Only on this account". Create it.
-2. On the app's page, note the **Client ID**, then **Generate a private key** (a `.pem` file
-   downloads).
-3. **Install App** → your account → **Only select repositories** → `clockspan`.
-4. In the repository, **Settings → Secrets and variables → Dependabot** (not Actions: a
-   Dependabot run only sees these): `AUTOMERGE_APP_CLIENT_ID` = the client ID,
-   `AUTOMERGE_APP_PRIVATE_KEY` = the whole `.pem` file. Delete the downloaded file afterwards.
-
-Without those two secrets the workflow falls back to `GITHUB_TOKEN`: the PR still merges, and
-`main` catches up at the next merge that isn't Dependabot's.
+Read a major version bump like an outside PR first: what could it break that the tests don't
+reach (the components have no automated tests)? Dependencies are pinned, so a fix only reaches
+users in a release: cut a patch release after merging a security update (or one that fixes a
+Dependabot alert) or a new Docker base image. Other bumps can wait for the next release.
 
 ```bash
 git switch -c <topic>            # never work on main
@@ -119,7 +111,6 @@ gh run rerun <run-id> --failed
 | Push to `main` | `check`, `image` | the image is built, booted by the same script, and only then pushed as `ghcr.io/geransmith/clockspan:edge` |
 | Push to `main` that changes the version | `check`, `image`, `release` | `:edge`, `:X.Y.Z`, `:X.Y`, `:latest`, the tag `vX.Y.Z` and the GitHub Release |
 | Pull request or push that touches `.github/` | `zizmor` (not required) | a security audit of the workflows and `dependabot.yml`; findings fail the job |
-| Dependabot's pull request | `automerge` | squash auto-merge once the required checks pass, except a major version bump |
 
 A newer push to a pull request cancels that PR's older run; runs on `main` are never cancelled.
 Actions are pinned to commit SHAs; Dependabot bumps them (SHA and version comment together).
