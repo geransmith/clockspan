@@ -1,7 +1,9 @@
 /**
- * Every phrase the app says to the user that is not a plain label lives here, so they can be
- * edited without touching logic. Keep them plain: short sentences, no cheerleading, no
- * "gentle reminder" openers. See the Copy convention in AGENTS.md.
+ * What the app raises at the user lives here (celebrations, the priority warnings, confirms,
+ * alerts, banners, notices), so it can be edited without touching logic. Labels, settings
+ * hints and empty-state lines stay beside the control or view they describe. Keep all of it
+ * plain: short sentences, no cheerleading, no "gentle reminder" openers. See the Copy
+ * convention in AGENTS.md.
  */
 
 /** Shown once the day is done. One is picked per clock-out. */
@@ -38,7 +40,7 @@ export const CELEBRATION_PHRASES = [
 
 /** Shown when adding a priority past the threshold. One is picked per attempt. */
 export const GENTLE_WARNINGS = [
-  'Three is already a full plate. Sure about a fourth?',
+  "That's a full plate already. Sure about one more?",
   'More rows means each one matters a little less.',
   "Everything can't be the most important thing.",
   'A long list is where priorities go to hide.',
@@ -139,6 +141,9 @@ export const TIMER_ELSEWHERE = {
   title: 'A timer is already running',
   body: 'It was started on another device. This sheet now shows that one.',
 } as const;
+
+/** Above the sheet when set punch times don't alternate in, out, in, out. */
+export const PUNCH_ORDER = 'Punch times are out of order. Check that ins and outs alternate.';
 
 /** A session logged without a label, wherever sessions are listed. */
 export const UNTITLED_SESSION = 'Untitled session';

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { clampToDay, clockOutPosition, computeTimeclock, emptyPunches, extraPairs, normalizePunches, secondMealApplies, timeclockForDate } from './timeclock';
 import type { Punch } from '../types';
+import { PUNCH_ORDER } from './copy';
 
 const settings = { workMinutes: 480, lunchDeadlineMinutes: 300, lunchMinutes: 30, secondMealAfterMinutes: 600 };
 const H = 3_600_000;
@@ -124,7 +125,7 @@ describe('computeTimeclock', () => {
   it('flags out-of-order punches instead of producing garbage', () => {
     const p = punches([T0, T0 + 2 * H, T0 + 1 * H]);
     const r = computeTimeclock(p, settings, T0 + 3 * H);
-    expect(r.error).not.toBeNull();
+    expect(r.error).toBe(PUNCH_ORDER);
   });
 
   it('keeps row order for two punches at the same minute', () => {

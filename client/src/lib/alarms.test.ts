@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { describeEvent, dueEvents, eventKey, type AlarmEvent, type AlarmTarget } from './alarms';
+import { formatTime } from './format';
 import type { AlarmId, AlarmSettings } from '../types';
 
 const M = 60_000;
@@ -123,7 +124,7 @@ describe('describeEvent', () => {
     const due = describeEvent(ev('clockOut', 'due', 0, T), ctx);
     expect(due.title).toBe('Time to clock out');
     expect(due.tone).toBe('danger');
-    expect(due.body).toContain('worked your 8h');
+    expect(due.body).toBe(`It's ${formatTime(T, true)}. You've worked your 8h for today. Punch out now.`);
 
     const over = describeEvent(ev('clockOut', 'overdue', 10, T), ctx);
     expect(over.title).toBe('Clock out is 10 min overdue');
@@ -143,7 +144,7 @@ describe('describeEvent', () => {
   it('explains the lunch deadline window', () => {
     const lead = describeEvent(ev('lunchBy', 'lead', 15, T), ctx);
     expect(lead.title).toBe('Lunch in 15 min');
-    expect(lead.body).toContain('4h after clocking in');
+    expect(lead.body).toBe(`Lunch must start by ${formatTime(T, true)}, 4h after clocking in at ${formatTime(clockIn, true)}.`);
     expect(describeEvent(ev('lunchBy', 'due', 0, T), ctx).title).toBe('Take lunch now');
     expect(describeEvent(ev('lunchBy', 'overdue', 5, T), ctx).title).toBe('Lunch is 5 min overdue');
   });

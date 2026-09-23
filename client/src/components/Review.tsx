@@ -147,7 +147,7 @@ function Body({
       <section className="review-section">
         <h3 className="retro-heading">Why</h3>
         {r.notes.length === 0 ? (
-          <p className="muted small">No retrospective notes yet. The card at the bottom of each day's sheet is where they go.</p>
+          <p className="muted small">No retrospective notes yet. Each day's retrospective card is where they go.</p>
         ) : (
           <ul className="review-list">
             {r.notes.map((n) => (
