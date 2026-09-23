@@ -28,7 +28,10 @@ has the user-facing description.
   `package.json`'s version (the merged bump PR) also gets the versioned image, the tag and the
   GitHub Release.
 - One `package.json` for both sides; `tsconfig.json` = client + shared, `tsconfig.server.json` =
-  server + shared (`rootDir: .`, so `dist/server` and `dist/shared`).
+  server + shared (`rootDir: .`, so `dist/server` and `dist/shared`). `dependencies` is only
+  what the server loads at run time (express, better-sqlite3, cookie, openid-client); the
+  client's libraries (React, React Aria, dnd-kit, …) are bundled by Vite at build time and live
+  in `devDependencies`, so the image's `npm prune --omit=dev` leaves them out.
 
 ## Repo map
 
@@ -463,7 +466,8 @@ repo or the session scratchpad.
 - Numeric settings inputs commit on blur/Enter (never on every keystroke); priorities debounce
   400 ms; punches and checkboxes save immediately.
 - Comments explain *why* (browser quirks, math), not what.
-- No new runtime dependency without stating the reason in the commit message.
+- No new dependency (a server one or a client library the bundle carries) without stating the
+  reason in the commit message.
 - **Copy**: phrases the app says (celebrations, gentle warnings, confirms, the timer-done
   alert) live in `client/src/lib/copy.ts`, never inline. Write them plainly and check new
   ones against Wikipedia's "Signs of AI writing"
