@@ -97,8 +97,8 @@ gh run rerun <run-id> --failed
 
 | Event | Jobs | Result |
 | --- | --- | --- |
-| Pull request | `check`, `image-smoke` (both required) | install without dependency scripts and check registry signatures; typecheck, lint, test, build; a version that already has a tag fails. The image is built and booted (health, SPA shell, `/data` owner, the healthcheck command) and never pushed |
-| Push to `main` | `check`, `image` | `ghcr.io/geransmith/clockspan:edge` |
+| Pull request | `check`, `image-smoke` (both required) | install without dependency scripts and check registry signatures; typecheck, lint, test, build; a version that already has a tag fails. The image is built and booted by `scripts/smoke-image.sh` (health, SPA shell, `/data` owner, root dropped, the healthcheck command) and never pushed |
+| Push to `main` | `check`, `image` | the image is built, booted by the same script, and only then pushed as `ghcr.io/geransmith/clockspan:edge` |
 | Push to `main` that changes the version | `check`, `image`, `release` | `:edge`, `:X.Y.Z`, `:X.Y`, `:latest`, the tag `vX.Y.Z` and the GitHub Release |
 | Pull request or push that touches `.github/` | `zizmor` (not required) | a security audit of the workflows and `dependabot.yml`; findings fail the job |
 | Dependabot's pull request | `automerge` | squash auto-merge once the required checks pass, except a major version bump |
