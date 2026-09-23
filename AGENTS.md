@@ -158,6 +158,7 @@ ca_profile.xml          the repository's Community Apps profile; the portal requ
                         Both files point at client/public/icons/icon-512.png and docs/screenshots/*.png
                         by raw URL on main: moving those files breaks the listing
 CONTRIBUTING.md         PR and release rules (imported by CLAUDE.md; see "Branches, PRs and releases")
+SECURITY.md             how to report a vulnerability (GitHub private reporting), supported versions, scope
 .github/workflows/ci.yml  check (+ image-smoke on PRs) → image (ghcr.io) → release (on a version bump); .github/release.yml groups notes by label
 .github/workflows/dependabot-automerge.yml  squash auto-merge for Dependabot PRs that pass (not majors)
 .github/workflows/workflow-lint.yml  zizmor on any change under .github/ (not a required check)
