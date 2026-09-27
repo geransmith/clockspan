@@ -13,7 +13,8 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    host: true,
+    // No `host`: Vite's default keeps the dev server on localhost, off whatever network the
+    // laptop is on. `npm run dev:client -- --host` opens it up for a test on a phone.
     proxy: {
       '/api': 'http://localhost:3000',
       '/auth': 'http://localhost:3000',

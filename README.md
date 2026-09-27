@@ -66,6 +66,7 @@ npm run dev
 
 - Web app with hot reload: <http://localhost:5173>
 - API: <http://localhost:3000> (Vite proxies `/api` and `/auth` to it)
+- The web app answers on this machine only. To try it from a phone on the same network, run `npm run dev:server` and `npm run dev:client -- --host` in two terminals and open the network address Vite prints.
 - Database: `./data/focus.db` (gitignored). Delete the file to start fresh.
 
 Other commands:

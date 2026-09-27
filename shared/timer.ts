@@ -4,6 +4,9 @@
  * `pausedAt` is set while paused and `pausedSeconds` holds the pauses that have already ended.
  */
 
+/** How long a session may be planned for: the server refuses a length outside it, and the − button stops at the minimum. */
+export const PLANNED_SECONDS = { min: 60, max: 8 * 3600 } as const;
+
 export interface SessionTiming {
   startedAt: number;
   plannedSeconds: number;
