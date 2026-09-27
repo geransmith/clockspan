@@ -35,10 +35,10 @@ File names say most of it. This lists where things live and the files a rule is 
 
 ```
 shared/                 imported by both sides, always with a `.js` suffix
-  settings.ts           Settings, DEFAULT_SETTINGS, CARD_IDS, MAX_PRIORITIES, retention bounds
+  settings.ts           Settings, DEFAULT_SETTINGS, CARD_IDS, MAX_PRIORITIES, SETTING_LIMITS, retention bounds
   api.ts                every wire type; the server's JSON builders and client/src/api.ts both use them
   sounds.ts             the sound catalog (SOUNDS, SOUND_EVENTS)
-  dates.ts, timer.ts    date keys; pause-aware session timing (activeMs, plannedEndAt)
+  dates.ts, timer.ts    date keys; pause-aware session timing (activeMs, plannedEndAt, PLANNED_SECONDS)
 server/                 Express API → dist/server
   app.ts                createApp(): headers, /api/health, auth routers, data routers behind
                         requireAuth, static files and the SPA fallback
@@ -313,10 +313,12 @@ Never commit `data/` or `.env`.
   recorded a choice worth keeping, `mergeSettings` can read it off the old layout entry the
   way the sticker chart's `stickers` setting does.
 - **A per-user setting**: add it to the `Settings` type and `DEFAULT_SETTINGS` in
-  `shared/settings.ts` → validate it in `mergeSettings()` (`server/routes/settings.ts`) → add
-  the control to the right tab in `SettingsDialog.tsx` (Timeclock · Alarms · Sheet · Data ·
-  Account; each is a `case` in `panel()`; the Sheet tab's "History" section holds the
-  calendar's switches) using `DurationField` / `NumberField` — it takes a `unit` suffix,
+  `shared/settings.ts`, and a number's bounds to `SETTING_LIMITS` there → validate it in
+  `mergeSettings()` (`server/routes/settings.ts`; `limited(key)` checks a number against its
+  bounds) → add the control to the right tab in `SettingsDialog.tsx` (Timeclock · Alarms ·
+  Sheet · Data · Account; each is a `case` in `panel()`; the Sheet tab's "History" section
+  holds the calendar's switches) using `DurationField` / `NumberField` with
+  `{...SETTING_LIMITS.<key>}` for `min` and `max` — `NumberField` takes a `unit` suffix,
   default "min" — / `Toggle`. Nothing else to mirror.
 - **A sound**: drop the clip in as `client/src/sounds/<id>.mp3` (CC0 only, MP3 so Safari can
   decode it, a couple of seconds at most) → add `{ id, label, kind: 'clip' }` to `SOUNDS` in
