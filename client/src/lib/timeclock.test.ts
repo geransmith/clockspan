@@ -10,6 +10,7 @@ import {
   normalizePunches,
   removePunchPair,
   secondMealApplies,
+  targetFraction,
   timeclockForDate,
 } from './timeclock';
 import type { Punch } from '../types';
@@ -374,5 +375,13 @@ describe('nextPunchPosition', () => {
     expect(nextPunchPosition([])).toBeNull();
     expect(nextPunchPosition(punches([T0, null, null]))).toBe(1);
     expect(nextPunchPosition(punches([T0, T0 + 4 * H, T0 + 4.5 * H]))).toBeNull();
+  });
+});
+
+describe('targetFraction', () => {
+  it('is the share of the work day worked, and stays at 1 past it', () => {
+    expect(targetFraction(computeTimeclock(emptyPunches(), settings, T0))).toBe(0);
+    expect(targetFraction(computeTimeclock(punches([T0, null, null]), settings, T0 + 2 * H))).toBe(0.25);
+    expect(targetFraction(computeTimeclock(punches([T0, null, null]), settings, T0 + 10 * H))).toBe(1);
   });
 });

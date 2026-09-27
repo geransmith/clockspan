@@ -4,10 +4,10 @@ import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
 import { calendarMonth } from '../lib/calendar';
 import { STICKERS_EMPTY } from '../lib/copy';
-import { dayName, formatDateLong, formatDuration, formatWeekday } from '../lib/format';
+import { dayName, formatDateLong, formatDuration, formatHours, formatWeekday } from '../lib/format';
 import { periodOffset, periodRange } from '../lib/review';
 import { countStickers, daySummaryOf, STICKER_REASONS, stickerEmoji, type StickerId } from '../lib/stickers';
-import { timeclockForDate } from '../lib/timeclock';
+import { targetFraction, timeclockForDate } from '../lib/timeclock';
 import type { Day } from '../types';
 import { Check } from './Icons';
 import { PeriodNav, PeriodReset } from './PeriodNav';
@@ -99,7 +99,9 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
                   if (stickers && d.stickers.length === STICKER_REASONS.length) cls.push('is-full');
                   const day = days.get(d.date);
                   const tc = day ? timeclockForDate(day.punches, settings, d.date, today, now) : null;
-                  const worked = tc && tc.clockIn != null ? formatDuration(tc.workedSeconds) : null;
+                  const clocked = tc?.clockIn != null ? tc : null;
+                  const worked = clocked ? formatDuration(clocked.workedSeconds) : null;
+                  const done = clocked ? targetFraction(clocked) : 0;
                   const shown = filter ? d.stickers.filter((id) => id === filter) : d.stickers;
                   const label = stickers
                     ? shown.length
@@ -131,8 +133,13 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
                             </span>
                           ))}
                         </span>
-                      ) : worked ? (
-                        <span className="calendar-worked">{worked}</span>
+                      ) : clocked ? (
+                        <>
+                          <span className="calendar-worked">{formatHours(clocked.workedSeconds)}</span>
+                          <span className={`calendar-bar${done === 1 ? ' is-met' : ''}`} aria-hidden="true">
+                            <span style={{ transform: `scaleX(${done})` }} />
+                          </span>
+                        </>
                       ) : d.hasData ? (
                         <span className="calendar-dot" aria-hidden="true" />
                       ) : null}
