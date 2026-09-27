@@ -25,7 +25,7 @@ export function Priorities({ priorities, onChange }: Props) {
   const lastWarning = useRef<string | undefined>(undefined);
   const dirty = useRef(false);
   const timer = useRef<number | null>(null);
-  const inputs = useRef(new Map<number, HTMLInputElement>());
+  const inputs = useRef(new Map<number, HTMLTextAreaElement>());
   const focusNext = useRef<number | null>(null);
   // A tick gets a burst from its checkbox; the burst goes away on its own.
   const [burst, setBurst] = useState<{ seed: number; anchor: DOMRect } | null>(null);
@@ -89,6 +89,7 @@ export function Priorities({ priorities, onChange }: Props) {
       {local.map((p) => {
         const empty = !p.text.trim();
         const removable = p.position > count;
+        const placeholder = p.position === 1 ? 'The one thing that would make today a win' : `Priority ${p.position}`;
         return (
           <div key={p.position} className={`priority-row${p.done ? ' is-done' : ''}${removable ? ' priority-row--removable' : ''}`}>
             <span className="priority-num" aria-hidden="true">
@@ -109,19 +110,27 @@ export function Priorities({ priorities, onChange }: Props) {
               aria-label={`Priority ${p.position} done`}
               title={empty ? 'Write the priority first' : undefined}
             />
-            <input
-              ref={(el) => {
-                if (el) inputs.current.set(p.position, el);
-                else inputs.current.delete(p.position);
-              }}
-              className="input priority-input"
-              value={p.text}
-              placeholder={p.position === 1 ? 'The one thing that would make today a win' : `Priority ${p.position}`}
-              aria-label={`Priority ${p.position}`}
-              onChange={(e) => edit(p.position, { text: e.target.value })}
-              onBlur={() => dirty.current && flush(local)}
-              maxLength={LIMITS.priorityText}
-            />
+            {/* A textarea so a long priority wraps on a phone; the wrapper's copy of the text sets its height. */}
+            <span className="grow-field" data-value={p.text || placeholder}>
+              <textarea
+                ref={(el) => {
+                  if (el) inputs.current.set(p.position, el);
+                  else inputs.current.delete(p.position);
+                }}
+                className="input priority-input"
+                rows={1}
+                value={p.text}
+                placeholder={placeholder}
+                aria-label={`Priority ${p.position}`}
+                // One line of text: Enter adds no line break, and a pasted one becomes a space.
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.preventDefault();
+                }}
+                onChange={(e) => edit(p.position, { text: e.target.value.replace(/[\r\n]+/g, ' ') })}
+                onBlur={() => dirty.current && flush(local)}
+                maxLength={LIMITS.priorityText}
+              />
+            </span>
             {removable && (
               <button
                 className="btn btn-icon priority-remove"
