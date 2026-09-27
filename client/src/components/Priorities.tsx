@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSettings } from '../hooks/useSettings';
 import { playSound } from '../lib/alerts';
 import { WARNING_ACTIONS } from '../lib/copy';
-import { MAX_PRIORITIES, newUid, padPriorities, pickWarning, warnThreshold, warningKind, type WarningKind } from '../lib/priorities';
+import { editPriority, MAX_PRIORITIES, padPriorities, pickWarning, removePriority, warnThreshold, warningKind, type WarningKind } from '../lib/priorities';
 import { LIMITS, type Priority } from '../types';
 import { Burst, BURST_MS } from './Burst';
 import { Check, Plus, X } from './Icons';
@@ -52,15 +52,7 @@ export function Priorities({ priorities, onChange }: Props) {
     onChange(next);
   };
   const edit = (position: number, patch: Partial<Priority>, immediate = false) => {
-    const next = local.map((p) => {
-      if (p.position !== position) return p;
-      const merged = { ...p, ...patch };
-      // An empty row can't be done; clearing the text also clears the tick. The uid is
-      // minted the first time a row gets text and survives a clear, so a session that
-      // pointed at it still does.
-      if (!merged.text.trim()) return { ...merged, done: false };
-      return merged.uid ? merged : { ...merged, uid: newUid(), addedAt: Date.now() };
-    });
+    const next = local.map((p) => (p.position === position ? editPriority(p, patch, Date.now()) : p));
     setLocal(next);
     dirty.current = true;
     if (timer.current) window.clearTimeout(timer.current);
@@ -87,7 +79,7 @@ export function Priorities({ priorities, onChange }: Props) {
     flush(next);
   };
   const removeRow = (position: number) => {
-    const next = local.filter((p) => p.position !== position).map((p, i) => ({ ...p, position: i + 1 }));
+    const next = removePriority(local, position);
     setLocal(next);
     flush(next);
   };

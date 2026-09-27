@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { DaySummary } from '../types';
 import { calendarMonth } from './calendar';
+import type { DaySummary } from './stickers';
 import { emptyPunches } from './timeclock';
 
 const settings = { workMinutes: 480, lunchDeadlineMinutes: 300, lunchMinutes: 30, secondMealAfterMinutes: 600 };

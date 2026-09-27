@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { startTestApp, type TestApp } from '../dev/harness.js';
 import { ensureLocalUsers, LOCAL_USERS } from '../dev/seed.js';
-import { CARD_DEFAULT_VISIBLE, CARD_IDS, DEFAULT_SETTINGS } from '../../shared/settings.js';
+import { CARD_DEFAULT_VISIBLE, CARD_IDS, DEFAULT_SETTINGS, SETTING_LIMITS } from '../../shared/settings.js';
 import { mergeSettings } from './settings.js';
 
 describe('/api/settings', () => {
@@ -177,14 +177,12 @@ describe('mergeSettings', () => {
     expect(mergeSettings(DEFAULT_SETTINGS, { retention: 'forever' }).retention).toEqual(DEFAULT_SETTINGS.retention);
   });
 
-  it('bounds every numeric field', () => {
-    const out = mergeSettings(DEFAULT_SETTINGS, {
-      workMinutes: 0,
-      lunchDeadlineMinutes: 24 * 60 + 1,
-      secondMealAfterMinutes: 1.5,
-      adjustStepMinutes: 61,
-      alarms: { retro: { overdueEveryMinutes: 121 } },
-    });
-    expect(out).toEqual(DEFAULT_SETTINGS);
+  it('bounds every numeric field by the limits the settings inputs clamp to', () => {
+    for (const [key, { min, max }] of Object.entries(SETTING_LIMITS)) {
+      expect(mergeSettings(DEFAULT_SETTINGS, { [key]: min })).toMatchObject({ [key]: min });
+      expect(mergeSettings(DEFAULT_SETTINGS, { [key]: max })).toMatchObject({ [key]: max });
+      for (const bad of [min - 1, max + 1, min + 0.5]) expect(mergeSettings(DEFAULT_SETTINGS, { [key]: bad })).toEqual(DEFAULT_SETTINGS);
+    }
+    expect(mergeSettings(DEFAULT_SETTINGS, { alarms: { retro: { overdueEveryMinutes: 121 } } })).toEqual(DEFAULT_SETTINGS);
   });
 });

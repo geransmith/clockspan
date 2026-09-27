@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { Day, DaySummary, Punch } from '../types';
+import type { Day, Punch } from '../types';
 import { STICKER_EMOJI } from './copy';
 import { calendarMonth } from './calendar';
-import { countStickers, daySummaryOf, STICKER_REASONS, stickerEmoji, stickersForDay } from './stickers';
+import { countStickers, daySummaryOf, STICKER_REASONS, stickerEmoji, stickersForDay, type DaySummary } from './stickers';
 import { emptyPunches } from './timeclock';
 
 const settings = { workMinutes: 480, lunchDeadlineMinutes: 300, lunchMinutes: 30, secondMealAfterMinutes: 600 };
