@@ -14,159 +14,66 @@ has the user-facing description.
 
 ## Stack & versions
 
-- Node **24** (Active LTS). `nvm use 24` locally; `node:24-alpine` in Docker.
-- Frontend: React 19 + TypeScript 7 (the native `tsc`) + Vite 8. Drag/drop: `@dnd-kit/sortable`. Punch time entry:
-  `react-aria` + `react-stately` (`useTimeField`, segments) with `@internationalized/date`.
-  No router lib — the date and view live in the URL query (`hooks/useRoute.ts`; today is
-  `date: null`, so a sheet left open over midnight moves to the new day). No CSS framework.
-- Backend: Express 5 (ESM, `NodeNext`, imports use `.js` extensions), `better-sqlite3` (native),
-  `openid-client` v6 for OIDC, `cookie` for cookie parsing. Passwords: `node:crypto` scrypt (async).
-- Tests: Vitest 5; the hook tests run under happy-dom with `@testing-library/react`. Lint: oxlint (`.oxlintrc.json`: correctness + typescript + react-hooks +
-  jsx-a11y rules, plus type-aware `typescript/*` rules such as no-floating-promises and
-  no-misused-promises, run by `oxlint-tsgolint`, which bundles TypeScript 7's checker (`options.typeAware`)). CI: `.github/workflows/ci.yml` runs
-  `npm audit --audit-level=high`, typecheck, lint, test, build on every PR and push, and on a PR also builds and boots the image (`image-smoke`, never pushed);
-  on `main` it builds, boots (the same `scripts/smoke-image.sh`) and then publishes the `edge`
-  image, and a commit that changed
-  `package.json`'s version (the merged bump PR) also gets the versioned image, the tag and the
-  GitHub Release.
+- Node **24** (`nvm use 24`; `node:24-alpine` in Docker).
+- Client: React 19, TypeScript 7 (the native `tsc`), Vite 8. `@dnd-kit/sortable` for drag/drop;
+  `react-aria` + `react-stately` + `@internationalized/date` for the punch time field. No router
+  (the date and view live in the URL query, `hooks/useRoute.ts`; today is `date: null`, so a
+  sheet left open over midnight moves to the new day) and no CSS framework.
+- Server: Express 5 (ESM, `NodeNext`, imports end in `.js`), `better-sqlite3`, `openid-client`
+  v6, `cookie`. Passwords: `node:crypto` scrypt (async).
+- Tests: Vitest 5; hook tests run under happy-dom with `@testing-library/react`. Lint: oxlint
+  (`.oxlintrc.json`) with type-aware rules run by `oxlint-tsgolint`. Formatting: Prettier. What
+  CI runs is in CONTRIBUTING.md ("What CI does").
 - One `package.json` for both sides; `tsconfig.json` = client + shared, `tsconfig.server.json` =
   server + shared (`rootDir: .`, so `dist/server` and `dist/shared`). `dependencies` is only
-  what the server loads at run time (express, better-sqlite3, cookie, openid-client); the
-  client's libraries (React, React Aria, dnd-kit, …) are bundled by Vite at build time and live
-  in `devDependencies`, so the image's `npm prune --omit=dev` leaves them out.
+  what the server loads at run time; the client's libraries are bundled by Vite and live in
+  `devDependencies`, so the image's `npm prune --omit=dev` leaves them out.
 
 ## Repo map
 
+File names say most of it. This lists where things live and the files a rule is attached to.
+
 ```
-shared/                 Imported by BOTH sides (always with a `.js` suffix); pure data + functions
-  settings.ts           Settings type, DEFAULT_SETTINGS, CARD_IDS, MAX_PRIORITIES, retention bounds
-  sounds.ts             the sound catalog: SOUNDS (id, label, kind none|synth|clip), SOUND_IDS, CLIP_IDS,
-                        SOUND_EVENTS (timer, lead, due, overdue, dayDone, priorityDone)
-  api.ts                the wire types (Day, Session, Punch, Priority, DaySummary, PruneInfo, AuthInfo…);
-                        server JSON builders are annotated with them, the client reads them
-  dates.ts              date keys: dateKey/todayKey/parseDateKey/isValidDateKey/addDays/endOfDay,
-                        startOfWeek/Month/Quarter, addMonths (+ dates.test.ts)
-  timer.ts              pause-aware session timing: activeMs(session, until) (the span minus its pauses;
-                        stops at pausedAt), plannedEndAt(session, now) (moves while paused) (+ timer.test.ts)
-server/                 Express API → dist/server (tsc)
-  index.ts              boot: load config, warn if AUTH_MODE=none, open DB, listen, SIGTERM
-  app.ts                createApp(): trust proxy, securityHeaders, /api/health, resolveUser, auth
-                        routers, data routers behind requireAuth, static dist/client + SPA fallback
-  security.ts           the ONLY place response headers (CSP, nosniff, frame, referrer, HSTS, no-store on /api) are set;
-                        also rejectCrossSiteWrites(config) (403 for a non-GET /api request marked Sec-Fetch-Site cross-site/same-site,
-                        or, without that header, whose Origin is not this host or APP_URL's)
-  config.ts             env parsing; throws with a clear message on bad/missing config
-  db.ts                 open + pragmas (WAL, foreign_keys), append-only MIGRATIONS, default user
-  retention.ts          old-day cleanup: cutoffKey, countDays, pruneDays, runRetention (all users,
-                        user setting capped by RETENTION_DAYS), scheduleRetention (30 s + 6 h)
-  cli.ts                `reset-password <username> [password]`
-  dev/seed.ts           seedDatabase(db, opts) → SeedManifest; ensureLocalUsers(). Dev + tests only
-  dev/seed-cli.ts       `npm run seed` (flags: --fresh --running --days N --quarter --today --now --auth --sessions)
-  dev/harness.ts        startTestApp(): real app on an in-memory DB + fetch client w/ cookie jar
-  **/*.test.ts          route/auth/db/header tests beside the code they cover (Vitest, via the harness)
-  auth/session.ts       cookie session (token hashed in DB, sliding 30d expiry), cookieOptions(),
-                        revokeOtherSessions()
-  auth/password.ts      async scrypt hash/verify, DUMMY_HASH, username/password validation
-  auth/middleware.ts    resolveUser / requireAuth / requireAdmin / currentUser(req)
-  auth/local.ts         /api/auth: me, setup, login (rate-limited), logout, password, users (admin)
-  auth/oidc.ts          /api/auth/{me,logout} + /auth/{login,callback}; lazy discovery w/ retry
-  routes/shared.ts      requireDate + dateParam, findDay/ensureDay, UID_RE, SessionRow → JSON
-  routes/days.ts        GET /days/range?from&to (full days, for the review and the calendar),
-                        GET|POST /days/prune, GET /days/:date, PUT punches, PUT priorities (full
-                        replace, sparse rows, uid/addedAt), PUT overtime, PUT retro (note, done)
-  routes/sessions.ts    POST /days/:date/sessions (start, optional priorityUid), GET /sessions/running,
-                        PATCH/:id (label, notes, planned, priorityUid), POST /:id/pause|resume|finish|cancel,
-                        DELETE /:id (`loadOwnedSession` does the 404 + scoping for every /:id route)
-  routes/settings.ts    mergeSettings() validator; GET/PUT/DELETE /settings
+shared/                 imported by both sides, always with a `.js` suffix
+  settings.ts           Settings, DEFAULT_SETTINGS, CARD_IDS, MAX_PRIORITIES, retention bounds
+  api.ts                every wire type; the server's JSON builders and client/src/api.ts both use them
+  sounds.ts             the sound catalog (SOUNDS, SOUND_EVENTS)
+  dates.ts, timer.ts    date keys; pause-aware session timing (activeMs, plannedEndAt)
+server/                 Express API → dist/server
+  app.ts                createApp(): headers, /api/health, auth routers, data routers behind
+                        requireAuth, static files and the SPA fallback
+  security.ts           every response header, and rejectCrossSiteWrites
+  config.ts, db.ts      env parsing (throws on bad config); pragmas, MIGRATIONS, the default user
+  retention.ts          old-day pruning (pruneDays, runRetention, the RETENTION_DAYS cap)
+  auth/                 session cookie, scrypt passwords, middleware (currentUser), local + OIDC routes
+  routes/               days, sessions, settings (mergeSettings); shared.ts has requireDate, findDay,
+                        and the row → JSON builders
+  dev/                  seed.ts + seed-cli.ts (`npm run seed`), harness.ts (startTestApp for route tests)
+  index.ts, cli.ts      the process entrypoints: the server (warns under AUTH_MODE=none), reset-password
 client/                 Vite root → dist/client
-  index.html            viewport-fit=cover, theme-color, manifest, apple-mobile-web-app meta
-  public/               manifest.webmanifest, icons/, sw.js (pass-through fetch; notificationclick)
-  public/icons/icon.svg the app icon's one source (favicon, manifest); the PNGs next to it,
-                        apple-touch-icon.png included, come from `npm run icons`
-  src/App.tsx           provider stack + Shell (route, customize, settings, today's alarms)
-  src/api.ts            fetch wrapper; dispatches UNAUTHENTICATED_EVENT on 401
-  src/types.ts          re-exports only: the shared wire types (api.ts) and Settings types
-  src/styles.css        design tokens (:root, dark via prefers-color-scheme), all component CSS
-  src/lib/timeclock.ts  PURE: computeTimeclock(punches, settings, now, {frozen}) → tiles/state,
-                        timeclockForDate/clampToDay (past days freeze at their end), normalizePunches/
-                        clockOutPosition/extraPairs (row model), secondMealApplies
-  src/lib/alarms.ts     PURE: dueEvents(...) scheduler + describeEvent() copy
-  src/lib/alerts.ts     the ONLY place that plays audio / calls Notification / pushes banners:
-                        playSound(id) runs a synth pattern (SYNTH) or a bundled clip (fetched +
-                        decoded once through the one AudioContext)
-  src/lib/sounds.ts     clipUrl(id) from one import.meta.glob over src/sounds/,
-                        SOUND_EVENT_LABELS (the rows of Settings → Alarms → Sounds)
-  src/sounds/           the bundled clips, <id>.mp3, all CC0; README.md there records each
-                        clip's title, author and source (the only place provenance lives)
-  src/lib/copy.ts       what the app raises at the user (celebrations, warning pools, confirms,
-                        alerts, banners, notices, retro prompt, settings status); no logic
-  src/lib/celebrate.ts  PURE: pickCelebration(seed) for the end-of-day notice, pickBurst(seed, n)
-                        for the emoji burst (pieces + flight)
-  src/lib/priorities.ts PURE: padPriorities(), warnThreshold(), warningKind(), pickWarning(kind),
-                        newUid(), placePriority() (timer → priorities)
-  src/lib/retro.ts      PURE: reviewDay(priorities, sessions) → on/off-plan time, mid-day rows
-  src/lib/stickers.ts   PURE: stickersForDay(summary) (clocked out, lunch, all priorities, focus,
-                        reviewed), stickerEmoji(date, id) (fixed, distinct per day), daySummaryOf(day)
-                        (a full day rolled up to a DaySummary), countStickers(weeks) (total, full
-                        days, per reason)
-  src/lib/review.ts     PURE: periodRange(kind, today, offset) (Mon-start weeks), periodOffset(kind, today,
-                        date) (the offset that lands on a date's period), reviewRange(days)
-  src/lib/calendar.ts   PURE: calendarMonth(days, settings, today, now, monthStart, showWeekends) →
-                        Mon-start rows of CalendarDay (outside / future / hasData / stickers) for
-                        History → Days; 5-wide rows without weekends, so hidden days are never counted
-  src/lib/format.ts     Intl formatting (time, dates, durations, dayName); formatTime(ms, hour12)
-                        + resolveHour12(timeFormat); re-exports shared/dates
-  src/lib/timefield.ts  PURE: msToTime/timeToMs (epoch ms ↔ @internationalized/date Time on a
-                        date key), guessPeriod() (the AM/PM the time field fills in)
-  src/lib/timer.ts      PURE: timerView(session, now) → elapsed/remaining/progress/endAt/paused/
-                        pausedForSeconds/due/overrunSeconds (what the countdown shows), dueKey(),
-                        PAUSE_LIMIT_SECONDS, DUE_GRACE_SECONDS
-  src/lib/layout.ts     CARDS (titles for CARD_IDS), DEFAULT_LAYOUT, normalizeLayout()
-  src/lib/storage.ts    readStored/writeStored: localStorage that never throws (private mode, quota)
-  src/hooks/            useSettings (SettingsProvider, optimistic PUT), useDay (per-date cache +
-                        setters), useTimer (running session, timerView per tick, pause/resume, the
-                        "time's up" prompt, requestFinish → the finish choice, and the auto-finish after
-                        the grace or a forgotten pause, mutationSeq re-sync, wake lock, tab title),
-                        useAlarms (fired keys in localStorage per day),
-                        useLatest (ref that tracks a value for callbacks), useNow, useRoute,
-                        useModalDialog (native <dialog>: open on mount, cancel/Escape/backdrop close),
-                        useRange (keyed GET /days/range for Calendar and Review),
-                        useSettled, useTimeFormat ({ hour12, formatTime } from the setting), useWakeLock;
-                        each has a *.test.ts(x) beside it (happy-dom)
-  src/test/hooks.tsx    fixtures for the hook tests: makeDay/makeSession/makeSettings, deferred(),
-                        settle(ms) (fake clock + React flush), setVisibility(), the provider stack
-  src/auth/             AuthGate (mode/user → Setup | Login | OIDC button | app), pages
-  src/components/       Header, RunningTimerBar, Banners, Sheet (dnd-kit) + CardShell,
-                        Timeclock + TimeField (React Aria hour/minute/AM-PM segments), Priorities,
-                        FinishChoice (the "How much to log?" sheet a late Finish opens; mounted once in App),
-                        Burst (emoji flying from an anchor, portalled to body; off under reduced
-                        motion and the `celebrations` setting), FocusTimer, SessionLog, Retro,
-                        History (Days | Review; owns the review period so the calendar can point it at a
-                        week), Calendar (month grid, stickers when `settings.stickers`, legend filter,
-                        picked-day panel), Review (controlled by History), PeriodNav (◀ label ▶, shared),
-                        SettingsDialog (tabs incl. Data: retention + delete-before), Tile (label /
-                        value / sub, shared by the timeclock, the day panel and the review), Icons
-scripts/screenshots.mjs `npm run screenshots`: dev server (reused or started) + seed + headless
-                        Chromium over CDP → docs/screenshots/*.png for the README
-scripts/icons.mjs       `npm run icons`: icon.svg → icon-192/512.png (transparent corners),
-                        icon-maskable-512.png and apple-touch-icon.png (full-bleed)
-scripts/browser.mjs     the headless Chromium both scripts drive: findBrowser, launchBrowser, Cdp, openBrowser
-scripts/smoke-image.sh  boots a built image and checks it (health, SPA shell, /data owner, PID 1 not
-                        root, the HEALTHCHECK command); CI's image-smoke and image jobs run it
-docs/screenshots/       committed PNGs the README embeds; regenerate after a visible UI change
-docker/entrypoint.sh    PUID/PGID (default 1000/1000) → chown /data + su-exec; 0 keeps root
-Dockerfile docker-compose.yml .env.example README.md .oxlintrc.json
-unraid/clockspan.xml    the Unraid Community Apps template: a field per .env.example variable
-                        (config.test.ts checks), /data → appdata, PUID/PGID 99/100; its TemplateURL is
-                        its own raw URL on main, so edits reach Unraid users when they merge
-ca_profile.xml          the repository's Community Apps profile; the portal requires it at the root.
-                        Both files point at client/public/icons/icon-512.png and docs/screenshots/*.png
-                        by raw URL on main: moving those files breaks the listing
-CONTRIBUTING.md         PR and release rules (imported by CLAUDE.md; see "Branches, PRs and releases")
-SECURITY.md             how to report a vulnerability (GitHub private reporting), supported versions, scope
-.github/workflows/ci.yml  check (+ image-smoke on PRs) → image (ghcr.io) → release (on a version bump); .github/release.yml groups notes by label
-.github/workflows/workflow-lint.yml  zizmor on any change under .github/ (not a required check)
-.github/workflows/codeql.yml  CodeQL (security-extended) on every PR, push to main and weekly; alerts in code scanning
+  public/               manifest, sw.js, icons/icon.svg (the icon's one source; `npm run icons` renders
+                        the PNGs next to it)
+  src/App.tsx           provider stack + Shell (route, settings dialog, today's alarms)
+  src/api.ts            fetch wrapper (UNAUTHENTICATED_EVENT on 401); src/types.ts re-exports shared types
+  src/lib/              pure logic with a test beside each file: timeclock, alarms, timer, retro,
+                        review, calendar, stickers, priorities, format, timefield, layout, celebrate
+    alerts.ts           the one place that plays sound, shows notifications and pushes banners
+    copy.ts             every line the app raises at the user; no logic
+    storage.ts          localStorage that never throws (private mode, quota)
+  src/hooks/            state and effects (useDay, useTimer, useSettings, useAlarms, …), each with a
+                        happy-dom test beside it; src/test/hooks.tsx has the fixtures and provider stack
+  src/components/       the cards, History (Calendar + Review), SettingsDialog, Banners, FinishChoice
+  src/auth/             AuthGate and the setup / login pages
+  src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
+  src/styles.css        design tokens and all component CSS
+scripts/                screenshots.mjs and icons.mjs (headless Chromium via browser.mjs), smoke-image.sh
+docs/screenshots/       the PNGs the README embeds
+Dockerfile, docker/     the image; entrypoint.sh owns /data as PUID:PGID and drops root
+unraid/clockspan.xml    the Unraid template, a field per .env.example variable (config.test.ts checks);
+                        Unraid reads it from main, so an edit reaches users when it merges
+ca_profile.xml          the Community Apps profile. Both XML files link icons/icon-512.png and
+                        docs/screenshots/*.png by raw URL on main: moving those breaks the listing
+.github/workflows/      ci.yml (check, image-smoke, image, release), codeql.yml, workflow-lint.yml (zizmor)
 ```
 
 ## Commands
@@ -192,72 +99,58 @@ npm run reset-password -- <username>
 docker compose pull && docker compose up -d   # the published image; see README for building locally
 ```
 
-Dev DB: `./data/focus.db` (gitignored). Delete it to start fresh. `AUTH_MODE=local npm run dev`
-to exercise the setup/login pages. The `prod` config in `.claude/launch.json` builds and serves
-the real bundle on :8090 with the real headers; the `web` config is the dev server, and
-`web-local` / `web-oidc` are the same dev server under `AUTH_MODE=local` / `oidc` (the OIDC one
-points at a provider that isn't there, so discovery logs a retry now and then; the sign-in
-button can't complete, everything after sign-in works). One at a time: they share :5173.
+`AUTH_MODE=local npm run dev` shows the setup and login pages. `.claude/launch.json` has `web`
+(the dev server), `web-local` / `web-oidc` (the same under `AUTH_MODE=local` / `oidc`; the OIDC
+provider isn't there, so its sign-in button can't complete and discovery logs a retry now and
+then; everything after sign-in works) and `prod` (the built bundle with the real headers on
+:8090). The `web*` configs share :5173, so run one at a time.
 
 ## Branches, PRs and releases
 
-`main` is protected. Every change is a branch → PR → `check` green → squash merge, and a
-release is a version-bump PR: CI tags and publishes from the merge, nothing is tagged by hand.
-The checklist, the PR requirements (title, one label, what must pass) and the version rule are
-in `CONTRIBUTING.md`.
-Follow it as written; it is not advice. Dependabot (`.github/dependabot.yml`) opens weekly
-`skip-changelog` PRs for npm (minor + patch grouped, majors on their own), GitHub Actions
-(grouped) and the Docker base image (pinned by digest in both stages), each release at least 7
-days old (`cooldown`; security updates don't wait). They are merged by hand, as a batch, like
-any other PR; a major version bump is read like an outside PR first. CONTRIBUTING.md has the
-routine and says when a dependency merge calls for a patch release.
+`main` is protected: every change is a branch → PR → green checks → squash merge, and a release
+is a version-bump PR that CI tags and publishes. `CONTRIBUTING.md` has the PR requirements
+(title, one label, what must pass), the release checklist, the version rule and the Dependabot
+routine. Follow it as written; it is not advice.
 
 ## Dev data is disposable
 
-On a dev checkout, `./data/focus.db` is test data and nothing else. Add, edit, and delete
-rows, users, days, punches, sessions, and settings as the task needs; delete the file to start
-over. None of this needs confirmation. Production data lives only on the Docker `/data` volume,
-which the dev machine cannot reach; the only local state worth protecting is the source tree.
+On a dev checkout `./data/focus.db` (gitignored) is test data and nothing else: add, edit and
+delete rows, users, days, punches, sessions and settings as the task needs, or delete the file
+to start over, with no confirmation. Production data lives only on the Docker `/data` volume,
+which the dev machine cannot reach. Run the destructive paths for real: delete a session or
+user, cancel a timer, `DELETE /api/settings`.
 
-Run the destructive paths for real: delete a session or user, cancel a timer, `DELETE
-/api/settings`.
-
-Start from `npm run seed`, not from an empty DB: the last 10 weekdays for the default user
-(a normal day, an extra out/in pair with a mid-day priority, approved overtime, an unreviewed
-day with a cancelled session, a half day with no lunch) plus today clocked in two hours ago.
-Flags are in the `seed-cli.ts` header (`--running` for timer work, `--quarter` for Month /
-Quarter review, `--fresh` to also reset settings and logins). Under `AUTH_MODE=local` it
-creates `admin` and `sam` (password `clockspan-dev`); under `AUTH_MODE=oidc`, one "Dev User".
-`--auth local|oidc` stands in for the env var (with placeholder OIDC values), and `--sessions`
-signs every seeded user in and prints a `document.cookie = 'fs_session=…'` line per user: run
-it in the page and reload to be that user, with no password typed and no provider. It replaces
-the user's days each run, never deletes user rows, and is safe while `npm run dev` is up;
-reload the page.
-
-A signed-in browser check, local or OIDC: `preview_start` `web-local` (or `web-oidc`), then
-`npm run seed -- --auth local --sessions` (or `--auth oidc`), and set the printed cookie with
-`javascript_tool`.
+Start from `npm run seed`, not an empty DB: the last 10 weekdays for the default user (a normal
+day, an extra out/in pair with a mid-day priority, approved overtime, an unreviewed day with a
+cancelled session, a half day with no lunch) plus today, clocked in two hours ago. Flags are in
+the `seed-cli.ts` header: `--running` for timer work, `--quarter` for Month / Quarter review,
+`--fresh` to also reset settings and logins. Under `AUTH_MODE=local` (or `--auth local`, which
+stands in for the env var) it creates `admin` and `sam` (password `clockspan-dev`); under
+`oidc`, one "Dev User". `--sessions` signs every seeded user in and prints a
+`document.cookie = 'fs_session=…'` line per user: run it in the page and reload to be that user,
+with no password typed and no provider. A run replaces the user's days, never deletes users,
+and is safe while `npm run dev` is up (reload the page).
 
 Ways in, cheapest first:
 
-- `npm test`: server tests boot the real app on an in-memory DB through `startTestApp()`
-  (`server/dev/harness.ts`) and hit it with `fetch`. `seed: true` gives the test the sample
-  days and a manifest of what was inserted (`app.seeded`). Reach into `app.db` for what the
-  API cannot set up (a session that started an hour ago). One app per test.
-- `curl` against `http://localhost:3000/api/...` while `npm run dev` is up.
-- `sqlite3 data/focus.db` for direct inserts or a look at what a route wrote.
-- `DATA_DIR=<scratch dir>` on `npm run seed` and `npm run dev` when the current DB should survive.
+- `npm test`: route tests boot the real app on an in-memory DB with `startTestApp()`
+  (`server/dev/harness.ts`) and call it with `fetch`. `seed: true` adds the sample days and a
+  manifest of them (`app.seeded`); `app.db` sets up what the API can't (a session that started
+  an hour ago). One app per test.
+- `curl` against `http://localhost:3000/api/...` while `npm run dev` is up; `sqlite3
+  data/focus.db` for direct inserts or a look at what a route wrote.
+- `DATA_DIR=<scratch dir>` on `npm run seed` and `npm run dev` when the current DB should
+  survive. Never point it outside the repo or the session scratchpad.
 - The UI in the preview pane, for what only the UI shows.
 
-Tests: pure-function tests in `shared/` and `client/src/lib`; hook tests beside each hook in
-`client/src/hooks` (`// @vitest-environment happy-dom`, `vi.mock('../api')`, fake timers; fixtures
-and the provider stack in `client/src/test/hooks.tsx`); harness tests in
+Tests sit beside the code: pure-function tests in `shared/` and `client/src/lib`; hook tests in
+`client/src/hooks` (`// @vitest-environment happy-dom`, `vi.mock('../api')`, fake timers;
+fixtures and the provider stack in `client/src/test/hooks.tsx`); harness tests in
 `server/**/*.test.ts` for routes, validation, scoping, headers, `mergeSettings`, and migrations
-(`migrate(db, upTo)` stops early so a backfill can be tested, see `server/db.test.ts`). No
-temp files: `openDatabase(':memory:')`.
+(`migrate(db, upTo)` stops early so a backfill can be tested, see `server/db.test.ts`). No temp
+files: `openDatabase(':memory:')`.
 
-Limits that still hold: never commit `data/` or `.env`, and never point `DATA_DIR` outside the
-repo or the session scratchpad.
+Never commit `data/` or `.env`.
 
 ## Architecture rules (do not break)
 
@@ -511,111 +404,89 @@ Prove a change at the cheapest level that can show it, and stop there:
 2. Anything in `server/`: a harness test in the router's `*.test.ts`. Route behavior,
    validation, scoping, headers, persistence and migrations are proven here, never by clicking.
 3. One-off looks at live data: `curl` against the seeded dev DB.
-4. The browser, only for what the API cannot show: how a card renders, drag/drop, banners
-   and alarms firing, the timer bar, light/dark, the 375 px pass. Run `npm run seed` first
-   (with `--running` for timer work) so the pass starts with data. Scope it to the surface
-   you touched; one pass at the mobile preset is enough unless the change is desktop-only
-   layout. Do not re-walk flows a test already covers.
+4. The browser, only for what tests cannot show: how a card renders, drag/drop, banners, the
+   timer bar, light/dark, the 375 px pass. Seed first (`--running` for timer work), scope it to
+   the surface you touched, and make one pass at the mobile preset unless the change is
+   desktop-only layout. Do not re-walk flows a test already covers.
 
-- `npm run test:coverage` green, `npm run typecheck` clean, `npm run lint` clean,
-  `npm run format:check` clean. The coverage run is the gate: every file under `server/`,
-  `shared/`, `client/src/lib/` and `client/src/hooks/` (minus the two process entrypoints and `server/dev/`) must be
-  100% on statements, branches, functions and lines, so new code in those trees ships with the
-  tests that reach it. A branch that cannot be reached is deleted, never hidden behind a
-  `v8 ignore` comment; `alerts.ts` shows how a browser-only module is tested (stub the globals).
-- If you touched CSS or a component: walk the touched surface at the 375 px mobile preset
-  (and desktop width if the change has a desktop-only branch); check light and dark.
-- If you touched `security.ts`, `index.html`, or how assets load: run the `prod` config and
-  read the console for CSP violations; `curl -sI localhost:8090/api/health` shows the headers.
-- If you touched the timer or alarms: reload mid-timer, background/foreground the tab, and let a
-  short timer run out (PATCH `plannedSeconds` to elapsed + 30 on the seeded session, then
-  reload so the client has the new plan): one chime, the "Time's up" banner with **Add 5 min**,
-  the countdown goes negative in the bar and the card; a reload inside the grace brings the
-  banner back with no second chime; **Add 5 min** counts down again from 5:00; under a minute
-  over, **Finish** logs the planned length at once; a minute or more over it opens "How much to
-  log?", where **Worked** logs the elapsed time and **Planned** the plan; a session found 20 min
-  over on load (backdate `started_at`) is logged at its planned length with one chime. Pause,
-  reload, resume: the
-  countdown holds and continues, the log row's pill follows, and the finished row's duration
-  excludes the pause (`curl /api/days/<today>` agrees).
-- If you touched sounds: `alerts.test.ts` proves the patterns, the one fetch per clip and the
-  quiet failure; `sounds.test.ts` the catalog ↔ folder match. The browser check is Settings →
-  Alarms → Sounds at the mobile preset: Test on a clip row fetches the file once (the network
-  list), a second Test fetches nothing, and a clock-out set today plays the day-complete sound
-  once (one request) with no repeat on reload.
-- If you touched punches: walk a pair added before lunch, an early Clock out (done +
-  celebration), "Add extra out / in" after it (old Clock out becomes Out N), and removing that
-  pair (time returns to Clock out). For the time field: clear Clock in, press `0` `7` `3` `0`
-  (the hour advances, the period fills, the tiles move with no further key), `p` flips it, ↑/↓
-  on a segment saves each step, and a half-typed row reverts when you click away. In the
-  browser pane send single `key` presses; the `type` action pastes the whole string into one
-  segment.
-- If you touched alarms: with "Overtime approved" on, the clock-out banner must stop and the
-  lunch tile must keep counting down. The retro banner must still fire, and "Mark reviewed"
-  must clear it without a repeat.
-- If you touched priorities or the timer: tick one row and press Add priority (the notice
-  lists the ticked row); tap a chip in the timer, start, and the log row shows the number;
-  "Also add to today's priorities" fills the first empty row; reassign a log row via its select.
-- If you touched the retro or review: `retro.test.ts` / `review.test.ts` prove the split and
-  the rollup; the browser check is one look at a seeded day's retro card and at History →
-  Review → Week (`--quarter` for Month / Quarter).
-- If you touched the History calendar: `calendar.test.ts` proves the grid and `review.test.ts`
-  the `periodOffset` round trip; the browser check is one month at the mobile preset (◀ to a
-  seeded month, tap a day, **Open day** and back through the header, **Review this week** lands
-  on that week). With the sticker chart on (Settings → Sheet → History, or `PUT /api/settings
-  {"stickers":true}`): the count line, a chip narrows the grid to one sticker and a second tap
-  clears it. With Show weekends off: five columns, and a seeded weekend day's stickers leave
-  the counts.
-- If you touched retention: `server/retention.test.ts` and the `/prune` block in
-  `days.test.ts` prove the cutoff, the cap, the running-session guard and the cascade; the
-  browser check is one look at Settings → Data (count line, toggle saves), with the delete
-  itself driven by curl (`POST /api/days/prune`) because of the confirm dialog.
-- If you touched auth: `server/auth/local.test.ts` covers setup, login, the limiter, password
-  change (which revokes other sessions) and admin user management; no browser pass needed.
-- If the change is visible in a README screenshot (sheet, retro, review, settings), run
-  `npm run screenshots` and commit the PNGs that changed.
+The gate: `npm run test:coverage` green and `typecheck`, `lint` and `format:check` clean. Every
+file under `server/`, `shared/`, `client/src/lib/` and `client/src/hooks/` (minus the two
+process entrypoints and `server/dev/`) must be 100% covered on statements, branches, functions
+and lines, so new code there ships with the tests that reach it. A branch that cannot be
+reached is deleted, never hidden behind a `v8 ignore` comment; `alerts.ts` shows how a
+browser-only module is tested (stub the globals).
+
+The browser pass for each surface (the logic under it is already tested):
+
+- **CSS or a component**: the touched surface at the 375 px mobile preset (and desktop width
+  if the change has a desktop-only branch), in light and dark.
+- **`security.ts`, `index.html` or how assets load**: the `prod` config, with the console free
+  of CSP violations; `curl -sI localhost:8090/api/health` shows the headers.
+- **The timer**: make the seeded session run out (PATCH `plannedSeconds` to elapsed + 30, then
+  reload so the client has the new plan). The bar and the card count below zero, the "Time's
+  up" banner offers **Add 5 min**, and a minute or more over, **Finish** opens "How much to
+  log?". Pause and resume: the countdown holds and the log row's pill follows.
+- **Alarms**: a banner firing at the mobile preset. With "Overtime approved" on, the clock-out
+  banner stops and the lunch tile keeps counting down.
+- **Sounds**: Settings → Alarms → Sounds. Test on a clip row fetches the file once (the network
+  list); a second Test fetches nothing. A clock-out set today plays the day-complete sound once,
+  and not again on reload.
+- **Punches**: a pair added before lunch, an early Clock out (done, celebration), "Add extra
+  out / in" after it (the old Clock out becomes Out N) and removing that pair. In the time
+  field: clear Clock in and press `0` `7` `3` `0` (the hour advances, the period fills, the
+  tiles move with no further key), `p` flips the period, ↑/↓ on a segment saves each step, and
+  a half-typed row reverts when focus leaves. In the browser pane send single `key` presses;
+  the `type` action pastes the whole string into one segment.
+- **Priorities or the timer card**: tick one row and press Add priority (the notice lists the
+  ticked row); tap a chip, start, and the log row shows the number; "Also add to today's
+  priorities" fills the first empty row; a log row's select reassigns it.
+- **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
+  Month / Quarter).
+- **The History calendar**: one month at the mobile preset: ◀ to a seeded month, tap a day,
+  **Open day** and back through the header, **Review this week** lands on that week. With the
+  sticker chart on (`PUT /api/settings {"stickers":true}`), a chip narrows the grid to one
+  sticker and a second tap clears it; with Show weekends off, five columns.
+- **Retention**: one look at Settings → Data (count line, toggle saves); drive the delete with
+  curl (`POST /api/days/prune`) because of the confirm dialog.
+- **Auth**: no browser pass; `server/auth/local.test.ts` covers setup, login, the limiter,
+  password change and user management.
+- **Anything a README screenshot shows** (sheet, retro, review, settings): `npm run screenshots`
+  and commit the PNGs that changed.
 
 ## Gotchas
 
-- `better-sqlite3` is native. Since v13 it bundles N-API prebuilds for every platform the
-  image can run on (including linux-musl), so no compiler toolchain is needed, but its
-  `binding.gyp` still makes npm try `node-gyp rebuild`; the Dockerfile and CI run
-  `npm ci --ignore-scripts` so the prebuild is used regardless of which npm version (11 or 12)
-  is in the base image and how it applies `allowScripts` (and so no dependency's install
-  script runs in CI; `npm audit signatures` then checks every package's registry signature). Docker is verified only in the
-  deployed environment, not on the dev Mac (no Docker here); the `image-smoke` job on every
-  PR (`scripts/smoke-image.sh`: build, boot, `/api/health`, root dropped, the healthcheck
-  command) is the earliest signal, and `main` runs the same script before it pushes a tag.
-- The preview harness exports `PORT=5173`; that's why `dev:server` pins `PORT=3000` and the
-  `prod` config pins `PORT=8090`.
-- `client/public/sw.js` is intentionally a pass-through service worker: installability, plus
-  the `notificationclick` handler for notifications `alerts.ts` shows through it (Chrome on
-  Android refuses `new Notification()`; the worker is only registered in a production build).
-  Do not add caching without a versioning strategy or users will see stale assets.
+- `better-sqlite3` is native but ships N-API prebuilds for every platform the image runs on
+  (linux-musl included). Its `binding.gyp` still makes npm try `node-gyp rebuild`, so the
+  Dockerfile and CI run `npm ci --ignore-scripts`, which also keeps every dependency's install
+  script from running; `npm audit signatures` then checks registry signatures. There is no
+  Docker on the dev machine: `image-smoke` (`scripts/smoke-image.sh`) on each PR is the first
+  run of the image.
+- The preview harness exports `PORT=5173`, which is why `dev:server` pins `PORT=3000` and the
+  `prod` config `PORT=8090`.
+- `client/public/sw.js` is a pass-through service worker on purpose: installability, and the
+  `notificationclick` handler for notifications `alerts.ts` shows through it (Chrome on Android
+  refuses `new Notification()`). It is registered only in a production build. No caching
+  without a versioning strategy, or users see stale assets.
 - `vite.config.ts` imports `defineConfig` from `vitest/config` so the `test` block type-checks.
-- OIDC: `APP_URL` must match the redirect URI registered in Authentik exactly
-  (`${APP_URL}/auth/callback`); the callback reconstructs its URL from `APP_URL`, not from
-  request headers, so it works behind proxies.
-- `TRUST_PROXY` is documented as a hop count (`1`), never `true`: `true` trusts the leftmost
+- OIDC: `APP_URL` must match the redirect URI registered with the provider exactly
+  (`${APP_URL}/auth/callback`). The callback builds its URL from `APP_URL`, not from request
+  headers, so it works behind proxies.
+- `TRUST_PROXY` is a hop count (`1`), never `true`: `true` trusts the leftmost
   `X-Forwarded-For`, which the client controls, and the login limiter keys on `req.ip`.
-- scrypt needs `maxmem` above Node's 32 MB default at N=2^15 — already set in `password.ts`.
-  `DUMMY_HASH` is computed at import with a top-level `await`, so `password.ts` is ESM-only.
+- scrypt at N=2^15 needs `maxmem` above Node's 32 MB default (set in `password.ts`).
+  `DUMMY_HASH` is computed with a top-level `await`, so `password.ts` is ESM-only.
 - `window` `focus` events fire on ordinary clicks in some embedded browsers; timer re-sync is
   throttled and seq-guarded for that reason. Don't add unthrottled focus-driven refetches.
 - `npm version` without `--no-git-tag-version` tags the branch commit, which is not the squash
-  commit that lands on `main`. CI creates the `vX.Y.Z` tag on the merge; a local tag would only
-  mislead `git describe`.
-- Formatting is Prettier's (`.prettierrc`: single quotes, trailing commas, 160 columns to match
-  the tree's long lines). `npm run format` before committing; CI runs `format:check`. Markdown
-  is left alone (`.prettierignore`): the docs have hand-laid tables and wrapping.
+  commit that lands on `main`. CI creates the `vX.Y.Z` tag on the merge.
+- Prettier (`.prettierrc`): single quotes, trailing commas, 160 columns. Markdown is left alone
+  (`.prettierignore`): the docs have hand-laid tables and wrapping.
 - oxlint ignores a misspelled rule name without a word. After editing `.oxlintrc.json`, check
-  `npx oxlint --print-config` lists what you meant, and that a deliberately bad snippet is caught.
-  A promise that is deliberately not awaited is written `void p` (no-floating-promises), and an
-  async handler passed to JSX or a timer is wrapped: `onSubmit={(e) => void submit(e)}`.
-- GitHub starts no workflow for an event `GITHUB_TOKEN` caused (except `workflow_dispatch` and
-  `repository_dispatch`). A push, merge, tag or release a workflow makes with it runs nothing
-  downstream: that is why the release job's tag starts no second run. A workflow step that
-  must trigger CI needs a GitHub App or personal token instead.
+  that `npx oxlint --print-config` lists what you meant and that a deliberately bad snippet is
+  caught. A promise deliberately not awaited is written `void p`, and an async handler passed to
+  JSX or a timer is wrapped: `onSubmit={(e) => void submit(e)}`.
+- A push, merge, tag or release a workflow makes with `GITHUB_TOKEN` starts no other workflow
+  (`workflow_dispatch` and `repository_dispatch` aside), which is why the release job's tag
+  starts no second run. A step that must trigger CI needs a GitHub App or personal token.
 - TypeScript 7 is the native compiler: the `typescript` package has no `tsserver` or JS API.
-  Editors need the native TypeScript extension for IntelliSense (VS Code's bundled TS still
-  works for that); `npm run typecheck` is the source of truth either way.
+  Editors need the native TypeScript extension; `npm run typecheck` is the source of truth.
