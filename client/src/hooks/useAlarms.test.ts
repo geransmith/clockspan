@@ -117,13 +117,23 @@ describe('clock-out and retro', () => {
     expect(retro!.action).toEqual({ label: 'Open retrospective', run: openRetro });
   });
 
-  it('overtime approval silences clock-out only, and clears its banner', () => {
-    const { rerender } = renderAlarms({ tc: overDay, day: { ...NO_DAY, overtimeApproved: true } });
+  it('overtime approval silences clock-out only: the retro and meal alarms still ring', () => {
+    const approved = { ...NO_DAY, overtimeApproved: true };
+    renderAlarms({ tc: overDay, day: approved });
     expect(tags()).toEqual(['alarm:retro']);
     vi.mocked(alert).mockClear();
-    rerender({ date: TODAY, tc: lunchSoon, now: T0, day: NO_DAY, settings });
-    rerender({ date: TODAY, tc: lunchSoon, now: T0, day: { ...NO_DAY, overtimeApproved: true }, settings });
-    expect(dismissByTag).toHaveBeenCalledWith('alarm:lunchBy');
+    // California Labor Code §512: the meal period is still owed on an overtime day.
+    renderAlarms({ tc: lunchSoon, day: approved });
+    expect(tags()).toContain('alarm:lunchBy');
+  });
+
+  it('approving overtime while the clock-out banner is up clears that banner and no other', () => {
+    const { rerender } = renderAlarms({ tc: overDay });
+    expect(tags()).toEqual(['alarm:clockOut', 'alarm:retro']);
+    vi.mocked(dismissByTag).mockClear();
+    // Approved from the card's switch (the banner's own button closes its banner itself).
+    rerender({ date: TODAY, tc: overDay, now: T0, day: { ...NO_DAY, overtimeApproved: true }, settings });
+    expect(vi.mocked(dismissByTag).mock.calls).toEqual([['alarm:clockOut']]);
   });
 
   it('a reviewed day disarms the retro alarm, and a moved target clears its banner', () => {
