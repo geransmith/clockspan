@@ -71,8 +71,8 @@ npm run dev
 Other commands:
 
 ```bash
-npm test               # unit tests (timeclock math, alarms) + API tests against an in-memory DB
-npm run test:coverage  # the same, failing unless server/, shared/ and the client libs are 100% covered (CI runs this)
+npm test               # unit tests (timeclock math, alarms), hook tests + API tests against an in-memory DB
+npm run test:coverage  # the same, failing unless server/, shared/, the client libs and hooks are 100% covered (CI runs this)
 npm run typecheck      # client + server type check
 npm run lint           # oxlint (correctness, type-aware TypeScript, React hooks and accessibility rules)
 npm run format         # Prettier (CI runs format:check)
