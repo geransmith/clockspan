@@ -1,3 +1,4 @@
+import { isIPv6 } from 'node:net';
 import { Router } from 'express';
 import type { DB, UserRow } from '../db.js';
 import type { Config } from '../config.js';
@@ -38,6 +39,28 @@ export class LoginLimiter {
   reset(ip: string): void {
     this.attempts.delete(ip);
   }
+}
+
+/**
+ * What the login limiter counts an address under. An IPv6 client is usually handed a whole
+ * /64, so keyed by the full address it could take a fresh five attempts from each of 2^64
+ * addresses; the /64 is the client. An IPv4 address a dual-stack socket reports as
+ * `::ffff:a.b.c.d` is that IPv4 address.
+ */
+export function limiterKey(ip: string): string {
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  if (mapped) return mapped[1]!;
+  if (!isIPv6(ip)) return ip;
+  const [head = '', tail] = ip.split('%')[0]!.split('::');
+  // A dotted IPv4 tail fills the last two groups.
+  const groups = (s: string) => (s ? s.split(':').flatMap((g) => (g.includes('.') ? ['0', '0'] : [g])) : []);
+  const h = groups(head);
+  const t = tail === undefined ? [] : groups(tail);
+  const full = [...h, ...Array<string>(8 - h.length - t.length).fill('0'), ...t];
+  return `${full
+    .slice(0, 4)
+    .map((g) => parseInt(g, 16).toString(16))
+    .join(':')}::/64`;
 }
 
 /**
@@ -104,7 +127,8 @@ export function localAuthRouter(db: DB, config: Config): Router {
   r.post('/login', async (req, res) => {
     // Only undefined once the socket is gone, when no answer can be sent anyway.
     const ip = String(req.ip);
-    const gate = limiter.check(ip);
+    const key = limiterKey(ip);
+    const gate = limiter.check(key);
     if (!gate.ok) {
       console.warn(`[auth] login blocked from ${ip}: too many attempts`);
       res.setHeader('Retry-After', String(gate.retryAfterSec));
@@ -114,7 +138,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
     // Counted now, before the hash: the check above and this line run without yielding, so
     // each of a burst of requests sees the ones before it. Counted after the await, a burst
     // would all pass the gate while the first was still hashing. A correct password clears it.
-    limiter.fail(ip);
+    limiter.fail(key);
     const { username, password } = req.body ?? {};
     const user =
       typeof username === 'string'
@@ -128,7 +152,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
       res.status(401).json({ error: 'Incorrect username or password.' });
       return;
     }
-    limiter.reset(ip);
+    limiter.reset(key);
     createSession(db, config, res, user.id);
     console.log(`[auth] ${logName(user.username)} signed in from ${ip}`);
     res.json({ user: publicUser(user) } satisfies UserResponse);

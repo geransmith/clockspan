@@ -90,6 +90,19 @@ describe('cross-site writes', () => {
     expect((await send('PUT', '/api/settings')).status).toBe(200);
   });
 
+  // Safari before 16.4 sends no Sec-Fetch-Site, but it does send Origin on a POST.
+  it('falls back to Origin when a browser sends no Sec-Fetch-Site', async () => {
+    const write = (origin: string) => fetch(`${app.url}/api/settings`, { method: 'PUT', headers: { 'content-type': 'application/json', origin }, body: '{}' });
+    expect((await write('https://evil.example')).status).toBe(403);
+    expect((await write('null')).status).toBe(403);
+    expect((await write(app.url)).status).toBe(200);
+    // A proxy that rewrites Host: the public origin is APP_URL's.
+    await app.close();
+    app = await startTestApp({ env: { APP_URL: 'https://focus.example.com' } });
+    expect((await write('https://focus.example.com')).status).toBe(200);
+    expect((await write('https://other.example.com')).status).toBe(403);
+  });
+
   it('leaves reads alone, whoever sent them', async () => {
     expect((await send('GET', '/api/settings', 'cross-site')).status).toBe(200);
   });
