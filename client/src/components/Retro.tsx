@@ -63,8 +63,6 @@ export function Retro({ priorities, sessions, note, reviewedAt, onChange }: Prop
     return <p className="muted center">Write priorities and log a session or two, then this shows how the day lined up with the plan.</p>;
   }
 
-  const offPlan = review.unplanned.reduce((sum, s) => sum + (s.durationSeconds ?? 0), 0);
-
   return (
     <div className="retro">
       {review.total > 0 && (
@@ -106,7 +104,7 @@ export function Retro({ priorities, sessions, note, reviewedAt, onChange }: Prop
       {review.unplanned.length > 0 && (
         <section className="retro-section">
           <h3 className="retro-heading">
-            Not on the plan <span className="muted">{formatDuration(offPlan)}</span>
+            Not on the plan <span className="muted">{formatDuration(review.offPlanSeconds)}</span>
           </h3>
           <ul className="retro-list">
             {review.unplanned.map((s) => (

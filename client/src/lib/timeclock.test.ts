@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { clampToDay, clockOutPosition, computeTimeclock, emptyPunches, extraPairs, normalizePunches, secondMealApplies, timeclockForDate } from './timeclock';
+import {
+  addPunchPair,
+  clampToDay,
+  clockOutPosition,
+  computeTimeclock,
+  emptyPunches,
+  extraPairs,
+  normalizePunches,
+  removePunchPair,
+  secondMealApplies,
+  timeclockForDate,
+} from './timeclock';
 import type { Punch } from '../types';
 import { PUNCH_ORDER } from './copy';
 
@@ -251,6 +262,50 @@ describe('punch rows', () => {
     // Positions 3-4 are a pair; 5 is missing, so 6 cannot pair with anything and 7 is the clock out.
     const gapped = punches([T0, null, null, null, null, null, null, null]).filter((p) => p.position !== 5);
     expect(extraPairs(gapped).map((p) => [p.out.position, p.in.position])).toEqual([[3, 4]]);
+  });
+});
+
+describe('adding and removing an extra pair', () => {
+  const day = [T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 8.5 * H];
+
+  it("turns the Clock out into the new pair's Out and adds an In and a fresh Clock out", () => {
+    const next = addPunchPair(punches(day));
+    expect(next.map((p) => [p.position, p.kind, p.at])).toEqual([
+      [0, 'in', T0],
+      [1, 'out', T0 + 4 * H],
+      [2, 'in', T0 + 4.5 * H],
+      [3, 'out', T0 + 8.5 * H],
+      [4, 'in', null],
+      [5, 'out', null],
+    ]);
+    expect(extraPairs(next).map((p) => p.out.at)).toEqual([T0 + 8.5 * H]);
+    expect(clockOutPosition(next)).toBe(5);
+  });
+
+  it("hands the Out's time back to the Clock out when the pair was added by mistake", () => {
+    // Clocked out at 4:30 PM, pressed "Add extra out / in", then removed the pair.
+    expect(removePunchPair(addPunchPair(punches(day)), 3).map((p) => p.at)).toEqual(day);
+  });
+
+  it('removes a pair and renumbers the rows after it, leaving the Clock out alone', () => {
+    const next = removePunchPair(punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 6 * H, T0 + 6.5 * H, null]), 3);
+    expect(next.map((p) => [p.position, p.kind, p.at])).toEqual([
+      [0, 'in', T0],
+      [1, 'out', T0 + 4 * H],
+      [2, 'in', T0 + 4.5 * H],
+      [3, 'out', null],
+    ]);
+  });
+
+  it('keeps a Clock out that already has its own time', () => {
+    const next = removePunchPair(punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 6 * H, null, T0 + 8.5 * H]), 3);
+    expect(next.map((p) => p.at)).toEqual(day);
+  });
+
+  it('hands nothing back from an Out without a time, or to rows with no Clock out row', () => {
+    expect(removePunchPair(punches([T0, null, null, null, null, null]), 3).map((p) => p.at)).toEqual([T0, null, null, null]);
+    // Un-normalized input: the last row is an in, so there is no Clock out to fill.
+    expect(removePunchPair(punches([T0, null, null, T0 + H, null]), 3).map((p) => p.at)).toEqual([T0, null, null]);
   });
 });
 
