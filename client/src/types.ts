@@ -6,7 +6,6 @@ export type {
   AuthInfo,
   AuthMode,
   Day,
-  DaySummary,
   LogoutResponse,
   OkResponse,
   OvertimeResponse,
@@ -27,4 +26,4 @@ export type {
   UserResponse,
   UsersResponse,
 } from '../../shared/api.js';
-export { LIMITS } from '../../shared/api.js';
+export { LIMITS, PASSWORD_LENGTH } from '../../shared/api.js';

@@ -133,7 +133,7 @@ export function daysRouter(db: DB, config: Config): Router {
       res.status(400).json({ error: 'from and to must be dates (YYYY-MM-DD) with from <= to.' });
       return;
     }
-    const span = (Date.parse(to) - Date.parse(from)) / 86_400_000;
+    const span = (Date.parse(to) - Date.parse(from)) / DAY_MS;
     if (span > MAX_RANGE_DAYS) {
       res.status(400).json({ error: `Range is limited to ${MAX_RANGE_DAYS} days.` });
       return;

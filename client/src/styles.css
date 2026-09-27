@@ -428,6 +428,24 @@ button {
   white-space: nowrap;
   color: var(--text);
 }
+/* Yesterday's unticked priorities, offered on today's empty list. */
+.left-open {
+  margin-bottom: 4px;
+}
+.left-open-list {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.left-open-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.left-open-list li {
+  overflow-wrap: anywhere;
+}
 /* End-of-day notice on the timeclock. */
 .notice--celebrate {
   background: var(--accent-soft);
@@ -937,6 +955,31 @@ button {
   color: var(--text-2);
   text-align: center;
 }
+/* The textarea and a hidden copy of its text share one grid cell, so the copy sets the height
+   and a long priority wraps instead of scrolling sideways. Both need the same box and font. */
+.grow-field {
+  display: grid;
+  min-width: 0;
+}
+.grow-field > textarea,
+.grow-field::after {
+  grid-area: 1 / 1;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 16px;
+  line-height: 22px;
+  overflow-wrap: anywhere;
+}
+.grow-field::after {
+  content: attr(data-value) ' ';
+  visibility: hidden;
+  white-space: pre-wrap;
+  border: 1px solid transparent;
+}
+.grow-field > textarea {
+  resize: none;
+  overflow: hidden;
+}
 .priority-row.is-done .priority-input {
   text-decoration: line-through;
   color: var(--text-3);
@@ -996,9 +1039,11 @@ button {
   font-size: 0.92rem;
   min-height: 32px;
 }
+/* One column per start button; two lengths set the same make one button. */
 .timer-quick {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   gap: 10px;
 }
 .btn-quick {
@@ -1339,9 +1384,7 @@ button {
   border-radius: 6px;
   font-weight: 600;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .log-label:hover {
   background: var(--surface-2);
@@ -1401,8 +1444,13 @@ button {
   .log-edit {
     grid-area: label;
   }
+  /* The running pill goes under the time so a long label keeps the width. */
   .log-duration {
     grid-area: duration;
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: flex-end;
+    gap: 2px;
   }
   .log-delete {
     grid-area: delete;
@@ -1836,6 +1884,9 @@ button {
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
+.review-more {
+  align-self: flex-start;
+}
 .review-row--note {
   flex-direction: column;
   align-items: stretch;
@@ -2152,9 +2203,10 @@ dialog.dialog::backdrop {
   .timer-add-priority {
     --hit-inset: -6px 0;
   }
-  /* These two clip their overflow (a long label ends in an ellipsis), which would cut off an
-     ::after as well; more padding, taken back by a negative margin, grows the button instead
-     and leaves the layout as it was. About 34 px of text becomes 44 px. */
+  /* The running label clips its overflow (a long label ends in an ellipsis), which would cut
+     off an ::after as well; more padding, taken back by a negative margin, grows the button
+     instead and leaves the layout as it was. About 34 px of text becomes 44 px. The log label
+     wraps, and grows the same way around however many lines it takes. */
   .running-label {
     padding-block: 11px;
     margin-block: -5px;

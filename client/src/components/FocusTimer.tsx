@@ -6,8 +6,6 @@ import { formatCountdown, formatDuration } from '../lib/format';
 import { LIMITS, type Priority } from '../types';
 import { Check, Minus, Pause, Play, Plus, X } from './Icons';
 
-const QUICK = [15, 25, 50];
-
 interface Props {
   date: string;
   isToday: boolean;
@@ -18,12 +16,16 @@ interface Props {
 
 export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) {
   const timer = useTimer();
+  const { settings } = useSettings();
   const [label, setLabel] = useState('');
   const [linked, setLinked] = useState<string | null>(null);
   const [addAsPriority, setAddAsPriority] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (timer.running) return <Running />;
+
+  // Shortest first, and a length set twice is one button.
+  const lengths = [...new Set(settings.timerMinutes)].sort((a, b) => a - b);
 
   // Open rows only: a done priority isn't something to start a session for.
   const open = priorities.filter((p) => p.uid && p.text.trim() && !p.done);
@@ -93,7 +95,7 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
         </label>
       )}
       <div className="timer-quick">
-        {QUICK.map((m) => (
+        {lengths.map((m) => (
           <button key={m} className="btn btn-quick" onClick={() => void start(m)} disabled={!isToday}>
             <span className="timer-quick-num">{m}</span>
             <span className="timer-quick-unit">min</span>

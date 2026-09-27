@@ -1,4 +1,4 @@
-import type { Day, DaySummary } from '../types';
+import type { Day, Punch } from '../types';
 import type { CalendarDay } from './calendar';
 import { hash } from './celebrate';
 import { STICKER_EMOJI } from './copy';
@@ -43,6 +43,16 @@ export function stickerEmoji(date: string, id: StickerId): string {
     taken.add(at);
   }
   return STICKER_EMOJI[at]!;
+}
+
+/** A day rolled up for the History calendar: what its stickers and the day panel's numbers need. */
+export interface DaySummary {
+  date: string;
+  punches: Punch[];
+  focusSeconds: number;
+  prioritiesDone: number;
+  prioritiesTotal: number;
+  retroAt: number | null;
 }
 
 /** A full day rolled up for the calendar: completed sessions, rows with text. Keeps today's cell live. */

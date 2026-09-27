@@ -7,7 +7,9 @@ import {
   DEFAULT_SETTINGS,
   MAX_RETENTION_DAYS,
   MIN_RETENTION_DAYS,
+  SETTING_LIMITS,
   THEMES,
+  TIMER_MINUTES,
   TIME_FORMATS,
   type AlarmSettings,
   type CardId,
@@ -51,6 +53,16 @@ function mergeRetention(base: RetentionSettings, patch: unknown): RetentionSetti
   };
 }
 
+/** Button by button: a bad length keeps the one it would replace, and the count never changes. */
+function mergeTimerMinutes(base: number[], patch: unknown): number[] {
+  if (!Array.isArray(patch)) return base;
+  const next: unknown[] = patch;
+  return base.map((m, i) => {
+    const v = next[i];
+    return isInt(v, TIMER_MINUTES.min, TIMER_MINUTES.max) ? v : m;
+  });
+}
+
 /**
  * Merge a stored/patch object onto defaults, validating every field. Unknown keys are
  * dropped and invalid values fall back, so a bad client can never corrupt settings.
@@ -59,6 +71,10 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
   if (!patch || typeof patch !== 'object') return base;
   const p = patch as Record<string, unknown>;
   const alarms = (p.alarms && typeof p.alarms === 'object' ? p.alarms : {}) as Record<string, unknown>;
+  const limited = (key: keyof typeof SETTING_LIMITS): number => {
+    const v = p[key];
+    return isInt(v, SETTING_LIMITS[key].min, SETTING_LIMITS[key].max) ? v : base[key];
+  };
 
   let layout = base.layout;
   // Until 0.3 the sticker chart was a sheet card; a row saved then carries its choice in the
@@ -81,14 +97,15 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
   }
 
   return {
-    workMinutes: isInt(p.workMinutes, 1, 24 * 60) ? p.workMinutes : base.workMinutes,
-    lunchDeadlineMinutes: isInt(p.lunchDeadlineMinutes, 1, 24 * 60) ? p.lunchDeadlineMinutes : base.lunchDeadlineMinutes,
-    lunchMinutes: isInt(p.lunchMinutes, 0, 8 * 60) ? p.lunchMinutes : base.lunchMinutes,
-    secondMealAfterMinutes: isInt(p.secondMealAfterMinutes, 1, 24 * 60) ? p.secondMealAfterMinutes : base.secondMealAfterMinutes,
+    workMinutes: limited('workMinutes'),
+    lunchDeadlineMinutes: limited('lunchDeadlineMinutes'),
+    lunchMinutes: limited('lunchMinutes'),
+    secondMealAfterMinutes: limited('secondMealAfterMinutes'),
     timeFormat: TIME_FORMATS.includes(p.timeFormat as TimeFormat) ? (p.timeFormat as TimeFormat) : base.timeFormat,
     theme: THEMES.includes(p.theme as Theme) ? (p.theme as Theme) : base.theme,
-    adjustStepMinutes: isInt(p.adjustStepMinutes, 1, 60) ? p.adjustStepMinutes : base.adjustStepMinutes,
-    priorityCount: isInt(p.priorityCount, 1, 10) ? p.priorityCount : base.priorityCount,
+    adjustStepMinutes: limited('adjustStepMinutes'),
+    timerMinutes: mergeTimerMinutes(base.timerMinutes, p.timerMinutes),
+    priorityCount: limited('priorityCount'),
     sound: isBool(p.sound) ? p.sound : base.sound,
     notifications: isBool(p.notifications) ? p.notifications : base.notifications,
     keepScreenAwake: isBool(p.keepScreenAwake) ? p.keepScreenAwake : base.keepScreenAwake,

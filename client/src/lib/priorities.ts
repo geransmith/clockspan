@@ -1,4 +1,4 @@
-import type { Priority } from '../types';
+import type { Day, Priority } from '../types';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { COMPLETE_WARNINGS, GENTLE_WARNINGS, PROGRESS_WARNINGS } from './copy';
 
@@ -56,6 +56,22 @@ export function newUid(): string {
 }
 
 /**
+ * A row after an edit. An empty row can't be done, so clearing the text clears the tick. The
+ * uid is minted (and `addedAt` stamped) the first time a row gets text and survives a clear,
+ * so a session that pointed at the row still does.
+ */
+export function editPriority(row: Priority, patch: Partial<Priority>, now: number): Priority {
+  const merged = { ...row, ...patch };
+  if (!merged.text.trim()) return { ...merged, done: false };
+  return merged.uid ? merged : { ...merged, uid: newUid(), addedAt: now };
+}
+
+/** The rows without the one at `position`, renumbered from 1. */
+export function removePriority(rows: Priority[], position: number): Priority[] {
+  return rows.filter((p) => p.position !== position).map((p, i) => ({ ...p, position: i + 1 }));
+}
+
+/**
  * Where a priority added from the timer goes: the first empty row if there is one, else a
  * new row at the end. Returns the full list to save; null when the sheet is full.
  */
@@ -65,4 +81,32 @@ export function placePriority(rows: Priority[], count: number, text: string, uid
   if (empty) return padded.map((p) => (p.position === empty.position ? { ...p, text, done: false, uid, addedAt } : p));
   if (padded.length >= MAX_PRIORITIES) return null;
   return [...padded, { position: padded.length + 1, text, done: false, uid, addedAt }];
+}
+
+/** The unticked rows of the last day that had a plan, offered on a new day's empty list. */
+export interface LeftOpen {
+  date: string;
+  rows: Priority[];
+}
+
+/**
+ * The latest day with a written priority, and its rows that were never ticked. Null when no
+ * day had a plan, or the last one got everything done: a finished plan has nothing to carry.
+ */
+export function leftOpen(days: Day[]): LeftOpen | null {
+  let last: Day | null = null;
+  for (const d of days) if (d.priorities.some((p) => p.text.trim()) && (!last || d.date > last.date)) last = d;
+  if (!last) return null;
+  const rows = last.priorities.filter((p) => p.text.trim() && !p.done).sort((a, b) => a.position - b.position);
+  return rows.length ? { date: last.date, rows } : null;
+}
+
+/**
+ * Today's list with the carried rows on top, padded to `count`. Each row is new to today: a
+ * fresh uid (sessions point at a uid within one day) and today's `addedAt`, so the retro
+ * counts it as planned unless a session already ran before it was brought over.
+ */
+export function carryOver(rows: Priority[], count: number, now = Date.now()): Priority[] {
+  const carried = rows.slice(0, MAX_PRIORITIES).map((p, i) => ({ position: i + 1, text: p.text, done: false, uid: newUid(), addedAt: now }));
+  return padPriorities(carried, count);
 }
