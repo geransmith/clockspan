@@ -22,8 +22,8 @@ has the user-facing description.
 - Backend: Express 5 (ESM, `NodeNext`, imports use `.js` extensions), `better-sqlite3` (native),
   `openid-client` v6 for OIDC, `cookie` for cookie parsing. Passwords: `node:crypto` scrypt (async).
 - Tests: Vitest 5. Lint: oxlint (`.oxlintrc.json`: correctness + typescript + react-hooks +
-  jsx-a11y rules, syntax level only; it parses TS itself, which is what lets TypeScript be 7). CI: `.github/workflows/ci.yml` runs typecheck, lint, test, build on
-  every PR and push, and on a PR also builds and boots the image (`image-smoke`, never pushed);
+  jsx-a11y rules, syntax level only; it parses TS itself, which is what lets TypeScript be 7). CI: `.github/workflows/ci.yml` runs
+  `npm audit --audit-level=high`, typecheck, lint, test, build on every PR and push, and on a PR also builds and boots the image (`image-smoke`, never pushed);
   on `main` it builds, boots (the same `scripts/smoke-image.sh`) and then publishes the `edge`
   image, and a commit that changed
   `package.json`'s version (the merged bump PR) also gets the versioned image, the tag and the
@@ -161,6 +161,7 @@ CONTRIBUTING.md         PR and release rules (imported by CLAUDE.md; see "Branch
 SECURITY.md             how to report a vulnerability (GitHub private reporting), supported versions, scope
 .github/workflows/ci.yml  check (+ image-smoke on PRs) → image (ghcr.io) → release (on a version bump); .github/release.yml groups notes by label
 .github/workflows/workflow-lint.yml  zizmor on any change under .github/ (not a required check)
+.github/workflows/codeql.yml  CodeQL (security-extended) on every PR, push to main and weekly; alerts in code scanning
 ```
 
 ## Commands
