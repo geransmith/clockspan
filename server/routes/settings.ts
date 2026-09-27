@@ -8,6 +8,7 @@ import {
   MAX_RETENTION_DAYS,
   MIN_RETENTION_DAYS,
   SETTING_LIMITS,
+  TIMER_MINUTES,
   TIME_FORMATS,
   type AlarmSettings,
   type CardId,
@@ -50,6 +51,16 @@ function mergeRetention(base: RetentionSettings, patch: unknown): RetentionSetti
   };
 }
 
+/** Button by button: a bad length keeps the one it would replace, and the count never changes. */
+function mergeTimerMinutes(base: number[], patch: unknown): number[] {
+  if (!Array.isArray(patch)) return base;
+  const next: unknown[] = patch;
+  return base.map((m, i) => {
+    const v = next[i];
+    return isInt(v, TIMER_MINUTES.min, TIMER_MINUTES.max) ? v : m;
+  });
+}
+
 /**
  * Merge a stored/patch object onto defaults, validating every field. Unknown keys are
  * dropped and invalid values fall back, so a bad client can never corrupt settings.
@@ -90,6 +101,7 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     secondMealAfterMinutes: limited('secondMealAfterMinutes'),
     timeFormat: TIME_FORMATS.includes(p.timeFormat as TimeFormat) ? (p.timeFormat as TimeFormat) : base.timeFormat,
     adjustStepMinutes: limited('adjustStepMinutes'),
+    timerMinutes: mergeTimerMinutes(base.timerMinutes, p.timerMinutes),
     priorityCount: limited('priorityCount'),
     sound: isBool(p.sound) ? p.sound : base.sound,
     notifications: isBool(p.notifications) ? p.notifications : base.notifications,
