@@ -28,8 +28,10 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   color-scheme: light dark;
 }
+/* Dark tokens: the system's choice unless Settings says light, or Settings says dark. The two
+   blocks must stay the same (theme-css.test.ts checks). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --bg: #0f1216;
     --surface: #171b21;
     --surface-2: #1e232b;
@@ -50,6 +52,32 @@
     --danger-soft: #3f1b1b;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.35);
   }
+}
+:root[data-theme='dark'] {
+  --bg: #0f1216;
+  --surface: #171b21;
+  --surface-2: #1e232b;
+  --surface-3: #262c36;
+  --border: #2a3038;
+  --text: #e9ebef;
+  --text-2: #a5adba;
+  --text-3: #6f7886;
+  --accent: #6b8ff8;
+  --accent-strong: #86a4ff;
+  --accent-soft: #1c2a4f;
+  --accent-text: #0b1020;
+  --ok: #46c27e;
+  --ok-soft: #12321f;
+  --warn: #f0a23b;
+  --warn-soft: #3a2a10;
+  --danger: #f36c6c;
+  --danger-soft: #3f1b1b;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.35);
+  /* Form controls and scrollbars follow a forced theme too. */
+  color-scheme: dark;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
 }
 
 /* ---------- base ---------- */

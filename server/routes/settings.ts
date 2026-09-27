@@ -7,11 +7,13 @@ import {
   DEFAULT_SETTINGS,
   MAX_RETENTION_DAYS,
   MIN_RETENTION_DAYS,
+  THEMES,
   TIME_FORMATS,
   type AlarmSettings,
   type CardId,
   type RetentionSettings,
   type Settings,
+  type Theme,
   type TimeFormat,
 } from '../../shared/settings.js';
 import { SOUND_EVENTS, SOUND_IDS, type SoundEvent, type SoundId } from '../../shared/sounds.js';
@@ -84,6 +86,7 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     lunchMinutes: isInt(p.lunchMinutes, 0, 8 * 60) ? p.lunchMinutes : base.lunchMinutes,
     secondMealAfterMinutes: isInt(p.secondMealAfterMinutes, 1, 24 * 60) ? p.secondMealAfterMinutes : base.secondMealAfterMinutes,
     timeFormat: TIME_FORMATS.includes(p.timeFormat as TimeFormat) ? (p.timeFormat as TimeFormat) : base.timeFormat,
+    theme: THEMES.includes(p.theme as Theme) ? (p.theme as Theme) : base.theme,
     adjustStepMinutes: isInt(p.adjustStepMinutes, 1, 60) ? p.adjustStepMinutes : base.adjustStepMinutes,
     priorityCount: isInt(p.priorityCount, 1, 10) ? p.priorityCount : base.priorityCount,
     sound: isBool(p.sound) ? p.sound : base.sound,
