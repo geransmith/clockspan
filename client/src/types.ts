@@ -6,7 +6,6 @@ export type {
   AuthInfo,
   AuthMode,
   Day,
-  DaySummary,
   LogoutResponse,
   OkResponse,
   OvertimeResponse,

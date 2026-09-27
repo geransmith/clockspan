@@ -74,16 +74,6 @@ export interface Day {
   sessions: Session[];
 }
 
-/** A day rolled up for the History calendar; built on the client (`daySummaryOf`) from a full `Day`. */
-export interface DaySummary {
-  date: string;
-  punches: Punch[];
-  focusSeconds: number;
-  prioritiesDone: number;
-  prioritiesTotal: number;
-  retroAt: number | null;
-}
-
 /** What `GET /days/prune?before=` would delete, plus the server-wide ceiling if one is set. */
 export interface PruneInfo {
   before: string;

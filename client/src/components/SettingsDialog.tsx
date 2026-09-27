@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type SubmitEvent, type KeyboardEvent, type ReactNode } from 'react';
-import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS, SETTING_LIMITS, type TimeFormat } from '../../../shared/settings.js';
+import { DEFAULT_SETTINGS, MAX_RETENTION_DAYS, MIN_RETENTION_DAYS, SETTING_LIMITS, type TimeFormat } from '../../../shared/settings.js';
 import { SOUND_EVENTS, SOUNDS } from '../../../shared/sounds.js';
 import * as api from '../api';
 import { useAuth } from '../auth/AuthGate';
@@ -8,7 +8,6 @@ import { useSettings } from '../hooks/useSettings';
 import { notificationPermission, playSound, requestNotificationPermission, unlockAudio } from '../lib/alerts';
 import { CONFIRM, DELETE_DAYS, RESET_SETTINGS, SAVE_STATUS } from '../lib/copy';
 import { addDays, formatDateFull, todayKey } from '../lib/format';
-import { DEFAULT_LAYOUT } from '../lib/layout';
 import { SOUND_EVENT_LABELS } from '../lib/sounds';
 import { readStored, writeStored } from '../lib/storage';
 import { PASSWORD_LENGTH, type AlarmId, type AlarmSettings, type PruneInfo, type PublicUser, type Settings, type SoundEvent, type SoundId } from '../types';
@@ -181,7 +180,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 <span className="muted">
                   {settings.layout.filter((l) => l.visible).length} of {settings.layout.length} cards visible
                 </span>
-                <button className="btn btn-ghost" onClick={() => set({ layout: DEFAULT_LAYOUT })}>
+                <button className="btn btn-ghost" onClick={() => set({ layout: DEFAULT_SETTINGS.layout })}>
                   Reset to default
                 </button>
               </div>
