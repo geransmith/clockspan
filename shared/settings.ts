@@ -69,12 +69,22 @@ export interface Settings {
 /** Priority rows a day can hold; the server rejects more, the card stops offering "Add". */
 export const MAX_PRIORITIES = 20;
 
-/** Longest start button the focus timer offers, in minutes. */
-export const MAX_TIMER_MINUTES = 240;
+/** A focus timer start button's length in minutes. `timerMinutes` is a list, so its bounds sit here rather than in `SETTING_LIMITS`. */
+export const TIMER_MINUTES = { min: 1, max: 240 } as const;
 
 /** Bounds for "keep the last N days", per user and for the server-wide RETENTION_DAYS. */
 export const MIN_RETENTION_DAYS = 30;
 export const MAX_RETENTION_DAYS = 3650;
+
+/** The numeric settings' bounds: `mergeSettings` keeps the old value outside them, the settings inputs clamp to them. */
+export const SETTING_LIMITS = {
+  workMinutes: { min: 1, max: 24 * 60 },
+  lunchDeadlineMinutes: { min: 1, max: 24 * 60 },
+  lunchMinutes: { min: 0, max: 8 * 60 },
+  secondMealAfterMinutes: { min: 1, max: 24 * 60 },
+  adjustStepMinutes: { min: 1, max: 60 },
+  priorityCount: { min: 1, max: 10 },
+} as const satisfies Partial<Record<keyof Settings, { min: number; max: number }>>;
 
 const DEFAULT_ALARM: AlarmSettings = { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 };
 // The retrospective is one nudge before the day ends, not a deadline: no repeat by default.

@@ -39,7 +39,7 @@
 
 **History.** A month calendar with each day's hours on it (or its stickers); step back as far as your data goes. Tap a day for its worked, focused and priorities numbers and its note, then **Open day** or **Review this week**.
 
-**Week / month / quarter review.** History → **Review** rolls the retrospectives up: how much focused time went off plan and to what, which priorities never got done, and every day's note. Tap a row to open that day.
+**Week / month / quarter review.** History → **Review** rolls the retrospectives up: how much focused time went off plan and to what, which priorities never got done, and every day's note. Repeats are merged, so a chore that came back on five days is one row with its total, and long lists fold after eight rows. Tap a row to open that day (the latest one, for a merged row).
 
 <p align="center">
   <img src="docs/screenshots/settings-alarms.png" width="300" alt="Settings → Alarms: per-alarm warn-before chips, when reached, repeat while over">
@@ -66,6 +66,7 @@ npm run dev
 
 - Web app with hot reload: <http://localhost:5173>
 - API: <http://localhost:3000> (Vite proxies `/api` and `/auth` to it)
+- The web app answers on this machine only. To try it from a phone on the same network, run `npm run dev:server` and `npm run dev:client -- --host` in two terminals and open the network address Vite prints.
 - Database: `./data/focus.db` (gitignored). Delete the file to start fresh.
 
 Other commands:
@@ -203,7 +204,7 @@ docker exec clockspan node dist/server/cli.js reset-password <username>
 # or locally: npm run reset-password -- <username>
 ```
 
-Login is rate-limited to 5 attempts per 15 minutes per IP, counting an IPv6 client by its /64 (set `TRUST_PROXY` behind a proxy so that's the real client IP). Changing your password signs out every other session.
+Login is rate-limited to 5 failed attempts per 15 minutes per IP, counting an IPv6 client by its /64 (set `TRUST_PROXY` behind a proxy so that's the real client IP), and to 50 failed attempts per 15 minutes per username from all addresses together. A locked account can't sign in on a new device until the 15 minutes pass; devices already signed in keep working. Changing your password signs out every other session.
 
 ### Authentik (OIDC)
 

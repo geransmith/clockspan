@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSettings } from '../hooks/useSettings';
 import { playSound } from '../lib/alerts';
 import { WARNING_ACTIONS } from '../lib/copy';
-import { MAX_PRIORITIES, newUid, padPriorities, pickWarning, warnThreshold, warningKind, type WarningKind } from '../lib/priorities';
+import { editPriority, MAX_PRIORITIES, padPriorities, pickWarning, removePriority, warnThreshold, warningKind, type WarningKind } from '../lib/priorities';
 import { LIMITS, type Priority } from '../types';
 import { Burst, BURST_MS } from './Burst';
 import { Check, Plus, X } from './Icons';
@@ -25,7 +25,7 @@ export function Priorities({ priorities, onChange }: Props) {
   const lastWarning = useRef<string | undefined>(undefined);
   const dirty = useRef(false);
   const timer = useRef<number | null>(null);
-  const inputs = useRef(new Map<number, HTMLInputElement>());
+  const inputs = useRef(new Map<number, HTMLTextAreaElement>());
   const focusNext = useRef<number | null>(null);
   // A tick gets a burst from its checkbox; the burst goes away on its own.
   const [burst, setBurst] = useState<{ seed: number; anchor: DOMRect } | null>(null);
@@ -52,15 +52,7 @@ export function Priorities({ priorities, onChange }: Props) {
     onChange(next);
   };
   const edit = (position: number, patch: Partial<Priority>, immediate = false) => {
-    const next = local.map((p) => {
-      if (p.position !== position) return p;
-      const merged = { ...p, ...patch };
-      // An empty row can't be done; clearing the text also clears the tick. The uid is
-      // minted the first time a row gets text and survives a clear, so a session that
-      // pointed at it still does.
-      if (!merged.text.trim()) return { ...merged, done: false };
-      return merged.uid ? merged : { ...merged, uid: newUid(), addedAt: Date.now() };
-    });
+    const next = local.map((p) => (p.position === position ? editPriority(p, patch, Date.now()) : p));
     setLocal(next);
     dirty.current = true;
     if (timer.current) window.clearTimeout(timer.current);
@@ -87,7 +79,7 @@ export function Priorities({ priorities, onChange }: Props) {
     flush(next);
   };
   const removeRow = (position: number) => {
-    const next = local.filter((p) => p.position !== position).map((p, i) => ({ ...p, position: i + 1 }));
+    const next = removePriority(local, position);
     setLocal(next);
     flush(next);
   };
@@ -97,6 +89,7 @@ export function Priorities({ priorities, onChange }: Props) {
       {local.map((p) => {
         const empty = !p.text.trim();
         const removable = p.position > count;
+        const placeholder = p.position === 1 ? 'The one thing that would make today a win' : `Priority ${p.position}`;
         return (
           <div key={p.position} className={`priority-row${p.done ? ' is-done' : ''}${removable ? ' priority-row--removable' : ''}`}>
             <span className="priority-num" aria-hidden="true">
@@ -117,19 +110,27 @@ export function Priorities({ priorities, onChange }: Props) {
               aria-label={`Priority ${p.position} done`}
               title={empty ? 'Write the priority first' : undefined}
             />
-            <input
-              ref={(el) => {
-                if (el) inputs.current.set(p.position, el);
-                else inputs.current.delete(p.position);
-              }}
-              className="input priority-input"
-              value={p.text}
-              placeholder={p.position === 1 ? 'The one thing that would make today a win' : `Priority ${p.position}`}
-              aria-label={`Priority ${p.position}`}
-              onChange={(e) => edit(p.position, { text: e.target.value })}
-              onBlur={() => dirty.current && flush(local)}
-              maxLength={LIMITS.priorityText}
-            />
+            {/* A textarea so a long priority wraps on a phone; the wrapper's copy of the text sets its height. */}
+            <span className="grow-field" data-value={p.text || placeholder}>
+              <textarea
+                ref={(el) => {
+                  if (el) inputs.current.set(p.position, el);
+                  else inputs.current.delete(p.position);
+                }}
+                className="input priority-input"
+                rows={1}
+                value={p.text}
+                placeholder={placeholder}
+                aria-label={`Priority ${p.position}`}
+                // One line of text: Enter adds no line break, and a pasted one becomes a space.
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.preventDefault();
+                }}
+                onChange={(e) => edit(p.position, { text: e.target.value.replace(/[\r\n]+/g, ' ') })}
+                onBlur={() => dirty.current && flush(local)}
+                maxLength={LIMITS.priorityText}
+              />
+            </span>
             {removable && (
               <button
                 className="btn btn-icon priority-remove"
