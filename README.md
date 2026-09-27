@@ -15,7 +15,7 @@
 
 ## Features
 
-**Timeclock that plans the day for you.** Tap *Now* on *Clock in* and the sheet works out when lunch must start (default: within 5 hours) and when your day ends (default: 8 hours worked plus a 30-minute lunch), and re-plans if lunch runs long. Forgot to punch? Type the time. Extra out/in pairs cover appointments before or after lunch. Clocking out ends the day, early or not, with a small celebration.
+**Timeclock that plans the day for you.** Tap *Now* on *Clock in* and the sheet works out when lunch must start (default: within 5 hours) and when your day ends (default: 8 hours worked plus a 30-minute lunch), and re-plans if lunch runs long. The *Now* for the next punch is the highlighted one. Forgot to punch? Type the time. Extra out/in pairs cover appointments before or after lunch. Clocking out ends the day, early or not, with a small celebration.
 
 **A sticker chart, if you want one.** Off by default. With it on, every day on the History calendar wears a little creature for each thing it did: clocked out, lunch taken, all priorities done, a focus session logged, retrospective reviewed. The legend counts them for the month and narrows the calendar to one kind.
 

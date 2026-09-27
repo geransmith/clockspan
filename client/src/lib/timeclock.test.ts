@@ -6,6 +6,7 @@ import {
   computeTimeclock,
   emptyPunches,
   extraPairs,
+  nextPunchPosition,
   normalizePunches,
   removePunchPair,
   secondMealApplies,
@@ -348,5 +349,30 @@ describe('timeclockForDate', () => {
     const r = timeclockForDate(punches([T0, null, null, T0 + 3 * H]), settings, yesterday, today, nowToday);
     expect(r.state).toBe('done');
     expect(r.clockOutAt).toBe(T0 + 3 * H);
+  });
+});
+
+describe('nextPunchPosition', () => {
+  it('walks the fixed rows in order', () => {
+    expect(nextPunchPosition(emptyPunches())).toBe(0);
+    expect(nextPunchPosition(punches([T0, null, null, null]))).toBe(1);
+    expect(nextPunchPosition(punches([T0, T0 + 4 * H, null, null]))).toBe(2);
+    expect(nextPunchPosition(punches([T0, T0 + 4 * H, T0 + 4.5 * H, null]))).toBe(3);
+    expect(nextPunchPosition(punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 8.5 * H]))).toBeNull();
+  });
+
+  it('puts a pair before lunch ahead of lunch, and one after lunch ahead of the clock out', () => {
+    // Out 1 at 10:00, before a lunch not taken yet: its In is next, not Lunch out.
+    expect(nextPunchPosition(punches([T0, null, null, T0 + 2 * H, null, null]))).toBe(4);
+    // Lunch taken, then a pair added: its Out comes before the Clock out row.
+    expect(nextPunchPosition(punches([T0, T0 + 4 * H, T0 + 4.5 * H, null, null, null]))).toBe(3);
+    // Clocked out, then "Add extra out / in": the old clock out is Out 1, so In 1 is next.
+    expect(nextPunchPosition(punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 6 * H, null, null]))).toBe(4);
+  });
+
+  it('skips rows that are missing', () => {
+    expect(nextPunchPosition([])).toBeNull();
+    expect(nextPunchPosition(punches([T0, null, null]))).toBe(1);
+    expect(nextPunchPosition(punches([T0, T0 + 4 * H, T0 + 4.5 * H]))).toBeNull();
   });
 });
