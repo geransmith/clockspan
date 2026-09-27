@@ -2,7 +2,7 @@ import { isIPv6 } from 'node:net';
 import { Router } from 'express';
 import type { DB, UserRow } from '../db.js';
 import type { Config } from '../config.js';
-import { DUMMY_HASH, hashPassword, validatePassword, validateUsername, verifyPassword } from './password.js';
+import { DUMMY_HASH, hashPassword, parseCredentials, parsePassword, verifyPassword } from './password.js';
 import { createSession, destroySession, revokeOtherSessions } from './session.js';
 import { currentUser, requireAdmin, requireAuth } from './middleware.js';
 import type { AuthInfo, OkResponse, PublicUser, UserResponse, UsersResponse } from '../../shared/api.js';
@@ -99,13 +99,12 @@ export function localAuthRouter(db: DB, config: Config): Router {
       res.status(403).json({ error: 'Setup has already been completed.' });
       return;
     }
-    const { username, password } = req.body ?? {};
-    const err = validateUsername(username) ?? validatePassword(password);
-    if (err) {
-      res.status(400).json({ error: err });
+    const creds = parseCredentials(req.body);
+    if ('error' in creds) {
+      res.status(400).json({ error: creds.error });
       return;
     }
-    const hash = await hashPassword(password);
+    const hash = await hashPassword(creds.password);
     // Re-check after the await: two first visitors racing each other must not both become
     // admin. The check and the insert below run without yielding, so this one is decisive.
     if (userCount(db) > 0) {
@@ -117,7 +116,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
         `INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at)
          VALUES ('local', ?, ?, ?, 1, ?)`,
       )
-      .run(username.trim(), hash, username.trim(), Date.now());
+      .run(creds.username, hash, creds.username, Date.now());
     createSession(db, config, res, Number(info.lastInsertRowid));
     const user = db.prepare(`SELECT * FROM users WHERE id = ?`).get(info.lastInsertRowid) as UserRow;
     console.log(`[auth] setup: admin ${logName(user.username)} created from ${req.ip}`);
@@ -139,7 +138,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
     // each of a burst of requests sees the ones before it. Counted after the await, a burst
     // would all pass the gate while the first was still hashing. A correct password clears it.
     limiter.fail(key);
-    const { username, password } = req.body ?? {};
+    const { username, password } = (req.body ?? {}) as { username?: unknown; password?: unknown };
     const user =
       typeof username === 'string'
         ? (db.prepare(`SELECT * FROM users WHERE kind = 'local' AND username = ?`).get(username.trim()) as UserRow | undefined)
@@ -177,19 +176,19 @@ export function localAuthRouter(db: DB, config: Config): Router {
     }
     // Counted before the hash, like a login.
     limiter.fail(key);
-    const { currentPassword, newPassword } = req.body ?? {};
+    const { currentPassword, newPassword } = (req.body ?? {}) as { currentPassword?: unknown; newPassword?: unknown };
     if (!user.password_hash || typeof currentPassword !== 'string' || !(await verifyPassword(currentPassword, user.password_hash))) {
       console.warn(`[auth] password change refused for ${logName(user.username)}: current password wrong`);
       res.status(400).json({ error: 'Current password is incorrect.' });
       return;
     }
     limiter.reset(key);
-    const err = validatePassword(newPassword);
-    if (err) {
-      res.status(400).json({ error: err });
+    const next = parsePassword(newPassword);
+    if ('error' in next) {
+      res.status(400).json({ error: next.error });
       return;
     }
-    db.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).run(await hashPassword(newPassword), user.id);
+    db.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).run(await hashPassword(next.password), user.id);
     // A changed password is usually "someone else may have the old one": drop every other session.
     revokeOtherSessions(db, req, user.id);
     console.log(`[auth] password changed for ${logName(user.username)}; other sessions signed out`);
@@ -203,14 +202,13 @@ export function localAuthRouter(db: DB, config: Config): Router {
   });
 
   r.post('/users', requireAdmin, async (req, res) => {
-    const { username, password } = req.body ?? {};
-    const err = validateUsername(username) ?? validatePassword(password);
-    if (err) {
-      res.status(400).json({ error: err });
+    const creds = parseCredentials(req.body);
+    if ('error' in creds) {
+      res.status(400).json({ error: creds.error });
       return;
     }
-    const name = username.trim();
-    const hash = await hashPassword(password);
+    const name = creds.username;
+    const hash = await hashPassword(creds.password);
     // The uniqueness check is the insert itself: a pre-check before the hash could be overtaken
     // by a second create for the same name while this one was hashing.
     const info = db

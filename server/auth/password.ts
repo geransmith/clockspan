@@ -39,18 +39,32 @@ export async function verifyPassword(password: string, stored: string): Promise<
  */
 export const DUMMY_HASH = await hashPassword(randomBytes(16).toString('base64url'));
 
-export function validatePassword(password: unknown): string | null {
-  if (typeof password !== 'string') return 'Password is required.';
-  if (password.length < 8) return 'Password must be at least 8 characters.';
-  if (password.length > 200) return 'Password is too long.';
-  return null;
+// The sign-in forms' bodies arrive as `any`. These hand back a checked value or the message to
+// show, so a route never touches a field it hasn't validated (the no-unsafe-* lint holds it).
+
+export function parsePassword(raw: unknown): { password: string } | { error: string } {
+  if (typeof raw !== 'string') return { error: 'Password is required.' };
+  if (raw.length < 8) return { error: 'Password must be at least 8 characters.' };
+  if (raw.length > 200) return { error: 'Password is too long.' };
+  return { password: raw };
 }
 
-export function validateUsername(username: unknown): string | null {
-  if (typeof username !== 'string') return 'Username is required.';
-  const u = username.trim();
-  if (u.length < 2) return 'Username must be at least 2 characters.';
-  if (u.length > 40) return 'Username must be 40 characters or fewer.';
-  if (!/^[a-zA-Z0-9._-]+$/.test(u)) return 'Username may contain letters, numbers, . _ and -';
-  return null;
+/** The username comes back trimmed, which is how it is stored and looked up. */
+export function parseUsername(raw: unknown): { username: string } | { error: string } {
+  if (typeof raw !== 'string') return { error: 'Username is required.' };
+  const username = raw.trim();
+  if (username.length < 2) return { error: 'Username must be at least 2 characters.' };
+  if (username.length > 40) return { error: 'Username must be 40 characters or fewer.' };
+  if (!/^[a-zA-Z0-9._-]+$/.test(username)) return { error: 'Username may contain letters, numbers, . _ and -' };
+  return { username };
+}
+
+/** `{ username, password }` for a new account (first-run setup, an admin adding a user). */
+export function parseCredentials(body: unknown): { username: string; password: string } | { error: string } {
+  const { username, password } = (body ?? {}) as { username?: unknown; password?: unknown };
+  const u = parseUsername(username);
+  if ('error' in u) return u;
+  const p = parsePassword(password);
+  if ('error' in p) return p;
+  return { username: u.username, password: p.password };
 }

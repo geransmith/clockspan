@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { loadConfig } from './config.js';
 import { openDatabase } from './db.js';
-import { hashPassword, validatePassword } from './auth/password.js';
+import { hashPassword, parsePassword } from './auth/password.js';
 
 // Usage: node dist/server/cli.js reset-password <username> [new-password]
 // Without a password argument, a random one is generated and printed.
@@ -21,13 +21,13 @@ if (!user) {
 }
 
 const password = passwordArg ?? randomBytes(12).toString('base64url');
-const err = validatePassword(password);
-if (err) {
-  console.error(err);
+const checked = parsePassword(password);
+if ('error' in checked) {
+  console.error(checked.error);
   process.exit(1);
 }
 
-db.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).run(await hashPassword(password), user.id);
+db.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).run(await hashPassword(checked.password), user.id);
 db.prepare(`DELETE FROM auth_sessions WHERE user_id = ?`).run(user.id);
 console.log(passwordArg ? `Password updated for ${username}.` : `New password for ${username}: ${password}`);
 db.close();

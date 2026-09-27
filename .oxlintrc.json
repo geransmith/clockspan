@@ -31,8 +31,10 @@
     // Type-aware rules for the bugs type checking lets through: promises nobody awaits or
     // catches, async functions handed to something that ignores what they return, values that
     // stringify as "[object Object]", non-Error throws, switches that miss a union member.
-    // Left off: no-unsafe-* (Express's `req.body` is `any`, so every route would need a
-    // rewrite), no-unnecessary-condition (it wants the guards on `req.body` and
+    // no-unsafe-*: Express's `req.body` is `any`, and these refuse reading a field off it
+    // before it is checked (cast it to `{ field?: unknown }`, as the routes do). Off for tests
+    // and the plain-JavaScript scripts (see the override below).
+    // Left off: no-unnecessary-condition (it wants the guards on `req.body` and
     // `navigator.serviceWorker` gone, which the runtime can still leave undefined), and the
     // style rules (strict-boolean-expressions, promise-function-async, …).
     "typescript/await-thenable": "error",
@@ -47,6 +49,11 @@
     "typescript/no-misused-promises": "error",
     "typescript/no-misused-spread": "error",
     "typescript/no-redundant-type-constituents": "error",
+    "typescript/no-unsafe-argument": "error",
+    "typescript/no-unsafe-assignment": "error",
+    "typescript/no-unsafe-call": "error",
+    "typescript/no-unsafe-member-access": "error",
+    "typescript/no-unsafe-return": "error",
     "typescript/no-unsafe-unary-minus": "error",
     "typescript/only-throw-error": "error",
     "typescript/prefer-promise-reject-errors": "error",
@@ -66,5 +73,19 @@
     // inputs the user just opened, where moving focus there is the expected behaviour.
     "jsx-a11y/no-autofocus": "off"
   },
-  "overrides": [{ "files": ["client/public/sw.js"], "env": { "serviceworker": true } }]
+  "overrides": [
+    { "files": ["client/public/sw.js"], "env": { "serviceworker": true } },
+    {
+      // The harness hands tests their JSON as `any` so a test reads a field without a cast;
+      // the scripts and the service worker are plain JavaScript with no types to check.
+      "files": ["**/*.test.ts", "scripts/**", "client/public/sw.js"],
+      "rules": {
+        "typescript/no-unsafe-argument": "off",
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-call": "off",
+        "typescript/no-unsafe-member-access": "off",
+        "typescript/no-unsafe-return": "off"
+      }
+    }
+  ]
 }
