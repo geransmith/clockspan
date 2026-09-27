@@ -1,10 +1,5 @@
-import { CARD_DEFAULT_VISIBLE, CARD_IDS, DEFAULT_SETTINGS } from '../../../shared/settings.js';
+import { CARD_DEFAULT_VISIBLE, CARD_IDS } from '../../../shared/settings.js';
 import type { CardId, Settings } from '../types';
-
-export interface CardDef {
-  id: CardId;
-  title: string;
-}
 
 /** A title for every card id; adding an id to CARD_IDS without one is a type error. */
 export const CARD_TITLES: Record<CardId, string> = {
@@ -15,18 +10,9 @@ export const CARD_TITLES: Record<CardId, string> = {
   retro: 'Retrospective',
 };
 
-/** Registry of cards in default order; `CARD_DEFAULT_VISIBLE` says which start hidden. */
-export const CARDS: CardDef[] = CARD_IDS.map((id) => ({ id, title: CARD_TITLES[id] }));
-
-export const DEFAULT_LAYOUT: Settings['layout'] = DEFAULT_SETTINGS.layout;
-
-export function cardTitle(id: CardId): string {
-  return CARD_TITLES[id];
-}
-
 /** Drop unknown ids, append missing ones with their default — mirrors the server merge. */
 export function normalizeLayout(layout: Settings['layout'] | undefined): Settings['layout'] {
-  const known = new Set(CARDS.map((c) => c.id));
+  const known = new Set<CardId>(CARD_IDS);
   const seen = new Set<CardId>();
   const out: Settings['layout'] = [];
   for (const item of layout ?? []) {
@@ -34,6 +20,6 @@ export function normalizeLayout(layout: Settings['layout'] | undefined): Setting
     seen.add(item.id);
     out.push({ id: item.id, visible: item.visible !== false });
   }
-  for (const c of CARDS) if (!seen.has(c.id)) out.push({ id: c.id, visible: CARD_DEFAULT_VISIBLE[c.id] });
+  for (const id of CARD_IDS) if (!seen.has(id)) out.push({ id, visible: CARD_DEFAULT_VISIBLE[id] });
   return out;
 }

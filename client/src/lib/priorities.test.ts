@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { COMPLETE_WARNINGS, GENTLE_WARNINGS, PROGRESS_WARNINGS } from './copy';
-import { carryOver, leftOpen, MAX_PRIORITIES, newUid, padPriorities, pickWarning, placePriority, warnThreshold, warningKind } from './priorities';
+import {
+  carryOver,
+  editPriority,
+  leftOpen,
+  MAX_PRIORITIES,
+  newUid,
+  padPriorities,
+  pickWarning,
+  placePriority,
+  removePriority,
+  warnThreshold,
+  warningKind,
+} from './priorities';
 import type { Day, Priority } from '../types';
 
 const row = (position: number, text: string, extra: Partial<Priority> = {}): Priority => ({ position, text, done: false, uid: null, addedAt: null, ...extra });
@@ -69,6 +81,39 @@ describe('newUid', () => {
     const a = newUid();
     expect(a).toMatch(/^[0-9a-f]{12}$/);
     expect(newUid()).not.toBe(a);
+  });
+});
+
+describe('editPriority', () => {
+  const blank: Priority = { position: 2, text: '', done: false, uid: null, addedAt: null };
+
+  it('mints a uid and stamps addedAt the first time a row gets text', () => {
+    const next = editPriority(blank, { text: 'Ship it' }, 100);
+    expect(next).toMatchObject({ position: 2, text: 'Ship it', done: false, addedAt: 100 });
+    expect(next.uid).toMatch(/^[0-9a-f]{12}$/);
+  });
+
+  it('keeps the uid and addedAt through later edits and a clear', () => {
+    const named = { ...blank, text: 'Ship it', uid: 'abcdef123456', addedAt: 100 };
+    expect(editPriority(named, { text: 'Ship it today' }, 200)).toMatchObject({ uid: 'abcdef123456', addedAt: 100 });
+    expect(editPriority(named, { text: '  ' }, 200)).toMatchObject({ text: '  ', uid: 'abcdef123456', addedAt: 100 });
+  });
+
+  it('ticks a row with text and clears the tick along with the text', () => {
+    const named = { ...blank, text: 'Ship it', uid: 'abcdef123456', addedAt: 100 };
+    expect(editPriority(named, { done: true }, 200).done).toBe(true);
+    expect(editPriority({ ...named, done: true }, { text: '' }, 200).done).toBe(false);
+    expect(editPriority(blank, { done: true }, 200)).toEqual(blank);
+  });
+});
+
+describe('removePriority', () => {
+  it('drops the row and renumbers the rest from 1', () => {
+    const next = removePriority([row(1, 'A'), row(2, 'B'), row(3, 'C')], 2);
+    expect(next.map((p) => [p.position, p.text])).toEqual([
+      [1, 'A'],
+      [2, 'C'],
+    ]);
   });
 });
 

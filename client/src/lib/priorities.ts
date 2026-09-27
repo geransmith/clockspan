@@ -56,6 +56,22 @@ export function newUid(): string {
 }
 
 /**
+ * A row after an edit. An empty row can't be done, so clearing the text clears the tick. The
+ * uid is minted (and `addedAt` stamped) the first time a row gets text and survives a clear,
+ * so a session that pointed at the row still does.
+ */
+export function editPriority(row: Priority, patch: Partial<Priority>, now: number): Priority {
+  const merged = { ...row, ...patch };
+  if (!merged.text.trim()) return { ...merged, done: false };
+  return merged.uid ? merged : { ...merged, uid: newUid(), addedAt: now };
+}
+
+/** The rows without the one at `position`, renumbered from 1. */
+export function removePriority(rows: Priority[], position: number): Priority[] {
+  return rows.filter((p) => p.position !== position).map((p, i) => ({ ...p, position: i + 1 }));
+}
+
+/**
  * Where a priority added from the timer goes: the first empty row if there is one, else a
  * new row at the end. Returns the full list to save; null when the sheet is full.
  */

@@ -8,7 +8,7 @@ import { useSettings } from '../hooks/useSettings';
 import { warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
 import { addDays, formatDateLong } from '../lib/format';
-import { cardTitle } from '../lib/layout';
+import { CARD_TITLES } from '../lib/layout';
 import { clampToDay, timeclockForDate, type TimeclockState } from '../lib/timeclock';
 import type { CardId } from '../types';
 import { CardShell } from './CardShell';
@@ -167,7 +167,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
           <span className="muted">Hidden:</span>
           {hidden.map((l) => (
             <button key={l.id} className="chip" onClick={() => setVisible(l.id, true)}>
-              {cardTitle(l.id)} <span className="chip-action">Show</span>
+              {CARD_TITLES[l.id]} <span className="chip-action">Show</span>
             </button>
           ))}
         </div>
@@ -201,7 +201,7 @@ function SortableCard({
   return (
     <div ref={setNodeRef} style={style} className="sortable" id={`card-${id}`}>
       <CardShell
-        title={cardTitle(id)}
+        title={CARD_TITLES[id]}
         aside={aside}
         customize={customize ? { handleProps: { ...attributes, ...listeners }, onHide, onMove, canUp, canDown } : undefined}
       >
