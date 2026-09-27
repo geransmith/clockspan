@@ -7,6 +7,7 @@ import {
   DEFAULT_SETTINGS,
   MAX_RETENTION_DAYS,
   MIN_RETENTION_DAYS,
+  SETTING_BOUNDS,
   TIME_FORMATS,
   type AlarmSettings,
   type CardId,
@@ -78,14 +79,19 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     layout = next;
   }
 
+  const bounded = (key: keyof typeof SETTING_BOUNDS): number => {
+    const v = p[key];
+    return isInt(v, SETTING_BOUNDS[key].min, SETTING_BOUNDS[key].max) ? v : base[key];
+  };
+
   return {
-    workMinutes: isInt(p.workMinutes, 1, 24 * 60) ? p.workMinutes : base.workMinutes,
-    lunchDeadlineMinutes: isInt(p.lunchDeadlineMinutes, 1, 24 * 60) ? p.lunchDeadlineMinutes : base.lunchDeadlineMinutes,
-    lunchMinutes: isInt(p.lunchMinutes, 0, 8 * 60) ? p.lunchMinutes : base.lunchMinutes,
-    secondMealAfterMinutes: isInt(p.secondMealAfterMinutes, 1, 24 * 60) ? p.secondMealAfterMinutes : base.secondMealAfterMinutes,
+    workMinutes: bounded('workMinutes'),
+    lunchDeadlineMinutes: bounded('lunchDeadlineMinutes'),
+    lunchMinutes: bounded('lunchMinutes'),
+    secondMealAfterMinutes: bounded('secondMealAfterMinutes'),
     timeFormat: TIME_FORMATS.includes(p.timeFormat as TimeFormat) ? (p.timeFormat as TimeFormat) : base.timeFormat,
-    adjustStepMinutes: isInt(p.adjustStepMinutes, 1, 60) ? p.adjustStepMinutes : base.adjustStepMinutes,
-    priorityCount: isInt(p.priorityCount, 1, 10) ? p.priorityCount : base.priorityCount,
+    adjustStepMinutes: bounded('adjustStepMinutes'),
+    priorityCount: bounded('priorityCount'),
     sound: isBool(p.sound) ? p.sound : base.sound,
     notifications: isBool(p.notifications) ? p.notifications : base.notifications,
     keepScreenAwake: isBool(p.keepScreenAwake) ? p.keepScreenAwake : base.keepScreenAwake,
@@ -119,7 +125,7 @@ export function settingsRouter(db: DB): Router {
   const r = Router();
 
   r.get('/', (req, res) => {
-    res.json(loadSettings(db, currentUser(req).id));
+    res.json(loadSettings(db, currentUser(req).id) satisfies Settings);
   });
 
   r.put('/', (req, res) => {
@@ -129,14 +135,14 @@ export function settingsRouter(db: DB): Router {
       `INSERT INTO settings (user_id, json) VALUES (?, ?)
        ON CONFLICT(user_id) DO UPDATE SET json = excluded.json`,
     ).run(user.id, JSON.stringify(next));
-    res.json(next);
+    res.json(next satisfies Settings);
   });
 
   // With no row, a read serves DEFAULT_SETTINGS, so dropping the row is the reset. The
   // response is what the next GET will serve.
   r.delete('/', (req, res) => {
     db.prepare(`DELETE FROM settings WHERE user_id = ?`).run(currentUser(req).id);
-    res.json(DEFAULT_SETTINGS);
+    res.json(DEFAULT_SETTINGS satisfies Settings);
   });
 
   return r;

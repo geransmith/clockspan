@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type SubmitEvent, type KeyboardEvent, type ReactNode } from 'react';
-import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS, type TimeFormat } from '../../../shared/settings.js';
+import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS, SETTING_BOUNDS, type TimeFormat } from '../../../shared/settings.js';
 import { SOUND_EVENTS, SOUNDS } from '../../../shared/sounds.js';
 import * as api from '../api';
 import { useAuth } from '../auth/AuthGate';
@@ -62,12 +62,18 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       case 'timeclock':
         return (
           <Section title="Timeclock" hint="Used to compute your lunch deadline, clock-out time and second meal period.">
-            <DurationField label="Work day" minutes={settings.workMinutes} onCommit={(m) => set({ workMinutes: m })} />
-            <DurationField label="Lunch must start within" minutes={settings.lunchDeadlineMinutes} onCommit={(m) => set({ lunchDeadlineMinutes: m })} />
-            <NumberField label="Lunch length" value={settings.lunchMinutes} min={0} max={480} onCommit={(m) => set({ lunchMinutes: m })} />
+            <DurationField label="Work day" minutes={settings.workMinutes} {...SETTING_BOUNDS.workMinutes} onCommit={(m) => set({ workMinutes: m })} />
+            <DurationField
+              label="Lunch must start within"
+              minutes={settings.lunchDeadlineMinutes}
+              {...SETTING_BOUNDS.lunchDeadlineMinutes}
+              onCommit={(m) => set({ lunchDeadlineMinutes: m })}
+            />
+            <NumberField label="Lunch length" value={settings.lunchMinutes} {...SETTING_BOUNDS.lunchMinutes} onCommit={(m) => set({ lunchMinutes: m })} />
             <DurationField
               label="Second meal due after (hours worked)"
               minutes={settings.secondMealAfterMinutes}
+              {...SETTING_BOUNDS.secondMealAfterMinutes}
               onCommit={(m) => set({ secondMealAfterMinutes: m })}
             />
             <div className="setting-row">
@@ -125,15 +131,20 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         return (
           <>
             <Section title="Priorities">
-              <NumberField label="Rows per day" unit="rows" value={settings.priorityCount} min={1} max={10} onCommit={(m) => set({ priorityCount: m })} />
+              <NumberField
+                label="Rows per day"
+                unit="rows"
+                value={settings.priorityCount}
+                {...SETTING_BOUNDS.priorityCount}
+                onCommit={(m) => set({ priorityCount: m })}
+              />
               <p className="muted small">New days start with this many rows. Add more on the sheet any time.</p>
             </Section>
             <Section title="Focus timer">
               <NumberField
                 label="Adjust step (± buttons)"
                 value={settings.adjustStepMinutes}
-                min={1}
-                max={60}
+                {...SETTING_BOUNDS.adjustStepMinutes}
                 onCommit={(m) => set({ adjustStepMinutes: m })}
               />
               <Toggle
@@ -359,8 +370,8 @@ function Toggle({ label, hint, checked, onChange }: { label: string; hint?: stri
   );
 }
 
-/** Hours + minutes inputs that commit on blur/Enter, so half-typed values never save. */
-function DurationField({ label, minutes, onCommit }: { label: string; minutes: number; onCommit: (m: number) => void }) {
+/** Hours + minutes inputs that commit on blur/Enter, so half-typed values never save. The total is clamped to `min`..`max` minutes. */
+function DurationField({ label, minutes, min, max, onCommit }: { label: string; minutes: number; min: number; max: number; onCommit: (m: number) => void }) {
   const [h, setH] = useState(String(Math.floor(minutes / 60)));
   const [m, setM] = useState(String(minutes % 60));
   // A new value from outside (save confirmed, reset) replaces the draft; React's
@@ -372,7 +383,7 @@ function DurationField({ label, minutes, onCommit }: { label: string; minutes: n
     setM(String(minutes % 60));
   }
   const commit = () => {
-    const total = Math.max(1, Math.min(24 * 60, (Number(h) || 0) * 60 + (Number(m) || 0)));
+    const total = Math.max(min, Math.min(max, (Number(h) || 0) * 60 + (Number(m) || 0)));
     if (total !== minutes) onCommit(total);
     else {
       setH(String(Math.floor(minutes / 60)));
