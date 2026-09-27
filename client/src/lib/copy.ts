@@ -18,21 +18,21 @@ export const STICKERS_EMPTY = 'Nothing here yet. Stickers appear as days get log
 export const CELEBRATION_PHRASES = [
   'Nice work today.',
   "That's a wrap.",
-  'You showed up. That counts.',
+  "Clocked out. That's it for today.",
   'Go be a person now.',
   'Done. The rest can wait until tomorrow.',
-  'Enough for one day. Good job.',
+  'Enough for one day.',
   'Off the clock. Act like it.',
   "Day's done. Go eat something.",
-  'That was a day. You did it anyway.',
+  "That was a day. It's over.",
   'Put the laptop down slowly and step away.',
   "See you tomorrow. Or Monday, if it's Friday.",
   "The work will still be there tomorrow. You don't have to be.",
-  'Logged, punched, done.',
+  'Punched out and logged.',
   "Well, that's today handled.",
   'Nothing more to do here. Really.',
   'Solid day. Now go outside.',
-  "You made it to the end. That's the whole job.",
+  'End of the day. Nothing left to punch.',
   'Close the lid.',
   "Leave the tabs open. They'll keep.",
   'Good. Now stop.',
@@ -56,7 +56,7 @@ export const GENTLE_WARNINGS = [
   'Ambition noted. Energy budget also noted.',
   'You could also just not.',
   'This is where "top" quietly becomes "all".',
-  'Fewer, finished, feels better. Just saying.',
+  'Short lists get finished more often.',
   'Adding is easy. Crossing off is the fun part.',
   "If it won't make today a win, park it for tomorrow.",
   'Is that a priority, or a worry in a to-do costume?',
@@ -71,9 +71,9 @@ export const PROGRESS_WARNINGS = [
   'You have done real work already. A new row does not count more than that.',
   'Adding now, with rows still open, means one of them slips. Which one?',
   'Part of the plan is done. Is this the rest of it, or a new plan?',
-  'Good progress. Does this belong today, or is it leaking in from tomorrow?',
+  'Does this belong today, or is it leaking in from tomorrow?',
   "The ticked ones are today's win. Don't bury them under new rows.",
-  'You have momentum. Spend it on the open rows first?',
+  'The open rows were the plan. Do them first?',
 ];
 
 /** Shown when every row is ticked. */
@@ -87,7 +87,7 @@ export const COMPLETE_WARNINGS = [
   "You did what you said you'd do. Stop there, or add one with a light grip.",
   'List cleared. If you add this, it is allowed to stay unfinished.',
   "Done means done. Tomorrow's sheet has empty rows.",
-  "The day is already a win. Don't renegotiate it.",
+  "You set the bar this morning. Don't raise it now.",
 ];
 
 /** Buttons under the warning, by how much of the list is done. */
