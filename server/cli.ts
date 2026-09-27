@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { loadConfig } from './config.js';
-import { openDatabase } from './db.js';
+import { findLocalUser, openDatabase } from './db.js';
 import { hashPassword, parsePassword } from './auth/password.js';
 
 // Usage: node dist/server/cli.js reset-password <username> [new-password]
@@ -14,7 +14,7 @@ if (cmd !== 'reset-password' || !username) {
 
 const config = loadConfig();
 const db = openDatabase(config.dbPath);
-const user = db.prepare(`SELECT id FROM users WHERE kind = 'local' AND username = ?`).get(username) as { id: number } | undefined;
+const user = findLocalUser(db, username);
 if (!user) {
   console.error(`No local user named "${username}".`);
   process.exit(1);

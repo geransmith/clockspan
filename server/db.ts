@@ -131,6 +131,16 @@ export interface UserRow {
   created_at: number;
 }
 
+/**
+ * The local account a typed name belongs to. Names match whatever their case ("Sam" is "sam");
+ * an install from before that rule may hold both spellings, and there the exact one wins.
+ */
+export function findLocalUser(db: DB, username: string): UserRow | undefined {
+  return db
+    .prepare(`SELECT * FROM users WHERE kind = 'local' AND username = ? COLLATE NOCASE ORDER BY username = ? DESC, id LIMIT 1`)
+    .get(username, username) as UserRow | undefined;
+}
+
 /** In AUTH_MODE=none every request acts as this single user. */
 export function ensureDefaultUser(db: DB): UserRow {
   const existing = db.prepare(`SELECT * FROM users WHERE kind = 'default'`).get() as UserRow | undefined;
