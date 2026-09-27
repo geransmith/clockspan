@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startTestApp, type Client, type TestApp } from '../dev/harness.js';
 import { SESSION_COOKIE } from './session.js';
 import { LoginLimiter, limiterKey } from './local.js';
+import { hashPassword } from './password.js';
 import { currentUser } from './middleware.js';
 import type { Request } from 'express';
 
@@ -165,6 +166,31 @@ describe('AUTH_MODE=local', () => {
     ]);
     expect([a.status, b.status].sort((x, y) => x - y)).toEqual([201, 409]);
     expect(app.db.prepare(`SELECT COUNT(*) AS n FROM users WHERE username = 'twin'`).get()).toEqual({ n: 1 });
+  });
+
+  it('matches usernames whatever their case, at sign-in and when adding a user', async () => {
+    await setup();
+    const phone = app.client();
+    expect((await phone.post('/api/auth/login', { username: ' Geran ', password: ADMIN.password })).body.user).toMatchObject({ username: 'geran' });
+
+    expect((await app.api.post('/api/auth/users', { username: 'Sam', password: 'sam password' })).status).toBe(201);
+    for (const username of ['sam', 'SAM', 'Sam']) {
+      expect((await app.api.post('/api/auth/users', { username, password: 'other password' })).body).toEqual({ error: 'That username is already taken.' });
+    }
+    expect((await phone.post('/api/auth/login', { username: 'sam', password: 'sam password' })).body.user).toMatchObject({ username: 'Sam' });
+  });
+
+  it('keeps both spellings working where an older install already has them, the exact one first', async () => {
+    await setup();
+    await app.api.post('/api/auth/users', { username: 'Twin', password: 'upper password' });
+    app.db
+      .prepare(`INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at) VALUES ('local', 'twin', ?, 'twin', 0, ?)`)
+      .run(await hashPassword('lower password'), Date.now());
+    const c = app.client();
+    expect((await c.post('/api/auth/login', { username: 'twin', password: 'lower password' })).body.user).toMatchObject({ username: 'twin' });
+    expect((await c.post('/api/auth/login', { username: 'Twin', password: 'upper password' })).body.user).toMatchObject({ username: 'Twin' });
+    // Neither is exact: the older account.
+    expect((await c.post('/api/auth/login', { username: 'TWIN', password: 'upper password' })).body.user).toMatchObject({ username: 'Twin' });
   });
 
   it('signs the other sessions out when the password changes, and keeps this one', async () => {

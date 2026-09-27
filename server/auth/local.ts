@@ -1,6 +1,6 @@
 import { isIPv6 } from 'node:net';
 import { Router } from 'express';
-import type { DB, UserRow } from '../db.js';
+import { findLocalUser, type DB, type UserRow } from '../db.js';
 import type { Config } from '../config.js';
 import { DUMMY_HASH, hashPassword, parseCredentials, parsePassword, verifyPassword } from './password.js';
 import { createSession, destroySession, revokeOtherSessions } from './session.js';
@@ -139,10 +139,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
     // would all pass the gate while the first was still hashing. A correct password clears it.
     limiter.fail(key);
     const { username, password } = (req.body ?? {}) as { username?: unknown; password?: unknown };
-    const user =
-      typeof username === 'string'
-        ? (db.prepare(`SELECT * FROM users WHERE kind = 'local' AND username = ?`).get(username.trim()) as UserRow | undefined)
-        : undefined;
+    const user = typeof username === 'string' ? findLocalUser(db, username.trim()) : undefined;
     // Always run the hash, against a dummy when the name is unknown, so timing can't tell
     // a wrong username from a wrong password.
     const ok = typeof password === 'string' && (await verifyPassword(password, user?.password_hash ?? DUMMY_HASH));
@@ -209,14 +206,16 @@ export function localAuthRouter(db: DB, config: Config): Router {
     }
     const name = creds.username;
     const hash = await hashPassword(creds.password);
-    // The uniqueness check is the insert itself: a pre-check before the hash could be overtaken
-    // by a second create for the same name while this one was hashing.
+    // The uniqueness check is part of the insert: a pre-check before the hash could be
+    // overtaken by a second create for the same name while this one was hashing. It ignores
+    // case, as sign-in does, so "Sam" can't be added beside "sam".
     const info = db
       .prepare(
         `INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at)
-         VALUES ('local', ?, ?, ?, 0, ?) ON CONFLICT(username) DO NOTHING`,
+         SELECT 'local', @name, @hash, @name, 0, @now
+         WHERE NOT EXISTS (SELECT 1 FROM users WHERE username = @name COLLATE NOCASE)`,
       )
-      .run(name, hash, name, Date.now());
+      .run({ name, hash, now: Date.now() });
     if (info.changes === 0) {
       res.status(409).json({ error: 'That username is already taken.' });
       return;
