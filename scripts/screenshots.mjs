@@ -142,8 +142,22 @@ class Page {
     return this.cdp.send(method, params, this.sessionId);
   }
 
-  async eval(expression) {
-    const r = await this.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
+  /**
+   * Runs `fn` in the page and returns its result, awaited and copied back as JSON. `fn` goes
+   * over as source, so it can only use its arguments and the page's globals. The arguments go
+   * over as values, so a selector or a label is never pasted into code the page runs.
+   */
+  async call(fn, ...args) {
+    // callFunctionOn needs an object to call `fn` on. The page's global object is looked up
+    // each time because a navigation replaces it.
+    const { result: globalObject } = await this.send('Runtime.evaluate', { expression: 'globalThis' });
+    const r = await this.send('Runtime.callFunctionOn', {
+      objectId: globalObject.objectId,
+      functionDeclaration: String(fn),
+      arguments: args.map((value) => ({ value })),
+      returnByValue: true,
+      awaitPromise: true,
+    });
     if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text);
     return r.result.value;
   }
@@ -161,29 +175,33 @@ class Page {
   }
 
   waitForSelector(selector, timeoutMs = 10_000) {
-    return waitFor(() => this.eval(`!!document.querySelector(${JSON.stringify(selector)})`), selector, timeoutMs, 100);
+    return waitFor(() => this.call((selector) => !!document.querySelector(selector), selector), selector, timeoutMs, 100);
   }
 
   /** Clicks the first `selector`, or the one whose text is `text`. */
   async click(selector, text) {
     await this.waitForSelector(selector);
-    const found = await this.eval(`(() => {
-      const els = [...document.querySelectorAll(${JSON.stringify(selector)})];
-      const el = ${text === undefined ? 'els[0]' : `els.find((e) => e.textContent.trim() === ${JSON.stringify(text)})`};
-      if (!el) return false;
-      el.click();
-      return true;
-    })()`);
+    const found = await this.call(
+      (selector, text) => {
+        const els = [...document.querySelectorAll(selector)];
+        const el = text === undefined ? els[0] : els.find((e) => e.textContent.trim() === text);
+        if (!el) return false;
+        el.click();
+        return true;
+      },
+      selector,
+      text,
+    );
     if (!found) throw new Error(`Nothing to click for ${selector}${text ? ` "${text}"` : ''}`);
     await sleep(350);
   }
 
   /** Page-relative box of an element, for a clipped capture. */
   async boxOf(selector, pad = 0) {
-    const box = await this.eval(`(() => {
-      const b = document.querySelector(${JSON.stringify(selector)})?.getBoundingClientRect();
+    const box = await this.call((selector) => {
+      const b = document.querySelector(selector)?.getBoundingClientRect();
       return b ? { x: b.x + window.scrollX, y: b.y + window.scrollY, width: b.width, height: b.height } : null;
-    })()`);
+    }, selector);
     if (!box) throw new Error(`No element for ${selector}`);
     return { x: box.x - pad, y: box.y - pad, width: box.width + 2 * pad, height: box.height + 2 * pad, scale: 1 };
   }
@@ -192,7 +210,7 @@ class Page {
     const params = { format: 'png', captureBeyondViewport: fullPage || Boolean(clip) };
     if (clip) params.clip = clip;
     else if (fullPage) {
-      const { width, height } = await this.eval('({ width: document.documentElement.clientWidth, height: document.documentElement.scrollHeight })');
+      const { width, height } = await this.call(() => ({ width: document.documentElement.clientWidth, height: document.documentElement.scrollHeight }));
       params.clip = { x: 0, y: 0, width, height, scale: 1 };
     }
     const { data } = await this.send('Page.captureScreenshot', params);
