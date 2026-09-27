@@ -170,6 +170,15 @@ describe('mergeSettings', () => {
     expect(Object.isFrozen(out.alarms.lunchBy)).toBe(false);
   });
 
+  it('takes the timer lengths button by button and keeps three', () => {
+    expect(mergeSettings(DEFAULT_SETTINGS, { timerMinutes: [10, 20, 45] }).timerMinutes).toEqual([10, 20, 45]);
+    // A bad entry keeps the length it would replace; extra entries are dropped, missing ones kept.
+    expect(mergeSettings(DEFAULT_SETTINGS, { timerMinutes: [5, 0, 241, 90] }).timerMinutes).toEqual([5, 25, 50]);
+    expect(mergeSettings(DEFAULT_SETTINGS, { timerMinutes: [12.5, '30'] }).timerMinutes).toEqual([15, 25, 50]);
+    expect(mergeSettings(DEFAULT_SETTINGS, { timerMinutes: [240] }).timerMinutes).toEqual([240, 25, 50]);
+    expect(mergeSettings(DEFAULT_SETTINGS, { timerMinutes: 25 }).timerMinutes).toEqual(DEFAULT_SETTINGS.timerMinutes);
+  });
+
   it('keeps retention within bounds, field by field', () => {
     expect(mergeSettings(DEFAULT_SETTINGS, { retention: { enabled: true, days: 90 } }).retention).toEqual({ enabled: true, days: 90 });
     expect(mergeSettings(DEFAULT_SETTINGS, { retention: { enabled: 'yes', days: 7 } }).retention).toEqual(DEFAULT_SETTINGS.retention);

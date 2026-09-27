@@ -43,6 +43,8 @@ export interface Settings {
   secondMealAfterMinutes: number;
   timeFormat: TimeFormat;
   adjustStepMinutes: number;
+  /** The focus timer's start buttons, in minutes; always three. */
+  timerMinutes: number[];
   /** Rows a fresh day's priorities card starts with. */
   priorityCount: number;
   sound: boolean;
@@ -66,6 +68,9 @@ export interface Settings {
 
 /** Priority rows a day can hold; the server rejects more, the card stops offering "Add". */
 export const MAX_PRIORITIES = 20;
+
+/** Longest start button the focus timer offers, in minutes. */
+export const MAX_TIMER_MINUTES = 240;
 
 /** Bounds for "keep the last N days", per user and for the server-wide RETENTION_DAYS. */
 export const MIN_RETENTION_DAYS = 30;
@@ -91,6 +96,7 @@ export const DEFAULT_SETTINGS: Settings = deepFreeze({
   secondMealAfterMinutes: 600,
   timeFormat: 'auto',
   adjustStepMinutes: 5,
+  timerMinutes: [15, 25, 50],
   priorityCount: 3,
   sound: true,
   notifications: true,

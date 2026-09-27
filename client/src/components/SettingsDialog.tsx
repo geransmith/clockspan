@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type SubmitEvent, type KeyboardEvent, type ReactNode } from 'react';
-import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS, type TimeFormat } from '../../../shared/settings.js';
+import { MAX_RETENTION_DAYS, MAX_TIMER_MINUTES, MIN_RETENTION_DAYS, type TimeFormat } from '../../../shared/settings.js';
 import { SOUND_EVENTS, SOUNDS } from '../../../shared/sounds.js';
 import * as api from '../api';
 import { useAuth } from '../auth/AuthGate';
@@ -129,6 +129,22 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               <p className="muted small">New days start with this many rows. Add more on the sheet any time.</p>
             </Section>
             <Section title="Focus timer">
+              <div className="setting-row">
+                <span>Start buttons</span>
+                <span className="duration-inputs">
+                  {settings.timerMinutes.map((m, i) => (
+                    <NumberInput
+                      key={i}
+                      label={`Start button ${i + 1}`}
+                      value={m}
+                      min={1}
+                      max={MAX_TIMER_MINUTES}
+                      onCommit={(n) => set({ timerMinutes: settings.timerMinutes.map((x, j) => (j === i ? n : x)) })}
+                    />
+                  ))}
+                  <span className="muted">min</span>
+                </span>
+              </div>
               <NumberField
                 label="Adjust step (± buttons)"
                 value={settings.adjustStepMinutes}
@@ -427,6 +443,33 @@ function NumberField({
   disabled?: boolean;
   onCommit: (n: number) => void;
 }) {
+  return (
+    <div className="setting-row">
+      <span>{label}</span>
+      <span className="duration-inputs">
+        <NumberInput label={label} value={value} min={min} max={max} disabled={disabled} onCommit={onCommit} />
+        <span className="muted">{unit}</span>
+      </span>
+    </div>
+  );
+}
+
+/** A number box that commits on blur or Enter, clamped to its bounds. */
+function NumberInput({
+  label,
+  value,
+  min,
+  max,
+  disabled,
+  onCommit,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  disabled?: boolean;
+  onCommit: (n: number) => void;
+}) {
   const [v, setV] = useState(String(value));
   const [seen, setSeen] = useState(value);
   if (value !== seen) {
@@ -439,22 +482,16 @@ function NumberField({
     else setV(String(value));
   };
   return (
-    <div className="setting-row">
-      <span>{label}</span>
-      <span className="duration-inputs">
-        <input
-          className="input input-num"
-          inputMode="numeric"
-          value={v}
-          onChange={(e) => setV(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-          aria-label={label}
-          disabled={disabled}
-        />
-        <span className="muted">{unit}</span>
-      </span>
-    </div>
+    <input
+      className="input input-num"
+      inputMode="numeric"
+      value={v}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+      aria-label={label}
+      disabled={disabled}
+    />
   );
 }
 

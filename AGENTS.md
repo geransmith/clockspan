@@ -317,7 +317,8 @@ Never commit `data/` or `.env`.
   the control to the right tab in `SettingsDialog.tsx` (Timeclock · Alarms · Sheet · Data ·
   Account; each is a `case` in `panel()`; the Sheet tab's "History" section holds the
   calendar's switches) using `DurationField` / `NumberField` — it takes a `unit` suffix,
-  default "min" — / `Toggle`. Nothing else to mirror.
+  default "min" — / `Toggle` (`NumberInput` alone puts several numbers on one row, like the
+  timer's start buttons). Nothing else to mirror.
 - **A sound**: drop the clip in as `client/src/sounds/<id>.mp3` (CC0 only, MP3 so Safari can
   decode it, a couple of seconds at most) → add `{ id, label, kind: 'clip' }` to `SOUNDS` in
   `shared/sounds.ts` → add its title, author and source line to `client/src/sounds/README.md`.
