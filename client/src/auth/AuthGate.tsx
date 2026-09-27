@@ -27,8 +27,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
           setError(null);
           return next;
         },
-        (err: Error) => {
-          setError(err.message);
+        (err: unknown) => {
+          setError((err as Error).message);
           return null;
         },
       ),

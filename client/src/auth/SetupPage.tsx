@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type SubmitEvent } from 'react';
 import * as api from '../api';
 import type { AuthInfo } from '../types';
 
@@ -15,7 +15,7 @@ export function SetupPage({ onDone, hint }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const submit = async (e: FormEvent) => {
+  const submit = async (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (password !== confirm) {
       setError('Passwords do not match.');
@@ -35,7 +35,7 @@ export function SetupPage({ onDone, hint }: Props) {
 
   return (
     <div className="gate">
-      <form className="gate-card" onSubmit={submit}>
+      <form className="gate-card" onSubmit={(e) => void submit(e)}>
         <h1>Welcome to Clockspan</h1>
         {hint && <p className="error">{hint}</p>}
         <p className="muted">Create the first account. This account is the admin and can add others later.</p>

@@ -22,7 +22,8 @@ has the user-facing description.
 - Backend: Express 5 (ESM, `NodeNext`, imports use `.js` extensions), `better-sqlite3` (native),
   `openid-client` v6 for OIDC, `cookie` for cookie parsing. Passwords: `node:crypto` scrypt (async).
 - Tests: Vitest 5. Lint: oxlint (`.oxlintrc.json`: correctness + typescript + react-hooks +
-  jsx-a11y rules, syntax level only; it parses TS itself, which is what lets TypeScript be 7). CI: `.github/workflows/ci.yml` runs typecheck, lint, test, build on
+  jsx-a11y rules, plus type-aware `typescript/*` rules such as no-floating-promises and
+  no-misused-promises, run by `oxlint-tsgolint`, which bundles TypeScript 7's checker (`options.typeAware`)). CI: `.github/workflows/ci.yml` runs typecheck, lint, test, build on
   every PR and push, and on a PR also builds and boots the image (`image-smoke`, never pushed);
   on `main` it builds, boots (the same `scripts/smoke-image.sh`) and then publishes the `edge`
   image, and a commit that changed
@@ -599,6 +600,8 @@ Prove a change at the cheapest level that can show it, and stop there:
   is left alone (`.prettierignore`): the docs have hand-laid tables and wrapping.
 - oxlint ignores a misspelled rule name without a word. After editing `.oxlintrc.json`, check
   `npx oxlint --print-config` lists what you meant, and that a deliberately bad snippet is caught.
+  A promise that is deliberately not awaited is written `void p` (no-floating-promises), and an
+  async handler passed to JSX or a timer is wrapped: `onSubmit={(e) => void submit(e)}`.
 - GitHub starts no workflow for an event `GITHUB_TOKEN` caused (except `workflow_dispatch` and
   `repository_dispatch`). A push, merge, tag or release a workflow makes with it runs nothing
   downstream: that is why the release job's tag starts no second run. A workflow step that

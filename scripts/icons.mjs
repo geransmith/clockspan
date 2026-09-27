@@ -79,7 +79,7 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(`[icons] ${err.message}`);
+main().catch((/** @type {unknown} */ err) => {
+  console.error(`[icons] ${err instanceof Error ? err.message : String(err)}`);
   process.exit(1);
 });

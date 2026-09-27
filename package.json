@@ -48,6 +48,7 @@
     "@vitest/coverage-v8": "5.0.1",
     "concurrently": "10.0.5",
     "oxlint": "1.83.0",
+    "oxlint-tsgolint": "7.0.2002",
     "prettier": "3.9.8",
     "react": "19.3.0",
     "react-aria": "3.52.1",
