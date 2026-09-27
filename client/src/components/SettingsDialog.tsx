@@ -251,7 +251,12 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 </button>
               </div>
             </Section>
-            <p className="muted small">Clockspan · data stays on your server</p>
+            <p className="muted small">
+              Clockspan v{__APP_VERSION__} · data stays on your server ·{' '}
+              <a className="about-link" href="https://github.com/geransmith/clockspan/releases" target="_blank" rel="noreferrer">
+                Release notes
+              </a>
+            </p>
           </>
         );
       case 'account':
