@@ -446,8 +446,9 @@ repo or the session scratchpad.
   banner, so the setter never rejects) → pass it from `Sheet.tsx`
   to the card, and from `App.tsx` into `useAlarms` if alarms depend on it.
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
-  `currentUser(req).id` (`requireDate` / `loadOwnedSession` where they fit), validate input,
-  return `{ error }` JSON on failure → add the call to `client/src/api.ts` and the response
+  `currentUser(req).id` (`requireDate` / `loadOwnedSession` where they fit), validate input
+  (cast `req.body` to `{ field?: unknown }` and check each field; the `no-unsafe-*` lint
+  refuses reading it as `any`), return `{ error }` JSON on failure → add the call to `client/src/api.ts` and the response
   type to `shared/api.ts` (the route's `res.json(… satisfies <Type>)` and the client's
   `request<Type>` both name it) → cover it in that router's
   `*.test.ts`: happy path, each 400, and that another

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DUMMY_HASH, hashPassword, validatePassword, validateUsername, verifyPassword } from './password.js';
+import { DUMMY_HASH, hashPassword, parseCredentials, parsePassword, parseUsername, verifyPassword } from './password.js';
 
 describe('hashPassword / verifyPassword', () => {
   it('round-trips at the default cost and rejects a wrong password', async () => {
@@ -45,14 +45,21 @@ describe('hashPassword / verifyPassword', () => {
 
 describe('validation', () => {
   it('bounds passwords and usernames', () => {
-    expect(validatePassword(undefined)).toMatch(/required/);
-    expect(validatePassword('short')).toMatch(/at least 8/);
-    expect(validatePassword('x'.repeat(201))).toMatch(/too long/);
-    expect(validatePassword('long enough')).toBeNull();
-    expect(validateUsername(5)).toMatch(/required/);
-    expect(validateUsername('a')).toMatch(/at least 2/);
-    expect(validateUsername('a'.repeat(41))).toMatch(/40 characters/);
-    expect(validateUsername('no spaces')).toMatch(/may contain/);
-    expect(validateUsername(' sam.smith-1_ ')).toBeNull();
+    expect(parsePassword(undefined)).toEqual({ error: 'Password is required.' });
+    expect(parsePassword('short')).toEqual({ error: expect.stringMatching(/at least 8/) });
+    expect(parsePassword('x'.repeat(201))).toEqual({ error: expect.stringMatching(/too long/) });
+    expect(parsePassword('long enough')).toEqual({ password: 'long enough' });
+    expect(parseUsername(5)).toEqual({ error: 'Username is required.' });
+    expect(parseUsername('a')).toEqual({ error: expect.stringMatching(/at least 2/) });
+    expect(parseUsername('a'.repeat(41))).toEqual({ error: expect.stringMatching(/40 characters/) });
+    expect(parseUsername('no spaces')).toEqual({ error: expect.stringMatching(/may contain/) });
+    expect(parseUsername(' sam.smith-1_ ')).toEqual({ username: 'sam.smith-1_' });
+  });
+
+  it('reads a new account from a request body, username first', () => {
+    expect(parseCredentials({ username: ' sam ', password: 'long enough' })).toEqual({ username: 'sam', password: 'long enough' });
+    expect(parseCredentials(undefined)).toEqual({ error: 'Username is required.' });
+    expect(parseCredentials({ username: 'x', password: 'short' })).toEqual({ error: expect.stringMatching(/at least 2/) });
+    expect(parseCredentials({ username: 'sam', password: 5 })).toEqual({ error: 'Password is required.' });
   });
 });
