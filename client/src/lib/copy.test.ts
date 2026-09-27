@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { CONFIRM, DELETE_DAYS, FINISH_CHOICE, TIMER_DONE, TIMER_DUE, TIMER_PAUSED_OUT } from './copy';
+import { CONFIRM, DELETE_DAYS, FINISH_CHOICE, LEFT_OPEN, TIMER_DONE, TIMER_DUE, TIMER_PAUSED_OUT } from './copy';
 
 describe('copy builders', () => {
   it('names the user in the delete confirm', () => {
     expect(CONFIRM.deleteUser('sam')).toBe('Delete sam and ALL of their data? This cannot be undone.');
+  });
+
+  it('names the day the offered priorities were left open on', () => {
+    expect(LEFT_OPEN.title('yesterday')).toBe('Still open from yesterday');
   });
 
   it('describes a finished timer with or without a label', () => {
