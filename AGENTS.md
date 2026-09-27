@@ -374,8 +374,9 @@ Never commit `data/` or `.env`.
 - TypeScript `strict` + `noUncheckedIndexedAccess`. Named exports. Server and shared imports
   end in `.js`. `npm run lint` and `npm run format:check` must pass; `_`-prefixed names are the
   only allowed unused vars.
-- CSS: tokens on `:root` in `client/src/styles.css`, dark mode via `prefers-color-scheme`,
-  **mobile-first** (base = phone; `@media (min-width: 640px)` enhances). Tap targets are
+- CSS: tokens on `:root` in `client/src/styles.css`, dark mode via `prefers-color-scheme`
+  unless the `theme` setting forces one (`data-theme` on `<html>`, set by `lib/theme.ts`; the
+  two dark token blocks must match, `theme-css.test.ts` checks), **mobile-first** (base = phone; `@media (min-width: 640px)` enhances). Tap targets are
   44 px on a touch screen: `.btn` and `.input` set `min-height: 44px`, and a compact control
   (chip, segment, running-bar button, banner close/action, log delete) keeps its drawn size
   and gets the rest from the `@media (pointer: coarse)` block at the end of `styles.css`, an

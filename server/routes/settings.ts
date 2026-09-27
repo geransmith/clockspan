@@ -8,12 +8,14 @@ import {
   MAX_RETENTION_DAYS,
   MIN_RETENTION_DAYS,
   SETTING_LIMITS,
+  THEMES,
   TIMER_MINUTES,
   TIME_FORMATS,
   type AlarmSettings,
   type CardId,
   type RetentionSettings,
   type Settings,
+  type Theme,
   type TimeFormat,
 } from '../../shared/settings.js';
 import { SOUND_EVENTS, SOUND_IDS, type SoundEvent, type SoundId } from '../../shared/sounds.js';
@@ -100,6 +102,7 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     lunchMinutes: limited('lunchMinutes'),
     secondMealAfterMinutes: limited('secondMealAfterMinutes'),
     timeFormat: TIME_FORMATS.includes(p.timeFormat as TimeFormat) ? (p.timeFormat as TimeFormat) : base.timeFormat,
+    theme: THEMES.includes(p.theme as Theme) ? (p.theme as Theme) : base.theme,
     adjustStepMinutes: limited('adjustStepMinutes'),
     timerMinutes: mergeTimerMinutes(base.timerMinutes, p.timerMinutes),
     priorityCount: limited('priorityCount'),

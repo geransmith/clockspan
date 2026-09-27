@@ -59,6 +59,13 @@ describe('/api/settings', () => {
     expect((await app.api.get('/api/settings')).body.sounds.timer).toBe('yay');
   });
 
+  it('accepts a known theme and falls back for anything else', async () => {
+    expect((await app.api.put('/api/settings', { theme: 'dark' })).body.theme).toBe('dark');
+    expect((await app.api.put('/api/settings', { theme: 'sepia' })).body.theme).toBe('dark');
+    expect((await app.api.put('/api/settings', { theme: 1 })).body.theme).toBe('dark');
+    expect((await app.api.put('/api/settings', { theme: 'auto' })).body.theme).toBe('auto');
+  });
+
   it('accepts a known time format and falls back for anything else', async () => {
     expect((await app.api.put('/api/settings', { timeFormat: '24h' })).body.timeFormat).toBe('24h');
     expect((await app.api.put('/api/settings', { timeFormat: '25h' })).body.timeFormat).toBe('24h');

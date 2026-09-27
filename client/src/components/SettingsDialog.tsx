@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type SubmitEvent, type KeyboardEvent, type ReactNode } from 'react';
-import { DEFAULT_SETTINGS, MAX_RETENTION_DAYS, MIN_RETENTION_DAYS, SETTING_LIMITS, TIMER_MINUTES, type TimeFormat } from '../../../shared/settings.js';
+import {
+  DEFAULT_SETTINGS,
+  MAX_RETENTION_DAYS,
+  MIN_RETENTION_DAYS,
+  SETTING_LIMITS,
+  TIMER_MINUTES,
+  type Theme,
+  type TimeFormat,
+} from '../../../shared/settings.js';
 import { SOUND_EVENTS, SOUNDS } from '../../../shared/sounds.js';
 import * as api from '../api';
 import { useAuth } from '../auth/AuthGate';
@@ -129,6 +137,17 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       case 'sheet':
         return (
           <>
+            <Section title="Appearance">
+              <div className="setting-row">
+                <span>Theme</span>
+                <select className="input select" value={settings.theme} onChange={(e) => set({ theme: e.target.value as Theme })} aria-label="Theme">
+                  <option value="auto">Automatic</option>
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
+              </div>
+              <p className="muted small">Automatic follows your device.</p>
+            </Section>
             <Section title="Priorities">
               <NumberField
                 label="Rows per day"

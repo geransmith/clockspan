@@ -23,6 +23,10 @@ export type AlarmId = 'lunchBy' | 'clockOut' | 'secondMeal' | 'retro';
 export const TIME_FORMATS = ['auto', '12h', '24h'] as const;
 export type TimeFormat = (typeof TIME_FORMATS)[number];
 
+/** Light or dark: the system's choice, or one of them regardless. */
+export const THEMES = ['auto', 'light', 'dark'] as const;
+export type Theme = (typeof THEMES)[number];
+
 export interface AlarmSettings {
   enabled: boolean;
   leadMinutes: number[];
@@ -42,6 +46,7 @@ export interface Settings {
   /** Hours *worked* after which a second meal period is due (California: 10 h). */
   secondMealAfterMinutes: number;
   timeFormat: TimeFormat;
+  theme: Theme;
   adjustStepMinutes: number;
   /** The focus timer's start buttons, in minutes; always three. */
   timerMinutes: number[];
@@ -105,6 +110,7 @@ export const DEFAULT_SETTINGS: Settings = deepFreeze({
   lunchMinutes: 30,
   secondMealAfterMinutes: 600,
   timeFormat: 'auto',
+  theme: 'auto',
   adjustStepMinutes: 5,
   timerMinutes: [15, 25, 50],
   priorityCount: 3,

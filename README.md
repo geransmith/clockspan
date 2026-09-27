@@ -51,7 +51,7 @@
 
 **Your data, your server.** Per-user sheets, history, settings and layout. Sign-in is optional: run it open on your LAN, create local accounts, or sign in through Authentik (OIDC). Old days can be deleted by hand or pruned automatically after a number of days you choose, with an optional server-wide ceiling for admins. Cards can be reordered or hidden per user.
 
-**Phone first.** Mobile layout, 44 px touch targets, installable (Android *Install app*, iOS *Add to Home Screen*), and a *keep screen awake* option so the countdown and chime stay live.
+**Phone first.** Mobile layout, 44 px touch targets, installable (Android *Install app*, iOS *Add to Home Screen*), a *keep screen awake* option so the countdown and chime stay live, and a light or dark theme that follows the device unless you pick one in Settings.
 
 ---
 

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AuthGate } from './auth/AuthGate';
 import { Banners } from './components/Banners';
 import { Header } from './components/Header';
@@ -15,6 +15,7 @@ import { useSettled } from './hooks/useSettled';
 import { SettingsProvider, useSettings } from './hooks/useSettings';
 import { TimerProvider, useTimer } from './hooks/useTimer';
 import { todayKey } from './lib/format';
+import { applyTheme } from './lib/theme';
 import { computeTimeclock } from './lib/timeclock';
 import type { CardId } from './types';
 
@@ -40,6 +41,10 @@ function Shell() {
   const { settings, loaded } = useSettings();
   const { running } = useTimer();
   const now = useNow(1000);
+  // Only a real answer: the defaults' 'auto' would undo a forced theme main.tsx put up.
+  useEffect(() => {
+    if (loaded) applyTheme(settings.theme);
+  }, [loaded, settings.theme]);
 
   // Alarms always watch *today*, whatever the sheet is showing. They wait while focus is
   // inside the punch rows and for a few seconds after it leaves, so back-filling a day
