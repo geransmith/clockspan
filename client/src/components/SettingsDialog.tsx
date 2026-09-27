@@ -625,7 +625,8 @@ function DeleteOldDays() {
             type="date"
             value={before}
             max={today}
-            onChange={(e) => e.target.value && setBefore(e.target.value)}
+            // `max` doesn't stop a typed date, and a cutoff after today would delete today too.
+            onChange={(e) => e.target.value && setBefore(e.target.value < today ? e.target.value : today)}
             aria-label="Delete days before"
           />
           <button className="btn btn-ghost btn-danger-text" onClick={() => void remove()} disabled={busy || !info || info.matching === 0}>
