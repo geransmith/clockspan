@@ -5,7 +5,7 @@ import { useTimeFormat } from '../hooks/useTimeFormat';
 import { playSound, unlockAudio } from '../lib/alerts';
 import { pickCelebration } from '../lib/celebrate';
 import { formatDuration, formatDurationCeil, roundToMinute } from '../lib/format';
-import { clockOutPosition, extraPairs, kindForPosition, secondMealApplies, type ExtraPair, type TimeclockResult } from '../lib/timeclock';
+import { clockOutPosition, extraPairs, kindForPosition, nextPunchPosition, secondMealApplies, type ExtraPair, type TimeclockResult } from '../lib/timeclock';
 import type { Punch } from '../types';
 import { Burst, BURST_MS } from './Burst';
 import { Plus, Trash, X } from './Icons';
@@ -151,6 +151,8 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
 
   // A punch after the clock-in is expected to come after it; the time field's AM/PM guess uses that.
   const clockInAt = byPos.get(0)?.at ?? null;
+  // Today, until the day is done, the next empty row's Now is the filled button: one obvious tap.
+  const nextPos = isToday && tc.state !== 'done' ? nextPunchPosition(punches) : null;
   const row = (punch: Punch, label: string) => (
     <PunchRow
       key={punch.position}
@@ -160,6 +162,7 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
       isToday={isToday}
       hour12={hour12}
       anchorAt={punch.position === 0 ? null : clockInAt}
+      next={punch.position === nextPos}
       onSet={(at) => setAt(punch.position, at)}
     />
   );
@@ -271,6 +274,7 @@ function PunchRow({
   isToday,
   hour12,
   anchorAt,
+  next,
   onSet,
 }: {
   label: string;
@@ -279,6 +283,8 @@ function PunchRow({
   isToday: boolean;
   hour12: boolean;
   anchorAt: number | null;
+  /** The row the next punch belongs in. */
+  next: boolean;
   onSet: (at: number | null) => void;
 }) {
   return (
@@ -286,7 +292,7 @@ function PunchRow({
       <span className="punch-label">{label}</span>
       <TimeField value={punch.at} date={date} hour12={hour12} anchorAt={anchorAt} label={label} onCommit={onSet} />
       <button
-        className="btn btn-ghost punch-now"
+        className={`btn ${next ? 'btn-primary' : 'btn-ghost'} punch-now`}
         onClick={() => onSet(roundToMinute(Date.now()))}
         disabled={!isToday}
         title={isToday ? 'Use the current time' : 'Only available today'}

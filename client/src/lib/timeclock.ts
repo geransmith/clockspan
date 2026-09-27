@@ -257,6 +257,27 @@ export function extraPairs(punches: Punch[]): ExtraPair[] {
   return pairs;
 }
 
+/**
+ * The first row without a time, in the order the card shows them (clock in, pairs before
+ * lunch, lunch out and in, pairs after it, clock out): the one the next "Now" is for. Null
+ * once every row has a time.
+ */
+export function nextPunchPosition(punches: Punch[]): number | null {
+  const byPos = new Map(punches.map((p) => [p.position, p]));
+  const pairs = extraPairs(punches);
+  const pairRows = (beforeLunch: boolean) => pairs.filter((p) => p.beforeLunch === beforeLunch).flatMap((p) => [p.out, p.in]);
+  const clockOut = clockOutPosition(punches);
+  const order = [
+    byPos.get(0),
+    ...pairRows(true),
+    byPos.get(LUNCH_OUT_POSITION),
+    byPos.get(LUNCH_IN_POSITION),
+    ...pairRows(false),
+    clockOut == null ? undefined : byPos.get(clockOut),
+  ];
+  return order.find((p) => p != null && p.at == null)?.position ?? null;
+}
+
 /** Empty punch rows for a fresh day: clock in, lunch out, lunch in, clock out. */
 export function emptyPunches(): Punch[] {
   return [0, 1, 2, CLOCK_OUT_MIN_POSITION].map((position) => ({ position, kind: kindForPosition(position), at: null }));
