@@ -52,7 +52,8 @@ server/                 Express API → dist/server (tsc)
   app.ts                createApp(): trust proxy, securityHeaders, /api/health, resolveUser, auth
                         routers, data routers behind requireAuth, static dist/client + SPA fallback
   security.ts           the ONLY place response headers (CSP, nosniff, frame, referrer, HSTS, no-store on /api) are set;
-                        also rejectCrossSiteWrites (403 for a non-GET /api request marked Sec-Fetch-Site cross-site/same-site)
+                        also rejectCrossSiteWrites(config) (403 for a non-GET /api request marked Sec-Fetch-Site cross-site/same-site,
+                        or, without that header, whose Origin is not this host or APP_URL's)
   config.ts             env parsing; throws with a clear message on bad/missing config
   db.ts                 open + pragmas (WAL, foreign_keys), append-only MIGRATIONS, default user
   retention.ts          old-day cleanup: cutoffKey, countDays, pruneDays, runRetention (all users,
@@ -269,8 +270,10 @@ repo or the session scratchpad.
   (`resolveUser` is mounted there), so a static answer, which is publicly cacheable, never
   carries a `Set-Cookie`. `rejectCrossSiteWrites` (also in `security.ts`, mounted on `/api`
   before `resolveUser`) refuses any non-GET request the browser marks `Sec-Fetch-Site:
-  cross-site` or `same-site`: under `AUTH_MODE=none` there is no cookie for SameSite to hold
-  back, and a body-less POST (finish, cancel) needs no preflight. Keep write routes under
+  cross-site` or `same-site`, and, from a browser that sends no `Sec-Fetch-Site` (Safari
+  before 16.4), one whose `Origin` host is neither the `Host` header nor `APP_URL`'s: under
+  `AUTH_MODE=none` there is no cookie for SameSite to hold back, and a body-less POST
+  (finish, cancel) needs no preflight. Keep write routes under
   `/api` so it covers them. Never interpolate request data or an error message
   into HTML without `escapeHtml` (see `auth/oidc.ts`). Password hashing is async
   (`scrypt`, never `scryptSync`); login verifies against `DUMMY_HASH` when the user is unknown.
