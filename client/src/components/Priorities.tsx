@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSettings } from '../hooks/useSettings';
 import { playSound } from '../lib/alerts';
-import { WARNING_ACTIONS } from '../lib/copy';
-import { MAX_PRIORITIES, newUid, padPriorities, pickWarning, warnThreshold, warningKind, type WarningKind } from '../lib/priorities';
+import { LEFT_OPEN, WARNING_ACTIONS } from '../lib/copy';
+import { carryOver, MAX_PRIORITIES, newUid, padPriorities, pickWarning, warnThreshold, warningKind, type WarningKind } from '../lib/priorities';
 import { LIMITS, type Priority } from '../types';
 import { Burst, BURST_MS } from './Burst';
 import { Check, Plus, X } from './Icons';
@@ -10,6 +10,8 @@ import { Check, Plus, X } from './Icons';
 interface Props {
   priorities: Priority[];
   onChange: (priorities: Priority[]) => void;
+  /** What the last planned day left unticked (`from` names that day), offered while the list is empty. */
+  leftOpen?: { from: string; rows: Priority[]; dismiss: () => void } | null;
 }
 
 /**
@@ -17,7 +19,7 @@ interface Props {
  * keystroke; checkboxes, add and remove save immediately. Keyed by date in the sheet, so a
  * new day mounts fresh instead of carrying drafts over.
  */
-export function Priorities({ priorities, onChange }: Props) {
+export function Priorities({ priorities, onChange, leftOpen }: Props) {
   const { settings } = useSettings();
   const count = settings.priorityCount;
   const [local, setLocal] = useState(() => padPriorities(priorities, count));
@@ -86,6 +88,11 @@ export function Priorities({ priorities, onChange }: Props) {
     setLocal(next);
     flush(next);
   };
+  const bringOver = (rows: Priority[]) => {
+    const next = carryOver(rows, count);
+    setLocal(next);
+    flush(next);
+  };
   const removeRow = (position: number) => {
     const next = local.filter((p) => p.position !== position).map((p, i) => ({ ...p, position: i + 1 }));
     setLocal(next);
@@ -94,6 +101,26 @@ export function Priorities({ priorities, onChange }: Props) {
 
   return (
     <div className="priorities">
+      {leftOpen && total === 0 && (
+        <div className="notice notice--gentle left-open">
+          <div className="left-open-list">
+            <strong>{LEFT_OPEN.title(leftOpen.from)}</strong>
+            <ul>
+              {leftOpen.rows.map((p) => (
+                <li key={p.position}>{p.text}</li>
+              ))}
+            </ul>
+          </div>
+          <span className="notice-actions">
+            <button className="btn" onClick={() => bringOver(leftOpen.rows)}>
+              {LEFT_OPEN.add}
+            </button>
+            <button className="btn btn-ghost" onClick={leftOpen.dismiss}>
+              {LEFT_OPEN.dismiss}
+            </button>
+          </span>
+        </div>
+      )}
       {local.map((p) => {
         const empty = !p.text.trim();
         const removable = p.position > count;

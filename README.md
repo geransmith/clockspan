@@ -19,7 +19,7 @@
 
 **A sticker chart, if you want one.** Off by default. With it on, every day on the History calendar wears a little creature for each thing it did: clocked out, lunch taken, all priorities done, a focus session logged, retrospective reviewed. The legend counts them for the month and narrows the calendar to one kind.
 
-**Three priorities, on purpose.** New days start with three rows (adjustable). You can add more, and the sheet asks first: the nudge changes once some rows are ticked, and again once they all are. Rows can only be ticked once they have text.
+**Three priorities, on purpose.** New days start with three rows (adjustable). You can add more, and the sheet asks first: the nudge changes once some rows are ticked, and again once they all are. Rows can only be ticked once they have text. A new day's empty list offers whatever the last day left unticked, in one tap.
 
 **A focus timer that knows what it's for.** 15, 25 or 50-minute sessions you can stretch, shorten or pause (paused time isn't logged). When one runs out it chimes and waits for you to add time or finish. Link a session to one of your open priorities, or put a new task on the plan as you start it. The running timer stays at the top of every view, and since its start time lives on the server it survives reloads and phone sleep.
 

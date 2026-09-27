@@ -97,6 +97,13 @@ export const WARNING_ACTIONS = {
   complete: { add: 'Add a bonus', keep: 'Stop here' },
 } as const;
 
+/** On today's empty priorities, when the last day with a plan left rows unticked. */
+export const LEFT_OPEN = {
+  title: (from: string) => `Still open from ${from}`,
+  add: 'Add to today',
+  dismiss: 'Start fresh',
+};
+
 /** Confirm dialogs. Each names what goes and that it stays gone. */
 export const CONFIRM = {
   cancelSession: 'Cancel this session? It will not be logged.',
