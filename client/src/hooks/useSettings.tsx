@@ -23,18 +23,31 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // sent after it, so the first answer can't briefly undo the second optimistic change.
   const seq = useRef(0);
 
+  // A failed fetch is asked again rather than settled with the defaults: `loaded` is what holds
+  // the alarms and the timer's alerts, and judged against the defaults they would ring at the
+  // wrong times (or not at all) until a reload. Two seconds, doubling up to a minute.
   useEffect(() => {
     let cancelled = false;
-    api
-      .getSettings()
-      .then((s) => {
-        if (cancelled) return;
-        setSettings({ ...s, layout: normalizeLayout(s.layout) });
-        setLoaded(true);
-      })
-      .catch(() => setLoaded(true));
+    let retry: number | undefined;
+    let delay = 2_000;
+    const fetchSettings = () => {
+      api
+        .getSettings()
+        .then((s) => {
+          if (cancelled) return;
+          setSettings({ ...s, layout: normalizeLayout(s.layout) });
+          setLoaded(true);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          retry = window.setTimeout(fetchSettings, delay);
+          delay = Math.min(delay * 2, 60_000);
+        });
+    };
+    fetchSettings();
     return () => {
       cancelled = true;
+      window.clearTimeout(retry);
     };
   }, []);
 
