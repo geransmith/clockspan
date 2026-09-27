@@ -6,11 +6,13 @@ import { Bell, X } from './Icons';
 export function Banners() {
   const banners = useSyncExternalStore(subscribeBanners, getBanners, getBanners);
   const { formatTime } = useTimeFormat();
-  if (banners.length === 0) return null;
+  // Always rendered, even with no banners: a live region has to be in the page before its
+  // content arrives to be announced. Polite for every banner (no per-banner role="alert", which
+  // is assertive), so a banner waits for the screen reader to finish instead of cutting it off.
   return (
     <div className="banners" aria-live="polite">
       {banners.slice(-3).map((b) => (
-        <div key={b.id} className={`banner banner--${b.tone}`} role="alert">
+        <div key={b.id} className={`banner banner--${b.tone}`}>
           {b.tag.startsWith('alarm:') && (
             <span className="banner-icon" aria-hidden="true">
               <Bell />
