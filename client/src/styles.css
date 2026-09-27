@@ -1808,6 +1808,9 @@ button {
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
+.review-more {
+  align-self: flex-start;
+}
 .review-row--note {
   flex-direction: column;
   align-items: stretch;

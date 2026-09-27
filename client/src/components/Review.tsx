@@ -1,3 +1,4 @@
+import { useState, type ReactNode } from 'react';
 import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
 import { UNTITLED_SESSION } from '../lib/copy';
@@ -56,7 +57,7 @@ export function Review({ today, now, period: { kind, offset }, onPeriod, onOpen 
 
       {error && <p className="error">{error}</p>}
       {!error && !days && <div className="sheet-loading" aria-busy="true" />}
-      {days && <Body days={days} today={today} now={now} kind={kind} onOpen={onOpen} dayLabel={dayLabel} settings={settings} />}
+      {days && <Body key={`${kind}:${period.from}`} days={days} today={today} now={now} kind={kind} onOpen={onOpen} dayLabel={dayLabel} settings={settings} />}
     </section>
   );
 }
@@ -81,7 +82,13 @@ function Body({
   const r = reviewRange(days, settings, today, now);
   if (r.days === 0) return <p className="muted center review-empty">Nothing recorded this {kind}.</p>;
   const onPlanPct = r.focusedSeconds > 0 ? Math.round((r.onPlanSeconds / r.focusedSeconds) * 100) : null;
-  const when = (date: string) => (kind === 'week' ? formatWeekday(date) : dayLabel(date));
+  // A row merged across days names them in a week and counts them in a longer period; it
+  // opens the latest of them.
+  const when = (dates: string[]) => {
+    if (kind === 'week') return dates.map(formatWeekday).join(', ');
+    return dates.length === 1 ? dayLabel(dates[0]!) : `${dates.length} days`;
+  };
+  const latest = (dates: string[]) => dates[dates.length - 1]!;
 
   return (
     <div className="review-body">
@@ -102,45 +109,45 @@ function Body({
         {r.unplanned.length === 0 ? (
           <p className="muted small">Every logged session was for a priority.</p>
         ) : (
-          <ul className="review-list">
-            {r.unplanned.map(({ date, session }) => (
-              <li key={session.id}>
-                <button className="review-row" onClick={() => onOpen(date)}>
-                  <span className="review-text">{session.label || <span className="muted">{UNTITLED_SESSION}</span>}</span>
+          <Folded
+            items={r.unplanned.map((g) => (
+              <li key={g.key}>
+                <button className="review-row" onClick={() => onOpen(latest(g.dates))}>
+                  <span className="review-text">{g.label || <span className="muted">{UNTITLED_SESSION}</span>}</span>
                   <span className="review-meta">
-                    <span className="muted small">{when(date)}</span>
-                    <span className="review-time">{formatDuration(session.durationSeconds ?? 0)}</span>
+                    <span className="muted small">{when(g.dates)}</span>
+                    <span className="review-time">{formatDuration(g.seconds)}</span>
                   </span>
                 </button>
               </li>
             ))}
-          </ul>
+          />
         )}
       </section>
 
       <section className="review-section">
         <h3 className="retro-heading">
-          Not done <span className="muted">{r.notDone.length}</span>
+          Not done <span className="muted">{r.prioritiesTotal - r.prioritiesDone}</span>
         </h3>
         {r.notDone.length === 0 ? (
           <p className="muted small">{r.prioritiesTotal > 0 ? 'Every priority got ticked.' : 'No priorities were written.'}</p>
         ) : (
-          <ul className="review-list">
-            {r.notDone.map((g, i) => (
-              <li key={`${g.date}-${i}`}>
-                <button className="review-row" onClick={() => onOpen(g.date)}>
+          <Folded
+            items={r.notDone.map((g) => (
+              <li key={g.key}>
+                <button className="review-row" onClick={() => onOpen(latest(g.dates))}>
                   <span className="review-text">
                     {g.text}
                     {g.addedMidDay && <span className="pill pill--warn retro-late">mid-day</span>}
                   </span>
                   <span className="review-meta">
-                    <span className="muted small">{when(g.date)}</span>
+                    <span className="muted small">{when(g.dates)}</span>
                     <span className="review-time">{g.focusedSeconds > 0 ? formatDuration(g.focusedSeconds) : <span className="muted">no time</span>}</span>
                   </span>
                 </button>
               </li>
             ))}
-          </ul>
+          />
         )}
       </section>
 
@@ -149,8 +156,8 @@ function Body({
         {r.notes.length === 0 ? (
           <p className="muted small">No retrospective notes yet. Each day's retrospective card is where they go.</p>
         ) : (
-          <ul className="review-list">
-            {r.notes.map((n) => (
+          <Folded
+            items={r.notes.map((n) => (
               <li key={n.date}>
                 <button className="review-row review-row--note" onClick={() => onOpen(n.date)}>
                   <span className="review-meta review-note-head">
@@ -165,9 +172,27 @@ function Body({
                 </button>
               </li>
             ))}
-          </ul>
+          />
         )}
       </section>
     </div>
+  );
+}
+
+/** Past this many rows a list shows its first ones and a button for the rest. */
+const FOLD_AT = 8;
+
+function Folded({ items }: { items: ReactNode[] }) {
+  const [open, setOpen] = useState(false);
+  const folded = !open && items.length > FOLD_AT + 1;
+  return (
+    <>
+      <ul className="review-list">{folded ? items.slice(0, FOLD_AT) : items}</ul>
+      {folded && (
+        <button className="btn btn-ghost review-more" onClick={() => setOpen(true)}>
+          Show all {items.length}
+        </button>
+      )}
+    </>
   );
 }
