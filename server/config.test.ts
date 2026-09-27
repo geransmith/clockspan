@@ -88,6 +88,35 @@ describe('blank values', () => {
   });
 });
 
+describe('APP_URL and OIDC_ISSUER', () => {
+  const oidc = (env: NodeJS.ProcessEnv) =>
+    loadConfig({
+      AUTH_MODE: 'oidc',
+      APP_URL: 'https://focus.example.com',
+      OIDC_ISSUER: 'https://auth.example.com/',
+      OIDC_CLIENT_ID: 'c',
+      OIDC_CLIENT_SECRET: 's',
+      ...env,
+    });
+
+  it('refuse a value that is not an http(s) URL, naming the variable', () => {
+    // Without a scheme this used to pass, then crash createApp with a bare "Invalid URL".
+    expect(() => load({ APP_URL: 'focus.example.com' })).toThrow(
+      /^APP_URL must be the app's full public URL, starting with https:\/\/ or http:\/\/ \(got "focus.example.com"\)$/,
+    );
+    expect(() => load({ APP_URL: 'ftp://focus.example.com' })).toThrow(/APP_URL must be/);
+    expect(() => oidc({ OIDC_ISSUER: 'auth.example.com' })).toThrow(
+      /^OIDC_ISSUER must be your provider's issuer URL, starting with https:\/\/ or http:\/\/ \(got "auth.example.com"\)$/,
+    );
+  });
+
+  it('keep the issuer as given, trailing slash included', () => {
+    // The issuer is an identifier the provider's tokens must match exactly; APP_URL is a base to append to.
+    expect(oidc({}).oidc?.issuer).toBe('https://auth.example.com/');
+    expect(oidc({ OIDC_ISSUER: 'http://localhost:9000/application/o/clockspan/' }).oidc?.issuer).toBe('http://localhost:9000/application/o/clockspan/');
+  });
+});
+
 describe('COOKIE_SECURE', () => {
   it('follows the APP_URL scheme unless set explicitly', () => {
     expect(load().cookieSecure).toBe(false);
