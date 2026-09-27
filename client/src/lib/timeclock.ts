@@ -3,7 +3,8 @@ import type { Punch, Settings } from '../types';
 import { PUNCH_ORDER } from './copy';
 
 export type TimeclockState = 'not-started' | 'working' | 'at-lunch' | 'on-break' | 'done';
-export type LunchStatus = 'none' | 'upcoming' | 'overdue' | 'taken';
+/** `not-needed`: the day's work fits inside the lunch window, so no lunch is planned or alarmed. */
+export type LunchStatus = 'none' | 'upcoming' | 'overdue' | 'taken' | 'not-needed';
 export type ClockOutStatus = 'none' | 'upcoming' | 'over' | 'done';
 export type SecondMealStatus = 'none' | 'upcoming' | 'overdue' | 'taken';
 
@@ -156,10 +157,16 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
   const state: TimeclockState = error ? 'working' : done ? 'done' : clockedIn ? 'working' : atLunch ? 'at-lunch' : 'on-break';
 
   const lunchBy = clockIn + settings.lunchDeadlineMinutes * MIN;
-  const lunchStatus: LunchStatus = lunchOut != null ? 'taken' : now < lunchBy ? 'upcoming' : 'overdue';
+  // A day with no more work than the lunch window has no lunch to plan: California owes none
+  // for five hours or less, and a 4 h day would otherwise show a clock-out 30 min late and ring
+  // "Take lunch now" as it ends. The day's work is the target, or what was worked once past it
+  // or done; breaks don't count, so stepping out never brings a lunch in.
+  const dayWorkSeconds = done ? workedSeconds : Math.max(workTarget, workedSeconds);
+  const lunchNeeded = dayWorkSeconds > settings.lunchDeadlineMinutes * 60;
+  const lunchStatus: LunchStatus = lunchOut != null ? 'taken' : !lunchNeeded ? 'not-needed' : now < lunchBy ? 'upcoming' : 'overdue';
 
   // Time still expected off the clock before the day can end.
-  const futureOffSeconds = lunchOut == null ? lunchSeconds : lunchIn == null && atLunch ? Math.max(0, lunchSeconds - openOffMs / 1000) : 0;
+  const futureOffSeconds = lunchOut == null ? (lunchNeeded ? lunchSeconds : 0) : lunchIn == null && atLunch ? Math.max(0, lunchSeconds - openOffMs / 1000) : 0;
 
   let clockOutAt: number | null;
   let clockOutStatus: ClockOutStatus;

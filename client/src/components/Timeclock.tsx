@@ -63,6 +63,8 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
     if (tc.lunchStatus === 'taken') {
       lunchTone = 'tile--ok';
       lunchSub = `Taken at ${formatTime(tc.lunchOut!)}`;
+    } else if (tc.lunchStatus === 'not-needed') {
+      lunchSub = 'Not needed today';
     } else if (tc.state === 'done') {
       lunchSub = 'Not taken';
     } else if (tc.lunchStatus === 'overdue') {

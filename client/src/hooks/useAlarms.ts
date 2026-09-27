@@ -44,7 +44,11 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     if (!fired.current || fired.current.date !== dateKey) fired.current = { date: dateKey, set: loadFired(dateKey) };
 
     const targets: AlarmTarget[] = [
-      { id: 'lunchBy', at: tc.lunchBy ?? 0, armed: tc.lunchBy != null && tc.lunchStatus !== 'taken' && tc.state !== 'done' },
+      {
+        id: 'lunchBy',
+        at: tc.lunchBy ?? 0,
+        armed: tc.lunchBy != null && (tc.lunchStatus === 'upcoming' || tc.lunchStatus === 'overdue') && tc.state !== 'done',
+      },
       // Clock-out is only a fixed instant while working; on a break it drifts.
       { id: 'clockOut', at: tc.clockOutAt ?? 0, armed: tc.clockOutAt != null && tc.state === 'working' && !overtimeApproved },
       { id: 'secondMeal', at: tc.secondMealBy ?? 0, armed: secondMealApplies(tc, settings, overtimeApproved) },
