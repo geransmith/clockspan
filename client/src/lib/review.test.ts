@@ -122,11 +122,11 @@ describe('reviewRange', () => {
     expect(r.prioritiesDone).toBe(2);
     expect(r.prioritiesTotal).toBe(3);
     expect(r.retrosDone).toBe(1);
-    expect(r.unplanned.map((u) => [u.date, u.session.label])).toEqual([
-      ['2026-09-15', 'Help Sam'],
-      ['2026-09-14', 'Fire drill'],
+    expect(r.unplanned.map((u) => [u.label, u.dates])).toEqual([
+      ['Help Sam', ['2026-09-15']],
+      ['Fire drill', ['2026-09-14']],
     ]);
-    expect(r.notDone).toEqual([{ date: '2026-09-14', text: 'Write the proposal', focusedSeconds: 0, addedMidDay: false }]);
+    expect(r.notDone).toEqual([{ key: 'write the proposal', text: 'Write the proposal', dates: ['2026-09-14'], focusedSeconds: 0, addedMidDay: false }]);
     expect(r.notes).toEqual([{ date: '2026-09-14', note: 'Slack ate the afternoon.', reviewedAt: d1.retroAt }]);
   });
 
@@ -134,17 +134,47 @@ describe('reviewRange', () => {
     expect(reviewRange([], settings, '2026-09-16', now).days).toBe(0);
   });
 
-  it('orders equally long unplanned sessions by date and reads a missing duration as zero', () => {
+  it('orders equally long unplanned work by date and reads a missing duration as zero', () => {
     const later = day('2026-09-15', { sessions: [session(3, '2026-09-15', at('2026-09-15', 9), 600)] });
     const earlier = day('2026-09-14', {
       sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600), session(2, '2026-09-14', at('2026-09-14', 11), 900, { durationSeconds: null })],
     });
     const r = reviewRange([later, earlier], settings, '2026-09-16', now);
-    expect(r.unplanned.map((u) => [u.date, u.session.id])).toEqual([
-      ['2026-09-14', 1],
-      ['2026-09-15', 3],
-      ['2026-09-14', 2],
+    expect(r.unplanned.map((u) => [u.label, u.seconds])).toEqual([
+      ['s1', 600],
+      ['s3', 600],
+      ['s2', 0],
     ]);
     expect(r.focusedSeconds).toBe(1200);
+  });
+
+  it('merges repeats by label or text, whatever the case and spacing', () => {
+    const mon = day('2026-09-14', {
+      priorities: [row(1, 'Review the PR'), row(2, 'Ship it', { done: true }), row(3, 'Plan next sprint')],
+      sessions: [
+        session(1, '2026-09-14', at('2026-09-14', 9), 600, { label: 'Expense receipts' }),
+        session(2, '2026-09-14', at('2026-09-14', 11), 300, { label: 'expense  receipts ' }),
+        session(3, '2026-09-14', at('2026-09-14', 13), 1500, { label: '' }),
+        session(4, '2026-09-14', at('2026-09-14', 14), 900, { priorityUid: 'uid100000000' }),
+      ],
+    });
+    const tue = day('2026-09-15', {
+      priorities: [row(1, 'Call the bank'), row(2, 'review the PR ', { addedAt: at('2026-09-15', 12) })],
+      sessions: [
+        session(5, '2026-09-15', at('2026-09-15', 9), 600, { label: 'Expense Receipts' }),
+        session(6, '2026-09-15', at('2026-09-15', 10), 1200, { priorityUid: 'uid200000000' }),
+      ],
+    });
+    const r = reviewRange([tue, mon], settings, '2026-09-16', now);
+    expect(r.unplanned).toEqual([
+      { key: 'expense receipts', label: 'Expense Receipts', seconds: 1500, sessions: 3, dates: ['2026-09-14', '2026-09-15'] },
+      { key: '', label: '', seconds: 1500, sessions: 1, dates: ['2026-09-14'] },
+    ]);
+    // Left open on two days comes first, then by date; the latest spelling wins; mid-day on either day counts.
+    expect(r.notDone).toEqual([
+      { key: 'review the pr', text: 'review the PR', dates: ['2026-09-14', '2026-09-15'], focusedSeconds: 2100, addedMidDay: true },
+      { key: 'plan next sprint', text: 'Plan next sprint', dates: ['2026-09-14'], focusedSeconds: 0, addedMidDay: false },
+      { key: 'call the bank', text: 'Call the bank', dates: ['2026-09-15'], focusedSeconds: 0, addedMidDay: false },
+    ]);
   });
 });

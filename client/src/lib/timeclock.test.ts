@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addPunchPair,
   clampToDay,
   clockOutPosition,
   computeTimeclock,
   emptyPunches,
   extraPairs,
+  nextPunchPosition,
   normalizePunches,
+  removePunchPair,
   secondMealApplies,
   targetFraction,
   timeclockForDate,
@@ -264,6 +267,50 @@ describe('punch rows', () => {
   });
 });
 
+describe('adding and removing an extra pair', () => {
+  const day = [T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 8.5 * H];
+
+  it("turns the Clock out into the new pair's Out and adds an In and a fresh Clock out", () => {
+    const next = addPunchPair(punches(day));
+    expect(next.map((p) => [p.position, p.kind, p.at])).toEqual([
+      [0, 'in', T0],
+      [1, 'out', T0 + 4 * H],
+      [2, 'in', T0 + 4.5 * H],
+      [3, 'out', T0 + 8.5 * H],
+      [4, 'in', null],
+      [5, 'out', null],
+    ]);
+    expect(extraPairs(next).map((p) => p.out.at)).toEqual([T0 + 8.5 * H]);
+    expect(clockOutPosition(next)).toBe(5);
+  });
+
+  it("hands the Out's time back to the Clock out when the pair was added by mistake", () => {
+    // Clocked out at 4:30 PM, pressed "Add extra out / in", then removed the pair.
+    expect(removePunchPair(addPunchPair(punches(day)), 3).map((p) => p.at)).toEqual(day);
+  });
+
+  it('removes a pair and renumbers the rows after it, leaving the Clock out alone', () => {
+    const next = removePunchPair(punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 6 * H, T0 + 6.5 * H, null]), 3);
+    expect(next.map((p) => [p.position, p.kind, p.at])).toEqual([
+      [0, 'in', T0],
+      [1, 'out', T0 + 4 * H],
+      [2, 'in', T0 + 4.5 * H],
+      [3, 'out', null],
+    ]);
+  });
+
+  it('keeps a Clock out that already has its own time', () => {
+    const next = removePunchPair(punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 6 * H, null, T0 + 8.5 * H]), 3);
+    expect(next.map((p) => p.at)).toEqual(day);
+  });
+
+  it('hands nothing back from an Out without a time, or to rows with no Clock out row', () => {
+    expect(removePunchPair(punches([T0, null, null, null, null, null]), 3).map((p) => p.at)).toEqual([T0, null, null, null]);
+    // Un-normalized input: the last row is an in, so there is no Clock out to fill.
+    expect(removePunchPair(punches([T0, null, null, T0 + H, null]), 3).map((p) => p.at)).toEqual([T0, null, null]);
+  });
+});
+
 describe('frozen (past day)', () => {
   it('treats a final clock-out as done even when short of the target', () => {
     const p = punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 7 * H, null]);
@@ -303,6 +350,31 @@ describe('timeclockForDate', () => {
     const r = timeclockForDate(punches([T0, null, null, T0 + 3 * H]), settings, yesterday, today, nowToday);
     expect(r.state).toBe('done');
     expect(r.clockOutAt).toBe(T0 + 3 * H);
+  });
+});
+
+describe('nextPunchPosition', () => {
+  it('walks the fixed rows in order', () => {
+    expect(nextPunchPosition(emptyPunches())).toBe(0);
+    expect(nextPunchPosition(punches([T0, null, null, null]))).toBe(1);
+    expect(nextPunchPosition(punches([T0, T0 + 4 * H, null, null]))).toBe(2);
+    expect(nextPunchPosition(punches([T0, T0 + 4 * H, T0 + 4.5 * H, null]))).toBe(3);
+    expect(nextPunchPosition(punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 8.5 * H]))).toBeNull();
+  });
+
+  it('puts a pair before lunch ahead of lunch, and one after lunch ahead of the clock out', () => {
+    // Out 1 at 10:00, before a lunch not taken yet: its In is next, not Lunch out.
+    expect(nextPunchPosition(punches([T0, null, null, T0 + 2 * H, null, null]))).toBe(4);
+    // Lunch taken, then a pair added: its Out comes before the Clock out row.
+    expect(nextPunchPosition(punches([T0, T0 + 4 * H, T0 + 4.5 * H, null, null, null]))).toBe(3);
+    // Clocked out, then "Add extra out / in": the old clock out is Out 1, so In 1 is next.
+    expect(nextPunchPosition(punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 6 * H, null, null]))).toBe(4);
+  });
+
+  it('skips rows that are missing', () => {
+    expect(nextPunchPosition([])).toBeNull();
+    expect(nextPunchPosition(punches([T0, null, null]))).toBe(1);
+    expect(nextPunchPosition(punches([T0, T0 + 4 * H, T0 + 4.5 * H]))).toBeNull();
   });
 });
 

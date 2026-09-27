@@ -47,5 +47,5 @@ export function Burst({ seed, anchor, big = false }: Props) {
 }
 
 function reducedMotion(): boolean {
-  return typeof window !== 'undefined' && 'matchMedia' in window && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }

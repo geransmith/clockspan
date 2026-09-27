@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
+import { PLANNED_SECONDS } from '../../../shared/timer.js';
 import type { Session, SessionConflict } from '../types';
 import { alert, dismissByTag, unlockAudio, warnQuietly } from '../lib/alerts';
 import { SAVE_FAILED, TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
@@ -213,7 +214,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         mutationSeq.current++;
         const elapsed = Math.floor(activeMs(cur, Date.now()) / 1000);
         // Once the plan is used up, "+5" means five more minutes from now, not from the end.
-        const next = Math.max(60, Math.max(cur.plannedSeconds, elapsed) + deltaSeconds);
+        const next = Math.max(PLANNED_SECONDS.min, Math.max(cur.plannedSeconds, elapsed) + deltaSeconds);
         if (next <= elapsed) {
           // Shrinking below what's already elapsed means "I'm done now".
           const { session } = await api.finishSession(cur.id);

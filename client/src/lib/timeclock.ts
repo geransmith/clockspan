@@ -262,6 +262,27 @@ export function extraPairs(punches: Punch[]): ExtraPair[] {
   return pairs;
 }
 
+/**
+ * The first row without a time, in the order the card shows them (clock in, pairs before
+ * lunch, lunch out and in, pairs after it, clock out): the one the next "Now" is for. Null
+ * once every row has a time.
+ */
+export function nextPunchPosition(punches: Punch[]): number | null {
+  const byPos = new Map(punches.map((p) => [p.position, p]));
+  const pairs = extraPairs(punches);
+  const pairRows = (beforeLunch: boolean) => pairs.filter((p) => p.beforeLunch === beforeLunch).flatMap((p) => [p.out, p.in]);
+  const clockOut = clockOutPosition(punches);
+  const order = [
+    byPos.get(0),
+    ...pairRows(true),
+    byPos.get(LUNCH_OUT_POSITION),
+    byPos.get(LUNCH_IN_POSITION),
+    ...pairRows(false),
+    clockOut == null ? undefined : byPos.get(clockOut),
+  ];
+  return order.find((p) => p != null && p.at == null)?.position ?? null;
+}
+
 /** Empty punch rows for a fresh day: clock in, lunch out, lunch in, clock out. */
 export function emptyPunches(): Punch[] {
   return [0, 1, 2, CLOCK_OUT_MIN_POSITION].map((position) => ({ position, kind: kindForPosition(position), at: null }));
@@ -278,4 +299,30 @@ export function normalizePunches(punches: Punch[]): Punch[] {
   const out: Punch[] = [];
   for (let i = 0; i <= max; i++) out.push({ position: i, kind: kindForPosition(i), at: byPos.get(i) ?? null });
   return out;
+}
+
+/**
+ * "Add extra out / in": two rows on the end, so the current Clock out becomes the new pair's
+ * Out (keeping its time), followed by an empty In and a fresh Clock out: "I clocked out, then
+ * came back".
+ */
+export function addPunchPair(punches: Punch[]): Punch[] {
+  const n = punches.length;
+  return [...punches, { position: n, kind: kindForPosition(n), at: null }, { position: n + 1, kind: kindForPosition(n + 1), at: null }];
+}
+
+/**
+ * The rows without the extra pair whose Out is at `outPosition`, renumbered. A pair added by
+ * mistake right after clocking out has the clock-out time in its Out and nothing in its In;
+ * removing it hands that time back to the Clock out row.
+ */
+export function removePunchPair(punches: Punch[], outPosition: number): Punch[] {
+  const out = punches.find((p) => p.position === outPosition);
+  const back = punches.find((p) => p.position === outPosition + 1);
+  const clockOutPos = clockOutPosition(punches);
+  let kept = punches.filter((p) => p.position !== outPosition && p.position !== outPosition + 1);
+  if (out?.at != null && back?.at == null && clockOutPos != null && kept.find((p) => p.position === clockOutPos)?.at == null) {
+    kept = kept.map((p) => (p.position === clockOutPos ? { ...p, at: out.at } : p));
+  }
+  return kept.map((p, i) => ({ ...p, position: i, kind: kindForPosition(i) }));
 }

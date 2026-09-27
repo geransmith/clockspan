@@ -3,10 +3,12 @@ import { DndContext, KeyboardSensor, PointerSensor, TouchSensor, closestCenter, 
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useDay } from '../hooks/useDay';
+import { useLeftOpen } from '../hooks/useLeftOpen';
 import { useSettings } from '../hooks/useSettings';
 import { warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
-import { cardTitle } from '../lib/layout';
+import { addDays, formatDateLong } from '../lib/format';
+import { CARD_TITLES } from '../lib/layout';
 import { clampToDay, timeclockForDate, type TimeclockState } from '../lib/timeclock';
 import type { CardId } from '../types';
 import { CardShell } from './CardShell';
@@ -33,6 +35,8 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
   const { day, store } = useDay(date);
   const isToday = date === today;
   const tc = useMemo(() => (day ? timeclockForDate(day.punches, settings, date, today, now) : null), [day, settings, date, today, now]);
+  // Today's list with nothing written yet offers what the last planned day left unticked.
+  const { leftOpen, dismiss: dismissLeftOpen } = useLeftOpen(today, isToday && day != null && !day.priorities.some((p) => p.text.trim()));
 
   const layout = settings.layout;
   const visible = layout.filter((l) => l.visible);
@@ -105,7 +109,20 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
           />
         );
       case 'priorities':
-        return <Priorities key={date} priorities={day.priorities} onChange={(p) => void store.setPriorities(date, p)} />;
+        return (
+          <Priorities
+            key={date}
+            priorities={day.priorities}
+            onChange={(p) => void store.setPriorities(date, p)}
+            leftOpen={
+              leftOpen && {
+                from: leftOpen.date === addDays(today, -1) ? 'yesterday' : formatDateLong(leftOpen.date),
+                rows: leftOpen.rows,
+                dismiss: dismissLeftOpen,
+              }
+            }
+          />
+        );
       case 'timer':
         return <FocusTimer date={date} isToday={isToday} priorities={day.priorities} onAddPriority={(text) => store.addPriority(date, text)} />;
       case 'log':
@@ -150,7 +167,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
           <span className="muted">Hidden:</span>
           {hidden.map((l) => (
             <button key={l.id} className="chip" onClick={() => setVisible(l.id, true)}>
-              {cardTitle(l.id)} <span className="chip-action">Show</span>
+              {CARD_TITLES[l.id]} <span className="chip-action">Show</span>
             </button>
           ))}
         </div>
@@ -184,7 +201,7 @@ function SortableCard({
   return (
     <div ref={setNodeRef} style={style} className="sortable" id={`card-${id}`}>
       <CardShell
-        title={cardTitle(id)}
+        title={CARD_TITLES[id]}
         aside={aside}
         customize={customize ? { handleProps: { ...attributes, ...listeners }, onHide, onMove, canUp, canDown } : undefined}
       >

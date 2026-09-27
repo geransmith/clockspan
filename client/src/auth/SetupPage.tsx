@@ -1,6 +1,6 @@
 import { useState, type SubmitEvent } from 'react';
 import * as api from '../api';
-import type { AuthInfo } from '../types';
+import { PASSWORD_LENGTH, type AuthInfo } from '../types';
 
 interface Props {
   onDone: () => Promise<AuthInfo | null>;
@@ -51,7 +51,7 @@ export function SetupPage({ onDone, hint }: Props) {
             autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            minLength={8}
+            minLength={PASSWORD_LENGTH.min}
             required
           />
         </label>
@@ -63,7 +63,7 @@ export function SetupPage({ onDone, hint }: Props) {
             autoComplete="new-password"
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
-            minLength={8}
+            minLength={PASSWORD_LENGTH.min}
             required
           />
         </label>

@@ -3,17 +3,14 @@ import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { dateParam, ensureDay, requireDate, sessionRowToJson, UID_RE, type SessionRow } from './shared.js';
 import { LIMITS, type OkResponse, type RunningResponse, type SessionConflict, type SessionResponse } from '../../shared/api.js';
-import { plannedEndAt } from '../../shared/timer.js';
-
-const MIN_PLANNED = 60;
-const MAX_PLANNED = 8 * 3600;
+import { PLANNED_SECONDS, plannedEndAt } from '../../shared/timer.js';
 
 type OwnedSession = SessionRow & { date: string };
 
 /** A whole number of seconds within the timer's range, or the message to send back. */
 function parsePlannedSeconds(raw: unknown): { seconds: number } | { error: string } {
-  if (typeof raw === 'number' && Number.isInteger(raw) && raw >= MIN_PLANNED && raw <= MAX_PLANNED) return { seconds: raw };
-  return { error: `plannedSeconds must be between ${MIN_PLANNED} and ${MAX_PLANNED}.` };
+  if (typeof raw === 'number' && Number.isInteger(raw) && raw >= PLANNED_SECONDS.min && raw <= PLANNED_SECONDS.max) return { seconds: raw };
+  return { error: `plannedSeconds must be between ${PLANNED_SECONDS.min} and ${PLANNED_SECONDS.max}.` };
 }
 
 /**

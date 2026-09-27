@@ -1,4 +1,4 @@
-import type { Day, Session } from '../types';
+import type { Day } from '../types';
 import { addDays, addMonths, formatDateSpan, formatMonth, parseDateKey, startOfMonth, startOfQuarter, startOfWeek } from './format';
 import { reviewDay } from './retro';
 import { timeclockForDate, type TimeclockSettings } from './timeclock';
@@ -51,15 +51,28 @@ export function periodOffset(kind: PeriodKind, today: string, date: string): num
   return Math.max(0, (ty - dy) * 4 + Math.floor((tm - 1) / 3) - Math.floor((dm - 1) / 3));
 }
 
+/**
+ * Sessions that weren't for a priority, merged by label (ignoring case and spacing) so a
+ * chore that keeps coming back reads as one row with its total. `label` is the latest
+ * spelling, '' for untitled sessions.
+ */
 export interface UnplannedWork {
-  date: string;
-  session: Session;
+  key: string;
+  label: string;
+  seconds: number;
+  sessions: number;
+  /** The distinct days it happened on, oldest first. */
+  dates: string[];
 }
 
+/** A priority left unticked, merged across the days it was written on the same way. */
 export interface UndoneGoal {
-  date: string;
+  key: string;
   text: string;
+  /** The distinct days it was left open on, oldest first. */
+  dates: string[];
   focusedSeconds: number;
+  /** Added mid-day on any of those days. */
   addedMidDay: boolean;
 }
 
@@ -73,9 +86,9 @@ export interface RangeReview {
   prioritiesDone: number;
   prioritiesTotal: number;
   retrosDone: number;
-  /** Sessions that weren't for a priority, longest first: where the time went instead. */
+  /** Off-plan work by label, most time first: where the time went instead. */
   unplanned: UnplannedWork[];
-  /** Priorities never ticked, in date order. */
+  /** Priorities never ticked, the ones left open on the most days first, then by date. */
   notDone: UndoneGoal[];
   /** Each day's "why", in date order. */
   notes: { date: string; note: string; reviewedAt: number | null }[];
@@ -99,6 +112,8 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
     notDone: [],
     notes: [],
   };
+  const unplanned = new Map<string, UnplannedWork>();
+  const notDone = new Map<string, UndoneGoal>();
   for (const day of [...days].sort((a, b) => a.date.localeCompare(b.date))) {
     const tc = timeclockForDate(day.punches, settings, day.date, today, now);
     const r = reviewDay(day.priorities, day.sessions);
@@ -112,12 +127,38 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
     out.prioritiesDone += r.done;
     out.prioritiesTotal += r.total;
     if (day.retroAt != null) out.retrosDone++;
-    for (const session of r.unplanned) out.unplanned.push({ date: day.date, session });
+    for (const session of r.unplanned) {
+      const key = groupKey(session.label);
+      let g = unplanned.get(key);
+      if (!g) unplanned.set(key, (g = { key, label: '', seconds: 0, sessions: 0, dates: [] }));
+      g.label = session.label.trim();
+      g.seconds += session.durationSeconds ?? 0;
+      g.sessions++;
+      addDate(g.dates, day.date);
+    }
     for (const p of r.planned) {
-      if (!p.priority.done) out.notDone.push({ date: day.date, text: p.priority.text, focusedSeconds: p.focusedSeconds, addedMidDay: p.addedMidDay });
+      if (p.priority.done) continue;
+      const key = groupKey(p.priority.text);
+      let g = notDone.get(key);
+      if (!g) notDone.set(key, (g = { key, text: '', dates: [], focusedSeconds: 0, addedMidDay: false }));
+      g.text = p.priority.text.trim();
+      g.focusedSeconds += p.focusedSeconds;
+      g.addedMidDay ||= p.addedMidDay;
+      addDate(g.dates, day.date);
     }
     if (day.retroNote.trim()) out.notes.push({ date: day.date, note: day.retroNote, reviewedAt: day.retroAt });
   }
-  out.unplanned.sort((a, b) => (b.session.durationSeconds ?? 0) - (a.session.durationSeconds ?? 0) || a.date.localeCompare(b.date));
+  out.unplanned = [...unplanned.values()].sort((a, b) => b.seconds - a.seconds || a.dates[0]!.localeCompare(b.dates[0]!));
+  out.notDone = [...notDone.values()].sort((a, b) => b.dates.length - a.dates.length || a.dates[0]!.localeCompare(b.dates[0]!));
   return out;
+}
+
+/** The same text typed on two days, whatever its case or spacing. */
+function groupKey(text: string): string {
+  return text.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/** Days are walked oldest first, so a new day is always the last one. */
+function addDate(dates: string[], date: string): void {
+  if (dates[dates.length - 1] !== date) dates.push(date);
 }
