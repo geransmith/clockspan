@@ -81,6 +81,12 @@ export function formatDuration(seconds: number): string {
   return `${h}h ${pad(m)}m`;
 }
 
+/** "7:39": hours and minutes on one line, for a cell too narrow for "7h 39m". */
+export function formatHours(seconds: number): string {
+  const s = Math.abs(Math.round(seconds));
+  return `${Math.floor(s / 3600)}:${pad(Math.floor((s % 3600) / 60))}`;
+}
+
 /** "1h 12m" but rounds up so "in 1m" never reads "in 0m" while seconds remain. */
 export function formatDurationCeil(seconds: number): string {
   return formatDuration(Math.ceil(Math.abs(seconds) / 60) * 60);

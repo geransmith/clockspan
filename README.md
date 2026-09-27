@@ -37,7 +37,7 @@
   <img src="docs/screenshots/review.png" width="300" alt="History → Review → Month: days and hours worked, focused time on and off plan, what went off the plan, what never got done, and each day's note">
 </p>
 
-**History.** A month calendar with each day's hours on it (or its stickers); step back as far as your data goes. Tap a day for its worked, focused and priorities numbers and its note, then **Open day** or **Review this week**.
+**History.** A month calendar with each day's hours on it and a thin bar for how much of the work day that was, green once the target was met (or its stickers instead); step back as far as your data goes. Tap a day for its worked, focused and priorities numbers and its note, then **Open day** or **Review this week**.
 
 **Week / month / quarter review.** History → **Review** rolls the retrospectives up: how much focused time went off plan and to what, which priorities never got done, and every day's note. Tap a row to open that day.
 

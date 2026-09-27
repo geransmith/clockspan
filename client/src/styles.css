@@ -1658,13 +1658,37 @@ button {
   color: var(--text-2);
   line-height: 1;
 }
-/* "7h 39m" wraps at the space in a phone-width cell and sits on one line from 640px. */
+/* "7:39" rather than "7h 39m", which wrapped at the space in a phone-width cell. */
 .calendar-worked {
   font-size: 0.68rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
+  white-space: nowrap;
   color: var(--text-2);
+}
+/* How much of the work day the day covered; green once the target is met. */
+.calendar-bar {
+  margin-top: auto;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.calendar-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left;
+}
+.calendar-bar.is-met > span {
+  background: var(--ok);
+}
+/* So "10:15" stays inside a seven-column cell on a 320px screen. */
+@media (max-width: 359px) {
+  .calendar-worked {
+    font-size: 0.6rem;
+  }
 }
 /* Two stickers per line in a phone-width cell (three from 640px), whichever emoji font the browser has. */
 .sticker-row {

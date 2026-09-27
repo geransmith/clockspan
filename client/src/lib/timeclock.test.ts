@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { clampToDay, clockOutPosition, computeTimeclock, emptyPunches, extraPairs, normalizePunches, secondMealApplies, timeclockForDate } from './timeclock';
+import {
+  clampToDay,
+  clockOutPosition,
+  computeTimeclock,
+  emptyPunches,
+  extraPairs,
+  normalizePunches,
+  secondMealApplies,
+  targetFraction,
+  timeclockForDate,
+} from './timeclock';
 import type { Punch } from '../types';
 import { PUNCH_ORDER } from './copy';
 
@@ -293,5 +303,13 @@ describe('timeclockForDate', () => {
     const r = timeclockForDate(punches([T0, null, null, T0 + 3 * H]), settings, yesterday, today, nowToday);
     expect(r.state).toBe('done');
     expect(r.clockOutAt).toBe(T0 + 3 * H);
+  });
+});
+
+describe('targetFraction', () => {
+  it('is the share of the work day worked, and stays at 1 past it', () => {
+    expect(targetFraction(computeTimeclock(emptyPunches(), settings, T0))).toBe(0);
+    expect(targetFraction(computeTimeclock(punches([T0, null, null]), settings, T0 + 2 * H))).toBe(0.25);
+    expect(targetFraction(computeTimeclock(punches([T0, null, null]), settings, T0 + 10 * H))).toBe(1);
   });
 });
