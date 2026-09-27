@@ -52,6 +52,19 @@ function parseSessionTtlDays(raw: string | undefined): number {
   return n;
 }
 
+/**
+ * Both URLs reach `new URL()` later: APP_URL in the write guard, OIDC_ISSUER in discovery. A
+ * value without a scheme (`focus.example.com`) would crash the first with a bare "Invalid URL"
+ * and keep the second retrying forever, neither naming the variable. Refuse it here instead.
+ */
+function parseHttpUrl(name: string, what: string, raw: string): string {
+  const protocol = URL.parse(raw)?.protocol;
+  if (protocol !== 'https:' && protocol !== 'http:') {
+    throw new Error(`${name} must be ${what}, starting with https:// or http:// (got "${raw}")`);
+  }
+  return raw;
+}
+
 export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env): Config {
   // Blank means unset. Unraid passes every template field, empty ones included (-e 'NAME'=''),
   // and so does a compose .env line like `COOKIE_SECURE=`; left in, '' would beat the defaults.
@@ -62,7 +75,7 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env): Config {
   }
   const authMode = authModeRaw as AuthMode;
 
-  const appUrl = env.APP_URL ? env.APP_URL.replace(/\/+$/, '') : null;
+  const appUrl = env.APP_URL ? parseHttpUrl('APP_URL', "the app's full public URL", env.APP_URL).replace(/\/+$/, '') : null;
   const cookieSecure = env.COOKIE_SECURE !== undefined ? env.COOKIE_SECURE === 'true' : Boolean(appUrl && appUrl.startsWith('https://'));
 
   let oidc: Config['oidc'] = null;
@@ -76,7 +89,7 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env): Config {
       );
     }
     oidc = {
-      issuer: env.OIDC_ISSUER!,
+      issuer: parseHttpUrl('OIDC_ISSUER', "your provider's issuer URL", env.OIDC_ISSUER!),
       clientId: env.OIDC_CLIENT_ID!,
       clientSecret: env.OIDC_CLIENT_SECRET!,
       scopes: env.OIDC_SCOPES ?? 'openid profile email',
