@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startTestApp, type Client, type TestApp } from '../dev/harness.js';
 import { SESSION_COOKIE } from './session.js';
-import { LoginLimiter } from './local.js';
+import { LoginLimiter, limiterKey } from './local.js';
 import { currentUser } from './middleware.js';
 import type { Request } from 'express';
 
@@ -47,7 +47,7 @@ describe('AUTH_MODE=local', () => {
 
   it('lets only one of two racing first visitors become admin', async () => {
     const [a, b] = await Promise.all([setup(app.client()), app.client().post('/api/auth/setup', { username: 'second', password: 'also long enough' })]);
-    expect([a.status, b.status].sort()).toEqual([201, 403]);
+    expect([a.status, b.status].sort((x, y) => x - y)).toEqual([201, 403]);
     expect((await app.api.get('/api/auth/me')).body.setupRequired).toBe(false);
   });
 
@@ -92,7 +92,24 @@ describe('AUTH_MODE=local', () => {
     await setup();
     const c = app.client();
     const burst = await Promise.all(Array.from({ length: 10 }, () => c.post('/api/auth/login', { username: 'geran', password: 'wrong' })));
-    expect(burst.map((r) => r.status).sort()).toEqual([...Array<number>(5).fill(401), ...Array<number>(5).fill(429)]);
+    expect(burst.map((r) => r.status).sort((x, y) => x - y)).toEqual([...Array<number>(5).fill(401), ...Array<number>(5).fill(429)]);
+  });
+
+  it('counts an IPv6 client by its /64, so rotating through its own addresses gets no fresh attempts', async () => {
+    await app.close();
+    app = await startTestApp({ authMode: 'local', env: { TRUST_PROXY: '1' } });
+    await setup();
+    const from = (ip: string) =>
+      fetch(`${app.url}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
+        body: JSON.stringify({ username: 'geran', password: 'wrong' }),
+      }).then((r) => r.status);
+    for (let i = 1; i <= 5; i++) expect(await from(`2001:db8:1:2::${i}`)).toBe(401);
+    expect(await from('2001:db8:1:2:ffff::1')).toBe(429);
+    // The next /64 over, and an IPv4 client, are someone else.
+    expect(await from('2001:db8:1:3::1')).toBe(401);
+    expect(await from('203.0.113.9')).toBe(401);
   });
 
   it('cuts a long or odd username short in the log', async () => {
@@ -137,7 +154,7 @@ describe('AUTH_MODE=local', () => {
     const burst = await Promise.all(
       Array.from({ length: 10 }, (_, i) => app.api.post('/api/auth/password', { currentPassword: `guess ${i}`, newPassword: 'new password' })),
     );
-    expect(burst.map((r) => r.status).sort()).toEqual([...Array<number>(5).fill(400), ...Array<number>(5).fill(429)]);
+    expect(burst.map((r) => r.status).sort((x, y) => x - y)).toEqual([...Array<number>(5).fill(400), ...Array<number>(5).fill(429)]);
   });
 
   it('answers 409, not 500, when two admins add the same username at once', async () => {
@@ -146,7 +163,7 @@ describe('AUTH_MODE=local', () => {
       app.api.post('/api/auth/users', { username: 'twin', password: 'twin password' }),
       app.api.post('/api/auth/users', { username: 'twin', password: 'twin password' }),
     ]);
-    expect([a.status, b.status].sort()).toEqual([201, 409]);
+    expect([a.status, b.status].sort((x, y) => x - y)).toEqual([201, 409]);
     expect(app.db.prepare(`SELECT COUNT(*) AS n FROM users WHERE username = 'twin'`).get()).toEqual({ n: 1 });
   });
 
@@ -275,5 +292,20 @@ describe('AUTH_MODE=none', () => {
     } finally {
       await app.close();
     }
+  });
+});
+
+describe('limiterKey', () => {
+  it('keeps IPv4 as is, unwraps a mapped IPv4, and cuts IPv6 to its /64', () => {
+    expect(limiterKey('203.0.113.9')).toBe('203.0.113.9');
+    expect(limiterKey('::FFFF:203.0.113.9')).toBe('203.0.113.9');
+    expect(limiterKey('2001:0db8:0001:0002:0003:0004:0005:0006')).toBe('2001:db8:1:2::/64');
+    expect(limiterKey('2001:db8:1:2::7')).toBe('2001:db8:1:2::/64');
+    expect(limiterKey('2001:db8::')).toBe('2001:db8:0:0::/64');
+    expect(limiterKey('::1')).toBe('0:0:0:0::/64');
+    expect(limiterKey('::5:6:7:8:9:a:b')).toBe('0:5:6:7::/64');
+    expect(limiterKey('64:ff9b::192.0.2.1')).toBe('64:ff9b:0:0::/64');
+    expect(limiterKey('fe80::1%eth0')).toBe('fe80:0:0:0::/64');
+    expect(limiterKey('not an address')).toBe('not an address');
   });
 });

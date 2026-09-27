@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type SubmitEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS, type TimeFormat } from '../../../shared/settings.js';
 import { SOUND_EVENTS, SOUNDS } from '../../../shared/sounds.js';
 import * as api from '../api';
@@ -585,7 +585,7 @@ function DeleteOldDays() {
     api
       .getPruneInfo(before)
       .then((r) => !cancelled && setInfo(r))
-      .catch((err) => !cancelled && setMsg({ ok: false, text: (err as Error).message }));
+      .catch((err: unknown) => !cancelled && setMsg({ ok: false, text: (err as Error).message }));
     return () => {
       cancelled = true;
     };
@@ -645,7 +645,7 @@ function ChangePassword() {
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const submit = async (e: FormEvent) => {
+  const submit = async (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (next !== confirm) return setMsg({ ok: false, text: 'New passwords do not match.' });
     try {
@@ -659,7 +659,7 @@ function ChangePassword() {
     }
   };
   return (
-    <form className="stack" onSubmit={submit}>
+    <form className="stack" onSubmit={(e) => void submit(e)}>
       <label className="field">
         <span>Current password</span>
         <input className="input" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
@@ -699,10 +699,10 @@ function Users({ me }: { me: PublicUser }) {
     api
       .listUsers()
       .then((r) => setUsers(r.users))
-      .catch((err) => setError((err as Error).message));
+      .catch((err: unknown) => setError((err as Error).message));
   useEffect(() => void load(), []);
 
-  const add = async (e: FormEvent) => {
+  const add = async (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
     try {
@@ -745,7 +745,7 @@ function Users({ me }: { me: PublicUser }) {
           </li>
         ))}
       </ul>
-      <form className="user-add" onSubmit={add}>
+      <form className="user-add" onSubmit={(e) => void add(e)}>
         <input className="input" placeholder="Username" autoComplete="off" value={username} onChange={(e) => setUsername(e.target.value)} required />
         <input
           className="input"

@@ -28,7 +28,7 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
   app.use(express.json({ limit: '256kb' }));
 
   app.get('/api/health', (_req, res) => res.json({ ok: true } satisfies OkResponse));
-  app.use('/api', rejectCrossSiteWrites);
+  app.use('/api', rejectCrossSiteWrites(config));
 
   // Only the API reads req.user. Resolving the session for a static file would slide its
   // expiry and hand the token back in a Set-Cookie on an answer marked `public` and cacheable;

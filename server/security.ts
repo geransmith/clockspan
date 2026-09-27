@@ -32,17 +32,30 @@ const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
  * "simple" POST (a form, or fetch in no-cors mode) needs no preflight: any page the user
  * visits could finish or cancel their running timer. `same-site` is refused too, because a
  * sibling app on the same domain counts as same-site for the cookie. The app's own requests
- * are always same-origin. A request without the header (curl, Safari before 16.4) passes,
- * and SameSite is all that covers those browsers.
+ * are always same-origin. A browser without Sec-Fetch-Site (Safari before 16.4) still sends
+ * Origin on a write, so then the Origin's host must be this host: the Host header, or
+ * APP_URL's for a proxy that rewrites Host. `null` (a sandboxed frame) is never this host. A
+ * request with neither header is not a browser acting for someone (curl) and passes.
  */
-export const rejectCrossSiteWrites: RequestHandler = (req, res, next) => {
-  const site = req.get('sec-fetch-site');
-  if (!READ_METHODS.has(req.method) && (site === 'cross-site' || site === 'same-site')) {
-    res.status(403).json({ error: 'Cross-site request refused.' });
-    return;
-  }
-  next();
-};
+export function rejectCrossSiteWrites(config: Config): RequestHandler {
+  const appHost = config.appUrl ? new URL(config.appUrl).host : null;
+  const foreign = (origin: string, host: string | undefined): boolean => {
+    const from = URL.parse(origin)?.host;
+    return from === undefined || (from !== host && from !== appHost);
+  };
+  return (req, res, next) => {
+    if (!READ_METHODS.has(req.method)) {
+      const site = req.get('sec-fetch-site');
+      const origin = req.get('origin');
+      const crossSite = site ? site === 'cross-site' || site === 'same-site' : origin !== undefined && foreign(origin, req.get('host'));
+      if (crossSite) {
+        res.status(403).json({ error: 'Cross-site request refused.' });
+        return;
+      }
+    }
+    next();
+  };
+}
 
 export function securityHeaders(config: Config): RequestHandler {
   // HSTS only makes sense on https, and browsers ignore it on plain http anyway; tying it

@@ -22,7 +22,8 @@ has the user-facing description.
 - Backend: Express 5 (ESM, `NodeNext`, imports use `.js` extensions), `better-sqlite3` (native),
   `openid-client` v6 for OIDC, `cookie` for cookie parsing. Passwords: `node:crypto` scrypt (async).
 - Tests: Vitest 5. Lint: oxlint (`.oxlintrc.json`: correctness + typescript + react-hooks +
-  jsx-a11y rules, syntax level only; it parses TS itself, which is what lets TypeScript be 7). CI: `.github/workflows/ci.yml` runs
+  jsx-a11y rules, plus type-aware `typescript/*` rules such as no-floating-promises and
+  no-misused-promises, run by `oxlint-tsgolint`, which bundles TypeScript 7's checker (`options.typeAware`)). CI: `.github/workflows/ci.yml` runs
   `npm audit --audit-level=high`, typecheck, lint, test, build on every PR and push, and on a PR also builds and boots the image (`image-smoke`, never pushed);
   on `main` it builds, boots (the same `scripts/smoke-image.sh`) and then publishes the `edge`
   image, and a commit that changed
@@ -52,7 +53,8 @@ server/                 Express API → dist/server (tsc)
   app.ts                createApp(): trust proxy, securityHeaders, /api/health, resolveUser, auth
                         routers, data routers behind requireAuth, static dist/client + SPA fallback
   security.ts           the ONLY place response headers (CSP, nosniff, frame, referrer, HSTS, no-store on /api) are set;
-                        also rejectCrossSiteWrites (403 for a non-GET /api request marked Sec-Fetch-Site cross-site/same-site)
+                        also rejectCrossSiteWrites(config) (403 for a non-GET /api request marked Sec-Fetch-Site cross-site/same-site,
+                        or, without that header, whose Origin is not this host or APP_URL's)
   config.ts             env parsing; throws with a clear message on bad/missing config
   db.ts                 open + pragmas (WAL, foreign_keys), append-only MIGRATIONS, default user
   retention.ts          old-day cleanup: cutoffKey, countDays, pruneDays, runRetention (all users,
@@ -270,8 +272,10 @@ repo or the session scratchpad.
   (`resolveUser` is mounted there), so a static answer, which is publicly cacheable, never
   carries a `Set-Cookie`. `rejectCrossSiteWrites` (also in `security.ts`, mounted on `/api`
   before `resolveUser`) refuses any non-GET request the browser marks `Sec-Fetch-Site:
-  cross-site` or `same-site`: under `AUTH_MODE=none` there is no cookie for SameSite to hold
-  back, and a body-less POST (finish, cancel) needs no preflight. Keep write routes under
+  cross-site` or `same-site`, and, from a browser that sends no `Sec-Fetch-Site` (Safari
+  before 16.4), one whose `Origin` host is neither the `Host` header nor `APP_URL`'s: under
+  `AUTH_MODE=none` there is no cookie for SameSite to hold back, and a body-less POST
+  (finish, cancel) needs no preflight. Keep write routes under
   `/api` so it covers them. Never interpolate request data or an error message
   into HTML without `escapeHtml` (see `auth/oidc.ts`). Password hashing is async
   (`scrypt`, never `scryptSync`); login verifies against `DUMMY_HASH` when the user is unknown.
@@ -597,6 +601,8 @@ Prove a change at the cheapest level that can show it, and stop there:
   is left alone (`.prettierignore`): the docs have hand-laid tables and wrapping.
 - oxlint ignores a misspelled rule name without a word. After editing `.oxlintrc.json`, check
   `npx oxlint --print-config` lists what you meant, and that a deliberately bad snippet is caught.
+  A promise that is deliberately not awaited is written `void p` (no-floating-promises), and an
+  async handler passed to JSX or a timer is wrapped: `onSubmit={(e) => void submit(e)}`.
 - GitHub starts no workflow for an event `GITHUB_TOKEN` caused (except `workflow_dispatch` and
   `repository_dispatch`). A push, merge, tag or release a workflow makes with it runs nothing
   downstream: that is why the release job's tag starts no second run. A workflow step that

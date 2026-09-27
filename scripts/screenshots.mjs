@@ -280,7 +280,7 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(`[screenshots] ${err.message}`);
+main().catch((/** @type {unknown} */ err) => {
+  console.error(`[screenshots] ${err instanceof Error ? err.message : String(err)}`);
   process.exit(1);
 });

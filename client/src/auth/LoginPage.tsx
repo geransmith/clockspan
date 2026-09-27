@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type SubmitEvent } from 'react';
 import * as api from '../api';
 import { HTTPS_ONLY } from '../lib/copy';
 import type { AuthInfo } from '../types';
@@ -16,7 +16,7 @@ export function LoginPage({ onDone, hint }: GateProps) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const submit = async (e: FormEvent) => {
+  const submit = async (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
@@ -34,7 +34,7 @@ export function LoginPage({ onDone, hint }: GateProps) {
 
   return (
     <div className="gate">
-      <form className="gate-card" onSubmit={submit}>
+      <form className="gate-card" onSubmit={(e) => void submit(e)}>
         <h1>Clockspan</h1>
         {hint && <p className="error">{hint}</p>}
         <label className="field">
