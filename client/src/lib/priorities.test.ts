@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { COMPLETE_WARNINGS, GENTLE_WARNINGS, PROGRESS_WARNINGS } from './copy';
-import { editPriority, MAX_PRIORITIES, newUid, padPriorities, pickWarning, placePriority, removePriority, warnThreshold, warningKind } from './priorities';
-import type { Priority } from '../types';
+import {
+  carryOver,
+  editPriority,
+  leftOpen,
+  MAX_PRIORITIES,
+  newUid,
+  padPriorities,
+  pickWarning,
+  placePriority,
+  removePriority,
+  warnThreshold,
+  warningKind,
+} from './priorities';
+import type { Day, Priority } from '../types';
 
 const row = (position: number, text: string, extra: Partial<Priority> = {}): Priority => ({ position, text, done: false, uid: null, addedAt: null, ...extra });
 
@@ -122,5 +134,62 @@ describe('placePriority', () => {
   it('refuses when the sheet is full', () => {
     const rows = Array.from({ length: MAX_PRIORITIES }, (_, i) => row(i + 1, `p${i + 1}`));
     expect(placePriority(rows, 3, 'One more', 'abcdef123456', 100)).toBeNull();
+  });
+});
+
+const day = (date: string, priorities: Priority[]): Day => ({
+  date,
+  punches: [],
+  priorities,
+  overtimeApproved: false,
+  retroNote: '',
+  retroAt: null,
+  sessions: [],
+});
+
+describe('leftOpen', () => {
+  it('takes the latest day that had a plan and returns its unticked rows in order', () => {
+    const days = [
+      day('2026-09-24', [row(1, 'Old thing')]),
+      day('2026-09-25', [row(3, 'Call the bank'), row(1, 'Ship it', { done: true }), row(2, 'Review the PR'), row(4, '  ')]),
+      // A later day with nothing written doesn't count as a plan.
+      day('2026-09-26', [row(1, '')]),
+    ];
+    expect(leftOpen(days)).toEqual({ date: '2026-09-25', rows: [row(2, 'Review the PR'), row(3, 'Call the bank')] });
+  });
+
+  it('finds the latest day whatever order the days come in', () => {
+    expect(leftOpen([day('2026-09-25', [row(1, 'Newer')]), day('2026-09-24', [row(1, 'Older')])])?.date).toBe('2026-09-25');
+  });
+
+  it('is null when no day had a plan or the last plan was finished', () => {
+    expect(leftOpen([])).toBeNull();
+    expect(leftOpen([day('2026-09-25', [])])).toBeNull();
+    expect(leftOpen([day('2026-09-24', [row(1, 'Open')]), day('2026-09-25', [row(1, 'Done', { done: true })])])).toBeNull();
+  });
+});
+
+describe('carryOver', () => {
+  it('puts the rows on top as new, unticked rows stamped now, padded to the count', () => {
+    const out = carryOver([row(2, 'Review the PR', { uid: 'aaaaaaaaaaaa', addedAt: 1 }), row(3, 'Call the bank')], 3, 500);
+    expect(out.map((p) => [p.position, p.text, p.done, p.addedAt])).toEqual([
+      [1, 'Review the PR', false, 500],
+      [2, 'Call the bank', false, 500],
+      [3, '', false, null],
+    ]);
+    expect(out[0]!.uid).toMatch(/^[0-9a-f]{12}$/);
+    expect(out[0]!.uid).not.toBe('aaaaaaaaaaaa');
+    expect(out[0]!.uid).not.toBe(out[1]!.uid);
+  });
+
+  it('stamps the current time when none is given', () => {
+    const before = Date.now();
+    expect(carryOver([row(1, 'Review the PR')], 3)[0]!.addedAt).toBeGreaterThanOrEqual(before);
+  });
+
+  it('keeps more rows than the count and stops at the cap', () => {
+    const many = Array.from({ length: MAX_PRIORITIES + 2 }, (_, i) => row(i + 1, `p${i + 1}`));
+    expect(carryOver(many.slice(0, 5), 3, 0)).toHaveLength(5);
+    expect(carryOver(many, 3, 0)).toHaveLength(MAX_PRIORITIES);
   });
 });
