@@ -1,5 +1,6 @@
 import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
+import { PASSWORD_LENGTH } from '../../shared/api.js';
 
 // Format: scrypt$<log2 N>$<salt b64>$<hash b64>. N is stored so it can be raised later
 // without invalidating existing hashes.
@@ -44,8 +45,8 @@ export const DUMMY_HASH = await hashPassword(randomBytes(16).toString('base64url
 
 export function parsePassword(raw: unknown): { password: string } | { error: string } {
   if (typeof raw !== 'string') return { error: 'Password is required.' };
-  if (raw.length < 8) return { error: 'Password must be at least 8 characters.' };
-  if (raw.length > 200) return { error: 'Password is too long.' };
+  if (raw.length < PASSWORD_LENGTH.min) return { error: `Password must be at least ${PASSWORD_LENGTH.min} characters.` };
+  if (raw.length > PASSWORD_LENGTH.max) return { error: 'Password is too long.' };
   return { password: raw };
 }
 

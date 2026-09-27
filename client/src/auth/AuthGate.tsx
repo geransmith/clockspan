@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import * as api from '../api';
-import { UNAUTHENTICATED_EVENT } from '../api';
 import type { AuthInfo } from '../types';
 import { HTTPS_ONLY } from '../lib/copy';
 import { LoginPage, OidcLoginPage } from './LoginPage';
@@ -38,8 +37,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
     const onUnauth = () => void refresh();
-    window.addEventListener(UNAUTHENTICATED_EVENT, onUnauth);
-    return () => window.removeEventListener(UNAUTHENTICATED_EVENT, onUnauth);
+    window.addEventListener(api.UNAUTHENTICATED_EVENT, onUnauth);
+    return () => window.removeEventListener(api.UNAUTHENTICATED_EVENT, onUnauth);
   }, [refresh]);
 
   const signOut = useCallback(async () => {

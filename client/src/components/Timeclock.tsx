@@ -5,7 +5,16 @@ import { useTimeFormat } from '../hooks/useTimeFormat';
 import { playSound, unlockAudio } from '../lib/alerts';
 import { pickCelebration } from '../lib/celebrate';
 import { formatDuration, formatDurationCeil, roundToMinute } from '../lib/format';
-import { clockOutPosition, extraPairs, kindForPosition, nextPunchPosition, secondMealApplies, type ExtraPair, type TimeclockResult } from '../lib/timeclock';
+import {
+  addPunchPair,
+  clockOutPosition,
+  extraPairs,
+  nextPunchPosition,
+  removePunchPair,
+  secondMealApplies,
+  type ExtraPair,
+  type TimeclockResult,
+} from '../lib/timeclock';
 import type { Punch } from '../types';
 import { Burst, BURST_MS } from './Burst';
 import { Plus, Trash, X } from './Icons';
@@ -37,24 +46,8 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
     unlockAudio();
     onChange(punches.map((p) => (p.position === position ? { ...p, at } : p)));
   };
-  // Appending two rows turns the current Clock out into the new pair's Out (keeping its time)
-  // and adds an empty In and a fresh Clock out: "I clocked out, then came back".
-  const addPair = () => {
-    const n = punches.length;
-    onChange([...punches, { position: n, kind: kindForPosition(n), at: null }, { position: n + 1, kind: kindForPosition(n + 1), at: null }]);
-  };
-  const removePair = (outPosition: number) => {
-    const out = punches.find((p) => p.position === outPosition);
-    const back = punches.find((p) => p.position === outPosition + 1);
-    const clockOutPos = clockOutPosition(punches);
-    let kept = punches.filter((p) => p.position !== outPosition && p.position !== outPosition + 1);
-    // A pair added by mistake right after clocking out has the clock-out time in its Out and
-    // nothing in its In; removing it hands that time back to the Clock out row.
-    if (out?.at != null && back?.at == null && clockOutPos != null && kept.find((p) => p.position === clockOutPos)?.at == null) {
-      kept = kept.map((p) => (p.position === clockOutPos ? { ...p, at: out.at } : p));
-    }
-    onChange(kept.map((p, i) => ({ ...p, position: i, kind: kindForPosition(i) })));
-  };
+  const addPair = () => onChange(addPunchPair(punches));
+  const removePair = (outPosition: number) => onChange(removePunchPair(punches, outPosition));
 
   // The tile turns amber once the first (largest) warning lead is reached.
   const firstLead = (id: 'lunchBy' | 'clockOut') => {
