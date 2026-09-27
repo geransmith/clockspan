@@ -36,8 +36,14 @@ export class LoginLimiter {
     else entry.count += 1;
   }
 
-  reset(ip: string): void {
-    this.attempts.delete(ip);
+  /**
+   * Takes back the attempt `fail` counted for a request that turned out to be right. The
+   * failures before it stay: if a success cleared them, anyone with an account of their own
+   * could sign in between guesses at someone else's password and never reach the limit.
+   */
+  succeed(ip: string): void {
+    const entry = this.attempts.get(ip);
+    if (entry) entry.count -= 1;
   }
 }
 
@@ -136,7 +142,8 @@ export function localAuthRouter(db: DB, config: Config): Router {
     }
     // Counted now, before the hash: the check above and this line run without yielding, so
     // each of a burst of requests sees the ones before it. Counted after the await, a burst
-    // would all pass the gate while the first was still hashing. A correct password clears it.
+    // would all pass the gate while the first was still hashing. A correct password takes its
+    // own count back.
     limiter.fail(key);
     const { username, password } = (req.body ?? {}) as { username?: unknown; password?: unknown };
     const user = typeof username === 'string' ? findLocalUser(db, username.trim()) : undefined;
@@ -148,7 +155,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
       res.status(401).json({ error: 'Incorrect username or password.' });
       return;
     }
-    limiter.reset(key);
+    limiter.succeed(key);
     createSession(db, config, res, user.id);
     console.log(`[auth] ${logName(user.username)} signed in from ${ip}`);
     res.json({ user: publicUser(user) } satisfies UserResponse);
@@ -179,7 +186,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
       res.status(400).json({ error: 'Current password is incorrect.' });
       return;
     }
-    limiter.reset(key);
+    limiter.succeed(key);
     const next = parsePassword(newPassword);
     if ('error' in next) {
       res.status(400).json({ error: next.error });
