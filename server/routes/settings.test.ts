@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { startTestApp, type TestApp } from '../dev/harness.js';
 import { ensureLocalUsers, LOCAL_USERS } from '../dev/seed.js';
-import { CARD_DEFAULT_VISIBLE, CARD_IDS, DEFAULT_SETTINGS, SETTING_BOUNDS } from '../../shared/settings.js';
+import { CARD_DEFAULT_VISIBLE, CARD_IDS, DEFAULT_SETTINGS } from '../../shared/settings.js';
 import { mergeSettings } from './settings.js';
 
 describe('/api/settings', () => {
@@ -186,16 +186,5 @@ describe('mergeSettings', () => {
       alarms: { retro: { overdueEveryMinutes: 121 } },
     });
     expect(out).toEqual(DEFAULT_SETTINGS);
-  });
-
-  it('takes each bounded field up to its shared bounds and not past them', () => {
-    for (const [key, { min, max }] of Object.entries(SETTING_BOUNDS) as [keyof typeof SETTING_BOUNDS, { min: number; max: number }][]) {
-      expect(DEFAULT_SETTINGS[key]).toBeGreaterThanOrEqual(min);
-      expect(DEFAULT_SETTINGS[key]).toBeLessThanOrEqual(max);
-      expect(mergeSettings(DEFAULT_SETTINGS, { [key]: min })[key]).toBe(min);
-      expect(mergeSettings(DEFAULT_SETTINGS, { [key]: max })[key]).toBe(max);
-      expect(mergeSettings(DEFAULT_SETTINGS, { [key]: min - 1 })[key]).toBe(DEFAULT_SETTINGS[key]);
-      expect(mergeSettings(DEFAULT_SETTINGS, { [key]: max + 1 })[key]).toBe(DEFAULT_SETTINGS[key]);
-    }
   });
 });

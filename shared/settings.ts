@@ -67,19 +67,6 @@ export interface Settings {
 /** Priority rows a day can hold; the server rejects more, the card stops offering "Add". */
 export const MAX_PRIORITIES = 20;
 
-/**
- * The range of each whole-number setting the dialog edits directly: `mergeSettings` refuses
- * anything outside it and the dialog's fields clamp to it, so the two can't drift apart.
- */
-export const SETTING_BOUNDS = {
-  workMinutes: { min: 1, max: 24 * 60 },
-  lunchDeadlineMinutes: { min: 1, max: 24 * 60 },
-  lunchMinutes: { min: 0, max: 8 * 60 },
-  secondMealAfterMinutes: { min: 1, max: 24 * 60 },
-  adjustStepMinutes: { min: 1, max: 60 },
-  priorityCount: { min: 1, max: 10 },
-} as const satisfies Partial<Record<keyof Settings, { min: number; max: number }>>;
-
 /** Bounds for "keep the last N days", per user and for the server-wide RETENTION_DAYS. */
 export const MIN_RETENTION_DAYS = 30;
 export const MAX_RETENTION_DAYS = 3650;

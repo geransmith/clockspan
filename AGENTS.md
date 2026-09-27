@@ -313,13 +313,11 @@ Never commit `data/` or `.env`.
   recorded a choice worth keeping, `mergeSettings` can read it off the old layout entry the
   way the sticker chart's `stickers` setting does.
 - **A per-user setting**: add it to the `Settings` type and `DEFAULT_SETTINGS` in
-  `shared/settings.ts` (a whole number also gets its range in `SETTING_BOUNDS` there) →
-  validate it in `mergeSettings()` (`server/routes/settings.ts`; `bounded()` reads that range)
-  → add the control to the right tab in `SettingsDialog.tsx` (Timeclock · Alarms · Sheet ·
-  Data · Account; each is a `case` in `panel()`; the Sheet tab's "History" section holds the
-  calendar's switches) using `DurationField` / `NumberField` (both take `min` / `max`: spread
-  `SETTING_BOUNDS.<key>` in; `NumberField` takes a `unit` suffix, default "min") / `Toggle`.
-  Nothing else to mirror.
+  `shared/settings.ts` → validate it in `mergeSettings()` (`server/routes/settings.ts`) → add
+  the control to the right tab in `SettingsDialog.tsx` (Timeclock · Alarms · Sheet · Data ·
+  Account; each is a `case` in `panel()`; the Sheet tab's "History" section holds the
+  calendar's switches) using `DurationField` / `NumberField` — it takes a `unit` suffix,
+  default "min" — / `Toggle`. Nothing else to mirror.
 - **A sound**: drop the clip in as `client/src/sounds/<id>.mp3` (CC0 only, MP3 so Safari can
   decode it, a couple of seconds at most) → add `{ id, label, kind: 'clip' }` to `SOUNDS` in
   `shared/sounds.ts` → add its title, author and source line to `client/src/sounds/README.md`.
