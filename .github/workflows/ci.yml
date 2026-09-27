@@ -135,10 +135,12 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.IMAGE }}
-          # Every push to main is `edge`; a version bump is also X.Y.Z, X.Y and latest.
+          # Every push to main is `edge`; a version bump is also X.Y.Z, X.Y and latest. The
+          # org.opencontainers.image.version label is the highest-priority tag, and edge (700)
+          # outranks raw (200), so without the priority below a release would be labelled edge.
           tags: |
             type=edge,branch=main
-            type=raw,value=${{ needs.check.outputs.version }},enable=${{ needs.check.outputs.release == 'true' }}
+            type=raw,value=${{ needs.check.outputs.version }},priority=900,enable=${{ needs.check.outputs.release == 'true' }}
             type=raw,value=${{ needs.check.outputs.minor }},enable=${{ needs.check.outputs.release == 'true' }}
             type=raw,value=latest,enable=${{ needs.check.outputs.release == 'true' }}
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1

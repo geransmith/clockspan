@@ -91,8 +91,9 @@ does the rest from the squash commit on `main`.
 
 **What the merge does.** `check` sees that `package.json`'s version differs from the previous
 commit's and refuses to go on if a tag for it already exists. Then the image is built once and
-pushed as `ghcr.io/geransmith/clockspan:edge`, `:X.Y.Z`, `:X.Y` and `:latest`, and the tag
-`vX.Y.Z` and the GitHub Release are created on that commit with generated notes. No tag is
+pushed as `ghcr.io/geransmith/clockspan:edge`, `:X.Y.Z`, `:X.Y` and `:latest`, labelled
+`org.opencontainers.image.version=X.Y.Z` (any other push to `main` is labelled `edge`), and the
+tag `vX.Y.Z` and the GitHub Release are created on that commit with generated notes. No tag is
 pushed by hand, and the tag CI creates starts no second run.
 
 **If the run fails.** `check` failed: nothing was published; fix the cause through a normal PR
