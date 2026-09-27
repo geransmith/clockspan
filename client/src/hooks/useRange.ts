@@ -17,7 +17,7 @@ export function useRange(from: string, to: string): { days: Day[] | null; error:
       .then((r) => {
         if (!cancelled) setFetched({ key, days: r.days });
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         if (!cancelled) setFetched({ key, error: (err as Error).message });
       });
     return () => {

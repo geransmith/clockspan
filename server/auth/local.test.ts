@@ -47,7 +47,7 @@ describe('AUTH_MODE=local', () => {
 
   it('lets only one of two racing first visitors become admin', async () => {
     const [a, b] = await Promise.all([setup(app.client()), app.client().post('/api/auth/setup', { username: 'second', password: 'also long enough' })]);
-    expect([a.status, b.status].sort()).toEqual([201, 403]);
+    expect([a.status, b.status].sort((x, y) => x - y)).toEqual([201, 403]);
     expect((await app.api.get('/api/auth/me')).body.setupRequired).toBe(false);
   });
 
@@ -92,7 +92,7 @@ describe('AUTH_MODE=local', () => {
     await setup();
     const c = app.client();
     const burst = await Promise.all(Array.from({ length: 10 }, () => c.post('/api/auth/login', { username: 'geran', password: 'wrong' })));
-    expect(burst.map((r) => r.status).sort()).toEqual([...Array<number>(5).fill(401), ...Array<number>(5).fill(429)]);
+    expect(burst.map((r) => r.status).sort((x, y) => x - y)).toEqual([...Array<number>(5).fill(401), ...Array<number>(5).fill(429)]);
   });
 
   it('cuts a long or odd username short in the log', async () => {
@@ -137,7 +137,7 @@ describe('AUTH_MODE=local', () => {
     const burst = await Promise.all(
       Array.from({ length: 10 }, (_, i) => app.api.post('/api/auth/password', { currentPassword: `guess ${i}`, newPassword: 'new password' })),
     );
-    expect(burst.map((r) => r.status).sort()).toEqual([...Array<number>(5).fill(400), ...Array<number>(5).fill(429)]);
+    expect(burst.map((r) => r.status).sort((x, y) => x - y)).toEqual([...Array<number>(5).fill(400), ...Array<number>(5).fill(429)]);
   });
 
   it('answers 409, not 500, when two admins add the same username at once', async () => {
@@ -146,7 +146,7 @@ describe('AUTH_MODE=local', () => {
       app.api.post('/api/auth/users', { username: 'twin', password: 'twin password' }),
       app.api.post('/api/auth/users', { username: 'twin', password: 'twin password' }),
     ]);
-    expect([a.status, b.status].sort()).toEqual([201, 409]);
+    expect([a.status, b.status].sort((x, y) => x - y)).toEqual([201, 409]);
     expect(app.db.prepare(`SELECT COUNT(*) AS n FROM users WHERE username = 'twin'`).get()).toEqual({ n: 1 });
   });
 

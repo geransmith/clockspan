@@ -76,11 +76,11 @@ export function DayProvider({ children }: { children: ReactNode }) {
           });
           dismissByTag('load-failed');
         })
-        .catch((err: Error) => {
+        .catch((err: unknown) => {
           // A refresh after a failed save has a copy to keep showing, and that save's banner
           // already said the server is not answering. A first load has nothing: say so.
           if (latest.current[date]) return;
-          setErrors((prev) => ({ ...prev, [date]: err.message }));
+          setErrors((prev) => ({ ...prev, [date]: (err as Error).message }));
           warnQuietly({ title: LOAD_FAILED.title, body: LOAD_FAILED.body, tag: 'load-failed' });
         })
         .finally(() => inflight.current.delete(date));
@@ -279,7 +279,7 @@ export function useRefreshDay(date: string): boolean {
       setPending(true);
       void p.finally(() => setPending(false));
     };
-    const id = setInterval(tick, 60_000);
+    const id = setInterval(() => void tick(), 60_000);
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       clearInterval(id);

@@ -32,7 +32,7 @@ export class Discovery {
 
   get(): Promise<oidc.Configuration> {
     if (!this.promise) {
-      this.promise = oidc.discovery(new URL(this.issuer), this.clientId, this.clientSecret).catch((err) => {
+      this.promise = oidc.discovery(new URL(this.issuer), this.clientId, this.clientSecret).catch((err: unknown) => {
         this.promise = null;
         throw err;
       });
