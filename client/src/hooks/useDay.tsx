@@ -21,8 +21,9 @@ interface DayStore {
   /** Fetch a day. Never rejects: a failure is recorded in `errors` and raised as a banner. */
   load: (date: string) => Promise<void>;
   /**
-   * Re-fetch a day already on screen, since another device may have changed it. Quiet: a
-   * failure keeps the copy shown, and nothing is sent while a save is out. Resolves when done.
+   * Re-fetch a day already on screen, since another device may have changed it, or one whose
+   * first load failed. Quiet: a failure keeps the copy (or the error) shown without another
+   * banner, and nothing is sent while a save is out. Resolves when done.
    */
   refresh: (date: string) => Promise<void>;
   setPunches: (date: string, punches: Punch[]) => Promise<void>;
@@ -50,6 +51,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
   // For callbacks that read before they write (addPriority): a click right after a priority
   // blur-flush must see the flushed list, not the render it closed over.
   const latest = useLatest(days);
+  const latestErrors = useLatest(errors);
   const { settings } = useSettings();
   const priorityCount = useLatest(settings.priorityCount);
   const inflight = useRef(new Map<string, Promise<void>>());
@@ -60,8 +62,10 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const mutationSeq = useRef(0);
   const saving = useRef(0);
 
-  const load = useCallback(
-    (date: string) => {
+  // `quiet` is the minute tick asking again after a failed first load: the error is already on
+  // the sheet, so another failure changes nothing on screen.
+  const fetchDay = useCallback(
+    (date: string, quiet: boolean) => {
       const existing = inflight.current.get(date);
       if (existing) return existing;
       const p = api
@@ -81,7 +85,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
           // already said the server is not answering. A first load has nothing: say so.
           if (latest.current[date]) return;
           setErrors((prev) => ({ ...prev, [date]: (err as Error).message }));
-          warnQuietly({ title: LOAD_FAILED.title, body: LOAD_FAILED.body, tag: 'load-failed' });
+          if (!quiet) warnQuietly({ title: LOAD_FAILED.title, body: LOAD_FAILED.body, tag: 'load-failed' });
         })
         .finally(() => inflight.current.delete(date));
       inflight.current.set(date, p);
@@ -89,6 +93,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
     },
     [latest],
   );
+  const load = useCallback((date: string) => fetchDay(date, false), [fetchDay]);
 
   // Every write ends here: on failure the server's copy replaces an optimistic guess (`date`
   // null when there was none) and a banner says so, since the edit vanishing on its own would
@@ -113,8 +118,10 @@ export function DayProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(
     (date: string) => {
-      // Not loaded yet (useDay's first fetch owns that), still loading, or a write is out.
-      if (!latest.current[date] || inflight.current.has(date) || saving.current > 0) return Promise.resolve();
+      if (inflight.current.has(date) || saving.current > 0) return Promise.resolve();
+      // Not loaded yet: useDay's first fetch owns that. If it failed, asking again here brings
+      // today's alarms back once the server answers, without anyone pressing Try again.
+      if (!latest.current[date]) return date in latestErrors.current ? fetchDay(date, true) : Promise.resolve();
       const seq = mutationSeq.current;
       return api
         .getDay(date)
@@ -124,7 +131,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
         })
         .catch(() => {});
     },
-    [latest],
+    [latest, latestErrors, fetchDay],
   );
 
   // A PUT replaces the whole day's punches, so two in flight could land out of order. Only
@@ -244,7 +251,10 @@ export function useDayStore(): DayStore {
   return v;
 }
 
-/** The day for a date key, loading it on first use. A failed load waits for `store.load` again (the sheet's Try again). */
+/**
+ * The day for a date key, loading it on first use. A failed load waits for `store.load` again
+ * (the sheet's Try again) or, for a day kept in step by `useRefreshDay`, its next tick.
+ */
 export function useDay(date: string): { day: Day | undefined; store: DayStore } {
   const store = useDayStore();
   const day = store.days[date];
@@ -258,8 +268,9 @@ export function useDay(date: string): { day: Day | undefined; store: DayStore } 
 /**
  * Keeps a day that is on screen in step with the server: a refresh when the tab comes back
  * (throttled, like the timer's sync; no `focus` listener, see the gotcha in AGENTS.md) and
- * every minute. Returns true while a come-back refresh is out, so the caller can wait for
- * the answer before judging alarms on a copy that may be hours old.
+ * every minute, which also asks again for a day whose first load failed. Returns true while a
+ * come-back refresh is out, so the caller can wait for the answer before judging alarms on a
+ * copy that may be hours old.
  */
 export function useRefreshDay(date: string): boolean {
   const { refresh } = useDayStore();

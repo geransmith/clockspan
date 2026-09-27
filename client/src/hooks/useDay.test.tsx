@@ -148,6 +148,27 @@ describe('refresh', () => {
   });
 });
 
+describe('refresh after a failed first load', () => {
+  it('asks again quietly: no second banner while the server is down, the day once it answers', async () => {
+    vi.mocked(api.getDay).mockRejectedValueOnce(new Error('Request failed (502)'));
+    const { result } = renderStore();
+    await settle();
+    expect(warnQuietly).toHaveBeenCalledTimes(1);
+
+    vi.mocked(api.getDay).mockRejectedValueOnce(new Error('Request failed (504)'));
+    await act(() => result.current.refresh(TODAY));
+    expect(api.getDay).toHaveBeenCalledTimes(2);
+    expect(result.current.errors[TODAY]).toBe('Request failed (504)');
+    expect(warnQuietly).toHaveBeenCalledTimes(1);
+
+    vi.mocked(api.getDay).mockResolvedValueOnce(makeDay(TODAY, { retroNote: 'back' }));
+    await act(() => result.current.refresh(TODAY));
+    expect(result.current.errors).toEqual({});
+    expect(result.current.days[TODAY]?.retroNote).toBe('back');
+    expect(dismissByTag).toHaveBeenCalledWith('load-failed');
+  });
+});
+
 describe('setPunches', () => {
   it('shows the punches at once and sends one PUT at a time, skipping to the newest', async () => {
     vi.mocked(api.getDay).mockResolvedValue(makeDay());
@@ -348,6 +369,21 @@ describe('useRefreshDay', () => {
     expect(api.getDay).toHaveBeenCalledTimes(2);
     await settle(MIN);
     expect(api.getDay).toHaveBeenCalledTimes(3);
+  });
+
+  it('loads today on the next minute after a failed first load, so its alarms come back', async () => {
+    vi.mocked(api.getDay).mockRejectedValueOnce(new Error('offline')).mockResolvedValue(makeDay());
+    const { result } = renderHook(
+      () => {
+        useRefreshDay(TODAY);
+        return useDay(TODAY).day;
+      },
+      { wrapper: SettingsAndDays },
+    );
+    await settle();
+    expect(result.current).toBeUndefined();
+    await settle(MIN);
+    expect(result.current).toBeDefined();
   });
 
   it('refreshes when the tab comes back, pending until the answer, at most every 5 s', async () => {

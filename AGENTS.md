@@ -351,7 +351,8 @@ repo or the session scratchpad.
   when the tab comes back, throttled, and every minute; `DayProvider.refresh` is skipped
   while a write is out and its answer dropped if `mutationSeq` moved), so the alarms in
   `App.tsx` judge the server's copy of the punches, not one from hours ago; they wait while a
-  come-back refresh is out.
+  come-back refresh is out. A today whose first load failed is loaded again on the same ticks
+  (no second banner), so its alarms come back with the server.
 - **Punch positions are fixed**: 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in
   pairs, and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches`
   enforces it). Kind is parity (`kindForPosition`). The math evaluates *set* punches
