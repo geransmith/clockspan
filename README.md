@@ -32,7 +32,7 @@
 **Retrospective.** The plan next to what actually happened: time logged against each priority, the sessions that weren't on the plan, rows that were added mid-day, and a note on why. A reminder fires 30 minutes before clock-out (adjustable) so you write it while you still remember.
 
 <p align="center">
-  <img src="docs/screenshots/history.png" width="300" alt="History → Days: a month calendar with the hours worked on each day, and the picked day's worked, focused and priorities under it with Open day and Review this week">
+  <img src="docs/screenshots/history.png" width="300" alt="History → Days with the sticker chart on: a month calendar with each day's stickers and their counts, and the picked day's worked, focused and priorities under it with Open day and Review this week">
   &nbsp;&nbsp;
   <img src="docs/screenshots/review.png" width="300" alt="History → Review → Month: days and hours worked, focused time on and off plan, what went off the plan, what never got done, and each day's note">
 </p>
