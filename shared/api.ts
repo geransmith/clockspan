@@ -15,6 +15,9 @@ export const LIMITS = {
   retroNote: 4000,
 } as const;
 
+/** A password's length: the server refuses one outside it, the password inputs set `minLength` from it. */
+export const PASSWORD_LENGTH = { min: 8, max: 200 } as const;
+
 /**
  * Position 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in pairs, and the last
  * row (always an odd position ≥ 3) is the final clock out.
