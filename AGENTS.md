@@ -21,7 +21,7 @@ has the user-facing description.
   `date: null`, so a sheet left open over midnight moves to the new day). No CSS framework.
 - Backend: Express 5 (ESM, `NodeNext`, imports use `.js` extensions), `better-sqlite3` (native),
   `openid-client` v6 for OIDC, `cookie` for cookie parsing. Passwords: `node:crypto` scrypt (async).
-- Tests: Vitest 5. Lint: oxlint (`.oxlintrc.json`: correctness + typescript + react-hooks +
+- Tests: Vitest 5; the hook tests run under happy-dom with `@testing-library/react`. Lint: oxlint (`.oxlintrc.json`: correctness + typescript + react-hooks +
   jsx-a11y rules, plus type-aware `typescript/*` rules such as no-floating-promises and
   no-misused-promises, run by `oxlint-tsgolint`, which bundles TypeScript 7's checker (`options.typeAware`)). CI: `.github/workflows/ci.yml` runs
   `npm audit --audit-level=high`, typecheck, lint, test, build on every PR and push, and on a PR also builds and boots the image (`image-smoke`, never pushed);
@@ -131,7 +131,10 @@ client/                 Vite root → dist/client
                         useLatest (ref that tracks a value for callbacks), useNow, useRoute,
                         useModalDialog (native <dialog>: open on mount, cancel/Escape/backdrop close),
                         useRange (keyed GET /days/range for Calendar and Review),
-                        useSettled, useTimeFormat ({ hour12, formatTime } from the setting), useWakeLock
+                        useSettled, useTimeFormat ({ hour12, formatTime } from the setting), useWakeLock;
+                        each has a *.test.ts(x) beside it (happy-dom)
+  src/test/hooks.tsx    fixtures for the hook tests: makeDay/makeSession/makeSettings, deferred(),
+                        settle(ms) (fake clock + React flush), setVisibility(), the provider stack
   src/auth/             AuthGate (mode/user → Setup | Login | OIDC button | app), pages
   src/components/       Header, RunningTimerBar, Banners, Sheet (dnd-kit) + CardShell,
                         Timeclock + TimeField (React Aria hour/minute/AM-PM segments), Priorities,
@@ -172,10 +175,10 @@ SECURITY.md             how to report a vulnerability (GitHub private reporting)
 nvm use 24
 npm install
 npm run dev            # API on :3000 (tsx watch, PORT pinned) + Vite on :5173 (proxies /api, /auth)
-npm test               # vitest: shared + client lib tests + server API tests (~1.5 s)
+npm test               # vitest: shared + client lib + hook tests + server API tests
 npm test -- server/routes/days   # one file
-npm run test:coverage  # the gate CI runs: the same suite, and every file in server/, shared/ and
-                       # client/src/lib must be 100% covered (text table of gaps + coverage/index.html)
+npm run test:coverage  # the gate CI runs: the same suite, and every file in server/, shared/,
+                       # client/src/lib and client/src/hooks must be 100% covered (text table of gaps + coverage/index.html)
 npm run typecheck      # client + server (tsconfig.server.test.json also covers dev/ and tests)
 npm run lint           # oxlint
 npm run format         # prettier --write . (format:check is what CI runs)
@@ -246,7 +249,9 @@ Ways in, cheapest first:
 - `DATA_DIR=<scratch dir>` on `npm run seed` and `npm run dev` when the current DB should survive.
 - The UI in the preview pane, for what only the UI shows.
 
-Tests: pure-function tests in `shared/` and `client/src/lib`; harness tests in
+Tests: pure-function tests in `shared/` and `client/src/lib`; hook tests beside each hook in
+`client/src/hooks` (`// @vitest-environment happy-dom`, `vi.mock('../api')`, fake timers; fixtures
+and the provider stack in `client/src/test/hooks.tsx`); harness tests in
 `server/**/*.test.ts` for routes, validation, scoping, headers, `mergeSettings`, and migrations
 (`migrate(db, upTo)` stops early so a backfill can be tested, see `server/db.test.ts`). No
 temp files: `openDatabase(':memory:')`.
@@ -500,7 +505,8 @@ repo or the session scratchpad.
 
 Prove a change at the cheapest level that can show it, and stop there:
 
-1. Pure functions (`shared/`, `client/src/lib`): a unit test.
+1. Pure functions (`shared/`, `client/src/lib`): a unit test. A hook (`client/src/hooks`): a
+   happy-dom test beside it, with the API mocked and fake timers for polls, retries and races.
 2. Anything in `server/`: a harness test in the router's `*.test.ts`. Route behavior,
    validation, scoping, headers, persistence and migrations are proven here, never by clicking.
 3. One-off looks at live data: `curl` against the seeded dev DB.
@@ -512,7 +518,7 @@ Prove a change at the cheapest level that can show it, and stop there:
 
 - `npm run test:coverage` green, `npm run typecheck` clean, `npm run lint` clean,
   `npm run format:check` clean. The coverage run is the gate: every file under `server/`,
-  `shared/` and `client/src/lib/` (minus the two process entrypoints and `server/dev/`) must be
+  `shared/`, `client/src/lib/` and `client/src/hooks/` (minus the two process entrypoints and `server/dev/`) must be
   100% on statements, branches, functions and lines, so new code in those trees ships with the
   tests that reach it. A branch that cannot be reached is deleted, never hidden behind a
   `v8 ignore` comment; `alerts.ts` shows how a browser-only module is tested (stub the globals).
