@@ -204,7 +204,7 @@ docker exec clockspan node dist/server/cli.js reset-password <username>
 # or locally: npm run reset-password -- <username>
 ```
 
-Login is rate-limited to 5 attempts per 15 minutes per IP, counting an IPv6 client by its /64 (set `TRUST_PROXY` behind a proxy so that's the real client IP). Changing your password signs out every other session.
+Login is rate-limited to 5 failed attempts per 15 minutes per IP, counting an IPv6 client by its /64 (set `TRUST_PROXY` behind a proxy so that's the real client IP), and to 50 failed attempts per 15 minutes per username from all addresses together. A locked account can't sign in on a new device until the 15 minutes pass; devices already signed in keep working. Changing your password signs out every other session.
 
 ### Authentik (OIDC)
 

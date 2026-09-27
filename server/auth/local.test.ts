@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startTestApp, type Client, type TestApp } from '../dev/harness.js';
 import { SESSION_COOKIE } from './session.js';
-import { LoginLimiter, limiterKey } from './local.js';
+import { LoginLimiter, MAX_ACCOUNT_FAILURES, accountKey, limiterKey } from './local.js';
 import { hashPassword } from './password.js';
 import { currentUser } from './middleware.js';
 import type { Request } from 'express';
@@ -122,6 +122,28 @@ describe('AUTH_MODE=local', () => {
     // The next /64 over, and an IPv4 client, are someone else.
     expect(await from('2001:db8:1:3::1')).toBe(401);
     expect(await from('203.0.113.9')).toBe(401);
+  });
+
+  it('caps failures per account across addresses, whatever the case or spacing of the name', { timeout: 30_000 }, async () => {
+    await app.close();
+    app = await startTestApp({ authMode: 'local', env: { TRUST_PROXY: '1' } });
+    await setup();
+    const from = (ip: string, username: string, password = 'a guess') =>
+      fetch(`${app.url}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
+        body: JSON.stringify({ username, password }),
+      });
+    // Five guesses from each of ten addresses: no address reaches its own limit.
+    const guesses = Array.from({ length: MAX_ACCOUNT_FAILURES }, (_, i) => from(`203.0.113.${Math.floor(i / 5)}`, i % 2 ? 'GERAN' : ' geran '));
+    expect(new Set((await Promise.all(guesses)).map((r) => r.status))).toEqual(new Set([401]));
+    // Now the account is locked, from a fresh address and with the right password too.
+    const locked = await from('198.51.100.1', 'geran', ADMIN.password);
+    expect(locked.status).toBe(429);
+    expect(Number(locked.headers.get('retry-after'))).toBeGreaterThan(0);
+    expect(warn).toHaveBeenCalledWith('[auth] login blocked for "geran" from 198.51.100.1: too many failures on this account');
+    // Another name from the same address is still only a wrong password.
+    expect((await from('198.51.100.1', 'nobody')).status).toBe(401);
   });
 
   it('cuts a long or odd username short in the log', async () => {
@@ -309,6 +331,14 @@ describe('LoginLimiter', () => {
     expect(limiter.check('b')).toEqual({ ok: true, retryAfterSec: 0 });
   });
 
+  it('takes its own limit, as the per-account one does', () => {
+    const limiter = new LoginLimiter(MAX_ACCOUNT_FAILURES);
+    for (let i = 0; i < MAX_ACCOUNT_FAILURES - 1; i++) limiter.fail('sam');
+    expect(limiter.check('sam').ok).toBe(true);
+    limiter.fail('sam');
+    expect(limiter.check('sam').ok).toBe(false);
+  });
+
   it('sweeps expired entries once the map grows past a thousand addresses', () => {
     vi.useFakeTimers();
     const limiter = new LoginLimiter();
@@ -336,6 +366,14 @@ describe('AUTH_MODE=none', () => {
     } finally {
       await app.close();
     }
+  });
+});
+
+describe('accountKey', () => {
+  it('counts a name whatever its case or spacing, cut to the longest valid username', () => {
+    expect(accountKey(' Sam ')).toBe('sam');
+    expect(accountKey('x'.repeat(100))).toBe('x'.repeat(40));
+    expect(accountKey(42)).toBe('');
   });
 });
 
