@@ -20,9 +20,11 @@ describe('pickCelebration', () => {
     expect(picks.size).toBeGreaterThan(15);
   });
 
-  it('has twenty of each to choose from', () => {
+  it('has twenty emoji and forty phrases to choose from, none repeated', () => {
     expect(CELEBRATION_EMOJI).toHaveLength(20);
-    expect(CELEBRATION_PHRASES).toHaveLength(20);
+    expect(CELEBRATION_PHRASES).toHaveLength(40);
+    expect(new Set(CELEBRATION_EMOJI).size).toBe(CELEBRATION_EMOJI.length);
+    expect(new Set(CELEBRATION_PHRASES).size).toBe(CELEBRATION_PHRASES.length);
   });
 });
 

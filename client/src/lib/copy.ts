@@ -15,6 +15,7 @@ export const STICKER_EMOJI = ['🐱', '🐶', '🐰', '🦊', '🐻', '🐼', '�
 /** The sticker chart before any day in its window has earned one. */
 export const STICKERS_EMPTY = 'Nothing here yet. Stickers appear as days get logged.';
 
+/** Follows "Day complete." in the Timeclock notice. One is picked per clock-out. */
 export const CELEBRATION_PHRASES = [
   'Nice work today.',
   "That's a wrap.",
@@ -36,6 +37,26 @@ export const CELEBRATION_PHRASES = [
   'Close the lid.',
   "Leave the tabs open. They'll keep.",
   'Good. Now stop.',
+  "Tomorrow's sheet starts blank.",
+  'Shut it down before you think of one more thing.',
+  "Home time, even if you're already home.",
+  'The inbox will refill overnight either way.',
+  'Go do literally anything else.',
+  'You can drop the work voice now.',
+  'Your brain can clock out too.',
+  'The rest of today is yours.',
+  'Mute the work chat on your way out.',
+  'Drink some water. You probably forgot to.',
+  'No more meetings today. Probably.',
+  'The list is closed until tomorrow.',
+  "You don't owe the day anything else.",
+  "If something's nagging you, write it down and leave it.",
+  'Stand up. Your back has been patient all day.',
+  'Eyes off the screen for a while.',
+  "Text someone who isn't a coworker.",
+  'Leave the half-done thing half done.',
+  "Put the work stuff where you can't see it.",
+  'Take the long way home, if there is one.',
 ];
 
 /** Shown when adding a priority past the threshold. One is picked per attempt. */
