@@ -6,6 +6,7 @@ import {
   formatDateShort,
   formatDuration,
   formatDurationCeil,
+  formatHours,
   formatTime,
   formatWeekday,
   resolveHour12,
@@ -46,6 +47,13 @@ describe('durations', () => {
     expect(formatDuration(45 * 60)).toBe('45m');
     expect(formatDuration(3600 + 12 * 60)).toBe('1h 12m');
     expect(formatDuration(-90)).toBe('1m');
+  });
+
+  it('writes hours and minutes on one line', () => {
+    expect(formatHours(0)).toBe('0:00');
+    expect(formatHours(45 * 60)).toBe('0:45');
+    expect(formatHours(7 * 3600 + 39 * 60 + 29)).toBe('7:39');
+    expect(formatHours(10 * 3600 + 5 * 60)).toBe('10:05');
   });
 
   it('rounds up so a countdown never reads 0m with seconds left', () => {

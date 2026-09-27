@@ -208,6 +208,11 @@ export function clampToDay(date: string, today: string, now: number): number {
   return date === today ? now : Math.min(now, endOfDay(date));
 }
 
+/** How much of the work-day target has been worked, 0 to 1. Worked plus remaining is the target until it is met. */
+export function targetFraction(tc: TimeclockResult): number {
+  return tc.workedSeconds / (tc.workedSeconds + tc.remainingSeconds);
+}
+
 /**
  * The timeclock for the sheet or a history row: today runs live; a past day is frozen at its
  * end so an unclosed clock-in doesn't count forever.
