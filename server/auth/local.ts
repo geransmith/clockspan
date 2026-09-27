@@ -8,19 +8,28 @@ import { currentUser, requireAdmin, requireAuth } from './middleware.js';
 import type { AuthInfo, OkResponse, PublicUser, UserResponse, UsersResponse } from '../../shared/api.js';
 
 const MAX_ATTEMPTS = 5;
+/**
+ * Failures one username may collect from all addresses together. The per-address limit alone
+ * leaves an attacker who holds many addresses (a /48 is 65,536 of the /64s below) bounded only
+ * by scrypt's speed. Set well above what typos add up to: someone locking an account on
+ * purpose has to keep sending failures, and devices already signed in are not affected.
+ */
+export const MAX_ACCOUNT_FAILURES = 50;
 const WINDOW_MS = 15 * 60_000;
 // Expired entries are swept once the map grows past this, so a spray of addresses can't
 // make it grow without bound.
 const SWEEP_ABOVE = 1000;
 
-/** Simple per-IP login limiter. In-memory is fine for a single-process self-hosted app. */
+/** Simple login limiter, per address or per account. In-memory is fine for a single-process self-hosted app. */
 export class LoginLimiter {
   private attempts = new Map<string, { count: number; resetAt: number }>();
+
+  constructor(private readonly maxAttempts = MAX_ATTEMPTS) {}
 
   check(ip: string): { ok: boolean; retryAfterSec: number } {
     const entry = this.attempts.get(ip);
     if (!entry || entry.resetAt <= Date.now()) return { ok: true, retryAfterSec: 0 };
-    if (entry.count >= MAX_ATTEMPTS) {
+    if (entry.count >= this.maxAttempts) {
       return { ok: false, retryAfterSec: Math.ceil((entry.resetAt - Date.now()) / 1000) };
     }
     return { ok: true, retryAfterSec: 0 };
@@ -70,6 +79,16 @@ export function limiterKey(ip: string): string {
 }
 
 /**
+ * What the per-account limit counts a sign-in under: the name as typed, whether or not it
+ * exists (a limit only on real accounts would tell a guesser which names are real), matched
+ * whatever its case like sign-in itself. Cut to the longest valid username so that one
+ * address's five attempts can't park megabytes of made-up names in the limiter.
+ */
+export function accountKey(username: unknown): string {
+  return typeof username === 'string' ? username.trim().toLowerCase().slice(0, 40) : '';
+}
+
+/**
  * A name as it goes into a log line: quoted and cut short, so whatever was typed into the
  * login form (a newline, say) cannot forge a line of its own. Every auth event is logged once
  * because, with the port on the internet, the log is how a password-guessing run or a locked
@@ -90,6 +109,7 @@ function userCount(db: DB): number {
 export function localAuthRouter(db: DB, config: Config): Router {
   const r = Router();
   const limiter = new LoginLimiter();
+  const accounts = new LoginLimiter(MAX_ACCOUNT_FAILURES);
 
   r.get('/me', (req, res) => {
     res.json({
@@ -133,19 +153,27 @@ export function localAuthRouter(db: DB, config: Config): Router {
     // Only undefined once the socket is gone, when no answer can be sent anyway.
     const ip = String(req.ip);
     const key = limiterKey(ip);
+    const { username, password } = (req.body ?? {}) as { username?: unknown; password?: unknown };
+    const account = accountKey(username);
     const gate = limiter.check(key);
-    if (!gate.ok) {
-      console.warn(`[auth] login blocked from ${ip}: too many attempts`);
-      res.setHeader('Retry-After', String(gate.retryAfterSec));
-      res.status(429).json({ error: `Too many attempts. Try again in ${Math.ceil(gate.retryAfterSec / 60)} min.` });
+    const accountGate = accounts.check(account);
+    if (!gate.ok || !accountGate.ok) {
+      const retryAfterSec = Math.max(gate.retryAfterSec, accountGate.retryAfterSec);
+      console.warn(
+        gate.ok
+          ? `[auth] login blocked for ${logName(username)} from ${ip}: too many failures on this account`
+          : `[auth] login blocked from ${ip}: too many attempts`,
+      );
+      res.setHeader('Retry-After', String(retryAfterSec));
+      res.status(429).json({ error: `Too many attempts. Try again in ${Math.ceil(retryAfterSec / 60)} min.` });
       return;
     }
-    // Counted now, before the hash: the check above and this line run without yielding, so
+    // Counted now, before the hash: the checks above and these lines run without yielding, so
     // each of a burst of requests sees the ones before it. Counted after the await, a burst
     // would all pass the gate while the first was still hashing. A correct password takes its
     // own count back.
     limiter.fail(key);
-    const { username, password } = (req.body ?? {}) as { username?: unknown; password?: unknown };
+    accounts.fail(account);
     const user = typeof username === 'string' ? findLocalUser(db, username.trim()) : undefined;
     // Always run the hash, against a dummy when the name is unknown, so timing can't tell
     // a wrong username from a wrong password.
@@ -156,6 +184,7 @@ export function localAuthRouter(db: DB, config: Config): Router {
       return;
     }
     limiter.succeed(key);
+    accounts.succeed(account);
     createSession(db, config, res, user.id);
     console.log(`[auth] ${logName(user.username)} signed in from ${ip}`);
     res.json({ user: publicUser(user) } satisfies UserResponse);
