@@ -7,6 +7,8 @@ export interface Route {
   /**
    * The date on screen, or null for today. Today is kept as null rather than as its key so a
    * sheet left open past midnight moves to the new day, the way a reload of the same URL does.
+   * A future date is today too: a day that hasn't started has nothing to punch or log, and the
+   * date picker's `max` doesn't stop a typed one.
    */
   date: string | null;
 }
@@ -16,7 +18,7 @@ function read(): Route {
   const date = params.get('date');
   return {
     view: params.get('view') === 'history' ? 'history' : 'sheet',
-    date: date && isValidDateKey(date) && date !== todayKey() ? date : null,
+    date: date && isValidDateKey(date) && date < todayKey() ? date : null,
   };
 }
 
@@ -42,7 +44,7 @@ export function useRoute(): [Route, (next: Partial<Route>) => void] {
   const navigate = useCallback(
     (next: Partial<Route>) => {
       const merged = { ...current.current, ...next };
-      if (merged.date === todayKey()) merged.date = null;
+      if (merged.date != null && merged.date >= todayKey()) merged.date = null;
       // Already there (the brand button on today's sheet): a push would add an entry Back
       // has to step through without anything changing.
       if (merged.view === current.current.view && merged.date === current.current.date) return;

@@ -110,7 +110,10 @@ export function resolveHour12(pref: TimeFormat = 'auto'): boolean {
   return new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions().hour12 !== false;
 }
 
-/** Round to the nearest minute (punch times are minute-granular in the UI). */
-export function roundToMinute(ms: number): number {
-  return Math.round(ms / 60_000) * 60_000;
+/**
+ * The start of the minute (punch times are minute-granular in the UI). Down, never to the
+ * nearest: a Now at 8:59:40 is 8:59, so a punch never lands in the future.
+ */
+export function floorToMinute(ms: number): number {
+  return Math.floor(ms / 60_000) * 60_000;
 }
