@@ -10,7 +10,7 @@ import {
   formatTime,
   formatWeekday,
   resolveHour12,
-  roundToMinute,
+  floorToMinute,
 } from './format';
 
 describe('dayName', () => {
@@ -34,10 +34,11 @@ describe('dates', () => {
     expect(short).not.toContain(formatWeekday('2026-09-16'));
   });
 
-  it('rounds an instant to the nearest minute', () => {
-    const at = new Date(2026, 8, 16, 7, 5, 29).getTime();
-    expect(roundToMinute(at)).toBe(new Date(2026, 8, 16, 7, 5).getTime());
-    expect(roundToMinute(at + 1000)).toBe(new Date(2026, 8, 16, 7, 6).getTime());
+  it('takes an instant down to the start of its minute, never later', () => {
+    const minute = new Date(2026, 8, 16, 7, 5).getTime();
+    expect(floorToMinute(minute)).toBe(minute);
+    expect(floorToMinute(minute + 59_999)).toBe(minute);
+    expect(floorToMinute(minute + 60_000)).toBe(minute + 60_000);
   });
 });
 

@@ -4,7 +4,7 @@ import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { playSound, unlockAudio } from '../lib/alerts';
 import { pickCelebration } from '../lib/celebrate';
-import { formatDuration, formatDurationCeil, roundToMinute } from '../lib/format';
+import { floorToMinute, formatDuration, formatDurationCeil } from '../lib/format';
 import {
   addPunchPair,
   clockOutPosition,
@@ -288,7 +288,7 @@ function PunchRow({
       <TimeField value={punch.at} date={date} hour12={hour12} anchorAt={anchorAt} label={label} onCommit={onSet} />
       <button
         className={`btn ${next ? 'btn-primary' : 'btn-ghost'} punch-now`}
-        onClick={() => onSet(roundToMinute(Date.now()))}
+        onClick={() => onSet(floorToMinute(Date.now()))}
         disabled={!isToday}
         title={isToday ? 'Use the current time' : 'Only available today'}
       >

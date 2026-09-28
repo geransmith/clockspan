@@ -33,6 +33,11 @@ describe('reading the URL', () => {
     visit('/?view=nope&date=2026-02-30');
     expect(render().result.current[0]).toEqual({ view: 'sheet', date: null });
   });
+
+  it('opens today for a date that has not come yet', () => {
+    visit('/?view=history&date=2030-01-01');
+    expect(render().result.current[0]).toEqual({ view: 'history', date: null });
+  });
 });
 
 describe('navigate', () => {
@@ -48,6 +53,14 @@ describe('navigate', () => {
     expect(result.current[0]).toEqual({ view: 'sheet', date: null });
     expect(window.location.search).toBe('');
     expect(push).toHaveBeenCalledTimes(3);
+  });
+
+  it('lands on today for a future date, as a typed date past the picker max would ask', () => {
+    const { result } = render();
+    act(() => result.current[1]({ date: '2026-09-25' }));
+    act(() => result.current[1]({ date: '2030-01-01' }));
+    expect(result.current[0]).toEqual({ view: 'sheet', date: null });
+    expect(window.location.search).toBe('');
   });
 
   it('pushes nothing when already there', () => {
