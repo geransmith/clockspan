@@ -1,11 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { AuthGate } from './auth/AuthGate';
 import { Banners } from './components/Banners';
 import { Header } from './components/Header';
-import { History } from './components/History';
 import { RunningTimerBar } from './components/RunningTimerBar';
 import { FinishChoice } from './components/FinishChoice';
-import { SettingsDialog } from './components/SettingsDialog';
 import { Sheet } from './components/Sheet';
 import { useAlarms } from './hooks/useAlarms';
 import { BreakProvider } from './hooks/useBreak';
@@ -19,6 +17,12 @@ import { todayKey } from './lib/format';
 import { applyTheme } from './lib/theme';
 import { computeTimeclock, daySettings } from './lib/timeclock';
 import type { CardId } from './types';
+
+// History and the settings dialog load when first opened, so the sheet's first load goes
+// without them. A chunk that fails to load (a deploy while the page was open) reloads the
+// page from main.tsx.
+const History = lazy(() => import('./components/History').then((m) => ({ default: m.History })));
+const SettingsDialog = lazy(() => import('./components/SettingsDialog').then((m) => ({ default: m.SettingsDialog })));
 
 export function App() {
   return (
@@ -108,10 +112,16 @@ function Shell() {
         {route.view === 'sheet' ? (
           <Sheet date={date} today={today} now={now} customize={customize} jumpTo={jumpTo} onJumped={onJumped} onPunchEditing={setEditingPunches} />
         ) : (
-          <History today={today} now={minute} date={date} onOpen={openDay} />
+          <Suspense fallback={<div className="sheet-loading" aria-busy="true" />}>
+            <History today={today} now={minute} date={date} onOpen={openDay} />
+          </Suspense>
         )}
       </main>
-      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && (
+        <Suspense fallback={null}>
+          <SettingsDialog onClose={() => setSettingsOpen(false)} />
+        </Suspense>
+      )}
       <FinishChoice />
     </div>
   );
