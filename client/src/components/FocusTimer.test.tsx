@@ -1,0 +1,103 @@
+// @vitest-environment happy-dom
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as api from '../api';
+import { useDay } from '../hooks/useDay';
+import { AllProviders, deferred, makeDay, makeSession, makeSettings, settle, T0, TODAY } from '../test/hooks';
+import type { Priority, SessionResponse } from '../types';
+import { FocusTimer } from './FocusTimer';
+
+vi.mock('../api');
+vi.mock('../lib/alerts');
+
+/** The card as the sheet wires it: today's priorities from the store, and the store's addPriority. */
+function Card() {
+  const { day, store } = useDay(TODAY);
+  if (!day) return null;
+  return <FocusTimer date={TODAY} isToday priorities={day.priorities} onAddPriority={(text) => store.addPriority(TODAY, text)} />;
+}
+
+async function renderCard(priorities: Priority[] = []) {
+  vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities }));
+  render(
+    <AllProviders>
+      <Card />
+    </AllProviders>,
+  );
+  await settle();
+}
+
+const start25 = () => screen.getByRole('button', { name: /^25\s*min$/ });
+const typeLabel = (text: string) => fireEvent.change(screen.getByLabelText('Session label'), { target: { value: text } });
+const alsoAdd = () => screen.queryByRole('checkbox', { name: "Also add to today's priorities" });
+const started = (session = makeSession({ label: 'Call the vendor' })): SessionResponse => ({ session });
+
+beforeEach(() => {
+  vi.useFakeTimers({ now: T0 });
+  vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
+  vi.mocked(api.getRunning).mockResolvedValue({ session: null });
+  vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve({ priorities }));
+});
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  vi.resetAllMocks();
+});
+
+describe('FocusTimer', () => {
+  it('sends one start for a second tap while the first is out', async () => {
+    const answer = deferred<SessionResponse>();
+    vi.mocked(api.startSession).mockReturnValue(answer.promise);
+    await renderCard();
+    typeLabel('Write the report');
+    fireEvent.click(start25());
+    fireEvent.click(start25());
+    await settle();
+    expect(api.startSession).toHaveBeenCalledTimes(1);
+    expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Write the report', null);
+    answer.resolve(started(makeSession({ label: 'Write the report' })));
+    await settle();
+    expect(screen.getByRole('timer')).toBeTruthy();
+  });
+
+  it('links a session to the chip that was picked', async () => {
+    vi.mocked(api.startSession).mockResolvedValue(started());
+    await renderCard([{ position: 1, text: 'Ship the fix', done: false, uid: 'abcdef123456', addedAt: T0 }]);
+    fireEvent.click(screen.getByRole('button', { name: /Ship the fix/ }));
+    // A picked row needs no "also add": it is on the plan already.
+    expect(alsoAdd()).toBeNull();
+    fireEvent.click(start25());
+    await settle();
+    expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Ship the fix', 'abcdef123456');
+  });
+
+  it('adds typed work to the plan and starts linked to the new row', async () => {
+    vi.mocked(api.startSession).mockResolvedValue(started());
+    await renderCard();
+    typeLabel('Call the vendor');
+    fireEvent.click(alsoAdd()!);
+    fireEvent.click(start25());
+    await settle();
+    const rows = vi.mocked(api.putPriorities).mock.lastCall![1];
+    expect(rows[0]).toMatchObject({ text: 'Call the vendor', done: false });
+    expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Call the vendor', rows[0]!.uid);
+  });
+
+  it('retries a failed start against the row it already added, not a second copy', async () => {
+    vi.mocked(api.startSession).mockRejectedValueOnce(new Error('The server did not answer in time.')).mockResolvedValueOnce(started());
+    await renderCard();
+    typeLabel('Call the vendor');
+    fireEvent.click(alsoAdd()!);
+    fireEvent.click(start25());
+    await settle();
+    expect(screen.getByText('The server did not answer in time.')).toBeTruthy();
+    expect(alsoAdd()).toBeNull();
+    expect(screen.getByRole('button', { name: /Call the vendor/, pressed: true })).toBeTruthy();
+
+    fireEvent.click(start25());
+    await settle();
+    expect(api.putPriorities).toHaveBeenCalledTimes(1);
+    const uid = vi.mocked(api.putPriorities).mock.lastCall![1][0]!.uid;
+    expect(vi.mocked(api.startSession).mock.calls.map((c) => c[3])).toEqual([uid, uid]);
+  });
+});
