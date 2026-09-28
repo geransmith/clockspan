@@ -130,8 +130,11 @@ Images are published to GitHub Container Registry for `linux/amd64` and `linux/a
 | Tag | What it is |
 | --- | --- |
 | `ghcr.io/geransmith/clockspan:latest` | the newest release |
+| `ghcr.io/geransmith/clockspan:X` | the newest release of one major version, e.g. `:1`: new features and fixes, never a breaking change |
 | `ghcr.io/geransmith/clockspan:X.Y.Z`, `:X.Y` | a specific release (`:X.Y` follows its patch releases) |
 | `ghcr.io/geransmith/clockspan:edge` | the latest commit on `main`; it has passed CI and nothing else |
+
+Versions follow [Semantic Versioning](https://semver.org) from 1.0.0. A major release (2.0.0) is the only kind that can need something from you, such as a changed variable; its release notes open with a *Breaking changes* section that says what to do. [CONTRIBUTING.md](CONTRIBUTING.md#releases) has the full rule.
 
 ```bash
 cp .env.example .env   # optional: sign-in mode, public URL, OIDC; without it there is no sign-in

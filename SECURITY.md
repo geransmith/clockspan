@@ -2,9 +2,9 @@
 
 ## Supported versions
 
-Fixes go into the next release only. Run the newest release (`ghcr.io/geransmith/clockspan:latest`,
-or its `X.Y.Z` tag) and update when a new one comes out; the README's Docker section has the
-commands.
+The newest release is supported. A fix ships as a patch release of the current major version,
+so `ghcr.io/geransmith/clockspan:latest` and the major tag (`:1`) both pick it up; a pinned
+`X.Y.Z` tag needs updating by hand. The README's Docker section has the commands.
 
 ## Reporting a vulnerability
 
