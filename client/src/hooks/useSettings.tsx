@@ -21,6 +21,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // Saves can overlap (two chips tapped quickly). A response only lands if nothing newer was
   // sent after it, so the first answer can't briefly undo the second optimistic change.
   const seq = useRef(0);
+  // And each goes out once the one before it has answered, failed or not: two in flight could
+  // reach the server in the other order and leave it on the older value.
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const inOrder = useCallback(<T,>(send: () => Promise<T>): Promise<T> => {
+    const next = queue.current.catch(() => {}).then(send);
+    queue.current = next;
+    return next;
+  }, []);
 
   // A failed fetch is asked again rather than settled with the defaults: `loaded` is what holds
   // the alarms and the timer's alerts, and judged against the defaults they would ring at the
@@ -56,7 +64,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       const mine = ++seq.current;
       setSettings({ ...prev, ...patch });
       try {
-        const saved = await api.putSettings(patch);
+        const saved = await inOrder(() => api.putSettings(patch));
         if (seq.current === mine) setSettings({ ...saved, layout: normalizeLayout(saved.layout) });
       } catch (err) {
         // A newer save is in flight: its answer settles the state, so don't roll it back here.
@@ -64,15 +72,15 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         throw err;
       }
     },
-    [latest],
+    [latest, inOrder],
   );
 
   // Not optimistic: the server's answer is the copy of the defaults that counts.
   const reset = useCallback(async () => {
     const mine = ++seq.current;
-    const saved = await api.resetSettings();
+    const saved = await inOrder(() => api.resetSettings());
     if (seq.current === mine) setSettings({ ...saved, layout: normalizeLayout(saved.layout) });
-  }, []);
+  }, [inOrder]);
 
   const value = useMemo(() => ({ settings, loaded, update, reset }), [settings, loaded, update, reset]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

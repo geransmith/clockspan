@@ -110,7 +110,7 @@ describe('update', () => {
     expect(result.current.settings.workMinutes).toBe(480);
   });
 
-  it('lets only the newest of two overlapping saves settle the state', async () => {
+  it('sends overlapping saves one at a time, and lets only the newest settle the state', async () => {
     vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ workMinutes: 480 }));
     const first = deferred<ReturnType<typeof makeSettings>>();
     const second = deferred<ReturnType<typeof makeSettings>>();
@@ -121,11 +121,15 @@ describe('update', () => {
     await settle();
     const b = result.current.update({ workMinutes: 520 });
     await settle();
+    // The second waits for the first, so the server takes them in the order they were made.
+    expect(api.putSettings).toHaveBeenCalledTimes(1);
+    expect(result.current.settings.workMinutes).toBe(520);
 
-    // The first answer (or failure) lands after the second was sent: it must not undo it.
+    // The first answer lands after the second change: it must not undo it.
     first.resolve(makeSettings({ workMinutes: 500 }));
     await a;
     await settle();
+    expect(api.putSettings).toHaveBeenLastCalledWith({ workMinutes: 520 });
     expect(result.current.settings.workMinutes).toBe(520);
     second.resolve(makeSettings({ workMinutes: 520 }));
     await b;
@@ -137,9 +141,11 @@ describe('update', () => {
     await settle();
     const d = result.current.update({ workMinutes: 560 });
     await settle();
+    // A failed save still lets the next one go.
     third.reject(new Error('offline'));
     await expect(c).rejects.toThrow('offline');
     await settle();
+    expect(api.putSettings).toHaveBeenLastCalledWith({ workMinutes: 560 });
     expect(result.current.settings.workMinutes).toBe(560);
     fourth.resolve(makeSettings({ workMinutes: 560 }));
     await d;
@@ -156,14 +162,19 @@ describe('reset', () => {
     await settle();
     expect(result.current.settings.workMinutes).toBe(makeSettings().workMinutes);
 
+    // A save made while the reset is out goes after it, and its answer is the one that counts.
     const reset = deferred<ReturnType<typeof makeSettings>>();
     vi.mocked(api.resetSettings).mockReturnValueOnce(reset.promise);
     vi.mocked(api.putSettings).mockResolvedValueOnce(makeSettings({ workMinutes: 450 }));
     const r = result.current.reset();
-    await result.current.update({ workMinutes: 450 });
+    const u = result.current.update({ workMinutes: 450 });
+    await settle();
+    expect(api.putSettings).not.toHaveBeenCalled();
     reset.resolve(makeSettings());
     await r;
+    await u;
     await settle();
+    expect(api.putSettings).toHaveBeenCalledWith({ workMinutes: 450 });
     expect(result.current.settings.workMinutes).toBe(450);
   });
 });

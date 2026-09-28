@@ -11,8 +11,10 @@ import { useSettings } from './useSettings';
 /**
  * The setters are optimistic and never reject: a failed save puts the server's copy back and
  * raises a banner, so a `void store.x()` call site is complete. `setPriorities` also says
- * whether it saved, for the one caller that chains on it (`addPriority`). Punch saves are
- * queued per day (one in flight, the newest waiting) so a burst of arrow keys lands in order.
+ * whether it saved, for the callers that chain on it (`addPriority`, the next-day planner).
+ * Saves reach the server in the order they were made: punches and priorities replace the whole
+ * list, so one PUT per day is in flight and only the newest waiting list follows it; the other
+ * fields of a day, and each session, queue their writes one after another.
  */
 interface DayStore {
   days: Record<string, Day>;
@@ -66,7 +68,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const { settings } = useSettings();
   const priorityCount = useLatest(settings.priorityCount);
   const inflight = useRef(new Map<string, Promise<void>>());
-  const punchQueue = useRef(new Map<string, { latest: Punch[]; inflight: boolean }>());
+  const listQueues = useRef(new Map<string, { latest: unknown; drained: Promise<boolean> }>());
+  const writeChains = useRef(new Map<string, Promise<boolean>>());
   // A refresh sent before a write and answered after it would put the older copy back, so
   // every write bumps this and a refresh answer is dropped when it has moved (the timer's
   // `mutationSeq`). `saving` counts writes in flight so no refresh is sent during one.
@@ -74,15 +77,23 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const saving = useRef(0);
 
   // `quiet` is the minute tick asking again after a failed first load: the error is already on
-  // the sheet, so another failure changes nothing on screen.
+  // the sheet, so another failure changes nothing on screen. `reload` is a failed save putting
+  // the stored day back: it asks afresh rather than wait on a GET already out, and its answer
+  // lands whatever was written since.
   const fetchDay = useCallback(
-    (date: string, quiet: boolean) => {
+    (date: string, { quiet = false, reload = false } = {}) => {
       const existing = inflight.current.get(date);
-      if (existing) return existing;
-      const p = api
+      if (existing && !reload) return existing;
+      // Otherwise a write made after this GET went out is newer than its answer (the timer's
+      // cross-device sync can ask for a day while a punch is on its way), so the answer only
+      // lands on a day with nothing written since.
+      const seq = mutationSeq.current;
+      const p: Promise<void> = api
         .getDay(date)
         .then((d) => {
-          setDays((prev) => ({ ...prev, [date]: { ...d, punches: normalizePunches(d.punches) } }));
+          if (reload || mutationSeq.current === seq || !latest.current[date]) {
+            setDays((prev) => ({ ...prev, [date]: { ...d, punches: normalizePunches(d.punches) } }));
+          }
           setErrors((prev) => {
             if (!(date in prev)) return prev;
             const next = { ...prev };
@@ -98,13 +109,15 @@ export function DayProvider({ children }: { children: ReactNode }) {
           setErrors((prev) => ({ ...prev, [date]: (err as Error).message }));
           if (!quiet) warnQuietly({ title: LOAD_FAILED.title, body: LOAD_FAILED.body, tag: 'load-failed' });
         })
-        .finally(() => inflight.current.delete(date));
+        .finally(() => {
+          if (inflight.current.get(date) === p) inflight.current.delete(date);
+        });
       inflight.current.set(date, p);
       return p;
     },
     [latest],
   );
-  const load = useCallback((date: string) => fetchDay(date, false), [fetchDay]);
+  const load = useCallback((date: string) => fetchDay(date), [fetchDay]);
 
   // Every write ends here: on failure the server's copy replaces an optimistic guess (`date`
   // null when there was none) and a banner says so, since the edit vanishing on its own would
@@ -117,14 +130,63 @@ export function DayProvider({ children }: { children: ReactNode }) {
         await run();
         return true;
       } catch {
-        if (date) void load(date);
+        if (date) void fetchDay(date, { reload: true });
         warnQuietly({ title: SAVE_FAILED.title, body: SAVE_FAILED.body, tag: 'save-failed' });
         return false;
       } finally {
         saving.current--;
       }
     },
-    [load],
+    [fetchDay],
+  );
+
+  // A PUT that replaces a whole list (punches, priorities) could land after a newer one if two
+  // were in flight. One goes out per key; the lists set meanwhile are skipped for the newest,
+  // which goes out next. A failed save drops the rest: `persist` has reloaded the day by then.
+  // Resolves to whether the newest list was saved.
+  const sendLatest = useCallback(
+    <T,>(key: string, date: string, value: T, send: (value: T) => Promise<unknown>): Promise<boolean> => {
+      const waiting = listQueues.current.get(key);
+      if (waiting) {
+        waiting.latest = value;
+        return waiting.drained;
+      }
+      const q = { latest: value as unknown, drained: Promise.resolve(true) };
+      listQueues.current.set(key, q);
+      q.drained = (async () => {
+        try {
+          let sent: unknown = q; // nothing yet: `q` is never a list
+          while (sent !== q.latest) {
+            sent = q.latest;
+            const batch = sent as T;
+            if (!(await persist(date, () => send(batch)))) return false;
+          }
+          return true;
+        } finally {
+          listQueues.current.delete(key);
+        }
+      })();
+      return q.drained;
+    },
+    [persist],
+  );
+
+  // Writes that change part of a row (overtime, the work day, the retro, a session) each go
+  // out after the one before them on the same key, so the server ends where the screen does.
+  const inOrder = useCallback(
+    (key: string, date: string | null, run: () => Promise<unknown>): Promise<boolean> => {
+      // Out from the moment it is queued: a refresh must not land between the change on
+      // screen and its PUT.
+      mutationSeq.current++;
+      saving.current++;
+      const next = (writeChains.current.get(key) ?? Promise.resolve(true)).then(() => persist(date, run)).finally(() => saving.current--);
+      writeChains.current.set(key, next);
+      void next.finally(() => {
+        if (writeChains.current.get(key) === next) writeChains.current.delete(key);
+      });
+      return next;
+    },
+    [persist],
   );
 
   const refresh = useCallback(
@@ -132,7 +194,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       if (inflight.current.has(date) || saving.current > 0) return Promise.resolve();
       // Not loaded yet: useDay's first fetch owns that. If it failed, asking again here brings
       // today's alarms back once the server answers, without anyone pressing Try again.
-      if (!latest.current[date]) return date in latestErrors.current ? fetchDay(date, true) : Promise.resolve();
+      if (!latest.current[date]) return date in latestErrors.current ? fetchDay(date, { quiet: true }) : Promise.resolve();
       const seq = mutationSeq.current;
       return api
         .getDay(date)
@@ -145,38 +207,21 @@ export function DayProvider({ children }: { children: ReactNode }) {
     [latest, latestErrors, fetchDay],
   );
 
-  // A PUT replaces the whole day's punches, so two in flight could land out of order. Only
-  // one runs per day; a newer set waits and goes out after it, and the sets in between are
-  // skipped. A failed save drops the queue: `persist` has reloaded the day by then.
   const setPunches = useCallback(
     async (date: string, punches: Punch[]) => {
       const normalized = normalizePunches(punches);
       setDays((prev) => withDay(prev, date, (d) => ({ ...d, punches: normalized })));
-      const q = punchQueue.current.get(date) ?? { latest: normalized, inflight: false };
-      q.latest = normalized;
-      punchQueue.current.set(date, q);
-      if (q.inflight) return;
-      q.inflight = true;
-      try {
-        let sent: Punch[] | null = null;
-        while (sent !== q.latest) {
-          sent = q.latest;
-          const batch = sent;
-          if (!(await persist(date, () => api.putPunches(date, batch)))) break;
-        }
-      } finally {
-        punchQueue.current.delete(date);
-      }
+      await sendLatest(`punches:${date}`, date, normalized, (p) => api.putPunches(date, p));
     },
-    [persist],
+    [sendLatest],
   );
 
   const setPriorities = useCallback(
-    async (date: string, priorities: Priority[]) => {
+    (date: string, priorities: Priority[]) => {
       setDays((prev) => withDay(prev, date, (d) => ({ ...d, priorities })));
-      return persist(date, () => api.putPriorities(date, priorities));
+      return sendLatest(`priorities:${date}`, date, priorities, (p) => api.putPriorities(date, p));
     },
-    [persist],
+    [sendLatest],
   );
 
   const addPriority = useCallback(
@@ -200,28 +245,28 @@ export function DayProvider({ children }: { children: ReactNode }) {
           retroAt: patch.done === undefined ? d.retroAt : patch.done ? (d.retroAt ?? Date.now()) : null,
         })),
       );
-      await persist(date, async () => {
+      await inOrder(`day:${date}`, date, async () => {
         const saved = await api.putRetro(date, patch);
         setDays((prev) => withDay(prev, date, (d) => ({ ...d, retroAt: saved.retroAt })));
       });
     },
-    [persist],
+    [inOrder],
   );
 
   const setOvertimeApproved = useCallback(
     async (date: string, approved: boolean) => {
       setDays((prev) => withDay(prev, date, (d) => ({ ...d, overtimeApproved: approved })));
-      await persist(date, () => api.putOvertime(date, approved));
+      await inOrder(`day:${date}`, date, () => api.putOvertime(date, approved));
     },
-    [persist],
+    [inOrder],
   );
 
   const setWorkMinutes = useCallback(
     async (date: string, minutes: number | null) => {
       setDays((prev) => withDay(prev, date, (d) => ({ ...d, workMinutes: minutes })));
-      await persist(date, () => api.putTarget(date, minutes));
+      await inOrder(`day:${date}`, date, () => api.putTarget(date, minutes));
     },
-    [persist],
+    [inOrder],
   );
 
   const applySession = useCallback((session: Session) => {
@@ -240,21 +285,21 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const removeSession = useCallback(
     async (date: string, id: number) => {
       setDays((prev) => withDay(prev, date, (d) => ({ ...d, sessions: d.sessions.filter((s) => s.id !== id) })));
-      await persist(date, () => api.deleteSession(id));
+      await inOrder(`session:${id}`, date, () => api.deleteSession(id));
     },
-    [persist],
+    [inOrder],
   );
 
   // Not optimistic (the row keeps the stored label until the PATCH answers), so nothing to
   // put back; the banner still applies: the user pressed Enter and nothing changed.
   const updateSession = useCallback(
     async (id: number, patch: { label?: string; notes?: string; priorityUid?: string | null }) => {
-      await persist(null, async () => {
+      await inOrder(`session:${id}`, null, async () => {
         const { session } = await api.patchSession(id, patch);
         applySession(session);
       });
     },
-    [applySession, persist],
+    [applySession, inOrder],
   );
 
   const value = useMemo(

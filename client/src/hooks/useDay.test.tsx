@@ -99,6 +99,64 @@ describe('load', () => {
   });
 });
 
+describe('load after a write', () => {
+  it('keeps what was written when a load sent before the write answers after it', async () => {
+    vi.mocked(api.getDay).mockResolvedValueOnce(makeDay());
+    const { result } = renderStore();
+    await settle();
+    // The timer's sync asks for the day again, and a punch goes out before it answers.
+    const stale = deferred<Day>();
+    vi.mocked(api.getDay).mockReturnValueOnce(stale.promise);
+    vi.mocked(api.putPunches).mockResolvedValue({ punches: [] });
+    let loaded!: Promise<void>;
+    act(() => {
+      loaded = result.current.load(TODAY);
+    });
+    await act(() => result.current.setPunches(TODAY, punchesAt(T0)));
+    stale.resolve(makeDay());
+    await act(() => loaded);
+    expect(result.current.days[TODAY]?.punches[0]?.at).toBe(T0);
+  });
+
+  it('still fills in a day that was not held when a write elsewhere went out meanwhile', async () => {
+    const first = deferred<Day>();
+    vi.mocked(api.getDay).mockReturnValueOnce(first.promise);
+    vi.mocked(api.patchSession).mockResolvedValue({ session: makeSession() });
+    const { result } = renderStore(null);
+    let loaded!: Promise<void>;
+    act(() => {
+      loaded = result.current.load(OTHER);
+    });
+    await act(() => result.current.updateSession(1, { label: 'Renamed' }));
+    first.resolve(makeDay(OTHER, { retroNote: 'from the server' }));
+    await act(() => loaded);
+    expect(result.current.days[OTHER]?.retroNote).toBe('from the server');
+  });
+
+  it('puts the stored day back after a failed save, without waiting on a load already out', async () => {
+    vi.mocked(api.getDay).mockResolvedValueOnce(makeDay());
+    const { result } = renderStore();
+    await settle();
+    const stale = deferred<Day>();
+    vi.mocked(api.getDay)
+      .mockReturnValueOnce(stale.promise)
+      .mockResolvedValueOnce(makeDay(TODAY, { retroNote: 'stored' }));
+    vi.mocked(api.putOvertime).mockRejectedValueOnce(new Error('offline'));
+    let loaded!: Promise<void>;
+    act(() => {
+      loaded = result.current.load(TODAY);
+    });
+    await act(() => result.current.setOvertimeApproved(TODAY, true));
+    await settle();
+    expect(api.getDay).toHaveBeenCalledTimes(3);
+    expect(result.current.days[TODAY]).toMatchObject({ overtimeApproved: false, retroNote: 'stored' });
+    // The older answer comes in last and changes nothing.
+    stale.resolve(makeDay(TODAY, { retroNote: 'older' }));
+    await act(() => loaded);
+    expect(result.current.days[TODAY]?.retroNote).toBe('stored');
+  });
+});
+
 describe('refresh', () => {
   it("adopts the server's copy of a day on screen", async () => {
     vi.mocked(api.getDay)
@@ -231,6 +289,23 @@ describe('priorities', () => {
     await act(async () => expect(await result.current.setPriorities(TODAY, [priority(1, 'Lost')])).toBe(false));
   });
 
+  it('sends one list at a time, skipping to the newest, and tells every caller it was saved', async () => {
+    vi.mocked(api.getDay).mockResolvedValue(makeDay());
+    const first = deferred<{ priorities: Priority[] }>();
+    vi.mocked(api.putPriorities).mockReturnValueOnce(first.promise).mockResolvedValue({ priorities: [] });
+    const { result } = renderStore();
+    await settle();
+    const saves: Promise<boolean>[] = [];
+    act(() => void saves.push(result.current.setPriorities(TODAY, [priority(1, 'One', { done: true })])));
+    act(() => void saves.push(result.current.setPriorities(TODAY, [priority(1, 'One', { done: true }), priority(2, 'Two')])));
+    act(() => void saves.push(result.current.setPriorities(TODAY, [priority(1, 'One', { done: true }), priority(2, 'Two', { done: true })])));
+    expect(api.putPriorities).toHaveBeenCalledTimes(1);
+    first.resolve({ priorities: [] });
+    await act(async () => expect(await Promise.all(saves)).toEqual([true, true, true]));
+    expect(api.putPriorities).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(api.putPriorities).mock.calls[1]?.[1].map((p) => p.done)).toEqual([true, true]);
+  });
+
   it('addPriority fills the first empty row and resolves to its uid', async () => {
     vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [priority(1, 'First')] }));
     vi.mocked(api.putPriorities).mockResolvedValue({ priorities: [] });
@@ -310,6 +385,29 @@ describe('per-day fields', () => {
     await settle();
     // The reload answers with the stored day, which has no length of its own in this mock.
     expect(result.current.days[TODAY]?.workMinutes).toBeNull();
+  });
+
+  it("sends a day's field changes one after another, in the order they were made", async () => {
+    vi.mocked(api.getDay).mockResolvedValue(makeDay());
+    const on = deferred<OvertimeResponse>();
+    vi.mocked(api.putOvertime).mockReturnValueOnce(on.promise).mockResolvedValueOnce({ overtimeApproved: false });
+    vi.mocked(api.putTarget).mockResolvedValueOnce({ workMinutes: 240 });
+    const { result } = renderStore();
+    await settle();
+    let done!: Promise<void>;
+    act(() => void result.current.setOvertimeApproved(TODAY, true));
+    act(() => void result.current.setOvertimeApproved(TODAY, false));
+    act(() => {
+      done = result.current.setWorkMinutes(TODAY, 240);
+    });
+    await settle();
+    expect(api.putOvertime).toHaveBeenCalledTimes(1);
+    expect(api.putTarget).not.toHaveBeenCalled();
+    on.resolve({ overtimeApproved: true });
+    await act(() => done);
+    expect(vi.mocked(api.putOvertime).mock.calls.map(([, v]) => v)).toEqual([true, false]);
+    expect(api.putTarget).toHaveBeenCalledWith(TODAY, 240);
+    expect(result.current.days[TODAY]).toMatchObject({ overtimeApproved: false, workMinutes: 240 });
   });
 
   it('setOvertimeApproved is optimistic and reloads the day when the save fails', async () => {

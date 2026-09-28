@@ -101,8 +101,8 @@ describe('SettingsDialog', () => {
   it('saves a switch through the settings provider and says so in the header', async () => {
     await renderDialog();
     fireEvent.click(screen.getByRole('switch', { name: /Show hours/, hidden: true }));
-    expect(api.putSettings).toHaveBeenCalledWith({ trackHours: false });
     await settle();
+    expect(api.putSettings).toHaveBeenCalledWith({ trackHours: false });
     expect(screen.getByRole('status', { hidden: true }).textContent).toContain(SAVE_STATUS.saved);
   });
 
@@ -111,6 +111,7 @@ describe('SettingsDialog', () => {
     await openTab('Alarms');
     const defaults = makeSettings().alarms;
     fireEvent.click(screen.getAllByRole('button', { name: '30m', hidden: true })[1]!);
+    await settle();
     expect(api.putSettings).toHaveBeenCalledWith({ alarms: { ...defaults, clockOut: { ...defaults.clockOut, leadMinutes: [30, 15, 5, 1] } } });
   });
 });
