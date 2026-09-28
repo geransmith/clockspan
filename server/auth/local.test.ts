@@ -302,7 +302,9 @@ describe('AUTH_MODE=local', () => {
     const sam = app.client();
     await sam.post('/api/auth/login', { username: 'sam', password: 'sam password' });
     await sam.post('/api/auth/password', { currentPassword: 'sam password', newPassword: 'sam chose this' });
-    expect((await sam.get('/api/auth/users')).status).toBe(403);
+    const refused = await sam.get('/api/auth/users');
+    expect(refused.status).toBe(403);
+    expect(refused.body).toEqual({ error: 'Only an admin can do that.' });
     expect((await sam.post('/api/auth/users', { username: 'eve', password: 'eve password' })).status).toBe(403);
     await sam.put('/api/days/2026-09-01/punches', { punches: [{ at: Date.UTC(2026, 8, 1, 8) }, { at: null }, { at: null }, { at: null }] });
     expect(app.db.prepare(`SELECT COUNT(*) AS n FROM days`).get()).toEqual({ n: 1 });
@@ -334,7 +336,7 @@ describe('AUTH_MODE=local', () => {
     // Only the password change is open: data routes, reads and writes, answer 403.
     const blocked = await sam.get('/api/settings');
     expect(blocked.status).toBe(403);
-    expect(blocked.body).toEqual({ error: 'password change required' });
+    expect(blocked.body).toEqual({ error: 'Choose a new password first.' });
     expect((await sam.put('/api/days/2026-09-01/punches', { punches: [] })).status).toBe(403);
     // Keeping the temporary password is not choosing one.
     expect((await sam.post('/api/auth/password', { currentPassword: 'temporary pw', newPassword: 'temporary pw' })).status).toBe(400);
@@ -371,12 +373,12 @@ describe('AUTH_MODE=local', () => {
     for (const path of ['/api/days', '/api/days/2026-09-01', '/api/sessions/running', '/api/nope']) {
       const r = await app.api.get(path);
       expect(r.status).toBe(401);
-      expect(r.body).toEqual({ error: 'unauthenticated' });
+      expect(r.body).toEqual({ error: 'Not signed in.' });
     }
     // The admin routes are not behind the data gate; they answer 401 themselves before 403.
     const r = await app.api.get('/api/auth/users');
     expect(r.status).toBe(401);
-    expect(r.body).toEqual({ error: 'unauthenticated' });
+    expect(r.body).toEqual({ error: 'Not signed in.' });
   });
 });
 

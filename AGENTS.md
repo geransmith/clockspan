@@ -200,7 +200,7 @@ Never commit `data/` or `.env`.
   nothing, and no user zone is known server-side.
 - **Old-day deletion goes through `pruneDays` (`server/retention.ts`)**, whether from the
   Data tab's button (`POST /days/prune`) or the scheduled `runRetention`. It deletes `days`
-  rows before a date key (cascades take punches, priorities, sessions), never a day with a
+  rows before a date key (cascades take punches, priorities, sessions, breaks), never a day with a
   running session, and never settings. The per-user setting `retention { enabled, days }` is
   capped by `RETENTION_DAYS` (`config.retentionDays`) via `effectiveKeepDays`; a user with no
   settings row still gets the cap. `reclaimSpace` (VACUUM + WAL checkpoint) runs after any
@@ -394,7 +394,8 @@ Never commit `data/` or `.env`.
   `computeTimeclock` → add a target in `useAlarms.ts` (`targets[]`, with an `armed` rule; put
   a rule the card also needs in a pure helper like `secondMealApplies`) → add its default
   under `alarms` in `shared/settings.ts` and the `AlarmId` union there → add an `AlarmEditor` in
-  `settings/AlarmsTab.tsx` → copy in `describeEvent()`: a `kicker` naming the alarm + rule
+  `settings/AlarmsTab.tsx` → its name in `ALARM_NAMES` (`lib/alarms.ts`; the type makes a
+  missing one an error) and copy in `describeEvent()`: a `kicker` naming the alarm + rule
   ("X alarm · 15 min warning"), a title, and a body that says where the deadline came from
   (it gets an `EventContext`; extend that if the new target needs more inputs). A banner can
   carry one `action` button (see the clock-out alarm's "Overtime approved" and the retro

@@ -139,7 +139,7 @@ describe('failures', () => {
     const lost = vi.fn();
     window.addEventListener(UNAUTHENTICATED_EVENT, lost);
     try {
-      answer(401, { error: 'unauthenticated' });
+      answer(401, { error: 'Not signed in.' });
       await expect(api.getDay(DATE)).rejects.toMatchObject({ status: 401 });
       expect(lost).toHaveBeenCalledTimes(1);
 

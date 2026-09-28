@@ -1,7 +1,7 @@
 import { Router, type RequestHandler, type Response } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
-import { dateParam, endRunningBreak, ensureDay, requireDate, sessionRowToJson, UID_RE, type SessionRow } from './shared.js';
+import { dateParam, endRunningBreak, ensureDay, findDay, requireDate, sessionRowToJson, UID_RE, type SessionRow } from './shared.js';
 import { LIMITS, type OkResponse, type RunningResponse, type SessionConflict, type SessionResponse } from '../../shared/api.js';
 import { PLANNED_SECONDS, plannedEndAt } from '../../shared/timer.js';
 
@@ -15,14 +15,15 @@ function parsePlannedSeconds(raw: unknown): { seconds: number } | { error: strin
 
 /**
  * A session's priority link: undefined = not mentioned, null = unplanned, a uid that must
- * exist on that day. Returns an error message for anything else.
+ * exist on that day (`dayId` undefined: a day not stored yet, which has none). Returns an
+ * error message for anything else.
  */
-function parsePriorityUid(db: DB, dayId: number, raw: unknown): { uid: string | null | undefined; error?: string } {
+function parsePriorityUid(db: DB, dayId: number | undefined, raw: unknown): { uid: string | null | undefined; error?: string } {
   if (raw === undefined) return { uid: undefined };
   if (raw === null) return { uid: null };
   if (typeof raw !== 'string' || !UID_RE.test(raw)) return { uid: undefined, error: 'priorityUid must be a priority id or null.' };
   const uid = raw.toLowerCase();
-  const hit = db.prepare(`SELECT 1 FROM priorities WHERE day_id = ? AND uid = ?`).get(dayId, uid);
+  const hit = dayId !== undefined && db.prepare(`SELECT 1 FROM priorities WHERE day_id = ? AND uid = ?`).get(dayId, uid);
   return hit ? { uid } : { uid: undefined, error: 'That priority is not on this day.' };
 }
 
@@ -54,10 +55,14 @@ export function sessionStartRouter(db: DB): Router {
       res.status(409).json({ error: 'A timer is already running.', session: sessionRowToJson(existing) } satisfies SessionConflict);
       return;
     }
-    const result = db.transaction((): { id: number } | { error: string } => {
+    // Checked before the day is stored, so a refused start leaves no empty day behind.
+    const link = parsePriorityUid(db, findDay(db, user.id, date)?.id, priorityUid);
+    if (link.error) {
+      res.status(400).json({ error: link.error });
+      return;
+    }
+    const id = db.transaction(() => {
       const dayId = ensureDay(db, user.id, date);
-      const link = parsePriorityUid(db, dayId, priorityUid);
-      if (link.error) return { error: link.error };
       const now = Date.now();
       // Back to work, on any device: a break still running ends here.
       endRunningBreak(db, user.id, now);
@@ -67,13 +72,9 @@ export function sessionStartRouter(db: DB): Router {
            VALUES (?, ?, ?, '', ?, ?, NULL, 'running', ?)`,
         )
         .run(dayId, user.id, typeof label === 'string' ? label.slice(0, LIMITS.sessionLabel) : '', planned.seconds, now, link.uid ?? null);
-      return { id: Number(info.lastInsertRowid) };
+      return Number(info.lastInsertRowid);
     })();
-    if ('error' in result) {
-      res.status(400).json({ error: result.error });
-      return;
-    }
-    res.status(201).json({ session: sessionRowToJson(getOwned(db, user.id, result.id)!) } satisfies SessionResponse);
+    res.status(201).json({ session: sessionRowToJson(getOwned(db, user.id, id)!) } satisfies SessionResponse);
   });
 
   return r;

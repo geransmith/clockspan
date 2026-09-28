@@ -121,6 +121,14 @@ export interface EventCopy {
   tone: 'warn' | 'danger';
 }
 
+/** The kicker's first words, naming the alarm; a new `AlarmId` without one is a type error. */
+const ALARM_NAMES: Record<AlarmId, string> = {
+  lunchBy: 'Lunch alarm',
+  clockOut: 'Clock-out alarm',
+  secondMeal: 'Second meal alarm',
+  retro: 'Retrospective',
+};
+
 /**
  * Human copy for an event. A chime on its own just says "something happened"; the banner
  * has to answer which alarm, which rule, and where the deadline came from.
@@ -129,7 +137,7 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
   const target = formatTime(e.target, ctx.hour12);
   const clockIn = formatTime(ctx.clockIn, ctx.hour12);
   const day = formatMinutes(ctx.workMinutes);
-  const alarm = e.id === 'lunchBy' ? 'Lunch alarm' : e.id === 'secondMeal' ? 'Second meal alarm' : e.id === 'retro' ? 'Retrospective' : 'Clock-out alarm';
+  const alarm = ALARM_NAMES[e.id];
   const mealHours = formatMinutes(ctx.secondMealAfterMinutes);
   const mealWhy = `Your ${mealHours} of work ends at ${target}. California requires a second 30-minute meal period before then unless you've waived it.`;
 

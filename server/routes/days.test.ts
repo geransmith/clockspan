@@ -219,10 +219,11 @@ describe('PUT /api/days/:date/retro', () => {
     expect((await app.api.put('/api/days/2026-09-01/retro', { done: 'yes' })).status).toBe(400);
   });
 
-  it('treats no body at all as an empty patch', async () => {
+  it('treats no body at all as an empty patch, and stores no day for it', async () => {
     const r = await fetch(`${app.url}/api/days/2026-09-01/retro`, { method: 'PUT' });
     expect(r.status).toBe(200);
     expect(await r.json()).toEqual({ retroNote: '', retroAt: null });
+    expect(app.db.prepare(`SELECT COUNT(*) AS n FROM days WHERE date = '2026-09-01'`).get()).toEqual({ n: 0 });
   });
 });
 

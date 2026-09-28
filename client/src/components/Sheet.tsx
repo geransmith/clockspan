@@ -148,7 +148,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
   const cards: SheetCard[] = visible.map((l, i) => ({
     id: l.id,
     body: render(l.id),
-    aside: l.id === 'timeclock' ? <StatePill state={tc.state} /> : undefined,
+    aside: l.id === 'timeclock' ? <StatePill state={tc.state} isToday={isToday} /> : undefined,
     customize: customize
       ? { onHide: () => setVisible(l.id, false), onMove: (dir) => reorder(i, i + dir), canUp: i > 0, canDown: i < visible.length - 1 }
       : undefined,
@@ -180,13 +180,14 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
   );
 }
 
-function StatePill({ state }: { state: TimeclockState }) {
+function StatePill({ state, isToday }: { state: TimeclockState; isToday: boolean }) {
+  // A past day is judged at its end, so one still "working" there was never clocked out.
   const map = {
     'not-started': ['Not clocked in', ''],
-    working: ['Working', 'pill--ok'],
+    working: isToday ? ['Working', 'pill--ok'] : ['No clock-out', 'pill--warn'],
     'at-lunch': ['At lunch', 'pill--warn'],
     'on-break': ['On break', 'pill--warn'],
-    done: ['Done for today', 'pill--accent'],
+    done: [isToday ? 'Done for today' : 'Done', 'pill--accent'],
   } as const;
   const [label, cls] = map[state];
   return <span className={`pill ${cls}`}>{label}</span>;
