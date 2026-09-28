@@ -7,7 +7,11 @@
 /** How long a session may be planned for: the server refuses a length outside it, and the − button stops at the minimum. */
 export const PLANNED_SECONDS = { min: 60, max: 8 * 3600 } as const;
 
-/** How long a break may run: the Break setting's range (`SETTING_LIMITS.breakMinutes`) in seconds, which a suggested break stays inside. */
+/**
+ * How long a break may run: the Break setting's range (`SETTING_LIMITS.breakMinutes`) in
+ * seconds, which a suggested break stays inside. The minimum is also the shortest break kept:
+ * one ended sooner (Break pressed by mistake) is dropped, not logged.
+ */
 export const BREAK_SECONDS = { min: 60, max: 3600 } as const;
 
 export interface SessionTiming {

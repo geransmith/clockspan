@@ -104,7 +104,39 @@ it('ends early on the server without an alert, and takes a suggestion still up w
   expect(alert).not.toHaveBeenCalled();
 });
 
-it('sends nothing to end when no break is running (a timer started without one)', async () => {
+it('drops a break ended within a minute from the log', async () => {
+  vi.mocked(api.endBreak).mockResolvedValue({ break: null });
+  const { result } = render();
+  await settle();
+  act(() => result.current.start(5));
+  await settle(30_000);
+  act(() => result.current.end());
+  expect(result.current.day?.breaks).toEqual([]);
+  await settle();
+  expect(api.endBreak).toHaveBeenCalledWith(5);
+  expect(result.current.day?.breaks).toEqual([]);
+  expect(result.current.endsAt).toBeNull();
+});
+
+it('takes the break banners down when a timer starts, and leaves the ending to the server', async () => {
+  const { result } = render();
+  await settle();
+  act(() => result.current.start(5));
+  await settle(2 * MIN);
+  vi.mocked(dismissByTag).mockClear();
+  vi.mocked(api.startSession).mockResolvedValue({ session: makeSession({ id: 3, startedAt: Date.now() }) });
+  await act(() => result.current.timer.start(TODAY, 1500, 'Next'));
+  await settle();
+  expect(dismissByTag).toHaveBeenCalledWith('break');
+  expect(api.endBreak).not.toHaveBeenCalled();
+  // The session's start ended it here as the server did: two minutes of rest.
+  expect(result.current.day?.breaks[0]?.endedAt).toBe(T0 + 2 * MIN);
+  expect(result.current.endsAt).toBeNull();
+  await settle(5 * MIN);
+  expect(alert).not.toHaveBeenCalled();
+});
+
+it('sends nothing to end when no break is running', async () => {
   const { result } = render();
   await settle();
   act(() => result.current.end());

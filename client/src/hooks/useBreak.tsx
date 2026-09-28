@@ -21,7 +21,7 @@ interface BreakCtx {
   next: { minutes: number; long: boolean };
   /** A break of `minutes` from now, logged on today's sheet. */
   start: (minutes: number) => void;
-  /** Back early (or a focus timer started): the break ends now without an alert, and a suggestion still up goes. */
+  /** Back early: the break ends now without an alert (dropped if it ran under a minute), and a suggestion still up goes. */
   end: () => void;
 }
 
@@ -44,7 +44,7 @@ const STALE_MS = 10 * 60_000;
  */
 export function BreakProvider({ children }: { children: ReactNode }) {
   const { settings, loaded } = useSettings();
-  const { finished } = useTimer();
+  const { finished, running } = useTimer();
   const { days, startBreak, endBreak } = useDayStore();
   const now = useNow(1000);
   const today = days[todayKey(now)];
@@ -71,6 +71,13 @@ export function BreakProvider({ children }: { children: ReactNode }) {
     const b = latestCurrent.current;
     if (b) void endBreak(b.date, b.id);
   }, [endBreak, latestCurrent]);
+
+  // A timer running means the break is over (the server ended it as the session started), and
+  // so is any banner about breaks: a suggestion or Break's over.
+  const working = running != null;
+  useEffect(() => {
+    if (working) dismissByTag('break');
+  }, [working]);
 
   const todaySessions = today?.sessions;
   const suggestion = useMemo(() => (settings.suggestBreaks && todaySessions ? suggestBreak(todaySessions) : null), [settings.suggestBreaks, todaySessions]);

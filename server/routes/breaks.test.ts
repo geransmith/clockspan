@@ -48,19 +48,41 @@ describe('breaks', () => {
     expect((await start()).status).toBe(201);
   });
 
-  it('ends a break still running when the next one starts', async () => {
+  it('ends a break still running when the next one starts, and drops it if it ran under a minute', async () => {
     const first = (await start()).body.break;
+    startedAgo(first.id, 2, 5);
     const second = (await start({ plannedSeconds: 600 })).body.break;
     const [a, b] = (await day()).breaks;
     expect(a).toMatchObject({ id: first.id, endedAt: second.startedAt });
     expect(b).toEqual(second);
+    // Seconds old: pressed by mistake, so the next one replaces it in the log.
+    const third = (await start({ plannedSeconds: 300 })).body.break;
+    expect((await day()).breaks.map((x: { id: number }) => x.id)).toEqual([first.id, third.id]);
   });
 
-  it('ends a break when a focus session starts, on any device', async () => {
+  it('ends a break when a focus session starts, on any device, and drops one under a minute', async () => {
     const { id } = (await start()).body.break;
     startedAgo(id, 2, 5);
     const session = (await app.api.post(`/api/days/${DATE}/sessions`, { plannedSeconds: 1500 })).body.session;
     expect((await day()).breaks[0]).toMatchObject({ id, endedAt: session.startedAt });
+    await app.api.post(`/api/sessions/${session.id}/finish`);
+    await start();
+    const next = (await app.api.post(`/api/days/${DATE}/sessions`, { plannedSeconds: 1500 })).body.session;
+    expect(next.status).toBe('running');
+    expect((await day()).breaks.map((x: { id: number }) => x.id)).toEqual([id]);
+  });
+
+  it('drops a break ended within a minute instead of logging it', async () => {
+    const { id } = (await start()).body.break;
+    const r = await app.api.post(`/api/breaks/${id}/end`);
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ break: null });
+    expect((await day()).breaks).toEqual([]);
+    expect((await app.api.post(`/api/breaks/${id}/end`)).status).toBe(404);
+    // A minute is enough to keep.
+    const kept = (await start()).body.break;
+    startedAgo(kept.id, 1, 5);
+    expect((await app.api.post(`/api/breaks/${kept.id}/end`)).body.break.id).toBe(kept.id);
   });
 
   it('ends a break early, once, and leaves one that already ran out alone', async () => {

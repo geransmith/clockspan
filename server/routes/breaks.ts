@@ -1,8 +1,8 @@
 import { Router, type RequestHandler, type Response } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
-import { breakRowToJson, dateParam, endRunningBreak, ensureDay, requireDate, type BreakRow } from './shared.js';
-import type { BreakConflict, BreakResponse, OkResponse } from '../../shared/api.js';
+import { breakRowToJson, dateParam, endRunningBreak, ensureDay, MIN_BREAK_MS, requireDate, type BreakRow } from './shared.js';
+import type { BreakConflict, BreakEndResponse, BreakResponse, OkResponse } from '../../shared/api.js';
 import { BREAK_SECONDS } from '../../shared/timer.js';
 
 type OwnedBreak = BreakRow & { date: string };
@@ -59,12 +59,18 @@ export function breaksRouter(db: DB): Router {
   };
   const owned = (res: Response) => res.locals.break as OwnedBreak;
 
-  // Back early: the break ends now. Idempotent, and a break that already ended keeps its end.
+  // Back early: the break ends now, or is dropped if it ran under a minute (answered as null).
+  // Idempotent, and a break that already ended keeps its end.
   r.post('/:id/end', loadOwnedBreak, (_req, res) => {
     const b = owned(res);
     const now = Date.now();
-    if (b.ended_at > now) db.prepare(`UPDATE breaks SET ended_at = ? WHERE id = ?`).run(Math.max(b.started_at, now), b.id);
-    res.json({ break: breakRowToJson(getOwned(db, b.user_id, b.id)!) } satisfies BreakResponse);
+    if (b.ended_at > now && now - b.started_at < MIN_BREAK_MS) {
+      db.prepare(`DELETE FROM breaks WHERE id = ?`).run(b.id);
+      res.json({ break: null } satisfies BreakEndResponse);
+      return;
+    }
+    if (b.ended_at > now) db.prepare(`UPDATE breaks SET ended_at = ? WHERE id = ?`).run(now, b.id);
+    res.json({ break: breakRowToJson(getOwned(db, b.user_id, b.id)!) } satisfies BreakEndResponse);
   });
 
   r.delete('/:id', loadOwnedBreak, (_req, res) => {

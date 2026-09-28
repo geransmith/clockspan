@@ -6,7 +6,7 @@ import { dismissByTag, warnQuietly } from '../lib/alerts';
 import { SAVE_FAILED } from '../lib/copy';
 import { emptyPunches } from '../lib/timeclock';
 import { deferred, makeBreak, makeDay, makeSession, makeSettings, MIN, settle, SettingsAndDays, setVisibility, T0, TODAY } from '../test/hooks';
-import type { BreakResponse, Day, OvertimeResponse, Priority, Punch, PunchesResponse } from '../types';
+import type { BreakEndResponse, BreakResponse, Day, OvertimeResponse, Priority, Punch, PunchesResponse } from '../types';
 import { useDay, useDayStore, useRefreshDay } from './useDay';
 
 vi.mock('../api');
@@ -492,6 +492,17 @@ describe('breaks', () => {
     expect(result.current.days[TODAY]?.breaks).toEqual([over, { ...running, endedAt: T0 }, saved]);
   });
 
+  it('startBreak drops a break under a minute old instead of ending it, as the server does', async () => {
+    const blip = makeBreak({ id: 2, startedAt: T0 - 30_000, endedAt: T0 + 270_000 });
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { breaks: [over, blip] }));
+    const saved = makeBreak({ id: 3, startedAt: T0, endedAt: T0 + 5 * MIN });
+    vi.mocked(api.startBreak).mockResolvedValue({ break: saved });
+    const { result } = renderStore();
+    await settle();
+    await act(() => result.current.startBreak(TODAY, 300));
+    expect(result.current.days[TODAY]?.breaks).toEqual([over, saved]);
+  });
+
   it('startBreak adds nothing and raises the banner when the server refuses', async () => {
     vi.mocked(api.getDay).mockResolvedValue(makeDay());
     vi.mocked(api.startBreak).mockRejectedValue(new Error('A focus timer is running.'));
@@ -521,6 +532,49 @@ describe('breaks', () => {
     answer.resolve({ break: { ...running, endedAt: T0 - 30_000 } });
     await act(() => done);
     expect(result.current.days[TODAY]?.breaks).toEqual([over, { ...running, endedAt: T0 - 30_000 }]);
+  });
+
+  it('endBreak drops a break under a minute old at once, and the server has the last word', async () => {
+    const blip = makeBreak({ id: 2, startedAt: T0 - 30_000, endedAt: T0 + 270_000 });
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { breaks: [over, blip] }));
+    const answer = deferred<BreakEndResponse>();
+    vi.mocked(api.endBreak).mockReturnValueOnce(answer.promise);
+    const { result } = renderStore();
+    await settle();
+    let done!: Promise<void>;
+    act(() => {
+      done = result.current.endBreak(TODAY, 2);
+    });
+    expect(result.current.days[TODAY]?.breaks).toEqual([over]);
+    answer.resolve({ break: null });
+    await act(() => done);
+    expect(result.current.days[TODAY]?.breaks).toEqual([over]);
+
+    // The server's clock put it past the minute: it stays, where it belongs in the list.
+    const later = makeBreak({ id: 4, startedAt: T0 - 50 * MIN, endedAt: T0 - 45 * MIN });
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { breaks: [later, over, blip] }));
+    await act(() => result.current.load(TODAY));
+    await settle();
+    vi.mocked(api.endBreak).mockResolvedValueOnce({ break: { ...blip, endedAt: T0 + 1000 } });
+    await act(() => result.current.endBreak(TODAY, 2));
+    expect(result.current.days[TODAY]?.breaks).toEqual([later, over, { ...blip, endedAt: T0 + 1000 }]);
+  });
+
+  it('a session starting ends the running break, or drops it under a minute, as the server does', async () => {
+    const blip = makeBreak({ id: 2, startedAt: T0 - 30_000, endedAt: T0 + 270_000 });
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { breaks: [over, running] }));
+    const { result } = renderStore();
+    await settle();
+    act(() => result.current.applySession(makeSession({ id: 5, startedAt: T0 })));
+    expect(result.current.days[TODAY]?.breaks).toEqual([over, { ...running, endedAt: T0 }]);
+    // A finished session leaves breaks as they are.
+    act(() => result.current.applySession(makeSession({ id: 5, startedAt: T0, status: 'completed', endedAt: T0 + MIN, durationSeconds: 60 })));
+    expect(result.current.days[TODAY]?.breaks).toEqual([over, { ...running, endedAt: T0 }]);
+
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { breaks: [over, blip] }));
+    await act(() => result.current.load(TODAY));
+    act(() => result.current.applySession(makeSession({ id: 6, startedAt: T0 })));
+    expect(result.current.days[TODAY]?.breaks).toEqual([over]);
   });
 
   it('endBreak puts the stored day back when the server does not answer', async () => {

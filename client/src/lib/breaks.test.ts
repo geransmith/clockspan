@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Break, Session } from '../types';
-import { breakSeconds, MAX_BREAK_MINUTES, MIN_FOCUS_SECONDS, runningBreak, SET_GAP_MINUTES, SET_SIZE, suggestBreak } from './breaks';
+import { breakSeconds, endBreaksAt, MAX_BREAK_MINUTES, MIN_FOCUS_SECONDS, runningBreak, SET_GAP_MINUTES, SET_SIZE, suggestBreak } from './breaks';
 
 const MIN = 60_000;
 const T0 = new Date(2026, 8, 28, 9, 0).getTime();
@@ -116,6 +116,16 @@ describe('logged breaks', () => {
     expect(breakSeconds(b, T0 + 2 * MIN)).toBe(120);
     expect(breakSeconds(b, T0 + 60 * MIN)).toBe(300);
     expect(breakSeconds(rest(2, 0, 5, T0 + 90_000), T0 + 60 * MIN)).toBe(90);
+  });
+
+  it('ends the break running at a moment there, and drops it if it ran under a minute', () => {
+    const over = rest(1, 0, 5);
+    const running = rest(2, 30, 10);
+    expect(endBreaksAt([over, running], T0 + 32 * MIN)).toEqual([over, { ...running, endedAt: T0 + 32 * MIN }]);
+    expect(endBreaksAt([over, running], T0 + 31 * MIN)).toEqual([over, { ...running, endedAt: T0 + 31 * MIN }]);
+    expect(endBreaksAt([over, running], T0 + 31 * MIN - 1)).toEqual([over]);
+    // Nothing running then: nothing changes.
+    expect(endBreaksAt([over, running], T0 + 50 * MIN)).toEqual([over, running]);
   });
 
   it('finds the break running now: the latest one, while its end is ahead', () => {

@@ -280,8 +280,11 @@ Never commit `data/` or `.env`.
   short, which is why only a full-length break rings "Break's over" (once per break id,
   `localStorage['focus:break-over']`). The server keeps breaks from overlapping sessions: a
   break start ends a running break and is refused (409) while a focus timer runs, and a
-  session start ends a running break (`endRunningBreak`, `routes/shared.ts`). Break writes
-  share one `inOrder` key (`breaks`).
+  session start ends a running break (`endRunningBreak`, `routes/shared.ts`). However a break
+  ends, one that ran under `BREAK_SECONDS.min` is deleted, not logged (`POST /breaks/:id/end`
+  answers `{ break: null }`). The client mirrors both rules with `endBreaksAt` (in `useDay`'s
+  break writes and `applySession`), so it never sends an end after a session start: the break
+  may already be gone. Break writes share one `inOrder` key (`breaks`).
 - **Saves reach the server in the order they were made.** `setPunches` and `setPriorities`
   replace a whole list, so one PUT per day is in flight and only the newest waiting list follows
   it (`sendLatest` in `useDay.tsx`); the other day fields and each session's writes queue one

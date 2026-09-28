@@ -1,5 +1,6 @@
 import type {
   AuthInfo,
+  BreakEndResponse,
   BreakResponse,
   Day,
   LogoutResponse,
@@ -109,5 +110,5 @@ export const deleteSession = (id: number) => request<OkResponse>('DELETE', `/api
 
 // ----- breaks -----
 export const startBreak = (date: string, plannedSeconds: number) => request<BreakResponse>('POST', `/api/days/${date}/breaks`, { plannedSeconds });
-export const endBreak = (id: number) => request<BreakResponse>('POST', `/api/breaks/${id}/end`);
+export const endBreak = (id: number) => request<BreakEndResponse>('POST', `/api/breaks/${id}/end`);
 export const deleteBreak = (id: number) => request<OkResponse>('DELETE', `/api/breaks/${id}`);

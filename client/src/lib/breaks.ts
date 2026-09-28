@@ -1,3 +1,4 @@
+import { BREAK_SECONDS } from '../../../shared/timer.js';
 import type { Break, Session } from '../types';
 
 /**
@@ -39,6 +40,15 @@ export interface BreakSuggestion {
 /** Seconds of rest a logged break holds at `now`: so far while it runs, its whole length once over. */
 export function breakSeconds(b: Break, now: number): number {
   return Math.max(0, Math.round((Math.min(now, b.endedAt) - b.startedAt) / 1000));
+}
+
+/**
+ * A day's breaks once `at` ends the one running then (End break, the next break, a focus
+ * session starting): cut short at `at`, or dropped if it ran under a minute. The server does
+ * the same, so the log shows it before the next refresh.
+ */
+export function endBreaksAt(breaks: readonly Break[], at: number): Break[] {
+  return breaks.flatMap((b) => (b.endedAt <= at ? [b] : at - b.startedAt < BREAK_SECONDS.min * 1000 ? [] : [{ ...b, endedAt: at }]));
 }
 
 /** The break running at `now` among a day's breaks (by start): the latest one still ahead of its end. */

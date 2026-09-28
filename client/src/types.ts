@@ -6,6 +6,7 @@ export type {
   AuthInfo,
   AuthMode,
   Break,
+  BreakEndResponse,
   BreakResponse,
   Day,
   LogoutResponse,

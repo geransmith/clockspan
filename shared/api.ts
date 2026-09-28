@@ -146,9 +146,14 @@ export interface SessionResponse {
   session: Session;
 }
 
-/** Starting a break and ending one early. */
+/** Starting a break. */
 export interface BreakResponse {
   break: Break;
+}
+
+/** `POST /breaks/:id/end`: the break as it ended, or null when it ran under a minute and was dropped. */
+export interface BreakEndResponse {
+  break: Break | null;
 }
 
 /** The 409 from starting a break while a focus timer runs. */

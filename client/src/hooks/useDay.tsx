@@ -1,9 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import { emptyDay } from '../../../shared/api.js';
-import type { Break, Day, Priority, Punch, Session } from '../types';
+import type { Day, Priority, Punch, Session } from '../types';
 import { dismissByTag, warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
+import { endBreaksAt } from '../lib/breaks';
 import { newUid, placePriority } from '../lib/priorities';
 import { emptyPunches, normalizePunches } from '../lib/timeclock';
 import { useLatest } from './useLatest';
@@ -274,7 +275,9 @@ export function DayProvider({ children }: { children: ReactNode }) {
         const others = d.sessions.filter((s) => s.id !== session.id);
         const next = session.status === 'cancelled' ? others : [...others, session];
         next.sort((a, b) => a.startedAt - b.startedAt);
-        return { ...d, sessions: next };
+        // A session starting ended the running break on the server; the same here.
+        const breaks = session.status === 'running' ? endBreaksAt(d.breaks, session.startedAt) : d.breaks;
+        return { ...d, sessions: next, breaks };
       }),
     );
   }, []);
@@ -299,44 +302,36 @@ export function DayProvider({ children }: { children: ReactNode }) {
     [applySession, inOrder],
   );
 
-  // The server ends a break still running when the next one starts; the same here, so the log
-  // doesn't show two running until the next refresh.
-  const applyBreak = useCallback((saved: Break) => {
-    mutationSeq.current++;
-    setDays((prev) =>
-      withDay(prev, saved.date, (d) => {
-        const others = d.breaks.filter((b) => b.id !== saved.id).map((b) => (b.endedAt > saved.startedAt ? { ...b, endedAt: saved.startedAt } : b));
-        return { ...d, breaks: [...others, saved].sort((a, b) => a.startedAt - b.startedAt) };
-      }),
-    );
-  }, []);
-
   // Break writes share one queue: an end or a delete never passes the start before it.
   const startBreak = useCallback(
     async (date: string, plannedSeconds: number) => {
       await inOrder('breaks', null, async () => {
         const { break: saved } = await api.startBreak(date, plannedSeconds);
-        applyBreak(saved);
+        // The server ended the one still running when this one started; the same here, so the
+        // log doesn't show two running until the next refresh.
+        setDays((prev) => withDay(prev, date, (d) => ({ ...d, breaks: [...endBreaksAt(d.breaks, saved.startedAt), saved] })));
       });
     },
-    [applyBreak, inOrder],
+    [inOrder],
   );
 
+  // At once on screen: cut short now, or gone if it ran under a minute. The server's answer
+  // then stands, a null one meaning it dropped the break.
   const endBreak = useCallback(
     async (date: string, id: number) => {
       const now = Date.now();
-      setDays((prev) =>
-        withDay(prev, date, (d) => ({
-          ...d,
-          breaks: d.breaks.map((b) => (b.id === id ? { ...b, endedAt: Math.min(b.endedAt, Math.max(b.startedAt, now)) } : b)),
-        })),
-      );
+      setDays((prev) => withDay(prev, date, (d) => ({ ...d, breaks: d.breaks.flatMap((b) => (b.id === id ? endBreaksAt([b], now) : [b])) })));
       await inOrder('breaks', date, async () => {
         const { break: saved } = await api.endBreak(id);
-        applyBreak(saved);
+        setDays((prev) =>
+          withDay(prev, date, (d) => {
+            const others = d.breaks.filter((b) => b.id !== id);
+            return { ...d, breaks: saved ? [...others, saved].sort((a, b) => a.startedAt - b.startedAt) : others };
+          }),
+        );
       });
     },
-    [applyBreak, inOrder],
+    [inOrder],
   );
 
   const removeBreak = useCallback(
