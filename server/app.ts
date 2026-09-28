@@ -97,8 +97,15 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
     res.status(status).json({ error: status >= 500 ? 'Internal error.' : (err as Error).message });
   });
 
+  return app;
+}
+
+/**
+ * The server's timers: expired logins purged every few hours, and old days pruned
+ * (`scheduleRetention`). The process entrypoint starts them after `createApp`, so building an
+ * app (every test does) starts nothing. Both are unref'd and never hold the process open.
+ */
+export function startBackgroundJobs(db: DB, config: Config): void {
   setInterval(purgeExpiredSessions, 6 * HOUR_MS, db).unref();
   scheduleRetention(db, config);
-
-  return app;
 }

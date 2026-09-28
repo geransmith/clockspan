@@ -1,6 +1,6 @@
 import { loadConfig } from './config.js';
 import { openDatabase } from './db.js';
-import { createApp } from './app.js';
+import { createApp, startBackgroundJobs } from './app.js';
 
 let config;
 try {
@@ -21,6 +21,7 @@ if (config.trustProxy === true) {
 
 const db = openDatabase(config.dbPath);
 const app = createApp(db, config);
+startBackgroundJobs(db, config);
 
 const server = app.listen(config.port, () => {
   console.log(`Clockspan listening on :${config.port} (auth: ${config.authMode}, db: ${config.dbPath})`);

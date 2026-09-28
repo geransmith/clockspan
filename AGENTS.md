@@ -43,12 +43,14 @@ shared/                 imported by both sides, always with a `.js` suffix
   dates.ts, timer.ts    date keys; pause-aware session timing (activeMs, plannedEndAt, PLANNED_SECONDS)
 server/                 Express API → dist/server
   app.ts                createApp(): headers, /api/health, auth routers, data routers behind
-                        requireAuth, static files and the SPA fallback
-  security.ts           every response header, and rejectCrossSiteWrites
+                        requireAuth, static files and the SPA fallback; startBackgroundJobs() (the
+                        login purge and the retention schedule, started by index.ts only)
+  security.ts           every security header, and rejectCrossSiteWrites
   config.ts, db.ts      env parsing (throws on bad config); pragmas, MIGRATIONS, the default user
+  settings.ts           mergeSettings (defaults + validation on every read and write), loadSettings
   retention.ts          old-day pruning (pruneDays, runRetention, the RETENTION_DAYS cap)
   auth/                 session cookie, scrypt passwords, middleware (currentUser), local + OIDC routes
-  routes/               days, sessions, settings (mergeSettings); shared.ts has requireDate, findDay,
+  routes/               the days, sessions and settings routers; shared.ts has requireDate, findDay,
                         and the row → JSON builders
   dev/                  seed.ts + seed-cli.ts (`npm run seed`), harness.ts (startTestApp for route tests)
   index.ts, cli.ts      the process entrypoints: the server (warns under AUTH_MODE=none), reset-password
@@ -200,7 +202,7 @@ Never commit `data/` or `.env`.
   is the single `kind='default'` user. Never add a data route outside the `requireAuth` router
   in `app.ts`. `/:date` routes take `requireDate`; `/sessions/:id` routes take
   `loadOwnedSession`, which is where the ownership check lives.
-- **Settings go through `mergeSettings()` on every read and write** (`server/routes/settings.ts`):
+- **Settings go through `mergeSettings()` on every read and write** (`server/settings.ts`):
   the stored JSON is merged onto `DEFAULT_SETTINGS`, unknown keys are dropped, invalid values
   fall back, and a PUT stores the merged result (so a key missing from an old row takes the
   current default, while a value a user has saved stays put). Add settings by adding a default
@@ -338,7 +340,7 @@ Never commit `data/` or `.env`.
   way the sticker chart's `stickers` setting does.
 - **A per-user setting**: add it to the `Settings` type and `DEFAULT_SETTINGS` in
   `shared/settings.ts`, and a number's bounds to `SETTING_LIMITS` there → validate it in
-  `mergeSettings()` (`server/routes/settings.ts`; `limited(key)` checks a number against its
+  `mergeSettings()` (`server/settings.ts`; `limited(key)` checks a number against its
   bounds) → add the control to the right tab in `SettingsDialog.tsx` (Timeclock · Alarms ·
   Sheet · Data · Account; each is a `case` in `panel()`; the Sheet tab's "History" section
   holds the calendar's switches) using `DurationField` / `NumberField` with
