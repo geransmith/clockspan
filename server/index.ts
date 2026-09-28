@@ -11,7 +11,9 @@ try {
 }
 
 if (config.authMode === 'none') {
-  console.warn('[auth] AUTH_MODE=none: anyone who can reach this port has full access. Set AUTH_MODE=local or oidc before exposing it.');
+  console.warn(
+    '[auth] AUTH_MODE=none: anyone who can reach this port has full access, and so can a web page opened on this network (DNS rebinding). Set AUTH_MODE=local or oidc unless you trust both.',
+  );
 }
 if (config.trustProxy === true) {
   console.warn(
