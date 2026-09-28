@@ -21,7 +21,16 @@ describe('GET /api/days/:date', () => {
   it('returns an empty day for a date with no rows', async () => {
     const r = await app.api.get('/api/days/2020-01-01');
     expect(r.status).toBe(200);
-    expect(r.body).toEqual({ date: '2020-01-01', punches: [], priorities: [], overtimeApproved: false, retroNote: '', retroAt: null, sessions: [] });
+    expect(r.body).toEqual({
+      date: '2020-01-01',
+      punches: [],
+      priorities: [],
+      overtimeApproved: false,
+      retroNote: '',
+      retroAt: null,
+      workMinutes: null,
+      sessions: [],
+    });
   });
 
   it('rejects an invalid date', async () => {
@@ -159,6 +168,26 @@ describe('PUT /api/days/:date/overtime', () => {
     expect((await app.api.get('/api/days/2026-09-01')).body.overtimeApproved).toBe(true);
     expect((await app.api.put('/api/days/2026-09-01/overtime', { approved: false })).body).toEqual({ overtimeApproved: false });
     expect((await app.api.put('/api/days/2026-09-01/overtime', { approved: 'yes' })).status).toBe(400);
+  });
+});
+
+describe('PUT /api/days/:date/target', () => {
+  it("sets the day's own work-day length and clears it back to the usual one", async () => {
+    expect((await app.api.put('/api/days/2026-09-01/target', { workMinutes: 240 })).body).toEqual({ workMinutes: 240 });
+    expect((await app.api.get('/api/days/2026-09-01')).body.workMinutes).toBe(240);
+    expect((await app.api.get('/api/days/range?from=2026-09-01&to=2026-09-01')).body.days[0].workMinutes).toBe(240);
+    expect((await app.api.put('/api/days/2026-09-01/target', { workMinutes: null })).body).toEqual({ workMinutes: null });
+    expect((await app.api.get('/api/days/2026-09-01')).body.workMinutes).toBeNull();
+  });
+
+  it("takes only a whole number within the setting's bounds, or null", async () => {
+    for (const workMinutes of [0, 24 * 60 + 1, 90.5, '240', undefined]) {
+      expect((await app.api.put('/api/days/2026-09-01/target', { workMinutes })).status).toBe(400);
+    }
+    expect((await app.api.put('/api/days/2026-09-01/target')).status).toBe(400);
+    expect((await app.api.put('/api/days/not-a-date/target', { workMinutes: 240 })).status).toBe(400);
+    expect((await app.api.put('/api/days/2026-09-01/target', { workMinutes: 1 })).status).toBe(200);
+    expect((await app.api.put('/api/days/2026-09-01/target', { workMinutes: 24 * 60 })).status).toBe(200);
   });
 });
 
@@ -305,11 +334,13 @@ describe('days are scoped to the signed-in user', () => {
     expect((await b.put(`/api/days/${date}/priorities`, { priorities: [{ text: 'Mine' }] })).status).toBe(200);
     expect((await b.put(`/api/days/${date}/overtime`, { approved: true })).status).toBe(200);
     expect((await b.put(`/api/days/${date}/retro`, { note: 'b', done: true })).status).toBe(200);
+    expect((await b.put(`/api/days/${date}/target`, { workMinutes: 240 })).status).toBe(200);
     expect((await a.get(`/api/days/${date}`)).body).toEqual(before);
     const bDay = (await b.get(`/api/days/${date}`)).body;
     expect(bDay.priorities.map((p: { text: string }) => p.text)).toEqual(['Mine']);
     expect(bDay.overtimeApproved).toBe(true);
     expect(bDay.retroNote).toBe('b');
+    expect(bDay.workMinutes).toBe(240);
     expect(app.db.prepare(`SELECT user_id FROM days WHERE date = ? ORDER BY user_id`).all(date)).toEqual([{ user_id: admin.id }, { user_id: member.id }]);
 
     // A prune by B deletes only B's days.

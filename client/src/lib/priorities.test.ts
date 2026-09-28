@@ -144,6 +144,7 @@ const day = (date: string, priorities: Priority[]): Day => ({
   overtimeApproved: false,
   retroNote: '',
   retroAt: null,
+  workMinutes: null,
   sessions: [],
 });
 

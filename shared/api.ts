@@ -71,6 +71,8 @@ export interface Day {
   /** The retrospective's "why" note and when it was marked reviewed (null = not yet). */
   retroNote: string;
   retroAt: number | null;
+  /** This day's own work-day length in minutes (a half day); null means the user's usual one. */
+  workMinutes: number | null;
   sessions: Session[];
 }
 
@@ -112,6 +114,11 @@ export interface OvertimeResponse {
 export interface RetroResponse {
   retroNote: string;
   retroAt: number | null;
+}
+
+/** `PUT /days/:date/target`: the day's own work-day length as stored (null = the usual one). */
+export interface TargetResponse {
+  workMinutes: number | null;
 }
 
 /** Every session route that answers with one session: start, PATCH, pause, resume, finish, cancel. */

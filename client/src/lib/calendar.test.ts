@@ -13,6 +13,7 @@ const summary = (date: string, patch: Partial<DaySummary> = {}): DaySummary => (
   prioritiesDone: 0,
   prioritiesTotal: 0,
   retroAt: null,
+  workMinutes: null,
   ...patch,
 });
 

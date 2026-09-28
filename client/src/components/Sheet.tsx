@@ -9,7 +9,7 @@ import { warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
 import { addDays, formatDateLong } from '../lib/format';
 import { CARD_TITLES } from '../lib/layout';
-import { clampToDay, timeclockForDate, type TimeclockState } from '../lib/timeclock';
+import { clampToDay, daySettings, timeclockForDate, type TimeclockState } from '../lib/timeclock';
 import type { CardId } from '../types';
 import { CardShell } from './CardShell';
 import { FocusTimer } from './FocusTimer';
@@ -34,7 +34,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
   const { settings, update } = useSettings();
   const { day, store } = useDay(date);
   const isToday = date === today;
-  const tc = useMemo(() => (day ? timeclockForDate(day.punches, settings, date, today, now) : null), [day, settings, date, today, now]);
+  const tc = useMemo(() => (day ? timeclockForDate(day.punches, daySettings(settings, day), date, today, now) : null), [day, settings, date, today, now]);
   // Today's list with nothing written yet offers what the last planned day left unticked.
   const { leftOpen, dismiss: dismissLeftOpen } = useLeftOpen(today, isToday && day != null && !day.priorities.some((p) => p.text.trim()));
 
@@ -103,8 +103,10 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
             punches={day.punches}
             tc={tc}
             overtimeApproved={day.overtimeApproved}
+            workMinutes={day.workMinutes}
             onChange={(p) => void store.setPunches(date, p)}
             onOvertimeChange={(v) => void store.setOvertimeApproved(date, v)}
+            onWorkMinutesChange={(m) => void store.setWorkMinutes(date, m)}
             onEditingChange={onPunchEditing}
           />
         );

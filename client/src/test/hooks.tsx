@@ -24,7 +24,7 @@ export function makeSettings(patch: Partial<Settings> = {}): Settings {
 }
 
 export function makeDay(date = TODAY, patch: Partial<Day> = {}): Day {
-  return { date, punches: emptyPunches(), priorities: [], overtimeApproved: false, retroNote: '', retroAt: null, sessions: [], ...patch };
+  return { date, punches: emptyPunches(), priorities: [], overtimeApproved: false, retroNote: '', retroAt: null, workMinutes: null, sessions: [], ...patch };
 }
 
 export function makeSession(patch: Partial<Session> = {}): Session {

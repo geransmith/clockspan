@@ -99,6 +99,8 @@ export const MIGRATIONS: string[] = [
   // A password someone else chose (an admin adding the account, or one the CLI generated) is
   // temporary: until the user sets their own, only the password change is open to them.
   `ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;`,
+  // A day's own work-day length in minutes (a half day); null is the user's usual one.
+  `ALTER TABLE days ADD COLUMN work_minutes INTEGER;`,
 ];
 
 export function openDatabase(dbPath: string): DB {

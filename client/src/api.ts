@@ -15,6 +15,7 @@ import type {
   RunningResponse,
   SessionResponse,
   Settings,
+  TargetResponse,
   UserResponse,
   UsersResponse,
 } from './types';
@@ -76,6 +77,7 @@ export const putPunches = (date: string, punches: Punch[]) =>
   request<PunchesResponse>('PUT', `/api/days/${date}/punches`, { punches: punches.map((p) => ({ at: p.at })) });
 export const putPriorities = (date: string, priorities: Priority[]) => request<PrioritiesResponse>('PUT', `/api/days/${date}/priorities`, { priorities });
 export const putOvertime = (date: string, approved: boolean) => request<OvertimeResponse>('PUT', `/api/days/${date}/overtime`, { approved });
+export const putTarget = (date: string, workMinutes: number | null) => request<TargetResponse>('PUT', `/api/days/${date}/target`, { workMinutes });
 export const putRetro = (date: string, patch: { note?: string; done?: boolean }) => request<RetroResponse>('PUT', `/api/days/${date}/retro`, patch);
 export const getRange = (from: string, to: string) => request<RangeResponse>('GET', `/api/days/range?from=${from}&to=${to}`);
 export const getPruneInfo = (before: string) => request<PruneInfo>('GET', `/api/days/prune?before=${before}`);

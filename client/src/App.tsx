@@ -16,7 +16,7 @@ import { SettingsProvider, useSettings } from './hooks/useSettings';
 import { TimerProvider, useTimer } from './hooks/useTimer';
 import { todayKey } from './lib/format';
 import { applyTheme } from './lib/theme';
-import { computeTimeclock } from './lib/timeclock';
+import { computeTimeclock, daySettings } from './lib/timeclock';
 import type { CardId } from './types';
 
 export function App() {
@@ -63,7 +63,10 @@ function Shell() {
   const [editingPunches, setEditingPunches] = useState(false);
   const punches = useSettled(todayDay?.punches, 3000, editingPunches);
   const settled = loaded && punches != null && punches === todayDay?.punches && !refreshing;
-  const todayTc = useMemo(() => (settled ? computeTimeclock(punches, settings, now) : null), [settled, punches, settings, now]);
+  // Today's own work-day length (a half day), when one was set, is what the alarms go by.
+  const todayWorkMinutes = todayDay?.workMinutes ?? null;
+  const todaySettings = useMemo(() => daySettings(settings, { workMinutes: todayWorkMinutes }), [settings, todayWorkMinutes]);
+  const todayTc = useMemo(() => (settled ? computeTimeclock(punches, todaySettings, now) : null), [settled, punches, todaySettings, now]);
   // A day flagged while the feature was on stays silent only while it is still on.
   const overtimeApproved = settings.overtimeApproval && Boolean(todayDay?.overtimeApproved);
   const approveOvertime = useCallback(() => void store.setOvertimeApproved(today, true), [store, today]);
@@ -78,7 +81,7 @@ function Shell() {
   // memoized), it renders once a minute instead of redoing the month or quarter every second.
   const minute = now - (now % 60_000);
   const openDay = useCallback((d: string) => navigate({ view: 'sheet', date: d }), [navigate]);
-  useAlarms(today, todayTc, settings, now, {
+  useAlarms(today, todayTc, todaySettings, now, {
     overtimeApproved,
     retroDone: Boolean(todayDay?.retroAt),
     approveOvertime: settings.overtimeApproval ? approveOvertime : undefined,

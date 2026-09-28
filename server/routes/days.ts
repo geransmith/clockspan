@@ -6,7 +6,7 @@ import { currentUser } from '../auth/middleware.js';
 import { countDays, pruneDays, reclaimSpace } from '../retention.js';
 import { isValidDateKey, punchWindow } from '../../shared/dates.js';
 import { dateParam, ensureDay, findDay, requireDate, sessionRowToJson, UID_RE, type DayRow, type SessionRow } from './shared.js';
-import { MAX_PRIORITIES } from '../../shared/settings.js';
+import { MAX_PRIORITIES, SETTING_LIMITS } from '../../shared/settings.js';
 import {
   LIMITS,
   type Day,
@@ -19,6 +19,7 @@ import {
   type PunchesResponse,
   type RangeResponse,
   type RetroResponse,
+  type TargetResponse,
 } from '../../shared/api.js';
 
 const MAX_RANGE_DAYS = 400;
@@ -112,12 +113,13 @@ function dayJson(day: DayRow, date: string, rows: DayRows): Day {
     overtimeApproved: Boolean(day.overtime_approved),
     retroNote: day.retro_note,
     retroAt: day.retro_at,
+    workMinutes: day.work_minutes,
     sessions: rows.sessions.map(sessionRowToJson),
   };
 }
 
 function emptyDayJson(date: string): Day {
-  return { date, punches: [], priorities: [], overtimeApproved: false, retroNote: '', retroAt: null, sessions: [] };
+  return { date, punches: [], priorities: [], overtimeApproved: false, retroNote: '', retroAt: null, workMinutes: null, sessions: [] };
 }
 
 export function daysRouter(db: DB, config: Config): Router {
@@ -139,7 +141,7 @@ export function daysRouter(db: DB, config: Config): Router {
       return;
     }
     const rows = db
-      .prepare(`SELECT id, date, overtime_approved, retro_note, retro_at FROM days WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date`)
+      .prepare(`SELECT id, date, overtime_approved, retro_note, retro_at, work_minutes FROM days WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date`)
       .all(user.id, from, to) as (DayRow & { date: string })[];
     const children = rangeRows(db, user.id, from, to);
     const none: DayRows = { punches: [], priorities: [], sessions: [] };
@@ -264,6 +266,22 @@ export function daysRouter(db: DB, config: Config): Router {
     const dayId = ensureDay(db, user.id, date);
     db.prepare(`UPDATE days SET overtime_approved = ? WHERE id = ?`).run(approved ? 1 : 0, dayId);
     res.json({ overtimeApproved: approved } satisfies OvertimeResponse);
+  });
+
+  // This day's own work-day length (a half day, a long one); null goes back to the setting.
+  // Same bounds as the setting, so every timeclock can take it in its place.
+  r.put('/:date/target', requireDate, (req, res) => {
+    const user = currentUser(req);
+    const date = dateParam(req);
+    const minutes = (req.body as { workMinutes?: unknown })?.workMinutes;
+    const { min, max } = SETTING_LIMITS.workMinutes;
+    if (minutes !== null && !(typeof minutes === 'number' && Number.isInteger(minutes) && minutes >= min && minutes <= max)) {
+      res.status(400).json({ error: `workMinutes must be a whole number from ${min} to ${max}, or null.` });
+      return;
+    }
+    const dayId = ensureDay(db, user.id, date);
+    db.prepare(`UPDATE days SET work_minutes = ? WHERE id = ?`).run(minutes, dayId);
+    res.json({ workMinutes: minutes } satisfies TargetResponse);
   });
 
   // The day's retrospective: a free-text "why" and whether it has been reviewed. Marking it

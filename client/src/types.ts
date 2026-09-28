@@ -23,6 +23,7 @@ export type {
   SessionConflict,
   SessionResponse,
   SessionStatus,
+  TargetResponse,
   UserResponse,
   UsersResponse,
 } from '../../shared/api.js';

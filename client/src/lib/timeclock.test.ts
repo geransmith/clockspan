@@ -4,6 +4,7 @@ import {
   clampToDay,
   clockOutPosition,
   computeTimeclock,
+  daySettings,
   emptyPunches,
   extraPairs,
   nextPunchPosition,
@@ -183,6 +184,21 @@ describe('computeTimeclock', () => {
     const r = computeTimeclock(p, settings, T0 + 11 * H + 20 * M);
     expect(r.clockOutStatus).toBe('over');
     expect(r.clockOutAt).toBe(T0 + 11 * H);
+  });
+});
+
+describe('daySettings', () => {
+  it("puts a day's own work-day length in place of the usual one, and nothing else", () => {
+    expect(daySettings(settings, { workMinutes: 240 })).toEqual({ ...settings, workMinutes: 240 });
+    expect(daySettings(settings, { workMinutes: null })).toBe(settings);
+    expect(daySettings(settings, undefined)).toBe(settings);
+  });
+
+  it('moves the clock-out and drops the lunch on a half day', () => {
+    const p = punches([T0, null, null, null]);
+    const r = computeTimeclock(p, daySettings(settings, { workMinutes: 240 }), T0 + H);
+    expect(r.clockOutAt).toBe(T0 + 4 * H);
+    expect(r.lunchStatus).toBe('not-needed');
   });
 });
 

@@ -2,7 +2,7 @@ import type { Day, Punch } from '../types';
 import type { CalendarDay } from './calendar';
 import { hash } from './celebrate';
 import { STICKER_EMOJI } from './copy';
-import { timeclockForDate, type TimeclockSettings } from './timeclock';
+import { daySettings, timeclockForDate, type TimeclockSettings } from './timeclock';
 
 export type StickerId = 'clockedOut' | 'lunch' | 'priorities' | 'focus' | 'reviewed';
 
@@ -17,7 +17,7 @@ export const STICKER_REASONS: { id: StickerId; label: string }[] = [
 
 /** The stickers one day earned. Past days are judged frozen, like everywhere else. */
 export function stickersForDay(d: DaySummary, settings: TimeclockSettings, today: string, now: number): StickerId[] {
-  const tc = timeclockForDate(d.punches, settings, d.date, today, now);
+  const tc = timeclockForDate(d.punches, daySettings(settings, d), d.date, today, now);
   const out: StickerId[] = [];
   if (tc.state === 'done') out.push('clockedOut');
   if (tc.lunchStatus === 'taken') out.push('lunch');
@@ -53,6 +53,8 @@ export interface DaySummary {
   prioritiesDone: number;
   prioritiesTotal: number;
   retroAt: number | null;
+  /** The day's own work-day length, if it had one (`daySettings`). */
+  workMinutes: number | null;
 }
 
 /** A full day rolled up for the calendar: completed sessions, rows with text. Keeps today's cell live. */
@@ -65,6 +67,7 @@ export function daySummaryOf(day: Day): DaySummary {
     prioritiesDone: withText.filter((p) => p.done).length,
     prioritiesTotal: withText.length,
     retroAt: day.retroAt,
+    workMinutes: day.workMinutes,
   };
 }
 

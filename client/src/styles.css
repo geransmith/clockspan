@@ -801,11 +801,25 @@ button {
 .timeclock-note--danger {
   color: var(--danger);
 }
-.ot-row {
+.ot-row,
+.target-row {
   margin-bottom: 12px;
   padding: 4px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+}
+/* The Change / Done button stays beside the line, however narrow the card. */
+.target-row > .setting-row {
+  flex-wrap: nowrap;
+}
+.target-row .toggle-text {
+  flex: 1;
+}
+.target-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 8px;
 }
 .punches {
   display: flex;

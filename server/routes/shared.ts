@@ -23,10 +23,12 @@ export interface DayRow {
   overtime_approved: number;
   retro_note: string;
   retro_at: number | null;
+  work_minutes: number | null;
 }
 
 export function findDay(db: DB, userId: number, date: string): DayRow | undefined {
-  return db.prepare(`SELECT id, overtime_approved, retro_note, retro_at FROM days WHERE user_id = ? AND date = ?`).get(userId, date) as DayRow | undefined;
+  return db.prepare(`SELECT id, overtime_approved, retro_note, retro_at, work_minutes FROM days WHERE user_id = ? AND date = ?`).get(userId, date) as
+    DayRow | undefined;
 }
 
 /** Priority ids: the client mints 12 hex chars (`newUid`); the server only checks the shape, loosely. */
