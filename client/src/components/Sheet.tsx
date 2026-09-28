@@ -4,12 +4,14 @@ import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, v
 import { CSS } from '@dnd-kit/utilities';
 import { useDay } from '../hooks/useDay';
 import { useLeftOpen } from '../hooks/useLeftOpen';
+import { useWeek } from '../hooks/useWeek';
 import { useSettings } from '../hooks/useSettings';
 import { warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
 import { addDays, formatDateLong } from '../lib/format';
 import { CARD_TITLES } from '../lib/layout';
 import { clampToDay, daySettings, timeclockForDate, type TimeclockState } from '../lib/timeclock';
+import { weekHours } from '../lib/week';
 import type { CardId } from '../types';
 import { CardShell } from './CardShell';
 import { FocusTimer } from './FocusTimer';
@@ -35,6 +37,9 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
   const { day, store } = useDay(date);
   const isToday = date === today;
   const tc = useMemo(() => (day ? timeclockForDate(day.punches, daySettings(settings, day), date, today, now) : null), [day, settings, date, today, now]);
+  // The week so far, up to this sheet's day, for the timeclock's week line.
+  const weekDays = useWeek(date);
+  const week = useMemo(() => (weekDays ? weekHours(weekDays, settings, date, today, now) : null), [weekDays, settings, date, today, now]);
   // Today's list with nothing written yet offers what the last planned day left unticked.
   const { leftOpen, dismiss: dismissLeftOpen } = useLeftOpen(today, isToday && day != null && !day.priorities.some((p) => p.text.trim()));
 
@@ -104,6 +109,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
             tc={tc}
             overtimeApproved={day.overtimeApproved}
             workMinutes={day.workMinutes}
+            week={week}
             onChange={(p) => void store.setPunches(date, p)}
             onOvertimeChange={(v) => void store.setOvertimeApproved(date, v)}
             onWorkMinutesChange={(m) => void store.setWorkMinutes(date, m)}

@@ -17,6 +17,7 @@ import {
   type TimeclockResult,
 } from '../lib/timeclock';
 import { SETTING_LIMITS } from '../../../shared/settings.js';
+import type { WeekHours } from '../lib/week';
 import type { Punch } from '../types';
 import { Burst, BURST_MS } from './Burst';
 import { DurationField } from './DurationField';
@@ -33,6 +34,8 @@ interface Props {
   overtimeApproved: boolean;
   /** This day's own work-day length; null is the usual one from the settings. */
   workMinutes: number | null;
+  /** The week so far up to this day; null while loading. */
+  week: WeekHours | null;
   onChange: (punches: Punch[]) => void;
   onOvertimeChange: (approved: boolean) => void;
   onWorkMinutesChange: (minutes: number | null) => void;
@@ -48,6 +51,7 @@ export function Timeclock({
   tc,
   overtimeApproved,
   workMinutes,
+  week,
   onChange,
   onOvertimeChange,
   onWorkMinutesChange,
@@ -238,6 +242,13 @@ export function Timeclock({
         <p className={`timeclock-note${tc.secondMealStatus === 'overdue' ? ' timeclock-note--danger' : ''}`}>
           2nd meal period {tc.secondMealStatus === 'overdue' ? 'was due' : 'due'} by {formatTime(secondMeal)} (
           {formatDuration(settings.secondMealAfterMinutes * 60)} worked)
+        </p>
+      )}
+
+      {week && week.targetSeconds > 0 && (
+        <p className="timeclock-note week-line">
+          This week <strong>{formatDuration(week.workedSeconds)}</strong> of {formatDuration(week.targetSeconds)}
+          {week.workedSeconds > week.targetSeconds && <> · {formatDuration(week.workedSeconds - week.targetSeconds)} over</>}
         </p>
       )}
 

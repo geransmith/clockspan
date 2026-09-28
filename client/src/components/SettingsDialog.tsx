@@ -71,6 +71,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         return (
           <Section title="Timeclock" hint="Used to compute your lunch deadline, clock-out time and second meal period.">
             <DurationField label="Work day" minutes={settings.workMinutes} {...SETTING_LIMITS.workMinutes} onCommit={(m) => set({ workMinutes: m })} />
+            <DurationField label="Work week" minutes={settings.weekMinutes} {...SETTING_LIMITS.weekMinutes} onCommit={(m) => set({ weekMinutes: m })} />
+            <p className="muted small">The timeclock counts the week so far against this. 0 hides that line.</p>
             <DurationField
               label="Lunch must start within"
               minutes={settings.lunchDeadlineMinutes}
