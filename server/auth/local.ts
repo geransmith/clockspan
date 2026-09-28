@@ -5,7 +5,7 @@ import type { Config } from '../config.js';
 import { DUMMY_HASH, hashPassword, parseCredentials, parsePassword, verifyPassword } from './password.js';
 import { createSession, destroySession, revokeOtherSessions } from './session.js';
 import { currentUser, requireAdmin, requireAuth } from './middleware.js';
-import { accountKey, LoginLimiter, limiterKey, MAX_ACCOUNT_FAILURES, refuseTooMany } from './limiter.js';
+import { accountKey, LoginLimiter, limiterKey, MAX_ACCOUNT_FAILURES, refuseTooMany, warnUntrustedProxy } from './limiter.js';
 import { logName, publicUser } from './users.js';
 import type { AuthInfo, OkResponse, UserResponse, UsersResponse } from '../../shared/api.js';
 
@@ -40,6 +40,7 @@ export function localAuthRouter(db: DB, config: Config, setupCode: string = newS
   const r = Router();
   const limiter = new LoginLimiter();
   const accounts = new LoginLimiter(MAX_ACCOUNT_FAILURES);
+  r.use(warnUntrustedProxy(config));
   if (userCount(db) === 0) console.log(`[auth] No account yet. The setup page asks for this code: ${setupCode}`);
 
   r.get('/me', (req, res) => {

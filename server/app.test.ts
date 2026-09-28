@@ -255,7 +255,10 @@ describe('bad request bodies', () => {
 
 describe('TRUST_PROXY', () => {
   let app: TestApp;
-  afterEach(() => app.close());
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await app.close();
+  });
 
   const USER = { username: 'geran', password: 'correct horse', setupCode: SETUP_CODE };
   const loginFrom = (forwardedFor: string) =>
@@ -281,6 +284,26 @@ describe('TRUST_PROXY', () => {
     await exhaust();
     expect((await loginFrom('203.0.113.1')).status).toBe(429);
     expect((await loginFrom('203.0.113.2')).status).toBe(401);
+  });
+
+  it('says once in the log when a proxy forwards sign-ins that TRUST_PROXY does not trust', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const me = (headers: Record<string, string> = {}) => fetch(`${app.url}/api/auth/me`, { headers });
+    app = await startTestApp({ authMode: 'local' });
+    await me();
+    expect(warn).not.toHaveBeenCalled();
+    await me({ 'x-forwarded-for': '203.0.113.1' });
+    await me({ 'x-forwarded-for': '203.0.113.2' });
+    expect(warn).toHaveBeenCalledOnce();
+    expect(String(warn.mock.calls[0]![0])).toMatch(
+      /^\[proxy\] A request came in with X-Forwarded-For but TRUST_PROXY is not set\. If a reverse proxy sent it, every sign-in counts as coming from the proxy \(127\.0\.0\.1\), so 5 failed sign-ins from anyone block new sign-ins for everyone for up to 15 minutes: /,
+    );
+    await app.close();
+
+    warn.mockClear();
+    app = await startTestApp({ authMode: 'local', env: { TRUST_PROXY: '1' } });
+    await me({ 'x-forwarded-for': '203.0.113.1' });
+    expect(warn).not.toHaveBeenCalled();
   });
 });
 
