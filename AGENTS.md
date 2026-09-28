@@ -460,7 +460,9 @@ The browser pass for each surface (the logic under it is already tested):
 ## Gotchas
 
 - `better-sqlite3` is native but ships N-API prebuilds for every platform the image runs on
-  (linux-musl included). Its `binding.gyp` still makes npm try `node-gyp rebuild`, so the
+  (linux-musl x64 and arm64 included) and picks one at run time, so `node_modules` is the same on
+  every platform: the Dockerfile's build stage runs on the builder's platform and only the
+  runtime stage is emulated for arm64. Its `binding.gyp` still makes npm try `node-gyp rebuild`, so the
   Dockerfile and CI run `npm ci --ignore-scripts`, which also keeps every dependency's install
   script from running; `npm audit signatures` then checks registry signatures. There is no
   Docker on the dev machine: `image-smoke` (`scripts/smoke-image.sh`) on each PR is the first

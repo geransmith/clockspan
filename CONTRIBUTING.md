@@ -108,8 +108,8 @@ gh run rerun <run-id> --failed
 
 | Event | Jobs | Result |
 | --- | --- | --- |
-| Pull request | `check`, `image-smoke` (both required) | install without dependency scripts and check registry signatures; `npm audit --audit-level=high` (a new advisory can turn an unchanged PR red: merge the fix first); typecheck, lint, test, build; a version that already has a tag fails. The image is built and booted by `scripts/smoke-image.sh` (health, SPA shell, `/data` owner, root dropped, the healthcheck command) and never pushed |
-| Push to `main` | `check`, `image` | the image is built, booted by the same script, and only then pushed as `ghcr.io/geransmith/clockspan:edge` |
+| Pull request | `check`, `image-smoke` (both required) | install without dependency scripts and check registry signatures; `npm audit --audit-level=high` (a new advisory can turn an unchanged PR red: merge the fix first); typecheck, lint, test, build; a version that already has a tag fails. The image is built for amd64 and for arm64 (under QEMU) and each is booted by `scripts/smoke-image.sh` (health, SPA shell, `/data` owner, root dropped, no package manager, the healthcheck command); nothing is pushed |
+| Push to `main` | `check`, `image` | both platforms are built and booted by the same script, and only then pushed as one multi-platform `ghcr.io/geransmith/clockspan:edge` |
 | Push to `main` that changes the version | `check`, `image`, `release` | `:edge`, `:X.Y.Z`, `:X.Y`, `:latest`, the tag `vX.Y.Z` and the GitHub Release |
 | Pull request, push to `main`, weekly | `CodeQL` (not required) | static security analysis of the TypeScript (`security-extended`); alerts land in code scanning, and GitHub fails the PR's CodeQL check on a new high or critical one |
 | Pull request or push that touches `.github/` | `zizmor` (not required) | a security audit of the workflows and `dependabot.yml`; findings fail the job |

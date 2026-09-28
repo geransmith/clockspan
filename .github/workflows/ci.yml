@@ -100,8 +100,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # arm64 (a Raspberry Pi, an Apple-silicon or ARM home server) is built and booted under QEMU.
+      # Only the runtime stage is emulated: the build stage runs on the runner's own platform.
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      - name: Build the amd64 image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           platforms: linux/amd64
@@ -110,16 +116,29 @@ jobs:
           # Reads the layers main's image job caches; a pull request never writes the cache.
           cache-from: type=gha
           provenance: false
-      # Health, the SPA shell, /data's owner, root dropped, the HEALTHCHECK command. The image job
-      # on main runs the same script before it pushes.
-      - name: Boot the image and check it serves
+      # Health, the SPA shell, /data's owner, root dropped, no package manager, the HEALTHCHECK
+      # command. The image job on main runs the same script before it pushes.
+      - name: Boot the amd64 image and check it serves
         run: sh scripts/smoke-image.sh clockspan:smoke
+      - name: Build the arm64 image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/arm64
+          load: true
+          tags: clockspan:smoke-arm64
+          cache-from: type=gha
+          provenance: false
+      # The same checks; better-sqlite3 loading its linuxmusl-arm64 prebuild is the one that
+      # only this run can show.
+      - name: Boot the arm64 image and check it serves
+        run: sh scripts/smoke-image.sh clockspan:smoke-arm64 linux/arm64
 
   image:
     if: github.event_name == 'push'
     needs: check
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     permissions:
       contents: read
       packages: write # push to ghcr.io
@@ -144,11 +163,15 @@ jobs:
             type=raw,value=${{ needs.check.outputs.version }},priority=900,enable=${{ needs.check.outputs.release == 'true' }}
             type=raw,value=${{ needs.check.outputs.minor }},enable=${{ needs.check.outputs.release == 'true' }}
             type=raw,value=latest,enable=${{ needs.check.outputs.release == 'true' }}
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      # Built and booted before anything is pushed. "Require branches to be up to date" is off,
-      # so this commit may not be the one image-smoke booted on the pull request, and a release
-      # moves `latest`. The push below rebuilds from the builder's cache and takes seconds.
-      - name: Build the image
+      # Both platforms are built and booted before anything is pushed. "Require branches to be up
+      # to date" is off, so this commit may not be the one image-smoke booted on the pull request,
+      # and a release moves `latest`. The push below rebuilds from the builder's cache and takes
+      # seconds.
+      - name: Build the amd64 image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -157,19 +180,33 @@ jobs:
           tags: clockspan:smoke
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
           provenance: false
-      - name: Boot the image and check it serves
+      - name: Boot the amd64 image and check it serves
         run: sh scripts/smoke-image.sh clockspan:smoke
+      - name: Build the arm64 image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/arm64
+          load: true
+          tags: clockspan:smoke-arm64
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          provenance: false
+      - name: Boot the arm64 image and check it serves
+        run: sh scripts/smoke-image.sh clockspan:smoke-arm64 linux/arm64
+      # One tag set for both platforms: Docker pulls the one that matches the host. The cache is
+      # written here, where both runtime stages are in one build.
       - name: Push the image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
+          cache-to: type=gha,mode=max
           # Attestations show up as an "unknown/unknown" platform on the GHCR page; skip them.
           provenance: false
 
