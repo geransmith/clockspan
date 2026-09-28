@@ -1,5 +1,6 @@
-// Intentionally minimal: a fetch handler is what makes the app installable, but nothing
-// is cached so users never see stale assets after an update.
+// Nothing is cached, so users never see stale assets after an update. The fetch handler passes
+// every request through untouched; older Chromium builds wanted one before they offered to
+// install an app.
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', () => {});

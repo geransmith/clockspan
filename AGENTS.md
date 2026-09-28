@@ -68,7 +68,8 @@ client/                 Vite root → dist/client
     copy.ts             every line the app raises at the user; no logic
     storage.ts          localStorage that never throws (private mode, quota)
   src/hooks/            state and effects (useDay, useTimer, useSettings, useAlarms, …), each with a
-                        happy-dom test beside it; src/test/hooks.tsx has the fixtures and provider stack
+                        happy-dom test beside it (useLatest and useTimeFormat are covered through the
+                        hooks that use them); src/test/hooks.tsx has the fixtures and provider stack
   src/components/       the cards, History (Calendar + Review), Banners, FinishChoice; pieces more than
                         one place uses (TimerControls, Toggle, NewPasswordFields, Tile); settings/ holds
                         SettingsDialog (the shell and tabs), a file per tab, and controls.tsx
