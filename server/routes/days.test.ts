@@ -30,6 +30,7 @@ describe('GET /api/days/:date', () => {
       retroAt: null,
       workMinutes: null,
       sessions: [],
+      breaks: [],
     });
   });
 
@@ -254,6 +255,8 @@ describe('/api/days/prune', () => {
     const count = (table: string) => (app.db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE day_id IN (${ids.join(',')})`).get() as { n: number }).n;
     expect(count('punches')).toBe(doomed.reduce((n, d) => n + d.punches.length, 0));
     expect(count('sessions')).toBe(doomed.reduce((n, d) => n + d.sessions.length, 0));
+    expect(count('breaks')).toBe(doomed.reduce((n, d) => n + d.breaks.length, 0));
+    expect(count('breaks')).toBeGreaterThan(0);
 
     // Another user's day on the same date must survive.
     const other = Number(app.db.prepare(`INSERT INTO users (kind, display_name, created_at) VALUES ('local', 'Other', 0)`).run().lastInsertRowid);
@@ -267,6 +270,7 @@ describe('/api/days/prune', () => {
     expect(count('punches')).toBe(0);
     expect(count('priorities')).toBe(0);
     expect(count('sessions')).toBe(0);
+    expect(count('breaks')).toBe(0);
     expect((await app.api.post('/api/days/prune', { before })).body).toEqual({ deleted: 0 });
     expect((await app.api.post('/api/days/prune', { before: 'soon' })).status).toBe(400);
     expect((await app.api.post('/api/days/prune', {})).status).toBe(400);
@@ -331,7 +335,7 @@ describe('days are scoped to the signed-in user', () => {
     expect((await a.get(`/api/days/${date}`)).body.punches.length).toBeGreaterThan(0);
 
     // Reads: B sees nothing of A's.
-    expect((await b.get(`/api/days/${date}`)).body).toMatchObject({ date, punches: [], priorities: [], sessions: [] });
+    expect((await b.get(`/api/days/${date}`)).body).toMatchObject({ date, punches: [], priorities: [], sessions: [], breaks: [] });
     expect((await b.get(`/api/days/range?from=${date}&to=${SEED_TODAY}`)).body.days).toEqual([]);
     expect((await b.get(`/api/days/prune?before=2099-01-01`)).body).toMatchObject({ matching: 0, total: 0, oldest: null });
 

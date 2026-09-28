@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { alert, dismissByTag, unlockAudio, type AlertOptions } from '../lib/alerts';
 import { BREAK_SUGGESTION } from '../lib/copy';
-import { AllProviders, deferred, makeDay, makeSession, makeSettings, MIN, settle, T0, TODAY } from '../test/hooks';
+import { AllProviders, deferred, makeBreak, makeDay, makeSession, makeSettings, MIN, settle, T0, TODAY } from '../test/hooks';
 import type { Day, Session } from '../types';
 import { useBreak } from './useBreak';
 import { useDay } from './useDay';
@@ -22,6 +22,11 @@ beforeEach(() => {
   vi.mocked(api.getSettings).mockResolvedValue(settings);
   vi.mocked(api.getRunning).mockResolvedValue({ session: null });
   vi.mocked(api.getDay).mockResolvedValue(makeDay());
+  // The server starts a break now and ends one early now.
+  vi.mocked(api.startBreak).mockImplementation((date, plannedSeconds) =>
+    Promise.resolve({ break: makeBreak({ id: 5, date, plannedSeconds, startedAt: Date.now(), endedAt: Date.now() + plannedSeconds * 1000 }) }),
+  );
+  vi.mocked(api.endBreak).mockImplementation((id) => Promise.resolve({ break: makeBreak({ id, startedAt: T0, endedAt: Date.now() }) }));
 });
 afterEach(() => {
   cleanup();
@@ -29,12 +34,15 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
-it('counts a break down and announces its end once, with the Break over sound', async () => {
+it("starts a break on today's sheet, counts it down and announces its end once, with the Break over sound", async () => {
   const { result } = render();
   await settle();
   expect(result.current.endsAt).toBeNull();
   act(() => result.current.start(5));
   expect(dismissByTag).toHaveBeenCalledWith('break');
+  await settle();
+  expect(api.startBreak).toHaveBeenCalledWith(TODAY, 300);
+  expect(result.current.day?.breaks.map((b) => b.id)).toEqual([5]);
   expect(result.current.endsAt).toBe(T0 + 5 * MIN);
   expect(result.current.remainingSeconds).toBe(300);
   await settle(2 * MIN);
@@ -50,15 +58,28 @@ it('counts a break down and announces its end once, with the Break over sound', 
   expect(alert).toHaveBeenCalledTimes(1);
 });
 
-it('keeps a break across a reload, and a reload after the end does not announce it again', async () => {
+it('starts one break for a second tap while the first is out', async () => {
+  const { result } = render();
+  await settle();
+  act(() => result.current.start(5));
+  act(() => result.current.start(5));
+  await settle();
+  expect(api.startBreak).toHaveBeenCalledTimes(1);
+  act(() => result.current.start(10));
+  await settle();
+  expect(api.startBreak).toHaveBeenCalledTimes(2);
+});
+
+it('follows a break from the server across a reload, and a reload after the end does not announce it again', async () => {
+  vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { breaks: [makeBreak({ startedAt: T0 - MIN, endedAt: T0 + 4 * MIN })] }));
   const first = render();
   await settle();
-  act(() => first.result.current.start(5));
+  expect(first.result.current.endsAt).toBe(T0 + 4 * MIN);
   first.unmount();
   const second = render();
   await settle();
-  expect(second.result.current.endsAt).toBe(T0 + 5 * MIN);
-  await settle(5 * MIN);
+  expect(second.result.current.endsAt).toBe(T0 + 4 * MIN);
+  await settle(4 * MIN);
   expect(alert).toHaveBeenCalledTimes(1);
   second.unmount();
   render();
@@ -66,36 +87,50 @@ it('keeps a break across a reload, and a reload after the end does not announce 
   expect(alert).toHaveBeenCalledTimes(1);
 });
 
-it('ends early without an alert, and takes a suggestion still up with it', async () => {
+it('ends early on the server without an alert, and takes a suggestion still up with it', async () => {
   const { result } = render();
   await settle();
   act(() => result.current.start(5));
+  await settle(MIN);
   vi.mocked(dismissByTag).mockClear();
   act(() => result.current.end());
   expect(dismissByTag).toHaveBeenCalledWith('break');
+  // At once on screen, then on the server.
   expect(result.current.endsAt).toBeNull();
+  await settle();
+  expect(api.endBreak).toHaveBeenCalledWith(5);
+  expect(result.current.day?.breaks[0]?.endedAt).toBe(T0 + MIN);
   await settle(10 * MIN);
   expect(alert).not.toHaveBeenCalled();
 });
 
-it('drops, without an alert, a break that ended long before the page opened', async () => {
-  localStorage.setItem('focus:break', JSON.stringify({ endsAt: T0 - 30 * MIN }));
+it('sends nothing to end when no break is running (a timer started without one)', async () => {
+  const { result } = render();
+  await settle();
+  act(() => result.current.end());
+  await settle();
+  expect(dismissByTag).toHaveBeenCalledWith('break');
+  expect(api.endBreak).not.toHaveBeenCalled();
+});
+
+it('says nothing for a break that ended early or long before the page opened', async () => {
+  const early = makeBreak({ id: 1, startedAt: T0 - 20 * MIN, endedAt: T0 - 18 * MIN });
+  vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { breaks: [early] }));
+  const { unmount } = render();
+  await settle();
+  expect(alert).not.toHaveBeenCalled();
+  expect(localStorage.getItem('focus:break-over')).toBe('1');
+  unmount();
+  vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { breaks: [makeBreak({ id: 2, startedAt: T0 - 35 * MIN, endedAt: T0 - 30 * MIN })] }));
   const { result } = render();
   await settle();
   expect(result.current.endsAt).toBeNull();
   expect(alert).not.toHaveBeenCalled();
-  expect(JSON.parse(localStorage.getItem('focus:break')!)).toEqual({ endsAt: null });
-});
-
-it('ignores a stored value that is not a break', async () => {
-  localStorage.setItem('focus:break', '"soon"');
-  const { result } = render();
-  await settle();
-  expect(result.current.endsAt).toBeNull();
+  expect(localStorage.getItem('focus:break-over')).toBe('2');
 });
 
 it('waits for the settings before announcing, so the chosen sound plays', async () => {
-  localStorage.setItem('focus:break', JSON.stringify({ endsAt: T0 - MIN }));
+  vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { breaks: [makeBreak({ startedAt: T0 - 6 * MIN, endedAt: T0 - MIN })] }));
   let answer!: (s: typeof settings) => void;
   vi.mocked(api.getSettings).mockReturnValue(new Promise((r) => (answer = r)));
   render();
@@ -149,6 +184,8 @@ describe('suggestions', () => {
     expect(result.current.next).toMatchObject({ minutes: 4, long: false });
     act(() => suggested()!.action!.run());
     expect(unlockAudio).toHaveBeenCalled();
+    await settle();
+    expect(api.startBreak).toHaveBeenCalledWith(TODAY, 4 * 60);
     expect(result.current.endsAt).toBe(T0 + 4 * MIN);
   });
 

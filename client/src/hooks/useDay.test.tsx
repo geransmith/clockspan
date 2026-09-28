@@ -5,8 +5,8 @@ import * as api from '../api';
 import { dismissByTag, warnQuietly } from '../lib/alerts';
 import { SAVE_FAILED } from '../lib/copy';
 import { emptyPunches } from '../lib/timeclock';
-import { deferred, makeDay, makeSession, makeSettings, MIN, settle, SettingsAndDays, setVisibility, T0, TODAY } from '../test/hooks';
-import type { Day, OvertimeResponse, Priority, Punch, PunchesResponse } from '../types';
+import { deferred, makeBreak, makeDay, makeSession, makeSettings, MIN, settle, SettingsAndDays, setVisibility, T0, TODAY } from '../test/hooks';
+import type { BreakResponse, Day, OvertimeResponse, Priority, Punch, PunchesResponse } from '../types';
 import { useDay, useDayStore, useRefreshDay } from './useDay';
 
 vi.mock('../api');
@@ -466,6 +466,83 @@ describe('sessions', () => {
     expect(result.current.days[TODAY]?.sessions[0]?.label).toBe('Stored');
     expect(warnQuietly).toHaveBeenCalledTimes(1);
     expect(api.getDay).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('breaks', () => {
+  const over = makeBreak({ id: 1, startedAt: T0 - 30 * MIN, endedAt: T0 - 25 * MIN });
+  const running = makeBreak({ id: 2, startedAt: T0 - 2 * MIN, endedAt: T0 + 3 * MIN });
+
+  it('startBreak shows the break once the server has it, and ends one still running as the server does', async () => {
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { breaks: [over, running] }));
+    const answer = deferred<BreakResponse>();
+    vi.mocked(api.startBreak).mockReturnValue(answer.promise);
+    const { result } = renderStore();
+    await settle();
+    let done!: Promise<void>;
+    act(() => {
+      done = result.current.startBreak(TODAY, 600);
+    });
+    await settle();
+    expect(api.startBreak).toHaveBeenCalledWith(TODAY, 600);
+    expect(result.current.days[TODAY]?.breaks).toEqual([over, running]);
+    const saved = makeBreak({ id: 3, plannedSeconds: 600, startedAt: T0, endedAt: T0 + 10 * MIN });
+    answer.resolve({ break: saved });
+    await act(() => done);
+    expect(result.current.days[TODAY]?.breaks).toEqual([over, { ...running, endedAt: T0 }, saved]);
+  });
+
+  it('startBreak adds nothing and raises the banner when the server refuses', async () => {
+    vi.mocked(api.getDay).mockResolvedValue(makeDay());
+    vi.mocked(api.startBreak).mockRejectedValue(new Error('A focus timer is running.'));
+    const { result } = renderStore();
+    await settle();
+    await act(() => result.current.startBreak(TODAY, 300));
+    expect(result.current.days[TODAY]?.breaks).toEqual([]);
+    expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ title: SAVE_FAILED.title }));
+    expect(api.getDay).toHaveBeenCalledTimes(1);
+  });
+
+  it('endBreak ends the break on screen at once, then takes the end the server stored', async () => {
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { breaks: [over, running] }));
+    const answer = deferred<BreakResponse>();
+    vi.mocked(api.endBreak).mockReturnValue(answer.promise);
+    const { result } = renderStore();
+    await settle();
+    let done!: Promise<void>;
+    act(() => {
+      done = result.current.endBreak(TODAY, 2);
+    });
+    expect(result.current.days[TODAY]?.breaks).toEqual([over, { ...running, endedAt: T0 }]);
+    expect(api.endBreak).not.toHaveBeenCalled();
+    await settle();
+    expect(api.endBreak).toHaveBeenCalledWith(2);
+    // A focus session starting on another device ended it a little earlier.
+    answer.resolve({ break: { ...running, endedAt: T0 - 30_000 } });
+    await act(() => done);
+    expect(result.current.days[TODAY]?.breaks).toEqual([over, { ...running, endedAt: T0 - 30_000 }]);
+  });
+
+  it('endBreak puts the stored day back when the server does not answer', async () => {
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { breaks: [running] }));
+    vi.mocked(api.endBreak).mockRejectedValue(new Error('offline'));
+    const { result } = renderStore();
+    await settle();
+    await act(() => result.current.endBreak(TODAY, 2));
+    await settle();
+    expect(warnQuietly).toHaveBeenCalledTimes(1);
+    expect(api.getDay).toHaveBeenCalledTimes(2);
+    expect(result.current.days[TODAY]?.breaks).toEqual([running]);
+  });
+
+  it('removeBreak drops the row before the server answers', async () => {
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { breaks: [over, running] }));
+    vi.mocked(api.deleteBreak).mockResolvedValue({ ok: true });
+    const { result } = renderStore();
+    await settle();
+    await act(() => result.current.removeBreak(TODAY, 1));
+    expect(result.current.days[TODAY]?.breaks).toEqual([running]);
+    expect(api.deleteBreak).toHaveBeenCalledWith(1);
   });
 });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Session } from '../types';
-import { MAX_BREAK_MINUTES, MIN_FOCUS_SECONDS, SET_GAP_MINUTES, SET_SIZE, suggestBreak } from './breaks';
+import type { Break, Session } from '../types';
+import { breakSeconds, MAX_BREAK_MINUTES, MIN_FOCUS_SECONDS, runningBreak, SET_GAP_MINUTES, SET_SIZE, suggestBreak } from './breaks';
 
 const MIN = 60_000;
 const T0 = new Date(2026, 8, 28, 9, 0).getTime();
@@ -98,5 +98,32 @@ describe('suggestBreak', () => {
   it('ends the run at a completed row with no end', () => {
     const [a, b] = inARow([25, 25]);
     expect(suggestBreak([{ ...a!, endedAt: null }, b!])).toMatchObject({ position: 1 });
+  });
+});
+
+describe('logged breaks', () => {
+  const rest = (id: number, at: number, minutes: number, endedAt = T0 + (at + minutes) * MIN): Break => ({
+    id,
+    date: '2026-09-28',
+    plannedSeconds: minutes * 60,
+    startedAt: T0 + at * MIN,
+    endedAt,
+  });
+
+  it('counts the rest so far while a break runs, and its whole length once over', () => {
+    const b = rest(1, 0, 5);
+    expect(breakSeconds(b, T0 - MIN)).toBe(0);
+    expect(breakSeconds(b, T0 + 2 * MIN)).toBe(120);
+    expect(breakSeconds(b, T0 + 60 * MIN)).toBe(300);
+    expect(breakSeconds(rest(2, 0, 5, T0 + 90_000), T0 + 60 * MIN)).toBe(90);
+  });
+
+  it('finds the break running now: the latest one, while its end is ahead', () => {
+    const breaks = [rest(1, 0, 5), rest(2, 30, 10)];
+    expect(runningBreak([], T0)).toBeNull();
+    expect(runningBreak(breaks.slice(0, 1), T0 + 2 * MIN)).toBe(breaks[0]);
+    expect(runningBreak(breaks.slice(0, 1), T0 + 5 * MIN)).toBeNull();
+    expect(runningBreak(breaks, T0 + 35 * MIN)).toBe(breaks[1]);
+    expect(runningBreak(breaks, T0 + 40 * MIN)).toBeNull();
   });
 });

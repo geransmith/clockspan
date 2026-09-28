@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { CONFIRM } from '../lib/copy';
 import { makeSession, makeSettings, MIN, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
-import type { Priority, Session } from '../types';
+import type { Break, Priority, Session } from '../types';
 import { SessionLog } from './SessionLog';
 
 vi.mock('../api');
@@ -13,10 +13,19 @@ vi.mock('../lib/alerts');
 const PLANNED: Priority[] = [{ position: 1, text: 'Ship the fix', done: false, uid: 'abcdef123456', addedAt: T0 }];
 const DONE = makeSession({ status: 'completed', endedAt: T0 + 25 * MIN, durationSeconds: 25 * 60 });
 
-async function renderLog(sessions: Session[] = [DONE]) {
+/** A break of `minutes` that started `at` minutes after T0 and ran its length. */
+const rest = (id: number, at: number, minutes: number): Break => ({
+  id,
+  date: TODAY,
+  plannedSeconds: minutes * 60,
+  startedAt: T0 + at * MIN,
+  endedAt: T0 + (at + minutes) * MIN,
+});
+
+async function renderLog(sessions: Session[] = [DONE], breaks: Break[] = []) {
   render(
     <SettingsAndDays>
-      <SessionLog date={TODAY} sessions={sessions} priorities={PLANNED} now={T0 + 30 * MIN} />
+      <SessionLog date={TODAY} sessions={sessions} breaks={breaks} priorities={PLANNED} now={T0 + 30 * MIN} />
     </SettingsAndDays>,
   );
   await settle();
@@ -31,6 +40,7 @@ beforeEach(() => {
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
   vi.mocked(api.patchSession).mockImplementation((id, patch) => Promise.resolve({ session: { ...DONE, id, ...patch } }));
   vi.mocked(api.deleteSession).mockResolvedValue({ ok: true });
+  vi.mocked(api.deleteBreak).mockResolvedValue({ ok: true });
 });
 afterEach(() => {
   cleanup();
@@ -103,5 +113,44 @@ describe('SessionLog', () => {
     fireEvent.click(done!);
     await settle();
     expect(api.deleteSession).toHaveBeenCalledWith(1);
+  });
+
+  it('lists breaks between the sessions they followed, with their own total', async () => {
+    const later = makeSession({ id: 2, label: 'Second one', startedAt: T0 + 40 * MIN, status: 'completed', endedAt: T0 + 50 * MIN, durationSeconds: 600 });
+    // A break still running at `now` counts what it has so far.
+    await renderLog([later, DONE], [rest(1, 25, 5), rest(2, 28, 5)]);
+    const rows = screen.getAllByRole('listitem').map((li) => li.textContent);
+    expect(rows).toHaveLength(4);
+    expect(rows[0]).toMatch(/Write the report/);
+    expect(rows[1]).toMatch(/Break.*5m/);
+    expect(rows[2]).toMatch(/Break.*on break.*2m/);
+    expect(rows[3]).toMatch(/Second one/);
+    expect(screen.getByText('On breaks').parentElement!.textContent).toBe('On breaks7m· 2 breaks');
+  });
+
+  it('shows breaks alone, and no break total without any', async () => {
+    await renderLog([], [rest(1, 0, 5)]);
+    expect(screen.getByText('On breaks').parentElement!.textContent).toBe('On breaks5m· 1 break');
+    cleanup();
+    await renderLog();
+    expect(screen.queryByText('On breaks')).toBeNull();
+    cleanup();
+    await renderLog([]);
+    expect(screen.getByText(/No focus sessions yet/)).toBeTruthy();
+  });
+
+  it('deletes a break once the confirm says yes, and never one still running', async () => {
+    const confirm = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
+    vi.stubGlobal('confirm', confirm);
+    await renderLog([DONE], [rest(7, 25, 3), rest(8, 29, 5)]);
+    const [over, running] = screen.getAllByRole('button', { name: 'Delete break' }) as HTMLButtonElement[];
+    expect(running!.disabled).toBe(true);
+    fireEvent.click(over!);
+    await settle();
+    expect(confirm).toHaveBeenCalledWith(CONFIRM.deleteBreak);
+    expect(api.deleteBreak).not.toHaveBeenCalled();
+    fireEvent.click(over!);
+    await settle();
+    expect(api.deleteBreak).toHaveBeenCalledWith(7);
   });
 });

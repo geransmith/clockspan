@@ -272,7 +272,16 @@ Never commit `data/` or `.env`.
   restarts the count). With `suggestBreaks` on, `useBreak` offers today's suggestion on the
   Break button and as a quiet banner off `useTimer().finished`, which only a finish by hand
   sets (Finish, the finish choice, − past the time worked), never the auto-finish or another
-  device. A break itself stays on the device (`localStorage`) and is never logged.
+  device.
+- **A break is a row in the day's log** (`breaks` table, `Day.breaks`), never device state.
+  `ended_at` is the planned end from the start and moves back when the break is ended early
+  (`POST /breaks/:id/end`), so nothing finishes a break that runs out: it is running while
+  `endedAt` is ahead of now (`runningBreak`), and one that ended before its planned end was cut
+  short, which is why only a full-length break rings "Break's over" (once per break id,
+  `localStorage['focus:break-over']`). The server keeps breaks from overlapping sessions: a
+  break start ends a running break and is refused (409) while a focus timer runs, and a
+  session start ends a running break (`endRunningBreak`, `routes/shared.ts`). Break writes
+  share one `inOrder` key (`breaks`).
 - **Saves reach the server in the order they were made.** `setPunches` and `setPriorities`
   replace a whole list, so one PUT per day is in flight and only the newest waiting list follows
   it (`sendLatest` in `useDay.tsx`); the other day fields and each session's writes queue one

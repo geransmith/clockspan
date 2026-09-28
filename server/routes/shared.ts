@@ -1,7 +1,7 @@
 import type { RequestHandler } from 'express';
 import type { DB } from '../db.js';
 import { isValidDateKey } from '../../shared/dates.js';
-import type { Session, SessionStatus } from '../../shared/api.js';
+import type { Break, Session, SessionStatus } from '../../shared/api.js';
 import { activeMs } from '../../shared/timer.js';
 
 /** Guards a `/:date` route: 400 unless the param is a real `YYYY-MM-DD`. Works under `mergeParams` too. */
@@ -56,6 +56,27 @@ export interface SessionRow {
   priority_uid: string | null;
   paused_seconds: number;
   paused_at: number | null;
+}
+
+export interface BreakRow {
+  id: number;
+  day_id: number;
+  user_id: number;
+  planned_seconds: number;
+  started_at: number;
+  ended_at: number;
+}
+
+export function breakRowToJson(b: BreakRow & { date: string }): Break {
+  return { id: b.id, date: b.date, plannedSeconds: b.planned_seconds, startedAt: b.started_at, endedAt: b.ended_at };
+}
+
+/**
+ * Ends the user's running break, if any, at `now`: a new break or a focus session starting
+ * means the last break is over, so no two overlap in the log.
+ */
+export function endRunningBreak(db: DB, userId: number, now: number): void {
+  db.prepare(`UPDATE breaks SET ended_at = MAX(started_at, ?) WHERE user_id = ? AND ended_at > ?`).run(now, userId, now);
 }
 
 export function sessionRowToJson(s: SessionRow & { date: string }): Session {

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import { emptyDay } from '../../../shared/api.js';
-import type { Day, Priority, Punch, Session } from '../types';
+import type { Break, Day, Priority, Punch, Session } from '../types';
 import { dismissByTag, warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
 import { newUid, placePriority } from '../lib/priorities';
@@ -41,6 +41,11 @@ interface DayStore {
   applySession: (session: Session) => void;
   removeSession: (date: string, id: number) => Promise<void>;
   updateSession: (id: number, patch: { label?: string; notes?: string; priorityUid?: string | null }) => Promise<void>;
+  /** Start a break now. Not optimistic: it shows once the server has it, since the server may end another. */
+  startBreak: (date: string, plannedSeconds: number) => Promise<void>;
+  /** End a break early. */
+  endBreak: (date: string, id: number) => Promise<void>;
+  removeBreak: (date: string, id: number) => Promise<void>;
 }
 
 const Ctx = createContext<DayStore | null>(null);
@@ -294,6 +299,54 @@ export function DayProvider({ children }: { children: ReactNode }) {
     [applySession, inOrder],
   );
 
+  // The server ends a break still running when the next one starts; the same here, so the log
+  // doesn't show two running until the next refresh.
+  const applyBreak = useCallback((saved: Break) => {
+    mutationSeq.current++;
+    setDays((prev) =>
+      withDay(prev, saved.date, (d) => {
+        const others = d.breaks.filter((b) => b.id !== saved.id).map((b) => (b.endedAt > saved.startedAt ? { ...b, endedAt: saved.startedAt } : b));
+        return { ...d, breaks: [...others, saved].sort((a, b) => a.startedAt - b.startedAt) };
+      }),
+    );
+  }, []);
+
+  // Break writes share one queue: an end or a delete never passes the start before it.
+  const startBreak = useCallback(
+    async (date: string, plannedSeconds: number) => {
+      await inOrder('breaks', null, async () => {
+        const { break: saved } = await api.startBreak(date, plannedSeconds);
+        applyBreak(saved);
+      });
+    },
+    [applyBreak, inOrder],
+  );
+
+  const endBreak = useCallback(
+    async (date: string, id: number) => {
+      const now = Date.now();
+      setDays((prev) =>
+        withDay(prev, date, (d) => ({
+          ...d,
+          breaks: d.breaks.map((b) => (b.id === id ? { ...b, endedAt: Math.min(b.endedAt, Math.max(b.startedAt, now)) } : b)),
+        })),
+      );
+      await inOrder('breaks', date, async () => {
+        const { break: saved } = await api.endBreak(id);
+        applyBreak(saved);
+      });
+    },
+    [applyBreak, inOrder],
+  );
+
+  const removeBreak = useCallback(
+    async (date: string, id: number) => {
+      setDays((prev) => withDay(prev, date, (d) => ({ ...d, breaks: d.breaks.filter((b) => b.id !== id) })));
+      await inOrder('breaks', date, () => api.deleteBreak(id));
+    },
+    [inOrder],
+  );
+
   const value = useMemo(
     () => ({
       days,
@@ -309,6 +362,9 @@ export function DayProvider({ children }: { children: ReactNode }) {
       applySession,
       removeSession,
       updateSession,
+      startBreak,
+      endBreak,
+      removeBreak,
     }),
     [
       days,
@@ -324,6 +380,9 @@ export function DayProvider({ children }: { children: ReactNode }) {
       applySession,
       removeSession,
       updateSession,
+      startBreak,
+      endBreak,
+      removeBreak,
     ],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

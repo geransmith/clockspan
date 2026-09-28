@@ -2,26 +2,35 @@ import { useRef, useState } from 'react';
 import { useDayStore } from '../hooks/useDay';
 import { CONFIRM, UNTITLED_SESSION } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
+import { breakSeconds } from '../lib/breaks';
 import { formatDuration, plural } from '../lib/format';
 import { activeMs } from '../lib/timer';
-import { LIMITS, type Priority, type Session } from '../types';
+import { LIMITS, type Break, type Priority, type Session } from '../types';
 import { Trash } from './Icons';
 
 interface Props {
   date: string;
   sessions: Session[];
+  breaks: Break[];
   priorities: Priority[];
   now: number;
 }
 
-export function SessionLog({ date, sessions, priorities, now }: Props) {
+type Entry = { at: number; session: Session; brk?: never } | { at: number; brk: Break; session?: never };
+
+export function SessionLog({ date, sessions, breaks, priorities, now }: Props) {
   const store = useDayStore();
   const completed = sessions.filter((s) => s.status === 'completed');
   const total = completed.reduce((sum, s) => sum + (s.durationSeconds ?? 0), 0);
+  const rested = breaks.reduce((sum, b) => sum + breakSeconds(b, now), 0);
   const planned = priorities.filter((p) => p.uid && p.text.trim());
+  // One list in the order things happened: breaks sit between the sessions they followed.
+  const entries: Entry[] = [...sessions.map((s) => ({ at: s.startedAt, session: s })), ...breaks.map((b) => ({ at: b.startedAt, brk: b }))].sort(
+    (a, b) => a.at - b.at,
+  );
 
-  if (sessions.length === 0) {
-    return <p className="muted center">No focus sessions yet. Sessions from the focus timer show up here.</p>;
+  if (entries.length === 0) {
+    return <p className="muted center">No focus sessions yet. Sessions and breaks from the focus timer show up here.</p>;
   }
 
   return (
@@ -33,19 +42,61 @@ export function SessionLog({ date, sessions, priorities, now }: Props) {
           · {completed.length} {plural(completed.length, 'session')}
         </span>
       </div>
+      {breaks.length > 0 && (
+        <div className="log-total">
+          <span className="muted">On breaks</span>
+          <strong>{formatDuration(rested)}</strong>
+          <span className="muted">
+            · {breaks.length} {plural(breaks.length, 'break')}
+          </span>
+        </div>
+      )}
       <ul className="log-list">
-        {sessions.map((s) => (
-          <Row
-            key={s.id}
-            session={s}
-            now={now}
-            planned={planned}
-            onEdit={(patch) => void store.updateSession(s.id, patch)}
-            onDelete={() => void store.removeSession(date, s.id)}
-          />
-        ))}
+        {entries.map(({ session: s, brk: b }) =>
+          s ? (
+            <Row
+              key={`s${s.id}`}
+              session={s}
+              now={now}
+              planned={planned}
+              onEdit={(patch) => void store.updateSession(s.id, patch)}
+              onDelete={() => void store.removeSession(date, s.id)}
+            />
+          ) : (
+            <BreakRow key={`b${b!.id}`} brk={b!} now={now} onDelete={() => void store.removeBreak(date, b!.id)} />
+          ),
+        )}
       </ul>
     </div>
+  );
+}
+
+/** A break in the log: when, how long, and a delete. Nothing to edit; it has no label or priority. */
+function BreakRow({ brk: b, now, onDelete }: { brk: Break; now: number; onDelete: () => void }) {
+  const { formatTime } = useTimeFormat();
+  const running = b.endedAt > now;
+  return (
+    <li className={`log-row log-row--break${running ? ' is-running' : ''}`}>
+      <span className="log-time">
+        {formatTime(b.startedAt)}
+        {!running && <> – {formatTime(b.endedAt)}</>}
+      </span>
+      <span className="log-label log-label--break">Break</span>
+      <span className="log-duration">
+        {running && <span className="pill pill--ok">on break</span>} {formatDuration(breakSeconds(b, now))}
+      </span>
+      <button
+        className="btn btn-icon log-delete"
+        onClick={() => {
+          if (window.confirm(CONFIRM.deleteBreak)) onDelete();
+        }}
+        aria-label="Delete break"
+        title="Delete"
+        disabled={running}
+      >
+        <Trash />
+      </button>
+    </li>
   );
 }
 

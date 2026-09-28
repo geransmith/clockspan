@@ -97,6 +97,9 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
   ['finishSession, counting the overrun', () => api.finishSession(3, true), 'POST', '/api/sessions/3/finish', { countOverrun: true }],
   ['cancelSession', () => api.cancelSession(3), 'POST', '/api/sessions/3/cancel', undefined],
   ['deleteSession', () => api.deleteSession(3), 'DELETE', '/api/sessions/3', undefined],
+  ['startBreak', () => api.startBreak(DATE, 300), 'POST', `/api/days/${DATE}/breaks`, { plannedSeconds: 300 }],
+  ['endBreak', () => api.endBreak(4), 'POST', '/api/breaks/4/end', undefined],
+  ['deleteBreak', () => api.deleteBreak(4), 'DELETE', '/api/breaks/4', undefined],
 ];
 
 describe('routes', () => {

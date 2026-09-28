@@ -1,4 +1,4 @@
-import type { Session } from '../types';
+import type { Break, Session } from '../types';
 
 /**
  * The break a focus session earns, on the Pomodoro technique's numbers: 25 minutes of focus
@@ -34,6 +34,17 @@ export interface BreakSuggestion {
   position: number;
   /** The focus the break is sized on: the latest session's, or the set's for a long break. */
   focusSeconds: number;
+}
+
+/** Seconds of rest a logged break holds at `now`: so far while it runs, its whole length once over. */
+export function breakSeconds(b: Break, now: number): number {
+  return Math.max(0, Math.round((Math.min(now, b.endedAt) - b.startedAt) / 1000));
+}
+
+/** The break running at `now` among a day's breaks (by start): the latest one still ahead of its end. */
+export function runningBreak(breaks: readonly Break[], now: number): Break | null {
+  const last = breaks.at(-1);
+  return last && last.endedAt > now ? last : null;
 }
 
 function breakMinutes(focusSeconds: number): number {
