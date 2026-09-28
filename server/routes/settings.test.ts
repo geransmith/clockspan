@@ -39,6 +39,13 @@ describe('/api/settings', () => {
     expect((await app.api.get('/api/settings')).body).toEqual(next.body);
   });
 
+  it('takes a weekly target from none up to a whole week, and keeps the old one otherwise', async () => {
+    expect((await app.api.put('/api/settings', { weekMinutes: 0 })).body.weekMinutes).toBe(0);
+    expect((await app.api.put('/api/settings', { weekMinutes: 7 * 24 * 60 })).body.weekMinutes).toBe(7 * 24 * 60);
+    expect((await app.api.put('/api/settings', { weekMinutes: 7 * 24 * 60 + 1 })).body.weekMinutes).toBe(7 * 24 * 60);
+    expect((await app.api.put('/api/settings', { weekMinutes: -60 })).body.weekMinutes).toBe(7 * 24 * 60);
+  });
+
   it('takes booleans for the switches and ignores anything else', async () => {
     expect((await app.api.put('/api/settings', { celebrations: false })).body.celebrations).toBe(false);
     expect((await app.api.put('/api/settings', { celebrations: 'no' })).body.celebrations).toBe(false);

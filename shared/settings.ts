@@ -45,6 +45,8 @@ export interface Settings {
   lunchMinutes: number;
   /** Hours *worked* after which a second meal period is due (California: 10 h). */
   secondMealAfterMinutes: number;
+  /** Hours a week the sheet counts the days toward, in minutes; 0 hides the week line. */
+  weekMinutes: number;
   timeFormat: TimeFormat;
   theme: Theme;
   adjustStepMinutes: number;
@@ -87,6 +89,7 @@ export const SETTING_LIMITS = {
   lunchDeadlineMinutes: { min: 1, max: 24 * 60 },
   lunchMinutes: { min: 0, max: 8 * 60 },
   secondMealAfterMinutes: { min: 1, max: 24 * 60 },
+  weekMinutes: { min: 0, max: 7 * 24 * 60 },
   adjustStepMinutes: { min: 1, max: 60 },
   priorityCount: { min: 1, max: 10 },
 } as const satisfies Partial<Record<keyof Settings, { min: number; max: number }>>;
@@ -109,6 +112,7 @@ export const DEFAULT_SETTINGS: Settings = deepFreeze({
   lunchDeadlineMinutes: 300,
   lunchMinutes: 30,
   secondMealAfterMinutes: 600,
+  weekMinutes: 40 * 60,
   timeFormat: 'auto',
   theme: 'auto',
   adjustStepMinutes: 5,

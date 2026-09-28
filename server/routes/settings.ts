@@ -101,6 +101,7 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     lunchDeadlineMinutes: limited('lunchDeadlineMinutes'),
     lunchMinutes: limited('lunchMinutes'),
     secondMealAfterMinutes: limited('secondMealAfterMinutes'),
+    weekMinutes: limited('weekMinutes'),
     timeFormat: TIME_FORMATS.includes(p.timeFormat as TimeFormat) ? (p.timeFormat as TimeFormat) : base.timeFormat,
     theme: THEMES.includes(p.theme as Theme) ? (p.theme as Theme) : base.theme,
     adjustStepMinutes: limited('adjustStepMinutes'),
