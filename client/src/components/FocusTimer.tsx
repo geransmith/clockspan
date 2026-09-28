@@ -4,10 +4,10 @@ import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { useTimer } from '../hooks/useTimer';
 import { unlockAudio } from '../lib/alerts';
-import { BREAK, CONFIRM, TIMER_DUE, UNTITLED_SESSION } from '../lib/copy';
+import { BREAK, TIMER_DUE, UNTITLED_SESSION } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
 import { LIMITS, type Priority } from '../types';
-import { Check, Minus, Pause, Play, Plus, X } from './Icons';
+import { TimerControls } from './TimerControls';
 
 interface Props {
   date: string;
@@ -146,10 +146,8 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
 }
 
 function Running() {
-  const { running, remainingSeconds, progress, paused, due, overrunSeconds, adjust, pause, resume, requestFinish, cancel } = useTimer();
-  const { settings } = useSettings();
+  const { running, remainingSeconds, progress, paused, due, overrunSeconds } = useTimer();
   if (!running) return null;
-  const step = settings.adjustStepMinutes;
   const r = 54;
   const circ = 2 * Math.PI * r;
   // Past the end the countdown goes negative; the sub-line says why.
@@ -170,37 +168,7 @@ function Running() {
         </div>
       </div>
       <div className="timer-running-label">{running.label || <span className="muted">{UNTITLED_SESSION}</span>}</div>
-      <div className="timer-controls">
-        {!due && (
-          <button className="btn" onClick={() => void adjust(-step * 60)}>
-            <Minus /> {step}m
-          </button>
-        )}
-        <button className="btn" onClick={() => void adjust(step * 60)}>
-          <Plus /> {step}m
-        </button>
-        {!due &&
-          (paused ? (
-            <button className="btn" onClick={() => void resume()}>
-              <Play /> Resume
-            </button>
-          ) : (
-            <button className="btn" onClick={() => void pause()}>
-              <Pause /> Pause
-            </button>
-          ))}
-        <button className="btn btn-primary" onClick={requestFinish}>
-          <Check /> Finish
-        </button>
-        <button
-          className="btn btn-ghost"
-          onClick={() => {
-            if (window.confirm(CONFIRM.cancelSession)) void cancel();
-          }}
-        >
-          <X /> Cancel
-        </button>
-      </div>
+      <TimerControls />
     </div>
   );
 }

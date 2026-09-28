@@ -1,6 +1,8 @@
 import { useState, type SubmitEvent } from 'react';
 import * as api from '../api';
-import { PASSWORD_LENGTH, type AuthInfo } from '../types';
+import { NewPasswordFields } from '../components/NewPasswordFields';
+import { PASSWORD_MISMATCH } from '../lib/copy';
+import type { AuthInfo } from '../types';
 
 interface Props {
   onDone: () => Promise<AuthInfo | null>;
@@ -19,7 +21,7 @@ export function SetupPage({ onDone, hint }: Props) {
   const submit = async (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (password !== confirm) {
-      setError('Passwords do not match.');
+      setError(PASSWORD_MISMATCH);
       return;
     }
     setBusy(true);
@@ -61,30 +63,7 @@ export function SetupPage({ onDone, hint }: Props) {
           <span>Username</span>
           <input className="input" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
         </label>
-        <label className="field">
-          <span>Password</span>
-          <input
-            className="input"
-            type="password"
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            minLength={PASSWORD_LENGTH.min}
-            required
-          />
-        </label>
-        <label className="field">
-          <span>Confirm password</span>
-          <input
-            className="input"
-            type="password"
-            autoComplete="new-password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            minLength={PASSWORD_LENGTH.min}
-            required
-          />
-        </label>
+        <NewPasswordFields label="Password" value={password} confirm={confirm} onValue={setPassword} onConfirm={setConfirm} />
         {error && <p className="error">{error}</p>}
         <button className="btn btn-primary btn-lg" type="submit" disabled={busy}>
           {busy ? 'Creating…' : 'Create account'}

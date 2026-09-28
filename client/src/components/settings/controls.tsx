@@ -1,4 +1,4 @@
-/** The settings tabs' building blocks: a titled section and its switch and number rows. */
+/** The settings tabs' building blocks: a titled section and its number rows (the switch is `../Toggle`). */
 import { useState, type ReactNode } from 'react';
 
 export function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
@@ -8,18 +8,6 @@ export function Section({ title, hint, children }: { title: string; hint?: strin
       {hint && <p className="muted small">{hint}</p>}
       <div className="settings-fields">{children}</div>
     </section>
-  );
-}
-
-export function Toggle({ label, hint, checked, onChange }: { label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <label className="toggle-row">
-      <span className="toggle-text">
-        <span>{label}</span>
-        {hint && <span className="muted small">{hint}</span>}
-      </span>
-      <input type="checkbox" role="switch" aria-checked={checked} className="switch" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-    </label>
   );
 }
 

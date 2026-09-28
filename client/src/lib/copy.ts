@@ -175,6 +175,12 @@ export const BREAK = {
   overBody: 'Pick the next thing, or start a timer.',
 } as const;
 
+/** The one button an alarm banner can carry: clock-out's and the retrospective's. */
+export const ALARM_ACTIONS = {
+  approveOvertime: 'Overtime approved',
+  openRetro: 'Open retrospective',
+} as const;
+
 /** Banner when a start finds a timer already running, started on another device. */
 export const TIMER_ELSEWHERE = {
   title: 'A timer is already running',
@@ -222,6 +228,9 @@ export const HTTPS_ONLY = {
   hint: 'This server keeps sessions over https only. Open the app through its https address before signing in.',
   notKept: 'Signed in, but the browser did not keep the session cookie. Open the app through its https address and try again.',
 } as const;
+
+/** Under the new-password fields (setup, a temporary password, Settings → Account) when the two differ. */
+export const PASSWORD_MISMATCH = 'The two passwords do not match.';
 
 /** After signing in on a temporary password (an admin's, or one the CLI generated), before the app. */
 export const NEW_PASSWORD = {

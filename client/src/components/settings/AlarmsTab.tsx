@@ -3,7 +3,8 @@ import { SOUND_EVENTS, SOUNDS } from '../../../../shared/sounds.js';
 import { notificationPermission, playSound, requestNotificationPermission, unlockAudio } from '../../lib/alerts';
 import { SOUND_EVENT_LABELS } from '../../lib/sounds';
 import type { AlarmId, AlarmSettings, Settings, SoundEvent, SoundId } from '../../types';
-import { Section, Toggle } from './controls';
+import { Toggle } from '../Toggle';
+import { Section } from './controls';
 
 const LEAD_CHOICES = [30, 15, 10, 5, 1];
 const REPEAT_CHOICES = [0, 1, 2, 5, 10, 15];

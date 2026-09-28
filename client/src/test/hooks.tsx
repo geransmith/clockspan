@@ -6,6 +6,7 @@ import { BreakProvider } from '../hooks/useBreak';
 import { DayProvider } from '../hooks/useDay';
 import { SettingsProvider } from '../hooks/useSettings';
 import { TimerProvider } from '../hooks/useTimer';
+import { ApiError } from '../lib/apiError';
 import { emptyPunches } from '../lib/timeclock';
 import type { Day, Session, Settings } from '../types';
 
@@ -58,8 +59,8 @@ export function deferred<T>() {
 }
 
 /** An API failure the way `request()` throws one: a status, and the body for a 409. */
-export function apiError(status: number, body?: unknown): Error {
-  return Object.assign(new Error(`Request failed (${status})`), { status, body });
+export function apiError(status: number, body?: unknown): ApiError {
+  return new ApiError(status, `Request failed (${status})`, body);
 }
 
 /** Moves the fake clock (0 = just the pending promises) and lets React render what changed. */

@@ -19,16 +19,9 @@ import type {
   UserResponse,
   UsersResponse,
 } from './types';
+import { ApiError } from './lib/apiError';
 
-export class ApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-    public body?: unknown,
-  ) {
-    super(message);
-  }
-}
+export { ApiError };
 
 export const UNAUTHENTICATED_EVENT = 'focus:unauthenticated';
 

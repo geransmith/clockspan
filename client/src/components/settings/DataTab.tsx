@@ -4,7 +4,8 @@ import * as api from '../../api';
 import { DELETE_DAYS, RESET_SETTINGS } from '../../lib/copy';
 import { addDays, formatDateFull, plural, todayKey } from '../../lib/format';
 import type { PruneInfo, Settings } from '../../types';
-import { NumberField, Section, Toggle } from './controls';
+import { Toggle } from '../Toggle';
+import { NumberField, Section } from './controls';
 
 export function DataTab({ settings, set, onReset }: { settings: Settings; set: (patch: Partial<Settings>) => void; onReset: () => void }) {
   return (

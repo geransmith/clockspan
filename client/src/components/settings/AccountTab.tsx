@@ -1,7 +1,8 @@
 import { useEffect, useState, type SubmitEvent } from 'react';
 import * as api from '../../api';
-import { CONFIRM } from '../../lib/copy';
+import { CONFIRM, PASSWORD_MISMATCH } from '../../lib/copy';
 import { PASSWORD_LENGTH, type PublicUser } from '../../types';
+import { NewPasswordFields } from '../NewPasswordFields';
 import { Section } from './controls';
 
 export function AccountTab({ user }: { user: PublicUser | null }) {
@@ -29,7 +30,7 @@ function ChangePassword() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const submit = async (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (next !== confirm) return setMsg({ ok: false, text: 'New passwords do not match.' });
+    if (next !== confirm) return setMsg({ ok: false, text: PASSWORD_MISMATCH });
     try {
       await api.changePassword(current, next);
       setMsg({ ok: true, text: 'Password updated.' });
@@ -46,30 +47,7 @@ function ChangePassword() {
         <span>Current password</span>
         <input className="input" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
       </label>
-      <label className="field">
-        <span>New password</span>
-        <input
-          className="input"
-          type="password"
-          autoComplete="new-password"
-          value={next}
-          onChange={(e) => setNext(e.target.value)}
-          minLength={PASSWORD_LENGTH.min}
-          required
-        />
-      </label>
-      <label className="field">
-        <span>Confirm new password</span>
-        <input
-          className="input"
-          type="password"
-          autoComplete="new-password"
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          minLength={PASSWORD_LENGTH.min}
-          required
-        />
-      </label>
+      <NewPasswordFields value={next} confirm={confirm} onValue={setNext} onConfirm={setConfirm} />
       {msg && <p className={msg.ok ? 'success' : 'error'}>{msg.text}</p>}
       <div>
         <button className="btn btn-primary" type="submit">

@@ -24,6 +24,7 @@ import { DurationField } from './DurationField';
 import { Plus, Trash, X } from './Icons';
 import { Tile } from './Tile';
 import { TimeField } from './TimeField';
+import { Toggle } from './Toggle';
 
 interface Props {
   date: string;
@@ -258,22 +259,13 @@ export function Timeclock({
       <WorkDay usual={settings.workMinutes} own={workMinutes} onChange={onWorkMinutesChange} />
 
       {otFeature && (
-        <label className="toggle-row ot-row">
-          <span className="toggle-text">
-            <span>Overtime approved</span>
-            <span className="muted small">
-              {overtimeApproved ? 'Clock-out alarm is off for today. Meal alarms stay on.' : 'Silences the clock-out alarm for this day.'}
-            </span>
-          </span>
-          <input
-            type="checkbox"
-            role="switch"
-            aria-checked={overtimeApproved}
-            className="switch"
-            checked={overtimeApproved}
-            onChange={(e) => onOvertimeChange(e.target.checked)}
-          />
-        </label>
+        <Toggle
+          className="ot-row"
+          label="Overtime approved"
+          hint={overtimeApproved ? 'Clock-out alarm is off for today. Meal alarms stay on.' : 'Silences the clock-out alarm for this day.'}
+          checked={overtimeApproved}
+          onChange={onOvertimeChange}
+        />
       )}
 
       <div
