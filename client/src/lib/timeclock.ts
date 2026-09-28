@@ -244,7 +244,9 @@ export function timeclockForDate(punches: Punch[], settings: TimeclockSettings, 
 /**
  * Whether the second meal period is in play: only while working, not yet taken, and only
  * when a day past the threshold is actually expected (overtime approved, already over the
- * target, or a target that long). A normal 8 h day never hears about it.
+ * target, or a target longer than the threshold). A normal 8 h day never hears about it, and
+ * neither does a 10 h one: California owes the second meal only for *more than* 10 hours, the
+ * same "more than" the lunch rule above uses.
  */
 export function secondMealApplies(
   tc: TimeclockResult,
@@ -256,7 +258,7 @@ export function secondMealApplies(
     tc.state === 'working' &&
     tc.secondMealBy != null &&
     tc.secondMealStatus !== 'taken' &&
-    (overtimeApproved || tc.overSeconds > 0 || settings.workMinutes >= settings.secondMealAfterMinutes)
+    (overtimeApproved || tc.overSeconds > 0 || settings.workMinutes > settings.secondMealAfterMinutes)
   );
 }
 
