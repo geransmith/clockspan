@@ -23,7 +23,7 @@ updates:
       - dependency-name: '@types/node'
         update-types: ['version-update:semver-major']
 
-  # ci.yml pins actions to commit SHAs with a `# vX.Y.Z` comment; Dependabot updates both.
+  # The workflows pin actions to commit SHAs with a `# vX.Y.Z` comment; Dependabot updates both.
   - package-ecosystem: github-actions
     directory: /
     schedule:

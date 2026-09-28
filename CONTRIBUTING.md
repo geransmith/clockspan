@@ -25,6 +25,10 @@ reach (most components have no automated tests, and none test how they look)? De
 users in a release: cut a patch release after merging a security update (or one that fixes a
 Dependabot alert) or a new Docker base image. Other bumps can wait for the next release.
 
+`package.json`'s `allowScripts` names esbuild at its exact version: it is the one install script
+a local `npm install` may run (CI and the image run none). When a bump moves esbuild to another
+version, move that entry in the same PR, or a local install leaves the script unapproved.
+
 ```bash
 git switch -c <topic>            # never work on main
 # edit, commit
