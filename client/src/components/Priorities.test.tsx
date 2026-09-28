@@ -62,6 +62,15 @@ describe('Priorities', () => {
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
+  it('still saves text typed just before the card goes away (another day opened)', async () => {
+    const { unmount, onChange, saved } = await renderCard();
+    fireEvent.change(textbox(1), { target: { value: 'Typed, then left' } });
+    unmount();
+    await settle(400);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(saved()[0]!.text).toBe('Typed, then left');
+  });
+
   it('only ticks a row with text, and saves the tick straight away', async () => {
     const { onChange, saved } = await renderCard([row(1, 'Report')]);
     expect(tick(2).disabled).toBe(true);
