@@ -2165,6 +2165,14 @@ dialog.dialog::backdrop {
     grid-template-columns: 1fr 1fr auto;
   }
 }
+/* The Data tab's last line keeps its muted colour for the link and marks it with the underline:
+   the accent is only just 4.5:1 on white, too close at this size. */
+.about-link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
 
 /* ---------- touch targets ---------- */
 /* On a touch screen a tap needs about 44 px to land, while the compact controls keep the size
@@ -2180,7 +2188,8 @@ dialog.dialog::backdrop {
   .banner-action,
   .log-delete,
   .punch-pair .punch-remove,
-  .timer-add-priority {
+  .timer-add-priority,
+  .about-link {
     position: relative;
   }
   .chip::after,
@@ -2190,7 +2199,8 @@ dialog.dialog::backdrop {
   .banner-action::after,
   .log-delete::after,
   .punch-pair .punch-remove::after,
-  .timer-add-priority::after {
+  .timer-add-priority::after,
+  .about-link::after {
     content: '';
     position: absolute;
     inset: var(--hit-inset);
@@ -2226,6 +2236,11 @@ dialog.dialog::backdrop {
   /* 32 px, 12 px from the chips above and the quick buttons below: 44 px. */
   .timer-add-priority {
     --hit-inset: -6px 0;
+  }
+  /* 16 px of text, 43 px under the Reset button when the line wraps and off to its side when
+     it doesn't, 26 px above the panel's foot: 44 px. */
+  .about-link {
+    --hit-inset: -14px -4px;
   }
   /* The running label clips its overflow (a long label ends in an ellipsis), which would cut
      off an ::after as well; more padding, taken back by a negative margin, grows the button

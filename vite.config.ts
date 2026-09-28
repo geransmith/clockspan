@@ -1,5 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import { version } from './package.json';
 
 // The client lives in ./client; the built bundle goes to ./dist/client, which
 // the Express server serves in production. In dev, Vite proxies API and auth
@@ -7,6 +8,9 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   root: 'client',
   plugins: [react()],
+  // Shown in Settings → Data. The bundle and the server ship in one image, so this is the running
+  // version; an `edge` build carries the last release's number until the next bump.
+  define: { __APP_VERSION__: JSON.stringify(version) },
   build: {
     outDir: '../dist/client',
     emptyOutDir: true,
