@@ -186,6 +186,42 @@ describe('computeTimeclock', () => {
   });
 });
 
+describe('a day that needs no lunch', () => {
+  const short = (workMinutes: number) => ({ ...settings, workMinutes });
+
+  it('plans no lunch when the whole day fits in the lunch window', () => {
+    const r = computeTimeclock(punches([T0, null, null, null]), short(240), T0 + H);
+    expect(r.lunchStatus).toBe('not-needed');
+    expect(r.clockOutAt).toBe(T0 + 4 * H); // not 4h 30m
+    expect(r.lunchBy).toBe(T0 + 5 * H);
+  });
+
+  it('counts a day exactly as long as the window as fitting, even past the deadline on the wall clock', () => {
+    // 5 h of work with a 20 min break: the clock runs past 13:00, the work does not pass 5 h.
+    const p = punches([T0, null, null, T0 + H, T0 + H + 20 * M, null]);
+    const r = computeTimeclock(p, short(300), T0 + 2 * H);
+    expect(r.lunchStatus).toBe('not-needed');
+    expect(r.clockOutAt).toBe(T0 + 5 * H + 20 * M);
+  });
+
+  it('owes a lunch once the work runs past the window', () => {
+    const r = computeTimeclock(punches([T0, null, null, null]), short(300), T0 + 5 * H + 10 * M);
+    expect(r.clockOutStatus).toBe('over');
+    expect(r.lunchStatus).toBe('overdue');
+  });
+
+  it('judges a finished day by what was worked', () => {
+    // An 8 h day that ended after 4 h of work needed no lunch; one that ended after 7 h did.
+    expect(computeTimeclock(punches([T0, null, null, T0 + 4 * H]), settings, T0 + 5 * H).lunchStatus).toBe('not-needed');
+    expect(computeTimeclock(punches([T0, null, null, T0 + 7 * H]), settings, T0 + 8 * H).lunchStatus).toBe('overdue');
+  });
+
+  it('leaves a normal day and a lunch already taken alone', () => {
+    expect(computeTimeclock(punches([T0, null, null, null]), settings, T0 + H).lunchStatus).toBe('upcoming');
+    expect(computeTimeclock(punches([T0, T0 + 2 * H, T0 + 2.5 * H, null]), short(240), T0 + 3 * H).lunchStatus).toBe('taken');
+  });
+});
+
 describe('second meal period', () => {
   it('projects the instant the 10th hour of work ends and holds it while working', () => {
     const p = punches([T0, T0 + 4 * H, T0 + 4.5 * H, null]);

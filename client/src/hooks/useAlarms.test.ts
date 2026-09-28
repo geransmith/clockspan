@@ -100,6 +100,20 @@ describe('firing', () => {
     expect(alert).toHaveBeenCalledTimes(2);
   });
 
+  it('has no lunch alarm on a day short enough to need no lunch', () => {
+    const fourHours = makeSettings({ workMinutes: 240 });
+    // Clocked in 4 h 50 m ago, still working: past a 4 h day, short of the 5 h lunch deadline.
+    const tc = computeTimeclock(
+      emptyPunches().map((p, i) => ({ ...p, at: i === 0 ? T0 - 290 * MIN : null })),
+      fourHours,
+      T0,
+    );
+    expect(tc.lunchStatus).toBe('not-needed');
+    renderAlarms({ tc, settings: fourHours });
+    expect(tags()).not.toContain('alarm:lunchBy');
+    expect(tags()).toContain('alarm:clockOut');
+  });
+
   it('never arms a target without an instant', () => {
     renderAlarms({ tc: { ...overDay, lunchBy: null, clockOutAt: null, secondMealBy: null } });
     expect(alert).not.toHaveBeenCalled();
