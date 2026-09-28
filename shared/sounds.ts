@@ -29,5 +29,5 @@ export const CLIP_IDS: readonly ClipId[] = SOUNDS.filter((s): s is Extract<Sound
  * What can make a noise. The alarm stages share their names with `AlarmKind`
  * (`client/src/lib/alarms.ts`) so a fired event's sound is `settings.sounds[event.kind]`.
  */
-export const SOUND_EVENTS = ['timer', 'lead', 'due', 'overdue', 'dayDone', 'priorityDone'] as const;
+export const SOUND_EVENTS = ['timer', 'breakDone', 'lead', 'due', 'overdue', 'dayDone', 'priorityDone'] as const;
 export type SoundEvent = (typeof SOUND_EVENTS)[number];

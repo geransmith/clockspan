@@ -1053,6 +1053,28 @@ button {
   font-size: 0.92rem;
   min-height: 32px;
 }
+/* A break in progress: when it ends and what's left, with a way back early. */
+.timer-break {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 6px 6px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  font-size: 0.92rem;
+}
+.timer-break-text {
+  display: flex;
+  flex-direction: column;
+}
+.timer-break-text strong {
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+}
+.timer-break-start {
+  align-self: center;
+}
 /* One column per start button; two lengths set the same make one button. */
 .timer-quick {
   display: grid;

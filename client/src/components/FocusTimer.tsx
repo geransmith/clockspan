@@ -1,7 +1,10 @@
 import { useState } from 'react';
+import { useBreak } from '../hooks/useBreak';
 import { useSettings } from '../hooks/useSettings';
+import { useTimeFormat } from '../hooks/useTimeFormat';
 import { useTimer } from '../hooks/useTimer';
-import { CONFIRM, TIMER_DUE, UNTITLED_SESSION } from '../lib/copy';
+import { unlockAudio } from '../lib/alerts';
+import { BREAK, CONFIRM, TIMER_DUE, UNTITLED_SESSION } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
 import { LIMITS, type Priority } from '../types';
 import { Check, Minus, Pause, Play, Plus, X } from './Icons';
@@ -16,7 +19,9 @@ interface Props {
 
 export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) {
   const timer = useTimer();
+  const breakTimer = useBreak();
   const { settings } = useSettings();
+  const { formatTime } = useTimeFormat();
   const [label, setLabel] = useState('');
   const [linked, setLinked] = useState<string | null>(null);
   const [addAsPriority, setAddAsPriority] = useState(false);
@@ -55,6 +60,8 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
       let uid = linkedStillOpen ? linked : null;
       if (!uid && offerAdd && addAsPriority) uid = await onAddPriority(trimmed);
       await timer.start(date, minutes * 60, trimmed, uid);
+      // Back to work: whatever was left of a break goes without an alert.
+      breakTimer.end();
       setLabel('');
       setLinked(null);
       setAddAsPriority(false);
@@ -101,6 +108,17 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
           <span>Also add to today's priorities</span>
         </label>
       )}
+      {breakTimer.endsAt != null && (
+        <div className="timer-break" role="status">
+          <span className="timer-break-text">
+            <span>{BREAK.running(formatTime(breakTimer.endsAt))}</span>
+            <strong>{formatCountdown(breakTimer.remainingSeconds)}</strong>
+          </span>
+          <button className="btn btn-ghost" onClick={breakTimer.end}>
+            {BREAK.end}
+          </button>
+        </div>
+      )}
       <div className="timer-quick">
         {lengths.map((m) => (
           <button key={m} className="btn btn-quick" onClick={() => void start(m)} disabled={!isToday || starting}>
@@ -109,6 +127,18 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
           </button>
         ))}
       </div>
+      {isToday && breakTimer.endsAt == null && (
+        <button
+          className="btn btn-ghost timer-break-start"
+          onClick={() => {
+            // A gesture, so iOS lets the Break over sound play later.
+            unlockAudio();
+            breakTimer.start();
+          }}
+        >
+          {BREAK.start(settings.breakMinutes)}
+        </button>
+      )}
       {!isToday && <p className="muted center">Timers can only be started on today's sheet.</p>}
       {error && <p className="error">{error}</p>}
     </div>

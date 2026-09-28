@@ -183,6 +183,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 {...SETTING_LIMITS.adjustStepMinutes}
                 onCommit={(m) => set({ adjustStepMinutes: m })}
               />
+              <NumberField label="Break" value={settings.breakMinutes} {...SETTING_LIMITS.breakMinutes} onCommit={(m) => set({ breakMinutes: m })} />
               <Toggle
                 label="Keep screen awake while a timer runs"
                 hint="Stops phones from sleeping mid-session so the chime can play."

@@ -105,6 +105,7 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     timeFormat: TIME_FORMATS.includes(p.timeFormat as TimeFormat) ? (p.timeFormat as TimeFormat) : base.timeFormat,
     theme: THEMES.includes(p.theme as Theme) ? (p.theme as Theme) : base.theme,
     adjustStepMinutes: limited('adjustStepMinutes'),
+    breakMinutes: limited('breakMinutes'),
     timerMinutes: mergeTimerMinutes(base.timerMinutes, p.timerMinutes),
     priorityCount: limited('priorityCount'),
     sound: isBool(p.sound) ? p.sound : base.sound,

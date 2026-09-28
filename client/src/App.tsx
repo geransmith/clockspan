@@ -8,6 +8,7 @@ import { FinishChoice } from './components/FinishChoice';
 import { SettingsDialog } from './components/SettingsDialog';
 import { Sheet } from './components/Sheet';
 import { useAlarms } from './hooks/useAlarms';
+import { BreakProvider } from './hooks/useBreak';
 import { DayProvider, useDay, useRefreshDay } from './hooks/useDay';
 import { useNow } from './hooks/useNow';
 import { useRoute } from './hooks/useRoute';
@@ -25,7 +26,9 @@ export function App() {
       <SettingsProvider>
         <DayProvider>
           <TimerProvider>
-            <Shell />
+            <BreakProvider>
+              <Shell />
+            </BreakProvider>
           </TimerProvider>
         </DayProvider>
       </SettingsProvider>
