@@ -1,6 +1,7 @@
 import { DEFAULT_SETTINGS, SETTING_LIMITS, TIMER_MINUTES, type Theme } from '../../../../shared/settings.js';
 import type { Settings } from '../../types';
-import { NumberField, NumberInput, Section, Toggle } from './controls';
+import { Toggle } from '../Toggle';
+import { NumberField, NumberInput, Section } from './controls';
 
 export function SheetTab({ settings, set }: { settings: Settings; set: (patch: Partial<Settings>) => void }) {
   return (

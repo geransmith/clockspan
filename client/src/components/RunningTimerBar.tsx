@@ -1,19 +1,16 @@
 import { useState } from 'react';
-import { useSettings } from '../hooks/useSettings';
 import { useTimer } from '../hooks/useTimer';
-import { CONFIRM, UNTITLED_SESSION } from '../lib/copy';
+import { UNTITLED_SESSION } from '../lib/copy';
 import { LIMITS } from '../types';
 import { formatCountdown } from '../lib/format';
-import { Check, Minus, Pause, Play, Plus, X } from './Icons';
+import { TimerControls } from './TimerControls';
 
 /** Fixed to the top of the viewport whenever a timer is running, on every view. */
 export function RunningTimerBar() {
-  const { running, remainingSeconds, overrunSeconds, progress, paused, due, adjust, pause, resume, requestFinish, cancel, setLabel } = useTimer();
-  const { settings } = useSettings();
+  const { running, remainingSeconds, overrunSeconds, progress, paused, due, setLabel } = useTimer();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   if (!running) return null;
-  const step = settings.adjustStepMinutes;
 
   const commitLabel = () => {
     setEditing(false);
@@ -54,44 +51,7 @@ export function RunningTimerBar() {
         <span className="running-time" aria-label={due ? 'Time over' : 'Time remaining'}>
           {formatCountdown(due ? -overrunSeconds : remainingSeconds)}
         </span>
-        <div className="running-controls">
-          {!due && (
-            <button className="btn btn-icon" onClick={() => void adjust(-step * 60)} aria-label={`Remove ${step} minutes`} title={`−${step}m`}>
-              <Minus />
-              <span className="btn-text">{step}m</span>
-            </button>
-          )}
-          <button className="btn btn-icon" onClick={() => void adjust(step * 60)} aria-label={`Add ${step} minutes`} title={`+${step}m`}>
-            <Plus />
-            <span className="btn-text">{step}m</span>
-          </button>
-          {!due &&
-            (paused ? (
-              <button className="btn btn-icon" onClick={() => void resume()} aria-label="Resume timer" title="Resume">
-                <Play />
-                <span className="btn-text">Resume</span>
-              </button>
-            ) : (
-              <button className="btn btn-icon" onClick={() => void pause()} aria-label="Pause timer" title="Pause">
-                <Pause />
-                <span className="btn-text">Pause</span>
-              </button>
-            ))}
-          <button className="btn btn-primary btn-icon" onClick={requestFinish} title="Finish now">
-            <Check />
-            <span className="btn-text">Finish</span>
-          </button>
-          <button
-            className="btn btn-icon running-cancel"
-            onClick={() => {
-              if (window.confirm(CONFIRM.cancelSession)) void cancel();
-            }}
-            aria-label="Cancel session"
-            title="Cancel"
-          >
-            <X />
-          </button>
-        </div>
+        <TimerControls compact />
       </div>
       <div className="running-progress" style={{ transform: `scaleX(${progress})` }} aria-hidden="true" />
     </div>

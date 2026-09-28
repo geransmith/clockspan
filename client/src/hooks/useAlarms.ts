@@ -3,6 +3,7 @@ import type { Settings } from '../types';
 import { secondMealApplies, type TimeclockResult } from '../lib/timeclock';
 import { describeEvent, dueEvents, type AlarmTarget } from '../lib/alarms';
 import { alert, dismissByTag } from '../lib/alerts';
+import { ALARM_ACTIONS } from '../lib/copy';
 import { resolveHour12 } from '../lib/format';
 import { pruneStored, readStoredJson, writeStored } from '../lib/storage';
 
@@ -83,9 +84,9 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
       const { kicker, title, body, tone } = describeEvent(e, ctx);
       const action =
         e.id === 'clockOut' && approveOvertime
-          ? { label: 'Overtime approved', run: approveOvertime }
+          ? { label: ALARM_ACTIONS.approveOvertime, run: approveOvertime }
           : e.id === 'retro' && openRetro
-            ? { label: 'Open retrospective', run: openRetro }
+            ? { label: ALARM_ACTIONS.openRetro, run: openRetro }
             : undefined;
       alert({
         kicker,

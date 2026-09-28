@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
-import { HTTPS_ONLY, NEW_PASSWORD } from '../lib/copy';
+import { HTTPS_ONLY, NEW_PASSWORD, PASSWORD_MISMATCH } from '../lib/copy';
 import { settle } from '../test/hooks';
 import type { AuthInfo, PublicUser } from '../types';
 import { AuthGate, useAuth } from './AuthGate';
@@ -10,7 +10,7 @@ import { AuthGate, useAuth } from './AuthGate';
 vi.mock('../api', async (importOriginal) => {
   // The event name has to stay the real one: the gate listens for what `request()` dispatches.
   const { UNAUTHENTICATED_EVENT } = await importOriginal<typeof import('../api')>();
-  return { UNAUTHENTICATED_EVENT, getAuth: vi.fn(), logout: vi.fn() };
+  return { UNAUTHENTICATED_EVENT, getAuth: vi.fn(), logout: vi.fn(), changePassword: vi.fn() };
 });
 
 const USER: PublicUser = { id: 2, name: 'sam', username: 'sam', isAdmin: false, kind: 'local', mustChangePassword: false };
@@ -73,6 +73,25 @@ describe('AuthGate', () => {
     await renderGate(info({ user: { ...USER, mustChangePassword: true } }));
     expect(screen.getByText(NEW_PASSWORD.title)).toBeTruthy();
     expect(screen.queryByText(/Sheet for/)).toBeNull();
+  });
+
+  it('checks the new password was typed the same twice before sending it', async () => {
+    await renderGate(info({ user: { ...USER, mustChangePassword: true } }));
+    const type = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    type('Temporary password', 'temp-pass-1');
+    type('New password', 'my own pass');
+    type('Confirm new password', 'my own pas');
+    fireEvent.submit(screen.getByRole('button', { name: 'Set password' }).closest('form')!);
+    expect(screen.getByText(PASSWORD_MISMATCH)).toBeTruthy();
+    expect(api.changePassword).not.toHaveBeenCalled();
+
+    type('Confirm new password', 'my own pass');
+    vi.mocked(api.changePassword).mockResolvedValue({ ok: true });
+    vi.mocked(api.getAuth).mockResolvedValue(info({ user: USER }));
+    fireEvent.submit(screen.getByRole('button', { name: 'Set password' }).closest('form')!);
+    await settle();
+    expect(api.changePassword).toHaveBeenCalledWith('temp-pass-1', 'my own pass');
+    expect(screen.getByText('Sheet for sam')).toBeTruthy();
   });
 
   it('warns over plain http when the session cookie is https-only', async () => {

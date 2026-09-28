@@ -3,6 +3,7 @@ import * as api from '../api';
 import { PLANNED_SECONDS } from '../../../shared/timer.js';
 import type { Session, SessionConflict } from '../types';
 import { alert, dismissByTag, unlockAudio, warnQuietly } from '../lib/alerts';
+import { ApiError } from '../lib/apiError';
 import { SAVE_FAILED, TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
 import { readStored, writeStored } from '../lib/storage';
@@ -177,12 +178,12 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         setRunning(session);
         store.applySession(session);
       } catch (err) {
-        const body = (err as { body?: Partial<SessionConflict> }).body;
-        if (!body?.session) throw err;
+        const theirs = err instanceof ApiError && err.status === 409 ? (err.body as Partial<SessionConflict> | null)?.session : undefined;
+        if (!theirs) throw err;
         // 409: a timer is already running, started on another device. Follow it, fetch its
         // day so the log has the row, and say why what was typed here went nowhere.
-        setRunning(body.session);
-        void store.load(body.session.date);
+        setRunning(theirs);
+        void store.load(theirs.date);
         alert({ ...TIMER_ELSEWHERE, tone: 'info', tag: 'timer-elsewhere', sound: false, notifications: false });
       }
     },
@@ -199,8 +200,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         warnQuietly({ title: SAVE_FAILED.title, body: SAVE_FAILED.body, tag: 'save-failed' });
         // Gone, or no longer running: it ended on another device. Show that now, not at the
         // next poll.
-        const status = (err as { status?: number }).status;
-        if (status === 404 || status === 409) sync(true);
+        if (err instanceof ApiError && (err.status === 404 || err.status === 409)) sync(true);
       }
     },
     [sync],

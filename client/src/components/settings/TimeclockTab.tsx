@@ -1,7 +1,8 @@
 import { SETTING_LIMITS, type TimeFormat } from '../../../../shared/settings.js';
 import type { Settings } from '../../types';
 import { DurationField } from '../DurationField';
-import { NumberField, Section, Toggle } from './controls';
+import { Toggle } from '../Toggle';
+import { NumberField, Section } from './controls';
 
 export function TimeclockTab({ settings, set }: { settings: Settings; set: (patch: Partial<Settings>) => void }) {
   return (

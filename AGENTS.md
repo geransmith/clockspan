@@ -58,7 +58,8 @@ client/                 Vite root → dist/client
   public/               manifest, sw.js, icons/icon.svg (the icon's one source; `npm run icons` renders
                         the PNGs next to it)
   src/App.tsx           provider stack + Shell (route, settings dialog, today's alarms)
-  src/api.ts            fetch wrapper (UNAUTHENTICATED_EVENT on 401); src/types.ts re-exports shared types
+  src/api.ts            fetch wrapper (UNAUTHENTICATED_EVENT on 401; throws lib/apiError.ts's ApiError, which
+                        a caller checks with instanceof); src/types.ts re-exports shared types
   src/lib/              pure logic with a test beside each file: timeclock, alarms, timer, retro,
                         review, calendar, stickers, priorities, format, timefield, layout, celebrate
     alerts.ts           the one place that plays sound, shows notifications and pushes banners
@@ -66,7 +67,8 @@ client/                 Vite root → dist/client
     storage.ts          localStorage that never throws (private mode, quota)
   src/hooks/            state and effects (useDay, useTimer, useSettings, useAlarms, …), each with a
                         happy-dom test beside it; src/test/hooks.tsx has the fixtures and provider stack
-  src/components/       the cards, History (Calendar + Review), Banners, FinishChoice; settings/ holds
+  src/components/       the cards, History (Calendar + Review), Banners, FinishChoice; pieces more than
+                        one place uses (TimerControls, Toggle, NewPasswordFields, Tile); settings/ holds
                         SettingsDialog (the shell and tabs), a file per tab, and controls.tsx
   src/auth/             AuthGate and the setup / login / new-password pages
   src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
