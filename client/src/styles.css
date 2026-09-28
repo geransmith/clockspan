@@ -1604,6 +1604,48 @@ button {
   align-items: center;
   gap: 10px;
 }
+.plan-next {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.plan-next-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.plan-next-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plan-next-editor .retro-heading {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+.plan-next-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.plan-next-list .inline-check {
+  align-items: flex-start;
+  min-height: 32px;
+}
+.plan-next-extra {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  color: var(--text-2);
+}
+.plan-next-extra svg {
+  width: 16px;
+  height: 16px;
+}
 .retro-foot .pill svg {
   width: 14px;
   height: 14px;

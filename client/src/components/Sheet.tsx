@@ -139,6 +139,8 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
         return (
           <Retro
             key={date}
+            date={date}
+            today={today}
             priorities={day.priorities}
             sessions={day.sessions}
             note={day.retroNote}
