@@ -6,6 +6,8 @@ export interface WeekHours {
   /** Worked from Monday up to and including the day, by the same math as each day's sheet. */
   workedSeconds: number;
   targetSeconds: number;
+  /** A target is set and the week has reached it. */
+  met: boolean;
 }
 
 /**
@@ -20,5 +22,6 @@ export function weekHours(days: Day[], settings: TimeclockSettings & { weekMinut
     if (d.date < from || d.date > date) continue;
     workedSeconds += timeclockForDate(d.punches, daySettings(settings, d), d.date, today, now).workedSeconds;
   }
-  return { workedSeconds, targetSeconds: settings.weekMinutes * 60 };
+  const targetSeconds = settings.weekMinutes * 60;
+  return { workedSeconds, targetSeconds, met: targetSeconds > 0 && workedSeconds >= targetSeconds };
 }

@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
-import { useLatest } from '../hooks/useLatest';
+import { useState } from 'react';
+import { useBecameTrue, useCelebration } from '../hooks/useCelebration';
 import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
-import { playSound, unlockAudio } from '../lib/alerts';
+import { unlockAudio } from '../lib/alerts';
 import { pickCelebration } from '../lib/celebrate';
 import { floorToMinute, formatDuration, formatDurationCeil } from '../lib/format';
 import {
@@ -19,7 +19,7 @@ import {
 import { SETTING_LIMITS } from '../../../shared/settings.js';
 import type { WeekHours } from '../lib/week';
 import type { Punch } from '../types';
-import { Burst, BURST_MS } from './Burst';
+import { Burst } from './Burst';
 import { DurationField } from './DurationField';
 import { Plus, Trash, X } from './Icons';
 import { Tile } from './Tile';
@@ -60,7 +60,7 @@ export function Timeclock({
   onWorkMinutesChange,
   onEditingChange,
 }: Props) {
-  const { settings } = useSettings();
+  const { settings, loaded } = useSettings();
   // The day's target and the settings its timeclock ran on (`daySettings`).
   const daySet = daySettings(settings, { workMinutes });
   const { hour12, formatTime } = useTimeFormat();
@@ -135,38 +135,17 @@ export function Timeclock({
 
   const celebration = tc.state === 'done' && tc.clockOutAt != null ? pickCelebration(tc.clockOutAt) : null;
   // The burst and the sound mark the day *becoming* done while the card is open, not a day
-  // that already was when it mounted (the sheet keys this card by date). "Adjust state while
-  // rendering"; the sound is a side effect, so the moment is recorded (a fresh object each
-  // time, so the same clock-out set again still counts) and played from an effect.
-  const doneNow = celebration != null;
-  const [wasDone, setWasDone] = useState(doneNow);
-  const [burstSeed, setBurstSeed] = useState<number | null>(null);
-  const [celebrate, setCelebrate] = useState<{ at: number | null } | null>(null);
-  if (doneNow !== wasDone) {
-    setWasDone(doneNow);
-    if (doneNow) {
-      setCelebrate({ at: tc.clockOutAt });
-      if (settings.celebrations) setBurstSeed(tc.clockOutAt);
-    }
-  }
-  const latest = useLatest(settings);
-  useEffect(() => {
-    if (!celebrate) return;
-    const { sound, sounds } = latest.current;
-    if (sound) playSound(sounds.dayDone);
-  }, [celebrate, latest]);
-  const notice = useRef<HTMLDivElement>(null);
-  const [burstAnchor, setBurstAnchor] = useState<DOMRect | null>(null);
-  useEffect(() => {
-    if (burstSeed == null) return;
-    // The notice has to be on screen before it can be measured.
-    setBurstAnchor(notice.current?.getBoundingClientRect() ?? null);
-    const id = window.setTimeout(() => {
-      setBurstSeed(null);
-      setBurstAnchor(null);
-    }, BURST_MS);
-    return () => window.clearTimeout(id);
-  }, [burstSeed]);
+  // that already was when it mounted (the sheet keys this card by date); the same clock-out
+  // set again still counts. The burst flies from the notice.
+  const { anchor: noticeRef, burst: dayBurst } = useCelebration<HTMLDivElement>(useBecameTrue(celebration != null), 'dayDone');
+  // The same for the week's target, on today's sheet: the clock running past it, or a punch
+  // that gets it there. Unknown until the settings are in, or a longer saved week than the
+  // default would read as the target just met.
+  const weekShown = settings.trackHours && week != null && week.targetSeconds > 0;
+  const { anchor: weekRef, burst: weekBurst } = useCelebration<HTMLParagraphElement>(
+    useBecameTrue(loaded && isToday && weekShown ? week.met : null),
+    'weekDone',
+  );
   const secondMeal = secondMealApplies(tc, daySet, otOn) && tc.secondMealBy != null ? tc.secondMealBy : null;
 
   // ----- rows -----
@@ -243,7 +222,7 @@ export function Timeclock({
       </div>
 
       {celebration && (
-        <div className="notice notice--celebrate" role="status" ref={notice}>
+        <div className="notice notice--celebrate" role="status" ref={noticeRef}>
           <span key={tc.clockOutAt} className="celebrate-emoji" aria-hidden="true">
             {celebration.emoji}
           </span>
@@ -253,7 +232,7 @@ export function Timeclock({
         </div>
       )}
 
-      {burstSeed != null && burstAnchor && <Burst key={burstSeed} seed={burstSeed} anchor={burstAnchor} big />}
+      {dayBurst && <Burst key={dayBurst.seed} seed={dayBurst.seed} anchor={dayBurst.anchor} big />}
 
       {secondMeal != null && (
         <p className={`timeclock-note${tc.secondMealStatus === 'overdue' ? ' timeclock-note--danger' : ''}`}>
@@ -262,15 +241,17 @@ export function Timeclock({
         </p>
       )}
 
-      {settings.trackHours && week && week.targetSeconds > 0 && (
-        <p className="timeclock-note week-line">
+      {weekShown && (
+        <p className="timeclock-note week-line" ref={weekRef}>
           This week <strong>{formatDuration(week.workedSeconds)}</strong> of {formatDuration(week.targetSeconds)}
-          {week.workedSeconds > week.targetSeconds && (
+          {/* A whole minute over, or the line would read "0m over" as the target is reached. */}
+          {week.workedSeconds - week.targetSeconds >= 60 && (
             <>
               {' · '}
               {formatDuration(week.workedSeconds - week.targetSeconds)} {otFeature ? 'over' : 'past'}
             </>
           )}
+          {weekBurst && <Burst key={weekBurst.seed} seed={weekBurst.seed} anchor={weekBurst.anchor} />}
         </p>
       )}
 

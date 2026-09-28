@@ -214,8 +214,11 @@ Never commit `data/` or `.env`.
   anywhere else. `unlockAudio()` must be called from a user gesture (timer start and every
   punch commit do this) for iOS. What plays is `settings.sounds[event]`, an id from the
   catalog in `shared/sounds.ts`; `settings.sound` is the master switch over all of them, and
-  `none` is the per-event off. The day-complete sound fires with the burst in `Timeclock.tsx`
-  (the day *becoming* done while the card is mounted, never a done day opening).
+  `none` is the per-event off. A celebration (day complete and work week reached in
+  `Timeclock.tsx`, the next day planned in `PlanNext.tsx`) is a `useCelebration(moment, event)`
+  (`hooks/useCelebration.ts`): the sound under `settings.sound`, the burst under
+  `settings.celebrations`. A state's moment comes from `useBecameTrue`, so it is the day
+  *becoming* done while the card is mounted, never a done day opening.
 - **Timer remaining time is derived from the server's `startedAt`, `plannedSeconds` and pauses**
   on every tick (`timerView()` in `client/src/lib/timer.ts`, on `shared/timer.ts`) — never a
   client-side counter. A paused session is still `status = 'running'` with `pausedAt` set;
@@ -337,7 +340,7 @@ Never commit `data/` or `.env`.
   `beep()` sequence in the `SYNTH` map in `alerts.ts` (the type makes a missing one an error).
   A new event that can make a noise is an id in `SOUND_EVENTS`, a default in
   `DEFAULT_SETTINGS.sounds`, a label in `SOUND_EVENT_LABELS`, and a `playSound(settings.sounds.<event>)`
-  call gated by `settings.sound`.
+  call gated by `settings.sound` (or a `useCelebration` for a moment worth a burst).
 - **An alarm target** (existing: `lunchBy`, `clockOut`, `secondMeal`, `retro`): expose the instant from
   `computeTimeclock` → add a target in `useAlarms.ts` (`targets[]`, with an `armed` rule; put
   a rule the card also needs in a pure helper like `secondMealApplies`) → add its default

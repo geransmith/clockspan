@@ -26,5 +26,7 @@ export const SOUND_EVENT_LABELS: Record<SoundEvent, string> = {
   due: 'Alarm reached',
   overdue: 'Alarm repeat',
   dayDone: 'Day complete',
+  weekDone: 'Work week reached',
   priorityDone: 'Priority ticked',
+  planDone: 'Next day planned',
 };

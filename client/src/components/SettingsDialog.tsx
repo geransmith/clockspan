@@ -223,7 +223,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             <Section title="Celebrations">
               <Toggle
                 label="Emoji bursts"
-                hint="A short burst when you tick a priority or finish the day."
+                hint="A short burst when you tick a priority, finish the day, reach the work week or plan the next day."
                 checked={settings.celebrations}
                 onChange={(v) => set({ celebrations: v })}
               />

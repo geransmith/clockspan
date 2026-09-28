@@ -14,7 +14,8 @@ import {
   type WarningKind,
 } from '../lib/priorities';
 import { LIMITS, type Priority } from '../types';
-import { Burst, BURST_MS } from './Burst';
+import { BURST_MS } from '../lib/celebrate';
+import { Burst } from './Burst';
 import { Check, Plus, X } from './Icons';
 
 interface Props {
