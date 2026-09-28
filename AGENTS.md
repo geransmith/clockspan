@@ -260,7 +260,15 @@ Never commit `data/` or `.env`.
   while a write is out and its answer dropped if `mutationSeq` moved), so the alarms in
   `App.tsx` judge the server's copy of the punches, not one from hours ago; they wait while a
   come-back refresh is out. A today whose first load failed is loaded again on the same ticks
-  (no second banner), so its alarms come back with the server.
+  (no second banner), so its alarms come back with the server. A `load` (the timer's sync, Try
+  again) is dropped the same way on a day written since it went out, except the reload after a
+  failed save, which always lands.
+- **Saves reach the server in the order they were made.** `setPunches` and `setPriorities`
+  replace a whole list, so one PUT per day is in flight and only the newest waiting list follows
+  it (`sendLatest` in `useDay.tsx`); the other day fields and each session's writes queue one
+  after another (`inOrder`), counted as out from the moment they are queued; `useSettings`
+  sends its PUTs one at a time too. A new write goes through one of these, never straight to
+  `api`.
 - **Punch positions are fixed**: 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in
   pairs, and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches`
   enforces it). Kind is parity (`kindForPosition`). The math evaluates *set* punches
@@ -273,8 +281,8 @@ Never commit `data/` or `.env`.
   focus leaves the field, so the row never shows a time the server doesn't have. In 12-hour
   mode the period is filled in as the hour is typed (`guessPeriod` in `lib/timefield.ts`: 5–11
   → AM, 12 and 1–4 → PM, kept after the day's clock-in), and left alone once the user has
-  touched that segment. Clearing is the row's × button only. `setPunches` queues PUTs per day
-  (one in flight, the newest waiting) because each PUT replaces the whole day.
+  touched that segment. Clearing is the row's × button only. Punch PUTs are queued per day (see
+  "Saves reach the server in the order they were made").
 - **Overtime approval (`days.overtime_approved`) silences only the `clockOut` alarm target.**
   Lunch and the second meal period stay armed: California Labor Code §512 still requires them
   on an overtime day. The setting `overtimeApproval` shows/hides the switch and banner
@@ -372,9 +380,9 @@ Never commit `data/` or `.env`.
 - **A per-day field** (like `overtimeApproved`, `retroNote`/`retroAt`): append a migration adding the column to
   `days` → read it in `findDay` (`routes/shared.ts`) and return it from `GET /days/:date` →
   add a `PUT /days/:date/<field>` route (with `requireDate`) → `Day` in `shared/api.ts` +
-  `client/src/api.ts` → an optimistic setter in `useDay.tsx` that goes through `persist()`
-  (mirror `setOvertimeApproved`; failures reload the day and raise the "Change not saved"
-  banner, so the setter never rejects) → pass it from `Sheet.tsx`
+  `client/src/api.ts` → an optimistic setter in `useDay.tsx` that goes through `inOrder` on
+  the day's `day:<date>` key (mirror `setOvertimeApproved`; failures reload the day and raise
+  the "Change not saved" banner, so the setter never rejects) → pass it from `Sheet.tsx`
   to the card, and from `App.tsx` into `useAlarms` if alarms depend on it.
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
   `currentUser(req).id` (`requireDate` / `loadOwnedSession` where they fit), validate input
