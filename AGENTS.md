@@ -50,7 +50,8 @@ server/                 Express API → dist/server
   config.ts, db.ts      env parsing (throws on bad config); pragmas, MIGRATIONS, the default user
   settings.ts           mergeSettings (defaults + validation on every read and write), loadSettings
   retention.ts          old-day pruning (pruneDays, runRetention, the RETENTION_DAYS cap)
-  auth/                 session cookie, scrypt passwords, middleware (currentUser), local + OIDC routes
+  auth/                 session cookie, scrypt passwords, the login limiter, publicUser/logName (users.ts),
+                        middleware (currentUser), local + OIDC routes
   routes/               the days, sessions and settings routers; shared.ts has requireDate, findDay,
                         and the row → JSON builders
   dev/                  seed.ts + seed-cli.ts (`npm run seed`), harness.ts (startTestApp for route tests)
@@ -176,7 +177,7 @@ Never commit `data/` or `.env`.
 - **Security headers are set only in `server/security.ts`** (applied first in `createApp`):
   the CSP, `nosniff`, framing, referrer, HSTS and the API's `no-store`. Headers that describe
   one answer stay with the code that sends it: the static files' `Cache-Control` in `app.ts`,
-  `Retry-After` on a 429 in `auth/local.ts`, `Set-Cookie` through `cookieOptions()`. The CSP is same-origin with no `unsafe-inline`, so no inline `<script>`/`<style>` in
+  `Retry-After` on a 429 in `auth/limiter.ts` (`refuseTooMany`), `Set-Cookie` through `cookieOptions()`. The CSP is same-origin with no `unsafe-inline`, so no inline `<script>`/`<style>` in
   `index.html` and no third-party assets; React `style={{}}` props are fine (CSSOM). Changing
   it means one look at the `prod` config's console. Cookies are set only through
   `cookieOptions()` (`auth/session.ts`), and the session is resolved under `/api` only
