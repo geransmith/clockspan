@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Day, Punch } from '../types';
 import { STICKER_EMOJI } from './copy';
 import { calendarMonth } from './calendar';
-import { countStickers, daySummaryOf, STICKER_REASONS, stickerEmoji, stickersForDay, type DaySummary } from './stickers';
+import { countStickers, daySummaryOf, STICKER_REASONS, stickerEmoji, stickerReasons, stickersForDay, type DaySummary } from './stickers';
 import { emptyPunches } from './timeclock';
 
 const settings = { workMinutes: 480, lunchDeadlineMinutes: 300, lunchMinutes: 30, secondMealAfterMinutes: 600 };
@@ -48,6 +48,26 @@ describe('stickersForDay', () => {
     expect(stickersForDay(halfPlan, settings, TODAY, NOW)).toEqual([]);
     const openToday = summary(TODAY, { punches: punches(TODAY, ['08:00', null, null, null]), focusSeconds: 60 });
     expect(stickersForDay(openToday, settings, TODAY, NOW)).toEqual(['focus']);
+  });
+
+  it('gives no Clocked out sticker with hours not tracked, and a legend and full day without it', () => {
+    const noHours = { ...settings, trackHours: false };
+    const lunchOnly = summary('2026-09-14', { punches: punches('2026-09-14', ['08:00', '12:00', null, null]) });
+    expect(stickersForDay(lunchOnly, noHours, TODAY, NOW)).toEqual(['lunch']);
+    expect(stickerReasons(false).map((r) => r.id)).toEqual(['lunch', 'priorities', 'focus', 'reviewed']);
+    expect(stickerReasons(true)).toBe(STICKER_REASONS);
+    expect(stickerReasons(undefined)).toBe(STICKER_REASONS);
+    // Everything such a day can earn makes it full.
+    const all = summary('2026-09-14', {
+      punches: punches('2026-09-14', ['08:00', '12:00', '12:30', '16:30']),
+      prioritiesDone: 1,
+      prioritiesTotal: 1,
+      focusSeconds: 60,
+      retroAt: 1,
+    });
+    const weeks = calendarMonth([all], noHours, TODAY, NOW, '2026-09-01');
+    expect(countStickers(weeks, stickerReasons(false)).full).toBe(1);
+    expect(countStickers(weeks).full).toBe(0);
   });
 
   it("goes by the day's own work-day length when it has one", () => {

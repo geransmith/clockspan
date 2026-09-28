@@ -1,4 +1,4 @@
-import type { Day, Punch } from '../types';
+import type { Day, Punch, Settings } from '../types';
 import type { CalendarDay } from './calendar';
 import { hash } from './celebrate';
 import { STICKER_EMOJI } from './copy';
@@ -15,11 +15,22 @@ export const STICKER_REASONS: { id: StickerId; label: string }[] = [
   { id: 'reviewed', label: 'Retrospective reviewed' },
 ];
 
+/** What the chart needs to judge a day: its timeclock, and whether hours are tracked at all. */
+export type StickerSettings = TimeclockSettings & Partial<Pick<Settings, 'trackHours'>>;
+
+/**
+ * The reasons a day can earn a sticker for this user: with hours not tracked there is no
+ * clocking out to reward, so the chart, its legend and a "full" day go without that one.
+ */
+export function stickerReasons(trackHours: boolean | undefined): { id: StickerId; label: string }[] {
+  return trackHours === false ? STICKER_REASONS.filter((r) => r.id !== 'clockedOut') : STICKER_REASONS;
+}
+
 /** The stickers one day earned. Past days are judged frozen, like everywhere else. */
-export function stickersForDay(d: DaySummary, settings: TimeclockSettings, today: string, now: number): StickerId[] {
+export function stickersForDay(d: DaySummary, settings: StickerSettings, today: string, now: number): StickerId[] {
   const tc = timeclockForDate(d.punches, daySettings(settings, d), d.date, today, now);
   const out: StickerId[] = [];
-  if (tc.state === 'done') out.push('clockedOut');
+  if (tc.state === 'done' && settings.trackHours !== false) out.push('clockedOut');
   if (tc.lunchStatus === 'taken') out.push('lunch');
   if (d.prioritiesTotal > 0 && d.prioritiesDone === d.prioritiesTotal) out.push('priorities');
   if (d.focusSeconds > 0) out.push('focus');
@@ -79,15 +90,15 @@ export interface StickerCount {
   byReason: Record<StickerId, number>;
 }
 
-/** Stickers on the calendar's month (filler cells carry none). */
-export function countStickers(weeks: CalendarDay[][]): StickerCount {
+/** Stickers on the calendar's month (filler cells carry none); `reasons` is what a full day needs. */
+export function countStickers(weeks: CalendarDay[][], reasons: { id: StickerId }[] = STICKER_REASONS): StickerCount {
   const byReason = Object.fromEntries(STICKER_REASONS.map((r) => [r.id, 0])) as Record<StickerId, number>;
   let total = 0;
   let full = 0;
   for (const row of weeks) {
     for (const d of row) {
       total += d.stickers.length;
-      if (d.stickers.length === STICKER_REASONS.length) full++;
+      if (d.stickers.length === reasons.length) full++;
       for (const id of d.stickers) byReason[id]++;
     }
   }

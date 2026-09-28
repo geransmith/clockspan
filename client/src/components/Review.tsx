@@ -93,7 +93,7 @@ function Body({
   return (
     <div className="review-body">
       <div className="tiles review-tiles">
-        <Tile label="Days" value={String(r.days)} sub={`worked ${formatDuration(r.workedSeconds)}`} />
+        <Tile label="Days" value={String(r.days)} sub={settings.trackHours ? `worked ${formatDuration(r.workedSeconds)}` : ''} />
         <Tile label="Focused" value={formatDuration(r.focusedSeconds)} sub={onPlanPct == null ? 'no sessions' : `${onPlanPct}% on plan`} />
         <Tile
           label="Priorities"

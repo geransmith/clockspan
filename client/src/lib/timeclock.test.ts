@@ -202,6 +202,28 @@ describe('daySettings', () => {
   });
 });
 
+describe('with the meal-period rules off', () => {
+  const noMeals = { ...settings, mealRules: false };
+
+  it('plans no lunch and has no lunch deadline to meet, on a day of any length', () => {
+    const r = computeTimeclock(punches([T0, null, null, null]), noMeals, T0 + 6 * H);
+    expect(r.lunchStatus).toBe('not-needed');
+    expect(r.clockOutAt).toBe(T0 + 8 * H); // 8h worked, no lunch added
+  });
+
+  it('still counts a lunch that was punched', () => {
+    const r = computeTimeclock(punches([T0, T0 + 4 * H, T0 + 4.5 * H, null]), noMeals, T0 + 6 * H);
+    expect(r.lunchStatus).toBe('taken');
+    expect(r.workedSeconds).toBe(5.5 * 3600);
+  });
+
+  it('never brings in the second meal period', () => {
+    const long = computeTimeclock(punches([T0, T0 + 4 * H, T0 + 4.5 * H, null]), noMeals, T0 + 10 * H);
+    expect(secondMealApplies(long, noMeals, true)).toBe(false);
+    expect(secondMealApplies(long, settings, true)).toBe(true);
+  });
+});
+
 describe('a day that needs no lunch', () => {
   const short = (workMinutes: number) => ({ ...settings, workMinutes });
 

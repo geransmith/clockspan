@@ -10,6 +10,7 @@ import { warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
 import { addDays, formatDateLong } from '../lib/format';
 import { CARD_TITLES } from '../lib/layout';
+import { daySummaryOf } from '../lib/stickers';
 import { clampToDay, daySettings, timeclockForDate, type TimeclockState } from '../lib/timeclock';
 import { weekHours } from '../lib/week';
 import type { CardId } from '../types';
@@ -40,6 +41,10 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
   // The week so far, up to this sheet's day, for the timeclock's week line.
   const weekDays = useWeek(date);
   const week = useMemo(() => (weekDays ? weekHours(weekDays, settings, date, today, now) : null), [weekDays, settings, date, today, now]);
+  const focus = useMemo(
+    () => ({ seconds: day ? daySummaryOf(day).focusSeconds : 0, sessions: day?.sessions.filter((s) => s.status === 'completed').length ?? 0 }),
+    [day],
+  );
   // Today's list with nothing written yet offers what the last planned day left unticked.
   const { leftOpen, dismiss: dismissLeftOpen } = useLeftOpen(today, isToday && day != null && !day.priorities.some((p) => p.text.trim()));
 
@@ -110,6 +115,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
             overtimeApproved={day.overtimeApproved}
             workMinutes={day.workMinutes}
             week={week}
+            focus={focus}
             onChange={(p) => void store.setPunches(date, p)}
             onOvertimeChange={(v) => void store.setOvertimeApproved(date, v)}
             onWorkMinutesChange={(m) => void store.setWorkMinutes(date, m)}

@@ -36,6 +36,8 @@ interface Props {
   workMinutes: number | null;
   /** The week so far up to this day; null while loading. */
   week: WeekHours | null;
+  /** The day's logged focus: with the meal rules off there's no lunch deadline, so that tile shows this. */
+  focus: { seconds: number; sessions: number };
   onChange: (punches: Punch[]) => void;
   onOvertimeChange: (approved: boolean) => void;
   onWorkMinutesChange: (minutes: number | null) => void;
@@ -52,6 +54,7 @@ export function Timeclock({
   overtimeApproved,
   workMinutes,
   week,
+  focus,
   onChange,
   onOvertimeChange,
   onWorkMinutesChange,
@@ -61,8 +64,10 @@ export function Timeclock({
   // The day's target and the settings its timeclock ran on (`daySettings`).
   const daySet = daySettings(settings, { workMinutes });
   const { hour12, formatTime } = useTimeFormat();
+  // Overtime off (exempt, salaried work): no approval switch, and time past the day is just later.
+  const otFeature = settings.overtimeApproval;
   // A day flagged while the feature was on only counts while it is still on.
-  const otOn = settings.overtimeApproval && overtimeApproved;
+  const otOn = otFeature && overtimeApproved;
 
   const setAt = (position: number, at: number | null) => {
     // A punch is typed or tapped: the gesture iOS wants before any sound, so the day-complete
@@ -108,8 +113,11 @@ export function Timeclock({
       outTone = 'tile--accent';
       outSub = 'Day complete';
     } else if (tc.clockOutStatus === 'over') {
-      outTone = otOn ? 'tile--accent' : 'tile--danger';
-      outSub = `Over by ${formatDurationCeil(tc.overSeconds)}${otOn ? ' · OT approved' : ''}`;
+      // Past the day's length is overtime only where overtime applies; otherwise it's just later.
+      outTone = otOn || !otFeature ? 'tile--accent' : 'tile--danger';
+      outSub = otFeature
+        ? `Over by ${formatDurationCeil(tc.overSeconds)}${otOn ? ' · OT approved' : ''}`
+        : `${formatDurationCeil(tc.overSeconds)} past your day`;
     } else {
       outTone = !otOn && secs <= firstLead('clockOut') ? 'tile--warn' : '';
       outSub = !isToday ? 'No clock-out recorded' : tc.state === 'working' ? `In ${formatDurationCeil(secs)}` : 'If you return now';
@@ -220,7 +228,16 @@ export function Timeclock({
   return (
     <div className="timeclock">
       <div className="tiles">
-        <Tile label="Lunch by" value={tc.lunchBy != null ? formatTime(tc.lunchBy) : '—'} sub={lunchSub} tone={lunchTone} />
+        {!settings.mealRules ? (
+          <Tile
+            label="Focused"
+            value={formatDuration(focus.seconds)}
+            sub={focus.sessions === 0 ? 'No sessions yet' : `${focus.sessions} ${focus.sessions === 1 ? 'session' : 'sessions'}`}
+            tone=""
+          />
+        ) : (
+          <Tile label="Lunch by" value={tc.lunchBy != null ? formatTime(tc.lunchBy) : '—'} sub={lunchSub} tone={lunchTone} />
+        )}
         <Tile label="Worked" value={formatDuration(tc.workedSeconds)} sub={workedSub} tone={tc.clockIn != null && tc.state === 'working' ? 'tile--live' : ''} />
         <Tile label="Clock out at" value={tc.clockOutAt != null ? formatTime(tc.clockOutAt) : '—'} sub={outSub} tone={outTone} />
       </div>
@@ -245,16 +262,21 @@ export function Timeclock({
         </p>
       )}
 
-      {week && week.targetSeconds > 0 && (
+      {settings.trackHours && week && week.targetSeconds > 0 && (
         <p className="timeclock-note week-line">
           This week <strong>{formatDuration(week.workedSeconds)}</strong> of {formatDuration(week.targetSeconds)}
-          {week.workedSeconds > week.targetSeconds && <> · {formatDuration(week.workedSeconds - week.targetSeconds)} over</>}
+          {week.workedSeconds > week.targetSeconds && (
+            <>
+              {' · '}
+              {formatDuration(week.workedSeconds - week.targetSeconds)} {otFeature ? 'over' : 'past'}
+            </>
+          )}
         </p>
       )}
 
       <WorkDay usual={settings.workMinutes} own={workMinutes} onChange={onWorkMinutesChange} />
 
-      {settings.overtimeApproval && (
+      {otFeature && (
         <label className="toggle-row ot-row">
           <span className="toggle-text">
             <span>Overtime approved</span>

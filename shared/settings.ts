@@ -59,8 +59,15 @@ export interface Settings {
   sound: boolean;
   notifications: boolean;
   keepScreenAwake: boolean;
-  /** Show the per-day "Overtime approved" switch and banner action. */
+  /**
+   * Overtime applies: the per-day "Overtime approved" switch and banner action, and time past
+   * the day's length shown as overtime. Off (exempt, salaried) it reads as time past the day.
+   */
   overtimeApproval: boolean;
+  /** The lunch deadline and second meal period rules, with their alarms. Off where they don't apply (exempt work, another state). */
+  mealRules: boolean;
+  /** Hours worked shown past the day's own tiles: the week line, the hours in History and the Clocked out sticker. */
+  trackHours: boolean;
   /** Which sound each event plays; `sound` above is the master switch over all of them. */
   sounds: Record<SoundEvent, SoundId>;
   /** Emoji bursts when a priority is ticked or the day ends. */
@@ -126,6 +133,8 @@ export const DEFAULT_SETTINGS: Settings = deepFreeze({
   notifications: true,
   keepScreenAwake: true,
   overtimeApproval: true,
+  mealRules: true,
+  trackHours: true,
   sounds: { timer: 'triad', breakDone: 'taps', lead: 'taps', due: 'notes', overdue: 'double', dayDone: 'yay', priorityDone: 'none' },
   celebrations: true,
   stickers: false,

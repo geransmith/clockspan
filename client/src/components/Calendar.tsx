@@ -6,7 +6,7 @@ import { calendarMonth } from '../lib/calendar';
 import { STICKERS_EMPTY } from '../lib/copy';
 import { dayName, formatDateLong, formatDuration, formatHours, formatWeekday } from '../lib/format';
 import { periodOffset, periodRange } from '../lib/review';
-import { countStickers, daySummaryOf, STICKER_REASONS, stickerEmoji, type StickerId } from '../lib/stickers';
+import { countStickers, daySummaryOf, STICKER_REASONS, stickerEmoji, stickerReasons, type StickerId } from '../lib/stickers';
 import { daySettings, targetFraction, timeclockForDate } from '../lib/timeclock';
 import type { Day } from '../types';
 import { Check } from './Icons';
@@ -49,7 +49,10 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
     [days, settings, today, now, period.from],
   );
   const stickers = settings.stickers;
-  const count = useMemo(() => (weeks && stickers ? countStickers(weeks) : null), [weeks, stickers]);
+  // Hours not tracked: no Clocked out sticker, so the legend and a full day go without it.
+  const { trackHours } = settings;
+  const reasons = useMemo(() => stickerReasons(trackHours), [trackHours]);
+  const count = useMemo(() => (weeks && stickers ? countStickers(weeks, reasons) : null), [weeks, stickers, reasons]);
 
   const step = (o: number) => {
     setOffset(o);
@@ -96,10 +99,11 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
                   if (d.isFuture) cls.push('is-future');
                   if (d.date === today) cls.push('is-today');
                   if (d.date === selected) cls.push('is-selected');
-                  if (stickers && d.stickers.length === STICKER_REASONS.length) cls.push('is-full');
+                  if (stickers && d.stickers.length === reasons.length) cls.push('is-full');
                   const day = days.get(d.date);
                   const tc = day ? timeclockForDate(day.punches, daySettings(settings, day), d.date, today, now) : null;
-                  const clocked = tc?.clockIn != null ? tc : null;
+                  // With hours not tracked a cell shows only that the day has something on it.
+                  const clocked = trackHours && tc?.clockIn != null ? tc : null;
                   const worked = clocked ? formatDuration(clocked.workedSeconds) : null;
                   const done = clocked ? targetFraction(clocked) : 0;
                   const shown = filter ? d.stickers.filter((id) => id === filter) : d.stickers;
@@ -154,7 +158,7 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
               <p className="muted small calendar-legend">{STICKERS_EMPTY}</p>
             ) : (
               <div className="chips calendar-legend" role="group" aria-label="Show only">
-                {STICKER_REASONS.map((r) => (
+                {reasons.map((r) => (
                   <button
                     key={r.id}
                     type="button"
@@ -216,11 +220,13 @@ function DayDetail({
       </header>
       {s && tc ? (
         <div className="tiles calendar-tiles">
-          <Tile
-            label="Worked"
-            value={tc.clockIn != null ? formatDuration(tc.workedSeconds) : '—'}
-            sub={tc.clockIn == null ? 'no clock-in' : tc.lunchStatus === 'taken' ? 'lunch taken' : ''}
-          />
+          {settings.trackHours && (
+            <Tile
+              label="Worked"
+              value={tc.clockIn != null ? formatDuration(tc.workedSeconds) : '—'}
+              sub={tc.clockIn == null ? 'no clock-in' : tc.lunchStatus === 'taken' ? 'lunch taken' : ''}
+            />
+          )}
           <Tile
             label="Focused"
             value={s.focusSeconds > 0 ? formatDuration(s.focusSeconds) : '—'}

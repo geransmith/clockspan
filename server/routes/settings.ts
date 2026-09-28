@@ -112,6 +112,8 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     notifications: isBool(p.notifications) ? p.notifications : base.notifications,
     keepScreenAwake: isBool(p.keepScreenAwake) ? p.keepScreenAwake : base.keepScreenAwake,
     overtimeApproval: isBool(p.overtimeApproval) ? p.overtimeApproval : base.overtimeApproval,
+    mealRules: isBool(p.mealRules) ? p.mealRules : base.mealRules,
+    trackHours: isBool(p.trackHours) ? p.trackHours : base.trackHours,
     sounds: mergeSounds(base.sounds, p.sounds),
     celebrations: isBool(p.celebrations) ? p.celebrations : base.celebrations,
     stickers: isBool(p.stickers) ? p.stickers : stickers,

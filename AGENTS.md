@@ -9,8 +9,9 @@ retrospective card (plan vs. log, a "why" note, a nudge before clock-out), a wee
 quarter review, and alarms for lunch, clock-out and the second meal period. "Overtime
 approved" silences the clock-out alarm only. Every day is persisted; old days can be pruned.
 Data is **per user**; auth is optional (`AUTH_MODE=none | local | oidc`). One Docker container,
-SQLite on `/data`. Mobile-first PWA. Meal-period defaults follow California rules. The README
-has the user-facing description.
+SQLite on `/data`. Mobile-first PWA. Meal-period defaults follow California rules; three
+switches (meal periods, overtime, hours) turn off what doesn't apply to exempt or salaried
+work. The README has the user-facing description.
 
 ## Stack & versions
 
@@ -262,8 +263,14 @@ Never commit `data/` or `.env`.
   (one in flight, the newest waiting) because each PUT replaces the whole day.
 - **Overtime approval (`days.overtime_approved`) silences only the `clockOut` alarm target.**
   Lunch and the second meal period stay armed: California Labor Code §512 still requires them
-  on an overtime day. The setting `overtimeApproval` only shows/hides the switch and banner
-  button; a flagged day is silent only while the setting is on (`App.tsx`).
+  on an overtime day. The setting `overtimeApproval` shows/hides the switch and banner
+  button, and with it off the Clock out tile reads time past the day as "past your day"
+  rather than a red "Over by"; a flagged day is silent only while the setting is on (`App.tsx`).
+- **`mealRules: false` turns the meal periods off in the math, not in the components.**
+  `computeTimeclock` then never needs a lunch (`not-needed`, so no lunch alarm and no lunch
+  added to the clock-out time) and `secondMealApplies` is false; a lunch that was punched still
+  counts. `trackHours: false` only hides hours outside the day's own tiles (the week line,
+  History's hours, the Clocked out sticker via `stickerReasons`); the timeclock still runs.
 - **Priorities are stored sparse** (positions 1..n, contiguous, ≤ `MAX_PRIORITIES`; no `done`
   on an empty row); the client pads to `settings.priorityCount` with `padPriorities()`.
   `PUT /days/:date/priorities` is a full replace, so removing a row is sending the list without it.
