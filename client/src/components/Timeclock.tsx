@@ -237,7 +237,7 @@ export function Timeclock({
 
       {secondMeal != null && (
         <p className={`timeclock-note${tc.secondMealStatus === 'overdue' ? ' timeclock-note--danger' : ''}`}>
-          2nd meal period {tc.secondMealStatus === 'overdue' ? 'was due' : 'due'} by {formatTime(secondMeal)} (
+          Second meal period {tc.secondMealStatus === 'overdue' ? 'was due' : 'due'} by {formatTime(secondMeal)} (
           {formatDuration(settings.secondMealAfterMinutes * 60)} worked)
         </p>
       )}
