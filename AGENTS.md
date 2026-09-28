@@ -83,9 +83,9 @@ ca_profile.xml          the Community Apps profile. Both XML files link icons/ic
 nvm use 24
 npm install
 npm run dev            # API on :3000 (tsx watch, PORT pinned) + Vite on :5173 (proxies /api, /auth)
-npm test               # vitest: shared + client lib + hook tests + server API tests
+npm test               # vitest: shared + client lib + hook + component tests + server API tests
 npm test -- server/routes/days   # one file
-npm run test:coverage  # the gate CI runs: the same suite, and every file in server/, shared/,
+npm run test:coverage  # the gate CI runs: the same suite, and every file in server/, shared/, client/src/api.ts,
                        # client/src/lib and client/src/hooks must be 100% covered (text table of gaps + coverage/index.html)
 npm run typecheck      # client + server (tsconfig.server.test.json also covers dev/ and tests)
 npm run lint           # oxlint
@@ -146,7 +146,10 @@ Ways in, cheapest first:
 
 Tests sit beside the code: pure-function tests in `shared/` and `client/src/lib`; hook tests in
 `client/src/hooks` (`// @vitest-environment happy-dom`, `vi.mock('../api')`, fake timers;
-fixtures and the provider stack in `client/src/test/hooks.tsx`); harness tests in
+fixtures and the provider stack in `client/src/test/hooks.tsx`); `client/src/api.test.ts` for
+every call's method, path and body (a stubbed `fetch`); component tests beside a component
+that holds logic worth pinning (drafts that save on a timer or on unmount, which page
+`AuthGate` shows), under happy-dom with the same fixtures; harness tests in
 `server/**/*.test.ts` for routes, validation, scoping, headers, `mergeSettings`, and migrations
 (`migrate(db, upTo)` stops early so a backfill can be tested, see `server/db.test.ts`). No temp
 files: `openDatabase(':memory:')`.
@@ -422,6 +425,8 @@ Prove a change at the cheapest level that can show it, and stop there:
 
 1. Pure functions (`shared/`, `client/src/lib`): a unit test. A hook (`client/src/hooks`): a
    happy-dom test beside it, with the API mocked and fake timers for polls, retries and races.
+   A component's own logic (when a draft saves, what a click sends, which page shows): a
+   happy-dom test beside it with `@testing-library/react`. Its looks stay a browser matter.
 2. Anything in `server/`: a harness test in the router's `*.test.ts`. Route behavior,
    validation, scoping, headers, persistence and migrations are proven here, never by clicking.
 3. One-off looks at live data: `curl` against the seeded dev DB.
@@ -431,7 +436,7 @@ Prove a change at the cheapest level that can show it, and stop there:
    desktop-only layout. Do not re-walk flows a test already covers.
 
 The gate: `npm run test:coverage` green and `typecheck`, `lint` and `format:check` clean. Every
-file under `server/`, `shared/`, `client/src/lib/` and `client/src/hooks/` (minus the two
+file under `server/`, `shared/`, `client/src/lib/` and `client/src/hooks/`, and `client/src/api.ts` (minus the two
 process entrypoints and `server/dev/`) must be 100% covered on statements, branches, functions
 and lines, so new code there ships with the tests that reach it. A branch that cannot be
 reached is deleted, never hidden behind a `v8 ignore` comment; `alerts.ts` shows how a
