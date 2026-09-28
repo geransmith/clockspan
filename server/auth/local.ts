@@ -99,7 +99,14 @@ export function logName(name: unknown): string {
 }
 
 export function publicUser(u: UserRow): PublicUser {
-  return { id: u.id, name: u.display_name, username: u.username, isAdmin: Boolean(u.is_admin), kind: u.kind };
+  return {
+    id: u.id,
+    name: u.display_name,
+    username: u.username,
+    isAdmin: Boolean(u.is_admin),
+    kind: u.kind,
+    mustChangePassword: Boolean(u.must_change_password),
+  };
 }
 
 function userCount(db: DB): number {
@@ -221,14 +228,19 @@ export function localAuthRouter(db: DB, config: Config): Router {
       res.status(400).json({ error: next.error });
       return;
     }
-    db.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).run(await hashPassword(next.password), user.id);
+    if (user.must_change_password && next.password === currentPassword) {
+      res.status(400).json({ error: 'Choose a password other than the temporary one.' });
+      return;
+    }
+    db.prepare(`UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?`).run(await hashPassword(next.password), user.id);
     // A changed password is usually "someone else may have the old one": drop every other session.
     revokeOtherSessions(db, req, user.id);
     console.log(`[auth] password changed for ${logName(user.username)}; other sessions signed out`);
     res.json({ ok: true } satisfies OkResponse);
   });
 
-  // Admin user management. Deleting a user cascades all of their data.
+  // Admin user management. Deleting a user cascades all of their data. A user an admin adds
+  // signs in with the password the admin typed and has to choose their own before anything else.
   r.get('/users', requireAdmin, (_req, res) => {
     const rows = db.prepare(`SELECT * FROM users WHERE kind = 'local' ORDER BY created_at`).all() as UserRow[];
     res.json({ users: rows.map(publicUser) } satisfies UsersResponse);
@@ -247,8 +259,8 @@ export function localAuthRouter(db: DB, config: Config): Router {
     // case, as sign-in does, so "Sam" can't be added beside "sam".
     const info = db
       .prepare(
-        `INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at)
-         SELECT 'local', @name, @hash, @name, 0, @now
+        `INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at, must_change_password)
+         SELECT 'local', @name, @hash, @name, 0, @now, 1
          WHERE NOT EXISTS (SELECT 1 FROM users WHERE username = @name COLLATE NOCASE)`,
       )
       .run({ name, hash, now: Date.now() });

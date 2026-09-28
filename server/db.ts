@@ -96,6 +96,9 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE sessions ADD COLUMN paused_seconds INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE sessions ADD COLUMN paused_at INTEGER;
   `,
+  // A password someone else chose (an admin adding the account, or one the CLI generated) is
+  // temporary: until the user sets their own, only the password change is open to them.
+  `ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 export function openDatabase(dbPath: string): DB {
@@ -129,6 +132,7 @@ export interface UserRow {
   display_name: string;
   is_admin: number;
   created_at: number;
+  must_change_password: number;
 }
 
 /**

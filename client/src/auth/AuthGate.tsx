@@ -3,6 +3,7 @@ import * as api from '../api';
 import type { AuthInfo } from '../types';
 import { HTTPS_ONLY } from '../lib/copy';
 import { LoginPage, OidcLoginPage } from './LoginPage';
+import { NewPasswordPage } from './NewPasswordPage';
 import { SetupPage } from './SetupPage';
 
 interface AuthCtx {
@@ -66,6 +67,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
   if (!auth || !value) return <div className="gate" aria-busy="true" />;
+  if (auth.user?.mustChangePassword) return <NewPasswordPage user={auth.user} onDone={refresh} onSignOut={signOut} />;
   if (auth.mode === 'none' || auth.user) return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
   // A Secure cookie set from a plain-http page is discarded by the browser, so the sign-in
   // would look like it did nothing. Say so up front (localhost counts as secure in most

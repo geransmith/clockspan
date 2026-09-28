@@ -4,7 +4,8 @@ import { findLocalUser, openDatabase } from './db.js';
 import { hashPassword, parsePassword } from './auth/password.js';
 
 // Usage: node dist/server/cli.js reset-password <username> [new-password]
-// Without a password argument, a random one is generated and printed.
+// Without a password argument, a random one is generated and printed; it is temporary, and
+// the user chooses their own at the next sign-in.
 const [cmd, username, passwordArg] = process.argv.slice(2);
 
 if (cmd !== 'reset-password' || !username) {
@@ -27,7 +28,10 @@ if ('error' in checked) {
   process.exit(1);
 }
 
-db.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).run(await hashPassword(checked.password), user.id);
+// A generated password is temporary: the user chooses their own at the next sign-in.
+db.prepare(`UPDATE users SET password_hash = ?, must_change_password = ? WHERE id = ?`).run(await hashPassword(checked.password), passwordArg ? 0 : 1, user.id);
 db.prepare(`DELETE FROM auth_sessions WHERE user_id = ?`).run(user.id);
-console.log(passwordArg ? `Password updated for ${username}.` : `New password for ${username}: ${password}`);
+console.log(
+  passwordArg ? `Password updated for ${username}.` : `Temporary password for ${username}: ${password}\nThey choose their own the next time they sign in.`,
+);
 db.close();

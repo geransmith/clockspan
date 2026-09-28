@@ -201,6 +201,12 @@ export const HTTPS_ONLY = {
   notKept: 'Signed in, but the browser did not keep the session cookie. Open the app through its https address and try again.',
 } as const;
 
+/** After signing in on a temporary password (an admin's, or one the CLI generated), before the app. */
+export const NEW_PASSWORD = {
+  title: 'Choose your own password',
+  body: 'The password you signed in with was set for you. Pick one of your own to continue.',
+} as const;
+
 /** The whole page, when something threw while rendering. */
 export const RENDER_FAILED = {
   title: 'Something went wrong',

@@ -266,7 +266,10 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               <ChangePassword />
             </Section>
             {auth.user?.isAdmin && (
-              <Section title="Users" hint="Each user has their own sheet, history and settings.">
+              <Section
+                title="Users"
+                hint="Each user has their own sheet, history and settings. A new user signs in with the temporary password you give them, then chooses their own."
+              >
                 <Users me={auth.user} />
               </Section>
             )}
@@ -814,6 +817,7 @@ function Users({ me }: { me: PublicUser }) {
             <span className="user-name">
               {u.name}
               {u.isAdmin && <span className="pill pill--accent">admin</span>}
+              {u.mustChangePassword && <span className="pill">temporary password</span>}
               {u.id === me.id && <span className="muted small"> (you)</span>}
             </span>
             {u.id !== me.id && (

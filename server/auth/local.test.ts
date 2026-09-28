@@ -257,6 +257,7 @@ describe('AUTH_MODE=local', () => {
 
     const sam = app.client();
     await sam.post('/api/auth/login', { username: 'sam', password: 'sam password' });
+    await sam.post('/api/auth/password', { currentPassword: 'sam password', newPassword: 'sam chose this' });
     expect((await sam.get('/api/auth/users')).status).toBe(403);
     expect((await sam.post('/api/auth/users', { username: 'eve', password: 'eve password' })).status).toBe(403);
     await sam.put('/api/days/2026-09-01/punches', { punches: [{ at: Date.UTC(2026, 8, 1, 8) }, { at: null }, { at: null }, { at: null }] });
@@ -269,6 +270,44 @@ describe('AUTH_MODE=local', () => {
 
     const me = (await app.api.get('/api/auth/me')).body.user.id;
     expect((await app.api.del(`/api/auth/users/${me}`)).status).toBe(400);
+  });
+
+  it('has a user an admin added choose their own password before anything else', async () => {
+    await setup();
+    expect((await app.api.get('/api/auth/me')).body.user.mustChangePassword).toBe(false);
+    await app.api.post('/api/auth/users', { username: 'sam', password: 'temporary pw' });
+    const listed = (await app.api.get('/api/auth/users')).body.users.map((u: { username: string; mustChangePassword: boolean }) => [
+      u.username,
+      u.mustChangePassword,
+    ]);
+    expect(listed).toEqual([
+      ['geran', false],
+      ['sam', true],
+    ]);
+
+    const sam = app.client();
+    expect((await sam.post('/api/auth/login', { username: 'sam', password: 'temporary pw' })).body.user.mustChangePassword).toBe(true);
+    // Only the password change is open: data routes, reads and writes, answer 403.
+    const blocked = await sam.get('/api/settings');
+    expect(blocked.status).toBe(403);
+    expect(blocked.body).toEqual({ error: 'password change required' });
+    expect((await sam.put('/api/days/2026-09-01/punches', { punches: [] })).status).toBe(403);
+    // Keeping the temporary password is not choosing one.
+    expect((await sam.post('/api/auth/password', { currentPassword: 'temporary pw', newPassword: 'temporary pw' })).status).toBe(400);
+    expect((await sam.post('/api/auth/password', { currentPassword: 'temporary pw', newPassword: 'sam chose this' })).body).toEqual({ ok: true });
+    expect((await sam.get('/api/auth/me')).body.user.mustChangePassword).toBe(false);
+    expect((await sam.get('/api/settings')).status).toBe(200);
+  });
+
+  it('keeps an admin on a temporary password out of user management as well', async () => {
+    await setup();
+    // What `reset-password <username>` without a password leaves behind.
+    app.db.prepare(`UPDATE users SET must_change_password = 1`).run();
+    expect((await app.api.get('/api/auth/users')).status).toBe(403);
+    expect((await app.api.get('/api/days/2026-09-01')).status).toBe(403);
+    // Choosing their own opens everything again.
+    expect((await app.api.post('/api/auth/password', { currentPassword: ADMIN.password, newPassword: 'a new one' })).body).toEqual({ ok: true });
+    expect((await app.api.get('/api/auth/users')).status).toBe(200);
   });
 
   it('answers the same errors when a request carries no body at all', async () => {
