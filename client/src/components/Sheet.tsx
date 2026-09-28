@@ -6,7 +6,7 @@ import { useSettings } from '../hooks/useSettings';
 import { warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
 import { addDays, formatDateLong } from '../lib/format';
-import { CARD_TITLES } from '../lib/layout';
+import { CARD_TITLES, moveCard, setCardVisible } from '../lib/layout';
 import { daySummaryOf } from '../lib/stickers';
 import { clampToDay, daySettings, timeclockForDate, type TimeclockState } from '../lib/timeclock';
 import { weekHours } from '../lib/week';
@@ -61,14 +61,10 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
   const saveLayout = (next: typeof layout) =>
     update({ layout: next }).catch(() => warnQuietly({ title: SAVE_FAILED.title, body: SAVE_FAILED.body, tag: 'save-failed' }));
   const reorder = (from: number, to: number) => {
-    if (from === to || to < 0 || to >= visible.length) return;
-    const nextVisible = [...visible];
-    nextVisible.splice(to, 0, ...nextVisible.splice(from, 1));
-    void saveLayout([...nextVisible, ...hidden]);
+    const next = moveCard(layout, from, to);
+    if (next) void saveLayout(next);
   };
-  const setVisible = (id: CardId, v: boolean) => {
-    void saveLayout(layout.map((l) => (l.id === id ? { ...l, visible: v } : l)));
-  };
+  const setVisible = (id: CardId, v: boolean) => void saveLayout(setCardVisible(layout, id, v));
 
   const ready = Boolean(day && tc);
   useEffect(() => {
