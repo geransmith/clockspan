@@ -2,17 +2,15 @@ import { Router } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import {
-  CARD_DEFAULT_VISIBLE,
-  CARD_IDS,
   DEFAULT_SETTINGS,
   MAX_RETENTION_DAYS,
   MIN_RETENTION_DAYS,
+  normalizeLayout,
   SETTING_LIMITS,
   THEMES,
   TIMER_MINUTES,
   TIME_FORMATS,
   type AlarmSettings,
-  type CardId,
   type RetentionSettings,
   type Settings,
   type Theme,
@@ -76,25 +74,15 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     return isInt(v, SETTING_LIMITS[key].min, SETTING_LIMITS[key].max) ? v : base[key];
   };
 
-  let layout = base.layout;
+  const layout = Array.isArray(p.layout) ? normalizeLayout(p.layout) : base.layout;
   // Until 0.3 the sticker chart was a sheet card; a row saved then carries its choice in the
   // layout. Honour it until the user's next save writes the setting itself.
-  let stickers = base.stickers;
-  if (Array.isArray(p.layout)) {
-    const seen = new Set<CardId>();
-    const next: Settings['layout'] = [];
-    for (const item of p.layout) {
-      if (!item || typeof item !== 'object') continue;
-      const { id, visible } = item as Record<string, unknown>;
-      if (id === 'stickers' && visible === true) stickers = true;
-      if (!CARD_IDS.includes(id as CardId) || seen.has(id as CardId)) continue;
-      seen.add(id as CardId);
-      next.push({ id: id as CardId, visible: isBool(visible) ? visible : CARD_DEFAULT_VISIBLE[id as CardId] });
-    }
-    // Any card the client omitted (e.g. added after they last saved) is appended with its default.
-    for (const id of CARD_IDS) if (!seen.has(id)) next.push({ id, visible: CARD_DEFAULT_VISIBLE[id] });
-    layout = next;
-  }
+  const stickerCard =
+    Array.isArray(p.layout) &&
+    (p.layout as unknown[]).some((item) => {
+      const card = item as { id?: unknown; visible?: unknown } | null;
+      return card?.id === 'stickers' && card.visible === true;
+    });
 
   return {
     workMinutes: limited('workMinutes'),
@@ -116,7 +104,7 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     trackHours: isBool(p.trackHours) ? p.trackHours : base.trackHours,
     sounds: mergeSounds(base.sounds, p.sounds),
     celebrations: isBool(p.celebrations) ? p.celebrations : base.celebrations,
-    stickers: isBool(p.stickers) ? p.stickers : stickers,
+    stickers: isBool(p.stickers) ? p.stickers : stickerCard || base.stickers,
     showWeekends: isBool(p.showWeekends) ? p.showWeekends : base.showWeekends,
     alarms: {
       lunchBy: mergeAlarm(base.alarms.lunchBy, alarms.lunchBy),

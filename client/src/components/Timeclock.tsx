@@ -4,7 +4,7 @@ import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { unlockAudio } from '../lib/alerts';
 import { pickCelebration } from '../lib/celebrate';
-import { floorToMinute, formatDuration, formatDurationCeil } from '../lib/format';
+import { floorToMinute, formatDuration, formatDurationCeil, plural } from '../lib/format';
 import {
   addPunchPair,
   clockOutPosition,
@@ -211,7 +211,7 @@ export function Timeclock({
           <Tile
             label="Focused"
             value={formatDuration(focus.seconds)}
-            sub={focus.sessions === 0 ? 'No sessions yet' : `${focus.sessions} ${focus.sessions === 1 ? 'session' : 'sessions'}`}
+            sub={focus.sessions === 0 ? 'No sessions yet' : `${focus.sessions} ${plural(focus.sessions, 'session')}`}
             tone=""
           />
         ) : (

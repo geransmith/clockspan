@@ -7,10 +7,13 @@ import {
   formatDuration,
   formatDurationCeil,
   formatHours,
+  formatMinutes,
   formatTime,
   formatWeekday,
   resolveHour12,
   floorToMinute,
+  plural,
+  sameText,
 } from './format';
 
 describe('dayName', () => {
@@ -50,6 +53,13 @@ describe('durations', () => {
     expect(formatDuration(-90)).toBe('1m');
   });
 
+  it('writes a length in minutes the way the alarm banners do', () => {
+    expect(formatMinutes(15)).toBe('15 min');
+    expect(formatMinutes(60)).toBe('1h');
+    expect(formatMinutes(90)).toBe('1h 30m');
+    expect(formatMinutes(605)).toBe('10h 5m');
+  });
+
   it('writes hours and minutes on one line', () => {
     expect(formatHours(0)).toBe('0:00');
     expect(formatHours(45 * 60)).toBe('0:45');
@@ -83,5 +93,18 @@ describe('formatTime', () => {
     expect(resolveHour12('12h')).toBe(true);
     expect(resolveHour12('24h')).toBe(false);
     expect(typeof resolveHour12('auto')).toBe('boolean');
+  });
+});
+
+describe('words', () => {
+  it('picks one or many by the count', () => {
+    expect(`1 ${plural(1, 'day')}`).toBe('1 day');
+    expect(`0 ${plural(0, 'day')}`).toBe('0 days');
+    expect(`3 ${plural(3, 'entry', 'entries')}`).toBe('3 entries');
+  });
+
+  it('keys text by its words, whatever the case or spacing', () => {
+    expect(sameText('  Call   the\tBank ')).toBe('call the bank');
+    expect(sameText('Call the bank')).toBe(sameText('call THE bank'));
   });
 });

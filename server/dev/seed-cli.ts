@@ -1,7 +1,7 @@
 import { loadConfig } from '../config.js';
 import { ensureDefaultUser, openDatabase } from '../db.js';
 import { insertSession, SESSION_COOKIE } from '../auth/session.js';
-import { todayKey } from '../../shared/dates.js';
+import { isValidDateKey, todayKey } from '../../shared/dates.js';
 import {
   DEFAULT_HISTORY_DAYS,
   LOCAL_USERS,
@@ -53,8 +53,9 @@ for (let i = 0; i < args.length; i++) {
 
 let now = Date.now();
 const today = opts.today ?? todayKey(now);
-if (!/^\d{4}-\d{2}-\d{2}$/.test(today)) {
-  console.error(`--today must be YYYY-MM-DD (got "${today}").`);
+if (!isValidDateKey(today)) {
+  // Only a value typed after --today can fail the check.
+  console.error(`--today must be a date, YYYY-MM-DD (got "${opts.today ?? ''}").`);
   process.exit(2);
 }
 // --now pins today's clock-in and running timer to a local time of day (the screenshot

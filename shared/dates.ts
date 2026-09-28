@@ -7,6 +7,10 @@
 const pad = (n: number) => String(n).padStart(2, '0');
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+export const HOUR_MS = 3_600_000;
+/** A calendar day's length in UTC; a local day across a DST change is an hour off it. */
+export const DAY_MS = 24 * HOUR_MS;
+
 /** Local-date key, e.g. 2026-09-16. */
 export function dateKey(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -29,8 +33,6 @@ export function isValidDateKey(s: unknown): s is string {
   const dt = new Date(Date.UTC(y, m - 1, d));
   return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
 }
-
-const HOUR_MS = 3_600_000;
 
 /**
  * The epoch range a punch on this key can plausibly have, whatever zone wrote it. The UI

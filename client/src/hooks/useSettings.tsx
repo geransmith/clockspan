@@ -1,8 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import type { Settings } from '../types';
-import { DEFAULT_SETTINGS } from '../../../shared/settings.js';
-import { normalizeLayout } from '../lib/layout';
+import { DEFAULT_SETTINGS, normalizeLayout } from '../../../shared/settings.js';
 import { useLatest } from './useLatest';
 
 interface SettingsCtx {

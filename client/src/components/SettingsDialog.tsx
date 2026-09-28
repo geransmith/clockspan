@@ -15,7 +15,7 @@ import { useModalDialog } from '../hooks/useModalDialog';
 import { useSettings } from '../hooks/useSettings';
 import { notificationPermission, playSound, requestNotificationPermission, unlockAudio } from '../lib/alerts';
 import { CONFIRM, DELETE_DAYS, RESET_SETTINGS, SAVE_STATUS } from '../lib/copy';
-import { addDays, formatDateFull, todayKey } from '../lib/format';
+import { addDays, formatDateFull, plural, todayKey } from '../lib/format';
 import { SOUND_EVENT_LABELS } from '../lib/sounds';
 import { readStored, writeStored } from '../lib/storage';
 import { PASSWORD_LENGTH, type AlarmId, type AlarmSettings, type PruneInfo, type PublicUser, type Settings, type SoundEvent, type SoundId } from '../types';
@@ -666,7 +666,7 @@ function DeleteOldDays() {
     ? null
     : info.total === 0
       ? 'No days stored.'
-      : `${info.total} day${info.total === 1 ? '' : 's'} stored, oldest ${formatDateFull(info.oldest!)}. ${info.matching} before this date.`;
+      : `${info.total} ${plural(info.total, 'day')} stored, oldest ${formatDateFull(info.oldest!)}. ${info.matching} before this date.`;
 
   return (
     <Section

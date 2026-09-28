@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { RETRO_PROMPT, UNTITLED_SESSION } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
-import { formatDuration } from '../lib/format';
+import { formatDuration, plural } from '../lib/format';
 import { reviewDay } from '../lib/retro';
 import { LIMITS, type Priority, type Session } from '../types';
 import { Check } from './Icons';
@@ -97,7 +97,10 @@ export function Retro({ date, today, priorities, sessions, note, reviewedAt, onC
                 <span className="retro-time">
                   {n > 0 ? (
                     <>
-                      {formatDuration(focusedSeconds)} <span className="muted small">· {n === 1 ? '1 session' : `${n} sessions`}</span>
+                      {formatDuration(focusedSeconds)}{' '}
+                      <span className="muted small">
+                        · {n} {plural(n, 'session')}
+                      </span>
                     </>
                   ) : (
                     <span className="muted">no time logged</span>

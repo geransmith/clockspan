@@ -4,7 +4,7 @@ import type { Config } from '../config.js';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { countDays, pruneDays, reclaimSpace } from '../retention.js';
-import { isValidDateKey, punchWindow } from '../../shared/dates.js';
+import { DAY_MS, isValidDateKey, punchWindow } from '../../shared/dates.js';
 import { dateParam, ensureDay, findDay, requireDate, sessionRowToJson, UID_RE, type DayRow, type SessionRow } from './shared.js';
 import { MAX_PRIORITIES, SETTING_LIMITS } from '../../shared/settings.js';
 import {
@@ -24,7 +24,6 @@ import {
 
 const MAX_RANGE_DAYS = 400;
 const MAX_PUNCHES = 40;
-const DAY_MS = 86_400_000;
 
 /**
  * A stored instant is a safe integer the client can format; anything else (1e308, say) would

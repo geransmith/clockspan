@@ -3,6 +3,7 @@ import { parseCookie, stringifySetCookie, type SetCookie } from 'cookie';
 import type { Request, Response } from 'express';
 import type { DB, UserRow } from '../db.js';
 import type { Config } from '../config.js';
+import { HOUR_MS } from '../../shared/dates.js';
 
 export const SESSION_COOKIE = 'fs_session';
 
@@ -63,7 +64,7 @@ export function resolveSession(db: DB, config: Config, req: Request, res: Respon
   // Slide expiry at most once an hour to keep writes cheap. The cookie's Max-Age was set at
   // login, so the browser is handed it again with a fresh one: the row sliding on its own
   // would still have the browser drop the cookie a TTL after login.
-  if (now - row.last_seen_at > 3_600_000) {
+  if (now - row.last_seen_at > HOUR_MS) {
     db.prepare(`UPDATE auth_sessions SET last_seen_at = ?, expires_at = ? WHERE id = ?`).run(now, now + config.sessionTtlMs, row.session_id);
     res.setHeader('Set-Cookie', sessionCookie(config, token));
   }

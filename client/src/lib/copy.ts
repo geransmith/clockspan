@@ -6,6 +6,8 @@
  * convention in AGENTS.md.
  */
 
+import { plural } from './format';
+
 /** Shown once the day is done. One is picked per clock-out. */
 export const CELEBRATION_EMOJI = ['🎉', '🥳', '🌟', '✨', '🙌', '💪', '🏆', '🎈', '🚀', '🌈', '🍀', '🎊', '👏', '😎', '🔥', '🥇', '🌻', '🫶', '🏁', '🧠'];
 
@@ -192,7 +194,7 @@ export const PLAN_NEXT = {
   already: (n: number) => `${n} already on the list`,
   placeholder: 'Something else for the list',
   save: (name: string) => `Add to ${name}`,
-  done: (n: number, name: string) => `${n} ${n === 1 ? 'row' : 'rows'} added for ${name}.`,
+  done: (n: number, name: string) => `${n} ${plural(n, 'row')} added for ${name}.`,
   nothing: 'Nothing new to add.',
 } as const;
 
@@ -251,10 +253,6 @@ export const RESET_SETTINGS = {
 
 /** Settings → Data: the confirm before old days are deleted, and the result line. */
 export const DELETE_DAYS = {
-  confirm: (n: number, before: string) => `Delete ${days(n)} before ${before}? This cannot be undone.`,
-  done: (n: number) => `Deleted ${days(n)}.`,
+  confirm: (n: number, before: string) => `Delete ${n} ${plural(n, 'day')} before ${before}? This cannot be undone.`,
+  done: (n: number) => `Deleted ${n} ${plural(n, 'day')}.`,
 } as const;
-
-function days(n: number): string {
-  return `${n} day${n === 1 ? '' : 's'}`;
-}

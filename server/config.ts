@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { AUTH_MODES, type AuthMode } from '../shared/api.js';
+import { DAY_MS } from '../shared/dates.js';
 import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS } from '../shared/settings.js';
 
 export interface Config {
@@ -117,7 +118,7 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env): Config {
     appUrl,
     cookieSecure,
     trustProxy: parseTrustProxy(env.TRUST_PROXY),
-    sessionTtlMs: parseSessionTtlDays(env.SESSION_TTL_DAYS) * 86_400_000,
+    sessionTtlMs: parseSessionTtlDays(env.SESSION_TTL_DAYS) * DAY_MS,
     retentionDays,
     oidc,
   };

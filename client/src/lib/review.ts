@@ -1,5 +1,5 @@
 import type { Day } from '../types';
-import { addDays, addMonths, formatDateSpan, formatMonth, parseDateKey, startOfMonth, startOfQuarter, startOfWeek } from './format';
+import { addDays, addMonths, DAY_MS, formatDateSpan, formatMonth, parseDateKey, sameText, startOfMonth, startOfQuarter, startOfWeek } from './format';
 import { reviewDay } from './retro';
 import { daySettings, timeclockForDate, type TimeclockSettings } from './timeclock';
 
@@ -43,7 +43,7 @@ export function periodOffset(kind: PeriodKind, today: string, date: string): num
   if (kind === 'week') {
     // Whole weeks between the two Mondays; rounding absorbs a DST hour.
     const ms = parseDateKey(startOfWeek(today)).getTime() - parseDateKey(startOfWeek(date)).getTime();
-    return Math.max(0, Math.round(ms / (7 * 86_400_000)));
+    return Math.max(0, Math.round(ms / (7 * DAY_MS)));
   }
   const [ty, tm] = today.split('-').map(Number) as [number, number];
   const [dy, dm] = date.split('-').map(Number) as [number, number];
@@ -128,7 +128,7 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
     out.prioritiesTotal += r.total;
     if (day.retroAt != null) out.retrosDone++;
     for (const session of r.unplanned) {
-      const key = groupKey(session.label);
+      const key = sameText(session.label);
       let g = unplanned.get(key);
       if (!g) unplanned.set(key, (g = { key, label: '', seconds: 0, sessions: 0, dates: [] }));
       g.label = session.label.trim();
@@ -138,7 +138,7 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
     }
     for (const p of r.planned) {
       if (p.priority.done) continue;
-      const key = groupKey(p.priority.text);
+      const key = sameText(p.priority.text);
       let g = notDone.get(key);
       if (!g) notDone.set(key, (g = { key, text: '', dates: [], focusedSeconds: 0, addedMidDay: false }));
       g.text = p.priority.text.trim();
@@ -151,11 +151,6 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
   out.unplanned = [...unplanned.values()].sort((a, b) => b.seconds - a.seconds || a.dates[0]!.localeCompare(b.dates[0]!));
   out.notDone = [...notDone.values()].sort((a, b) => b.dates.length - a.dates.length || a.dates[0]!.localeCompare(b.dates[0]!));
   return out;
-}
-
-/** The same text typed on two days, whatever its case or spacing. */
-function groupKey(text: string): string {
-  return text.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
 /** Days are walked oldest first, so a new day is always the last one. */
