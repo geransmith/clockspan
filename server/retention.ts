@@ -1,7 +1,7 @@
 import type { Config } from './config.js';
 import type { DB } from './db.js';
 import type { Settings } from '../shared/settings.js';
-import { loadSettings } from './routes/settings.js';
+import { loadSettings } from './settings.js';
 import { DAY_MS, HOUR_MS } from '../shared/dates.js';
 
 /**

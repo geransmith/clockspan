@@ -3,9 +3,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AddressInfo } from 'node:net';
-import { createApp } from './app.js';
+import { createApp, startBackgroundJobs } from './app.js';
 import { loadConfig } from './config.js';
-import { openDatabase } from './db.js';
+import { ensureDefaultUser, openDatabase } from './db.js';
 import { SETUP_CODE, startTestApp, type TestApp } from './dev/harness.js';
 
 describe('response headers', () => {
@@ -271,5 +271,42 @@ describe('createApp', () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       db.close();
     }
+  });
+});
+
+describe('startBackgroundJobs', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('purges expired logins every six hours and schedules the old-day prune; building an app starts neither', () => {
+    vi.useFakeTimers({ now: Date.UTC(2026, 8, 16, 12) });
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const db = openDatabase(':memory:');
+    const config = loadConfig({ AUTH_MODE: 'none', RETENTION_DAYS: '30' });
+    const user = ensureDefaultUser(db);
+    const now = Date.now();
+    db.prepare(`INSERT INTO auth_sessions (user_id, token_hash, created_at, expires_at, last_seen_at) VALUES (?, 'old', ?, ?, ?)`).run(
+      user.id,
+      0,
+      now + 60_000,
+      0,
+    );
+    db.prepare(`INSERT INTO days (user_id, date, created_at) VALUES (?, '2025-01-01', 0)`).run(user.id);
+    const count = (table: string) => (db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
+
+    createApp(db, config);
+    vi.advanceTimersByTime(7 * 3_600_000);
+    expect([count('auth_sessions'), count('days')]).toEqual([1, 1]);
+
+    startBackgroundJobs(db, config);
+    vi.advanceTimersByTime(30_000);
+    expect(count('days')).toBe(0);
+    // The login expired a minute after it was stored; the next six-hourly purge takes it.
+    expect(count('auth_sessions')).toBe(1);
+    vi.advanceTimersByTime(6 * 3_600_000);
+    expect(count('auth_sessions')).toBe(0);
+    db.close();
   });
 });
