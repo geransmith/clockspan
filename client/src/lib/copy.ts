@@ -213,6 +213,9 @@ export const SAVE_FAILED = {
   body: 'The server did not answer. The sheet shows what is stored.',
 } as const;
 
+/** A request that got no answer within `REQUEST_TIMEOUT_MS` (`api.ts`), where a form shows its error. */
+export const REQUEST_TIMEOUT = 'The server did not answer in time.';
+
 /** In place of a sheet whose day could not be fetched; the button asks again. */
 export const LOAD_FAILED = {
   title: 'Could not load this day',

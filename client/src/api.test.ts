@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from './api';
-import { ApiError, UNAUTHENTICATED_EVENT } from './api';
+import { ApiError, REQUEST_TIMEOUT_MS, UNAUTHENTICATED_EVENT } from './api';
+import { REQUEST_TIMEOUT } from './lib/copy';
 
 /**
  * `request()` is plain `fetch`. The stub records each call and answers with whatever the test
@@ -106,6 +107,7 @@ describe('routes', () => {
     expect(sent.path).toBe(path);
     expect(sent.init.method).toBe(method);
     expect(sent.init.credentials).toBe('same-origin');
+    expect(sent.init.signal).toBeDefined();
     if (body === undefined) {
       expect(sent.init.body).toBeUndefined();
       expect(sent.init.headers).toBeUndefined();
@@ -144,6 +146,20 @@ describe('failures', () => {
     } finally {
       window.removeEventListener(UNAUTHENTICATED_EVENT, lost);
     }
+  });
+
+  it('gives up after 30 s, waiting for the answer or its body, and says the server did not answer', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    fetchMock.mockRejectedValueOnce(new DOMException('signal timed out', 'TimeoutError'));
+    const err = await api.getDay(DATE).catch((e: unknown) => e);
+    expect(timeout).toHaveBeenCalledWith(REQUEST_TIMEOUT_MS);
+    expect(err).not.toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ message: REQUEST_TIMEOUT });
+
+    // The headers came, the body didn't.
+    const stalled = { ok: true, status: 200, json: () => Promise.reject(new DOMException('signal timed out', 'TimeoutError')) };
+    fetchMock.mockResolvedValueOnce(stalled as unknown as Response);
+    await expect(api.putOvertime(DATE, true)).rejects.toThrow(REQUEST_TIMEOUT);
   });
 
   it('leaves a network failure as the error fetch threw', async () => {
