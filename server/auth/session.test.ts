@@ -2,11 +2,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { startTestApp, type TestApp } from '../dev/harness.js';
+import { SETUP_CODE, startTestApp, type TestApp } from '../dev/harness.js';
 import { purgeExpiredSessions, revokeOtherSessions, SESSION_COOKIE } from './session.js';
 import type { Request } from 'express';
 
-const USER = { username: 'geran', password: 'correct horse' };
+const USER = { username: 'geran', password: 'correct horse', setupCode: SETUP_CODE };
 const HOUR = 3_600_000;
 
 type SessionRow = { id: number; expires_at: number; last_seen_at: number };

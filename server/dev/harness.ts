@@ -54,6 +54,9 @@ export interface StartOptions {
   clientDir?: string;
 }
 
+/** Every test app's first-run setup code (AUTH_MODE=local), so a test can post it with the form. */
+export const SETUP_CODE = 'TEST-SETU-PCOD';
+
 /** A Wednesday, so "this week" in a review holds seeded days on both sides. */
 export const SEED_TODAY = '2026-09-16';
 export const SEED_NOW = new Date(2026, 8, 16, 14, 0).getTime();
@@ -100,7 +103,7 @@ export async function startTestApp(opts: StartOptions = {}): Promise<TestApp> {
   const config = loadConfig({ AUTH_MODE: authMode, DATA_DIR: os.tmpdir(), PORT: '0', ...oidcEnv, ...opts.env });
   const db = openDatabase(':memory:');
   // No client dir means the static block stays off, so /api tests never see index.html.
-  const app = createApp(db, config, { clientDir: opts.clientDir ?? path.join(os.tmpdir(), 'clockspan-no-client') });
+  const app = createApp(db, config, { clientDir: opts.clientDir ?? path.join(os.tmpdir(), 'clockspan-no-client'), setupCode: SETUP_CODE });
   const server = await new Promise<import('node:http').Server>((resolve) => {
     const s = app.listen(0, '127.0.0.1', () => resolve(s));
   });

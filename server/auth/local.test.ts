@@ -1,12 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { startTestApp, type Client, type TestApp } from '../dev/harness.js';
+import { SETUP_CODE, startTestApp, type Client, type TestApp } from '../dev/harness.js';
 import { SESSION_COOKIE } from './session.js';
-import { LoginLimiter, MAX_ACCOUNT_FAILURES, accountKey, limiterKey } from './local.js';
+import { LoginLimiter, MAX_ACCOUNT_FAILURES, accountKey, limiterKey, newSetupCode, setupCodeMatches } from './local.js';
 import { hashPassword } from './password.js';
 import { currentUser } from './middleware.js';
 import type { Request } from 'express';
+import { createApp } from '../app.js';
+import { loadConfig } from '../config.js';
+import { openDatabase } from '../db.js';
 
 const ADMIN = { username: 'geran', password: 'correct horse' };
+const FIRST_RUN = { ...ADMIN, setupCode: SETUP_CODE };
 
 describe('AUTH_MODE=local', () => {
   let app: TestApp;
@@ -23,7 +27,7 @@ describe('AUTH_MODE=local', () => {
     vi.restoreAllMocks();
   });
 
-  const setup = (client: Client = app.api) => client.post('/api/auth/setup', ADMIN);
+  const setup = (client: Client = app.api) => client.post('/api/auth/setup', FIRST_RUN);
 
   it('asks for setup until the first user exists, then signs that user in', async () => {
     expect((await app.api.get('/api/auth/me')).body).toEqual({ mode: 'local', setupRequired: true, user: null, cookieSecure: false });
@@ -46,16 +50,55 @@ describe('AUTH_MODE=local', () => {
     expect((await app.api.get('/api/auth/me')).body.cookieSecure).toBe(true);
   });
 
+  it('takes setup only with the code from the server log, whatever its case or dashes', async () => {
+    const wrong = await app.api.post('/api/auth/setup', { ...ADMIN, setupCode: 'AAAA-BBBB-CCCC' });
+    expect(wrong.status).toBe(403);
+    expect(wrong.body.error).toMatch(/server log/);
+    expect((await app.api.post('/api/auth/setup', ADMIN)).status).toBe(403);
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/setup refused .*wrong setup code/));
+    expect((await app.api.get('/api/auth/me')).body.setupRequired).toBe(true);
+    const typed = ` ${SETUP_CODE.toLowerCase().replaceAll('-', ' ')} `;
+    expect((await app.api.post('/api/auth/setup', { ...ADMIN, setupCode: typed })).status).toBe(201);
+  });
+
+  it('counts wrong setup codes against the address like failed sign-ins', async () => {
+    for (let i = 0; i < 5; i++) expect((await app.api.post('/api/auth/setup', { ...ADMIN, setupCode: 'nope' })).status).toBe(403);
+    const locked = await setup();
+    expect(locked.status).toBe(429);
+    expect(Number(locked.headers.get('retry-after'))).toBeGreaterThan(0);
+  });
+
+  it('prints a fresh code in the log until the first account exists, and not after', async () => {
+    await app.close();
+    log.mockClear();
+    const db = openDatabase(':memory:');
+    const config = loadConfig({ AUTH_MODE: 'local' });
+    createApp(db, config);
+    const line = (log.mock.calls as unknown[][]).map(([m]) => String(m)).find((m) => m.includes('setup page asks for this code'));
+    const code = /([A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})$/.exec(line ?? '')?.[1];
+    expect(code).toBeDefined();
+    expect(code).not.toBe(SETUP_CODE);
+    db.prepare(`INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at) VALUES ('local', 'x', 'h', 'x', 1, 0)`).run();
+    log.mockClear();
+    createApp(db, config);
+    expect(log.mock.calls.flat().join('\n')).not.toContain('setup page asks for this code');
+    db.close();
+    app = await startTestApp({ authMode: 'local' });
+  });
+
   it('lets only one of two racing first visitors become admin', async () => {
-    const [a, b] = await Promise.all([setup(app.client()), app.client().post('/api/auth/setup', { username: 'second', password: 'also long enough' })]);
+    const [a, b] = await Promise.all([
+      setup(app.client()),
+      app.client().post('/api/auth/setup', { username: 'second', password: 'also long enough', setupCode: SETUP_CODE }),
+    ]);
     expect([a.status, b.status].sort((x, y) => x - y)).toEqual([201, 403]);
     expect((await app.api.get('/api/auth/me')).body.setupRequired).toBe(false);
   });
 
   it('validates the setup form', async () => {
-    expect((await app.api.post('/api/auth/setup', { username: 'a', password: ADMIN.password })).status).toBe(400);
-    expect((await app.api.post('/api/auth/setup', { username: 'ok name', password: ADMIN.password })).status).toBe(400);
-    expect((await app.api.post('/api/auth/setup', { username: 'fine', password: 'short' })).status).toBe(400);
+    expect((await app.api.post('/api/auth/setup', { ...FIRST_RUN, username: 'a' })).status).toBe(400);
+    expect((await app.api.post('/api/auth/setup', { ...FIRST_RUN, username: 'ok name' })).status).toBe(400);
+    expect((await app.api.post('/api/auth/setup', { ...FIRST_RUN, username: 'fine', password: 'short' })).status).toBe(400);
     expect((await app.api.get('/api/auth/me')).body.setupRequired).toBe(true);
   });
 
@@ -312,7 +355,8 @@ describe('AUTH_MODE=local', () => {
 
   it('answers the same errors when a request carries no body at all', async () => {
     const bare = (path: string, cookie?: string) => fetch(app.url + path, { method: 'POST', headers: cookie ? { cookie } : {} });
-    expect((await bare('/api/auth/setup')).status).toBe(400);
+    // No body is no setup code.
+    expect((await bare('/api/auth/setup')).status).toBe(403);
     await setup();
     expect((await bare('/api/auth/login')).status).toBe(401);
     expect((await app.api.post('/api/auth/login', { username: 42, password: ADMIN.password })).status).toBe(401);
@@ -338,6 +382,21 @@ describe('AUTH_MODE=local', () => {
 describe('currentUser', () => {
   it('refuses to be used on a request that never went through requireAuth', () => {
     expect(() => currentUser({} as Request)).toThrow(/requireAuth/);
+  });
+});
+
+describe('setup codes', () => {
+  it('are twelve unambiguous characters in threes of four, new each time', () => {
+    const codes = new Set(Array.from({ length: 50 }, newSetupCode));
+    expect(codes.size).toBe(50);
+    for (const c of codes) expect(c).toMatch(/^[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}$/);
+  });
+
+  it('match whatever the case, spacing or dashes, and never a non-string', () => {
+    expect(setupCodeMatches('ABCD-EFGH-JKMN', 'abcd efgh jkmn')).toBe(true);
+    expect(setupCodeMatches('ABCD-EFGH-JKMN', 'ABCDEFGHJKMN')).toBe(true);
+    expect(setupCodeMatches('ABCD-EFGH-JKMN', 'ABCD-EFGH-JKMP')).toBe(false);
+    expect(setupCodeMatches('ABCD-EFGH-JKMN', 42)).toBe(false);
   });
 });
 

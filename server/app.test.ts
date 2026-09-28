@@ -6,7 +6,7 @@ import type { AddressInfo } from 'node:net';
 import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { openDatabase } from './db.js';
-import { startTestApp, type TestApp } from './dev/harness.js';
+import { SETUP_CODE, startTestApp, type TestApp } from './dev/harness.js';
 
 describe('response headers', () => {
   let app: TestApp;
@@ -163,7 +163,7 @@ describe('TRUST_PROXY', () => {
   let app: TestApp;
   afterEach(() => app.close());
 
-  const USER = { username: 'geran', password: 'correct horse' };
+  const USER = { username: 'geran', password: 'correct horse', setupCode: SETUP_CODE };
   const loginFrom = (forwardedFor: string) =>
     fetch(`${app.url}/api/auth/login`, {
       method: 'POST',
