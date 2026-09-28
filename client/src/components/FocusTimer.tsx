@@ -21,6 +21,9 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
   const [linked, setLinked] = useState<string | null>(null);
   const [addAsPriority, setAddAsPriority] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A start is out. A second tap before it answers would add the priority twice and meet the
+  // first timer as a 409, which reads as one started on another device.
+  const [starting, setStarting] = useState(false);
 
   if (timer.running) return <Running />;
 
@@ -45,6 +48,8 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
   };
 
   const start = async (minutes: number) => {
+    if (starting) return;
+    setStarting(true);
     setError(null);
     try {
       let uid = linkedStillOpen ? linked : null;
@@ -55,6 +60,8 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
       setAddAsPriority(false);
     } catch (err) {
       setError((err as Error).message);
+    } finally {
+      setStarting(false);
     }
   };
 
@@ -96,7 +103,7 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
       )}
       <div className="timer-quick">
         {lengths.map((m) => (
-          <button key={m} className="btn btn-quick" onClick={() => void start(m)} disabled={!isToday}>
+          <button key={m} className="btn btn-quick" onClick={() => void start(m)} disabled={!isToday || starting}>
             <span className="timer-quick-num">{m}</span>
             <span className="timer-quick-unit">min</span>
           </button>
