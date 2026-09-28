@@ -1,7 +1,7 @@
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import { isIPv6 } from 'node:net';
 import { Router } from 'express';
-import { findLocalUser, type DB, type UserRow } from '../db.js';
+import { findLocalUser, findUserById, type DB, type UserRow } from '../db.js';
 import type { Config } from '../config.js';
 import { DUMMY_HASH, hashPassword, parseCredentials, parsePassword, verifyPassword } from './password.js';
 import { createSession, destroySession, revokeOtherSessions } from './session.js';
@@ -190,7 +190,7 @@ export function localAuthRouter(db: DB, config: Config, setupCode: string = newS
       )
       .run(creds.username, hash, creds.username, Date.now());
     createSession(db, config, res, Number(info.lastInsertRowid));
-    const user = db.prepare(`SELECT * FROM users WHERE id = ?`).get(info.lastInsertRowid) as UserRow;
+    const user = findUserById(db, info.lastInsertRowid)!;
     console.log(`[auth] setup: admin ${logName(user.username)} created from ${req.ip}`);
     res.status(201).json({ user: publicUser(user) } satisfies UserResponse);
   });
@@ -307,7 +307,7 @@ export function localAuthRouter(db: DB, config: Config, setupCode: string = newS
       res.status(409).json({ error: 'That username is already taken.' });
       return;
     }
-    const user = db.prepare(`SELECT * FROM users WHERE id = ?`).get(info.lastInsertRowid) as UserRow;
+    const user = findUserById(db, info.lastInsertRowid)!;
     console.log(`[auth] user ${logName(name)} created by ${logName(currentUser(req).username)}`);
     res.status(201).json({ user: publicUser(user) } satisfies UserResponse);
   });

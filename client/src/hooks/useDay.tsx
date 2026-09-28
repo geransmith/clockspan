@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
+import { emptyDay } from '../../../shared/api.js';
 import type { Day, Priority, Punch, Session } from '../types';
 import { dismissByTag, warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
@@ -45,16 +46,7 @@ interface DayStore {
 const Ctx = createContext<DayStore | null>(null);
 
 function withDay(days: Record<string, Day>, date: string, fn: (d: Day) => Day): Record<string, Day> {
-  const current = days[date] ?? {
-    date,
-    punches: emptyPunches(),
-    priorities: [],
-    overtimeApproved: false,
-    retroNote: '',
-    retroAt: null,
-    workMinutes: null,
-    sessions: [],
-  };
+  const current = days[date] ?? { ...emptyDay(date), punches: emptyPunches() };
   return { ...days, [date]: fn(current) };
 }
 

@@ -1,6 +1,7 @@
 import { act } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { vi } from 'vitest';
+import { emptyDay } from '../../../shared/api.js';
 import { DEFAULT_SETTINGS } from '../../../shared/settings.js';
 import { BreakProvider } from '../hooks/useBreak';
 import { DayProvider } from '../hooks/useDay';
@@ -26,7 +27,7 @@ export function makeSettings(patch: Partial<Settings> = {}): Settings {
 }
 
 export function makeDay(date = TODAY, patch: Partial<Day> = {}): Day {
-  return { date, punches: emptyPunches(), priorities: [], overtimeApproved: false, retroNote: '', retroAt: null, workMinutes: null, sessions: [], ...patch };
+  return { ...emptyDay(date), punches: emptyPunches(), ...patch };
 }
 
 export function makeSession(patch: Partial<Session> = {}): Session {

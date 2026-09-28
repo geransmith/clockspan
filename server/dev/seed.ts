@@ -3,6 +3,7 @@ import type { DB, UserRow } from '../db.js';
 import { upsertOidcUser } from '../auth/oidc.js';
 import { hashPassword } from '../auth/password.js';
 import { addDays, addMonths, parseDateKey, startOfQuarter } from '../../shared/dates.js';
+import { kindForPosition } from '../../shared/punches.js';
 
 /**
  * Deterministic sample data for the dev DB and for API tests. Rows are written with plain
@@ -192,7 +193,7 @@ function insertDay(ctx: Insert, day: Omit<SeededDay, 'sessions'> & { sessions: O
 }
 
 function punchRows(times: (number | null)[]): SeededPunch[] {
-  return times.map((t, position) => ({ position, kind: position % 2 === 0 ? 'in' : 'out', at: t }));
+  return times.map((t, position) => ({ position, kind: kindForPosition(position), at: t }));
 }
 
 function completed(label: string, startedAt: number, minutes: number, priorityUid: string | null, notes = ''): Omit<SeededSession, 'id'> {
