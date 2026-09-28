@@ -168,11 +168,22 @@ export const TIMER_PAUSED_OUT = {
 
 /** The focus timer's break: the button, the line while it runs, and the banner when it's over. */
 export const BREAK = {
-  start: (minutes: number) => `Break · ${minutes} min`,
+  start: (minutes: number, long = false) => `${long ? 'Long break' : 'Break'} · ${minutes} min`,
   running: (until: string) => `Break until ${until}`,
   end: 'End break',
   over: "Break's over",
   overBody: 'Pick the next thing, or start a timer.',
+} as const;
+
+/**
+ * With Suggest breaks on, the banner after a session is finished by hand: the break it earned
+ * (`lib/breaks.ts`) and a button that starts it. `of` is the number of sessions in a set.
+ */
+export const BREAK_SUGGESTION = {
+  kicker: (position: number, of: number) => `Session ${position} of ${of}`,
+  title: (minutes: number, long: boolean) => (long ? `Take a long break, ${minutes} min` : `Take a ${minutes} min break`),
+  body: (focus: string, long: boolean, of: number) => (long ? `For the ${focus} logged over all ${of}.` : `For the ${focus} you just logged.`),
+  start: 'Start break',
 } as const;
 
 /** The one button an alarm banner can carry: clock-out's and the retrospective's. */

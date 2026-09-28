@@ -138,10 +138,10 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
           onClick={() => {
             // A gesture, so iOS lets the Break over sound play later.
             unlockAudio();
-            breakTimer.start();
+            breakTimer.start(breakTimer.next.minutes);
           }}
         >
-          {BREAK.start(settings.breakMinutes)}
+          {BREAK.start(breakTimer.next.minutes, breakTimer.next.long)}
         </button>
       )}
       {!isToday && <p className="muted center">Timers can only be started on today's sheet.</p>}

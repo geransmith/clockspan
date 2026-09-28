@@ -41,6 +41,12 @@ interface TimerCtx {
   finishChoice: boolean;
   dismissFinishChoice: () => void;
   cancel: () => Promise<void>;
+  /**
+   * The session last finished by hand on this device (Finish, the finish choice, or − past the
+   * time worked), a fresh object each time. Not one that finished on its own after the grace or
+   * a forgotten pause, or on another device: its user wasn't here to take a break after it.
+   */
+  finished: Session | null;
 }
 
 const Ctx = createContext<TimerCtx | null>(null);
@@ -54,6 +60,7 @@ const DUE_STORAGE_KEY = 'focus:timer-due';
 export function TimerProvider({ children }: { children: ReactNode }) {
   const [running, setRunning] = useState<Session | null>(null);
   const [finishChoice, setFinishChoice] = useState(false);
+  const [finished, setFinished] = useState<Session | null>(null);
   // Latest value for callbacks so rapid clicks (−5m, −5m) compound instead of racing.
   const runningRef = useLatest<Session | null>(running);
   const now = useNow(1000);
@@ -220,6 +227,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
           const { session } = await api.finishSession(cur.id);
           store.applySession(session);
           setRunning(null);
+          if (session.status === 'completed') setFinished(session);
           return;
         }
         const optimistic = { ...cur, plannedSeconds: next };
@@ -309,6 +317,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         const { session } = await api.finishSession(cur.id, countOverrun);
         store.applySession(session);
         setRunning(null);
+        // Finish is idempotent: a session cancelled elsewhere comes back as it is.
+        if (session.status === 'completed') setFinished(session);
       }),
     [attempt, store, runningRef],
   );
@@ -386,6 +396,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       finishChoice: finishChoice && running != null,
       dismissFinishChoice,
       cancel,
+      finished,
     }),
     [
       running,
@@ -405,6 +416,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       finishChoice,
       dismissFinishChoice,
       cancel,
+      finished,
     ],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

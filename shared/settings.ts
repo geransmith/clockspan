@@ -75,6 +75,12 @@ export interface Settings {
   adjustStepMinutes: number;
   /** The focus timer's Break button: how long a break runs, in minutes. */
   breakMinutes: number;
+  /**
+   * After a session finished by hand, a banner offers a break sized to it on the Pomodoro
+   * technique's numbers (`client/src/lib/breaks.ts`), and the Break button offers the same
+   * length. Off by default.
+   */
+  suggestBreaks: boolean;
   /** The focus timer's start buttons, in minutes; always three. */
   timerMinutes: number[];
   /** Rows a fresh day's priorities card starts with. */
@@ -156,6 +162,7 @@ export const DEFAULT_SETTINGS: Settings = deepFreeze({
   theme: 'auto',
   adjustStepMinutes: 5,
   breakMinutes: 5,
+  suggestBreaks: false,
   timerMinutes: [15, 25, 50],
   priorityCount: 3,
   sound: true,

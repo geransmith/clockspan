@@ -185,6 +185,15 @@ describe('adjust', () => {
     expect(api.finishSession).toHaveBeenCalledWith(1);
     expect(result.current.timer.running).toBeNull();
     expect(result.current.store.days[TODAY]?.sessions[0]?.durationSeconds).toBe(90);
+    expect(result.current.timer.finished).toMatchObject({ id: 1, status: 'completed', durationSeconds: 90 });
+  });
+
+  it('reports no finish when shrinking finds it cancelled elsewhere', async () => {
+    const { result } = await renderRunning(startedAgo(1.5, { plannedSeconds: 120 }));
+    vi.mocked(api.finishSession).mockResolvedValue({ session: startedAgo(1.5, { status: 'cancelled' }) });
+    await act(() => result.current.timer.adjust(-5 * 60));
+    expect(result.current.timer.running).toBeNull();
+    expect(result.current.timer.finished).toBeNull();
   });
 
   it('once due, +N means N minutes from now', async () => {
@@ -406,11 +415,21 @@ describe('finish and cancel', () => {
   it('finish logs the session and clears the timer', async () => {
     const { result } = await renderRunning(startedAgo(5));
     vi.mocked(api.finishSession).mockResolvedValue({ session: startedAgo(5, { status: 'completed', durationSeconds: 300 }) });
+    expect(result.current.timer.finished).toBeNull();
     await act(() => result.current.timer.finish(true));
     expect(api.finishSession).toHaveBeenCalledWith(1, true);
     expect(result.current.timer.running).toBeNull();
     expect(result.current.store.days[TODAY]?.sessions[0]?.status).toBe('completed');
+    expect(result.current.timer.finished).toMatchObject({ id: 1, status: 'completed', durationSeconds: 300 });
     expect(document.title).toBe('Clockspan');
+  });
+
+  it('reports no finish for a session the server says was cancelled elsewhere', async () => {
+    const { result } = await renderRunning(startedAgo(5));
+    vi.mocked(api.finishSession).mockResolvedValue({ session: startedAgo(5, { status: 'cancelled' }) });
+    await act(() => result.current.timer.finish());
+    expect(result.current.timer.running).toBeNull();
+    expect(result.current.timer.finished).toBeNull();
   });
 
   it('cancel drops the row and clears the timer; a 409 re-syncs', async () => {
@@ -424,6 +443,7 @@ describe('finish and cancel', () => {
     await act(() => result.current.timer.cancel());
     expect(result.current.timer.running).toBeNull();
     expect(result.current.store.days[TODAY]?.sessions).toEqual([]);
+    expect(result.current.timer.finished).toBeNull();
   });
 
   it('requestFinish finishes at once before the end and under a minute past it', async () => {
@@ -524,6 +544,8 @@ describe("time's up", () => {
     await settle(6000);
     expect(api.finishSession).toHaveBeenCalledWith(1);
     expect(result.current.timer.running).toBeNull();
+    // Nobody pressed Finish: nothing for a break suggestion to follow.
+    expect(result.current.timer.finished).toBeNull();
     expect(alert).toHaveBeenLastCalledWith(
       expect.objectContaining({ title: TIMER_DONE.title, body: TIMER_DONE.body('', '25:00'), sound: false, notifications: false }),
     );

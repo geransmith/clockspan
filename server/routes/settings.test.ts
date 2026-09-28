@@ -51,6 +51,9 @@ describe('/api/settings', () => {
     expect((await app.api.put('/api/settings', { celebrations: true })).body.celebrations).toBe(true);
     expect((await app.api.put('/api/settings', { mealRules: false, trackHours: false })).body).toMatchObject({ mealRules: false, trackHours: false });
     expect((await app.api.put('/api/settings', { mealRules: 'no', trackHours: 1 })).body).toMatchObject({ mealRules: false, trackHours: false });
+    expect((await app.api.put('/api/settings', { suggestBreaks: true })).body.suggestBreaks).toBe(true);
+    expect((await app.api.put('/api/settings', { suggestBreaks: 'off' })).body.suggestBreaks).toBe(true);
+    expect((await app.api.put('/api/settings', { suggestBreaks: false })).body.suggestBreaks).toBe(false);
   });
 
   it('takes a catalog id per sound event and keeps the rest', async () => {

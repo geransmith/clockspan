@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BREAK, CONFIRM, DELETE_DAYS, FINISH_CHOICE, LEFT_OPEN, PLAN_NEXT, TIMER_DONE, TIMER_DUE, TIMER_PAUSED_OUT } from './copy';
+import { BREAK, BREAK_SUGGESTION, CONFIRM, DELETE_DAYS, FINISH_CHOICE, LEFT_OPEN, PLAN_NEXT, TIMER_DONE, TIMER_DUE, TIMER_PAUSED_OUT } from './copy';
 
 describe('copy builders', () => {
   it('names the user in the delete confirm', () => {
@@ -37,7 +37,16 @@ describe('copy builders', () => {
 
   it('names the break length and when it ends', () => {
     expect(BREAK.start(5)).toBe('Break · 5 min');
+    expect(BREAK.start(20, true)).toBe('Long break · 20 min');
     expect(BREAK.running('10:35 AM')).toBe('Break until 10:35 AM');
+  });
+
+  it('offers the break a session earned and says what it was sized on', () => {
+    expect(BREAK_SUGGESTION.kicker(2, 4)).toBe('Session 2 of 4');
+    expect(BREAK_SUGGESTION.title(5, false)).toBe('Take a 5 min break');
+    expect(BREAK_SUGGESTION.title(20, true)).toBe('Take a long break, 20 min');
+    expect(BREAK_SUGGESTION.body('25m', false, 4)).toBe('For the 25m you just logged.');
+    expect(BREAK_SUGGESTION.body('1h 40m', true, 4)).toBe('For the 1h 40m logged over all 4.');
   });
 
   it('names the day being planned and counts the rows added', () => {

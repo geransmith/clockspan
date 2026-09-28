@@ -1,17 +1,27 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { alert, dismissByTag } from '../lib/alerts';
-import { BREAK } from '../lib/copy';
+import { alert, dismissByTag, unlockAudio } from '../lib/alerts';
+import { SET_SIZE, suggestBreak } from '../lib/breaks';
+import { BREAK, BREAK_SUGGESTION } from '../lib/copy';
+import { formatDuration, todayKey } from '../lib/format';
 import { readStoredJson, writeStored } from '../lib/storage';
+import { useDayStore } from './useDay';
+import { useLatest } from './useLatest';
 import { useNow } from './useNow';
 import { useSettings } from './useSettings';
+import { useTimer } from './useTimer';
 
 interface BreakCtx {
   /** When the break ends; null when there is none. */
   endsAt: number | null;
   remainingSeconds: number;
-  /** A break of `settings.breakMinutes` from now. */
-  start: () => void;
-  /** Back early (or a focus timer started): no alert. */
+  /**
+   * What the Break button offers: with Suggest breaks on, the break today's latest session
+   * earned (`suggestBreak`); otherwise, or before a session is logged, `settings.breakMinutes`.
+   */
+  next: { minutes: number; long: boolean };
+  /** A break of `minutes` from now. */
+  start: (minutes: number) => void;
+  /** Back early (or a focus timer started): no alert, and a suggestion still up goes. */
   end: () => void;
 }
 
@@ -31,10 +41,13 @@ function storedEnd(): number | null {
 /**
  * A short break after a focus session: a countdown with nothing logged, and a banner (with the
  * Break over sound) when it runs out. Like the timer's alerts it waits for the settings, or it
- * would ring with the default sound.
+ * would ring with the default sound. With Suggest breaks on, a session finished by hand raises
+ * a banner offering the break it earned; it is quiet, since the user just pressed Finish.
  */
 export function BreakProvider({ children }: { children: ReactNode }) {
   const { settings, loaded } = useSettings();
+  const { finished } = useTimer();
+  const { days } = useDayStore();
   const [endsAt, setEndsAt] = useState<number | null>(storedEnd);
   const now = useNow(1000);
   // A break that has run out reads as none straight away; the effect below announces it once.
@@ -46,11 +59,50 @@ export function BreakProvider({ children }: { children: ReactNode }) {
     setEndsAt(next);
   }, []);
 
-  const start = useCallback(() => {
+  const start = useCallback(
+    (minutes: number) => {
+      dismissByTag('break');
+      save(Date.now() + minutes * 60_000);
+    },
+    [save],
+  );
+  const end = useCallback(() => {
     dismissByTag('break');
-    save(Date.now() + settings.breakMinutes * 60_000);
-  }, [save, settings.breakMinutes]);
-  const end = useCallback(() => save(null), [save]);
+    save(null);
+  }, [save]);
+
+  const todaySessions = days[todayKey(now)]?.sessions;
+  const suggestion = useMemo(() => (settings.suggestBreaks && todaySessions ? suggestBreak(todaySessions) : null), [settings.suggestBreaks, todaySessions]);
+  const breakMinutes = settings.breakMinutes;
+  const next = useMemo(() => suggestion ?? { minutes: breakMinutes, long: false }, [suggestion, breakMinutes]);
+
+  // Read once a session is finished by hand: applySession put the row on today's sheet in the
+  // same render, so today's suggestion is the one it earned, and the banner and the Break button
+  // agree. None with the setting off, for a false start, or for a session that ran past midnight
+  // (it is on yesterday's sheet, so today's suggestion isn't about it).
+  const latest = useLatest(suggestion);
+  useEffect(() => {
+    const earned = latest.current;
+    if (!finished || !earned || earned.sessionId !== finished.id) return;
+    alert({
+      kicker: BREAK_SUGGESTION.kicker(earned.position, SET_SIZE),
+      title: BREAK_SUGGESTION.title(earned.minutes, earned.long),
+      body: BREAK_SUGGESTION.body(formatDuration(earned.focusSeconds), earned.long, SET_SIZE),
+      tone: 'info',
+      sticky: true,
+      tag: 'break',
+      action: {
+        label: BREAK_SUGGESTION.start,
+        run: () => {
+          // A gesture, so iOS lets the Break over sound play later.
+          unlockAudio();
+          start(earned.minutes);
+        },
+      },
+      sound: false,
+      notifications: false,
+    });
+  }, [finished, latest, start]);
 
   useEffect(() => {
     if (endsAt == null || !loaded || now < endsAt || announced.current === endsAt) return;
@@ -70,7 +122,7 @@ export function BreakProvider({ children }: { children: ReactNode }) {
   }, [endsAt, loaded, now, settings.sound, settings.sounds.breakDone, settings.notifications]);
 
   const remainingSeconds = active == null ? 0 : Math.ceil((active - now) / 1000);
-  const value = useMemo(() => ({ endsAt: active, remainingSeconds, start, end }), [active, remainingSeconds, start, end]);
+  const value = useMemo(() => ({ endsAt: active, remainingSeconds, next, start, end }), [active, remainingSeconds, next, start, end]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

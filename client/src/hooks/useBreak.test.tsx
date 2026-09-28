@@ -1,28 +1,27 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook } from '@testing-library/react';
-import type { ReactNode } from 'react';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
-import { alert, dismissByTag } from '../lib/alerts';
-import { makeSettings, MIN, settle, T0 } from '../test/hooks';
-import { BreakProvider, useBreak } from './useBreak';
-import { SettingsProvider } from './useSettings';
+import { alert, dismissByTag, unlockAudio, type AlertOptions } from '../lib/alerts';
+import { BREAK_SUGGESTION } from '../lib/copy';
+import { AllProviders, deferred, makeDay, makeSession, makeSettings, MIN, settle, T0, TODAY } from '../test/hooks';
+import type { Day, Session } from '../types';
+import { useBreak } from './useBreak';
+import { useDay } from './useDay';
+import { useTimer } from './useTimer';
 
 vi.mock('../api');
 vi.mock('../lib/alerts');
 
 const settings = makeSettings({ breakMinutes: 5 });
-const wrapper = ({ children }: { children: ReactNode }) => (
-  <SettingsProvider>
-    <BreakProvider>{children}</BreakProvider>
-  </SettingsProvider>
-);
-const render = () => renderHook(() => useBreak(), { wrapper });
+const render = () => renderHook(() => ({ ...useBreak(), timer: useTimer(), day: useDay(TODAY).day }), { wrapper: AllProviders });
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
   localStorage.clear();
   vi.mocked(api.getSettings).mockResolvedValue(settings);
+  vi.mocked(api.getRunning).mockResolvedValue({ session: null });
+  vi.mocked(api.getDay).mockResolvedValue(makeDay());
 });
 afterEach(() => {
   cleanup();
@@ -34,7 +33,7 @@ it('counts a break down and announces its end once, with the Break over sound', 
   const { result } = render();
   await settle();
   expect(result.current.endsAt).toBeNull();
-  act(() => result.current.start());
+  act(() => result.current.start(5));
   expect(dismissByTag).toHaveBeenCalledWith('break');
   expect(result.current.endsAt).toBe(T0 + 5 * MIN);
   expect(result.current.remainingSeconds).toBe(300);
@@ -54,7 +53,7 @@ it('counts a break down and announces its end once, with the Break over sound', 
 it('keeps a break across a reload, and a reload after the end does not announce it again', async () => {
   const first = render();
   await settle();
-  act(() => first.result.current.start());
+  act(() => first.result.current.start(5));
   first.unmount();
   const second = render();
   await settle();
@@ -67,11 +66,13 @@ it('keeps a break across a reload, and a reload after the end does not announce 
   expect(alert).toHaveBeenCalledTimes(1);
 });
 
-it('ends early without an alert', async () => {
+it('ends early without an alert, and takes a suggestion still up with it', async () => {
   const { result } = render();
   await settle();
-  act(() => result.current.start());
+  act(() => result.current.start(5));
+  vi.mocked(dismissByTag).mockClear();
   act(() => result.current.end());
+  expect(dismissByTag).toHaveBeenCalledWith('break');
   expect(result.current.endsAt).toBeNull();
   await settle(10 * MIN);
   expect(alert).not.toHaveBeenCalled();
@@ -108,4 +109,112 @@ it('waits for the settings before announcing, so the chosen sound plays', async 
 it('is only there inside its provider', () => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
   expect(() => renderHook(() => useBreak())).toThrow('useBreak outside BreakProvider');
+});
+
+describe('suggestions', () => {
+  /** A session of `minutes` that ended `gap` minutes before the next one started, `at` minutes before T0. */
+  const done = (id: number, at: number, minutes = 25): Session =>
+    makeSession({ id, startedAt: T0 - at * MIN, endedAt: T0 - (at - minutes) * MIN, status: 'completed', durationSeconds: minutes * 60 });
+
+  /** Today with `earlier` logged and a timer running since `startedAt`, finished by hand after `minutes` of focus. */
+  async function finishByHand(minutes: number, earlier: Session[] = [], patch: Partial<typeof settings> = {}) {
+    vi.mocked(api.getSettings).mockResolvedValue({ ...settings, suggestBreaks: true, ...patch });
+    const running = makeSession({ id: 9, startedAt: T0 - minutes * MIN, plannedSeconds: (minutes + 5) * 60 });
+    vi.mocked(api.getRunning).mockResolvedValue({ session: running });
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { sessions: [...earlier, running] }));
+    const r = render();
+    await settle();
+    vi.mocked(api.finishSession).mockResolvedValue({ session: { ...running, status: 'completed', endedAt: T0, durationSeconds: minutes * 60 } });
+    vi.mocked(api.getRunning).mockResolvedValue({ session: null });
+    await act(() => r.result.current.timer.finish());
+    return r;
+  }
+
+  const suggested = (): AlertOptions | undefined => vi.mocked(alert).mock.calls.find(([o]) => o.title.startsWith('Take a'))?.[0];
+
+  it('offers a break a fifth as long as a session finished by hand, quietly, and starts it from the banner', async () => {
+    const { result } = await finishByHand(20);
+    expect(alert).toHaveBeenCalledTimes(1);
+    expect(suggested()).toMatchObject({
+      kicker: BREAK_SUGGESTION.kicker(1, 4),
+      title: BREAK_SUGGESTION.title(4, false),
+      body: BREAK_SUGGESTION.body('20m', false, 4),
+      tag: 'break',
+      sticky: true,
+      sound: false,
+      notifications: false,
+      action: { label: BREAK_SUGGESTION.start },
+    });
+    // The card's Break button offers the same length.
+    expect(result.current.next).toMatchObject({ minutes: 4, long: false });
+    act(() => suggested()!.action!.run());
+    expect(unlockAudio).toHaveBeenCalled();
+    expect(result.current.endsAt).toBe(T0 + 4 * MIN);
+  });
+
+  it('offers the fourth session in a row a long break, a fifth of all four', async () => {
+    const { result } = await finishByHand(25, [done(1, 115), done(2, 85), done(3, 55)]);
+    expect(suggested()).toMatchObject({
+      kicker: BREAK_SUGGESTION.kicker(4, 4),
+      title: BREAK_SUGGESTION.title(20, true),
+      body: BREAK_SUGGESTION.body('1h 40m', true, 4),
+    });
+    expect(result.current.next).toMatchObject({ minutes: 20, long: true });
+  });
+
+  it('counts the set over after a long gap', async () => {
+    await finishByHand(25, [done(1, 115), done(2, 85), done(3, 70)]);
+    expect(suggested()).toMatchObject({ kicker: BREAK_SUGGESTION.kicker(1, 4), title: BREAK_SUGGESTION.title(5, false) });
+  });
+
+  it('offers nothing with the setting off, and the Break button keeps its own length', async () => {
+    const { result } = await finishByHand(50, [], { suggestBreaks: false });
+    expect(alert).not.toHaveBeenCalled();
+    expect(result.current.next).toEqual({ minutes: 5, long: false });
+  });
+
+  it('offers nothing after a false start, and the Break button keeps the break of the last real one', async () => {
+    const { result } = await finishByHand(0.5, [done(1, 40)]);
+    expect(alert).not.toHaveBeenCalled();
+    expect(result.current.next).toMatchObject({ minutes: 5, long: false });
+  });
+
+  it('offers nothing for a session the server says was cancelled elsewhere', async () => {
+    vi.mocked(api.getSettings).mockResolvedValue({ ...settings, suggestBreaks: true });
+    const running = makeSession({ startedAt: T0 - 20 * MIN });
+    vi.mocked(api.getRunning).mockResolvedValue({ session: running });
+    const { result } = render();
+    await settle();
+    vi.mocked(api.finishSession).mockResolvedValue({ session: { ...running, status: 'cancelled', endedAt: T0 } });
+    await act(() => result.current.timer.finish());
+    expect(alert).not.toHaveBeenCalled();
+  });
+
+  it('offers nothing for a session that ran past midnight, which belongs to the day before', async () => {
+    const midnight = new Date(2026, 8, 28).getTime();
+    vi.setSystemTime(midnight + 5 * MIN);
+    vi.mocked(api.getSettings).mockResolvedValue({ ...settings, suggestBreaks: true });
+    const running = makeSession({ date: '2026-09-27', startedAt: midnight - 20 * MIN, plannedSeconds: 30 * 60 });
+    vi.mocked(api.getRunning).mockResolvedValue({ session: running });
+    vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(makeDay(date, { sessions: date === TODAY ? [] : [running] })));
+    const { result } = render();
+    await settle();
+    vi.mocked(api.finishSession).mockResolvedValue({ session: { ...running, status: 'completed', endedAt: Date.now(), durationSeconds: 25 * 60 } });
+    await act(() => result.current.timer.finish());
+    expect(result.current.timer.finished).not.toBeNull();
+    expect(alert).not.toHaveBeenCalled();
+  });
+
+  it('has the Break button keep its own length until today has a completed session', async () => {
+    vi.mocked(api.getSettings).mockResolvedValue({ ...settings, suggestBreaks: true, breakMinutes: 7 });
+    const today = deferred<Day>();
+    vi.mocked(api.getDay).mockReturnValue(today.promise);
+    const { result } = render();
+    await settle();
+    // The settings are in; today's sessions are not.
+    expect(result.current.next).toEqual({ minutes: 7, long: false });
+    today.resolve(makeDay(TODAY, { sessions: [makeSession({ status: 'cancelled', endedAt: T0 })] }));
+    await settle();
+    expect(result.current.next).toEqual({ minutes: 7, long: false });
+  });
 });

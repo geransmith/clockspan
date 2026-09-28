@@ -51,6 +51,12 @@ export function SheetTab({ settings, set }: { settings: Settings; set: (patch: P
         />
         <NumberField label="Break" value={settings.breakMinutes} {...SETTING_LIMITS.breakMinutes} onCommit={(m) => set({ breakMinutes: m })} />
         <Toggle
+          label="Suggest a break after each session"
+          hint="After you finish a session, a banner offers a break a fifth as long, as in the Pomodoro technique (25 min earns 5). Every fourth session in a row earns a long break, a fifth of all four, up to 30 min; a 15 min gap starts the count over. The Break button offers the same."
+          checked={settings.suggestBreaks}
+          onChange={(v) => set({ suggestBreaks: v })}
+        />
+        <Toggle
           label="Keep screen awake while a timer runs"
           hint="Stops phones from sleeping mid-session so the chime can play."
           checked={settings.keepScreenAwake}

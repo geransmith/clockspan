@@ -62,8 +62,8 @@ client/                 Vite root → dist/client
   src/App.tsx           provider stack + Shell (route, settings dialog, today's alarms)
   src/api.ts            fetch wrapper (30 s timeout; UNAUTHENTICATED_EVENT on 401; throws lib/apiError.ts's
                         ApiError, which a caller checks with instanceof); src/types.ts re-exports shared types
-  src/lib/              pure logic with a test beside each file: timeclock, alarms, timer, retro,
-                        review, calendar, stickers, priorities, format, timefield, layout, celebrate
+  src/lib/              pure logic with a test beside each file: timeclock, alarms, timer, breaks,
+                        retro, review, calendar, stickers, priorities, format, timefield, layout, celebrate
     alerts.ts           the one place that plays sound, shows notifications and pushes banners
     copy.ts             every line the app raises at the user; no logic
     storage.ts          localStorage that never throws (private mode, quota)
@@ -267,6 +267,12 @@ Never commit `data/` or `.env`.
   (no second banner), so its alarms come back with the server. A `load` (the timer's sync, Try
   again) is dropped the same way on a day written since it went out, except the reload after a
   failed save, which always lands.
+- **Break lengths come only from `client/src/lib/breaks.ts`** (`suggestBreak`, pure, over a
+  day's sessions: a fifth of the session, a long break for the fourth in a row, a 15-minute gap
+  restarts the count). With `suggestBreaks` on, `useBreak` offers today's suggestion on the
+  Break button and as a quiet banner off `useTimer().finished`, which only a finish by hand
+  sets (Finish, the finish choice, − past the time worked), never the auto-finish or another
+  device. A break itself stays on the device (`localStorage`) and is never logged.
 - **Saves reach the server in the order they were made.** `setPunches` and `setPriorities`
   replace a whole list, so one PUT per day is in flight and only the newest waiting list follows
   it (`sendLatest` in `useDay.tsx`); the other day fields and each session's writes queue one
