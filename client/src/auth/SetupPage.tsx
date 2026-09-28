@@ -2,7 +2,7 @@ import { useState, type SubmitEvent } from 'react';
 import * as api from '../api';
 import { NewPasswordFields } from '../components/NewPasswordFields';
 import { PASSWORD_MISMATCH } from '../lib/copy';
-import type { AuthInfo } from '../types';
+import { USERNAME, type AuthInfo } from '../types';
 
 interface Props {
   onDone: () => Promise<AuthInfo | null>;
@@ -61,7 +61,17 @@ export function SetupPage({ onDone, hint }: Props) {
         </label>
         <label className="field">
           <span>Username</span>
-          <input className="input" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
+          <input
+            className="input"
+            autoComplete="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            minLength={USERNAME.min}
+            maxLength={USERNAME.max}
+            pattern={USERNAME.pattern}
+            title={`Only ${USERNAME.chars}`}
+            required
+          />
         </label>
         <NewPasswordFields label="Password" value={password} confirm={confirm} onValue={setPassword} onConfirm={setConfirm} />
         {error && <p className="error">{error}</p>}

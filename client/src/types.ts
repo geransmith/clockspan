@@ -30,4 +30,4 @@ export type {
   UserResponse,
   UsersResponse,
 } from '../../shared/api.js';
-export { LIMITS, PASSWORD_LENGTH } from '../../shared/api.js';
+export { LIMITS, PASSWORD_LENGTH, USERNAME } from '../../shared/api.js';

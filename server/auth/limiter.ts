@@ -1,5 +1,6 @@
 import { isIPv6 } from 'node:net';
 import type { Response } from 'express';
+import { USERNAME } from '../../shared/api.js';
 
 /**
  * The sign-in limits: failures per address (an IPv6 client by its /64) and per account name.
@@ -84,7 +85,7 @@ export function limiterKey(ip: string): string {
  * address's five attempts can't park megabytes of made-up names in the limiter.
  */
 export function accountKey(username: unknown): string {
-  return typeof username === 'string' ? username.trim().toLowerCase().slice(0, 40) : '';
+  return typeof username === 'string' ? username.trim().toLowerCase().slice(0, USERNAME.max) : '';
 }
 
 /** The 429 for a request the limiter holds back, with when to try again. */
