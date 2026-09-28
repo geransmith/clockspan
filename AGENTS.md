@@ -45,7 +45,7 @@ server/                 Express API → dist/server
   app.ts                createApp(): headers, /api/health, auth routers, data routers behind
                         requireAuth, static files and the SPA fallback; startBackgroundJobs() (the
                         login purge and the retention schedule, started by index.ts only)
-  security.ts           every response header, and rejectCrossSiteWrites
+  security.ts           every security header, and rejectCrossSiteWrites
   config.ts, db.ts      env parsing (throws on bad config); pragmas, MIGRATIONS, the default user
   settings.ts           mergeSettings (defaults + validation on every read and write), loadSettings
   retention.ts          old-day pruning (pruneDays, runRetention, the RETENTION_DAYS cap)
