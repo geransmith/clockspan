@@ -252,7 +252,9 @@ describe('sessions are scoped to the signed-in user', () => {
     expect((await b.post(`/api/sessions/${id}/pause`)).status).toBe(404);
     expect((await b.post(`/api/sessions/${id}/resume`)).status).toBe(404);
     expect((await b.post(`/api/sessions/${id}/finish`)).status).toBe(404);
+    expect((await b.post(`/api/sessions/${id}/cancel`)).status).toBe(404);
     expect((await b.del(`/api/sessions/${id}`)).status).toBe(404);
+    expect((await a.get('/api/sessions/running')).body.session).toMatchObject({ id, status: 'running' });
     expect((await b.get(`/api/days/${DATE}`)).body.sessions).toEqual([]);
     // B has their own seeded days; A does not see them.
     const range = '/api/days/range?from=2026-01-01&to=2026-12-31';

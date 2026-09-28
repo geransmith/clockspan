@@ -21,7 +21,7 @@ gh pr merge <number> --squash --delete-branch   # for each one that passed
 ```
 
 Read a major version bump like an outside PR first: what could it break that the tests don't
-reach (the components have no automated tests)? Dependencies are pinned, so a fix only reaches
+reach (most components have no automated tests, and none test how they look)? Dependencies are pinned, so a fix only reaches
 users in a release: cut a patch release after merging a security update (or one that fixes a
 Dependabot alert) or a new Docker base image. Other bumps can wait for the next release.
 
