@@ -4,7 +4,7 @@ import * as oidc from 'openid-client';
 import { findUserById, type DB, type UserRow } from '../db.js';
 import type { Config } from '../config.js';
 import { cookieOptions, createSession, destroySession } from './session.js';
-import { logName, publicUser } from './local.js';
+import { logName, publicUser } from './users.js';
 import type { AuthInfo, LogoutResponse } from '../../shared/api.js';
 
 const FLOW_COOKIE = 'fs_oidc';
