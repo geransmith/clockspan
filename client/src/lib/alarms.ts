@@ -129,7 +129,7 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
   const target = formatTime(e.target, ctx.hour12);
   const clockIn = formatTime(ctx.clockIn, ctx.hour12);
   const day = formatMinutes(ctx.workMinutes);
-  const alarm = e.id === 'lunchBy' ? 'Lunch alarm' : e.id === 'secondMeal' ? '2nd meal alarm' : e.id === 'retro' ? 'Retrospective' : 'Clock-out alarm';
+  const alarm = e.id === 'lunchBy' ? 'Lunch alarm' : e.id === 'secondMeal' ? 'Second meal alarm' : e.id === 'retro' ? 'Retrospective' : 'Clock-out alarm';
   const mealHours = formatMinutes(ctx.secondMealAfterMinutes);
   const mealWhy = `Your ${mealHours} of work ends at ${target}. California requires a second 30-minute meal period before then unless you've waived it.`;
 

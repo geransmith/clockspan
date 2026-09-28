@@ -151,7 +151,7 @@ describe('describeEvent', () => {
 
   it('explains the second meal period rule', () => {
     const lead = describeEvent(ev('secondMeal', 'lead', 15, T), ctx);
-    expect(lead.kicker).toBe('2nd meal alarm · 15 min warning');
+    expect(lead.kicker).toBe('Second meal alarm · 15 min warning');
     expect(lead.title).toBe('Second meal break in 15 min');
     expect(lead.body).toContain('10h of work ends at');
     expect(lead.body).toContain('California');
