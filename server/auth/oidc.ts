@@ -12,9 +12,17 @@ const FLOW_TTL_SEC = 600;
 /** The provider's claim is stored as-is otherwise; a name is a label, not a document. */
 const MAX_DISPLAY_NAME = 100;
 
-/** The two error pages are HTML with a retry link; anything interpolated into them goes through this. */
-export function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+/**
+ * The error pages a browser lands on. Fixed text: the error itself goes to the log, since a
+ * provider's or the network's message can name internal hosts to whoever opened the page.
+ */
+const RETRY = '<a href="/auth/login">Try again</a>.';
+const PROVIDER_DOWN = `Identity provider is unreachable. ${RETRY}`;
+const SIGN_IN_FAILED = `Sign-in failed. ${RETRY}`;
+
+/** The first value that is a non-empty string: which name claims a provider fills, and with what, varies. */
+function firstName(...values: unknown[]): string | undefined {
+  return values.find((v): v is string => typeof v === 'string' && v.trim() !== '');
 }
 
 /**
@@ -109,7 +117,8 @@ export function oidcAuthRouter(db: DB, config: Config): { api: Router; web: Rout
     try {
       c = await discovery.get();
     } catch (err) {
-      res.status(503).send(`Identity provider is unreachable: ${escapeHtml((err as Error).message)}`);
+      console.error(`[oidc] sign-in refused, provider unreachable: ${(err as Error).message}`);
+      res.status(503).send(PROVIDER_DOWN);
       return;
     }
     const codeVerifier = oidc.randomPKCECodeVerifier();
@@ -131,7 +140,7 @@ export function oidcAuthRouter(db: DB, config: Config): { api: Router; web: Rout
   web.get('/callback', async (req, res) => {
     const raw = req.headers.cookie ? parseCookie(req.headers.cookie)[FLOW_COOKIE] : undefined;
     if (!raw) {
-      res.status(400).send('Sign-in session expired. <a href="/auth/login">Try again</a>.');
+      res.status(400).send(`Sign-in session expired. ${RETRY}`);
       return;
     }
     const clearFlow = stringifySetCookie({ name: FLOW_COOKIE, value: '', ...cookieOptions(config, '/auth'), maxAge: 0 });
@@ -146,11 +155,11 @@ export function oidcAuthRouter(db: DB, config: Config): { api: Router; web: Rout
       });
       const claims = tokens.claims();
       if (!claims?.sub) throw new Error('ID token has no subject');
-      let name = (claims.name as string | undefined) ?? (claims.preferred_username as string | undefined) ?? (claims.email as string | undefined);
+      let name = firstName(claims.name, claims.preferred_username, claims.email);
       if (!name) {
         try {
           const info = await oidc.fetchUserInfo(c, tokens.access_token, claims.sub);
-          name = info.name ?? info.preferred_username ?? info.email;
+          name = firstName(info.name, info.preferred_username, info.email);
         } catch {
           // Fall through to the subject as a last resort.
         }
@@ -164,7 +173,7 @@ export function oidcAuthRouter(db: DB, config: Config): { api: Router; web: Rout
     } catch (err) {
       console.error('[oidc] callback failed:', err);
       res.setHeader('Set-Cookie', clearFlow);
-      res.status(400).send(`Sign-in failed: ${escapeHtml((err as Error).message)}. <a href="/auth/login">Try again</a>.`);
+      res.status(400).send(SIGN_IN_FAILED);
     }
   });
 

@@ -112,8 +112,11 @@ describe('OIDC code grant', () => {
     expect((await callback({ sub: 'e' }, { sub: 'e', email: 'e@example.com' })).r.status).toBe(302);
     expect((await callback({ sub: 'f' }, { sub: 'f' })).r.status).toBe(302);
     expect((await callback({ sub: 'g' }, new Error('userinfo down'))).r.status).toBe(302);
-    expect(names()).toEqual(['ada', 'bob@example.com', 'Cy', 'dee', 'e@example.com', 'f', 'g']);
-    expect(oidc.fetchUserInfo).toHaveBeenCalledTimes(5);
+    // A claim that isn't a usable string is skipped, not trusted.
+    expect((await callback({ sub: 'h', name: 42, preferred_username: 'hal' })).r.status).toBe(302);
+    expect((await callback({ sub: 'i', name: '  ' }, { sub: 'i', name: ['Ivy'] as unknown as string, email: 'i@example.com' })).r.status).toBe(302);
+    expect(names()).toEqual(['ada', 'bob@example.com', 'Cy', 'dee', 'e@example.com', 'f', 'g', 'hal', 'i@example.com']);
+    expect(oidc.fetchUserInfo).toHaveBeenCalledTimes(6);
     expect(vi.mocked(oidc.fetchUserInfo).mock.calls[0]!.slice(1)).toEqual(['at', 'c']);
   });
 
@@ -121,7 +124,7 @@ describe('OIDC code grant', () => {
     for (const claims of [undefined, {}]) {
       const { r } = await callback(claims);
       expect(r.status).toBe(400);
-      expect(await r.text()).toBe('Sign-in failed: ID token has no subject. <a href="/auth/login">Try again</a>.');
+      expect(await r.text()).toBe('Sign-in failed. <a href="/auth/login">Try again</a>.');
       expect(r.headers.getSetCookie().find((c) => c.startsWith('fs_oidc='))).toMatch(/Max-Age=0/i);
       expect(r.headers.getSetCookie().some((c) => c.startsWith(`${SESSION_COOKIE}=`))).toBe(false);
     }

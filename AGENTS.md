@@ -186,8 +186,9 @@ Never commit `data/` or `.env`.
   before 16.4), one whose `Origin` host is neither the `Host` header nor `APP_URL`'s: under
   `AUTH_MODE=none` there is no cookie for SameSite to hold back, and a body-less POST
   (finish, cancel) needs no preflight. Keep write routes under
-  `/api` so it covers them. Never interpolate request data or an error message
-  into HTML without `escapeHtml` (see `auth/oidc.ts`). Password hashing is async
+  `/api` so it covers them. The HTML pages the server writes itself (the OIDC error pages in
+  `auth/oidc.ts`) carry fixed text: no request data or error message goes into HTML, and the
+  cause goes to the log. Password hashing is async
   (`scrypt`, never `scryptSync`); login verifies against `DUMMY_HASH` when the user is unknown.
 - **The server stores epoch milliseconds and never decides what "today" is.** The client sends
   the local date key `YYYY-MM-DD` (`shared/dates.ts: todayKey`). The container's TZ is
