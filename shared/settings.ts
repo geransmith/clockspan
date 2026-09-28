@@ -70,7 +70,7 @@ export interface Settings {
   trackHours: boolean;
   /** Which sound each event plays; `sound` above is the master switch over all of them. */
   sounds: Record<SoundEvent, SoundId>;
-  /** Emoji bursts when a priority is ticked or the day ends. */
+  /** Emoji bursts when a priority is ticked, the day ends, the work week is reached or the next day is planned. */
   celebrations: boolean;
   /** Stickers on the History calendar: one per thing a day did. Off by default. */
   stickers: boolean;
@@ -135,7 +135,17 @@ export const DEFAULT_SETTINGS: Settings = deepFreeze({
   overtimeApproval: true,
   mealRules: true,
   trackHours: true,
-  sounds: { timer: 'triad', breakDone: 'taps', lead: 'taps', due: 'notes', overdue: 'double', dayDone: 'yay', priorityDone: 'none' },
+  sounds: {
+    timer: 'triad',
+    breakDone: 'taps',
+    lead: 'taps',
+    due: 'notes',
+    overdue: 'double',
+    dayDone: 'yay',
+    weekDone: 'tada',
+    priorityDone: 'none',
+    planDone: 'none',
+  },
   celebrations: true,
   stickers: false,
   showWeekends: true,

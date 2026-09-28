@@ -1,10 +1,12 @@
 import { useState, type KeyboardEvent } from 'react';
+import { useCelebration, type Moment } from '../hooks/useCelebration';
 import { useDay } from '../hooks/useDay';
 import { useSettings } from '../hooks/useSettings';
 import { PLAN_NEXT } from '../lib/copy';
 import { addDays, formatDateLong } from '../lib/format';
 import { nextWorkDay, planNext, sameText } from '../lib/plan';
 import { LIMITS, type Priority } from '../types';
+import { Burst } from './Burst';
 import { Plus } from './Icons';
 
 interface Props {
@@ -23,6 +25,9 @@ export function PlanNext({ date, today, priorities }: Props) {
   const { settings } = useSettings();
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  // Rows put on the next day's list: a small burst from the line that says so.
+  const [planned, setPlanned] = useState<Moment | null>(null);
+  const { anchor, burst } = useCelebration<HTMLDivElement>(planned, 'planDone');
   const next = nextWorkDay(date, settings.showWeekends);
   if (date !== today) return null;
   const name = next === addDays(today, 1) ? 'tomorrow' : formatDateLong(next);
@@ -33,14 +38,15 @@ export function PlanNext({ date, today, priorities }: Props) {
           date={next}
           name={name}
           candidates={priorities.filter((p) => p.text.trim() && !p.done)}
-          onDone={(message) => {
+          onDone={(message, added) => {
             setOpen(false);
             setResult(message);
+            if (added > 0) setPlanned({});
           }}
           onCancel={() => setOpen(false)}
         />
       ) : (
-        <div className="plan-next-foot">
+        <div className="plan-next-foot" ref={anchor}>
           <button className="btn btn-ghost" onClick={() => setOpen(true)}>
             {PLAN_NEXT.open(name)}
           </button>
@@ -51,6 +57,7 @@ export function PlanNext({ date, today, priorities }: Props) {
           )}
         </div>
       )}
+      {burst && <Burst key={burst.seed} seed={burst.seed} anchor={burst.anchor} />}
     </div>
   );
 }
@@ -65,7 +72,7 @@ function Planner({
   date: string;
   name: string;
   candidates: Priority[];
-  onDone: (message: string) => void;
+  onDone: (message: string, added: number) => void;
   onCancel: () => void;
 }) {
   const { day, store } = useDay(date);
@@ -95,14 +102,14 @@ function Planner({
     const texts = [...offered.filter((p) => picked.has(p.position)).map((p) => p.text), ...extra, ...(draft.trim() ? [draft] : [])];
     const { rows, added } = planNext(day.priorities, texts);
     if (added === 0) {
-      onDone(PLAN_NEXT.nothing);
+      onDone(PLAN_NEXT.nothing, 0);
       return;
     }
     setBusy(true);
     // A failed save raises the store's banner and puts the stored list back.
     const ok = await store.setPriorities(date, rows);
     setBusy(false);
-    if (ok) onDone(PLAN_NEXT.done(added, name));
+    if (ok) onDone(PLAN_NEXT.done(added, name), added);
   };
 
   return (

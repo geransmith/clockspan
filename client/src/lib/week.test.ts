@@ -20,7 +20,7 @@ function day(date: string, hours: number | null, patch: Partial<Day> = {}): Day 
 describe('weekHours', () => {
   it('adds up Monday to the day, today live, against the weekly target', () => {
     const days = [day('2026-09-28', 8), day('2026-09-29', 7.5), day(TODAY, null)];
-    expect(weekHours(days, settings, TODAY, TODAY, NOW)).toEqual({ workedSeconds: (8 + 7.5 + 4) * 3600, targetSeconds: 40 * 3600 });
+    expect(weekHours(days, settings, TODAY, TODAY, NOW)).toEqual({ workedSeconds: (8 + 7.5 + 4) * 3600, targetSeconds: 40 * 3600, met: false });
   });
 
   it("leaves out days before the week's Monday and after the day", () => {
@@ -34,6 +34,12 @@ describe('weekHours', () => {
   });
 
   it('reports a target of nothing when the week line is off', () => {
-    expect(weekHours([], { ...settings, weekMinutes: 0 }, TODAY, TODAY, NOW)).toEqual({ workedSeconds: 0, targetSeconds: 0 });
+    expect(weekHours([], { ...settings, weekMinutes: 0 }, TODAY, TODAY, NOW)).toEqual({ workedSeconds: 0, targetSeconds: 0, met: false });
+  });
+
+  it('is met once the worked time reaches the target, not before', () => {
+    const days = [day('2026-09-28', 8), day('2026-09-29', 8)];
+    expect(weekHours(days, { ...settings, weekMinutes: 16 * 60 }, TODAY, TODAY, NOW).met).toBe(true);
+    expect(weekHours(days, { ...settings, weekMinutes: 16 * 60 + 1 }, TODAY, TODAY, NOW).met).toBe(false);
   });
 });

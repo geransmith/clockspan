@@ -10,9 +10,6 @@ interface Props {
   big?: boolean;
 }
 
-/** How long one burst lives; the parent drops it after this. */
-export const BURST_MS = 1800;
-
 /**
  * A handful of emoji flying up from `anchor` and fading out. Rendered on `document.body`
  * because cards clip their overflow. Nothing under reduced motion: the app's rule turns
