@@ -197,12 +197,14 @@ Set these in `.env` (start from `.env.example`, which documents each one) or in 
 
 Each user has their own sheet, history, settings and layout.
 
-**Local mode.** The first visit shows a *create account* page; that account is the admin. Passwords are hashed with scrypt. Change your password in **Settings → Account**. Forgot it?
+**Local mode.** The first visit shows a *create account* page; that account is the admin. The admin adds users in **Settings → Account** with a temporary password; a new user has to choose their own the first time they sign in, before the sheet opens. Passwords are hashed with scrypt. Change your password in **Settings → Account**. Forgot it?
 
 ```bash
 docker exec clockspan node dist/server/cli.js reset-password <username>
 # or locally: npm run reset-password -- <username>
 ```
+
+Without a password after the username, the command prints a temporary one, and the user chooses their own at the next sign-in. Either way, every session of that user is signed out.
 
 Login is rate-limited to 5 failed attempts per 15 minutes per IP, counting an IPv6 client by its /64 (set `TRUST_PROXY` behind a proxy so that's the real client IP), and to 50 failed attempts per 15 minutes per username from all addresses together. A locked account can't sign in on a new device until the 15 minutes pass; devices already signed in keep working. Changing your password signs out every other session.
 

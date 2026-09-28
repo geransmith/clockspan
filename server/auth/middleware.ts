@@ -34,6 +34,19 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   next();
 }
 
+/**
+ * After requireAuth: a user on a temporary password (an admin set it, or the CLI generated it)
+ * gets nothing but the password change until they choose their own. The client shows that
+ * page first, so only a stale tab or a script meets the 403.
+ */
+export function requireOwnPassword(req: Request, res: Response, next: NextFunction): void {
+  if (currentUser(req).must_change_password) {
+    res.status(403).json({ error: 'password change required' });
+    return;
+  }
+  next();
+}
+
 export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
   if (!req.user) {
     res.status(401).json({ error: 'unauthenticated' });
@@ -43,7 +56,7 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction): v
     res.status(403).json({ error: 'forbidden' });
     return;
   }
-  next();
+  requireOwnPassword(req, res, next);
 }
 
 /** Narrow helper so route handlers don't repeat the non-null check. */

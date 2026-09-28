@@ -144,6 +144,8 @@ export interface PublicUser {
   username: string | null;
   isAdmin: boolean;
   kind: 'default' | 'local' | 'oidc';
+  /** Signed in with a temporary password (an admin's, or one the CLI generated): the app asks for their own before anything else. */
+  mustChangePassword: boolean;
 }
 
 /** `GET /auth/me` in every auth mode. */

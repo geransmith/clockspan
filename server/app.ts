@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import express, { type Express } from 'express';
 import type { Config } from './config.js';
 import type { DB } from './db.js';
-import { currentUser, requireAuth, resolveUser } from './auth/middleware.js';
+import { currentUser, requireAuth, requireOwnPassword, resolveUser } from './auth/middleware.js';
 import { localAuthRouter, publicUser } from './auth/local.js';
 import { oidcAuthRouter } from './auth/oidc.js';
 import { purgeExpiredSessions } from './auth/session.js';
@@ -51,7 +51,7 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
 
   // ----- data (all behind auth, all scoped to req.user) -----
   const api = express.Router();
-  api.use(requireAuth);
+  api.use(requireAuth, requireOwnPassword);
   api.use('/settings', settingsRouter(db));
   api.use('/days/:date/sessions', sessionStartRouter(db));
   api.use('/days', daysRouter(db, config));

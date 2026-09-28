@@ -63,7 +63,7 @@ client/                 Vite root → dist/client
   src/hooks/            state and effects (useDay, useTimer, useSettings, useAlarms, …), each with a
                         happy-dom test beside it; src/test/hooks.tsx has the fixtures and provider stack
   src/components/       the cards, History (Calendar + Review), SettingsDialog, Banners, FinishChoice
-  src/auth/             AuthGate and the setup / login pages
+  src/auth/             AuthGate and the setup / login / new-password pages
   src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
   src/styles.css        design tokens and all component CSS
 scripts/                screenshots.mjs and icons.mjs (headless Chromium via browser.mjs), smoke-image.sh
