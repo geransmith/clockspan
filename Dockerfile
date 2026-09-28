@@ -6,7 +6,10 @@
 # ships a fix, and an unpinned build would change under a release without anything in git
 # saying so. Dependabot opens a PR when the tag moves, and CI's image-smoke boots it first.
 # ---- build ----
-FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS build
+# On the builder's own platform whatever the target: what comes out (the bundle, dist/server,
+# and node_modules, where better-sqlite3 carries a prebuild for every platform and picks one at
+# run time) is the same for amd64 and arm64, so an arm64 image emulates only the stage below.
+FROM --platform=$BUILDPLATFORM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 # --ignore-scripts: better-sqlite3 ships prebuilds (including linux-musl) and loads them when
@@ -24,8 +27,13 @@ RUN npm run build && npm prune --omit=dev
 FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1
 WORKDIR /app
 # su-exec drops root in the entrypoint. The HEALTHCHECK's wget is busybox's, already in the
-# base image; CI's image-smoke job runs that exact command inside the container.
-RUN apk add --no-cache su-exec
+# base image; CI's image-smoke job runs that exact command inside the container. The app runs
+# on `node` alone (reset-password too: `node dist/server/cli.js`), so the package managers the
+# base image ships are removed: npm, npx, corepack and yarn, with the packages they bundle,
+# which scanners would otherwise report against this image.
+RUN apk add --no-cache su-exec \
+ && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-* \
+      /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./

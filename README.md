@@ -125,7 +125,7 @@ For OIDC you need a reachable provider; see [Authentik](#authentik-oidc) below a
 
 ## Docker
 
-Images are published to GitHub Container Registry for `linux/amd64`:
+Images are published to GitHub Container Registry for `linux/amd64` and `linux/arm64` (a Raspberry Pi 4 or 5 on a 64-bit OS, an ARM home server); Docker pulls the one that matches the host. The image holds Node and the app and no package manager:
 
 | Tag | What it is |
 | --- | --- |
