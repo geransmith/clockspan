@@ -40,9 +40,10 @@ git switch main && git pull
 - **Title**: imperative and specific. "Add second meal alarm", "Fix lunch tile after
   midnight". No prefixes or ticket numbers. The title becomes the commit message on `main`
   and a line in the release notes, so write it for a reader who will not open the PR.
-- **One label**: `enhancement` (new behaviour or setting), `bug`, `documentation`, or
-  `skip-changelog` (housekeeping, release bumps, CI, dependency updates). Unlabelled PRs land
-  under "Other changes" in the notes.
+- **One label**: `enhancement` (new behaviour or setting), `bug`, `documentation`,
+  `breaking` (a change that needs a major release; see "Version" below, and it wins over the
+  others), or `skip-changelog` (housekeeping, release bumps, CI, dependency updates).
+  Unlabelled PRs land under "Other changes" in the notes.
 - **Body**: what changed, why, and how it was verified. A few lines is enough.
 - **Before opening**:
   - `npm run test:coverage`, `npm run typecheck`, `npm run lint` and `npm run format:check`
@@ -59,8 +60,30 @@ git switch main && git pull
 **When.** After any merged change a user would notice: a feature, a fix, a new setting, a
 migration. Several PRs can share one release. Docs-only changes need no release.
 
-**Version.** `0.x` until the author calls it `1.0.0`. `patch` for fixes, `minor` for new
-behaviour, settings or migrations. A version is never reused: a bad release is followed by a
+**Version.** [Semantic Versioning](https://semver.org) from 1.0.0: `MAJOR.MINOR.PATCH`, and a
+release takes the largest bump any PR in it needs. What the version promises is what someone
+running the image relies on:
+
+- the environment variables, what they mean and their defaults;
+- the `/data` volume and its database, which a release migrates forward when it starts (going
+  back to an older release after that is not supported);
+- the container: port 8080, `PUID`/`PGID`, the platforms (`linux/amd64`, `linux/arm64`) and
+  the healthcheck;
+- the `reset-password` command.
+
+The JSON under `/api` belongs to the web app that ships in the same image, and can change in
+any release.
+
+- **major**: an upgrade that can break a working install or needs the operator to act. A
+  variable removed, renamed or given a different default; a platform dropped; stored data
+  dropped or rewritten so that something is lost. Its PR carries the `breaking` label (the
+  notes list it first, under "Breaking changes") and its body says what to do.
+- **minor**: anything new that works without the operator doing anything: a feature, a
+  setting, a card, an optional variable, a migration that only adds.
+- **patch**: fixes, dependency and base-image updates, and wording.
+
+Versions are plain `X.Y.Z`: no pre-releases. CI refuses a version that isn't `X.Y.Z` or isn't
+higher than the one before it. A version is never reused: a bad release is followed by a
 patch, not re-published.
 
 **Checklist.** The release is the version-bump PR. Merging it is the last step by hand; CI
@@ -70,7 +93,7 @@ does the rest from the squash commit on `main`.
 
    ```bash
    git switch -c release/vX.Y.Z
-   npm version <minor|patch> --no-git-tag-version   # prints the new version
+   npm version <major|minor|patch> --no-git-tag-version   # prints the new version
    git commit -am "Release vX.Y.Z"
    git push -u origin HEAD
    gh pr create --fill --label skip-changelog
@@ -90,8 +113,9 @@ does the rest from the squash commit on `main`.
    `docker pull` line on top. Reword a line on GitHub if it reads badly.
 
 **What the merge does.** `check` sees that `package.json`'s version differs from the previous
-commit's and refuses to go on if a tag for it already exists. Then the image is built once and
-pushed as `ghcr.io/geransmith/clockspan:edge`, `:X.Y.Z`, `:X.Y` and `:latest`, labelled
+commit's and refuses to go on if it isn't a higher `X.Y.Z` or a tag for it already exists.
+Then the image is built once and pushed as `ghcr.io/geransmith/clockspan:edge`, `:X.Y.Z`,
+`:X.Y`, `:X` and `:latest`, labelled
 `org.opencontainers.image.version=X.Y.Z` (any other push to `main` is labelled `edge`), and the
 tag `vX.Y.Z` and the GitHub Release are created on that commit with generated notes. No tag is
 pushed by hand, and the tag CI creates starts no second run.
@@ -108,14 +132,15 @@ gh run rerun <run-id> --failed
 
 | Event | Jobs | Result |
 | --- | --- | --- |
-| Pull request | `check`, `image-smoke` (both required) | install without dependency scripts and check registry signatures; `npm audit --audit-level=high` (a new advisory can turn an unchanged PR red: merge the fix first); typecheck, lint, test, build; a version that already has a tag fails. The image is built for amd64 and for arm64 (under QEMU) and each is booted by `scripts/smoke-image.sh` (health, SPA shell, `/data` owner, root dropped, no package manager, the healthcheck command); nothing is pushed |
+| Pull request | `check`, `image-smoke` (both required) | install without dependency scripts and check registry signatures; `npm audit --audit-level=high` (a new advisory can turn an unchanged PR red: merge the fix first); typecheck, lint, test, build; a changed version must be a higher `X.Y.Z` with no tag yet. The image is built for amd64 and for arm64 (under QEMU) and each is booted by `scripts/smoke-image.sh` (health, SPA shell, `/data` owner, root dropped, no package manager, the healthcheck command); nothing is pushed |
 | Push to `main` | `check`, `image` | both platforms are built and booted by the same script, and only then pushed as one multi-platform `ghcr.io/geransmith/clockspan:edge` |
-| Push to `main` that changes the version | `check`, `image`, `release` | `:edge`, `:X.Y.Z`, `:X.Y`, `:latest`, the tag `vX.Y.Z` and the GitHub Release |
+| Push to `main` that changes the version | `check`, `image`, `release` | `:edge`, `:X.Y.Z`, `:X.Y`, `:X`, `:latest`, the tag `vX.Y.Z` and the GitHub Release |
 | Pull request, push to `main`, weekly | `CodeQL` (not required) | static security analysis of the TypeScript (`security-extended`); alerts land in code scanning, and GitHub fails the PR's CodeQL check on a new high or critical one |
 | Pull request or push that touches `.github/` | `zizmor` (not required) | a security audit of the workflows and `dependabot.yml`; findings fail the job |
 
 A newer push to a pull request cancels that PR's older run; runs on `main` are never cancelled.
 Actions are pinned to commit SHAs; Dependabot bumps them (SHA and version comment together).
 
-Image tags: `latest` is the newest release, `X.Y.Z` and `X.Y` pin a release, `edge` is the
-latest commit on `main` and has only passed CI.
+Image tags: `latest` is the newest release; `X` follows a major version through its minor and
+patch releases, never across a breaking change; `X.Y` follows a minor version's patches;
+`X.Y.Z` is one release; `edge` is the latest commit on `main` and has only passed CI.
