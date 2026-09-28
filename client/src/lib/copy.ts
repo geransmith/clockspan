@@ -176,6 +176,17 @@ export const PUNCH_ORDER = 'Punch times are out of order. Check that ins and out
 /** A session logged without a label, wherever sessions are listed. */
 export const UNTITLED_SESSION = 'Untitled session';
 
+/** The retrospective's planner for the next work day (`name` is "tomorrow" or a date). */
+export const PLAN_NEXT = {
+  open: (name: string) => `Plan ${name}`,
+  title: (name: string) => `Plan for ${name}`,
+  already: (n: number) => `${n} already on the list`,
+  placeholder: 'Something else for the list',
+  save: (name: string) => `Add to ${name}`,
+  done: (n: number, name: string) => `${n} ${n === 1 ? 'row' : 'rows'} added for ${name}.`,
+  nothing: 'Nothing new to add.',
+} as const;
+
 /** Placeholder for the day's retrospective note. */
 export const RETRO_PROMPT = 'What got in the way? What went to plan?';
 

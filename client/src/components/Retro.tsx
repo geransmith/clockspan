@@ -5,8 +5,11 @@ import { formatDuration } from '../lib/format';
 import { reviewDay } from '../lib/retro';
 import { LIMITS, type Priority, type Session } from '../types';
 import { Check } from './Icons';
+import { PlanNext } from './PlanNext';
 
 interface Props {
+  date: string;
+  today: string;
   priorities: Priority[];
   sessions: Session[];
   note: string;
@@ -20,7 +23,7 @@ interface Props {
  * the last keystroke or on blur; "Mark reviewed" saves immediately. Keyed by date in the
  * sheet, so a new day mounts with its own note.
  */
-export function Retro({ priorities, sessions, note, reviewedAt, onChange }: Props) {
+export function Retro({ date, today, priorities, sessions, note, reviewedAt, onChange }: Props) {
   const { formatTime } = useTimeFormat();
   const review = reviewDay(priorities, sessions);
   const [draft, setDraft] = useState(note);
@@ -60,7 +63,12 @@ export function Retro({ priorities, sessions, note, reviewedAt, onChange }: Prop
   };
 
   if (review.total === 0 && review.unplanned.length === 0) {
-    return <p className="muted center">Write priorities and log a session or two, then this shows how the day lined up with the plan.</p>;
+    return (
+      <div className="retro">
+        <p className="muted center">Write priorities and log a session or two, then this shows how the day lined up with the plan.</p>
+        <PlanNext date={date} today={today} priorities={priorities} />
+      </div>
+    );
   }
 
   return (
@@ -173,6 +181,8 @@ export function Retro({ priorities, sessions, note, reviewedAt, onChange }: Prop
           </button>
         )}
       </div>
+
+      <PlanNext date={date} today={today} priorities={priorities} />
     </div>
   );
 }

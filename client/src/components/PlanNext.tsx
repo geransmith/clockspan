@@ -1,0 +1,161 @@
+import { useState, type KeyboardEvent } from 'react';
+import { useDay } from '../hooks/useDay';
+import { useSettings } from '../hooks/useSettings';
+import { PLAN_NEXT } from '../lib/copy';
+import { addDays, formatDateLong } from '../lib/format';
+import { nextWorkDay, planNext, sameText } from '../lib/plan';
+import { LIMITS, type Priority } from '../types';
+import { Plus } from './Icons';
+
+interface Props {
+  /** The day the retrospective is for; only today's offers a plan, since the next day is ahead. */
+  date: string;
+  today: string;
+  /** That day's priorities: the unticked ones are offered for the next day. */
+  priorities: Priority[];
+}
+
+/**
+ * The end of the retrospective: put what's left, and anything new, on the next work day's
+ * list tonight, while it's fresh. The day only loads once the planner opens.
+ */
+export function PlanNext({ date, today, priorities }: Props) {
+  const { settings } = useSettings();
+  const [open, setOpen] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const next = nextWorkDay(date, settings.showWeekends);
+  if (date !== today) return null;
+  const name = next === addDays(today, 1) ? 'tomorrow' : formatDateLong(next);
+  return (
+    <div className="plan-next">
+      {open ? (
+        <Planner
+          date={next}
+          name={name}
+          candidates={priorities.filter((p) => p.text.trim() && !p.done)}
+          onDone={(message) => {
+            setOpen(false);
+            setResult(message);
+          }}
+          onCancel={() => setOpen(false)}
+        />
+      ) : (
+        <div className="plan-next-foot">
+          <button className="btn btn-ghost" onClick={() => setOpen(true)}>
+            {PLAN_NEXT.open(name)}
+          </button>
+          {result && (
+            <span className="muted small" role="status">
+              {result}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Planner({
+  date,
+  name,
+  candidates,
+  onDone,
+  onCancel,
+}: {
+  date: string;
+  name: string;
+  candidates: Priority[];
+  onDone: (message: string) => void;
+  onCancel: () => void;
+}) {
+  const { day, store } = useDay(date);
+  // Today's open rows start ticked: carrying them over is the usual answer.
+  const [picked, setPicked] = useState(() => new Set(candidates.map((p) => p.position)));
+  const [extra, setExtra] = useState<string[]>([]);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const onList = day?.priorities.filter((p) => p.text.trim()) ?? [];
+  const already = onList.length;
+  // A row already on that list (planned earlier tonight) isn't offered again.
+  const planned = new Set(onList.map((p) => sameText(p.text)));
+  const offered = candidates.filter((p) => !planned.has(sameText(p.text)));
+
+  const addDraft = () => {
+    if (draft.trim()) setExtra((x) => [...x, draft.trim()]);
+    setDraft('');
+  };
+  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      addDraft();
+    }
+  };
+  const save = async () => {
+    if (!day) return;
+    const texts = [...offered.filter((p) => picked.has(p.position)).map((p) => p.text), ...extra, ...(draft.trim() ? [draft] : [])];
+    const { rows, added } = planNext(day.priorities, texts);
+    if (added === 0) {
+      onDone(PLAN_NEXT.nothing);
+      return;
+    }
+    setBusy(true);
+    // A failed save raises the store's banner and puts the stored list back.
+    const ok = await store.setPriorities(date, rows);
+    setBusy(false);
+    if (ok) onDone(PLAN_NEXT.done(added, name));
+  };
+
+  return (
+    <div className="plan-next-editor">
+      <h3 className="retro-heading">
+        {PLAN_NEXT.title(name)} {already > 0 && <span className="muted">{PLAN_NEXT.already(already)}</span>}
+      </h3>
+      {offered.length + extra.length > 0 && (
+        <ul className="plan-next-list">
+          {offered.map((p) => (
+            <li key={p.position}>
+              <label className="inline-check">
+                <input
+                  type="checkbox"
+                  className="checkbox"
+                  checked={picked.has(p.position)}
+                  onChange={(e) =>
+                    setPicked((s) => {
+                      const nextSet = new Set(s);
+                      if (e.target.checked) nextSet.add(p.position);
+                      else nextSet.delete(p.position);
+                      return nextSet;
+                    })
+                  }
+                />
+                <span>{p.text}</span>
+              </label>
+            </li>
+          ))}
+          {extra.map((text, i) => (
+            <li key={`extra-${i}`} className="plan-next-extra">
+              <Plus /> <span>{text}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <input
+        className="input"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={onKey}
+        placeholder={PLAN_NEXT.placeholder}
+        maxLength={LIMITS.priorityText}
+        aria-label={PLAN_NEXT.placeholder}
+      />
+      <div className="retro-foot">
+        <button className="btn btn-primary" onClick={() => void save()} disabled={busy || !day}>
+          {PLAN_NEXT.save(name)}
+        </button>
+        <button className="btn btn-ghost" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
