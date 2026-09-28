@@ -828,7 +828,7 @@ button {
 }
 .punch-row {
   display: grid;
-  grid-template-columns: 84px 1fr auto auto;
+  grid-template-columns: 76px 1fr auto auto;
   align-items: center;
   gap: 6px;
 }
@@ -888,13 +888,15 @@ button {
   flex-direction: column;
   gap: 8px;
 }
-/* One box per out/in pair; its remove button spans both rows so it clearly acts on the pair. */
+/* One box per out/in pair. There is no room beside the rows on a phone, so the remove button
+   sits in the box's top-right corner; from 640 px it stands beside them and spans both rows, so
+   it clearly acts on the pair. */
 .punch-pair {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr;
   align-items: center;
   gap: 6px;
-  padding: 8px 8px 8px 12px;
+  padding: 6px 8px 8px 12px;
   border: 1px solid var(--border);
   border-left: 3px solid var(--surface-3);
   border-radius: var(--radius-sm);
@@ -904,14 +906,14 @@ button {
   flex-direction: column;
   gap: 8px;
   min-width: 0;
-}
-@media (max-width: 639px) {
-  .punch-pair-rows {
-    order: 1;
-  }
+  order: 1;
 }
 .punch-pair .punch-row {
-  grid-template-columns: 62px 1fr auto auto;
+  grid-template-columns: 60px 1fr auto auto;
+}
+.punch-pair .punch-remove {
+  justify-self: end;
+  min-height: 36px;
 }
 .punch-add {
   align-self: flex-start;
@@ -921,24 +923,30 @@ button {
 .punch-remove {
   color: var(--text-3);
 }
-@media (max-width: 639px) {
+.punch-now {
+  padding: 0 10px;
+}
+@media (min-width: 640px) {
   .punch-row {
-    grid-template-columns: 76px 1fr auto auto;
+    grid-template-columns: 84px 1fr auto auto;
   }
-  /* No room beside the rows on a phone: the remove button sits in the box's top-right corner. */
   .punch-pair {
-    grid-template-columns: 1fr;
-    padding: 6px 8px 8px 12px;
+    grid-template-columns: 1fr auto;
+    padding: 8px 8px 8px 12px;
   }
-  .punch-pair .punch-remove {
-    justify-self: end;
-    min-height: 36px;
+  .punch-pair-rows {
+    order: 0;
   }
   .punch-pair .punch-row {
-    grid-template-columns: 60px 1fr auto auto;
+    grid-template-columns: 62px 1fr auto auto;
+  }
+  /* Back to the plain .btn size and padding. */
+  .punch-pair .punch-remove {
+    justify-self: auto;
+    min-height: 44px;
   }
   .punch-now {
-    padding: 0 10px;
+    padding: 0 14px;
   }
 }
 
@@ -1233,7 +1241,7 @@ button {
   min-height: 38px;
 }
 .running-time {
-  font-size: 1.35rem;
+  font-size: 1.2rem;
   font-weight: 750;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
@@ -1259,12 +1267,16 @@ button {
   transform-origin: left;
   transition: transform 0.9s linear;
 }
-@media (max-width: 639px) {
+/* On a phone the bar has no room for Cancel; the timer card has it. */
+.running-cancel {
+  display: none;
+}
+@media (min-width: 640px) {
   .running-cancel {
-    display: none;
+    display: inline-flex;
   }
   .running-time {
-    font-size: 1.2rem;
+    font-size: 1.35rem;
   }
 }
 
