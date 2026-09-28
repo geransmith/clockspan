@@ -15,7 +15,8 @@ work. The README has the user-facing description.
 
 ## Stack & versions
 
-- Node **24** (`nvm use 24`; `node:24-alpine` in Docker).
+- Node **24** (`.nvmrc`, so a bare `nvm use`; `node:24-alpine` in Docker). `devEngines` in
+  `package.json` makes npm refuse `install`, `ci` and `run` on an older Node.
 - Client: React 19, TypeScript 7 (the native `tsc`), Vite 8. `@dnd-kit/sortable` for drag/drop (loaded on the first Customize);
   `react-aria` + `react-stately` + `@internationalized/date` for the punch time field. No router
   (the date and view live in the URL query, `hooks/useRoute.ts`; today is `date: null`, so a
@@ -89,7 +90,7 @@ ca_profile.xml          the Community Apps profile. Both XML files link icons/ic
 ## Commands
 
 ```bash
-nvm use 24
+nvm use                # reads .nvmrc (24)
 npm install
 npm run dev            # API on :3000 (tsx watch, PORT pinned) + Vite on :5173 (proxies /api, /auth)
 npm test               # vitest: shared + client lib + hook + component tests + server API tests
@@ -558,3 +559,9 @@ The browser pass for each surface (the logic under it is already tested):
   starts no second run. A step that must trigger CI needs a GitHub App or personal token.
 - TypeScript 7 is the native compiler: the `typescript` package has no `tsserver` or JS API.
   Editors need the native TypeScript extension; `npm run typecheck` is the source of truth.
+- The Node floor (`engines` and `devEngines` in `package.json`) has no upper bound, and `.npmrc`
+  has no `engine-strict`, on purpose: Dependabot's updater reads both files and runs its own
+  Node (24 at the time of writing; it follows the active LTS). A cap it outgrows, or a package
+  whose `engines` leaves its Node out under `engine-strict`, stops its npm updates without
+  failing any check: the PRs just stop coming. A new Node major moves `.nvmrc`, both fields,
+  CI and the Dockerfile together.

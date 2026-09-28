@@ -8,6 +8,13 @@
   "engines": {
     "node": ">=24"
   },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": ">=24",
+      "onFail": "error"
+    }
+  },
   "scripts": {
     "dev": "concurrently -k -n api,web -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "PORT=3000 tsx watch server/index.ts",
@@ -39,6 +46,7 @@
     "@dnd-kit/sortable": "10.0.0",
     "@dnd-kit/utilities": "3.2.2",
     "@internationalized/date": "3.12.4",
+    "@puppeteer/browsers": "3.2.2",
     "@testing-library/dom": "10.4.2",
     "@testing-library/react": "16.3.3",
     "@types/better-sqlite3": "9.6.0",
