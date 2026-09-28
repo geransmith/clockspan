@@ -289,7 +289,9 @@ describe('second meal period', () => {
     const normal = computeTimeclock(p, settings, T0 + 6 * H);
     expect(secondMealApplies(normal, settings, false)).toBe(false);
     expect(secondMealApplies(normal, settings, true)).toBe(true);
-    expect(secondMealApplies(normal, { ...settings, workMinutes: 600 }, false)).toBe(true);
+    // A 10 h day (a 4×10 schedule) ends as the 10th hour does: no second meal is owed.
+    expect(secondMealApplies(normal, { ...settings, workMinutes: 600 }, false)).toBe(false);
+    expect(secondMealApplies(normal, { ...settings, workMinutes: 601 }, false)).toBe(true);
     const over = computeTimeclock(p, settings, T0 + 9 * H);
     expect(secondMealApplies(over, settings, false)).toBe(true);
     const taken = computeTimeclock(punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 8 * H, T0 + 8.5 * H, null]), settings, T0 + 9 * H);
