@@ -40,6 +40,7 @@ const day = (date: string, extra: Partial<Day> = {}): Day => ({
   retroAt: null,
   workMinutes: null,
   sessions: [],
+  breaks: [],
   ...extra,
 });
 

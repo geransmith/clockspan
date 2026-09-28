@@ -11,6 +11,7 @@ import { oidcAuthRouter } from './auth/oidc.js';
 import { purgeExpiredSessions } from './auth/session.js';
 import { scheduleRetention } from './retention.js';
 import { rejectCrossSiteWrites, securityHeaders } from './security.js';
+import { breakStartRouter, breaksRouter } from './routes/breaks.js';
 import { daysRouter } from './routes/days.js';
 import { sessionStartRouter, sessionsRouter } from './routes/sessions.js';
 import { settingsRouter } from './routes/settings.js';
@@ -58,8 +59,10 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
   api.use(requireAuth, requireOwnPassword);
   api.use('/settings', settingsRouter(db));
   api.use('/days/:date/sessions', sessionStartRouter(db));
+  api.use('/days/:date/breaks', breakStartRouter(db));
   api.use('/days', daysRouter(db, config));
   api.use('/sessions', sessionsRouter(db));
+  api.use('/breaks', breaksRouter(db));
   app.use('/api', api);
 
   const notFound: express.RequestHandler = (_req, res) => {

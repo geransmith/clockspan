@@ -1,7 +1,7 @@
 import { Router, type RequestHandler, type Response } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
-import { dateParam, ensureDay, requireDate, sessionRowToJson, UID_RE, type SessionRow } from './shared.js';
+import { dateParam, endRunningBreak, ensureDay, requireDate, sessionRowToJson, UID_RE, type SessionRow } from './shared.js';
 import { LIMITS, type OkResponse, type RunningResponse, type SessionConflict, type SessionResponse } from '../../shared/api.js';
 import { PLANNED_SECONDS, plannedEndAt } from '../../shared/timer.js';
 
@@ -58,12 +58,15 @@ export function sessionStartRouter(db: DB): Router {
       const dayId = ensureDay(db, user.id, date);
       const link = parsePriorityUid(db, dayId, priorityUid);
       if (link.error) return { error: link.error };
+      const now = Date.now();
+      // Back to work, on any device: a break still running ends here.
+      endRunningBreak(db, user.id, now);
       const info = db
         .prepare(
           `INSERT INTO sessions (day_id, user_id, label, notes, planned_seconds, started_at, ended_at, status, priority_uid)
            VALUES (?, ?, ?, '', ?, ?, NULL, 'running', ?)`,
         )
-        .run(dayId, user.id, typeof label === 'string' ? label.slice(0, LIMITS.sessionLabel) : '', planned.seconds, Date.now(), link.uid ?? null);
+        .run(dayId, user.id, typeof label === 'string' ? label.slice(0, LIMITS.sessionLabel) : '', planned.seconds, now, link.uid ?? null);
       return { id: Number(info.lastInsertRowid) };
     })();
     if ('error' in result) {

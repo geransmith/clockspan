@@ -64,9 +64,9 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
         setLinked(uid);
         setAddAsPriority(false);
       }
+      // Back to work: the server ends a running break as the session starts (useBreak takes
+      // its banners down), so nothing to send here.
       await timer.start(date, minutes * 60, trimmed, uid);
-      // Back to work: whatever was left of a break goes without an alert.
-      breakTimer.end();
       setLabel('');
       setLinked(null);
       setAddAsPriority(false);
@@ -138,10 +138,10 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
           onClick={() => {
             // A gesture, so iOS lets the Break over sound play later.
             unlockAudio();
-            breakTimer.start();
+            breakTimer.start(breakTimer.next.minutes);
           }}
         >
-          {BREAK.start(settings.breakMinutes)}
+          {BREAK.start(breakTimer.next.minutes, breakTimer.next.long)}
         </button>
       )}
       {!isToday && <p className="muted center">Timers can only be started on today's sheet.</p>}

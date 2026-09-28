@@ -9,7 +9,7 @@ import { SettingsProvider } from '../hooks/useSettings';
 import { TimerProvider } from '../hooks/useTimer';
 import { ApiError } from '../lib/apiError';
 import { emptyPunches } from '../lib/timeclock';
-import type { Day, Session, Settings } from '../types';
+import type { Break, Day, Session, Settings } from '../types';
 
 /**
  * Shared by the hook tests, which run under happy-dom with fake timers. Each test file mocks
@@ -46,6 +46,11 @@ export function makeSession(patch: Partial<Session> = {}): Session {
     priorityUid: null,
     ...patch,
   };
+}
+
+/** A five-minute break from T0 that ran its full length. */
+export function makeBreak(patch: Partial<Break> = {}): Break {
+  return { id: 1, date: TODAY, plannedSeconds: 5 * 60, startedAt: T0, endedAt: T0 + 5 * MIN, ...patch };
 }
 
 /** A promise the test settles by hand, for answers that must arrive in a chosen order. */

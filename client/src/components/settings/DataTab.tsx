@@ -12,7 +12,7 @@ export function DataTab({ settings, set, onReset }: { settings: Settings; set: (
     <>
       <Section
         title="Automatic cleanup"
-        hint="Deletes days older than this, with their punches, priorities, sessions and notes. Settings are kept. Runs on the server every few hours."
+        hint="Deletes days older than this, with their punches, priorities, sessions, breaks and notes. Settings are kept. Runs on the server every few hours."
       >
         <Toggle
           label="Delete old days automatically"
@@ -94,7 +94,7 @@ function DeleteOldDays() {
   return (
     <Section
       title="Delete old days now"
-      hint="Removes every day before the date, with its punches, priorities, sessions and notes. Today and a day with a running timer are always kept."
+      hint="Removes every day before the date, with its punches, priorities, sessions, breaks and notes. Today and a day with a running timer are always kept."
     >
       <div className="setting-row">
         <span>Delete days before</span>

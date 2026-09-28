@@ -1472,6 +1472,18 @@ button {
   font-weight: 650;
   white-space: nowrap;
 }
+/* A break row reads quieter than a session: no label to edit, just the rest taken. */
+.log-label--break {
+  font-weight: 500;
+  color: var(--text-2);
+}
+.log-label--break:hover {
+  background: none;
+}
+.log-row--break .log-duration {
+  font-weight: 500;
+  color: var(--text-2);
+}
 .log-delete {
   color: var(--text-3);
   min-height: 36px;

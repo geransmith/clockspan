@@ -5,7 +5,19 @@ import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { countDays, pruneDays, reclaimSpace } from '../retention.js';
 import { DAY_MS, isValidDateKey, punchWindow } from '../../shared/dates.js';
-import { DAY_COLUMNS, dateParam, ensureDay, findDay, requireDate, sessionRowToJson, UID_RE, type DayRow, type SessionRow } from './shared.js';
+import {
+  breakRowToJson,
+  DAY_COLUMNS,
+  dateParam,
+  ensureDay,
+  findDay,
+  requireDate,
+  sessionRowToJson,
+  UID_RE,
+  type BreakRow,
+  type DayRow,
+  type SessionRow,
+} from './shared.js';
 import { kindForPosition } from '../../shared/punches.js';
 import { MAX_PRIORITIES, SETTING_LIMITS } from '../../shared/settings.js';
 import {
@@ -67,11 +79,12 @@ function prioritiesJson(rows: PriorityRow[]): Priority[] {
     .map((r) => ({ position: r.position, text: r.text, done: Boolean(r.done), uid: r.uid, addedAt: r.added_at }));
 }
 
-/** A day's child rows: punches by position, sessions by start, cancelled ones left out. */
+/** A day's child rows: punches by position, sessions and breaks by start, cancelled sessions left out. */
 interface DayRows {
   punches: PunchRow[];
   priorities: PriorityRow[];
   sessions: (SessionRow & { date: string })[];
+  breaks: (BreakRow & { date: string })[];
 }
 
 function dayRows(db: DB, dayId: number): DayRows {
@@ -81,6 +94,9 @@ function dayRows(db: DB, dayId: number): DayRows {
     sessions: db
       .prepare(`SELECT s.*, d.date FROM sessions s JOIN days d ON d.id = s.day_id WHERE s.day_id = ? AND s.status <> 'cancelled' ORDER BY s.started_at`)
       .all(dayId) as DayRows['sessions'],
+    breaks: db
+      .prepare(`SELECT b.*, d.date FROM breaks b JOIN days d ON d.id = b.day_id WHERE b.day_id = ? ORDER BY b.started_at`)
+      .all(dayId) as DayRows['breaks'],
   };
 }
 
@@ -93,7 +109,7 @@ function rangeRows(db: DB, userId: number, from: string, to: string): Map<number
   const out = new Map<number, DayRows>();
   const rowsFor = (dayId: number) => {
     let rows = out.get(dayId);
-    if (!rows) out.set(dayId, (rows = { punches: [], priorities: [], sessions: [] }));
+    if (!rows) out.set(dayId, (rows = { punches: [], priorities: [], sessions: [], breaks: [] }));
     return rows;
   };
   for (const p of db.prepare(`SELECT x.* FROM punches x ${inRange} ORDER BY x.position`).all(userId, from, to) as PunchRow[]) rowsFor(p.day_id).punches.push(p);
@@ -102,6 +118,8 @@ function rangeRows(db: DB, userId: number, from: string, to: string): Map<number
     .prepare(`SELECT x.*, d.date FROM sessions x ${inRange} AND x.status <> 'cancelled' ORDER BY x.started_at`)
     .all(userId, from, to) as DayRows['sessions'];
   for (const s of sessions) rowsFor(s.day_id).sessions.push(s);
+  const breaks = db.prepare(`SELECT x.*, d.date FROM breaks x ${inRange} ORDER BY x.started_at`).all(userId, from, to) as DayRows['breaks'];
+  for (const b of breaks) rowsFor(b.day_id).breaks.push(b);
   return out;
 }
 
@@ -116,6 +134,7 @@ function dayJson(day: DayRow, date: string, rows: DayRows): Day {
     retroAt: day.retro_at,
     workMinutes: day.work_minutes,
     sessions: rows.sessions.map(sessionRowToJson),
+    breaks: rows.breaks.map(breakRowToJson),
   };
 }
 
@@ -141,7 +160,7 @@ export function daysRouter(db: DB, config: Config): Router {
       .prepare(`SELECT ${DAY_COLUMNS}, date FROM days WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date`)
       .all(user.id, from, to) as (DayRow & { date: string })[];
     const children = rangeRows(db, user.id, from, to);
-    const none: DayRows = { punches: [], priorities: [], sessions: [] };
+    const none: DayRows = { punches: [], priorities: [], sessions: [], breaks: [] };
     res.json({ days: rows.map((d) => dayJson(d, d.date, children.get(d.id) ?? none)) } satisfies RangeResponse);
   });
 

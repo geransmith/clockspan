@@ -5,6 +5,9 @@ export type { SoundEvent, SoundId } from '../../shared/sounds.js';
 export type {
   AuthInfo,
   AuthMode,
+  Break,
+  BreakEndResponse,
+  BreakResponse,
   Day,
   LogoutResponse,
   OkResponse,

@@ -101,6 +101,21 @@ export const MIGRATIONS: string[] = [
   `ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;`,
   // A day's own work-day length in minutes (a half day); null is the user's usual one.
   `ALTER TABLE days ADD COLUMN work_minutes INTEGER;`,
+  // Breaks between focus sessions, logged with the day. ended_at is the planned end from the
+  // start and moves back when a break is ended early, so nothing has to finish a break that
+  // runs out: it is running while ended_at is ahead of now.
+  `
+  CREATE TABLE breaks (
+    id              INTEGER PRIMARY KEY,
+    day_id          INTEGER NOT NULL REFERENCES days(id) ON DELETE CASCADE,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    planned_seconds INTEGER NOT NULL,
+    started_at      INTEGER NOT NULL,
+    ended_at        INTEGER NOT NULL
+  );
+  CREATE INDEX breaks_day ON breaks(day_id);
+  CREATE INDEX breaks_user_end ON breaks(user_id, ended_at);
+  `,
 ];
 
 export function openDatabase(dbPath: string): DB {

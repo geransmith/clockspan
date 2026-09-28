@@ -146,6 +146,7 @@ const day = (date: string, priorities: Priority[]): Day => ({
   retroAt: null,
   workMinutes: null,
   sessions: [],
+  breaks: [],
 });
 
 describe('leftOpen', () => {

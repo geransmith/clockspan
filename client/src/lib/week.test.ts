@@ -14,7 +14,7 @@ function day(date: string, hours: number | null, patch: Partial<Day> = {}): Day 
   const punches: Punch[] = emptyPunches().map((p) =>
     p.position === 0 ? { ...p, at: start } : p.position === 3 && hours != null ? { ...p, at: start + hours * H } : p,
   );
-  return { date, punches, priorities: [], overtimeApproved: false, retroNote: '', retroAt: null, workMinutes: null, sessions: [], ...patch };
+  return { date, punches, priorities: [], overtimeApproved: false, retroNote: '', retroAt: null, workMinutes: null, sessions: [], breaks: [], ...patch };
 }
 
 describe('weekHours', () => {

@@ -74,11 +74,26 @@ export interface Day {
   /** This day's own work-day length in minutes (a half day); null means the user's usual one. */
   workMinutes: number | null;
   sessions: Session[];
+  /** By start. */
+  breaks: Break[];
+}
+
+/**
+ * A break between focus sessions. `endedAt` is set to the planned end when it starts and moved
+ * back if it is ended early, so a break is running while `endedAt` is ahead of now, and one
+ * that ended before `startedAt + plannedSeconds` was cut short.
+ */
+export interface Break {
+  id: number;
+  date: string;
+  plannedSeconds: number;
+  startedAt: number;
+  endedAt: number;
 }
 
 /** A date with nothing stored yet: what `GET /days/:date` answers for it, and where an edit to a day the client never loaded starts. */
 export function emptyDay(date: string): Day {
-  return { date, punches: [], priorities: [], overtimeApproved: false, retroNote: '', retroAt: null, workMinutes: null, sessions: [] };
+  return { date, punches: [], priorities: [], overtimeApproved: false, retroNote: '', retroAt: null, workMinutes: null, sessions: [], breaks: [] };
 }
 
 /** What `GET /days/prune?before=` would delete, plus the server-wide ceiling if one is set. */
@@ -129,6 +144,21 @@ export interface TargetResponse {
 /** Every session route that answers with one session: start, PATCH, pause, resume, finish, cancel. */
 export interface SessionResponse {
   session: Session;
+}
+
+/** Starting a break. */
+export interface BreakResponse {
+  break: Break;
+}
+
+/** `POST /breaks/:id/end`: the break as it ended, or null when it ran under a minute and was dropped. */
+export interface BreakEndResponse {
+  break: Break | null;
+}
+
+/** The 409 from starting a break while a focus timer runs. */
+export interface BreakConflict {
+  error: string;
 }
 
 /** `GET /sessions/running`. */

@@ -52,6 +52,13 @@ export interface SeededSession {
   priorityUid: string | null;
 }
 
+export interface SeededBreak {
+  id: number;
+  plannedSeconds: number;
+  startedAt: number;
+  endedAt: number;
+}
+
 export interface SeededDay {
   date: string;
   /** Which template built the day; tests pick days by this. */
@@ -60,6 +67,7 @@ export interface SeededDay {
   punches: SeededPunch[];
   priorities: SeededPriority[];
   sessions: SeededSession[];
+  breaks: SeededBreak[];
   overtimeApproved: boolean;
   retroNote: string;
   retroAt: number | null;
@@ -171,7 +179,10 @@ interface Insert {
   userId: number;
 }
 
-function insertDay(ctx: Insert, day: Omit<SeededDay, 'sessions'> & { sessions: Omit<SeededSession, 'id'>[] }): SeededDay {
+/** A day as the templates build it, before the inserts give its sessions and breaks ids. */
+type DayDraft = Omit<SeededDay, 'sessions' | 'breaks'> & { sessions: Omit<SeededSession, 'id'>[]; breaks: Omit<SeededBreak, 'id'>[] };
+
+function insertDay(ctx: Insert, day: DayDraft): SeededDay {
   const { db, userId } = ctx;
   const info = db
     .prepare(`INSERT INTO days (user_id, date, created_at, overtime_approved, retro_note, retro_at) VALUES (?, ?, ?, ?, ?, ?)`)
@@ -189,7 +200,12 @@ function insertDay(ctx: Insert, day: Omit<SeededDay, 'sessions'> & { sessions: O
     const r = sess.run(dayId, userId, s.label, s.notes, s.plannedSeconds, s.startedAt, s.endedAt, s.status, s.priorityUid);
     return { id: Number(r.lastInsertRowid), ...s };
   });
-  return { ...day, sessions };
+  const rest = db.prepare(`INSERT INTO breaks (day_id, user_id, planned_seconds, started_at, ended_at) VALUES (?, ?, ?, ?, ?)`);
+  const breaks: SeededBreak[] = day.breaks.map((b) => {
+    const r = rest.run(dayId, userId, b.plannedSeconds, b.startedAt, b.endedAt);
+    return { id: Number(r.lastInsertRowid), ...b };
+  });
+  return { ...day, sessions, breaks };
 }
 
 function punchRows(times: (number | null)[]): SeededPunch[] {
@@ -200,13 +216,13 @@ function completed(label: string, startedAt: number, minutes: number, priorityUi
   return { label, notes, plannedSeconds: minutes * 60, startedAt, endedAt: startedAt + minutes * MIN, status: 'completed', priorityUid };
 }
 
+/** A break that ran its full length. */
+function rested(startedAt: number, minutes: number): Omit<SeededBreak, 'id'> {
+  return { plannedSeconds: minutes * 60, startedAt, endedAt: startedAt + minutes * MIN };
+}
+
 /** Builds one past weekday. `index` counts from the oldest day; `kind` picks the template. */
-function buildPastDay(
-  date: string,
-  index: number,
-  kind: Exclude<DayKind, 'today'>,
-  rand: () => number,
-): Omit<SeededDay, 'sessions'> & { sessions: Omit<SeededSession, 'id'>[] } {
+function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today'>, rand: () => number): DayDraft {
   const jitter = (spread: number) => Math.round((rand() - 0.5) * 2 * spread);
   const pick = <T>(arr: readonly T[]): T => arr[Math.floor(rand() * arr.length)]!;
   const texts = shuffle(PRIORITY_TEXTS, rand);
@@ -245,6 +261,7 @@ function buildPastDay(
         completed('Reply to the recruiter', lunchIn + 20 * MIN, 25, priorities[3]!.uid),
         completed(pick(UNPLANNED_LABELS), extraIn + 15 * MIN, 25, null),
       ],
+      breaks: [rested(firstStart + 25 * MIN, 5)],
       retroNote: pick(RETRO_NOTES),
       retroAt: clockOut + 15 * MIN,
     };
@@ -270,6 +287,7 @@ function buildPastDay(
         completed(texts[2]!, at(date, 14, 0), 50, priorities[2]!.uid),
         completed(texts[2]!, at(date, 17, 30), 50, priorities[2]!.uid, 'Kept going after the day ended.'),
       ],
+      breaks: [],
       retroNote: RETRO_NOTES[5]!,
       retroAt: lateOut + 5 * MIN,
     };
@@ -295,6 +313,7 @@ function buildPastDay(
         },
         completed(pick(UNPLANNED_LABELS), lunchIn + 30 * MIN, 25, null),
       ],
+      breaks: [],
       retroNote: '',
       retroAt: null,
     };
@@ -311,6 +330,7 @@ function buildPastDay(
       punches: punchRows([halfIn, null, null, halfOut]),
       priorities,
       sessions: [completed(texts[0]!, halfIn + 10 * MIN, 50, priorities[0]!.uid), completed(texts[0]!, halfIn + 70 * MIN, 50, priorities[0]!.uid)],
+      breaks: [rested(halfIn + 60 * MIN, 10)],
       retroNote: 'Half day. Left at half one for the appointment.',
       retroAt: halfOut + 2 * MIN,
     };
@@ -326,6 +346,8 @@ function buildPastDay(
       completed(texts[1]!, clockIn + 60 * MIN, 50, priorities[1]!.uid),
       completed(pick(UNPLANNED_LABELS), lunchIn + 30 * MIN, 25, null),
     ],
+    // A fifth of each session before it, the way Suggest breaks sizes them.
+    breaks: [rested(clockIn + 40 * MIN, 5), rested(clockIn + 110 * MIN, 10)],
     retroNote: pick(RETRO_NOTES),
     retroAt: clockOut + 5 * MIN,
   };
@@ -346,7 +368,7 @@ export function kindForDistance(distance: number): Exclude<DayKind, 'today'> {
   return 'normal';
 }
 
-function buildToday(today: string, now: number, index: number, running: boolean): Omit<SeededDay, 'sessions'> & { sessions: Omit<SeededSession, 'id'>[] } {
+function buildToday(today: string, now: number, index: number, running: boolean): DayDraft {
   // Two hours ago, on the minute, but never before today started (a seed run at 01:00).
   const clockIn = Math.max(at(today, 0, 5), Math.floor((now - 2 * 3_600_000) / MIN) * MIN);
   const createdAt = clockIn - 3 * MIN;
@@ -378,6 +400,7 @@ function buildToday(today: string, now: number, index: number, running: boolean)
     punches: punchRows([clockIn, null, null, null]),
     priorities,
     sessions,
+    breaks: [rested(clockIn + 60 * MIN, 10)],
     retroNote: '',
     retroAt: null,
   };

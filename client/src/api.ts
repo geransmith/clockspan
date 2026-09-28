@@ -1,5 +1,7 @@
 import type {
   AuthInfo,
+  BreakEndResponse,
+  BreakResponse,
   Day,
   LogoutResponse,
   OkResponse,
@@ -105,3 +107,8 @@ export const finishSession = (id: number, countOverrun = false) =>
   request<SessionResponse>('POST', `/api/sessions/${id}/finish`, countOverrun ? { countOverrun } : undefined);
 export const cancelSession = (id: number) => request<SessionResponse>('POST', `/api/sessions/${id}/cancel`);
 export const deleteSession = (id: number) => request<OkResponse>('DELETE', `/api/sessions/${id}`);
+
+// ----- breaks -----
+export const startBreak = (date: string, plannedSeconds: number) => request<BreakResponse>('POST', `/api/days/${date}/breaks`, { plannedSeconds });
+export const endBreak = (id: number) => request<BreakEndResponse>('POST', `/api/breaks/${id}/end`);
+export const deleteBreak = (id: number) => request<OkResponse>('DELETE', `/api/breaks/${id}`);

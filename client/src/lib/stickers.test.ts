@@ -150,6 +150,7 @@ describe('daySummaryOf', () => {
           pausedAt: null,
         },
       ],
+      breaks: [],
     };
     expect(daySummaryOf(day)).toEqual({
       date: TODAY,
