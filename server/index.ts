@@ -11,9 +11,9 @@ try {
 }
 
 if (config.authMode === 'none') {
-  console.warn(
-    '[auth] AUTH_MODE=none: anyone who can reach this port has full access, and so can a web page opened on this network (DNS rebinding). Set AUTH_MODE=local or oidc unless you trust both.',
-  );
+  console.warn('[auth] AUTH_MODE=none: anyone who can reach this port has full access. Set AUTH_MODE=local or oidc unless you trust everyone who can.');
+} else if (config.allowedHosts.length > 0) {
+  console.warn(`[host] ALLOWED_HOSTS is only read under AUTH_MODE=none; with ${config.authMode} sign-in the session cookie already stays with the real name.`);
 }
 if (config.trustProxy === true) {
   console.warn(

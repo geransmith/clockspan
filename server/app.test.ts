@@ -1,8 +1,9 @@
 import fs from 'node:fs';
+import http from 'node:http';
+import net, { type AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AddressInfo } from 'node:net';
 import { createApp, startBackgroundJobs } from './app.js';
 import { loadConfig } from './config.js';
 import { ensureDefaultUser, openDatabase } from './db.js';
@@ -108,6 +109,99 @@ describe('cross-site writes', () => {
 
   it('leaves reads alone, whoever sent them', async () => {
     expect((await send('GET', '/api/settings', 'cross-site')).status).toBe(200);
+  });
+});
+
+describe('host names under AUTH_MODE=none', () => {
+  let app: TestApp;
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await app.close();
+  });
+
+  // fetch drops a Host header it is handed, so these go through node:http, which sends it as given.
+  const as = (host: string, path = '/api/settings', method = 'GET') =>
+    new Promise<{ status: number; body: unknown }>((resolve, reject) => {
+      const req = http.request(`${app.url}${path}`, { method, headers: { host, 'content-type': 'application/json' } }, (res) => {
+        let text = '';
+        res
+          .setEncoding('utf8')
+          .on('data', (chunk: string) => (text += chunk))
+          .on('end', () => resolve({ status: res.statusCode!, body: JSON.parse(text) as unknown }));
+      });
+      req.on('error', reject).end(method === 'GET' ? undefined : '{"workMinutes": 300}');
+    });
+
+  it('refuses a name it does not know, reads included, and says what to set', async () => {
+    app = await startTestApp({ seed: true });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // A rebinding page: its own name, pointed at this server, so the browser calls it same-origin.
+    const read = await as('rebind.example:8080', `/api/days/${app.seeded!.today}`);
+    expect(read).toEqual({ status: 403, body: { error: 'This server does not answer to rebind.example. Add it to ALLOWED_HOSTS.' } });
+    expect((await as('rebind.example:8080', '/api/settings', 'PUT')).status).toBe(403);
+    expect((await as('rebind.example', '/api/auth/me')).status).toBe(403);
+    expect(app.db.prepare(`SELECT COUNT(*) AS n FROM settings`).get()).toEqual({ n: 0 });
+    // One line per name, however many requests it sends.
+    expect(warn).toHaveBeenCalledOnce();
+    expect(String(warn.mock.calls[0]![0])).toMatch(/^\[host\] API request for "rebind\.example" refused/);
+  });
+
+  it('answers the names no outside page can use', async () => {
+    app = await startTestApp();
+    const names = ['127.0.0.1:8080', '192.168.1.10', '[::1]:8080', '[FE80::1]', 'tower:8080', 'TOWER.', 'localhost:5173', 'app.localhost'];
+    for (const host of [...names, 'tower.local', 'nas.home.arpa', 'box.internal']) expect([host, (await as(host)).status]).toEqual([host, 200]);
+    // Only the whole label counts.
+    for (const host of ['evil.notlocal', 'local.evil.example', 'internal.evil.example']) expect([host, (await as(host)).status]).toEqual([host, 403]);
+  });
+
+  it("answers APP_URL's host and ALLOWED_HOSTS, where a leading dot takes the whole domain", async () => {
+    app = await startTestApp({ env: { APP_URL: 'https://focus.example.com', ALLOWED_HOSTS: 'nas.example.net,.lan' } });
+    for (const host of ['focus.example.com', 'FOCUS.example.com:443', 'nas.example.net', 'lan', 'tower.lan', 'a.b.lan:8080']) {
+      expect([host, (await as(host)).status]).toEqual([host, 200]);
+    }
+    for (const host of ['example.com', 'www.focus.example.com', 'focus.example.com.evil.example', 'example.net', 'tower.flan']) {
+      expect([host, (await as(host)).status]).toEqual([host, 403]);
+    }
+  });
+
+  it('refuses a Host header no browser would send, without logging it', async () => {
+    app = await startTestApp();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (const host of ['tower/x', '[1:2]', '.', '-tower'])
+      expect([host, await as(host)]).toEqual([host, { status: 403, body: { error: 'Invalid Host header.' } }]);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('lets a request with no Host header through: a browser always sends one', async () => {
+    app = await startTestApp();
+    const reply = await new Promise<string>((resolve, reject) => {
+      const socket = net.connect(Number(new URL(app.url).port), '127.0.0.1', () => socket.end('GET /api/settings HTTP/1.0\r\n\r\n'));
+      let text = '';
+      socket
+        .setEncoding('utf8')
+        .on('data', (chunk: string) => (text += chunk))
+        .on('end', () => resolve(text))
+        .on('error', reject);
+    });
+    expect(reply).toMatch(/^HTTP\/1\.1 200 /);
+  });
+
+  it('logs the first few refused names once each, so made-up names cannot flood the log', async () => {
+    app = await startTestApp();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (let i = 0; i < 12; i++) expect((await as(`n${i}.evil.example`)).status).toBe(403);
+    expect((await as('n0.evil.example')).status).toBe(403);
+    expect(warn).toHaveBeenCalledTimes(10);
+  });
+
+  it('leaves the health check alone, and every sign-in mode', async () => {
+    app = await startTestApp();
+    expect(await as('rebind.example', '/api/health')).toEqual({ status: 200, body: { ok: true } });
+    await app.close();
+    // The session cookie belongs to the real name, so a rebound one gets nothing anyway.
+    app = await startTestApp({ authMode: 'local' });
+    expect((await as('rebind.example', '/api/auth/me')).status).toBe(200);
+    expect((await as('rebind.example', '/api/settings')).status).toBe(401);
   });
 });
 

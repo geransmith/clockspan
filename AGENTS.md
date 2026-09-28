@@ -46,7 +46,7 @@ server/                 Express API → dist/server
   app.ts                createApp(): headers, /api/health, auth routers, data routers behind
                         requireAuth, static files and the SPA fallback; startBackgroundJobs() (the
                         login purge and the retention schedule, started by index.ts only)
-  security.ts           every security header, and rejectCrossSiteWrites
+  security.ts           every security header, rejectCrossSiteWrites and rejectUnknownHosts
   config.ts, db.ts      env parsing (throws on bad config); pragmas, MIGRATIONS, the default user
   settings.ts           mergeSettings (defaults + validation on every read and write), loadSettings
   retention.ts          old-day pruning (pruneDays, runRetention, the RETENTION_DAYS cap)
@@ -189,7 +189,13 @@ Never commit `data/` or `.env`.
   before 16.4), one whose `Origin` host is neither the `Host` header nor `APP_URL`'s: under
   `AUTH_MODE=none` there is no cookie for SameSite to hold back, and a body-less POST
   (finish, cancel) needs no preflight. Keep write routes under
-  `/api` so it covers them. The HTML pages the server writes itself (the OIDC error pages in
+  `/api` so it covers them. Under `AUTH_MODE=none` only, `rejectUnknownHosts` (also in
+  `security.ts`, mounted on `/api` after `/api/health`) refuses a request whose `Host` names
+  something other than an IP address, a one-word name, `localhost`, a `.local`, `.home.arpa`
+  or `.internal` name, `APP_URL`'s host or an `ALLOWED_HOSTS` entry: DNS rebinding makes a
+  page same-origin, and with no cookie nothing else would stop it reading or writing. It reads
+  the raw `Host` header, never `req.hostname`, which believes `X-Forwarded-Host` under
+  `TRUST_PROXY`, and a same-origin page can set that. The HTML pages the server writes itself (the OIDC error pages in
   `auth/oidc.ts`) carry fixed text: no request data or error message goes into HTML, and the
   cause goes to the log. Password hashing is async
   (`scrypt`, never `scryptSync`); login verifies against `DUMMY_HASH` when the user is unknown.
