@@ -1,7 +1,7 @@
 /**
  * The JSON the API speaks, shared by the server that builds it and the client that reads
  * it. Server builders are annotated with these types so a renamed field is a type error on
- * both sides, not a test failure. No imports (settings have their own file).
+ * both sides, not a test failure. No imports (settings have their own file); `emptyDay` is the one function.
  */
 
 /**
@@ -74,6 +74,11 @@ export interface Day {
   /** This day's own work-day length in minutes (a half day); null means the user's usual one. */
   workMinutes: number | null;
   sessions: Session[];
+}
+
+/** A date with nothing stored yet: what `GET /days/:date` answers for it, and where an edit to a day the client never loaded starts. */
+export function emptyDay(date: string): Day {
+  return { date, punches: [], priorities: [], overtimeApproved: false, retroNote: '', retroAt: null, workMinutes: null, sessions: [] };
 }
 
 /** What `GET /days/prune?before=` would delete, plus the server-wide ceiling if one is set. */

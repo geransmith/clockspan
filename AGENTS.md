@@ -38,9 +38,10 @@ File names say most of it. This lists where things live and the files a rule is 
 shared/                 imported by both sides, always with a `.js` suffix
   settings.ts           Settings, DEFAULT_SETTINGS, CARD_IDS, normalizeLayout, MAX_PRIORITIES, SETTING_LIMITS,
                         retention bounds
-  api.ts                every wire type; the server's JSON builders and client/src/api.ts both use them
+  api.ts                every wire type and `emptyDay`; the server's JSON builders and client/src/api.ts both use them
   sounds.ts             the sound catalog (SOUNDS, SOUND_EVENTS)
   dates.ts, timer.ts    date keys; pause-aware session timing (activeMs, plannedEndAt, PLANNED_SECONDS)
+  punches.ts            kindForPosition: a punch row's kind is its position's parity
 server/                 Express API → dist/server
   app.ts                createApp(): headers, /api/health, auth routers, data routers behind
                         requireAuth, static files and the SPA fallback; startBackgroundJobs() (the
@@ -272,7 +273,7 @@ Never commit `data/` or `.env`.
   `api`.
 - **Punch positions are fixed**: 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in
   pairs, and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches`
-  enforces it). Kind is parity (`kindForPosition`). The math evaluates *set* punches
+  enforces it). Kind is parity (`kindForPosition`, `shared/punches.ts`). The math evaluates *set* punches
   chronologically; `extraPairs()` only decides where the card *shows* a pair. An explicit
   Clock out that is the latest punch ends the day even if the target isn't met. "Add extra
   out / in" appends two rows, so the old Clock out becomes the new pair's Out. Lunch semantics
@@ -379,8 +380,9 @@ Never commit `data/` or `.env`.
   carry one `action` button (see the clock-out alarm's "Overtime approved" and the retro
   alarm's "Open retrospective", chosen in `useAlarms` from the `AlarmDayState` callbacks).
 - **A per-day field** (like `overtimeApproved`, `retroNote`/`retroAt`): append a migration adding the column to
-  `days` → read it in `findDay` (`routes/shared.ts`) and return it from `GET /days/:date` →
-  add a `PUT /days/:date/<field>` route (with `requireDate`) → `Day` in `shared/api.ts` +
+  `days` → add the column to `DAY_COLUMNS` (`routes/shared.ts`; `findDay` and `/days/range` both
+  read it) and return it from `dayJson` → add a `PUT /days/:date/<field>` route (with
+  `requireDate`) → `Day` and its default in `emptyDay` (`shared/api.ts`) +
   `client/src/api.ts` → an optimistic setter in `useDay.tsx` that goes through `inOrder` on
   the day's `day:<date>` key (mirror `setOvertimeApproved`; failures reload the day and raise
   the "Change not saved" banner, so the setter never rejects) → pass it from `Sheet.tsx`

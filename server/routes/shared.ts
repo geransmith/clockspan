@@ -26,9 +26,11 @@ export interface DayRow {
   work_minutes: number | null;
 }
 
+/** The `days` columns a `Day` is built from. `findDay` and `/days/range` both read these, so a new per-day column is added here once. */
+export const DAY_COLUMNS = 'id, overtime_approved, retro_note, retro_at, work_minutes';
+
 export function findDay(db: DB, userId: number, date: string): DayRow | undefined {
-  return db.prepare(`SELECT id, overtime_approved, retro_note, retro_at, work_minutes FROM days WHERE user_id = ? AND date = ?`).get(userId, date) as
-    DayRow | undefined;
+  return db.prepare(`SELECT ${DAY_COLUMNS} FROM days WHERE user_id = ? AND date = ?`).get(userId, date) as DayRow | undefined;
 }
 
 /** Priority ids: the client mints 12 hex chars (`newUid`); the server only checks the shape, loosely. */

@@ -147,10 +147,14 @@ export function findLocalUser(db: DB, username: string): UserRow | undefined {
     .get(username, username) as UserRow | undefined;
 }
 
+export function findUserById(db: DB, id: number | bigint): UserRow | undefined {
+  return db.prepare(`SELECT * FROM users WHERE id = ?`).get(id) as UserRow | undefined;
+}
+
 /** In AUTH_MODE=none every request acts as this single user. */
 export function ensureDefaultUser(db: DB): UserRow {
   const existing = db.prepare(`SELECT * FROM users WHERE kind = 'default'`).get() as UserRow | undefined;
   if (existing) return existing;
   const info = db.prepare(`INSERT INTO users (kind, display_name, is_admin, created_at) VALUES ('default', 'You', 1, ?)`).run(Date.now());
-  return db.prepare(`SELECT * FROM users WHERE id = ?`).get(info.lastInsertRowid) as UserRow;
+  return findUserById(db, info.lastInsertRowid)!;
 }

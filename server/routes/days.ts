@@ -5,9 +5,11 @@ import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { countDays, pruneDays, reclaimSpace } from '../retention.js';
 import { DAY_MS, isValidDateKey, punchWindow } from '../../shared/dates.js';
-import { dateParam, ensureDay, findDay, requireDate, sessionRowToJson, UID_RE, type DayRow, type SessionRow } from './shared.js';
+import { DAY_COLUMNS, dateParam, ensureDay, findDay, requireDate, sessionRowToJson, UID_RE, type DayRow, type SessionRow } from './shared.js';
+import { kindForPosition } from '../../shared/punches.js';
 import { MAX_PRIORITIES, SETTING_LIMITS } from '../../shared/settings.js';
 import {
+  emptyDay,
   LIMITS,
   type Day,
   type OvertimeResponse,
@@ -117,10 +119,6 @@ function dayJson(day: DayRow, date: string, rows: DayRows): Day {
   };
 }
 
-function emptyDayJson(date: string): Day {
-  return { date, punches: [], priorities: [], overtimeApproved: false, retroNote: '', retroAt: null, workMinutes: null, sessions: [] };
-}
-
 export function daysRouter(db: DB, config: Config): Router {
   const r = Router();
 
@@ -140,7 +138,7 @@ export function daysRouter(db: DB, config: Config): Router {
       return;
     }
     const rows = db
-      .prepare(`SELECT id, date, overtime_approved, retro_note, retro_at, work_minutes FROM days WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date`)
+      .prepare(`SELECT ${DAY_COLUMNS}, date FROM days WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date`)
       .all(user.id, from, to) as (DayRow & { date: string })[];
     const children = rangeRows(db, user.id, from, to);
     const none: DayRows = { punches: [], priorities: [], sessions: [] };
@@ -173,7 +171,7 @@ export function daysRouter(db: DB, config: Config): Router {
     const user = currentUser(req);
     const date = dateParam(req);
     const day = findDay(db, user.id, date);
-    res.json((day ? dayJson(day, date, dayRows(db, day.id)) : emptyDayJson(date)) satisfies Day);
+    res.json((day ? dayJson(day, date, dayRows(db, day.id)) : emptyDay(date)) satisfies Day);
   });
 
   // Full replace. Position parity defines kind: even = in, odd = out.
@@ -200,7 +198,7 @@ export function daysRouter(db: DB, config: Config): Router {
         res.status(400).json({ error: `Punch ${i} has an invalid time.` });
         return;
       }
-      punches.push({ position: i, kind: i % 2 === 0 ? 'in' : 'out', at });
+      punches.push({ position: i, kind: kindForPosition(i), at });
     }
     db.transaction(() => {
       const dayId = ensureDay(db, user.id, date);

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { parseCookie, stringifySetCookie } from 'cookie';
 import * as oidc from 'openid-client';
-import type { DB, UserRow } from '../db.js';
+import { findUserById, type DB, type UserRow } from '../db.js';
 import type { Config } from '../config.js';
 import { cookieOptions, createSession, destroySession } from './session.js';
 import { logName, publicUser } from './local.js';
@@ -81,7 +81,7 @@ export function upsertOidcUser(db: DB, sub: string, rawName: string): UserRow {
   const info = db
     .prepare(`INSERT INTO users (kind, oidc_sub, display_name, is_admin, created_at) VALUES ('oidc', ?, ?, ?, ?)`)
     .run(sub, displayName, anyUser ? 0 : 1, Date.now());
-  return db.prepare(`SELECT * FROM users WHERE id = ?`).get(info.lastInsertRowid) as UserRow;
+  return findUserById(db, info.lastInsertRowid)!;
 }
 
 export function oidcAuthRouter(db: DB, config: Config): { api: Router; web: Router } {

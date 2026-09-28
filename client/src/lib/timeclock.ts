@@ -1,4 +1,5 @@
 import { endOfDay } from '../../../shared/dates.js';
+import { kindForPosition } from '../../../shared/punches.js';
 import type { Punch, Settings } from '../types';
 import { PUNCH_ORDER } from './copy';
 
@@ -49,10 +50,6 @@ export const LUNCH_OUT_POSITION = 1;
 export const LUNCH_IN_POSITION = 2;
 /** The clock-out row is the last row and never earlier than this. */
 export const CLOCK_OUT_MIN_POSITION = 3;
-
-export function kindForPosition(position: number): 'in' | 'out' {
-  return position % 2 === 0 ? 'in' : 'out';
-}
 
 const MIN = 60_000;
 
