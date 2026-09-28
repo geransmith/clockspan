@@ -14,6 +14,7 @@ import { daysRouter } from './routes/days.js';
 import { sessionStartRouter, sessionsRouter } from './routes/sessions.js';
 import { settingsRouter } from './routes/settings.js';
 import type { AuthInfo, OkResponse } from '../shared/api.js';
+import { HOUR_MS } from '../shared/dates.js';
 
 export interface AppOptions {
   /** Where the built client lives; the default is `dist/client` next to the built server. */
@@ -96,7 +97,7 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
     res.status(status).json({ error: status >= 500 ? 'Internal error.' : (err as Error).message });
   });
 
-  setInterval(purgeExpiredSessions, 6 * 3_600_000, db).unref();
+  setInterval(purgeExpiredSessions, 6 * HOUR_MS, db).unref();
   scheduleRetention(db, config);
 
   return app;

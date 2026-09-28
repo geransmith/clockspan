@@ -4,6 +4,7 @@ import type { TimeFormat } from '../../../shared/settings.js';
 export {
   addDays,
   addMonths,
+  DAY_MS,
   dateKey,
   endOfDay,
   isValidDateKey,
@@ -72,6 +73,14 @@ export function formatWeekday(key: string): string {
   return weekdayFmt.format(parseDateKey(key));
 }
 
+/** "15 min", "1h 30m", "2h": a length in minutes the way the alarm banners write it. */
+export function formatMinutes(m: number): string {
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const rest = m % 60;
+  return rest ? `${h}h ${rest}m` : `${h}h`;
+}
+
 /** "1h 12m", "45m", "0m". Negative values are shown as positive. */
 export function formatDuration(seconds: number): string {
   const s = Math.abs(Math.round(seconds));
@@ -116,4 +125,14 @@ export function resolveHour12(pref: TimeFormat = 'auto'): boolean {
  */
 export function floorToMinute(ms: number): number {
   return Math.floor(ms / 60_000) * 60_000;
+}
+
+/** The word for `n` of something: "day" for 1, "days" otherwise (or the `many` given). */
+export function plural(n: number, one: string, many = `${one}s`): string {
+  return n === 1 ? one : many;
+}
+
+/** The same text typed twice, whatever its case or spacing: the key repeats are merged by. */
+export function sameText(text: string): string {
+  return text.trim().replace(/\s+/g, ' ').toLowerCase();
 }

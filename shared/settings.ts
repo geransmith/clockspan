@@ -1,7 +1,8 @@
 /**
- * Per-user settings: the shape, the defaults and the bounds. Imported by the server
- * (`mergeSettings` validates against these) and the client (first render before the real
- * settings arrive). Pure data (the one import is the sound catalog), so either side can pull it in.
+ * Per-user settings: the shape, the defaults, the bounds and the layout merge. Imported by the
+ * server (`mergeSettings` validates against these) and the client (first render before the real
+ * settings arrive). No side effects and no runtime imports (the one import is the sound
+ * catalog's types), so either side can pull it in.
  */
 import type { SoundEvent, SoundId } from './sounds.js';
 
@@ -16,6 +17,28 @@ export const CARD_DEFAULT_VISIBLE: Record<CardId, boolean> = {
   log: true,
   retro: true,
 };
+
+/**
+ * A layout made whole, from whatever was saved or sent: the cards in their order, unknown and
+ * repeated ids dropped, a `visible` that isn't a boolean read as the card's default, and every
+ * card the layout misses (one added in a later release) appended with its default. The server
+ * runs it on every settings read and write (`mergeSettings`) and the client on every answer, so
+ * a new card reaches existing users on both sides.
+ */
+export function normalizeLayout(raw: unknown): { id: CardId; visible: boolean }[] {
+  const seen = new Set<CardId>();
+  const out: { id: CardId; visible: boolean }[] = [];
+  for (const item of Array.isArray(raw) ? (raw as unknown[]) : []) {
+    if (!item || typeof item !== 'object') continue;
+    const { id, visible } = item as { id?: unknown; visible?: unknown };
+    if (!CARD_IDS.includes(id as CardId) || seen.has(id as CardId)) continue;
+    const card = id as CardId;
+    seen.add(card);
+    out.push({ id: card, visible: typeof visible === 'boolean' ? visible : CARD_DEFAULT_VISIBLE[card] });
+  }
+  for (const id of CARD_IDS) if (!seen.has(id)) out.push({ id, visible: CARD_DEFAULT_VISIBLE[id] });
+  return out;
+}
 
 export type AlarmId = 'lunchBy' | 'clockOut' | 'secondMeal' | 'retro';
 

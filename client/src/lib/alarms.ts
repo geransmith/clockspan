@@ -1,5 +1,5 @@
 import type { AlarmId, AlarmSettings } from '../types';
-import { formatTime } from './format';
+import { formatMinutes, formatTime } from './format';
 
 export interface AlarmTarget {
   id: AlarmId;
@@ -98,13 +98,6 @@ export function dueEvents(
   return { fire, crossed };
 }
 
-function fmtMinutes(m: number): string {
-  if (m < 60) return `${m} min`;
-  const h = Math.floor(m / 60);
-  const rest = m % 60;
-  return rest ? `${h}h ${rest}m` : `${h}h`;
-}
-
 /** What the copy needs beyond the event itself: how the deadline was derived. */
 export interface EventContext {
   /** Clock-in instant, for "clocked in at 8:32 AM". */
@@ -135,9 +128,9 @@ export interface EventCopy {
 export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
   const target = formatTime(e.target, ctx.hour12);
   const clockIn = formatTime(ctx.clockIn, ctx.hour12);
-  const day = fmtMinutes(ctx.workMinutes);
+  const day = formatMinutes(ctx.workMinutes);
   const alarm = e.id === 'lunchBy' ? 'Lunch alarm' : e.id === 'secondMeal' ? '2nd meal alarm' : e.id === 'retro' ? 'Retrospective' : 'Clock-out alarm';
-  const mealHours = fmtMinutes(ctx.secondMealAfterMinutes);
+  const mealHours = formatMinutes(ctx.secondMealAfterMinutes);
   const mealWhy = `Your ${mealHours} of work ends at ${target}. California requires a second 30-minute meal period before then unless you've waived it.`;
 
   // The retrospective isn't a deadline: its target is the clock-out instant and the copy
@@ -145,7 +138,7 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
   if (e.id === 'retro') {
     if (e.kind === 'lead') {
       return {
-        kicker: `${alarm} · ${fmtMinutes(e.minutes)} before clock-out`,
+        kicker: `${alarm} · ${formatMinutes(e.minutes)} before clock-out`,
         title: 'Look back before you clock out',
         body: `Your day ends at ${target}. Compare what you planned with what you did while it's fresh.`,
         tone: 'warn',
@@ -160,27 +153,27 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
       };
     }
     return {
-      kicker: `${alarm} · ${fmtMinutes(e.minutes)} overdue`,
-      title: `Retrospective is ${fmtMinutes(e.minutes)} overdue`,
+      kicker: `${alarm} · ${formatMinutes(e.minutes)} overdue`,
+      title: `Retrospective is ${formatMinutes(e.minutes)} overdue`,
       body: `Your day ended at ${target}. The retrospective card is on today's sheet.`,
       tone: 'warn',
     };
   }
 
   if (e.kind === 'lead') {
-    const kicker = `${alarm} · ${fmtMinutes(e.minutes)} warning`;
+    const kicker = `${alarm} · ${formatMinutes(e.minutes)} warning`;
     if (e.id === 'lunchBy') {
       return {
         kicker,
-        title: `Lunch in ${fmtMinutes(e.minutes)}`,
-        body: `Lunch must start by ${target}, ${fmtMinutes(ctx.lunchDeadlineMinutes)} after clocking in at ${clockIn}.`,
+        title: `Lunch in ${formatMinutes(e.minutes)}`,
+        body: `Lunch must start by ${target}, ${formatMinutes(ctx.lunchDeadlineMinutes)} after clocking in at ${clockIn}.`,
         tone: 'warn',
       };
     }
-    if (e.id === 'secondMeal') return { kicker, title: `Second meal break in ${fmtMinutes(e.minutes)}`, body: mealWhy, tone: 'warn' };
+    if (e.id === 'secondMeal') return { kicker, title: `Second meal break in ${formatMinutes(e.minutes)}`, body: mealWhy, tone: 'warn' };
     return {
       kicker,
-      title: `Clock out in ${fmtMinutes(e.minutes)}`,
+      title: `Clock out in ${formatMinutes(e.minutes)}`,
       body: `Your ${day} day ends at ${target} (clocked in ${clockIn}). Start wrapping up.`,
       tone: 'warn',
     };
@@ -191,11 +184,11 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
     if (e.id === 'secondMeal') return { kicker, title: 'Take your second meal break', body: mealWhy, tone: 'danger' };
     return { kicker, title: 'Time to clock out', body: `It's ${target}. You've worked your ${day} for today. Punch out now.`, tone: 'danger' };
   }
-  const kicker = `${alarm} · ${fmtMinutes(e.minutes)} overdue`;
+  const kicker = `${alarm} · ${formatMinutes(e.minutes)} overdue`;
   if (e.id === 'lunchBy') {
     return {
       kicker,
-      title: `Lunch is ${fmtMinutes(e.minutes)} overdue`,
+      title: `Lunch is ${formatMinutes(e.minutes)} overdue`,
       body: `Your lunch deadline was ${target}. Start your break as soon as you can.`,
       tone: 'danger',
     };
@@ -203,14 +196,14 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
   if (e.id === 'secondMeal') {
     return {
       kicker,
-      title: `Second meal break is ${fmtMinutes(e.minutes)} overdue`,
+      title: `Second meal break is ${formatMinutes(e.minutes)} overdue`,
       body: `Your ${mealHours} of work ended at ${target}. Take a 30-minute break as soon as you can.`,
       tone: 'danger',
     };
   }
   return {
     kicker,
-    title: `Clock out is ${fmtMinutes(e.minutes)} overdue`,
+    title: `Clock out is ${formatMinutes(e.minutes)} overdue`,
     body: `Your day ended at ${target}. You're working past your ${day} target.`,
     tone: 'danger',
   };

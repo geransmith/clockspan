@@ -2,6 +2,7 @@ import type { Config } from './config.js';
 import type { DB } from './db.js';
 import type { Settings } from '../shared/settings.js';
 import { loadSettings } from './routes/settings.js';
+import { DAY_MS, HOUR_MS } from '../shared/dates.js';
 
 /**
  * Old days are deleted two ways: the user's "Delete old days now" button and an automatic
@@ -10,9 +11,8 @@ import { loadSettings } from './routes/settings.js';
  * its punches, priorities and sessions; settings and logins are never touched.
  */
 
-const DAY_MS = 86_400_000;
 const RUN_AFTER_BOOT_MS = 30_000;
-const RUN_EVERY_MS = 6 * 3_600_000;
+const RUN_EVERY_MS = 6 * HOUR_MS;
 
 /**
  * Days whose key sorts before this one are older than `keepDays`. The server normally never

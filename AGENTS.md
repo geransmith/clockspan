@@ -36,7 +36,8 @@ File names say most of it. This lists where things live and the files a rule is 
 
 ```
 shared/                 imported by both sides, always with a `.js` suffix
-  settings.ts           Settings, DEFAULT_SETTINGS, CARD_IDS, MAX_PRIORITIES, SETTING_LIMITS, retention bounds
+  settings.ts           Settings, DEFAULT_SETTINGS, CARD_IDS, normalizeLayout, MAX_PRIORITIES, SETTING_LIMITS,
+                        retention bounds
   api.ts                every wire type; the server's JSON builders and client/src/api.ts both use them
   sounds.ts             the sound catalog (SOUNDS, SOUND_EVENTS)
   dates.ts, timer.ts    date keys; pause-aware session timing (activeMs, plannedEndAt, PLANNED_SECONDS)
@@ -326,10 +327,11 @@ Never commit `data/` or `.env`.
 - **A card**: add the id to `CARD_IDS` and its default under `CARD_DEFAULT_VISIBLE` in
   `shared/settings.ts`, and its title to `CARD_TITLES` in `client/src/lib/layout.ts` (the
   types make a missing entry an error) → write the component → add a `case` in `Sheet.tsx`'s
-  `render()`. Existing users get it automatically because layouts merge with the registry on
-  both sides (`normalizeLayout`, `mergeSettings`), appended with that default; a card whose
-  default is hidden shows up under Customize → Hidden → Show. Removing a card is the reverse
-  (drop the id everywhere; both merges discard it from saved layouts), and if the card
+  `render()`. Existing users get it automatically because every layout goes through
+  `normalizeLayout` (`shared/settings.ts`; `mergeSettings` runs it on the server, `useSettings`
+  on the client), which appends a missing card with that default; a card whose default is
+  hidden shows up under Customize → Hidden → Show. Removing a card is the reverse (drop the
+  id everywhere; the merge discards it from saved layouts), and if the card
   recorded a choice worth keeping, `mergeSettings` can read it off the old layout entry the
   way the sticker chart's `stickers` setting does.
 - **A per-user setting**: add it to the `Settings` type and `DEFAULT_SETTINGS` in

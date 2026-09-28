@@ -1,5 +1,5 @@
 import type { Priority } from '../types';
-import { addDays, parseDateKey } from './format';
+import { addDays, parseDateKey, sameText } from './format';
 import { MAX_PRIORITIES, newUid } from './priorities';
 
 /**
@@ -11,9 +11,6 @@ export function nextWorkDay(date: string, showWeekends: boolean): string {
   if (!showWeekends) while ([0, 6].includes(parseDateKey(next).getDay())) next = addDays(next, 1);
   return next;
 }
-
-/** The same text written twice, whatever its case or spacing. */
-export const sameText = (text: string) => text.trim().replace(/\s+/g, ' ').toLowerCase();
 
 /**
  * That day's list with `texts` added after what it already holds. Rows already there by text

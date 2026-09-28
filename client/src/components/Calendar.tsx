@@ -4,7 +4,7 @@ import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
 import { calendarMonth } from '../lib/calendar';
 import { STICKERS_EMPTY } from '../lib/copy';
-import { dayName, formatDateLong, formatDuration, formatHours, formatWeekday } from '../lib/format';
+import { dayName, formatDateLong, formatDuration, formatHours, formatWeekday, plural } from '../lib/format';
 import { periodOffset, periodRange } from '../lib/review';
 import { countStickers, daySummaryOf, STICKER_REASONS, stickerEmoji, stickerReasons, type StickerId } from '../lib/stickers';
 import { daySettings, targetFraction, timeclockForDate } from '../lib/timeclock';
@@ -73,11 +73,11 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
         <>
           {count && (
             <p className="calendar-count">
-              <strong>{count.total}</strong> sticker{count.total === 1 ? '' : 's'}
+              <strong>{count.total}</strong> {plural(count.total, 'sticker')}
               {count.full > 0 && (
                 <>
                   {' '}
-                  · {count.full} full day{count.full === 1 ? '' : 's'}
+                  · {count.full} full {plural(count.full, 'day')}
                 </>
               )}
             </p>
@@ -230,7 +230,7 @@ function DayDetail({
           <Tile
             label="Focused"
             value={s.focusSeconds > 0 ? formatDuration(s.focusSeconds) : '—'}
-            sub={sessions > 0 ? `${sessions} session${sessions === 1 ? '' : 's'}` : ''}
+            sub={sessions > 0 ? `${sessions} ${plural(sessions, 'session')}` : ''}
           />
           <Tile
             label="Priorities"

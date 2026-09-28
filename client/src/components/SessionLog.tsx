@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { useDayStore } from '../hooks/useDay';
 import { CONFIRM, UNTITLED_SESSION } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
-import { formatDuration } from '../lib/format';
+import { formatDuration, plural } from '../lib/format';
 import { activeMs } from '../lib/timer';
 import { LIMITS, type Priority, type Session } from '../types';
 import { Trash } from './Icons';
@@ -30,7 +30,7 @@ export function SessionLog({ date, sessions, priorities, now }: Props) {
         <span className="muted">Total focused</span>
         <strong>{formatDuration(total)}</strong>
         <span className="muted">
-          · {completed.length} session{completed.length === 1 ? '' : 's'}
+          · {completed.length} {plural(completed.length, 'session')}
         </span>
       </div>
       <ul className="log-list">
