@@ -69,8 +69,9 @@
     // Off on purpose: the History calendar is an ARIA grid over a CSS grid, and `role="status"`
     // on a div is valid ARIA; the rule would want <table> and <output> for them.
     "jsx-a11y/prefer-tag-over-role": "off",
-    // Off on purpose: the four uses are a single-purpose login form and two edit-in-place
-    // inputs the user just opened, where moving focus there is the expected behaviour.
+    // Off on purpose: the five uses are the first field of the three sign-in pages (sign in,
+    // setup, new password) and two edit-in-place inputs the user just opened, where moving
+    // focus there is the expected behaviour.
     "jsx-a11y/no-autofocus": "off"
   },
   "overrides": [
