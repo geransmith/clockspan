@@ -20,6 +20,9 @@ describe('response headers', () => {
     expect(csp).toContain("default-src 'self'");
     expect(csp).toContain("frame-ancestors 'none'");
     expect(csp).toContain("object-src 'none'");
+    // Nothing the app serves is a `data:` URL, so no directive allows one.
+    expect(csp.split('; ')).toContain("img-src 'self'");
+    expect(csp).not.toContain('data:');
     expect(res.headers.get('x-content-type-options')).toBe('nosniff');
     expect(res.headers.get('x-frame-options')).toBe('DENY');
     expect(res.headers.get('referrer-policy')).toBe('same-origin');

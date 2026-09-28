@@ -3,8 +3,10 @@ import type { Config } from './config.js';
 
 /**
  * Response headers for every request. The app is a same-origin SPA with no third-party
- * assets, so the policy can be the strict default: scripts and styles only from this
- * origin, no framing, no plugins. `data:` images cover the SVG favicon and PWA icons.
+ * assets, so the policy can be the strict default: scripts, styles, images and fetches only
+ * from this origin, no framing, no plugins. The icons are files under /icons, and the build
+ * never inlines an asset as a `data:` URL (`assetsInlineLimit` in vite.config.ts), so no
+ * directive needs `data:`.
  * Dev (Vite on :5173) never goes through here, so a CSP change is only visible against the
  * built bundle (the `prod` launch config).
  */
@@ -12,7 +14,7 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self'",
-  "img-src 'self' data:",
+  "img-src 'self'",
   "connect-src 'self'",
   "manifest-src 'self'",
   "worker-src 'self'",

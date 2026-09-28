@@ -14,6 +14,10 @@ export default defineConfig({
   build: {
     outDir: '../dist/client',
     emptyOutDir: true,
+    // Vite inlines an imported asset under 4 kB as a `data:` URL, which the CSP
+    // (server/security.ts) refuses: a short sound clip would be fetched from one and blocked.
+    // Every asset stays a file under /assets.
+    assetsInlineLimit: 0,
   },
   server: {
     port: 5173,
