@@ -60,7 +60,10 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
   api.use('/sessions', sessionsRouter(db));
   app.use('/api', api);
 
-  app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found.' }));
+  const notFound: express.RequestHandler = (_req, res) => {
+    res.status(404).json({ error: 'Not found.' });
+  };
+  app.use('/api', notFound);
 
   // ----- static SPA (production build) -----
   const clientDir = opts.clientDir ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../client');
@@ -76,6 +79,10 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
         },
       }),
     );
+    // /assets holds only the build's fingerprinted files, so a miss there is never a client
+    // route: it is a page from before an upgrade asking for the old build's chunk. The shell
+    // in its place would be refused as a script with a MIME-type error; a 404 says what happened.
+    app.use('/assets', notFound);
     app.get('/{*splat}', (_req, res) => {
       res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(path.join(clientDir, 'index.html'));
