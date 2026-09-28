@@ -1,7 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from 'react';
-import { DndContext, KeyboardSensor, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
-import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useDay } from '../hooks/useDay';
 import { useLeftOpen } from '../hooks/useLeftOpen';
 import { useWeek } from '../hooks/useWeek';
@@ -14,12 +11,14 @@ import { daySummaryOf } from '../lib/stickers';
 import { clampToDay, daySettings, timeclockForDate, type TimeclockState } from '../lib/timeclock';
 import { weekHours } from '../lib/week';
 import type { CardId } from '../types';
-import { CardShell } from './CardShell';
+import { CardFrame, type SheetCard } from './CardFrame';
 import { FocusTimer } from './FocusTimer';
 import { Priorities } from './Priorities';
 import { Retro } from './Retro';
 import { SessionLog } from './SessionLog';
 import { Timeclock } from './Timeclock';
+
+const SortableCards = lazy(() => import('./SortableCards').then((m) => ({ default: m.SortableCards })));
 
 interface Props {
   date: string;
@@ -52,27 +51,20 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
   const visible = layout.filter((l) => l.visible);
   const hidden = layout.filter((l) => !l.visible);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    // Long-press on touch so normal scrolling isn't hijacked.
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  // Drag and drop loads with the first Customize, and the sheet stays on it after that:
+  // swapping lists remounts every card, which drops what is typed but not saved (a timer
+  // label, an open planner), so that happens once at most.
+  const [sortable, setSortable] = useState(customize);
+  if (customize && !sortable) setSortable(true);
 
   // The provider puts the old layout back on failure; the banner is the only sign it happened.
   const saveLayout = (next: typeof layout) =>
     update({ layout: next }).catch(() => warnQuietly({ title: SAVE_FAILED.title, body: SAVE_FAILED.body, tag: 'save-failed' }));
   const reorder = (from: number, to: number) => {
     if (from === to || to < 0 || to >= visible.length) return;
-    const nextVisible = arrayMove(visible, from, to);
+    const nextVisible = [...visible];
+    nextVisible.splice(to, 0, ...nextVisible.splice(from, 1));
     void saveLayout([...nextVisible, ...hidden]);
-  };
-  const onDragEnd = (e: DragEndEvent) => {
-    if (!e.over || e.active.id === e.over.id) return;
-    reorder(
-      visible.findIndex((l) => l.id === e.active.id),
-      visible.findIndex((l) => l.id === e.over!.id),
-    );
   };
   const setVisible = (id: CardId, v: boolean) => {
     void saveLayout(layout.map((l) => (l.id === id ? { ...l, visible: v } : l)));
@@ -157,27 +149,26 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
     }
   };
 
+  const cards: SheetCard[] = visible.map((l, i) => ({
+    id: l.id,
+    body: render(l.id),
+    aside: l.id === 'timeclock' ? <StatePill state={tc.state} /> : undefined,
+    customize: customize
+      ? { onHide: () => setVisible(l.id, false), onMove: (dir) => reorder(i, i + dir), canUp: i > 0, canDown: i < visible.length - 1 }
+      : undefined,
+  }));
+  const plain = cards.map((c) => <CardFrame key={c.id} card={c} />);
+
   return (
     <div className="sheet">
       {tc.error && <div className="notice notice--danger">{tc.error}</div>}
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-        <SortableContext items={visible.map((l) => l.id)} strategy={verticalListSortingStrategy}>
-          {visible.map((l, i) => (
-            <SortableCard
-              key={l.id}
-              id={l.id}
-              customize={customize}
-              onHide={() => setVisible(l.id, false)}
-              onMove={(dir) => reorder(i, i + dir)}
-              canUp={i > 0}
-              canDown={i < visible.length - 1}
-              aside={l.id === 'timeclock' ? <StatePill state={tc.state} /> : undefined}
-            >
-              {render(l.id)}
-            </SortableCard>
-          ))}
-        </SortableContext>
-      </DndContext>
+      {sortable ? (
+        <Suspense fallback={plain}>
+          <SortableCards cards={cards} onReorder={reorder} />
+        </Suspense>
+      ) : (
+        plain
+      )}
       {customize && hidden.length > 0 && (
         <div className="hidden-strip">
           <span className="muted">Hidden:</span>
@@ -189,40 +180,6 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
         </div>
       )}
       {visible.length === 0 && !customize && <p className="muted center">All cards are hidden. Use Customize to show them.</p>}
-    </div>
-  );
-}
-
-function SortableCard({
-  id,
-  customize,
-  children,
-  onHide,
-  onMove,
-  canUp,
-  canDown,
-  aside,
-}: {
-  id: CardId;
-  customize: boolean;
-  children: ReactNode;
-  onHide: () => void;
-  onMove: (dir: -1 | 1) => void;
-  canUp: boolean;
-  canDown: boolean;
-  aside?: ReactNode;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: !customize });
-  const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 2 : undefined, opacity: isDragging ? 0.85 : undefined };
-  return (
-    <div ref={setNodeRef} style={style} className="sortable" id={`card-${id}`}>
-      <CardShell
-        title={CARD_TITLES[id]}
-        aside={aside}
-        customize={customize ? { handleProps: { ...attributes, ...listeners }, onHide, onMove, canUp, canDown } : undefined}
-      >
-        {children}
-      </CardShell>
     </div>
   );
 }

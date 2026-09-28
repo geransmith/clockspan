@@ -16,7 +16,7 @@ work. The README has the user-facing description.
 ## Stack & versions
 
 - Node **24** (`nvm use 24`; `node:24-alpine` in Docker).
-- Client: React 19, TypeScript 7 (the native `tsc`), Vite 8. `@dnd-kit/sortable` for drag/drop;
+- Client: React 19, TypeScript 7 (the native `tsc`), Vite 8. `@dnd-kit/sortable` for drag/drop (loaded on the first Customize);
   `react-aria` + `react-stately` + `@internationalized/date` for the punch time field. No router
   (the date and view live in the URL query, `hooks/useRoute.ts`; today is `date: null`, so a
   sheet left open over midnight moves to the new day) and no CSS framework.
@@ -308,6 +308,13 @@ Never commit `data/` or `.env`.
   enforces both).
 - Static assets are public; **all data is behind `/api/*`**. The SPA fallback serves
   `index.html` for any non-API path. `/assets/*` is fingerprinted and cached immutable.
+- **History, the settings dialog and drag and drop are lazy chunks** (`lazy()` in `App.tsx`
+  for `History` and `SettingsDialog`, in `Sheet.tsx` for `SortableCards`, which holds every
+  `@dnd-kit` import). A static import of one of them from the first screen folds it back into
+  the main chunk. The sheet renders plain `CardFrame`s until the first Customize and stays on
+  `SortableCards` after it, since swapping lists remounts the cards. A chunk that fails to
+  load (an upgrade while the page was open) reloads the page once a minute at most
+  (`vite:preloadError` in `main.tsx`, `lib/reload.ts`); otherwise the `ErrorBoundary` shows.
 - **Migrations are append-only** in `server/db.ts` (`MIGRATIONS[]`, `PRAGMA user_version`).
   Every FK to `users` or `days` is `ON DELETE CASCADE`.
 
