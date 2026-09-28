@@ -4,7 +4,8 @@ import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { unlockAudio } from '../lib/alerts';
 import { pickCelebration } from '../lib/celebrate';
-import { floorToMinute, formatDuration, formatDurationCeil, plural } from '../lib/format';
+import { floorToMinute, formatDuration, plural } from '../lib/format';
+import { timeclockTiles } from '../lib/tiles';
 import {
   addPunchPair,
   clockOutPosition,
@@ -79,60 +80,15 @@ export function Timeclock({
   const addPair = () => onChange(addPunchPair(punches));
   const removePair = (outPosition: number) => onChange(removePunchPair(punches, outPosition));
 
-  // The tile turns amber once the first (largest) warning lead is reached.
-  const firstLead = (id: 'lunchBy' | 'clockOut') => {
-    const a = settings.alarms[id];
-    return a.enabled && a.leadMinutes.length ? Math.max(...a.leadMinutes) * 60 : 15 * 60;
-  };
-
-  // ----- tiles -----
-  let lunchTone = '';
-  let lunchSub = 'Clock in to see your deadline';
-  if (tc.lunchBy != null) {
-    const secs = (tc.lunchBy - now) / 1000;
-    if (tc.lunchStatus === 'taken') {
-      lunchTone = 'tile--ok';
-      lunchSub = `Taken at ${formatTime(tc.lunchOut!)}`;
-    } else if (tc.lunchStatus === 'not-needed') {
-      lunchSub = 'Not needed today';
-    } else if (tc.state === 'done') {
-      lunchSub = 'Not taken';
-    } else if (tc.lunchStatus === 'overdue') {
-      lunchTone = 'tile--danger';
-      lunchSub = `Overdue by ${formatDurationCeil(-secs)}`;
-    } else {
-      lunchTone = secs <= firstLead('lunchBy') ? 'tile--warn' : '';
-      lunchSub = `In ${formatDurationCeil(secs)}`;
-    }
-  }
-
-  let outTone = '';
-  let outSub = 'Clock in to see your end time';
-  if (tc.clockOutAt != null) {
-    const secs = (tc.clockOutAt - now) / 1000;
-    if (tc.clockOutStatus === 'done') {
-      outTone = 'tile--accent';
-      outSub = 'Day complete';
-    } else if (tc.clockOutStatus === 'over') {
-      // Past the day's length is overtime only where overtime applies; otherwise it's just later.
-      outTone = otOn || !otFeature ? 'tile--accent' : 'tile--danger';
-      outSub = otFeature
-        ? `Over by ${formatDurationCeil(tc.overSeconds)}${otOn ? ' · OT approved' : ''}`
-        : `${formatDurationCeil(tc.overSeconds)} past your day`;
-    } else {
-      outTone = !otOn && secs <= firstLead('clockOut') ? 'tile--warn' : '';
-      outSub = !isToday ? 'No clock-out recorded' : tc.state === 'working' ? `In ${formatDurationCeil(secs)}` : 'If you return now';
-    }
-  }
-
-  const workedSub =
-    tc.clockIn == null
-      ? `${formatDuration(daySet.workMinutes * 60)} day`
-      : tc.overSeconds > 0
-        ? `${formatDuration(tc.overSeconds)} over target`
-        : tc.state === 'done'
-          ? `${formatDurationCeil(tc.remainingSeconds)} under target`
-          : `${formatDurationCeil(tc.remainingSeconds)} to go`;
+  const tiles = timeclockTiles(tc, {
+    now,
+    isToday,
+    workMinutes: daySet.workMinutes,
+    alarms: settings.alarms,
+    overtimeApproval: otFeature,
+    overtimeApproved,
+    formatTime,
+  });
 
   const celebration = tc.state === 'done' && tc.clockOutAt != null ? pickCelebration(tc.clockOutAt) : null;
   // The burst and the sound mark the day *becoming* done while the card is open, not a day
@@ -216,10 +172,10 @@ export function Timeclock({
             tone=""
           />
         ) : (
-          <Tile label="Lunch by" value={tc.lunchBy != null ? formatTime(tc.lunchBy) : '—'} sub={lunchSub} tone={lunchTone} />
+          <Tile label="Lunch by" {...tiles.lunch} />
         )}
-        <Tile label="Worked" value={formatDuration(tc.workedSeconds)} sub={workedSub} tone={tc.clockIn != null && tc.state === 'working' ? 'tile--live' : ''} />
-        <Tile label="Clock out at" value={tc.clockOutAt != null ? formatTime(tc.clockOutAt) : '—'} sub={outSub} tone={outTone} />
+        <Tile label="Worked" {...tiles.worked} />
+        <Tile label="Clock out at" {...tiles.clockOut} />
       </div>
 
       {celebration && (
