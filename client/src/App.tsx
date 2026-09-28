@@ -22,7 +22,7 @@ import type { CardId } from './types';
 // without them. A chunk that fails to load (a deploy while the page was open) reloads the
 // page from main.tsx.
 const History = lazy(() => import('./components/History').then((m) => ({ default: m.History })));
-const SettingsDialog = lazy(() => import('./components/SettingsDialog').then((m) => ({ default: m.SettingsDialog })));
+const SettingsDialog = lazy(() => import('./components/settings/SettingsDialog').then((m) => ({ default: m.SettingsDialog })));
 
 export function App() {
   return (

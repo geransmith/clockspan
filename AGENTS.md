@@ -66,7 +66,8 @@ client/                 Vite root → dist/client
     storage.ts          localStorage that never throws (private mode, quota)
   src/hooks/            state and effects (useDay, useTimer, useSettings, useAlarms, …), each with a
                         happy-dom test beside it; src/test/hooks.tsx has the fixtures and provider stack
-  src/components/       the cards, History (Calendar + Review), SettingsDialog, Banners, FinishChoice
+  src/components/       the cards, History (Calendar + Review), Banners, FinishChoice; settings/ holds
+                        SettingsDialog (the shell and tabs), a file per tab, and controls.tsx
   src/auth/             AuthGate and the setup / login / new-password pages
   src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
   src/styles.css        design tokens and all component CSS
@@ -341,9 +342,9 @@ Never commit `data/` or `.env`.
 - **A per-user setting**: add it to the `Settings` type and `DEFAULT_SETTINGS` in
   `shared/settings.ts`, and a number's bounds to `SETTING_LIMITS` there → validate it in
   `mergeSettings()` (`server/settings.ts`; `limited(key)` checks a number against its
-  bounds) → add the control to the right tab in `SettingsDialog.tsx` (Timeclock · Alarms ·
-  Sheet · Data · Account; each is a `case` in `panel()`; the Sheet tab's "History" section
-  holds the calendar's switches) using `DurationField` / `NumberField` with
+  bounds) → add the control to its tab in `client/src/components/settings/` (`TimeclockTab`,
+  `AlarmsTab`, `SheetTab`, `DataTab`, `AccountTab`; the Sheet tab's "History" section holds
+  the calendar's switches) using `DurationField` / `NumberField` (`settings/controls.tsx`) with
   `{...SETTING_LIMITS.<key>}` for `min` and `max` — `NumberField` takes a `unit` suffix,
   default "min" — / `Toggle` (`NumberInput` alone puts several numbers on one row, like the
   timer's start buttons). Nothing else to mirror.
@@ -361,7 +362,7 @@ Never commit `data/` or `.env`.
   `computeTimeclock` → add a target in `useAlarms.ts` (`targets[]`, with an `armed` rule; put
   a rule the card also needs in a pure helper like `secondMealApplies`) → add its default
   under `alarms` in `shared/settings.ts` and the `AlarmId` union there → add an `AlarmEditor` in
-  `SettingsDialog.tsx` → copy in `describeEvent()`: a `kicker` naming the alarm + rule
+  `settings/AlarmsTab.tsx` → copy in `describeEvent()`: a `kicker` naming the alarm + rule
   ("X alarm · 15 min warning"), a title, and a body that says where the deadline came from
   (it gets an `EventContext`; extend that if the new target needs more inputs). A banner can
   carry one `action` button (see the clock-out alarm's "Overtime approved" and the retro
