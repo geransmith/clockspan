@@ -1,5 +1,6 @@
-import { useState, type SubmitEvent } from 'react';
+import { useState } from 'react';
 import * as api from '../api';
+import { useSubmit } from '../hooks/useSubmit';
 import { HTTPS_ONLY } from '../lib/copy';
 import type { AuthInfo } from '../types';
 
@@ -13,28 +14,18 @@ interface GateProps {
 export function LoginPage({ onDone, hint }: GateProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { busy, error, onSubmit } = useSubmit();
 
-  const submit = async (e: SubmitEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      await api.login(username.trim(), password);
-      // A 200 with no session on the next request: the browser dropped the cookie.
-      const next = await onDone();
-      if (next && !next.user) setError(HTTPS_ONLY.notKept);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const submit = onSubmit(async () => {
+    await api.login(username.trim(), password);
+    // A 200 with no session on the next request: the browser dropped the cookie.
+    const next = await onDone();
+    if (next && !next.user) throw new Error(HTTPS_ONLY.notKept);
+  });
 
   return (
     <div className="gate">
-      <form className="gate-card" onSubmit={(e) => void submit(e)}>
+      <form className="gate-card" onSubmit={submit}>
         <h1>Clockspan</h1>
         {hint && <p className="error">{hint}</p>}
         <label className="field">

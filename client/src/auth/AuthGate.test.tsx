@@ -82,6 +82,7 @@ describe('AuthGate', () => {
     type('New password', 'my own pass');
     type('Confirm new password', 'my own pas');
     fireEvent.submit(screen.getByRole('button', { name: 'Set password' }).closest('form')!);
+    await settle();
     expect(screen.getByText(PASSWORD_MISMATCH)).toBeTruthy();
     expect(api.changePassword).not.toHaveBeenCalled();
 
