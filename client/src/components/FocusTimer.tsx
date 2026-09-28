@@ -58,7 +58,12 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
     setError(null);
     try {
       let uid = linkedStillOpen ? linked : null;
-      if (!uid && offerAdd && addAsPriority) uid = await onAddPriority(trimmed);
+      if (!uid && offerAdd && addAsPriority) {
+        uid = await onAddPriority(trimmed);
+        // Linked from here on, so a retry after a failed start uses this row instead of adding another.
+        setLinked(uid);
+        setAddAsPriority(false);
+      }
       await timer.start(date, minutes * 60, trimmed, uid);
       // Back to work: whatever was left of a break goes without an alert.
       breakTimer.end();
