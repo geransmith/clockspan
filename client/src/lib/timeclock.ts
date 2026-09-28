@@ -210,6 +210,15 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
   };
 }
 
+/**
+ * The settings a day's timeclock runs on: its own work-day length when one was set for it (a
+ * half day), the usual one otherwise. The sheet, the alarms, the calendar and the review all
+ * go through this, so they agree on what a day's target was.
+ */
+export function daySettings<T extends TimeclockSettings>(settings: T, day: { workMinutes: number | null } | undefined): T {
+  return day?.workMinutes == null ? settings : { ...settings, workMinutes: day.workMinutes };
+}
+
 /** "Now" as a day sees it: live today, never past the end of an earlier day. */
 export function clampToDay(date: string, today: string, now: number): number {
   return date === today ? now : Math.min(now, endOfDay(date));

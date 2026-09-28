@@ -8,6 +8,7 @@ import { floorToMinute, formatDuration, formatDurationCeil } from '../lib/format
 import {
   addPunchPair,
   clockOutPosition,
+  daySettings,
   extraPairs,
   nextPunchPosition,
   removePunchPair,
@@ -15,8 +16,10 @@ import {
   type ExtraPair,
   type TimeclockResult,
 } from '../lib/timeclock';
+import { SETTING_LIMITS } from '../../../shared/settings.js';
 import type { Punch } from '../types';
 import { Burst, BURST_MS } from './Burst';
+import { DurationField } from './DurationField';
 import { Plus, Trash, X } from './Icons';
 import { Tile } from './Tile';
 import { TimeField } from './TimeField';
@@ -28,14 +31,31 @@ interface Props {
   punches: Punch[];
   tc: TimeclockResult;
   overtimeApproved: boolean;
+  /** This day's own work-day length; null is the usual one from the settings. */
+  workMinutes: number | null;
   onChange: (punches: Punch[]) => void;
   onOvertimeChange: (approved: boolean) => void;
+  onWorkMinutesChange: (minutes: number | null) => void;
   /** Focus entered or left the punch rows: the app holds alarms while a time is being typed. */
   onEditingChange?: (editing: boolean) => void;
 }
 
-export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, onChange, onOvertimeChange, onEditingChange }: Props) {
+export function Timeclock({
+  date,
+  isToday,
+  now,
+  punches,
+  tc,
+  overtimeApproved,
+  workMinutes,
+  onChange,
+  onOvertimeChange,
+  onWorkMinutesChange,
+  onEditingChange,
+}: Props) {
   const { settings } = useSettings();
+  // The day's target and the settings its timeclock ran on (`daySettings`).
+  const daySet = daySettings(settings, { workMinutes });
   const { hour12, formatTime } = useTimeFormat();
   // A day flagged while the feature was on only counts while it is still on.
   const otOn = settings.overtimeApproval && overtimeApproved;
@@ -94,7 +114,7 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
 
   const workedSub =
     tc.clockIn == null
-      ? `${formatDuration(settings.workMinutes * 60)} day`
+      ? `${formatDuration(daySet.workMinutes * 60)} day`
       : tc.overSeconds > 0
         ? `${formatDuration(tc.overSeconds)} over target`
         : tc.state === 'done'
@@ -135,7 +155,7 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
     }, BURST_MS);
     return () => window.clearTimeout(id);
   }, [burstSeed]);
-  const secondMeal = secondMealApplies(tc, settings, otOn) && tc.secondMealBy != null ? tc.secondMealBy : null;
+  const secondMeal = secondMealApplies(tc, daySet, otOn) && tc.secondMealBy != null ? tc.secondMealBy : null;
 
   // ----- rows -----
   const byPos = new Map(punches.map((p) => [p.position, p]));
@@ -221,6 +241,8 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
         </p>
       )}
 
+      <WorkDay usual={settings.workMinutes} own={workMinutes} onChange={onWorkMinutesChange} />
+
       {settings.overtimeApproval && (
         <label className="toggle-row ot-row">
           <span className="toggle-text">
@@ -258,6 +280,46 @@ export function Timeclock({ date, isToday, now, punches, tc, overtimeApproved, o
           Add extra out / in
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * This day's work-day length: the usual one from the settings, or its own (a half day, a long
+ * one). Folded to one line until Change; any day can be set, so a past half day counts as one
+ * in History too. Setting it back to the usual length stores no override.
+ */
+function WorkDay({ usual, own, onChange }: { usual: number; own: number | null; onChange: (minutes: number | null) => void }) {
+  const [open, setOpen] = useState(false);
+  const target = own ?? usual;
+  const half = Math.round(usual / 2);
+  const set = (m: number) => onChange(m === usual ? null : m);
+  return (
+    <div className="target-row">
+      <div className="setting-row">
+        <span className="toggle-text">
+          <span>
+            Work day <strong>{formatDuration(target * 60)}</strong>
+          </span>
+          <span className="muted small">{own == null ? 'Your usual length.' : `This day only. Usually ${formatDuration(usual * 60)}.`}</span>
+        </span>
+        <button className="btn btn-ghost" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+          {open ? 'Done' : 'Change'}
+        </button>
+      </div>
+      {open && (
+        <div className="target-edit">
+          <span className="chips">
+            <button className={`chip${target === half ? ' is-on' : ''}`} onClick={() => set(half)} aria-pressed={target === half}>
+              Half day · {formatDuration(half * 60)}
+            </button>
+            <button className={`chip${own == null ? ' is-on' : ''}`} onClick={() => onChange(null)} aria-pressed={own == null}>
+              Usual · {formatDuration(usual * 60)}
+            </button>
+          </span>
+          <DurationField label="This day" minutes={target} {...SETTING_LIMITS.workMinutes} onCommit={set} />
+        </div>
+      )}
     </div>
   );
 }

@@ -38,6 +38,7 @@ const day = (date: string, extra: Partial<Day> = {}): Day => ({
   overtimeApproved: false,
   retroNote: '',
   retroAt: null,
+  workMinutes: null,
   sessions: [],
   ...extra,
 });

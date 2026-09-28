@@ -22,7 +22,7 @@ function punches(date: string, times: (string | null)[]): Punch[] {
 }
 
 function summary(date: string, patch: Partial<DaySummary> = {}): DaySummary {
-  return { date, punches: emptyPunches(), focusSeconds: 0, prioritiesDone: 0, prioritiesTotal: 0, retroAt: null, ...patch };
+  return { date, punches: emptyPunches(), focusSeconds: 0, prioritiesDone: 0, prioritiesTotal: 0, retroAt: null, workMinutes: null, ...patch };
 }
 
 describe('stickersForDay', () => {
@@ -48,6 +48,13 @@ describe('stickersForDay', () => {
     expect(stickersForDay(halfPlan, settings, TODAY, NOW)).toEqual([]);
     const openToday = summary(TODAY, { punches: punches(TODAY, ['08:00', null, null, null]), focusSeconds: 60 });
     expect(stickersForDay(openToday, settings, TODAY, NOW)).toEqual(['focus']);
+  });
+
+  it("goes by the day's own work-day length when it has one", () => {
+    // Out at 12:00 after four hours today: still at lunch on the usual 8 h day, done on a half day.
+    const out = punches(TODAY, ['08:00', '12:00', null, null]);
+    expect(stickersForDay(summary(TODAY, { punches: out }), settings, TODAY, NOW)).toEqual(['lunch']);
+    expect(stickersForDay(summary(TODAY, { punches: out, workMinutes: 240 }), settings, TODAY, NOW)).toEqual(['clockedOut', 'lunch']);
   });
 });
 
@@ -78,6 +85,7 @@ describe('daySummaryOf', () => {
       overtimeApproved: false,
       retroNote: '',
       retroAt: 5,
+      workMinutes: null,
       sessions: [
         {
           id: 1,
@@ -123,7 +131,15 @@ describe('daySummaryOf', () => {
         },
       ],
     };
-    expect(daySummaryOf(day)).toEqual({ date: TODAY, punches: day.punches, focusSeconds: 1500, prioritiesDone: 1, prioritiesTotal: 2, retroAt: 5 });
+    expect(daySummaryOf(day)).toEqual({
+      date: TODAY,
+      punches: day.punches,
+      focusSeconds: 1500,
+      prioritiesDone: 1,
+      prioritiesTotal: 2,
+      retroAt: 5,
+      workMinutes: null,
+    });
     // A completed session whose end was never written counts for nothing rather than NaN.
     const unfinished = { ...day, sessions: [{ ...day.sessions[0]!, durationSeconds: null }] };
     expect(daySummaryOf(unfinished).focusSeconds).toBe(0);

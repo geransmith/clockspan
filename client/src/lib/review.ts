@@ -1,7 +1,7 @@
 import type { Day } from '../types';
 import { addDays, addMonths, formatDateSpan, formatMonth, parseDateKey, startOfMonth, startOfQuarter, startOfWeek } from './format';
 import { reviewDay } from './retro';
-import { timeclockForDate, type TimeclockSettings } from './timeclock';
+import { daySettings, timeclockForDate, type TimeclockSettings } from './timeclock';
 
 export type PeriodKind = 'week' | 'month' | 'quarter';
 
@@ -115,7 +115,7 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
   const unplanned = new Map<string, UnplannedWork>();
   const notDone = new Map<string, UndoneGoal>();
   for (const day of [...days].sort((a, b) => a.date.localeCompare(b.date))) {
-    const tc = timeclockForDate(day.punches, settings, day.date, today, now);
+    const tc = timeclockForDate(day.punches, daySettings(settings, day), day.date, today, now);
     const r = reviewDay(day.priorities, day.sessions);
     const hasSomething = tc.clockIn != null || r.total > 0 || r.unplanned.length > 0 || r.onPlanSeconds > 0 || day.retroNote.trim() !== '';
     if (!hasSomething) continue;

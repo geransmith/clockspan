@@ -290,6 +290,28 @@ describe('per-day fields', () => {
     await settle();
   });
 
+  it('setWorkMinutes is optimistic, and a failed save puts the stored length back', async () => {
+    vi.mocked(api.getDay).mockResolvedValue(makeDay());
+    vi.mocked(api.putTarget).mockResolvedValueOnce({ workMinutes: 240 });
+    const { result } = renderStore();
+    await settle();
+    act(() => void result.current.setWorkMinutes(TODAY, 240));
+    expect(result.current.days[TODAY]?.workMinutes).toBe(240);
+    await settle();
+    expect(api.putTarget).toHaveBeenCalledWith(TODAY, 240);
+
+    vi.mocked(api.putTarget).mockRejectedValueOnce(new Error('offline'));
+    let done!: Promise<void>;
+    act(() => {
+      done = result.current.setWorkMinutes(TODAY, 300);
+    });
+    expect(result.current.days[TODAY]?.workMinutes).toBe(300);
+    await act(() => done);
+    await settle();
+    // The reload answers with the stored day, which has no length of its own in this mock.
+    expect(result.current.days[TODAY]?.workMinutes).toBeNull();
+  });
+
   it('setOvertimeApproved is optimistic and reloads the day when the save fails', async () => {
     vi.mocked(api.getDay).mockResolvedValue(makeDay());
     vi.mocked(api.putOvertime).mockRejectedValueOnce(new Error('offline'));

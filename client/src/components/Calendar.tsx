@@ -7,7 +7,7 @@ import { STICKERS_EMPTY } from '../lib/copy';
 import { dayName, formatDateLong, formatDuration, formatHours, formatWeekday } from '../lib/format';
 import { periodOffset, periodRange } from '../lib/review';
 import { countStickers, daySummaryOf, STICKER_REASONS, stickerEmoji, type StickerId } from '../lib/stickers';
-import { targetFraction, timeclockForDate } from '../lib/timeclock';
+import { daySettings, targetFraction, timeclockForDate } from '../lib/timeclock';
 import type { Day } from '../types';
 import { Check } from './Icons';
 import { PeriodNav, PeriodReset } from './PeriodNav';
@@ -98,7 +98,7 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
                   if (d.date === selected) cls.push('is-selected');
                   if (stickers && d.stickers.length === STICKER_REASONS.length) cls.push('is-full');
                   const day = days.get(d.date);
-                  const tc = day ? timeclockForDate(day.punches, settings, d.date, today, now) : null;
+                  const tc = day ? timeclockForDate(day.punches, daySettings(settings, day), d.date, today, now) : null;
                   const clocked = tc?.clockIn != null ? tc : null;
                   const worked = clocked ? formatDuration(clocked.workedSeconds) : null;
                   const done = clocked ? targetFraction(clocked) : 0;
@@ -198,7 +198,7 @@ function DayDetail({
   const { settings } = useSettings();
   const name = dayName(date, today);
   const s = day ? daySummaryOf(day) : null;
-  const tc = day ? timeclockForDate(day.punches, settings, date, today, now) : null;
+  const tc = day ? timeclockForDate(day.punches, daySettings(settings, day), date, today, now) : null;
   const sessions = day ? day.sessions.filter((x) => x.status === 'completed').length : 0;
   const note = day?.retroNote.trim() ?? '';
   return (
