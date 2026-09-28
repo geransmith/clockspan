@@ -227,6 +227,30 @@ describe('static client', () => {
     expect((await app.api.get('/api/nope')).status).toBe(404);
   });
 
+  it('answers a missing file under /assets with a 404, never the shell', async () => {
+    app = await startTestApp({ clientDir: dir });
+    // A page from before an upgrade asking for the old build's chunk.
+    const missing = await fetch(`${app.url}/assets/History-missing.js`);
+    expect(missing.status).toBe(404);
+    expect(missing.headers.get('content-type')).toMatch(/application\/json/);
+    expect(await missing.json()).toEqual({ error: 'Not found.' });
+    // The miss still goes through security.ts, and nothing caches it for a year.
+    expect(missing.headers.get('content-security-policy')).toContain("default-src 'self'");
+    expect(missing.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(missing.headers.get('cache-control')).toBeNull();
+    for (const p of ['/assets/nested/index-old.css', '/assets/', '/assets']) expect((await fetch(app.url + p)).status).toBe(404);
+
+    const asset = await fetch(`${app.url}/assets/index-abc123.js`);
+    expect(asset.status).toBe(200);
+    expect(asset.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    // Only the /assets segment: a path that merely starts with the word is a client route.
+    for (const p of ['/some/route', '/assets-old']) {
+      const r = await fetch(app.url + p);
+      expect(r.status).toBe(200);
+      expect(await r.text()).toContain('shell');
+    }
+  });
+
   it('serves nothing outside /api when there is no build', async () => {
     app = await startTestApp({ clientDir: path.join(dir, 'missing') });
     expect((await fetch(app.url + '/')).status).toBe(404);
