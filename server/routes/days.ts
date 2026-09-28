@@ -173,7 +173,7 @@ export function daysRouter(db: DB, config: Config): Router {
     const user = currentUser(req);
     const date = dateParam(req);
     const day = findDay(db, user.id, date);
-    res.json(day ? dayJson(day, date, dayRows(db, day.id)) : emptyDayJson(date));
+    res.json((day ? dayJson(day, date, dayRows(db, day.id)) : emptyDayJson(date)) satisfies Day);
   });
 
   // Full replace. Position parity defines kind: even = in, odd = out.
@@ -243,7 +243,12 @@ export function daysRouter(db: DB, config: Config): Router {
         return;
       }
       if (addedAt == null && hasText) addedAt = Date.now();
-      rows.push({ position: i + 1, text, done: hasText && Boolean(item.done), uid, addedAt });
+      // Checked like every other flag: `Boolean("false")` would tick the row.
+      if (item.done !== undefined && typeof item.done !== 'boolean') {
+        res.status(400).json({ error: `Priority ${i + 1} has an invalid done flag.` });
+        return;
+      }
+      rows.push({ position: i + 1, text, done: hasText && item.done === true, uid, addedAt });
     }
     db.transaction(() => {
       const dayId = ensureDay(db, user.id, date);

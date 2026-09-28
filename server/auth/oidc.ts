@@ -67,7 +67,8 @@ export function upsertOidcUser(db: DB, sub: string, rawName: string): UserRow {
     }
     return existing;
   }
-  // First OIDC user becomes admin so someone can manage things later if needed.
+  // The first OIDC user is marked admin, like the first local account. Nothing reads the flag
+  // under OIDC yet: the provider decides who signs in, and the Users tab is local-only.
   const anyUser = db.prepare(`SELECT 1 FROM users WHERE kind = 'oidc' LIMIT 1`).get();
   const info = db
     .prepare(`INSERT INTO users (kind, oidc_sub, display_name, is_admin, created_at) VALUES ('oidc', ?, ?, ?, ?)`)

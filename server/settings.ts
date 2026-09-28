@@ -5,6 +5,7 @@
  */
 import type { DB } from './db.js';
 import {
+  ALARM_LIMITS,
   DEFAULT_SETTINGS,
   MAX_RETENTION_DAYS,
   MIN_RETENTION_DAYS,
@@ -30,10 +31,12 @@ function mergeAlarm(base: AlarmSettings, patch: unknown): AlarmSettings {
   return {
     enabled: isBool(p.enabled) ? p.enabled : base.enabled,
     leadMinutes: Array.isArray(p.leadMinutes)
-      ? [...new Set(p.leadMinutes.filter((n): n is number => isInt(n, 1, 240)))].sort((a, b) => b - a)
+      ? [...new Set(p.leadMinutes.filter((n): n is number => isInt(n, ALARM_LIMITS.leadMinutes.min, ALARM_LIMITS.leadMinutes.max)))].sort((a, b) => b - a)
       : base.leadMinutes,
     onDue: isBool(p.onDue) ? p.onDue : base.onDue,
-    overdueEveryMinutes: isInt(p.overdueEveryMinutes, 0, 120) ? p.overdueEveryMinutes : base.overdueEveryMinutes,
+    overdueEveryMinutes: isInt(p.overdueEveryMinutes, ALARM_LIMITS.overdueEveryMinutes.min, ALARM_LIMITS.overdueEveryMinutes.max)
+      ? p.overdueEveryMinutes
+      : base.overdueEveryMinutes,
   };
 }
 
