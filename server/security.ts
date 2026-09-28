@@ -38,6 +38,9 @@ const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
  * Origin on a write, so then the Origin's host must be this host: the Host header, or
  * APP_URL's for a proxy that rewrites Host. `null` (a sandboxed frame) is never this host. A
  * request with neither header is not a browser acting for someone (curl) and passes.
+ * What this can't see is DNS rebinding: a page that points one of its own names at this server
+ * is same-origin to the browser. Under AUTH_MODE=none nothing else stands in its way (the README
+ * says so); with sign-in, the session cookie stays with the real host.
  */
 export function rejectCrossSiteWrites(config: Config): RequestHandler {
   const appHost = config.appUrl ? new URL(config.appUrl).host : null;
