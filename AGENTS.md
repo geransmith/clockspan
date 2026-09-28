@@ -166,8 +166,10 @@ Never commit `data/` or `.env`.
   envelope with `satisfies` (`res.json({ deleted } satisfies PruneResult)`), while
   `client/src/api.ts` reads the same types, so a field renamed on one side fails `typecheck`
   on the other. Server-only row types (`UserRow`, `SessionRow`) take their unions from there too.
-- **Response headers are set only in `server/security.ts`** (applied first in `createApp`).
-  The CSP is same-origin with no `unsafe-inline`, so no inline `<script>`/`<style>` in
+- **Security headers are set only in `server/security.ts`** (applied first in `createApp`):
+  the CSP, `nosniff`, framing, referrer, HSTS and the API's `no-store`. Headers that describe
+  one answer stay with the code that sends it: the static files' `Cache-Control` in `app.ts`,
+  `Retry-After` on a 429 in `auth/local.ts`, `Set-Cookie` through `cookieOptions()`. The CSP is same-origin with no `unsafe-inline`, so no inline `<script>`/`<style>` in
   `index.html` and no third-party assets; React `style={{}}` props are fine (CSSOM). Changing
   it means one look at the `prod` config's console. Cookies are set only through
   `cookieOptions()` (`auth/session.ts`), and the session is resolved under `/api` only
@@ -378,7 +380,7 @@ Never commit `data/` or `.env`.
   the new field, add it to `server/dev/seed.ts` and its manifest.
 - **A schema change**: append a migration string to `MIGRATIONS` in `db.ts`. Never edit an
   existing entry.
-- **A response header, CSP source or request guard**: `server/security.ts` only (tests in
+- **A security header, CSP source or request guard**: `server/security.ts` only (tests in
   `server/app.test.ts`), then the `prod` config check.
 - **A config env var**: parse and validate it in `server/config.ts` (throw with a clear
   message on a bad value) → cover it in `server/config.test.ts` → document it in

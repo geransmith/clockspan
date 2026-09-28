@@ -204,7 +204,7 @@ docker exec clockspan node dist/server/cli.js reset-password <username>
 # or locally: npm run reset-password -- <username>
 ```
 
-Without a password after the username, the command prints a temporary one, and the user chooses their own at the next sign-in. Either way, every session of that user is signed out.
+Without a password after the username, the command prints a temporary one, and the user chooses their own at the next sign-in. Prefer that form: a password typed after the username stays in your shell history. Either way, every session of that user is signed out.
 
 Login is rate-limited to 5 failed attempts per 15 minutes per IP, counting an IPv6 client by its /64 (set `TRUST_PROXY` behind a proxy so that's the real client IP), and to 50 failed attempts per 15 minutes per username from all addresses together. A locked account can't sign in on a new device until the 15 minutes pass; devices already signed in keep working. Changing your password signs out every other session.
 
@@ -247,6 +247,8 @@ UPDATE settings SET user_id = (SELECT id FROM users WHERE kind = 'local' ORDER B
 COMMIT;
 SQL
 ```
+
+Going from `none` to `oidc` works the same way. Sign in through your provider once first, since that creates your account, then run the script with `kind = 'oidc'` in place of each `kind = 'local'` (four places).
 
 ---
 
