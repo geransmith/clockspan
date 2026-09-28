@@ -20,22 +20,39 @@ import type {
   UsersResponse,
 } from './types';
 import { ApiError } from './lib/apiError';
+import { REQUEST_TIMEOUT } from './lib/copy';
 
 export { ApiError };
 
 export const UNAUTHENTICATED_EVENT = 'focus:unauthenticated';
 
+/**
+ * How long a request may take, answer included. `fetch` has no limit of its own: one that never
+ * answers (a phone changing networks mid-request) would hold the day's save queue and its
+ * refreshes until the browser gave up minutes later, with nothing on screen meanwhile.
+ */
+export const REQUEST_TIMEOUT_MS = 30_000;
+
+const timedOut = (err: unknown): boolean => (err as { name?: unknown } | null)?.name === 'TimeoutError';
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(path, {
-    method,
-    headers: body !== undefined ? { 'content-type': 'application/json' } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    credentials: 'same-origin',
-  });
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      headers: body !== undefined ? { 'content-type': 'application/json' } : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      credentials: 'same-origin',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (err) {
+    throw timedOut(err) ? new Error(REQUEST_TIMEOUT) : err;
+  }
   let data: unknown = null;
   try {
     data = await res.json();
-  } catch {
+  } catch (err) {
+    if (timedOut(err)) throw new Error(REQUEST_TIMEOUT);
     // Non-JSON error bodies (e.g. a proxy page) fall through to the generic message.
   }
   if (!res.ok) {
