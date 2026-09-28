@@ -8,7 +8,9 @@ export type LunchStatus = 'none' | 'upcoming' | 'overdue' | 'taken' | 'not-neede
 export type ClockOutStatus = 'none' | 'upcoming' | 'over' | 'done';
 export type SecondMealStatus = 'none' | 'upcoming' | 'overdue' | 'taken';
 
-export type TimeclockSettings = Pick<Settings, 'workMinutes' | 'lunchDeadlineMinutes' | 'lunchMinutes' | 'secondMealAfterMinutes'>;
+/** `mealRules` is optional so a caller that only has the lengths (tests) keeps the meal rules on. */
+export type TimeclockSettings = Pick<Settings, 'workMinutes' | 'lunchDeadlineMinutes' | 'lunchMinutes' | 'secondMealAfterMinutes'> &
+  Partial<Pick<Settings, 'mealRules'>>;
 
 export interface TimeclockResult {
   state: TimeclockState;
@@ -162,7 +164,9 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
   // "Take lunch now" as it ends. The day's work is the target, or what was worked once past it
   // or done; breaks don't count, so stepping out never brings a lunch in.
   const dayWorkSeconds = done ? workedSeconds : Math.max(workTarget, workedSeconds);
-  const lunchNeeded = dayWorkSeconds > settings.lunchDeadlineMinutes * 60;
+  // With the meal-period rules off (exempt work, another state) lunch is never planned or
+  // alarmed; a lunch that was punched is still taken.
+  const lunchNeeded = settings.mealRules !== false && dayWorkSeconds > settings.lunchDeadlineMinutes * 60;
   const lunchStatus: LunchStatus = lunchOut != null ? 'taken' : !lunchNeeded ? 'not-needed' : now < lunchBy ? 'upcoming' : 'overdue';
 
   // Time still expected off the clock before the day can end.
@@ -242,8 +246,13 @@ export function timeclockForDate(punches: Punch[], settings: TimeclockSettings, 
  * when a day past the threshold is actually expected (overtime approved, already over the
  * target, or a target that long). A normal 8 h day never hears about it.
  */
-export function secondMealApplies(tc: TimeclockResult, settings: Pick<Settings, 'workMinutes' | 'secondMealAfterMinutes'>, overtimeApproved: boolean): boolean {
+export function secondMealApplies(
+  tc: TimeclockResult,
+  settings: Pick<Settings, 'workMinutes' | 'secondMealAfterMinutes'> & Partial<Pick<Settings, 'mealRules'>>,
+  overtimeApproved: boolean,
+): boolean {
   return (
+    settings.mealRules !== false &&
     tc.state === 'working' &&
     tc.secondMealBy != null &&
     tc.secondMealStatus !== 'taken' &&

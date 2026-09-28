@@ -1,6 +1,5 @@
 import { addDays, addMonths, startOfWeek } from '../../../shared/dates.js';
-import { stickersForDay, type DaySummary, type StickerId } from './stickers';
-import type { TimeclockSettings } from './timeclock';
+import { stickersForDay, type DaySummary, type StickerId, type StickerSettings } from './stickers';
 
 export interface CalendarDay {
   date: string;
@@ -21,7 +20,7 @@ export interface CalendarDay {
  */
 export function calendarMonth(
   days: DaySummary[],
-  settings: TimeclockSettings,
+  settings: StickerSettings,
   today: string,
   now: number,
   monthStart: string,
