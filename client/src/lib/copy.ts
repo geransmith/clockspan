@@ -164,6 +164,15 @@ export const TIMER_PAUSED_OUT = {
   body: (label: string, duration: string) => `${label ? `${label} · ` : ''}${duration} logged. It sat paused for an hour, so it ended where the pause began.`,
 } as const;
 
+/** The focus timer's break: the button, the line while it runs, and the banner when it's over. */
+export const BREAK = {
+  start: (minutes: number) => `Break · ${minutes} min`,
+  running: (until: string) => `Break until ${until}`,
+  end: 'End break',
+  over: "Break's over",
+  overBody: 'Pick the next thing, or start a timer.',
+} as const;
+
 /** Banner when a start finds a timer already running, started on another device. */
 export const TIMER_ELSEWHERE = {
   title: 'A timer is already running',

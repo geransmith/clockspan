@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CONFIRM, DELETE_DAYS, FINISH_CHOICE, LEFT_OPEN, PLAN_NEXT, TIMER_DONE, TIMER_DUE, TIMER_PAUSED_OUT } from './copy';
+import { BREAK, CONFIRM, DELETE_DAYS, FINISH_CHOICE, LEFT_OPEN, PLAN_NEXT, TIMER_DONE, TIMER_DUE, TIMER_PAUSED_OUT } from './copy';
 
 describe('copy builders', () => {
   it('names the user in the delete confirm', () => {
@@ -33,6 +33,11 @@ describe('copy builders', () => {
       'Write the report · 12m logged. It sat paused for an hour, so it ended where the pause began.',
     );
     expect(TIMER_PAUSED_OUT.body('', '12m')).toMatch(/^12m logged\./);
+  });
+
+  it('names the break length and when it ends', () => {
+    expect(BREAK.start(5)).toBe('Break · 5 min');
+    expect(BREAK.running('10:35 AM')).toBe('Break until 10:35 AM');
   });
 
   it('names the day being planned and counts the rows added', () => {

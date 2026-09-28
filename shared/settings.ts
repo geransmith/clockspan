@@ -50,6 +50,8 @@ export interface Settings {
   timeFormat: TimeFormat;
   theme: Theme;
   adjustStepMinutes: number;
+  /** The focus timer's Break button: how long a break runs, in minutes. */
+  breakMinutes: number;
   /** The focus timer's start buttons, in minutes; always three. */
   timerMinutes: number[];
   /** Rows a fresh day's priorities card starts with. */
@@ -91,6 +93,7 @@ export const SETTING_LIMITS = {
   secondMealAfterMinutes: { min: 1, max: 24 * 60 },
   weekMinutes: { min: 0, max: 7 * 24 * 60 },
   adjustStepMinutes: { min: 1, max: 60 },
+  breakMinutes: { min: 1, max: 60 },
   priorityCount: { min: 1, max: 10 },
 } as const satisfies Partial<Record<keyof Settings, { min: number; max: number }>>;
 
@@ -116,13 +119,14 @@ export const DEFAULT_SETTINGS: Settings = deepFreeze({
   timeFormat: 'auto',
   theme: 'auto',
   adjustStepMinutes: 5,
+  breakMinutes: 5,
   timerMinutes: [15, 25, 50],
   priorityCount: 3,
   sound: true,
   notifications: true,
   keepScreenAwake: true,
   overtimeApproval: true,
-  sounds: { timer: 'triad', lead: 'taps', due: 'notes', overdue: 'double', dayDone: 'yay', priorityDone: 'none' },
+  sounds: { timer: 'triad', breakDone: 'taps', lead: 'taps', due: 'notes', overdue: 'double', dayDone: 'yay', priorityDone: 'none' },
   celebrations: true,
   stickers: false,
   showWeekends: true,
