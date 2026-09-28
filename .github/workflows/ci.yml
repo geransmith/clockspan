@@ -40,25 +40,11 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      # As in the Dockerfile, no dependency's install script runs, so a compromised package
-      # can't do anything at install time. better-sqlite3 loads its bundled prebuild without one.
-      - run: npm ci --ignore-scripts
-      # Every package came from the npm registry as published (signatures, and provenance
-      # where the package has it).
-      - run: npm audit signatures
-      # No installed package, dev dependencies included (the client's libraries are bundled from
-      # them), has a known high or critical advisory. A new advisory can turn this red on a PR
-      # that changed nothing: fix it with a bump PR (CONTRIBUTING.md, security updates).
-      - run: npm audit --audit-level=high
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm run format:check
-      - run: npm run test:coverage
-      - run: npm run build
       # A commit that changes package.json's version is a release: the merge of the bump PR
       # publishes the versioned image and the GitHub Release (no tag is pushed by hand). On a
       # PR the same comparison, against the base branch, refuses a version that already has a
-      # tag before anything is built.
+      # tag. It needs only git and node, so it runs first: a reused version fails in seconds,
+      # not after the install, the tests and the build.
       - name: Detect a version bump
         id: version
         env:
@@ -87,6 +73,21 @@ jobs:
             echo "version=$pkg"
             echo "minor=${pkg%.*}"
           } >> "$GITHUB_OUTPUT"
+      # As in the Dockerfile, no dependency's install script runs, so a compromised package
+      # can't do anything at install time. better-sqlite3 loads its bundled prebuild without one.
+      - run: npm ci --ignore-scripts
+      # Every package came from the npm registry as published (signatures, and provenance
+      # where the package has it).
+      - run: npm audit signatures
+      # No installed package, dev dependencies included (the client's libraries are bundled from
+      # them), has a known high or critical advisory. A new advisory can turn this red on a PR
+      # that changed nothing: fix it with a bump PR (CONTRIBUTING.md, security updates).
+      - run: npm audit --audit-level=high
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run test:coverage
+      - run: npm run build
 
   # The image built and booted on every pull request, never pushed. Without it a Dependabot bump
   # of the Node base image or of better-sqlite3 (native, loaded from its musl prebuild) would
