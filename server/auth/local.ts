@@ -1,3 +1,4 @@
+import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import { isIPv6 } from 'node:net';
 import { Router } from 'express';
 import { findLocalUser, type DB, type UserRow } from '../db.js';
@@ -109,14 +110,38 @@ export function publicUser(u: UserRow): PublicUser {
   };
 }
 
+/** Letters and digits that can't be read as one another: no 0/O, no 1/I/L. */
+const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+/** A first-run setup code: twelve characters in threes of four, about 59 bits. */
+export function newSetupCode(): string {
+  const chars = Array.from({ length: 12 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]);
+  return [0, 4, 8].map((i) => chars.slice(i, i + 4).join('')).join('-');
+}
+
+/** A typed code against the real one, whatever its case, spacing or dashes, in constant time. */
+export function setupCodeMatches(expected: string, typed: unknown): boolean {
+  const norm = (s: string) =>
+    createHash('sha256')
+      .update(s.toUpperCase().replace(/[^A-Z0-9]/g, ''))
+      .digest();
+  return typeof typed === 'string' && timingSafeEqual(norm(expected), norm(typed));
+}
+
 function userCount(db: DB): number {
   return (db.prepare(`SELECT COUNT(*) AS n FROM users WHERE kind = 'local'`).get() as { n: number }).n;
 }
 
-export function localAuthRouter(db: DB, config: Config): Router {
+/**
+ * `setupCode` is only fixed by tests; a server makes a new one each start. Until the first
+ * account exists it is printed in the log, and setup asks for it: a stranger who reaches a
+ * fresh install before its owner has no way to read the log, so can't make themselves admin.
+ */
+export function localAuthRouter(db: DB, config: Config, setupCode: string = newSetupCode()): Router {
   const r = Router();
   const limiter = new LoginLimiter();
   const accounts = new LoginLimiter(MAX_ACCOUNT_FAILURES);
+  if (userCount(db) === 0) console.log(`[auth] No account yet. The setup page asks for this code: ${setupCode}`);
 
   r.get('/me', (req, res) => {
     res.json({
@@ -130,6 +155,20 @@ export function localAuthRouter(db: DB, config: Config): Router {
   r.post('/setup', async (req, res) => {
     if (userCount(db) > 0) {
       res.status(403).json({ error: 'Setup has already been completed.' });
+      return;
+    }
+    // Wrong codes count against the address like failed sign-ins do.
+    const key = limiterKey(String(req.ip));
+    const gate = limiter.check(key);
+    if (!gate.ok) {
+      res.setHeader('Retry-After', String(gate.retryAfterSec));
+      res.status(429).json({ error: `Too many attempts. Try again in ${Math.ceil(gate.retryAfterSec / 60)} min.` });
+      return;
+    }
+    if (!setupCodeMatches(setupCode, (req.body as { setupCode?: unknown } | undefined)?.setupCode)) {
+      limiter.fail(key);
+      console.warn(`[auth] setup refused from ${req.ip}: wrong setup code`);
+      res.status(403).json({ error: "That setup code doesn't match the one in the server log." });
       return;
     }
     const creds = parseCredentials(req.body);

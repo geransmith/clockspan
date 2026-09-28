@@ -18,6 +18,8 @@ import type { AuthInfo, OkResponse } from '../shared/api.js';
 export interface AppOptions {
   /** Where the built client lives; the default is `dist/client` next to the built server. */
   clientDir?: string;
+  /** AUTH_MODE=local's first-run setup code. Only tests fix it; a server makes its own. */
+  setupCode?: string;
 }
 
 export function createApp(db: DB, config: Config, opts: AppOptions = {}): Express {
@@ -37,7 +39,7 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
 
   // ----- auth -----
   if (config.authMode === 'local') {
-    app.use('/api/auth', localAuthRouter(db, config));
+    app.use('/api/auth', localAuthRouter(db, config, opts.setupCode));
   } else if (config.authMode === 'oidc') {
     const { api, web } = oidcAuthRouter(db, config);
     app.use('/api/auth', api);

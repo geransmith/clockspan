@@ -9,6 +9,7 @@ interface Props {
 }
 
 export function SetupPage({ onDone, hint }: Props) {
+  const [code, setCode] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -24,7 +25,7 @@ export function SetupPage({ onDone, hint }: Props) {
     setBusy(true);
     setError(null);
     try {
-      await api.setup(username.trim(), password);
+      await api.setup(code, username.trim(), password);
       await onDone();
     } catch (err) {
       setError((err as Error).message);
@@ -40,8 +41,25 @@ export function SetupPage({ onDone, hint }: Props) {
         {hint && <p className="error">{hint}</p>}
         <p className="muted">Create the first account. This account is the admin and can add others later.</p>
         <label className="field">
+          <span>Setup code</span>
+          <input
+            className="input"
+            autoComplete="off"
+            autoCapitalize="characters"
+            spellCheck={false}
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="XXXX-XXXX-XXXX"
+            required
+            autoFocus
+          />
+          <span className="muted small">
+            The server prints it in its log when it starts: <code>docker logs clockspan</code>, or the container&apos;s log in Unraid.
+          </span>
+        </label>
+        <label className="field">
           <span>Username</span>
-          <input className="input" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required autoFocus />
+          <input className="input" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
         </label>
         <label className="field">
           <span>Password</span>
