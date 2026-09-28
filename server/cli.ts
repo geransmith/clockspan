@@ -13,7 +13,13 @@ if (cmd !== 'reset-password' || !username) {
   process.exit(2);
 }
 
-const config = loadConfig();
+let config;
+try {
+  config = loadConfig();
+} catch (err) {
+  console.error(`[config] ${(err as Error).message}`);
+  process.exit(1);
+}
 const db = openDatabase(config.dbPath);
 const user = findLocalUser(db, username);
 if (!user) {
@@ -28,7 +34,6 @@ if ('error' in checked) {
   process.exit(1);
 }
 
-// A generated password is temporary: the user chooses their own at the next sign-in.
 db.prepare(`UPDATE users SET password_hash = ?, must_change_password = ? WHERE id = ?`).run(await hashPassword(checked.password), passwordArg ? 0 : 1, user.id);
 db.prepare(`DELETE FROM auth_sessions WHERE user_id = ?`).run(user.id);
 console.log(

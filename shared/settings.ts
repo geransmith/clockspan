@@ -127,6 +127,12 @@ export const SETTING_LIMITS = {
   priorityCount: { min: 1, max: 10 },
 } as const satisfies Partial<Record<keyof Settings, { min: number; max: number }>>;
 
+/** An alarm's warn-before minutes and its repeat while overdue (0 = no repeat). The settings chips offer values inside these. */
+export const ALARM_LIMITS = {
+  leadMinutes: { min: 1, max: 240 },
+  overdueEveryMinutes: { min: 0, max: 120 },
+} as const;
+
 const DEFAULT_ALARM: AlarmSettings = { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 };
 // The retrospective is one nudge before the day ends, not a deadline: no repeat by default.
 const DEFAULT_RETRO_ALARM: AlarmSettings = { enabled: true, leadMinutes: [30], onDue: false, overdueEveryMinutes: 0 };

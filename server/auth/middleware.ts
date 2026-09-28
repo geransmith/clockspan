@@ -47,16 +47,15 @@ export function requireOwnPassword(req: Request, res: Response, next: NextFuncti
   next();
 }
 
+/** requireAuth, then an admin, then one on their own password. */
 export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
-  if (!req.user) {
-    res.status(401).json({ error: 'unauthenticated' });
-    return;
-  }
-  if (!req.user.is_admin) {
-    res.status(403).json({ error: 'forbidden' });
-    return;
-  }
-  requireOwnPassword(req, res, next);
+  requireAuth(req, res, () => {
+    if (!currentUser(req).is_admin) {
+      res.status(403).json({ error: 'forbidden' });
+      return;
+    }
+    requireOwnPassword(req, res, next);
+  });
 }
 
 /** Narrow helper so route handlers don't repeat the non-null check. */

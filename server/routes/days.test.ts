@@ -154,6 +154,15 @@ describe('PUT /api/days/:date/priorities', () => {
     expect((await app.api.put('/api/days/2026-09-01/priorities', { priorities: null })).status).toBe(400);
   });
 
+  it('takes done only as true or false', async () => {
+    const r = await app.api.put('/api/days/2026-09-01/priorities', { priorities: [{ text: 'a', done: 'false' }] });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toBe('Priority 1 has an invalid done flag.');
+    expect((await app.api.get('/api/days/2026-09-01')).body.priorities).toEqual([]);
+    const ok = await app.api.put('/api/days/2026-09-01/priorities', { priorities: [{ text: 'a', done: false }, { text: 'b', done: true }, { text: 'c' }] });
+    expect(ok.body.priorities.map((p: { done: boolean }) => p.done)).toEqual([false, true, false]);
+  });
+
   it('reads a null row as an empty one', async () => {
     const r = await app.api.put('/api/days/2026-09-01/priorities', { priorities: [null, { text: 'b' }] });
     expect(r.status).toBe(200);
