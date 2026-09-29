@@ -22,10 +22,10 @@ const rest = (id: number, at: number, minutes: number): Break => ({
   endedAt: T0 + (at + minutes) * MIN,
 });
 
-async function renderLog(sessions: Session[] = [DONE], breaks: Break[] = []) {
+async function renderLog(sessions: Session[] = [DONE], breaks: Break[] = [], date = TODAY) {
   render(
     <SettingsAndDays>
-      <SessionLog date={TODAY} sessions={sessions} breaks={breaks} priorities={PLANNED} now={T0 + 30 * MIN} />
+      <SessionLog date={date} sessions={sessions} breaks={breaks} priorities={PLANNED} now={T0 + 30 * MIN} />
     </SettingsAndDays>,
   );
   await settle();
@@ -137,6 +137,10 @@ describe('SessionLog', () => {
     cleanup();
     await renderLog([]);
     expect(screen.getByText(/No focus sessions yet/)).toBeTruthy();
+    cleanup();
+    // A past day with nothing logged isn't waiting for anything.
+    await renderLog([], [], '2026-09-25');
+    expect(screen.getByText('No focus sessions or breaks on this day.')).toBeTruthy();
   });
 
   it('deletes a break once the confirm says yes, and never one still running', async () => {

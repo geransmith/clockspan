@@ -99,7 +99,7 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
                 className={`chip${linked === p.uid ? ' is-on' : ''}`}
                 onClick={() => pick(p)}
                 aria-pressed={linked === p.uid}
-                title={linked === p.uid ? 'Unlink from this priority' : `Start a session for priority ${p.position}`}
+                title={linked === p.uid ? 'Unlink from this priority' : `Link the next session to priority ${p.position}`}
               >
                 <span className="chip-num">{p.position}</span>
                 <span className="chip-text">{p.text}</span>

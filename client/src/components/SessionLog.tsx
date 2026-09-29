@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { todayKey } from '../../../shared/dates.js';
 import { useDayStore } from '../hooks/useDay';
 import { CONFIRM, UNTITLED_SESSION } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
@@ -31,7 +32,11 @@ export function SessionLog({ date, sessions, breaks, priorities, now }: Props) {
   );
 
   if (entries.length === 0) {
-    return <p className="muted center">No focus sessions yet. Sessions and breaks from the focus timer show up here.</p>;
+    return (
+      <p className="muted center">
+        {date === todayKey(now) ? 'No focus sessions yet. Sessions and breaks from the focus timer show up here.' : 'No focus sessions or breaks on this day.'}
+      </p>
+    );
   }
 
   return (

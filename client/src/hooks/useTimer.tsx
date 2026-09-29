@@ -153,7 +153,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         const chimed = readStored(DUE_STORAGE_KEY) === dueKey(session.id, endAt);
         alert({
           title: TIMER_DONE.title,
-          body: TIMER_DONE.body(session.label, formatCountdown(done.durationSeconds ?? 0)),
+          body: TIMER_DONE.body(session.label, formatDuration(done.durationSeconds ?? 0)),
           tone: 'success',
           chime: settings.sounds.timer,
           tag: 'timer-complete',
