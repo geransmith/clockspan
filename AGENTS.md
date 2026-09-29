@@ -268,8 +268,10 @@ Never commit `data/` or `.env`.
   default would ring the clock-out alarm on load. So `loaded` only turns true on a real answer:
   a failed `GET /settings` is retried (`nextBackoff` in `shared/backoff.ts`: 2 s doubling to a
   minute), never settled with the defaults.
-  `useTimer` keeps a `mutationSeq` so a slow `GET /sessions/running` can't overwrite an
-  optimistic update; keep that pattern for new mutations.
+  `useTimer` keeps the running session the way the day store keeps a day
+  (`lib/optimistic.ts`): a press shows at once and goes out after the writes before it, a
+  failure drops only that press, and a sync's answer never hides a press still on its way.
+  Keep that pattern for new mutations.
   **One running session per user is a schema invariant** (a unique partial index), and another
   device may own it: a 409 on start is adopted with a banner, a sync whose answer differs from
   the session shown reloads that day so the log catches up, a 404/409 on adjust/finish/cancel

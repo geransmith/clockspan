@@ -8,6 +8,7 @@ import { alert, dismissByTag, unlockAudio, warnQuietly } from '../lib/alerts';
 import { ApiError } from '../lib/apiError';
 import { SAVE_FAILED, TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
+import { addPending, fetched, settle, settleWith, shown, untracked, type Tracked } from '../lib/optimistic';
 import { readStored, writeStored } from '../lib/storage';
 import { activeMs, DUE_GRACE_SECONDS, dueKey, PAUSE_LIMIT_SECONDS, timerView, type TimerView } from '../lib/timer';
 import { useDayStore } from './useDay';
@@ -60,11 +61,28 @@ const IDLE: TimerView = { elapsedSeconds: 0, remainingSeconds: 0, progress: 0, e
 const DUE_STORAGE_KEY = 'focus:timer-due';
 
 export function TimerProvider({ children }: { children: ReactNode }) {
-  const [running, setRunning] = useState<Session | null>(null);
+  // The running session as the server last confirmed it, plus the presses (adjust, rename,
+  // pause, resume) it hasn't answered yet (`lib/optimistic.ts`); `null` confirmed is "none running".
+  const [tracked, setTracked] = useState<Tracked<Session | null>>(untracked);
+  // The same value, current at once: rapid presses (−5m, −5m) build on each other, and a sync's
+  // answer is judged against every change made so far.
+  const held = useRef(tracked);
+  const change = useCallback((fn: (t: Tracked<Session | null>) => Tracked<Session | null>) => {
+    held.current = fn(held.current);
+    setTracked(held.current);
+  }, []);
+  const running = useMemo(() => shown(tracked) ?? null, [tracked]);
+  const nextId = useRef(0);
+  // Every write goes out once the one before it has answered, failed or not, so the server
+  // ends where the screen does (two +5s in flight could land in the other order).
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const inOrder = useCallback(<T,>(send: () => Promise<T>): Promise<T> => {
+    const next = queue.current.catch(() => {}).then(send);
+    queue.current = next;
+    return next;
+  }, []);
   const [finishChoice, setFinishChoice] = useState(false);
   const [finished, setFinished] = useState<Session | null>(null);
-  // Latest value for callbacks so rapid clicks (−5m, −5m) compound instead of racing.
-  const runningRef = useLatest<Session | null>(running);
   const now = useNow(1000);
   // `loaded` gates the two effects that alert: on a fresh load the running session can answer
   // before the settings do, and an alert then would use the default sound and volume switch.
@@ -78,31 +96,31 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // duration; all a wait costs is the chime's promptness.
   const retry = useRef({ at: 0, delay: 0 });
 
-  // Re-sync with the server on load, when the tab comes back, and every minute. A
-  // response is dropped if a local mutation happened after the request was sent, so a
-  // slow GET can never overwrite a fresh optimistic update. A different answer than the one
-  // shown means another device started or ended a timer: its day is reloaded so the log
-  // shows the row this device never wrote.
-  const mutationSeq = useRef(0);
+  // Re-sync with the server on load, when the tab comes back, and every minute. The answer
+  // replaces the confirmed session unless the server confirmed a change after it went out, and
+  // a press still on its way stays on top of it. A different session than the one shown means
+  // another device started or ended a timer: its day is reloaded so the log shows the row this
+  // device never wrote.
   const lastSync = useRef(0);
   const sync = useCallback(
     (force = false) => {
       const t = Date.now();
       if (!force && t - lastSync.current < 5000) return;
       lastSync.current = t;
-      const seq = mutationSeq.current;
+      const sentAt = held.current.version;
       api
         .getRunning()
         .then(({ session }) => {
-          if (mutationSeq.current !== seq) return;
-          const prev = runningRef.current;
-          setRunning(session);
+          const prev = shown(held.current) ?? null;
+          const { next } = fetched(held.current, sentAt, session);
+          if (next === held.current) return;
+          change(() => next);
           if (prev?.id === session?.id) return;
           for (const date of new Set([prev?.date, session?.date])) if (date) void storeRef.current.load(date);
         })
         .catch(() => {});
     },
-    [runningRef, storeRef],
+    [change, storeRef],
   );
   useEffect(() => {
     sync(true);
@@ -117,6 +135,18 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     };
   }, [sync]);
 
+  // The session is over (finished or cancelled, here or by the server): nothing runs now, and
+  // the day's log takes the row.
+  const end = useCallback(
+    async (send: () => Promise<{ session: Session }>) => {
+      const { session } = await inOrder(send);
+      change((t) => settleWith(t, [], null));
+      store.applySession(session);
+      return session;
+    },
+    [change, inOrder, store],
+  );
+
   const { elapsedSeconds, remainingSeconds, progress, endAt, paused, pausedForSeconds, due, overrunSeconds } = running ? timerView(running, now) : IDLE;
 
   // Completion without the user: a timer that ran out and waited DUE_GRACE_SECONDS for an
@@ -128,14 +158,10 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     const forgotten = pausedForSeconds >= PAUSE_LIMIT_SECONDS;
     if (!(due && overrunSeconds >= DUE_GRACE_SECONDS) && !forgotten) return;
     completing.current = true;
-    mutationSeq.current++;
     const session = running;
-    api
-      .finishSession(session.id)
-      .then(({ session: done }) => {
+    end(() => api.finishSession(session.id))
+      .then((done) => {
         retry.current = { at: 0, delay: 0 };
-        store.applySession(done);
-        setRunning(null);
         // Cancelled on another device before this one heard: nothing to celebrate.
         if (done.status !== 'completed') return;
         if (forgotten) {
@@ -168,7 +194,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       .finally(() => {
         completing.current = false;
       });
-  }, [running, loaded, now, endAt, due, overrunSeconds, pausedForSeconds, store, settings.sound, settings.sounds.timer, settings.notifications]);
+  }, [running, loaded, now, endAt, due, overrunSeconds, pausedForSeconds, end, settings.sound, settings.sounds.timer, settings.notifications]);
 
   useWakeLock(running != null && !paused && !due && settings.keepScreenAwake);
 
@@ -181,22 +207,21 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   const start = useCallback(
     async (date: string, plannedSeconds: number, label: string, priorityUid: string | null = null) => {
       unlockAudio(); // user gesture: lets the completion chime play later on iOS
-      mutationSeq.current++;
       try {
-        const { session } = await api.startSession(date, plannedSeconds, label, priorityUid);
-        setRunning(session);
+        const { session } = await inOrder(() => api.startSession(date, plannedSeconds, label, priorityUid));
+        change((t) => settleWith(t, [], session));
         store.applySession(session);
       } catch (err) {
         const theirs = err instanceof ApiError && err.status === 409 ? (err.body as Partial<SessionConflict> | null)?.session : undefined;
         if (!theirs) throw err;
         // 409: a timer is already running, started on another device. Follow it, fetch its
         // day so the log has the row, and say why what was typed here went nowhere.
-        setRunning(theirs);
+        change((t) => settleWith(t, [], theirs));
         void store.load(theirs.date);
         alert({ ...TIMER_ELSEWHERE, tone: 'info', tag: 'timer-elsewhere', sound: false, notifications: false });
       }
     },
-    [store],
+    [change, inOrder, store],
   );
 
   // The bar and the card call these with `void`, so a failure has to be reported here: the
@@ -215,12 +240,31 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     [sync],
   );
 
+  // A press on the running session (adjust, rename, pause, resume): shown at once, sent after
+  // the writes before it, and the server's row taken when it answers. A failure just drops the
+  // change, so the screen is back on the stored row with any later press still on top. A row
+  // that answers as no longer running ended elsewhere: nothing runs here either.
+  const press = useCallback(
+    async (cur: Session, apply: (s: Session) => Session, send: () => Promise<{ session: Session }>) => {
+      const id = ++nextId.current;
+      change((t) => addPending(t, id, (s) => (s && s.id === cur.id ? apply(s) : s)));
+      try {
+        const { session } = await inOrder(send);
+        change((t) => settleWith(t, [id], session.status === 'running' ? session : null));
+        return session;
+      } catch (err) {
+        change((t) => settle(t, [id]));
+        throw err;
+      }
+    },
+    [change, inOrder],
+  );
+
   const adjust = useCallback(
     (deltaSeconds: number) =>
       attempt(async () => {
-        const cur = runningRef.current;
+        const cur = shown(held.current);
         if (!cur) return;
-        mutationSeq.current++;
         const elapsed = Math.floor(activeMs(cur, Date.now()) / 1000);
         // Once the plan is used up, "+5" means five more minutes from now, not from the end.
         const from = Math.max(cur.plannedSeconds, elapsed);
@@ -229,70 +273,52 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         if (deltaSeconds > 0 && next <= from) return;
         if (next <= elapsed) {
           // Shrinking below what's already elapsed means "I'm done now".
-          const { session } = await api.finishSession(cur.id);
-          store.applySession(session);
-          setRunning(null);
+          const session = await end(() => api.finishSession(cur.id));
           if (session.status === 'completed') setFinished(session);
           return;
         }
-        const optimistic = { ...cur, plannedSeconds: next };
-        runningRef.current = optimistic;
-        setRunning(optimistic);
-        try {
-          const { session } = await api.patchSession(cur.id, { plannedSeconds: next });
-          // Only adopt the response if nothing newer happened meanwhile.
-          setRunning((latest) => (latest && latest.id === session.id && latest.plannedSeconds === next ? session : latest));
-        } catch (err) {
-          setRunning(cur);
-          throw err;
-        }
+        await press(
+          cur,
+          (s) => ({ ...s, plannedSeconds: next }),
+          () => api.patchSession(cur.id, { plannedSeconds: next }),
+        );
       }),
-    [attempt, store, runningRef],
+    [attempt, end, press],
   );
 
   const setLabel = useCallback(
     (label: string) =>
       attempt(async () => {
-        const cur = runningRef.current;
+        const cur = shown(held.current);
         if (!cur) return;
-        mutationSeq.current++;
-        setRunning({ ...cur, label });
-        try {
-          const { session } = await api.patchSession(cur.id, { label });
-          setRunning((latest) => (latest && latest.id === session.id ? { ...latest, label: session.label } : latest));
-        } catch (err) {
-          setRunning((latest) => (latest && latest.id === cur.id ? { ...latest, label: cur.label } : latest));
-          throw err;
-        }
+        const session = await press(
+          cur,
+          (s) => ({ ...s, label }),
+          () => api.patchSession(cur.id, { label }),
+        );
+        if (session.status !== 'running') store.applySession(session);
       }),
-    [attempt, runningRef],
+    [attempt, press, store],
   );
 
-  // Pause and resume are optimistic like adjust; the server's row is adopted only if the
-  // user hasn't flipped it again meanwhile, and a failure puts the pause fields back.
+  // Pause and resume hold the clock at once; the log row's pill reads the day's copy, which
+  // takes the server's row when it answers.
   const setPaused = useCallback(
     (paused: boolean) =>
       attempt(async () => {
-        const cur = runningRef.current;
+        const cur = shown(held.current);
         if (!cur || (cur.pausedAt != null) === paused) return;
-        mutationSeq.current++;
         const now = Date.now();
-        const optimistic =
-          cur.pausedAt == null
-            ? { ...cur, pausedAt: now }
-            : { ...cur, pausedAt: null, pausedSeconds: cur.pausedSeconds + Math.round((now - cur.pausedAt) / 1000) };
-        runningRef.current = optimistic;
-        setRunning(optimistic);
-        try {
-          const { session } = await (paused ? api.pauseSession(cur.id) : api.resumeSession(cur.id));
-          store.applySession(session); // the log row's pill reads the day's copy
-          setRunning((latest) => (latest && latest.id === session.id && (latest.pausedAt != null) === paused ? session : latest));
-        } catch (err) {
-          setRunning((latest) => (latest && latest.id === cur.id ? { ...latest, pausedAt: cur.pausedAt, pausedSeconds: cur.pausedSeconds } : latest));
-          throw err;
-        }
+        const apply = (s: Session): Session =>
+          paused
+            ? { ...s, pausedAt: s.pausedAt ?? now }
+            : s.pausedAt == null
+              ? s
+              : { ...s, pausedAt: null, pausedSeconds: s.pausedSeconds + Math.round((now - s.pausedAt) / 1000) };
+        const session = await press(cur, apply, () => (paused ? api.pauseSession(cur.id) : api.resumeSession(cur.id)));
+        store.applySession(session);
       }),
-    [attempt, store, runningRef],
+    [attempt, press, store],
   );
   const pause = useCallback(() => setPaused(true), [setPaused]);
   const resume = useCallback(() => setPaused(false), [setPaused]);
@@ -301,40 +327,34 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     (countOverrun = false) =>
       attempt(async () => {
         setFinishChoice(false);
-        const cur = runningRef.current;
+        const cur = shown(held.current);
         if (!cur) return;
-        mutationSeq.current++;
-        const { session } = await api.finishSession(cur.id, countOverrun);
-        store.applySession(session);
-        setRunning(null);
+        const session = await end(() => api.finishSession(cur.id, countOverrun));
         // Finish is idempotent: a session cancelled elsewhere comes back as it is.
         if (session.status === 'completed') setFinished(session);
       }),
-    [attempt, store, runningRef],
+    [attempt, end],
   );
 
   const requestFinish = useCallback(() => {
-    const cur = runningRef.current;
+    const cur = shown(held.current);
     if (!cur) return;
     const v = timerView(cur, Date.now());
     // Under a minute over, both lengths are the same whole minutes: nothing to ask.
     if (v.due && Math.floor(v.elapsedSeconds / 60) !== Math.floor(cur.plannedSeconds / 60)) setFinishChoice(true);
     else void finish();
-  }, [finish, runningRef]);
+  }, [finish]);
   const dismissFinishChoice = useCallback(() => setFinishChoice(false), []);
 
   const cancel = useCallback(
     () =>
       attempt(async () => {
         setFinishChoice(false);
-        const cur = runningRef.current;
+        const cur = shown(held.current);
         if (!cur) return;
-        mutationSeq.current++;
-        const { session } = await api.cancelSession(cur.id);
-        store.applySession(session);
-        setRunning(null);
+        await end(() => api.cancelSession(cur.id));
       }),
-    [attempt, store, runningRef],
+    [attempt, end],
   );
 
   // Time's up: announce once per (session, planned end) and leave the session open for an

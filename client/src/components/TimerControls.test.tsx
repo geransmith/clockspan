@@ -72,6 +72,8 @@ describe('TimerControls', () => {
     vi.mocked(api.cancelSession).mockResolvedValue({ session: { ...makeSession(), status: 'cancelled' } });
     confirm.mockReturnValue(true);
     fireEvent.click(button(/Cancel/));
+    // It goes out after any write still queued, a tick later.
+    await settle();
     expect(api.cancelSession).toHaveBeenCalledWith(1);
   });
 
