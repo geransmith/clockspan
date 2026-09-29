@@ -1,12 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
-import { emptyDay } from '../../../shared/api.js';
 import type { Day, Priority, Punch, Session } from '../types';
 import { dismissByTag, warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
 import { endBreaksAt } from '../lib/breaks';
 import { newUid, placePriority } from '../lib/priorities';
-import { emptyPunches, normalizePunches } from '../lib/timeclock';
+import { normalizePunches } from '../lib/timeclock';
 import { useLatest } from './useLatest';
 import { useSettings } from './useSettings';
 
@@ -51,9 +50,15 @@ interface DayStore {
 
 const Ctx = createContext<DayStore | null>(null);
 
+/**
+ * `fn` applied to a day the store holds. A day it doesn't hold is left alone: it shows the
+ * server's copy once it loads. A made-up empty day would stand in for that copy for good, since
+ * a load's answer doesn't replace a day written since, and its lists would go out as the
+ * day's next save.
+ */
 function withDay(days: Record<string, Day>, date: string, fn: (d: Day) => Day): Record<string, Day> {
-  const current = days[date] ?? { ...emptyDay(date), punches: emptyPunches() };
-  return { ...days, [date]: fn(current) };
+  const current = days[date];
+  return current ? { ...days, [date]: fn(current) } : days;
 }
 
 export function DayProvider({ children }: { children: ReactNode }) {
@@ -76,22 +81,25 @@ export function DayProvider({ children }: { children: ReactNode }) {
 
   // `quiet` is the minute tick asking again after a failed first load: the error is already on
   // the sheet, so another failure changes nothing on screen. `reload` is a failed save putting
-  // the stored day back: it asks afresh rather than wait on a GET already out, and its answer
-  // lands whatever was written since.
+  // the stored day back, or a day asked for again after a change it may predate: it asks afresh
+  // rather than wait on a GET already out, and its answer lands whatever was written since.
   const fetchDay = useCallback(
     (date: string, { quiet = false, reload = false } = {}) => {
       const existing = inflight.current.get(date);
       if (existing && !reload) return existing;
-      // Otherwise a write made after this GET went out is newer than its answer (the timer's
-      // cross-device sync can ask for a day while a punch is on its way), so the answer only
-      // lands on a day with nothing written since.
+      // Otherwise the answer only replaces a day the store holds when no write was out while
+      // this GET was. One made after it went out is newer than its answer (the timer's
+      // cross-device sync can ask for a day while a punch is on its way), and so is one already
+      // waiting or on its way when it went out, which can reach the server after the GET.
       const seq = mutationSeq.current;
+      const idle = saving.current === 0;
       const p: Promise<void> = api
         .getDay(date)
         .then((d) => {
-          if (reload || mutationSeq.current === seq || !latest.current[date]) {
-            setDays((prev) => ({ ...prev, [date]: { ...d, punches: normalizePunches(d.punches) } }));
-          }
+          const fresh = reload || (idle && mutationSeq.current === seq);
+          // Whether the day is held is read from the state the update lands on: an answer
+          // just ahead of this one may have put it there without a render yet.
+          setDays((prev) => (fresh || !prev[date] ? { ...prev, [date]: { ...d, punches: normalizePunches(d.punches) } } : prev));
           setErrors((prev) => {
             if (!(date in prev)) return prev;
             const next = { ...prev };
@@ -116,6 +124,15 @@ export function DayProvider({ children }: { children: ReactNode }) {
     [latest],
   );
   const load = useCallback((date: string) => fetchDay(date), [fetchDay]);
+
+  // A change the server has made to a day the store doesn't hold yet: the day shows it once
+  // it loads, unless that load went out before the change, so the day is asked for again.
+  const askAgainIfLoading = useCallback(
+    (date: string) => {
+      if (!latest.current[date] && inflight.current.has(date)) void fetchDay(date, { reload: true });
+    },
+    [latest, fetchDay],
+  );
 
   // Every write ends here, through one of the two queues below, which count it in `saving`
   // from the moment it is queued. On failure the server's copy replaces an optimistic guess
@@ -226,8 +243,11 @@ export function DayProvider({ children }: { children: ReactNode }) {
 
   const addPriority = useCallback(
     async (date: string, text: string) => {
+      const day = latest.current[date];
+      // Only onto a list the store holds: one made up empty would replace the stored rows.
+      if (!day) throw new Error(SAVE_FAILED.title);
       const uid = newUid();
-      const next = placePriority(latest.current[date]?.priorities ?? [], priorityCount.current, text, uid, Date.now());
+      const next = placePriority(day.priorities, priorityCount.current, text, uid, Date.now());
       if (!next) throw new Error('The priorities list is full.');
       // A timer must not start against a uid the server never stored.
       if (!(await setPriorities(date, next))) throw new Error(SAVE_FAILED.title);
@@ -269,20 +289,24 @@ export function DayProvider({ children }: { children: ReactNode }) {
     [inOrder],
   );
 
-  const applySession = useCallback((session: Session) => {
-    // The server just confirmed this row: fresher than any refresh already on its way.
-    mutationSeq.current++;
-    setDays((prev) =>
-      withDay(prev, session.date, (d) => {
-        const others = d.sessions.filter((s) => s.id !== session.id);
-        const next = session.status === 'cancelled' ? others : [...others, session];
-        next.sort((a, b) => a.startedAt - b.startedAt);
-        // A session starting ended the running break on the server; the same here.
-        const breaks = session.status === 'running' ? endBreaksAt(d.breaks, session.startedAt) : d.breaks;
-        return { ...d, sessions: next, breaks };
-      }),
-    );
-  }, []);
+  const applySession = useCallback(
+    (session: Session) => {
+      // The server just confirmed this row: fresher than any refresh already on its way.
+      mutationSeq.current++;
+      setDays((prev) =>
+        withDay(prev, session.date, (d) => {
+          const others = d.sessions.filter((s) => s.id !== session.id);
+          const next = session.status === 'cancelled' ? others : [...others, session];
+          next.sort((a, b) => a.startedAt - b.startedAt);
+          // A session starting ended the running break on the server; the same here.
+          const breaks = session.status === 'running' ? endBreaksAt(d.breaks, session.startedAt) : d.breaks;
+          return { ...d, sessions: next, breaks };
+        }),
+      );
+      askAgainIfLoading(session.date);
+    },
+    [askAgainIfLoading],
+  );
 
   const removeSession = useCallback(
     async (date: string, id: number) => {
@@ -312,9 +336,10 @@ export function DayProvider({ children }: { children: ReactNode }) {
         // The server ended the one still running when this one started; the same here, so the
         // log doesn't show two running until the next refresh.
         setDays((prev) => withDay(prev, date, (d) => ({ ...d, breaks: [...endBreaksAt(d.breaks, saved.startedAt), saved] })));
+        askAgainIfLoading(date);
       });
     },
-    [inOrder],
+    [inOrder, askAgainIfLoading],
   );
 
   // At once on screen: cut short now, or gone if it ran under a minute. The server's answer

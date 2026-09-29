@@ -133,6 +133,52 @@ describe('load after a write', () => {
     expect(result.current.days[OTHER]?.retroNote).toBe('from the server');
   });
 
+  it('does not make up a day for a session confirmed before its first load, and asks for the day again', async () => {
+    // Today's first load is out when the timer's auto-finish comes back.
+    const first = deferred<Day>();
+    const done = makeSession({ id: 5, status: 'completed', endedAt: T0 + 25 * MIN, durationSeconds: 1500 });
+    vi.mocked(api.getDay)
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(makeDay(TODAY, { punches: punchesAt(T0), sessions: [done] }));
+    const { result } = renderStore();
+    act(() => result.current.applySession(done));
+    expect(result.current.days[TODAY]).toBeUndefined();
+    // The first answer was read before the finish: it has the punches but not the session.
+    first.resolve(makeDay(TODAY, { punches: punchesAt(T0) }));
+    await settle();
+    expect(api.getDay).toHaveBeenCalledTimes(2);
+    expect(result.current.days[TODAY]?.punches[0]?.at).toBe(T0);
+    expect(result.current.days[TODAY]?.sessions.map((x) => x.id)).toEqual([5]);
+  });
+
+  it('keeps a punch waiting to go out when a load sent while it waited answers first', async () => {
+    vi.mocked(api.getDay).mockResolvedValueOnce(makeDay());
+    const { result } = renderStore();
+    await settle();
+    const first = deferred<PunchesResponse>();
+    vi.mocked(api.putPunches).mockReturnValueOnce(first.promise).mockResolvedValue({ punches: [] });
+    const stale = deferred<Day>();
+    vi.mocked(api.getDay).mockReturnValueOnce(stale.promise);
+    // Clock in goes out, lunch out waits behind it, and then the timer's sync asks for the day.
+    let saved!: Promise<void>;
+    act(() => {
+      void result.current.setPunches(TODAY, punchesAt(T0));
+      saved = result.current.setPunches(TODAY, punchesAt(T0, T0 + 240 * MIN));
+    });
+    let loaded!: Promise<void>;
+    act(() => {
+      loaded = result.current.load(TODAY);
+    });
+    // The server has only the clock-in so far.
+    stale.resolve(makeDay(TODAY, { punches: punchesAt(T0) }));
+    await act(() => loaded);
+    expect(result.current.days[TODAY]?.punches[1]?.at).toBe(T0 + 240 * MIN);
+    first.resolve({ punches: [] });
+    await act(() => saved);
+    expect(vi.mocked(api.putPunches).mock.calls.map(([, p]) => p[1]?.at)).toEqual([null, T0 + 240 * MIN]);
+    expect(result.current.days[TODAY]?.punches[1]?.at).toBe(T0 + 240 * MIN);
+  });
+
   it('puts the stored day back after a failed save, without waiting on a load already out', async () => {
     vi.mocked(api.getDay).mockResolvedValueOnce(makeDay());
     const { result } = renderStore();
@@ -270,11 +316,12 @@ describe('setPunches', () => {
     expect(result.current.days[TODAY]?.punches[0]?.at).toBe(T0 - MIN);
   });
 
-  it('works on a day that was never loaded', async () => {
+  it('sends the list for a day never loaded, and leaves that day to load from the server', async () => {
     vi.mocked(api.putPunches).mockResolvedValue({ punches: [] });
     const { result } = renderStore(null);
     await act(() => result.current.setPunches(OTHER, punchesAt(T0)));
-    expect(result.current.days[OTHER]?.punches[0]?.at).toBe(T0);
+    expect(vi.mocked(api.putPunches).mock.calls[0]?.[1][0]?.at).toBe(T0);
+    expect(result.current.days[OTHER]).toBeUndefined();
   });
 });
 
@@ -320,15 +367,22 @@ describe('priorities', () => {
     expect(rows[1]).toMatchObject({ uid, addedAt: T0 });
   });
 
-  it('addPriority rejects when the list is full or the save fails', async () => {
+  it('addPriority rejects when the list is full, the day is not loaded, or the save fails', async () => {
     const full = Array.from({ length: 20 }, (_, i) => priority(i + 1, `Row ${i + 1}`));
-    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: full }));
+    // Every later GET is the other day's: its load, then the reload after the failed save.
+    vi.mocked(api.getDay)
+      .mockResolvedValue(makeDay(OTHER))
+      .mockResolvedValueOnce(makeDay(TODAY, { priorities: full }));
     vi.mocked(api.putPriorities).mockRejectedValue(new Error('offline'));
     const { result } = renderStore();
     await settle();
     await expect(result.current.addPriority(TODAY, 'One more')).rejects.toThrow('The priorities list is full.');
-    // A day never loaded starts from an empty list.
+    // A day not loaded has no list to add to: one made up empty would replace the stored rows.
+    await expect(result.current.addPriority(OTHER, 'Unsaved')).rejects.toThrow(SAVE_FAILED.title);
+    expect(api.putPriorities).not.toHaveBeenCalled();
+    await act(() => result.current.load(OTHER));
     await expect(act(() => result.current.addPriority(OTHER, 'Unsaved'))).rejects.toThrow(SAVE_FAILED.title);
+    expect(api.putPriorities).toHaveBeenCalledTimes(1);
   });
 });
 
