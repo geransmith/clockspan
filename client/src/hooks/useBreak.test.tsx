@@ -3,11 +3,13 @@ import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { alert, dismissByTag, unlockAudio, type AlertOptions } from '../lib/alerts';
-import { BREAK_SUGGESTION } from '../lib/copy';
+import { todayKey } from '../../../shared/dates.js';
+import { BREAK, BREAK_SUGGESTION } from '../lib/copy';
 import { AllProviders, deferred, makeBreak, makeDay, makeSession, makeSettings, MIN, settle, T0, TODAY } from '../test/hooks';
 import type { Day, Session } from '../types';
 import { useBreak } from './useBreak';
-import { useDay } from './useDay';
+import { useClock } from './useClock';
+import { useDay, useDayStore } from './useDay';
 import { useTimer } from './useTimer';
 
 vi.mock('../api');
@@ -171,6 +173,70 @@ it('waits for the settings before announcing, so the chosen sound plays', async 
   answer({ ...settings, sounds: { ...settings.sounds, breakDone: 'bell' } });
   await settle();
   expect(alert).toHaveBeenCalledWith(expect.objectContaining({ chime: 'bell' }));
+});
+
+describe('across midnight', () => {
+  const YESTERDAY = '2026-09-27';
+  const midnight = new Date(2026, 8, 28).getTime();
+  /** The sheet as App shows it: today's, moving to the new day at midnight, while the store keeps the old one. */
+  const renderSheet = () =>
+    renderHook(() => ({ ...useBreak(), timer: useTimer(), sheet: useDay(todayKey(useClock())).day, days: useDayStore().days }), { wrapper: AllProviders });
+
+  /** A ten-minute break started at 23:55 on yesterday's sheet. */
+  async function breakBeforeMidnight() {
+    vi.setSystemTime(midnight - 5 * MIN);
+    vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(makeDay(date)));
+    const r = renderSheet();
+    await settle();
+    act(() => r.result.current.start(10));
+    await settle();
+    expect(api.startBreak).toHaveBeenCalledWith(YESTERDAY, 600);
+    expect(r.result.current.endsAt).toBe(midnight + 5 * MIN);
+    return r;
+  }
+
+  it('keeps counting it down on the new day, and announces its end once', async () => {
+    const { result } = await breakBeforeMidnight();
+    await settle(6 * MIN);
+    expect(result.current.sheet?.date).toBe(TODAY);
+    expect(result.current.endsAt).toBe(midnight + 5 * MIN);
+    expect(result.current.remainingSeconds).toBe(4 * 60);
+    expect(alert).not.toHaveBeenCalled();
+    await settle(4 * MIN);
+    expect(result.current.endsAt).toBeNull();
+    expect(alert).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: BREAK.over, tag: 'break' }));
+    await settle(MIN);
+    expect(alert).toHaveBeenCalledTimes(1);
+  });
+
+  it('ends it early on the day it started', async () => {
+    vi.mocked(api.endBreak).mockImplementation((id) =>
+      Promise.resolve({ break: makeBreak({ id, date: YESTERDAY, plannedSeconds: 600, startedAt: midnight - 5 * MIN, endedAt: Date.now() }) }),
+    );
+    const { result } = await breakBeforeMidnight();
+    await settle(7 * MIN);
+    act(() => result.current.end());
+    expect(result.current.endsAt).toBeNull();
+    await settle();
+    expect(api.endBreak).toHaveBeenCalledWith(5);
+    expect(result.current.days[YESTERDAY]?.breaks.map((b) => b.endedAt)).toEqual([midnight + 2 * MIN]);
+    await settle(10 * MIN);
+    expect(alert).not.toHaveBeenCalled();
+  });
+
+  it('lets a session started on the new day end it, as the server does', async () => {
+    const { result } = await breakBeforeMidnight();
+    await settle(7 * MIN);
+    const session = makeSession({ id: 3, startedAt: Date.now() });
+    vi.mocked(api.startSession).mockResolvedValue({ session });
+    vi.mocked(api.getRunning).mockResolvedValue({ session });
+    vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(makeDay(date, date === TODAY ? { sessions: [session] } : {})));
+    await act(() => result.current.timer.start(TODAY, 1500, 'Next'));
+    await settle();
+    expect(result.current.endsAt).toBeNull();
+    await settle(5 * MIN);
+    expect(alert).not.toHaveBeenCalled();
+  });
 });
 
 it('is only there inside its provider', () => {

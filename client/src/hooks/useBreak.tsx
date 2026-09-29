@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, typ
 import { alert, dismissByTag, unlockAudio } from '../lib/alerts';
 import { runningBreak, SET_SIZE, suggestBreak } from '../lib/breaks';
 import { BREAK, BREAK_SUGGESTION } from '../lib/copy';
-import { MINUTE_MS, todayKey } from '../../../shared/dates.js';
+import { addDays, MINUTE_MS, todayKey } from '../../../shared/dates.js';
 import { formatDuration } from '../lib/format';
 import { readStored, writeStored } from '../lib/storage';
 import { useDayStore } from './useDay';
@@ -12,7 +12,7 @@ import { useSettings } from './useSettings';
 import { useTimer } from './useTimer';
 
 interface BreakCtx {
-  /** When today's running break ends; null when there is none. */
+  /** When the running break ends (today's, or one started before midnight); null when there is none. */
   endsAt: number | null;
   remainingSeconds: number;
   /**
@@ -48,8 +48,12 @@ export function BreakProvider({ children }: { children: ReactNode }) {
   const { finished, running } = useTimer();
   const { days, startBreak, endBreak } = useDayStore();
   const now = useClock();
-  const today = days[todayKey(now)];
-  const breaks = today?.breaks;
+  const date = todayKey(now);
+  const today = days[date];
+  // A break started before midnight stays on the day it started, which the store still has (it
+  // was today's sheet), so it keeps counting down, can be ended and rings after midnight. Only
+  // until something starts today: the server ended it then.
+  const breaks = today?.breaks.length || today?.sessions.length ? today.breaks : (days[addDays(date, -1)] ?? today)?.breaks;
   const current = breaks ? runningBreak(breaks, now) : null;
   const latestCurrent = useLatest(current);
   const announced = useRef<number | null>(null);
