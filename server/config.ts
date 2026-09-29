@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import path from 'node:path';
 import { AUTH_MODES, type AuthMode } from '../shared/api.js';
 import { DAY_MS } from '../shared/dates.js';
@@ -25,16 +26,52 @@ export interface Config {
   } | null;
 }
 
+/** Express's names for address ranges in a `trust proxy` list. */
+const PROXY_RANGES = new Set(['loopback', 'linklocal', 'uniquelocal']);
+
+/** One entry of a `trust proxy` list: a range name, an IP address, or an address with a /prefix or /netmask. */
+function isProxyEntry(entry: string): boolean {
+  if (PROXY_RANGES.has(entry)) return true;
+  const [ip, mask, ...rest] = entry.split('/') as [string, ...string[]];
+  const family = isIP(ip);
+  if (family === 0 || rest.length > 0) return false;
+  if (mask === undefined) return true;
+  if (/^\d+$/.test(mask)) return Number(mask) <= (family === 4 ? 32 : 128);
+  return isIP(mask) === family;
+}
+
 /**
  * A hop count is the documented form. Express also takes `loopback`, an IP or a CIDR list as
  * a string, so those pass through untouched: turning an unknown string into `true` would
  * trust whatever X-Forwarded-For a client sends, which is exactly what the docs warn against.
+ * Anything else is refused here. Express would take `1.5` as two hops and fail to start on
+ * `yes` with a message that never names the variable.
  */
 function parseTrustProxy(raw: string | undefined): boolean | number | string {
   if (!raw || raw === 'false' || raw === '0') return false;
   if (raw === 'true') return true;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : raw;
+  if (/^\d+$/.test(raw)) return Number(raw);
+  if (raw.split(',').every((entry) => isProxyEntry(entry.trim()))) return raw;
+  throw new Error(
+    `TRUST_PROXY must be the number of proxies in front of the app (usually 1), or loopback, linklocal, uniquelocal, IP addresses or CIDR ranges separated by commas (got "${raw}")`,
+  );
+}
+
+const TRUE_WORDS = new Set(['true', '1', 'yes', 'on']);
+const FALSE_WORDS = new Set(['false', '0', 'no', 'off']);
+
+/**
+ * An on/off variable, however it is spelled. Only `true` used to count as on, so
+ * `COOKIE_SECURE=TRUE` quietly turned the Secure flag off. A value that is neither is not
+ * worth refusing to start over: it is logged and the default stands.
+ */
+function parseSwitch(name: string, raw: string | undefined): boolean | undefined {
+  if (raw === undefined) return undefined;
+  const word = raw.trim().toLowerCase();
+  if (TRUE_WORDS.has(word)) return true;
+  if (FALSE_WORDS.has(word)) return false;
+  console.warn(`[config] ${name} should be true or false; "${raw}" is neither, so the default applies`);
+  return undefined;
 }
 
 function parsePort(raw: string | undefined): number {
@@ -101,7 +138,7 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env): Config {
   const authMode = authModeRaw as AuthMode;
 
   const appUrl = env.APP_URL ? parseHttpUrl('APP_URL', "the app's full public URL", env.APP_URL).replace(/\/+$/, '') : null;
-  const cookieSecure = env.COOKIE_SECURE !== undefined ? env.COOKIE_SECURE === 'true' : Boolean(appUrl && appUrl.startsWith('https://'));
+  const cookieSecure = parseSwitch('COOKIE_SECURE', env.COOKIE_SECURE) ?? Boolean(appUrl && appUrl.startsWith('https://'));
 
   let oidc: Config['oidc'] = null;
   if (authMode === 'oidc') {

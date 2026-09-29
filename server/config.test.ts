@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { loadConfig } from './config.js';
 
 const load = (env: Record<string, string> = {}) => loadConfig({ AUTH_MODE: 'none', ...env });
@@ -21,7 +21,15 @@ describe('TRUST_PROXY', () => {
   it('passes Express string forms through instead of widening them to true', () => {
     expect(load({ TRUST_PROXY: 'loopback' }).trustProxy).toBe('loopback');
     expect(load({ TRUST_PROXY: '10.0.0.0/8, 172.16.0.0/12' }).trustProxy).toBe('10.0.0.0/8, 172.16.0.0/12');
+    expect(load({ TRUST_PROXY: 'loopback, 192.168.1.2, fd00::/8, 10.0.0.0/255.0.0.0' }).trustProxy).toBe('loopback, 192.168.1.2, fd00::/8, 10.0.0.0/255.0.0.0');
     expect(load({ TRUST_PROXY: 'true' }).trustProxy).toBe(true);
+  });
+
+  it('refuses what Express would misread or crash on, naming the variable', () => {
+    // 1.5 would trust two hops; the rest would fail at start with a bare "invalid IP address".
+    for (const value of ['1.5', '-1', 'yes', 'on', 'TRUE', 'loopback,', '10.0.0.0/33', 'fd00::/129', '10.0.0.0/8/8', '10.0.0.0/fd00::', 'proxy.lan']) {
+      expect(() => load({ TRUST_PROXY: value }), value).toThrow(/^TRUST_PROXY must be the number of proxies/);
+    }
   });
 });
 
@@ -148,6 +156,19 @@ describe('COOKIE_SECURE', () => {
     // Explicit wins both ways: TLS terminated at a proxy, or a plain-http test of an https URL.
     expect(load({ APP_URL: 'http://focus.lan', COOKIE_SECURE: 'true' }).cookieSecure).toBe(true);
     expect(load({ APP_URL: 'https://focus.example.com', COOKIE_SECURE: 'false' }).cookieSecure).toBe(false);
+  });
+
+  it('reads the usual spellings of on and off, in any case', () => {
+    for (const on of ['TRUE', 'True', '1', 'yes', 'On', ' true ']) expect(load({ COOKIE_SECURE: on }).cookieSecure, on).toBe(true);
+    for (const off of ['FALSE', '0', 'no', 'off']) expect(load({ APP_URL: 'https://focus.example.com', COOKIE_SECURE: off }).cookieSecure, off).toBe(false);
+  });
+
+  it('keeps the default for a value that is neither, and says so', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(load({ APP_URL: 'https://focus.example.com', COOKIE_SECURE: 'secure' }).cookieSecure).toBe(true);
+    expect(load({ APP_URL: 'http://focus.lan', COOKIE_SECURE: 'maybe' }).cookieSecure).toBe(false);
+    expect(warn).toHaveBeenCalledWith('[config] COOKIE_SECURE should be true or false; "secure" is neither, so the default applies');
+    warn.mockRestore();
   });
 });
 
