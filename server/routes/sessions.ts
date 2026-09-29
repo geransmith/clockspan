@@ -7,7 +7,7 @@ import {
   ensureDay,
   findDay,
   getOwned,
-  ownedRows,
+  ownedRouter,
   parsePlannedSeconds,
   requireDate,
   runningSession,
@@ -80,19 +80,18 @@ export function sessionStartRouter(db: DB): Router {
 }
 
 export function sessionsRouter(db: DB): Router {
-  const r = Router();
+  // Every /:id route works on the caller's own session or answers 404 (`ownedRouter`).
+  const { router: r, owned } = ownedRouter(db, 'sessions');
 
   r.get('/running', (req, res) => {
     const s = runningSession(db, currentUser(req).id);
     res.json({ session: s ? sessionRowToJson(s) : null } satisfies RunningResponse);
   });
 
-  // Every /:id route below works on the caller's own session or answers 404.
-  const { load: loadOwnedSession, owned } = ownedRows(db, 'sessions');
   const reply = (res: Response, userId: number, id: number) =>
     res.json({ session: sessionRowToJson(getOwned(db, 'sessions', userId, id)!) } satisfies SessionResponse);
 
-  r.patch('/:id', loadOwnedSession, (req, res) => {
+  r.patch('/:id', (req, res) => {
     const s = owned(res);
     const { plannedSeconds, label, priorityUid } = (req.body ?? {}) as Record<string, unknown>;
     const next = {
@@ -131,7 +130,7 @@ export function sessionsRouter(db: DB): Router {
 
   // A paused session stays 'running' with paused_at set; resuming folds the pause into
   // paused_seconds. Both are idempotent like finish and cancel: the row is answered as it is.
-  r.post('/:id/pause', loadOwnedSession, (_req, res) => {
+  r.post('/:id/pause', (_req, res) => {
     const s = owned(res);
     if (s.status !== 'running') {
       res.status(409).json({ error: 'Only a running timer can be paused.' });
@@ -141,7 +140,7 @@ export function sessionsRouter(db: DB): Router {
     reply(res, s.user_id, s.id);
   });
 
-  r.post('/:id/resume', loadOwnedSession, (_req, res) => {
+  r.post('/:id/resume', (_req, res) => {
     const s = owned(res);
     if (s.status !== 'running') {
       res.status(409).json({ error: 'Only a running timer can be resumed.' });
@@ -158,7 +157,7 @@ export function sessionsRouter(db: DB): Router {
   // recorded with its planned duration. `countOverrun: true` is the user choosing to log the
   // time past the end as well (they were there for it). A session finished while paused ends
   // when the pause began (no work happened since), so the log excludes every pause.
-  r.post('/:id/finish', loadOwnedSession, (req, res) => {
+  r.post('/:id/finish', (req, res) => {
     const s = owned(res);
     const { countOverrun } = (req.body ?? {}) as { countOverrun?: unknown };
     if (countOverrun !== undefined && typeof countOverrun !== 'boolean') {
@@ -177,7 +176,7 @@ export function sessionsRouter(db: DB): Router {
     reply(res, s.user_id, s.id);
   });
 
-  r.post('/:id/cancel', loadOwnedSession, (_req, res) => {
+  r.post('/:id/cancel', (_req, res) => {
     const s = owned(res);
     if (s.status === 'running') {
       db.prepare(`UPDATE sessions SET ended_at = ?, paused_at = NULL, status = 'cancelled' WHERE id = ?`).run(Date.now(), s.id);
@@ -185,7 +184,7 @@ export function sessionsRouter(db: DB): Router {
     reply(res, s.user_id, s.id);
   });
 
-  r.delete('/:id', loadOwnedSession, (_req, res) => {
+  r.delete('/:id', (_req, res) => {
     db.prepare(`DELETE FROM sessions WHERE id = ?`).run(owned(res).id);
     res.json({ ok: true } satisfies OkResponse);
   });

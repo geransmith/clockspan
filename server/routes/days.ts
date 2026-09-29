@@ -4,6 +4,7 @@ import type { Config } from '../config.js';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { countDays, pruneDays, reclaimSpace } from '../retention.js';
+import { isWholeNumber } from '../validate.js';
 import { DAY_MS, isValidDateKey, punchWindow } from '../../shared/dates.js';
 import {
   breakRowToJson,
@@ -81,29 +82,21 @@ interface DayRows {
   breaks: Dated<BreakRow>[];
 }
 
-function dayRows(db: DB, dayId: number): DayRows {
-  return {
-    punches: db.prepare(`SELECT * FROM punches WHERE day_id = ? ORDER BY position`).all(dayId) as PunchRow[],
-    priorities: db.prepare(`SELECT * FROM priorities WHERE day_id = ?`).all(dayId) as PriorityRow[],
-    sessions: db
-      .prepare(`SELECT s.*, d.date FROM sessions s JOIN days d ON d.id = s.day_id WHERE s.day_id = ? AND s.status <> 'cancelled' ORDER BY s.started_at`)
-      .all(dayId) as DayRows['sessions'],
-    breaks: db
-      .prepare(`SELECT b.*, d.date FROM breaks b JOIN days d ON d.id = b.day_id WHERE b.day_id = ? ORDER BY b.started_at`)
-      .all(dayId) as DayRows['breaks'],
-  };
-}
+/** A day with none of them; a fresh object each time, since `rangeRows` pushes into its lists. */
+const noRows = (): DayRows => ({ punches: [], priorities: [], sessions: [], breaks: [] });
 
 /**
- * The same rows for every day of a user's range, one query per table instead of three per
- * day (a quarter would otherwise be ~280 queries). Grouping keeps each query's order.
+ * The child rows of every day in a user's range, by day id: one query per table rather than
+ * one per table per day (a quarter's review would be hundreds). Grouping keeps each query's
+ * order. `GET /:date` loads its one day through here too, so a new child table is added in
+ * one place. A day with no child rows has no entry.
  */
 function rangeRows(db: DB, userId: number, from: string, to: string): Map<number, DayRows> {
   const inRange = `JOIN days d ON d.id = x.day_id WHERE d.user_id = ? AND d.date >= ? AND d.date <= ?`;
   const out = new Map<number, DayRows>();
   const rowsFor = (dayId: number) => {
     let rows = out.get(dayId);
-    if (!rows) out.set(dayId, (rows = { punches: [], priorities: [], sessions: [], breaks: [] }));
+    if (!rows) out.set(dayId, (rows = noRows()));
     return rows;
   };
   for (const p of db.prepare(`SELECT x.* FROM punches x ${inRange} ORDER BY x.position`).all(userId, from, to) as PunchRow[]) rowsFor(p.day_id).punches.push(p);
@@ -154,8 +147,7 @@ export function daysRouter(db: DB, config: Config): Router {
       .prepare(`SELECT ${DAY_COLUMNS}, date FROM days WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date`)
       .all(user.id, from, to) as (DayRow & { date: string })[];
     const children = rangeRows(db, user.id, from, to);
-    const none: DayRows = { punches: [], priorities: [], sessions: [], breaks: [] };
-    res.json({ days: rows.map((d) => dayJson(d, d.date, children.get(d.id) ?? none)) } satisfies RangeResponse);
+    res.json({ days: rows.map((d) => dayJson(d, d.date, children.get(d.id) ?? noRows())) } satisfies RangeResponse);
   });
 
   // Old-day cleanup. GET is the preview the Data tab shows before asking; POST deletes.
@@ -184,7 +176,7 @@ export function daysRouter(db: DB, config: Config): Router {
     const user = currentUser(req);
     const date = dateParam(req);
     const day = findDay(db, user.id, date);
-    res.json((day ? dayJson(day, date, dayRows(db, day.id)) : emptyDay(date)) satisfies Day);
+    res.json((day ? dayJson(day, date, rangeRows(db, user.id, date, date).get(day.id) ?? noRows()) : emptyDay(date)) satisfies Day);
   });
 
   // Full replace. Position parity defines kind: even = in, odd = out.
@@ -307,9 +299,9 @@ export function daysRouter(db: DB, config: Config): Router {
     const user = currentUser(req);
     const date = dateParam(req);
     const minutes = (req.body as { workMinutes?: unknown })?.workMinutes;
-    const { min, max } = SETTING_LIMITS.workMinutes;
-    if (minutes !== null && !(typeof minutes === 'number' && Number.isInteger(minutes) && minutes >= min && minutes <= max)) {
-      res.status(400).json({ error: `workMinutes must be a whole number from ${min} to ${max}, or null.` });
+    const bounds = SETTING_LIMITS.workMinutes;
+    if (minutes !== null && !isWholeNumber(minutes, bounds)) {
+      res.status(400).json({ error: `workMinutes must be a whole number from ${bounds.min} to ${bounds.max}, or null.` });
       return;
     }
     const dayId = ensureDay(db, user.id, date);

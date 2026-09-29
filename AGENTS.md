@@ -219,9 +219,11 @@ Never commit `data/` or `.env`.
   deletion so the file actually shrinks; it must not run inside a transaction.
 - **Every data query is scoped by `req.user.id`** (`currentUser(req)`). In `AUTH_MODE=none` that
   is the single `kind='default'` user. Never add a data route outside the `requireAuth` router
-  in `app.ts`. `/:date` routes take `requireDate`; `/sessions/:id` routes take
-  `loadOwnedSession` and `/breaks/:id` routes `loadOwnedBreak`, both made by `ownedRows()` in
-  `routes/shared.ts`, which is where the ownership check lives.
+  in `app.ts`. `/:date` routes take `requireDate`. The `/sessions/:id` and `/breaks/:id` routes
+  sit on a router made by `ownedRouter()` in `routes/shared.ts`, which is where the ownership
+  check lives: it is that router's `id` param handler (`router.param`), so every route on it
+  with an `:id` is checked, one added later included, with nothing to list on the route. It
+  answers 404 for another user's row or none, and the handler reads the row with `owned(res)`.
 - **Settings go through `mergeSettings()` on every read and write** (`server/settings.ts`):
   the stored JSON is merged onto `DEFAULT_SETTINGS`, unknown keys are dropped, invalid values
   fall back, and a PUT stores the merged result (so a key missing from an old row takes the
@@ -436,7 +438,9 @@ Never commit `data/` or `.env`.
   alarm's "Open retrospective", chosen in `useAlarms` from the `AlarmDayState` callbacks).
 - **A per-day field** (like `overtimeApproved`, `retroNote`/`retroAt`): append a migration adding the column to
   `days` → add the column to `DAY_COLUMNS` (`routes/shared.ts`; `findDay` and `/days/range` both
-  read it) and return it from `dayJson` → add a `PUT /days/:date/<field>` route (with
+  read it) and return it from `dayJson` (a per-day list in a table of its own, like `breaks`, is
+  instead a list on `DayRows` and one more query in `rangeRows` in `routes/days.ts`, which loads
+  a day's child rows for both `GET /days/:date` and `/days/range`) → add a `PUT /days/:date/<field>` route (with
   `requireDate`) → `Day` and its default in `emptyDay` (`shared/api.ts`) +
   `client/src/api.ts` → an optimistic setter in `useDay.tsx` that goes through `inOrder` on
   the day's `day:<date>` key with the change and a commit from the server's answer (mirror
@@ -444,7 +448,10 @@ Never commit `data/` or `.env`.
   reloads the day, so the setter never rejects) → pass it from `Sheet.tsx`
   to the card, and from `useTodayAlarms` into `useAlarms` if alarms depend on it.
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
-  `currentUser(req).id` (`requireDate` / `loadOwnedSession` / `loadOwnedBreak` where they fit), validate input
+  `currentUser(req).id` (`requireDate` on a `/:date` route; a `/:id` route on the sessions or
+  breaks router is checked by the router itself and reads its row with `owned(res)`; a new table
+  addressed by id gets its entry in `OwnedRows` and `NOT_FOUND` and a router from
+  `ownedRouter()`, all in `routes/shared.ts`), validate input
   (cast `req.body` to `{ field?: unknown }` and check each field; the `no-unsafe-*` lint
   refuses reading it as `any`), return `{ error }` JSON on failure → add the call to `client/src/api.ts` and the response
   type to `shared/api.ts` (the route's `res.json(… satisfies <Type>)` and the client's

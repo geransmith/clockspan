@@ -13,18 +13,6 @@ describe('cutoffKey', () => {
   });
 });
 
-describe('RETENTION_DAYS', () => {
-  it('is optional, bounded, and a whole number', () => {
-    expect(loadConfig({}).retentionDays).toBeNull();
-    expect(loadConfig({ RETENTION_DAYS: '' }).retentionDays).toBeNull();
-    expect(loadConfig({ RETENTION_DAYS: '90' }).retentionDays).toBe(90);
-    expect(() => loadConfig({ RETENTION_DAYS: '10' })).toThrow(/RETENTION_DAYS/);
-    expect(() => loadConfig({ RETENTION_DAYS: '4000' })).toThrow(/RETENTION_DAYS/);
-    expect(() => loadConfig({ RETENTION_DAYS: 'abc' })).toThrow(/RETENTION_DAYS/);
-    expect(() => loadConfig({ RETENTION_DAYS: '1.5' })).toThrow(/RETENTION_DAYS/);
-  });
-});
-
 describe('effectiveKeepDays', () => {
   const config = loadConfig({});
   it('is null unless the user or the server asks for a limit, and takes the smaller of the two', () => {
@@ -60,8 +48,8 @@ describe('runRetention', () => {
     expect(runRetention(app.db, app.config, SEED_NOW)).toBe(expectedGone.length);
     expect(dates()).toEqual(seeded.filter((d) => d >= cutoff));
     // Cascade: nothing of those days is left behind.
-    expect(app.db.prepare(`SELECT COUNT(*) AS n FROM punches WHERE day_id NOT IN (SELECT id FROM days)`).get()).toEqual({ n: 0 });
-    expect(app.db.prepare(`SELECT COUNT(*) AS n FROM sessions WHERE day_id NOT IN (SELECT id FROM days)`).get()).toEqual({ n: 0 });
+    expect(app.count('punches', 'day_id NOT IN (SELECT id FROM days)')).toBe(0);
+    expect(app.count('sessions', 'day_id NOT IN (SELECT id FROM days)')).toBe(0);
     // A second pass finds nothing.
     expect(runRetention(app.db, app.config, SEED_NOW)).toBe(0);
   });

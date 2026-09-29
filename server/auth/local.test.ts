@@ -242,7 +242,7 @@ describe('AUTH_MODE=local', () => {
       app.api.post('/api/auth/users', { username: 'twin', password: 'twin password' }),
     ]);
     expect([a.status, b.status].sort((x, y) => x - y)).toEqual([201, 409]);
-    expect(app.db.prepare(`SELECT COUNT(*) AS n FROM users WHERE username = 'twin'`).get()).toEqual({ n: 1 });
+    expect(app.count('users', `username = 'twin'`)).toBe(1);
   });
 
   it('matches usernames whatever their case, at sign-in and when adding a user', async () => {
@@ -307,11 +307,11 @@ describe('AUTH_MODE=local', () => {
     expect(refused.body).toEqual({ error: 'Only an admin can do that.' });
     expect((await sam.post('/api/auth/users', { username: 'eve', password: 'eve password' })).status).toBe(403);
     await sam.put('/api/days/2026-09-01/punches', { punches: [{ at: Date.UTC(2026, 8, 1, 8) }, { at: null }, { at: null }, { at: null }] });
-    expect(app.db.prepare(`SELECT COUNT(*) AS n FROM days`).get()).toEqual({ n: 1 });
+    expect(app.count('days')).toBe(1);
 
     expect((await app.api.del(`/api/auth/users/${created.body.user.id}`)).body).toEqual({ ok: true });
     expect((await app.api.del(`/api/auth/users/${created.body.user.id}`)).status).toBe(404);
-    expect(app.db.prepare(`SELECT COUNT(*) AS n FROM days`).get()).toEqual({ n: 0 });
+    expect(app.count('days')).toBe(0);
     expect((await sam.get('/api/settings')).status).toBe(401);
 
     const me = (await app.api.get('/api/auth/me')).body.user.id;

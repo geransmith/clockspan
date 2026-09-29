@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loadConfig } from '../config.js';
 import { openDatabase, type DB, type UserRow } from '../db.js';
+import { countRows } from '../dev/harness.js';
 import { ensureLocalUsers, LOCAL_USERS } from '../dev/seed.js';
 import { PASSWORD_LENGTH } from '../../shared/api.js';
 import { verifyPassword } from './password.js';
@@ -24,7 +25,7 @@ describe('resetPassword', () => {
 
   const stored = (user: UserRow) =>
     db.prepare(`SELECT password_hash AS hash, must_change_password AS mustChange FROM users WHERE id = ?`).get(user.id) as { hash: string; mustChange: number };
-  const sessions = (user: UserRow) => (db.prepare(`SELECT COUNT(*) AS n FROM auth_sessions WHERE user_id = ?`).get(user.id) as { n: number }).n;
+  const sessions = (user: UserRow) => countRows(db, 'auth_sessions', 'user_id = ?', user.id);
 
   it('sets a given password for good and signs that user out everywhere, and no one else', async () => {
     expect(await resetPassword(db, LOCAL_USERS.member, 'a new password')).toEqual({ password: 'a new password', temporary: false });

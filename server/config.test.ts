@@ -94,6 +94,27 @@ describe('SESSION_TTL_DAYS', () => {
   });
 });
 
+describe('RETENTION_DAYS', () => {
+  it('is optional, bounded, and a whole number', () => {
+    expect(load().retentionDays).toBeNull();
+    expect(load({ RETENTION_DAYS: '' }).retentionDays).toBeNull();
+    expect(load({ RETENTION_DAYS: '90' }).retentionDays).toBe(90);
+    expect(() => load({ RETENTION_DAYS: '10' })).toThrow(/RETENTION_DAYS/);
+    expect(() => load({ RETENTION_DAYS: '4000' })).toThrow(/RETENTION_DAYS/);
+    expect(() => load({ RETENTION_DAYS: 'abc' })).toThrow(/RETENTION_DAYS/);
+    expect(() => load({ RETENTION_DAYS: '1.5' })).toThrow(/RETENTION_DAYS/);
+  });
+
+  it('takes both ends of the range and names it when refusing', () => {
+    expect(load({ RETENTION_DAYS: '30' }).retentionDays).toBe(30);
+    expect(load({ RETENTION_DAYS: '3650' }).retentionDays).toBe(3650);
+    expect(() => load({ RETENTION_DAYS: '29' })).toThrow(
+      'RETENTION_DAYS must be a whole number of days from 30 to 3650, or unset to keep everything (got "29")',
+    );
+    expect(() => load({ RETENTION_DAYS: '3651' })).toThrow(/from 30 to 3650/);
+  });
+});
+
 describe('AUTH_MODE', () => {
   it('rejects unknown modes and requires the OIDC settings for oidc', () => {
     expect(() => loadConfig({ AUTH_MODE: 'basic' })).toThrow(/AUTH_MODE must be one of/);

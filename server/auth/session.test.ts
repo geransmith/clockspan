@@ -1,8 +1,6 @@
 import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { SETUP_CODE, startTestApp, type TestApp } from '../dev/harness.js';
+import { SETUP_CODE, startTestApp, tempClientBuild, type TestApp } from '../dev/harness.js';
 import { purgeExpiredSessions, revokeOtherSessions, SESSION_COOKIE } from './session.js';
 import type { Request } from 'express';
 
@@ -83,11 +81,7 @@ describe('cookie sessions', () => {
   });
 
   it('never slides on a static file, whose answer is publicly cacheable', async () => {
-    // A stand-in for dist/client: the shell and one fingerprinted asset.
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clockspan-client-'));
-    fs.mkdirSync(path.join(dir, 'assets'));
-    fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><title>shell</title>');
-    fs.writeFileSync(path.join(dir, 'assets', 'index-abc123.js'), 'console.log(1)');
+    const dir = tempClientBuild();
     await app.close();
     app = await startTestApp({ authMode: 'local', clientDir: dir });
     try {

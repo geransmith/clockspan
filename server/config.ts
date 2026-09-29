@@ -3,6 +3,7 @@ import path from 'node:path';
 import { AUTH_MODES, type AuthMode } from '../shared/api.js';
 import { DAY_MS } from '../shared/dates.js';
 import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS } from '../shared/settings.js';
+import { isWholeNumber } from './validate.js';
 
 export interface Config {
   port: number;
@@ -80,7 +81,7 @@ function parseSwitch(name: string, raw: string | undefined): boolean | undefined
 function parsePort(raw: string | undefined): number {
   if (!raw) return 3000;
   const n = Number(raw);
-  if (!Number.isInteger(n) || n < 0 || n > 65535) {
+  if (!isWholeNumber(n, { min: 0, max: 65535 })) {
     throw new Error(`PORT must be a whole number from 0 to 65535 (got "${raw}")`);
   }
   return n;
@@ -91,6 +92,18 @@ function parseSessionTtlDays(raw: string | undefined): number {
   const n = Number(raw);
   if (!Number.isFinite(n) || n <= 0) {
     throw new Error(`SESSION_TTL_DAYS must be a positive number of days (got "${raw}")`);
+  }
+  return n;
+}
+
+/** The server-wide ceiling on the days of history any user keeps; unset keeps everything. */
+function parseRetentionDays(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const n = Number(raw);
+  if (!isWholeNumber(n, { min: MIN_RETENTION_DAYS, max: MAX_RETENTION_DAYS })) {
+    throw new Error(
+      `RETENTION_DAYS must be a whole number of days from ${MIN_RETENTION_DAYS} to ${MAX_RETENTION_DAYS}, or unset to keep everything (got "${raw}")`,
+    );
   }
   return n;
 }
@@ -171,17 +184,6 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env): Config {
 
   const dataDir = path.resolve(env.DATA_DIR ?? './data');
 
-  let retentionDays: number | null = null;
-  if (env.RETENTION_DAYS) {
-    const n = Number(env.RETENTION_DAYS);
-    if (!Number.isInteger(n) || n < MIN_RETENTION_DAYS || n > MAX_RETENTION_DAYS) {
-      throw new Error(
-        `RETENTION_DAYS must be a whole number of days from ${MIN_RETENTION_DAYS} to ${MAX_RETENTION_DAYS}, or unset to keep everything (got "${env.RETENTION_DAYS}")`,
-      );
-    }
-    retentionDays = n;
-  }
-
   return {
     port: parsePort(env.PORT),
     dataDir,
@@ -192,7 +194,7 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env): Config {
     trustProxy: parseTrustProxy(env.TRUST_PROXY),
     sessionTtlMs: parseSessionTtlDays(env.SESSION_TTL_DAYS) * DAY_MS,
     allowedHosts: parseAllowedHosts(env.ALLOWED_HOSTS),
-    retentionDays,
+    retentionDays: parseRetentionDays(env.RETENTION_DAYS),
     oidc,
   };
 }

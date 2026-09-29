@@ -149,7 +149,7 @@ describe('/api/settings', () => {
     const r = await app.api.del('/api/settings');
     expect(r.body).toEqual(DEFAULT_SETTINGS);
     expect((await app.api.get('/api/settings')).body).toEqual(DEFAULT_SETTINGS);
-    expect(app.db.prepare(`SELECT COUNT(*) AS n FROM settings`).get()).toEqual({ n: 0 });
+    expect(app.count('settings')).toBe(0);
   });
 });
 
@@ -166,7 +166,7 @@ describe('settings are scoped to the signed-in user', () => {
 
       expect((await b.del('/api/settings')).body).toEqual(DEFAULT_SETTINGS);
       expect((await a.get('/api/settings')).body.workMinutes).toBe(420);
-      expect(app.db.prepare(`SELECT COUNT(*) AS n FROM settings`).get()).toEqual({ n: 1 });
+      expect(app.count('settings')).toBe(1);
     } finally {
       await app.close();
     }

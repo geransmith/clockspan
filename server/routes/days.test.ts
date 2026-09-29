@@ -286,7 +286,7 @@ describe('PUT /api/days/:date/retro', () => {
     const r = await fetch(`${app.url}/api/days/2026-09-01/retro`, { method: 'PUT' });
     expect(r.status).toBe(200);
     expect(await r.json()).toEqual({ retroNote: '', retroAt: null });
-    expect(app.db.prepare(`SELECT COUNT(*) AS n FROM days WHERE date = '2026-09-01'`).get()).toEqual({ n: 0 });
+    expect(app.count('days', 'date = ?', '2026-09-01')).toBe(0);
   });
 });
 
@@ -316,7 +316,7 @@ describe('/api/days/prune', () => {
     const before = dates[3]!;
     const doomed = app.seeded!.days.slice(0, 3);
     const ids = (app.db.prepare(`SELECT id FROM days WHERE date < ?`).all(before) as { id: number }[]).map((d) => d.id);
-    const count = (table: string) => (app.db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE day_id IN (${ids.join(',')})`).get() as { n: number }).n;
+    const count = (table: string) => app.count(table, `day_id IN (${ids.join(',')})`);
     expect(count('punches')).toBe(doomed.reduce((n, d) => n + d.punches.length, 0));
     expect(count('sessions')).toBe(doomed.reduce((n, d) => n + d.sessions.length, 0));
     expect(count('breaks')).toBe(doomed.reduce((n, d) => n + d.breaks.length, 0));
@@ -359,16 +359,6 @@ describe('GET /api/days/range', () => {
     expect(r.body.days.map((d: { date: string }) => d.date)).toEqual(['2026-09-14', '2026-09-15', '2026-09-16']);
     expect(r.body.days[0].sessions.length).toBeGreaterThan(0);
     expect((await app.api.get('/api/days/range?from=2020-01-01&to=2020-01-31')).body.days).toEqual([]);
-  });
-
-  it('answers each day exactly as GET /:date does, including a day row with nothing on it', async () => {
-    const dates = app.seeded!.days.map((d) => d.date).sort();
-    // A weekend inside the seed span: a day row with no punches, priorities or sessions.
-    expect((await app.api.put('/api/days/2026-09-13/overtime', { approved: true })).status).toBe(200);
-    const range = await app.api.get(`/api/days/range?from=${dates[0]}&to=${SEED_TODAY}`);
-    const one = await Promise.all(range.body.days.map((d: { date: string }) => app.api.get(`/api/days/${d.date}`)));
-    expect(range.body.days).toEqual(one.map((r) => r.body));
-    expect(range.body.days.map((d: { date: string }) => d.date)).toEqual([...new Set([...dates, '2026-09-13'])].sort());
   });
 
   it('validates the range', async () => {

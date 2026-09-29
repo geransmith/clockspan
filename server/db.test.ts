@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 import { MIGRATIONS, ensureDefaultUser, migrate, openDatabase } from './db.js';
+import { countRows } from './dev/harness.js';
 
 describe('openDatabase', () => {
   it('runs every migration on a fresh database', () => {
@@ -79,7 +80,7 @@ describe('migration 4: one running session per user', () => {
     // Another user, and an ended row, are unaffected.
     insert.run(otherDay, other, null, 'running');
     insert.run(day, user.id, 1600, 'cancelled');
-    expect(db.prepare(`SELECT COUNT(*) AS n FROM sessions`).get()).toEqual({ n: 4 });
+    expect(countRows(db, 'sessions')).toBe(4);
     db.close();
   });
 });
