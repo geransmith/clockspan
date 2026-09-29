@@ -45,13 +45,16 @@ function isProxyEntry(entry: string): boolean {
  * a string, so those pass through untouched: turning an unknown string into `true` would
  * trust whatever X-Forwarded-For a client sends, which is exactly what the docs warn against.
  * Anything else is refused here. Express would take `1.5` as two hops and fail to start on
- * `yes` with a message that never names the variable.
+ * `yes` with a message that never names the variable. Spaces around the value are dropped:
+ * `1 ` (a hand-edited .env line, a pasted template field) started the server back when this
+ * was `Number(raw)`, and refusing it now would stop an install that ran.
  */
 function parseTrustProxy(raw: string | undefined): boolean | number | string {
-  if (!raw || raw === 'false' || raw === '0') return false;
-  if (raw === 'true') return true;
-  if (/^\d+$/.test(raw)) return Number(raw);
-  if (raw.split(',').every((entry) => isProxyEntry(entry.trim()))) return raw;
+  const value = raw?.trim();
+  if (!value || value === 'false' || value === '0') return false;
+  if (value === 'true') return true;
+  if (/^\d+$/.test(value)) return Number(value);
+  if (value.split(',').every((entry) => isProxyEntry(entry.trim()))) return value;
   throw new Error(
     `TRUST_PROXY must be the number of proxies in front of the app (usually 1), or loopback, linklocal, uniquelocal, IP addresses or CIDR ranges separated by commas (got "${raw}")`,
   );
@@ -119,12 +122,12 @@ function parseAllowedHosts(raw: string | undefined): string[] {
  * value without a scheme (`focus.example.com`) would crash the first with a bare "Invalid URL"
  * and keep the second retrying forever, neither naming the variable. Refuse it here instead.
  */
-function parseHttpUrl(name: string, what: string, raw: string): string {
-  const protocol = URL.parse(raw)?.protocol;
-  if (protocol !== 'https:' && protocol !== 'http:') {
+function parseHttpUrl(name: string, what: string, raw: string): URL {
+  const url = URL.parse(raw);
+  if (!url || (url.protocol !== 'https:' && url.protocol !== 'http:')) {
     throw new Error(`${name} must be ${what}, starting with https:// or http:// (got "${raw}")`);
   }
-  return raw;
+  return url;
 }
 
 export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env): Config {
@@ -137,8 +140,12 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env): Config {
   }
   const authMode = authModeRaw as AuthMode;
 
-  const appUrl = env.APP_URL ? parseHttpUrl('APP_URL', "the app's full public URL", env.APP_URL).replace(/\/+$/, '') : null;
-  const cookieSecure = parseSwitch('COOKIE_SECURE', env.COOKIE_SECURE) ?? Boolean(appUrl && appUrl.startsWith('https://'));
+  // The scheme and host are case-insensitive, but the value is used as a string: `HTTPS://…`
+  // failed a startsWith('https://') here and dropped Secure and HSTS, and the OIDC redirect URI
+  // is compared exactly. So it is kept in the form a browser uses, lowercase.
+  const publicUrl = env.APP_URL ? parseHttpUrl('APP_URL', "the app's full public URL", env.APP_URL) : null;
+  const appUrl = publicUrl ? publicUrl.href.replace(/\/+$/, '') : null;
+  const cookieSecure = parseSwitch('COOKIE_SECURE', env.COOKIE_SECURE) ?? publicUrl?.protocol === 'https:';
 
   let oidc: Config['oidc'] = null;
   if (authMode === 'oidc') {
@@ -150,8 +157,10 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env): Config {
           `provider must be \${APP_URL}/auth/callback.`,
       );
     }
+    // Checked, not rewritten: the issuer is an identifier the provider's tokens must match as written.
+    parseHttpUrl('OIDC_ISSUER', "your provider's issuer URL", env.OIDC_ISSUER!);
     oidc = {
-      issuer: parseHttpUrl('OIDC_ISSUER', "your provider's issuer URL", env.OIDC_ISSUER!),
+      issuer: env.OIDC_ISSUER!,
       clientId: env.OIDC_CLIENT_ID!,
       clientSecret: env.OIDC_CLIENT_SECRET!,
       scopes: env.OIDC_SCOPES ?? 'openid profile email',
