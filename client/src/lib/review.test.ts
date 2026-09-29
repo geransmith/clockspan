@@ -120,8 +120,10 @@ describe('reviewRange', () => {
     expect(r.focusedSeconds).toBe(7200);
     expect(r.onPlanSeconds).toBe(3600);
     expect(r.offPlanSeconds).toBe(3600);
+    expect(r.onPlanPercent).toBe(50);
     expect(r.prioritiesDone).toBe(2);
     expect(r.prioritiesTotal).toBe(3);
+    expect(r.prioritiesOpen).toBe(1);
     expect(r.retrosDone).toBe(1);
     expect(r.unplanned.map((u) => [u.label, u.dates])).toEqual([
       ['Help Sam', ['2026-09-15']],
@@ -132,7 +134,23 @@ describe('reviewRange', () => {
   });
 
   it('is all zeros for no days', () => {
-    expect(reviewRange([], settings, '2026-09-16', now).days).toBe(0);
+    expect(reviewRange([], settings, '2026-09-16', now)).toMatchObject({ days: 0, onPlanPercent: null, prioritiesOpen: 0 });
+  });
+
+  it('rounds the on-plan share to a whole percent, and has none without focus logged', () => {
+    const third = day('2026-09-14', {
+      priorities: [row(1, 'Ship it')],
+      sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600, { priorityUid: 'uid100000000' }), session(2, '2026-09-14', at('2026-09-14', 10), 1200)],
+    });
+    expect(reviewRange([third], settings, '2026-09-16', now).onPlanPercent).toBe(33);
+    const twoThirds = { ...third, sessions: third.sessions.map((s) => ({ ...s, priorityUid: s.priorityUid ? null : 'uid100000000' })) };
+    expect(reviewRange([twoThirds], settings, '2026-09-16', now).onPlanPercent).toBe(67);
+    // All of it off the plan is none on it, which is not the same as nothing logged.
+    const offPlan = { ...third, sessions: third.sessions.map((s) => ({ ...s, priorityUid: null })) };
+    expect(reviewRange([offPlan], settings, '2026-09-16', now).onPlanPercent).toBe(0);
+    // A day with a plan and no sessions still counts as a day, with its rows open.
+    const r = reviewRange([{ ...third, sessions: [] }], settings, '2026-09-16', now);
+    expect(r).toMatchObject({ days: 1, focusedSeconds: 0, onPlanPercent: null, prioritiesOpen: 1 });
   });
 
   it('orders equally long unplanned work by date and reads a missing duration as zero', () => {

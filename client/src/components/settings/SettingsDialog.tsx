@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import type { KeyboardEvent } from 'react';
 import { useAuth } from '../../auth/AuthGate';
+import { useLastTab } from '../../hooks/useLastTab';
 import { useModalDialog } from '../../hooks/useModalDialog';
+import { useSaveStatus, type SaveState } from '../../hooks/useSaveStatus';
 import { useSettings } from '../../hooks/useSettings';
 import { RESET_SETTINGS, SAVE_STATUS } from '../../lib/copy';
-import { readStored, writeStored } from '../../lib/storage';
 import type { Settings } from '../../types';
 import { Check, X } from '../Icons';
 import { AccountTab } from './AccountTab';
@@ -28,7 +29,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const { saveState, save } = useSaveStatus();
   // Account holds password + users, which only exist with local accounts.
   const tabs = TABS.filter((t) => t.id !== 'account' || auth.mode === 'local');
-  const [tab, setTab] = useLastTab(tabs);
+  const [tab, setTab] = useLastTab(TAB_STORAGE_KEY, tabs, 'timeclock');
 
   // Focus lands on the dialog, not on the Close button, where Enter would shut what was just opened.
   const dialog = useModalDialog(onClose);
@@ -101,62 +102,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       </div>
     </dialog>
   );
-}
-
-/** The tab you were on last time, so reopening the dialog to tweak the same thing doesn't start over. */
-function useLastTab(tabs: { id: TabId }[]): [TabId, (t: TabId) => void] {
-  const [tab, setTab] = useState<TabId>(() => {
-    const stored = readStored(TAB_STORAGE_KEY);
-    return tabs.find((t) => t.id === stored)?.id ?? tabs[0]?.id ?? 'timeclock';
-  });
-  useEffect(() => writeStored(TAB_STORAGE_KEY, tab), [tab]);
-  return [tab, setTab];
-}
-
-type SaveState = 'idle' | 'saving' | 'saved' | 'failed';
-
-/**
- * Tracks in-flight settings saves so the header can say "Saving…", then "Saved" once the server
- * has confirmed, or "Not saved" when the provider had to roll the change back. In-flight saves
- * are counted so a burst of chip clicks reads as one save instead of flickering between states.
- * `run` is any provider call that settles when the server has answered (update or reset).
- */
-function useSaveStatus() {
-  const [saveState, setSaveState] = useState<SaveState>('idle');
-  const pending = useRef(0);
-  const failed = useRef(false);
-  const timer = useRef<number | null>(null);
-
-  useEffect(
-    () => () => {
-      if (timer.current) window.clearTimeout(timer.current);
-    },
-    [],
-  );
-
-  const save = useCallback(async (run: () => Promise<void>) => {
-    if (pending.current === 0) failed.current = false;
-    pending.current++;
-    if (timer.current) window.clearTimeout(timer.current);
-    setSaveState('saving');
-    try {
-      await run();
-    } catch {
-      // The provider already put the old value back; all that is left is to say so.
-      failed.current = true;
-    } finally {
-      pending.current--;
-      if (pending.current === 0) {
-        if (failed.current) setSaveState('failed');
-        else {
-          setSaveState('saved');
-          timer.current = window.setTimeout(() => setSaveState('idle'), 2500);
-        }
-      }
-    }
-  }, []);
-
-  return { saveState, save };
 }
 
 /** Always rendered, empty when idle: a live region has to exist before its text changes to be announced. */

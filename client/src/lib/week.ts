@@ -8,6 +8,11 @@ export interface WeekHours {
   targetSeconds: number;
   /** A target is set and the week has reached it. */
   met: boolean;
+  /**
+   * Worked past the target, once that is a whole minute: under that the line would read
+   * "0m over" just as the target is reached. 0 without a target.
+   */
+  overSeconds: number;
 }
 
 /**
@@ -23,5 +28,6 @@ export function weekHours(days: Day[], settings: TimeclockSettings & { weekMinut
     workedSeconds += timeclockForDate(d.punches, daySettings(settings, d), d.date, today, now).workedSeconds;
   }
   const targetSeconds = settings.weekMinutes * 60;
-  return { workedSeconds, targetSeconds, met: targetSeconds > 0 && workedSeconds >= targetSeconds };
+  const over = workedSeconds - targetSeconds;
+  return { workedSeconds, targetSeconds, met: targetSeconds > 0 && workedSeconds >= targetSeconds, overSeconds: targetSeconds > 0 && over >= 60 ? over : 0 };
 }

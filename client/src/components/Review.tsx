@@ -81,7 +81,6 @@ function Body({
 }) {
   const r = reviewRange(days, settings, today, now);
   if (r.days === 0) return <p className="muted center review-empty">Nothing recorded this {kind}.</p>;
-  const onPlanPct = r.focusedSeconds > 0 ? Math.round((r.onPlanSeconds / r.focusedSeconds) * 100) : null;
   // A row merged across days names them in a week and counts them in a longer period; it
   // opens the latest of them.
   const when = (dates: string[]) => {
@@ -94,7 +93,7 @@ function Body({
     <div className="review-body">
       <div className="tiles review-tiles">
         <Tile label="Days" value={String(r.days)} sub={settings.trackHours ? `worked ${formatDuration(r.workedSeconds)}` : ''} />
-        <Tile label="Focused" value={formatDuration(r.focusedSeconds)} sub={onPlanPct == null ? 'no sessions' : `${onPlanPct}% on plan`} />
+        <Tile label="Focused" value={formatDuration(r.focusedSeconds)} sub={r.onPlanPercent == null ? 'no sessions' : `${r.onPlanPercent}% on plan`} />
         <Tile
           label="Priorities"
           value={r.prioritiesTotal > 0 ? `${r.prioritiesDone}/${r.prioritiesTotal}` : '—'}
@@ -127,7 +126,7 @@ function Body({
 
       <section className="review-section">
         <h3 className="retro-heading">
-          Not done <span className="muted">{r.prioritiesTotal - r.prioritiesDone}</span>
+          Not done <span className="muted">{r.prioritiesOpen}</span>
         </h3>
         {r.notDone.length === 0 ? (
           <p className="muted small">{r.prioritiesTotal > 0 ? 'Every priority got ticked.' : 'No priorities were written.'}</p>

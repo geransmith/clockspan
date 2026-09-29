@@ -114,6 +114,21 @@ describe('SettingsDialog', () => {
     expect(screen.getByRole('status', { hidden: true }).textContent).toContain(SAVE_STATUS.saved);
   });
 
+  it('says in the header and the panel when a change was put back', async () => {
+    await renderDialog();
+    vi.mocked(api.putSettings).mockRejectedValueOnce(new Error('Request failed (500)'));
+    fireEvent.click(toggle('Show hours'));
+    await settle();
+    expect(screen.getByRole('status', { hidden: true }).textContent).toBe(SAVE_STATUS.failed);
+    expect(screen.getByText(SAVE_STATUS.failedDetail)).toBeTruthy();
+    expect(toggle('Show hours').getAttribute('aria-checked')).toBe('true');
+    // The next save that goes through clears both.
+    fireEvent.click(toggle('Show hours'));
+    await settle();
+    expect(screen.getByRole('status', { hidden: true }).textContent).toContain(SAVE_STATUS.saved);
+    expect(screen.queryByText(SAVE_STATUS.failedDetail)).toBeNull();
+  });
+
   it('offers to hide the lunch punches only with the meal periods off', async () => {
     await renderDialog();
     expect(screen.queryByRole('switch', { name: 'Lunch punches', hidden: true })).toBeNull();
