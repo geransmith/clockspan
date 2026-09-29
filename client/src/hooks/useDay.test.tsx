@@ -242,6 +242,25 @@ describe('load after a write', () => {
 });
 
 describe('refresh', () => {
+  it('shares a load already out for a day on screen instead of sending a second', async () => {
+    vi.mocked(api.getDay).mockResolvedValueOnce(makeDay());
+    const { result } = renderStore();
+    await settle();
+    // The timer's sync asked for the day, and the minute's refresh comes while that is out.
+    const out = deferred<Day>();
+    vi.mocked(api.getDay).mockReturnValueOnce(out.promise);
+    let loaded!: Promise<void>;
+    let refreshed!: Promise<void>;
+    act(() => {
+      loaded = result.current.load(TODAY);
+      refreshed = result.current.refresh(TODAY);
+    });
+    expect(api.getDay).toHaveBeenCalledTimes(2);
+    out.resolve(makeDay(TODAY, { retroNote: 'shared' }));
+    await act(() => Promise.all([loaded, refreshed]));
+    expect(result.current.days[TODAY]?.retroNote).toBe('shared');
+  });
+
   it("adopts the server's copy of a day on screen", async () => {
     vi.mocked(api.getDay)
       .mockResolvedValueOnce(makeDay())

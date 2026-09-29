@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { startTestApp, type TestApp } from '../dev/harness.js';
-import { ensureLocalUsers, LOCAL_USERS } from '../dev/seed.js';
 
 const DATE = '2026-09-01';
 const MIN = 60_000;
@@ -121,11 +120,7 @@ describe('breaks are scoped to the signed-in user', () => {
   afterEach(() => app.close());
 
   it("hides one user's breaks from another", async () => {
-    await ensureLocalUsers(app.db);
-    const a = app.client();
-    const b = app.client();
-    expect((await a.post('/api/auth/login', { username: LOCAL_USERS.admin, password: LOCAL_USERS.password })).status).toBe(200);
-    expect((await b.post('/api/auth/login', { username: LOCAL_USERS.member, password: LOCAL_USERS.password })).status).toBe(200);
+    const { a, b } = await app.twoUsers();
 
     const { id } = (await a.post(`/api/days/${DATE}/breaks`, { plannedSeconds: 300 })).body.break;
     expect((await b.get(`/api/days/${DATE}`)).body.breaks).toEqual([]);

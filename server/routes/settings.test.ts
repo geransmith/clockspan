@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { startTestApp, type TestApp } from '../dev/harness.js';
-import { ensureLocalUsers, LOCAL_USERS } from '../dev/seed.js';
 import { CARD_DEFAULT_VISIBLE, CARD_IDS, DEFAULT_SETTINGS } from '../../shared/settings.js';
 
 describe('/api/settings', () => {
@@ -158,11 +157,7 @@ describe('settings are scoped to the signed-in user', () => {
   it("saves, reads and resets one user's row without touching another's", async () => {
     const app = await startTestApp({ authMode: 'local' });
     try {
-      await ensureLocalUsers(app.db);
-      const a = app.client();
-      const b = app.client();
-      expect((await a.post('/api/auth/login', { username: LOCAL_USERS.admin, password: LOCAL_USERS.password })).status).toBe(200);
-      expect((await b.post('/api/auth/login', { username: LOCAL_USERS.member, password: LOCAL_USERS.password })).status).toBe(200);
+      const { a, b } = await app.twoUsers();
 
       expect((await a.put('/api/settings', { workMinutes: 420 })).body.workMinutes).toBe(420);
       expect((await b.get('/api/settings')).body).toEqual(DEFAULT_SETTINGS);
