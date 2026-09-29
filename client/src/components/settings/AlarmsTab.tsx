@@ -78,7 +78,7 @@ function AlarmEditor({ title, hint, alarm, onChange }: { title: string; hint?: s
           </span>
         </div>
         <div className="setting-row">
-          <label className="inline-check">
+          <label className="inline-check alarm-on-due">
             <input
               type="checkbox"
               className="checkbox"

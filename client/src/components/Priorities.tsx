@@ -109,23 +109,26 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
             <span className="priority-num" aria-hidden="true">
               {p.position}
             </span>
-            <input
-              type="checkbox"
-              className="checkbox"
-              checked={p.done}
-              disabled={empty}
-              onChange={(e) => {
-                if (e.target.checked) {
-                  // The sound plays once the tick has rendered; iOS only allows that after a tap unlocked it.
-                  unlockAudio();
-                  anchor.current = e.target;
-                  setTicked({});
-                }
-                edit(p.position, { done: e.target.checked }, true);
-              }}
-              aria-label={`Priority ${p.position} done`}
-              title={empty ? 'Write the priority first' : undefined}
-            />
+            {/* The label is the tick's touch area (styles.css); the box itself is 22 px. */}
+            <label className="priority-tick">
+              <input
+                type="checkbox"
+                className="checkbox"
+                checked={p.done}
+                disabled={empty}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    // The sound plays once the tick has rendered; iOS only allows that after a tap unlocked it.
+                    unlockAudio();
+                    anchor.current = e.target;
+                    setTicked({});
+                  }
+                  edit(p.position, { done: e.target.checked }, true);
+                }}
+                aria-label={`Priority ${p.position} done`}
+                title={empty ? 'Write the priority first' : undefined}
+              />
+            </label>
             {/* A textarea so a long priority wraps on a phone; the wrapper's copy of the text sets its height. */}
             <span className="grow-field" data-value={p.text || placeholder}>
               <textarea

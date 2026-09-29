@@ -973,6 +973,14 @@ button {
   align-items: center;
   gap: 10px;
 }
+/* The tick's label is its touch area (below). Without the browser's own checkbox margin the box
+   sits in its 22 px column, and the label is exactly the box in every engine. */
+.priority-tick {
+  display: flex;
+}
+.priority-tick .checkbox {
+  margin: 0;
+}
 .priority-row--removable {
   grid-template-columns: 24px 22px 1fr auto;
 }
@@ -1417,9 +1425,12 @@ button {
 }
 .log-row {
   display: grid;
-  grid-template-columns: auto 1fr auto auto;
+  grid-template-columns: 1fr auto auto;
+  grid-template-areas:
+    'label duration delete'
+    'time duration delete';
   align-items: center;
-  gap: 10px;
+  gap: 0 10px;
   padding: 8px 0;
   border-top: 1px solid var(--border);
 }
@@ -1429,12 +1440,14 @@ button {
   padding: 8px 16px;
 }
 .log-time {
+  grid-area: time;
   font-variant-numeric: tabular-nums;
   color: var(--text-2);
   font-size: 0.9rem;
   white-space: nowrap;
 }
 .log-label {
+  grid-area: label;
   text-align: left;
   border: 0;
   background: none;
@@ -1453,6 +1466,7 @@ button {
 }
 /* Label + priority select stacked while a row is being edited. */
 .log-edit {
+  grid-area: label;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1460,7 +1474,6 @@ button {
 }
 .log-plan-select {
   min-height: 38px;
-  font-size: 0.9rem;
 }
 /* Which priority the session was for, shown before the label. */
 .log-plan {
@@ -1478,7 +1491,13 @@ button {
   line-height: 18px;
   text-align: center;
 }
+/* The running pill goes under the time so a long label keeps the width. */
 .log-duration {
+  grid-area: duration;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  gap: 2px;
   font-variant-numeric: tabular-nums;
   font-weight: 650;
   white-space: nowrap;
@@ -1496,35 +1515,27 @@ button {
   color: var(--text-2);
 }
 .log-delete {
+  grid-area: delete;
   color: var(--text-3);
   min-height: 36px;
   min-width: 36px;
 }
-@media (max-width: 480px) {
+/* Wider than a phone: each row on one line, the time first. */
+@media (min-width: 481px) {
   .log-row {
-    grid-template-columns: 1fr auto auto;
-    grid-template-areas:
-      'label duration delete'
-      'time duration delete';
-    row-gap: 0;
+    grid-template-columns: auto 1fr auto auto;
+    grid-template-areas: none;
+    row-gap: 10px;
   }
-  .log-time {
-    grid-area: time;
-  }
+  .log-time,
   .log-label,
-  .log-edit {
-    grid-area: label;
-  }
-  /* The running pill goes under the time so a long label keeps the width. */
-  .log-duration {
-    grid-area: duration;
-    display: flex;
-    flex-direction: column-reverse;
-    align-items: flex-end;
-    gap: 2px;
-  }
+  .log-edit,
+  .log-duration,
   .log-delete {
-    grid-area: delete;
+    grid-area: auto;
+  }
+  .log-duration {
+    display: block;
   }
 }
 
@@ -1830,7 +1841,7 @@ button {
 .calendar-day.is-today .calendar-daynum {
   color: var(--accent);
 }
-/* Every sticker earned: the day itself gets the gold star. */
+/* Every sticker earned: the whole cell is filled in. */
 .calendar-day.is-full {
   background: var(--accent-soft);
   border-color: var(--accent);
@@ -1989,7 +2000,7 @@ button {
   border-top: 1px solid var(--border);
 }
 .review-row {
-  width: 100%;
+  width: calc(100% + 12px);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -2302,7 +2313,9 @@ dialog.dialog::backdrop {
   .log-delete,
   .punch-pair .punch-remove,
   .timer-add-priority,
-  .about-link {
+  .about-link,
+  .priority-tick,
+  .brand {
     position: relative;
   }
   .chip::after,
@@ -2313,7 +2326,9 @@ dialog.dialog::backdrop {
   .log-delete::after,
   .punch-pair .punch-remove::after,
   .timer-add-priority::after,
-  .about-link::after {
+  .about-link::after,
+  .priority-tick::after,
+  .brand::after {
     content: '';
     position: absolute;
     inset: var(--hit-inset);
@@ -2354,6 +2369,29 @@ dialog.dialog::backdrop {
      it doesn't, 26 px above the panel's foot: 44 px. */
   .about-link {
     --hit-inset: -14px -4px;
+  }
+  /* 22 px square in a 44 px row, 10 px from the text on its right, with the row's number (which
+     takes no taps) on its left: 44 px. */
+  .priority-tick {
+    --hit-inset: -11px -5px -11px -17px;
+  }
+  /* 40 px at the top of the page with nothing above it: 44 px. */
+  .brand {
+    --hit-inset: -2px 0;
+  }
+  /* A check with its words, and a list row, draw nothing around themselves: on a touch screen
+     they take a whole 44 px instead, which only adds air. The Review rows touch each other, so
+     an ::after has nowhere to go; the planner's rows and "When reached" are too close to theirs. */
+  .plan-next-list .inline-check,
+  .alarm-on-due,
+  .review-row {
+    min-height: 44px;
+  }
+  /* The edit-in-place inputs are drawn at 38 px to sit in their rows with a mouse. */
+  .log-label-input,
+  .log-plan-select,
+  .running-label-input {
+    min-height: 44px;
   }
   /* The running label clips its overflow (a long label ends in an ellipsis), which would cut
      off an ::after as well; more padding, taken back by a negative margin, grows the button
