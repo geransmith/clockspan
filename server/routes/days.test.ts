@@ -164,6 +164,21 @@ describe('PUT /api/days/:date/priorities', () => {
     expect(ok.body.priorities.map((p: { done: boolean }) => p.done)).toEqual([false, true, false]);
   });
 
+  it('refuses a malformed uid and text that is not a string, and stores nothing', async () => {
+    const put = (row: Record<string, unknown>) => app.api.put('/api/days/2026-09-01/priorities', { priorities: [{ text: 'ok' }, row] });
+    for (const uid of ['not-a-uid!', 'ab', 12345678]) {
+      const r = await put({ text: 'x', uid });
+      expect([r.status, r.body.error], String(uid)).toEqual([400, 'Priority 2 has an invalid uid.']);
+    }
+    for (const text of [42, ['x'], { t: 'x' }]) {
+      const r = await put({ text });
+      expect([r.status, r.body.error], JSON.stringify(text)).toEqual([400, 'Priority 2 has invalid text.']);
+    }
+    expect((await app.api.get('/api/days/2026-09-01')).body.priorities).toEqual([]);
+    // Absent or null is an empty row, as before.
+    expect((await put({ text: null, uid: null })).status).toBe(200);
+  });
+
   it('reads a null row as an empty one', async () => {
     const r = await app.api.put('/api/days/2026-09-01/priorities', { priorities: [null, { text: 'b' }] });
     expect(r.status).toBe(200);
