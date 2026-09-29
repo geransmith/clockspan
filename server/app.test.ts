@@ -310,13 +310,15 @@ describe('TRUST_PROXY', () => {
 describe('static client', () => {
   let app: TestApp;
   let dir: string;
-  /** A stand-in for dist/client: the shell, a fingerprinted asset and an icon. */
+  /** A stand-in for dist/client: the shell, a fingerprinted asset, an icon, the manifest and the service worker. */
   const writeBuild = (root: string) => {
     fs.mkdirSync(path.join(root, 'assets'), { recursive: true });
     fs.mkdirSync(path.join(root, 'icons'));
     fs.writeFileSync(path.join(root, 'index.html'), '<!doctype html><title>shell</title>');
     fs.writeFileSync(path.join(root, 'assets', 'index-abc123.js'), 'console.log(1)');
     fs.writeFileSync(path.join(root, 'icons', 'icon.svg'), '<svg/>');
+    fs.writeFileSync(path.join(root, 'manifest.webmanifest'), '{}');
+    fs.writeFileSync(path.join(root, 'sw.js'), '');
   };
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clockspan-client-'));
@@ -387,6 +389,19 @@ describe('static client', () => {
     expect((await fetch(`${app.url}/icons/icon.svg`)).status).toBe(200);
     // A dotfile inside the build is still never served: the path falls through to the shell.
     expect(await (await fetch(`${app.url}/.secret`)).text()).toContain('shell');
+  });
+
+  it('caches by the path inside the build, whatever the folders above it are called', async () => {
+    // An install under a folder named assets: only the build's own /assets is fingerprinted.
+    const nested = path.join(dir, 'assets', 'clockspan');
+    writeBuild(nested);
+    app = await startTestApp({ clientDir: nested });
+    expect((await fetch(`${app.url}/assets/index-abc123.js`)).headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    for (const p of ['/sw.js', '/manifest.webmanifest', '/icons/icon.svg']) {
+      const r = await fetch(app.url + p);
+      expect(r.status, p).toBe(200);
+      expect(r.headers.get('cache-control'), p).toBe('public, max-age=3600');
+    }
   });
 
   it('serves nothing outside /api when there is no build', async () => {

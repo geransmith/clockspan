@@ -82,7 +82,9 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
         index: false,
         maxAge: '1h',
         setHeaders: (res, filePath) => {
-          if (filePath.includes(`${path.sep}assets${path.sep}`)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          // By the path inside the build: filePath is absolute, and an install under a folder
+          // named assets would otherwise pin the icons, manifest and service worker for a year.
+          if (path.relative(clientDir, filePath).startsWith(`assets${path.sep}`)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
         },
       }),
     );
