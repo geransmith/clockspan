@@ -43,11 +43,12 @@ shared/                 imported by both sides, always with a `.js` suffix
   sounds.ts             the sound catalog (SOUNDS, SOUND_EVENTS)
   dates.ts, timer.ts    date keys; pause-aware session timing (activeMs, plannedEndAt, PLANNED_SECONDS)
   punches.ts            kindForPosition: a punch row's kind is its position's parity
+  backoff.ts            nextBackoff: the wait between retries of a request that must answer
 server/                 Express API → dist/server
   app.ts                createApp(): headers, /api/health, auth routers, data routers behind
                         requireAuth, static files and the SPA fallback; startBackgroundJobs() (the
                         login purge and the retention schedule, started by index.ts only)
-  security.ts           every security header, and rejectCrossSiteWrites
+  security.ts           every security header, rejectCrossSiteWrites and rejectUnknownHosts
   config.ts, db.ts      env parsing (throws on bad config); pragmas, MIGRATIONS, the default user
   settings.ts           mergeSettings (defaults + validation on every read and write), loadSettings
   retention.ts          old-day pruning (pruneDays, runRetention, the RETENTION_DAYS cap)
@@ -192,7 +193,13 @@ Never commit `data/` or `.env`.
   before 16.4), one whose `Origin` host is neither the `Host` header nor `APP_URL`'s: under
   `AUTH_MODE=none` there is no cookie for SameSite to hold back, and a body-less POST
   (finish, cancel) needs no preflight. Keep write routes under
-  `/api` so it covers them. The HTML pages the server writes itself (the OIDC error pages in
+  `/api` so it covers them. Under `AUTH_MODE=none` only, `rejectUnknownHosts` (also in
+  `security.ts`, mounted on `/api` after `/api/health`) refuses a request whose `Host` names
+  something other than an IP address, a one-word name, `localhost`, a `.local`, `.home.arpa`
+  or `.internal` name, `APP_URL`'s host or an `ALLOWED_HOSTS` entry: DNS rebinding makes a
+  page same-origin, and with no cookie nothing else would stop it reading or writing. It reads
+  the raw `Host` header, never `req.hostname`, which believes `X-Forwarded-Host` under
+  `TRUST_PROXY`, and a same-origin page can set that. The HTML pages the server writes itself (the OIDC error pages in
   `auth/oidc.ts`) carry fixed text: no request data or error message goes into HTML, and the
   cause goes to the log. Password hashing is async
   (`scrypt`, never `scryptSync`); login verifies against `DUMMY_HASH` when the user is unknown.
@@ -234,10 +241,12 @@ Never commit `data/` or `.env`.
   punch commit do this) for iOS. What plays is `settings.sounds[event]`, an id from the
   catalog in `shared/sounds.ts`; `settings.sound` is the master switch over all of them, and
   `none` is the per-event off. A celebration (day complete and work week reached in
-  `Timeclock.tsx`, the next day planned in `PlanNext.tsx`) is a `useCelebration(moment, event)`
-  (`hooks/useCelebration.ts`): the sound under `settings.sound`, the burst under
-  `settings.celebrations`. A state's moment comes from `useBecameTrue`, so it is the day
-  *becoming* done while the card is mounted, never a done day opening.
+  `Timeclock.tsx`, a priority ticked in `Priorities.tsx`, the next day planned in
+  `PlanNext.tsx`) is a `useCelebration(moment, event)` (`hooks/useCelebration.ts`): the sound
+  under `settings.sound`, the burst under `settings.celebrations`. A state's moment comes from
+  `useBecameTrue`, so it is the day *becoming* done while the card is mounted, never a done day
+  opening. The sound plays after the render, so a moment set by a tap calls `unlockAudio()` in
+  that handler first.
 - **Timer remaining time is derived from the server's `startedAt`, `plannedSeconds` and pauses**
   on every tick (`timerView()` in `client/src/lib/timer.ts`, on `shared/timer.ts`) — never a
   client-side counter. A paused session is still `status = 'running'` with `pausedAt` set;
@@ -256,7 +265,8 @@ Never commit `data/` or `.env`.
   `settings.loaded`, or an alert raised on load would use the default sound and switch; the
   alarms in `App.tsx` wait for it the same way (`settled`), or a longer work day than the
   default would ring the clock-out alarm on load. So `loaded` only turns true on a real answer:
-  a failed `GET /settings` is retried (2 s doubling to a minute), never settled with the defaults.
+  a failed `GET /settings` is retried (`nextBackoff` in `shared/backoff.ts`: 2 s doubling to a
+  minute), never settled with the defaults.
   `useTimer` keeps a `mutationSeq` so a slow `GET /sessions/running` can't overwrite an
   optimistic update; keep that pattern for new mutations.
   **One running session per user is a schema invariant** (a unique partial index), and another
@@ -329,8 +339,9 @@ Never commit `data/` or `.env`.
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started —
   one rule, no clock-in fallback. `GET /days/range` returns full days and the client does the
-  rollup (the review and the History calendar both fetch it, one period at a time); register
-  any new literal path under `/days` before `/:date`.
+  rollup (the review, the History calendar and the week line all fetch it through `useRange`,
+  one period at a time, which lays the day store's copies over the answer so an edit shows at
+  once); register any new literal path under `/days` before `/:date`.
 - **History → Days opens on the route's date.** `App.tsx` passes `route.date ?? today` to `History`;
   the calendar starts on that month with that day picked (`periodOffset('month', …)`), and
   only "Open day" navigates. So the header's History button lands on the month of the day
@@ -347,10 +358,12 @@ Never commit `data/` or `.env`.
 - **Per-date card drafts reset by remounting**: `Sheet.tsx` keys `Priorities` and `Retro` by
   date, so neither needs a "date changed" effect. Local drafts that mirror a prop use the
   "adjust state while rendering" form (see `DurationField`), not a `useEffect` + `setState`,
-  unless the draft is gated by a dirty flag (`Priorities`, `Retro`): a ref can't be read during
-  render, so there the effect form is the one the react-hooks rules allow. Callbacks that must
-  read the latest value use `useLatest()`, never a ref written in render (the react-hooks lint
-  enforces both).
+  unless the draft is gated by a dirty flag: a ref can't be read during render, so there the
+  effect form is the one the react-hooks rules allow. A typed draft that saves on a timer is
+  `useDebouncedDraft(stored, save, ms)` (`Priorities`, `Retro`): it saves after the wait, at
+  once on `flush()` or an edit made now, and on unmount, so a day left mid-sentence still
+  saves. Callbacks that must read the latest value use `useLatest()`, never a ref written in
+  render (the react-hooks lint enforces both).
 - Static assets are public; **all data is behind `/api/*`**. The SPA fallback serves
   `index.html` for any non-API path. `/assets/*` is fingerprinted and cached immutable.
 - **History, the settings dialog and drag and drop are lazy chunks** (`lazy()` in `App.tsx`
@@ -395,10 +408,11 @@ Never commit `data/` or `.env`.
   `DEFAULT_SETTINGS.sounds`, a label in `SOUND_EVENT_LABELS`, and a `playSound(settings.sounds.<event>)`
   call gated by `settings.sound` (or a `useCelebration` for a moment worth a burst).
 - **An alarm target** (existing: `lunchBy`, `clockOut`, `secondMeal`, `retro`): expose the instant from
-  `computeTimeclock` → add a target in `useAlarms.ts` (`targets[]`, with an `armed` rule; put
-  a rule the card also needs in a pure helper like `secondMealApplies`) → add its default
+  `computeTimeclock` → add a target to `alarmTargets()` in `lib/alarms.ts`, with an `armed` rule
+  and a test case (a rule the card also needs goes in a pure helper like `secondMealApplies`) → add its default
   under `alarms` in `shared/settings.ts` and the `AlarmId` union there → add an `AlarmEditor` in
-  `settings/AlarmsTab.tsx` → copy in `describeEvent()`: a `kicker` naming the alarm + rule
+  `settings/AlarmsTab.tsx` → its name in `ALARM_NAMES` (`lib/alarms.ts`; the type makes a
+  missing one an error) and copy in `describeEvent()`: a `kicker` naming the alarm + rule
   ("X alarm · 15 min warning"), a title, and a body that says where the deadline came from
   (it gets an `EventContext`; extend that if the new target needs more inputs). A banner can
   carry one `action` button (see the clock-out alarm's "Overtime approved" and the retro
@@ -451,6 +465,9 @@ Never commit `data/` or `.env`.
   fonts or assets (the CSP would block them anyway). Safe-area insets via `--safe-top` / `--safe-bottom`.
 - Numeric settings inputs commit on blur/Enter (never on every keystroke); priorities debounce
   400 ms; punches and checkboxes save immediately.
+- A form that sends a request submits through `useSubmit()` (`hooks/useSubmit.ts`): one send at
+  a time with the button disabled, and one error line, cleared when a send starts and filled
+  with what it throws (a mismatched confirmation throws too).
 - Comments explain *why* (browser quirks, math), not what.
 - No new dependency (a server one or a client library the bundle carries) without stating the
   reason in the commit message.

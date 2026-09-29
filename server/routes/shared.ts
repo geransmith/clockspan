@@ -3,7 +3,7 @@ import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { isValidDateKey } from '../../shared/dates.js';
 import type { Break, Punch, Session, SessionStatus } from '../../shared/api.js';
-import { activeMs, BREAK_SECONDS } from '../../shared/timer.js';
+import { activeMs, MIN_BREAK_MS } from '../../shared/timer.js';
 
 /** Guards a `/:date` route: 400 unless the param is a real `YYYY-MM-DD`. Works under `mergeParams` too. */
 export const requireDate: RequestHandler = (req, res, next) => {
@@ -138,9 +138,6 @@ export function runningSession(db: DB, userId: number): Dated<SessionRow> | unde
 export function breakRowToJson(b: Dated<BreakRow>): Break {
   return { id: b.id, date: b.date, plannedSeconds: b.planned_seconds, startedAt: b.started_at, endedAt: b.ended_at };
 }
-
-/** A break that ends at `now` after running less than this is dropped rather than logged. */
-export const MIN_BREAK_MS = BREAK_SECONDS.min * 1000;
 
 /**
  * Ends the user's running break, if any, at `now`: a new break or a focus session starting

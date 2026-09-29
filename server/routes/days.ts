@@ -304,12 +304,15 @@ export function daysRouter(db: DB, config: Config): Router {
       res.status(400).json({ error: 'done must be a boolean.' });
       return;
     }
-    const dayId = ensureDay(db, user.id, date);
-    if (note !== undefined) db.prepare(`UPDATE days SET retro_note = ? WHERE id = ?`).run(note.slice(0, LIMITS.retroNote), dayId);
-    if (done === true) db.prepare(`UPDATE days SET retro_at = COALESCE(retro_at, ?) WHERE id = ?`).run(Date.now(), dayId);
-    if (done === false) db.prepare(`UPDATE days SET retro_at = NULL WHERE id = ?`).run(dayId);
-    const day = findDay(db, user.id, date)!;
-    res.json({ retroNote: day.retro_note, retroAt: day.retro_at } satisfies RetroResponse);
+    // An empty patch changes nothing, so it stores no day either; it answers what is there.
+    if (note !== undefined || done !== undefined) {
+      const dayId = ensureDay(db, user.id, date);
+      if (note !== undefined) db.prepare(`UPDATE days SET retro_note = ? WHERE id = ?`).run(note.slice(0, LIMITS.retroNote), dayId);
+      if (done === true) db.prepare(`UPDATE days SET retro_at = COALESCE(retro_at, ?) WHERE id = ?`).run(Date.now(), dayId);
+      if (done === false) db.prepare(`UPDATE days SET retro_at = NULL WHERE id = ?`).run(dayId);
+    }
+    const day = findDay(db, user.id, date);
+    res.json({ retroNote: day?.retro_note ?? '', retroAt: day?.retro_at ?? null } satisfies RetroResponse);
   });
 
   return r;

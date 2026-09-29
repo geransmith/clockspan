@@ -1,17 +1,20 @@
 // @vitest-environment happy-dom
-import { cleanup, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import * as api from '../api';
-import { deferred, makeDay, settle, T0 } from '../test/hooks';
+import { deferred, makeDay, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
 import type { Day } from '../types';
+import { useDay } from './useDay';
 import { useRange } from './useRange';
 
 vi.mock('../api');
 
-const render = (from: string, to: string) => renderHook((p: { from: string; to: string }) => useRange(p.from, p.to), { initialProps: { from, to } });
+const render = (from: string, to: string) =>
+  renderHook((p: { from: string; to: string }) => useRange(p.from, p.to), { initialProps: { from, to }, wrapper: SettingsAndDays });
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
+  vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
 });
 afterEach(() => {
   cleanup();
@@ -53,4 +56,34 @@ it('reads as loading straight away on a new range, and drops the answer for the 
   failing.reject(new Error('late'));
   await settle();
   expect(result.current).toEqual({ days: [makeDay('2026-10-05')], error: null });
+});
+
+it("takes the store's copy of a day it holds, in date order, and follows an edit made since", async () => {
+  // TODAY is a Monday; the range runs to Wednesday. The store holds Wednesday (answered too),
+  // Tuesday (stored since the range was asked for), and two days outside the range.
+  const tue = '2026-09-29';
+  const wed = '2026-09-30';
+  vi.mocked(api.getRange).mockResolvedValue({ days: [makeDay(TODAY, { retroNote: 'fetched' }), makeDay(wed, { retroNote: 'fetched' })] });
+  vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(makeDay(date, { retroNote: 'held' })));
+  vi.mocked(api.putRetro).mockResolvedValue({ retroNote: 'edited', retroAt: null });
+  const { result } = renderHook(
+    () => {
+      const { store } = useDay(wed);
+      useDay(tue);
+      useDay('2026-09-25');
+      useDay('2026-10-01');
+      return { range: useRange(TODAY, wed), store };
+    },
+    { wrapper: SettingsAndDays },
+  );
+  expect(result.current.range.days).toBeNull();
+  await settle();
+  expect(result.current.range.days?.map((d) => [d.date, d.retroNote])).toEqual([
+    [TODAY, 'fetched'],
+    [tue, 'held'],
+    [wed, 'held'],
+  ]);
+  await act(() => result.current.store.setRetro(wed, { note: 'edited' }));
+  expect(result.current.range.days?.find((d) => d.date === wed)?.retroNote).toBe('edited');
+  expect(api.getRange).toHaveBeenCalledTimes(1);
 });

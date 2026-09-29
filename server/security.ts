@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import type { RequestHandler } from 'express';
 import type { Config } from './config.js';
 
@@ -39,8 +40,8 @@ const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
  * APP_URL's for a proxy that rewrites Host. `null` (a sandboxed frame) is never this host. A
  * request with neither header is not a browser acting for someone (curl) and passes.
  * What this can't see is DNS rebinding: a page that points one of its own names at this server
- * is same-origin to the browser. Under AUTH_MODE=none nothing else stands in its way (the README
- * says so); with sign-in, the session cookie stays with the real host.
+ * is same-origin to the browser. Under AUTH_MODE=none `rejectUnknownHosts` stops that; with
+ * sign-in, the session cookie stays with the real host.
  */
 export function rejectCrossSiteWrites(config: Config): RequestHandler {
   const appHost = config.appUrl ? new URL(config.appUrl).host : null;
@@ -59,6 +60,70 @@ export function rejectCrossSiteWrites(config: Config): RequestHandler {
       }
     }
     next();
+  };
+}
+
+/**
+ * Top-level names that can't be registered on the internet (RFC 6761, RFC 6762, RFC 8375, and
+ * `.internal`, which ICANN set aside in 2024), so no outside page can point one at this server.
+ */
+const PRIVATE_DOMAINS = ['.localhost', '.local', '.home.arpa', '.internal'];
+
+/** How many refused names get a log line, so a stream of made-up names can't flood the log or grow the set. */
+const REPORTED_NAMES = 10;
+
+/** A Host header as a browser sends it: a bracketed IPv6 address or a name, then maybe a port. */
+const HOST_HEADER = /^(?:\[([0-9a-f:.]+)\]|([a-z0-9_][a-z0-9_.-]*))(?::\d+)?$/i;
+
+/** The name a Host header asks for, lowercased, with no port, brackets or trailing dot; null for a malformed header. */
+function hostName(header: string): string | null {
+  const m = HOST_HEADER.exec(header);
+  if (!m) return null;
+  if (m[1] !== undefined) return isIP(m[1]) === 6 ? m[1].toLowerCase() : null;
+  return m[2]!.toLowerCase().replace(/\.$/, '');
+}
+
+/** An entry is one name, or with a leading dot a domain and every name under it. */
+function matches(name: string, entry: string): boolean {
+  return entry.startsWith('.') ? name === entry.slice(1) || name.endsWith(entry) : name === entry;
+}
+
+/**
+ * Refuses an API request for a host name this server doesn't know. Mounted under AUTH_MODE=none
+ * only (app.ts), where no cookie is needed: DNS rebinding points a name the attacker owns at
+ * this server, the browser then treats the attacker's page as same-origin, and it can read and
+ * write everything (`rejectCrossSiteWrites` sees `same-origin`). The request still names the
+ * attacker's domain in Host, so an allowlist ends it. What always passes is what no outside
+ * page can use: an IP address, a one-word name (`tower`, resolved on the LAN), and the names in
+ * PRIVATE_DOMAINS. APP_URL's host and ALLOWED_HOSTS add the rest. Under sign-in the check isn't
+ * needed: the session cookie never goes to the attacker's name.
+ * The raw Host header is read, never `req.hostname`: behind TRUST_PROXY that believes
+ * X-Forwarded-Host, which a same-origin page may set on its own requests.
+ */
+export function rejectUnknownHosts(config: Config): RequestHandler {
+  const allowed = [...PRIVATE_DOMAINS, ...config.allowedHosts];
+  if (config.appUrl) allowed.push(new URL(config.appUrl).hostname);
+  const known = (name: string) => isIP(name) !== 0 || !name.includes('.') || allowed.some((entry) => matches(name, entry));
+  const reported = new Set<string>();
+  return (req, res, next) => {
+    const header = req.get('host');
+    // HTTP/1.0 without a Host header: not a browser, so not a page acting for someone.
+    if (header === undefined) {
+      next();
+      return;
+    }
+    const name = hostName(header);
+    if (name !== null && known(name)) {
+      next();
+      return;
+    }
+    if (name !== null && !reported.has(name) && reported.size < REPORTED_NAMES) {
+      reported.add(name);
+      console.warn(
+        `[host] API request for ${JSON.stringify(name)} refused: with AUTH_MODE=none the API only answers names it knows. If the name is yours, add it to ALLOWED_HOSTS.`,
+      );
+    }
+    res.status(403).json({ error: name === null ? 'Invalid Host header.' : `This server does not answer to ${name}. Add it to ALLOWED_HOSTS.` });
   };
 }
 

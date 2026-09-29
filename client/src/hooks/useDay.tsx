@@ -70,7 +70,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const writeChains = useRef(new Map<string, Promise<boolean>>());
   // A refresh sent before a write and answered after it would put the older copy back, so
   // every write bumps this and a refresh answer is dropped when it has moved (the timer's
-  // `mutationSeq`). `saving` counts writes in flight so no refresh is sent during one.
+  // `mutationSeq`). `saving` counts writes queued or in flight so no refresh is sent during one.
   const mutationSeq = useRef(0);
   const saving = useRef(0);
 
@@ -117,13 +117,14 @@ export function DayProvider({ children }: { children: ReactNode }) {
   );
   const load = useCallback((date: string) => fetchDay(date), [fetchDay]);
 
-  // Every write ends here: on failure the server's copy replaces an optimistic guess (`date`
-  // null when there was none) and a banner says so, since the edit vanishing on its own would
-  // look like the app losing data.
+  // Every write ends here, through one of the two queues below, which count it in `saving`
+  // from the moment it is queued. On failure the server's copy replaces an optimistic guess
+  // (`date` null when there was none) and a banner says so, since the edit vanishing on its
+  // own would look like the app losing data.
   const persist = useCallback(
     async (date: string | null, run: () => Promise<unknown>): Promise<boolean> => {
+      // A GET sent while this write waited its turn is older than it.
       mutationSeq.current++;
-      saving.current++;
       try {
         await run();
         return true;
@@ -131,8 +132,6 @@ export function DayProvider({ children }: { children: ReactNode }) {
         if (date) void fetchDay(date, { reload: true });
         warnQuietly({ title: SAVE_FAILED.title, body: SAVE_FAILED.body, tag: 'save-failed' });
         return false;
-      } finally {
-        saving.current--;
       }
     },
     [fetchDay],
@@ -151,6 +150,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       }
       const q = { latest: value as unknown, drained: Promise.resolve(true) };
       listQueues.current.set(key, q);
+      saving.current++;
       q.drained = (async () => {
         try {
           let sent: unknown = q; // nothing yet: `q` is never a list
@@ -161,6 +161,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
           }
           return true;
         } finally {
+          saving.current--;
           listQueues.current.delete(key);
         }
       })();
@@ -173,8 +174,9 @@ export function DayProvider({ children }: { children: ReactNode }) {
   // out after the one before them on the same key, so the server ends where the screen does.
   const inOrder = useCallback(
     (key: string, date: string | null, run: () => Promise<unknown>): Promise<boolean> => {
-      // Out from the moment it is queued: a refresh must not land between the change on
-      // screen and its PUT.
+      // Out from the moment it is queued: the change is on screen, so a GET already out is
+      // older than it (`persist` bumps again when the write goes out, for one sent meanwhile),
+      // and no refresh goes out until it has its answer.
       mutationSeq.current++;
       saving.current++;
       const next = (writeChains.current.get(key) ?? Promise.resolve(true)).then(() => persist(date, run)).finally(() => saving.current--);
