@@ -53,7 +53,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     data = await res.json();
   } catch (err) {
     if (timedOut(err)) throw new Error(REQUEST_TIMEOUT);
-    // Non-JSON error bodies (e.g. a proxy page) fall through to the generic message.
+    // Every API answer is JSON, so a body that isn't is a page from something in between: a
+    // proxy's error page (the generic message below), or a forward-auth proxy's sign-in page,
+    // which comes as a 200 once its session runs out and must not pass for an empty answer.
+    if (res.ok) throw new ApiError(res.status, `Unreadable answer (${res.status})`, null);
   }
   if (!res.ok) {
     const message = (data as { error?: string } | null)?.error ?? `Request failed (${res.status})`;

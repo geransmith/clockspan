@@ -91,7 +91,9 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const latestErrors = useLatest(errors);
   const { settings } = useSettings();
   const priorityCount = useLatest(settings.priorityCount);
-  const inflight = useRef(new Map<string, Promise<void>>());
+  const inflight = useRef(new Map<string, Promise<boolean>>());
+  // The date whose failed load raised the banner (one at a time: a newer one replaces it).
+  const bannerFor = useRef<string | null>(null);
   const listQueues = useRef(new Map<string, { latest: unknown; ids: number[]; drained: Promise<boolean> }>());
   const writeChains = useRef(new Map<string, Promise<boolean>>());
   const nextId = useRef(0);
@@ -104,38 +106,47 @@ export function DayProvider({ children }: { children: ReactNode }) {
   // `quiet`: a refresh, or asking again after a failed save or first load. A first load that
   // fails is recorded (the sheet shows it with Try again) and, unless quiet, raised as a banner;
   // a day already shown keeps its copy, and a failed save has already said the server is down.
+  // An answer that isn't a day fails the same way. Never rejects: it resolves to whether the
+  // answer was stale, older than a change the server confirmed after it went out.
   const fetchDay = useCallback(
-    function fetchDay(date: string, quiet = false): Promise<void> {
+    function fetchDay(date: string, quiet = false): Promise<boolean> {
       const out = inflight.current.get(date);
       if (out) return out;
       const sentAt = (store.current[date] ?? untracked<Day>()).version;
-      const p: Promise<void> = api
+      let again = false;
+      const p = api
         .getDay(date)
-        .then(
-          (d) => {
-            let again = false;
-            update(date, (t) => {
-              const answer = fetched(t, sentAt, normalizeDay(d));
-              again = answer.again;
-              return answer.next;
-            });
-            setErrors((prev) => {
-              if (!(date in prev)) return prev;
-              const next = { ...prev };
-              delete next[date];
-              return next;
-            });
+        .then((d) => {
+          const day = normalizeDay(d);
+          let stale = false;
+          update(date, (t) => {
+            const answer = fetched(t, sentAt, day);
+            stale = t.version !== sentAt;
+            again = answer.again;
+            return answer.next;
+          });
+          setErrors((prev) => {
+            if (!(date in prev)) return prev;
+            const next = { ...prev };
+            delete next[date];
+            return next;
+          });
+          if (bannerFor.current === date) {
+            bannerFor.current = null;
             dismissByTag('load-failed');
-            return again;
-          },
-          (err: unknown) => {
-            if (shownDay(store.current[date])) return false;
-            setErrors((prev) => ({ ...prev, [date]: (err as Error).message }));
-            if (!quiet) warnQuietly({ title: LOAD_FAILED.title, body: LOAD_FAILED.body, tag: 'load-failed' });
-            return false;
-          },
-        )
-        .then((again) => {
+          }
+          return stale;
+        })
+        .catch((err: unknown) => {
+          if (shownDay(store.current[date])) return false;
+          setErrors((prev) => ({ ...prev, [date]: (err as Error).message }));
+          if (!quiet) {
+            bannerFor.current = date;
+            warnQuietly({ title: LOAD_FAILED.title, body: LOAD_FAILED.body, tag: 'load-failed' });
+          }
+          return false;
+        })
+        .finally(() => {
           inflight.current.delete(date);
           // It landed on a day never loaded, but the server confirmed a change after it went out.
           if (again) void fetchDay(date, true);
@@ -145,14 +156,19 @@ export function DayProvider({ children }: { children: ReactNode }) {
     },
     [update],
   );
-  const load = useCallback((date: string) => fetchDay(date), [fetchDay]);
+  const load = useCallback(
+    async (date: string) => {
+      await fetchDay(date);
+    },
+    [fetchDay],
+  );
 
   const refresh = useCallback(
-    (date: string) => {
+    async (date: string) => {
       // Not loaded yet: useDay's first fetch owns that. If it failed, asking again here brings
       // today's alarms back once the server answers, without anyone pressing Try again.
-      if (!shownDay(store.current[date]) && !(date in latestErrors.current)) return Promise.resolve();
-      return fetchDay(date, true);
+      if (!shownDay(store.current[date]) && !(date in latestErrors.current)) return;
+      await fetchDay(date, true);
     },
     [latestErrors, fetchDay],
   );
@@ -160,7 +176,9 @@ export function DayProvider({ children }: { children: ReactNode }) {
   // Every write ends here. Saved: the changes `ids` leave the pending list and the server's
   // answer becomes the stored copy. Not saved: they leave it all the same, so the screen is back
   // on the stored copy at once, a banner says so (the edit vanishing on its own would look like
-  // the app losing data), and the day is asked for again in case the server moved on.
+  // the app losing data), and the day is asked for again in case the server moved on (another
+  // device deleted the row). That shares a load already out, whose answer is dropped if a
+  // change was confirmed after it went out, so a stale answer asks once more.
   const persist = useCallback(
     async (date: string, ids: readonly number[], run: () => Promise<Commit>): Promise<boolean> => {
       try {
@@ -170,7 +188,9 @@ export function DayProvider({ children }: { children: ReactNode }) {
       } catch {
         update(date, (t) => settle(t, ids));
         warnQuietly({ title: SAVE_FAILED.title, body: SAVE_FAILED.body, tag: 'save-failed' });
-        void fetchDay(date, true);
+        void fetchDay(date, true).then((stale) => {
+          if (stale) void fetchDay(date, true);
+        });
         return false;
       }
     },
