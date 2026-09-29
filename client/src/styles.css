@@ -7,18 +7,27 @@
   --border: #e2e5ec;
   --text: #171a20;
   --text-2: #5b6473;
-  /* About 3:1 on the surfaces: icons, placeholders and struck-through done rows. Other text uses --text-2 (4.5:1 and up). */
+  /* About 3:1 on the surfaces: icons, placeholders and struck-through done rows. Other text uses
+     --text-2 or a tone's -ink (4.5:1 and up). */
   --text-3: #8a94a4;
+  /* Words in a tone's colour use its -ink: in light mode the tone itself is 3.7 to 4.3:1 on its
+     -soft, and the -ink is 5:1 and up there, on white and on --surface-2. The tone stays for
+     fills, borders, icons and bars. The dark tones pass as they are, so each dark -ink is its
+     tone. (--accent-text is the colour on an --accent fill.) */
   --accent: #3b6cf6;
   --accent-strong: #2a56cf;
   --accent-soft: #e8eeff;
+  --accent-ink: var(--accent-strong);
   --accent-text: #ffffff;
   --ok: #178a4c;
   --ok-soft: #e3f5ea;
+  --ok-ink: #147641;
   --warn: #c2620a;
   --warn-soft: #fff1dc;
+  --warn-ink: #a25208;
   --danger: #d12f2f;
   --danger-soft: #fde7e7;
+  --danger-ink: #bd2a2a;
   --radius: 16px;
   --radius-sm: 10px;
   --shadow: 0 1px 2px rgba(20, 24, 40, 0.04), 0 6px 20px rgba(20, 24, 40, 0.06);
@@ -43,13 +52,17 @@
     --accent: #6b8ff8;
     --accent-strong: #86a4ff;
     --accent-soft: #1c2a4f;
+    --accent-ink: var(--accent);
     --accent-text: #0b1020;
     --ok: #46c27e;
     --ok-soft: #12321f;
+    --ok-ink: var(--ok);
     --warn: #f0a23b;
     --warn-soft: #3a2a10;
+    --warn-ink: var(--warn);
     --danger: #f36c6c;
     --danger-soft: #3f1b1b;
+    --danger-ink: var(--danger);
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.35);
   }
 }
@@ -65,13 +78,17 @@
   --accent: #6b8ff8;
   --accent-strong: #86a4ff;
   --accent-soft: #1c2a4f;
+  --accent-ink: var(--accent);
   --accent-text: #0b1020;
   --ok: #46c27e;
   --ok-soft: #12321f;
+  --ok-ink: var(--ok);
   --warn: #f0a23b;
   --warn-soft: #3a2a10;
+  --warn-ink: var(--warn);
   --danger: #f36c6c;
   --danger-soft: #3f1b1b;
+  --danger-ink: var(--danger);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.35);
   /* Form controls and scrollbars follow a forced theme too. */
   color-scheme: dark;
@@ -150,11 +167,11 @@ button {
   text-align: center;
 }
 .error {
-  color: var(--danger);
+  color: var(--danger-ink);
   font-size: 0.92rem;
 }
 .success {
-  color: var(--ok);
+  color: var(--ok-ink);
   font-size: 0.92rem;
 }
 .stack {
@@ -215,7 +232,7 @@ button {
 .btn-icon.is-active {
   background: var(--accent-soft);
   border-color: transparent;
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .btn-lg {
   min-height: 50px;
@@ -223,7 +240,7 @@ button {
   width: 100%;
 }
 .btn-danger-text {
-  color: var(--danger);
+  color: var(--danger-ink);
 }
 .btn-text {
   display: none;
@@ -317,19 +334,19 @@ button {
 }
 .pill--ok {
   background: var(--ok-soft);
-  color: var(--ok);
+  color: var(--ok-ink);
 }
 .pill--warn {
   background: var(--warn-soft);
-  color: var(--warn);
+  color: var(--warn-ink);
 }
 .pill--accent {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .pill--danger {
   background: var(--danger-soft);
-  color: var(--danger);
+  color: var(--danger-ink);
 }
 .chip {
   display: inline-flex;
@@ -346,13 +363,13 @@ button {
 .chip.is-on {
   background: var(--accent-soft);
   border-color: transparent;
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .chip:disabled {
   opacity: 0.45;
 }
 .chip-action {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .chips {
   display: flex;
@@ -364,7 +381,7 @@ button {
   height: 28px;
   border-radius: 50%;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -379,7 +396,7 @@ button {
 }
 .notice--danger {
   background: var(--danger-soft);
-  color: var(--danger);
+  color: var(--danger-ink);
 }
 /* Priorities nudge: warm but not alarming, with its two buttons on the next line on phones. */
 .notice--gentle {
@@ -750,14 +767,14 @@ button {
 }
 .tile--ok .tile-sub,
 .tile--ok .tile-label {
-  color: var(--ok);
+  color: var(--ok-ink);
 }
 .tile--warn {
   background: var(--warn-soft);
 }
 .tile--warn .tile-sub,
 .tile--warn .tile-label {
-  color: var(--warn);
+  color: var(--warn-ink);
 }
 .tile--danger {
   background: var(--danger-soft);
@@ -765,14 +782,14 @@ button {
 .tile--danger .tile-sub,
 .tile--danger .tile-label,
 .tile--danger .tile-value {
-  color: var(--danger);
+  color: var(--danger-ink);
 }
 .tile--accent {
   background: var(--accent-soft);
 }
 .tile--accent .tile-sub,
 .tile--accent .tile-label {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .tile--live .tile-value::after {
   content: '';
@@ -810,7 +827,7 @@ button {
   color: var(--text-2);
 }
 .timeclock-note--danger {
-  color: var(--danger);
+  color: var(--danger-ink);
 }
 .ot-row,
 .target-row {
@@ -928,7 +945,7 @@ button {
 }
 .punch-add {
   align-self: flex-start;
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .punch-clear,
 .punch-remove {
@@ -1036,7 +1053,7 @@ button {
   gap: 8px;
 }
 .priority-add {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .priorities-summary {
   font-size: 0.85rem;
@@ -1120,7 +1137,7 @@ button {
   border-radius: var(--radius);
   background: var(--accent-soft);
   border-color: transparent;
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .btn-quick:hover:not(:disabled) {
   background: var(--accent);
@@ -1135,7 +1152,6 @@ button {
 .timer-quick-unit {
   font-size: 0.8rem;
   font-weight: 600;
-  opacity: 0.85;
 }
 .timer--running {
   display: flex;
@@ -1172,7 +1188,7 @@ button {
   stroke: var(--warn);
 }
 .timer--running.is-due .countdown {
-  color: var(--warn);
+  color: var(--warn-ink);
 }
 .ring-center {
   position: absolute;
@@ -1237,7 +1253,7 @@ button {
   background: var(--warn);
 }
 .running-bar.is-due .running-time {
-  color: var(--warn);
+  color: var(--warn-ink);
 }
 .running-bar.is-due .running-progress {
   background: var(--warn);
@@ -1342,15 +1358,18 @@ button {
   background: var(--warn-soft);
   border-color: var(--warn);
   --banner-tone: var(--warn);
+  --banner-ink: var(--warn-ink);
 }
 .banner--danger {
   background: var(--danger-soft);
   border-color: var(--danger);
   --banner-tone: var(--danger);
+  --banner-ink: var(--danger-ink);
 }
 .banner--success {
   border-left-color: var(--ok);
   --banner-tone: var(--ok);
+  --banner-ink: var(--ok-ink);
 }
 .banner-icon {
   flex: none;
@@ -1376,7 +1395,7 @@ button {
 .banner-kicker {
   font-size: 0.78rem;
   font-weight: 650;
-  color: var(--banner-tone, var(--accent));
+  color: var(--banner-ink, var(--accent-ink));
 }
 .banner-time {
   flex: none;
@@ -1397,7 +1416,7 @@ button {
   margin-top: 4px;
   min-height: 36px;
   border: 1px solid var(--banner-tone, var(--accent));
-  color: var(--banner-tone, var(--accent));
+  color: var(--banner-ink, var(--accent-ink));
 }
 .banner-close {
   min-height: 32px;
@@ -1489,7 +1508,7 @@ button {
   padding: 0 5px;
   border-radius: 999px;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: 0.72rem;
   font-weight: 700;
   line-height: 18px;
@@ -1843,7 +1862,7 @@ button {
   opacity: 0.55;
 }
 .calendar-day.is-today .calendar-daynum {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 /* Every sticker earned: the whole cell is filled in. */
 .calendar-day.is-full {
@@ -2154,7 +2173,7 @@ dialog.dialog::backdrop {
   color: var(--text);
 }
 .tab.is-active {
-  color: var(--accent);
+  color: var(--accent-ink);
   border-bottom-color: var(--accent);
 }
 .dialog-body {
