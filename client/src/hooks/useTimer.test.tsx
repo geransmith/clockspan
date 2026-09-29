@@ -156,20 +156,76 @@ describe('adjust', () => {
     expect(result.current.timer.running).toMatchObject({ plannedSeconds: 1800, notes: 'stored' });
   });
 
-  it('keeps a newer adjust when an older answer lands late', async () => {
+  it('compounds rapid presses, shows the newest at once, and sends them in order', async () => {
     const { result } = await renderRunning(startedAgo(5));
     const first = deferred<Answer>();
     vi.mocked(api.patchSession)
       .mockReturnValueOnce(first.promise)
       .mockResolvedValueOnce({ session: startedAgo(5, { plannedSeconds: 2100 }) });
     let a!: Promise<void>;
+    let b!: Promise<void>;
     act(() => {
       a = result.current.timer.adjust(5 * 60);
+      b = result.current.timer.adjust(5 * 60);
     });
-    await act(() => result.current.timer.adjust(5 * 60));
+    expect(result.current.timer.running?.plannedSeconds).toBe(2100);
+    await settle();
+    // The second waits for the first, so the server takes them in the order they were made.
+    expect(vi.mocked(api.patchSession).mock.calls).toEqual([[1, { plannedSeconds: 1800 }]]);
     first.resolve({ session: startedAgo(5, { plannedSeconds: 1800 }) });
     await act(() => a);
+    // The first answer is in, and the second press is still on top of it.
     expect(result.current.timer.running?.plannedSeconds).toBe(2100);
+    await act(() => b);
+    expect(vi.mocked(api.patchSession).mock.calls).toEqual([
+      [1, { plannedSeconds: 1800 }],
+      [1, { plannedSeconds: 2100 }],
+    ]);
+    expect(result.current.timer.running?.plannedSeconds).toBe(2100);
+  });
+
+  it('keeps the second press when the first fails, and warns once', async () => {
+    const { result } = await renderRunning(startedAgo(5));
+    const first = deferred<Answer>();
+    vi.mocked(api.patchSession)
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce({ session: startedAgo(5, { plannedSeconds: 2100 }) });
+    let a!: Promise<void>;
+    let b!: Promise<void>;
+    act(() => {
+      a = result.current.timer.adjust(5 * 60);
+      b = result.current.timer.adjust(5 * 60);
+    });
+    first.reject(new Error('offline'));
+    await act(() => a);
+    // Only the refused press is gone; the one still on its way shows.
+    expect(result.current.timer.running?.plannedSeconds).toBe(2100);
+    await act(() => b);
+    expect(result.current.timer.running?.plannedSeconds).toBe(2100);
+    expect(warnQuietly).toHaveBeenCalledTimes(1);
+  });
+
+  it('never brings a finished timer back when a + before the finish fails late', async () => {
+    const { result } = await renderRunning(startedAgo(5));
+    const plus = deferred<Answer>();
+    vi.mocked(api.patchSession).mockReturnValueOnce(plus.promise);
+    vi.mocked(api.finishSession).mockResolvedValue({ session: startedAgo(5, { status: 'completed', durationSeconds: 300 }) });
+    let a!: Promise<void>;
+    let f!: Promise<void>;
+    act(() => {
+      a = result.current.timer.adjust(5 * 60);
+      f = result.current.timer.finish();
+    });
+    plus.reject(new Error('offline'));
+    await act(() => a);
+    await act(() => f);
+    expect(api.finishSession).toHaveBeenCalledWith(1, false);
+    expect(result.current.timer.running).toBeNull();
+    expect(result.current.timer.finished).toMatchObject({ id: 1, status: 'completed' });
+    // The server has nothing running now, and the next sync agrees.
+    vi.mocked(api.getRunning).mockResolvedValue({ session: null });
+    await settle(MIN);
+    expect(result.current.timer.running).toBeNull();
   });
 
   it('never plans under a minute', async () => {
@@ -290,12 +346,14 @@ describe('setLabel', () => {
     vi.mocked(api.patchSession).mockReturnValueOnce(rename.promise);
     vi.mocked(api.cancelSession).mockResolvedValue({ session: startedAgo(5, { status: 'cancelled' }) });
     let a!: Promise<void>;
+    let c!: Promise<void>;
     act(() => {
       a = result.current.timer.setLabel('Renamed');
+      c = result.current.timer.cancel();
     });
-    await act(() => result.current.timer.cancel());
     rename.resolve({ session: startedAgo(5, { label: 'Renamed' }) });
     await act(() => a);
+    await act(() => c);
     expect(result.current.timer.running).toBeNull();
 
     // Replaced by another device's session before the rename fails: nothing to put back.
@@ -312,6 +370,53 @@ describe('setLabel', () => {
     failing.reject(new Error('offline'));
     await act(() => b);
     expect(result.current.timer.running).toMatchObject({ id: 3, label: 'Third' });
+  });
+});
+
+describe('a press the server answers differently', () => {
+  it('drops a session that answers a press as ended elsewhere, and logs its row', async () => {
+    const { result } = await renderRunning(startedAgo(5));
+    vi.mocked(api.patchSession).mockResolvedValue({
+      session: startedAgo(5, { label: 'Renamed', status: 'completed', endedAt: T0, durationSeconds: 300 }),
+    });
+    await act(() => result.current.timer.setLabel('Renamed'));
+    expect(result.current.timer.running).toBeNull();
+    expect(result.current.store.days[TODAY]?.sessions[0]).toMatchObject({ status: 'completed', label: 'Renamed' });
+  });
+
+  it('keeps the pause another device made when a sync lands under a pause of its own', async () => {
+    const { result } = await renderRunning(startedAgo(5));
+    const pausing = deferred<Answer>();
+    vi.mocked(api.pauseSession).mockReturnValueOnce(pausing.promise);
+    let p!: Promise<void>;
+    act(() => {
+      p = result.current.timer.pause();
+    });
+    const elsewhere = startedAgo(5, { pausedAt: T0 - 2 * MIN });
+    vi.mocked(api.getRunning).mockResolvedValue({ session: elsewhere });
+    await settle(MIN);
+    expect(result.current.timer.running?.pausedAt).toBe(T0 - 2 * MIN);
+    pausing.resolve({ session: elsewhere });
+    await act(() => p);
+    expect(result.current.timer.running?.pausedAt).toBe(T0 - 2 * MIN);
+  });
+
+  it('keeps a resume another device made when a sync lands under a resume of its own', async () => {
+    const { result } = await renderRunning(startedAgo(15, { pausedAt: T0 - 10 * MIN }));
+    const resuming = deferred<Answer>();
+    vi.mocked(api.resumeSession).mockReturnValueOnce(resuming.promise);
+    let r!: Promise<void>;
+    act(() => {
+      r = result.current.timer.resume();
+    });
+    // The phone resumed it first, and banked a shorter pause.
+    const elsewhere = startedAgo(15, { pausedSeconds: 300 });
+    vi.mocked(api.getRunning).mockResolvedValue({ session: elsewhere });
+    await settle(MIN);
+    expect(result.current.timer.running).toMatchObject({ pausedAt: null, pausedSeconds: 300 });
+    resuming.resolve({ session: elsewhere });
+    await act(() => r);
+    expect(result.current.timer.running).toMatchObject({ pausedAt: null, pausedSeconds: 300 });
   });
 });
 
@@ -394,12 +499,14 @@ describe('pause and resume', () => {
     vi.mocked(api.pauseSession).mockReturnValueOnce(pausing.promise);
     vi.mocked(api.finishSession).mockResolvedValue({ session: startedAgo(5, { status: 'completed', durationSeconds: 300 }) });
     let p!: Promise<void>;
+    let f!: Promise<void>;
     act(() => {
       p = result.current.timer.pause();
+      f = result.current.timer.finish();
     });
-    await act(() => result.current.timer.finish());
     pausing.reject(new Error('offline'));
     await act(() => p);
+    await act(() => f);
     expect(result.current.timer.running).toBeNull();
 
     vi.mocked(api.getRunning).mockResolvedValueOnce({ session: startedAgo(5, { pausedAt: T0 }) });
@@ -408,12 +515,14 @@ describe('pause and resume', () => {
     vi.mocked(api.resumeSession).mockReturnValueOnce(resuming.promise);
     vi.mocked(api.cancelSession).mockResolvedValue({ session: startedAgo(5, { status: 'cancelled' }) });
     let r!: Promise<void>;
+    let c!: Promise<void>;
     act(() => {
       r = result.current.timer.resume();
+      c = result.current.timer.cancel();
     });
-    await act(() => result.current.timer.cancel());
     resuming.reject(new Error('offline'));
     await act(() => r);
+    await act(() => c);
     expect(result.current.timer.running).toBeNull();
   });
 
