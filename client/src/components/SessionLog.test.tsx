@@ -3,8 +3,9 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { CONFIRM } from '../lib/copy';
-import { makeSession, makeSettings, MIN, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
-import type { Break, Priority, Session } from '../types';
+import { useTimer } from '../hooks/useTimer';
+import { AllProviders, deferred, makeDay, makeSession, makeSettings, MIN, settle, T0, TODAY } from '../test/hooks';
+import type { Break, Priority, Session, SessionResponse } from '../types';
 import { SessionLog } from './SessionLog';
 
 vi.mock('../api');
@@ -12,6 +13,7 @@ vi.mock('../lib/alerts');
 
 const PLANNED: Priority[] = [{ position: 1, text: 'Ship the fix', done: false, uid: 'abcdef123456', addedAt: T0 }];
 const DONE = makeSession({ status: 'completed', endedAt: T0 + 25 * MIN, durationSeconds: 25 * 60 });
+const RUNNING = makeSession({ id: 2, label: 'Still going', startedAt: T0 + 26 * MIN });
 
 /** A break of `minutes` that started `at` minutes after T0 and ran its length. */
 const rest = (id: number, at: number, minutes: number): Break => ({
@@ -22,11 +24,17 @@ const rest = (id: number, at: number, minutes: number): Break => ({
   endedAt: T0 + (at + minutes) * MIN,
 });
 
+/** The running timer's label, as the bar at the top shows it. */
+function BarLabel() {
+  return <output aria-label="Running bar">{useTimer().running?.label}</output>;
+}
+
 async function renderLog(sessions: Session[] = [DONE], breaks: Break[] = [], date = TODAY) {
   render(
-    <SettingsAndDays>
+    <AllProviders>
+      <BarLabel />
       <SessionLog date={date} sessions={sessions} breaks={breaks} priorities={PLANNED} now={T0 + 30 * MIN} />
-    </SettingsAndDays>,
+    </AllProviders>,
   );
   await settle();
 }
@@ -34,10 +42,13 @@ async function renderLog(sessions: Session[] = [DONE], breaks: Break[] = [], dat
 const openEdit = () => fireEvent.click(screen.getByRole('button', { name: /Write the report/ }));
 const labelInput = () => screen.getByRole('textbox', { name: 'Session label' }) as HTMLInputElement;
 const planSelect = () => screen.getByRole('combobox', { name: 'Priority this session was for' }) as HTMLSelectElement;
+const bar = () => screen.getByRole('status', { name: 'Running bar' }).textContent;
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 + 30 * MIN });
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
+  vi.mocked(api.getRunning).mockResolvedValue({ session: null });
+  vi.mocked(api.getDay).mockResolvedValue(makeDay());
   vi.mocked(api.patchSession).mockImplementation((id, patch) => Promise.resolve({ session: { ...DONE, id, ...patch } }));
   vi.mocked(api.deleteSession).mockResolvedValue({ ok: true });
   vi.mocked(api.deleteBreak).mockResolvedValue({ ok: true });
@@ -100,10 +111,39 @@ describe('SessionLog', () => {
     expect(api.patchSession).toHaveBeenCalledWith(1, { label: 'Relabeled' });
   });
 
+  it('edits the running row through the timer, so the bar shows the edit too', async () => {
+    vi.mocked(api.getRunning).mockResolvedValue({ session: RUNNING });
+    const answer = deferred<SessionResponse>();
+    vi.mocked(api.patchSession).mockReturnValue(answer.promise);
+    await renderLog([DONE, RUNNING]);
+    expect(bar()).toBe('Still going');
+    fireEvent.click(screen.getByRole('button', { name: /Still going/ }));
+    fireEvent.change(labelInput(), { target: { value: 'Renamed' } });
+    fireEvent.change(planSelect(), { target: { value: 'abcdef123456' } });
+    await settle();
+    expect(api.patchSession).toHaveBeenCalledTimes(1);
+    expect(api.patchSession).toHaveBeenCalledWith(2, { priorityUid: 'abcdef123456', label: 'Renamed' });
+    // Both at once, before the server answers.
+    expect(bar()).toBe('Renamed');
+    expect(screen.getByRole('button', { name: /Renamed/ }).textContent).toBe('1Renamed');
+    answer.resolve({ session: { ...RUNNING, label: 'Renamed', priorityUid: 'abcdef123456' } });
+    await settle();
+    expect(bar()).toBe('Renamed');
+  });
+
+  it('shows the running row as the timer has it', async () => {
+    // Renamed in the bar: the day's copy hasn't heard yet.
+    vi.mocked(api.getRunning).mockResolvedValue({ session: { ...RUNNING, label: 'Renamed in the bar', pausedAt: T0 + 29 * MIN } });
+    await renderLog([DONE, RUNNING]);
+    const row = screen.getAllByRole('listitem')[1]!.textContent;
+    expect(row).toMatch(/Renamed in the bar/);
+    expect(row).toMatch(/paused/);
+  });
+
   it('deletes a session only once the confirm says yes, and never a running one', async () => {
     const confirm = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
     vi.stubGlobal('confirm', confirm);
-    await renderLog([DONE, makeSession({ id: 2, label: 'Still going', startedAt: T0 + 26 * MIN })]);
+    await renderLog([DONE, RUNNING]);
     const [done, running] = screen.getAllByRole('button', { name: 'Delete session' }) as HTMLButtonElement[];
     expect(running!.disabled).toBe(true);
     fireEvent.click(done!);

@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { useDay } from '../hooks/useDay';
+import { unlockAudio } from '../lib/alerts';
 import { AllProviders, deferred, makeDay, makeSession, makeSettings, settle, T0, TODAY } from '../test/hooks';
 import type { Priority, SessionResponse } from '../types';
 import { FocusTimer } from './FocusTimer';
@@ -81,6 +82,19 @@ describe('FocusTimer', () => {
     const rows = vi.mocked(api.putPriorities).mock.lastCall![1];
     expect(rows[0]).toMatchObject({ text: 'Call the vendor', done: false });
     expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Call the vendor', rows[0]!.uid);
+  });
+
+  it('unlocks audio in the tap, before the priority is saved', async () => {
+    vi.mocked(api.startSession).mockResolvedValue(started());
+    await renderCard();
+    typeLabel('Call the vendor');
+    fireEvent.click(alsoAdd()!);
+    expect(unlockAudio).not.toHaveBeenCalled();
+    fireEvent.click(start25());
+    // Within the click itself, not after the priority's save answers.
+    expect(unlockAudio).toHaveBeenCalled();
+    await settle();
+    expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Call the vendor', expect.any(String));
   });
 
   it('retries a failed start against the row it already added, not a second copy', async () => {

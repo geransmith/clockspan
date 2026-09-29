@@ -54,6 +54,9 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
   };
 
   const start = async (minutes: number) => {
+    // Here, inside the tap: `timer.start` unlocks too, but after the priority's save is
+    // awaited, which iOS no longer counts as the gesture, so the completion chime stays silent.
+    unlockAudio();
     if (starting) return;
     setStarting(true);
     setError(null);
