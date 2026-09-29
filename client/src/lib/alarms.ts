@@ -1,5 +1,6 @@
 import type { AlarmId, AlarmSettings } from '../types';
 import { formatMinutes, formatTime } from './format';
+import { secondMealApplies, type TimeclockResult } from './timeclock';
 
 export interface AlarmTarget {
   id: AlarmId;
@@ -7,6 +8,35 @@ export interface AlarmTarget {
   at: number;
   /** False disables the target (e.g. lunch already taken, or clock-out still drifting). */
   armed: boolean;
+}
+
+/** The day's own switches that disarm a target. */
+export interface TargetDay {
+  /** Silences the clock-out target only. */
+  overtimeApproved: boolean;
+  /** Today's retrospective has been marked reviewed. */
+  retroDone: boolean;
+}
+
+/**
+ * Today's targets and when each is armed. Lunch is armed until it is taken or the day is
+ * done. Clock-out is only a fixed instant while working (on a break it drifts later), and
+ * the retrospective shares it. Overtime approval disarms the clock-out target only: meal
+ * periods are still required on an overtime day (California Labor Code §512), so lunch and
+ * the second meal stay armed, and the planned end of the day is still the moment to look back.
+ */
+export function alarmTargets(tc: TimeclockResult, settings: Parameters<typeof secondMealApplies>[1], day: TargetDay): AlarmTarget[] {
+  const endFixed = tc.clockOutAt != null && tc.state === 'working';
+  return [
+    {
+      id: 'lunchBy',
+      at: tc.lunchBy ?? 0,
+      armed: tc.lunchBy != null && (tc.lunchStatus === 'upcoming' || tc.lunchStatus === 'overdue') && tc.state !== 'done',
+    },
+    { id: 'clockOut', at: tc.clockOutAt ?? 0, armed: endFixed && !day.overtimeApproved },
+    { id: 'secondMeal', at: tc.secondMealBy ?? 0, armed: secondMealApplies(tc, settings, day.overtimeApproved) },
+    { id: 'retro', at: tc.clockOutAt ?? 0, armed: endFixed && !day.retroDone },
+  ];
 }
 
 export type AlarmKind = 'lead' | 'due' | 'overdue';
