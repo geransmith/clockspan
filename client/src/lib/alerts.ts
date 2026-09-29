@@ -212,6 +212,16 @@ export function dismissByTag(tag: string): void {
   emit();
 }
 
+/**
+ * Drop every banner. A sign-out takes the app down without a page load, and the list outlives
+ * it: the next user to sign in would see these, and a button on one would run against the
+ * last user's day with the new user's session.
+ */
+export function clearBanners(): void {
+  banners = [];
+  emit();
+}
+
 function pushBanner(b: Omit<Banner, 'id' | 'at'>): void {
   // One banner per tag so "clock out in 5" replaces "clock out in 15".
   const banner: Banner = { ...b, id: nextId++, at: Date.now() };

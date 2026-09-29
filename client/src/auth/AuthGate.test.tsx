@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
+import { alert, getBanners } from '../lib/alerts';
 import { HTTPS_ONLY, NEW_PASSWORD, PASSWORD_MISMATCH } from '../lib/copy';
 import { settle } from '../test/hooks';
 import type { AuthInfo, PublicUser } from '../types';
@@ -111,6 +112,25 @@ describe('AuthGate', () => {
     await settle();
     expect(api.getAuth).toHaveBeenCalledTimes(2);
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
+  });
+
+  it("drops the last user's banners when a sign-out closes the app", async () => {
+    await renderGate(info({ user: USER }));
+    alert({
+      title: 'Clock out',
+      tone: 'danger',
+      tag: 'alarm:clockOut',
+      sticky: true,
+      action: { label: 'Overtime approved', run: vi.fn() },
+      sound: false,
+      notifications: false,
+    });
+    expect(getBanners()).toHaveLength(1);
+    vi.mocked(api.getAuth).mockResolvedValue(info({}));
+    window.dispatchEvent(new Event(api.UNAUTHENTICATED_EVENT));
+    await settle();
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
+    expect(getBanners()).toEqual([]);
   });
 
   it('offers a retry when the server does not answer', async () => {

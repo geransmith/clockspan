@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import type { AuthInfo } from '../types';
+import { clearBanners } from '../lib/alerts';
 import { HTTPS_ONLY, SERVER_UNREACHABLE } from '../lib/copy';
 import { LoginPage, OidcLoginPage } from './LoginPage';
 import { NewPasswordPage } from './NewPasswordPage';
@@ -70,7 +71,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }
   if (!auth || !value) return <div className="gate" aria-busy="true" />;
   if (auth.user?.mustChangePassword) return <NewPasswordPage user={auth.user} onDone={refresh} onSignOut={signOut} />;
-  if (auth.mode === 'none' || auth.user) return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  if (auth.mode === 'none' || auth.user)
+    return (
+      <Ctx.Provider value={value}>
+        <SignedIn>{children}</SignedIn>
+      </Ctx.Provider>
+    );
   // A Secure cookie set from a plain-http page is discarded by the browser, so the sign-in
   // would look like it did nothing. Say so up front (localhost counts as secure in most
   // browsers, but a dev server never sets APP_URL to https anyway).
@@ -78,6 +84,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (auth.mode === 'local' && auth.setupRequired) return <SetupPage onDone={refresh} hint={hint} />;
   if (auth.mode === 'local') return <LoginPage onDone={refresh} hint={hint} />;
   return <OidcLoginPage hint={hint} />;
+}
+
+/** The app for a signed-in user. A sign-out unmounts it without a page load, so it takes its banners with it. */
+function SignedIn({ children }: { children: ReactNode }) {
+  useEffect(() => clearBanners, []);
+  return children;
 }
 
 export function useAuth(): AuthCtx {

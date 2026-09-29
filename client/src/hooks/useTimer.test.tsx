@@ -104,6 +104,13 @@ describe('sync with the server', () => {
     expect(result.current.timer.running?.id).toBe(1);
   });
 
+  it('puts the plain title back on unmount (a sign-out)', async () => {
+    const { unmount } = await renderRunning(startedAgo(5));
+    expect(document.title).toBe('20:00 · Write the report — Clockspan');
+    unmount();
+    expect(document.title).toBe('Clockspan');
+  });
+
   it('stops polling on unmount', async () => {
     const { unmount } = await renderRunning(null);
     unmount();
