@@ -57,7 +57,7 @@
 
 ## Run locally (for testing and development)
 
-Requirements: **Node 24** (`nvm use 24` if you use nvm).
+Requirements: **Node 24** (`nvm use` picks it up from `.nvmrc`). On an older Node, npm refuses to install or run anything.
 
 ```bash
 npm install

@@ -47,6 +47,7 @@ updates:
       default-days: 7
     labels: [skip-changelog]
     ignore:
-      # A Node major is a deliberate move across `engines`, nvm, CI and the Dockerfile together.
+      # A Node major is a deliberate move across .nvmrc, `engines` / `devEngines`, CI and the
+      # Dockerfile together.
       - dependency-name: node
         update-types: ['version-update:semver-major']
