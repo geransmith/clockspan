@@ -347,7 +347,7 @@ describe('AUTH_MODE=local', () => {
 
   it('keeps an admin on a temporary password out of user management as well', async () => {
     await setup();
-    // What `reset-password <username>` without a password leaves behind.
+    // The flag a reset without a password sets (`resetPassword`), without the new password and the sign-out that come with it.
     app.db.prepare(`UPDATE users SET must_change_password = 1`).run();
     expect((await app.api.get('/api/auth/users')).status).toBe(403);
     expect((await app.api.get('/api/days/2026-09-01')).status).toBe(403);

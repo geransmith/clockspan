@@ -5,7 +5,7 @@
 [![Release](https://img.shields.io/github/v/release/geransmith/clockspan)](https://github.com/geransmith/clockspan/releases)
 [![CI](https://github.com/geransmith/clockspan/actions/workflows/ci.yml/badge.svg)](https://github.com/geransmith/clockspan/actions/workflows/ci.yml)
 
-**Clockspan** is a self-hosted, single-day focus sheet for getting through a workday with ADHD. One page: a punch-style timeclock that works out when lunch is due and when the day ends, the few things that would make today a win, a focus timer that logs what you did, and a retrospective that puts the plan next to what happened. Every day is saved; alarms fire as deadlines approach. Runs as one Docker container with a SQLite file; works on phones and installs to the Home Screen.
+**Clockspan** is a self-hosted, single-day focus sheet for getting through a workday with ADHD. One page: a punch-style timeclock that works out when lunch is due and when the day ends, a short list of the day's priorities, a focus timer that logs what you did, and a retrospective that puts the plan next to what happened. Every day is saved; alarms fire as deadlines approach. Runs as one Docker container with a SQLite file; works on phones and installs to the Home Screen.
 
 <p align="center">
   <img src="docs/screenshots/sheet-phone-light.png" width="300" alt="The sheet on a phone, light mode: running timer bar, timeclock with the lunch-by, worked, clock-out and focused tiles, and today's priorities">
@@ -32,7 +32,7 @@
 <p align="center">
   <img src="docs/screenshots/history.png" width="300" alt="History → Days with the sticker chart on: a month calendar with each day's stickers and their counts, and the picked day's worked, focused and priorities under it with Open day and Review this week">
   &nbsp;&nbsp;
-  <img src="docs/screenshots/review.png" width="300" alt="History → Review → Month: days and hours worked, focused time on and off plan, what went off the plan, what never got done, and each day's note">
+  <img src="docs/screenshots/review.png" width="300" alt="History → Review → Month: days and hours worked, focused time on and off plan, what went off the plan, what never got done, and the days' notes">
 </p>
 
 **History.** A month calendar with each day's hours on it and a thin bar for how much of the work day that was, green once the target was met (or its stickers instead); step back as far as your data goes. Tap a day for its worked, focused and priorities numbers and its note, then **Open day** or **Review this week**.
@@ -85,30 +85,30 @@ npm start              # serve the production build on http://localhost:3000 (PO
 ### Sample data
 
 A fresh checkout has an empty database, so History, the retrospective and the week / month
-/ quarter review have nothing to show. `npm run seed` fills `./data/focus.db` with sample
-days so you can try those screens without punching a fortnight by hand:
-
-- the last ten weekdays, each with clock in / lunch / clock out punches, three or four
-  priorities (some ticked), a few focus sessions (most linked to a priority, one not), on most
-  days a break or two, and a retrospective note. Among them: a day with an extra out / in
-  pair, a day worked late with "Overtime approved", a half day with no lunch, a day that was
-  never reviewed, and one cancelled session;
-- today, clocked in two hours ago with one priority done, two sessions and a break logged.
+/ quarter review have nothing to show. `npm run seed` fills `./data/focus.db` with the last
+ten weekdays, each with punches, priorities, focus sessions and a retrospective note (an extra
+out / in pair, an overtime day, a day never marked reviewed and a half day among them), and
+today, clocked in two hours ago. [AGENTS.md](AGENTS.md#dev-data-is-disposable) lists what each
+day holds.
 
 Dates are relative to the day you run it, so the sample always lands in the current week.
-Run it again whenever you want the sample back: it replaces the seeded days but leaves your
-settings alone. It only writes to the local database (`DATA_DIR`, default `./data`); it
-never touches a Docker `/data` volume. Safe to run while `npm run dev` is up; reload the page.
+Each run first deletes every day of the user it seeds, including days you entered by hand;
+settings stay unless you pass `--fresh`. It only writes to the local database (`DATA_DIR`,
+default `./data`); it never touches a Docker `/data` volume. Safe to run while `npm run dev`
+is up; reload the page.
 
 ```bash
 npm run seed                      # the default set above
-npm run seed -- --running         # also leave a 25-minute focus timer running
+npm run seed -- --running         # also leave a 25-minute focus timer running, started ten
+                                  # minutes ago
 npm run seed -- --quarter         # every weekday since the start of last quarter, for the
                                   # month and quarter reviews
 npm run seed -- --days 30         # a specific number of past weekdays
-npm run seed -- --fresh           # also reset settings and sign everyone out
-npm run seed -- --today 2026-03-02   # build the sample around another date
-npm run seed -- --now 10:30       # today's clock-in and timer pinned to that time of day
+npm run seed -- --fresh           # also reset the seeded users' settings and sign them out
+npm run seed -- --today 2026-03-02   # the same sample around another date, at the current
+                                     # time of day
+npm run seed -- --now 10:30       # pin the time of day: clock-in two hours before it, a
+                                  # --running timer ten minutes before it
 ```
 
 ### Trying the auth modes locally
@@ -132,7 +132,7 @@ Images are published to GitHub Container Registry for `linux/amd64` and `linux/a
 | `ghcr.io/geransmith/clockspan:latest` | the newest release |
 | `ghcr.io/geransmith/clockspan:X` | the newest release of one major version, e.g. `:2`: new features and fixes, never a breaking change |
 | `ghcr.io/geransmith/clockspan:X.Y.Z`, `:X.Y` | a specific release (`:X.Y` follows its patch releases) |
-| `ghcr.io/geransmith/clockspan:edge` | the latest commit on `main`; it has passed CI and nothing else |
+| `ghcr.io/geransmith/clockspan:edge` | built from `main` after each merge; it has passed CI and nothing else. When two merges land close together, it can be the build before the latest for a few minutes |
 
 Versions follow [Semantic Versioning](https://semver.org) from 1.0.0. A major release (2.0.0) is the only kind that can need something from you, such as a changed variable; its release notes open with a *Breaking changes* section that says what to do. [CONTRIBUTING.md](CONTRIBUTING.md#releases) has the full rule.
 
@@ -182,7 +182,7 @@ Set these in `.env` (start from `.env.example`, which documents each one) or in 
 | `TRUST_PROXY` | `false` | Number of reverse proxies in front of the app (usually `1`), or the proxies' addresses: `loopback`, `linklocal`, `uniquelocal`, IP addresses and CIDR ranges, comma-separated. Anything else stops the server with a message. Never `true`, which trusts any `X-Forwarded-For` a client sends |
 | `COOKIE_SECURE` | derived from `APP_URL` | Force session cookies to `Secure` on (`true`) or off (`false`); `1`/`0`, `yes`/`no` and `on`/`off` work too. Any other value is logged and ignored |
 | `SESSION_TTL_DAYS` | `30` | Sliding session lifetime |
-| `RETENTION_DAYS` | unset | Server-wide ceiling on history: every user's days older than this many days (30 or more) are deleted every few hours. Unset keeps everything; users can still choose a shorter limit in Settings → Data |
+| `RETENTION_DAYS` | unset | Server-wide ceiling on history: every user's days older than this many days (30 to 3650) are deleted every few hours. Any other value stops the server with a message. Unset keeps everything; users can still choose a shorter limit in Settings → Data |
 | `OIDC_ISSUER` | — | Provider issuer URL, `https://` only (discovery is done from it) |
 | `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | — | Confidential client credentials |
 | `OIDC_SCOPES` | `openid profile email` | Scopes to request |
@@ -218,7 +218,7 @@ Login is rate-limited to 5 failed attempts per 15 minutes per IP, counting an IP
 
 1. **Applications → Providers → Create → OAuth2/OpenID Provider.**
    - Client type: **Confidential**
-   - Redirect URIs: `https://focus.example.com/auth/callback` (exactly `${APP_URL}/auth/callback`)
+   - Redirect URIs: `https://focus.example.com/auth/callback` (exactly `${APP_URL}/auth/callback`, with `APP_URL`'s scheme and host in lowercase and no trailing slash, which is how the app uses it)
    - Scopes: `openid`, `profile`, `email`
    - Note the *Client ID* and *Client Secret*.
 2. **Applications → Applications → Create.** Name it, pick the provider you just made, and set the slug (e.g. `clockspan`). Use *Policy / Group / User Bindings* on this application to control who may sign in.
@@ -265,16 +265,16 @@ Going from `none` to `oidc` works the same way. Sign in through your provider on
 - **Timeclock.** Tap **Now** on *Clock in* when you start. The *Lunch by* tile counts down, and *Focused* adds up the day's focus sessions; punch *Lunch out* / *Lunch in* around your break, and *Clock out* when you leave. Clocking out ends the day, even if you left early.
   - **Work-day length.** A half day, or a longer one? **Work day → Change** on the card sets this day's length (*Half day*, back to *Usual*, or any length), and the clock-out time, the alarms, the lunch rule and History go by it.
   - **The week.** Under the tiles, *This week* adds up Monday to the day on screen against *Settings → Timeclock → Work week* (40 hours by default; 0 hides the line).
-  - **Typing a time.** To enter a time by hand, click the hour and type: `0730` moves through hour and minute on its own, fills in AM or PM (morning for 5–11, afternoon for 12 and 1–4; a punch after your clock-in stays after it) and saves as soon as the last part is in; press `a` or `p`, or ↑/↓ on any part, to change it. A half-typed time is dropped when you click away, so what the row shows is what is stored. Times follow your browser's clock; *Settings → Timeclock → Time format* forces 12-hour or 24-hour.
+  - **Typing a time.** To enter a time by hand, click the hour and type: `0730` moves through hour and minute on its own, fills in AM or PM (morning for 5–11, afternoon for 12 and 1–4; on a later row, an hour that would fall before your clock-in flips to the other half of the day, except the clock-in's own hour: 8:10 after an 8:30 clock-in saves as 8:10 AM) and saves as soon as the last part is in; press `a` or `p`, or ↑/↓ on any part, to change it. A half-typed time is dropped when you click away, so what the row shows is what is stored. Times follow your browser's clock; *Settings → Timeclock → Time format* forces 12-hour or 24-hour.
   - **Extra out / in.** Need to step out for an appointment? **Add extra out / in** for as many pairs as you need. A pair you add before lunch is punched sits above lunch; otherwise it sits below. Your projected *Clock out at* accounts for everything. Came back after clocking out? Tap **Add extra out / in**: your clock-out time becomes that pair's *Out*, tap **Now** on its *In*, and you get a fresh *Clock out* row.
   - **Celebrations.** The day-complete line comes with a burst of emoji and a sound; reaching the work week on today's sheet gets a smaller burst and its own sound, and so do ticking a priority and saving *Plan tomorrow* (their sounds are off until you pick one): *Settings → Sheet → Celebrations* turns the bursts off (so does the system's reduce-motion setting), and *Settings → Alarms → Sounds* picks the sounds.
 - **Top priorities.** A row can only be ticked once it has text. **Add priority** adds a row; past three (or your configured count) it asks first, gently. With some rows ticked, the notice lists what's done and the buttons read *Add anyway / Finish what's open*; with everything ticked, *Add a bonus / Stop here*. Rows beyond your default can be removed with the ×. *Settings → Sheet → Priorities → Rows per day* sets how many rows a new day starts with.
-- **Timer.** Type what you're about to do, tap 15/25/50. Or tap one of the *Working on* chips (your open priorities) and the session is linked to that row. New task from your manager? Type it, tick **Also add to today's priorities**, start: the first empty row fills in and the session is linked. The bar at the top follows you around; **−5m / +5m** adjust the current session, **Pause** stops the clock for a break (the time away isn't logged, and a pause left for an hour closes the session where it began), **Finish** ends it early and logs the real duration. Reaching zero chimes and the countdown goes negative while it waits: **+5m** keeps going, and **Finish** logs the planned length, or, once you are a minute or more over, asks whether to log the planned length or the time you actually worked; left unanswered for ten minutes it logs the planned length on its own. Timers keep correct time across reloads and phone sleep because the start time lives on the server.
+- **Timer.** Type what you're about to do, tap 15/25/50. Or tap one of the *Working on* chips (your open priorities) and the session is linked to that row. New task from your manager? Type it, tick **Also add to today's priorities**, start: the first empty row fills in (or a new row at the end) and the session is linked. The box only shows while the list has room, which is an empty row or fewer than 20 rows. The bar at the top follows you around; **−5m / +5m** adjust the current session, **Pause** stops the clock for a break (the time away isn't logged, and a pause left for an hour closes the session where it began), **Finish** ends it early and logs the real duration. Reaching zero chimes and the countdown goes negative while it waits: **+5m** keeps going, and **Finish** logs the planned length, or, once you are a minute or more over, asks whether to log the planned length or the time you actually worked; left unanswered for ten minutes it logs the planned length on its own. Timers keep correct time across reloads and phone sleep because the start time lives on the server.
 - **Day log.** Rows show a small number when the session was for a priority. Tap a label to edit it, or to change which priority it was for (*Unplanned* unlinks it). A break row shows how long you rested (**End break** on the timer card logs a short one as it was), and the trash button removes one you didn't mean to take.
 - **Retrospective.** The last card on the sheet, unless you move it. *Planned* is each priority with the focused time logged against it (rows written after your first session are marked *added HH:MM*); *Not on the plan* is every session without a priority. Write why the day went the way it did and tap **Mark reviewed**. *Settings → Alarms → Retrospective* controls the reminder (default: 30 minutes before clock-out; it isn't silenced by overtime approval, and marking the day reviewed clears it). The banner's **Open retrospective** button takes you to the card. On today's card, **Plan tomorrow** puts what's still open, and anything you add, on the next work day's list while it's fresh (with weekends off the calendar, Friday plans Monday); rows already on that list aren't added twice.
 - **Review.** History → **Review**. Pick *Week* (Monday to Sunday), *Month* or *Quarter* and step back with ◀. Tiles show days and hours worked, focused time and how much of it was on plan, priorities done and days reviewed. Below: *Off the plan* (unplanned sessions, longest first), *Not done* (priorities never ticked) and *Why* (each day's note). Tap any row to open that day.
 - **Alarms.** Settings → Alarms. Per alarm: warn-before chips (30/15/10/5/1 min), *when reached*, and *repeat while over*. Under *Sounds*, each event (a warning, a deadline reached, a repeat, the timer finishing, a break ending, the day completing, the work week reached, a priority ticked, the next day planned) gets one of a few chimes or bundled clips, or none, with a Test button. The tiles turn amber when you're inside the first warning window and red when you're over.
-  - **Second meal period.** On a day heading past 10 hours worked (overtime approved, already over your target, or a target longer than 10 hours) the sheet shows when your 10th hour ends and alarms before it. A day of exactly 10 hours, like a 4×10 schedule, owes no second meal and gets no alarm. Any break after lunch counts as taken. Adjust the threshold under *Settings → Timeclock*, or turn the alarm off if you've waived it.
+  - **Second meal period.** On a day heading past 10 hours worked (overtime approved, already over your target, or a target longer than 10 hours) the sheet shows when your 10th hour ends and alarms before it. A day of exactly 10 hours, like a 4×10 schedule, owes no second meal and gets no alarm. An extra out / in punched after lunch out counts as taken; a break on the timer card doesn't. Adjust the threshold under *Settings → Timeclock*, or turn the alarm off if you've waived it.
   - **Overtime approved.** A switch on the timeclock card, and a button on the clock-out alarm banner, that silences that day's clock-out alarm. Meal alarms stay on. If overtime doesn't apply to you, turn off *Settings → Timeclock → Overtime*: both disappear, and time past your day reads as that instead of a red *Over by*.
   - **About the defaults.** Lunch within 5 hours, a second meal period after 10 hours worked, and keeping meal alarms on during approved overtime all follow California labor rules, because that's where the author works. Other states and countries differ. Everything is adjustable in Settings, and pull requests that add presets or rules for other places are welcome.
   - **Salaried or exempt.** *Settings → Timeclock* has a switch for each part that may not apply. *Meal periods* off: no lunch deadline or second meal period, no alarms for them and no *Lunch by* tile (a lunch you punch still counts); *Lunch punches* off as well hides the *Lunch out* / *Lunch in* rows, except on a day that already has a lunch punched. *Overtime* off: see above. *Show hours* off: no week line, no hours on the History calendar or in the review, and no *Clocked out* sticker. Don't want to punch at all? Hide the timeclock card under *Customize*; priorities, the timer, breaks and the retrospective work without it.
@@ -283,7 +283,7 @@ Going from `none` to `oidc` works the same way. Sign in through your provider on
 - **Settings.** Five tabs: *Timeclock* (day length; meal periods, overtime and hours, each with a switch and its own lengths; time format), *Alarms* (per-alarm rules, sound, notifications, a sound per event with a Test button), *Sheet* (theme, priorities, timer and break lengths, break suggestions, celebrations, the sticker chart and weekends on the calendar, layout), *Data* (old-day cleanup) and *Account* (local accounts only). **Reset all settings**, at the bottom of *Data*, puts every setting back to its default; days, punches and sessions are untouched.
 - **Data.** Settings → Data. *Delete old days automatically* keeps the last N days (30 to 3650) and drops the rest, with their punches, priorities, sessions, breaks and notes; the server checks every few hours. *Delete days before* a date does the same once, after showing how many days it will remove. Today and a day with a running timer are never deleted; settings are kept. If the admin set `RETENTION_DAYS`, the tab says so and that ceiling applies whatever you choose.
 - **Past days.** Use ◀ ▶ or the date picker on the sheet, or **History** → **Days**: a month calendar (step back with ◀) with the hours worked on each day. Tap a day to see its worked, focused and priorities numbers, a tick once its retrospective is reviewed, and its note; **Open day** goes to that sheet and **Review this week** to that week's review. Only work here? *Settings → Sheet → History → Show weekends* off drops Saturday and Sunday from the calendar (and from the sticker counts); a weekend day is still reachable from the sheet's date picker. Past days are editable; timers can only start on today.
-- **Phone.** Add to Home Screen (Android: *Install app*; iOS: Share → *Add to Home Screen*). Browser notifications on iOS only work from the installed app. *Keep screen awake* keeps the countdown and chime live while the app is open; if the phone sleeps anyway, the alert fires when you come back.
+- **Phone.** Add to Home Screen (Android: *Install app*; iOS: Share → *Add to Home Screen*). Browser notifications on iOS only work from the installed app. *Keep screen awake* keeps the screen on while a focus timer counts down (not while it is paused or has run out); if the phone sleeps anyway, the alert fires when you come back.
 
 ## Exposing it to the internet
 
@@ -315,4 +315,4 @@ Every change is a squash-merged pull request with CI green; a release is a versi
 
 The bundled sounds are CC0 clips from Freesound; [client/src/sounds/README.md](client/src/sounds/README.md) lists each one's author and source.
 
-The screenshots above come from `npm run screenshots`. It starts the dev server if one isn't running, seeds sample data with the clock pinned to 10:30, drives a local Chromium headless and writes `docs/screenshots/*.png`. It looks for Chrome, Chromium, Edge or Brave and otherwise fetches a Chrome for Testing build into `node_modules/.cache` the first time; set `CHROME_BIN` to force a particular browser.
+The screenshots above come from `npm run screenshots`. It starts the dev server if one isn't running, seeds sample data with the clock pinned to 10:30 (replacing the dev database's days, as `npm run seed` does), turns the sticker chart on and leaves it on, drives a local Chromium headless and writes `docs/screenshots/*.png`. It looks for Chrome, Chromium, Edge or Brave and otherwise fetches a Chrome for Testing build into `node_modules/.cache` the first time; set `CHROME_BIN` to force a particular browser.
