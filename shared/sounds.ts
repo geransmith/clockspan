@@ -23,7 +23,6 @@ export type ClipId = Extract<Sound, { kind: 'clip' }>['id'];
 export type SynthId = Extract<Sound, { kind: 'synth' }>['id'];
 
 export const SOUND_IDS: readonly SoundId[] = SOUNDS.map((s) => s.id);
-export const CLIP_IDS: readonly ClipId[] = SOUNDS.filter((s): s is Extract<Sound, { kind: 'clip' }> => s.kind === 'clip').map((s) => s.id);
 
 /**
  * What can make a noise. The alarm stages share their names with `AlarmKind`

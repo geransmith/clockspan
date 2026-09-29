@@ -386,7 +386,9 @@ Never commit `data/` or `.env`.
   load (an upgrade while the page was open) reloads the page once a minute at most
   (`vite:preloadError` in `main.tsx`, `lib/reload.ts`); otherwise the `ErrorBoundary` shows.
 - **Migrations are append-only** in `server/db.ts` (`MIGRATIONS[]`, `PRAGMA user_version`).
-  Every FK to `users` or `days` is `ON DELETE CASCADE`.
+  Every FK to `users` or `days` is `ON DELETE CASCADE`. A column nothing uses stays in the
+  table rather than a migration dropping it: `sessions.notes` is one (never shown or edited;
+  the API no longer reads or writes it).
 
 ## How to add…
 

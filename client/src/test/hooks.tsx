@@ -35,7 +35,6 @@ export function makeSession(patch: Partial<Session> = {}): Session {
     id: 1,
     date: TODAY,
     label: 'Write the report',
-    notes: '',
     plannedSeconds: 25 * 60,
     startedAt: T0,
     endedAt: null,

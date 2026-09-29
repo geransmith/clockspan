@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from './api';
-import { ApiError, REQUEST_TIMEOUT_MS, UNAUTHENTICATED_EVENT } from './api';
+import { REQUEST_TIMEOUT_MS, UNAUTHENTICATED_EVENT } from './api';
+import { ApiError } from './lib/apiError';
 import { REQUEST_TIMEOUT } from './lib/copy';
 
 /**

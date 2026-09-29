@@ -4,18 +4,8 @@ import { useDebouncedDraft } from '../hooks/useDebouncedDraft';
 import { useSettings } from '../hooks/useSettings';
 import { unlockAudio } from '../lib/alerts';
 import { LEFT_OPEN, WARNING_ACTIONS } from '../lib/copy';
-import {
-  carryOver,
-  editPriority,
-  hasText,
-  MAX_PRIORITIES,
-  padPriorities,
-  pickWarning,
-  removePriority,
-  warnThreshold,
-  warningKind,
-  type WarningKind,
-} from '../lib/priorities';
+import { carryOver, editPriority, hasText, padPriorities, pickWarning, removePriority, warnThreshold, warningKind, type WarningKind } from '../lib/priorities';
+import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { LIMITS, type Priority } from '../types';
 import { Burst } from './Burst';
 import { Check, Plus, X } from './Icons';

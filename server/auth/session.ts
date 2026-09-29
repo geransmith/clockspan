@@ -12,7 +12,7 @@ function hashToken(token: string): string {
 }
 
 /** The attributes every cookie this app sets shares; `secure` follows the deployment. */
-export type CookieOptions = Omit<SetCookie, 'name' | 'value'>;
+type CookieOptions = Omit<SetCookie, 'name' | 'value'>;
 
 export function cookieOptions(config: Config, path = '/'): CookieOptions {
   return { httpOnly: true, sameSite: 'lax', secure: config.cookieSecure, path };
@@ -38,7 +38,7 @@ export function createSession(db: DB, config: Config, res: Response, userId: num
   res.setHeader('Set-Cookie', sessionCookie(config, insertSession(db, config, userId)));
 }
 
-export function readSessionToken(req: Request): string | null {
+function readSessionToken(req: Request): string | null {
   const header = req.headers.cookie;
   if (!header) return null;
   return parseCookie(header)[SESSION_COOKIE] ?? null;

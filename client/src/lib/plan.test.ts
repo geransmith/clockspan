@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Priority } from '../types';
 import { nextWorkDay, planNext } from './plan';
-import { MAX_PRIORITIES } from './priorities';
+import { MAX_PRIORITIES } from '../../../shared/settings.js';
 
 const row = (position: number, text: string, patch: Partial<Priority> = {}): Priority => ({
   position,

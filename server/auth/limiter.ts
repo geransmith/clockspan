@@ -102,7 +102,7 @@ export function warnUntrustedProxy(config: Config): RequestHandler {
     if (!warned && req.get('x-forwarded-for') !== undefined) {
       warned = true;
       console.warn(
-        `[proxy] A request came in with X-Forwarded-For but TRUST_PROXY is not set. If a reverse proxy sent it, every sign-in counts as coming from the proxy (${req.ip}), so ${MAX_ATTEMPTS} failed sign-ins from anyone block new sign-ins for everyone for up to ${WINDOW_MS / 60_000} minutes: set TRUST_PROXY to the number of proxies, usually 1. With no proxy in front, a client sent the header itself; leave TRUST_PROXY unset.`,
+        `[proxy] A request came in with X-Forwarded-For but TRUST_PROXY is not set. If a reverse proxy sent it, every sign-in counts as coming from the proxy (${req.ip}), so ${MAX_ATTEMPTS} failed sign-ins from anyone block new sign-ins for everyone for up to ${WINDOW_MS / MINUTE_MS} minutes: set TRUST_PROXY to the number of proxies, usually 1. With no proxy in front, a client sent the header itself; leave TRUST_PROXY unset.`,
       );
     }
     next();

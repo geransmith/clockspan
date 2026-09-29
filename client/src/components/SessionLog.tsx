@@ -7,7 +7,7 @@ import { breakSeconds } from '../lib/breaks';
 import { formatDuration, plural } from '../lib/format';
 import { hasText } from '../lib/priorities';
 import { focusOf } from '../lib/retro';
-import { activeMs } from '../lib/timer';
+import { activeMs } from '../../../shared/timer.js';
 import { LIMITS, type Break, type Priority, type Session } from '../types';
 import { Trash } from './Icons';
 

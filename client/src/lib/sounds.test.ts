@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { CLIP_IDS, SOUND_EVENTS } from '../../../shared/sounds';
+import { SOUND_EVENTS, SOUNDS, type ClipId } from '../../../shared/sounds';
 import { bundledClipIds, clipUrl, SOUND_EVENT_LABELS } from './sounds';
 
 describe('sound registry', () => {
   it('has a file for every clip in the catalog and a catalog line for every file', () => {
-    expect(bundledClipIds()).toEqual([...CLIP_IDS].sort());
-    for (const id of CLIP_IDS) expect(clipUrl(id)).toMatch(new RegExp(`${id}(-[\\w-]+)?\\.mp3$`));
+    const clips = SOUNDS.filter((s) => s.kind === 'clip').map((s) => s.id as ClipId);
+    expect(bundledClipIds()).toEqual([...clips].sort());
+    for (const id of clips) expect(clipUrl(id)).toMatch(new RegExp(`${id}(-[\\w-]+)?\\.mp3$`));
   });
 
   it('labels every event', () => {

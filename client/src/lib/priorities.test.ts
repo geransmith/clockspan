@@ -1,18 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { COMPLETE_WARNINGS, GENTLE_WARNINGS, PROGRESS_WARNINGS } from './copy';
-import {
-  carryOver,
-  editPriority,
-  leftOpen,
-  MAX_PRIORITIES,
-  newUid,
-  padPriorities,
-  pickWarning,
-  placePriority,
-  removePriority,
-  warnThreshold,
-  warningKind,
-} from './priorities';
+import { carryOver, editPriority, leftOpen, newUid, padPriorities, pickWarning, placePriority, removePriority, warnThreshold, warningKind } from './priorities';
+import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import type { Day, Priority } from '../types';
 
 const row = (position: number, text: string, extra: Partial<Priority> = {}): Priority => ({ position, text, done: false, uid: null, addedAt: null, ...extra });
