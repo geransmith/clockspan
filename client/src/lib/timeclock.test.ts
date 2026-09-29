@@ -7,6 +7,7 @@ import {
   daySettings,
   emptyPunches,
   extraPairs,
+  lunchRowsShown,
   nextPunchPosition,
   normalizePunches,
   removePunchPair,
@@ -451,6 +452,32 @@ describe('nextPunchPosition', () => {
     expect(nextPunchPosition([])).toBeNull();
     expect(nextPunchPosition(punches([T0, null, null]))).toBe(1);
     expect(nextPunchPosition(punches([T0, T0 + 4 * H, T0 + 4.5 * H]))).toBeNull();
+  });
+
+  it('goes from the clock in to the clock out with the lunch rows hidden', () => {
+    expect(nextPunchPosition(emptyPunches(), false)).toBe(0);
+    expect(nextPunchPosition(punches([T0, null, null, null]), false)).toBe(3);
+    expect(nextPunchPosition(punches([T0, null, null, T0 + 8 * H]), false)).toBeNull();
+    // Stepped out and back: with no lunch every pair sits before the clock out.
+    expect(nextPunchPosition(punches([T0, null, null, T0 + 2 * H, null, null]), false)).toBe(4);
+    expect(nextPunchPosition(punches([T0, null, null, T0 + 2 * H, T0 + 3 * H, null]), false)).toBe(5);
+  });
+});
+
+describe('lunchRowsShown', () => {
+  const off = { mealRules: false, lunchPunches: false };
+
+  it('shows the lunch rows unless the meal periods and the lunch punches are both off', () => {
+    expect(lunchRowsShown(emptyPunches(), { mealRules: true, lunchPunches: true })).toBe(true);
+    expect(lunchRowsShown(emptyPunches(), { mealRules: true, lunchPunches: false })).toBe(true);
+    expect(lunchRowsShown(emptyPunches(), { mealRules: false, lunchPunches: true })).toBe(true);
+    expect(lunchRowsShown(emptyPunches(), off)).toBe(false);
+    expect(lunchRowsShown(punches([T0, null, null, T0 + 8 * H]), off)).toBe(false);
+  });
+
+  it('keeps them on a day with a lunch punched, so the times stay in sight', () => {
+    expect(lunchRowsShown(punches([T0, T0 + 4 * H, null, null]), off)).toBe(true);
+    expect(lunchRowsShown(punches([T0, null, T0 + 4.5 * H, null]), off)).toBe(true);
   });
 });
 

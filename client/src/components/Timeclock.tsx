@@ -11,6 +11,7 @@ import {
   clockOutPosition,
   daySettings,
   extraPairs,
+  lunchRowsShown,
   nextPunchPosition,
   removePunchPair,
   secondMealApplies,
@@ -114,8 +115,9 @@ export function Timeclock({
 
   // A punch after the clock-in is expected to come after it; the time field's AM/PM guess uses that.
   const clockInAt = byPos.get(0)?.at ?? null;
+  const lunchRows = lunchRowsShown(punches, settings);
   // Today, until the day is done, the next empty row's Now is the filled button: one obvious tap.
-  const nextPos = isToday && tc.state !== 'done' ? nextPunchPosition(punches) : null;
+  const nextPos = isToday && tc.state !== 'done' ? nextPunchPosition(punches, lunchRows) : null;
   const row = (punch: Punch, label: string) => (
     <PunchRow
       key={punch.position}
@@ -225,8 +227,8 @@ export function Timeclock({
       >
         {fixedRow(0, 'Clock in')}
         {pairBlock(before, 0)}
-        {fixedRow(1, 'Lunch out')}
-        {fixedRow(2, 'Lunch in')}
+        {lunchRows && fixedRow(1, 'Lunch out')}
+        {lunchRows && fixedRow(2, 'Lunch in')}
         {pairBlock(after, before.length)}
         {clockOutPos != null && fixedRow(clockOutPos, 'Clock out')}
         <button className="btn btn-ghost punch-add" onClick={addPair}>

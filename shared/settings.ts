@@ -95,6 +95,11 @@ export interface Settings {
   overtimeApproval: boolean;
   /** The lunch deadline and second meal period rules, with their alarms. Off where they don't apply (exempt work, another state). */
   mealRules: boolean;
+  /**
+   * The timeclock's Lunch out and Lunch in rows while `mealRules` is off. Off hides them on a
+   * day with no lunch punched; with the meal periods on they always show.
+   */
+  lunchPunches: boolean;
   /** Hours worked shown past the day's own tiles: the week line, the hours in History and the Clocked out sticker. */
   trackHours: boolean;
   /** Which sound each event plays; `sound` above is the master switch over all of them. */
@@ -170,6 +175,7 @@ export const DEFAULT_SETTINGS: Settings = deepFreeze({
   keepScreenAwake: true,
   overtimeApproval: true,
   mealRules: true,
+  lunchPunches: true,
   trackHours: true,
   sounds: {
     timer: 'triad',

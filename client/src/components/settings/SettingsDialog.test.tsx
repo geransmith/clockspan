@@ -106,6 +106,18 @@ describe('SettingsDialog', () => {
     expect(screen.getByRole('status', { hidden: true }).textContent).toContain(SAVE_STATUS.saved);
   });
 
+  it('offers to hide the lunch punches only with the meal periods off', async () => {
+    await renderDialog();
+    expect(screen.queryByRole('switch', { name: /Lunch punches/, hidden: true })).toBeNull();
+    fireEvent.click(screen.getByRole('switch', { name: /Meal periods/, hidden: true }));
+    await settle();
+    expect(api.putSettings).toHaveBeenCalledWith({ mealRules: false });
+    expect(screen.queryByLabelText('Lunch must start within hours')).toBeNull();
+    fireEvent.click(screen.getByRole('switch', { name: /Lunch punches/, hidden: true }));
+    await settle();
+    expect(api.putSettings).toHaveBeenLastCalledWith({ lunchPunches: false });
+  });
+
   it('saves one alarm field without touching the others', async () => {
     await renderDialog();
     await openTab('Alarms');

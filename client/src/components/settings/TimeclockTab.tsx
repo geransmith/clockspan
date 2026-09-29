@@ -14,6 +14,14 @@ export function TimeclockTab({ settings, set }: { settings: Settings; set: (patc
         checked={settings.mealRules}
         onChange={(v) => set({ mealRules: v })}
       />
+      {!settings.mealRules && (
+        <Toggle
+          label="Lunch punches"
+          hint="The Lunch out and Lunch in rows on the timeclock. Off hides them, except on a day with a lunch already punched."
+          checked={settings.lunchPunches}
+          onChange={(v) => set({ lunchPunches: v })}
+        />
+      )}
       {settings.mealRules && (
         <>
           <DurationField
