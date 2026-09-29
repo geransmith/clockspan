@@ -4,6 +4,7 @@ import type { Settings } from '../types';
 import { nextBackoff } from '../../../shared/backoff.js';
 import { DEFAULT_SETTINGS, normalizeLayout } from '../../../shared/settings.js';
 import { addPending, fetched, settle, settleWith, shown, untracked, type Tracked } from '../lib/optimistic';
+import { useRefreshLoop } from './useRefreshLoop';
 
 interface SettingsCtx {
   settings: Settings;
@@ -42,6 +43,19 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     return next;
   }, []);
 
+  // A read's answer. A save answered while it was out already brought all the settings, newer
+  // than these (`fetched`). Settings the same as the stored copy change nothing, so `settings`
+  // keeps its identity; the server builds them in one fixed order (`mergeSettings`), so equal
+  // settings print the same.
+  const land = useCallback(
+    (sentAt: number, s: Settings) =>
+      change((t) => {
+        const value = fromServer(s);
+        return JSON.stringify(value) === JSON.stringify(t.confirmed) ? t : fetched(t, sentAt, value).next;
+      }),
+    [change],
+  );
+
   // A failed fetch is asked again rather than settled with the defaults: `loaded` is what holds
   // the alarms and the timer's alerts, and judged against the defaults they would ring at the
   // wrong times (or not at all) until a reload.
@@ -54,8 +68,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       api
         .getSettings()
         .then((s) => {
-          // A save answered while this was out already brought all the settings, newer than these.
-          if (!cancelled) change((t) => fetched(t, sentAt, fromServer(s)).next);
+          if (!cancelled) land(sentAt, s);
         })
         .catch(() => {
           if (cancelled) return;
@@ -68,7 +81,21 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       window.clearTimeout(retry);
     };
-  }, [change]);
+  }, [land]);
+
+  // Then kept in step like today's day (every minute and when the tab comes back), since
+  // another device may change them: a work day made longer on the phone must not ring this
+  // tab's clock-out alarm at the old length. Until the first answer the retries above own the
+  // fetch; a failed refresh keeps the copy shown.
+  const refresh = useCallback(() => {
+    if (store.current.confirmed === undefined) return Promise.resolve();
+    const sentAt = store.current.version;
+    return api
+      .getSettings()
+      .then((s) => land(sentAt, s))
+      .catch(() => {});
+  }, [land]);
+  useRefreshLoop(refresh);
 
   const update = useCallback(
     async (patch: Partial<Settings>) => {
@@ -92,8 +119,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     change((t) => settleWith(t, [], fromServer(saved)));
   }, [change, inOrder]);
 
-  // Kept by identity between changes: the alarms and the sheet key their work on it.
-  const settings = useMemo(() => shown(tracked) ?? DEFAULT_SETTINGS, [tracked]);
+  // Kept by identity between changes: the alarms and the sheet key their work on it. Until the
+  // first answer the defaults stand in for the server's copy, with `loaded` false, so a change
+  // made meanwhile shows at once like any other.
+  const settings = useMemo(() => shown({ ...tracked, confirmed: tracked.confirmed ?? DEFAULT_SETTINGS })!, [tracked]);
   const loaded = tracked.confirmed !== undefined;
   const value = useMemo(() => ({ settings, loaded, update, reset }), [settings, loaded, update, reset]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
