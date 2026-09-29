@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import * as api from '../../api';
 import { useSubmit } from '../../hooks/useSubmit';
 import { CONFIRM, PASSWORD_MISMATCH } from '../../lib/copy';
-import { PASSWORD_LENGTH, type PublicUser } from '../../types';
+import { PASSWORD_LENGTH, USERNAME, type PublicUser } from '../../types';
 import { NewPasswordFields } from '../NewPasswordFields';
 import { Section } from './controls';
 
@@ -112,7 +112,18 @@ function Users({ me }: { me: PublicUser }) {
         ))}
       </ul>
       <form className="user-add" onSubmit={add}>
-        <input className="input" placeholder="Username" autoComplete="off" value={username} onChange={(e) => setUsername(e.target.value)} required />
+        <input
+          className="input"
+          placeholder="Username"
+          autoComplete="off"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          minLength={USERNAME.min}
+          maxLength={USERNAME.max}
+          pattern={USERNAME.pattern}
+          title={`Only ${USERNAME.chars}`}
+          required
+        />
         <input
           className="input"
           type="password"
@@ -121,6 +132,7 @@ function Users({ me }: { me: PublicUser }) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           minLength={PASSWORD_LENGTH.min}
+          maxLength={PASSWORD_LENGTH.max}
           required
         />
         <button className="btn btn-primary" type="submit" disabled={busy}>

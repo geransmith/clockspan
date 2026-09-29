@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { USERNAME } from '../../shared/api.js';
 import { DUMMY_HASH, hashPassword, parseCredentials, parsePassword, parseUsername, verifyPassword } from './password.js';
 
 describe('hashPassword / verifyPassword', () => {
@@ -54,6 +55,19 @@ describe('validation', () => {
     expect(parseUsername('a'.repeat(41))).toEqual({ error: expect.stringMatching(/40 characters/) });
     expect(parseUsername('no spaces')).toEqual({ error: expect.stringMatching(/may contain/) });
     expect(parseUsername(' sam.smith-1_ ')).toEqual({ username: 'sam.smith-1_' });
+  });
+
+  it("gives the username inputs the server's rule, in a form browsers compile", () => {
+    // A browser matches `pattern` against the input's whole value, with the v flag.
+    const input = new RegExp(`^(?:${USERNAME.pattern})$`, 'v');
+    for (const name of ['sam', 'sam.smith-1_', ' sam ']) {
+      expect(input.test(name)).toBe(true);
+      expect(parseUsername(name)).toEqual({ username: name.trim() });
+    }
+    for (const name of ['no spaces', 'sam!', 'sâm']) {
+      expect(input.test(name)).toBe(false);
+      expect(parseUsername(name)).toEqual({ error: 'Username may contain letters, numbers, . _ and -' });
+    }
   });
 
   it('reads a new account from a request body, username first', () => {

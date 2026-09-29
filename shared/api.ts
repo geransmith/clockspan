@@ -19,6 +19,15 @@ export const LIMITS = {
 export const PASSWORD_LENGTH = { min: 8, max: 200 } as const;
 
 /**
+ * A username: its length, the characters it may use as a `pattern`, and those characters in
+ * words. The server trims, then refuses anything outside them; the username inputs take their
+ * `minLength`, `maxLength`, `pattern` and `title` from here. The pattern allows spaces around
+ * the name because the server trims them, and it must work where a browser matches an input's
+ * whole value under the `v` flag, which wants a `-` in a class escaped.
+ */
+export const USERNAME = { min: 2, max: 40, pattern: '\\s*[A-Za-z0-9._\\-]+\\s*', chars: 'letters, numbers, . _ and -' } as const;
+
+/**
  * Position 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in pairs, and the last
  * row (always an odd position ≥ 3) is the final clock out.
  */
