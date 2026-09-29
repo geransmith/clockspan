@@ -150,10 +150,10 @@ describe('start', () => {
 describe('adjust', () => {
   it('changes the plan at once and adopts the stored session', async () => {
     const { result } = await renderRunning(startedAgo(5));
-    vi.mocked(api.patchSession).mockResolvedValue({ session: startedAgo(5, { plannedSeconds: 1800, notes: 'stored' }) });
+    vi.mocked(api.patchSession).mockResolvedValue({ session: startedAgo(5, { plannedSeconds: 1800, label: 'Stored' }) });
     await act(() => result.current.timer.adjust(5 * 60));
     expect(api.patchSession).toHaveBeenCalledWith(1, { plannedSeconds: 1800 });
-    expect(result.current.timer.running).toMatchObject({ plannedSeconds: 1800, notes: 'stored' });
+    expect(result.current.timer.running).toMatchObject({ plannedSeconds: 1800, label: 'Stored' });
   });
 
   it('compounds rapid presses, shows the newest at once, and sends them in order', async () => {

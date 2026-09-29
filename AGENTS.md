@@ -61,7 +61,7 @@ server/                 Express API → dist/server
 client/                 Vite root → dist/client
   public/               manifest, sw.js, icons/icon.svg (the icon's one source; `npm run icons` renders
                         the PNGs next to it)
-  src/App.tsx           provider stack + Shell (route, settings dialog, today's alarms)
+  src/App.tsx           provider stack + Shell (route, settings dialog); today's alarms are hooks/useTodayAlarms.ts
   src/api.ts            fetch wrapper (30 s timeout; UNAUTHENTICATED_EVENT on 401; throws lib/apiError.ts's
                         ApiError, which a caller checks with instanceof); src/types.ts re-exports shared types
   src/lib/              pure logic with a test beside each file: timeclock, alarms, timer, breaks,
@@ -74,7 +74,7 @@ client/                 Vite root → dist/client
                         happy-dom test beside it (useLatest and useTimeFormat are covered through the
                         hooks that use them); src/test/hooks.tsx has the fixtures and provider stack
   src/components/       the cards, History (Calendar + Review), Banners, FinishChoice; pieces more than
-                        one place uses (TimerControls, Toggle, NewPasswordFields, Tile); settings/ holds
+                        one place uses (TimerControls, Toggle, NewPasswordFields, UsernameInput, Tile); settings/ holds
                         SettingsDialog (the shell and tabs), a file per tab, and controls.tsx
   src/auth/             AuthGate and the setup / login / new-password pages
   src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
@@ -264,7 +264,7 @@ Never commit `data/` or `.env`.
   the planned and worked lengths differ by a whole minute, where `finishChoice` opens the
   `FinishChoice` sheet (Planned · Nm / Worked · Mm / Back). Both alerting effects wait for
   `settings.loaded`, or an alert raised on load would use the default sound and switch; the
-  alarms in `App.tsx` wait for it the same way (`settled`), or a longer work day than the
+  alarms (`useTodayAlarms`) wait for it the same way (`settled`), or a longer work day than the
   default would ring the clock-out alarm on load. So `loaded` only turns true on a real answer:
   a failed `GET /settings` is retried (`nextBackoff` in `shared/backoff.ts`: 2 s doubling to a
   minute), never settled with the defaults.
@@ -277,7 +277,7 @@ Never commit `data/` or `.env`.
   the session shown reloads that day so the log catches up, a 404/409 on adjust/finish/cancel
   re-syncs at once, and the completion chime only plays when the server says `completed`.
   **Today's day is kept in step the same way** (`useRefreshDay` in `useDay.tsx`: a refresh
-  when the tab comes back, throttled, and every minute), so the alarms in `App.tsx` judge the
+  when the tab comes back, throttled, and every minute), so the alarms in `useTodayAlarms` judge the
   server's copy of the punches, not one from hours ago; they wait while a come-back refresh is
   out. A today whose first load failed is loaded again on the same ticks (no second banner), so
   its alarms come back with the server.
@@ -331,7 +331,7 @@ Never commit `data/` or `.env`.
   Lunch and the second meal period stay armed: California Labor Code §512 still requires them
   on an overtime day. The setting `overtimeApproval` shows/hides the switch and banner
   button, and with it off the Clock out tile reads time past the day as "past your day"
-  rather than a red "Over by"; a flagged day is silent only while the setting is on (`App.tsx`).
+  rather than a red "Over by"; a flagged day is silent only while the setting is on (`useTodayAlarms`).
 - **`mealRules: false` turns the meal periods off in the math, not in the components.**
   `computeTimeclock` then never needs a lunch (`not-needed`, so no lunch alarm and no lunch
   added to the clock-out time) and `secondMealApplies` is false; a lunch that was punched still
@@ -366,7 +366,7 @@ Never commit `data/` or `.env`.
 - **Alarm event keys embed the target minute** (`eventKey`), so a moved target re-arms and a
   reload never re-fires. Fired keys live in `localStorage` under `focus:alarms:<date>` and are
   pruned to today. Today's punches are held while focus is inside the punch rows and settle
-  for 3 s after it leaves (`useSettled(value, ms, hold)`, wired in `App.tsx`) before evaluation.
+  for 3 s after it leaves (`useSettled(value, ms, hold)`, wired in `useTodayAlarms`) before evaluation.
 - **Per-date card drafts reset by remounting**: `Sheet.tsx` keys `Priorities` and `Retro` by
   date, so neither needs a "date changed" effect. Local drafts that mirror a prop use the
   "adjust state while rendering" form (see `DurationField`), not a `useEffect` + `setState`,
@@ -386,7 +386,9 @@ Never commit `data/` or `.env`.
   load (an upgrade while the page was open) reloads the page once a minute at most
   (`vite:preloadError` in `main.tsx`, `lib/reload.ts`); otherwise the `ErrorBoundary` shows.
 - **Migrations are append-only** in `server/db.ts` (`MIGRATIONS[]`, `PRAGMA user_version`).
-  Every FK to `users` or `days` is `ON DELETE CASCADE`.
+  Every FK to `users` or `days` is `ON DELETE CASCADE`. A column nothing uses stays in the
+  table rather than a migration dropping it: `sessions.notes` is one (never shown or edited;
+  the API no longer reads or writes it).
 
 ## How to add…
 
@@ -437,7 +439,7 @@ Never commit `data/` or `.env`.
   the day's `day:<date>` key with the change and a commit from the server's answer (mirror
   `setOvertimeApproved`; a failure drops the change, raises the "Change not saved" banner and
   reloads the day, so the setter never rejects) → pass it from `Sheet.tsx`
-  to the card, and from `App.tsx` into `useAlarms` if alarms depend on it.
+  to the card, and from `useTodayAlarms` into `useAlarms` if alarms depend on it.
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
   `currentUser(req).id` (`requireDate` / `loadOwnedSession` / `loadOwnedBreak` where they fit), validate input
   (cast `req.body` to `{ field?: unknown }` and check each field; the `no-unsafe-*` lint

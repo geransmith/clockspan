@@ -20,7 +20,6 @@ const session = (id: number, date: string, startedAt: number, seconds: number, e
   id,
   date,
   label: `s${id}`,
-  notes: '',
   plannedSeconds: seconds,
   startedAt,
   endedAt: startedAt + seconds * 1000,

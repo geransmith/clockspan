@@ -2,8 +2,6 @@ import type { Day, Priority } from '../types';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { COMPLETE_WARNINGS, GENTLE_WARNINGS, PROGRESS_WARNINGS } from './copy';
 
-export { MAX_PRIORITIES };
-
 /** A row with something written in it; the others are the card's empty slots. */
 export function hasText(p: { text: string }): boolean {
   return p.text.trim() !== '';

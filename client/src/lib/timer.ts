@@ -1,7 +1,5 @@
 import { activeMs, plannedEndAt, type SessionTiming } from '../../../shared/timer.js';
 
-export { activeMs };
-
 /**
  * A pause is a break, not a parking spot. One left this long was forgotten: the client
  * finishes the session, and the server logs the focus before the pause either way.
