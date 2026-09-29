@@ -265,19 +265,23 @@ export function TimerProvider({ children }: { children: ReactNode }) {
 
   // Pause and resume are optimistic like adjust; the server's row is adopted only if the
   // user hasn't flipped it again meanwhile, and a failure puts the pause fields back.
-  const pause = useCallback(
-    () =>
+  const setPaused = useCallback(
+    (paused: boolean) =>
       attempt(async () => {
         const cur = runningRef.current;
-        if (!cur || cur.pausedAt != null) return;
+        if (!cur || (cur.pausedAt != null) === paused) return;
         mutationSeq.current++;
-        const optimistic = { ...cur, pausedAt: Date.now() };
+        const now = Date.now();
+        const optimistic =
+          cur.pausedAt == null
+            ? { ...cur, pausedAt: now }
+            : { ...cur, pausedAt: null, pausedSeconds: cur.pausedSeconds + Math.round((now - cur.pausedAt) / 1000) };
         runningRef.current = optimistic;
         setRunning(optimistic);
         try {
-          const { session } = await api.pauseSession(cur.id);
+          const { session } = await (paused ? api.pauseSession(cur.id) : api.resumeSession(cur.id));
           store.applySession(session); // the log row's pill reads the day's copy
-          setRunning((latest) => (latest && latest.id === session.id && latest.pausedAt != null ? session : latest));
+          setRunning((latest) => (latest && latest.id === session.id && (latest.pausedAt != null) === paused ? session : latest));
         } catch (err) {
           setRunning((latest) => (latest && latest.id === cur.id ? { ...latest, pausedAt: cur.pausedAt, pausedSeconds: cur.pausedSeconds } : latest));
           throw err;
@@ -285,27 +289,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       }),
     [attempt, store, runningRef],
   );
-
-  const resume = useCallback(
-    () =>
-      attempt(async () => {
-        const cur = runningRef.current;
-        if (!cur || cur.pausedAt == null) return;
-        mutationSeq.current++;
-        const optimistic = { ...cur, pausedAt: null, pausedSeconds: cur.pausedSeconds + Math.round((Date.now() - cur.pausedAt) / 1000) };
-        runningRef.current = optimistic;
-        setRunning(optimistic);
-        try {
-          const { session } = await api.resumeSession(cur.id);
-          store.applySession(session);
-          setRunning((latest) => (latest && latest.id === session.id && latest.pausedAt == null ? session : latest));
-        } catch (err) {
-          setRunning((latest) => (latest && latest.id === cur.id ? { ...latest, pausedAt: cur.pausedAt, pausedSeconds: cur.pausedSeconds } : latest));
-          throw err;
-        }
-      }),
-    [attempt, store, runningRef],
-  );
+  const pause = useCallback(() => setPaused(true), [setPaused]);
+  const resume = useCallback(() => setPaused(false), [setPaused]);
 
   const finish = useCallback(
     (countOverrun = false) =>

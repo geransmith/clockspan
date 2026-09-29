@@ -394,8 +394,8 @@ Never commit `data/` or `.env`.
   `DEFAULT_SETTINGS.sounds`, a label in `SOUND_EVENT_LABELS`, and a `playSound(settings.sounds.<event>)`
   call gated by `settings.sound` (or a `useCelebration` for a moment worth a burst).
 - **An alarm target** (existing: `lunchBy`, `clockOut`, `secondMeal`, `retro`): expose the instant from
-  `computeTimeclock` → add a target in `useAlarms.ts` (`targets[]`, with an `armed` rule; put
-  a rule the card also needs in a pure helper like `secondMealApplies`) → add its default
+  `computeTimeclock` → add a target to `alarmTargets()` in `lib/alarms.ts`, with an `armed` rule
+  and a test case (a rule the card also needs goes in a pure helper like `secondMealApplies`) → add its default
   under `alarms` in `shared/settings.ts` and the `AlarmId` union there → add an `AlarmEditor` in
   `settings/AlarmsTab.tsx` → copy in `describeEvent()`: a `kicker` naming the alarm + rule
   ("X alarm · 15 min warning"), a title, and a body that says where the deadline came from
