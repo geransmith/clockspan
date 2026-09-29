@@ -82,7 +82,9 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
         index: false,
         maxAge: '1h',
         setHeaders: (res, filePath) => {
-          if (filePath.includes(`${path.sep}assets${path.sep}`)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          // By the path inside the build: filePath is absolute, and an install under a folder
+          // named assets would otherwise pin the icons, manifest and service worker for a year.
+          if (path.relative(clientDir, filePath).startsWith(`assets${path.sep}`)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
         },
       }),
     );
@@ -92,7 +94,11 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
     app.use('/assets', notFound);
     app.get('/{*splat}', (_req, res) => {
       res.setHeader('Cache-Control', 'no-cache');
-      res.sendFile(path.join(clientDir, 'index.html'));
+      // `root`, not an absolute path: send's dotfile rule checks every segment of an absolute
+      // path, so an install under any folder starting with a dot (~/.local/share/…, a
+      // .claude/worktrees checkout) answered every page with a 404. With a root it checks only
+      // the part inside it, as express.static does.
+      res.sendFile('index.html', { root: clientDir });
     });
   }
 
