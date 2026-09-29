@@ -331,8 +331,12 @@ Never commit `data/` or `.env`.
 - **`mealRules: false` turns the meal periods off in the math, not in the components.**
   `computeTimeclock` then never needs a lunch (`not-needed`, so no lunch alarm and no lunch
   added to the clock-out time) and `secondMealApplies` is false; a lunch that was punched still
-  counts. `trackHours: false` only hides hours outside the day's own tiles (the week line,
-  History's hours, the Clocked out sticker via `stickerReasons`); the timeclock still runs.
+  counts. The card drops the Lunch by tile (the Focused tile shows either way), and with
+  `lunchPunches: false` too it hides the Lunch out / in rows, which stay in the data at
+  positions 1 and 2: `lunchRowsShown` decides (never on a day with a lunch punched) and
+  `nextPunchPosition` skips them. `trackHours: false` only hides hours outside the day's own
+  tiles (the week line, History's hours, the Clocked out sticker via `stickerReasons`); the
+  timeclock still runs.
 - **Priorities are stored sparse** (positions 1..n, contiguous, ≤ `MAX_PRIORITIES`; no `done`
   on an empty row); the client pads to `settings.priorityCount` with `padPriorities()`.
   `PUT /days/:date/priorities` is a full replace, so removing a row is sending the list without it.

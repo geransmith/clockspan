@@ -673,15 +673,26 @@ button {
 }
 
 /* ---------- timeclock ---------- */
-/* Three across at every width. On a phone the type shrinks instead of the tiles stacking,
+/* Three across at every width (the timeclock's four are below). On a phone the type shrinks instead of the tiles stacking,
    which put the punch rows and the priorities most of a screen further down. Each tile's
-   label, value and sub-line sit on rows shared by the three (subgrid), so a label that wraps
-   to two lines ("Clock out at" on a narrow phone) doesn't drop that tile's number below the others. */
+   label, value and sub-line sit on rows shared by the tiles in a row (subgrid), so a label that
+   wraps to two lines ("Clock out at" on a narrow phone) doesn't drop that tile's number below the others. */
 .tiles {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 14px;
+}
+/* The timeclock's four (Lunch by joins the others with the meal periods on): a quarter of a
+   phone is too narrow for "10:45 AM" and its sub-line, so two by two. Four across once a
+   quarter of the card holds "12h 59m" and the live dot at the desktop size, which is 760 px. */
+.tiles--four {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (min-width: 760px) {
+  .tiles--four {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 .tile {
   display: grid;

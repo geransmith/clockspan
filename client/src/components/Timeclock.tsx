@@ -4,13 +4,14 @@ import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { unlockAudio } from '../lib/alerts';
 import { pickCelebration } from '../lib/celebrate';
-import { floorToMinute, formatDuration, plural } from '../lib/format';
-import { timeclockTiles } from '../lib/tiles';
+import { floorToMinute, formatDuration } from '../lib/format';
+import { focusTile, timeclockTiles } from '../lib/tiles';
 import {
   addPunchPair,
   clockOutPosition,
   daySettings,
   extraPairs,
+  lunchRowsShown,
   nextPunchPosition,
   removePunchPair,
   secondMealApplies,
@@ -38,7 +39,7 @@ interface Props {
   workMinutes: number | null;
   /** The week so far up to this day; null while loading. */
   week: WeekHours | null;
-  /** The day's logged focus: with the meal rules off there's no lunch deadline, so that tile shows this. */
+  /** The day's logged focus, for the Focused tile. */
   focus: { seconds: number; count: number };
   onChange: (punches: Punch[]) => void;
   onOvertimeChange: (approved: boolean) => void;
@@ -114,8 +115,9 @@ export function Timeclock({
 
   // A punch after the clock-in is expected to come after it; the time field's AM/PM guess uses that.
   const clockInAt = byPos.get(0)?.at ?? null;
+  const lunchRows = lunchRowsShown(punches, settings);
   // Today, until the day is done, the next empty row's Now is the filled button: one obvious tap.
-  const nextPos = isToday && tc.state !== 'done' ? nextPunchPosition(punches) : null;
+  const nextPos = isToday && tc.state !== 'done' ? nextPunchPosition(punches, lunchRows) : null;
   const row = (punch: Punch, label: string) => (
     <PunchRow
       key={punch.position}
@@ -163,19 +165,11 @@ export function Timeclock({
 
   return (
     <div className="timeclock">
-      <div className="tiles">
-        {!settings.mealRules ? (
-          <Tile
-            label="Focused"
-            value={formatDuration(focus.seconds)}
-            sub={focus.count === 0 ? 'No sessions yet' : `${focus.count} ${plural(focus.count, 'session')}`}
-            tone=""
-          />
-        ) : (
-          <Tile label="Lunch by" {...tiles.lunch} />
-        )}
+      <div className={settings.mealRules ? 'tiles tiles--four' : 'tiles'}>
+        {settings.mealRules && <Tile label="Lunch by" {...tiles.lunch} />}
         <Tile label="Worked" {...tiles.worked} />
         <Tile label="Clock out at" {...tiles.clockOut} />
+        <Tile label="Focused" {...focusTile(focus, isToday)} />
       </div>
 
       {celebration && (
@@ -218,7 +212,11 @@ export function Timeclock({
         <Toggle
           className="ot-row"
           label="Overtime approved"
-          hint={overtimeApproved ? 'Clock-out alarm is off for today. Meal alarms stay on.' : 'Silences the clock-out alarm for this day.'}
+          hint={
+            overtimeApproved
+              ? `Clock-out alarm is off for today.${settings.mealRules ? ' Meal alarms stay on.' : ''}`
+              : 'Silences the clock-out alarm for this day.'
+          }
           checked={overtimeApproved}
           onChange={onOvertimeChange}
         />
@@ -233,8 +231,8 @@ export function Timeclock({
       >
         {fixedRow(0, 'Clock in')}
         {pairBlock(before, 0)}
-        {fixedRow(1, 'Lunch out')}
-        {fixedRow(2, 'Lunch in')}
+        {lunchRows && fixedRow(1, 'Lunch out')}
+        {lunchRows && fixedRow(2, 'Lunch in')}
         {pairBlock(after, before.length)}
         {clockOutPos != null && fixedRow(clockOutPos, 'Clock out')}
         <button className="btn btn-ghost punch-add" onClick={addPair}>

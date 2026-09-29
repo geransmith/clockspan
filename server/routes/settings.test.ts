@@ -49,8 +49,16 @@ describe('/api/settings', () => {
     expect((await app.api.put('/api/settings', { celebrations: false })).body.celebrations).toBe(false);
     expect((await app.api.put('/api/settings', { celebrations: 'no' })).body.celebrations).toBe(false);
     expect((await app.api.put('/api/settings', { celebrations: true })).body.celebrations).toBe(true);
-    expect((await app.api.put('/api/settings', { mealRules: false, trackHours: false })).body).toMatchObject({ mealRules: false, trackHours: false });
-    expect((await app.api.put('/api/settings', { mealRules: 'no', trackHours: 1 })).body).toMatchObject({ mealRules: false, trackHours: false });
+    expect((await app.api.put('/api/settings', { mealRules: false, lunchPunches: false, trackHours: false })).body).toMatchObject({
+      mealRules: false,
+      lunchPunches: false,
+      trackHours: false,
+    });
+    expect((await app.api.put('/api/settings', { mealRules: 'no', lunchPunches: 'no', trackHours: 1 })).body).toMatchObject({
+      mealRules: false,
+      lunchPunches: false,
+      trackHours: false,
+    });
     expect((await app.api.put('/api/settings', { suggestBreaks: true })).body.suggestBreaks).toBe(true);
     expect((await app.api.put('/api/settings', { suggestBreaks: 'off' })).body.suggestBreaks).toBe(true);
     expect((await app.api.put('/api/settings', { suggestBreaks: false })).body.suggestBreaks).toBe(false);

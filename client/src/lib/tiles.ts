@@ -1,8 +1,8 @@
 import type { AlarmSettings, Settings } from '../types';
-import { formatDuration, formatDurationCeil } from './format';
+import { formatDuration, formatDurationCeil, plural } from './format';
 import type { TimeclockResult } from './timeclock';
 
-/** One of the timeclock card's three tiles: the number, the line under it, and its colour class. */
+/** One of the timeclock card's tiles: the number, the line under it, and its colour class. */
 export interface TileView {
   value: string;
   sub: string;
@@ -87,4 +87,13 @@ export function timeclockTiles(tc: TimeclockResult, o: TileOptions): { lunch: Ti
   };
 
   return { lunch, worked, clockOut };
+}
+
+/** The Focused tile: the day's logged focus time and how many sessions it took. */
+export function focusTile(focus: { seconds: number; count: number }, isToday: boolean): TileView {
+  return {
+    value: formatDuration(focus.seconds),
+    sub: focus.count > 0 ? `${focus.count} ${plural(focus.count, 'session')}` : isToday ? 'No sessions yet' : 'No sessions',
+    tone: '',
+  };
 }

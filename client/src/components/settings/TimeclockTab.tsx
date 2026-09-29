@@ -10,10 +10,18 @@ export function TimeclockTab({ settings, set }: { settings: Settings; set: (patc
       <DurationField label="Work day" minutes={settings.workMinutes} {...SETTING_LIMITS.workMinutes} onCommit={(m) => set({ workMinutes: m })} />
       <Toggle
         label="Meal periods"
-        hint="The lunch deadline and the second meal period, with their alarms. Off for salaried or exempt work, or where other rules apply; the Lunch by tile then shows focused time."
+        hint="The lunch deadline and the second meal period, with their alarms and the Lunch by tile. Off for salaried or exempt work, or where other rules apply."
         checked={settings.mealRules}
         onChange={(v) => set({ mealRules: v })}
       />
+      {!settings.mealRules && (
+        <Toggle
+          label="Lunch punches"
+          hint="The Lunch out and Lunch in rows on the timeclock. Off hides them, except on a day with a lunch already punched."
+          checked={settings.lunchPunches}
+          onChange={(v) => set({ lunchPunches: v })}
+        />
+      )}
       {settings.mealRules && (
         <>
           <DurationField
@@ -33,7 +41,7 @@ export function TimeclockTab({ settings, set }: { settings: Settings; set: (patc
       )}
       <Toggle
         label="Overtime"
-        hint="An 'Overtime approved' switch on the timeclock and the clock-out alarm. It silences that day's clock-out alarm only; meal alarms stay on. Off where overtime doesn't apply: time past your day isn't shown as overtime."
+        hint={`An 'Overtime approved' switch on the timeclock and the clock-out alarm. It silences that day's clock-out alarm only${settings.mealRules ? '; meal alarms stay on' : ''}. Off where overtime doesn't apply: time past your day isn't shown as overtime.`}
         checked={settings.overtimeApproval}
         onChange={(v) => set({ overtimeApproval: v })}
       />

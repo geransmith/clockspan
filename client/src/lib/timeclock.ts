@@ -285,11 +285,21 @@ export function extraPairs(punches: Punch[]): ExtraPair[] {
 }
 
 /**
+ * Whether the card shows the Lunch out and Lunch in rows. Only the meal periods off with
+ * Lunch punches off hides them, and never on a day with a lunch punched: the math still
+ * counts that lunch, so its times stay where they can be seen and cleared.
+ */
+export function lunchRowsShown(punches: Punch[], settings: Pick<Settings, 'mealRules' | 'lunchPunches'>): boolean {
+  if (settings.mealRules || settings.lunchPunches) return true;
+  return punches.some((p) => (p.position === LUNCH_OUT_POSITION || p.position === LUNCH_IN_POSITION) && p.at != null);
+}
+
+/**
  * The first row without a time, in the order the card shows them (clock in, pairs before
  * lunch, lunch out and in, pairs after it, clock out): the one the next "Now" is for. Null
- * once every row has a time.
+ * once every row has a time. With the lunch rows hidden (`lunchRowsShown`) they are skipped.
  */
-export function nextPunchPosition(punches: Punch[]): number | null {
+export function nextPunchPosition(punches: Punch[], lunchRows = true): number | null {
   const byPos = new Map(punches.map((p) => [p.position, p]));
   const pairs = extraPairs(punches);
   const pairRows = (beforeLunch: boolean) => pairs.filter((p) => p.beforeLunch === beforeLunch).flatMap((p) => [p.out, p.in]);
@@ -297,8 +307,7 @@ export function nextPunchPosition(punches: Punch[]): number | null {
   const order = [
     byPos.get(0),
     ...pairRows(true),
-    byPos.get(LUNCH_OUT_POSITION),
-    byPos.get(LUNCH_IN_POSITION),
+    ...(lunchRows ? [byPos.get(LUNCH_OUT_POSITION), byPos.get(LUNCH_IN_POSITION)] : []),
     ...pairRows(false),
     clockOut == null ? undefined : byPos.get(clockOut),
   ];
