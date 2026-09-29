@@ -183,7 +183,7 @@ Set these in `.env` (start from `.env.example`, which documents each one) or in 
 | `COOKIE_SECURE` | derived from `APP_URL` | Force session cookies to `Secure` on (`true`) or off (`false`); `1`/`0`, `yes`/`no` and `on`/`off` work too. Any other value is logged and ignored |
 | `SESSION_TTL_DAYS` | `30` | Sliding session lifetime |
 | `RETENTION_DAYS` | unset | Server-wide ceiling on history: every user's days older than this many days (30 or more) are deleted every few hours. Unset keeps everything; users can still choose a shorter limit in Settings → Data |
-| `OIDC_ISSUER` | — | Provider issuer URL (discovery is done from it) |
+| `OIDC_ISSUER` | — | Provider issuer URL, `https://` only (discovery is done from it) |
 | `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | — | Confidential client credentials |
 | `OIDC_SCOPES` | `openid profile email` | Scopes to request |
 | `PUID` / `PGID` | `1000` / `1000` | Docker only: own `/data` and run as this user; `0` keeps root |
@@ -234,7 +234,7 @@ Login is rate-limited to 5 failed attempts per 15 minutes per IP, counting an IP
    TRUST_PROXY=1
    ```
 
-The app refuses to start, with a clear message, if `APP_URL`, `OIDC_ISSUER`, `OIDC_CLIENT_ID` or `OIDC_CLIENT_SECRET` is missing. If Authentik is briefly unreachable at startup the app still boots and retries discovery in the background. Sign out also ends the Authentik session when the provider advertises an end-session endpoint.
+The app refuses to start, with a clear message, if `APP_URL`, `OIDC_ISSUER`, `OIDC_CLIENT_ID` or `OIDC_CLIENT_SECRET` is missing, or if `OIDC_ISSUER` isn't an `https://` URL (the sign-in library never contacts a provider over plain http). If Authentik is briefly unreachable at startup the app still boots and retries discovery in the background. Sign out also ends the Authentik session when the provider advertises an end-session endpoint.
 
 **Switching modes later.** Data is keyed by user. Going from `none` to `local` creates a fresh admin; the old implicit user's data stays in the database. To hand it to the new account, stop the container and run the script below before the new account records a day of its own (a user has one row per date, so a date both accounts used stops the script and nothing moves). Days move together with their sessions and breaks, which belong to a user as well as a day. The last two statements bring the old settings along, replacing any the admin saved; leave them out to keep the admin's.
 

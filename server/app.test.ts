@@ -8,6 +8,7 @@ import { createApp, startBackgroundJobs } from './app.js';
 import { loadConfig } from './config.js';
 import { ensureDefaultUser, openDatabase } from './db.js';
 import { SETUP_CODE, startTestApp, type TestApp } from './dev/harness.js';
+import { Discovery } from './auth/oidc.js';
 
 describe('response headers', () => {
   let app: TestApp;
@@ -424,6 +425,27 @@ describe('startBackgroundJobs', () => {
     expect(count('auth_sessions')).toBe(1);
     vi.advanceTimersByTime(6 * 3_600_000);
     expect(count('auth_sessions')).toBe(0);
+    db.close();
+  });
+
+  it('warms the OIDC lookup createApp was given, which building the app leaves alone', () => {
+    vi.useFakeTimers();
+    const db = openDatabase(':memory:');
+    const config = loadConfig({
+      AUTH_MODE: 'oidc',
+      OIDC_ISSUER: 'https://127.0.0.1:2/',
+      OIDC_CLIENT_ID: 'c',
+      OIDC_CLIENT_SECRET: 's',
+      APP_URL: 'http://localhost',
+    });
+    const discovery = new Discovery('https://127.0.0.1:2/', 'c', 's');
+    const get = vi.spyOn(discovery, 'get');
+    const warm = vi.spyOn(discovery, 'warm').mockResolvedValue();
+    createApp(db, config, { discovery });
+    expect(get).not.toHaveBeenCalled();
+    expect(warm).not.toHaveBeenCalled();
+    startBackgroundJobs(db, config, discovery);
+    expect(warm).toHaveBeenCalledOnce();
     db.close();
   });
 

@@ -31,7 +31,7 @@ const grant = (claims: Record<string, unknown> | undefined): Grant => ({ access_
 describe('OIDC code grant', () => {
   let app: TestApp;
   beforeEach(async () => {
-    vi.mocked(oidc.discovery).mockResolvedValue(configuration());
+    vi.mocked(oidc.discovery).mockReset().mockResolvedValue(configuration());
     vi.mocked(oidc.authorizationCodeGrant).mockReset();
     vi.mocked(oidc.fetchUserInfo).mockReset();
     vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -150,7 +150,44 @@ describe('OIDC code grant', () => {
     vi.mocked(oidc.discovery).mockResolvedValue(configuration(false));
     await app.close();
     app = await startTestApp({ authMode: 'oidc', env: { OIDC_ISSUER: ISSUER } });
+    await login();
     expect((await app.api.post('/api/auth/logout')).body).toEqual({ ok: true, redirect: null });
+
+    // One openid-client won't send a browser to: the logout still answers, without it.
+    vi.mocked(oidc.discovery).mockResolvedValue(
+      new oidc.Configuration({ ...metadata(false), end_session_endpoint: 'http://idp.example.com/end-session/' }, 'clockspan', 'secret'),
+    );
+    await app.close();
+    app = await startTestApp({ authMode: 'oidc', env: { OIDC_ISSUER: ISSUER } });
+    await login();
+    expect((await app.api.post('/api/auth/logout')).body).toEqual({ ok: true, redirect: null });
+  });
+
+  it('logs out at once, without asking the provider, while discovery has no answer yet', async () => {
+    // A provider that takes the connection and never answers: openid-client waits 30 s.
+    vi.mocked(oidc.discovery).mockReturnValue(new Promise<never>(() => {}));
+    await app.close();
+    app = await startTestApp({ authMode: 'oidc', env: { OIDC_ISSUER: ISSUER } });
+    const r = await app.api.post('/api/auth/logout');
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ ok: true, redirect: null });
+    expect(oidc.discovery).not.toHaveBeenCalled();
+  });
+
+  it('asks the provider nothing while the app is built, and the routes use the lookup the entrypoint warms', async () => {
+    // beforeEach built an app: nothing looked the provider up, and nothing will until asked.
+    expect(oidc.discovery).not.toHaveBeenCalled();
+    const discovery = new Discovery(ISSUER, 'clockspan', 'secret');
+    await app.close();
+    app = await startTestApp({ authMode: 'oidc', env: { OIDC_ISSUER: ISSUER }, discovery });
+    expect(oidc.discovery).not.toHaveBeenCalled();
+    // What startBackgroundJobs runs.
+    await discovery.warm();
+    // No sign-in since boot, and sign-out already has the provider's end-session URL.
+    const out = await app.api.post('/api/auth/logout');
+    expect(new URL(out.body.redirect as string).pathname).toBe('/application/o/clockspan/end-session/');
+    await login();
+    expect(oidc.discovery).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -179,6 +216,61 @@ describe('Discovery', () => {
     expect(vi.mocked(oidc.discovery).mock.calls[0]!.slice(0, 3)).toEqual([new URL(ISSUER), 'clockspan', 'secret']);
     // Cached from here on: no third call.
     expect(await d.get()).toBe(c);
+    expect(d.current()).toBe(c);
     expect(oidc.discovery).toHaveBeenCalledTimes(2);
+  });
+
+  const clientError = (message: string, code: string, cause?: unknown) => Object.assign(new oidc.ClientError(message, { cause }), { code });
+  const status = (n: number) => clientError('unexpected HTTP response status code', 'OAUTH_RESPONSE_IS_NOT_CONFORM', new Response(null, { status: n }));
+
+  it('keeps retrying while the provider is down or starting, and logs what went wrong', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(oidc.discovery)
+      .mockReset()
+      .mockRejectedValueOnce(new TypeError('fetch failed', { cause: new Error('connect ECONNREFUSED 10.0.0.5:443') }))
+      // Every address of a name refused: the detail is in `errors`, and the message is empty.
+      .mockRejectedValueOnce(new TypeError('fetch failed', { cause: new AggregateError([], '') }))
+      .mockRejectedValueOnce(clientError('operation timed out', 'OAUTH_TIMEOUT', new DOMException('The operation was aborted due to timeout', 'TimeoutError')))
+      // A reverse proxy's answer while the provider starts.
+      .mockRejectedValueOnce(status(502))
+      .mockResolvedValue(configuration());
+
+    const d = new Discovery(ISSUER, 'clockspan', 'secret');
+    const warm = d.warm();
+    await vi.advanceTimersByTimeAsync(2_000 + 4_000 + 8_000 + 16_000);
+    await warm;
+    expect(error.mock.calls).toEqual([
+      ['[oidc] discovery failed (fetch failed: connect ECONNREFUSED 10.0.0.5:443); retrying in 2s'],
+      ['[oidc] discovery failed (fetch failed); retrying in 4s'],
+      ['[oidc] discovery failed (operation timed out: The operation was aborted due to timeout); retrying in 8s'],
+      ['[oidc] discovery failed (unexpected HTTP response status code: HTTP 502); retrying in 16s'],
+    ]);
+    expect(d.current()).not.toBeNull();
+  });
+
+  it('stops at an answer that asking again cannot change, says so once, and leaves sign-in to ask again', async () => {
+    vi.useFakeTimers();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const mismatch = clientError('discovered metadata issuer does not match the expected issuer', 'OAUTH_JSON_ATTRIBUTE_COMPARISON', { attribute: 'issuer' });
+    for (const [err, why] of [
+      [status(404), 'unexpected HTTP response status code: HTTP 404'],
+      [mismatch, 'discovered metadata issuer does not match the expected issuer'],
+    ] as const) {
+      error.mockClear();
+      vi.mocked(oidc.discovery).mockReset().mockRejectedValue(err);
+      const d = new Discovery(ISSUER, 'clockspan', 'secret');
+      await d.warm();
+      await vi.advanceTimersByTimeAsync(60 * 60_000);
+      expect(error.mock.calls).toEqual([
+        [`[oidc] discovery failed (${why}); not retrying, since the answer won't change. Check OIDC_ISSUER against the provider's issuer URL.`],
+      ]);
+      expect(oidc.discovery).toHaveBeenCalledTimes(1);
+      expect(d.current()).toBeNull();
+      // A sign-in asks again, in case the provider was fixed since.
+      await expect(d.get()).rejects.toBe(err);
+      expect(oidc.discovery).toHaveBeenCalledTimes(2);
+    }
   });
 });

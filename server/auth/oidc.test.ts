@@ -11,7 +11,7 @@ import { upsertOidcUser } from './oidc.js';
 describe('AUTH_MODE=oidc', () => {
   let app: TestApp;
   beforeEach(async () => {
-    // Discovery retries in the background and logs each failure; keep the run quiet.
+    // The routes log why a sign-in failed; keep the run quiet.
     vi.spyOn(console, 'error').mockImplementation(() => {});
     app = await startTestApp({ authMode: 'oidc' });
   });
@@ -37,7 +37,8 @@ describe('AUTH_MODE=oidc', () => {
     expect(r.status).toBe(503);
     expect(await r.text()).toBe('Identity provider is unreachable. <a href="/auth/login">Try again</a>.');
     expect(r.headers.getSetCookie()).toEqual([]);
-    expect(console.error).toHaveBeenCalledWith(expect.stringMatching(/^\[oidc\] sign-in refused, provider unreachable: \S/));
+    // A refused connection: the issuer is https, so openid-client really tried the port.
+    expect(console.error).toHaveBeenCalledWith('[oidc] sign-in refused, provider unreachable: fetch failed: connect ECONNREFUSED 127.0.0.1:2');
   });
 
   it('refuses a callback without the flow cookie', async () => {
@@ -60,7 +61,7 @@ describe('AUTH_MODE=oidc', () => {
     expect(app.db.prepare(`SELECT COUNT(*) AS n FROM auth_sessions`).get()).toEqual({ n: 0 });
   });
 
-  it('logs out locally even when the provider cannot be asked for an end-session URL', async () => {
+  it('logs out locally, with no end-session URL, while discovery has never reached the provider', async () => {
     const r = await app.api.post('/api/auth/logout');
     expect(r.status).toBe(200);
     expect(r.body).toEqual({ ok: true, redirect: null });

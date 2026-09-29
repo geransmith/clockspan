@@ -147,14 +147,22 @@ describe('APP_URL and OIDC_ISSUER', () => {
     );
     expect(() => load({ APP_URL: 'ftp://focus.example.com' })).toThrow(/APP_URL must be/);
     expect(() => oidc({ OIDC_ISSUER: 'auth.example.com' })).toThrow(
-      /^OIDC_ISSUER must be your provider's issuer URL, starting with https:\/\/ or http:\/\/ \(got "auth.example.com"\)$/,
+      /^OIDC_ISSUER must be your provider's issuer URL, starting with https:\/\/ \(got "auth.example.com"\)$/,
     );
+  });
+
+  it('refuse an http issuer, which openid-client would never contact, while APP_URL may be http', () => {
+    expect(() => oidc({ OIDC_ISSUER: 'http://localhost:9000/application/o/clockspan/' })).toThrow(
+      /^OIDC_ISSUER must be your provider's issuer URL, starting with https:\/\/ \(got "http:\/\/localhost:9000\/application\/o\/clockspan\/"\)$/,
+    );
+    expect(() => oidc({ OIDC_ISSUER: 'HTTP://auth.lan/' })).toThrow(/OIDC_ISSUER must be/);
+    expect(oidc({ APP_URL: 'http://focus.lan' }).appUrl).toBe('http://focus.lan');
   });
 
   it('keep the issuer as given, trailing slash included', () => {
     // The issuer is an identifier the provider's tokens must match exactly; APP_URL is a base to append to.
     expect(oidc({}).oidc?.issuer).toBe('https://auth.example.com/');
-    expect(oidc({ OIDC_ISSUER: 'http://localhost:9000/application/o/clockspan/' }).oidc?.issuer).toBe('http://localhost:9000/application/o/clockspan/');
+    expect(oidc({ OIDC_ISSUER: 'https://auth.example.com/application/o/clockspan/' }).oidc?.issuer).toBe('https://auth.example.com/application/o/clockspan/');
   });
 });
 
