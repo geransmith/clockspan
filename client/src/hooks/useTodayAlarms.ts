@@ -21,6 +21,7 @@ import { useSettled } from './useSettled';
 export function useTodayAlarms(today: string, now: number, openRetro: () => void): { setEditingPunches: (editing: boolean) => void } {
   const { settings, loaded } = useSettings();
   const { day, store } = useDay(today);
+  const { setOvertimeApproved } = store;
   const refreshing = useRefreshDay(today);
   const [editingPunches, setEditingPunches] = useState(false);
   const punches = useSettled(day?.punches, 3000, editingPunches);
@@ -31,7 +32,9 @@ export function useTodayAlarms(today: string, now: number, openRetro: () => void
   const tc = useMemo(() => (settled ? computeTimeclock(punches, todaySettings, now) : null), [settled, punches, todaySettings, now]);
   // A day flagged while the feature was on stays silent only while it is still on.
   const overtimeApproved = settings.overtimeApproval && Boolean(day?.overtimeApproved);
-  const approveOvertime = useCallback(() => void store.setOvertimeApproved(today, true), [store, today]);
+  // On the setter, which keeps its identity: the store is a new object whenever a day changes,
+  // and the alarms would run again for each.
+  const approveOvertime = useCallback(() => void setOvertimeApproved(today, true), [setOvertimeApproved, today]);
   useAlarms(today, tc, todaySettings, now, {
     overtimeApproved,
     retroDone: Boolean(day?.retroAt),

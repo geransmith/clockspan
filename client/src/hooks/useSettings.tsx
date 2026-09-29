@@ -1,10 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from 'react';
 import * as api from '../api';
 import type { Settings } from '../types';
 import { nextBackoff } from '../../../shared/backoff.js';
 import { DEFAULT_SETTINGS, normalizeLayout } from '../../../shared/settings.js';
 import { addPending, fetched, settle, settleWith, shown, untracked, type Tracked } from '../lib/optimistic';
 import { useRefreshLoop } from './useRefreshLoop';
+import { useTracked } from './useTracked';
 
 interface SettingsCtx {
   settings: Settings;
@@ -26,22 +27,7 @@ function fromServer(s: Settings): Settings {
  * showing, with any later change still on top, and rejects so the dialog can say so.
  */
 export function SettingsProvider({ children }: { children: ReactNode }) {
-  const [tracked, setTracked] = useState<Tracked<Settings>>(untracked);
-  // The same value, current at once for the callbacks below (see the day store).
-  const store = useRef(tracked);
-  const nextId = useRef(0);
-  const change = useCallback((fn: (t: Tracked<Settings>) => Tracked<Settings>) => {
-    store.current = fn(store.current);
-    setTracked(store.current);
-  }, []);
-  // Each save goes out once the one before it has answered, failed or not: two in flight could
-  // reach the server in the other order and leave it on the older value.
-  const queue = useRef<Promise<unknown>>(Promise.resolve());
-  const inOrder = useCallback(<T,>(send: () => Promise<T>): Promise<T> => {
-    const next = queue.current.catch(() => {}).then(send);
-    queue.current = next;
-    return next;
-  }, []);
+  const { tracked, current, change, nextId, queue } = useTracked<Tracked<Settings>>(untracked);
 
   // A read's answer. A save answered while it was out already brought all the settings, newer
   // than these (`fetched`). Settings the same as the stored copy change nothing, so `settings`
@@ -64,7 +50,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     let retry: number | undefined;
     let delay = 0;
     const fetchSettings = () => {
-      const sentAt = store.current.version;
+      const sentAt = current().version;
       api
         .getSettings()
         .then((s) => {
@@ -81,43 +67,43 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       window.clearTimeout(retry);
     };
-  }, [land]);
+  }, [current, land]);
 
   // Then kept in step like today's day (every minute and when the tab comes back), since
   // another device may change them: a work day made longer on the phone must not ring this
   // tab's clock-out alarm at the old length. Until the first answer the retries above own the
   // fetch; a failed refresh keeps the copy shown.
   const refresh = useCallback(() => {
-    if (store.current.confirmed === undefined) return Promise.resolve();
-    const sentAt = store.current.version;
+    const { confirmed, version: sentAt } = current();
+    if (confirmed === undefined) return Promise.resolve();
     return api
       .getSettings()
       .then((s) => land(sentAt, s))
       .catch(() => {});
-  }, [land]);
+  }, [current, land]);
   useRefreshLoop(refresh);
 
   const update = useCallback(
     async (patch: Partial<Settings>) => {
-      const id = ++nextId.current;
+      const id = nextId();
       change((t) => addPending(t, id, (s) => ({ ...s, ...patch })));
       try {
-        const saved = await inOrder(() => api.putSettings(patch));
+        const saved = await queue(() => api.putSettings(patch));
         change((t) => settleWith(t, [id], fromServer(saved)));
       } catch (err) {
         change((t) => settle(t, [id]));
         throw err;
       }
     },
-    [change, inOrder],
+    [change, nextId, queue],
   );
 
   // Not optimistic: the server's answer is the copy of the defaults that counts. A change made
   // after it is still pending and stays on top.
   const reset = useCallback(async () => {
-    const saved = await inOrder(() => api.resetSettings());
+    const saved = await queue(() => api.resetSettings());
     change((t) => settleWith(t, [], fromServer(saved)));
-  }, [change, inOrder]);
+  }, [change, queue]);
 
   // Kept by identity between changes: the alarms and the sheet key their work on it. Until the
   // first answer the defaults stand in for the server's copy, with `loaded` false, so a change

@@ -1,6 +1,6 @@
 /**
  * A value the server owns (a day, the settings, the running session), kept as two parts: what
- * the server last confirmed, and the changes this device has made since that the server hasn't
+ * the server has confirmed, and the changes this device has made since that the server hasn't
  * confirmed yet. The screen shows the confirmed value with the pending changes laid over it in
  * the order they were made. That split carries every rule the stores need:
  *
@@ -11,8 +11,9 @@
  *   answer older than a change the server has since confirmed is dropped: `version` moves with
  *   every confirmed change, and a read carries the version it was sent at.
  *
- * Pure and immutable: every function returns a new `Tracked`. `apply` and `commit` must be pure
- * too (no clock reads inside them), since the shown value is worked out again whenever it changes.
+ * Pure and immutable: every function on a `Tracked` returns a new one. `apply` and `commit` must
+ * be pure too (no clock reads inside them), since the shown value is worked out again whenever it
+ * changes. `serial()`, the stores' write queue, lives here too.
  */
 
 export interface Pending<T> {
@@ -21,7 +22,11 @@ export interface Pending<T> {
 }
 
 export interface Tracked<T> {
-  /** The server's last word; undefined until the first answer. */
+  /**
+   * The server's answers in the order they arrived: a read's copy, with each save's answer laid
+   * on it since. Not always what the server holds now: a save's answer can be older than a read
+   * that landed before it. Undefined until the first answer.
+   */
   confirmed: T | undefined;
   /** Changes not confirmed yet, oldest first. */
   pending: readonly Pending<T>[];
@@ -83,4 +88,26 @@ export function fetched<T>(t: Tracked<T>, sentVersion: number, value: T): { next
   const stale = t.version !== sentVersion;
   if (stale && t.confirmed !== undefined) return { next: t, again: false };
   return { next: { ...t, confirmed: value }, again: stale };
+}
+
+/** Runs `job` once the jobs queued before it on the same key have settled. */
+export type Queue = <R>(job: () => Promise<R>, key?: string) => Promise<R>;
+
+/**
+ * A store's write queue: each job starts once the one before it on its key has answered, failed
+ * or not, so the server takes the writes in the order they were made (two in flight could land
+ * the other way round and leave it on the older value). Keys don't wait on each other, and a key
+ * with nothing left to run is forgotten, so one per session doesn't pile up.
+ */
+export function serial(): Queue {
+  const tails = new Map<string, Promise<unknown>>();
+  return (job, key = '') => {
+    const next = (tails.get(key) ?? Promise.resolve()).catch(() => {}).then(job);
+    tails.set(key, next);
+    const forget = () => {
+      if (tails.get(key) === next) tails.delete(key);
+    };
+    void next.then(forget, forget);
+    return next;
+  };
 }
