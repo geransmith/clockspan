@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
+import { nextBackoff } from '../../../shared/backoff.js';
 import { PLANNED_SECONDS } from '../../../shared/timer.js';
 import type { Session, SessionConflict } from '../types';
 import { alert, dismissByTag, unlockAudio, warnQuietly } from '../lib/alerts';
@@ -71,9 +72,9 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // `sync` reads the store through a ref so it stays one function for the provider's lifetime.
   const storeRef = useLatest(store);
   const completing = useRef(false);
-  // After a failed finish (server unreachable) wait before trying again, doubling up to a
-  // minute. The server clamps ended_at to the planned end, so a late finish still logs the
-  // planned duration; all a wait costs is the chime's promptness.
+  // After a failed finish (server unreachable) wait before trying again (`nextBackoff`). The
+  // server clamps ended_at to the planned end, so a late finish still logs the planned
+  // duration; all a wait costs is the chime's promptness.
   const retry = useRef({ at: 0, delay: 0 });
 
   // Re-sync with the server on load, when the tab comes back, and every minute. A
@@ -160,7 +161,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         });
       })
       .catch(() => {
-        const delay = Math.min(60_000, retry.current.delay ? retry.current.delay * 2 : 2_000);
+        const delay = nextBackoff(retry.current.delay);
         retry.current = { at: Date.now() + delay, delay };
       })
       .finally(() => {

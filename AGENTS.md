@@ -43,6 +43,7 @@ shared/                 imported by both sides, always with a `.js` suffix
   sounds.ts             the sound catalog (SOUNDS, SOUND_EVENTS)
   dates.ts, timer.ts    date keys; pause-aware session timing (activeMs, plannedEndAt, PLANNED_SECONDS)
   punches.ts            kindForPosition: a punch row's kind is its position's parity
+  backoff.ts            nextBackoff: the wait between retries of a request that must answer
 server/                 Express API → dist/server
   app.ts                createApp(): headers, /api/health, auth routers, data routers behind
                         requireAuth, static files and the SPA fallback; startBackgroundJobs() (the
@@ -261,7 +262,8 @@ Never commit `data/` or `.env`.
   `settings.loaded`, or an alert raised on load would use the default sound and switch; the
   alarms in `App.tsx` wait for it the same way (`settled`), or a longer work day than the
   default would ring the clock-out alarm on load. So `loaded` only turns true on a real answer:
-  a failed `GET /settings` is retried (2 s doubling to a minute), never settled with the defaults.
+  a failed `GET /settings` is retried (`nextBackoff` in `shared/backoff.ts`: 2 s doubling to a
+  minute), never settled with the defaults.
   `useTimer` keeps a `mutationSeq` so a slow `GET /sessions/running` can't overwrite an
   optimistic update; keep that pattern for new mutations.
   **One running session per user is a schema invariant** (a unique partial index), and another
@@ -458,6 +460,9 @@ Never commit `data/` or `.env`.
   fonts or assets (the CSP would block them anyway). Safe-area insets via `--safe-top` / `--safe-bottom`.
 - Numeric settings inputs commit on blur/Enter (never on every keystroke); priorities debounce
   400 ms; punches and checkboxes save immediately.
+- A form that sends a request submits through `useSubmit()` (`hooks/useSubmit.ts`): one send at
+  a time with the button disabled, and one error line, cleared when a send starts and filled
+  with what it throws (a mismatched confirmation throws too).
 - Comments explain *why* (browser quirks, math), not what.
 - No new dependency (a server one or a client library the bundle carries) without stating the
   reason in the commit message.

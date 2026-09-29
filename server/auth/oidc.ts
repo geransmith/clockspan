@@ -6,6 +6,7 @@ import type { Config } from '../config.js';
 import { cookieOptions, createSession, destroySession } from './session.js';
 import { logName, publicUser } from './users.js';
 import type { AuthInfo, LogoutResponse } from '../../shared/api.js';
+import { nextBackoff } from '../../shared/backoff.js';
 
 const FLOW_COOKIE = 'fs_oidc';
 const FLOW_TTL_SEC = 600;
@@ -49,17 +50,17 @@ export class Discovery {
   }
 
   async warm(): Promise<void> {
-    let delay = 2000;
+    let delay = 0;
     for (;;) {
       try {
         await this.get();
         console.log(`[oidc] discovered issuer ${this.issuer}`);
         return;
       } catch (err) {
+        delay = nextBackoff(delay);
         console.error(`[oidc] discovery failed (${(err as Error).message}); retrying in ${delay / 1000}s`);
         // unref: a provider that never answers must not keep the process (or a test) alive.
         await new Promise((r) => setTimeout(r, delay).unref());
-        delay = Math.min(delay * 2, 60_000);
       }
     }
   }
