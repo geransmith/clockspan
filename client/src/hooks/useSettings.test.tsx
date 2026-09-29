@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
-import { cleanup, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { CARD_IDS } from '../../../shared/settings.js';
-import { deferred, makeSettings, settle, T0 } from '../test/hooks';
+import { deferred, makeSettings, MIN, settle, setVisibility, T0 } from '../test/hooks';
+import type { Settings } from '../types';
 import { SettingsProvider, useSettings } from './useSettings';
 import { useTimeFormat } from './useTimeFormat';
 
@@ -82,7 +83,82 @@ describe('loading', () => {
   });
 });
 
+describe('refresh', () => {
+  it('reads the settings again every minute and when the tab comes back, and keeps them on a failure', async () => {
+    vi.mocked(api.getSettings)
+      .mockResolvedValueOnce(makeSettings())
+      .mockResolvedValueOnce(makeSettings({ workMinutes: 540 }))
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(makeSettings({ workMinutes: 600 }));
+    const { result } = render();
+    await settle();
+    // The work day was made longer on the phone.
+    await settle(MIN);
+    expect(api.getSettings).toHaveBeenCalledTimes(2);
+    expect(result.current.settings.workMinutes).toBe(540);
+    await settle(MIN);
+    expect(api.getSettings).toHaveBeenCalledTimes(3);
+    expect(result.current).toMatchObject({ loaded: true, settings: { workMinutes: 540 } });
+    await settle(10_000);
+    act(() => setVisibility('visible'));
+    await settle();
+    expect(api.getSettings).toHaveBeenCalledTimes(4);
+    expect(result.current.settings.workMinutes).toBe(600);
+  });
+
+  it('keeps the same settings object when the answer has not changed', async () => {
+    vi.mocked(api.getSettings).mockImplementation(() => Promise.resolve(makeSettings({ workMinutes: 540 })));
+    const { result } = render();
+    await settle();
+    const before = result.current.settings;
+    await settle(MIN);
+    expect(api.getSettings).toHaveBeenCalledTimes(2);
+    expect(result.current.settings).toBe(before);
+  });
+
+  it('never hides a save on its way, nor undoes one that answered after the refresh went out', async () => {
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ workMinutes: 480 }));
+    const saved = deferred<Settings>();
+    vi.mocked(api.putSettings).mockReturnValueOnce(saved.promise);
+    const { result } = render();
+    await settle();
+    const done = result.current.update({ workMinutes: 540 });
+    await settle(MIN);
+    expect(api.getSettings).toHaveBeenCalledTimes(2);
+    expect(result.current.settings.workMinutes).toBe(540);
+    saved.resolve(makeSettings({ workMinutes: 540 }));
+    await done;
+
+    // The next refresh was read before the next save, and answers after it.
+    const late = deferred<Settings>();
+    vi.mocked(api.getSettings).mockReturnValueOnce(late.promise);
+    vi.mocked(api.putSettings).mockResolvedValueOnce(makeSettings({ workMinutes: 600 }));
+    await settle(MIN);
+    await act(() => result.current.update({ workMinutes: 600 }));
+    late.resolve(makeSettings({ workMinutes: 540 }));
+    await settle();
+    expect(result.current.settings.workMinutes).toBe(600);
+  });
+});
+
 describe('update', () => {
+  it('shows a change made before the first answer over the defaults, with loaded still false', async () => {
+    vi.mocked(api.getSettings).mockRejectedValue(new Error('offline'));
+    const saved = deferred<Settings>();
+    vi.mocked(api.putSettings).mockReturnValueOnce(saved.promise);
+    const { result } = render();
+    await settle();
+    const sound = !makeSettings().sound;
+    const done = result.current.update({ sound });
+    await settle();
+    expect(result.current).toMatchObject({ loaded: false, settings: { sound, workMinutes: makeSettings().workMinutes } });
+    // The server is down for the save too: back to the defaults.
+    saved.reject(new Error('offline'));
+    await expect(done).rejects.toThrow('offline');
+    await settle();
+    expect(result.current.settings).toEqual(makeSettings());
+  });
+
   it('shows the change at once and adopts what the server stored', async () => {
     vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
     const saved = deferred<ReturnType<typeof makeSettings>>();
