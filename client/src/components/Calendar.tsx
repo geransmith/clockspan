@@ -5,8 +5,8 @@ import { calendarMonth } from '../lib/calendar';
 import { STICKERS_EMPTY } from '../lib/copy';
 import { dayName, formatDateLong, formatDuration, formatHours, formatWeekday, plural } from '../lib/format';
 import { periodOffset, periodRange } from '../lib/review';
-import { countStickers, daySummaryOf, STICKER_REASONS, stickerEmoji, stickerReasons, type StickerId } from '../lib/stickers';
-import { daySettings, targetFraction, timeclockForDate } from '../lib/timeclock';
+import { countStickers, daySummaryOf, STICKER_LABELS, stickerEmoji, stickerReasons, type StickerId } from '../lib/stickers';
+import { targetFraction, type TimeclockResult } from '../lib/timeclock';
 import type { Day } from '../types';
 import { Check } from './Icons';
 import { PeriodNav, PeriodReset } from './PeriodNav';
@@ -91,16 +91,14 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
                   if (d.date === today) cls.push('is-today');
                   if (d.date === selected) cls.push('is-selected');
                   if (stickers && d.stickers.length === reasons.length) cls.push('is-full');
-                  const day = days.get(d.date);
-                  const tc = day ? timeclockForDate(day.punches, daySettings(settings, day), d.date, today, now) : null;
                   // With hours not tracked a cell shows only that the day has something on it.
-                  const clocked = trackHours && tc?.clockIn != null ? tc : null;
+                  const clocked = trackHours && d.timeclock?.clockIn != null ? d.timeclock : null;
                   const worked = clocked ? formatDuration(clocked.workedSeconds) : null;
                   const done = clocked ? targetFraction(clocked) : 0;
                   const shown = filter ? d.stickers.filter((id) => id === filter) : d.stickers;
                   const label = stickers
                     ? shown.length
-                      ? shown.map((id) => STICKER_REASONS.find((r) => r.id === id)!.label).join(', ')
+                      ? shown.map((id) => STICKER_LABELS[id]).join(', ')
                       : 'no stickers'
                     : worked
                       ? `worked ${worked}`
@@ -123,7 +121,7 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
                       {stickers ? (
                         <span className="sticker-row">
                           {shown.map((id) => (
-                            <span key={id} className="sticker" title={STICKER_REASONS.find((r) => r.id === id)!.label} aria-hidden="true">
+                            <span key={id} className="sticker" title={STICKER_LABELS[id]} aria-hidden="true">
                               {stickerEmoji(d.date, id)}
                             </span>
                           ))}
@@ -166,7 +164,14 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
             {selected == null ? (
               <p className="muted small">Tap a day to see it.</p>
             ) : (
-              <DayDetail date={selected} day={days.get(selected)} today={today} now={now} onOpen={onOpen} onReviewWeek={onReviewWeek} />
+              <DayDetail
+                date={selected}
+                day={days.get(selected)}
+                tc={weeks.flat().find((c) => c.date === selected)?.timeclock ?? null}
+                today={today}
+                onOpen={onOpen}
+                onReviewWeek={onReviewWeek}
+              />
             )}
           </div>
         </>
@@ -178,22 +183,22 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
 function DayDetail({
   date,
   day,
+  tc,
   today,
-  now,
   onOpen,
   onReviewWeek,
 }: {
   date: string;
   day: Day | undefined;
+  /** The picked cell's timeclock (`calendarMonth` worked it out once). */
+  tc: TimeclockResult | null;
   today: string;
-  now: number;
   onOpen: (date: string) => void;
   onReviewWeek: (date: string) => void;
 }) {
   const { settings } = useSettings();
   const name = dayName(date, today);
   const s = day ? daySummaryOf(day) : null;
-  const tc = day ? timeclockForDate(day.punches, daySettings(settings, day), date, today, now) : null;
   const note = day?.retroNote.trim() ?? '';
   return (
     <>

@@ -4,7 +4,7 @@ import { hash } from './celebrate';
 import { STICKER_EMOJI } from './copy';
 import { hasText } from './priorities';
 import { focusOf } from './retro';
-import { daySettings, timeclockForDate, type TimeclockSettings } from './timeclock';
+import { daySettings, timeclockForDate, type TimeclockResult, type TimeclockSettings } from './timeclock';
 
 export type StickerId = 'clockedOut' | 'lunch' | 'priorities' | 'focus' | 'reviewed';
 
@@ -17,6 +17,9 @@ export const STICKER_REASONS: { id: StickerId; label: string }[] = [
   { id: 'reviewed', label: 'Retrospective reviewed' },
 ];
 
+/** Each reason's label, for a cell's name and a sticker's tooltip. */
+export const STICKER_LABELS = Object.fromEntries(STICKER_REASONS.map((r) => [r.id, r.label])) as Record<StickerId, string>;
+
 /** What the chart needs to judge a day: its timeclock, and whether hours are tracked at all. */
 export type StickerSettings = TimeclockSettings & Partial<Pick<Settings, 'trackHours'>>;
 
@@ -28,11 +31,15 @@ export function stickerReasons(trackHours: boolean | undefined): { id: StickerId
   return trackHours === false ? STICKER_REASONS.filter((r) => r.id !== 'clockedOut') : STICKER_REASONS;
 }
 
-/** The stickers one day earned. Past days are judged frozen, like everywhere else. */
-export function stickersForDay(d: DaySummary, settings: StickerSettings, today: string, now: number): StickerId[] {
-  const tc = timeclockForDate(d.punches, daySettings(settings, d), d.date, today, now);
+/** A day's timeclock as the calendar judges it: by its own work-day length, frozen once past. */
+export function dayTimeclock(d: DaySummary, settings: TimeclockSettings, today: string, now: number): TimeclockResult {
+  return timeclockForDate(d.punches, daySettings(settings, d), d.date, today, now);
+}
+
+/** The stickers one day earned, judged on its timeclock (`dayTimeclock`), worked out once by the caller. */
+export function stickersForDay(d: DaySummary, tc: TimeclockResult, trackHours: boolean | undefined): StickerId[] {
   const out: StickerId[] = [];
-  if (tc.state === 'done' && settings.trackHours !== false) out.push('clockedOut');
+  if (tc.state === 'done' && trackHours !== false) out.push('clockedOut');
   if (tc.lunchStatus === 'taken') out.push('lunch');
   if (d.prioritiesTotal > 0 && d.prioritiesDone === d.prioritiesTotal) out.push('priorities');
   if (d.focusSeconds > 0) out.push('focus');

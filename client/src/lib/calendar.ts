@@ -1,5 +1,6 @@
 import { addDays, addMonths, startOfWeek } from '../../../shared/dates.js';
-import { stickersForDay, type DaySummary, type StickerId, type StickerSettings } from './stickers';
+import { dayTimeclock, stickersForDay, type DaySummary, type StickerId, type StickerSettings } from './stickers';
+import type { TimeclockResult } from './timeclock';
 
 export interface CalendarDay {
   date: string;
@@ -10,6 +11,8 @@ export interface CalendarDay {
   hasData: boolean;
   /** What the day earned (see `stickersForDay`); empty for a filler. */
   stickers: StickerId[];
+  /** The day's timeclock, worked out once for its stickers, its cell and the day panel; null without data. */
+  timeclock: TimeclockResult | null;
 }
 
 /**
@@ -36,7 +39,15 @@ export function calendarMonth(
       const date = addDays(monday, i);
       const outside = date < monthStart || date > monthEnd;
       const d = outside ? undefined : byDate.get(date);
-      row.push({ date, outside, isFuture: date > today, hasData: d != null, stickers: d ? stickersForDay(d, settings, today, now) : [] });
+      const timeclock = d ? dayTimeclock(d, settings, today, now) : null;
+      row.push({
+        date,
+        outside,
+        isFuture: date > today,
+        hasData: d != null,
+        stickers: d && timeclock ? stickersForDay(d, timeclock, settings.trackHours) : [],
+        timeclock,
+      });
     }
     // A month that starts on a Saturday would otherwise open with a row of nothing but filler.
     if (row.some((d) => !d.outside)) out.push(row);
