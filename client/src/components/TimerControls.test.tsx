@@ -37,11 +37,14 @@ afterEach(() => {
 describe('TimerControls', () => {
   it('writes each button out on the card, and names the icon buttons in the bar', async () => {
     await renderControls(false);
-    expect(names()).toEqual(['5m', '5m', 'Pause', 'Finish', 'Cancel']);
+    // − and + both read "5m", so each carries a name that says which way.
+    expect(names()).toEqual(['Remove 5 minutes', 'Add 5 minutes', 'Pause', 'Finish', 'Cancel']);
+    expect(button('Add 5 minutes').getAttribute('title')).toBeNull();
     cleanup();
     await renderControls(true);
     expect(names()).toEqual(['Remove 5 minutes', 'Add 5 minutes', 'Pause timer', 'Finish', 'Cancel session']);
     expect(button('Pause timer').getAttribute('title')).toBe('Pause');
+    expect(button('Add 5 minutes').getAttribute('title')).toBe('+5m');
   });
 
   it('pauses and resumes the running session, and moves the planned end by the step', async () => {
@@ -80,8 +83,8 @@ describe('TimerControls', () => {
   it('leaves only + and Finish once the timer has run out', async () => {
     // Two minutes past a 25-minute plan: due, and well inside the wait before it finishes itself.
     await renderControls(false, makeSession({ startedAt: T0 - 22 * MIN }));
-    expect(names()).toEqual(['5m', 'Finish', 'Cancel']);
-    expect((button('5m') as HTMLButtonElement).disabled).toBe(false);
+    expect(names()).toEqual(['Add 5 minutes', 'Finish', 'Cancel']);
+    expect((button('Add 5 minutes') as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('turns + off at the longest plan the server takes, running or run out', async () => {

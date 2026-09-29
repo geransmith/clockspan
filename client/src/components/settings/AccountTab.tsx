@@ -52,7 +52,11 @@ function ChangePassword() {
           {error}
         </p>
       )}
-      {done && <p className="success">Password updated.</p>}
+      {done && (
+        <p className="success" role="status">
+          Password updated.
+        </p>
+      )}
       <div>
         <button className="btn btn-primary" type="submit" disabled={busy}>
           Change password
@@ -117,11 +121,12 @@ function Users({ me }: { me: PublicUser }) {
         ))}
       </ul>
       <form className="user-add" onSubmit={add}>
-        <UsernameInput placeholder="Username" autoComplete="off" value={username} onChange={(e) => setUsername(e.target.value)} />
+        <UsernameInput placeholder="Username" aria-label="Username" autoComplete="off" value={username} onChange={(e) => setUsername(e.target.value)} />
         <input
           className="input"
           type="password"
           placeholder="Temporary password"
+          aria-label="Temporary password"
           autoComplete="new-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}

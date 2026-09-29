@@ -57,8 +57,9 @@ function AlarmEditor({ title, hint, alarm, onChange }: { title: string; hint?: s
     const has = alarm.leadMinutes.includes(m);
     onChange({ leadMinutes: (has ? alarm.leadMinutes.filter((x) => x !== m) : [...alarm.leadMinutes, m]).sort((a, b) => b - a) });
   };
+  // Every alarm has the same chips and fields; the group gives each set the alarm's name.
   return (
-    <div className={`alarm-editor${alarm.enabled ? '' : ' is-off'}`}>
+    <div className={`alarm-editor${alarm.enabled ? '' : ' is-off'}`} role="group" aria-label={title}>
       <Toggle label={title} hint={hint} checked={alarm.enabled} onChange={(v) => onChange({ enabled: v })} />
       <div className="alarm-fields">
         <div className="setting-row">

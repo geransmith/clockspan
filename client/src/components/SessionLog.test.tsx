@@ -126,6 +126,7 @@ describe('SessionLog', () => {
     // Both at once, before the server answers.
     expect(bar()).toBe('Renamed');
     expect(screen.getByRole('button', { name: /Renamed/ }).textContent).toBe('1Renamed');
+    expect(screen.getByRole('img', { name: 'Priority 1' }).textContent).toBe('1');
     answer.resolve({ session: { ...RUNNING, label: 'Renamed', priorityUid: 'abcdef123456' } });
     await settle();
     expect(bar()).toBe('Renamed');

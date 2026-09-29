@@ -193,7 +193,7 @@ function Row({
           title={linked ? `Priority ${linked.position}: ${linked.text}. Click to edit` : 'Edit label or link to a priority'}
         >
           {linked && (
-            <span className="log-plan" aria-label={`Priority ${linked.position}`}>
+            <span className="log-plan" role="img" aria-label={`Priority ${linked.position}`}>
               {linked.position}
             </span>
           )}
