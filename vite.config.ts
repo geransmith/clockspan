@@ -38,10 +38,11 @@ export default defineConfig({
     // metrics or the run fails. The set is what the suite is meant to prove: the server, shared,
     // the client's API calls, the pure client libs and the hooks (their tests run under
     // happy-dom, named *.test.tsx). Left out on purpose: the two process entrypoints (index.ts
-    // and cli.ts only wire things up and call process.exit), dev tooling (seed, harness), and
-    // the components. A few components have tests for the logic they hold (saving drafts,
-    // which page the auth gate shows); how they look is checked in the browser. An unreachable
-    // branch is deleted, never hidden behind a v8 ignore comment.
+    // and cli.ts only wire things up and call process.exit; what reset-password does is in
+    // auth/reset.ts, which is covered), dev tooling (seed, harness), and the components. A few
+    // components have tests for the logic they hold (saving drafts, which page the auth gate
+    // shows); how they look is checked in the browser. An unreachable branch is deleted, never
+    // hidden behind a v8 ignore comment.
     coverage: {
       provider: 'v8',
       include: ['server/**', 'shared/**', 'client/src/api.ts', 'client/src/lib/**', 'client/src/hooks/**'],

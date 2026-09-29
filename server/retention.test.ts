@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadConfig } from './config.js';
 import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from './dev/harness.js';
-import { ensureDefaultUser, openDatabase } from './db.js';
+import { ensureDefaultUser, openDatabase, type UserRow } from './db.js';
+import { seedDatabase } from './dev/seed.js';
 import { cutoffKey, effectiveKeepDays, runRetention, scheduleRetention } from './retention.js';
 import { DEFAULT_SETTINGS } from '../shared/settings.js';
 
@@ -76,6 +77,31 @@ describe('runRetention', () => {
     app = await startTestApp({ seed: { days: 60 }, env: { RETENTION_DAYS: '30' } });
     await app.api.put('/api/settings', { retention: { enabled: true, days: 3650 } });
     expect(runRetention(app.db, app.config, SEED_NOW)).toBe(seeded.filter((d) => d < cutoff).length);
+  });
+
+  it("holds each user to their own setting, and the server cap to everyone's", async () => {
+    app = await startTestApp({ authMode: 'local' });
+    const { admin, member, a } = await app.twoUsers();
+    const seed = (user: UserRow) => seedDatabase(app.db, { userId: user.id, today: SEED_TODAY, now: SEED_NOW, days: 60 }).days.map((d) => d.date);
+    const seeded = seed(admin);
+    expect(seed(member)).toEqual(seeded);
+    const datesOf = (user: UserRow) =>
+      (app.db.prepare(`SELECT date FROM days WHERE user_id = ? ORDER BY date`).all(user.id) as { date: string }[]).map((d) => d.date);
+    const keptAfter = (days: number) => seeded.filter((d) => d >= cutoffKey(SEED_NOW, days));
+    // Sixty weekdays reach past both cutoffs, and the 30-day one takes more.
+    expect(seeded.length).toBeGreaterThan(keptAfter(60).length);
+    expect(keptAfter(60).length).toBeGreaterThan(keptAfter(30).length);
+
+    // The admin keeps 30 days; sam's setting is off and there is no cap, so they keep everything.
+    expect((await a.put('/api/settings', { retention: { enabled: true, days: 30 } })).status).toBe(200);
+    expect(runRetention(app.db, app.config, SEED_NOW)).toBe(seeded.length - keptAfter(30).length);
+    expect(datesOf(admin)).toEqual(keptAfter(30));
+    expect(datesOf(member)).toEqual(seeded);
+
+    // A 60-day cap reaches sam too; the admin's own 30 is already the tighter limit.
+    expect(runRetention(app.db, { ...app.config, retentionDays: 60 }, SEED_NOW)).toBe(seeded.length - keptAfter(60).length);
+    expect(datesOf(member)).toEqual(keptAfter(60));
+    expect(datesOf(admin)).toEqual(keptAfter(30));
   });
 });
 
