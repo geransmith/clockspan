@@ -426,4 +426,15 @@ describe('startBackgroundJobs', () => {
     expect(count('auth_sessions')).toBe(0);
     db.close();
   });
+
+  it('logs a purge that fails instead of ending the process', () => {
+    vi.useFakeTimers();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const db = openDatabase(':memory:');
+    startBackgroundJobs(db, loadConfig({ AUTH_MODE: 'none' }));
+    // Stands in for a database that is busy or full when the six-hourly purge runs.
+    db.close();
+    expect(() => vi.advanceTimersByTime(6 * 3_600_000)).not.toThrow();
+    expect(error).toHaveBeenCalledWith('[sessions]', expect.any(Error));
+  });
 });

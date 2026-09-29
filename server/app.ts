@@ -112,6 +112,14 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
  * app (every test does) starts nothing. Both are unref'd and never hold the process open.
  */
 export function startBackgroundJobs(db: DB, config: Config): void {
-  setInterval(purgeExpiredSessions, 6 * HOUR_MS, db).unref();
+  // A timer's throw is an uncaught exception: one busy or full database would end the server.
+  const purge = () => {
+    try {
+      purgeExpiredSessions(db);
+    } catch (err) {
+      console.error('[sessions]', err);
+    }
+  };
+  setInterval(purge, 6 * HOUR_MS).unref();
   scheduleRetention(db, config);
 }

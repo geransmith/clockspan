@@ -179,8 +179,8 @@ Set these in `.env` (start from `.env.example`, which documents each one) or in 
 | `AUTH_MODE` | `none` | `none`, `local` or `oidc` |
 | `APP_URL` | — | Public URL of the app. Required for `oidc`; also turns on Secure cookies when `https` |
 | `ALLOWED_HOSTS` | — | `AUTH_MODE=none` only: other host names the app answers to, comma-separated; a leading dot (`.lan`) takes a domain and every name under it. IP addresses, `localhost`, one-word names, `.local`, `.home.arpa` and `.internal` names and `APP_URL`'s always work. See [Auth and users](#auth-and-users) |
-| `TRUST_PROXY` | `false` | Number of reverse proxies in front of the app (usually `1`); Express string forms such as `loopback` or a CIDR list are passed through. Never `true`, which trusts any `X-Forwarded-For` a client sends |
-| `COOKIE_SECURE` | derived from `APP_URL` | Force session cookies to `Secure` on/off |
+| `TRUST_PROXY` | `false` | Number of reverse proxies in front of the app (usually `1`), or the proxies' addresses: `loopback`, `linklocal`, `uniquelocal`, IP addresses and CIDR ranges, comma-separated. Anything else stops the server with a message. Never `true`, which trusts any `X-Forwarded-For` a client sends |
+| `COOKIE_SECURE` | derived from `APP_URL` | Force session cookies to `Secure` on (`true`) or off (`false`); `1`/`0`, `yes`/`no` and `on`/`off` work too. Any other value is logged and ignored |
 | `SESSION_TTL_DAYS` | `30` | Sliding session lifetime |
 | `RETENTION_DAYS` | unset | Server-wide ceiling on history: every user's days older than this many days (30 or more) are deleted every few hours. Unset keeps everything; users can still choose a shorter limit in Settings → Data |
 | `OIDC_ISSUER` | — | Provider issuer URL (discovery is done from it) |
