@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useDebouncedDraft } from '../hooks/useDebouncedDraft';
 import { RETRO_PROMPT, UNTITLED_SESSION } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { formatDuration, plural } from '../lib/format';
@@ -26,41 +26,14 @@ interface Props {
 export function Retro({ date, today, priorities, sessions, note, reviewedAt, onChange }: Props) {
   const { formatTime } = useTimeFormat();
   const review = reviewDay(priorities, sessions);
-  const [draft, setDraft] = useState(note);
-  const dirty = useRef(false);
-  const timer = useRef<number | null>(null);
-  // What the timer would run. Leaving the day inside the 800 ms (browser Back, a swipe)
-  // unmounts the card without a blur, so the unmount runs it instead of dropping the note;
-  // the store outlives the card and the save still lands.
-  const pending = useRef<(() => void) | null>(null);
-
-  // Adopt the stored note whenever nothing is being typed.
-  useEffect(() => {
-    if (!dirty.current) setDraft(note);
-  }, [note]);
-  useEffect(
-    () => () => {
-      if (timer.current) window.clearTimeout(timer.current);
-      pending.current?.();
+  // A note typed back to what was stored saves nothing.
+  const { draft, edit, flush } = useDebouncedDraft(
+    note,
+    (value) => {
+      if (value !== note) onChange({ note: value });
     },
-    [],
+    800,
   );
-
-  const flush = (value: string) => {
-    if (timer.current) window.clearTimeout(timer.current);
-    timer.current = null;
-    pending.current = null;
-    if (!dirty.current) return;
-    dirty.current = false;
-    if (value !== note) onChange({ note: value });
-  };
-  const edit = (value: string) => {
-    setDraft(value);
-    dirty.current = true;
-    if (timer.current) window.clearTimeout(timer.current);
-    pending.current = () => flush(value);
-    timer.current = window.setTimeout(pending.current, 800);
-  };
 
   if (review.total === 0 && review.unplanned.length === 0) {
     return (
@@ -158,7 +131,7 @@ export function Retro({ date, today, priorities, sessions, note, reviewedAt, onC
           rows={3}
           maxLength={LIMITS.retroNote}
           onChange={(e) => edit(e.target.value)}
-          onBlur={() => flush(draft)}
+          onBlur={flush}
         />
       </label>
 
@@ -176,7 +149,7 @@ export function Retro({ date, today, priorities, sessions, note, reviewedAt, onC
           <button
             className="btn btn-primary"
             onClick={() => {
-              flush(draft);
+              flush();
               onChange({ done: true });
             }}
           >

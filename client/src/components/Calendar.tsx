@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { useDay } from '../hooks/useDay';
 import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
 import { calendarMonth } from '../lib/calendar';
@@ -34,19 +33,11 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
   const [selected, setSelected] = useState<string | null>(date > today ? null : date);
   const [filter, setFilter] = useState<StickerId | null>(null);
   const period = periodRange('month', today, offset);
-  const { days: fetched, error } = useRange(period.from, period.to);
-  // Today comes from the live day so a punch or a tick shows without a refetch.
-  const { day: liveToday } = useDay(today);
-
-  const days = useMemo(() => {
-    if (!fetched) return null;
-    const byDate = new Map(fetched.map((d) => [d.date, d]));
-    if (liveToday && today >= period.from && today <= period.to) byDate.set(today, liveToday);
-    return byDate;
-  }, [fetched, liveToday, today, period.from, period.to]);
+  const { days: list, error } = useRange(period.from, period.to);
+  const days = useMemo(() => (list ? new Map(list.map((d) => [d.date, d])) : null), [list]);
   const weeks = useMemo(
-    () => (days ? calendarMonth([...days.values()].map(daySummaryOf), settings, today, now, period.from, settings.showWeekends) : null),
-    [days, settings, today, now, period.from],
+    () => (list ? calendarMonth(list.map(daySummaryOf), settings, today, now, period.from, settings.showWeekends) : null),
+    [list, settings, today, now, period.from],
   );
   const stickers = settings.stickers;
   // Hours not tracked: no Clocked out sticker, so the legend and a full day go without it.

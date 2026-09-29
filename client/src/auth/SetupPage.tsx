@@ -1,6 +1,7 @@
-import { useState, type SubmitEvent } from 'react';
+import { useState } from 'react';
 import * as api from '../api';
 import { NewPasswordFields } from '../components/NewPasswordFields';
+import { useSubmit } from '../hooks/useSubmit';
 import { PASSWORD_MISMATCH } from '../lib/copy';
 import type { AuthInfo } from '../types';
 
@@ -15,30 +16,17 @@ export function SetupPage({ onDone, hint }: Props) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { busy, error, onSubmit } = useSubmit();
 
-  const submit = async (e: SubmitEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (password !== confirm) {
-      setError(PASSWORD_MISMATCH);
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      await api.setup(code, username.trim(), password);
-      await onDone();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const submit = onSubmit(async () => {
+    if (password !== confirm) throw new Error(PASSWORD_MISMATCH);
+    await api.setup(code, username.trim(), password);
+    await onDone();
+  });
 
   return (
     <div className="gate">
-      <form className="gate-card" onSubmit={(e) => void submit(e)}>
+      <form className="gate-card" onSubmit={submit}>
         <h1>Welcome to Clockspan</h1>
         {hint && <p className="error">{hint}</p>}
         <p className="muted">Create the first account. This account is the admin and can add others later.</p>

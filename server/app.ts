@@ -10,7 +10,7 @@ import { publicUser } from './auth/users.js';
 import { oidcAuthRouter } from './auth/oidc.js';
 import { purgeExpiredSessions } from './auth/session.js';
 import { scheduleRetention } from './retention.js';
-import { rejectCrossSiteWrites, securityHeaders } from './security.js';
+import { rejectCrossSiteWrites, rejectUnknownHosts, securityHeaders } from './security.js';
 import { breakStartRouter, breaksRouter } from './routes/breaks.js';
 import { daysRouter } from './routes/days.js';
 import { sessionStartRouter, sessionsRouter } from './routes/sessions.js';
@@ -33,6 +33,8 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
   app.use(express.json({ limit: '256kb' }));
 
   app.get('/api/health', (_req, res) => res.json({ ok: true } satisfies OkResponse));
+  // With no sign-in, the Host header is what tells the owner's browser from a rebound name.
+  if (config.authMode === 'none') app.use('/api', rejectUnknownHosts(config));
   app.use('/api', rejectCrossSiteWrites(config));
 
   // Only the API reads req.user. Resolving the session for a static file would slide its

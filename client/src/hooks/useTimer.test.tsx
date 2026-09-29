@@ -455,7 +455,7 @@ describe('finish and cancel', () => {
     await settle();
     expect(api.finishSession).toHaveBeenCalledTimes(1);
 
-    // 25 min 30 s in when the next poll brings it: both lengths read 25m.
+    // 25 min 30 s in when the next poll brings it: both lengths are 25 whole minutes.
     vi.mocked(api.getRunning).mockResolvedValueOnce({ session: startedAgo(24.5) });
     await settle(MIN);
     act(() => result.current.timer.requestFinish());

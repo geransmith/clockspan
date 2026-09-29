@@ -1,6 +1,7 @@
-import { useState, type SubmitEvent } from 'react';
+import { useState } from 'react';
 import * as api from '../api';
 import { NewPasswordFields } from '../components/NewPasswordFields';
+import { useSubmit } from '../hooks/useSubmit';
 import { NEW_PASSWORD, PASSWORD_MISMATCH } from '../lib/copy';
 import type { AuthInfo, PublicUser } from '../types';
 
@@ -19,30 +20,17 @@ export function NewPasswordPage({ user, onDone, onSignOut }: Props) {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { busy, error, onSubmit } = useSubmit();
 
-  const submit = async (e: SubmitEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (next !== confirm) {
-      setError(PASSWORD_MISMATCH);
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      await api.changePassword(current, next);
-      await onDone();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const submit = onSubmit(async () => {
+    if (next !== confirm) throw new Error(PASSWORD_MISMATCH);
+    await api.changePassword(current, next);
+    await onDone();
+  });
 
   return (
     <div className="gate">
-      <form className="gate-card" onSubmit={(e) => void submit(e)}>
+      <form className="gate-card" onSubmit={submit}>
         <h1>{NEW_PASSWORD.title}</h1>
         <p className="muted">{NEW_PASSWORD.body}</p>
         {/* For password managers: the account this new password belongs to. */}

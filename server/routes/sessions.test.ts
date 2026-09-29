@@ -65,9 +65,10 @@ describe('sessions', () => {
     const ok = await start({ priorityUid: uid.toUpperCase() });
     expect(ok.status).toBe(201);
     expect(ok.body.session.priorityUid).toBe(uid);
-    // A uid from another day is "not on this day".
+    // A uid from another day is "not on this day", and the refusal stores no day.
     await app.api.post(`/api/sessions/${ok.body.session.id}/finish`);
     expect((await app.api.post('/api/days/2026-09-02/sessions', { plannedSeconds: 600, priorityUid: uid })).status).toBe(400);
+    expect(app.db.prepare(`SELECT date FROM days`).all()).toEqual([{ date: DATE }]);
   });
 
   it('patches label, notes and the link; planned time only while running', async () => {
