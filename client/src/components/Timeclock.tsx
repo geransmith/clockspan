@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useBecameTrue, useCelebration } from '../hooks/useCelebration';
 import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
@@ -45,7 +45,7 @@ interface Props {
   onChange: (punches: Punch[]) => void;
   onOvertimeChange: (approved: boolean) => void;
   onWorkMinutesChange: (minutes: number | null) => void;
-  /** Focus entered or left the punch rows: the app holds alarms while a time is being typed. */
+  /** A punch time is being typed on today's sheet, or no longer is: the app holds today's alarms meanwhile. */
   onEditingChange?: (editing: boolean) => void;
 }
 
@@ -80,7 +80,30 @@ export function Timeclock({
     onChange(punches.map((p) => (p.position === position ? { ...p, at } : p)));
   };
   const addPair = () => onChange(addPunchPair(punches));
-  const removePair = (outPosition: number) => onChange(removePunchPair(punches, outPosition));
+  const removePair = (outPosition: number) => {
+    // Removing a pair can hand its Out's time to the Clock out and end the day, so the
+    // day-complete clip needs this gesture too.
+    unlockAudio();
+    onChange(removePunchPair(punches, outPosition));
+  };
+
+  // Only a time field on today's sheet holds today's alarms: Now, × and the pair buttons save
+  // at once, and on a desktop a clicked button keeps focus until something else is clicked.
+  // The cleanup lets the hold go as well as the blur, because the card can unmount with a
+  // field focused (Back to another day) and not every browser sends a blur for a removed element.
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    if (!typing || !isToday || !onEditingChange) return;
+    onEditingChange(true);
+    return () => onEditingChange(false);
+  }, [typing, isToday, onEditingChange]);
+  // A field remounted while focused (Escape throws its draft away) drops focus on the page with
+  // no blur in Chrome or Firefox, so a hold left that way ends on the next change to the punches.
+  const rowsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = document.activeElement;
+    if (typing && !(el?.closest('.timefield') && rowsRef.current?.contains(el))) setTyping(false);
+  }, [punches, typing]);
 
   const tiles = timeclockTiles(tc, {
     now,
@@ -227,9 +250,10 @@ export function Timeclock({
 
       <div
         className="punches"
-        onFocus={() => onEditingChange?.(true)}
+        ref={rowsRef}
+        onFocus={(e) => setTyping(e.target.closest('.timefield') != null)}
         onBlur={(e) => {
-          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) onEditingChange?.(false);
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setTyping(false);
         }}
       >
         {fixedRow(0, 'Clock in')}

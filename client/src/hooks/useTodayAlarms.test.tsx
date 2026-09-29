@@ -111,4 +111,16 @@ describe('useTodayAlarms', () => {
     await settle(200);
     expect(tags()).toContain('alarm:clockOut');
   });
+
+  it('keeps judging while a field has focus and nothing was typed, though each refresh brings a new copy', async () => {
+    // Clocked in 8 h 29 m ago with a 30 min lunch: the day ends a minute from now.
+    const { result } = render(makeSettings(), makeDay(TODAY, { punches: punchesAt(T0 - 509 * MIN, T0 - 300 * MIN, T0 - 270 * MIN) }));
+    await judged();
+    act(() => result.current.alarms.setEditingPunches(true));
+    vi.mocked(alert).mockClear();
+    // The minute's refresh lands as the day ends: the same times in a new list.
+    await settle(MIN);
+    expect(api.getDay).toHaveBeenCalledTimes(2);
+    expect(alerted().find((a) => a.tag === 'alarm:clockOut')?.title).toBe('Time to clock out');
+  });
 });

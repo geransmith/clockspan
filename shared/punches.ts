@@ -9,3 +9,11 @@ import type { Punch } from './api.js';
 export function kindForPosition(position: number): Punch['kind'] {
   return position % 2 === 0 ? 'in' : 'out';
 }
+
+/**
+ * The same rows at the same times. Every fetch of a day builds a new list, so a copy the
+ * server sent again with nothing changed is only equal to the one before by value.
+ */
+export function samePunches(a: readonly Punch[], b: readonly Punch[]): boolean {
+  return a.length === b.length && a.every((p, i) => p.position === b[i]?.position && p.at === b[i]?.at);
+}
