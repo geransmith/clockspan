@@ -92,7 +92,7 @@ describe('runRetention', () => {
     expect(seeded.length).toBeGreaterThan(keptAfter(60).length);
     expect(keptAfter(60).length).toBeGreaterThan(keptAfter(30).length);
 
-    // The admin keeps 30 days; sam's setting is off and there is no cap, so he keeps everything.
+    // The admin keeps 30 days; sam's setting is off and there is no cap, so they keep everything.
     expect((await a.put('/api/settings', { retention: { enabled: true, days: 30 } })).status).toBe(200);
     expect(runRetention(app.db, app.config, SEED_NOW)).toBe(seeded.length - keptAfter(30).length);
     expect(datesOf(admin)).toEqual(keptAfter(30));
