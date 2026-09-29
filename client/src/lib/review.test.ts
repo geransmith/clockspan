@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Day, Priority, Session } from '../types';
-import { addMonths, startOfQuarter, startOfWeek } from './format';
+import { addMonths, startOfQuarter, startOfWeek } from '../../../shared/dates.js';
 import { periodOffset, periodRange, reviewRange } from './review';
 
 const settings = { workMinutes: 480, lunchDeadlineMinutes: 300, lunchMinutes: 30, secondMealAfterMinutes: 600 };

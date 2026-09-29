@@ -1,4 +1,4 @@
-import { endOfDay } from '../../../shared/dates.js';
+import { endOfDay, MINUTE_MS } from '../../../shared/dates.js';
 import { kindForPosition } from '../../../shared/punches.js';
 import type { Punch, Settings } from '../types';
 import { PUNCH_ORDER } from './copy';
@@ -50,8 +50,6 @@ export const LUNCH_OUT_POSITION = 1;
 export const LUNCH_IN_POSITION = 2;
 /** The clock-out row is the last row and never earlier than this. */
 export const CLOCK_OUT_MIN_POSITION = 3;
-
-const MIN = 60_000;
 
 /**
  * Position of the final clock-out row: the last row, which `normalizePunches` keeps at an
@@ -155,7 +153,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
 
   const state: TimeclockState = error ? 'working' : done ? 'done' : clockedIn ? 'working' : atLunch ? 'at-lunch' : 'on-break';
 
-  const lunchBy = clockIn + settings.lunchDeadlineMinutes * MIN;
+  const lunchBy = clockIn + settings.lunchDeadlineMinutes * MINUTE_MS;
   // A day with no more work than the lunch window has no lunch to plan: California owes none
   // for five hours or less, and a 4 h day would otherwise show a clock-out 30 min late and ring
   // "Take lunch now" as it ends. The day's work is the target, or what was worked once past it

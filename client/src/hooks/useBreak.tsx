@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, typ
 import { alert, dismissByTag, unlockAudio } from '../lib/alerts';
 import { runningBreak, SET_SIZE, suggestBreak } from '../lib/breaks';
 import { BREAK, BREAK_SUGGESTION } from '../lib/copy';
-import { formatDuration, todayKey } from '../lib/format';
+import { MINUTE_MS, todayKey } from '../../../shared/dates.js';
+import { formatDuration } from '../lib/format';
 import { readStored, writeStored } from '../lib/storage';
 import { useDayStore } from './useDay';
 import { useLatest } from './useLatest';
@@ -31,7 +32,7 @@ const Ctx = createContext<BreakCtx | null>(null);
 const OVER_KEY = 'focus:break-over';
 
 /** An end older than this is from another sitting (the tab was closed): it is dropped, not announced. */
-const STALE_MS = 10 * 60_000;
+const STALE_MS = 10 * MINUTE_MS;
 
 /**
  * Breaks between focus sessions. A break is a row in today's log (`Day.breaks`), so it counts

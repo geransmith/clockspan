@@ -39,7 +39,7 @@ interface Props {
   /** The week so far up to this day; null while loading. */
   week: WeekHours | null;
   /** The day's logged focus: with the meal rules off there's no lunch deadline, so that tile shows this. */
-  focus: { seconds: number; sessions: number };
+  focus: { seconds: number; count: number };
   onChange: (punches: Punch[]) => void;
   onOvertimeChange: (approved: boolean) => void;
   onWorkMinutesChange: (minutes: number | null) => void;
@@ -168,7 +168,7 @@ export function Timeclock({
           <Tile
             label="Focused"
             value={formatDuration(focus.seconds)}
-            sub={focus.sessions === 0 ? 'No sessions yet' : `${focus.sessions} ${plural(focus.sessions, 'session')}`}
+            sub={focus.count === 0 ? 'No sessions yet' : `${focus.count} ${plural(focus.count, 'session')}`}
             tone=""
           />
         ) : (

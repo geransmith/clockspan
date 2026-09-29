@@ -5,9 +5,11 @@ import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
 import { warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
-import { addDays, formatDateLong, startOfWeek } from '../lib/format';
+import { startOfWeek } from '../../../shared/dates.js';
+import { dayName } from '../lib/format';
 import { CARD_TITLES, moveCard, setCardVisible } from '../lib/layout';
-import { daySummaryOf } from '../lib/stickers';
+import { hasText } from '../lib/priorities';
+import { focusOf } from '../lib/retro';
 import { clampToDay, daySettings, timeclockForDate, type TimeclockState } from '../lib/timeclock';
 import { weekHours } from '../lib/week';
 import type { CardId } from '../types';
@@ -40,12 +42,9 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
   // The week so far, up to this sheet's day, for the timeclock's week line.
   const { days: weekDays } = useRange(startOfWeek(date), date);
   const week = useMemo(() => (weekDays ? weekHours(weekDays, settings, date, today, now) : null), [weekDays, settings, date, today, now]);
-  const focus = useMemo(
-    () => ({ seconds: day ? daySummaryOf(day).focusSeconds : 0, sessions: day?.sessions.filter((s) => s.status === 'completed').length ?? 0 }),
-    [day],
-  );
+  const focus = useMemo(() => focusOf(day?.sessions ?? []), [day]);
   // Today's list with nothing written yet offers what the last planned day left unticked.
-  const { leftOpen, dismiss: dismissLeftOpen } = useLeftOpen(today, isToday && day != null && !day.priorities.some((p) => p.text.trim()));
+  const { leftOpen, dismiss: dismissLeftOpen } = useLeftOpen(today, isToday && day != null && !day.priorities.some(hasText));
 
   const layout = settings.layout;
   const visible = layout.filter((l) => l.visible);
@@ -118,7 +117,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
             onChange={(p) => void store.setPriorities(date, p)}
             leftOpen={
               leftOpen && {
-                from: leftOpen.date === addDays(today, -1) ? 'yesterday' : formatDateLong(leftOpen.date),
+                from: dayName(leftOpen.date, today, true),
                 rows: leftOpen.rows,
                 dismiss: dismissLeftOpen,
               }

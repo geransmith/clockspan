@@ -1,5 +1,5 @@
 import type { Day } from '../types';
-import { startOfWeek } from './format';
+import { startOfWeek } from '../../../shared/dates.js';
 import { daySettings, timeclockForDate, type TimeclockSettings } from './timeclock';
 
 export interface WeekHours {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Priority, Session } from '../types';
-import { reviewDay } from './retro';
+import { focusOf, reviewDay } from './retro';
 
 const row = (position: number, text: string, extra: Partial<Priority> = {}): Priority => ({
   position,
@@ -24,6 +24,19 @@ const session = (id: number, startedAt: number, seconds: number, extra: Partial<
   durationSeconds: seconds,
   priorityUid: null,
   ...extra,
+});
+
+describe('focusOf', () => {
+  it('counts completed sessions only', () => {
+    const sessions = [
+      session(1, 0, 600),
+      session(2, 1, 300),
+      session(3, 2, 900, { status: 'running', endedAt: null, durationSeconds: null }),
+      session(4, 3, 100, { status: 'cancelled' }),
+    ];
+    expect(focusOf(sessions)).toEqual({ seconds: 900, count: 2 });
+    expect(focusOf([])).toEqual({ seconds: 0, count: 0 });
+  });
 });
 
 describe('reviewDay', () => {

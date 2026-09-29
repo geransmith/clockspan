@@ -22,7 +22,17 @@ function punches(date: string, times: (string | null)[]): Punch[] {
 }
 
 function summary(date: string, patch: Partial<DaySummary> = {}): DaySummary {
-  return { date, punches: emptyPunches(), focusSeconds: 0, prioritiesDone: 0, prioritiesTotal: 0, retroAt: null, workMinutes: null, ...patch };
+  return {
+    date,
+    punches: emptyPunches(),
+    focusSeconds: 0,
+    focusSessions: 0,
+    prioritiesDone: 0,
+    prioritiesTotal: 0,
+    retroAt: null,
+    workMinutes: null,
+    ...patch,
+  };
 }
 
 describe('stickersForDay', () => {
@@ -156,6 +166,7 @@ describe('daySummaryOf', () => {
       date: TODAY,
       punches: day.punches,
       focusSeconds: 1500,
+      focusSessions: 1,
       prioritiesDone: 1,
       prioritiesTotal: 2,
       retroAt: 5,

@@ -4,6 +4,8 @@ import { CONFIRM, UNTITLED_SESSION } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { breakSeconds } from '../lib/breaks';
 import { formatDuration, plural } from '../lib/format';
+import { hasText } from '../lib/priorities';
+import { focusOf } from '../lib/retro';
 import { activeMs } from '../lib/timer';
 import { LIMITS, type Break, type Priority, type Session } from '../types';
 import { Trash } from './Icons';
@@ -20,10 +22,9 @@ type Entry = { at: number; session: Session; brk?: never } | { at: number; brk: 
 
 export function SessionLog({ date, sessions, breaks, priorities, now }: Props) {
   const store = useDayStore();
-  const completed = sessions.filter((s) => s.status === 'completed');
-  const total = completed.reduce((sum, s) => sum + (s.durationSeconds ?? 0), 0);
+  const focus = focusOf(sessions);
   const rested = breaks.reduce((sum, b) => sum + breakSeconds(b, now), 0);
-  const planned = priorities.filter((p) => p.uid && p.text.trim());
+  const planned = priorities.filter((p) => p.uid && hasText(p));
   // One list in the order things happened: breaks sit between the sessions they followed.
   const entries: Entry[] = [...sessions.map((s) => ({ at: s.startedAt, session: s })), ...breaks.map((b) => ({ at: b.startedAt, brk: b }))].sort(
     (a, b) => a.at - b.at,
@@ -37,9 +38,9 @@ export function SessionLog({ date, sessions, breaks, priorities, now }: Props) {
     <div className="log">
       <div className="log-total">
         <span className="muted">Total focused</span>
-        <strong>{formatDuration(total)}</strong>
+        <strong>{formatDuration(focus.seconds)}</strong>
         <span className="muted">
-          · {completed.length} {plural(completed.length, 'session')}
+          · {focus.count} {plural(focus.count, 'session')}
         </span>
       </div>
       {breaks.length > 0 && (

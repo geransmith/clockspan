@@ -2,6 +2,7 @@ import { isIPv6 } from 'node:net';
 import type { RequestHandler, Response } from 'express';
 import type { Config } from '../config.js';
 import { USERNAME } from '../../shared/api.js';
+import { MINUTE_MS } from '../../shared/dates.js';
 
 /**
  * The sign-in limits: failures per address (an IPv6 client by its /64) and per account name.
@@ -16,7 +17,7 @@ const MAX_ATTEMPTS = 5;
  * purpose has to keep sending failures, and devices already signed in are not affected.
  */
 export const MAX_ACCOUNT_FAILURES = 50;
-const WINDOW_MS = 15 * 60_000;
+const WINDOW_MS = 15 * MINUTE_MS;
 // Expired entries are swept once the map grows past this, so a spray of addresses can't
 // make it grow without bound.
 const SWEEP_ABOVE = 1000;

@@ -1,4 +1,5 @@
 import type { Priority, Session } from '../types';
+import { hasText } from './priorities';
 
 export interface PriorityReview {
   priority: Priority;
@@ -21,11 +22,26 @@ export interface DayReview {
 }
 
 /**
+ * A day's focus: its completed sessions' logged time and how many there were. A running or
+ * cancelled session counts for neither.
+ */
+export function focusOf(sessions: Session[]): { seconds: number; count: number } {
+  let seconds = 0;
+  let count = 0;
+  for (const s of sessions) {
+    if (s.status !== 'completed') continue;
+    seconds += s.durationSeconds ?? 0;
+    count++;
+  }
+  return { seconds, count };
+}
+
+/**
  * Pure plan-vs-actual for one day. Only completed sessions count; a running one isn't
  * done yet. A session is on plan when its uid matches a row that still has text.
  */
 export function reviewDay(priorities: Priority[], sessions: Session[]): DayReview {
-  const rows = priorities.filter((p) => p.text.trim()).sort((a, b) => a.position - b.position);
+  const rows = priorities.filter(hasText).sort((a, b) => a.position - b.position);
   const completed = sessions.filter((s) => s.status === 'completed');
   const firstStart = completed.length ? Math.min(...completed.map((s) => s.startedAt)) : null;
   const byUid = new Map(rows.filter((p) => p.uid).map((p) => [p.uid!, p]));

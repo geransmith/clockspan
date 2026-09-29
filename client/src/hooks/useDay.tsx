@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
+import { MINUTE_MS } from '../../../shared/dates.js';
 import type { Day, Priority, Punch, Session } from '../types';
 import { dismissByTag, warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
@@ -50,6 +51,11 @@ interface DayStore {
 
 const Ctx = createContext<DayStore | null>(null);
 
+/** A day from the server as the store keeps it: with the punch rows the card shows. */
+function normalizeDay(d: Day): Day {
+  return { ...d, punches: normalizePunches(d.punches) };
+}
+
 /**
  * `fn` applied to a day the store holds. A day it doesn't hold is left alone: it shows the
  * server's copy once it loads. A made-up empty day would stand in for that copy for good, since
@@ -99,7 +105,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
           const fresh = reload || (idle && mutationSeq.current === seq);
           // Whether the day is held is read from the state the update lands on: an answer
           // just ahead of this one may have put it there without a render yet.
-          setDays((prev) => (fresh || !prev[date] ? { ...prev, [date]: { ...d, punches: normalizePunches(d.punches) } } : prev));
+          setDays((prev) => (fresh || !prev[date] ? { ...prev, [date]: normalizeDay(d) } : prev));
           setErrors((prev) => {
             if (!(date in prev)) return prev;
             const next = { ...prev };
@@ -217,7 +223,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
         .getDay(date)
         .then((d) => {
           if (mutationSeq.current !== seq) return;
-          setDays((prev) => ({ ...prev, [date]: { ...d, punches: normalizePunches(d.punches) } }));
+          setDays((prev) => ({ ...prev, [date]: normalizeDay(d) }));
         })
         .catch(() => {});
     },
@@ -455,7 +461,7 @@ export function useRefreshDay(date: string): boolean {
       setPending(true);
       void p.finally(() => setPending(false));
     };
-    const id = setInterval(() => void tick(), 60_000);
+    const id = setInterval(() => void tick(), MINUTE_MS);
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       clearInterval(id);

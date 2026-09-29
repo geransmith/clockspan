@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import * as api from '../api';
-import { addDays } from '../lib/format';
+import { addDays } from '../../../shared/dates.js';
 import { leftOpen, type LeftOpen } from '../lib/priorities';
 import { readStored, writeStored } from '../lib/storage';
 

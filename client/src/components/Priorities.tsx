@@ -7,6 +7,7 @@ import { LEFT_OPEN, WARNING_ACTIONS } from '../lib/copy';
 import {
   carryOver,
   editPriority,
+  hasText,
   MAX_PRIORITIES,
   padPriorities,
   pickWarning,
@@ -56,9 +57,9 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
       now,
     );
   };
-  const doneRows = local.filter((p) => p.done && p.text.trim());
+  const doneRows = local.filter((p) => p.done && hasText(p));
   const done = doneRows.length;
-  const total = local.filter((p) => p.text.trim()).length;
+  const total = local.filter(hasText).length;
 
   const addRow = (force = false) => {
     if (local.length >= MAX_PRIORITIES) return;
@@ -100,7 +101,7 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
         </div>
       )}
       {local.map((p) => {
-        const empty = !p.text.trim();
+        const empty = !hasText(p);
         const removable = p.position > count;
         const placeholder = p.position === 1 ? 'The one thing that would make today a win' : `Priority ${p.position}`;
         return (

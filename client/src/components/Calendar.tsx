@@ -194,7 +194,6 @@ function DayDetail({
   const name = dayName(date, today);
   const s = day ? daySummaryOf(day) : null;
   const tc = day ? timeclockForDate(day.punches, daySettings(settings, day), date, today, now) : null;
-  const sessions = day ? day.sessions.filter((x) => x.status === 'completed').length : 0;
   const note = day?.retroNote.trim() ?? '';
   return (
     <>
@@ -221,7 +220,7 @@ function DayDetail({
           <Tile
             label="Focused"
             value={s.focusSeconds > 0 ? formatDuration(s.focusSeconds) : '—'}
-            sub={sessions > 0 ? `${sessions} ${plural(sessions, 'session')}` : ''}
+            sub={s.focusSessions > 0 ? `${s.focusSessions} ${plural(s.focusSessions, 'session')}` : ''}
           />
           <Tile
             label="Priorities"

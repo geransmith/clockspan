@@ -3,8 +3,9 @@ import { useCelebration, type Moment } from '../hooks/useCelebration';
 import { useDay } from '../hooks/useDay';
 import { useSettings } from '../hooks/useSettings';
 import { PLAN_NEXT } from '../lib/copy';
-import { addDays, formatDateLong, sameText } from '../lib/format';
+import { dayName, sameText } from '../lib/format';
 import { nextWorkDay, planNext } from '../lib/plan';
+import { hasText } from '../lib/priorities';
 import { LIMITS, type Priority } from '../types';
 import { Burst } from './Burst';
 import { Plus } from './Icons';
@@ -30,14 +31,14 @@ export function PlanNext({ date, today, priorities }: Props) {
   const { anchor, burst } = useCelebration<HTMLDivElement>(planned, 'planDone');
   const next = nextWorkDay(date, settings.showWeekends);
   if (date !== today) return null;
-  const name = next === addDays(today, 1) ? 'tomorrow' : formatDateLong(next);
+  const name = dayName(next, today, true);
   return (
     <div className="plan-next">
       {open ? (
         <Planner
           date={next}
           name={name}
-          candidates={priorities.filter((p) => p.text.trim() && !p.done)}
+          candidates={priorities.filter((p) => hasText(p) && !p.done)}
           onDone={(message, added) => {
             setOpen(false);
             setResult(message);
@@ -81,7 +82,7 @@ function Planner({
   const [extra, setExtra] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
-  const onList = day?.priorities.filter((p) => p.text.trim()) ?? [];
+  const onList = day?.priorities.filter(hasText) ?? [];
   const already = onList.length;
   // A row already on that list (planned earlier tonight) isn't offered again.
   const planned = new Set(onList.map((p) => sameText(p.text)));

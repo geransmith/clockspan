@@ -10,6 +10,7 @@ const summary = (date: string, patch: Partial<DaySummary> = {}): DaySummary => (
   date,
   punches: emptyPunches(),
   focusSeconds: 0,
+  focusSessions: 0,
   prioritiesDone: 0,
   prioritiesTotal: 0,
   retroAt: null,

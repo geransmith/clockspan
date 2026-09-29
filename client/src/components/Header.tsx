@@ -1,7 +1,8 @@
 import { useAuth } from '../auth/AuthGate';
 import type { Route } from '../hooks/useRoute';
 import { CONFIRM } from '../lib/copy';
-import { addDays, dayName, formatDateLong } from '../lib/format';
+import { addDays } from '../../../shared/dates.js';
+import { dayName, formatDateLong } from '../lib/format';
 import { ChevronLeft, ChevronRight, Gear, Layout, List } from './Icons';
 
 interface Props {
@@ -19,7 +20,7 @@ export function Header({ view, date, today, customize, onNavigate, onToggleCusto
   const { auth, signOut } = useAuth();
   const onSheet = view === 'sheet';
   const isToday = date === today;
-  // "Yesterday" gets the date underneath; an older day's name already is the date.
+  // "Yesterday" (or "Tomorrow") gets the date underneath; any other day's name already is the date.
   const name = dayName(date, today);
   const long = formatDateLong(date);
 

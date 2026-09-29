@@ -4,6 +4,11 @@ import { COMPLETE_WARNINGS, GENTLE_WARNINGS, PROGRESS_WARNINGS } from './copy';
 
 export { MAX_PRIORITIES };
 
+/** A row with something written in it; the others are the card's empty slots. */
+export function hasText(p: { text: string }): boolean {
+  return p.text.trim() !== '';
+}
+
 /**
  * The server stores only the rows that exist; the card shows at least `count` rows and
  * every stored row beyond that.
@@ -14,7 +19,7 @@ export function padPriorities(rows: Priority[], count: number): Priority[] {
   const out: Priority[] = [];
   for (let position = 1; position <= n; position++) {
     const r = byPos.get(position);
-    out.push({ position, text: r?.text ?? '', done: Boolean(r?.done && r.text.trim()), uid: r?.uid ?? null, addedAt: r?.addedAt ?? null });
+    out.push({ position, text: r?.text ?? '', done: Boolean(r?.done && hasText(r)), uid: r?.uid ?? null, addedAt: r?.addedAt ?? null });
   }
   return out;
 }
@@ -62,7 +67,7 @@ export function newUid(): string {
  */
 export function editPriority(row: Priority, patch: Partial<Priority>, now: number): Priority {
   const merged = { ...row, ...patch };
-  if (!merged.text.trim()) return { ...merged, done: false };
+  if (!hasText(merged)) return { ...merged, done: false };
   return merged.uid ? merged : { ...merged, uid: newUid(), addedAt: now };
 }
 
@@ -77,7 +82,7 @@ export function removePriority(rows: Priority[], position: number): Priority[] {
  */
 export function placePriority(rows: Priority[], count: number, text: string, uid: string, addedAt: number): Priority[] | null {
   const padded = padPriorities(rows, count);
-  const empty = padded.find((p) => !p.text.trim());
+  const empty = padded.find((p) => !hasText(p));
   if (empty) return padded.map((p) => (p.position === empty.position ? { ...p, text, done: false, uid, addedAt } : p));
   if (padded.length >= MAX_PRIORITIES) return null;
   return [...padded, { position: padded.length + 1, text, done: false, uid, addedAt }];
@@ -95,9 +100,9 @@ export interface LeftOpen {
  */
 export function leftOpen(days: Day[]): LeftOpen | null {
   let last: Day | null = null;
-  for (const d of days) if (d.priorities.some((p) => p.text.trim()) && (!last || d.date > last.date)) last = d;
+  for (const d of days) if (d.priorities.some(hasText) && (!last || d.date > last.date)) last = d;
   if (!last) return null;
-  const rows = last.priorities.filter((p) => p.text.trim() && !p.done).sort((a, b) => a.position - b.position);
+  const rows = last.priorities.filter((p) => hasText(p) && !p.done).sort((a, b) => a.position - b.position);
   return rows.length ? { date: last.date, rows } : null;
 }
 
