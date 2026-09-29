@@ -17,7 +17,10 @@ export const STICKER_EMOJI = ['🐱', '🐶', '🐰', '🦊', '🐻', '🐼', '�
 /** The sticker chart before any day in its window has earned one. */
 export const STICKERS_EMPTY = 'Nothing here yet. Stickers appear as days get logged.';
 
-/** Follows "Day complete." in the Timeclock notice. One is picked per clock-out. */
+/** The Timeclock notice once the day is done; one of the phrases below follows it. */
+export const DAY_COMPLETE = 'Day complete.';
+
+/** Follows `DAY_COMPLETE` in the Timeclock notice. One is picked per clock-out. */
 export const CELEBRATION_PHRASES = [
   'Nice work today.',
   "That's a wrap.",
@@ -127,7 +130,7 @@ export const LEFT_OPEN = {
   dismiss: 'Start fresh',
 };
 
-/** Confirm dialogs. Each names what goes and that it stays gone. */
+/** Confirm dialogs. Each names what it does; the ones that cannot be undone say so. */
 export const CONFIRM = {
   cancelSession: 'Cancel this session? It will not be logged.',
   deleteSession: 'Delete this session from the log?',
@@ -199,6 +202,10 @@ export const TIMER_ELSEWHERE = {
   body: 'It was started on another device. This sheet now shows that one.',
 } as const;
 
+/** Under the timeclock's tiles while the second meal period applies: when it is due, and after how long. */
+export const SECOND_MEAL_NOTE = (overdue: boolean, at: string, worked: string) =>
+  `Second meal period ${overdue ? 'was due' : 'due'} by ${at} (${worked} worked)`;
+
 /** Above the sheet when set punch times don't alternate in, out, in, out. */
 export const PUNCH_ORDER = 'Punch times are out of order. Check that ins and outs alternate.';
 
@@ -253,6 +260,12 @@ export const NEW_PASSWORD = {
   body: 'The password you signed in with was set for you. Pick one of your own to continue.',
 } as const;
 
+/** The whole page, when the first `/api/auth/me` got no answer. */
+export const SERVER_UNREACHABLE = {
+  body: (error: string) => `Can’t reach the server: ${error}`,
+  retry: 'Retry',
+} as const;
+
 /** The whole page, when something threw while rendering. */
 export const RENDER_FAILED = {
   title: 'Something went wrong',
@@ -268,7 +281,7 @@ export const SAVE_STATUS = {
   failedDetail: "The last change didn't save and was put back.",
 } as const;
 
-/** Settings dialog footer: the button and the confirm before every setting goes back to default. */
+/** Settings → Data → Reset: the button, its hint and the confirm before every setting goes back to default. */
 export const RESET_SETTINGS = {
   button: 'Reset all settings',
   hint: 'Every setting goes back to its default. Days, punches and sessions are kept.',

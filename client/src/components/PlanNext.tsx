@@ -2,6 +2,7 @@ import { useState, type KeyboardEvent } from 'react';
 import { useCelebration, type Moment } from '../hooks/useCelebration';
 import { useDay } from '../hooks/useDay';
 import { useSettings } from '../hooks/useSettings';
+import { unlockAudio } from '../lib/alerts';
 import { PLAN_NEXT } from '../lib/copy';
 import { dayName, sameText } from '../lib/format';
 import { nextWorkDay, planNext } from '../lib/plan';
@@ -106,6 +107,8 @@ function Planner({
   };
   const save = async () => {
     if (!day) return;
+    // The tap is the gesture iOS needs: the "next day planned" sound plays after the save answers.
+    unlockAudio();
     const texts = [...offered.filter((p) => picked.has(p.position)).map((p) => p.text), ...extra, ...(draft.trim() ? [draft] : [])];
     const { rows, added } = planNext(day.priorities, texts);
     if (added === 0) {

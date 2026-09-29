@@ -566,7 +566,7 @@ describe("time's up", () => {
     // Nobody pressed Finish: nothing for a break suggestion to follow.
     expect(result.current.timer.finished).toBeNull();
     expect(alert).toHaveBeenLastCalledWith(
-      expect.objectContaining({ title: TIMER_DONE.title, body: TIMER_DONE.body('', '25:00'), sound: false, notifications: false }),
+      expect.objectContaining({ title: TIMER_DONE.title, body: TIMER_DONE.body('', '25m'), sound: false, notifications: false }),
     );
   });
 
@@ -577,7 +577,7 @@ describe("time's up", () => {
     expect(result.current.timer.running).toBeNull();
     // Found past the grace: no due banner, just the completion.
     expect(alert).toHaveBeenCalledTimes(1);
-    expect(alert).toHaveBeenCalledWith(expect.objectContaining({ title: TIMER_DONE.title, body: TIMER_DONE.body('Write the report', '0:00'), sound: true }));
+    expect(alert).toHaveBeenCalledWith(expect.objectContaining({ title: TIMER_DONE.title, body: TIMER_DONE.body('Write the report', '0m'), sound: true }));
   });
 
   it('says nothing when the server reports it was cancelled elsewhere', async () => {

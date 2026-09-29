@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import type { AuthInfo } from '../types';
-import { HTTPS_ONLY } from '../lib/copy';
+import { HTTPS_ONLY, SERVER_UNREACHABLE } from '../lib/copy';
 import { LoginPage, OidcLoginPage } from './LoginPage';
 import { NewPasswordPage } from './NewPasswordPage';
 import { SetupPage } from './SetupPage';
@@ -58,9 +58,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
       <div className="gate">
         <div className="gate-card">
           <h1>Clockspan</h1>
-          <p className="error">Can’t reach the server: {error}</p>
+          <p className="error" role="alert">
+            {SERVER_UNREACHABLE.body(error)}
+          </p>
           <button className="btn btn-primary" onClick={() => void refresh()}>
-            Retry
+            {SERVER_UNREACHABLE.retry}
           </button>
         </div>
       </div>

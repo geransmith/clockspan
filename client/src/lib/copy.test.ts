@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { BREAK, BREAK_SUGGESTION, CONFIRM, DELETE_DAYS, FINISH_CHOICE, LEFT_OPEN, PLAN_NEXT, TIMER_DONE, TIMER_DUE, TIMER_PAUSED_OUT } from './copy';
+import {
+  BREAK,
+  BREAK_SUGGESTION,
+  CONFIRM,
+  DELETE_DAYS,
+  FINISH_CHOICE,
+  LEFT_OPEN,
+  PLAN_NEXT,
+  SECOND_MEAL_NOTE,
+  SERVER_UNREACHABLE,
+  TIMER_DONE,
+  TIMER_DUE,
+  TIMER_PAUSED_OUT,
+} from './copy';
 
 describe('copy builders', () => {
   it('names the user in the delete confirm', () => {
@@ -11,8 +24,8 @@ describe('copy builders', () => {
   });
 
   it('describes a finished timer with or without a label', () => {
-    expect(TIMER_DONE.body('Write the report', '25:00')).toBe('Write the report · 25:00');
-    expect(TIMER_DONE.body('', '25:00')).toBe('25:00 logged.');
+    expect(TIMER_DONE.body('Write the report', '25m')).toBe('Write the report · 25m');
+    expect(TIMER_DONE.body('', '25m')).toBe('25m logged.');
   });
 
   it('asks what to do with a timer that ran out', () => {
@@ -56,6 +69,15 @@ describe('copy builders', () => {
     expect(PLAN_NEXT.save('tomorrow')).toBe('Add to tomorrow');
     expect(PLAN_NEXT.done(1, 'tomorrow')).toBe('1 row added for tomorrow.');
     expect(PLAN_NEXT.done(3, 'tomorrow')).toBe('3 rows added for tomorrow.');
+  });
+
+  it('says when the second meal period is or was due', () => {
+    expect(SECOND_MEAL_NOTE(false, '6:30 PM', '10h 00m')).toBe('Second meal period due by 6:30 PM (10h 00m worked)');
+    expect(SECOND_MEAL_NOTE(true, '6:30 PM', '10h 00m')).toBe('Second meal period was due by 6:30 PM (10h 00m worked)');
+  });
+
+  it('names what went wrong when the server does not answer', () => {
+    expect(SERVER_UNREACHABLE.body('Request failed (502)')).toBe('Can’t reach the server: Request failed (502)');
   });
 
   it('counts days in the delete-old-days confirm and result', () => {

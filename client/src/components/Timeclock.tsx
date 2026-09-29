@@ -4,6 +4,7 @@ import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { unlockAudio } from '../lib/alerts';
 import { pickCelebration } from '../lib/celebrate';
+import { DAY_COMPLETE, SECOND_MEAL_NOTE } from '../lib/copy';
 import { floorToMinute, formatDuration } from '../lib/format';
 import { focusTile, timeclockTiles } from '../lib/tiles';
 import {
@@ -180,7 +181,7 @@ export function Timeclock({
               {celebration.emoji}
             </span>
             <span>
-              <strong>Day complete.</strong> {celebration.phrase}
+              <strong>{DAY_COMPLETE}</strong> {celebration.phrase}
             </span>
           </div>
         )}
@@ -190,8 +191,7 @@ export function Timeclock({
 
       {secondMeal != null && (
         <p className={`timeclock-note${tc.secondMealStatus === 'overdue' ? ' timeclock-note--danger' : ''}`}>
-          Second meal period {tc.secondMealStatus === 'overdue' ? 'was due' : 'due'} by {formatTime(secondMeal)} (
-          {formatDuration(settings.secondMealAfterMinutes * 60)} worked)
+          {SECOND_MEAL_NOTE(tc.secondMealStatus === 'overdue', formatTime(secondMeal), formatDuration(settings.secondMealAfterMinutes * 60))}
         </p>
       )}
 
