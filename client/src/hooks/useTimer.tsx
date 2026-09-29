@@ -199,6 +199,11 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     document.title = running
       ? `${paused ? 'Paused ' : ''}${formatCountdown(due ? -overrunSeconds : remainingSeconds)}${running.label ? ` · ${running.label}` : ''} — ${BASE_TITLE}`
       : BASE_TITLE;
+    // A sign-out unmounts the provider without a page load; the sign-in page shouldn't keep
+    // the last user's countdown and label.
+    return () => {
+      document.title = BASE_TITLE;
+    };
   }, [running, remainingSeconds, overrunSeconds, paused, due]);
 
   const start = useCallback(
