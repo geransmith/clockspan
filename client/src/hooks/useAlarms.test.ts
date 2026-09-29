@@ -115,7 +115,8 @@ describe('firing', () => {
   });
 
   it('stays quiet while the punches are out of order, where the end of the day drifts with the clock', () => {
-    // Clock out typed before Lunch out: 7 h 50 m worked, "at lunch", and the end moves a minute every minute.
+    // Lunch out, then Clock out with no Lunch in between: two outs in a row. 7 h 50 m worked,
+    // and the timeclock reads "working" whatever happened.
     const tangled = (now: number) =>
       computeTimeclock(
         emptyPunches().map((p, i) => ({ ...p, at: [T0 - 490 * MIN, T0 - 20 * MIN, null, T0 - 15 * MIN][i] ?? null })),

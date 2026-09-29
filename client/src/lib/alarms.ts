@@ -25,9 +25,9 @@ export interface TargetDay {
  * the retrospective shares it. Overtime approval disarms the clock-out target only: meal
  * periods are still required on an overtime day (California Labor Code §512), so lunch and
  * the second meal stay armed, and the planned end of the day is still the moment to look back.
- * With the punches out of order the timeclock reads "working" whatever happened, and an end
- * that drifts with the clock would be a new alarm every minute, so the end of the day and
- * the second meal wait for the punches to be fixed.
+ * With the punches out of order the timeclock reads "working" whatever happened: a finished
+ * day with no lunch would ring "Lunch is overdue" at every repeat, and an end that drifts with
+ * the clock would be a new alarm every minute, so nothing is armed until the punches are fixed.
  */
 export function alarmTargets(tc: TimeclockResult, settings: Parameters<typeof secondMealApplies>[1], day: TargetDay): AlarmTarget[] {
   const endFixed = tc.error == null && tc.clockOutAt != null && tc.state === 'working';
@@ -35,7 +35,7 @@ export function alarmTargets(tc: TimeclockResult, settings: Parameters<typeof se
     {
       id: 'lunchBy',
       at: tc.lunchBy ?? 0,
-      armed: tc.lunchBy != null && (tc.lunchStatus === 'upcoming' || tc.lunchStatus === 'overdue') && tc.state !== 'done',
+      armed: tc.error == null && tc.lunchBy != null && (tc.lunchStatus === 'upcoming' || tc.lunchStatus === 'overdue') && tc.state !== 'done',
     },
     { id: 'clockOut', at: tc.clockOutAt ?? 0, armed: endFixed && !day.overtimeApproved },
     { id: 'secondMeal', at: tc.secondMealBy ?? 0, armed: secondMealApplies(tc, settings, day.overtimeApproved) },
@@ -191,7 +191,7 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
       return {
         kicker: `${alarm} · clock-out`,
         title: 'Clocking out? Do the retrospective first.',
-        body: `It's ${target}. Two minutes on what went to plan and what didn't.`,
+        body: `You reached your ${day} at ${target}. Two minutes on what went to plan and what didn't.`,
         tone: 'warn',
       };
     }
@@ -225,10 +225,12 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
     };
   }
   if (e.kind === 'due') {
+    // A due event can be seen late (the app opened after the target, with repeats off), so a
+    // body gives the target's time and never says that it is that time now.
     const kicker = `${alarm} · time's up`;
     if (e.id === 'lunchBy') return { kicker, title: 'Take lunch now', body: `Your lunch deadline is ${target}. Start your break.`, tone: 'danger' };
     if (e.id === 'secondMeal') return { kicker, title: 'Take your second meal break', body: mealWhy, tone: 'danger' };
-    return { kicker, title: 'Time to clock out', body: `It's ${target}. You've worked your ${day} for today. Punch out now.`, tone: 'danger' };
+    return { kicker, title: 'Time to clock out', body: `You reached your ${day} for today at ${target}. Punch out now.`, tone: 'danger' };
   }
   const kicker = `${alarm} · ${formatMinutes(e.minutes)} overdue`;
   if (e.id === 'lunchBy') {
