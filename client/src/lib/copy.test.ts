@@ -2,16 +2,24 @@ import { describe, expect, it } from 'vitest';
 import {
   BREAK,
   BREAK_SUGGESTION,
+  CELEBRATION_PHRASES,
+  COMPLETE_WARNINGS,
   CONFIRM,
   DELETE_DAYS,
   FINISH_CHOICE,
+  GENTLE_WARNINGS,
   LEFT_OPEN,
+  LOAD_FAILED,
   PLAN_NEXT,
+  PROGRESS_WARNINGS,
+  REQUEST_FAILED,
+  SAVE_FAILED,
   SECOND_MEAL_NOTE,
   SERVER_UNREACHABLE,
   TIMER_DONE,
   TIMER_DUE,
   TIMER_PAUSED_OUT,
+  UNREADABLE_ANSWER,
 } from './copy';
 
 describe('copy builders', () => {
@@ -80,10 +88,36 @@ describe('copy builders', () => {
     expect(SERVER_UNREACHABLE.body('Request failed (502)')).toBe('Can’t reach the server: Request failed (502)');
   });
 
+  it('names the status of a refusal with no message of its own, or an answer that is not JSON', () => {
+    expect(REQUEST_FAILED(502)).toBe('Request failed (502)');
+    expect(UNREADABLE_ANSWER(200)).toBe('Unreadable answer (200)');
+  });
+
+  it('gives a failed save or load a reason that holds for a refusal as well as for no answer', () => {
+    // The same banner follows a timeout and a 409, so neither line may blame only the network.
+    for (const body of [SAVE_FAILED.body, LOAD_FAILED.body]) {
+      expect(body).toMatch(/refused/);
+      expect(body).toMatch(/did not answer/);
+    }
+  });
+
   it('counts days in the delete-old-days confirm and result', () => {
     expect(DELETE_DAYS.confirm(1, 'Monday, June 1, 2026')).toBe('Delete 1 day before Monday, June 1, 2026? This cannot be undone.');
     expect(DELETE_DAYS.confirm(12, 'Monday, June 1, 2026')).toMatch(/^Delete 12 days before /);
     expect(DELETE_DAYS.done(0)).toBe('Deleted 0 days.');
     expect(DELETE_DAYS.done(1)).toBe('Deleted 1 day.');
+  });
+});
+
+describe('copy pools', () => {
+  it('has no line twice in a pool', () => {
+    for (const pool of [CELEBRATION_PHRASES, GENTLE_WARNINGS, PROGRESS_WARNINGS, COMPLETE_WARNINGS]) {
+      expect(new Set(pool).size).toBe(pool.length);
+    }
+  });
+
+  it('names no row count in a priority warning: the list starts at priorityCount rows, whatever that is set to', () => {
+    const counted = /\b(\d+|two|three|four|five|six|seven|eight|nine|ten|twenty)\b/i;
+    for (const line of [...GENTLE_WARNINGS, ...PROGRESS_WARNINGS, ...COMPLETE_WARNINGS]) expect(line).not.toMatch(counted);
   });
 });

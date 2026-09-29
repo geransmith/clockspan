@@ -6,6 +6,7 @@ import { useDay } from '../hooks/useDay';
 import { unlockAudio } from '../lib/alerts';
 import { AllProviders, deferred, makeDay, makeSession, makeSettings, settle, T0, TODAY } from '../test/hooks';
 import type { Priority, SessionResponse } from '../types';
+import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { FocusTimer } from './FocusTimer';
 
 vi.mock('../api');
@@ -82,6 +83,26 @@ describe('FocusTimer', () => {
     const rows = vi.mocked(api.putPriorities).mock.lastCall![1];
     expect(rows[0]).toMatchObject({ text: 'Call the vendor', done: false });
     expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Call the vendor', rows[0]!.uid);
+  });
+
+  it('does not offer to add typed work to a full list, and starts it unlinked', async () => {
+    vi.mocked(api.startSession).mockResolvedValue(started());
+    const full = Array.from({ length: MAX_PRIORITIES }, (_, i) => ({ position: i + 1, text: `Row ${i + 1}`, done: true, uid: `uid${i}`, addedAt: T0 }));
+    await renderCard(full);
+    typeLabel('Call the vendor');
+    expect(alsoAdd()).toBeNull();
+    fireEvent.click(start25());
+    await settle();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(api.putPriorities).not.toHaveBeenCalled();
+    expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Call the vendor', null);
+  });
+
+  it('offers it while one row is still free', async () => {
+    const almost = Array.from({ length: MAX_PRIORITIES - 1 }, (_, i) => ({ position: i + 1, text: `Row ${i + 1}`, done: true, uid: `uid${i}`, addedAt: T0 }));
+    await renderCard(almost);
+    typeLabel('Call the vendor');
+    expect(alsoAdd()).toBeTruthy();
   });
 
   it('unlocks audio in the tap, before the priority is saved', async () => {

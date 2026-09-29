@@ -3,7 +3,7 @@ import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { dismissByTag, warnQuietly } from '../lib/alerts';
-import { SAVE_FAILED } from '../lib/copy';
+import { ADD_PRIORITY_FAILED, SAVE_FAILED } from '../lib/copy';
 import { emptyPunches } from '../lib/timeclock';
 import { apiError, deferred, makeBreak, makeDay, makeSession, makeSettings, MIN, settle, SettingsAndDays, setVisibility, T0, TODAY } from '../test/hooks';
 import type { BreakEndResponse, BreakResponse, Day, OvertimeResponse, Priority, Punch, PunchesResponse, Session } from '../types';
@@ -495,9 +495,10 @@ describe('priorities', () => {
     vi.mocked(api.putPriorities).mockRejectedValue(new Error('offline'));
     const { result } = renderStore();
     await settle();
-    await expect(result.current.addPriority(TODAY, 'One more')).rejects.toThrow('The priorities list is full.');
+    await expect(result.current.addPriority(TODAY, 'One more')).rejects.toThrow(ADD_PRIORITY_FAILED.full);
     // A day not loaded has no list to add to: one made up empty would replace the stored rows.
-    await expect(result.current.addPriority(OTHER, 'Unsaved')).rejects.toThrow(SAVE_FAILED.title);
+    // Nothing was sent, so the reason given is the load, not a failed save.
+    await expect(result.current.addPriority(OTHER, 'Unsaved')).rejects.toThrow(ADD_PRIORITY_FAILED.notLoaded);
     expect(api.putPriorities).not.toHaveBeenCalled();
     await act(() => result.current.load(OTHER));
     await expect(act(() => result.current.addPriority(OTHER, 'Unsaved'))).rejects.toThrow(SAVE_FAILED.title);

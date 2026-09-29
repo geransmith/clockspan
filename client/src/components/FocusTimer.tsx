@@ -6,7 +6,7 @@ import { useTimer } from '../hooks/useTimer';
 import { unlockAudio } from '../lib/alerts';
 import { BREAK, TIMER_DUE, UNTITLED_SESSION } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
-import { hasText } from '../lib/priorities';
+import { hasRoom, hasText } from '../lib/priorities';
 import { LIMITS, type Priority } from '../types';
 import { TimerControls } from './TimerControls';
 
@@ -40,8 +40,9 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
   const open = priorities.filter((p) => p.uid && hasText(p) && !p.done);
   const linkedStillOpen = linked != null && open.some((p) => p.uid === linked);
   const trimmed = label.trim();
-  // New work typed in, not tied to a row: offer to put it on the plan as well.
-  const offerAdd = isToday && trimmed !== '' && !linkedStillOpen;
+  // New work typed in, not tied to a row: offer to put it on the plan as well, while the plan
+  // has a row for it. On a full list the tick would only earn an error at Start.
+  const offerAdd = isToday && trimmed !== '' && !linkedStillOpen && hasRoom(priorities, settings.priorityCount);
 
   const pick = (p: Priority) => {
     if (linked === p.uid) {

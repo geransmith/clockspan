@@ -253,6 +253,9 @@ describe('describeEvent', () => {
     expect(describeEvent(ev('retro', 'due', 0, T), late).body).toBe(
       `You reached your 8h at ${formatTime(T, true)}. Two minutes on what went to plan and what didn't.`,
     );
+    expect(describeEvent(ev('secondMeal', 'due', 0, T), late).body).toBe(
+      `You reached 10h of work at ${formatTime(T, true)}. California requires a second 30-minute meal period by then unless you've waived it.`,
+    );
   });
 
   it('formats a non-round work day', () => {
