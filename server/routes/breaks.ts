@@ -1,16 +1,20 @@
-import { Router, type RequestHandler, type Response } from 'express';
+import { Router } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
-import { breakRowToJson, dateParam, endRunningBreak, ensureDay, MIN_BREAK_MS, requireDate, type BreakRow } from './shared.js';
+import {
+  breakRowToJson,
+  dateParam,
+  endRunningBreak,
+  ensureDay,
+  getOwned,
+  MIN_BREAK_MS,
+  ownedRows,
+  parsePlannedSeconds,
+  requireDate,
+  runningSession,
+} from './shared.js';
 import type { BreakConflict, BreakEndResponse, BreakResponse, OkResponse } from '../../shared/api.js';
 import { BREAK_SECONDS } from '../../shared/timer.js';
-
-type OwnedBreak = BreakRow & { date: string };
-
-function getOwned(db: DB, userId: number, id: number): OwnedBreak | undefined {
-  return db.prepare(`SELECT b.*, d.date FROM breaks b JOIN days d ON d.id = b.day_id WHERE b.id = ? AND b.user_id = ?`).get(id, userId) as
-    OwnedBreak | undefined;
-}
 
 /** Mounted at /api/days/:date/breaks (start), like the sessions' start router. */
 export function breakStartRouter(db: DB): Router {
@@ -21,11 +25,12 @@ export function breakStartRouter(db: DB): Router {
   r.post('/', requireDate, (req, res) => {
     const user = currentUser(req);
     const { plannedSeconds } = (req.body ?? {}) as { plannedSeconds?: unknown };
-    if (typeof plannedSeconds !== 'number' || !Number.isInteger(plannedSeconds) || plannedSeconds < BREAK_SECONDS.min || plannedSeconds > BREAK_SECONDS.max) {
-      res.status(400).json({ error: `plannedSeconds must be between ${BREAK_SECONDS.min} and ${BREAK_SECONDS.max}.` });
+    const planned = parsePlannedSeconds(plannedSeconds, BREAK_SECONDS);
+    if ('error' in planned) {
+      res.status(400).json({ error: planned.error });
       return;
     }
-    if (db.prepare(`SELECT 1 FROM sessions WHERE user_id = ? AND status = 'running'`).get(user.id)) {
+    if (runningSession(db, user.id)) {
       res.status(409).json({ error: 'A focus timer is running.' } satisfies BreakConflict);
       return;
     }
@@ -35,10 +40,10 @@ export function breakStartRouter(db: DB): Router {
       const dayId = ensureDay(db, user.id, dateParam(req));
       const info = db
         .prepare(`INSERT INTO breaks (day_id, user_id, planned_seconds, started_at, ended_at) VALUES (?, ?, ?, ?, ?)`)
-        .run(dayId, user.id, plannedSeconds, now, now + plannedSeconds * 1000);
+        .run(dayId, user.id, planned.seconds, now, now + planned.seconds * 1000);
       return Number(info.lastInsertRowid);
     })();
-    res.status(201).json({ break: breakRowToJson(getOwned(db, user.id, id)!) } satisfies BreakResponse);
+    res.status(201).json({ break: breakRowToJson(getOwned(db, 'breaks', user.id, id)!) } satisfies BreakResponse);
   });
 
   return r;
@@ -48,16 +53,7 @@ export function breaksRouter(db: DB): Router {
   const r = Router();
 
   // Every /:id route works on the caller's own break or answers 404.
-  const loadOwnedBreak: RequestHandler = (req, res, next) => {
-    const b = getOwned(db, currentUser(req).id, Number(req.params.id));
-    if (!b) {
-      res.status(404).json({ error: 'Break not found.' });
-      return;
-    }
-    res.locals.break = b;
-    next();
-  };
-  const owned = (res: Response) => res.locals.break as OwnedBreak;
+  const { load: loadOwnedBreak, owned } = ownedRows(db, 'breaks');
 
   // Back early: the break ends now, or is dropped if it ran under a minute (answered as null).
   // Idempotent, and a break that already ended keeps its end.
@@ -70,7 +66,7 @@ export function breaksRouter(db: DB): Router {
       return;
     }
     if (b.ended_at > now) db.prepare(`UPDATE breaks SET ended_at = ? WHERE id = ?`).run(now, b.id);
-    res.json({ break: breakRowToJson(getOwned(db, b.user_id, b.id)!) } satisfies BreakEndResponse);
+    res.json({ break: breakRowToJson(getOwned(db, 'breaks', b.user_id, b.id)!) } satisfies BreakEndResponse);
   });
 
   r.delete('/:id', loadOwnedBreak, (_req, res) => {

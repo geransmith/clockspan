@@ -1,17 +1,20 @@
-import { Router, type RequestHandler, type Response } from 'express';
+import { Router, type Response } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
-import { dateParam, endRunningBreak, ensureDay, requireDate, sessionRowToJson, UID_RE, type SessionRow } from './shared.js';
+import {
+  dateParam,
+  endRunningBreak,
+  ensureDay,
+  getOwned,
+  ownedRows,
+  parsePlannedSeconds,
+  requireDate,
+  runningSession,
+  sessionRowToJson,
+  UID_RE,
+} from './shared.js';
 import { LIMITS, type OkResponse, type RunningResponse, type SessionConflict, type SessionResponse } from '../../shared/api.js';
 import { PLANNED_SECONDS, plannedEndAt } from '../../shared/timer.js';
-
-type OwnedSession = SessionRow & { date: string };
-
-/** A whole number of seconds within the timer's range, or the message to send back. */
-function parsePlannedSeconds(raw: unknown): { seconds: number } | { error: string } {
-  if (typeof raw === 'number' && Number.isInteger(raw) && raw >= PLANNED_SECONDS.min && raw <= PLANNED_SECONDS.max) return { seconds: raw };
-  return { error: `plannedSeconds must be between ${PLANNED_SECONDS.min} and ${PLANNED_SECONDS.max}.` };
-}
 
 /**
  * A session's priority link: undefined = not mentioned, null = unplanned, a uid that must
@@ -26,16 +29,6 @@ function parsePriorityUid(db: DB, dayId: number, raw: unknown): { uid: string | 
   return hit ? { uid } : { uid: undefined, error: 'That priority is not on this day.' };
 }
 
-function getOwned(db: DB, userId: number, id: number): OwnedSession | undefined {
-  return db.prepare(`SELECT s.*, d.date FROM sessions s JOIN days d ON d.id = s.day_id WHERE s.id = ? AND s.user_id = ?`).get(id, userId) as
-    OwnedSession | undefined;
-}
-
-function running(db: DB, userId: number): OwnedSession | undefined {
-  return db.prepare(`SELECT s.*, d.date FROM sessions s JOIN days d ON d.id = s.day_id WHERE s.user_id = ? AND s.status = 'running' LIMIT 1`).get(userId) as
-    OwnedSession | undefined;
-}
-
 /** Mounted at /api/days/:date/sessions (start) — separate router so params flow cleanly. */
 export function sessionStartRouter(db: DB): Router {
   const r = Router({ mergeParams: true });
@@ -44,12 +37,12 @@ export function sessionStartRouter(db: DB): Router {
     const user = currentUser(req);
     const date = dateParam(req);
     const { label, plannedSeconds, priorityUid } = (req.body ?? {}) as { label?: unknown; plannedSeconds?: unknown; priorityUid?: unknown };
-    const planned = parsePlannedSeconds(plannedSeconds);
+    const planned = parsePlannedSeconds(plannedSeconds, PLANNED_SECONDS);
     if ('error' in planned) {
       res.status(400).json({ error: planned.error });
       return;
     }
-    const existing = running(db, user.id);
+    const existing = runningSession(db, user.id);
     if (existing) {
       res.status(409).json({ error: 'A timer is already running.', session: sessionRowToJson(existing) } satisfies SessionConflict);
       return;
@@ -73,7 +66,7 @@ export function sessionStartRouter(db: DB): Router {
       res.status(400).json({ error: result.error });
       return;
     }
-    res.status(201).json({ session: sessionRowToJson(getOwned(db, user.id, result.id)!) } satisfies SessionResponse);
+    res.status(201).json({ session: sessionRowToJson(getOwned(db, 'sessions', user.id, result.id)!) } satisfies SessionResponse);
   });
 
   return r;
@@ -83,23 +76,14 @@ export function sessionsRouter(db: DB): Router {
   const r = Router();
 
   r.get('/running', (req, res) => {
-    const s = running(db, currentUser(req).id);
+    const s = runningSession(db, currentUser(req).id);
     res.json({ session: s ? sessionRowToJson(s) : null } satisfies RunningResponse);
   });
 
-  // Every /:id route below works on the caller's own session or answers 404; the row is
-  // handed on through res.locals so the handlers don't repeat the lookup.
-  const loadOwnedSession: RequestHandler = (req, res, next) => {
-    const s = getOwned(db, currentUser(req).id, Number(req.params.id));
-    if (!s) {
-      res.status(404).json({ error: 'Session not found.' });
-      return;
-    }
-    res.locals.session = s;
-    next();
-  };
-  const owned = (res: Response) => res.locals.session as OwnedSession;
-  const reply = (res: Response, userId: number, id: number) => res.json({ session: sessionRowToJson(getOwned(db, userId, id)!) } satisfies SessionResponse);
+  // Every /:id route below works on the caller's own session or answers 404.
+  const { load: loadOwnedSession, owned } = ownedRows(db, 'sessions');
+  const reply = (res: Response, userId: number, id: number) =>
+    res.json({ session: sessionRowToJson(getOwned(db, 'sessions', userId, id)!) } satisfies SessionResponse);
 
   r.patch('/:id', loadOwnedSession, (req, res) => {
     const s = owned(res);
@@ -117,7 +101,7 @@ export function sessionsRouter(db: DB): Router {
     }
     if (link.uid !== undefined) next.priorityUid = link.uid;
     if (plannedSeconds !== undefined) {
-      const planned = parsePlannedSeconds(plannedSeconds);
+      const planned = parsePlannedSeconds(plannedSeconds, PLANNED_SECONDS);
       if ('error' in planned) {
         res.status(400).json({ error: planned.error });
         return;
