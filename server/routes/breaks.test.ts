@@ -130,7 +130,7 @@ describe('breaks are scoped to the signed-in user', () => {
     const { id } = (await a.post(`/api/days/${DATE}/breaks`, { plannedSeconds: 300 })).body.break;
     expect((await b.get(`/api/days/${DATE}`)).body.breaks).toEqual([]);
     expect((await b.get(`/api/days/range?from=${DATE}&to=${DATE}`)).body.days).toEqual([]);
-    expect((await b.post(`/api/breaks/${id}/end`)).status).toBe(404);
+    expect(await b.post(`/api/breaks/${id}/end`)).toMatchObject({ status: 404, body: { error: 'Break not found.' } });
     expect((await b.del(`/api/breaks/${id}`)).status).toBe(404);
     // B's own break doesn't end A's, and B's timer doesn't either.
     expect((await b.post(`/api/days/${DATE}/breaks`, { plannedSeconds: 600 })).status).toBe(201);

@@ -177,7 +177,8 @@ Never commit `data/` or `.env`.
   (`sessionRowToJson(): Session`, `dayJson(): Day`, …) and each route's answer names its
   envelope with `satisfies` (`res.json({ deleted } satisfies PruneResult)`), while
   `client/src/api.ts` reads the same types, so a field renamed on one side fails `typecheck`
-  on the other. Server-only row types (`UserRow`, `SessionRow`) take their unions from there too.
+  on the other. Server-only row types (`UserRow` in `db.ts`, a day's rows in `routes/shared.ts`)
+  take their unions from there too (`PunchRow.kind` is `Punch['kind']`).
 - **Security headers are set only in `server/security.ts`** (applied first in `createApp`):
   the CSP, `nosniff`, framing, referrer, HSTS and the API's `no-store`. Headers that describe
   one answer stay with the code that sends it: the static files' `Cache-Control` in `app.ts`,
@@ -217,8 +218,8 @@ Never commit `data/` or `.env`.
 - **Every data query is scoped by `req.user.id`** (`currentUser(req)`). In `AUTH_MODE=none` that
   is the single `kind='default'` user. Never add a data route outside the `requireAuth` router
   in `app.ts`. `/:date` routes take `requireDate`; `/sessions/:id` routes take
-  `loadOwnedSession` and `/breaks/:id` routes `loadOwnedBreak`, which is where the ownership
-  checks live.
+  `loadOwnedSession` and `/breaks/:id` routes `loadOwnedBreak`, both made by `ownedRows()` in
+  `routes/shared.ts`, which is where the ownership check lives.
 - **Settings go through `mergeSettings()` on every read and write** (`server/settings.ts`):
   the stored JSON is merged onto `DEFAULT_SETTINGS`, unknown keys are dropped, invalid values
   fall back, and a PUT stores the merged result (so a key missing from an old row takes the

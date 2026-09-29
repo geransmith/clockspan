@@ -249,7 +249,7 @@ describe('sessions are scoped to the signed-in user', () => {
     expect(started.status).toBe(201);
     const id = started.body.session.id;
     expect((await b.get('/api/sessions/running')).body.session).toBeNull();
-    expect((await b.patch(`/api/sessions/${id}`, { label: 'mine now' })).status).toBe(404);
+    expect(await b.patch(`/api/sessions/${id}`, { label: 'mine now' })).toMatchObject({ status: 404, body: { error: 'Session not found.' } });
     expect((await b.post(`/api/sessions/${id}/pause`)).status).toBe(404);
     expect((await b.post(`/api/sessions/${id}/resume`)).status).toBe(404);
     expect((await b.post(`/api/sessions/${id}/finish`)).status).toBe(404);

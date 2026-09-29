@@ -15,7 +15,10 @@ import {
   sessionRowToJson,
   UID_RE,
   type BreakRow,
+  type Dated,
   type DayRow,
+  type PriorityRow,
+  type PunchRow,
   type SessionRow,
 } from './shared.js';
 import { kindForPosition } from '../../shared/punches.js';
@@ -50,24 +53,6 @@ function parseInstant(raw: unknown, from: number, to: number): number | null {
   return Number.isSafeInteger(ms) && ms >= from && ms <= to ? ms : null;
 }
 
-export interface PunchRow {
-  id: number;
-  day_id: number;
-  position: number;
-  kind: 'in' | 'out';
-  at: number | null;
-}
-
-export interface PriorityRow {
-  id: number;
-  day_id: number;
-  position: number;
-  text: string;
-  done: number;
-  uid: string | null;
-  added_at: number | null;
-}
-
 function punchesJson(rows: PunchRow[]): Punch[] {
   return rows.map((p) => ({ position: p.position, kind: p.kind, at: p.at }));
 }
@@ -83,8 +68,8 @@ function prioritiesJson(rows: PriorityRow[]): Priority[] {
 interface DayRows {
   punches: PunchRow[];
   priorities: PriorityRow[];
-  sessions: (SessionRow & { date: string })[];
-  breaks: (BreakRow & { date: string })[];
+  sessions: Dated<SessionRow>[];
+  breaks: Dated<BreakRow>[];
 }
 
 function dayRows(db: DB, dayId: number): DayRows {
