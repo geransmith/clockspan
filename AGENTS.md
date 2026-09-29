@@ -42,22 +42,27 @@ shared/                 imported by both sides, always with a `.js` suffix
   api.ts                every wire type and `emptyDay`; the server's JSON builders and client/src/api.ts both use them
   sounds.ts             the sound catalog (SOUNDS, SOUND_EVENTS)
   dates.ts, timer.ts    date keys; pause-aware session timing (activeMs, plannedEndAt, PLANNED_SECONDS)
-  punches.ts            kindForPosition: a punch row's kind is its position's parity
+  punches.ts            kindForPosition: a punch row's kind is its position's parity; samePunches compares
+                        two lists by value
   backoff.ts            nextBackoff: the wait between retries of a request that must answer
 server/                 Express API → dist/server
   app.ts                createApp(): headers, /api/health, auth routers, data routers behind
                         requireAuth, static files and the SPA fallback; startBackgroundJobs() (the
-                        login purge and the retention schedule, started by index.ts only)
+                        login purge, the retention schedule and, under OIDC, warming the `Discovery`
+                        index.ts passes in; started by index.ts only)
   security.ts           every security header, rejectCrossSiteWrites and rejectUnknownHosts
   config.ts, db.ts      env parsing (throws on bad config); pragmas, MIGRATIONS, the default user
   settings.ts           mergeSettings (defaults + validation on every read and write), loadSettings
   retention.ts          old-day pruning (pruneDays, runRetention, the RETENTION_DAYS cap)
+  validate.ts           isWholeNumber: the one check for every bounded number the server takes
   auth/                 session cookie, scrypt passwords, the login limiter, publicUser/logName (users.ts),
-                        middleware (currentUser), local + OIDC routes
+                        middleware (currentUser), local + OIDC routes, resetPassword (reset.ts: what the
+                        reset-password command does)
   routes/               the days, sessions, breaks and settings routers; shared.ts has requireDate, findDay,
-                        and the row → JSON builders
+                        ownedRouter and the session and break row → JSON builders (dayJson is in days.ts)
   dev/                  seed.ts + seed-cli.ts (`npm run seed`), harness.ts (startTestApp for route tests)
   index.ts, cli.ts      the process entrypoints: the server (warns under AUTH_MODE=none), reset-password
+                        (reads the arguments and prints resetPassword's answer)
 client/                 Vite root → dist/client
   public/               manifest, sw.js, icons/icon.svg (the icon's one source; `npm run icons` renders
                         the PNGs next to it)
@@ -74,7 +79,9 @@ client/                 Vite root → dist/client
     storage.ts          localStorage that never throws (private mode, quota)
   src/hooks/            state and effects (useDay, useTimer, useSettings, useAlarms, …), each with a
                         happy-dom test beside it (useLatest and useTimeFormat are covered through the
-                        hooks that use them); src/test/hooks.tsx has the fixtures and provider stack
+                        hooks that use them). useClock is the app's one 1-second clock; useSaveStatus
+                        (Saving… / Saved / Not saved) and useLastTab (the tab it reopens on) serve the
+                        settings dialog. src/test/hooks.tsx has the fixtures and provider stack
   src/components/       the cards, History (Calendar + Review), Banners, FinishChoice; pieces more than
                         one place uses (TimerControls, Toggle, NewPasswordFields, UsernameInput, Tile); settings/ holds
                         SettingsDialog (the shell and tabs), a file per tab, and controls.tsx
@@ -86,8 +93,10 @@ docs/screenshots/       the PNGs the README embeds
 Dockerfile, docker/     the image; entrypoint.sh owns /data as PUID:PGID and drops root
 unraid/clockspan.xml    the Unraid template, a field per .env.example variable (config.test.ts checks);
                         Unraid reads it from main, so an edit reaches users when it merges
-ca_profile.xml          the Community Apps profile. Both XML files link icons/icon-512.png and
-                        docs/screenshots/*.png by raw URL on main: moving those breaks the listing
+ca_profile.xml          the Community Apps profile. Both XML files link client/public/icons/icon-512.png
+                        by raw URL on main; the template also links its own path (TemplateURL) and
+                        three shots (sheet-phone-light, sheet-desktop, history). Moving or renaming
+                        any of those breaks the listing
 .github/workflows/      ci.yml (check, image-smoke, image, release), codeql.yml, workflow-lint.yml (zizmor)
 ```
 
@@ -135,16 +144,34 @@ to start over, with no confirmation. Production data lives only on the Docker `/
 which the dev machine cannot reach. Run the destructive paths for real: delete a session or
 user, cancel a timer, `DELETE /api/settings`.
 
-Start from `npm run seed`, not an empty DB: the last 10 weekdays for the default user (a normal
-day, an extra out/in pair with a mid-day priority, approved overtime, an unreviewed day with a
-cancelled session, a half day with no lunch) plus today, clocked in two hours ago. Flags are in
-the `seed-cli.ts` header: `--running` for timer work, `--quarter` for Month / Quarter review,
-`--fresh` to also reset settings and logins. Under `AUTH_MODE=local` (or `--auth local`, which
-stands in for the env var) it creates `admin` and `sam` (password `clockspan-dev`); under
-`oidc`, one "Dev User". `--sessions` signs every seeded user in and prints a
-`document.cookie = 'fs_session=…'` line per user: run it in the page and reload to be that user,
-with no password typed and no provider. A run replaces the user's days, never deletes users,
-and is safe while `npm run dev` is up (reload the page).
+Start from `npm run seed`, not an empty DB (`server/dev/seed.ts`; the options are in the
+`seed-cli.ts` header). A run deletes every day of the user it seeds, hand-made ones included,
+then writes the last 10 weekdays and today. Each past weekday takes a template by its distance
+back (`kindForDistance`): the last weekday has an extra out/in pair in the afternoon and a
+priority added mid-day (the README's retro shot), then come a normal day, an overtime day
+(approved, 10 h 15 m worked, with the second meal taken as an out/in pair after lunch), an
+unreviewed day (a note written but never marked reviewed, and a cancelled session) and a half
+day with its own 4 h 30 m work day and no lunch punched. Further back the templates recur at
+fixed intervals, so the default 10 are three normal days, two each of the extra pair, overtime
+and unreviewed (two cancelled sessions in all) and one half day. Every past day has two to four
+priorities and a note. Today is clocked in two hours before *now*. Its three priorities were
+planned two minutes after the last weekday's review, with that day's first open row carried to
+position 1 and the second row ticked; its log has a 50-minute session for the ticked row, an
+unplanned one paused for eight minutes and finished three minutes short of its 25, a full
+break and one cut short.
+
+`--running` leaves a 25-minute timer running, started ten minutes before *now*, for timer work;
+`--quarter` seeds every weekday since the start of last quarter, for Month / Quarter review
+(`--days N` for another count); `--now HH:MM` pins *now* to that time of day; `--today
+YYYY-MM-DD` moves the whole sample to that date at the current time of day (or `--now`'s);
+`--fresh` also deletes the seeded users' settings and logins. Under `AUTH_MODE=local` (or
+`--auth local`, which stands in for the env var) it creates `admin` and `sam` (password
+`clockspan-dev`; `sam` gets at most three past days and no timer); under `oidc`, one "Dev
+User". `--sessions` signs every seeded user in and prints a `document.cookie = 'fs_session=…'`
+line per user: run it in the page and reload to be that user, with no password typed and no
+provider. A run never deletes users and is safe while `npm run dev` is up (reload the page).
+`npm run screenshots` seeds the dev DB the same way (`--running --quarter --now 10:30`), so it
+also replaces the default user's days, and it leaves the sticker chart on (`stickers: true`).
 
 Ways in, cheapest first:
 
@@ -162,8 +189,9 @@ Tests sit beside the code: pure-function tests in `shared/` and `client/src/lib`
 `client/src/hooks` (`// @vitest-environment happy-dom`, `vi.mock('../api')`, fake timers;
 fixtures and the provider stack in `client/src/test/hooks.tsx`); `client/src/api.test.ts` for
 every call's method, path and body (a stubbed `fetch`); component tests beside a component
-that holds logic worth pinning (drafts that save on a timer or on unmount, which page
-`AuthGate` shows), under happy-dom with the same fixtures; harness tests in
+that holds logic worth pinning (drafts that save on a timer or on unmount, what `PlanNext`
+saves, the running bar's label edit, which page `AuthGate` shows), under happy-dom with the
+same fixtures; harness tests in
 `server/**/*.test.ts` for routes, validation, scoping, headers, `mergeSettings`, and migrations
 (`migrate(db, upTo)` stops early so a backfill can be tested, see `server/db.test.ts`). No temp
 files: `openDatabase(':memory:')`.
@@ -264,31 +292,41 @@ Never commit `data/` or `.env`.
   auto-finish (which chimes only if nothing has for that end). While due the countdown shows
   the overrun as a negative number, `adjust(+N)` is N minutes from now, `finish()` logs the
   planned length (the server's clamp) and `finish(true)` sends `countOverrun` so the time past
-  the end is logged too. The Finish buttons call `requestFinish()`: it finishes at once unless
-  the planned and worked lengths differ by a whole minute, where `finishChoice` opens the
-  `FinishChoice` sheet (Planned · Nm / Worked · Mm / Back). Both alerting effects wait for
-  `settings.loaded`, or an alert raised on load would use the default sound and switch; the
-  alarms (`useTodayAlarms`) wait for it the same way (`settled`), or a longer work day than the
-  default would ring the clock-out alarm on load. So `loaded` only turns true on a real answer:
-  a failed `GET /settings` is retried (`nextBackoff` in `shared/backoff.ts`: 2 s doubling to a
-  minute), never settled with the defaults.
+  the end is logged too. Plans are whole minutes: `adjust` rounds the new plan up to one and
+  stops at `PLANNED_SECONDS.max` (8 h), where `canAdd` turns false, + is disabled and the
+  "Time's up" banner drops its Add button. The Finish buttons call `requestFinish()`: it
+  finishes unless the timer is due and the planned and worked lengths differ in their whole
+  minutes (a minute or more over), where `finishChoice` opens the `FinishChoice` sheet
+  (Planned · Nm / Worked · Mm / Back). A finish goes out behind any press still on its way. The
+  choice belongs to the session it was asked for (`finishChoiceFor`): once that session ends,
+  however it ends, the sheet goes with it. The bar and the log's running row edit the session
+  through `useTimer` (`setLabel`, `edit`), so their writes share its queue and both show the
+  edit.
   `useTimer` keeps the running session the way the day store keeps a day
   (`lib/optimistic.ts`, on `useTracked`): a press (adjust, edit, pause, resume) shows at once,
   every write (start and finish too) goes out on the timer's queue after the ones before it, a
   failure drops only that press, and a sync's answer never hides a press still on its way.
   Keep that pattern for new mutations.
-  **One running session per user is a schema invariant** (a unique partial index), and another
+- **One running session per user is a schema invariant** (a unique partial index), and another
   device may own it: a 409 on start is adopted with a banner, a sync whose answer differs from
-  the session shown reloads that day so the log catches up, a 404/409 on adjust/finish/cancel
-  re-syncs at once (the loop's `runNow`: a sync sent after the refusal, chained behind any sync
-  already out and counted for the throttle), and the completion chime only plays when the
-  server says `completed`.
-  **Today's day is kept in step the same way** (`useRefreshDay` in `useDay.tsx`, on
-  `useRefreshLoop`, the same hook as the timer's sync: every minute and when the tab comes back,
-  throttled to 5 s), so the alarms in `useTodayAlarms` judge the
-  server's copy of the punches, not one from hours ago; they wait while a come-back refresh is
-  out. A today whose first load failed is loaded again on the same ticks (no second banner), so
-  its alarms come back with the server.
+  the session shown reloads that day so the log catches up, a 404/409 on any press on the
+  running session re-syncs at once (the loop's `runNow`: a sync sent after the refusal, chained
+  behind any sync already out and counted for the throttle), and the completion chime only
+  plays when the server says `completed`.
+- **Nothing alerts before the settings have loaded.** The timer's two alerting effects and the
+  break-over alert (`useBreak`) wait for `settings.loaded`, or an alert raised on load would use
+  the default sound and switch; the alarms (`useTodayAlarms`) wait for it the same way
+  (`settled`), or a longer work day than the default would ring the clock-out alarm on load. So
+  `loaded` only turns true on a real answer: a failed `GET /settings` is retried (`nextBackoff`
+  in `shared/backoff.ts`: 2 s doubling to a minute), never settled with the defaults. After the
+  first answer the settings are fetched again on `useRefreshLoop`, like today's day, since
+  another device may change them.
+- **Today's day is kept in step with the server** (`useRefreshDay` in `useDay.tsx`, on the same
+  hook as the timer's sync and the settings' refresh, `useRefreshLoop`: every minute and when
+  the tab comes back, throttled to 5 s), so the alarms in `useTodayAlarms` judge the server's
+  copy of the punches, not one from hours ago; they wait while a come-back refresh is out. A
+  today whose first load failed is loaded again on the same ticks (no second banner), so its
+  alarms come back with the server.
 - **The day store keeps the server's copy and this device's changes apart**
   (`lib/optimistic.ts`): each day is its confirmed copy plus the changes not confirmed yet, and
   the sheet shows the one laid over the other. The confirmed copy is the server's answers in the
@@ -346,8 +384,9 @@ Never commit `data/` or `.env`.
   moment hour, minute and period are all filled, and throws a half-typed draft away when
   focus leaves the field, so the row never shows a time the server doesn't have. In 12-hour
   mode the period is filled in as the hour is typed (`guessPeriod` in `lib/timefield.ts`: 5–11
-  → AM, 12 and 1–4 → PM, kept after the day's clock-in), and left alone once the user has
-  touched that segment. Clearing is the row's × button only. Punch PUTs are queued per day (see
+  → AM, 12 and 1–4 → PM; on a later row, the other period when every minute of the hour falls
+  before the day's clock-in in this one and not in the other, so 8:10 after an 8:30 clock-in
+  stays AM), and left alone once the user has touched that segment. Clearing is the row's × button only. Punch PUTs are queued per day (see
   "Saves reach the server in the order they were made").
 - **Overtime approval (`days.overtime_approved`) silences only the `clockOut` alarm target.**
   Lunch and the second meal period stay armed: California Labor Code §512 still requires them
@@ -387,8 +426,12 @@ Never commit `data/` or `.env`.
   (`days.retro_at`) disarms it. Its banner button jumps to the card (`jumpTo` in `App.tsx`).
 - **Alarm event keys embed the target minute** (`eventKey`), so a moved target re-arms and a
   reload never re-fires. Fired keys live in `localStorage` under `focus:alarms:<date>` and are
-  pruned to today. Today's punches are held while focus is inside the punch rows and settle
-  for 3 s after it leaves (`useSettled(value, ms, hold)`, wired in `useTodayAlarms`) before evaluation.
+  pruned to today. Today's punches are held while a punch time field on today's sheet has focus
+  (`Timeclock`'s `onEditingChange`; Now, × and the pair buttons save at once and never hold) and
+  settle for 3 s after (`useSettled(value, ms, hold)`, wired in `useTodayAlarms`) before
+  evaluation. The hold ends when focus leaves the time fields, when the card unmounts, or on the
+  next change to the punches once focus has gone without a blur. Held punches are compared with the day's by value
+  (`samePunches`), so a refresh that brings the same times doesn't stop the alarms.
 - **Per-date card drafts reset by remounting**: `Sheet.tsx` keys `Priorities` and `Retro` by
   date, so neither needs a "date changed" effect. Local drafts that mirror a prop use the
   "adjust state while rendering" form (see `DurationField`), not a `useEffect` + `setState`,
@@ -429,11 +472,11 @@ Never commit `data/` or `.env`.
   `mergeSettings()` (`server/settings.ts`; `limited(key)` checks a number against its
   bounds) → add the control to its tab in `client/src/components/settings/` (`TimeclockTab`,
   `AlarmsTab`, `SheetTab`, `DataTab`, `AccountTab`; the Sheet tab's "History" section holds
-  the calendar's switches) using `DurationField` (`components/DurationField.tsx`) / `NumberField`
-  (`settings/controls.tsx`) with
-  `{...SETTING_LIMITS.<key>}` for `min` and `max` — `NumberField` takes a `unit` suffix,
-  default "min" — / `Toggle` (`NumberInput` alone puts several numbers on one row, like the
-  timer's start buttons). Nothing else to mirror.
+  the calendar's switches): a `DurationField` (`components/DurationField.tsx`) for hours and
+  minutes or a `NumberField` (`settings/controls.tsx`) for one number, whose `unit` suffix is
+  "min" unless given, each with `{...SETTING_LIMITS.<key>}` for `min` and `max`; a `Toggle` for
+  a switch. `NumberInput` on its own puts several numbers on one row, like the timer's start
+  buttons. Nothing else to mirror.
 - **A sound**: drop the clip in as `client/src/sounds/<id>.mp3` (CC0 only, MP3 so Safari can
   decode it, a couple of seconds at most) → add `{ id, label, kind: 'clip' }` to `SOUNDS` in
   `shared/sounds.ts` → add its title, author and source line to `client/src/sounds/README.md`.
@@ -505,9 +548,15 @@ Never commit `data/` or `.env`.
   empty `::after` reaching past its edge (a control that clips its overflow grows its padding
   instead). Where two controls sit closer than that, each reaches half the gap. A new compact
   control joins that block. Inputs are 16 px so iOS doesn't zoom. No external
-  fonts or assets (the CSP would block them anyway). Safe-area insets via `--safe-top` / `--safe-bottom`.
-- Numeric settings inputs commit on blur/Enter (never on every keystroke); priorities debounce
-  400 ms; punches and checkboxes save immediately.
+  fonts or assets (the CSP would block them anyway). Safe-area insets via `--safe-top`,
+  `--safe-bottom`, `--safe-left` and `--safe-right` (a phone held sideways puts the notch on a
+  side). Words in a tone's colour use its `-ink` token (`--accent-ink`, `--ok-ink`,
+  `--warn-ink`, `--danger-ink`), which keeps light-mode text at 4.5:1 and up; the tone itself is
+  for fills, borders, icons and bars.
+- Numeric settings inputs commit on blur or Enter, never on every keystroke (`NumberInput`);
+  `DurationField` commits when focus leaves its hours / minutes pair or on Enter, so moving from
+  hours to minutes saves nothing. Priorities debounce 400 ms; punches and checkboxes save
+  immediately.
 - A form that sends a request submits through `useSubmit()` (`hooks/useSubmit.ts`): one send at
   a time with the button disabled, and one error line, cleared when a send starts and filled
   with what it throws (a mismatched confirmation throws too).
@@ -580,7 +629,8 @@ The browser pass for each surface (the logic under it is already tested):
 - **Retention**: one look at Settings → Data (count line, toggle saves); drive the delete with
   curl (`POST /api/days/prune`) because of the confirm dialog.
 - **Auth**: no browser pass; `server/auth/local.test.ts` covers setup, login, the limiter,
-  password change and user management.
+  password change and user management, and `server/auth/reset.test.ts` the reset-password
+  command.
 - **Anything a README screenshot shows** (sheet, retro, review, settings): `npm run screenshots`
   and commit the PNGs that changed.
 
@@ -601,9 +651,11 @@ The browser pass for each surface (the logic under it is already tested):
   refuses `new Notification()`). It is registered only in a production build. No caching
   without a versioning strategy, or users see stale assets.
 - `vite.config.ts` imports `defineConfig` from `vitest/config` so the `test` block type-checks.
-- OIDC: `APP_URL` must match the redirect URI registered with the provider exactly
-  (`${APP_URL}/auth/callback`). The callback builds its URL from `APP_URL`, not from request
-  headers, so it works behind proxies.
+- OIDC: `loadConfig` normalizes `APP_URL` (scheme and host lowercased, trailing slash dropped),
+  and `${APP_URL}/auth/callback` in that form must match the redirect URI registered with the
+  provider exactly. The callback builds its URL from `APP_URL`, not from request headers, so it
+  works behind proxies. `OIDC_ISSUER` must be `https://` (openid-client refuses plain http) and
+  is checked but kept as written, since the provider's tokens must match it.
 - `TRUST_PROXY` is a hop count (`1`), never `true`: `true` trusts the leftmost
   `X-Forwarded-For`, which the client controls, and the login limiter keys on `req.ip`. Left
   unset behind a proxy, every sign-in is the proxy's address; under `AUTH_MODE=local`,
