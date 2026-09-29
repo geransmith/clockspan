@@ -8,6 +8,7 @@
     "noUncheckedIndexedAccess": true,
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
+    "isolatedModules": true,
     "esModuleInterop": true,
     "outDir": "dist",
     "rootDir": ".",
