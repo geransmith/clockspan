@@ -425,11 +425,6 @@ button {
   margin-bottom: 2px;
   border-bottom: 1px solid color-mix(in srgb, var(--warn) 25%, transparent);
 }
-.notice-done ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
 .notice-done li {
   display: flex;
   align-items: center;
@@ -457,11 +452,6 @@ button {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-.left-open-list ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
 }
 .left-open-list li {
   overflow-wrap: anywhere;
@@ -1589,7 +1579,6 @@ button {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  margin: 0;
   font-size: 0.8rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -1602,9 +1591,6 @@ button {
   letter-spacing: 0;
 }
 .retro-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
 }
@@ -1686,7 +1672,6 @@ button {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 18px;
-  margin: 0;
   padding: 10px 14px;
   border-radius: var(--radius-sm);
   background: var(--surface-2);
@@ -1730,9 +1715,6 @@ button {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
   overflow-wrap: anywhere;
 }
 .plan-next-list .inline-check {
@@ -1855,7 +1837,6 @@ button {
   border-radius: var(--radius-sm);
   background: var(--surface-2);
   color: var(--text);
-  font: inherit;
   text-align: left;
   display: flex;
   flex-direction: column;
@@ -1894,14 +1875,20 @@ button {
   color: var(--text-2);
   line-height: 1;
 }
-/* "7:39" rather than "7h 39m", which wrapped at the space in a phone-width cell. */
+/* "7:39" rather than "7h 39m", which wrapped at the space in a phone-width cell. The smallest size
+   keeps "10:15" inside a seven-column cell on a 320px screen. */
 .calendar-worked {
-  font-size: 0.68rem;
+  font-size: 0.6rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
   white-space: nowrap;
   color: var(--text-2);
+}
+@media (min-width: 360px) {
+  .calendar-worked {
+    font-size: 0.68rem;
+  }
 }
 /* How much of the work day the day covered; green once the target is met. */
 .calendar-bar {
@@ -1920,12 +1907,6 @@ button {
 .calendar-bar.is-met > span {
   background: var(--ok);
 }
-/* So "10:15" stays inside a seven-column cell on a 320px screen. */
-@media (max-width: 359px) {
-  .calendar-worked {
-    font-size: 0.6rem;
-  }
-}
 /* Two stickers per line in a phone-width cell (three from 640px), whichever emoji font the browser has. */
 .sticker-row {
   display: grid;
@@ -1936,7 +1917,6 @@ button {
   line-height: 1.1;
 }
 .calendar-count {
-  margin: 0;
   padding: 12px 16px 0;
   color: var(--text-2);
 }
@@ -1977,9 +1957,6 @@ button {
 }
 .calendar-tiles .tile-value {
   font-size: 1.05rem;
-}
-.calendar-note {
-  margin: 0;
 }
 .calendar-actions {
   display: flex;
@@ -2026,9 +2003,6 @@ button {
   gap: 6px;
 }
 .review-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
 }
@@ -2214,10 +2188,6 @@ dialog.dialog::backdrop {
   gap: 8px;
   padding: 8px 12px calc(8px + var(--safe-bottom)) 20px;
   border-top: 1px solid var(--border);
-}
-/* Stays on the right when the tagline forces a wrap on narrow phones. */
-.dialog-foot .btn {
-  margin-left: auto;
 }
 /* The finish question: choices stacked full-width on a phone (the default on top), a row with
    Back on the left from 640px. */

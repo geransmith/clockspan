@@ -226,7 +226,6 @@ describe('audio', () => {
 
 describe('notifications', () => {
   it('reports support and permission', async () => {
-    expect(alerts.notificationsSupported()).toBe(true);
     expect(alerts.notificationPermission()).toBe('granted');
     FakeNotification.permission = 'default';
     expect(alerts.notificationPermission()).toBe('default');
@@ -237,7 +236,6 @@ describe('notifications', () => {
 
   it('answers unsupported without the Notification global', async () => {
     vi.stubGlobal('Notification', undefined);
-    expect(alerts.notificationsSupported()).toBe(false);
     expect(alerts.notificationPermission()).toBe('unsupported');
     expect(await alerts.requestNotificationPermission()).toBe('unsupported');
     // An alert still lands as a banner.

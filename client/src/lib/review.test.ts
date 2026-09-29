@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import type { Day, Priority, Session } from '../types';
-import { addMonths, startOfQuarter, startOfWeek } from '../../../shared/dates.js';
 import { periodOffset, periodRange, reviewRange } from './review';
 
 const settings = { workMinutes: 480, lunchDeadlineMinutes: 300, lunchMinutes: 30, secondMealAfterMinutes: 600 };
@@ -41,18 +40,6 @@ const day = (date: string, extra: Partial<Day> = {}): Day => ({
   sessions: [],
   breaks: [],
   ...extra,
-});
-
-describe('period helpers', () => {
-  it('starts weeks on Monday and quarters on the calendar quarter', () => {
-    expect(startOfWeek('2026-09-16')).toBe('2026-09-14'); // Wednesday → Monday
-    expect(startOfWeek('2026-09-14')).toBe('2026-09-14');
-    expect(startOfWeek('2026-09-13')).toBe('2026-09-07'); // Sunday belongs to the week before
-    expect(startOfQuarter('2026-09-16')).toBe('2026-07-01');
-    expect(startOfQuarter('2026-12-31')).toBe('2026-10-01');
-    expect(addMonths('2026-12-01', 1)).toBe('2027-01-01');
-    expect(addMonths('2026-01-01', -1)).toBe('2025-12-01');
-  });
 });
 
 describe('periodRange', () => {

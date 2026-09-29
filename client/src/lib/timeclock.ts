@@ -46,10 +46,10 @@ export interface TimeclockResult {
   error: string | null;
 }
 
-export const LUNCH_OUT_POSITION = 1;
-export const LUNCH_IN_POSITION = 2;
+const LUNCH_OUT_POSITION = 1;
+const LUNCH_IN_POSITION = 2;
 /** The clock-out row is the last row and never earlier than this. */
-export const CLOCK_OUT_MIN_POSITION = 3;
+const CLOCK_OUT_MIN_POSITION = 3;
 
 /**
  * Position of the final clock-out row: the last row, which `normalizePunches` keeps at an

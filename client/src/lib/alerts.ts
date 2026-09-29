@@ -136,7 +136,7 @@ export function playSound(id: SoundId): void {
 }
 
 // ----- notifications -----
-export function notificationsSupported(): boolean {
+function notificationsSupported(): boolean {
   return typeof Notification !== 'undefined';
 }
 
