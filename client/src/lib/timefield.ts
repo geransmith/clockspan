@@ -22,12 +22,14 @@ export function timeToMs(t: Time, dateKey: string): number {
  * 11 is morning, 12 and 1 to 4 is afternoon. When the day's clock-in is known (`anchorAt`)
  * a later punch comes after it, so the other period wins if the guess would land before
  * the clock-in and the other period would not. One keystroke on the segment flips it.
+ * The guess is made as the hour is typed, before the minute, so an hour counts as after the
+ * clock-in when any minute of it is: 8 after an 8:30 clock-in can still be 8:50 AM.
  */
-export function guessPeriod(hour12: number, minute: number, dateKey: string, anchorAt: number | null): Period {
+export function guessPeriod(hour12: number, dateKey: string, anchorAt: number | null): Period {
   const base: Period = hour12 >= 5 && hour12 <= 11 ? 'AM' : 'PM';
   if (anchorAt == null) return base;
   const other: Period = base === 'AM' ? 'PM' : 'AM';
-  const at = (p: Period) => timeToMs(new Time(hour24(hour12, p), minute), dateKey);
+  const at = (p: Period) => timeToMs(new Time(hour24(hour12, p), 59), dateKey);
   return at(base) < anchorAt && at(other) >= anchorAt ? other : base;
 }
 
