@@ -223,7 +223,10 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         mutationSeq.current++;
         const elapsed = Math.floor(activeMs(cur, Date.now()) / 1000);
         // Once the plan is used up, "+5" means five more minutes from now, not from the end.
-        const next = Math.max(PLANNED_SECONDS.min, Math.max(cur.plannedSeconds, elapsed) + deltaSeconds);
+        const from = Math.max(cur.plannedSeconds, elapsed);
+        const next = Math.min(PLANNED_SECONDS.max, Math.max(PLANNED_SECONDS.min, from + deltaSeconds));
+        // At the longest plan the server takes, + has nothing left to add (and must not finish).
+        if (deltaSeconds > 0 && next <= from) return;
         if (next <= elapsed) {
           // Shrinking below what's already elapsed means "I'm done now".
           const { session } = await api.finishSession(cur.id);

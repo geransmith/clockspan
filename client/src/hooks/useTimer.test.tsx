@@ -179,6 +179,23 @@ describe('adjust', () => {
     expect(api.patchSession).toHaveBeenCalledWith(1, { plannedSeconds: 60 });
   });
 
+  it('stops at the longest plan the server takes, and does nothing past it', async () => {
+    const { result } = await renderRunning(startedAgo(60, { plannedSeconds: 8 * 3600 - 120 }));
+    vi.mocked(api.patchSession).mockResolvedValue({ session: startedAgo(60, { plannedSeconds: 8 * 3600 }) });
+    await act(() => result.current.timer.adjust(5 * 60));
+    expect(api.patchSession).toHaveBeenCalledWith(1, { plannedSeconds: 8 * 3600 });
+    await act(() => result.current.timer.adjust(5 * 60));
+    expect(api.patchSession).toHaveBeenCalledTimes(1);
+    // An 8 h plan that ran out: + neither asks for more nor finishes it.
+    cleanup();
+    const due = await renderRunning(startedAgo(8 * 60 + 2, { plannedSeconds: 8 * 3600 }));
+    expect(due.result.current.timer.due).toBe(true);
+    await act(() => due.result.current.timer.adjust(5 * 60));
+    expect(api.patchSession).toHaveBeenCalledTimes(1);
+    expect(api.finishSession).not.toHaveBeenCalled();
+    expect(warnQuietly).not.toHaveBeenCalled();
+  });
+
   it('finishes when the new plan is already used up', async () => {
     const { result } = await renderRunning(startedAgo(1.5, { plannedSeconds: 120 }));
     vi.mocked(api.finishSession).mockResolvedValue({ session: startedAgo(1.5, { status: 'completed', durationSeconds: 90 }) });
