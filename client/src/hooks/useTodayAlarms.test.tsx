@@ -1,0 +1,114 @@
+// @vitest-environment happy-dom
+import { act, cleanup, renderHook } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as api from '../api';
+import { alert } from '../lib/alerts';
+import { emptyPunches } from '../lib/timeclock';
+import { deferred, makeDay, makeSettings, MIN, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
+import type { Day, Punch, Settings } from '../types';
+import { useDayStore } from './useDay';
+import { useTodayAlarms } from './useTodayAlarms';
+
+vi.mock('../api');
+vi.mock('../lib/alerts');
+
+const punchesAt = (...at: (number | null)[]): Punch[] => emptyPunches().map((p, i) => ({ ...p, at: at[i] ?? null }));
+// Clocked in 8 h 35 m ago with a 30 min lunch: 5 min past an 8 h day.
+const overDay = (patch: Partial<Day> = {}) => makeDay(TODAY, { punches: punchesAt(T0 - 515 * MIN, T0 - 300 * MIN, T0 - 270 * MIN), ...patch });
+
+/** Lets the loads land, then waits out the three seconds the punches take to settle. */
+async function judged(): Promise<void> {
+  await settle();
+  await settle(5_000);
+}
+
+const alerted = () => vi.mocked(alert).mock.calls.map(([a]) => a);
+const tags = () => alerted().map((a) => a.tag);
+
+function render(settings: Settings | Promise<Settings>, day: Day) {
+  vi.mocked(api.getSettings).mockReturnValue(Promise.resolve(settings));
+  vi.mocked(api.getDay).mockResolvedValue(day);
+  return renderHook(() => ({ alarms: useTodayAlarms(TODAY, Date.now(), vi.fn()), store: useDayStore() }), { wrapper: SettingsAndDays });
+}
+
+beforeEach(() => {
+  vi.useFakeTimers({ now: T0 });
+  localStorage.clear();
+});
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  vi.resetAllMocks();
+});
+
+describe('useTodayAlarms', () => {
+  it('waits for the settings, and judges the day by them rather than the defaults', async () => {
+    const settings = deferred<Settings>();
+    render(settings.promise, overDay());
+    // The day and its punches are in, but a 10 h day by the defaults' 8 h would ring now.
+    await judged();
+    expect(alert).not.toHaveBeenCalled();
+    settings.resolve(makeSettings({ workMinutes: 600 }));
+    await judged();
+    expect(tags()).not.toContain('alarm:clockOut');
+
+    // Another device, from scratch: the alarms already fired here are remembered in storage.
+    cleanup();
+    localStorage.clear();
+    vi.mocked(alert).mockClear();
+    render(makeSettings(), overDay());
+    await judged();
+    expect(tags()).toContain('alarm:clockOut');
+  });
+
+  it("goes by today's own work-day length", async () => {
+    // A half day, clocked in 4 h 10 m ago: over by 10 min, where the usual 8 h is hours away.
+    render(makeSettings(), makeDay(TODAY, { punches: punchesAt(T0 - 250 * MIN), workMinutes: 240 }));
+    await judged();
+    expect(alerted().find((a) => a.tag === 'alarm:clockOut')?.title).toBe('Clock out is 10 min overdue');
+  });
+
+  it('keeps an approved day quiet only while Overtime is on, and offers the button only then', async () => {
+    render(makeSettings(), overDay({ overtimeApproved: true }));
+    await judged();
+    expect(tags()).toEqual(['alarm:retro']);
+
+    // Another device, from scratch: the alarms already fired here are remembered in storage.
+    cleanup();
+    localStorage.clear();
+    vi.mocked(alert).mockClear();
+    render(makeSettings({ overtimeApproval: false }), overDay({ overtimeApproved: true }));
+    await judged();
+    const clockOut = alerted().find((a) => a.tag === 'alarm:clockOut');
+    expect(clockOut).toBeDefined();
+    expect(clockOut!.action).toBeUndefined();
+
+    // Another device, from scratch: the alarms already fired here are remembered in storage.
+    cleanup();
+    localStorage.clear();
+    vi.mocked(alert).mockClear();
+    render(makeSettings(), overDay());
+    await judged();
+    const action = alerted().find((a) => a.tag === 'alarm:clockOut')!.action!;
+    expect(action.label).toBe('Overtime approved');
+    // The button approves today, where the switch on the card would.
+    vi.mocked(api.putOvertime).mockResolvedValue({ overtimeApproved: true });
+    await act(async () => action.run());
+    expect(api.putOvertime).toHaveBeenCalledWith(TODAY, true);
+  });
+
+  it('holds while a punch is being typed, and judges the punches three seconds after', async () => {
+    vi.mocked(api.putPunches).mockImplementation((_date, punches) => Promise.resolve({ punches }));
+    const { result } = render(makeSettings(), makeDay());
+    await judged();
+    act(() => result.current.alarms.setEditingPunches(true));
+    await act(() => result.current.store.setPunches(TODAY, overDay().punches));
+    await judged();
+    expect(alert).not.toHaveBeenCalled();
+    act(() => result.current.alarms.setEditingPunches(false));
+    await settle(2_900);
+    expect(alert).not.toHaveBeenCalled();
+    await settle(200);
+    expect(tags()).toContain('alarm:clockOut');
+  });
+});
