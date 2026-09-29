@@ -10,7 +10,6 @@
  */
 export const LIMITS = {
   sessionLabel: 200,
-  sessionNotes: 2000,
   priorityText: 500,
   retroNote: 4000,
 } as const;
@@ -55,7 +54,6 @@ export interface Session {
   id: number;
   date: string;
   label: string;
-  notes: string;
   plannedSeconds: number;
   startedAt: number;
   endedAt: number | null;

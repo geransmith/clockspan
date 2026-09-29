@@ -24,8 +24,6 @@ import type {
 import { ApiError } from './lib/apiError';
 import { REQUEST_TIMEOUT } from './lib/copy';
 
-export { ApiError };
-
 export const UNAUTHENTICATED_EVENT = 'focus:unauthenticated';
 
 /**
@@ -99,7 +97,7 @@ export const pruneDays = (before: string) => request<PruneResult>('POST', '/api/
 export const getRunning = () => request<RunningResponse>('GET', '/api/sessions/running');
 export const startSession = (date: string, plannedSeconds: number, label: string, priorityUid: string | null = null) =>
   request<SessionResponse>('POST', `/api/days/${date}/sessions`, { plannedSeconds, label, priorityUid });
-export const patchSession = (id: number, patch: { plannedSeconds?: number; label?: string; notes?: string; priorityUid?: string | null }) =>
+export const patchSession = (id: number, patch: { plannedSeconds?: number; label?: string; priorityUid?: string | null }) =>
   request<SessionResponse>('PATCH', `/api/sessions/${id}`, patch);
 export const pauseSession = (id: number) => request<SessionResponse>('POST', `/api/sessions/${id}/pause`);
 export const resumeSession = (id: number) => request<SessionResponse>('POST', `/api/sessions/${id}/resume`);

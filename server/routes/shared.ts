@@ -73,7 +73,6 @@ export interface SessionRow {
   day_id: number;
   user_id: number;
   label: string;
-  notes: string;
   planned_seconds: number;
   started_at: number;
   ended_at: number | null;
@@ -155,7 +154,6 @@ export function sessionRowToJson(s: Dated<SessionRow>): Session {
     id: s.id,
     date: s.date,
     label: s.label,
-    notes: s.notes,
     plannedSeconds: s.planned_seconds,
     startedAt: s.started_at,
     endedAt: s.ended_at,

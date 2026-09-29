@@ -4,6 +4,7 @@ import { upsertOidcUser } from '../auth/oidc.js';
 import { hashPassword } from '../auth/password.js';
 import { addDays, addMonths, parseDateKey, startOfQuarter } from '../../shared/dates.js';
 import { kindForPosition } from '../../shared/punches.js';
+import type { Punch, SessionStatus } from '../../shared/api.js';
 
 /**
  * Deterministic sample data for the dev DB and for API tests. Rows are written with plain
@@ -27,11 +28,7 @@ export interface SeedOptions {
   fresh?: boolean;
 }
 
-export interface SeededPunch {
-  position: number;
-  kind: 'in' | 'out';
-  at: number | null;
-}
+export type SeededPunch = Punch;
 
 export interface SeededPriority {
   position: number;
@@ -44,11 +41,10 @@ export interface SeededPriority {
 export interface SeededSession {
   id: number;
   label: string;
-  notes: string;
   plannedSeconds: number;
   startedAt: number;
   endedAt: number | null;
-  status: 'running' | 'completed' | 'cancelled';
+  status: SessionStatus;
   priorityUid: string | null;
 }
 
@@ -193,11 +189,11 @@ function insertDay(ctx: Insert, day: DayDraft): SeededDay {
   const prio = db.prepare(`INSERT INTO priorities (day_id, position, text, done, uid, added_at) VALUES (?, ?, ?, ?, ?, ?)`);
   for (const p of day.priorities) prio.run(dayId, p.position, p.text, p.done ? 1 : 0, p.uid, p.addedAt);
   const sess = db.prepare(
-    `INSERT INTO sessions (day_id, user_id, label, notes, planned_seconds, started_at, ended_at, status, priority_uid)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO sessions (day_id, user_id, label, planned_seconds, started_at, ended_at, status, priority_uid)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const sessions: SeededSession[] = day.sessions.map((s) => {
-    const r = sess.run(dayId, userId, s.label, s.notes, s.plannedSeconds, s.startedAt, s.endedAt, s.status, s.priorityUid);
+    const r = sess.run(dayId, userId, s.label, s.plannedSeconds, s.startedAt, s.endedAt, s.status, s.priorityUid);
     return { id: Number(r.lastInsertRowid), ...s };
   });
   const rest = db.prepare(`INSERT INTO breaks (day_id, user_id, planned_seconds, started_at, ended_at) VALUES (?, ?, ?, ?, ?)`);
@@ -212,8 +208,8 @@ function punchRows(times: (number | null)[]): SeededPunch[] {
   return times.map((t, position) => ({ position, kind: kindForPosition(position), at: t }));
 }
 
-function completed(label: string, startedAt: number, minutes: number, priorityUid: string | null, notes = ''): Omit<SeededSession, 'id'> {
-  return { label, notes, plannedSeconds: minutes * 60, startedAt, endedAt: startedAt + minutes * MIN, status: 'completed', priorityUid };
+function completed(label: string, startedAt: number, minutes: number, priorityUid: string | null): Omit<SeededSession, 'id'> {
+  return { label, plannedSeconds: minutes * 60, startedAt, endedAt: startedAt + minutes * MIN, status: 'completed', priorityUid };
 }
 
 /** A break that ran its full length. */
@@ -257,7 +253,7 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
       priorities,
       sessions: [
         completed(texts[0]!, firstStart, 25, priorities[0]!.uid),
-        completed(texts[1]!, firstStart + 45 * MIN, 50, priorities[1]!.uid, 'Second pass after the review comments.'),
+        completed(texts[1]!, firstStart + 45 * MIN, 50, priorities[1]!.uid),
         completed('Reply to the recruiter', lunchIn + 20 * MIN, 25, priorities[3]!.uid),
         completed(pick(UNPLANNED_LABELS), extraIn + 15 * MIN, 25, null),
       ],
@@ -285,7 +281,7 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
         completed(texts[0]!, at(date, 8, 30), 50, priorities[0]!.uid),
         completed(texts[1]!, at(date, 10, 0), 50, priorities[1]!.uid),
         completed(texts[2]!, at(date, 14, 0), 50, priorities[2]!.uid),
-        completed(texts[2]!, at(date, 17, 30), 50, priorities[2]!.uid, 'Kept going after the day ended.'),
+        completed(texts[2]!, at(date, 17, 30), 50, priorities[2]!.uid),
       ],
       breaks: [],
       retroNote: RETRO_NOTES[5]!,
@@ -304,7 +300,6 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
         // Cancelled a few minutes in: must not count anywhere.
         {
           label: texts[1]!,
-          notes: '',
           plannedSeconds: 25 * 60,
           startedAt: clockIn + 60 * MIN,
           endedAt: clockIn + 65 * MIN,
@@ -384,7 +379,6 @@ function buildToday(today: string, now: number, index: number, running: boolean)
   if (running) {
     sessions.push({
       label: 'Answer the two open support threads',
-      notes: '',
       plannedSeconds: 25 * 60,
       startedAt: now - 10 * MIN,
       endedAt: null,

@@ -10,7 +10,6 @@ const session = (id: number, startedAt: number, minutes: number, extra: Partial<
   id,
   date: '2026-09-28',
   label: `s${id}`,
-  notes: '',
   plannedSeconds: minutes * 60,
   startedAt,
   endedAt: startedAt + minutes * MIN,

@@ -67,8 +67,8 @@ export function sessionStartRouter(db: DB): Router {
       endRunningBreak(db, user.id, now);
       const info = db
         .prepare(
-          `INSERT INTO sessions (day_id, user_id, label, notes, planned_seconds, started_at, ended_at, status, priority_uid)
-           VALUES (?, ?, ?, '', ?, ?, NULL, 'running', ?)`,
+          `INSERT INTO sessions (day_id, user_id, label, planned_seconds, started_at, ended_at, status, priority_uid)
+           VALUES (?, ?, ?, ?, ?, NULL, 'running', ?)`,
         )
         .run(dayId, user.id, typeof label === 'string' ? label.slice(0, LIMITS.sessionLabel) : '', planned.seconds, now, link.uid ?? null);
       return Number(info.lastInsertRowid);
@@ -94,11 +94,10 @@ export function sessionsRouter(db: DB): Router {
 
   r.patch('/:id', loadOwnedSession, (req, res) => {
     const s = owned(res);
-    const { plannedSeconds, label, notes, priorityUid } = (req.body ?? {}) as Record<string, unknown>;
+    const { plannedSeconds, label, priorityUid } = (req.body ?? {}) as Record<string, unknown>;
     const next = {
       planned: s.planned_seconds,
       label: s.label,
-      notes: s.notes,
       priorityUid: s.priority_uid,
     };
     const link = parsePriorityUid(db, s.day_id, priorityUid);
@@ -126,20 +125,7 @@ export function sessionsRouter(db: DB): Router {
       }
       next.label = label.slice(0, LIMITS.sessionLabel);
     }
-    if (notes !== undefined) {
-      if (typeof notes !== 'string') {
-        res.status(400).json({ error: 'notes must be a string.' });
-        return;
-      }
-      next.notes = notes.slice(0, LIMITS.sessionNotes);
-    }
-    db.prepare(`UPDATE sessions SET planned_seconds = ?, label = ?, notes = ?, priority_uid = ? WHERE id = ?`).run(
-      next.planned,
-      next.label,
-      next.notes,
-      next.priorityUid,
-      s.id,
-    );
+    db.prepare(`UPDATE sessions SET planned_seconds = ?, label = ?, priority_uid = ? WHERE id = ?`).run(next.planned, next.label, next.priorityUid, s.id);
     reply(res, s.user_id, s.id);
   });
 

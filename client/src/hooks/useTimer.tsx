@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as api from '../api';
 import { nextBackoff } from '../../../shared/backoff.js';
 import { MINUTE_MS } from '../../../shared/dates.js';
-import { PLANNED_SECONDS } from '../../../shared/timer.js';
+import { activeMs, PLANNED_SECONDS } from '../../../shared/timer.js';
 import type { Session, SessionConflict } from '../types';
 import { alert, dismissByTag, unlockAudio, warnQuietly } from '../lib/alerts';
 import { ApiError } from '../lib/apiError';
@@ -10,7 +10,7 @@ import { SAVE_FAILED, TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT }
 import { formatCountdown, formatDuration } from '../lib/format';
 import { addPending, fetched, settle, settleWith, shown, untracked, type Tracked } from '../lib/optimistic';
 import { readStored, writeStored } from '../lib/storage';
-import { activeMs, DUE_GRACE_SECONDS, dueKey, PAUSE_LIMIT_SECONDS, timerView, type TimerView } from '../lib/timer';
+import { DUE_GRACE_SECONDS, dueKey, PAUSE_LIMIT_SECONDS, timerView, type TimerView } from '../lib/timer';
 import { useDayStore } from './useDay';
 import { useLatest } from './useLatest';
 import { useNow } from './useNow';
