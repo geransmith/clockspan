@@ -32,7 +32,7 @@ describe('useRefreshLoop', () => {
   it('runs when the tab comes back, pending until the answer, at most every 5 s', async () => {
     const answer = deferred<void>();
     const run = vi.fn(() => answer.promise);
-    const { result } = renderHook(() => useRefreshLoop(run));
+    const { result } = renderHook(() => useRefreshLoop(run).pending);
     setVisibility('hidden');
     expect(run).not.toHaveBeenCalled();
     act(() => setVisibility('visible'));
@@ -53,7 +53,7 @@ describe('useRefreshLoop', () => {
   it('waits on the minute run still out when the tab comes back inside the throttle', async () => {
     const answer = deferred<void>();
     const run = vi.fn(() => answer.promise);
-    const { result } = renderHook(() => useRefreshLoop(run));
+    const { result } = renderHook(() => useRefreshLoop(run).pending);
     // The minute's run goes out just as a frozen page resumes, then the tab reports visible.
     await settle(MIN);
     act(() => setVisibility('visible'));
@@ -68,7 +68,7 @@ describe('useRefreshLoop', () => {
     const slow = deferred<void>();
     const newer = deferred<void>();
     const run = vi.fn().mockReturnValueOnce(slow.promise).mockReturnValueOnce(newer.promise);
-    const { result } = renderHook(() => useRefreshLoop(run));
+    const { result } = renderHook(() => useRefreshLoop(run).pending);
     act(() => setVisibility('visible'));
     await settle(6_000);
     // The first run is still out after 5 s; the tab comes back and a second one goes.
@@ -76,12 +76,48 @@ describe('useRefreshLoop', () => {
     expect(run).toHaveBeenCalledTimes(2);
     slow.resolve();
     await settle();
-    // The late answer is not the one being waited on: back again inside the throttle, still pending.
-    act(() => setVisibility('visible'));
+    // The late answer is not the one being waited on.
     expect(result.current).toBe(true);
     newer.resolve();
     await settle();
     expect(result.current).toBe(false);
+  });
+
+  it('runs now when asked with nothing out, inside the throttle too, and the tab coming back just after asks nothing more', async () => {
+    const run = vi.fn(() => Promise.resolve());
+    const { result } = renderHook(() => useRefreshLoop(run, true));
+    await settle();
+    // The mount's run answered a moment ago, and the caller learns its copy is wrong.
+    await act(() => result.current.runNow());
+    expect(run).toHaveBeenCalledTimes(2);
+    await settle(4_000);
+    act(() => setVisibility('visible'));
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(result.current.pending).toBe(false);
+    await settle(1_000);
+    act(() => setVisibility('visible'));
+    expect(run).toHaveBeenCalledTimes(3);
+    await settle();
+  });
+
+  it('with a run out, runs again once it answers: neither sharing it nor sending a second beside it', async () => {
+    const out = deferred<void>();
+    const run = vi.fn().mockReturnValueOnce(out.promise).mockResolvedValue(undefined);
+    const { result } = renderHook(() => useRefreshLoop(run, true));
+    let forced!: Promise<unknown>;
+    act(() => {
+      forced = result.current.runNow();
+    });
+    expect(run).toHaveBeenCalledTimes(1);
+    // The tab coming back now waits on the fresh run and sends nothing.
+    act(() => setVisibility('visible'));
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(result.current.pending).toBe(true);
+    out.resolve();
+    await act(() => forced);
+    await settle();
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(result.current.pending).toBe(false);
   });
 
   it('uses the newest run and stops on unmount', async () => {

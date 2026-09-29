@@ -67,7 +67,8 @@ client/                 Vite root → dist/client
   src/lib/              pure logic with a test beside each file (apiError is covered through api.test):
                         timeclock, alarms, timer, breaks, retro, review, calendar, stickers, priorities,
                         format, timefield, layout, celebrate, plan, tiles, week, theme, reload, sounds,
-                        optimistic (a server copy plus pending changes, which the stores are built on)
+                        optimistic (a server copy plus pending changes, which the stores are built on,
+                        and `serial()`, their write queue)
     alerts.ts           the one place that plays sound, shows notifications and pushes banners
     copy.ts             every line the app raises at the user; no logic
     storage.ts          localStorage that never throws (private mode, quota)
@@ -272,28 +273,36 @@ Never commit `data/` or `.env`.
   a failed `GET /settings` is retried (`nextBackoff` in `shared/backoff.ts`: 2 s doubling to a
   minute), never settled with the defaults.
   `useTimer` keeps the running session the way the day store keeps a day
-  (`lib/optimistic.ts`): a press shows at once and goes out after the writes before it, a
+  (`lib/optimistic.ts`, on `useTracked`): a press (adjust, edit, pause, resume) shows at once,
+  every write (start and finish too) goes out on the timer's queue after the ones before it, a
   failure drops only that press, and a sync's answer never hides a press still on its way.
   Keep that pattern for new mutations.
   **One running session per user is a schema invariant** (a unique partial index), and another
   device may own it: a 409 on start is adopted with a banner, a sync whose answer differs from
   the session shown reloads that day so the log catches up, a 404/409 on adjust/finish/cancel
-  re-syncs at once, and the completion chime only plays when the server says `completed`.
-  **Today's day is kept in step the same way** (`useRefreshDay` in `useDay.tsx`, on the same
-  `useRefreshLoop` as the timer's sync: every minute and when the tab comes back, throttled to
-  5 s), so the alarms in `useTodayAlarms` judge the
+  re-syncs at once (the loop's `runNow`: a sync sent after the refusal, chained behind any sync
+  already out and counted for the throttle), and the completion chime only plays when the
+  server says `completed`.
+  **Today's day is kept in step the same way** (`useRefreshDay` in `useDay.tsx`, on
+  `useRefreshLoop`, the same hook as the timer's sync: every minute and when the tab comes back,
+  throttled to 5 s), so the alarms in `useTodayAlarms` judge the
   server's copy of the punches, not one from hours ago; they wait while a come-back refresh is
   out. A today whose first load failed is loaded again on the same ticks (no second banner), so
   its alarms come back with the server.
 - **The day store keeps the server's copy and this device's changes apart**
   (`lib/optimistic.ts`): each day is its confirmed copy plus the changes not confirmed yet, and
-  the sheet shows the one laid over the other. A failed write just drops its change, so the
-  screen is back on the stored copy at once (with the "Change not saved" banner) and the day is
-  asked for again. A read's answer replaces the confirmed copy and never a change still on its
-  way; it is dropped only when the server confirmed a change after the read went out
-  (`version`), and a day never loaded takes it anyway and is asked for again. A day not loaded
-  yet keeps its changes until the server's copy arrives, so nothing made up stands in for it.
-  `apply` and commit functions are pure: read the clock outside them.
+  the sheet shows the one laid over the other. The confirmed copy is the server's answers in the
+  order they arrived (a read's copy with each save's answer laid on it), so it is not always
+  what the server holds now: a save's answer can be older than a read that landed first. A
+  failed write just drops its change, so the screen is back on the confirmed copy at once (with
+  the "Change not saved" banner), and the day is asked for again, once more if that answer is
+  dropped. A read's answer replaces the confirmed copy and never a change still on its way; it
+  is dropped only when the server confirmed a change after the read went out (`version`), and a
+  day never loaded takes it anyway and is asked for again. A day not loaded yet keeps its
+  changes until the server's copy arrives, so nothing made up stands in for it. The day store,
+  `useSettings` and `useTimer` are all built on `useTracked` (`hooks/useTracked.ts`): the
+  state, a `current()` that callbacks read before the next render, ids for the changes, and the
+  store's write queue. `apply` and commit functions are pure: read the clock outside them.
 - **Break lengths come only from `client/src/lib/breaks.ts`** (`suggestBreak`, pure, over a
   day's sessions: a fifth of the session, a long break for the fourth in a row, a 15-minute gap
   restarts the count). With `suggestBreaks` on, `useBreak` offers today's suggestion on the
@@ -312,11 +321,20 @@ Never commit `data/` or `.env`.
   answers `{ break: null }`). The client mirrors both rules with `endBreaksAt` (in `useDay`'s
   break writes and `applySession`), so it never sends an end after a session start: the break
   may already be gone. Break writes share one `inOrder` key (`breaks`).
-- **Saves reach the server in the order they were made.** `setPunches` and `setPriorities`
-  replace a whole list, so one PUT per day is in flight and only the newest waiting list follows
-  it (`sendLatest` in `useDay.tsx`); the other day fields, each session and the breaks queue
-  one after another (`inOrder`); `useSettings` sends its PUTs one at a time too. A new write
-  goes through one of these, never straight to `api`.
+- **Saves reach the server in the order they were made**, each store's on its own queue
+  (`serial()` in `lib/optimistic.ts`, made by `useTracked`). In the day store, `setPunches` and
+  `setPriorities` replace a whole list, so one PUT per list and day is in flight and only the
+  newest waiting list follows it (`sendLatest` in `useDay.tsx`); a failed list save also drops
+  the lists waiting behind it, which were built on the one refused. The day's other fields
+  (`day:<date>`), each session (`session:<id>`) and the breaks (`breaks`) queue their writes
+  one after another (`inOrder`). `useTimer` sends the running session's writes one at a time on
+  its own queue: start, adjust, edit, pause, resume, finish and cancel, and the log's edits of
+  the running row, which `SessionLog` sends through `useTimer().edit`. That queue is not ordered
+  against the day store's `session:<id>` queue, which carries the other rows' edits and deletes.
+  `useSettings` sends its PUTs and resets one at a time. A new write goes through one of these,
+  never straight to `api`. Reads are not queued: settings and today's day are read again on
+  `useRefreshLoop` (the same hook as the timer's sync, each call with its own throttle), and a
+  read's answer never replaces a change still on its way.
 - **Punch positions are fixed**: 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in
   pairs, and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches`
   enforces it). Kind is parity (`kindForPosition`, `shared/punches.ts`). The math evaluates *set* punches
