@@ -150,6 +150,13 @@ describe('alarmTargets', () => {
     expect(armed(alarmTargets(tangled, s, { ...day, overtimeApproved: true }))).toEqual({ lunchBy: false, clockOut: false, secondMeal: false, retro: false });
   });
 
+  it('keeps lunch armed with the punches out of order, since its deadline comes from the clock-in', () => {
+    // Mid-morning, no lunch yet, and a Clock out typed as 2:00 AM: the typo must not mute the meal period.
+    const typo = tc(IN + 3 * H, IN, null, null, IN - 6 * H);
+    expect([typo.error, typo.state, typo.lunchStatus]).toEqual([expect.any(String), 'working', 'upcoming']);
+    expect(armed(alarmTargets(typo, s, day))).toEqual({ lunchBy: true, clockOut: false, secondMeal: false, retro: false });
+  });
+
   it('disarms the retrospective once reviewed, and everything once the day is done', () => {
     expect(armed(alarmTargets(tc(IN + 2 * H, IN), s, { ...day, retroDone: true }))).toEqual({ lunchBy: true, clockOut: true, secondMeal: false, retro: false });
     // Clocked out at 2 PM with no lunch: the missed lunch still reads overdue, but a done day rings nothing.
@@ -191,7 +198,7 @@ describe('describeEvent', () => {
     const due = describeEvent(ev('clockOut', 'due', 0, T), ctx);
     expect(due.title).toBe('Time to clock out');
     expect(due.tone).toBe('danger');
-    expect(due.body).toBe(`It's ${formatTime(T, true)}. You've worked your 8h for today. Punch out now.`);
+    expect(due.body).toBe(`You reached your 8h for today at ${formatTime(T, true)}. Punch out now.`);
 
     const over = describeEvent(ev('clockOut', 'overdue', 10, T), ctx);
     expect(over.title).toBe('Clock out is 10 min overdue');
@@ -237,6 +244,15 @@ describe('describeEvent', () => {
     expect(describeEvent(ev('secondMeal', 'lead', 15, T), { ...ctx, now: T - 5 * M }).title).toBe('Second meal break in 5 min');
     // Never "in 0 min" in the last seconds.
     expect(describeEvent(ev('clockOut', 'lead', 1, T), { ...ctx, now: T - 1000 }).title).toBe('Clock out in 1 min');
+  });
+
+  it('gives the time a due alarm was for, which stays true when it is seen late', () => {
+    // The app opened 40 min after the end of the day, with overdue repeats off: the due event is what fires.
+    const late = { ...ctx, now: T + 40 * M };
+    expect(describeEvent(ev('clockOut', 'due', 0, T), late).body).toBe(`You reached your 8h for today at ${formatTime(T, true)}. Punch out now.`);
+    expect(describeEvent(ev('retro', 'due', 0, T), late).body).toBe(
+      `You reached your 8h at ${formatTime(T, true)}. Two minutes on what went to plan and what didn't.`,
+    );
   });
 
   it('formats a non-round work day', () => {
