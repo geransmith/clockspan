@@ -57,7 +57,7 @@
 
 ## Run locally (for testing and development)
 
-Requirements: **Node 24** (`nvm use 24` if you use nvm).
+Requirements: **Node 24** (`nvm use` picks it up from `.nvmrc`). On an older Node, npm refuses to install or run anything.
 
 ```bash
 npm install
@@ -89,11 +89,11 @@ A fresh checkout has an empty database, so History, the retrospective and the we
 days so you can try those screens without punching a fortnight by hand:
 
 - the last ten weekdays, each with clock in / lunch / clock out punches, three or four
-  priorities (some ticked), a few focus sessions (most linked to a priority, one not) and a
-  retrospective note. Among them: a day with an extra break, a day worked late with
-  "Overtime approved", a half day with no lunch, a day that was never reviewed, and one
-  cancelled session;
-- today, clocked in two hours ago with one priority done and two sessions logged.
+  priorities (some ticked), a few focus sessions (most linked to a priority, one not), on most
+  days a break or two, and a retrospective note. Among them: a day with an extra out / in
+  pair, a day worked late with "Overtime approved", a half day with no lunch, a day that was
+  never reviewed, and one cancelled session;
+- today, clocked in two hours ago with one priority done, two sessions and a break logged.
 
 Dates are relative to the day you run it, so the sample always lands in the current week.
 Run it again whenever you want the sample back: it replaces the seeded days but leaves your
@@ -160,7 +160,7 @@ The database in the mounted volume is untouched. To build from source instead, `
 
 ### Unraid
 
-The Unraid template, [`unraid/clockspan.xml`](unraid/clockspan.xml), keeps the database in `/mnt/user/appdata/clockspan`, runs the app as `99:100` (`PUID`/`PGID`) and serves it on port 8080. Every variable below is a field on its form: the sign-in mode is a dropdown, and the rest are under *Show more settings*. Fields left blank take the defaults.
+The Unraid template, [`unraid/clockspan.xml`](unraid/clockspan.xml), keeps the database in `/mnt/user/appdata/clockspan`, runs the app as `99:100` (`PUID`/`PGID`) and serves it on port 8080. Every variable below is a field on its form except `PORT` and `DATA_DIR`, which the image sets, and `DATA_PATH`, whose place the *Data* path takes. The sign-in mode (a dropdown) and the App URL are on the form itself; the rest are under *Show more settings*. Fields left blank take the defaults.
 
 If Clockspan isn't in the Apps tab yet, add the template by hand from the Unraid terminal, then pick **clockspan** under *Docker → Add Container → Template*:
 
@@ -170,14 +170,15 @@ wget -O /boot/config/plugins/dockerMan/templates-user/my-clockspan.xml https://r
 
 ### Environment variables
 
-Set these in `.env` (start from `.env.example`, which documents each one) or in the Unraid template's fields. A variable set to an empty value counts as unset, so its default applies.
+Set these in `.env` (start from `.env.example`, which documents each one) or in the Unraid template's fields. A variable set to an empty value counts as unset, so its default applies. `PORT` and `DATA_DIR` are the exception: the image sets them to match its port mapping and its `/data` volume, so they only matter when running from source.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `PORT` | `8080` (Docker) / `3000` (dev) | Listen port |
-| `DATA_DIR` | `/data` (Docker) / `./data` | Where `focus.db` lives |
+| `PORT` | `8080` (Docker) / `3000` (from source) | Listen port. Running from source only: under Docker, change the host side of the port mapping instead |
+| `DATA_DIR` | `/data` (Docker) / `./data` (from source) | Where `focus.db` lives. Running from source only: under Docker, `DATA_PATH` (or the Unraid *Data* path) picks the host directory |
 | `AUTH_MODE` | `none` | `none`, `local` or `oidc` |
 | `APP_URL` | — | Public URL of the app. Required for `oidc`; also turns on Secure cookies when `https` |
+| `ALLOWED_HOSTS` | — | `AUTH_MODE=none` only: other host names the app answers to, comma-separated; a leading dot (`.lan`) takes a domain and every name under it. IP addresses, `localhost`, one-word names, `.local`, `.home.arpa` and `.internal` names and `APP_URL`'s always work. See [Auth and users](#auth-and-users) |
 | `TRUST_PROXY` | `false` | Number of reverse proxies in front of the app (usually `1`); Express string forms such as `loopback` or a CIDR list are passed through. Never `true`, which trusts any `X-Forwarded-For` a client sends |
 | `COOKIE_SECURE` | derived from `APP_URL` | Force session cookies to `Secure` on/off |
 | `SESSION_TTL_DAYS` | `30` | Sliding session lifetime |
@@ -200,7 +201,7 @@ Set these in `.env` (start from `.env.example`, which documents each one) or in 
 
 Each user has their own sheet, history, settings and layout.
 
-**No sign-in (`none`).** Meant for a network you trust. Anyone who can reach the port can read and change the data, and so can a web page opened on a computer on that network: a site can point one of its own names at the server's address (DNS rebinding), and the browser then treats its requests as same-origin, so the cross-site check below can't tell them apart. Use `local` if that matters to you.
+**No sign-in (`none`).** Meant for a network you trust: anyone who can reach the port can read and change the data. A web page opened on that network can't. A site could point one of its own names at the server's address (DNS rebinding) so that the browser treats its requests as same-origin, which the cross-site check below can't tell apart, so the app answers only names no outside site can use and the ones you list. IP addresses (`http://192.168.1.10:8080`), `localhost`, one-word names (`http://tower:8080`), `.local`, `.home.arpa` and `.internal` names and `APP_URL`'s name always work. Reach the app by another name, such as a domain on your reverse proxy or a `.lan` name? Set `APP_URL` to it, or list it in `ALLOWED_HOSTS`; until then the page says *Can’t reach the server* and names the host to add.
 
 **Local mode.** The first visit shows a *create account* page; that account is the admin. The page asks for a setup code, which the server prints in its log when it starts with no account yet (`docker logs clockspan`, or the container's log in Unraid): someone who finds a fresh install before you can't claim it. A restart prints a new code. The admin adds users in **Settings → Account** with a temporary password; a new user has to choose their own the first time they sign in, before the sheet opens. Passwords are hashed with scrypt. Change your password in **Settings → Account**. Forgot it?
 
@@ -235,7 +236,7 @@ Login is rate-limited to 5 failed attempts per 15 minutes per IP, counting an IP
 
 The app refuses to start with a clear message if any of these are missing. If Authentik is briefly unreachable at startup the app still boots and retries discovery in the background. Sign out also ends the Authentik session when the provider advertises an end-session endpoint.
 
-**Switching modes later.** Data is keyed by user. Going from `none` to `local` creates a fresh admin; the old implicit user's data stays in the database. To hand it to the new account, stop the container and run the script below before the new account records a day of its own (a user has one row per date, so a date both accounts used stops the script and nothing moves). Days and their sessions move together: a session belongs to a user as well as a day. The last two statements bring the old settings along, replacing any the admin saved; leave them out to keep the admin's.
+**Switching modes later.** Data is keyed by user. Going from `none` to `local` creates a fresh admin; the old implicit user's data stays in the database. To hand it to the new account, stop the container and run the script below before the new account records a day of its own (a user has one row per date, so a date both accounts used stops the script and nothing moves). Days move together with their sessions and breaks, which belong to a user as well as a day. The last two statements bring the old settings along, replacing any the admin saved; leave them out to keep the admin's.
 
 ```bash
 sqlite3 /path/on/host/focus.db <<'SQL'
@@ -245,6 +246,8 @@ UPDATE days     SET user_id = (SELECT id FROM users WHERE kind = 'local' ORDER B
                 WHERE user_id = (SELECT id FROM users WHERE kind = 'default');
 UPDATE sessions SET user_id = (SELECT id FROM users WHERE kind = 'local' ORDER BY id LIMIT 1)
                 WHERE user_id = (SELECT id FROM users WHERE kind = 'default');
+UPDATE breaks   SET user_id = (SELECT id FROM users WHERE kind = 'local' ORDER BY id LIMIT 1)
+                WHERE user_id = (SELECT id FROM users WHERE kind = 'default');
 DELETE FROM settings WHERE user_id = (SELECT id FROM users WHERE kind = 'local' ORDER BY id LIMIT 1)
                 AND EXISTS (SELECT 1 FROM settings WHERE user_id = (SELECT id FROM users WHERE kind = 'default'));
 UPDATE settings SET user_id = (SELECT id FROM users WHERE kind = 'local' ORDER BY id LIMIT 1)
@@ -253,7 +256,7 @@ COMMIT;
 SQL
 ```
 
-Going from `none` to `oidc` works the same way. Sign in through your provider once first, since that creates your account, then run the script with `kind = 'oidc'` in place of each `kind = 'local'` (four places).
+Going from `none` to `oidc` works the same way. Sign in through your provider once first, since that creates your account, then run the script with `kind = 'oidc'` in place of each `kind = 'local'` (five places).
 
 ---
 
@@ -273,7 +276,7 @@ Going from `none` to `oidc` works the same way. Sign in through your provider on
 - **Sticker chart.** Off by default: turn it on under *Settings → Sheet → History*. Every day on the History calendar then wears a sticker for each thing it did (clocked out, lunch taken, all priorities done, a focus session logged, retrospective reviewed) instead of its hours, with the month's count on top and a day that earned all five picked out. With *Show hours* off there's no clocked-out sticker, and four make a full day. The legend chips count each kind; tap one to show only that sticker, tap again for all of them. Today updates as you go. Hover a sticker for what it was for.
 - **Layout.** Tap **Customize** to drag cards (long-press on phones), use ▲/▼, or hide a card. Hidden cards appear in a strip at the bottom while customizing. *Settings → Sheet → Layout → Reset to default* restores everything.
 - **Settings.** Five tabs: *Timeclock* (day length; meal periods, overtime and hours, each with a switch and its own lengths; time format), *Alarms* (per-alarm rules, sound, notifications, a sound per event with a Test button), *Sheet* (theme, priorities, timer and break lengths, break suggestions, celebrations, the sticker chart and weekends on the calendar, layout), *Data* (old-day cleanup) and *Account* (local accounts only). **Reset all settings**, at the bottom of *Data*, puts every setting back to its default; days, punches and sessions are untouched.
-- **Data.** Settings → Data. *Delete old days automatically* keeps the last N days (30 to 3650) and drops the rest, with their punches, priorities, sessions and notes; the server checks every few hours. *Delete days before* a date does the same once, after showing how many days it will remove. Today and a day with a running timer are never deleted; settings are kept. If the admin set `RETENTION_DAYS`, the tab says so and that ceiling applies whatever you choose.
+- **Data.** Settings → Data. *Delete old days automatically* keeps the last N days (30 to 3650) and drops the rest, with their punches, priorities, sessions, breaks and notes; the server checks every few hours. *Delete days before* a date does the same once, after showing how many days it will remove. Today and a day with a running timer are never deleted; settings are kept. If the admin set `RETENTION_DAYS`, the tab says so and that ceiling applies whatever you choose.
 - **Past days.** Use ◀ ▶ or the date picker on the sheet, or **History** → **Days**: a month calendar (step back with ◀) with the hours worked on each day. Tap a day to see its worked, focused and priorities numbers, a tick once its retrospective is reviewed, and its note; **Open day** goes to that sheet and **Review this week** to that week's review. Only work here? *Settings → Sheet → History → Show weekends* off drops Saturday and Sunday from the calendar (and from the sticker counts); a weekend day is still reachable from the sheet's date picker. Past days are editable; timers can only start on today.
 - **Phone.** Add to Home Screen (Android: *Install app*; iOS: Share → *Add to Home Screen*). Browser notifications on iOS only work from the installed app. *Keep screen awake* keeps the countdown and chime live while the app is open; if the phone sleeps anyway, the alert fires when you come back.
 
@@ -287,7 +290,7 @@ The app is built to sit behind a reverse proxy on your own domain. Before openin
 - **Finish setup first.** In `local` mode the admin account is created on the first visit, with the setup code from the server log; do that before the proxy is open to the internet anyway. Once `APP_URL` is https the session cookie is Secure and only an https page can keep it, so sign in through the proxy's https address (the sign-in page says so when it is opened over plain http); for a one-off LAN setup, start with `COOKIE_SECURE=false` and remove it afterwards.
 - Keep `/data` backed up (below). WebSockets are not used, so any proxy works.
 
-What the app does on its own: a strict same-origin Content-Security-Policy plus `nosniff`, `frame-ancestors 'none'` and `Referrer-Policy` on every response, and `Cache-Control: no-store` on every API answer; API writes that the browser marks as sent from another site are refused (this also covers `AUTH_MODE=none`, where there is no cookie, apart from DNS rebinding: see [Auth and users](#auth-and-users)); HttpOnly, SameSite=Lax session cookies with the token stored hashed; scrypt password hashes; a per-IP login limit (per /64 for IPv6); a non-root container user. It is still a small self-hosted app: keep it updated and behind the protections your proxy already gives you. Found a hole? [SECURITY.md](SECURITY.md) says how to report it privately.
+What the app does on its own: a strict same-origin Content-Security-Policy plus `nosniff`, `frame-ancestors 'none'` and `Referrer-Policy` on every response, and `Cache-Control: no-store` on every API answer; API writes that the browser marks as sent from another site are refused (this also covers `AUTH_MODE=none`, where there is no cookie); under `AUTH_MODE=none` the API also refuses host names it doesn't know, which stops DNS rebinding (see [Auth and users](#auth-and-users)); HttpOnly, SameSite=Lax session cookies with the token stored hashed; scrypt password hashes; a per-IP login limit (per /64 for IPv6); a non-root container user. It is still a small self-hosted app: keep it updated and behind the protections your proxy already gives you. Found a hole? [SECURITY.md](SECURITY.md) says how to report it privately.
 
 ## Backups
 

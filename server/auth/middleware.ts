@@ -28,7 +28,7 @@ export function resolveUser(db: DB, config: Config): RequestHandler {
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   if (!req.user) {
-    res.status(401).json({ error: 'unauthenticated' });
+    res.status(401).json({ error: 'Not signed in.' });
     return;
   }
   next();
@@ -41,7 +41,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
  */
 export function requireOwnPassword(req: Request, res: Response, next: NextFunction): void {
   if (currentUser(req).must_change_password) {
-    res.status(403).json({ error: 'password change required' });
+    res.status(403).json({ error: 'Choose a new password first.' });
     return;
   }
   next();
@@ -51,7 +51,7 @@ export function requireOwnPassword(req: Request, res: Response, next: NextFuncti
 export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
   requireAuth(req, res, () => {
     if (!currentUser(req).is_admin) {
-      res.status(403).json({ error: 'forbidden' });
+      res.status(403).json({ error: 'Only an admin can do that.' });
       return;
     }
     requireOwnPassword(req, res, next);

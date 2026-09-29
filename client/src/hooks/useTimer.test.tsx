@@ -117,6 +117,8 @@ describe('start', () => {
   it('unlocks audio, starts on the server and logs the row', async () => {
     vi.mocked(api.startSession).mockResolvedValue({ session: makeSession({ priorityUid: 'u1' }) });
     const { result } = await renderRunning(null);
+    // Today is held, as the app always holds it.
+    await act(() => result.current.store.load(TODAY));
     await act(() => result.current.timer.start(TODAY, 1500, 'Write the report', 'u1'));
     expect(unlockAudio).toHaveBeenCalled();
     expect(api.startSession).toHaveBeenCalledWith(TODAY, 1500, 'Write the report', 'u1');
@@ -453,7 +455,7 @@ describe('finish and cancel', () => {
     await settle();
     expect(api.finishSession).toHaveBeenCalledTimes(1);
 
-    // 25 min 30 s in when the next poll brings it: both lengths read 25m.
+    // 25 min 30 s in when the next poll brings it: both lengths are 25 whole minutes.
     vi.mocked(api.getRunning).mockResolvedValueOnce({ session: startedAgo(24.5) });
     await settle(MIN);
     act(() => result.current.timer.requestFinish());

@@ -25,6 +25,28 @@ describe('TRUST_PROXY', () => {
   });
 });
 
+describe('ALLOWED_HOSTS', () => {
+  it('is empty unless set', () => {
+    expect(load().allowedHosts).toEqual([]);
+    expect(load({ ALLOWED_HOSTS: '' }).allowedHosts).toEqual([]);
+  });
+
+  it('takes names and leading-dot domains, trimmed and lowercased', () => {
+    expect(load({ ALLOWED_HOSTS: 'Focus.Example.com, .lan ,nas_1.home-net.example,' }).allowedHosts).toEqual([
+      'focus.example.com',
+      '.lan',
+      'nas_1.home-net.example',
+    ]);
+  });
+
+  it('refuses a URL, a port or a wildcard, which would never match a name', () => {
+    for (const bad of ['https://focus.example.com', 'focus.example.com:8443', 'focus.example.com/app', '*.example.com', 'a..b', '[::1]']) {
+      expect(() => load({ ALLOWED_HOSTS: `ok.example, ${bad}` })).toThrow(`ALLOWED_HOSTS must be host names separated by commas`);
+      expect(() => load({ ALLOWED_HOSTS: bad })).toThrow(`(got "${bad}")`);
+    }
+  });
+});
+
 describe('PORT', () => {
   it('defaults to 3000 and accepts 0 (ephemeral) through 65535', () => {
     expect(load().port).toBe(3000);

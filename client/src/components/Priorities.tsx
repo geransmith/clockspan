@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCelebration, type Moment } from '../hooks/useCelebration';
+import { useDebouncedDraft } from '../hooks/useDebouncedDraft';
 import { useSettings } from '../hooks/useSettings';
-import { playSound } from '../lib/alerts';
+import { unlockAudio } from '../lib/alerts';
 import { LEFT_OPEN, WARNING_ACTIONS } from '../lib/copy';
 import {
   carryOver,
@@ -15,7 +17,6 @@ import {
   type WarningKind,
 } from '../lib/priorities';
 import { LIMITS, type Priority } from '../types';
-import { BURST_MS } from '../lib/celebrate';
 import { Burst } from './Burst';
 import { Check, Plus, X } from './Icons';
 
@@ -34,44 +35,27 @@ interface Props {
 export function Priorities({ priorities, onChange, leftOpen }: Props) {
   const { settings } = useSettings();
   const count = settings.priorityCount;
-  const [local, setLocal] = useState(() => padPriorities(priorities, count));
+  const stored = useMemo(() => padPriorities(priorities, count), [priorities, count]);
+  const { draft: local, edit: editList, flush } = useDebouncedDraft(stored, onChange, 400);
   const [warning, setWarning] = useState<{ kind: WarningKind; text: string } | null>(null);
   const lastWarning = useRef<string | undefined>(undefined);
-  const dirty = useRef(false);
-  const timer = useRef<number | null>(null);
   const inputs = useRef(new Map<number, HTMLTextAreaElement>());
   const focusNext = useRef<number | null>(null);
-  // A tick gets a burst from its checkbox; the burst goes away on its own.
-  const [burst, setBurst] = useState<{ seed: number; anchor: DOMRect } | null>(null);
-  useEffect(() => {
-    if (!burst) return;
-    const id = window.setTimeout(() => setBurst(null), BURST_MS);
-    return () => window.clearTimeout(id);
-  }, [burst]);
+  // A tick gets a burst from its checkbox.
+  const [ticked, setTicked] = useState<Moment | null>(null);
+  const { anchor, burst } = useCelebration<HTMLInputElement>(ticked, 'priorityDone');
 
-  // Adopt server state whenever there are no unsaved edits.
-  useEffect(() => {
-    if (!dirty.current) setLocal(padPriorities(priorities, count));
-  }, [priorities, count]);
   useEffect(() => {
     if (focusNext.current == null) return;
     inputs.current.get(focusNext.current)?.focus();
     focusNext.current = null;
   }, [local.length]);
 
-  const flush = (next: Priority[]) => {
-    if (timer.current) window.clearTimeout(timer.current);
-    timer.current = null;
-    dirty.current = false;
-    onChange(next);
-  };
-  const edit = (position: number, patch: Partial<Priority>, immediate = false) => {
-    const next = local.map((p) => (p.position === position ? editPriority(p, patch, Date.now()) : p));
-    setLocal(next);
-    dirty.current = true;
-    if (timer.current) window.clearTimeout(timer.current);
-    if (immediate) flush(next);
-    else timer.current = window.setTimeout(() => flush(next), 400);
+  const edit = (position: number, patch: Partial<Priority>, now = false) => {
+    editList(
+      local.map((p) => (p.position === position ? editPriority(p, patch, Date.now()) : p)),
+      now,
+    );
   };
   const doneRows = local.filter((p) => p.done && hasText(p));
   const done = doneRows.length;
@@ -89,19 +73,10 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
     setWarning(null);
     const next = [...local, { position: local.length + 1, text: '', done: false, uid: null, addedAt: null }];
     focusNext.current = next.length;
-    setLocal(next);
-    flush(next);
+    editList(next, true);
   };
-  const bringOver = (rows: Priority[]) => {
-    const next = carryOver(rows, count);
-    setLocal(next);
-    flush(next);
-  };
-  const removeRow = (position: number) => {
-    const next = removePriority(local, position);
-    setLocal(next);
-    flush(next);
-  };
+  const bringOver = (rows: Priority[]) => editList(carryOver(rows, count), true);
+  const removeRow = (position: number) => editList(removePriority(local, position), true);
 
   return (
     <div className="priorities">
@@ -141,8 +116,10 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
               disabled={empty}
               onChange={(e) => {
                 if (e.target.checked) {
-                  if (settings.sound) playSound(settings.sounds.priorityDone);
-                  if (settings.celebrations) setBurst({ seed: Date.now(), anchor: e.target.getBoundingClientRect() });
+                  // The sound plays once the tick has rendered; iOS only allows that after a tap unlocked it.
+                  unlockAudio();
+                  anchor.current = e.target;
+                  setTicked({});
                 }
                 edit(p.position, { done: e.target.checked }, true);
               }}
@@ -166,7 +143,7 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
                   if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.preventDefault();
                 }}
                 onChange={(e) => edit(p.position, { text: e.target.value.replace(/[\r\n]+/g, ' ') })}
-                onBlur={() => dirty.current && flush(local)}
+                onBlur={flush}
                 maxLength={LIMITS.priorityText}
               />
             </span>

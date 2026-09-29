@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
+import { nextBackoff } from '../../../shared/backoff.js';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { PLANNED_SECONDS } from '../../../shared/timer.js';
 import type { Session, SessionConflict } from '../types';
@@ -72,9 +73,9 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // `sync` reads the store through a ref so it stays one function for the provider's lifetime.
   const storeRef = useLatest(store);
   const completing = useRef(false);
-  // After a failed finish (server unreachable) wait before trying again, doubling up to a
-  // minute. The server clamps ended_at to the planned end, so a late finish still logs the
-  // planned duration; all a wait costs is the chime's promptness.
+  // After a failed finish (server unreachable) wait before trying again (`nextBackoff`). The
+  // server clamps ended_at to the planned end, so a late finish still logs the planned
+  // duration; all a wait costs is the chime's promptness.
   const retry = useRef({ at: 0, delay: 0 });
 
   // Re-sync with the server on load, when the tab comes back, and every minute. A
@@ -161,7 +162,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         });
       })
       .catch(() => {
-        const delay = Math.min(60_000, retry.current.delay ? retry.current.delay * 2 : 2_000);
+        const delay = nextBackoff(retry.current.delay);
         retry.current = { at: Date.now() + delay, delay };
       })
       .finally(() => {
@@ -266,19 +267,23 @@ export function TimerProvider({ children }: { children: ReactNode }) {
 
   // Pause and resume are optimistic like adjust; the server's row is adopted only if the
   // user hasn't flipped it again meanwhile, and a failure puts the pause fields back.
-  const pause = useCallback(
-    () =>
+  const setPaused = useCallback(
+    (paused: boolean) =>
       attempt(async () => {
         const cur = runningRef.current;
-        if (!cur || cur.pausedAt != null) return;
+        if (!cur || (cur.pausedAt != null) === paused) return;
         mutationSeq.current++;
-        const optimistic = { ...cur, pausedAt: Date.now() };
+        const now = Date.now();
+        const optimistic =
+          cur.pausedAt == null
+            ? { ...cur, pausedAt: now }
+            : { ...cur, pausedAt: null, pausedSeconds: cur.pausedSeconds + Math.round((now - cur.pausedAt) / 1000) };
         runningRef.current = optimistic;
         setRunning(optimistic);
         try {
-          const { session } = await api.pauseSession(cur.id);
+          const { session } = await (paused ? api.pauseSession(cur.id) : api.resumeSession(cur.id));
           store.applySession(session); // the log row's pill reads the day's copy
-          setRunning((latest) => (latest && latest.id === session.id && latest.pausedAt != null ? session : latest));
+          setRunning((latest) => (latest && latest.id === session.id && (latest.pausedAt != null) === paused ? session : latest));
         } catch (err) {
           setRunning((latest) => (latest && latest.id === cur.id ? { ...latest, pausedAt: cur.pausedAt, pausedSeconds: cur.pausedSeconds } : latest));
           throw err;
@@ -286,27 +291,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       }),
     [attempt, store, runningRef],
   );
-
-  const resume = useCallback(
-    () =>
-      attempt(async () => {
-        const cur = runningRef.current;
-        if (!cur || cur.pausedAt == null) return;
-        mutationSeq.current++;
-        const optimistic = { ...cur, pausedAt: null, pausedSeconds: cur.pausedSeconds + Math.round((Date.now() - cur.pausedAt) / 1000) };
-        runningRef.current = optimistic;
-        setRunning(optimistic);
-        try {
-          const { session } = await api.resumeSession(cur.id);
-          store.applySession(session);
-          setRunning((latest) => (latest && latest.id === session.id && latest.pausedAt == null ? session : latest));
-        } catch (err) {
-          setRunning((latest) => (latest && latest.id === cur.id ? { ...latest, pausedAt: cur.pausedAt, pausedSeconds: cur.pausedSeconds } : latest));
-          throw err;
-        }
-      }),
-    [attempt, store, runningRef],
-  );
+  const pause = useCallback(() => setPaused(true), [setPaused]);
+  const resume = useCallback(() => setPaused(false), [setPaused]);
 
   const finish = useCallback(
     (countOverrun = false) =>
@@ -328,8 +314,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     const cur = runningRef.current;
     if (!cur) return;
     const v = timerView(cur, Date.now());
-    // Under a minute over, both lengths read the same: nothing to ask.
-    if (v.due && formatDuration(v.elapsedSeconds) !== formatDuration(cur.plannedSeconds)) setFinishChoice(true);
+    // Under a minute over, both lengths are the same whole minutes: nothing to ask.
+    if (v.due && Math.floor(v.elapsedSeconds / 60) !== Math.floor(cur.plannedSeconds / 60)) setFinishChoice(true);
     else void finish();
   }, [finish, runningRef]);
   const dismissFinishChoice = useCallback(() => setFinishChoice(false), []);

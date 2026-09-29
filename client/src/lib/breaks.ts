@@ -1,5 +1,5 @@
 import { MINUTE_MS } from '../../../shared/dates.js';
-import { BREAK_SECONDS } from '../../../shared/timer.js';
+import { MIN_BREAK_MS } from '../../../shared/timer.js';
 import type { Break, Session } from '../types';
 
 /**
@@ -49,7 +49,7 @@ export function breakSeconds(b: Break, now: number): number {
  * the same, so the log shows it before the next refresh.
  */
 export function endBreaksAt(breaks: readonly Break[], at: number): Break[] {
-  return breaks.flatMap((b) => (b.endedAt <= at ? [b] : at - b.startedAt < BREAK_SECONDS.min * 1000 ? [] : [{ ...b, endedAt: at }]));
+  return breaks.flatMap((b) => (b.endedAt <= at ? [b] : at - b.startedAt < MIN_BREAK_MS ? [] : [{ ...b, endedAt: at }]));
 }
 
 /** The break running at `now` among a day's breaks (by start): the latest one still ahead of its end. */

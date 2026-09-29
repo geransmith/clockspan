@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import type { Settings } from '../types';
-import { secondMealApplies, type TimeclockResult } from '../lib/timeclock';
-import { describeEvent, dueEvents, type AlarmTarget } from '../lib/alarms';
+import type { TimeclockResult } from '../lib/timeclock';
+import { alarmTargets, describeEvent, dueEvents, type TargetDay } from '../lib/alarms';
 import { alert, dismissByTag } from '../lib/alerts';
 import { ALARM_ACTIONS } from '../lib/copy';
 import { resolveHour12 } from '../lib/format';
@@ -18,23 +18,16 @@ function loadFired(dateKey: string): Set<string> {
   return new Set(Array.isArray(stored) ? stored.filter((k): k is string => typeof k === 'string') : []);
 }
 
-export interface AlarmDayState {
-  /** Silences the clock-out target only; see below. */
-  overtimeApproved: boolean;
-  /** Today's retrospective has been marked reviewed: its target disarms. */
-  retroDone: boolean;
-  /** Banner buttons. */
+/** The day's switches (which targets are armed is `alarmTargets`) and the banner buttons. */
+export interface AlarmDayState extends TargetDay {
   approveOvertime?: () => void;
   openRetro?: () => void;
 }
 
 /**
- * App-level alarm engine for today's timeclock. Runs every tick; the pure scheduler
- * decides what is due and the fired-set (persisted per day) prevents repeats.
- * `overtimeApproved` silences the clock-out target only: meal periods are still required
- * on an overtime day (California Labor Code §512), so lunch and second meal stay armed.
- * The retrospective target is the same clock-out instant and is not silenced by overtime
- * approval either: the planned end of the day is still the moment to look back.
+ * App-level alarm engine for today's timeclock. Runs every tick: `alarmTargets` says which
+ * deadlines are armed, the pure scheduler decides what is due, and the fired-set (persisted
+ * per day) prevents repeats.
  */
 export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings: Settings, now: number, day: AlarmDayState): void {
   const { overtimeApproved, retroDone, approveOvertime, openRetro } = day;
@@ -45,17 +38,7 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     if (!tc || tc.clockIn == null) return;
     if (!fired.current || fired.current.date !== dateKey) fired.current = { date: dateKey, set: loadFired(dateKey) };
 
-    const targets: AlarmTarget[] = [
-      {
-        id: 'lunchBy',
-        at: tc.lunchBy ?? 0,
-        armed: tc.lunchBy != null && (tc.lunchStatus === 'upcoming' || tc.lunchStatus === 'overdue') && tc.state !== 'done',
-      },
-      // Clock-out is only a fixed instant while working; on a break it drifts.
-      { id: 'clockOut', at: tc.clockOutAt ?? 0, armed: tc.clockOutAt != null && tc.state === 'working' && !overtimeApproved },
-      { id: 'secondMeal', at: tc.secondMealBy ?? 0, armed: secondMealApplies(tc, settings, overtimeApproved) },
-      { id: 'retro', at: tc.clockOutAt ?? 0, armed: tc.clockOutAt != null && tc.state === 'working' && !retroDone },
-    ];
+    const targets = alarmTargets(tc, settings, { overtimeApproved, retroDone });
 
     // A banner about a target that just disarmed (lunch taken) or moved (clock-out
     // pushed later) is stale; clear it before evaluating the new state.

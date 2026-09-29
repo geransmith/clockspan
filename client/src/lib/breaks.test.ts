@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { BREAK_SECONDS } from '../../../shared/timer.js';
 import type { Break, Session } from '../types';
 import { breakSeconds, endBreaksAt, MAX_BREAK_MINUTES, MIN_FOCUS_SECONDS, runningBreak, SET_GAP_MINUTES, SET_SIZE, suggestBreak } from './breaks';
 
@@ -64,6 +65,11 @@ describe('suggestBreak', () => {
   it('never goes under a minute or past 30', () => {
     expect(suggestBreak(inARow([1]))?.minutes).toBe(1);
     expect(suggestBreak(inARow([200]))?.minutes).toBe(MAX_BREAK_MINUTES);
+  });
+
+  it('only suggests a length the server takes', () => {
+    expect(BREAK_SECONDS.min).toBeLessThanOrEqual(60);
+    expect(BREAK_SECONDS.max).toBeGreaterThanOrEqual(MAX_BREAK_MINUTES * 60);
   });
 
   it('gives the fourth session in a row a long break, a fifth of the four together', () => {

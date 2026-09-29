@@ -71,6 +71,10 @@ describe('Worked', () => {
     expect(tiles(afterLunch, at(17)).worked).toEqual({ value: '8h 30m', sub: '30m over target', tone: 'tile--live' });
     expect(tiles(punches(empty, at(8), null, null, at(14)), at(14)).worked).toEqual({ value: '6h 00m', sub: '2h 00m under target', tone: '' });
   });
+
+  it('is not live on a past day left clocked in', () => {
+    expect(tiles(clockedIn, at(9), { isToday: false }).worked.tone).toBe('');
+  });
 });
 
 describe('Clock out at', () => {

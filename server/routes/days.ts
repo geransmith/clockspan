@@ -15,7 +15,10 @@ import {
   sessionRowToJson,
   UID_RE,
   type BreakRow,
+  type Dated,
   type DayRow,
+  type PriorityRow,
+  type PunchRow,
   type SessionRow,
 } from './shared.js';
 import { kindForPosition } from '../../shared/punches.js';
@@ -50,24 +53,6 @@ function parseInstant(raw: unknown, from: number, to: number): number | null {
   return Number.isSafeInteger(ms) && ms >= from && ms <= to ? ms : null;
 }
 
-export interface PunchRow {
-  id: number;
-  day_id: number;
-  position: number;
-  kind: 'in' | 'out';
-  at: number | null;
-}
-
-export interface PriorityRow {
-  id: number;
-  day_id: number;
-  position: number;
-  text: string;
-  done: number;
-  uid: string | null;
-  added_at: number | null;
-}
-
 function punchesJson(rows: PunchRow[]): Punch[] {
   return rows.map((p) => ({ position: p.position, kind: p.kind, at: p.at }));
 }
@@ -83,8 +68,8 @@ function prioritiesJson(rows: PriorityRow[]): Priority[] {
 interface DayRows {
   punches: PunchRow[];
   priorities: PriorityRow[];
-  sessions: (SessionRow & { date: string })[];
-  breaks: (BreakRow & { date: string })[];
+  sessions: Dated<SessionRow>[];
+  breaks: Dated<BreakRow>[];
 }
 
 function dayRows(db: DB, dayId: number): DayRows {
@@ -319,12 +304,15 @@ export function daysRouter(db: DB, config: Config): Router {
       res.status(400).json({ error: 'done must be a boolean.' });
       return;
     }
-    const dayId = ensureDay(db, user.id, date);
-    if (note !== undefined) db.prepare(`UPDATE days SET retro_note = ? WHERE id = ?`).run(note.slice(0, LIMITS.retroNote), dayId);
-    if (done === true) db.prepare(`UPDATE days SET retro_at = COALESCE(retro_at, ?) WHERE id = ?`).run(Date.now(), dayId);
-    if (done === false) db.prepare(`UPDATE days SET retro_at = NULL WHERE id = ?`).run(dayId);
-    const day = findDay(db, user.id, date)!;
-    res.json({ retroNote: day.retro_note, retroAt: day.retro_at } satisfies RetroResponse);
+    // An empty patch changes nothing, so it stores no day either; it answers what is there.
+    if (note !== undefined || done !== undefined) {
+      const dayId = ensureDay(db, user.id, date);
+      if (note !== undefined) db.prepare(`UPDATE days SET retro_note = ? WHERE id = ?`).run(note.slice(0, LIMITS.retroNote), dayId);
+      if (done === true) db.prepare(`UPDATE days SET retro_at = COALESCE(retro_at, ?) WHERE id = ?`).run(Date.now(), dayId);
+      if (done === false) db.prepare(`UPDATE days SET retro_at = NULL WHERE id = ?`).run(dayId);
+    }
+    const day = findDay(db, user.id, date);
+    res.json({ retroNote: day?.retro_note ?? '', retroAt: day?.retro_at ?? null } satisfies RetroResponse);
   });
 
   return r;
