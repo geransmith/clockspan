@@ -29,7 +29,7 @@ describe('AUTH_MODE=oidc', () => {
     // The password routes are not mounted: they sit behind the auth gate like any unknown path.
     expect((await app.api.post('/api/auth/login', { username: 'x', password: 'y' })).status).toBe(401);
     expect((await app.api.post('/api/auth/setup', { username: 'x', password: 'y' })).status).toBe(401);
-    expect(app.db.prepare(`SELECT COUNT(*) AS n FROM users`).get()).toEqual({ n: 0 });
+    expect(app.count('users')).toBe(0);
   });
 
   it('answers 503 on /auth/login while the provider is unreachable, with the cause in the log only', async () => {
@@ -58,7 +58,7 @@ describe('AUTH_MODE=oidc', () => {
     expect(cleared).toMatch(/Max-Age=0/i);
     expect(cleared).toMatch(/Path=\/auth/i);
     expect(r.headers.getSetCookie().some((c) => c.startsWith(`${SESSION_COOKIE}=`))).toBe(false);
-    expect(app.db.prepare(`SELECT COUNT(*) AS n FROM auth_sessions`).get()).toEqual({ n: 0 });
+    expect(app.count('auth_sessions')).toBe(0);
   });
 
   it('logs out locally, with no end-session URL, while discovery has never reached the provider', async () => {
@@ -81,7 +81,7 @@ describe('AUTH_MODE=oidc', () => {
     expect(app.db.prepare(`SELECT display_name FROM users WHERE id = ?`).get(first.id)).toEqual({ display_name: 'Ada L.' });
     // The same name again is a plain read.
     expect(upsertOidcUser(app.db, 'issuer|1', 'Ada L.')).toMatchObject({ id: first.id, display_name: 'Ada L.' });
-    expect(app.db.prepare(`SELECT COUNT(*) AS n FROM users WHERE kind = 'oidc'`).get()).toEqual({ n: 2 });
+    expect(app.count('users', `kind = 'oidc'`)).toBe(2);
     // A name is a label: a provider that sends a paragraph gets the first 100 characters.
     expect(upsertOidcUser(app.db, 'issuer|3', 'n'.repeat(500)).display_name).toBe('n'.repeat(100));
   });

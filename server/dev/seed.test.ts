@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ensureDefaultUser, openDatabase } from '../db.js';
 import { insertSession, SESSION_COOKIE } from '../auth/session.js';
-import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from './harness.js';
+import { countRows, SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from './harness.js';
 import { DAY_MS, punchWindow, todayKey } from '../../shared/dates.js';
 import { LIMITS } from '../../shared/api.js';
 import { DEFAULT_SETTINGS, SETTING_LIMITS } from '../../shared/settings.js';
@@ -22,12 +22,7 @@ import {
 } from './seed.js';
 
 const counts = (db: ReturnType<typeof openDatabase>) =>
-  Object.fromEntries(
-    ['days', 'punches', 'priorities', 'sessions', 'breaks', 'settings', 'auth_sessions'].map((t) => [
-      t,
-      (db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as { n: number }).n,
-    ]),
-  );
+  Object.fromEntries(['days', 'punches', 'priorities', 'sessions', 'breaks', 'settings', 'auth_sessions'].map((t) => [t, countRows(db, t)]));
 
 /** The clocked-in stretches of a day: its set punches in order, in → out, today's last one open until `now`. */
 function workedSpans(day: SeededDay, now: number): [number, number][] {
@@ -140,8 +135,7 @@ describe('seedDatabase', () => {
 
     // Every template shows up in the last week, and today has the one running timer.
     expect(new Set(m.days.map((d) => d.kind))).toEqual(new Set(['normal', 'extraPair', 'overtime', 'unreviewed', 'noLunch', 'today']));
-    const running = db.prepare(`SELECT COUNT(*) AS n FROM sessions WHERE status = 'running'`).get() as { n: number };
-    expect(running.n).toBe(1);
+    expect(countRows(db, 'sessions', `status = 'running'`)).toBe(1);
     expect(m.days.at(-1)!.sessions.filter((s) => s.status === 'running')).toHaveLength(1);
     const unreviewed = m.days.find((d) => d.kind === 'unreviewed')!;
     expect(unreviewed.retroAt).toBeNull();

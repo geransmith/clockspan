@@ -21,9 +21,9 @@ import {
   type TimeFormat,
 } from '../shared/settings.js';
 import { SOUND_EVENTS, SOUND_IDS, type SoundEvent, type SoundId } from '../shared/sounds.js';
+import { isWholeNumber } from './validate.js';
 
 const isBool = (v: unknown): v is boolean => typeof v === 'boolean';
-const isInt = (v: unknown, min: number, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
 
 function mergeAlarm(base: AlarmSettings, patch: unknown): AlarmSettings {
   if (!patch || typeof patch !== 'object') return base;
@@ -31,12 +31,10 @@ function mergeAlarm(base: AlarmSettings, patch: unknown): AlarmSettings {
   return {
     enabled: isBool(p.enabled) ? p.enabled : base.enabled,
     leadMinutes: Array.isArray(p.leadMinutes)
-      ? [...new Set(p.leadMinutes.filter((n): n is number => isInt(n, ALARM_LIMITS.leadMinutes.min, ALARM_LIMITS.leadMinutes.max)))].sort((a, b) => b - a)
+      ? [...new Set(p.leadMinutes.filter((n): n is number => isWholeNumber(n, ALARM_LIMITS.leadMinutes)))].sort((a, b) => b - a)
       : base.leadMinutes,
     onDue: isBool(p.onDue) ? p.onDue : base.onDue,
-    overdueEveryMinutes: isInt(p.overdueEveryMinutes, ALARM_LIMITS.overdueEveryMinutes.min, ALARM_LIMITS.overdueEveryMinutes.max)
-      ? p.overdueEveryMinutes
-      : base.overdueEveryMinutes,
+    overdueEveryMinutes: isWholeNumber(p.overdueEveryMinutes, ALARM_LIMITS.overdueEveryMinutes) ? p.overdueEveryMinutes : base.overdueEveryMinutes,
   };
 }
 
@@ -53,7 +51,7 @@ function mergeRetention(base: RetentionSettings, patch: unknown): RetentionSetti
   const p = patch as Record<string, unknown>;
   return {
     enabled: isBool(p.enabled) ? p.enabled : base.enabled,
-    days: isInt(p.days, MIN_RETENTION_DAYS, MAX_RETENTION_DAYS) ? p.days : base.days,
+    days: isWholeNumber(p.days, { min: MIN_RETENTION_DAYS, max: MAX_RETENTION_DAYS }) ? p.days : base.days,
   };
 }
 
@@ -63,7 +61,7 @@ function mergeTimerMinutes(base: number[], patch: unknown): number[] {
   const next: unknown[] = patch;
   return base.map((m, i) => {
     const v = next[i];
-    return isInt(v, TIMER_MINUTES.min, TIMER_MINUTES.max) ? v : m;
+    return isWholeNumber(v, TIMER_MINUTES) ? v : m;
   });
 }
 
@@ -77,7 +75,7 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
   const alarms = (p.alarms && typeof p.alarms === 'object' ? p.alarms : {}) as Record<string, unknown>;
   const limited = (key: keyof typeof SETTING_LIMITS): number => {
     const v = p[key];
-    return isInt(v, SETTING_LIMITS[key].min, SETTING_LIMITS[key].max) ? v : base[key];
+    return isWholeNumber(v, SETTING_LIMITS[key]) ? v : base[key];
   };
 
   const layout = Array.isArray(p.layout) ? normalizeLayout(p.layout) : base.layout;

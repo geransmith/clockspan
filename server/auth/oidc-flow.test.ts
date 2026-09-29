@@ -128,7 +128,7 @@ describe('OIDC code grant', () => {
       expect(r.headers.getSetCookie().find((c) => c.startsWith('fs_oidc='))).toMatch(/Max-Age=0/i);
       expect(r.headers.getSetCookie().some((c) => c.startsWith(`${SESSION_COOKIE}=`))).toBe(false);
     }
-    expect(app.db.prepare(`SELECT COUNT(*) AS n FROM users`).get()).toEqual({ n: 0 });
+    expect(app.count('users')).toBe(0);
   });
 
   it('logs out locally and hands back the provider end-session URL when it has one', async () => {
@@ -144,7 +144,7 @@ describe('OIDC code grant', () => {
     expect(end.origin + end.pathname).toBe(`${ISSUER}end-session/`);
     expect(end.searchParams.get('post_logout_redirect_uri')).toBe('http://localhost');
     expect(end.searchParams.get('client_id')).toBe('clockspan');
-    expect(app.db.prepare(`SELECT COUNT(*) AS n FROM auth_sessions`).get()).toEqual({ n: 0 });
+    expect(app.count('auth_sessions')).toBe(0);
 
     // A provider without RP-initiated logout: the local logout is all there is.
     vi.mocked(oidc.discovery).mockResolvedValue(configuration(false));

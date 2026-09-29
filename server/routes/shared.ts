@@ -1,6 +1,7 @@
-import type { RequestHandler, Response } from 'express';
+import { Router, type RequestHandler, type Response } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
+import { isWholeNumber } from '../validate.js';
 import { isValidDateKey } from '../../shared/dates.js';
 import type { Break, Punch, Session, SessionStatus } from '../../shared/api.js';
 import { activeMs, MIN_BREAK_MS } from '../../shared/timer.js';
@@ -46,7 +47,7 @@ export function ensureDay(db: DB, userId: number, date: string): number {
 
 /** A whole number of seconds within `bounds` for a `plannedSeconds` field, or the message to send back. */
 export function parsePlannedSeconds(raw: unknown, bounds: { min: number; max: number }): { seconds: number } | { error: string } {
-  if (typeof raw === 'number' && Number.isInteger(raw) && raw >= bounds.min && raw <= bounds.max) return { seconds: raw };
+  if (isWholeNumber(raw, bounds)) return { seconds: raw };
   return { error: `plannedSeconds must be between ${bounds.min} and ${bounds.max}.` };
 }
 
@@ -109,23 +110,24 @@ export function getOwned<T extends OwnedTable>(db: DB, table: T, userId: number,
 }
 
 /**
- * For the `/:id` routes of `table`: `load` is the guard each of them takes, which is where the
- * ownership check lives. It answers 404 for anyone else's row, or none, and hands the caller's
- * own on to the handler, which reads it with `owned(res)` instead of repeating the lookup.
+ * The router for `table`'s `/:id` routes, and where the ownership check lives. It runs as the
+ * router's `id` param handler, so every route on this router with an `:id` in its path gets it,
+ * one added later included, without listing a guard. It answers 404 for anyone else's row, or
+ * none (a non-numeric id finds none), and hands the caller's own on to the handler, which reads
+ * it with `owned(res)` instead of repeating the lookup.
  */
-export function ownedRows<T extends OwnedTable>(db: DB, table: T): { load: RequestHandler; owned: (res: Response) => Dated<OwnedRows[T]> } {
-  return {
-    load: (req, res, next) => {
-      const row = getOwned(db, table, currentUser(req).id, Number(req.params.id));
-      if (!row) {
-        res.status(404).json({ error: NOT_FOUND[table] });
-        return;
-      }
-      res.locals.owned = row;
-      next();
-    },
-    owned: (res) => res.locals.owned as Dated<OwnedRows[T]>,
-  };
+export function ownedRouter<T extends OwnedTable>(db: DB, table: T): { router: Router; owned: (res: Response) => Dated<OwnedRows[T]> } {
+  const router = Router();
+  router.param('id', (req, res, next, id: string) => {
+    const row = getOwned(db, table, currentUser(req).id, Number(id));
+    if (!row) {
+      res.status(404).json({ error: NOT_FOUND[table] });
+      return;
+    }
+    res.locals.owned = row;
+    next();
+  });
+  return { router, owned: (res) => res.locals.owned as Dated<OwnedRows[T]> };
 }
 
 /** The user's running session, if any: there is at most one (a unique partial index). */

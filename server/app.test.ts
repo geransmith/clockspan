@@ -1,13 +1,12 @@
 import fs from 'node:fs';
 import http from 'node:http';
 import net, { type AddressInfo } from 'node:net';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, startBackgroundJobs } from './app.js';
 import { loadConfig } from './config.js';
 import { ensureDefaultUser, openDatabase } from './db.js';
-import { SETUP_CODE, startTestApp, type TestApp } from './dev/harness.js';
+import { countRows, SETUP_CODE, startTestApp, tempClientBuild, writeClientBuild, type TestApp } from './dev/harness.js';
 import { Discovery } from './auth/oidc.js';
 
 describe('response headers', () => {
@@ -141,7 +140,7 @@ describe('host names under AUTH_MODE=none', () => {
     expect(read).toEqual({ status: 403, body: { error: 'This server does not answer to rebind.example. Add it to ALLOWED_HOSTS.' } });
     expect((await as('rebind.example:8080', '/api/settings', 'PUT')).status).toBe(403);
     expect((await as('rebind.example', '/api/auth/me')).status).toBe(403);
-    expect(app.db.prepare(`SELECT COUNT(*) AS n FROM settings`).get()).toEqual({ n: 0 });
+    expect(app.count('settings')).toBe(0);
     // One line per name, however many requests it sends.
     expect(warn).toHaveBeenCalledOnce();
     expect(String(warn.mock.calls[0]![0])).toMatch(/^\[host\] API request for "rebind\.example" refused/);
@@ -231,7 +230,7 @@ describe('bad request bodies', () => {
     expect(await res.json()).toEqual({ error: expect.stringMatching(/too large/i) });
     // The app is still up and the row untouched.
     expect((await app.api.get('/api/settings')).status).toBe(200);
-    expect(app.db.prepare(`SELECT COUNT(*) AS n FROM settings`).get()).toEqual({ n: 0 });
+    expect(app.count('settings')).toBe(0);
   });
 
   it('answers an unexpected failure with a fixed 500 message and logs the cause', async () => {
@@ -311,19 +310,8 @@ describe('TRUST_PROXY', () => {
 describe('static client', () => {
   let app: TestApp;
   let dir: string;
-  /** A stand-in for dist/client: the shell, a fingerprinted asset, an icon, the manifest and the service worker. */
-  const writeBuild = (root: string) => {
-    fs.mkdirSync(path.join(root, 'assets'), { recursive: true });
-    fs.mkdirSync(path.join(root, 'icons'));
-    fs.writeFileSync(path.join(root, 'index.html'), '<!doctype html><title>shell</title>');
-    fs.writeFileSync(path.join(root, 'assets', 'index-abc123.js'), 'console.log(1)');
-    fs.writeFileSync(path.join(root, 'icons', 'icon.svg'), '<svg/>');
-    fs.writeFileSync(path.join(root, 'manifest.webmanifest'), '{}');
-    fs.writeFileSync(path.join(root, 'sw.js'), '');
-  };
   beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clockspan-client-'));
-    writeBuild(dir);
+    dir = tempClientBuild();
   });
   afterEach(async () => {
     await app.close();
@@ -378,7 +366,7 @@ describe('static client', () => {
     // An install under ~/.local/share, or a checkout under .claude/worktrees: send ignores
     // dotfiles, and only the path inside the build is the app's to judge.
     const hidden = path.join(dir, '.local', 'share', 'clockspan');
-    writeBuild(hidden);
+    writeClientBuild(hidden);
     fs.writeFileSync(path.join(hidden, '.secret'), 'not for the browser');
     app = await startTestApp({ clientDir: hidden });
     for (const p of ['/', '/history', '/some/deep/path?date=2026-09-01']) {
@@ -395,7 +383,7 @@ describe('static client', () => {
   it('caches by the path inside the build, whatever the folders above it are called', async () => {
     // An install under a folder named assets: only the build's own /assets is fingerprinted.
     const nested = path.join(dir, 'assets', 'clockspan');
-    writeBuild(nested);
+    writeClientBuild(nested);
     app = await startTestApp({ clientDir: nested });
     expect((await fetch(`${app.url}/assets/index-abc123.js`)).headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
     for (const p of ['/sw.js', '/manifest.webmanifest', '/icons/icon.svg']) {
@@ -448,7 +436,7 @@ describe('startBackgroundJobs', () => {
       0,
     );
     db.prepare(`INSERT INTO days (user_id, date, created_at) VALUES (?, '2025-01-01', 0)`).run(user.id);
-    const count = (table: string) => (db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
+    const count = (table: string) => countRows(db, table);
 
     createApp(db, config);
     vi.advanceTimersByTime(7 * 3_600_000);

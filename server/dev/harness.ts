@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
@@ -41,6 +42,8 @@ export interface TestApp {
   client(): Client;
   /** Set when started with `seed`. */
   seeded?: SeedManifest;
+  /** Rows in `table`, or those matching `where` (SQL, with `?` for each of `params`): `countRows` on this app's DB. */
+  count(table: string, where?: string, ...params: unknown[]): number;
   /**
    * Under AUTH_MODE=local: the seed's two accounts, each signed in on a client of its own, for
    * the tests that check one user never sees or touches another's rows.
@@ -71,6 +74,32 @@ export const SETUP_CODE = 'TEST-SETU-PCOD';
 /** A Wednesday, so "this week" in a review holds seeded days on both sides. */
 export const SEED_TODAY = '2026-09-16';
 export const SEED_NOW = new Date(2026, 8, 16, 14, 0).getTime();
+
+/** Rows in `table`, or those matching `where` (SQL, with `?` for each of `params`). */
+export function countRows(db: DB, table: string, where?: string, ...params: unknown[]): number {
+  return (db.prepare(`SELECT COUNT(*) AS n FROM ${table}${where ? ` WHERE ${where}` : ''}`).get(...params) as { n: number }).n;
+}
+
+/**
+ * Writes a stand-in for dist/client into `root`: the shell, a fingerprinted asset, an icon, the
+ * manifest and the service worker. Pass the folder as `clientDir`.
+ */
+export function writeClientBuild(root: string): void {
+  fs.mkdirSync(path.join(root, 'assets'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'icons'));
+  fs.writeFileSync(path.join(root, 'index.html'), '<!doctype html><title>shell</title>');
+  fs.writeFileSync(path.join(root, 'assets', 'index-abc123.js'), 'console.log(1)');
+  fs.writeFileSync(path.join(root, 'icons', 'icon.svg'), '<svg/>');
+  fs.writeFileSync(path.join(root, 'manifest.webmanifest'), '{}');
+  fs.writeFileSync(path.join(root, 'sw.js'), '');
+}
+
+/** `writeClientBuild` in a new temporary folder, which the caller removes. */
+export function tempClientBuild(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clockspan-client-'));
+  writeClientBuild(dir);
+  return dir;
+}
 
 function makeClient(baseUrl: string): Client {
   const jar = new Map<string, string>();
@@ -140,6 +169,7 @@ export async function startTestApp(opts: StartOptions = {}): Promise<TestApp> {
     api: makeClient(url),
     client: () => makeClient(url),
     seeded,
+    count: (table, where, ...params) => countRows(db, table, where, ...params),
     twoUsers: async () => {
       const users = await ensureLocalUsers(db);
       const signIn = async (username: string) => {

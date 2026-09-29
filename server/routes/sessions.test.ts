@@ -48,7 +48,7 @@ describe('sessions', () => {
     const label = await start({ label: 42 });
     expect([label.status, label.body.error]).toEqual([400, 'label must be a string.']);
     // Refused before anything is stored.
-    expect(app.db.prepare(`SELECT COUNT(*) AS n FROM days`).get()).toEqual({ n: 0 });
+    expect(app.count('days')).toBe(0);
     expect((await app.api.post('/api/days/nope/sessions', { plannedSeconds: 1500 })).status).toBe(400);
     // No body at all: the same 400, not a crash on reading a field of undefined.
     expect((await fetch(`${app.url}/api/days/${DATE}/sessions`, { method: 'POST' })).status).toBe(400);
