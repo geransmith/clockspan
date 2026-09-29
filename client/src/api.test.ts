@@ -136,6 +136,11 @@ describe('failures', () => {
     await expect(api.getDay(DATE)).rejects.toMatchObject({ status: 502, message: 'Request failed (502)', body: null });
   });
 
+  it('refuses a 200 whose body is not JSON, such as a sign-in page from a proxy in front', async () => {
+    answer(200, '<html>Sign in</html>', false);
+    await expect(api.getDay(DATE)).rejects.toMatchObject({ status: 200, message: 'Unreadable answer (200)', body: null });
+  });
+
   it('announces a lost session on a 401, but not for a wrong password at sign-in', async () => {
     const lost = vi.fn();
     window.addEventListener(UNAUTHENTICATED_EVENT, lost);

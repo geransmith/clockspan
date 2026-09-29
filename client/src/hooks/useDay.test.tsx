@@ -5,7 +5,7 @@ import * as api from '../api';
 import { dismissByTag, warnQuietly } from '../lib/alerts';
 import { SAVE_FAILED } from '../lib/copy';
 import { emptyPunches } from '../lib/timeclock';
-import { deferred, makeBreak, makeDay, makeSession, makeSettings, MIN, settle, SettingsAndDays, setVisibility, T0, TODAY } from '../test/hooks';
+import { apiError, deferred, makeBreak, makeDay, makeSession, makeSettings, MIN, settle, SettingsAndDays, setVisibility, T0, TODAY } from '../test/hooks';
 import type { BreakEndResponse, BreakResponse, Day, OvertimeResponse, Priority, Punch, PunchesResponse, Session } from '../types';
 import { useDay, useDayStore, useRefreshDay } from './useDay';
 
@@ -59,7 +59,6 @@ describe('load', () => {
     await settle();
     expect(api.getDay).toHaveBeenCalledTimes(1);
     expect(result.current.days[TODAY]?.punches.map((p) => p.position)).toEqual([0, 1, 2, 3]);
-    expect(dismissByTag).toHaveBeenCalledWith('load-failed');
   });
 
   it('shares one request between callers asking at once', async () => {
@@ -68,10 +67,40 @@ describe('load', () => {
     const { result } = renderStore(null);
     const a = result.current.load(TODAY);
     const b = result.current.load(TODAY);
-    expect(b).toBe(a);
     answer.resolve(makeDay());
-    await act(() => a);
+    await act(() => Promise.all([a, b]));
     expect(api.getDay).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats an answer that is not a day as a failed load, and the next load asks again', async () => {
+    // What request() let through for a proxy's sign-in page: normalizing it throws.
+    vi.mocked(api.getDay).mockResolvedValueOnce(null as unknown as Day);
+    const { result } = renderStore();
+    await settle();
+    expect(result.current.errors[TODAY]).toBeDefined();
+    expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ tag: 'load-failed' }));
+
+    vi.mocked(api.getDay).mockResolvedValueOnce(makeDay());
+    await act(() => result.current.load(TODAY));
+    expect(api.getDay).toHaveBeenCalledTimes(2);
+    expect(result.current.errors).toEqual({});
+    expect(result.current.days[TODAY]).toBeDefined();
+  });
+
+  it("takes down the load-failed banner when the day that raised it loads, not another day's", async () => {
+    vi.mocked(api.getDay).mockResolvedValueOnce(makeDay()).mockRejectedValueOnce(new Error('offline'));
+    const { result } = renderStore();
+    await settle();
+    await act(() => result.current.load(OTHER));
+    expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ tag: 'load-failed' }));
+    // Today's minute refresh: the other day still failed, so its banner stays.
+    vi.mocked(api.getDay).mockResolvedValueOnce(makeDay());
+    await act(() => result.current.refresh(TODAY));
+    expect(dismissByTag).not.toHaveBeenCalled();
+
+    vi.mocked(api.getDay).mockResolvedValueOnce(makeDay(OTHER));
+    await act(() => result.current.load(OTHER));
+    expect(dismissByTag).toHaveBeenCalledWith('load-failed');
   });
 
   it('records a failed first load, raises the banner, and waits for Try again', async () => {
@@ -203,6 +232,35 @@ describe('load after a write', () => {
     out.resolve(makeDay(TODAY, { retroNote: 'stored' }));
     await act(() => loaded);
     expect(result.current.days[TODAY]).toMatchObject({ overtimeApproved: false, retroNote: 'stored' });
+  });
+
+  it('asks once more after a failed save when the load it shared comes back stale', async () => {
+    const gone = makeBreak({ id: 1, startedAt: T0 - 30 * MIN, endedAt: T0 - 25 * MIN });
+    vi.mocked(api.getDay).mockResolvedValueOnce(makeDay(TODAY, { breaks: [gone] }));
+    const { result } = renderStore();
+    await settle();
+    // The minute's refresh is out when overtime saves and the break's delete is refused: the
+    // phone deleted it already.
+    const out = deferred<Day>();
+    vi.mocked(api.getDay)
+      .mockReturnValueOnce(out.promise)
+      .mockResolvedValueOnce(makeDay(TODAY, { overtimeApproved: true }));
+    vi.mocked(api.putOvertime).mockResolvedValueOnce({ overtimeApproved: true });
+    vi.mocked(api.deleteBreak).mockRejectedValueOnce(apiError(404));
+    let refreshed!: Promise<void>;
+    act(() => {
+      refreshed = result.current.refresh(TODAY);
+    });
+    await act(() => result.current.setOvertimeApproved(TODAY, true));
+    await act(() => result.current.removeBreak(TODAY, 1));
+    expect(result.current.days[TODAY]?.breaks).toEqual([gone]);
+    expect(api.getDay).toHaveBeenCalledTimes(2);
+    // Read before the overtime save, so it is dropped: the store asks again.
+    out.resolve(makeDay(TODAY, { breaks: [gone] }));
+    await act(() => refreshed);
+    await settle();
+    expect(api.getDay).toHaveBeenCalledTimes(3);
+    expect(result.current.days[TODAY]).toMatchObject({ overtimeApproved: true, breaks: [] });
   });
 
   it('shows the stored copy, not the change, when the server is down for the save and the reload alike', async () => {
