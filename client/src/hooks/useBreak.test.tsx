@@ -264,10 +264,14 @@ describe('suggestions', () => {
     vi.setSystemTime(midnight + 5 * MIN);
     vi.mocked(api.getSettings).mockResolvedValue({ ...settings, suggestBreaks: true });
     const running = makeSession({ date: '2026-09-27', startedAt: midnight - 20 * MIN, plannedSeconds: 30 * 60 });
+    // Today already earned a break of its own, so a suggestion exists: only the check that it
+    // belongs to the session just finished keeps it off the screen.
+    const todays = makeSession({ id: 9, status: 'completed', startedAt: midnight + MIN, endedAt: midnight + 4 * MIN, durationSeconds: 3 * 60 });
     vi.mocked(api.getRunning).mockResolvedValue({ session: running });
-    vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(makeDay(date, { sessions: date === TODAY ? [] : [running] })));
+    vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(makeDay(date, { sessions: date === TODAY ? [todays] : [running] })));
     const { result } = render();
     await settle();
+    expect(result.current.next).toMatchObject({ minutes: 1, long: false, sessionId: 9 });
     vi.mocked(api.finishSession).mockResolvedValue({ session: { ...running, status: 'completed', endedAt: Date.now(), durationSeconds: 25 * 60 } });
     await act(() => result.current.timer.finish());
     expect(result.current.timer.finished).not.toBeNull();

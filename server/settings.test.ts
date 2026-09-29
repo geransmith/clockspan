@@ -36,6 +36,31 @@ describe('mergeSettings', () => {
     expect(mergeSettings(DEFAULT_SETTINGS, { retention: 'forever' }).retention).toEqual(DEFAULT_SETTINGS.retention);
   });
 
+  it('takes every switch only as true or false, flipped from its default', () => {
+    const switches = (Object.keys(DEFAULT_SETTINGS) as (keyof typeof DEFAULT_SETTINGS)[]).filter((k) => typeof DEFAULT_SETTINGS[k] === 'boolean');
+    // A new switch lands here without a line of its own; these are the ones there are today.
+    expect(switches).toEqual([
+      'suggestBreaks',
+      'sound',
+      'notifications',
+      'keepScreenAwake',
+      'overtimeApproval',
+      'mealRules',
+      'lunchPunches',
+      'trackHours',
+      'celebrations',
+      'stickers',
+      'showWeekends',
+    ]);
+    for (const key of switches) {
+      const flipped = !DEFAULT_SETTINGS[key];
+      expect(mergeSettings(DEFAULT_SETTINGS, { [key]: flipped })[key], key).toBe(flipped);
+      // A string, a number or null is never stored as the switch, whatever it would read as.
+      for (const bad of ['false', 'true', 0, 1, null])
+        expect(mergeSettings(DEFAULT_SETTINGS, { [key]: bad })[key], `${key}: ${String(bad)}`).toBe(DEFAULT_SETTINGS[key]);
+    }
+  });
+
   it('bounds every numeric field by the limits the settings inputs clamp to', () => {
     for (const [key, { min, max }] of Object.entries(SETTING_LIMITS)) {
       expect(mergeSettings(DEFAULT_SETTINGS, { [key]: min })).toMatchObject({ [key]: min });

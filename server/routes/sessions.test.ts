@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SEED_TODAY, startTestApp, type TestApp } from '../dev/harness.js';
-import { LOCAL_USERS, ensureLocalUsers, seedDatabase } from '../dev/seed.js';
+import { seedDatabase } from '../dev/seed.js';
 import { LIMITS } from '../../shared/api.js';
 
 const DATE = '2026-09-01';
@@ -254,11 +254,7 @@ describe('sessions are scoped to the signed-in user', () => {
   afterEach(() => app.close());
 
   it("hides one user's sessions from another", async () => {
-    const { admin, member } = await ensureLocalUsers(app.db);
-    const a = app.client();
-    const b = app.client();
-    expect((await a.post('/api/auth/login', { username: LOCAL_USERS.admin, password: LOCAL_USERS.password })).status).toBe(200);
-    expect((await b.post('/api/auth/login', { username: LOCAL_USERS.member, password: LOCAL_USERS.password })).status).toBe(200);
+    const { admin, member, a, b } = await app.twoUsers();
     seedDatabase(app.db, { userId: member.id, today: SEED_TODAY, now: Date.now(), days: 1 });
     expect(admin.id).not.toBe(member.id);
 

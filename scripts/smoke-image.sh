@@ -16,7 +16,8 @@ name="clockspan-smoke-$$"
 cleanup() {
   echo "--- container log"
   docker logs "$name" 2>&1 || true
-  docker rm -f "$name" >/dev/null 2>&1 || true
+  # -v takes the anonymous /data volume with it, or every run would leave one behind.
+  docker rm -fv "$name" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -47,7 +48,10 @@ test "$(docker exec "$name" stat -c %u /proc/1)" = 1000
 step "no package manager ships in the image: npm, npx, corepack and yarn were removed"
 docker exec "$name" sh -c '! command -v npm && ! command -v npx && ! command -v corepack && ! command -v yarn' >/dev/null
 
-step "the HEALTHCHECK's own command passes where Docker runs it"
-docker exec "$name" sh -c 'wget -qO- "http://127.0.0.1:$PORT/api/health"' >/dev/null
+step "the image's own HEALTHCHECK command passes where Docker runs it"
+# Read from the image rather than copied here, so a typo in the Dockerfile's HEALTHCHECK fails
+# this step too. The shell form is stored as CMD-SHELL and its command line.
+test "$(docker inspect -f '{{index .Config.Healthcheck.Test 0}}' "$image")" = CMD-SHELL
+docker exec "$name" sh -c "$(docker inspect -f '{{index .Config.Healthcheck.Test 1}}' "$image")"
 
 echo "--- smoke test passed"

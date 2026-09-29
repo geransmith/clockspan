@@ -3,8 +3,8 @@ import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { createApp } from '../app.js';
 import { loadConfig, type Config } from '../config.js';
-import { ensureDefaultUser, openDatabase, type DB } from '../db.js';
-import { seedDatabase, type SeedManifest, type SeedOptions } from './seed.js';
+import { ensureDefaultUser, openDatabase, type DB, type UserRow } from '../db.js';
+import { ensureLocalUsers, LOCAL_USERS, seedDatabase, type SeedManifest, type SeedOptions } from './seed.js';
 
 /**
  * Boots the real Express app on an in-memory SQLite DB and talks to it over HTTP with
@@ -40,6 +40,11 @@ export interface TestApp {
   client(): Client;
   /** Set when started with `seed`. */
   seeded?: SeedManifest;
+  /**
+   * Under AUTH_MODE=local: the seed's two accounts, each signed in on a client of its own, for
+   * the tests that check one user never sees or touches another's rows.
+   */
+  twoUsers(): Promise<{ admin: UserRow; member: UserRow; a: Client; b: Client }>;
   close(): Promise<void>;
 }
 
@@ -125,6 +130,16 @@ export async function startTestApp(opts: StartOptions = {}): Promise<TestApp> {
     api: makeClient(url),
     client: () => makeClient(url),
     seeded,
+    twoUsers: async () => {
+      const users = await ensureLocalUsers(db);
+      const signIn = async (username: string) => {
+        const client = makeClient(url);
+        const r = await client.post('/api/auth/login', { username, password: LOCAL_USERS.password });
+        if (r.status !== 200) throw new Error(`${username} could not sign in (${r.status})`);
+        return client;
+      };
+      return { ...users, a: await signIn(LOCAL_USERS.admin), b: await signIn(LOCAL_USERS.member) };
+    },
     close: () =>
       new Promise<void>((resolve, reject) => {
         server.close((err) => {

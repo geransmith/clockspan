@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from '../dev/harness.js';
-import { ensureLocalUsers, LOCAL_USERS, seedDatabase } from '../dev/seed.js';
+import { seedDatabase } from '../dev/seed.js';
 import { MAX_PRIORITIES } from '../../shared/settings.js';
 import { punchWindow } from '../../shared/dates.js';
 import { LIMITS } from '../../shared/api.js';
@@ -340,11 +340,7 @@ describe('days are scoped to the signed-in user', () => {
   });
 
   it("keeps every read and write on the caller's own rows", async () => {
-    const { admin, member } = await ensureLocalUsers(app.db);
-    const a = app.client();
-    const b = app.client();
-    expect((await a.post('/api/auth/login', { username: LOCAL_USERS.admin, password: LOCAL_USERS.password })).status).toBe(200);
-    expect((await b.post('/api/auth/login', { username: LOCAL_USERS.member, password: LOCAL_USERS.password })).status).toBe(200);
+    const { admin, member, a, b } = await app.twoUsers();
     // A has a seeded history; B starts empty.
     const seeded = seedDatabase(app.db, { userId: admin.id, today: SEED_TODAY, now: SEED_NOW, days: 3 });
     const date = seeded.days[0]!.date;
