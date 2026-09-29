@@ -7,7 +7,7 @@ import { formatDuration } from '../lib/format';
 import { readStored, writeStored } from '../lib/storage';
 import { useDayStore } from './useDay';
 import { useLatest } from './useLatest';
-import { useNow } from './useNow';
+import { useClock } from './useClock';
 import { useSettings } from './useSettings';
 import { useTimer } from './useTimer';
 
@@ -47,7 +47,7 @@ export function BreakProvider({ children }: { children: ReactNode }) {
   const { settings, loaded } = useSettings();
   const { finished, running } = useTimer();
   const { days, startBreak, endBreak } = useDayStore();
-  const now = useNow(1000);
+  const now = useClock();
   const today = days[todayKey(now)];
   const breaks = today?.breaks;
   const current = breaks ? runningBreak(breaks, now) : null;

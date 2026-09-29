@@ -4,6 +4,7 @@ import { vi } from 'vitest';
 import { emptyDay } from '../../../shared/api.js';
 import { DEFAULT_SETTINGS } from '../../../shared/settings.js';
 import { BreakProvider } from '../hooks/useBreak';
+import { ClockProvider } from '../hooks/useClock';
 import { DayProvider } from '../hooks/useDay';
 import { SettingsProvider } from '../hooks/useSettings';
 import { TimerProvider } from '../hooks/useTimer';
@@ -92,10 +93,12 @@ export function SettingsAndDays({ children }: { children: ReactNode }) {
 /** The provider stack as `App.tsx` builds it. */
 export function AllProviders({ children }: { children: ReactNode }) {
   return (
-    <SettingsAndDays>
-      <TimerProvider>
-        <BreakProvider>{children}</BreakProvider>
-      </TimerProvider>
-    </SettingsAndDays>
+    <ClockProvider>
+      <SettingsAndDays>
+        <TimerProvider>
+          <BreakProvider>{children}</BreakProvider>
+        </TimerProvider>
+      </SettingsAndDays>
+    </ClockProvider>
   );
 }
