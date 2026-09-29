@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addPending, confirm, fetched, settle, shown, untracked, type Tracked } from './optimistic';
+import { addPending, confirm, fetched, settle, settleWith, shown, untracked, type Tracked } from './optimistic';
 
 type Row = { text: string; n: number };
 const loaded = (value: Row, version = 0): Tracked<Row> => ({ confirmed: value, pending: [], version });
@@ -49,6 +49,15 @@ describe('settle', () => {
   it('keeps a value never loaded unloaded, while still moving the version', () => {
     const t = settle(addPending(untracked<Row>(), 1, inc), [1], setText('saved'));
     expect(t).toEqual({ confirmed: undefined, pending: [], version: 1 });
+  });
+});
+
+describe('settleWith', () => {
+  it('takes a whole answer as the confirmed value, loaded or not, keeping the other changes on top', () => {
+    let t = addPending(addPending(untracked<Row>(), 1, setText('b')), 2, inc);
+    t = settleWith(t, [1], { text: 'B', n: 0 });
+    expect(t).toMatchObject({ confirmed: { text: 'B', n: 0 }, version: 1 });
+    expect(shown(t)).toEqual({ text: 'B', n: 1 });
   });
 });
 

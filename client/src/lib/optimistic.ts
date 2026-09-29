@@ -58,6 +58,15 @@ export function settle<T>(t: Tracked<T>, ids: readonly number[], commit?: (confi
 }
 
 /**
+ * `settle` for a server that answers with the whole value (the running session, all the
+ * settings): its answer becomes the confirmed value, loaded or not, so a save made before the
+ * first read answered still shows.
+ */
+export function settleWith<T>(t: Tracked<T>, ids: readonly number[], value: T): Tracked<T> {
+  return { confirmed: value, pending: t.pending.filter((p) => !ids.includes(p.id)), version: t.version + 1 };
+}
+
+/**
  * A change the server made and confirmed without this store asking (the timer finished a
  * session, a break started): laid onto the confirmed value, and a read already out is older.
  */

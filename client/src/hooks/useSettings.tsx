@@ -3,7 +3,7 @@ import * as api from '../api';
 import type { Settings } from '../types';
 import { nextBackoff } from '../../../shared/backoff.js';
 import { DEFAULT_SETTINGS, normalizeLayout } from '../../../shared/settings.js';
-import { useLatest } from './useLatest';
+import { addPending, fetched, settle, settleWith, shown, untracked, type Tracked } from '../lib/optimistic';
 
 interface SettingsCtx {
   settings: Settings;
@@ -14,15 +14,26 @@ interface SettingsCtx {
 
 const Ctx = createContext<SettingsCtx | null>(null);
 
+/** The server's settings as the client keeps them: a layout this build can render. */
+function fromServer(s: Settings): Settings {
+  return { ...s, layout: normalizeLayout(s.layout) };
+}
+
+/**
+ * The user's settings: the server's copy plus the changes not confirmed yet, like a day
+ * (`lib/optimistic.ts`). A change shows at once; a save that fails leaves the server's copy
+ * showing, with any later change still on top, and rejects so the dialog can say so.
+ */
 export function SettingsProvider({ children }: { children: ReactNode }) {
-  // The shared defaults stand in until the server answers, so nothing renders against a guess.
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [loaded, setLoaded] = useState(false);
-  const latest = useLatest(settings);
-  // Saves can overlap (two chips tapped quickly). A response only lands if nothing newer was
-  // sent after it, so the first answer can't briefly undo the second optimistic change.
-  const seq = useRef(0);
-  // And each goes out once the one before it has answered, failed or not: two in flight could
+  const [tracked, setTracked] = useState<Tracked<Settings>>(untracked);
+  // The same value, current at once for the callbacks below (see the day store).
+  const store = useRef(tracked);
+  const nextId = useRef(0);
+  const change = useCallback((fn: (t: Tracked<Settings>) => Tracked<Settings>) => {
+    store.current = fn(store.current);
+    setTracked(store.current);
+  }, []);
+  // Each save goes out once the one before it has answered, failed or not: two in flight could
   // reach the server in the other order and leave it on the older value.
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const inOrder = useCallback(<T,>(send: () => Promise<T>): Promise<T> => {
@@ -39,12 +50,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     let retry: number | undefined;
     let delay = 0;
     const fetchSettings = () => {
+      const sentAt = store.current.version;
       api
         .getSettings()
         .then((s) => {
-          if (cancelled) return;
-          setSettings({ ...s, layout: normalizeLayout(s.layout) });
-          setLoaded(true);
+          // A save answered while this was out already brought all the settings, newer than these.
+          if (!cancelled) change((t) => fetched(t, sentAt, fromServer(s)).next);
         })
         .catch(() => {
           if (cancelled) return;
@@ -57,32 +68,33 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       window.clearTimeout(retry);
     };
-  }, []);
+  }, [change]);
 
   const update = useCallback(
     async (patch: Partial<Settings>) => {
-      const prev = latest.current;
-      const mine = ++seq.current;
-      setSettings({ ...prev, ...patch });
+      const id = ++nextId.current;
+      change((t) => addPending(t, id, (s) => ({ ...s, ...patch })));
       try {
         const saved = await inOrder(() => api.putSettings(patch));
-        if (seq.current === mine) setSettings({ ...saved, layout: normalizeLayout(saved.layout) });
+        change((t) => settleWith(t, [id], fromServer(saved)));
       } catch (err) {
-        // A newer save is in flight: its answer settles the state, so don't roll it back here.
-        if (seq.current === mine) setSettings(prev);
+        change((t) => settle(t, [id]));
         throw err;
       }
     },
-    [latest, inOrder],
+    [change, inOrder],
   );
 
-  // Not optimistic: the server's answer is the copy of the defaults that counts.
+  // Not optimistic: the server's answer is the copy of the defaults that counts. A change made
+  // after it is still pending and stays on top.
   const reset = useCallback(async () => {
-    const mine = ++seq.current;
     const saved = await inOrder(() => api.resetSettings());
-    if (seq.current === mine) setSettings({ ...saved, layout: normalizeLayout(saved.layout) });
-  }, [inOrder]);
+    change((t) => settleWith(t, [], fromServer(saved)));
+  }, [change, inOrder]);
 
+  // Kept by identity between changes: the alarms and the sheet key their work on it.
+  const settings = useMemo(() => shown(tracked) ?? DEFAULT_SETTINGS, [tracked]);
+  const loaded = tracked.confirmed !== undefined;
   const value = useMemo(() => ({ settings, loaded, update, reset }), [settings, loaded, update, reset]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

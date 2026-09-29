@@ -110,6 +110,45 @@ describe('update', () => {
     expect(result.current.settings.workMinutes).toBe(480);
   });
 
+  it('shows the stored settings after two saves in a row fail, not the first guess', async () => {
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ workMinutes: 480 }));
+    const first = deferred<ReturnType<typeof makeSettings>>();
+    const second = deferred<ReturnType<typeof makeSettings>>();
+    vi.mocked(api.putSettings).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const { result } = render();
+    await settle();
+    const a = result.current.update({ workMinutes: 500 });
+    await settle();
+    const b = result.current.update({ priorityCount: 5 });
+    await settle();
+    expect(result.current.settings).toMatchObject({ workMinutes: 500, priorityCount: 5 });
+    first.reject(new Error('offline'));
+    await expect(a).rejects.toThrow('offline');
+    await settle();
+    // The first is gone; the second is still on its way and still shows.
+    expect(result.current.settings).toMatchObject({ workMinutes: 480, priorityCount: 5 });
+    second.reject(new Error('offline'));
+    await expect(b).rejects.toThrow('offline');
+    await settle();
+    expect(result.current.settings).toMatchObject({ workMinutes: 480, priorityCount: 3 });
+  });
+
+  it("takes a save's answer as loaded, and drops the first load when it answers later", async () => {
+    const first = deferred<ReturnType<typeof makeSettings>>();
+    vi.mocked(api.getSettings).mockReturnValueOnce(first.promise);
+    vi.mocked(api.putSettings).mockResolvedValue(makeSettings({ workMinutes: 500 }));
+    const { result } = render();
+    await result.current.update({ workMinutes: 500 });
+    await settle();
+    // The answer is all the settings, as stored.
+    expect(result.current).toMatchObject({ loaded: true, settings: { workMinutes: 500 } });
+    // The load was read before the save.
+    first.resolve(makeSettings());
+    await settle();
+    expect(api.getSettings).toHaveBeenCalledTimes(1);
+    expect(result.current.settings.workMinutes).toBe(500);
+  });
+
   it('sends overlapping saves one at a time, and lets only the newest settle the state', async () => {
     vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ workMinutes: 480 }));
     const first = deferred<ReturnType<typeof makeSettings>>();
