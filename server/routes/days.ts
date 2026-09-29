@@ -53,6 +53,15 @@ function parseInstant(raw: unknown, from: number, to: number): number | null {
   return Number.isSafeInteger(ms) && ms >= from && ms <= to ? ms : null;
 }
 
+/**
+ * One row of a list the client replaces whole: an object, or null for an empty row. Anything
+ * else is a client bug, and reading fields off it would store an empty row in its place
+ * (`(5).at` is undefined), or trip over a method of the same name (`'x'.at`).
+ */
+function isRow(raw: unknown): raw is Record<string, unknown> | null {
+  return raw === null || (typeof raw === 'object' && !Array.isArray(raw));
+}
+
 function punchesJson(rows: PunchRow[]): Punch[] {
   return rows.map((p) => ({ position: p.position, kind: p.kind, at: p.at }));
 }
@@ -195,7 +204,11 @@ export function daysRouter(db: DB, config: Config): Router {
     const window = punchWindow(date);
     const punches: Punch[] = [];
     for (let i = 0; i < input.length; i++) {
-      const item = input[i] as Record<string, unknown> | null;
+      const item: unknown = input[i];
+      if (!isRow(item)) {
+        res.status(400).json({ error: `Punch ${i} must be an object or null.` });
+        return;
+      }
       const raw = item?.at;
       const at = raw == null ? null : parseInstant(raw, window.from, window.to);
       if (raw != null && at == null) {
@@ -228,7 +241,12 @@ export function daysRouter(db: DB, config: Config): Router {
     const rows: Priority[] = [];
     const seen = new Set<string>();
     for (let i = 0; i < input.length; i++) {
-      const item = (input[i] ?? {}) as Record<string, unknown>;
+      const row: unknown = input[i];
+      if (!isRow(row)) {
+        res.status(400).json({ error: `Priority ${i + 1} must be an object or null.` });
+        return;
+      }
+      const item: Record<string, unknown> = row ?? {};
       // Checked like every other field: a value of the wrong kind is a client bug, not a row to guess at.
       if (item.text != null && typeof item.text !== 'string') {
         res.status(400).json({ error: `Priority ${i + 1} has invalid text.` });
@@ -254,8 +272,8 @@ export function daysRouter(db: DB, config: Config): Router {
         return;
       }
       if (addedAt == null && hasText) addedAt = Date.now();
-      // Checked like every other flag: `Boolean("false")` would tick the row.
-      if (item.done !== undefined && typeof item.done !== 'boolean') {
+      // Checked like every other flag: `Boolean("false")` would tick the row. Null is absent, as for the other fields.
+      if (item.done != null && typeof item.done !== 'boolean') {
         res.status(400).json({ error: `Priority ${i + 1} has an invalid done flag.` });
         return;
       }
