@@ -1,11 +1,11 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useDay } from '../hooks/useDay';
 import { useLeftOpen } from '../hooks/useLeftOpen';
-import { useWeek } from '../hooks/useWeek';
+import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
 import { warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
-import { addDays, formatDateLong } from '../lib/format';
+import { addDays, formatDateLong, startOfWeek } from '../lib/format';
 import { CARD_TITLES, moveCard, setCardVisible } from '../lib/layout';
 import { daySummaryOf } from '../lib/stickers';
 import { clampToDay, daySettings, timeclockForDate, type TimeclockState } from '../lib/timeclock';
@@ -38,7 +38,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
   const isToday = date === today;
   const tc = useMemo(() => (day ? timeclockForDate(day.punches, daySettings(settings, day), date, today, now) : null), [day, settings, date, today, now]);
   // The week so far, up to this sheet's day, for the timeclock's week line.
-  const weekDays = useWeek(date);
+  const { days: weekDays } = useRange(startOfWeek(date), date);
   const week = useMemo(() => (weekDays ? weekHours(weekDays, settings, date, today, now) : null), [weekDays, settings, date, today, now]);
   const focus = useMemo(
     () => ({ seconds: day ? daySummaryOf(day).focusSeconds : 0, sessions: day?.sessions.filter((s) => s.status === 'completed').length ?? 0 }),

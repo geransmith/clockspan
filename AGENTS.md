@@ -334,8 +334,9 @@ Never commit `data/` or `.env`.
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started —
   one rule, no clock-in fallback. `GET /days/range` returns full days and the client does the
-  rollup (the review and the History calendar both fetch it, one period at a time); register
-  any new literal path under `/days` before `/:date`.
+  rollup (the review, the History calendar and the week line all fetch it through `useRange`,
+  one period at a time, which lays the day store's copies over the answer so an edit shows at
+  once); register any new literal path under `/days` before `/:date`.
 - **History → Days opens on the route's date.** `App.tsx` passes `route.date ?? today` to `History`;
   the calendar starts on that month with that day picked (`periodOffset('month', …)`), and
   only "Open day" navigates. So the header's History button lands on the month of the day
