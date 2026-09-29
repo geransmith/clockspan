@@ -565,7 +565,10 @@ The browser pass for each surface (the logic under it is already tested):
   (`${APP_URL}/auth/callback`). The callback builds its URL from `APP_URL`, not from request
   headers, so it works behind proxies.
 - `TRUST_PROXY` is a hop count (`1`), never `true`: `true` trusts the leftmost
-  `X-Forwarded-For`, which the client controls, and the login limiter keys on `req.ip`.
+  `X-Forwarded-For`, which the client controls, and the login limiter keys on `req.ip`. Left
+  unset behind a proxy, every sign-in is the proxy's address; under `AUTH_MODE=local`,
+  `warnUntrustedProxy` (`auth/limiter.ts`) logs that once, the first time `X-Forwarded-For`
+  reaches `/api/auth`.
 - scrypt at N=2^15 needs `maxmem` above Node's 32 MB default (set in `password.ts`).
   `DUMMY_HASH` is computed with a top-level `await`, so `password.ts` is ESM-only.
 - `window` `focus` events fire on ordinary clicks in some embedded browsers; timer re-sync is

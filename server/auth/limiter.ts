@@ -1,5 +1,6 @@
 import { isIPv6 } from 'node:net';
-import type { Response } from 'express';
+import type { RequestHandler, Response } from 'express';
+import type { Config } from '../config.js';
 import { USERNAME } from '../../shared/api.js';
 
 /**
@@ -86,6 +87,25 @@ export function limiterKey(ip: string): string {
  */
 export function accountKey(username: unknown): string {
   return typeof username === 'string' ? username.trim().toLowerCase().slice(0, USERNAME.max) : '';
+}
+
+/**
+ * Logs once when a request carries X-Forwarded-For while TRUST_PROXY is unset. Behind a proxy
+ * that means every sign-in counts as the proxy's address, so a few failed sign-ins from anyone
+ * block new sign-ins for everyone. A client can send the header too, so the line says what to
+ * do in either case. It names only the socket's address, never what the header says.
+ */
+export function warnUntrustedProxy(config: Config): RequestHandler {
+  let warned = config.trustProxy !== false;
+  return (req, _res, next) => {
+    if (!warned && req.get('x-forwarded-for') !== undefined) {
+      warned = true;
+      console.warn(
+        `[proxy] A request came in with X-Forwarded-For but TRUST_PROXY is not set. If a reverse proxy sent it, every sign-in counts as coming from the proxy (${req.ip}), so ${MAX_ATTEMPTS} failed sign-ins from anyone block new sign-ins for everyone for up to ${WINDOW_MS / 60_000} minutes: set TRUST_PROXY to the number of proxies, usually 1. With no proxy in front, a client sent the header itself; leave TRUST_PROXY unset.`,
+      );
+    }
+    next();
+  };
 }
 
 /** The 429 for a request the limiter holds back, with when to try again. */
