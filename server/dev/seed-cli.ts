@@ -17,7 +17,10 @@ import {
 //                     [--auth none|local|oidc] [--sessions]
 // Fills the dev DB (DATA_DIR, default ./data) with sample days for the default user, for the
 // `admin` and `sam` local users when AUTH_MODE=local, or for one OIDC dev user when
-// AUTH_MODE=oidc. --sessions also signs each of them in and prints the cookie, so a browser
+// AUTH_MODE=oidc. --today moves the whole sample to another date, at the current time of day.
+// --now pins that time of day instead: today's clock-in is two hours before it and a
+// --running timer started ten minutes before it (the screenshot script shifts the browser's
+// clock to match). --sessions also signs each user in and prints the cookie, so a browser
 // check sets it instead of typing a password (or, for OIDC, going to a provider). --auth
 // stands in for AUTH_MODE (and fills placeholder OIDC_* values, since the seed never contacts
 // a provider). Safe to run while `npm run dev` is up; reload the page afterwards.
@@ -33,10 +36,20 @@ const opts: { fresh: boolean; running: boolean; quarter: boolean; sessions: bool
   quarter: false,
   sessions: false,
 };
+const USAGE = 'Options: --fresh --running --days N --quarter --today YYYY-MM-DD --now HH:MM --auth MODE --sessions';
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
   const [name, inline] = args[i]!.split('=', 2) as [string, string | undefined];
-  const next = () => inline ?? args[++i];
+  const next = () => {
+    const value = inline ?? args[++i];
+    // Left last with nothing after it, the option would otherwise be dropped without a word
+    // (and an empty `--days=` read as 0).
+    if (!value) {
+      console.error(`${name} needs a value. ${USAGE}`);
+      process.exit(2);
+    }
+    return value;
+  };
   if (name === '--fresh') opts.fresh = true;
   else if (name === '--running') opts.running = true;
   else if (name === '--quarter') opts.quarter = true;
@@ -46,29 +59,32 @@ for (let i = 0; i < args.length; i++) {
   else if (name === '--today') opts.today = next();
   else if (name === '--now') opts.now = next();
   else {
-    console.error(`Unknown option ${name}. Options: --fresh --running --days N --quarter --today YYYY-MM-DD --now HH:MM --auth MODE --sessions`);
+    console.error(`Unknown option ${name}. ${USAGE}`);
     process.exit(2);
   }
 }
 
-let now = Date.now();
-const today = opts.today ?? todayKey(now);
+const clock = new Date();
+const today = opts.today ?? todayKey(clock.getTime());
 if (!isValidDateKey(today)) {
   // Only a value typed after --today can fail the check.
   console.error(`--today must be a date, YYYY-MM-DD (got "${opts.today ?? ''}").`);
   process.exit(2);
 }
-// --now pins today's clock-in and running timer to a local time of day (the screenshot
-// script shifts the browser's clock to match), instead of "two hours ago".
+// Today's rows are built around `now`, so it has to fall on `today`: the current time of day
+// there, or --now's. A --today with the real clock would put its clock-in on the real date,
+// outside the punch window the API allows for that day.
+const [y, mo, d] = today.split('-').map(Number) as [number, number, number];
+clock.setFullYear(y, mo - 1, d);
 if (opts.now !== undefined) {
   const m = /^(\d{1,2}):(\d{2})$/.exec(opts.now);
   if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) {
     console.error(`--now must be HH:MM (got "${opts.now}").`);
     process.exit(2);
   }
-  const [y, mo, d] = today.split('-').map(Number) as [number, number, number];
-  now = new Date(y, mo - 1, d, Number(m[1]), Number(m[2])).getTime();
+  clock.setHours(Number(m[1]), Number(m[2]), 0, 0);
 }
+const now = clock.getTime();
 if (opts.quarter && opts.days !== undefined) {
   console.error('Pass --days or --quarter, not both.');
   process.exit(2);
@@ -88,7 +104,8 @@ if (opts.auth !== undefined && !['none', 'local', 'oidc'].includes(opts.auth)) {
 }
 const env: NodeJS.ProcessEnv = { ...process.env, ...(opts.auth ? { AUTH_MODE: opts.auth } : {}) };
 if (env.AUTH_MODE === 'oidc') {
-  env.OIDC_ISSUER ??= 'http://127.0.0.1:9/';
+  // https, as the config will require; port 2 because fetch refuses 1 and 9 outright.
+  env.OIDC_ISSUER ??= 'https://127.0.0.1:2/';
   env.OIDC_CLIENT_ID ??= 'clockspan-dev';
   env.OIDC_CLIENT_SECRET ??= 'dev';
   env.APP_URL ??= 'http://localhost:5173';
