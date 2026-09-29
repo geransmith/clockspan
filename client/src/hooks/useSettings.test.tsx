@@ -57,13 +57,22 @@ describe('loading', () => {
     expect(result.current.settings.lunchDeadlineMinutes).toBe(60);
   });
 
-  it('drops an answer or a retry that lands after unmount (sign-out)', async () => {
+  it('drops the answer or the retry of a fetch whose effect was cleaned up (StrictMode, sign-out)', async () => {
+    // StrictMode runs the effect twice, cleaning up the first run the way an unmount would. Its
+    // answer lands after the second run's and is older, so it must not show.
     const late = deferred<ReturnType<typeof makeSettings>>();
-    vi.mocked(api.getSettings).mockReturnValue(late.promise);
-    render().unmount();
-    late.resolve(makeSettings());
+    vi.mocked(api.getSettings)
+      .mockReturnValueOnce(late.promise)
+      .mockResolvedValueOnce(makeSettings({ workMinutes: 540 }));
+    const strict = renderHook(() => useSettings(), { wrapper: SettingsProvider, reactStrictMode: true });
     await settle();
+    expect(api.getSettings).toHaveBeenCalledTimes(2);
+    late.resolve(makeSettings({ workMinutes: 480 }));
+    await settle();
+    expect(strict.result.current.settings.workMinutes).toBe(540);
+    strict.unmount();
 
+    // Signed out with the fetch still out: its failure schedules no retry.
     const failing = deferred<ReturnType<typeof makeSettings>>();
     vi.mocked(api.getSettings).mockReset().mockReturnValue(failing.promise);
     const second = render();
@@ -279,17 +288,22 @@ describe('reset', () => {
 
     // A save made while the reset is out goes after it, and its answer is the one that counts.
     const reset = deferred<ReturnType<typeof makeSettings>>();
+    const saved = deferred<ReturnType<typeof makeSettings>>();
     vi.mocked(api.resetSettings).mockReturnValueOnce(reset.promise);
-    vi.mocked(api.putSettings).mockResolvedValueOnce(makeSettings({ workMinutes: 450 }));
+    vi.mocked(api.putSettings).mockReturnValueOnce(saved.promise);
     const r = result.current.reset();
     const u = result.current.update({ workMinutes: 450 });
     await settle();
     expect(api.putSettings).not.toHaveBeenCalled();
     reset.resolve(makeSettings());
     await r;
+    await settle();
+    // The defaults are in, and the change made while they were out still shows over them.
+    expect(api.putSettings).toHaveBeenCalledWith({ workMinutes: 450 });
+    expect(result.current.settings.workMinutes).toBe(450);
+    saved.resolve(makeSettings({ workMinutes: 450 }));
     await u;
     await settle();
-    expect(api.putSettings).toHaveBeenCalledWith({ workMinutes: 450 });
     expect(result.current.settings.workMinutes).toBe(450);
   });
 });

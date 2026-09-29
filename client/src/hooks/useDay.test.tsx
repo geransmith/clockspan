@@ -151,20 +151,24 @@ describe('load after a write', () => {
     expect(result.current.days[TODAY]?.punches[0]?.at).toBe(T0);
   });
 
-  it('still fills in a day that was not held when a write elsewhere went out meanwhile', async () => {
+  it('still fills in a day whose first load was out when a write to it was saved, and asks for the day again', async () => {
+    // Today's first load is out when a break started from the bar is saved.
     const first = deferred<Day>();
-    vi.mocked(api.getDay).mockReturnValueOnce(first.promise);
-    vi.mocked(api.patchSession).mockResolvedValue({ session: makeSession() });
-    const { result } = renderStore(null);
-    let loaded!: Promise<void>;
-    act(() => {
-      loaded = result.current.load(OTHER);
-    });
-    // A session on today's sheet, which isn't loaded here either.
-    await act(() => result.current.updateSession(TODAY, 1, { label: 'Renamed' }));
-    first.resolve(makeDay(OTHER, { retroNote: 'from the server' }));
-    await act(() => loaded);
-    expect(result.current.days[OTHER]?.retroNote).toBe('from the server');
+    const again = deferred<Day>();
+    vi.mocked(api.getDay).mockReturnValueOnce(first.promise).mockReturnValueOnce(again.promise);
+    const saved = makeBreak({ id: 3 });
+    vi.mocked(api.startBreak).mockResolvedValue({ break: saved });
+    const { result } = renderStore();
+    await act(() => result.current.startBreak(TODAY, 300));
+    expect(result.current.days[TODAY]).toBeUndefined();
+    // Read before the break was saved, but the best copy there is: it shows, and the day is asked for again.
+    first.resolve(makeDay(TODAY, { punches: punchesAt(T0) }));
+    await settle();
+    expect(result.current.days[TODAY]?.punches[0]?.at).toBe(T0);
+    expect(api.getDay).toHaveBeenCalledTimes(2);
+    again.resolve(makeDay(TODAY, { punches: punchesAt(T0), breaks: [saved] }));
+    await settle();
+    expect(result.current.days[TODAY]?.breaks).toEqual([saved]);
   });
 
   it('does not make up a day for a session confirmed before its first load, and asks for the day again', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addPending, confirm, fetched, settle, settleWith, shown, untracked, type Tracked } from './optimistic';
+import { addPending, confirm, fetched, serial, settle, settleWith, shown, untracked, type Tracked } from './optimistic';
 
 type Row = { text: string; n: number };
 const loaded = (value: Row, version = 0): Tracked<Row> => ({ confirmed: value, pending: [], version });
@@ -87,5 +87,62 @@ describe('fetched', () => {
     const { next, again } = fetched(t, 0, { text: 'first', n: 0 });
     expect(next.confirmed).toEqual({ text: 'first', n: 0 });
     expect(again).toBe(true);
+  });
+});
+
+describe('serial', () => {
+  /** A job that waits for the test to answer it, and says when it starts. */
+  function job(name: string, started: string[]) {
+    let answer!: { resolve: (v: string) => void; reject: (e: Error) => void };
+    const run = () => {
+      started.push(name);
+      return new Promise<string>((resolve, reject) => (answer = { resolve, reject }));
+    };
+    return { run, answer: () => answer };
+  }
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  it('starts each job on a key once the one before it has answered, failed or not', async () => {
+    const queue = serial();
+    const started: string[] = [];
+    const a = job('a', started);
+    const b = job('b', started);
+    const c = job('c', started);
+    const first = queue(a.run);
+    const second = queue(b.run);
+    const third = queue(c.run);
+    // Nothing starts in the same turn: a caller can show its change before the send.
+    expect(started).toEqual([]);
+    await flush();
+    expect(started).toEqual(['a']);
+    a.answer().reject(new Error('offline'));
+    await expect(first).rejects.toThrow('offline');
+    await flush();
+    expect(started).toEqual(['a', 'b']);
+    b.answer().resolve('B');
+    expect(await second).toBe('B');
+    await flush();
+    expect(started).toEqual(['a', 'b', 'c']);
+    c.answer().resolve('C');
+    expect(await third).toBe('C');
+  });
+
+  it('keeps keys apart, and still runs a job on a key left idle', async () => {
+    const queue = serial();
+    const started: string[] = [];
+    const a = job('a', started);
+    const b = job('b', started);
+    const first = queue(a.run, 'day:1');
+    void queue(b.run, 'day:2');
+    await flush();
+    // The other key doesn't wait for the one out on the first.
+    expect(started).toEqual(['a', 'b']);
+    a.answer().resolve('A');
+    await first;
+    await flush();
+    const c = job('c', started);
+    void queue(c.run, 'day:1');
+    await flush();
+    expect(started).toEqual(['a', 'b', 'c']);
   });
 });

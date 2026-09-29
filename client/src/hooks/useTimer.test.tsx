@@ -329,6 +329,24 @@ describe('adjust', () => {
     expect(result.current.timer.running).toBeNull();
   });
 
+  it('re-syncs after a 404 with a sync sent after it, not the one already out', async () => {
+    const session = startedAgo(5);
+    const { result } = await renderRunning(session);
+    // The minute's sync goes out before the phone ends the session, and answers late.
+    const minute = deferred<{ session: Session | null }>();
+    vi.mocked(api.getRunning).mockReturnValueOnce(minute.promise).mockResolvedValue({ session: null });
+    await settle(MIN);
+    expect(api.getRunning).toHaveBeenCalledTimes(2);
+    vi.mocked(api.patchSession).mockRejectedValue(apiError(404));
+    await act(() => result.current.timer.adjust(5 * 60));
+    // Nothing goes out beside the sync already out.
+    expect(api.getRunning).toHaveBeenCalledTimes(2);
+    minute.resolve({ session });
+    await settle();
+    expect(api.getRunning).toHaveBeenCalledTimes(3);
+    expect(result.current.timer.running).toBeNull();
+  });
+
   it('only warns on a failure that is not about the session (offline)', async () => {
     const { result } = await renderRunning(startedAgo(5));
     vi.mocked(api.patchSession).mockRejectedValue(new Error('offline'));
