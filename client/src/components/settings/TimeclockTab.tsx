@@ -10,7 +10,7 @@ export function TimeclockTab({ settings, set }: { settings: Settings; set: (patc
       <DurationField label="Work day" minutes={settings.workMinutes} {...SETTING_LIMITS.workMinutes} onCommit={(m) => set({ workMinutes: m })} />
       <Toggle
         label="Meal periods"
-        hint="The lunch deadline and the second meal period, with their alarms. Off for salaried or exempt work, or where other rules apply; the Lunch by tile then shows focused time."
+        hint="The lunch deadline and the second meal period, with their alarms and the Lunch by tile. Off for salaried or exempt work, or where other rules apply."
         checked={settings.mealRules}
         onChange={(v) => set({ mealRules: v })}
       />

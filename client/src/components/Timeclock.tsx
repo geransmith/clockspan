@@ -4,8 +4,8 @@ import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { unlockAudio } from '../lib/alerts';
 import { pickCelebration } from '../lib/celebrate';
-import { floorToMinute, formatDuration, plural } from '../lib/format';
-import { timeclockTiles } from '../lib/tiles';
+import { floorToMinute, formatDuration } from '../lib/format';
+import { focusTile, timeclockTiles } from '../lib/tiles';
 import {
   addPunchPair,
   clockOutPosition,
@@ -38,7 +38,7 @@ interface Props {
   workMinutes: number | null;
   /** The week so far up to this day; null while loading. */
   week: WeekHours | null;
-  /** The day's logged focus: with the meal rules off there's no lunch deadline, so that tile shows this. */
+  /** The day's logged focus, for the Focused tile. */
   focus: { seconds: number; count: number };
   onChange: (punches: Punch[]) => void;
   onOvertimeChange: (approved: boolean) => void;
@@ -163,19 +163,11 @@ export function Timeclock({
 
   return (
     <div className="timeclock">
-      <div className="tiles">
-        {!settings.mealRules ? (
-          <Tile
-            label="Focused"
-            value={formatDuration(focus.seconds)}
-            sub={focus.count === 0 ? 'No sessions yet' : `${focus.count} ${plural(focus.count, 'session')}`}
-            tone=""
-          />
-        ) : (
-          <Tile label="Lunch by" {...tiles.lunch} />
-        )}
+      <div className={settings.mealRules ? 'tiles tiles--four' : 'tiles'}>
+        {settings.mealRules && <Tile label="Lunch by" {...tiles.lunch} />}
         <Tile label="Worked" {...tiles.worked} />
         <Tile label="Clock out at" {...tiles.clockOut} />
+        <Tile label="Focused" {...focusTile(focus, isToday)} />
       </div>
 
       {celebration && (

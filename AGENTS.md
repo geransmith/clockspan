@@ -331,7 +331,8 @@ Never commit `data/` or `.env`.
 - **`mealRules: false` turns the meal periods off in the math, not in the components.**
   `computeTimeclock` then never needs a lunch (`not-needed`, so no lunch alarm and no lunch
   added to the clock-out time) and `secondMealApplies` is false; a lunch that was punched still
-  counts. `trackHours: false` only hides hours outside the day's own tiles (the week line,
+  counts. The card drops the Lunch by tile (the Focused tile shows either way).
+  `trackHours: false` only hides hours outside the day's own tiles (the week line,
   History's hours, the Clocked out sticker via `stickerReasons`); the timeclock still runs.
 - **Priorities are stored sparse** (positions 1..n, contiguous, ≤ `MAX_PRIORITIES`; no `done`
   on an empty row); the client pads to `settings.priorityCount` with `padPriorities()`.

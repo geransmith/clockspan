@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS } from '../../../shared/settings.js';
 import type { Punch, Settings } from '../types';
 import { addPunchPair, computeTimeclock, emptyPunches } from './timeclock';
-import { timeclockTiles, type TileOptions } from './tiles';
+import { focusTile, timeclockTiles, type TileOptions } from './tiles';
 
 const at = (h: number, m = 0) => new Date(2026, 8, 28, h, m).getTime();
 /** Punch rows with these times from position 0; the rest empty. */
@@ -103,5 +103,17 @@ describe('Clock out at', () => {
   it('marks the day complete once clocked out', () => {
     const extra = punches(addPunchPair(empty), at(8), at(12), at(12, 30), at(14), at(14, 15), at(16, 45));
     expect(tiles(extra, at(17)).clockOut).toEqual({ value: '16:45', sub: 'Day complete', tone: 'tile--accent' });
+  });
+});
+
+describe('the Focused tile', () => {
+  it("shows the day's focus time and its session count", () => {
+    expect(focusTile({ seconds: 25 * 60, count: 1 }, true)).toEqual({ value: '25m', sub: '1 session', tone: '' });
+    expect(focusTile({ seconds: 90 * 60, count: 3 }, false)).toEqual({ value: '1h 30m', sub: '3 sessions', tone: '' });
+  });
+
+  it('says no sessions yet only while the day is still going', () => {
+    expect(focusTile({ seconds: 0, count: 0 }, true).sub).toBe('No sessions yet');
+    expect(focusTile({ seconds: 0, count: 0 }, false).sub).toBe('No sessions');
   });
 });
