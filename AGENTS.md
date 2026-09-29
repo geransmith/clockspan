@@ -74,7 +74,7 @@ client/                 Vite root → dist/client
                         happy-dom test beside it (useLatest and useTimeFormat are covered through the
                         hooks that use them); src/test/hooks.tsx has the fixtures and provider stack
   src/components/       the cards, History (Calendar + Review), Banners, FinishChoice; pieces more than
-                        one place uses (TimerControls, Toggle, NewPasswordFields, Tile); settings/ holds
+                        one place uses (TimerControls, Toggle, NewPasswordFields, UsernameInput, Tile); settings/ holds
                         SettingsDialog (the shell and tabs), a file per tab, and controls.tsx
   src/auth/             AuthGate and the setup / login / new-password pages
   src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
