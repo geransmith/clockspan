@@ -240,10 +240,12 @@ Never commit `data/` or `.env`.
   punch commit do this) for iOS. What plays is `settings.sounds[event]`, an id from the
   catalog in `shared/sounds.ts`; `settings.sound` is the master switch over all of them, and
   `none` is the per-event off. A celebration (day complete and work week reached in
-  `Timeclock.tsx`, the next day planned in `PlanNext.tsx`) is a `useCelebration(moment, event)`
-  (`hooks/useCelebration.ts`): the sound under `settings.sound`, the burst under
-  `settings.celebrations`. A state's moment comes from `useBecameTrue`, so it is the day
-  *becoming* done while the card is mounted, never a done day opening.
+  `Timeclock.tsx`, a priority ticked in `Priorities.tsx`, the next day planned in
+  `PlanNext.tsx`) is a `useCelebration(moment, event)` (`hooks/useCelebration.ts`): the sound
+  under `settings.sound`, the burst under `settings.celebrations`. A state's moment comes from
+  `useBecameTrue`, so it is the day *becoming* done while the card is mounted, never a done day
+  opening. The sound plays after the render, so a moment set by a tap calls `unlockAudio()` in
+  that handler first.
 - **Timer remaining time is derived from the server's `startedAt`, `plannedSeconds` and pauses**
   on every tick (`timerView()` in `client/src/lib/timer.ts`, on `shared/timer.ts`) — never a
   client-side counter. A paused session is still `status = 'running'` with `pausedAt` set;
@@ -355,10 +357,12 @@ Never commit `data/` or `.env`.
 - **Per-date card drafts reset by remounting**: `Sheet.tsx` keys `Priorities` and `Retro` by
   date, so neither needs a "date changed" effect. Local drafts that mirror a prop use the
   "adjust state while rendering" form (see `DurationField`), not a `useEffect` + `setState`,
-  unless the draft is gated by a dirty flag (`Priorities`, `Retro`): a ref can't be read during
-  render, so there the effect form is the one the react-hooks rules allow. Callbacks that must
-  read the latest value use `useLatest()`, never a ref written in render (the react-hooks lint
-  enforces both).
+  unless the draft is gated by a dirty flag: a ref can't be read during render, so there the
+  effect form is the one the react-hooks rules allow. A typed draft that saves on a timer is
+  `useDebouncedDraft(stored, save, ms)` (`Priorities`, `Retro`): it saves after the wait, at
+  once on `flush()` or an edit made now, and on unmount, so a day left mid-sentence still
+  saves. Callbacks that must read the latest value use `useLatest()`, never a ref written in
+  render (the react-hooks lint enforces both).
 - Static assets are public; **all data is behind `/api/*`**. The SPA fallback serves
   `index.html` for any non-API path. `/assets/*` is fingerprinted and cached immutable.
 - **History, the settings dialog and drag and drop are lazy chunks** (`lazy()` in `App.tsx`
