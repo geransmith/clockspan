@@ -130,16 +130,21 @@ describe('sessions', () => {
     // Pretend the pause began 90 s ago: resuming banks it.
     app.db.prepare(`UPDATE sessions SET paused_at = paused_at - 90000 WHERE id = ?`).run(id);
     const resumed = await app.api.post(`/api/sessions/${id}/resume`);
-    expect(resumed.body.session).toMatchObject({ status: 'running', pausedSeconds: 90, pausedAt: null });
+    expect(resumed.body.session).toMatchObject({ status: 'running', pausedAt: null });
+    // 90 s plus the real time between the requests, rounded: 91 on a slow machine.
+    expect(resumed.body.session.pausedSeconds).toBeGreaterThanOrEqual(90);
+    expect(resumed.body.session.pausedSeconds).toBeLessThanOrEqual(91);
     // Adjusting still works around a pause.
     expect((await app.api.patch(`/api/sessions/${id}`, { plannedSeconds: 600 })).body.session.plannedSeconds).toBe(600);
     // A second pause, then finish: the session ends when that pause began, and neither pause counts.
     await app.api.post(`/api/sessions/${id}/pause`);
     app.db.prepare(`UPDATE sessions SET paused_at = paused_at - 30000, started_at = started_at - 300000 WHERE id = ?`).run(id);
     const done = await app.api.post(`/api/sessions/${id}/finish`);
-    expect(done.body.session).toMatchObject({ status: 'completed', pausedSeconds: 90, pausedAt: null });
-    // Span: started 300 s ago, pause began 30 s ago → 270 s, minus the 90 s pause = 180 s.
-    expect(done.body.session.durationSeconds).toBe(180);
+    expect(done.body.session).toMatchObject({ status: 'completed', pausedSeconds: resumed.body.session.pausedSeconds, pausedAt: null });
+    // Span: started 300 s ago, pause began 30 s ago → 270 s, minus the 90 s pause = 180 s (and the
+    // few real milliseconds the requests took).
+    expect(done.body.session.durationSeconds).toBeGreaterThanOrEqual(179);
+    expect(done.body.session.durationSeconds).toBeLessThanOrEqual(181);
     expect(Date.now() - done.body.session.endedAt).toBeGreaterThanOrEqual(30_000);
     // Ended sessions can't be paused or resumed.
     expect((await app.api.post(`/api/sessions/${id}/pause`)).status).toBe(409);
@@ -148,12 +153,23 @@ describe('sessions', () => {
     expect((await app.api.post('/api/sessions/999/resume')).status).toBe(404);
   });
 
-  it('clamps a paused timer to its planned end, pushed out by the pauses', async () => {
+  it('clamps a timer that ran out to its planned end, pushed out by the pauses it had', async () => {
     const { id } = (await start({ plannedSeconds: 600 })).body.session;
     // Started 20 min ago with 2 min banked as pauses: the planned 10 min ran out 8 min ago.
     app.db.prepare(`UPDATE sessions SET started_at = ?, paused_seconds = 120 WHERE id = ?`).run(Date.now() - 20 * 60_000, id);
     const r = await app.api.post(`/api/sessions/${id}/finish`);
     expect(r.body.session.durationSeconds).toBe(600);
+    expect(r.body.session.endedAt).toBe(r.body.session.startedAt + 720_000);
+  });
+
+  it('logs the planned length for a timer paused after it ran out, however long the pause', async () => {
+    const { id } = (await start({ plannedSeconds: 600 })).body.session;
+    await app.api.post(`/api/sessions/${id}/pause`);
+    // Started 20 min ago with 2 min of earlier pauses, so the plan ran out 8 min ago; paused 5 min ago.
+    const now = Date.now();
+    app.db.prepare(`UPDATE sessions SET started_at = ?, paused_seconds = 120, paused_at = ? WHERE id = ?`).run(now - 20 * 60_000, now - 5 * 60_000, id);
+    const r = await app.api.post(`/api/sessions/${id}/finish`);
+    expect(r.body.session).toMatchObject({ status: 'completed', durationSeconds: 600, pausedAt: null });
     expect(r.body.session.endedAt).toBe(r.body.session.startedAt + 720_000);
   });
 

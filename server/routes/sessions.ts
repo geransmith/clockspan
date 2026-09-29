@@ -178,7 +178,9 @@ export function sessionsRouter(db: DB): Router {
       const now = Date.now();
       const timing = { startedAt: s.started_at, plannedSeconds: s.planned_seconds, pausedSeconds: s.paused_seconds, pausedAt: s.paused_at };
       const until = s.paused_at ?? now;
-      const endedAt = countOverrun ? until : Math.min(until, plannedEndAt(timing, now));
+      // The planned end as of `until`: while paused it moves forward with the clock, so read at
+      // `now` it would let a pause that began after the end count the overrun anyway.
+      const endedAt = countOverrun ? until : Math.min(until, plannedEndAt(timing, until));
       db.prepare(`UPDATE sessions SET ended_at = ?, paused_at = NULL, status = 'completed' WHERE id = ?`).run(endedAt, s.id);
     }
     reply(res, s.user_id, s.id);
