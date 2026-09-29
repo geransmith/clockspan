@@ -23,7 +23,7 @@ const BASE = (process.env.BASE_URL ?? 'http://localhost:5173').replace(/\/+$/, '
 const CLOCK = '10:30';
 
 const PHONE = { width: 375, height: 812, deviceScaleFactor: 2, mobile: true };
-/** Taller than a phone so the sheet shots reach the priorities card and the review shows both lists. */
+/** Taller than a phone so the sheet shots reach the priorities card. */
 const PHONE_TALL = { ...PHONE, height: 1000 };
 const DESKTOP = { width: 1280, height: 900, deviceScaleFactor: 2, mobile: false };
 
@@ -231,19 +231,24 @@ const SHOTS = [
   { name: 'sheet-phone-light', url: '/', device: PHONE_TALL, scheme: 'light', ready: READY_SHEET },
   { name: 'sheet-phone-dark', url: '/', device: PHONE_TALL, scheme: 'dark', ready: READY_SHEET },
   { name: 'sheet-desktop', url: '/', device: DESKTOP, scheme: 'dark', ready: READY_SHEET, fullPage: true },
+  // The seed makes the last weekday the one with a priority added mid-day.
   { name: 'retro', url: `/?date=${lastWeekday()}`, device: PHONE, scheme: 'light', ready: '#card-retro .card', clip: '#card-retro' },
   // The route's date picks the day, so the panel is filled before the first paint settles.
   { name: 'history', url: `/?view=history&date=${lastWeekday()}`, device: PHONE, scheme: 'light', ready: '.calendar-detail .tile', fullPage: true },
   {
+    // The whole page, so the days' notes at the end are in the picture.
     name: 'review',
     url: '/?view=history',
-    device: PHONE_TALL,
+    device: PHONE,
     scheme: 'light',
     ready: READY_HISTORY,
+    fullPage: true,
     steps: async (page) => {
-      await page.click('.segmented [role="tab"]', 'Review');
-      await page.click('.review [role="tab"]', 'Month');
-      await page.waitForSelector('.review');
+      // The Days / Review switch and the period chips are toggle buttons (aria-pressed), not tabs.
+      await page.click('.segmented .segment', 'Review');
+      await page.click('.review .chip', 'Month');
+      // The body is gone while the month's days load and back once they arrive.
+      await page.waitForSelector('.review .review-body');
       await sleep(600);
     },
   },
