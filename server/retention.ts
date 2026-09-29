@@ -8,7 +8,7 @@ import { DAY_MS, HOUR_MS } from '../shared/dates.js';
  * Old days are deleted two ways: the user's "Delete old days now" button and an automatic
  * prune (per-user setting, plus an optional server-wide ceiling from RETENTION_DAYS). Both
  * go through `pruneDays` so the rules are in one place. Deleting a `days` row cascades to
- * its punches, priorities and sessions; settings and logins are never touched.
+ * its punches, priorities, sessions and breaks; settings and logins are never touched.
  */
 
 const RUN_AFTER_BOOT_MS = 30_000;

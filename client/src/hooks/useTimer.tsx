@@ -327,8 +327,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     const cur = runningRef.current;
     if (!cur) return;
     const v = timerView(cur, Date.now());
-    // Under a minute over, both lengths read the same: nothing to ask.
-    if (v.due && formatDuration(v.elapsedSeconds) !== formatDuration(cur.plannedSeconds)) setFinishChoice(true);
+    // Under a minute over, both lengths are the same whole minutes: nothing to ask.
+    if (v.due && Math.floor(v.elapsedSeconds / 60) !== Math.floor(cur.plannedSeconds / 60)) setFinishChoice(true);
     else void finish();
   }, [finish, runningRef]);
   const dismissFinishChoice = useCallback(() => setFinishChoice(false), []);
