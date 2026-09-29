@@ -18,6 +18,15 @@ describe('TRUST_PROXY', () => {
     expect(load({ TRUST_PROXY: '2' }).trustProxy).toBe(2);
   });
 
+  it('ignores spaces around the value, which started the server before values were checked', () => {
+    expect(load({ TRUST_PROXY: '1 ' }).trustProxy).toBe(1);
+    expect(load({ TRUST_PROXY: ' 1' }).trustProxy).toBe(1);
+    expect(load({ TRUST_PROXY: '2 ' }).trustProxy).toBe(2);
+    expect(load({ TRUST_PROXY: ' 0 ' }).trustProxy).toBe(false);
+    expect(load({ TRUST_PROXY: '   ' }).trustProxy).toBe(false);
+    expect(load({ TRUST_PROXY: ' loopback, 10.0.0.0/8 ' }).trustProxy).toBe('loopback, 10.0.0.0/8');
+  });
+
   it('passes Express string forms through instead of widening them to true', () => {
     expect(load({ TRUST_PROXY: 'loopback' }).trustProxy).toBe('loopback');
     expect(load({ TRUST_PROXY: '10.0.0.0/8, 172.16.0.0/12' }).trustProxy).toBe('10.0.0.0/8, 172.16.0.0/12');
@@ -30,6 +39,8 @@ describe('TRUST_PROXY', () => {
     for (const value of ['1.5', '-1', 'yes', 'on', 'TRUE', 'loopback,', '10.0.0.0/33', 'fd00::/129', '10.0.0.0/8/8', '10.0.0.0/fd00::', 'proxy.lan']) {
       expect(() => load({ TRUST_PROXY: value }), value).toThrow(/^TRUST_PROXY must be the number of proxies/);
     }
+    // 1.0 started the server before values were checked, but a hop count is a whole number, spaces or not.
+    for (const value of ['1.0', ' 1.5 ']) expect(() => load({ TRUST_PROXY: value }), value).toThrow(/^TRUST_PROXY must be the number of proxies/);
   });
 });
 
@@ -153,6 +164,10 @@ describe('COOKIE_SECURE', () => {
     expect(load({ APP_URL: 'https://focus.example.com/' }).cookieSecure).toBe(true);
     expect(load({ APP_URL: 'https://focus.example.com/' }).appUrl).toBe('https://focus.example.com');
     expect(load({ APP_URL: 'http://focus.lan' }).cookieSecure).toBe(false);
+    // The scheme and host are case-insensitive; the Secure default and the OIDC redirect URI read the lowercase form.
+    expect(load({ APP_URL: 'HTTPS://Focus.Example.com/' })).toMatchObject({ appUrl: 'https://focus.example.com', cookieSecure: true });
+    expect(load({ APP_URL: 'Https://FOCUS.example.com/Clockspan/' }).appUrl).toBe('https://focus.example.com/Clockspan');
+    expect(load({ APP_URL: 'HTTP://Focus.lan' })).toMatchObject({ appUrl: 'http://focus.lan', cookieSecure: false });
     // Explicit wins both ways: TLS terminated at a proxy, or a plain-http test of an https URL.
     expect(load({ APP_URL: 'http://focus.lan', COOKIE_SECURE: 'true' }).cookieSecure).toBe(true);
     expect(load({ APP_URL: 'https://focus.example.com', COOKIE_SECURE: 'false' }).cookieSecure).toBe(false);
