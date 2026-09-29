@@ -172,16 +172,19 @@ export function Timeclock({
         <Tile label="Focused" {...focusTile(focus, isToday)} />
       </div>
 
-      {celebration && (
-        <div className="notice notice--celebrate" role="status" ref={noticeRef}>
-          <span key={tc.clockOutAt} className="celebrate-emoji" aria-hidden="true">
-            {celebration.emoji}
-          </span>
-          <span>
-            <strong>Day complete.</strong> {celebration.phrase}
-          </span>
-        </div>
-      )}
+      {/* Always there, so a screen reader hears the notice arrive: a live region has to exist first. */}
+      <div role="status">
+        {celebration && (
+          <div className="notice notice--celebrate" ref={noticeRef}>
+            <span key={tc.clockOutAt} className="celebrate-emoji" aria-hidden="true">
+              {celebration.emoji}
+            </span>
+            <span>
+              <strong>Day complete.</strong> {celebration.phrase}
+            </span>
+          </div>
+        )}
+      </div>
 
       {dayBurst && <Burst key={dayBurst.seed} seed={dayBurst.seed} anchor={dayBurst.anchor} big />}
 

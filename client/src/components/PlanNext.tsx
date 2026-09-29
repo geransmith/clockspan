@@ -34,7 +34,7 @@ export function PlanNext({ date, today, priorities }: Props) {
   const name = dayName(next, today, true);
   return (
     <div className="plan-next">
-      {open ? (
+      {open && (
         <Planner
           date={next}
           name={name}
@@ -46,18 +46,24 @@ export function PlanNext({ date, today, priorities }: Props) {
           }}
           onCancel={() => setOpen(false)}
         />
-      ) : (
-        <div className="plan-next-foot" ref={anchor}>
-          <button className="btn btn-ghost" onClick={() => setOpen(true)}>
+      )}
+      {/* Mounted while the planner is open too, so its status line exists before the result arrives. */}
+      <div className="plan-next-foot" ref={anchor}>
+        {!open && (
+          <button
+            className="btn btn-ghost"
+            onClick={() => {
+              setResult(null);
+              setOpen(true);
+            }}
+          >
             {PLAN_NEXT.open(name)}
           </button>
-          {result && (
-            <span className="muted small" role="status">
-              {result}
-            </span>
-          )}
-        </div>
-      )}
+        )}
+        <span className="muted small" role="status">
+          {result}
+        </span>
+      </div>
       {burst && <Burst key={burst.seed} seed={burst.seed} anchor={burst.anchor} />}
     </div>
   );

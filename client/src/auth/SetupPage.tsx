@@ -62,7 +62,11 @@ export function SetupPage({ onDone, hint }: Props) {
           />
         </label>
         <NewPasswordFields label="Password" value={password} confirm={confirm} onValue={setPassword} onConfirm={setConfirm} />
-        {error && <p className="error">{error}</p>}
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
         <button className="btn btn-primary btn-lg" type="submit" disabled={busy}>
           {busy ? 'Creating…' : 'Create account'}
         </button>

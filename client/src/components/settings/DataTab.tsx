@@ -116,7 +116,11 @@ function DeleteOldDays() {
       </div>
       {stored && <p className="muted small">{stored}</p>}
       {info?.serverMaxDays != null && <p className="muted small">This server keeps at most {info.serverMaxDays} days for every user.</p>}
-      {msg && <p className={msg.ok ? 'success' : 'error'}>{msg.text}</p>}
+      {msg && (
+        <p className={msg.ok ? 'success' : 'error'} role={msg.ok ? undefined : 'alert'}>
+          {msg.text}
+        </p>
+      )}
     </Section>
   );
 }

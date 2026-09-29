@@ -201,7 +201,7 @@ function DayDetail({
         <strong>
           {name}
           {day?.retroAt != null && (
-            <span className="history-reviewed" title="Retrospective reviewed" aria-label="Retrospective reviewed">
+            <span className="history-reviewed" title="Retrospective reviewed" role="img" aria-label="Retrospective reviewed">
               <Check />
             </span>
           )}

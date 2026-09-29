@@ -27,7 +27,7 @@ export function Header({ view, date, today, customize, onNavigate, onToggleCusto
   return (
     <header className="topbar">
       <div className="topbar-row">
-        <button className="brand" onClick={() => onNavigate({ view: 'sheet', date: today })} aria-label="Go to today">
+        <button className="brand" onClick={() => onNavigate({ view: 'sheet', date: today })} title="Go to today">
           <img className="brand-logo" src="/icons/icon.svg" alt="" width={28} height={28} />
           Clockspan
         </button>

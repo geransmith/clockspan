@@ -57,7 +57,7 @@ export function Retro({ date, today, priorities, sessions, note, reviewedAt, onC
           <ul className="retro-list">
             {review.planned.map(({ priority: p, focusedSeconds, sessions: n, addedMidDay }) => (
               <li key={p.uid ?? p.position} className={`retro-row${p.done ? ' is-done' : ''}`}>
-                <span className={`retro-tick${p.done ? ' is-done' : ''}`} aria-label={p.done ? 'Done' : 'Not done'}>
+                <span className={`retro-tick${p.done ? ' is-done' : ''}`} role="img" aria-label={p.done ? 'Done' : 'Not done'}>
                   {p.done && <Check />}
                 </span>
                 <span className="retro-text">

@@ -28,10 +28,10 @@ export function CardShell({ title, children, aside, customize }: Props) {
         {aside && <div className="card-aside">{aside}</div>}
         {customize && (
           <div className="card-tools">
-            <button className="btn btn-icon" onClick={() => customize.onMove(-1)} disabled={!customize.canUp} aria-label="Move up">
+            <button className="btn btn-icon" onClick={() => customize.onMove(-1)} disabled={!customize.canUp} aria-label={`Move ${title} up`}>
               <ArrowUp />
             </button>
-            <button className="btn btn-icon" onClick={() => customize.onMove(1)} disabled={!customize.canDown} aria-label="Move down">
+            <button className="btn btn-icon" onClick={() => customize.onMove(1)} disabled={!customize.canDown} aria-label={`Move ${title} down`}>
               <ArrowDown />
             </button>
             <button className="btn btn-icon" onClick={customize.onHide} aria-label={`Hide ${title}`} title="Hide">

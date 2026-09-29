@@ -45,9 +45,9 @@ export function Review({ today, now, period: { kind, offset }, onPeriod, onOpen 
     <section className="card review">
       <header className="card-head">
         <h2 className="card-title">Review</h2>
-        <span className="chips" role="tablist" aria-label="Period">
+        <span className="chips" role="group" aria-label="Period">
           {KINDS.map((k) => (
-            <button key={k.id} className={`chip${kind === k.id ? ' is-on' : ''}`} onClick={() => pickKind(k.id)} role="tab" aria-selected={kind === k.id}>
+            <button key={k.id} className={`chip${kind === k.id ? ' is-on' : ''}`} onClick={() => pickKind(k.id)} aria-pressed={kind === k.id}>
               {k.label}
             </button>
           ))}
