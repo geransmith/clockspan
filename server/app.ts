@@ -92,7 +92,11 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
     app.use('/assets', notFound);
     app.get('/{*splat}', (_req, res) => {
       res.setHeader('Cache-Control', 'no-cache');
-      res.sendFile(path.join(clientDir, 'index.html'));
+      // `root`, not an absolute path: send's dotfile rule checks every segment of an absolute
+      // path, so an install under any folder starting with a dot (~/.local/share/…, a
+      // .claude/worktrees checkout) answered every page with a 404. With a root it checks only
+      // the part inside it, as express.static does.
+      res.sendFile('index.html', { root: clientDir });
     });
   }
 

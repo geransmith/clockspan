@@ -310,14 +310,17 @@ describe('TRUST_PROXY', () => {
 describe('static client', () => {
   let app: TestApp;
   let dir: string;
+  /** A stand-in for dist/client: the shell, a fingerprinted asset and an icon. */
+  const writeBuild = (root: string) => {
+    fs.mkdirSync(path.join(root, 'assets'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'icons'));
+    fs.writeFileSync(path.join(root, 'index.html'), '<!doctype html><title>shell</title>');
+    fs.writeFileSync(path.join(root, 'assets', 'index-abc123.js'), 'console.log(1)');
+    fs.writeFileSync(path.join(root, 'icons', 'icon.svg'), '<svg/>');
+  };
   beforeEach(() => {
-    // A stand-in for dist/client: the shell, a fingerprinted asset and an icon.
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clockspan-client-'));
-    fs.mkdirSync(path.join(dir, 'assets'));
-    fs.mkdirSync(path.join(dir, 'icons'));
-    fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><title>shell</title>');
-    fs.writeFileSync(path.join(dir, 'assets', 'index-abc123.js'), 'console.log(1)');
-    fs.writeFileSync(path.join(dir, 'icons', 'icon.svg'), '<svg/>');
+    writeBuild(dir);
   });
   afterEach(async () => {
     await app.close();
@@ -366,6 +369,24 @@ describe('static client', () => {
       expect(r.status).toBe(200);
       expect(await r.text()).toContain('shell');
     }
+  });
+
+  it('serves the build from a folder with a dot-named directory in its path', async () => {
+    // An install under ~/.local/share, or a checkout under .claude/worktrees: send ignores
+    // dotfiles, and only the path inside the build is the app's to judge.
+    const hidden = path.join(dir, '.local', 'share', 'clockspan');
+    writeBuild(hidden);
+    fs.writeFileSync(path.join(hidden, '.secret'), 'not for the browser');
+    app = await startTestApp({ clientDir: hidden });
+    for (const p of ['/', '/history', '/some/deep/path?date=2026-09-01']) {
+      const r = await fetch(app.url + p);
+      expect(r.status, p).toBe(200);
+      expect(await r.text()).toContain('shell');
+    }
+    expect((await fetch(`${app.url}/assets/index-abc123.js`)).status).toBe(200);
+    expect((await fetch(`${app.url}/icons/icon.svg`)).status).toBe(200);
+    // A dotfile inside the build is still never served: the path falls through to the shell.
+    expect(await (await fetch(`${app.url}/.secret`)).text()).toContain('shell');
   });
 
   it('serves nothing outside /api when there is no build', async () => {
