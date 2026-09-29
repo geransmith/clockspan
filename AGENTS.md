@@ -64,9 +64,10 @@ client/                 Vite root → dist/client
   src/App.tsx           provider stack + Shell (route, settings dialog); today's alarms are hooks/useTodayAlarms.ts
   src/api.ts            fetch wrapper (30 s timeout; UNAUTHENTICATED_EVENT on 401; throws lib/apiError.ts's
                         ApiError, which a caller checks with instanceof); src/types.ts re-exports shared types
-  src/lib/              pure logic with a test beside each file: timeclock, alarms, timer, breaks,
-                        retro, review, calendar, stickers, priorities, format, timefield, layout, celebrate,
-                        plan, tiles, week, optimistic (a server copy plus pending changes, which the day store is built on)
+  src/lib/              pure logic with a test beside each file (apiError is covered through api.test):
+                        timeclock, alarms, timer, breaks, retro, review, calendar, stickers, priorities,
+                        format, timefield, layout, celebrate, plan, tiles, week, theme, reload, sounds,
+                        optimistic (a server copy plus pending changes, which the stores are built on)
     alerts.ts           the one place that plays sound, shows notifications and pushes banners
     copy.ts             every line the app raises at the user; no logic
     storage.ts          localStorage that never throws (private mode, quota)
@@ -408,7 +409,8 @@ Never commit `data/` or `.env`.
   `mergeSettings()` (`server/settings.ts`; `limited(key)` checks a number against its
   bounds) → add the control to its tab in `client/src/components/settings/` (`TimeclockTab`,
   `AlarmsTab`, `SheetTab`, `DataTab`, `AccountTab`; the Sheet tab's "History" section holds
-  the calendar's switches) using `DurationField` / `NumberField` (`settings/controls.tsx`) with
+  the calendar's switches) using `DurationField` (`components/DurationField.tsx`) / `NumberField`
+  (`settings/controls.tsx`) with
   `{...SETTING_LIMITS.<key>}` for `min` and `max` — `NumberField` takes a `unit` suffix,
   default "min" — / `Toggle` (`NumberInput` alone puts several numbers on one row, like the
   timer's start buttons). Nothing else to mirror.

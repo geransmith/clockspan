@@ -136,7 +136,7 @@ gh run rerun <run-id> --failed
 
 | Event | Jobs | Result |
 | --- | --- | --- |
-| Pull request | `check`, `image-smoke` (both required) | install without dependency scripts and check registry signatures; `npm audit --audit-level=high` (a new advisory can turn an unchanged PR red: merge the fix first); typecheck, lint, test, build; a changed version must be a higher `X.Y.Z` with no tag yet. The image is built for amd64 and for arm64 (under QEMU) and each is booted by `scripts/smoke-image.sh` (health, SPA shell, `/data` owner, root dropped, no package manager, the healthcheck command); nothing is pushed |
+| Pull request | `check`, `image-smoke` (both required) | install without dependency scripts and check registry signatures; `npm audit --audit-level=high` (a new advisory can turn an unchanged PR red: merge the fix first); typecheck, lint, format:check, test:coverage, build; a changed version must be a higher `X.Y.Z` with no tag yet. The image is built for amd64 and for arm64 (under QEMU) and each is booted by `scripts/smoke-image.sh` (health, SPA shell, `/data` owner, root dropped, no package manager, the healthcheck command); nothing is pushed |
 | Push to `main` | `check`, `image` | both platforms are built and booted by the same script, and only then pushed as one multi-platform `ghcr.io/geransmith/clockspan:edge` |
 | Push to `main` that changes the version | `check`, `image`, `release` | `:edge`, `:X.Y.Z`, `:X.Y`, `:X`, `:latest`, the tag `vX.Y.Z` and the GitHub Release |
 | Pull request, push to `main`, weekly | `CodeQL` (not required) | static security analysis of the TypeScript (`security-extended`); alerts land in code scanning, and GitHub fails the PR's CodeQL check on a new high or critical one |
@@ -147,4 +147,5 @@ Actions are pinned to commit SHAs; Dependabot bumps them (SHA and version commen
 
 Image tags: `latest` is the newest release; `X` follows a major version through its minor and
 patch releases, never across a breaking change; `X.Y` follows a minor version's patches;
-`X.Y.Z` is one release; `edge` is the latest commit on `main` and has only passed CI.
+`X.Y.Z` is one release; `edge` is built from `main` and has only passed CI (two merges close
+together build side by side, so for a few minutes it can be the one before the latest).
