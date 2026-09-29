@@ -28,20 +28,24 @@ describe('guessPeriod', () => {
       [1, 'PM'],
       [4, 'PM'],
     ];
-    for (const [h, p] of cases) expect(guessPeriod(h, 0, DAY, null), `${h}`).toBe(p);
+    for (const [h, p] of cases) expect(guessPeriod(h, DAY, null), `${h}`).toBe(p);
   });
 
   it('keeps a later punch after the clock-in when only the other period does', () => {
     const clockIn = at(7, 30);
-    expect(guessPeriod(10, 0, DAY, clockIn)).toBe('AM'); // 10:00 AM is after 7:30 AM already
-    expect(guessPeriod(12, 30, DAY, clockIn)).toBe('PM');
-    expect(guessPeriod(4, 0, DAY, clockIn)).toBe('PM');
-    expect(guessPeriod(6, 0, DAY, clockIn)).toBe('PM'); // 6:00 AM is before the clock-in, 6:00 PM after
-    expect(guessPeriod(7, 0, DAY, clockIn)).toBe('PM'); // 7:00 AM is 30 min before the clock-in
-    expect(guessPeriod(7, 30, DAY, clockIn)).toBe('AM'); // exactly the clock-in counts as after
+    expect(guessPeriod(10, DAY, clockIn)).toBe('AM'); // 10 AM is after 7:30 AM already
+    expect(guessPeriod(12, DAY, clockIn)).toBe('PM');
+    expect(guessPeriod(4, DAY, clockIn)).toBe('PM');
+    expect(guessPeriod(6, DAY, clockIn)).toBe('PM'); // all of 6 AM is before the clock-in, 6 PM after
+  });
+
+  it('keeps the clock-in hour itself in the morning: the minute typed next can be after it', () => {
+    expect(guessPeriod(7, DAY, at(7, 30))).toBe('AM'); // 7:45 AM is after a 7:30 clock-in
+    expect(guessPeriod(8, DAY, at(8, 30))).toBe('AM'); // 8:50 AM, not PM
+    expect(guessPeriod(8, DAY, at(9, 15))).toBe('PM'); // every minute of 8 AM is before 9:15
   });
 
   it('keeps the base guess when neither period lands after the anchor', () => {
-    expect(guessPeriod(9, 0, DAY, at(23, 0))).toBe('AM');
+    expect(guessPeriod(9, DAY, at(23, 0))).toBe('AM');
   });
 });

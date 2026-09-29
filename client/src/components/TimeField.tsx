@@ -60,7 +60,7 @@ function Field({ value, date, hour12, anchorAt, label, onCommit, onDiscard }: Pr
   const latest = useLatest(state);
   useLayoutEffect(() => {
     if (!hour12 || hourValue == null || !minuteEmpty || periodTouched.current) return;
-    const wanted = guessPeriod(hourValue, 0, date, anchorAt) === 'AM' ? 0 : 1;
+    const wanted = guessPeriod(hourValue, date, anchorAt) === 'AM' ? 0 : 1;
     const period = latest.current.segments.find((s) => s.type === 'dayPeriod');
     if (period && period.value !== wanted) latest.current.setSegment('dayPeriod', wanted);
   }, [hour12, hourValue, minuteEmpty, date, anchorAt, latest]);
