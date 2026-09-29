@@ -8,7 +8,8 @@ import { Check, Minus, Pause, Play, Plus, X } from './Icons';
  * move the planned end by the adjust step, Pause and Resume hold the clock, Finish asks how much
  * to log once the timer ran a minute over, and Cancel asks first. Once due, only + and Finish
  * are left; + is off at the longest plan the server takes. The bar shows the icons and hides
- * the words on a narrow screen, so there each button carries its name.
+ * the words on a narrow screen, so there each button carries its name. − and + carry theirs
+ * on the card too: the icons are hidden from screen readers and both say only the step.
  */
 export function TimerControls({ compact = false }: { compact?: boolean }) {
   const { paused, due, canAdd, adjust, pause, resume, requestFinish, cancel } = useTimer();
@@ -24,12 +25,18 @@ export function TimerControls({ compact = false }: { compact?: boolean }) {
   return (
     <div className={compact ? 'running-controls' : 'timer-controls'}>
       {!due && (
-        <button className={btn} onClick={() => void adjust(-step * 60)} {...named(`Remove ${step} minutes`, `−${step}m`)}>
+        <button className={btn} onClick={() => void adjust(-step * 60)} aria-label={`Remove ${step} minutes`} title={compact ? `−${step}m` : undefined}>
           <Minus />
           {words(`${step}m`)}
         </button>
       )}
-      <button className={btn} onClick={() => void adjust(step * 60)} disabled={!canAdd} {...named(`Add ${step} minutes`, `+${step}m`)}>
+      <button
+        className={btn}
+        onClick={() => void adjust(step * 60)}
+        disabled={!canAdd}
+        aria-label={`Add ${step} minutes`}
+        title={compact ? `+${step}m` : undefined}
+      >
         <Plus />
         {words(`${step}m`)}
       </button>

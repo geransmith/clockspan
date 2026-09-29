@@ -48,7 +48,7 @@ export function RunningTimerBar() {
             {running.label || <span className="muted">{UNTITLED_SESSION}</span>}
           </button>
         )}
-        <span className="running-time" aria-label={due ? 'Time over' : 'Time remaining'}>
+        <span className="running-time" role="timer" aria-label={due ? 'Time over' : 'Time remaining'}>
           {formatCountdown(due ? -overrunSeconds : remainingSeconds)}
         </span>
         <TimerControls compact />

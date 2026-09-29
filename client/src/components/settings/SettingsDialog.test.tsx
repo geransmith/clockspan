@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import { AuthGate } from '../../auth/AuthGate';
@@ -18,6 +18,7 @@ vi.mock('../../api', async (importOriginal) => {
     putSettings: vi.fn(),
     getPruneInfo: vi.fn(),
     listUsers: vi.fn(),
+    changePassword: vi.fn(),
   };
 });
 vi.mock('../../lib/alerts');
@@ -44,6 +45,7 @@ async function renderDialog(auth: AuthInfo = LOCAL_ADMIN) {
 }
 
 const tabNames = () => screen.getAllByRole('tab', { hidden: true }).map((t) => t.textContent);
+const toggle = (name: string) => screen.getByRole('switch', { name, hidden: true });
 const openTab = async (name: string) => {
   fireEvent.click(screen.getByRole('tab', { name, hidden: true }));
   await settle();
@@ -98,9 +100,15 @@ describe('SettingsDialog', () => {
     expect(screen.getByRole('tab', { name: 'Timeclock', hidden: true }).getAttribute('aria-selected')).toBe('true');
   });
 
+  it('names a switch by its label and describes it with the hint', async () => {
+    await renderDialog();
+    const hint = toggle('Meal periods').getAttribute('aria-describedby');
+    expect(document.getElementById(hint!)!.textContent).toMatch(/^The lunch deadline and the second meal period/);
+  });
+
   it('saves a switch through the settings provider and says so in the header', async () => {
     await renderDialog();
-    fireEvent.click(screen.getByRole('switch', { name: /Show hours/, hidden: true }));
+    fireEvent.click(toggle('Show hours'));
     await settle();
     expect(api.putSettings).toHaveBeenCalledWith({ trackHours: false });
     expect(screen.getByRole('status', { hidden: true }).textContent).toContain(SAVE_STATUS.saved);
@@ -108,15 +116,15 @@ describe('SettingsDialog', () => {
 
   it('offers to hide the lunch punches only with the meal periods off', async () => {
     await renderDialog();
-    expect(screen.queryByRole('switch', { name: /Lunch punches/, hidden: true })).toBeNull();
+    expect(screen.queryByRole('switch', { name: 'Lunch punches', hidden: true })).toBeNull();
     expect(screen.getByText(/clock-out alarm only; meal alarms stay on\./)).toBeTruthy();
-    fireEvent.click(screen.getByRole('switch', { name: /Meal periods/, hidden: true }));
+    fireEvent.click(toggle('Meal periods'));
     await settle();
     expect(api.putSettings).toHaveBeenCalledWith({ mealRules: false });
     expect(screen.queryByLabelText('Lunch must start within hours')).toBeNull();
     // No meal alarms to keep on, so the Overtime hint stops promising them.
     expect(screen.getByText(/clock-out alarm only\. Off where/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('switch', { name: /Lunch punches/, hidden: true }));
+    fireEvent.click(toggle('Lunch punches'));
     await settle();
     expect(api.putSettings).toHaveBeenLastCalledWith({ lunchPunches: false });
   });
@@ -125,8 +133,26 @@ describe('SettingsDialog', () => {
     await renderDialog();
     await openTab('Alarms');
     const defaults = makeSettings().alarms;
-    fireEvent.click(screen.getAllByRole('button', { name: '30m', hidden: true })[1]!);
+    const clockOut = screen.getByRole('group', { name: 'Clock-out', hidden: true });
+    expect(within(clockOut).getByRole('switch', { name: 'Clock-out', hidden: true })).toBeTruthy();
+    fireEvent.click(within(clockOut).getByRole('button', { name: '30m', hidden: true }));
     await settle();
     expect(api.putSettings).toHaveBeenCalledWith({ alarms: { ...defaults, clockOut: { ...defaults.clockOut, leadMinutes: [30, 15, 5, 1] } } });
+  });
+
+  it('labels the add-user fields and announces a changed password', async () => {
+    await renderDialog();
+    await openTab('Account');
+    expect(screen.getByRole('textbox', { name: 'Username', hidden: true })).toBeTruthy();
+    expect(screen.getByLabelText('Temporary password')).toBeTruthy();
+
+    vi.mocked(api.changePassword).mockResolvedValue({ ok: true });
+    const type = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    type('Current password', 'old-pass-123');
+    type('New password', 'new-pass-123');
+    type('Confirm new password', 'new-pass-123');
+    fireEvent.submit(screen.getByRole('button', { name: 'Change password', hidden: true }).closest('form')!);
+    await settle();
+    expect(screen.getByText('Password updated.').getAttribute('role')).toBe('status');
   });
 });
