@@ -66,7 +66,7 @@ client/                 Vite root → dist/client
                         ApiError, which a caller checks with instanceof); src/types.ts re-exports shared types
   src/lib/              pure logic with a test beside each file: timeclock, alarms, timer, breaks,
                         retro, review, calendar, stickers, priorities, format, timefield, layout, celebrate,
-                        plan, tiles, week
+                        plan, tiles, week, optimistic (a server copy plus pending changes, which the day store is built on)
     alerts.ts           the one place that plays sound, shows notifications and pushes banners
     copy.ts             every line the app raises at the user; no logic
     storage.ts          localStorage that never throws (private mode, quota)
@@ -275,16 +275,19 @@ Never commit `data/` or `.env`.
   the session shown reloads that day so the log catches up, a 404/409 on adjust/finish/cancel
   re-syncs at once, and the completion chime only plays when the server says `completed`.
   **Today's day is kept in step the same way** (`useRefreshDay` in `useDay.tsx`: a refresh
-  when the tab comes back, throttled, and every minute; `DayProvider.refresh` is skipped
-  while a write is out and its answer dropped if `mutationSeq` moved), so the alarms in
-  `App.tsx` judge the server's copy of the punches, not one from hours ago; they wait while a
-  come-back refresh is out. A today whose first load failed is loaded again on the same ticks
-  (no second banner), so its alarms come back with the server. A `load` (the timer's sync, Try
-  again) doesn't replace a day the store holds when a write was queued or out as it went out,
-  or was made before it answered, except the reload after a failed save, which always lands.
-  Writes change only days the store holds (`withDay`): a day not loaded yet shows the server's
-  copy when it loads, and one whose first load was out when the server confirmed a session or
-  break on it is asked for again. A made-up day would stand in for the server's copy.
+  when the tab comes back, throttled, and every minute), so the alarms in `App.tsx` judge the
+  server's copy of the punches, not one from hours ago; they wait while a come-back refresh is
+  out. A today whose first load failed is loaded again on the same ticks (no second banner), so
+  its alarms come back with the server.
+- **The day store keeps the server's copy and this device's changes apart**
+  (`lib/optimistic.ts`): each day is its confirmed copy plus the changes not confirmed yet, and
+  the sheet shows the one laid over the other. A failed write just drops its change, so the
+  screen is back on the stored copy at once (with the "Change not saved" banner) and the day is
+  asked for again. A read's answer replaces the confirmed copy and never a change still on its
+  way; it is dropped only when the server confirmed a change after the read went out
+  (`version`), and a day never loaded takes it anyway and is asked for again. A day not loaded
+  yet keeps its changes until the server's copy arrives, so nothing made up stands in for it.
+  `apply` and commit functions are pure: read the clock outside them.
 - **Break lengths come only from `client/src/lib/breaks.ts`** (`suggestBreak`, pure, over a
   day's sessions: a fifth of the session, a long break for the fourth in a row, a 15-minute gap
   restarts the count). With `suggestBreaks` on, `useBreak` offers today's suggestion on the
@@ -305,10 +308,9 @@ Never commit `data/` or `.env`.
   may already be gone. Break writes share one `inOrder` key (`breaks`).
 - **Saves reach the server in the order they were made.** `setPunches` and `setPriorities`
   replace a whole list, so one PUT per day is in flight and only the newest waiting list follows
-  it (`sendLatest` in `useDay.tsx`); the other day fields and each session's writes queue one
-  after another (`inOrder`), counted as out from the moment they are queued; `useSettings`
-  sends its PUTs one at a time too. A new write goes through one of these, never straight to
-  `api`.
+  it (`sendLatest` in `useDay.tsx`); the other day fields, each session and the breaks queue
+  one after another (`inOrder`); `useSettings` sends its PUTs one at a time too. A new write
+  goes through one of these, never straight to `api`.
 - **Punch positions are fixed**: 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in
   pairs, and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches`
   enforces it). Kind is parity (`kindForPosition`, `shared/punches.ts`). The math evaluates *set* punches
@@ -430,8 +432,9 @@ Never commit `data/` or `.env`.
   read it) and return it from `dayJson` → add a `PUT /days/:date/<field>` route (with
   `requireDate`) → `Day` and its default in `emptyDay` (`shared/api.ts`) +
   `client/src/api.ts` → an optimistic setter in `useDay.tsx` that goes through `inOrder` on
-  the day's `day:<date>` key (mirror `setOvertimeApproved`; failures reload the day and raise
-  the "Change not saved" banner, so the setter never rejects) → pass it from `Sheet.tsx`
+  the day's `day:<date>` key with the change and a commit from the server's answer (mirror
+  `setOvertimeApproved`; a failure drops the change, raises the "Change not saved" banner and
+  reloads the day, so the setter never rejects) → pass it from `Sheet.tsx`
   to the card, and from `App.tsx` into `useAlarms` if alarms depend on it.
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
   `currentUser(req).id` (`requireDate` / `loadOwnedSession` / `loadOwnedBreak` where they fit), validate input

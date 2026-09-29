@@ -65,7 +65,7 @@ export function SessionLog({ date, sessions, breaks, priorities, now }: Props) {
               session={s}
               now={now}
               planned={planned}
-              onEdit={(patch) => void store.updateSession(s.id, patch)}
+              onEdit={(patch) => void store.updateSession(date, s.id, patch)}
               onDelete={() => void store.removeSession(date, s.id)}
             />
           ) : (
