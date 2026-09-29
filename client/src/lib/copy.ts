@@ -22,7 +22,7 @@ export const DAY_COMPLETE = 'Day complete.';
 
 /** Follows `DAY_COMPLETE` in the Timeclock notice. One is picked per clock-out. */
 export const CELEBRATION_PHRASES = [
-  'Nice work today.',
+  'Log off before another email lands.',
   "That's a wrap.",
   "Clocked out. That's it for today.",
   'Go be a person now.',
@@ -37,7 +37,7 @@ export const CELEBRATION_PHRASES = [
   'Punched out and logged.',
   "Well, that's today handled.",
   'Nothing more to do here. Really.',
-  'Solid day. Now go outside.',
+  'Go outside for a bit.',
   'End of the day. Nothing left to punch.',
   'Close the lid.',
   "Leave the tabs open. They'll keep.",
@@ -72,13 +72,13 @@ export const GENTLE_WARNINGS = [
   'A long list is where priorities go to hide.',
   'Is this for today, or for some day?',
   'Fine, but if you could only do one today, which one?',
-  'Three plates is carrying. Six is juggling.',
+  'Carrying a few plates is one thing. Juggling them is another.',
   "The list doesn't get shorter by getting longer.",
   'Bold move. Today thing or someday thing?',
   'Done beats listed.',
   'Sure? Tomorrow has room too.',
   "That's another promise to yourself. Still want it?",
-  'The top of the list is prime real estate. Row six is the suburbs.',
+  'The top of the list is prime real estate. The bottom is the suburbs.',
   'Ambition noted. Energy budget also noted.',
   'You could also just not.',
   'This is where "top" quietly becomes "all".',
@@ -226,19 +226,35 @@ export const PLAN_NEXT = {
 /** Placeholder for the day's retrospective note. */
 export const RETRO_PROMPT = 'What got in the way? What went to plan?';
 
-/** Banner when a punch, priority, note, log edit, timer action or layout change fails to reach the server. */
+/**
+ * Banner when a punch, priority, note, log edit, timer action or layout change isn't saved.
+ * One banner covers a request that got no answer and one the server turned down (a break
+ * started while a timer runs, a session another device deleted), so the body names both.
+ */
 export const SAVE_FAILED = {
   title: 'Change not saved',
-  body: 'The server did not answer. The sheet shows what is stored.',
+  body: 'The server refused it or did not answer. The sheet shows what is stored.',
+} as const;
+
+/** Under the timer's Start buttons when "Also add to today's priorities" can't add the row. */
+export const ADD_PRIORITY_FAILED = {
+  full: 'The priorities list is full.',
+  notLoaded: "This day's priorities have not loaded yet.",
 } as const;
 
 /** A request that got no answer within `REQUEST_TIMEOUT_MS` (`api.ts`), where a form shows its error. */
 export const REQUEST_TIMEOUT = 'The server did not answer in time.';
 
-/** In place of a sheet whose day could not be fetched; the button asks again. */
+/** A refusal whose body has no `{ error }` to show (`api.ts`), such as a proxy's error page. */
+export const REQUEST_FAILED = (status: number) => `Request failed (${status})`;
+
+/** A 2xx answer that isn't JSON (`api.ts`): a page from something in between, such as a proxy's sign-in page. */
+export const UNREADABLE_ANSWER = (status: number) => `Unreadable answer (${status})`;
+
+/** In place of a sheet whose day could not be fetched; the button asks again. Covers a refusal too, like `SAVE_FAILED`. */
 export const LOAD_FAILED = {
   title: 'Could not load this day',
-  body: 'The server did not answer.',
+  body: 'The server refused the request or did not answer.',
   retry: 'Try again',
 } as const;
 

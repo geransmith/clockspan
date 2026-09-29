@@ -93,7 +93,7 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
       {local.map((p) => {
         const empty = !hasText(p);
         const removable = p.position > count;
-        const placeholder = p.position === 1 ? 'The one thing that would make today a win' : `Priority ${p.position}`;
+        const placeholder = p.position === 1 ? 'The one thing to get done' : `Priority ${p.position}`;
         return (
           <div key={p.position} className={`priority-row${p.done ? ' is-done' : ''}${removable ? ' priority-row--removable' : ''}`}>
             <span className="priority-num" aria-hidden="true">

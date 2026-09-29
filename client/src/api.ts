@@ -22,7 +22,7 @@ import type {
   UsersResponse,
 } from './types';
 import { ApiError } from './lib/apiError';
-import { REQUEST_TIMEOUT } from './lib/copy';
+import { REQUEST_FAILED, REQUEST_TIMEOUT, UNREADABLE_ANSWER } from './lib/copy';
 
 export const UNAUTHENTICATED_EVENT = 'focus:unauthenticated';
 
@@ -56,10 +56,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     // Every API answer is JSON, so a body that isn't is a page from something in between: a
     // proxy's error page (the generic message below), or a forward-auth proxy's sign-in page,
     // which comes as a 200 once its session runs out and must not pass for an empty answer.
-    if (res.ok) throw new ApiError(res.status, `Unreadable answer (${res.status})`, null);
+    if (res.ok) throw new ApiError(res.status, UNREADABLE_ANSWER(res.status), null);
   }
   if (!res.ok) {
-    const message = (data as { error?: string } | null)?.error ?? `Request failed (${res.status})`;
+    const message = (data as { error?: string } | null)?.error ?? REQUEST_FAILED(res.status);
     // The login route answers 401 for a wrong password; that is not a lost session.
     if (res.status === 401 && path !== '/api/auth/login') window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT));
     throw new ApiError(res.status, message, data);

@@ -74,15 +74,21 @@ export function removePriority(rows: Priority[], position: number): Priority[] {
   return rows.filter((p) => p.position !== position).map((p, i) => ({ ...p, position: i + 1 }));
 }
 
+/** Whether `placePriority` has somewhere to put a row: an empty one, or space for one more. */
+export function hasRoom(rows: Priority[], count: number): boolean {
+  const padded = padPriorities(rows, count);
+  return padded.length < MAX_PRIORITIES || padded.some((p) => !hasText(p));
+}
+
 /**
  * Where a priority added from the timer goes: the first empty row if there is one, else a
  * new row at the end. Returns the full list to save; null when the sheet is full.
  */
 export function placePriority(rows: Priority[], count: number, text: string, uid: string, addedAt: number): Priority[] | null {
+  if (!hasRoom(rows, count)) return null;
   const padded = padPriorities(rows, count);
   const empty = padded.find((p) => !hasText(p));
   if (empty) return padded.map((p) => (p.position === empty.position ? { ...p, text, done: false, uid, addedAt } : p));
-  if (padded.length >= MAX_PRIORITIES) return null;
   return [...padded, { position: padded.length + 1, text, done: false, uid, addedAt }];
 }
 

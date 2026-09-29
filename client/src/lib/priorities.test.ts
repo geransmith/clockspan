@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { COMPLETE_WARNINGS, GENTLE_WARNINGS, PROGRESS_WARNINGS } from './copy';
-import { carryOver, editPriority, leftOpen, newUid, padPriorities, pickWarning, placePriority, removePriority, warnThreshold, warningKind } from './priorities';
+import {
+  carryOver,
+  editPriority,
+  hasRoom,
+  leftOpen,
+  newUid,
+  padPriorities,
+  pickWarning,
+  placePriority,
+  removePriority,
+  warnThreshold,
+  warningKind,
+} from './priorities';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import type { Day, Priority } from '../types';
 
@@ -123,6 +135,26 @@ describe('placePriority', () => {
   it('refuses when the sheet is full', () => {
     const rows = Array.from({ length: MAX_PRIORITIES }, (_, i) => row(i + 1, `p${i + 1}`));
     expect(placePriority(rows, 3, 'One more', 'abcdef123456', 100)).toBeNull();
+  });
+});
+
+describe('hasRoom', () => {
+  const full = Array.from({ length: MAX_PRIORITIES }, (_, i) => row(i + 1, `p${i + 1}`));
+  const cases: [string, Priority[]][] = [
+    ['an empty day', []],
+    ['every row written, under the cap', [row(1, 'A'), row(2, 'B'), row(3, 'C')]],
+    ['every row up to the cap written', full],
+    ['the cap reached with one row cleared', full.map((p) => (p.position === 7 ? { ...p, text: '  ' } : p))],
+  ];
+
+  it.each(cases)('answers as placePriority does for %s', (_name, rows) => {
+    expect(hasRoom(rows, 3)).toBe(placePriority(rows, 3, 'New', 'abcdef123456', 100) !== null);
+  });
+
+  it('is false only when every row up to the cap has text', () => {
+    expect(hasRoom(full, 3)).toBe(false);
+    expect(hasRoom(full.slice(0, -1), 3)).toBe(true);
+    expect(hasRoom(cases[3]![1], 3)).toBe(true);
   });
 });
 

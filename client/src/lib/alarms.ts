@@ -232,7 +232,14 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
     // body gives the target's time and never says that it is that time now.
     const kicker = `${alarm} · time's up`;
     if (e.id === 'lunchBy') return { kicker, title: 'Take lunch now', body: `Your lunch deadline is ${target}. Start your break.`, tone: 'danger' };
-    if (e.id === 'secondMeal') return { kicker, title: 'Take your second meal break', body: mealWhy, tone: 'danger' };
+    if (e.id === 'secondMeal') {
+      return {
+        kicker,
+        title: 'Take your second meal break',
+        body: `You reached ${mealHours} of work at ${target}. California requires a second 30-minute meal period by then unless you've waived it.`,
+        tone: 'danger',
+      };
+    }
     return { kicker, title: 'Time to clock out', body: `You reached your ${day} for today at ${target}. Punch out now.`, tone: 'danger' };
   }
   const kicker = `${alarm} · ${formatMinutes(e.minutes)} overdue`;

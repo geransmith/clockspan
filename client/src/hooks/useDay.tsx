@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as api from '../api';
 import type { Day, Priority, Punch, Session } from '../types';
 import { dismissByTag, warnQuietly } from '../lib/alerts';
-import { LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
+import { ADD_PRIORITY_FAILED, LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
 import { endBreaksAt } from '../lib/breaks';
 import { addPending, confirm, fetched, settle, shown, untracked, type Tracked } from '../lib/optimistic';
 import { newUid, placePriority } from '../lib/priorities';
@@ -287,10 +287,10 @@ export function DayProvider({ children }: { children: ReactNode }) {
     async (date: string, text: string) => {
       const day = shownDay(store.current[date]);
       // Only onto a list the store holds: one made up empty would replace the stored rows.
-      if (!day) throw new Error(SAVE_FAILED.title);
+      if (!day) throw new Error(ADD_PRIORITY_FAILED.notLoaded);
       const uid = newUid();
       const next = placePriority(day.priorities, priorityCount.current, text, uid, Date.now());
-      if (!next) throw new Error('The priorities list is full.');
+      if (!next) throw new Error(ADD_PRIORITY_FAILED.full);
       // A timer must not start against a uid the server never stored.
       if (!(await setPriorities(date, next))) throw new Error(SAVE_FAILED.title);
       return uid;
