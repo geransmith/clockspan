@@ -83,7 +83,7 @@ describe('useRefreshLoop', () => {
     expect(result.current).toBe(false);
   });
 
-  it('runs now when asked, inside the throttle too, and the tab coming back just after asks nothing more', async () => {
+  it('runs now when asked with nothing out, inside the throttle too, and the tab coming back just after asks nothing more', async () => {
     const run = vi.fn(() => Promise.resolve());
     const { result } = renderHook(() => useRefreshLoop(run, true));
     await settle();
@@ -100,15 +100,24 @@ describe('useRefreshLoop', () => {
     await settle();
   });
 
-  it('shares a run already out when asked to run now', async () => {
-    const answer = deferred<void>();
-    const run = vi.fn(() => answer.promise);
+  it('with a run out, runs again once it answers: neither sharing it nor sending a second beside it', async () => {
+    const out = deferred<void>();
+    const run = vi.fn().mockReturnValueOnce(out.promise).mockResolvedValue(undefined);
     const { result } = renderHook(() => useRefreshLoop(run, true));
-    const shared = result.current.runNow();
+    let forced!: Promise<unknown>;
+    act(() => {
+      forced = result.current.runNow();
+    });
     expect(run).toHaveBeenCalledTimes(1);
-    answer.resolve();
-    await act(() => shared);
+    // The tab coming back now waits on the fresh run and sends nothing.
+    act(() => setVisibility('visible'));
     expect(run).toHaveBeenCalledTimes(1);
+    expect(result.current.pending).toBe(true);
+    out.resolve();
+    await act(() => forced);
+    await settle();
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(result.current.pending).toBe(false);
   });
 
   it('uses the newest run and stops on unmount', async () => {

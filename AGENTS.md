@@ -67,7 +67,8 @@ client/                 Vite root → dist/client
   src/lib/              pure logic with a test beside each file (apiError is covered through api.test):
                         timeclock, alarms, timer, breaks, retro, review, calendar, stickers, priorities,
                         format, timefield, layout, celebrate, plan, tiles, week, theme, reload, sounds,
-                        optimistic (a server copy plus pending changes, which the stores are built on)
+                        optimistic (a server copy plus pending changes, which the stores are built on,
+                        and `serial()`, their write queue)
     alerts.ts           the one place that plays sound, shows notifications and pushes banners
     copy.ts             every line the app raises at the user; no logic
     storage.ts          localStorage that never throws (private mode, quota)
@@ -277,8 +278,9 @@ Never commit `data/` or `.env`.
   **One running session per user is a schema invariant** (a unique partial index), and another
   device may own it: a 409 on start is adopted with a banner, a sync whose answer differs from
   the session shown reloads that day so the log catches up, a 404/409 on adjust/finish/cancel
-  re-syncs at once (the loop's `runNow`, which shares a sync already out and counts for the
-  throttle), and the completion chime only plays when the server says `completed`.
+  re-syncs at once (the loop's `runNow`: a sync sent after the refusal, chained behind any sync
+  already out and counted for the throttle), and the completion chime only plays when the
+  server says `completed`.
   **Today's day is kept in step the same way** (`useRefreshDay` in `useDay.tsx`, on
   `useRefreshLoop`, the same hook as the timer's sync: every minute and when the tab comes back,
   throttled to 5 s), so the alarms in `useTodayAlarms` judge the

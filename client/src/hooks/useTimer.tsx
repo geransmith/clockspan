@@ -94,12 +94,13 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   const retry = useRef({ at: 0, delay: 0 });
 
   // Re-sync with the server on load, when the tab comes back, and every minute
-  // (`useRefreshLoop`), and at once when a press finds the session gone (`syncNow`: through the
-  // loop, so it shares a sync already out and the tab coming back just after asks nothing more).
-  // The answer replaces the confirmed session unless the server confirmed a change after it went
-  // out, and a press still on its way stays on top of it. A different session than the one
-  // shown means another device started or ended a timer: its day is reloaded so the log shows
-  // the row this device never wrote.
+  // (`useRefreshLoop`), and at once when a press finds the session gone (`syncNow`: a sync sent
+  // after the refusal, since one already out may still show the session running; it waits for
+  // that one, and the tab coming back just after asks nothing more). The answer replaces the
+  // confirmed session unless the server confirmed a change after it went out, and a press still
+  // on its way stays on top of it. A different session than the one shown means another device
+  // started or ended a timer: its day is reloaded so the log shows the row this device never
+  // wrote.
   const sync = useCallback(() => {
     const sentAt = current().version;
     return api
