@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
-import { calendarMonth } from '../lib/calendar';
+import { calendarMonth, pickedTimeclock } from '../lib/calendar';
 import { STICKERS_EMPTY } from '../lib/copy';
 import { dayName, formatDateLong, formatDuration, formatHours, formatWeekday, plural } from '../lib/format';
 import { periodOffset, periodRange } from '../lib/review';
@@ -44,6 +44,7 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
   const { trackHours } = settings;
   const reasons = useMemo(() => stickerReasons(trackHours), [trackHours]);
   const count = useMemo(() => (weeks && stickers ? countStickers(weeks, reasons) : null), [weeks, stickers, reasons]);
+  const picked = selected == null ? undefined : days?.get(selected);
 
   const step = (o: number) => {
     setOffset(o);
@@ -166,8 +167,8 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
             ) : (
               <DayDetail
                 date={selected}
-                day={days.get(selected)}
-                tc={weeks.flat().find((c) => c.date === selected)?.timeclock ?? null}
+                day={picked}
+                tc={picked ? pickedTimeclock(weeks, daySummaryOf(picked), settings, today, now) : null}
                 today={today}
                 onOpen={onOpen}
                 onReviewWeek={onReviewWeek}
@@ -190,7 +191,7 @@ function DayDetail({
 }: {
   date: string;
   day: Day | undefined;
-  /** The picked cell's timeclock (`calendarMonth` worked it out once). */
+  /** The picked day's timeclock (`pickedTimeclock`); null without data. */
   tc: TimeclockResult | null;
   today: string;
   onOpen: (date: string) => void;

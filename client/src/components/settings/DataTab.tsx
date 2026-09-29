@@ -108,7 +108,11 @@ function DeleteOldDays() {
             // `max` doesn't stop a typed date, and a cutoff after today would delete today too.
             onChange={(e) => {
               if (!e.target.value) return;
-              setBefore(e.target.value < today ? e.target.value : today);
+              const next = e.target.value < today ? e.target.value : today;
+              // A later date typed while the cutoff is already today lands on the same date: the
+              // count effect won't run again, so clearing the count would leave Delete off for good.
+              if (next === before) return;
+              setBefore(next);
               // The count and any message were for the old date: Delete waits for the new count.
               setInfo(null);
               setMsg(null);
@@ -123,7 +127,7 @@ function DeleteOldDays() {
       {stored && <p className="muted small">{stored}</p>}
       {info?.serverMaxDays != null && <p className="muted small">This server keeps at most {info.serverMaxDays} days for every user.</p>}
       {msg && (
-        <p className={msg.ok ? 'success' : 'error'} role={msg.ok ? undefined : 'alert'}>
+        <p className={msg.ok ? 'success' : 'error'} role={msg.ok ? 'status' : 'alert'}>
           {msg.text}
         </p>
       )}

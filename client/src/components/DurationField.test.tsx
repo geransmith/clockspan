@@ -25,6 +25,21 @@ describe('DurationField', () => {
     expect(onCommit).toHaveBeenCalledWith(570);
   });
 
+  it('does not save the hours on the way to the minutes', () => {
+    // 5h 0m → 4h 30m must not store 4h 0m in between: late in a lunch window that moves the
+    // deadline into the past and fires the alarm.
+    const { hours, mins, onCommit } = renderField(300);
+    fireEvent.change(hours, { target: { value: '4' } });
+    fireEvent.blur(hours, { relatedTarget: mins });
+    expect(onCommit).not.toHaveBeenCalled();
+    fireEvent.change(mins, { target: { value: '30' } });
+    fireEvent.blur(mins, { relatedTarget: hours });
+    expect(onCommit).not.toHaveBeenCalled();
+    fireEvent.blur(hours);
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect(onCommit).toHaveBeenCalledWith(270);
+  });
+
   it('saves on Enter', () => {
     const { mins, onCommit } = renderField();
     mins.focus();

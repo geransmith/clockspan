@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { calendarMonth } from './calendar';
-import type { DaySummary } from './stickers';
+import { calendarMonth, pickedTimeclock } from './calendar';
+import { dayTimeclock, type DaySummary } from './stickers';
 import { emptyPunches } from './timeclock';
 
 const settings = { workMinutes: 480, lunchDeadlineMinutes: 300, lunchMinutes: 30, secondMealAfterMinutes: 600 };
@@ -61,5 +61,28 @@ describe('calendarMonth', () => {
     expect(weeks[0]![0]!.date).toBe('2027-02-01');
     expect(weeks[3]![6]!.date).toBe('2027-02-28');
     expect(weeks.flat().some((d) => d.outside)).toBe(false);
+  });
+});
+
+describe('pickedTimeclock', () => {
+  const at = (h: number) => new Date(2026, 8, 12, h, 0).getTime();
+  // A Saturday clocked 9:00 to 12:00, and a Monday with a cell.
+  const saturday = summary('2026-09-12', {
+    punches: emptyPunches().map((p) => (p.position === 0 ? { ...p, at: at(9) } : p.position === 3 ? { ...p, at: at(12) } : p)),
+  });
+  const monday = summary('2026-09-14', { retroAt: 1 });
+
+  it("takes the picked day's cell's timeclock", () => {
+    const weeks = calendarMonth([saturday, monday], settings, TODAY, NOW, '2026-09-01');
+    expect(pickedTimeclock(weeks, monday, settings, TODAY, NOW)).toBe(weeks[2]![0]!.timeclock);
+    expect(pickedTimeclock(weeks, saturday, settings, TODAY, NOW)).toBe(weeks[1]![5]!.timeclock);
+  });
+
+  it('works out a weekend day that has no cell with weekends off', () => {
+    // History opens on the sheet's date, so a Saturday can be picked with no cell to read.
+    const weeks = calendarMonth([saturday, monday], settings, TODAY, NOW, '2026-09-01', false);
+    const tc = pickedTimeclock(weeks, saturday, settings, TODAY, NOW);
+    expect(tc).toEqual(dayTimeclock(saturday, settings, TODAY, NOW));
+    expect(tc).toMatchObject({ state: 'done', workedSeconds: 3 * 3600 });
   });
 });

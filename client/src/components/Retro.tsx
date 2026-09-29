@@ -35,17 +35,14 @@ export function Retro({ date, today, priorities, sessions, note, reviewedAt, onC
     800,
   );
 
-  if (review.total === 0 && review.unplanned.length === 0) {
-    return (
-      <div className="retro">
-        <p className="muted center">Write priorities and log a session or two, then this shows how the day lined up with the plan.</p>
-        <PlanNext date={date} today={today} priorities={priorities} />
-      </div>
-    );
-  }
+  // An empty day still gets the note and Mark reviewed: the retro alarm stays armed until the
+  // day is reviewed, and its banner opens this card.
+  const empty = review.total === 0 && review.unplanned.length === 0;
 
   return (
     <div className="retro">
+      {empty && <p className="muted center">Write priorities and log a session or two, then this shows how the day lined up with the plan.</p>}
+
       {review.total > 0 && (
         <section className="retro-section">
           <h3 className="retro-heading">
@@ -105,22 +102,24 @@ export function Retro({ date, today, priorities, sessions, note, reviewedAt, onC
         </section>
       )}
 
-      <p className="retro-summary">
-        <span>
-          <span className="muted">On plan</span> <strong>{formatDuration(review.onPlanSeconds)}</strong>
-        </span>
-        <span>
-          <span className="muted">Off plan</span> <strong>{formatDuration(review.offPlanSeconds)}</strong>
-        </span>
-        {review.total > 0 && (
+      {!empty && (
+        <p className="retro-summary">
           <span>
-            <span className="muted">Done</span>{' '}
-            <strong>
-              {review.done} of {review.total}
-            </strong>
+            <span className="muted">On plan</span> <strong>{formatDuration(review.onPlanSeconds)}</strong>
           </span>
-        )}
-      </p>
+          <span>
+            <span className="muted">Off plan</span> <strong>{formatDuration(review.offPlanSeconds)}</strong>
+          </span>
+          {review.total > 0 && (
+            <span>
+              <span className="muted">Done</span>{' '}
+              <strong>
+                {review.done} of {review.total}
+              </strong>
+            </span>
+          )}
+        </p>
+      )}
 
       <label className="field retro-note">
         <span className="muted small">Why did the day go this way?</span>

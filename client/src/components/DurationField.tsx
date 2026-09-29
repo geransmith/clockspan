@@ -1,6 +1,6 @@
-import { useState, type KeyboardEvent } from 'react';
+import { useState, type FocusEvent, type KeyboardEvent } from 'react';
 
-/** Hours + minutes inputs that commit on blur/Enter, so half-typed values never save. `min` and `max` are in minutes. */
+/** Hours + minutes inputs that commit when focus leaves the pair or on Enter, so half-typed values never save. `min` and `max` are in minutes. */
 export function DurationField({
   label,
   minutes,
@@ -24,7 +24,11 @@ export function DurationField({
     setH(String(Math.floor(minutes / 60)));
     setM(String(minutes % 60));
   }
-  const commit = () => {
+  // Moving from hours to minutes is still typing: saving there would store the new hours with
+  // the old minutes (5h 0m → 4h 30m passes through 4h 0m), which can move an alarm's deadline
+  // into the past for a moment and fire it.
+  const onBlur = (e: FocusEvent<HTMLSpanElement>) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
     const total = Math.max(min, Math.min(max, (Number(h) || 0) * 60 + (Number(m) || 0)));
     if (total !== minutes) onCommit(total);
     else {
@@ -36,13 +40,12 @@ export function DurationField({
   return (
     <div className="setting-row">
       <span>{label}</span>
-      <span className="duration-inputs">
+      <span className="duration-inputs" onBlur={onBlur}>
         <input
           className="input input-num"
           inputMode="numeric"
           value={h}
           onChange={(e) => setH(e.target.value)}
-          onBlur={commit}
           onKeyDown={onKey}
           aria-label={`${label} hours`}
         />
@@ -52,7 +55,6 @@ export function DurationField({
           inputMode="numeric"
           value={m}
           onChange={(e) => setM(e.target.value)}
-          onBlur={commit}
           onKeyDown={onKey}
           aria-label={`${label} minutes`}
         />

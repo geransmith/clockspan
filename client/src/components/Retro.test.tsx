@@ -16,11 +16,11 @@ const DATE = '2026-09-25';
 const TODAY = '2026-09-28';
 const PRIORITIES: Priority[] = [{ position: 1, text: 'Report', done: false, uid: 'abcdef123456', addedAt: T0 }];
 
-async function renderCard(note = '', reviewedAt: number | null = null) {
+async function renderCard(note = '', reviewedAt: number | null = null, priorities = PRIORITIES) {
   const onChange = vi.fn<(patch: { note?: string; done?: boolean }) => void>();
   const card = (n: string, r: number | null) => (
     <SettingsProvider>
-      <Retro date={DATE} today={TODAY} priorities={PRIORITIES} sessions={[]} note={n} reviewedAt={r} onChange={onChange} />
+      <Retro date={DATE} today={TODAY} priorities={priorities} sessions={[]} note={n} reviewedAt={r} onChange={onChange} />
     </SettingsProvider>
   );
   const view = render(card(note, reviewedAt));
@@ -83,6 +83,16 @@ describe('Retro', () => {
     again('Went to plan', T0);
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     expect(onChange).toHaveBeenLastCalledWith({ done: false });
+  });
+
+  it('keeps the note and Mark reviewed on a day with nothing planned or logged', async () => {
+    // The retro alarm stays armed until the day is reviewed, and its banner opens this card.
+    const { box, onChange } = await renderCard('', null, []);
+    expect(screen.getByText(/Write priorities and log a session or two/)).toBeTruthy();
+    expect(screen.queryByText('On plan')).toBeNull();
+    fireEvent.change(box, { target: { value: 'Sick day' } });
+    fireEvent.click(screen.getByRole('button', { name: /Mark reviewed/ }));
+    expect(onChange.mock.calls).toEqual([[{ note: 'Sick day' }], [{ done: true }]]);
   });
 
   it('takes the stored note while nothing is being typed, and keeps a draft that is', async () => {
