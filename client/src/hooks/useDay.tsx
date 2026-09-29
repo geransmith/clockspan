@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import { emptyDay } from '../../../shared/api.js';
+import { MINUTE_MS } from '../../../shared/dates.js';
 import type { Day, Priority, Punch, Session } from '../types';
 import { dismissByTag, warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
@@ -51,6 +52,11 @@ interface DayStore {
 
 const Ctx = createContext<DayStore | null>(null);
 
+/** A day from the server as the store keeps it: with the punch rows the card shows. */
+function normalizeDay(d: Day): Day {
+  return { ...d, punches: normalizePunches(d.punches) };
+}
+
 function withDay(days: Record<string, Day>, date: string, fn: (d: Day) => Day): Record<string, Day> {
   const current = days[date] ?? { ...emptyDay(date), punches: emptyPunches() };
   return { ...days, [date]: fn(current) };
@@ -90,7 +96,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
         .getDay(date)
         .then((d) => {
           if (reload || mutationSeq.current === seq || !latest.current[date]) {
-            setDays((prev) => ({ ...prev, [date]: { ...d, punches: normalizePunches(d.punches) } }));
+            setDays((prev) => ({ ...prev, [date]: normalizeDay(d) }));
           }
           setErrors((prev) => {
             if (!(date in prev)) return prev;
@@ -198,7 +204,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
         .getDay(date)
         .then((d) => {
           if (mutationSeq.current !== seq) return;
-          setDays((prev) => ({ ...prev, [date]: { ...d, punches: normalizePunches(d.punches) } }));
+          setDays((prev) => ({ ...prev, [date]: normalizeDay(d) }));
         })
         .catch(() => {});
     },
@@ -428,7 +434,7 @@ export function useRefreshDay(date: string): boolean {
       setPending(true);
       void p.finally(() => setPending(false));
     };
-    const id = setInterval(() => void tick(), 60_000);
+    const id = setInterval(() => void tick(), MINUTE_MS);
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       clearInterval(id);

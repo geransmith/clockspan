@@ -1,4 +1,5 @@
 import type { AlarmId, AlarmSettings } from '../types';
+import { MINUTE_MS } from '../../../shared/dates.js';
 import { formatMinutes, formatTime } from './format';
 
 export interface AlarmTarget {
@@ -22,7 +23,6 @@ export interface AlarmEvent {
   target: number;
 }
 
-const MIN = 60_000;
 const MAX_OVERDUE_REPEATS = 288; // 24h at 5-minute repeats
 
 /**
@@ -30,7 +30,7 @@ const MAX_OVERDUE_REPEATS = 288; // 24h at 5-minute repeats
  * lunch pushing clock-out later — re-arms automatically, while a reload never re-fires.
  */
 export function eventKey(dateKey: string, id: AlarmId, kind: AlarmKind, minutes: number, target: number): string {
-  return `${dateKey}:${id}:${kind}:${minutes}:${Math.round(target / MIN)}`;
+  return `${dateKey}:${id}:${kind}:${minutes}:${Math.round(target / MINUTE_MS)}`;
 }
 
 /**
@@ -60,7 +60,7 @@ export function dueEvents(
         id: target.id,
         kind: 'lead',
         minutes: lead,
-        at: target.at - lead * MIN,
+        at: target.at - lead * MINUTE_MS,
         target: target.at,
       });
     }
@@ -76,14 +76,14 @@ export function dueEvents(
     }
     if (cfg.overdueEveryMinutes > 0 && now > target.at) {
       const every = cfg.overdueEveryMinutes;
-      const k = Math.min(MAX_OVERDUE_REPEATS, Math.floor((now - target.at) / (every * MIN)));
+      const k = Math.min(MAX_OVERDUE_REPEATS, Math.floor((now - target.at) / (every * MINUTE_MS)));
       for (let i = 1; i <= k; i++) {
         candidates.push({
           key: eventKey(dateKey, target.id, 'overdue', i * every, target.at),
           id: target.id,
           kind: 'overdue',
           minutes: i * every,
-          at: target.at + i * every * MIN,
+          at: target.at + i * every * MINUTE_MS,
           target: target.at,
         });
       }

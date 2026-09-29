@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { MINUTE_MS } from '../../../shared/dates.js';
 import type { Settings } from '../types';
 import { secondMealApplies, type TimeclockResult } from '../lib/timeclock';
 import { describeEvent, dueEvents, type AlarmTarget } from '../lib/alarms';
@@ -60,7 +61,7 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     // pushed later) is stale; clear it before evaluating the new state.
     for (const t of targets) {
       const prev = lastTargets.current[t.id];
-      if (prev && (prev.armed !== t.armed || Math.abs(prev.at - t.at) >= 60_000)) dismissByTag(`alarm:${t.id}`);
+      if (prev && (prev.armed !== t.armed || Math.abs(prev.at - t.at) >= MINUTE_MS)) dismissByTag(`alarm:${t.id}`);
       lastTargets.current[t.id] = { at: t.at, armed: t.armed };
     }
 

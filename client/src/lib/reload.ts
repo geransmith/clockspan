@@ -1,7 +1,8 @@
+import { MINUTE_MS } from '../../../shared/dates.js';
 import { readStored, writeStored } from './storage';
 
 const KEY = 'focus:chunk-reload';
-const MIN_GAP_MS = 60_000;
+const MIN_GAP_MS = MINUTE_MS;
 
 /**
  * A chunk that fails to load is almost always a new version: the open page asks for the

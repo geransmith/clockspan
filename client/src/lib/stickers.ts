@@ -2,6 +2,8 @@ import type { Day, Punch, Settings } from '../types';
 import type { CalendarDay } from './calendar';
 import { hash } from './celebrate';
 import { STICKER_EMOJI } from './copy';
+import { hasText } from './priorities';
+import { focusOf } from './retro';
 import { daySettings, timeclockForDate, type TimeclockSettings } from './timeclock';
 
 export type StickerId = 'clockedOut' | 'lunch' | 'priorities' | 'focus' | 'reviewed';
@@ -61,6 +63,8 @@ export interface DaySummary {
   date: string;
   punches: Punch[];
   focusSeconds: number;
+  /** Completed sessions, for the day panel's Focused tile. */
+  focusSessions: number;
   prioritiesDone: number;
   prioritiesTotal: number;
   retroAt: number | null;
@@ -70,11 +74,13 @@ export interface DaySummary {
 
 /** A full day rolled up for the calendar: completed sessions, rows with text. Keeps today's cell live. */
 export function daySummaryOf(day: Day): DaySummary {
-  const withText = day.priorities.filter((p) => p.text.trim() !== '');
+  const withText = day.priorities.filter(hasText);
+  const focus = focusOf(day.sessions);
   return {
     date: day.date,
     punches: day.punches,
-    focusSeconds: day.sessions.reduce((sum, s) => sum + (s.status === 'completed' ? (s.durationSeconds ?? 0) : 0), 0),
+    focusSeconds: focus.seconds,
+    focusSessions: focus.count,
     prioritiesDone: withText.filter((p) => p.done).length,
     prioritiesTotal: withText.length,
     retroAt: day.retroAt,

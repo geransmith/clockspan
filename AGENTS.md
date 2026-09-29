@@ -170,7 +170,8 @@ Never commit `data/` or `.env`.
 - **Anything both sides need lives in `shared/`** (`settings.ts`, `dates.ts`, `api.ts`) and is
   imported from there with a `.js` suffix. Never mirror a constant, default or type into the
   other tree; the client's `types.ts` re-exports the shared types so component imports stay
-  short. Every response body has a `shared/api.ts` type: builders are annotated with it
+  short, and date helpers (`addDays`, `todayKey`, `MINUTE_MS`, …) come straight from
+  `shared/dates.js`, never through another module. Every response body has a `shared/api.ts` type: builders are annotated with it
   (`sessionRowToJson(): Session`, `dayJson(): Day`, …) and each route's answer names its
   envelope with `satisfies` (`res.json({ deleted } satisfies PruneResult)`), while
   `client/src/api.ts` reads the same types, so a field renamed on one side fails `typecheck`

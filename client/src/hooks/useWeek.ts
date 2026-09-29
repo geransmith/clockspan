@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { Day } from '../types';
-import { startOfWeek } from '../lib/format';
+import { startOfWeek } from '../../../shared/dates.js';
 import { useDayStore } from './useDay';
 import { useRange } from './useRange';
 

@@ -17,11 +17,18 @@ import {
 } from './format';
 
 describe('dayName', () => {
-  it('names today and yesterday, and dates everything else', () => {
+  it('names today, yesterday and tomorrow, and dates everything else', () => {
     expect(dayName('2026-09-16', '2026-09-16')).toBe('Today');
     expect(dayName('2026-09-15', '2026-09-16')).toBe('Yesterday');
+    expect(dayName('2026-09-17', '2026-09-16')).toBe('Tomorrow');
     expect(dayName('2026-09-14', '2026-09-16')).toMatch(/14/);
-    expect(dayName('2026-09-17', '2026-09-16')).toMatch(/17/);
+    expect(dayName('2026-09-18', '2026-09-16')).toMatch(/18/);
+  });
+
+  it('lowercases the word inside a sentence, never the date', () => {
+    expect(dayName('2026-09-15', '2026-09-16', true)).toBe('yesterday');
+    expect(dayName('2026-09-17', '2026-09-16', true)).toBe('tomorrow');
+    expect(dayName('2026-09-18', '2026-09-16', true)).toBe(dayName('2026-09-18', '2026-09-16'));
   });
 });
 

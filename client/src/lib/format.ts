@@ -1,21 +1,5 @@
-import { addDays, parseDateKey } from '../../../shared/dates.js';
+import { addDays, MINUTE_MS, pad2, parseDateKey } from '../../../shared/dates.js';
 import type { TimeFormat } from '../../../shared/settings.js';
-
-export {
-  addDays,
-  addMonths,
-  DAY_MS,
-  dateKey,
-  endOfDay,
-  isValidDateKey,
-  parseDateKey,
-  startOfMonth,
-  startOfQuarter,
-  startOfWeek,
-  todayKey,
-} from '../../../shared/dates.js';
-
-const pad = (n: number) => String(n).padStart(2, '0');
 
 // One formatter per clock; the locale decides everything else (separators, AM/PM spelling).
 const timeFmts = new Map<boolean, Intl.DateTimeFormat>();
@@ -61,11 +45,14 @@ export function formatDateSpan(from: string, to: string): string {
   return `${dayShortFmt.format(a)} – ${dayShortFmt.format(b)}`;
 }
 
-/** "Today", "Yesterday", or the short date: how the header and the history list name a day. */
-export function dayName(key: string, today: string): string {
-  if (key === today) return 'Today';
-  if (key === addDays(today, -1)) return 'Yesterday';
-  return formatDateLong(key);
+/**
+ * "Today", "Yesterday", "Tomorrow", or the short date: how the header and the calendar name a
+ * day. `inSentence` lowercases the word for a line that runs on ("Still open from yesterday").
+ */
+export function dayName(key: string, today: string, inSentence = false): string {
+  const word = key === today ? 'Today' : key === addDays(today, -1) ? 'Yesterday' : key === addDays(today, 1) ? 'Tomorrow' : null;
+  if (!word) return formatDateLong(key);
+  return inSentence ? word.toLowerCase() : word;
 }
 
 /** "Wed" */
@@ -87,13 +74,13 @@ export function formatDuration(seconds: number): string {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   if (h === 0) return `${m}m`;
-  return `${h}h ${pad(m)}m`;
+  return `${h}h ${pad2(m)}m`;
 }
 
 /** "7:39": hours and minutes on one line, for a cell too narrow for "7h 39m". */
 export function formatHours(seconds: number): string {
   const s = Math.abs(Math.round(seconds));
-  return `${Math.floor(s / 3600)}:${pad(Math.floor((s % 3600) / 60))}`;
+  return `${Math.floor(s / 3600)}:${pad2(Math.floor((s % 3600) / 60))}`;
 }
 
 /** "1h 12m" but rounds up so "in 1m" never reads "in 0m" while seconds remain. */
@@ -108,7 +95,7 @@ export function formatCountdown(seconds: number): string {
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
   const sign = Math.round(seconds) < 0 ? '−' : '';
-  return `${sign}${h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`}`;
+  return `${sign}${h > 0 ? `${h}:${pad2(m)}:${pad2(sec)}` : `${m}:${pad2(sec)}`}`;
 }
 
 /** Whether times get AM/PM: the setting, or for 'auto' whatever the browser locale does. */
@@ -124,7 +111,7 @@ export function resolveHour12(pref: TimeFormat = 'auto'): boolean {
  * nearest: a Now at 8:59:40 is 8:59, so a punch never lands in the future.
  */
 export function floorToMinute(ms: number): number {
-  return Math.floor(ms / 60_000) * 60_000;
+  return Math.floor(ms / MINUTE_MS) * MINUTE_MS;
 }
 
 /** The word for `n` of something: "day" for 1, "days" otherwise (or the `many` given). */

@@ -13,7 +13,8 @@ import { useRoute } from './hooks/useRoute';
 import { useSettled } from './hooks/useSettled';
 import { SettingsProvider, useSettings } from './hooks/useSettings';
 import { TimerProvider, useTimer } from './hooks/useTimer';
-import { todayKey } from './lib/format';
+import { todayKey } from '../../shared/dates.js';
+import { floorToMinute } from './lib/format';
 import { applyTheme } from './lib/theme';
 import { computeTimeclock, daySettings } from './lib/timeclock';
 import type { CardId } from './types';
@@ -86,7 +87,7 @@ function Shell() {
   const onJumped = useCallback(() => setJumpTo(null), []);
   // History shows nothing finer than a minute. Handed the clock floored to the minute (and
   // memoized), it renders once a minute instead of redoing the month or quarter every second.
-  const minute = now - (now % 60_000);
+  const minute = floorToMinute(now);
   const openDay = useCallback((d: string) => navigate({ view: 'sheet', date: d }), [navigate]);
   useAlarms(today, todayTc, todaySettings, now, {
     overtimeApproved,

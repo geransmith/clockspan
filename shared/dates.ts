@@ -4,16 +4,19 @@
  * `isValidDateKey` is zone-free so that holds in any container TZ.
  */
 
-const pad = (n: number) => String(n).padStart(2, '0');
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-export const HOUR_MS = 3_600_000;
+/** "07": a month, day, hour or minute in two digits. */
+export const pad2 = (n: number): string => String(n).padStart(2, '0');
+
+export const MINUTE_MS = 60_000;
+export const HOUR_MS = 60 * MINUTE_MS;
 /** A calendar day's length in UTC; a local day across a DST change is an hour off it. */
 export const DAY_MS = 24 * HOUR_MS;
 
 /** Local-date key, e.g. 2026-09-16. */
 export function dateKey(d: Date): string {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
 export function todayKey(now: number = Date.now()): string {
@@ -72,7 +75,7 @@ export function startOfMonth(key: string): string {
 
 export function startOfQuarter(key: string): string {
   const [y, m] = key.split('-').map(Number) as [number, number];
-  return `${y}-${pad(Math.floor((m - 1) / 3) * 3 + 1)}-01`;
+  return `${y}-${pad2(Math.floor((m - 1) / 3) * 3 + 1)}-01`;
 }
 
 /** `n` months from the first of the key's month, clamped to a first-of-month key. */

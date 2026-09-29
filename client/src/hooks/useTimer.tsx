@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
+import { MINUTE_MS } from '../../../shared/dates.js';
 import { PLANNED_SECONDS } from '../../../shared/timer.js';
 import type { Session, SessionConflict } from '../types';
 import { alert, dismissByTag, unlockAudio, warnQuietly } from '../lib/alerts';
@@ -107,7 +108,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     const onVisible = () => {
       if (document.visibilityState === 'visible') sync();
     };
-    const id = setInterval(() => sync(), 60_000);
+    const id = setInterval(() => sync(), MINUTE_MS);
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       clearInterval(id);

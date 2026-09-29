@@ -6,6 +6,7 @@ import { useTimer } from '../hooks/useTimer';
 import { unlockAudio } from '../lib/alerts';
 import { BREAK, TIMER_DUE, UNTITLED_SESSION } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
+import { hasText } from '../lib/priorities';
 import { LIMITS, type Priority } from '../types';
 import { TimerControls } from './TimerControls';
 
@@ -36,7 +37,7 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
   const lengths = [...new Set(settings.timerMinutes)].sort((a, b) => a - b);
 
   // Open rows only: a done priority isn't something to start a session for.
-  const open = priorities.filter((p) => p.uid && p.text.trim() && !p.done);
+  const open = priorities.filter((p) => p.uid && hasText(p) && !p.done);
   const linkedStillOpen = linked != null && open.some((p) => p.uid === linked);
   const trimmed = label.trim();
   // New work typed in, not tied to a row: offer to put it on the plan as well.

@@ -1,6 +1,7 @@
 import type { Priority } from '../types';
-import { addDays, parseDateKey, sameText } from './format';
-import { MAX_PRIORITIES, newUid } from './priorities';
+import { addDays, parseDateKey } from '../../../shared/dates.js';
+import { sameText } from './format';
+import { hasText, MAX_PRIORITIES, newUid } from './priorities';
 
 /**
  * The day a plan made on `date` is for: the next one, or with weekends off the calendar (not
@@ -18,7 +19,7 @@ export function nextWorkDay(date: string, showWeekends: boolean): string {
  * `addedAt` now, the evening before, so the next day's retrospective counts it as planned.
  */
 export function planNext(existing: Priority[], texts: string[], now = Date.now()): { rows: Priority[]; added: number } {
-  const kept = existing.filter((p) => p.text.trim()).sort((a, b) => a.position - b.position);
+  const kept = existing.filter(hasText).sort((a, b) => a.position - b.position);
   const seen = new Set(kept.map((p) => sameText(p.text)));
   const rows = [...kept];
   for (const text of texts) {

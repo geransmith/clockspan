@@ -1,3 +1,4 @@
+import { MINUTE_MS } from '../../../shared/dates.js';
 import { BREAK_SECONDS } from '../../../shared/timer.js';
 import type { Break, Session } from '../types';
 
@@ -75,7 +76,7 @@ export function suggestBreak(sessions: readonly Session[]): BreakSuggestion | nu
   if (!last) return null;
   let first = done.length - 1;
   // Every completed row has an end; the type allows none, and a row without one ends the run.
-  while (first > 0 && done[first]!.startedAt - (done[first - 1]!.endedAt ?? -Infinity) < SET_GAP_MINUTES * 60_000) first--;
+  while (first > 0 && done[first]!.startedAt - (done[first - 1]!.endedAt ?? -Infinity) < SET_GAP_MINUTES * MINUTE_MS) first--;
   const position = ((done.length - first - 1) % SET_SIZE) + 1;
   const long = position === SET_SIZE;
   const focusSeconds = (long ? done.slice(-SET_SIZE) : [last]).reduce((sum, s) => sum + s.durationSeconds, 0);
