@@ -122,10 +122,10 @@ function parseAllowedHosts(raw: string | undefined): string[] {
  * value without a scheme (`focus.example.com`) would crash the first with a bare "Invalid URL"
  * and keep the second retrying forever, neither naming the variable. Refuse it here instead.
  */
-function parseHttpUrl(name: string, what: string, raw: string): URL {
+function parseHttpUrl(name: string, what: string, raw: string, schemes: readonly string[] = ['https:', 'http:']): URL {
   const url = URL.parse(raw);
-  if (!url || (url.protocol !== 'https:' && url.protocol !== 'http:')) {
-    throw new Error(`${name} must be ${what}, starting with https:// or http:// (got "${raw}")`);
+  if (!url || !schemes.includes(url.protocol)) {
+    throw new Error(`${name} must be ${what}, starting with ${schemes.map((s) => `${s}//`).join(' or ')} (got "${raw}")`);
   }
   return url;
 }
@@ -158,7 +158,9 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env): Config {
       );
     }
     // Checked, not rewritten: the issuer is an identifier the provider's tokens must match as written.
-    parseHttpUrl('OIDC_ISSUER', "your provider's issuer URL", env.OIDC_ISSUER!);
+    // https only: openid-client refuses every plain-http request, so an http issuer booted and
+    // then failed each discovery, logging a provider that looked down when it was never asked.
+    parseHttpUrl('OIDC_ISSUER', "your provider's issuer URL", env.OIDC_ISSUER!, ['https:']);
     oidc = {
       issuer: env.OIDC_ISSUER!,
       clientId: env.OIDC_CLIENT_ID!,

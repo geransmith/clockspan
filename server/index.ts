@@ -1,6 +1,7 @@
 import { loadConfig } from './config.js';
 import { openDatabase } from './db.js';
 import { createApp, startBackgroundJobs } from './app.js';
+import { Discovery } from './auth/oidc.js';
 
 let config;
 try {
@@ -22,8 +23,10 @@ if (config.trustProxy === true) {
 }
 
 const db = openDatabase(config.dbPath);
-const app = createApp(db, config);
-startBackgroundJobs(db, config);
+// One lookup for the sign-in routes and the warm-up, so the first sign-in finds it done.
+const discovery = config.oidc ? new Discovery(config.oidc.issuer, config.oidc.clientId, config.oidc.clientSecret) : undefined;
+const app = createApp(db, config, { discovery });
+startBackgroundJobs(db, config, discovery);
 
 const server = app.listen(config.port, () => {
   console.log(`Clockspan listening on :${config.port} (auth: ${config.authMode}, db: ${config.dbPath})`);

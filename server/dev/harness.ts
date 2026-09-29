@@ -2,6 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { createApp } from '../app.js';
+import type { Discovery } from '../auth/oidc.js';
 import { loadConfig, type Config } from '../config.js';
 import { ensureDefaultUser, openDatabase, type DB, type UserRow } from '../db.js';
 import { ensureLocalUsers, LOCAL_USERS, seedDatabase, type SeedManifest, type SeedOptions } from './seed.js';
@@ -49,7 +50,10 @@ export interface TestApp {
 }
 
 export interface StartOptions {
-  /** `oidc` points discovery at a port nothing listens on: the routes that don't need the provider can still be tested. */
+  /**
+   * `oidc` points discovery at a port nothing listens on: the routes that don't need the provider
+   * can still be tested. Port 2, since fetch refuses 1 and 9 itself ("bad port") without connecting.
+   */
   authMode?: 'none' | 'local' | 'oidc';
   /** Seed the default user (AUTH_MODE=none only); pass options to override the defaults. */
   seed?: boolean | Partial<Omit<SeedOptions, 'userId'>>;
@@ -57,6 +61,8 @@ export interface StartOptions {
   env?: Record<string, string>;
   /** A directory to serve as the built client; by default nothing is served outside /api. */
   clientDir?: string;
+  /** The OIDC lookup the app should use, as the entrypoint passes the one it warms; by default the app makes its own. */
+  discovery?: Discovery;
 }
 
 /** Every test app's first-run setup code (AUTH_MODE=local), so a test can post it with the form. */
@@ -104,11 +110,15 @@ function makeClient(baseUrl: string): Client {
 export async function startTestApp(opts: StartOptions = {}): Promise<TestApp> {
   const authMode = opts.authMode ?? 'none';
   const oidcEnv =
-    authMode === 'oidc' ? { OIDC_ISSUER: 'http://127.0.0.1:1/', OIDC_CLIENT_ID: 'clockspan', OIDC_CLIENT_SECRET: 'secret', APP_URL: 'http://localhost' } : {};
+    authMode === 'oidc' ? { OIDC_ISSUER: 'https://127.0.0.1:2/', OIDC_CLIENT_ID: 'clockspan', OIDC_CLIENT_SECRET: 'secret', APP_URL: 'http://localhost' } : {};
   const config = loadConfig({ AUTH_MODE: authMode, DATA_DIR: os.tmpdir(), PORT: '0', ...oidcEnv, ...opts.env });
   const db = openDatabase(':memory:');
   // No client dir means the static block stays off, so /api tests never see index.html.
-  const app = createApp(db, config, { clientDir: opts.clientDir ?? path.join(os.tmpdir(), 'clockspan-no-client'), setupCode: SETUP_CODE });
+  const app = createApp(db, config, {
+    clientDir: opts.clientDir ?? path.join(os.tmpdir(), 'clockspan-no-client'),
+    setupCode: SETUP_CODE,
+    discovery: opts.discovery,
+  });
   const server = await new Promise<import('node:http').Server>((resolve) => {
     const s = app.listen(0, '127.0.0.1', () => resolve(s));
   });

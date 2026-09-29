@@ -27,11 +27,36 @@ function firstName(...values: unknown[]): string | undefined {
 }
 
 /**
+ * openid-client's messages are generic: every connection problem is fetch's "fetch failed", and
+ * any status but 200 is "unexpected HTTP response status code". The cause says which: refused,
+ * a name that doesn't resolve, a certificate Node doesn't trust, a 404.
+ */
+function reason(err: unknown): string {
+  const { message, cause } = err as Error;
+  if (cause instanceof Response) return `${message}: HTTP ${cause.status}`;
+  // An AggregateError (every address of a name refused) carries its detail in `errors`, not here.
+  if (cause instanceof Error && cause.message) return `${message}: ${cause.message}`;
+  return message;
+}
+
+/**
+ * No connection (fetch's TypeError), a timeout or a 5xx is a provider that is down or still
+ * starting, as it is for a while when a whole server boots at once. Every other ClientError is
+ * about the URL or what it answered (a 404, a page that isn't metadata, an issuer that doesn't
+ * match), and asking again gets the same answer until OIDC_ISSUER or the provider changes.
+ */
+function worthRetrying(err: unknown): boolean {
+  if (!(err instanceof oidc.ClientError)) return true;
+  return err.code === 'OAUTH_TIMEOUT' || (err.cause instanceof Response && err.cause.status >= 500);
+}
+
+/**
  * Discovery is retried lazily with backoff so the app still boots (and serves the
  * sign-in page) when the identity provider is briefly unavailable.
  */
 export class Discovery {
   private promise: Promise<oidc.Configuration> | null = null;
+  private resolved: oidc.Configuration | null = null;
 
   constructor(
     private readonly issuer: string,
@@ -41,14 +66,26 @@ export class Discovery {
 
   get(): Promise<oidc.Configuration> {
     if (!this.promise) {
-      this.promise = oidc.discovery(new URL(this.issuer), this.clientId, this.clientSecret).catch((err: unknown) => {
-        this.promise = null;
-        throw err;
-      });
+      this.promise = oidc.discovery(new URL(this.issuer), this.clientId, this.clientSecret).then(
+        (c) => {
+          this.resolved = c;
+          return c;
+        },
+        (err: unknown) => {
+          this.promise = null;
+          throw err;
+        },
+      );
     }
     return this.promise;
   }
 
+  /** The provider's configuration once a discovery has succeeded; null before, and it never starts one. */
+  current(): oidc.Configuration | null {
+    return this.resolved;
+  }
+
+  /** Started by `startBackgroundJobs`, so building an app contacts no provider and leaves no timer behind. */
   async warm(): Promise<void> {
     let delay = 0;
     for (;;) {
@@ -57,8 +94,15 @@ export class Discovery {
         console.log(`[oidc] discovered issuer ${this.issuer}`);
         return;
       } catch (err) {
+        if (!worthRetrying(err)) {
+          // Once: a line a minute forever would bury it. A sign-in still asks again.
+          console.error(
+            `[oidc] discovery failed (${reason(err)}); not retrying, since the answer won't change. Check OIDC_ISSUER against the provider's issuer URL.`,
+          );
+          return;
+        }
         delay = nextBackoff(delay);
-        console.error(`[oidc] discovery failed (${(err as Error).message}); retrying in ${delay / 1000}s`);
+        console.error(`[oidc] discovery failed (${reason(err)}); retrying in ${delay / 1000}s`);
         // unref: a provider that never answers must not keep the process (or a test) alive.
         await new Promise((r) => setTimeout(r, delay).unref());
       }
@@ -85,12 +129,12 @@ export function upsertOidcUser(db: DB, sub: string, rawName: string): UserRow {
   return findUserById(db, info.lastInsertRowid)!;
 }
 
-export function oidcAuthRouter(db: DB, config: Config): { api: Router; web: Router } {
+/** `given` is the Discovery the entrypoint warms in `startBackgroundJobs`; without one, the routes look the provider up on the first sign-in. */
+export function oidcAuthRouter(db: DB, config: Config, given?: Discovery): { api: Router; web: Router } {
   const o = config.oidc!;
   const appUrl = config.appUrl!;
   const redirectUri = `${appUrl}/auth/callback`;
-  const discovery = new Discovery(o.issuer, o.clientId, o.clientSecret);
-  void discovery.warm();
+  const discovery = given ?? new Discovery(o.issuer, o.clientId, o.clientSecret);
 
   const api = Router();
   const web = Router();
@@ -99,16 +143,18 @@ export function oidcAuthRouter(db: DB, config: Config): { api: Router; web: Rout
     res.json({ mode: 'oidc', setupRequired: false, user: req.user ? publicUser(req.user) : null, cookieSecure: config.cookieSecure } satisfies AuthInfo);
   });
 
-  api.post('/logout', async (req, res) => {
+  api.post('/logout', (req, res) => {
     destroySession(db, config, req, res);
     let endSession: string | null = null;
-    try {
-      const c = await discovery.get();
-      if (c.serverMetadata().end_session_endpoint) {
+    // Only an answer discovery already has: asking the provider now would hold Sign out for up
+    // to openid-client's 30 s timeout while it is down, and the local logout is what counts.
+    const c = discovery.current();
+    if (c?.serverMetadata().end_session_endpoint) {
+      try {
         endSession = oidc.buildEndSessionUrl(c, { post_logout_redirect_uri: appUrl }).href;
+      } catch {
+        // An endpoint openid-client won't send a browser to (plain http); local logout is enough.
       }
-    } catch {
-      // Provider unreachable; local logout is enough.
     }
     res.json({ ok: true, redirect: endSession } satisfies LogoutResponse);
   });
@@ -118,7 +164,7 @@ export function oidcAuthRouter(db: DB, config: Config): { api: Router; web: Rout
     try {
       c = await discovery.get();
     } catch (err) {
-      console.error(`[oidc] sign-in refused, provider unreachable: ${(err as Error).message}`);
+      console.error(`[oidc] sign-in refused, provider unreachable: ${reason(err)}`);
       res.status(503).send(PROVIDER_DOWN);
       return;
     }

@@ -7,7 +7,7 @@ import type { DB } from './db.js';
 import { currentUser, requireAuth, requireOwnPassword, resolveUser } from './auth/middleware.js';
 import { localAuthRouter } from './auth/local.js';
 import { publicUser } from './auth/users.js';
-import { oidcAuthRouter } from './auth/oidc.js';
+import { oidcAuthRouter, type Discovery } from './auth/oidc.js';
 import { purgeExpiredSessions } from './auth/session.js';
 import { scheduleRetention } from './retention.js';
 import { rejectCrossSiteWrites, rejectUnknownHosts, securityHeaders } from './security.js';
@@ -23,6 +23,8 @@ export interface AppOptions {
   clientDir?: string;
   /** AUTH_MODE=local's first-run setup code. Only tests fix it; a server makes its own. */
   setupCode?: string;
+  /** AUTH_MODE=oidc's provider lookup, shared with `startBackgroundJobs`, which warms it. Tests leave it out. */
+  discovery?: Discovery;
 }
 
 export function createApp(db: DB, config: Config, opts: AppOptions = {}): Express {
@@ -46,7 +48,7 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
   if (config.authMode === 'local') {
     app.use('/api/auth', localAuthRouter(db, config, opts.setupCode));
   } else if (config.authMode === 'oidc') {
-    const { api, web } = oidcAuthRouter(db, config);
+    const { api, web } = oidcAuthRouter(db, config, opts.discovery);
     app.use('/api/auth', api);
     app.use('/auth', web);
   } else {
@@ -113,11 +115,13 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
 }
 
 /**
- * The server's timers: expired logins purged every few hours, and old days pruned
- * (`scheduleRetention`). The process entrypoint starts them after `createApp`, so building an
- * app (every test does) starts nothing. Both are unref'd and never hold the process open.
+ * The server's timers: expired logins purged every few hours, old days pruned
+ * (`scheduleRetention`), and under OIDC the provider looked up until it answers
+ * (`Discovery.warm`, on the one `createApp` was given). The process entrypoint starts them after
+ * `createApp`, so building an app (every test does) starts nothing. All are unref'd and never
+ * hold the process open.
  */
-export function startBackgroundJobs(db: DB, config: Config): void {
+export function startBackgroundJobs(db: DB, config: Config, discovery?: Discovery): void {
   // A timer's throw is an uncaught exception: one busy or full database would end the server.
   const purge = () => {
     try {
@@ -128,4 +132,5 @@ export function startBackgroundJobs(db: DB, config: Config): void {
   };
   setInterval(purge, 6 * HOUR_MS).unref();
   scheduleRetention(db, config);
+  if (discovery) void discovery.warm();
 }
