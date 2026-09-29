@@ -115,10 +115,11 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
         </label>
       )}
       {breakTimer.endsAt != null && (
-        <div className="timer-break" role="status">
+        <div className="timer-break">
           <span className="timer-break-text">
             <span>{BREAK.running(formatTime(breakTimer.endsAt))}</span>
-            <strong>{formatCountdown(breakTimer.remainingSeconds)}</strong>
+            {/* A timer, like the focus ring's: a live region would read it out every second. */}
+            <strong role="timer">{formatCountdown(breakTimer.remainingSeconds)}</strong>
           </span>
           <button className="btn btn-ghost" onClick={breakTimer.end}>
             {BREAK.end}
@@ -146,7 +147,11 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
         </button>
       )}
       {!isToday && <p className="muted center">Timers can only be started on today's sheet.</p>}
-      {error && <p className="error">{error}</p>}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

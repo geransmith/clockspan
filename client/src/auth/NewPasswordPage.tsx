@@ -48,7 +48,11 @@ export function NewPasswordPage({ user, onDone, onSignOut }: Props) {
           />
         </label>
         <NewPasswordFields value={next} confirm={confirm} onValue={setNext} onConfirm={setConfirm} />
-        {error && <p className="error">{error}</p>}
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
         <button className="btn btn-primary btn-lg" type="submit" disabled={busy}>
           {busy ? 'Saving…' : 'Set password'}
         </button>

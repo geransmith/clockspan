@@ -46,7 +46,11 @@ function ChangePassword() {
         <input className="input" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
       </label>
       <NewPasswordFields value={next} confirm={confirm} onValue={setNext} onConfirm={setConfirm} />
-      {error && <p className="error">{error}</p>}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
       {done && <p className="success">Password updated.</p>}
       <div>
         <button className="btn btn-primary" type="submit" disabled={busy}>
@@ -139,7 +143,11 @@ function Users({ me }: { me: PublicUser }) {
           Add user
         </button>
       </form>
-      {error && <p className="error">{error}</p>}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

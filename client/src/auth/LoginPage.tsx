@@ -36,7 +36,11 @@ export function LoginPage({ onDone, hint }: GateProps) {
           <span>Password</span>
           <input className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         </label>
-        {error && <p className="error">{error}</p>}
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
         <button className="btn btn-primary btn-lg" type="submit" disabled={busy}>
           {busy ? 'Signing in…' : 'Sign in'}
         </button>

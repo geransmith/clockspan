@@ -23,11 +23,12 @@ export const History = memo(function History({ today, now, date, onOpen }: Props
   };
   return (
     <div className="history-view">
-      <div className="segmented" role="tablist" aria-label="History view">
-        <button className={`segment${tab === 'days' ? ' is-on' : ''}`} role="tab" aria-selected={tab === 'days'} onClick={() => setTab('days')}>
+      {/* A switch between two views, not ARIA tabs: there are no tab panels or arrow keys to go with them. */}
+      <div className="segmented" role="group" aria-label="History view">
+        <button className={`segment${tab === 'days' ? ' is-on' : ''}`} aria-pressed={tab === 'days'} onClick={() => setTab('days')}>
           Days
         </button>
-        <button className={`segment${tab === 'review' ? ' is-on' : ''}`} role="tab" aria-selected={tab === 'review'} onClick={() => setTab('review')}>
+        <button className={`segment${tab === 'review' ? ' is-on' : ''}`} aria-pressed={tab === 'review'} onClick={() => setTab('review')}>
           Review
         </button>
       </div>

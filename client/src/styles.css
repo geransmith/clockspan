@@ -967,6 +967,10 @@ button {
   flex-direction: column;
   gap: 8px;
 }
+/* The warning's live region is always there; empty, it gives back the gap before it. */
+.priorities-notice:empty {
+  margin-top: -8px;
+}
 .priority-row {
   display: grid;
   grid-template-columns: 24px 22px 1fr;

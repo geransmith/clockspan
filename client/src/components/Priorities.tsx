@@ -160,34 +160,37 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
           </div>
         );
       })}
-      {warning && (
-        <div className="notice notice--gentle" role="status">
-          {warning.kind !== 'fresh' && (
-            <div className="notice-done">
-              <strong>
-                {done} of {total} done
-              </strong>
-              <ul>
-                {doneRows.map((p) => (
-                  <li key={p.position}>
-                    <Check />
-                    <span>{p.text}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <span>{warning.text}</span>
-          <span className="notice-actions">
-            <button className="btn btn-ghost" onClick={() => addRow(true)}>
-              {WARNING_ACTIONS[warning.kind].add}
-            </button>
-            <button className="btn btn-ghost" onClick={() => setWarning(null)}>
-              {WARNING_ACTIONS[warning.kind].keep}
-            </button>
-          </span>
-        </div>
-      )}
+      {/* Always there, so the warning is heard when it arrives (see styles.css for its gap). */}
+      <div className="priorities-notice" role="status">
+        {warning && (
+          <div className="notice notice--gentle">
+            {warning.kind !== 'fresh' && (
+              <div className="notice-done">
+                <strong>
+                  {done} of {total} done
+                </strong>
+                <ul>
+                  {doneRows.map((p) => (
+                    <li key={p.position}>
+                      <Check />
+                      <span>{p.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <span>{warning.text}</span>
+            <span className="notice-actions">
+              <button className="btn btn-ghost" onClick={() => addRow(true)}>
+                {WARNING_ACTIONS[warning.kind].add}
+              </button>
+              <button className="btn btn-ghost" onClick={() => setWarning(null)}>
+                {WARNING_ACTIONS[warning.kind].keep}
+              </button>
+            </span>
+          </div>
+        )}
+      </div>
       {burst && <Burst key={burst.seed} seed={burst.seed} anchor={burst.anchor} />}
       <div className="priorities-foot">
         {local.length < MAX_PRIORITIES ? (

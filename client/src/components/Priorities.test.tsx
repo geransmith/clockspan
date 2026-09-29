@@ -94,13 +94,16 @@ describe('Priorities', () => {
 
   it('asks before a row past the usual count, then adds it; the extra row can be removed', async () => {
     const { onChange, saved } = await renderCard([row(1, 'Report')]);
+    expect(screen.getByRole('status').textContent).toBe('');
     fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
     expect(onChange).not.toHaveBeenCalled();
+    // The live region is there before the warning, so a screen reader hears it arrive.
     const status = screen.getByRole('status');
     expect(GENTLE_WARNINGS.some((w) => status.textContent!.includes(w))).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: WARNING_ACTIONS.fresh.keep }));
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByRole('status')).toBe(status);
+    expect(status.textContent).toBe('');
 
     fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
     fireEvent.click(screen.getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
