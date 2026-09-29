@@ -2,7 +2,18 @@ import { describe, expect, it } from 'vitest';
 import type { Day, Punch } from '../types';
 import { STICKER_EMOJI } from './copy';
 import { calendarMonth } from './calendar';
-import { countStickers, daySummaryOf, STICKER_REASONS, stickerEmoji, stickerReasons, stickersForDay, type DaySummary } from './stickers';
+import {
+  countStickers,
+  dayTimeclock,
+  daySummaryOf,
+  STICKER_LABELS,
+  STICKER_REASONS,
+  stickerEmoji,
+  stickerReasons,
+  stickersForDay,
+  type DaySummary,
+  type StickerSettings,
+} from './stickers';
 import { emptyPunches } from './timeclock';
 
 const settings = { workMinutes: 480, lunchDeadlineMinutes: 300, lunchMinutes: 30, secondMealAfterMinutes: 600 };
@@ -21,6 +32,9 @@ function punches(date: string, times: (string | null)[]): Punch[] {
   return rows;
 }
 
+/** What the calendar gives a day: its stickers, judged on its timeclock worked out once. */
+const earned = (d: DaySummary, s: StickerSettings = settings) => stickersForDay(d, dayTimeclock(d, s, TODAY, NOW), s.trackHours);
+
 function summary(date: string, patch: Partial<DaySummary> = {}): DaySummary {
   return {
     date,
@@ -36,8 +50,13 @@ function summary(date: string, patch: Partial<DaySummary> = {}): DaySummary {
 }
 
 describe('stickersForDay', () => {
+  it('names each reason once, for the cells and tooltips', () => {
+    expect(STICKER_LABELS).toEqual(Object.fromEntries(STICKER_REASONS.map((r) => [r.id, r.label])));
+    expect(STICKER_LABELS.lunch).toBe('Lunch taken');
+  });
+
   it('earns nothing for an empty day', () => {
-    expect(stickersForDay(summary('2026-09-14'), settings, TODAY, NOW)).toEqual([]);
+    expect(earned(summary('2026-09-14'))).toEqual([]);
   });
 
   it('earns one sticker per thing the day did', () => {
@@ -48,22 +67,22 @@ describe('stickersForDay', () => {
       prioritiesTotal: 3,
       retroAt: 1,
     });
-    expect(stickersForDay(full, settings, TODAY, NOW)).toEqual(['clockedOut', 'lunch', 'priorities', 'focus', 'reviewed']);
+    expect(earned(full)).toEqual(['clockedOut', 'lunch', 'priorities', 'focus', 'reviewed']);
   });
 
   it('judges each reason on its own', () => {
     const lunchOnly = summary('2026-09-14', { punches: punches('2026-09-14', ['08:00', '12:00', null, null]) });
-    expect(stickersForDay(lunchOnly, settings, TODAY, NOW)).toEqual(['clockedOut', 'lunch']); // a past day off the clock is done
+    expect(earned(lunchOnly)).toEqual(['clockedOut', 'lunch']); // a past day off the clock is done
     const halfPlan = summary('2026-09-14', { prioritiesDone: 1, prioritiesTotal: 2 });
-    expect(stickersForDay(halfPlan, settings, TODAY, NOW)).toEqual([]);
+    expect(earned(halfPlan)).toEqual([]);
     const openToday = summary(TODAY, { punches: punches(TODAY, ['08:00', null, null, null]), focusSeconds: 60 });
-    expect(stickersForDay(openToday, settings, TODAY, NOW)).toEqual(['focus']);
+    expect(earned(openToday)).toEqual(['focus']);
   });
 
   it('gives no Clocked out sticker with hours not tracked, and a legend and full day without it', () => {
     const noHours = { ...settings, trackHours: false };
     const lunchOnly = summary('2026-09-14', { punches: punches('2026-09-14', ['08:00', '12:00', null, null]) });
-    expect(stickersForDay(lunchOnly, noHours, TODAY, NOW)).toEqual(['lunch']);
+    expect(earned(lunchOnly, noHours)).toEqual(['lunch']);
     expect(stickerReasons(false).map((r) => r.id)).toEqual(['lunch', 'priorities', 'focus', 'reviewed']);
     expect(stickerReasons(true)).toBe(STICKER_REASONS);
     expect(stickerReasons(undefined)).toBe(STICKER_REASONS);
@@ -83,8 +102,8 @@ describe('stickersForDay', () => {
   it("goes by the day's own work-day length when it has one", () => {
     // Out at 12:00 after four hours today: still at lunch on the usual 8 h day, done on a half day.
     const out = punches(TODAY, ['08:00', '12:00', null, null]);
-    expect(stickersForDay(summary(TODAY, { punches: out }), settings, TODAY, NOW)).toEqual(['lunch']);
-    expect(stickersForDay(summary(TODAY, { punches: out, workMinutes: 240 }), settings, TODAY, NOW)).toEqual(['clockedOut', 'lunch']);
+    expect(earned(summary(TODAY, { punches: out }))).toEqual(['lunch']);
+    expect(earned(summary(TODAY, { punches: out, workMinutes: 240 }))).toEqual(['clockedOut', 'lunch']);
   });
 });
 
