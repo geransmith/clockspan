@@ -276,8 +276,9 @@ Never commit `data/` or `.env`.
   device may own it: a 409 on start is adopted with a banner, a sync whose answer differs from
   the session shown reloads that day so the log catches up, a 404/409 on adjust/finish/cancel
   re-syncs at once, and the completion chime only plays when the server says `completed`.
-  **Today's day is kept in step the same way** (`useRefreshDay` in `useDay.tsx`: a refresh
-  when the tab comes back, throttled, and every minute), so the alarms in `useTodayAlarms` judge the
+  **Today's day is kept in step the same way** (`useRefreshDay` in `useDay.tsx`, on the same
+  `useRefreshLoop` as the timer's sync: every minute and when the tab comes back, throttled to
+  5 s), so the alarms in `useTodayAlarms` judge the
   server's copy of the punches, not one from hours ago; they wait while a come-back refresh is
   out. A today whose first load failed is loaded again on the same ticks (no second banner), so
   its alarms come back with the server.
@@ -584,7 +585,8 @@ The browser pass for each surface (the logic under it is already tested):
 - scrypt at N=2^15 needs `maxmem` above Node's 32 MB default (set in `password.ts`).
   `DUMMY_HASH` is computed with a top-level `await`, so `password.ts` is ESM-only.
 - `window` `focus` events fire on ordinary clicks in some embedded browsers; timer re-sync is
-  throttled and seq-guarded for that reason. Don't add unthrottled focus-driven refetches.
+  throttled (`useRefreshLoop`, which listens for `visibilitychange` and never `focus`) for that
+  reason. Don't add unthrottled focus-driven refetches.
 - `npm version` without `--no-git-tag-version` tags the branch commit, which is not the squash
   commit that lands on `main`. CI creates the `vX.Y.Z` tag on the merge.
 - Prettier (`.prettierrc`): single quotes, trailing commas, 160 columns. Markdown is left alone

@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
-import { MINUTE_MS } from '../../../shared/dates.js';
 import type { Day, Priority, Punch, Session } from '../types';
 import { dismissByTag, warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
@@ -9,6 +8,7 @@ import { addPending, confirm, fetched, settle, shown, untracked, type Tracked } 
 import { newUid, placePriority } from '../lib/priorities';
 import { normalizePunches } from '../lib/timeclock';
 import { useLatest } from './useLatest';
+import { useRefreshLoop } from './useRefreshLoop';
 import { useSettings } from './useSettings';
 
 /**
@@ -473,36 +473,11 @@ export function useDay(date: string): { day: Day | undefined; store: DayStore } 
 }
 
 /**
- * Keeps a day that is on screen in step with the server: a refresh when the tab comes back
- * (throttled, like the timer's sync; no `focus` listener, see the gotcha in AGENTS.md) and
- * every minute, which also asks again for a day whose first load failed. Returns true while a
- * come-back refresh is out, so the caller can wait for the answer before judging alarms on a
- * copy that may be hours old.
+ * Keeps a day that is on screen in step with the server (`useRefreshLoop`: every minute and
+ * when the tab comes back), which also asks again for a day whose first load failed. True
+ * while a come-back refresh is out.
  */
 export function useRefreshDay(date: string): boolean {
   const { refresh } = useDayStore();
-  const [pending, setPending] = useState(false);
-  useEffect(() => {
-    let last = 0;
-    const tick = (): Promise<void> | null => {
-      const t = Date.now();
-      if (t - last < 5000) return null;
-      last = t;
-      return refresh(date);
-    };
-    const onVisible = () => {
-      if (document.visibilityState !== 'visible') return;
-      const p = tick();
-      if (!p) return;
-      setPending(true);
-      void p.finally(() => setPending(false));
-    };
-    const id = setInterval(() => void tick(), MINUTE_MS);
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      clearInterval(id);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, [date, refresh]);
-  return pending;
+  return useRefreshLoop(() => refresh(date));
 }
