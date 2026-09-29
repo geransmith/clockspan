@@ -1,6 +1,6 @@
 import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
-import { PASSWORD_LENGTH } from '../../shared/api.js';
+import { PASSWORD_LENGTH, USERNAME } from '../../shared/api.js';
 
 // Format: scrypt$<log2 N>$<salt b64>$<hash b64>. N is stored so it can be raised later
 // without invalidating existing hashes.
@@ -50,13 +50,15 @@ export function parsePassword(raw: unknown): { password: string } | { error: str
   return { password: raw };
 }
 
+const USERNAME_RE = new RegExp(`^(?:${USERNAME.pattern})$`);
+
 /** The username comes back trimmed, which is how it is stored and looked up. */
 export function parseUsername(raw: unknown): { username: string } | { error: string } {
   if (typeof raw !== 'string') return { error: 'Username is required.' };
   const username = raw.trim();
-  if (username.length < 2) return { error: 'Username must be at least 2 characters.' };
-  if (username.length > 40) return { error: 'Username must be 40 characters or fewer.' };
-  if (!/^[a-zA-Z0-9._-]+$/.test(username)) return { error: 'Username may contain letters, numbers, . _ and -' };
+  if (username.length < USERNAME.min) return { error: `Username must be at least ${USERNAME.min} characters.` };
+  if (username.length > USERNAME.max) return { error: `Username must be ${USERNAME.max} characters or fewer.` };
+  if (!USERNAME_RE.test(username)) return { error: `Username may contain ${USERNAME.chars}` };
   return { username };
 }
 
