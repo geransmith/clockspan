@@ -96,6 +96,22 @@ describe('PUT /api/days/:date/punches', () => {
     expect(tooMany.body.error).toMatch(/limited to 40/);
     expect((await app.api.put('/api/days/bad/punches', { punches: [] })).status).toBe(400);
   });
+
+  it('refuses a row that is not an object, and stores nothing', async () => {
+    // A number or true used to be stored as an empty punch; 'x' and [1] were refused only because strings and arrays have an `at` method.
+    for (const row of [5, true, 'x', [1], [{ at: T0 + 8 * HOUR }]]) {
+      const r = await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: T0 + 8 * HOUR }, row] });
+      expect([r.status, r.body.error], JSON.stringify(row)).toEqual([400, 'Punch 1 must be an object or null.']);
+    }
+    expect((await app.api.get('/api/days/2026-09-01')).body.punches).toEqual([]);
+  });
+
+  it("takes the web app's rows, and a null row as an empty one", async () => {
+    // The client sends `{ at }` for every row, `at: null` for an empty one (putPunches in client/src/api.ts); a null row reads the same.
+    const r = await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: T0 + 8 * HOUR }, { at: null }, null, { at: T0 + 17 * HOUR }] });
+    expect(r.status).toBe(200);
+    expect(r.body.punches.map((p: { at: number | null }) => p.at)).toEqual([T0 + 8 * HOUR, null, null, T0 + 17 * HOUR]);
+  });
 });
 
 describe('PUT /api/days/:date/priorities', () => {
@@ -184,6 +200,38 @@ describe('PUT /api/days/:date/priorities', () => {
     expect(r.status).toBe(200);
     expect(r.body.priorities[0]).toEqual({ position: 1, text: '', done: false, uid: null, addedAt: null });
     expect(r.body.priorities[1]).toMatchObject({ position: 2, text: 'b' });
+  });
+
+  it('refuses a row that is not an object, and stores nothing', async () => {
+    // Each of these used to be stored as an empty row.
+    for (const row of ['x', 5, true, [1], [{ text: 'a' }]]) {
+      const r = await app.api.put('/api/days/2026-09-01/priorities', { priorities: [{ text: 'ok' }, row] });
+      expect([r.status, r.body.error], JSON.stringify(row)).toEqual([400, 'Priority 2 must be an object or null.']);
+    }
+    expect((await app.api.get('/api/days/2026-09-01')).body.priorities).toEqual([]);
+  });
+
+  it('reads done: null as absent, like the other fields', async () => {
+    const r = await app.api.put('/api/days/2026-09-01/priorities', {
+      priorities: [
+        { text: 'a', done: null },
+        { text: '', done: null, uid: null, addedAt: null },
+      ],
+    });
+    expect(r.status).toBe(200);
+    expect(r.body.priorities.map((p: { done: boolean }) => p.done)).toEqual([false, false]);
+  });
+
+  it("takes the web app's rows as it pads and sends them", async () => {
+    // padPriorities (client/src/lib/priorities.ts) sends every field of every row, empty rows included.
+    const priorities = [
+      { position: 1, text: 'Write the report', done: true, uid: 'abcdef123456', addedAt: T0 },
+      { position: 2, text: '', done: false, uid: null, addedAt: null },
+      { position: 3, text: '', done: false, uid: '0123456789ab', addedAt: T0 + HOUR },
+    ];
+    const r = await app.api.put('/api/days/2026-09-01/priorities', { priorities });
+    expect(r.status).toBe(200);
+    expect(r.body.priorities).toEqual(priorities);
   });
 });
 
