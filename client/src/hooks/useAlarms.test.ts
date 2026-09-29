@@ -114,6 +114,31 @@ describe('firing', () => {
     expect(tags()).toContain('alarm:clockOut');
   });
 
+  it('stays quiet while the punches are out of order, where the end of the day drifts with the clock', () => {
+    // Clock out typed before Lunch out: 7 h 50 m worked, "at lunch", and the end moves a minute every minute.
+    const tangled = (now: number) =>
+      computeTimeclock(
+        emptyPunches().map((p, i) => ({ ...p, at: [T0 - 490 * MIN, T0 - 20 * MIN, null, T0 - 15 * MIN][i] ?? null })),
+        settings,
+        now,
+      );
+    expect(tangled(T0).error).not.toBeNull();
+    const { rerender } = renderAlarms({ tc: tangled(T0) });
+    for (let m = 1; m <= 3; m++) rerender({ date: TODAY, tc: tangled(T0 + m * MIN), now: T0 + m * MIN, day: NO_DAY, settings });
+    expect(alert).not.toHaveBeenCalled();
+  });
+
+  it('rings once for two tabs open on one device', () => {
+    // Both tabs were opened before the warning, so each holds its own copy of what fired.
+    const early = tcAt(T0 - 5 * MIN, T0 - 286 * MIN);
+    const a = renderAlarms({ tc: early, now: T0 - 5 * MIN });
+    const b = renderAlarms({ tc: early, now: T0 - 5 * MIN });
+    expect(alert).not.toHaveBeenCalled();
+    a.rerender({ date: TODAY, tc: lunchSoon, now: T0, day: NO_DAY, settings });
+    b.rerender({ date: TODAY, tc: lunchSoon, now: T0, day: NO_DAY, settings });
+    expect(tags()).toEqual(['alarm:lunchBy']);
+  });
+
   it('never arms a target without an instant', () => {
     renderAlarms({ tc: { ...overDay, lunchBy: null, clockOutAt: null, secondMealBy: null } });
     expect(alert).not.toHaveBeenCalled();
@@ -148,6 +173,23 @@ describe('clock-out and retro', () => {
     // Approved from the card's switch (the banner's own button closes its banner itself).
     rerender({ date: TODAY, tc: overDay, now: T0, day: { ...NO_DAY, overtimeApproved: true }, settings });
     expect(vi.mocked(dismissByTag).mock.calls).toEqual([['alarm:clockOut']]);
+  });
+
+  it("takes the banners down when the clock-in is cleared or the day changes, and not while today's punches settle", () => {
+    const { rerender } = renderAlarms({ tc: overDay });
+    expect(tags()).toEqual(['alarm:clockOut', 'alarm:retro']);
+    vi.mocked(dismissByTag).mockClear();
+    // Punches still settling (the app hands over no timeclock): the banners stay.
+    rerender({ date: TODAY, tc: null, now: T0, day: NO_DAY, settings });
+    expect(dismissByTag).not.toHaveBeenCalled();
+    rerender({ date: TODAY, tc: tcAt(T0), now: T0, day: NO_DAY, settings });
+    expect(vi.mocked(dismissByTag).mock.calls.flat().sort()).toEqual(['alarm:clockOut', 'alarm:lunchBy', 'alarm:retro', 'alarm:secondMeal']);
+
+    // Past midnight, yesterday's banner (and its Overtime approved button) goes with the day.
+    const next = renderAlarms({ tc: overDay });
+    vi.mocked(dismissByTag).mockClear();
+    next.rerender({ date: '2026-09-29', tc: overDay, now: T0, day: NO_DAY, settings });
+    expect(dismissByTag).toHaveBeenCalledWith('alarm:clockOut');
   });
 
   it('a reviewed day disarms the retro alarm, and a moved target clears its banner', () => {
