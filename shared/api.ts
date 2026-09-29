@@ -165,11 +165,6 @@ export interface BreakEndResponse {
   break: Break | null;
 }
 
-/** The 409 from starting a break while a focus timer runs. */
-export interface BreakConflict {
-  error: string;
-}
-
 /** `GET /sessions/running`. */
 export interface RunningResponse {
   session: Session | null;

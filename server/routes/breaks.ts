@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { breakRowToJson, dateParam, endRunningBreak, ensureDay, getOwned, ownedRows, parsePlannedSeconds, requireDate, runningSession } from './shared.js';
-import type { BreakConflict, BreakEndResponse, BreakResponse, OkResponse } from '../../shared/api.js';
+import type { BreakEndResponse, BreakResponse, OkResponse } from '../../shared/api.js';
 import { BREAK_SECONDS, MIN_BREAK_MS } from '../../shared/timer.js';
 
 /** Mounted at /api/days/:date/breaks (start), like the sessions' start router. */
@@ -20,7 +20,7 @@ export function breakStartRouter(db: DB): Router {
       return;
     }
     if (runningSession(db, user.id)) {
-      res.status(409).json({ error: 'A focus timer is running.' } satisfies BreakConflict);
+      res.status(409).json({ error: 'A focus timer is running.' });
       return;
     }
     const id = db.transaction(() => {

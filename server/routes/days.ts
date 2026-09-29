@@ -229,16 +229,25 @@ export function daysRouter(db: DB, config: Config): Router {
     const seen = new Set<string>();
     for (let i = 0; i < input.length; i++) {
       const item = (input[i] ?? {}) as Record<string, unknown>;
+      // Checked like every other field: a value of the wrong kind is a client bug, not a row to guess at.
+      if (item.text != null && typeof item.text !== 'string') {
+        res.status(400).json({ error: `Priority ${i + 1} has invalid text.` });
+        return;
+      }
+      if (item.uid != null && !(typeof item.uid === 'string' && UID_RE.test(item.uid))) {
+        res.status(400).json({ error: `Priority ${i + 1} has an invalid uid.` });
+        return;
+      }
       const text = typeof item.text === 'string' ? item.text.slice(0, LIMITS.priorityText) : '';
       const hasText = text.trim() !== '';
-      let uid = typeof item.uid === 'string' && UID_RE.test(item.uid) ? item.uid.toLowerCase() : null;
+      let uid = typeof item.uid === 'string' ? item.uid.toLowerCase() : null;
       if (uid && seen.has(uid)) {
         res.status(400).json({ error: `Priority ${i + 1} repeats another row's uid.` });
         return;
       }
       if (!uid && hasText) uid = randomBytes(6).toString('hex');
       if (uid) seen.add(uid);
-      // Stamped by the client when the row first got text; never in the future.
+      // Stamped by the client when the row first got text; at most a day ahead, for a device clock running fast.
       let addedAt = item.addedAt == null ? null : parseInstant(item.addedAt, 0, Date.now() + DAY_MS);
       if (item.addedAt != null && addedAt == null) {
         res.status(400).json({ error: `Priority ${i + 1} has an invalid addedAt.` });

@@ -44,6 +44,11 @@ export function sessionStartRouter(db: DB): Router {
       res.status(400).json({ error: planned.error });
       return;
     }
+    // Refused like the same field on PATCH, rather than quietly stored as ''.
+    if (label !== undefined && typeof label !== 'string') {
+      res.status(400).json({ error: 'label must be a string.' });
+      return;
+    }
     const existing = runningSession(db, user.id);
     if (existing) {
       res.status(409).json({ error: 'A timer is already running.', session: sessionRowToJson(existing) } satisfies SessionConflict);
