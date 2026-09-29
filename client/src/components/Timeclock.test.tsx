@@ -17,14 +17,14 @@ const YESTERDAY = '2026-09-27';
 async function renderCard(date = TODAY, punches: Punch[] = emptyPunches()) {
   const onEditingChange = vi.fn<(editing: boolean) => void>();
   const onChange = vi.fn<(punches: Punch[]) => void>();
-  const view = render(
+  const card = (p: Punch[]) => (
     <SettingsProvider>
       <Timeclock
         date={date}
         isToday={date === TODAY}
         now={T0}
-        punches={punches}
-        tc={timeclockForDate(punches, makeSettings(), date, TODAY, T0)}
+        punches={p}
+        tc={timeclockForDate(p, makeSettings(), date, TODAY, T0)}
         overtimeApproved={false}
         workMinutes={null}
         week={null}
@@ -34,10 +34,11 @@ async function renderCard(date = TODAY, punches: Punch[] = emptyPunches()) {
         onWorkMinutesChange={vi.fn()}
         onEditingChange={onEditingChange}
       />
-    </SettingsProvider>,
+    </SettingsProvider>
   );
+  const view = render(card(punches));
   await settle();
-  return { ...view, onEditingChange, onChange };
+  return { ...view, onEditingChange, onChange, again: (p: Punch[]) => view.rerender(card(p)) };
 }
 
 /** A segment of the row's time field, where typing a time starts. */
@@ -71,6 +72,19 @@ describe('Timeclock', () => {
     focus(field('Clock in'));
     expect(onEditingChange).toHaveBeenLastCalledWith(true);
     unmount();
+    expect(onEditingChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('lets the hold go on the next change to the punches once focus is lost with no blur', async () => {
+    const { onEditingChange, again } = await renderCard();
+    focus(field('Clock in'));
+    expect(onEditingChange).toHaveBeenLastCalledWith(true);
+    // Escape throws the draft away by remounting the field; the focused segment goes with it.
+    fireEvent.keyDown(field('Clock in'), { key: 'Escape' });
+    expect(document.activeElement?.closest('.timefield')).toBeFalsy();
+    expect(onEditingChange).toHaveBeenLastCalledWith(true);
+    // Another device punches in.
+    again(emptyPunches().map((p) => ({ ...p, at: p.position === 0 ? T0 : null })));
     expect(onEditingChange).toHaveBeenLastCalledWith(false);
   });
 

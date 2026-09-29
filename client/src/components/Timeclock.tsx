@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useBecameTrue, useCelebration } from '../hooks/useCelebration';
 import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
@@ -97,6 +97,13 @@ export function Timeclock({
     onEditingChange(true);
     return () => onEditingChange(false);
   }, [typing, isToday, onEditingChange]);
+  // A field remounted while focused (Escape throws its draft away) drops focus on the page with
+  // no blur in Chrome or Firefox, so a hold left that way ends on the next change to the punches.
+  const rowsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = document.activeElement;
+    if (typing && !(el?.closest('.timefield') && rowsRef.current?.contains(el))) setTyping(false);
+  }, [punches, typing]);
 
   const tiles = timeclockTiles(tc, {
     now,
@@ -243,6 +250,7 @@ export function Timeclock({
 
       <div
         className="punches"
+        ref={rowsRef}
         onFocus={(e) => setTyping(e.target.closest('.timefield') != null)}
         onBlur={(e) => {
           if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setTyping(false);
