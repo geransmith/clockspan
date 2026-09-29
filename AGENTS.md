@@ -268,8 +268,11 @@ Never commit `data/` or `.env`.
   `App.tsx` judge the server's copy of the punches, not one from hours ago; they wait while a
   come-back refresh is out. A today whose first load failed is loaded again on the same ticks
   (no second banner), so its alarms come back with the server. A `load` (the timer's sync, Try
-  again) is dropped the same way on a day written since it went out, except the reload after a
-  failed save, which always lands.
+  again) doesn't replace a day the store holds when a write was queued or out as it went out,
+  or was made before it answered, except the reload after a failed save, which always lands.
+  Writes change only days the store holds (`withDay`): a day not loaded yet shows the server's
+  copy when it loads, and one whose first load was out when the server confirmed a session or
+  break on it is asked for again. A made-up day would stand in for the server's copy.
 - **Break lengths come only from `client/src/lib/breaks.ts`** (`suggestBreak`, pure, over a
   day's sessions: a fifth of the session, a long break for the fourth in a row, a 15-minute gap
   restarts the count). With `suggestBreaks` on, `useBreak` offers today's suggestion on the
