@@ -25,9 +25,12 @@ export interface TargetDay {
  * the retrospective shares it. Overtime approval disarms the clock-out target only: meal
  * periods are still required on an overtime day (California Labor Code §512), so lunch and
  * the second meal stay armed, and the planned end of the day is still the moment to look back.
- * With the punches out of order the timeclock reads "working" whatever happened: a finished
- * day with no lunch would ring "Lunch is overdue" at every repeat, and an end that drifts with
- * the clock would be a new alarm every minute, so nothing is armed until the punches are fixed.
+ * With the punches out of order the timeclock reads "working" whatever happened, and an end
+ * that drifts with the clock would be a new alarm every minute, so the end of the day, the
+ * retrospective and the second meal wait for the punches to be fixed. Lunch stays armed: its
+ * deadline comes from the clock-in and doesn't move, and a typo elsewhere must not mute the
+ * meal period while the person is still working. On a day that is really over, the repeat is
+ * what prompts fixing the punches.
  */
 export function alarmTargets(tc: TimeclockResult, settings: Parameters<typeof secondMealApplies>[1], day: TargetDay): AlarmTarget[] {
   const endFixed = tc.error == null && tc.clockOutAt != null && tc.state === 'working';
@@ -35,7 +38,7 @@ export function alarmTargets(tc: TimeclockResult, settings: Parameters<typeof se
     {
       id: 'lunchBy',
       at: tc.lunchBy ?? 0,
-      armed: tc.error == null && tc.lunchBy != null && (tc.lunchStatus === 'upcoming' || tc.lunchStatus === 'overdue') && tc.state !== 'done',
+      armed: tc.lunchBy != null && (tc.lunchStatus === 'upcoming' || tc.lunchStatus === 'overdue') && tc.state !== 'done',
     },
     { id: 'clockOut', at: tc.clockOutAt ?? 0, armed: endFixed && !day.overtimeApproved },
     { id: 'secondMeal', at: tc.secondMealBy ?? 0, armed: secondMealApplies(tc, settings, day.overtimeApproved) },

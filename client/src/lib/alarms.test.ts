@@ -143,15 +143,18 @@ describe('alarmTargets', () => {
     });
   });
 
-  it('waits for punches out of order to be fixed before anything rings', () => {
+  it('waits for punches out of order to be fixed before the end of the day or the second meal ring', () => {
     // Clock out typed before Lunch out: the timeclock reads "working" while the day is over.
     const tangled = tc(IN + 9 * H, IN, IN + 8 * H + 25 * M, null, IN + 8 * H + 20 * M);
     expect([tangled.error, tangled.state]).toEqual([expect.any(String), 'working']);
     expect(armed(alarmTargets(tangled, s, { ...day, overtimeApproved: true }))).toEqual({ lunchBy: false, clockOut: false, secondMeal: false, retro: false });
-    // No lunch, and the Clock out typed as 2:00 AM rather than PM: lunch reads overdue on a day that may be long over.
-    const noLunch = tc(IN + 9 * H, IN, null, null, IN - 6 * H);
-    expect([noLunch.error, noLunch.state, noLunch.lunchStatus]).toEqual([expect.any(String), 'working', 'overdue']);
-    expect(armed(alarmTargets(noLunch, s, day))).toEqual({ lunchBy: false, clockOut: false, secondMeal: false, retro: false });
+  });
+
+  it('keeps lunch armed with the punches out of order, since its deadline comes from the clock-in', () => {
+    // Mid-morning, no lunch yet, and a Clock out typed as 2:00 AM: the typo must not mute the meal period.
+    const typo = tc(IN + 3 * H, IN, null, null, IN - 6 * H);
+    expect([typo.error, typo.state, typo.lunchStatus]).toEqual([expect.any(String), 'working', 'upcoming']);
+    expect(armed(alarmTargets(typo, s, day))).toEqual({ lunchBy: true, clockOut: false, secondMeal: false, retro: false });
   });
 
   it('disarms the retrospective once reviewed, and everything once the day is done', () => {
