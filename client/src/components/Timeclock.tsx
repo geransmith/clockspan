@@ -212,7 +212,11 @@ export function Timeclock({
         <Toggle
           className="ot-row"
           label="Overtime approved"
-          hint={overtimeApproved ? 'Clock-out alarm is off for today. Meal alarms stay on.' : 'Silences the clock-out alarm for this day.'}
+          hint={
+            overtimeApproved
+              ? `Clock-out alarm is off for today.${settings.mealRules ? ' Meal alarms stay on.' : ''}`
+              : 'Silences the clock-out alarm for this day.'
+          }
           checked={overtimeApproved}
           onChange={onOvertimeChange}
         />

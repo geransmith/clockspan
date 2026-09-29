@@ -41,7 +41,7 @@ export function TimeclockTab({ settings, set }: { settings: Settings; set: (patc
       )}
       <Toggle
         label="Overtime"
-        hint="An 'Overtime approved' switch on the timeclock and the clock-out alarm. It silences that day's clock-out alarm only; meal alarms stay on. Off where overtime doesn't apply: time past your day isn't shown as overtime."
+        hint={`An 'Overtime approved' switch on the timeclock and the clock-out alarm. It silences that day's clock-out alarm only${settings.mealRules ? '; meal alarms stay on' : ''}. Off where overtime doesn't apply: time past your day isn't shown as overtime.`}
         checked={settings.overtimeApproval}
         onChange={(v) => set({ overtimeApproval: v })}
       />
