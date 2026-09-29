@@ -3,7 +3,7 @@
 ## Supported versions
 
 The newest release is supported. A fix ships as a patch release of the current major version,
-so `ghcr.io/geransmith/clockspan:latest` and the major tag (`:1`) both pick it up; a pinned
+so `ghcr.io/geransmith/clockspan:latest` and the current major tag (`:X`, e.g. `:2`) both pick it up; a pinned
 `X.Y.Z` tag needs updating by hand. The README's Docker section has the commands.
 
 ## Reporting a vulnerability

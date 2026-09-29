@@ -37,8 +37,8 @@ interface TimerCtx {
   /** `countOverrun` logs the time past the planned end too; otherwise a late finish logs the plan. */
   finish: (countOverrun?: boolean) => Promise<void>;
   /**
-   * The Finish button: finishes now, unless the timer is a whole minute or more past its end,
-   * where the planned and the worked length differ and `finishChoice` asks which one to log.
+   * The Finish button: finishes now, unless the timer ran out and the planned and the worked
+   * length differ in their whole minutes, where `finishChoice` asks which one to log.
    */
   requestFinish: () => void;
   finishChoice: boolean;

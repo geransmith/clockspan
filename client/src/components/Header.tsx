@@ -20,7 +20,7 @@ export function Header({ view, date, today, customize, onNavigate, onToggleCusto
   const { auth, signOut } = useAuth();
   const onSheet = view === 'sheet';
   const isToday = date === today;
-  // "Yesterday" (or "Tomorrow") gets the date underneath; any other day's name already is the date.
+  // "Yesterday" gets the date underneath; any other day's name already is the date (the sheet never shows a future day).
   const name = dayName(date, today);
   const long = formatDateLong(date);
 

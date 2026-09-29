@@ -4,7 +4,8 @@ import { FINISH_CHOICE } from '../lib/copy';
 import { formatDuration } from '../lib/format';
 
 /**
- * Asked when Finish is pressed a whole minute or more past the timer's end: log the planned
+ * Asked when Finish is pressed after the timer ran out, once the planned and the worked length
+ * differ in their whole minutes (`requestFinish`): log the planned
  * length (the default: a timer that runs out unattended logs the same) or the time worked.
  * Mounted once in App; it renders nothing until the timer asks.
  */
