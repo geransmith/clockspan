@@ -221,11 +221,10 @@ export function Timeclock({
       {weekShown && (
         <p className="timeclock-note week-line" ref={weekRef}>
           This week <strong>{formatDuration(week.workedSeconds)}</strong> of {formatDuration(week.targetSeconds)}
-          {/* A whole minute over, or the line would read "0m over" as the target is reached. */}
-          {week.workedSeconds - week.targetSeconds >= 60 && (
+          {week.overSeconds > 0 && (
             <>
               {' · '}
-              {formatDuration(week.workedSeconds - week.targetSeconds)} {otFeature ? 'over' : 'past'}
+              {formatDuration(week.overSeconds)} {otFeature ? 'over' : 'past'}
             </>
           )}
           {weekBurst && <Burst key={weekBurst.seed} seed={weekBurst.seed} anchor={weekBurst.anchor} />}

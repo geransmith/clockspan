@@ -84,8 +84,12 @@ export interface RangeReview {
   focusedSeconds: number;
   onPlanSeconds: number;
   offPlanSeconds: number;
+  /** The focused time that went to a priority, as a whole percent; null with no focus logged. */
+  onPlanPercent: number | null;
   prioritiesDone: number;
   prioritiesTotal: number;
+  /** Rows left unticked, once per day each was written on (`notDone` merges repeats). */
+  prioritiesOpen: number;
   retrosDone: number;
   /** Off-plan work by label, most time first: where the time went instead. */
   unplanned: UnplannedWork[];
@@ -106,8 +110,10 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
     focusedSeconds: 0,
     onPlanSeconds: 0,
     offPlanSeconds: 0,
+    onPlanPercent: null,
     prioritiesDone: 0,
     prioritiesTotal: 0,
+    prioritiesOpen: 0,
     retrosDone: 0,
     unplanned: [],
     notDone: [],
@@ -149,6 +155,8 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
     }
     if (day.retroNote.trim()) out.notes.push({ date: day.date, note: day.retroNote, reviewedAt: day.retroAt });
   }
+  if (out.focusedSeconds > 0) out.onPlanPercent = Math.round((out.onPlanSeconds / out.focusedSeconds) * 100);
+  out.prioritiesOpen = out.prioritiesTotal - out.prioritiesDone;
   out.unplanned = [...unplanned.values()].sort((a, b) => b.seconds - a.seconds || a.dates[0]!.localeCompare(b.dates[0]!));
   out.notDone = [...notDone.values()].sort((a, b) => b.dates.length - a.dates.length || a.dates[0]!.localeCompare(b.dates[0]!));
   return out;
