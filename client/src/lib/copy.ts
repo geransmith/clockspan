@@ -72,7 +72,7 @@ export const GENTLE_WARNINGS = [
   'A long list is where priorities go to hide.',
   'Is this for today, or for some day?',
   'Fine, but if you could only do one today, which one?',
-  'A few plates is carrying. More is juggling.',
+  'Carrying a few plates is one thing. Juggling them is another.',
   "The list doesn't get shorter by getting longer.",
   'Bold move. Today thing or someday thing?',
   'Done beats listed.',
