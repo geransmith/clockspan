@@ -89,11 +89,11 @@ A fresh checkout has an empty database, so History, the retrospective and the we
 days so you can try those screens without punching a fortnight by hand:
 
 - the last ten weekdays, each with clock in / lunch / clock out punches, three or four
-  priorities (some ticked), a few focus sessions (most linked to a priority, one not) and a
-  retrospective note. Among them: a day with an extra break, a day worked late with
-  "Overtime approved", a half day with no lunch, a day that was never reviewed, and one
-  cancelled session;
-- today, clocked in two hours ago with one priority done and two sessions logged.
+  priorities (some ticked), a few focus sessions (most linked to a priority, one not), on most
+  days a break or two, and a retrospective note. Among them: a day with an extra out / in
+  pair, a day worked late with "Overtime approved", a half day with no lunch, a day that was
+  never reviewed, and one cancelled session;
+- today, clocked in two hours ago with one priority done, two sessions and a break logged.
 
 Dates are relative to the day you run it, so the sample always lands in the current week.
 Run it again whenever you want the sample back: it replaces the seeded days but leaves your
@@ -160,7 +160,7 @@ The database in the mounted volume is untouched. To build from source instead, `
 
 ### Unraid
 
-The Unraid template, [`unraid/clockspan.xml`](unraid/clockspan.xml), keeps the database in `/mnt/user/appdata/clockspan`, runs the app as `99:100` (`PUID`/`PGID`) and serves it on port 8080. Every variable below is a field on its form: the sign-in mode is a dropdown, and the rest are under *Show more settings*. Fields left blank take the defaults.
+The Unraid template, [`unraid/clockspan.xml`](unraid/clockspan.xml), keeps the database in `/mnt/user/appdata/clockspan`, runs the app as `99:100` (`PUID`/`PGID`) and serves it on port 8080. Every variable below is a field on its form except `PORT` and `DATA_DIR`, which the image sets, and `DATA_PATH`, whose place the *Data* path takes. The sign-in mode (a dropdown) and the App URL are on the form itself; the rest are under *Show more settings*. Fields left blank take the defaults.
 
 If Clockspan isn't in the Apps tab yet, add the template by hand from the Unraid terminal, then pick **clockspan** under *Docker → Add Container → Template*:
 
@@ -170,12 +170,12 @@ wget -O /boot/config/plugins/dockerMan/templates-user/my-clockspan.xml https://r
 
 ### Environment variables
 
-Set these in `.env` (start from `.env.example`, which documents each one) or in the Unraid template's fields. A variable set to an empty value counts as unset, so its default applies.
+Set these in `.env` (start from `.env.example`, which documents each one) or in the Unraid template's fields. A variable set to an empty value counts as unset, so its default applies. `PORT` and `DATA_DIR` are the exception: the image sets them to match its port mapping and its `/data` volume, so they only matter when running from source.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `PORT` | `8080` (Docker) / `3000` (dev) | Listen port |
-| `DATA_DIR` | `/data` (Docker) / `./data` | Where `focus.db` lives |
+| `PORT` | `8080` (Docker) / `3000` (from source) | Listen port. Running from source only: under Docker, change the host side of the port mapping instead |
+| `DATA_DIR` | `/data` (Docker) / `./data` (from source) | Where `focus.db` lives. Running from source only: under Docker, `DATA_PATH` (or the Unraid *Data* path) picks the host directory |
 | `AUTH_MODE` | `none` | `none`, `local` or `oidc` |
 | `APP_URL` | — | Public URL of the app. Required for `oidc`; also turns on Secure cookies when `https` |
 | `TRUST_PROXY` | `false` | Number of reverse proxies in front of the app (usually `1`); Express string forms such as `loopback` or a CIDR list are passed through. Never `true`, which trusts any `X-Forwarded-For` a client sends |
@@ -235,7 +235,7 @@ Login is rate-limited to 5 failed attempts per 15 minutes per IP, counting an IP
 
 The app refuses to start with a clear message if any of these are missing. If Authentik is briefly unreachable at startup the app still boots and retries discovery in the background. Sign out also ends the Authentik session when the provider advertises an end-session endpoint.
 
-**Switching modes later.** Data is keyed by user. Going from `none` to `local` creates a fresh admin; the old implicit user's data stays in the database. To hand it to the new account, stop the container and run the script below before the new account records a day of its own (a user has one row per date, so a date both accounts used stops the script and nothing moves). Days and their sessions move together: a session belongs to a user as well as a day. The last two statements bring the old settings along, replacing any the admin saved; leave them out to keep the admin's.
+**Switching modes later.** Data is keyed by user. Going from `none` to `local` creates a fresh admin; the old implicit user's data stays in the database. To hand it to the new account, stop the container and run the script below before the new account records a day of its own (a user has one row per date, so a date both accounts used stops the script and nothing moves). Days move together with their sessions and breaks, which belong to a user as well as a day. The last two statements bring the old settings along, replacing any the admin saved; leave them out to keep the admin's.
 
 ```bash
 sqlite3 /path/on/host/focus.db <<'SQL'
@@ -245,6 +245,8 @@ UPDATE days     SET user_id = (SELECT id FROM users WHERE kind = 'local' ORDER B
                 WHERE user_id = (SELECT id FROM users WHERE kind = 'default');
 UPDATE sessions SET user_id = (SELECT id FROM users WHERE kind = 'local' ORDER BY id LIMIT 1)
                 WHERE user_id = (SELECT id FROM users WHERE kind = 'default');
+UPDATE breaks   SET user_id = (SELECT id FROM users WHERE kind = 'local' ORDER BY id LIMIT 1)
+                WHERE user_id = (SELECT id FROM users WHERE kind = 'default');
 DELETE FROM settings WHERE user_id = (SELECT id FROM users WHERE kind = 'local' ORDER BY id LIMIT 1)
                 AND EXISTS (SELECT 1 FROM settings WHERE user_id = (SELECT id FROM users WHERE kind = 'default'));
 UPDATE settings SET user_id = (SELECT id FROM users WHERE kind = 'local' ORDER BY id LIMIT 1)
@@ -253,7 +255,7 @@ COMMIT;
 SQL
 ```
 
-Going from `none` to `oidc` works the same way. Sign in through your provider once first, since that creates your account, then run the script with `kind = 'oidc'` in place of each `kind = 'local'` (four places).
+Going from `none` to `oidc` works the same way. Sign in through your provider once first, since that creates your account, then run the script with `kind = 'oidc'` in place of each `kind = 'local'` (five places).
 
 ---
 
@@ -273,7 +275,7 @@ Going from `none` to `oidc` works the same way. Sign in through your provider on
 - **Sticker chart.** Off by default: turn it on under *Settings → Sheet → History*. Every day on the History calendar then wears a sticker for each thing it did (clocked out, lunch taken, all priorities done, a focus session logged, retrospective reviewed) instead of its hours, with the month's count on top and a day that earned all five picked out. With *Show hours* off there's no clocked-out sticker, and four make a full day. The legend chips count each kind; tap one to show only that sticker, tap again for all of them. Today updates as you go. Hover a sticker for what it was for.
 - **Layout.** Tap **Customize** to drag cards (long-press on phones), use ▲/▼, or hide a card. Hidden cards appear in a strip at the bottom while customizing. *Settings → Sheet → Layout → Reset to default* restores everything.
 - **Settings.** Five tabs: *Timeclock* (day length; meal periods, overtime and hours, each with a switch and its own lengths; time format), *Alarms* (per-alarm rules, sound, notifications, a sound per event with a Test button), *Sheet* (theme, priorities, timer and break lengths, break suggestions, celebrations, the sticker chart and weekends on the calendar, layout), *Data* (old-day cleanup) and *Account* (local accounts only). **Reset all settings**, at the bottom of *Data*, puts every setting back to its default; days, punches and sessions are untouched.
-- **Data.** Settings → Data. *Delete old days automatically* keeps the last N days (30 to 3650) and drops the rest, with their punches, priorities, sessions and notes; the server checks every few hours. *Delete days before* a date does the same once, after showing how many days it will remove. Today and a day with a running timer are never deleted; settings are kept. If the admin set `RETENTION_DAYS`, the tab says so and that ceiling applies whatever you choose.
+- **Data.** Settings → Data. *Delete old days automatically* keeps the last N days (30 to 3650) and drops the rest, with their punches, priorities, sessions, breaks and notes; the server checks every few hours. *Delete days before* a date does the same once, after showing how many days it will remove. Today and a day with a running timer are never deleted; settings are kept. If the admin set `RETENTION_DAYS`, the tab says so and that ceiling applies whatever you choose.
 - **Past days.** Use ◀ ▶ or the date picker on the sheet, or **History** → **Days**: a month calendar (step back with ◀) with the hours worked on each day. Tap a day to see its worked, focused and priorities numbers, a tick once its retrospective is reviewed, and its note; **Open day** goes to that sheet and **Review this week** to that week's review. Only work here? *Settings → Sheet → History → Show weekends* off drops Saturday and Sunday from the calendar (and from the sticker counts); a weekend day is still reachable from the sheet's date picker. Past days are editable; timers can only start on today.
 - **Phone.** Add to Home Screen (Android: *Install app*; iOS: Share → *Add to Home Screen*). Browser notifications on iOS only work from the installed app. *Keep screen awake* keeps the countdown and chime live while the app is open; if the phone sleeps anyway, the alert fires when you come back.
 

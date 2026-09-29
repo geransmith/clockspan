@@ -52,7 +52,7 @@ server/                 Express API → dist/server
   retention.ts          old-day pruning (pruneDays, runRetention, the RETENTION_DAYS cap)
   auth/                 session cookie, scrypt passwords, the login limiter, publicUser/logName (users.ts),
                         middleware (currentUser), local + OIDC routes
-  routes/               the days, sessions and settings routers; shared.ts has requireDate, findDay,
+  routes/               the days, sessions, breaks and settings routers; shared.ts has requireDate, findDay,
                         and the row → JSON builders
   dev/                  seed.ts + seed-cli.ts (`npm run seed`), harness.ts (startTestApp for route tests)
   index.ts, cli.ts      the process entrypoints: the server (warns under AUTH_MODE=none), reset-password
@@ -63,7 +63,8 @@ client/                 Vite root → dist/client
   src/api.ts            fetch wrapper (30 s timeout; UNAUTHENTICATED_EVENT on 401; throws lib/apiError.ts's
                         ApiError, which a caller checks with instanceof); src/types.ts re-exports shared types
   src/lib/              pure logic with a test beside each file: timeclock, alarms, timer, breaks,
-                        retro, review, calendar, stickers, priorities, format, timefield, layout, celebrate
+                        retro, review, calendar, stickers, priorities, format, timefield, layout, celebrate,
+                        plan, tiles, week
     alerts.ts           the one place that plays sound, shows notifications and pushes banners
     copy.ts             every line the app raises at the user; no logic
     storage.ts          localStorage that never throws (private mode, quota)
@@ -200,7 +201,7 @@ Never commit `data/` or `.env`.
   nothing, and no user zone is known server-side.
 - **Old-day deletion goes through `pruneDays` (`server/retention.ts`)**, whether from the
   Data tab's button (`POST /days/prune`) or the scheduled `runRetention`. It deletes `days`
-  rows before a date key (cascades take punches, priorities, sessions), never a day with a
+  rows before a date key (cascades take punches, priorities, sessions, breaks), never a day with a
   running session, and never settings. The per-user setting `retention { enabled, days }` is
   capped by `RETENTION_DAYS` (`config.retentionDays`) via `effectiveKeepDays`; a user with no
   settings row still gets the cap. `reclaimSpace` (VACUUM + WAL checkpoint) runs after any
@@ -208,7 +209,8 @@ Never commit `data/` or `.env`.
 - **Every data query is scoped by `req.user.id`** (`currentUser(req)`). In `AUTH_MODE=none` that
   is the single `kind='default'` user. Never add a data route outside the `requireAuth` router
   in `app.ts`. `/:date` routes take `requireDate`; `/sessions/:id` routes take
-  `loadOwnedSession`, which is where the ownership check lives.
+  `loadOwnedSession` and `/breaks/:id` routes `loadOwnedBreak`, which is where the ownership
+  checks live.
 - **Settings go through `mergeSettings()` on every read and write** (`server/settings.ts`):
   the stored JSON is merged onto `DEFAULT_SETTINGS`, unknown keys are dropped, invalid values
   fall back, and a PUT stores the merged result (so a key missing from an old row takes the
@@ -408,7 +410,7 @@ Never commit `data/` or `.env`.
   the "Change not saved" banner, so the setter never rejects) → pass it from `Sheet.tsx`
   to the card, and from `App.tsx` into `useAlarms` if alarms depend on it.
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
-  `currentUser(req).id` (`requireDate` / `loadOwnedSession` where they fit), validate input
+  `currentUser(req).id` (`requireDate` / `loadOwnedSession` / `loadOwnedBreak` where they fit), validate input
   (cast `req.body` to `{ field?: unknown }` and check each field; the `no-unsafe-*` lint
   refuses reading it as `any`), return `{ error }` JSON on failure → add the call to `client/src/api.ts` and the response
   type to `shared/api.ts` (the route's `res.json(… satisfies <Type>)` and the client's
@@ -417,7 +419,8 @@ Never commit `data/` or `.env`.
   user gets a 404/empty result (the scoping test is not optional). If the seed should carry
   the new field, add it to `server/dev/seed.ts` and its manifest.
 - **A schema change**: append a migration string to `MIGRATIONS` in `db.ts`. Never edit an
-  existing entry.
+  existing entry. A new table with a `user_id` also joins the README's script under "Switching
+  modes later" (and its count of places); `server/db.test.ts` fails until it does.
 - **A security header, CSP source or request guard**: `server/security.ts` only (tests in
   `server/app.test.ts`), then the `prod` config check.
 - **A config env var**: parse and validate it in `server/config.ts` (throw with a clear

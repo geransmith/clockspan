@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 import { MIGRATIONS, ensureDefaultUser, migrate, openDatabase } from './db.js';
@@ -80,5 +81,55 @@ describe('migration 4: one running session per user', () => {
     insert.run(day, user.id, 1600, 'cancelled');
     expect(db.prepare(`SELECT COUNT(*) AS n FROM sessions`).get()).toEqual({ n: 4 });
     db.close();
+  });
+});
+
+describe("the README's script for switching from none to local", () => {
+  // README.md → "Switching modes later": run by hand to give the implicit user's data to the new
+  // account. A table that gains a user_id column has to join it, or its rows stay with the old
+  // user: still listed on the moved days, which find them by day_id, but refused by every
+  // ownership check. Breaks were left behind that way.
+  const readme = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  // `.bail on` is the sqlite3 shell's; exec() stops at the first error by itself.
+  const sql = (/<<'SQL'\n([\s\S]*?)\nSQL\n/.exec(readme)?.[1] ?? '').replace(/^\..*\n/gm, '');
+
+  it('moves every table that has a user_id, except sign-in sessions', () => {
+    const db = openDatabase(':memory:');
+    const rows = db.prepare(`SELECT m.name FROM sqlite_master m, pragma_table_info(m.name) c WHERE m.type = 'table' AND c.name = 'user_id'`).all();
+    // Sign-in sessions stay behind: the new account signs in for itself.
+    const owned = (rows as { name: string }[]).map(({ name }) => name).filter((name) => name !== 'auth_sessions');
+    const moved = [...sql.matchAll(/^UPDATE (\w+)/gm)].map(([, table]) => table);
+    expect(moved.sort()).toEqual(owned.sort());
+    db.close();
+  });
+
+  it("hands the old user's rows to the first local account, settings included", () => {
+    const db = openDatabase(':memory:');
+    const old = ensureDefaultUser(db);
+    const admin = Number(
+      db.prepare(`INSERT INTO users (kind, username, display_name, is_admin, created_at) VALUES ('local', 'admin', 'Admin', 1, 1)`).run().lastInsertRowid,
+    );
+    const day = db.prepare(`INSERT INTO days (user_id, date, created_at) VALUES (?, '2026-09-01', 1000)`).run(old.id).lastInsertRowid;
+    db.prepare(
+      `INSERT INTO sessions (day_id, user_id, label, planned_seconds, started_at, ended_at, status) VALUES (?, ?, '', 600, 1000, 1600, 'completed')`,
+    ).run(day, old.id);
+    db.prepare(`INSERT INTO breaks (day_id, user_id, planned_seconds, started_at, ended_at) VALUES (?, ?, 300, 1600, 1900)`).run(day, old.id);
+    const settings = db.prepare(`INSERT INTO settings (user_id, json) VALUES (?, ?)`);
+    settings.run(old.id, '{"from":"none"}');
+    settings.run(admin, '{"from":"admin"}');
+
+    db.exec(sql);
+
+    for (const table of ['days', 'sessions', 'breaks', 'settings']) {
+      expect(db.prepare(`SELECT user_id FROM ${table}`).all(), table).toEqual([{ user_id: admin }]);
+    }
+    expect(db.prepare(`SELECT json FROM settings`).get()).toEqual({ json: '{"from":"none"}' });
+    db.close();
+  });
+
+  it('counts the places the OIDC variant has to change', () => {
+    const places = sql.match(/kind = 'local'/g)?.length ?? 0;
+    const stated = /in place of each `kind = 'local'` \((\w+) places\)/.exec(readme)?.[1];
+    expect(stated).toBe(['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'][places]);
   });
 });
