@@ -81,5 +81,19 @@ describe('TimerControls', () => {
     // Two minutes past a 25-minute plan: due, and well inside the wait before it finishes itself.
     await renderControls(false, makeSession({ startedAt: T0 - 22 * MIN }));
     expect(names()).toEqual(['5m', 'Finish', 'Cancel']);
+    expect((button('5m') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('turns + off at the longest plan the server takes, running or run out', async () => {
+    await renderControls(true, makeSession({ plannedSeconds: 8 * 3600 }));
+    expect((button('Add 5 minutes') as HTMLButtonElement).disabled).toBe(true);
+    expect((button('Remove 5 minutes') as HTMLButtonElement).disabled).toBe(false);
+    cleanup();
+    await renderControls(true, makeSession({ plannedSeconds: 8 * 3600, startedAt: T0 - 8 * 60 * MIN }));
+    expect(names()).toEqual(['Add 5 minutes', 'Finish', 'Cancel session']);
+    fireEvent.click(button('Add 5 minutes'));
+    await settle();
+    expect((button('Add 5 minutes') as HTMLButtonElement).disabled).toBe(true);
+    expect(api.patchSession).not.toHaveBeenCalled();
   });
 });

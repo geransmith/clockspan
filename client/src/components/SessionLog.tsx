@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { todayKey } from '../../../shared/dates.js';
 import { useDayStore } from '../hooks/useDay';
+import { useTimer } from '../hooks/useTimer';
 import { CONFIRM, UNTITLED_SESSION } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { breakSeconds } from '../lib/breaks';
@@ -23,11 +24,16 @@ type Entry = { at: number; session: Session; brk?: never } | { at: number; brk: 
 
 export function SessionLog({ date, sessions, breaks, priorities, now }: Props) {
   const store = useDayStore();
+  const { running, edit } = useTimer();
   const focus = focusOf(sessions);
   const rested = breaks.reduce((sum, b) => sum + breakSeconds(b, now), 0);
   const planned = priorities.filter((p) => p.uid && hasText(p));
+  // The running session's row is the timer's copy, and its edits go through the timer: one queue
+  // for the session's writes, and an edit or a pause shows here and in the bar at once.
+  const live = (s: Session) => s.status === 'running' && s.id === running?.id;
+  const rows = running ? sessions.map((s) => (live(s) ? running : s)) : sessions;
   // One list in the order things happened: breaks sit between the sessions they followed.
-  const entries: Entry[] = [...sessions.map((s) => ({ at: s.startedAt, session: s })), ...breaks.map((b) => ({ at: b.startedAt, brk: b }))].sort(
+  const entries: Entry[] = [...rows.map((s) => ({ at: s.startedAt, session: s })), ...breaks.map((b) => ({ at: b.startedAt, brk: b }))].sort(
     (a, b) => a.at - b.at,
   );
 
@@ -65,7 +71,7 @@ export function SessionLog({ date, sessions, breaks, priorities, now }: Props) {
               session={s}
               now={now}
               planned={planned}
-              onEdit={(patch) => void store.updateSession(date, s.id, patch)}
+              onEdit={(patch) => void (live(s) ? edit(patch) : store.updateSession(date, s.id, patch))}
               onDelete={() => void store.removeSession(date, s.id)}
             />
           ) : (

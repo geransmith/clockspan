@@ -17,6 +17,8 @@ import { useRefreshLoop } from './useRefreshLoop';
 import { useSettings } from './useSettings';
 import { useWakeLock } from './useWakeLock';
 
+type SessionEdit = { label?: string; priorityUid?: string | null };
+
 interface TimerCtx {
   running: Session | null;
   /** Seconds left; 0 once complete. Derived from the server's startedAt and pauses every tick. */
@@ -29,8 +31,15 @@ interface TimerCtx {
   due: boolean;
   overrunSeconds: number;
   start: (date: string, plannedSeconds: number, label: string, priorityUid?: string | null) => Promise<void>;
-  /** Mid-session, ± the planned length; once due, +N is N more minutes from now. */
+  /** Mid-session, ± the planned length; once due, +N is N more minutes from now. Plans are whole minutes. */
   adjust: (deltaSeconds: number) => Promise<void>;
+  /** + has something to add: false once the plan (or the time worked) is at the longest the server takes. */
+  canAdd: boolean;
+  /**
+   * Renames the running session or links it to another priority. The bar and the log's running
+   * row both edit through here, so the session's writes share one queue and both show the edit.
+   */
+  edit: (patch: SessionEdit) => Promise<void>;
   setLabel: (label: string) => Promise<void>;
   pause: () => Promise<void>;
   resume: () => Promise<void>;
@@ -81,7 +90,9 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     queue.current = next;
     return next;
   }, []);
-  const [finishChoice, setFinishChoice] = useState(false);
+  // The session "How much to log?" was asked for: once it ends, however it ends, the question
+  // goes with it and never opens over the next one.
+  const [finishChoiceFor, setFinishChoiceFor] = useState<number | null>(null);
   const [finished, setFinished] = useState<Session | null>(null);
   const now = useClock();
   // `loaded` gates the two effects that alert: on a fresh load the running session can answer
@@ -119,11 +130,12 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   useRefreshLoop(sync, true);
 
   // The session is over (finished or cancelled, here or by the server): nothing runs now, and
-  // the day's log takes the row.
+  // the day's log takes the row. Unless a sync has meanwhile shown a session another device
+  // started: the answer is about the one before it, and the new one keeps running.
   const end = useCallback(
     async (send: () => Promise<{ session: Session }>) => {
       const { session } = await inOrder(send);
-      change((t) => settleWith(t, [], null));
+      change((t) => (t.confirmed && t.confirmed.id !== session.id ? t : settleWith(t, [], null)));
       store.applySession(session);
       return session;
     },
@@ -131,6 +143,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   );
 
   const { elapsedSeconds, remainingSeconds, progress, endAt, paused, pausedForSeconds, due, overrunSeconds } = running ? timerView(running, now) : IDLE;
+  // What `adjust` adds to: the plan, or once it is used up, the time worked.
+  const canAdd = running != null && Math.max(running.plannedSeconds, elapsedSeconds) < PLANNED_SECONDS.max;
 
   // Completion without the user: a timer that ran out and waited DUE_GRACE_SECONDS for an
   // answer (or expired while the page was closed — the server clamps ended_at to the planned
@@ -223,24 +237,28 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     [sync],
   );
 
-  // A press on the running session (adjust, rename, pause, resume): shown at once, sent after
-  // the writes before it, and the server's row taken when it answers. A failure just drops the
-  // change, so the screen is back on the stored row with any later press still on top. A row
-  // that answers as no longer running ended elsewhere: nothing runs here either.
+  // A press on the running session (adjust, edit, pause, resume): shown at once, sent after
+  // the writes before it, and the server's row taken by the timer and the day's log when it
+  // answers. A failure just drops the change, so the screen is back on the stored row with any
+  // later press still on top. A row that answers as no longer running ended elsewhere: nothing
+  // runs here either. If a sync already showed this session ended (and maybe another started)
+  // while the press waited, the answer only says what became of this row: the timer keeps what
+  // the sync showed, and a running answer is older than the sync, so the log doesn't take it.
   const press = useCallback(
     async (cur: Session, apply: (s: Session) => Session, send: () => Promise<{ session: Session }>) => {
       const id = ++nextId.current;
       change((t) => addPending(t, id, (s) => (s && s.id === cur.id ? apply(s) : s)));
       try {
         const { session } = await inOrder(send);
-        change((t) => settleWith(t, [id], session.status === 'running' ? session : null));
-        return session;
+        const current = held.current.confirmed?.id === cur.id;
+        change((t) => (current ? settleWith(t, [id], session.status === 'running' ? session : null) : settle(t, [id])));
+        if (current || session.status !== 'running') store.applySession(session);
       } catch (err) {
         change((t) => settle(t, [id]));
         throw err;
       }
     },
-    [change, inOrder],
+    [change, inOrder, store],
   );
 
   const adjust = useCallback(
@@ -251,7 +269,9 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         const elapsed = Math.floor(activeMs(cur, Date.now()) / 1000);
         // Once the plan is used up, "+5" means five more minutes from now, not from the end.
         const from = Math.max(cur.plannedSeconds, elapsed);
-        const next = Math.min(PLANNED_SECONDS.max, Math.max(PLANNED_SECONDS.min, from + deltaSeconds));
+        // Whole minutes, like the start buttons' plans: the finish choice compares whole
+        // minutes, and a plan of 30:37 would ask it 23 s after the end.
+        const next = Math.min(PLANNED_SECONDS.max, Math.max(PLANNED_SECONDS.min, Math.ceil((from + deltaSeconds) / 60) * 60));
         // At the longest plan the server takes, + has nothing left to add (and must not finish).
         if (deltaSeconds > 0 && next <= from) return;
         if (next <= elapsed) {
@@ -269,23 +289,21 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     [attempt, end, press],
   );
 
-  const setLabel = useCallback(
-    (label: string) =>
+  const edit = useCallback(
+    (patch: SessionEdit) =>
       attempt(async () => {
         const cur = shown(held.current);
         if (!cur) return;
-        const session = await press(
+        await press(
           cur,
-          (s) => ({ ...s, label }),
-          () => api.patchSession(cur.id, { label }),
+          (s) => ({ ...s, ...patch }),
+          () => api.patchSession(cur.id, patch),
         );
-        if (session.status !== 'running') store.applySession(session);
       }),
-    [attempt, press, store],
+    [attempt, press],
   );
+  const setLabel = useCallback((label: string) => edit({ label }), [edit]);
 
-  // Pause and resume hold the clock at once; the log row's pill reads the day's copy, which
-  // takes the server's row when it answers.
   const setPaused = useCallback(
     (paused: boolean) =>
       attempt(async () => {
@@ -298,10 +316,9 @@ export function TimerProvider({ children }: { children: ReactNode }) {
             : s.pausedAt == null
               ? s
               : { ...s, pausedAt: null, pausedSeconds: s.pausedSeconds + Math.round((now - s.pausedAt) / 1000) };
-        const session = await press(cur, apply, () => (paused ? api.pauseSession(cur.id) : api.resumeSession(cur.id)));
-        store.applySession(session);
+        await press(cur, apply, () => (paused ? api.pauseSession(cur.id) : api.resumeSession(cur.id)));
       }),
-    [attempt, press, store],
+    [attempt, press],
   );
   const pause = useCallback(() => setPaused(true), [setPaused]);
   const resume = useCallback(() => setPaused(false), [setPaused]);
@@ -309,7 +326,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   const finish = useCallback(
     (countOverrun = false) =>
       attempt(async () => {
-        setFinishChoice(false);
+        setFinishChoiceFor(null);
         const cur = shown(held.current);
         if (!cur) return;
         const session = await end(() => api.finishSession(cur.id, countOverrun));
@@ -324,15 +341,15 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     if (!cur) return;
     const v = timerView(cur, Date.now());
     // Under a minute over, both lengths are the same whole minutes: nothing to ask.
-    if (v.due && Math.floor(v.elapsedSeconds / 60) !== Math.floor(cur.plannedSeconds / 60)) setFinishChoice(true);
+    if (v.due && Math.floor(v.elapsedSeconds / 60) !== Math.floor(cur.plannedSeconds / 60)) setFinishChoiceFor(cur.id);
     else void finish();
   }, [finish]);
-  const dismissFinishChoice = useCallback(() => setFinishChoice(false), []);
+  const dismissFinishChoice = useCallback(() => setFinishChoiceFor(null), []);
 
   const cancel = useCallback(
     () =>
       attempt(async () => {
-        setFinishChoice(false);
+        setFinishChoiceFor(null);
         const cur = shown(held.current);
         if (!cur) return;
         await end(() => api.cancelSession(cur.id));
@@ -353,8 +370,11 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     }
     if (!loaded || overrunSeconds >= DUE_GRACE_SECONDS) return;
     const key = dueKey(running.id, endAt);
-    if (announced.current === key) return;
-    announced.current = key;
+    // Raised again, quietly, when the time worked reaches the longest plan: + has nothing left
+    // to add, and a button that does nothing must not stay up.
+    const raised = `${key}:${canAdd}`;
+    if (announced.current === raised) return;
+    announced.current = raised;
     const fresh = readStored(DUE_STORAGE_KEY) !== key;
     writeStored(DUE_STORAGE_KEY, key);
     alert({
@@ -364,11 +384,11 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       sticky: true,
       chime: settings.sounds.timer,
       tag: 'timer-due',
-      action: { label: TIMER_DUE.more(step), run: () => void adjust(step * 60) },
+      action: canAdd ? { label: TIMER_DUE.more(step), run: () => void adjust(step * 60) } : undefined,
       sound: fresh && settings.sound,
       notifications: fresh && settings.notifications,
     });
-  }, [running, loaded, due, overrunSeconds, endAt, step, adjust, settings.sound, settings.sounds.timer, settings.notifications]);
+  }, [running, loaded, due, overrunSeconds, endAt, canAdd, step, adjust, settings.sound, settings.sounds.timer, settings.notifications]);
 
   const value = useMemo(
     () => ({
@@ -381,12 +401,14 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       overrunSeconds,
       start,
       adjust,
+      canAdd,
+      edit,
       setLabel,
       pause,
       resume,
       finish,
       requestFinish,
-      finishChoice: finishChoice && running != null,
+      finishChoice: running != null && finishChoiceFor === running.id,
       dismissFinishChoice,
       cancel,
       finished,
@@ -401,12 +423,14 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       overrunSeconds,
       start,
       adjust,
+      canAdd,
+      edit,
       setLabel,
       pause,
       resume,
       finish,
       requestFinish,
-      finishChoice,
+      finishChoiceFor,
       dismissFinishChoice,
       cancel,
       finished,

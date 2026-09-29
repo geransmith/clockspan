@@ -7,11 +7,11 @@ import { Check, Minus, Pause, Play, Plus, X } from './Icons';
  * The running timer's buttons, for the bar at the top (`compact`) and for the timer card: −/+
  * move the planned end by the adjust step, Pause and Resume hold the clock, Finish asks how much
  * to log once the timer ran a minute over, and Cancel asks first. Once due, only + and Finish
- * are left. The bar shows the icons and hides the words on a narrow screen, so there each button
- * carries its name.
+ * are left; + is off at the longest plan the server takes. The bar shows the icons and hides
+ * the words on a narrow screen, so there each button carries its name.
  */
 export function TimerControls({ compact = false }: { compact?: boolean }) {
-  const { paused, due, adjust, pause, resume, requestFinish, cancel } = useTimer();
+  const { paused, due, canAdd, adjust, pause, resume, requestFinish, cancel } = useTimer();
   const { settings } = useSettings();
   const step = settings.adjustStepMinutes;
   const btn = compact ? 'btn btn-icon' : 'btn';
@@ -29,7 +29,7 @@ export function TimerControls({ compact = false }: { compact?: boolean }) {
           {words(`${step}m`)}
         </button>
       )}
-      <button className={btn} onClick={() => void adjust(step * 60)} {...named(`Add ${step} minutes`, `+${step}m`)}>
+      <button className={btn} onClick={() => void adjust(step * 60)} disabled={!canAdd} {...named(`Add ${step} minutes`, `+${step}m`)}>
         <Plus />
         {words(`${step}m`)}
       </button>
