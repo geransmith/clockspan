@@ -3,16 +3,22 @@
  * client (what the countdown shows). A pause stops the focus clock without ending the session:
  * `pausedAt` is set while paused and `pausedSeconds` holds the pauses that have already ended.
  */
+import { SETTING_LIMITS } from './settings.js';
 
 /** How long a session may be planned for: the server refuses a length outside it, and the − button stops at the minimum. */
 export const PLANNED_SECONDS = { min: 60, max: 8 * 3600 } as const;
 
 /**
- * How long a break may run: the Break setting's range (`SETTING_LIMITS.breakMinutes`) in
- * seconds, which a suggested break stays inside. The minimum is also the shortest break kept:
- * one ended sooner (Break pressed by mistake) is dropped, not logged.
+ * How long a break may run: the Break setting's range in seconds, so the server takes every
+ * length the setting offers, and a suggested break stays inside it too.
  */
-export const BREAK_SECONDS = { min: 60, max: 3600 } as const;
+export const BREAK_SECONDS = { min: SETTING_LIMITS.breakMinutes.min * 60, max: SETTING_LIMITS.breakMinutes.max * 60 } as const;
+
+/**
+ * The shortest break kept: one ended sooner (Break pressed by mistake) is dropped, not logged.
+ * The server drops it and the client's copy of the day does the same (`endBreaksAt`).
+ */
+export const MIN_BREAK_MS = BREAK_SECONDS.min * 1000;
 
 export interface SessionTiming {
   startedAt: number;

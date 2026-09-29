@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import type { Settings } from '../types';
+import { nextBackoff } from '../../../shared/backoff.js';
 import { DEFAULT_SETTINGS, normalizeLayout } from '../../../shared/settings.js';
 import { useLatest } from './useLatest';
 
@@ -32,11 +33,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   // A failed fetch is asked again rather than settled with the defaults: `loaded` is what holds
   // the alarms and the timer's alerts, and judged against the defaults they would ring at the
-  // wrong times (or not at all) until a reload. Two seconds, doubling up to a minute.
+  // wrong times (or not at all) until a reload.
   useEffect(() => {
     let cancelled = false;
     let retry: number | undefined;
-    let delay = 2_000;
+    let delay = 0;
     const fetchSettings = () => {
       api
         .getSettings()
@@ -47,8 +48,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         })
         .catch(() => {
           if (cancelled) return;
+          delay = nextBackoff(delay);
           retry = window.setTimeout(fetchSettings, delay);
-          delay = Math.min(delay * 2, 60_000);
         });
     };
     fetchSettings();

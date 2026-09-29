@@ -13,6 +13,8 @@ export interface Config {
   /** Express's `trust proxy` value: a hop count, or one of its string forms (`loopback`, an IP, a CIDR list). */
   trustProxy: boolean | number | string;
   sessionTtlMs: number;
+  /** Under AUTH_MODE=none, host names the API answers to beyond the ones that always pass (`rejectUnknownHosts`); a leading dot takes a whole domain. */
+  allowedHosts: string[];
   /** Server-wide ceiling on how many days of history any user keeps; null = no ceiling. */
   retentionDays: number | null;
   oidc: {
@@ -51,6 +53,28 @@ function parseSessionTtlDays(raw: string | undefined): number {
     throw new Error(`SESSION_TTL_DAYS must be a positive number of days (got "${raw}")`);
   }
   return n;
+}
+
+/**
+ * Names only. The check compares the name in the Host header, so a scheme, port or path in an
+ * entry (`https://focus.example.com`) would match nothing and leave the owner locked out with
+ * no clue why; refuse it here instead. `*.example.com` is refused too: the leading dot is the
+ * one form, and it takes the bare domain as well.
+ */
+function parseAllowedHosts(raw: string | undefined): string[] {
+  if (!raw) return [];
+  const entries = raw
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => entry !== '');
+  for (const entry of entries) {
+    if (!/^\.?[a-z0-9_-]+(\.[a-z0-9_-]+)*$/.test(entry)) {
+      throw new Error(
+        `ALLOWED_HOSTS must be host names separated by commas, like focus.example.com, or .example.com for a domain and every name under it (got "${entry}")`,
+      );
+    }
+  }
+  return entries;
 }
 
 /**
@@ -119,6 +143,7 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env): Config {
     cookieSecure,
     trustProxy: parseTrustProxy(env.TRUST_PROXY),
     sessionTtlMs: parseSessionTtlDays(env.SESSION_TTL_DAYS) * DAY_MS,
+    allowedHosts: parseAllowedHosts(env.ALLOWED_HOSTS),
     retentionDays,
     oidc,
   };

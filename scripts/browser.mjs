@@ -69,8 +69,9 @@ function cachedBrowser() {
 /** No browser on this machine: fetch Chrome for Testing once into node_modules/.cache. */
 function fetchBrowser() {
   console.log('[browser] no Chromium found; fetching Chrome for Testing into node_modules/.cache (one time, ~150 MB)');
-  // Pinned: `npx --yes` runs whatever it downloads, so the package version is fixed here.
-  const r = spawnSync('npx', ['--yes', '@puppeteer/browsers@3.2.2', 'install', 'chrome@stable', '--path', BROWSER_CACHE], {
+  // A devDependency, so package-lock.json pins it and what it pulls in, and Dependabot bumps it.
+  // `--no` makes npx run that copy and never download one (`--` ends npx's own options).
+  const r = spawnSync('npx', ['--no', '--', '@puppeteer/browsers', 'install', 'chrome@stable', '--path', BROWSER_CACHE], {
     cwd: ROOT,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'inherit'],

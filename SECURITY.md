@@ -27,7 +27,6 @@ In scope: the server, the web app and the Docker image built from this repositor
 
 Out of scope: a deployment that skips the README's
 [Exposing it to the internet](README.md#exposing-it-to-the-internet) steps (for example
-`AUTH_MODE=none` on a public port, or `TRUST_PROXY=true`), a web page reaching an
-`AUTH_MODE=none` install through DNS rebinding (the README's
-[Auth and users](README.md#auth-and-users) says so), and problems in the reverse proxy or
+`AUTH_MODE=none` on a public port, or `TRUST_PROXY=true`), a host name the operator listed in
+`ALLOWED_HOSTS` or `APP_URL` that someone else controls, and problems in the reverse proxy or
 identity provider in front of the app.

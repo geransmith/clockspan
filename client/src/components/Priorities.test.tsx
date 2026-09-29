@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
+import { playSound, unlockAudio } from '../lib/alerts';
 import { COMPLETE_WARNINGS, GENTLE_WARNINGS, LEFT_OPEN, WARNING_ACTIONS } from '../lib/copy';
 import { makeSettings, settle, T0 } from '../test/hooks';
 import type { Priority } from '../types';
@@ -77,6 +78,18 @@ describe('Priorities', () => {
     fireEvent.click(tick(1));
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(saved()[0]).toMatchObject({ text: 'Report', done: true });
+  });
+
+  it('celebrates a tick from its box with the priority sound, and not an untick', async () => {
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ sounds: { ...makeSettings().sounds, priorityDone: 'pop' } }));
+    await renderCard([row(1, 'Report'), row(2, 'Invoices', true)]);
+    fireEvent.click(tick(1));
+    // The sound plays after the render, so the tap unlocks audio for iOS first.
+    expect(unlockAudio).toHaveBeenCalled();
+    expect(playSound).toHaveBeenCalledExactlyOnceWith('pop');
+    expect(document.querySelector('.burst')).not.toBeNull();
+    fireEvent.click(tick(2));
+    expect(playSound).toHaveBeenCalledTimes(1);
   });
 
   it('asks before a row past the usual count, then adds it; the extra row can be removed', async () => {

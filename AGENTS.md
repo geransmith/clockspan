@@ -15,7 +15,8 @@ work. The README has the user-facing description.
 
 ## Stack & versions
 
-- Node **24** (`nvm use 24`; `node:24-alpine` in Docker).
+- Node **24** (`.nvmrc`, so a bare `nvm use`; `node:24-alpine` in Docker). `devEngines` in
+  `package.json` makes npm refuse `install`, `ci` and `run` on an older Node.
 - Client: React 19, TypeScript 7 (the native `tsc`), Vite 8. `@dnd-kit/sortable` for drag/drop (loaded on the first Customize);
   `react-aria` + `react-stately` + `@internationalized/date` for the punch time field. No router
   (the date and view live in the URL query, `hooks/useRoute.ts`; today is `date: null`, so a
@@ -42,17 +43,18 @@ shared/                 imported by both sides, always with a `.js` suffix
   sounds.ts             the sound catalog (SOUNDS, SOUND_EVENTS)
   dates.ts, timer.ts    date keys; pause-aware session timing (activeMs, plannedEndAt, PLANNED_SECONDS)
   punches.ts            kindForPosition: a punch row's kind is its position's parity
+  backoff.ts            nextBackoff: the wait between retries of a request that must answer
 server/                 Express API → dist/server
   app.ts                createApp(): headers, /api/health, auth routers, data routers behind
                         requireAuth, static files and the SPA fallback; startBackgroundJobs() (the
                         login purge and the retention schedule, started by index.ts only)
-  security.ts           every security header, and rejectCrossSiteWrites
+  security.ts           every security header, rejectCrossSiteWrites and rejectUnknownHosts
   config.ts, db.ts      env parsing (throws on bad config); pragmas, MIGRATIONS, the default user
   settings.ts           mergeSettings (defaults + validation on every read and write), loadSettings
   retention.ts          old-day pruning (pruneDays, runRetention, the RETENTION_DAYS cap)
   auth/                 session cookie, scrypt passwords, the login limiter, publicUser/logName (users.ts),
                         middleware (currentUser), local + OIDC routes
-  routes/               the days, sessions and settings routers; shared.ts has requireDate, findDay,
+  routes/               the days, sessions, breaks and settings routers; shared.ts has requireDate, findDay,
                         and the row → JSON builders
   dev/                  seed.ts + seed-cli.ts (`npm run seed`), harness.ts (startTestApp for route tests)
   index.ts, cli.ts      the process entrypoints: the server (warns under AUTH_MODE=none), reset-password
@@ -63,7 +65,8 @@ client/                 Vite root → dist/client
   src/api.ts            fetch wrapper (30 s timeout; UNAUTHENTICATED_EVENT on 401; throws lib/apiError.ts's
                         ApiError, which a caller checks with instanceof); src/types.ts re-exports shared types
   src/lib/              pure logic with a test beside each file: timeclock, alarms, timer, breaks,
-                        retro, review, calendar, stickers, priorities, format, timefield, layout, celebrate
+                        retro, review, calendar, stickers, priorities, format, timefield, layout, celebrate,
+                        plan, tiles, week
     alerts.ts           the one place that plays sound, shows notifications and pushes banners
     copy.ts             every line the app raises at the user; no logic
     storage.ts          localStorage that never throws (private mode, quota)
@@ -89,7 +92,7 @@ ca_profile.xml          the Community Apps profile. Both XML files link icons/ic
 ## Commands
 
 ```bash
-nvm use 24
+nvm use                # reads .nvmrc (24)
 npm install
 npm run dev            # API on :3000 (tsx watch, PORT pinned) + Vite on :5173 (proxies /api, /auth)
 npm test               # vitest: shared + client lib + hook + component tests + server API tests
@@ -189,7 +192,13 @@ Never commit `data/` or `.env`.
   before 16.4), one whose `Origin` host is neither the `Host` header nor `APP_URL`'s: under
   `AUTH_MODE=none` there is no cookie for SameSite to hold back, and a body-less POST
   (finish, cancel) needs no preflight. Keep write routes under
-  `/api` so it covers them. The HTML pages the server writes itself (the OIDC error pages in
+  `/api` so it covers them. Under `AUTH_MODE=none` only, `rejectUnknownHosts` (also in
+  `security.ts`, mounted on `/api` after `/api/health`) refuses a request whose `Host` names
+  something other than an IP address, a one-word name, `localhost`, a `.local`, `.home.arpa`
+  or `.internal` name, `APP_URL`'s host or an `ALLOWED_HOSTS` entry: DNS rebinding makes a
+  page same-origin, and with no cookie nothing else would stop it reading or writing. It reads
+  the raw `Host` header, never `req.hostname`, which believes `X-Forwarded-Host` under
+  `TRUST_PROXY`, and a same-origin page can set that. The HTML pages the server writes itself (the OIDC error pages in
   `auth/oidc.ts`) carry fixed text: no request data or error message goes into HTML, and the
   cause goes to the log. Password hashing is async
   (`scrypt`, never `scryptSync`); login verifies against `DUMMY_HASH` when the user is unknown.
@@ -200,7 +209,7 @@ Never commit `data/` or `.env`.
   nothing, and no user zone is known server-side.
 - **Old-day deletion goes through `pruneDays` (`server/retention.ts`)**, whether from the
   Data tab's button (`POST /days/prune`) or the scheduled `runRetention`. It deletes `days`
-  rows before a date key (cascades take punches, priorities, sessions), never a day with a
+  rows before a date key (cascades take punches, priorities, sessions, breaks), never a day with a
   running session, and never settings. The per-user setting `retention { enabled, days }` is
   capped by `RETENTION_DAYS` (`config.retentionDays`) via `effectiveKeepDays`; a user with no
   settings row still gets the cap. `reclaimSpace` (VACUUM + WAL checkpoint) runs after any
@@ -208,7 +217,8 @@ Never commit `data/` or `.env`.
 - **Every data query is scoped by `req.user.id`** (`currentUser(req)`). In `AUTH_MODE=none` that
   is the single `kind='default'` user. Never add a data route outside the `requireAuth` router
   in `app.ts`. `/:date` routes take `requireDate`; `/sessions/:id` routes take
-  `loadOwnedSession`, which is where the ownership check lives.
+  `loadOwnedSession` and `/breaks/:id` routes `loadOwnedBreak`, which is where the ownership
+  checks live.
 - **Settings go through `mergeSettings()` on every read and write** (`server/settings.ts`):
   the stored JSON is merged onto `DEFAULT_SETTINGS`, unknown keys are dropped, invalid values
   fall back, and a PUT stores the merged result (so a key missing from an old row takes the
@@ -230,10 +240,12 @@ Never commit `data/` or `.env`.
   punch commit do this) for iOS. What plays is `settings.sounds[event]`, an id from the
   catalog in `shared/sounds.ts`; `settings.sound` is the master switch over all of them, and
   `none` is the per-event off. A celebration (day complete and work week reached in
-  `Timeclock.tsx`, the next day planned in `PlanNext.tsx`) is a `useCelebration(moment, event)`
-  (`hooks/useCelebration.ts`): the sound under `settings.sound`, the burst under
-  `settings.celebrations`. A state's moment comes from `useBecameTrue`, so it is the day
-  *becoming* done while the card is mounted, never a done day opening.
+  `Timeclock.tsx`, a priority ticked in `Priorities.tsx`, the next day planned in
+  `PlanNext.tsx`) is a `useCelebration(moment, event)` (`hooks/useCelebration.ts`): the sound
+  under `settings.sound`, the burst under `settings.celebrations`. A state's moment comes from
+  `useBecameTrue`, so it is the day *becoming* done while the card is mounted, never a done day
+  opening. The sound plays after the render, so a moment set by a tap calls `unlockAudio()` in
+  that handler first.
 - **Timer remaining time is derived from the server's `startedAt`, `plannedSeconds` and pauses**
   on every tick (`timerView()` in `client/src/lib/timer.ts`, on `shared/timer.ts`) — never a
   client-side counter. A paused session is still `status = 'running'` with `pausedAt` set;
@@ -252,7 +264,8 @@ Never commit `data/` or `.env`.
   `settings.loaded`, or an alert raised on load would use the default sound and switch; the
   alarms in `App.tsx` wait for it the same way (`settled`), or a longer work day than the
   default would ring the clock-out alarm on load. So `loaded` only turns true on a real answer:
-  a failed `GET /settings` is retried (2 s doubling to a minute), never settled with the defaults.
+  a failed `GET /settings` is retried (`nextBackoff` in `shared/backoff.ts`: 2 s doubling to a
+  minute), never settled with the defaults.
   `useTimer` keeps a `mutationSeq` so a slow `GET /sessions/running` can't overwrite an
   optimistic update; keep that pattern for new mutations.
   **One running session per user is a schema invariant** (a unique partial index), and another
@@ -325,8 +338,9 @@ Never commit `data/` or `.env`.
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started —
   one rule, no clock-in fallback. `GET /days/range` returns full days and the client does the
-  rollup (the review and the History calendar both fetch it, one period at a time); register
-  any new literal path under `/days` before `/:date`.
+  rollup (the review, the History calendar and the week line all fetch it through `useRange`,
+  one period at a time, which lays the day store's copies over the answer so an edit shows at
+  once); register any new literal path under `/days` before `/:date`.
 - **History → Days opens on the route's date.** `App.tsx` passes `route.date ?? today` to `History`;
   the calendar starts on that month with that day picked (`periodOffset('month', …)`), and
   only "Open day" navigates. So the header's History button lands on the month of the day
@@ -343,10 +357,12 @@ Never commit `data/` or `.env`.
 - **Per-date card drafts reset by remounting**: `Sheet.tsx` keys `Priorities` and `Retro` by
   date, so neither needs a "date changed" effect. Local drafts that mirror a prop use the
   "adjust state while rendering" form (see `DurationField`), not a `useEffect` + `setState`,
-  unless the draft is gated by a dirty flag (`Priorities`, `Retro`): a ref can't be read during
-  render, so there the effect form is the one the react-hooks rules allow. Callbacks that must
-  read the latest value use `useLatest()`, never a ref written in render (the react-hooks lint
-  enforces both).
+  unless the draft is gated by a dirty flag: a ref can't be read during render, so there the
+  effect form is the one the react-hooks rules allow. A typed draft that saves on a timer is
+  `useDebouncedDraft(stored, save, ms)` (`Priorities`, `Retro`): it saves after the wait, at
+  once on `flush()` or an edit made now, and on unmount, so a day left mid-sentence still
+  saves. Callbacks that must read the latest value use `useLatest()`, never a ref written in
+  render (the react-hooks lint enforces both).
 - Static assets are public; **all data is behind `/api/*`**. The SPA fallback serves
   `index.html` for any non-API path. `/assets/*` is fingerprinted and cached immutable.
 - **History, the settings dialog and drag and drop are lazy chunks** (`lazy()` in `App.tsx`
@@ -391,10 +407,11 @@ Never commit `data/` or `.env`.
   `DEFAULT_SETTINGS.sounds`, a label in `SOUND_EVENT_LABELS`, and a `playSound(settings.sounds.<event>)`
   call gated by `settings.sound` (or a `useCelebration` for a moment worth a burst).
 - **An alarm target** (existing: `lunchBy`, `clockOut`, `secondMeal`, `retro`): expose the instant from
-  `computeTimeclock` → add a target in `useAlarms.ts` (`targets[]`, with an `armed` rule; put
-  a rule the card also needs in a pure helper like `secondMealApplies`) → add its default
+  `computeTimeclock` → add a target to `alarmTargets()` in `lib/alarms.ts`, with an `armed` rule
+  and a test case (a rule the card also needs goes in a pure helper like `secondMealApplies`) → add its default
   under `alarms` in `shared/settings.ts` and the `AlarmId` union there → add an `AlarmEditor` in
-  `settings/AlarmsTab.tsx` → copy in `describeEvent()`: a `kicker` naming the alarm + rule
+  `settings/AlarmsTab.tsx` → its name in `ALARM_NAMES` (`lib/alarms.ts`; the type makes a
+  missing one an error) and copy in `describeEvent()`: a `kicker` naming the alarm + rule
   ("X alarm · 15 min warning"), a title, and a body that says where the deadline came from
   (it gets an `EventContext`; extend that if the new target needs more inputs). A banner can
   carry one `action` button (see the clock-out alarm's "Overtime approved" and the retro
@@ -408,7 +425,7 @@ Never commit `data/` or `.env`.
   the "Change not saved" banner, so the setter never rejects) → pass it from `Sheet.tsx`
   to the card, and from `App.tsx` into `useAlarms` if alarms depend on it.
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
-  `currentUser(req).id` (`requireDate` / `loadOwnedSession` where they fit), validate input
+  `currentUser(req).id` (`requireDate` / `loadOwnedSession` / `loadOwnedBreak` where they fit), validate input
   (cast `req.body` to `{ field?: unknown }` and check each field; the `no-unsafe-*` lint
   refuses reading it as `any`), return `{ error }` JSON on failure → add the call to `client/src/api.ts` and the response
   type to `shared/api.ts` (the route's `res.json(… satisfies <Type>)` and the client's
@@ -417,7 +434,8 @@ Never commit `data/` or `.env`.
   user gets a 404/empty result (the scoping test is not optional). If the seed should carry
   the new field, add it to `server/dev/seed.ts` and its manifest.
 - **A schema change**: append a migration string to `MIGRATIONS` in `db.ts`. Never edit an
-  existing entry.
+  existing entry. A new table with a `user_id` also joins the README's script under "Switching
+  modes later" (and its count of places); `server/db.test.ts` fails until it does.
 - **A security header, CSP source or request guard**: `server/security.ts` only (tests in
   `server/app.test.ts`), then the `prod` config check.
 - **A config env var**: parse and validate it in `server/config.ts` (throw with a clear
@@ -446,6 +464,9 @@ Never commit `data/` or `.env`.
   fonts or assets (the CSP would block them anyway). Safe-area insets via `--safe-top` / `--safe-bottom`.
 - Numeric settings inputs commit on blur/Enter (never on every keystroke); priorities debounce
   400 ms; punches and checkboxes save immediately.
+- A form that sends a request submits through `useSubmit()` (`hooks/useSubmit.ts`): one send at
+  a time with the button disabled, and one error line, cleared when a send starts and filled
+  with what it throws (a mismatched confirmation throws too).
 - Comments explain *why* (browser quirks, math), not what.
 - No new dependency (a server one or a client library the bundle carries) without stating the
   reason in the commit message.
@@ -558,3 +579,9 @@ The browser pass for each surface (the logic under it is already tested):
   starts no second run. A step that must trigger CI needs a GitHub App or personal token.
 - TypeScript 7 is the native compiler: the `typescript` package has no `tsserver` or JS API.
   Editors need the native TypeScript extension; `npm run typecheck` is the source of truth.
+- The Node floor (`engines` and `devEngines` in `package.json`) has no upper bound, and `.npmrc`
+  has no `engine-strict`, on purpose: Dependabot's updater reads both files and runs its own
+  Node (24 at the time of writing; it follows the active LTS). A cap it outgrows, or a package
+  whose `engines` leaves its Node out under `engine-strict`, stops its npm updates without
+  failing any check: the PRs just stop coming. A new Node major moves `.nvmrc`, both fields,
+  CI and the Dockerfile together.
