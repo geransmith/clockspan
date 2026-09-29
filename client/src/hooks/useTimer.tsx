@@ -12,7 +12,7 @@ import { readStored, writeStored } from '../lib/storage';
 import { DUE_GRACE_SECONDS, dueKey, PAUSE_LIMIT_SECONDS, timerView, type TimerView } from '../lib/timer';
 import { useDayStore } from './useDay';
 import { useLatest } from './useLatest';
-import { useNow } from './useNow';
+import { useClock } from './useClock';
 import { useRefreshLoop } from './useRefreshLoop';
 import { useSettings } from './useSettings';
 import { useWakeLock } from './useWakeLock';
@@ -83,7 +83,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   }, []);
   const [finishChoice, setFinishChoice] = useState(false);
   const [finished, setFinished] = useState<Session | null>(null);
-  const now = useNow(1000);
+  const now = useClock();
   // `loaded` gates the two effects that alert: on a fresh load the running session can answer
   // before the settings do, and an alert then would use the default sound and volume switch.
   const { settings, loaded } = useSettings();

@@ -7,7 +7,7 @@ import { FinishChoice } from './components/FinishChoice';
 import { Sheet } from './components/Sheet';
 import { BreakProvider } from './hooks/useBreak';
 import { DayProvider } from './hooks/useDay';
-import { useNow } from './hooks/useNow';
+import { ClockProvider, useClock } from './hooks/useClock';
 import { useRoute } from './hooks/useRoute';
 import { SettingsProvider, useSettings } from './hooks/useSettings';
 import { TimerProvider, useTimer } from './hooks/useTimer';
@@ -26,15 +26,17 @@ const SettingsDialog = lazy(() => import('./components/settings/SettingsDialog')
 export function App() {
   return (
     <AuthGate>
-      <SettingsProvider>
-        <DayProvider>
-          <TimerProvider>
-            <BreakProvider>
-              <Shell />
-            </BreakProvider>
-          </TimerProvider>
-        </DayProvider>
-      </SettingsProvider>
+      <ClockProvider>
+        <SettingsProvider>
+          <DayProvider>
+            <TimerProvider>
+              <BreakProvider>
+                <Shell />
+              </BreakProvider>
+            </TimerProvider>
+          </DayProvider>
+        </SettingsProvider>
+      </ClockProvider>
     </AuthGate>
   );
 }
@@ -46,7 +48,7 @@ function Shell() {
   const [jumpTo, setJumpTo] = useState<CardId | null>(null);
   const { settings, loaded } = useSettings();
   const { running } = useTimer();
-  const now = useNow(1000);
+  const now = useClock();
   // Only a real answer: the defaults' 'auto' would undo a forced theme main.tsx put up.
   useEffect(() => {
     if (loaded) applyTheme(settings.theme);
