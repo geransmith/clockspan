@@ -241,7 +241,8 @@ export function timeclockForDate(punches: Punch[], settings: TimeclockSettings, 
  * when a day past the threshold is actually expected (overtime approved, already over the
  * target, or a target longer than the threshold). A normal 8 h day never hears about it, and
  * neither does a 10 h one: California owes the second meal only for *more than* 10 hours, the
- * same "more than" the lunch rule above uses.
+ * same "more than" the lunch rule above uses. Punches out of order read as working whatever
+ * happened, so they put it off until they are fixed.
  */
 export function secondMealApplies(
   tc: TimeclockResult,
@@ -250,6 +251,7 @@ export function secondMealApplies(
 ): boolean {
   return (
     settings.mealRules !== false &&
+    tc.error == null &&
     tc.state === 'working' &&
     tc.secondMealBy != null &&
     tc.secondMealStatus !== 'taken' &&

@@ -25,9 +25,12 @@ export interface TargetDay {
  * the retrospective shares it. Overtime approval disarms the clock-out target only: meal
  * periods are still required on an overtime day (California Labor Code §512), so lunch and
  * the second meal stay armed, and the planned end of the day is still the moment to look back.
+ * With the punches out of order the timeclock reads "working" whatever happened, and an end
+ * that drifts with the clock would be a new alarm every minute, so the end of the day and
+ * the second meal wait for the punches to be fixed.
  */
 export function alarmTargets(tc: TimeclockResult, settings: Parameters<typeof secondMealApplies>[1], day: TargetDay): AlarmTarget[] {
-  const endFixed = tc.clockOutAt != null && tc.state === 'working';
+  const endFixed = tc.error == null && tc.clockOutAt != null && tc.state === 'working';
   return [
     {
       id: 'lunchBy',
@@ -140,6 +143,8 @@ export interface EventContext {
   lunchDeadlineMinutes: number;
   /** Hours worked after which the second meal period is due (settings.secondMealAfterMinutes). */
   secondMealAfterMinutes: number;
+  /** When the event is shown: a warning seen late (the phone was asleep) says the time actually left. */
+  now: number;
 }
 
 export interface EventCopy {
@@ -200,18 +205,21 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
 
   if (e.kind === 'lead') {
     const kicker = `${alarm} · ${formatMinutes(e.minutes)} warning`;
+    // The kicker names the rule that fired; the title says how long is left now, which is less
+    // when the check came late.
+    const left = formatMinutes(Math.min(e.minutes, Math.max(1, Math.ceil((e.target - ctx.now) / MINUTE_MS))));
     if (e.id === 'lunchBy') {
       return {
         kicker,
-        title: `Lunch in ${formatMinutes(e.minutes)}`,
+        title: `Lunch in ${left}`,
         body: `Lunch must start by ${target}, ${formatMinutes(ctx.lunchDeadlineMinutes)} after clocking in at ${clockIn}.`,
         tone: 'warn',
       };
     }
-    if (e.id === 'secondMeal') return { kicker, title: `Second meal break in ${formatMinutes(e.minutes)}`, body: mealWhy, tone: 'warn' };
+    if (e.id === 'secondMeal') return { kicker, title: `Second meal break in ${left}`, body: mealWhy, tone: 'warn' };
     return {
       kicker,
-      title: `Clock out in ${formatMinutes(e.minutes)}`,
+      title: `Clock out in ${left}`,
       body: `Your ${day} day ends at ${target} (clocked in ${clockIn}). Start wrapping up.`,
       tone: 'warn',
     };

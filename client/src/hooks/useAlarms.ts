@@ -10,12 +10,10 @@ import { pruneStored, readStoredJson, writeStored } from '../lib/storage';
 
 const STORAGE_PREFIX = 'focus:alarms:';
 
-/** Today's fired keys; other days' are dropped so the store never grows. */
-function loadFired(dateKey: string): Set<string> {
-  const key = STORAGE_PREFIX + dateKey;
-  pruneStored(STORAGE_PREFIX, key);
-  const stored = readStoredJson(key);
-  return new Set(Array.isArray(stored) ? stored.filter((k): k is string => typeof k === 'string') : []);
+/** The keys stored for a day: what this tab, or another one open on the same device, already fired. */
+function storedFired(dateKey: string): string[] {
+  const stored = readStoredJson(STORAGE_PREFIX + dateKey);
+  return Array.isArray(stored) ? stored.filter((k): k is string => typeof k === 'string') : [];
 }
 
 /** The day's switches (which targets are armed is `alarmTargets`) and the banner buttons. */
@@ -35,8 +33,27 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
   const lastTargets = useRef<Record<string, { at: number; armed: boolean }>>({});
 
   useEffect(() => {
-    if (!tc || tc.clockIn == null) return;
-    if (!fired.current || fired.current.date !== dateKey) fired.current = { date: dateKey, set: loadFired(dateKey) };
+    // Not judged yet (settings or punches still settling): leave everything as it is.
+    if (!tc) return;
+    // Every alarm banner belongs to one day's clock-in. A new day, or a clock-in cleared, takes
+    // them down: their buttons would act on a day that is no longer the one being judged.
+    const clearBanners = () => {
+      for (const id of Object.keys(lastTargets.current)) dismissByTag(`alarm:${id}`);
+      lastTargets.current = {};
+    };
+    if (fired.current?.date !== dateKey) {
+      if (fired.current) clearBanners();
+      // Other days' keys are dropped so the store never grows.
+      pruneStored(STORAGE_PREFIX, STORAGE_PREFIX + dateKey);
+      fired.current = { date: dateKey, set: new Set() };
+    }
+    if (tc.clockIn == null) {
+      clearBanners();
+      return;
+    }
+    // Read every time, not once: a second tab on this device writes what it fired, and
+    // without its keys both tabs would ring every alarm.
+    for (const k of storedFired(dateKey)) fired.current.set.add(k);
 
     const targets = alarmTargets(tc, settings, { overtimeApproved, retroDone });
 
@@ -63,6 +80,7 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
       workMinutes: settings.workMinutes,
       lunchDeadlineMinutes: settings.lunchDeadlineMinutes,
       secondMealAfterMinutes: settings.secondMealAfterMinutes,
+      now,
     };
     for (const e of fire) {
       const { kicker, title, body, tone } = describeEvent(e, ctx);

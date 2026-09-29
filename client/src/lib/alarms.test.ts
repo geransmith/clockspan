@@ -143,6 +143,13 @@ describe('alarmTargets', () => {
     });
   });
 
+  it('waits for punches out of order to be fixed before the end of the day or the second meal ring', () => {
+    // Clock out typed before Lunch out: the timeclock reads "working" while the day is over.
+    const tangled = tc(IN + 9 * H, IN, IN + 8 * H + 25 * M, null, IN + 8 * H + 20 * M);
+    expect([tangled.error, tangled.state]).toEqual([expect.any(String), 'working']);
+    expect(armed(alarmTargets(tangled, s, { ...day, overtimeApproved: true }))).toEqual({ lunchBy: false, clockOut: false, secondMeal: false, retro: false });
+  });
+
   it('disarms the retrospective once reviewed, and everything once the day is done', () => {
     expect(armed(alarmTargets(tc(IN + 2 * H, IN), s, { ...day, retroDone: true }))).toEqual({ lunchBy: true, clockOut: true, secondMeal: false, retro: false });
     // Clocked out at 2 PM with no lunch: the missed lunch still reads overdue, but a done day rings nothing.
@@ -155,7 +162,8 @@ describe('alarmTargets', () => {
 describe('describeEvent', () => {
   // 8:32 clock-in, 8h day, lunch within 4h.
   const clockIn = new Date(2026, 8, 16, 8, 32).getTime();
-  const ctx = { clockIn, hour12: true, workMinutes: 480, lunchDeadlineMinutes: 240, secondMealAfterMinutes: 600 };
+  // Seen on time: half an hour ahead of the target, before any of these warnings is due.
+  const ctx = { clockIn, hour12: true, workMinutes: 480, lunchDeadlineMinutes: 240, secondMealAfterMinutes: 600, now: T - 30 * M };
   const ev = (id: AlarmId, kind: AlarmEvent['kind'], minutes: number, target: number): AlarmEvent => ({
     key: eventKey(D, id, kind, minutes, target),
     id,
@@ -218,6 +226,17 @@ describe('describeEvent', () => {
     const over = describeEvent(ev('secondMeal', 'overdue', 5, T), ctx);
     expect(over.title).toBe('Second meal break is 5 min overdue');
     expect(over.tone).toBe('danger');
+  });
+
+  it('says the time actually left when a warning is seen late, and keeps the rule in the kicker', () => {
+    // The phone was asleep through the 15-minute mark and wakes 8 min before clock-out.
+    const late = describeEvent(ev('clockOut', 'lead', 15, T), { ...ctx, now: T - 8 * M - 20_000 });
+    expect(late.kicker).toBe('Clock-out alarm · 15 min warning');
+    expect(late.title).toBe('Clock out in 9 min');
+    expect(describeEvent(ev('lunchBy', 'lead', 15, T), { ...ctx, now: T - 3 * M }).title).toBe('Lunch in 3 min');
+    expect(describeEvent(ev('secondMeal', 'lead', 15, T), { ...ctx, now: T - 5 * M }).title).toBe('Second meal break in 5 min');
+    // Never "in 0 min" in the last seconds.
+    expect(describeEvent(ev('clockOut', 'lead', 1, T), { ...ctx, now: T - 1000 }).title).toBe('Clock out in 1 min');
   });
 
   it('formats a non-round work day', () => {
