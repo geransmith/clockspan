@@ -1,7 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import { nextBackoff } from '../../../shared/backoff.js';
-import { MINUTE_MS } from '../../../shared/dates.js';
 import { activeMs, PLANNED_SECONDS } from '../../../shared/timer.js';
 import type { Session, SessionConflict } from '../types';
 import { alert, dismissByTag, unlockAudio, warnQuietly } from '../lib/alerts';
@@ -14,6 +13,7 @@ import { DUE_GRACE_SECONDS, dueKey, PAUSE_LIMIT_SECONDS, timerView, type TimerVi
 import { useDayStore } from './useDay';
 import { useLatest } from './useLatest';
 import { useNow } from './useNow';
+import { useRefreshLoop } from './useRefreshLoop';
 import { useSettings } from './useSettings';
 import { useWakeLock } from './useWakeLock';
 
@@ -96,44 +96,27 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // duration; all a wait costs is the chime's promptness.
   const retry = useRef({ at: 0, delay: 0 });
 
-  // Re-sync with the server on load, when the tab comes back, and every minute. The answer
-  // replaces the confirmed session unless the server confirmed a change after it went out, and
-  // a press still on its way stays on top of it. A different session than the one shown means
-  // another device started or ended a timer: its day is reloaded so the log shows the row this
-  // device never wrote.
-  const lastSync = useRef(0);
-  const sync = useCallback(
-    (force = false) => {
-      const t = Date.now();
-      if (!force && t - lastSync.current < 5000) return;
-      lastSync.current = t;
-      const sentAt = held.current.version;
-      api
-        .getRunning()
-        .then(({ session }) => {
-          const prev = shown(held.current) ?? null;
-          const { next } = fetched(held.current, sentAt, session);
-          if (next === held.current) return;
-          change(() => next);
-          if (prev?.id === session?.id) return;
-          for (const date of new Set([prev?.date, session?.date])) if (date) void storeRef.current.load(date);
-        })
-        .catch(() => {});
-    },
-    [change, storeRef],
-  );
-  useEffect(() => {
-    sync(true);
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') sync();
-    };
-    const id = setInterval(() => sync(), MINUTE_MS);
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      clearInterval(id);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, [sync]);
+  // Re-sync with the server on load, when the tab comes back, and every minute
+  // (`useRefreshLoop`), and at once when a press finds the session gone. The answer replaces
+  // the confirmed session unless the server confirmed a change after it went out, and a press
+  // still on its way stays on top of it. A different session than the one shown means another
+  // device started or ended a timer: its day is reloaded so the log shows the row this device
+  // never wrote.
+  const sync = useCallback(() => {
+    const sentAt = held.current.version;
+    return api
+      .getRunning()
+      .then(({ session }) => {
+        const prev = shown(held.current) ?? null;
+        const { next } = fetched(held.current, sentAt, session);
+        if (next === held.current) return;
+        change(() => next);
+        if (prev?.id === session?.id) return;
+        for (const date of new Set([prev?.date, session?.date])) if (date) void storeRef.current.load(date);
+      })
+      .catch(() => {});
+  }, [change, storeRef]);
+  useRefreshLoop(sync, true);
 
   // The session is over (finished or cancelled, here or by the server): nothing runs now, and
   // the day's log takes the row.
@@ -234,7 +217,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         warnQuietly({ title: SAVE_FAILED.title, body: SAVE_FAILED.body, tag: 'save-failed' });
         // Gone, or no longer running: it ended on another device. Show that now, not at the
         // next poll.
-        if (err instanceof ApiError && (err.status === 404 || err.status === 409)) sync(true);
+        if (err instanceof ApiError && (err.status === 404 || err.status === 409)) void sync();
       }
     },
     [sync],
