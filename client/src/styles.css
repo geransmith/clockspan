@@ -1,7 +1,7 @@
 /* ---------- tokens ---------- */
 :root {
-  /* index.html's theme-color metas and the manifest's background_color repeat --bg in each
-     scheme (theme-css.test.ts checks). */
+  /* index.html's theme-color metas repeat --bg for each scheme, and the manifest's
+     background_color the light one (theme-css.test.ts checks). */
   --bg: #f4f5f8;
   --surface: #ffffff;
   --surface-2: #f0f2f6;
@@ -1028,10 +1028,6 @@ button {
 }
 .priority-remove {
   color: var(--text-3);
-}
-.checkbox:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
 }
 .priority-num {
   font-weight: 700;
