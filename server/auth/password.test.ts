@@ -37,10 +37,10 @@ describe('hashPassword / verifyPassword', () => {
     }
   });
 
-  it('DUMMY_HASH is a real hash that matches nothing a user would send', async () => {
-    expect(DUMMY_HASH.startsWith('scrypt$')).toBe(true);
-    expect(await verifyPassword('', DUMMY_HASH)).toBe(false);
-    expect(await verifyPassword('password', DUMMY_HASH)).toBe(false);
+  it("DUMMY_HASH costs what a real account's hash does", async () => {
+    // An unknown name is verified against it, so a cheaper dummy would let timing tell a wrong name from a wrong password.
+    const real = (await hashPassword('x')).split('$');
+    expect(DUMMY_HASH.split('$').slice(0, 2)).toEqual(real.slice(0, 2));
   });
 });
 

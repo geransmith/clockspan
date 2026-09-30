@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { findLocalUser, type DB } from '../db.js';
 import { hashPassword, parsePassword } from './password.js';
+import { revokeSessions } from './session.js';
 
 /** What the CLI prints: the message for a refusal, or the password that is now set. */
 export type ResetResult = { error: string } | { password: string; temporary: boolean };
@@ -18,6 +19,6 @@ export async function resetPassword(db: DB, username: string, given?: string): P
   if ('error' in checked) return checked;
   const temporary = given === undefined;
   db.prepare(`UPDATE users SET password_hash = ?, must_change_password = ? WHERE id = ?`).run(await hashPassword(checked.password), temporary ? 1 : 0, user.id);
-  db.prepare(`DELETE FROM auth_sessions WHERE user_id = ?`).run(user.id);
+  revokeSessions(db, user.id);
   return { password: checked.password, temporary };
 }

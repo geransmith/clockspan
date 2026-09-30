@@ -44,7 +44,12 @@ function readSessionToken(req: Request): string | null {
   return parseCookie(header)[SESSION_COOKIE] ?? null;
 }
 
-/** Returns the user for a valid session and slides its expiry; null otherwise. */
+/**
+ * Returns the user for a valid session and slides its expiry; null otherwise. A valid session
+ * is one whose user belongs to the running AUTH_MODE: one made before a mode switch never
+ * resolves, so an OIDC-era admin never becomes a local admin, and its row expires and
+ * `purgeExpiredSessions` removes it.
+ */
 export function resolveSession(db: DB, config: Config, req: Request, res: Response): UserRow | null {
   const token = readSessionToken(req);
   if (!token) return null;
@@ -53,9 +58,9 @@ export function resolveSession(db: DB, config: Config, req: Request, res: Respon
     .prepare(
       `SELECT s.id AS session_id, s.expires_at, s.last_seen_at, u.*
        FROM auth_sessions s JOIN users u ON u.id = s.user_id
-       WHERE s.token_hash = ?`,
+       WHERE s.token_hash = ? AND u.kind = ?`,
     )
-    .get(hashToken(token)) as (UserRow & { session_id: number; expires_at: number; last_seen_at: number }) | undefined;
+    .get(hashToken(token), config.authMode) as (UserRow & { session_id: number; expires_at: number; last_seen_at: number }) | undefined;
   if (!row) return null;
   if (row.expires_at <= now) {
     db.prepare(`DELETE FROM auth_sessions WHERE id = ?`).run(row.session_id);
@@ -78,10 +83,9 @@ export function destroySession(db: DB, config: Config, req: Request, res: Respon
   res.setHeader('Set-Cookie', stringifySetCookie({ name: SESSION_COOKIE, value: '', ...cookieOptions(config), maxAge: 0 }));
 }
 
-/** Signs the user out everywhere except the request's own session (after a password change). */
-export function revokeOtherSessions(db: DB, req: Request, userId: number): void {
-  const token = readSessionToken(req);
-  db.prepare(`DELETE FROM auth_sessions WHERE user_id = ? AND token_hash <> ?`).run(userId, token ? hashToken(token) : '');
+/** Ends every session of the user: a password change (which then issues a new one) and the reset-password command. */
+export function revokeSessions(db: DB, userId: number): void {
+  db.prepare(`DELETE FROM auth_sessions WHERE user_id = ?`).run(userId);
 }
 
 export function purgeExpiredSessions(db: DB): void {

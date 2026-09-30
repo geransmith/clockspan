@@ -244,8 +244,10 @@ Never commit `data/` or `.env`.
   rows before a date key (cascades take punches, priorities, sessions, breaks), never a day with a
   running session, and never settings. The per-user setting `retention { enabled, days }` is
   capped by `RETENTION_DAYS` (`config.retentionDays`) via `effectiveKeepDays`; a user with no
-  settings row still gets the cap. `reclaimSpace` (VACUUM + WAL checkpoint) runs after any
-  deletion so the file actually shrinks; it must not run inside a transaction.
+  settings row still gets the cap. `reclaimSpace` (VACUUM + WAL checkpoint) runs after a
+  prune that deleted a day and after an admin deletes a user (`DELETE /api/auth/users/:id`), so
+  the file shrinks and deleted text does not stay in free pages; it must not run inside a
+  transaction.
 - **Every data query is scoped by `req.user.id`** (`currentUser(req)`). In `AUTH_MODE=none` that
   is the single `kind='default'` user. Never add a data route outside the `requireAuth` router
   in `app.ts`. `/:date` routes take `requireDate`. The `/sessions/:id` and `/breaks/:id` routes

@@ -2,8 +2,9 @@ import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import { Router } from 'express';
 import { findLocalUser, findUserById, type DB, type UserRow } from '../db.js';
 import type { Config } from '../config.js';
+import { reclaimSpace } from '../retention.js';
 import { DUMMY_HASH, hashPassword, parseCredentials, parsePassword, verifyPassword } from './password.js';
-import { createSession, destroySession, revokeOtherSessions } from './session.js';
+import { createSession, destroySession, revokeSessions } from './session.js';
 import { currentUser, requireAdmin, requireAuth } from './middleware.js';
 import { accountKey, LoginLimiter, limiterKey, MAX_ACCOUNT_FAILURES, refuseTooMany, warnUntrustedProxy } from './limiter.js';
 import { logName, publicUser } from './users.js';
@@ -169,9 +170,12 @@ export function localAuthRouter(db: DB, config: Config, setupCode: string = newS
       return;
     }
     db.prepare(`UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?`).run(await hashPassword(next.password), user.id);
-    // A changed password is usually "someone else may have the old one": drop every other session.
-    revokeOtherSessions(db, req, user.id);
-    console.log(`[auth] password changed for ${logName(user.username)}; other sessions signed out`);
+    // A changed password is usually "someone else may have the old one", and what leaked may be
+    // this session's own cookie: end every session, this one included, and give this browser a
+    // new one.
+    revokeSessions(db, user.id);
+    createSession(db, config, res, user.id);
+    console.log(`[auth] password changed for ${logName(user.username)}; every session signed out, this one renewed`);
     res.json({ ok: true } satisfies OkResponse);
   });
 
@@ -221,6 +225,8 @@ export function localAuthRouter(db: DB, config: Config, setupCode: string = newS
       res.status(404).json({ error: 'User not found.' });
       return;
     }
+    // A deleted user's text must not stay readable in the file's free pages.
+    reclaimSpace(db);
     console.log(`[auth] user #${id} and their data deleted by ${logName(me.username)}`);
     res.json({ ok: true } satisfies OkResponse);
   });
