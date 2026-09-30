@@ -5,16 +5,18 @@
  *   npm run screenshots
  *
  * It reuses a running `npm run dev` (BASE_URL, default http://localhost:5173) or starts one,
- * seeds the dev DB (`--running --quarter`, with the clock pinned to 10:30 so every run looks
- * the same) and turns the sticker chart on for the history shot, drives a local Chromium over
- * the DevTools protocol, and stops whatever it started. scripts/browser.mjs picks the browser
- * (CHROME_BIN, an installed one, or a Chrome for Testing build it fetches once). The dev
- * server has to be in AUTH_MODE=none (the default): the script does not sign in.
+ * seeds the dev DB (`--running --quarter`, with the clock pinned to 10:30) and resets the
+ * default user's settings (`--fresh`), then turns the sticker chart on for the history shot,
+ * drives a local Chromium over the DevTools protocol, and stops whatever it started. The time
+ * of day is pinned but the date is not, so shots that show a date change from day to day.
+ * scripts/browser.mjs picks the browser (CHROME_BIN, an installed one, or a Chrome for Testing
+ * build it fetches once). The dev server has to be in AUTH_MODE=none (the default): the
+ * script does not sign in.
  */
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { openBrowser } from './browser.mjs';
+import { openBrowser, openTab } from './browser.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const OUT = path.join(ROOT, 'docs', 'screenshots');
@@ -94,8 +96,9 @@ function stopGroup(child) {
 }
 
 function seed() {
-  log(`seeding (--running --quarter --now ${CLOCK})`);
-  const r = spawnSync('npm', ['run', 'seed', '--', '--running', '--quarter', '--now', CLOCK], { cwd: ROOT, stdio: 'inherit' });
+  const args = ['--running', '--quarter', '--now', CLOCK, '--fresh'];
+  log(`seeding (${args.join(' ')})`);
+  const r = spawnSync('npm', ['run', 'seed', '--', ...args], { cwd: ROOT, stdio: 'inherit' });
   if (r.status !== 0) throw new Error('npm run seed failed');
 }
 
@@ -108,20 +111,12 @@ async function enableStickers() {
 // ----- page -----
 
 class Page {
-  constructor(cdp, sessionId) {
-    this.cdp = cdp;
-    this.sessionId = sessionId;
+  constructor(send) {
+    this.send = send;
   }
 
   static async open(cdp) {
-    const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
-    const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
-    const page = new Page(cdp, sessionId);
-    const silent = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('The browser opened a tab but never answered DevTools. Try another Chromium via CHROME_BIN.')), 15_000).unref(),
-    );
-    await Promise.race([page.send('Page.enable'), silent]);
-    await page.send('Runtime.enable');
+    const page = new Page(await openTab(cdp));
     // The sheet reads the clock through Date, so shifting Date shifts the whole app: the
     // timer bar, the tiles and "today" all agree with the seed's --now.
     await page.send('Page.addScriptToEvaluateOnNewDocument', {
@@ -136,10 +131,6 @@ class Page {
       })();`,
     });
     return page;
-  }
-
-  send(method, params) {
-    return this.cdp.send(method, params, this.sessionId);
   }
 
   /**
@@ -257,33 +248,29 @@ const SHOTS = [
 ];
 
 async function main() {
-  const cleanups = [];
-  const cleanup = () => {
-    for (const fn of cleanups.splice(0).reverse()) {
-      try {
-        fn();
-      } catch {
-        /* best effort */
-      }
+  let dev;
+  let browser;
+  // Safe to run twice, as a Ctrl-C during the finally's run does: browser.close waits for the
+  // same shutdown, and stopGroup ignores a group that is already gone.
+  const cleanup = async () => {
+    try {
+      await browser?.close();
+    } finally {
+      if (dev) stopGroup(dev);
     }
   };
-  process.on('SIGINT', () => {
-    cleanup();
-    process.exit(130);
-  });
+  process.on('SIGINT', () => void cleanup().finally(() => process.exit(130)));
 
   try {
     if (!(await healthy())) {
-      const dev = await startDevServer();
-      cleanups.push(() => stopGroup(dev));
+      dev = await startDevServer();
     } else {
       log(`using the server at ${BASE}`);
     }
     seed();
     await enableStickers();
 
-    const browser = await openBrowser(log);
-    cleanups.push(browser.close);
+    browser = await openBrowser(log);
     const { cdp } = browser;
 
     fs.mkdirSync(OUT, { recursive: true });
@@ -297,9 +284,8 @@ async function main() {
       await page.send('Page.close');
       log(`wrote ${path.relative(ROOT, file)} (${Math.round(fs.statSync(file).size / 1024)} KB)`);
     }
-    await browser.close();
   } finally {
-    cleanup();
+    await cleanup();
   }
 }
 
