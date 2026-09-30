@@ -19,7 +19,8 @@ updates:
       minor-and-patch:
         update-types: [minor, patch]
     ignore:
-      # @types/node tracks the Node major in `engines`, the Dockerfile and CI, not npm's latest.
+      # @types/node follows the project's Node major, not npm's latest; AGENTS.md (Gotchas)
+      # lists what a Node major moves.
       - dependency-name: '@types/node'
         update-types: ['version-update:semver-major']
 
@@ -31,7 +32,7 @@ updates:
     cooldown:
       default-days: 7
     labels: [skip-changelog]
-    # One PR for the week's action bumps: the four docker/* actions often release together.
+    # One PR for the week's action bumps: the docker/* actions often release together.
     # Majors are included.
     groups:
       actions:
@@ -47,7 +48,6 @@ updates:
       default-days: 7
     labels: [skip-changelog]
     ignore:
-      # A Node major is a deliberate move across .nvmrc, `engines` / `devEngines`, CI and the
-      # Dockerfile together.
+      # A Node major is a deliberate move; AGENTS.md (Gotchas) lists what it moves.
       - dependency-name: node
         update-types: ['version-update:semver-major']
