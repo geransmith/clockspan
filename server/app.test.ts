@@ -219,6 +219,11 @@ describe('bad request bodies', () => {
     expect(body.error).not.toMatch(/\n\s+at /);
   });
 
+  it("shows a 4xx's message when the error carries no expose flag", async () => {
+    // The router's bad-param 400 has no `expose`, which is why the handler hides only `expose: false`.
+    expect(await app.api.get('/api/days/%E0')).toMatchObject({ status: 400, body: { error: "Failed to decode param '%E0'" } });
+  });
+
   it('refuses a body over the limit with a 413, not a crash', async () => {
     const res = await send(JSON.stringify({ pad: 'x'.repeat(300_000) }));
     expect(res.status).toBe(413);
