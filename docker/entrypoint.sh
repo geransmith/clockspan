@@ -1,13 +1,11 @@
 #!/bin/sh
-# Own /data as PUID:PGID (image default 1000/1000, Unraid convention 99/100) and drop
-# privileges before starting node. 0/0 or empty values keep the process as root.
+# Own /data as PUID:PGID and drop root before starting node. Unset or blank takes 1000/1000,
+# as for every other variable (Unraid's template sets 99/100); PUID=0 keeps root.
 set -e
-if [ -n "$PUID" ] && [ -n "$PGID" ] && [ "$PUID" != "0" ]; then
-  # A passwd entry is nice-to-have only; su-exec works with numeric ids regardless.
-  addgroup -g "$PGID" app 2>/dev/null || true
-  adduser -D -H -u "$PUID" -G "$(awk -F: -v g="$PGID" '$3==g{print $1; exit}' /etc/group)" app 2>/dev/null || true
-  chown -R "$PUID:$PGID" "${DATA_DIR:-/data}"
-  export HOME=/tmp
-  exec su-exec "$PUID:$PGID" "$@"
+uid="${PUID:-1000}"
+gid="${PGID:-1000}"
+if [ "$uid" != 0 ]; then
+  chown -R "$uid:$gid" "${DATA_DIR:-/data}"
+  exec su-exec "$uid:$gid" "$@"
 fi
 exec "$@"

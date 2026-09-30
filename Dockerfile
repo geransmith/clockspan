@@ -37,17 +37,15 @@ RUN apk add --no-cache su-exec \
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./
-COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh && mkdir -p /data
+# The entrypoint owns /data as PUID:PGID (default 1000/1000) and drops root; PUID=0 keeps root.
+COPY --chmod=0755 docker/entrypoint.sh /entrypoint.sh
+# A runtime that ignores VOLUME would not make /data, and the entrypoint's `chown -R` needs it.
+RUN mkdir -p /data
 
-# PUID/PGID: the entrypoint owns /data as this user and drops root before starting node.
-# Override to match the host directory's owner (Unraid: 99/100); 0/0 keeps root.
 ENV NODE_ENV=production \
     PORT=8080 \
     DATA_DIR=/data \
-    AUTH_MODE=none \
-    PUID=1000 \
-    PGID=1000
+    AUTH_MODE=none
 
 EXPOSE 8080
 VOLUME ["/data"]
