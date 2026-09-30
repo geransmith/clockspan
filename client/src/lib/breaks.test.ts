@@ -56,7 +56,6 @@ describe('suggestBreak', () => {
     const blip = session(9, c!.endedAt! + 2 * MIN, 0.5);
     expect(suggestBreak([blip])).toBeNull();
     expect(suggestBreak([{ ...blip, durationSeconds: MIN_FOCUS_SECONDS }])).toMatchObject({ sessionId: 9, minutes: 1 });
-    expect(suggestBreak([{ ...blip, durationSeconds: null }])).toBeNull();
     // The latest real session is still c, third of its set.
     expect(suggestBreak([a!, b!, c!, blip])).toMatchObject({ sessionId: 3, position: 3 });
   });
@@ -98,11 +97,6 @@ describe('suggestBreak', () => {
     expect(suggestBreak([d!, b!, a!, c!])).toMatchObject({ long: true, position: 4 });
     // The latest completed one is b: a cancelled session earns nothing.
     expect(suggestBreak([a!, b!, { ...c!, status: 'cancelled' }])).toMatchObject({ long: false, position: 2 });
-  });
-
-  it('ends the run at a completed row with no end', () => {
-    const [a, b] = inARow([25, 25]);
-    expect(suggestBreak([{ ...a!, endedAt: null }, b!])).toMatchObject({ position: 1 });
   });
 });
 

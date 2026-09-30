@@ -449,7 +449,8 @@ Never commit `data/` or `.env`.
   the main chunk. The sheet renders plain `CardFrame`s until the first Customize and stays on
   `SortableCards` after it, since swapping lists remounts the cards. A chunk that fails to
   load (an upgrade while the page was open) reloads the page once a minute at most
-  (`vite:preloadError` in `main.tsx`, `lib/reload.ts`); otherwise the `ErrorBoundary` shows.
+  (`vite:preloadError` in `main.tsx`, `lib/reload.ts`); the `ErrorBoundary` card shows until
+  the reload lands, and stays when no reload is made.
 - **Migrations are append-only** in `server/db.ts` (`MIGRATIONS[]`, `PRAGMA user_version`).
   Every FK to `users` or `days` is `ON DELETE CASCADE`. A column nothing uses stays in the
   table rather than a migration dropping it: `sessions.notes` is one (never shown or edited;
@@ -646,10 +647,11 @@ The browser pass for each surface (the logic under it is already tested):
   run of the image.
 - The preview harness exports `PORT=5173`, which is why `dev:server` pins `PORT=3000` and the
   `prod` config `PORT=8090`.
-- `client/public/sw.js` is a pass-through service worker on purpose: installability, and the
-  `notificationclick` handler for notifications `alerts.ts` shows through it (Chrome on Android
-  refuses `new Notification()`). It is registered only in a production build. No caching
-  without a versioning strategy, or users see stale assets.
+- `client/public/sw.js` caches nothing, on purpose. It holds the `notificationclick` handler
+  for the notifications `alerts.ts` shows through it (Chrome on Android refuses
+  `new Notification()`). It has no fetch handler, because Chrome needs none to offer Install
+  and warns that an empty one is a no-op. It is registered only in a production build. No
+  caching without a versioning strategy, or users see stale assets.
 - `vite.config.ts` imports `defineConfig` from `vitest/config` so the `test` block type-checks.
 - OIDC: `loadConfig` normalizes `APP_URL` (scheme and host lowercased, trailing slash dropped),
   and `${APP_URL}/auth/callback` in that form must match the redirect URI registered with the

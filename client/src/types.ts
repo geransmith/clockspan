@@ -4,7 +4,6 @@ export type { AlarmId, AlarmSettings, CardId, Settings, Theme } from '../../shar
 export type { SoundEvent, SoundId } from '../../shared/sounds.js';
 export type {
   AuthInfo,
-  AuthMode,
   Break,
   BreakEndResponse,
   BreakResponse,
@@ -25,7 +24,6 @@ export type {
   Session,
   SessionConflict,
   SessionResponse,
-  SessionStatus,
   TargetResponse,
   UserResponse,
   UsersResponse,
