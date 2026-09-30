@@ -5,27 +5,20 @@ import type { Config } from './config.js';
 /**
  * Response headers for every request. The app is a same-origin SPA with no third-party
  * assets, so the policy can be the strict default: scripts, styles, images and fetches only
- * from this origin, no framing, no plugins. The icons are files under /icons, and the build
- * never inlines an asset as a `data:` URL (`assetsInlineLimit` in vite.config.ts), so no
- * directive needs `data:`.
+ * from this origin, no framing, no plugins. `default-src 'self'` covers every fetch directive
+ * (scripts, styles, images, fetches, the manifest, the service worker); the others listed are
+ * the directives that don't fall back to it, plus `object-src 'none'`, which is stricter.
+ * The icons are files under /icons, and the build never inlines an asset as a `data:` URL
+ * (`assetsInlineLimit` in vite.config.ts), so no directive needs `data:`.
  * Dev (Vite on :5173) never goes through here, so a CSP change is only visible against the
  * built bundle (the `prod` launch config).
  */
-const CSP = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self'",
-  "img-src 'self'",
-  "connect-src 'self'",
-  "manifest-src 'self'",
-  "worker-src 'self'",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "object-src 'none'",
-].join('; ');
+const CSP = ["default-src 'self'", "frame-ancestors 'none'", "base-uri 'self'", "form-action 'self'", "object-src 'none'"].join('; ');
 
 const ONE_YEAR_SEC = 31_536_000;
+
+/** `/api` and everything under it, matched the way Express mounts it. */
+const API_PATH = /^\/api(?:\/|$)/i;
 
 const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -139,8 +132,9 @@ export function securityHeaders(config: Config): RequestHandler {
     if (hsts) res.setHeader('Strict-Transport-Security', hsts);
     // Every API answer is per-user JSON. Express adds an ETag and nothing else, so without
     // this a browser or a cache in front of the app could keep one; the static files set
-    // their own caching in app.ts.
-    if (req.path.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
+    // their own caching in app.ts. Express mounts `/api` case-insensitively and with or
+    // without a trailing slash, so `/API/settings` reaches the data routers and is marked too.
+    if (API_PATH.test(req.path)) res.setHeader('Cache-Control', 'no-store');
     next();
   };
 }

@@ -18,12 +18,8 @@ describe('response headers', () => {
     const res = await app.api.get('/api/health');
     expect(res.status).toBe(200);
     const csp = res.headers.get('content-security-policy') ?? '';
-    expect(csp).toContain("default-src 'self'");
-    expect(csp).toContain("frame-ancestors 'none'");
-    expect(csp).toContain("object-src 'none'");
     // Nothing the app serves is a `data:` URL, so no directive allows one.
-    expect(csp.split('; ')).toContain("img-src 'self'");
-    expect(csp).not.toContain('data:');
+    expect(csp.split('; ')).toEqual(["default-src 'self'", "frame-ancestors 'none'", "base-uri 'self'", "form-action 'self'", "object-src 'none'"]);
     expect(res.headers.get('x-content-type-options')).toBe('nosniff');
     expect(res.headers.get('x-frame-options')).toBe('DENY');
     expect(res.headers.get('referrer-policy')).toBe('same-origin');
@@ -37,21 +33,20 @@ describe('response headers', () => {
     expect((await app.api.get('/api/health')).headers.get('cache-control')).toBe('no-store');
     expect((await app.api.get('/api/settings')).headers.get('cache-control')).toBe('no-store');
     expect((await app.api.get('/api/nope')).headers.get('cache-control')).toBe('no-store');
+    // Express mounts /api case-insensitively, so this reaches the settings router.
+    const upper = await app.api.get('/API/settings');
+    expect(upper.status).toBe(200);
+    expect(upper.headers.get('cache-control')).toBe('no-store');
+    expect((await app.api.get('/api')).headers.get('cache-control')).toBe('no-store');
     // Outside /api nothing is set here; the static block in app.ts decides.
     expect((await fetch(`${app.url}/`)).headers.get('cache-control')).toBeNull();
+    expect((await fetch(`${app.url}/apiary`)).headers.get('cache-control')).toBeNull();
   });
 
   it('adds HSTS once the deployment is https', async () => {
     app = await startTestApp({ env: { APP_URL: 'https://focus.example.com' } });
     const res = await app.api.get('/api/health');
     expect(res.headers.get('strict-transport-security')).toMatch(/^max-age=\d+$/);
-  });
-
-  it('answers unknown API paths as JSON, not the SPA shell', async () => {
-    app = await startTestApp();
-    const res = await app.api.get('/api/nope');
-    expect(res.status).toBe(404);
-    expect(res.body).toEqual({ error: 'Not found.' });
   });
 });
 
@@ -320,7 +315,7 @@ describe('static client', () => {
 
   it('serves the shell for every non-API path, uncached, and the fingerprinted assets for a year', async () => {
     app = await startTestApp({ clientDir: dir });
-    for (const p of ['/', '/history', '/some/deep/path?date=2026-09-01']) {
+    for (const p of ['/', '/index.html', '/history', '/some/deep/path?date=2026-09-01']) {
       const r = await fetch(app.url + p);
       expect(r.status).toBe(200);
       expect(r.headers.get('content-type')).toMatch(/text\/html/);
@@ -334,8 +329,8 @@ describe('static client', () => {
     const icon = await fetch(`${app.url}/icons/icon.svg`);
     expect(icon.status).toBe(200);
     expect(icon.headers.get('cache-control')).toBe('public, max-age=3600');
-    // The API is still the API.
-    expect((await app.api.get('/api/nope')).status).toBe(404);
+    // The API is still the API: JSON, never the shell.
+    expect(await app.api.get('/api/nope')).toMatchObject({ status: 404, body: { error: 'Not found.' } });
   });
 
   it('answers a missing file under /assets with a 404, never the shell', async () => {
@@ -398,6 +393,21 @@ describe('static client', () => {
     expect((await fetch(app.url + '/')).status).toBe(404);
     expect((await app.api.get('/api/health')).body).toEqual({ ok: true });
   });
+
+  it('answers a shell removed under a running server with fixed text, and logs the cause', async () => {
+    app = await startTestApp({ clientDir: dir });
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // What a rebuild emptying dist/client does after the boot-time check has passed.
+    fs.rmSync(path.join(dir, 'index.html'));
+    const res = await fetch(`${app.url}/history`);
+    expect(res.status).toBe(404);
+    const text = await res.text();
+    expect(JSON.parse(text)).toEqual({ error: 'Request failed.' });
+    expect(text).not.toContain(dir);
+    expect(logged).toHaveBeenCalledOnce();
+    expect(logged).toHaveBeenCalledWith(expect.objectContaining({ code: 'ENOENT' }));
+    logged.mockRestore();
+  });
 });
 
 describe('createApp', () => {
@@ -424,7 +434,7 @@ describe('startBackgroundJobs', () => {
 
   it('purges expired logins every six hours and schedules the old-day prune; building an app starts neither', () => {
     vi.useFakeTimers({ now: Date.UTC(2026, 8, 16, 12) });
-    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     const db = openDatabase(':memory:');
     const config = loadConfig({ AUTH_MODE: 'none', RETENTION_DAYS: '30' });
     const user = ensureDefaultUser(db);
@@ -443,8 +453,11 @@ describe('startBackgroundJobs', () => {
     expect([count('auth_sessions'), count('days')]).toEqual([1, 1]);
 
     startBackgroundJobs(db, config);
-    vi.advanceTimersByTime(30_000);
+    vi.advanceTimersByTime(29_999);
+    expect(count('days')).toBe(1);
+    vi.advanceTimersByTime(1);
     expect(count('days')).toBe(0);
+    expect(log).toHaveBeenCalledWith('[retention] deleted 1 day');
     // The login expired a minute after it was stored; the next six-hourly purge takes it.
     expect(count('auth_sessions')).toBe(1);
     vi.advanceTimersByTime(6 * 3_600_000);
@@ -473,14 +486,15 @@ describe('startBackgroundJobs', () => {
     db.close();
   });
 
-  it('logs a purge that fails instead of ending the process', () => {
+  it('logs a job that fails instead of ending the process', () => {
     vi.useFakeTimers();
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     const db = openDatabase(':memory:');
     startBackgroundJobs(db, loadConfig({ AUTH_MODE: 'none' }));
-    // Stands in for a database that is busy or full when the six-hourly purge runs.
+    // Stands in for a database that is busy or full when the prune and the purge run.
     db.close();
     expect(() => vi.advanceTimersByTime(6 * 3_600_000)).not.toThrow();
     expect(error).toHaveBeenCalledWith('[sessions]', expect.any(Error));
+    expect(error).toHaveBeenCalledWith('[retention]', expect.any(Error));
   });
 });

@@ -1,18 +1,17 @@
 import type { Config } from './config.js';
 import type { DB } from './db.js';
+import type { PruneInfo } from '../shared/api.js';
 import type { Settings } from '../shared/settings.js';
 import { loadSettings } from './settings.js';
-import { DAY_MS, HOUR_MS } from '../shared/dates.js';
+import { DAY_MS } from '../shared/dates.js';
 
 /**
  * Old days are deleted two ways: the user's "Delete old days now" button and an automatic
- * prune (per-user setting, plus an optional server-wide ceiling from RETENTION_DAYS). Both
- * go through `pruneDays` so the rules are in one place. Deleting a `days` row cascades to
- * its punches, priorities, sessions and breaks; settings and logins are never touched.
+ * prune (per-user setting, plus an optional server-wide ceiling from RETENTION_DAYS), which
+ * `startBackgroundJobs` in app.ts runs through `runRetention` on a timer. Both go through
+ * `pruneDays` so the rules are in one place. Deleting a `days` row cascades to its punches,
+ * priorities, sessions and breaks; settings and logins are never touched.
  */
-
-const RUN_AFTER_BOOT_MS = 30_000;
-const RUN_EVERY_MS = 6 * HOUR_MS;
 
 /**
  * Days whose key sorts before this one are older than `keepDays`. The server normally never
@@ -24,27 +23,24 @@ export function cutoffKey(now: number, keepDays: number): string {
   return new Date(now - keepDays * DAY_MS).toISOString().slice(0, 10);
 }
 
-/** The counts behind `GET /days/prune`; the route adds the cutoff and the server cap. */
-export interface PruneCounts {
-  /** Days that `pruneDays(before)` would delete. */
-  matching: number;
-  total: number;
-  oldest: string | null;
-}
+type PruneCounts = Pick<PruneInfo, 'matching' | 'total' | 'oldest'>;
 
 // A day with a running timer is kept whatever its date: the timer bar would otherwise point at
 // a session whose day no longer exists. The preview's count and the delete share this test.
 const NO_RUNNING_TIMER = `NOT EXISTS (SELECT 1 FROM sessions s WHERE s.day_id = days.id AND s.status = 'running')`;
 
+/**
+ * The counts behind `GET /days/prune`: `matching` is the days `pruneDays(before)` would delete,
+ * and the route adds the cutoff and the server cap.
+ */
 export function countDays(db: DB, userId: number, before: string): PruneCounts {
-  const row = db
+  return db
     .prepare(
       `SELECT COUNT(*) AS total, MIN(date) AS oldest,
-              SUM(CASE WHEN date < ? AND ${NO_RUNNING_TIMER} THEN 1 ELSE 0 END) AS matching
+              COUNT(*) FILTER (WHERE date < ? AND ${NO_RUNNING_TIMER}) AS matching
        FROM days WHERE user_id = ?`,
     )
-    .get(before, userId) as { total: number; oldest: string | null; matching: number | null };
-  return { matching: row.matching ?? 0, total: row.total, oldest: row.oldest };
+    .get(before, userId) as PruneCounts;
 }
 
 /** Deletes the user's days before `before` (YYYY-MM-DD, exclusive) and returns how many. */
@@ -85,17 +81,4 @@ export function runRetention(db: DB, config: Config, now: number = Date.now()): 
     console.log(`[retention] deleted ${deleted} day${deleted === 1 ? '' : 's'}`);
   }
   return deleted;
-}
-
-/** Shortly after boot, then every few hours. Both timers are unref'd so they never hold the process open. */
-export function scheduleRetention(db: DB, config: Config): void {
-  const run = () => {
-    try {
-      runRetention(db, config);
-    } catch (err) {
-      console.error('[retention]', err);
-    }
-  };
-  setTimeout(run, RUN_AFTER_BOOT_MS).unref();
-  setInterval(run, RUN_EVERY_MS).unref();
 }
