@@ -23,7 +23,7 @@ export function todayKey(now: number = Date.now()): string {
   return dateKey(new Date(now));
 }
 
-/** Midnight (local) for a date key. */
+/** The key's first local instant: midnight, or 01:00 where the zone skips midnight. */
 export function parseDateKey(key: string): Date {
   const [y, m, d] = key.split('-').map(Number) as [number, number, number];
   return new Date(y, m - 1, d);
