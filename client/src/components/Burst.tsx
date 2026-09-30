@@ -12,12 +12,10 @@ interface Props {
 
 /**
  * A handful of emoji flying up from `anchor` and fading out. Rendered on `document.body`
- * because cards clip their overflow. Nothing under reduced motion: the app's rule turns
- * every animation off, which would leave the emoji sitting in a clump.
+ * because cards clip their overflow.
  */
 export function Burst({ seed, anchor, big = false }: Props) {
   const pieces = useMemo(() => pickBurst(seed, big ? 14 : 8), [seed, big]);
-  if (reducedMotion()) return null;
   const reach = big ? 140 : 90;
   const style: CSSProperties = { left: anchor.left + anchor.width / 2, top: anchor.top + anchor.height / 2 };
   return createPortal(
@@ -41,8 +39,4 @@ export function Burst({ seed, anchor, big = false }: Props) {
     </span>,
     document.body,
   );
-}
-
-function reducedMotion(): boolean {
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }

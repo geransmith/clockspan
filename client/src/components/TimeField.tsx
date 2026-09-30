@@ -81,7 +81,7 @@ function Field({ value, date, hour12, anchorAt, label, onCommit, onDiscard }: Pr
   };
 
   return (
-    <div {...mergeProps(groupProps, { onBlur, onKeyDown })} ref={ref} className={`timefield${partial ? ' is-partial' : ''}`}>
+    <div {...mergeProps(groupProps, { onBlur, onKeyDown })} ref={ref} className={`input timefield${partial ? ' is-partial' : ''}`}>
       {state.segments.map((segment, i) => (
         <Segment key={i} segment={segment} state={state} onTouch={segment.type === 'dayPeriod' ? () => (periodTouched.current = true) : undefined} />
       ))}
