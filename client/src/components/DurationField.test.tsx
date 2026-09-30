@@ -56,6 +56,9 @@ describe('DurationField', () => {
     fireEvent.change(hours, { target: { value: '7.33' } });
     fireEvent.blur(hours);
     expect(onCommit).toHaveBeenLastCalledWith(440);
+    fireEvent.change(hours, { target: { value: '0' } });
+    fireEvent.blur(hours);
+    expect(onCommit).toHaveBeenLastCalledWith(1);
   });
 
   it('puts the stored value back for a blank or non-numeric box', () => {
