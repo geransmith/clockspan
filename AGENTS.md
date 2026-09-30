@@ -78,8 +78,8 @@ client/                 Vite root → dist/client
     copy.ts             every line the app raises at the user; no logic
     storage.ts          localStorage that never throws (private mode, quota)
   src/hooks/            state and effects (useDay, useTimer, useSettings, useAlarms, …), each with a
-                        happy-dom test beside it (useLatest and useTimeFormat are covered through the
-                        hooks that use them). useClock is the app's one 1-second clock; useSaveStatus
+                        happy-dom test beside it (useLatest is covered through the hooks that use it).
+                        useClock is the app's one 1-second clock; useSaveStatus
                         (Saving… / Saved / Not saved) and useLastTab (the tab it reopens on) serve the
                         settings dialog. src/test/hooks.tsx has the fixtures and provider stack
   src/components/       the cards, History (Calendar + Review), Banners, FinishChoice; pieces more than

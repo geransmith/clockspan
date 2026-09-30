@@ -14,7 +14,7 @@ afterEach(() => cleanup());
 
 it('opens on the fallback with nothing stored', () => {
   expect(render().result.current[0]).toBe('one');
-  expect(localStorage.getItem(KEY)).toBe('one');
+  expect(localStorage.getItem(KEY)).toBeNull();
 });
 
 it('remembers the tab picked, and opens on it next time', () => {
@@ -29,6 +29,7 @@ it('remembers the tab picked, and opens on it next time', () => {
 it("opens on the fallback when the stored tab isn't offered now", () => {
   localStorage.setItem(KEY, 'three');
   expect(render(ALL.slice(0, 2)).result.current[0]).toBe('one');
+  expect(localStorage.getItem(KEY)).toBe('three');
   localStorage.setItem(KEY, 'not a tab');
   expect(render().result.current[0]).toBe('one');
 });

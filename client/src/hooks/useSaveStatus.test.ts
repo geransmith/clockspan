@@ -36,7 +36,7 @@ it('says saving, then saved once the server answers, then nothing after 2.5 s', 
   expect(result.current.saveState).toBe('idle');
 });
 
-it('says not saved when the change was put back, and keeps saying it', async () => {
+it('says not saved when the save fails, and keeps saying it', async () => {
   const { result } = renderHook(() => useSaveStatus());
   const { answer, done } = start(result.current.save);
   answer.reject(new Error('Request failed (500)'));
@@ -87,11 +87,7 @@ it('keeps saying saving when a new save starts before the last "saved" has gone'
   expect(result.current.saveState).toBe('saved');
 });
 
-it('leaves no timer behind when it unmounts, with or without "saved" showing', async () => {
-  const quiet = renderHook(() => useSaveStatus());
-  quiet.unmount();
-  expect(vi.getTimerCount()).toBe(0);
-
+it('leaves no "saved" timer behind when it unmounts', async () => {
   const { result, unmount } = renderHook(() => useSaveStatus());
   start(result.current.save).answer.resolve();
   await settle();

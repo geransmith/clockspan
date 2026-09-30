@@ -7,32 +7,28 @@ const SAVED_MS = 2500;
 
 /**
  * Tracks in-flight settings saves so the header can say "Saving…", then "Saved" once the server
- * has confirmed, or "Not saved" when the provider had to roll the change back. In-flight saves
- * are counted so a burst of chip clicks reads as one save instead of flickering between states.
- * `run` is any provider call that settles when the server has answered (update or reset).
+ * has confirmed, or "Not saved" when the save failed and the provider dropped the change, so the
+ * stored value shows again. In-flight saves are counted so a burst of chip clicks reads as one
+ * save instead of flickering between states. `run` is any provider call that settles when the
+ * server has answered (update or reset).
  */
 export function useSaveStatus(): { saveState: SaveState; save: (run: () => Promise<void>) => Promise<void> } {
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const pending = useRef(0);
   const failed = useRef(false);
-  const timer = useRef<number | null>(null);
+  const timer = useRef<number | undefined>(undefined);
 
-  useEffect(
-    () => () => {
-      if (timer.current) window.clearTimeout(timer.current);
-    },
-    [],
-  );
+  useEffect(() => () => window.clearTimeout(timer.current), []);
 
   const save = useCallback(async (run: () => Promise<void>) => {
     if (pending.current === 0) failed.current = false;
     pending.current++;
-    if (timer.current) window.clearTimeout(timer.current);
+    window.clearTimeout(timer.current);
     setSaveState('saving');
     try {
       await run();
     } catch {
-      // The provider already put the old value back; all that is left is to say so.
+      // The provider dropped the failed change, so the stored value shows again; all that is left is to say so.
       failed.current = true;
     } finally {
       pending.current--;
