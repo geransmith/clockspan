@@ -418,7 +418,11 @@ Never commit `data/` or `.env`.
 - **History → Days opens on the route's date.** `App.tsx` passes `route.date ?? today` to `History`;
   the calendar starts on that month with that day picked (`periodOffset('month', …)`), and
   only "Open day" navigates. So the header's History button lands on the month of the day
-  being viewed, and browser Back from a day returns to it. The month grid is
+  being viewed. "Open day" first records the picked day on the History entry
+  (`navigate(…, { replace: true })`) and then pushes the sheet, so browser Back from that day
+  reopens the calendar on its month with the day picked; History's tab and the Review period
+  are component state, so Back from a day opened in Review lands on Days with that day
+  picked. The month grid is
   `calendarMonth()` (pure); the panel's numbers come from `timeclockForDate` + `daySummaryOf`,
   the same math as the sheet.
 - **The `retro` alarm target is the clock-out instant** ("warn before" = minutes before the
@@ -623,9 +627,10 @@ The browser pass for each surface (the logic under it is already tested):
 - **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
   Month / Quarter).
 - **The History calendar**: one month at the mobile preset: ◀ to a seeded month, tap a day,
-  **Open day** and back through the header, **Review this week** lands on that week. With the
-  sticker chart on (`PUT /api/settings {"stickers":true}`), a chip narrows the grid to one
-  sticker and a second tap clears it; with Show weekends off, five columns.
+  **Open day**, browser Back lands on that month with the day picked, and back through the
+  header, **Review this week** lands on that week. With the sticker chart on
+  (`PUT /api/settings {"stickers":true}`), a chip narrows the grid to one sticker and a second
+  tap clears it; with Show weekends off, five columns.
 - **Retention**: one look at Settings → Data (count line, toggle saves); drive the delete with
   curl (`POST /api/days/prune`) because of the confirm dialog.
 - **Auth**: no browser pass; `server/auth/local.test.ts` covers setup, login, the limiter,
