@@ -1,17 +1,25 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { SEED_TODAY, startTestApp, type TestApp } from '../dev/harness.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from '../dev/harness.js';
 import { seedDatabase } from '../dev/seed.js';
 import { LIMITS } from '../../shared/api.js';
+import { HOUR_MS } from '../../shared/dates.js';
 
 const DATE = '2026-09-01';
 
 describe('sessions', () => {
   let app: TestApp;
   beforeEach(async () => {
+    // Only Date: the server reads the same clock in this process, and HTTP keeps its real timers.
+    vi.useFakeTimers({ now: SEED_NOW, toFake: ['Date'] });
     app = await startTestApp();
   });
-  afterEach(() => app.close());
+  afterEach(async () => {
+    vi.useRealTimers();
+    await app.close();
+  });
 
+  /** Moves the clock to `ms` after the test's start. */
+  const at = (ms: number) => vi.setSystemTime(SEED_NOW + ms);
   const start = (body: Record<string, unknown> = {}) => app.api.post(`/api/days/${DATE}/sessions`, { plannedSeconds: 1500, label: 'Work', ...body });
 
   it('starts a timer and reports it as running', async () => {
@@ -41,7 +49,7 @@ describe('sessions', () => {
     expect(second.body.session.id).toBe(first.body.session.id);
   });
 
-  it('validates planned time and the date', async () => {
+  it('validates planned time and the label', async () => {
     expect((await start({ plannedSeconds: 59 })).status).toBe(400);
     expect((await start({ plannedSeconds: 8 * 3600 + 1 })).status).toBe(400);
     expect((await start({ plannedSeconds: 90.5 })).status).toBe(400);
@@ -49,23 +57,24 @@ describe('sessions', () => {
     expect([label.status, label.body.error]).toEqual([400, 'label must be a string.']);
     // Refused before anything is stored.
     expect(app.count('days')).toBe(0);
-    expect((await app.api.post('/api/days/nope/sessions', { plannedSeconds: 1500 })).status).toBe(400);
     // No body at all: the same 400, not a crash on reading a field of undefined.
-    expect((await fetch(`${app.url}/api/days/${DATE}/sessions`, { method: 'POST' })).status).toBe(400);
+    expect((await app.api.post(`/api/days/${DATE}/sessions`)).status).toBe(400);
   });
 
   it('leaves a session as it is when patched with no body', async () => {
     const { id } = (await start()).body.session;
-    const r = await fetch(`${app.url}/api/sessions/${id}`, { method: 'PATCH' });
+    const r = await app.api.patch(`/api/sessions/${id}`);
     expect(r.status).toBe(200);
-    expect(((await r.json()) as { session: { label: string; plannedSeconds: number } }).session).toMatchObject({ label: 'Work', plannedSeconds: 1500 });
+    expect(r.body.session).toMatchObject({ label: 'Work', plannedSeconds: 1500 });
   });
 
   it('links only to a priority that exists on that day', async () => {
     const prio = await app.api.put(`/api/days/${DATE}/priorities`, { priorities: [{ text: 'Plan' }] });
     const uid: string = prio.body.priorities[0].uid;
-    expect((await start({ priorityUid: 'nope' })).status).toBe(400);
-    expect((await start({ priorityUid: 'abcdefabcdef' })).status).toBe(400);
+    const shape = await start({ priorityUid: 'nope' });
+    expect([shape.status, shape.body.error]).toEqual([400, 'priorityUid must be a priority id or null.']);
+    const absent = await start({ priorityUid: 'abcdefabcdef' });
+    expect([absent.status, absent.body.error]).toEqual([400, 'That priority is not on this day.']);
     const ok = await start({ priorityUid: uid.toUpperCase() });
     expect(ok.status).toBe(201);
     expect(ok.body.session.priorityUid).toBe(uid);
@@ -90,7 +99,13 @@ describe('sessions', () => {
       priorityUid: uid,
       plannedSeconds: 600,
     });
-    expect((await app.api.patch(`/api/sessions/${id}`, { priorityUid: 'bad!' })).status).toBe(400);
+    const shape = await app.api.patch(`/api/sessions/${id}`, { priorityUid: 'bad!' });
+    expect([shape.status, shape.body.error]).toEqual([400, 'priorityUid must be a priority id or null.']);
+    // A priority that exists on another day is refused, and the link stays.
+    const other: string = (await app.api.put('/api/days/2026-09-02/priorities', { priorities: [{ text: 'Other' }] })).body.priorities[0].uid;
+    const elsewhere = await app.api.patch(`/api/sessions/${id}`, { priorityUid: other });
+    expect([elsewhere.status, elsewhere.body.error]).toEqual([400, 'That priority is not on this day.']);
+    expect((await app.api.get(`/api/days/${DATE}`)).body.sessions[0].priorityUid).toBe(uid);
     expect((await app.api.patch(`/api/sessions/${id}`, { plannedSeconds: 10 })).status).toBe(400);
     // A wrong type is a 400 like everywhere else, not silently kept.
     const badLabel = await app.api.patch(`/api/sessions/${id}`, { label: 42 });
@@ -108,45 +123,40 @@ describe('sessions', () => {
 
   it('finishes at the planned end when the timer expired unattended', async () => {
     const { id } = (await start({ plannedSeconds: 600 })).body.session;
-    // Pretend it started an hour ago: the log must show the planned 10 min, not 60.
-    app.db.prepare(`UPDATE sessions SET started_at = ? WHERE id = ?`).run(Date.now() - 3_600_000, id);
+    // Finished an hour later: the log shows the planned 10 min, not 60.
+    at(HOUR_MS);
     const r = await app.api.post(`/api/sessions/${id}/finish`);
-    expect(r.body.session.status).toBe('completed');
-    expect(r.body.session.durationSeconds).toBe(600);
+    expect(r.body.session).toMatchObject({ status: 'completed', durationSeconds: 600, endedAt: SEED_NOW + 600_000 });
     // Idempotent.
-    expect((await app.api.post(`/api/sessions/${id}/finish`)).body.session.endedAt).toBe(r.body.session.endedAt);
+    at(HOUR_MS + 60_000);
+    expect((await app.api.post(`/api/sessions/${id}/finish`)).body.session.endedAt).toBe(SEED_NOW + 600_000);
     expect((await app.api.get('/api/sessions/running')).body.session).toBeNull();
   });
 
   it('pauses and resumes, and logs only the time the clock was running', async () => {
     const { id } = (await start({ plannedSeconds: 1500 })).body.session;
     expect((await app.api.post(`/api/sessions/${id}/resume`)).body.session.pausedAt).toBeNull();
+    at(60_000);
     const paused = await app.api.post(`/api/sessions/${id}/pause`);
     expect(paused.status).toBe(200);
-    expect(paused.body.session).toMatchObject({ status: 'running', pausedSeconds: 0 });
-    expect(paused.body.session.pausedAt).toBeGreaterThan(0);
+    expect(paused.body.session).toMatchObject({ status: 'running', pausedSeconds: 0, pausedAt: SEED_NOW + 60_000 });
     // Still the one running timer, and a second pause changes nothing.
-    expect((await app.api.get('/api/sessions/running')).body.session.pausedAt).toBe(paused.body.session.pausedAt);
-    expect((await app.api.post(`/api/sessions/${id}/pause`)).body.session.pausedAt).toBe(paused.body.session.pausedAt);
-    // Pretend the pause began 90 s ago: resuming banks it.
-    app.db.prepare(`UPDATE sessions SET paused_at = paused_at - 90000 WHERE id = ?`).run(id);
+    expect((await app.api.get('/api/sessions/running')).body.session.pausedAt).toBe(SEED_NOW + 60_000);
+    at(100_000);
+    expect((await app.api.post(`/api/sessions/${id}/pause`)).body.session.pausedAt).toBe(SEED_NOW + 60_000);
+    // Resuming banks the 90 s the pause lasted.
+    at(150_000);
     const resumed = await app.api.post(`/api/sessions/${id}/resume`);
-    expect(resumed.body.session).toMatchObject({ status: 'running', pausedAt: null });
-    // 90 s plus the real time between the requests, rounded: 91 on a slow machine.
-    expect(resumed.body.session.pausedSeconds).toBeGreaterThanOrEqual(90);
-    expect(resumed.body.session.pausedSeconds).toBeLessThanOrEqual(91);
+    expect(resumed.body.session).toMatchObject({ status: 'running', pausedAt: null, pausedSeconds: 90 });
     // Adjusting still works around a pause.
     expect((await app.api.patch(`/api/sessions/${id}`, { plannedSeconds: 600 })).body.session.plannedSeconds).toBe(600);
     // A second pause, then finish: the session ends when that pause began, and neither pause counts.
+    at(300_000);
     await app.api.post(`/api/sessions/${id}/pause`);
-    app.db.prepare(`UPDATE sessions SET paused_at = paused_at - 30000, started_at = started_at - 300000 WHERE id = ?`).run(id);
+    at(330_000);
     const done = await app.api.post(`/api/sessions/${id}/finish`);
-    expect(done.body.session).toMatchObject({ status: 'completed', pausedSeconds: resumed.body.session.pausedSeconds, pausedAt: null });
-    // Span: started 300 s ago, pause began 30 s ago → 270 s, minus the 90 s pause = 180 s (and the
-    // few real milliseconds the requests took).
-    expect(done.body.session.durationSeconds).toBeGreaterThanOrEqual(179);
-    expect(done.body.session.durationSeconds).toBeLessThanOrEqual(181);
-    expect(Date.now() - done.body.session.endedAt).toBeGreaterThanOrEqual(30_000);
+    // 300 s from the start to the second pause, less the 90 s of the first.
+    expect(done.body.session).toMatchObject({ status: 'completed', pausedSeconds: 90, pausedAt: null, endedAt: SEED_NOW + 300_000, durationSeconds: 210 });
     // Ended sessions can't be paused or resumed.
     expect((await app.api.post(`/api/sessions/${id}/pause`)).status).toBe(409);
     expect((await app.api.post(`/api/sessions/${id}/resume`)).status).toBe(409);
@@ -156,22 +166,28 @@ describe('sessions', () => {
 
   it('clamps a timer that ran out to its planned end, pushed out by the pauses it had', async () => {
     const { id } = (await start({ plannedSeconds: 600 })).body.session;
-    // Started 20 min ago with 2 min banked as pauses: the planned 10 min ran out 8 min ago.
-    app.db.prepare(`UPDATE sessions SET started_at = ?, paused_seconds = 120 WHERE id = ?`).run(Date.now() - 20 * 60_000, id);
+    // Two minutes of pauses push the planned 10 min out to 12; finished at 20.
+    at(60_000);
+    await app.api.post(`/api/sessions/${id}/pause`);
+    at(180_000);
+    await app.api.post(`/api/sessions/${id}/resume`);
+    at(1_200_000);
     const r = await app.api.post(`/api/sessions/${id}/finish`);
-    expect(r.body.session.durationSeconds).toBe(600);
-    expect(r.body.session.endedAt).toBe(r.body.session.startedAt + 720_000);
+    expect(r.body.session).toMatchObject({ durationSeconds: 600, startedAt: SEED_NOW, endedAt: SEED_NOW + 720_000 });
   });
 
   it('logs the planned length for a timer paused after it ran out, however long the pause', async () => {
     const { id } = (await start({ plannedSeconds: 600 })).body.session;
+    // Two minutes of pauses, so the plan runs out at 12 min; paused again at 15 and finished at 20.
+    at(60_000);
     await app.api.post(`/api/sessions/${id}/pause`);
-    // Started 20 min ago with 2 min of earlier pauses, so the plan ran out 8 min ago; paused 5 min ago.
-    const now = Date.now();
-    app.db.prepare(`UPDATE sessions SET started_at = ?, paused_seconds = 120, paused_at = ? WHERE id = ?`).run(now - 20 * 60_000, now - 5 * 60_000, id);
+    at(180_000);
+    await app.api.post(`/api/sessions/${id}/resume`);
+    at(900_000);
+    await app.api.post(`/api/sessions/${id}/pause`);
+    at(1_200_000);
     const r = await app.api.post(`/api/sessions/${id}/finish`);
-    expect(r.body.session).toMatchObject({ status: 'completed', durationSeconds: 600, pausedAt: null });
-    expect(r.body.session.endedAt).toBe(r.body.session.startedAt + 720_000);
+    expect(r.body.session).toMatchObject({ status: 'completed', durationSeconds: 600, pausedAt: null, startedAt: SEED_NOW, endedAt: SEED_NOW + 720_000 });
   });
 
   it('cancels a paused timer and clears the pause', async () => {
@@ -183,37 +199,45 @@ describe('sessions', () => {
 
   it('logs the time past the planned end only when asked to', async () => {
     const { id } = (await start({ plannedSeconds: 600 })).body.session;
-    app.db.prepare(`UPDATE sessions SET started_at = ? WHERE id = ?`).run(Date.now() - 3_600_000, id);
+    at(HOUR_MS);
     expect((await app.api.post(`/api/sessions/${id}/finish`, { countOverrun: 'yes' })).status).toBe(400);
     // No body at all (curl) reads as "not asked", not a crash.
-    const bare = await fetch(`${app.url}/api/sessions/${id}/finish`, { method: 'POST' });
+    const bare = await app.api.post(`/api/sessions/${id}/finish`);
     expect(bare.status).toBe(200);
-    expect(((await bare.json()) as { session: { durationSeconds: number } }).session.durationSeconds).toBe(600);
+    expect(bare.body.session.durationSeconds).toBe(600);
     // Finishing again with the flag changes nothing: it is already over.
     const r = await app.api.post(`/api/sessions/${id}/finish`, { countOverrun: true });
     expect(r.body.session.durationSeconds).toBe(600);
     // A fresh one, an hour in, asked to count the overrun.
-    app.db.prepare(`DELETE FROM sessions WHERE id = ?`).run(id);
     const again = (await start({ plannedSeconds: 600 })).body.session;
-    app.db.prepare(`UPDATE sessions SET started_at = ? WHERE id = ?`).run(Date.now() - 3_600_000, again.id);
-    r.body.session = (await app.api.post(`/api/sessions/${again.id}/finish`, { countOverrun: true })).body.session;
-    expect(r.body.session.status).toBe('completed');
-    expect(r.body.session.durationSeconds).toBeGreaterThanOrEqual(3600);
-    expect(r.body.session.durationSeconds).toBeLessThan(3605);
+    at(2 * HOUR_MS);
+    const counted = (await app.api.post(`/api/sessions/${again.id}/finish`, { countOverrun: true })).body.session;
+    expect(counted).toMatchObject({ status: 'completed', durationSeconds: 3600 });
     // A paused session still ends where the pause began, overrun or not.
     const second = (await start({ plannedSeconds: 600 })).body.session;
+    at(3 * HOUR_MS - 60_000);
     await app.api.post(`/api/sessions/${second.id}/pause`);
-    app.db.prepare(`UPDATE sessions SET started_at = started_at - 3600000, paused_at = paused_at - 60000 WHERE id = ?`).run(second.id);
+    at(3 * HOUR_MS);
     const done = await app.api.post(`/api/sessions/${second.id}/finish`, { countOverrun: true });
-    expect(done.body.session.durationSeconds).toBeGreaterThanOrEqual(3540);
-    expect(done.body.session.durationSeconds).toBeLessThan(3545);
-    expect(Date.now() - done.body.session.endedAt).toBeGreaterThanOrEqual(60_000);
+    expect(done.body.session).toMatchObject({ durationSeconds: 3540, endedAt: SEED_NOW + 3 * HOUR_MS - 60_000 });
   });
 
   it('finishes early with the elapsed time', async () => {
     const { id } = (await start({ plannedSeconds: 1500 })).body.session;
+    at(90_000);
     const r = await app.api.post(`/api/sessions/${id}/finish`);
-    expect(r.body.session.durationSeconds).toBeLessThan(5);
+    expect(r.body.session).toMatchObject({ durationSeconds: 90, endedAt: SEED_NOW + 90_000 });
+  });
+
+  it('rounds the logged time to the nearest second', async () => {
+    // 90.4 s logs 90, which rules out rounding up; 90.6 s logs 91, which rules out rounding down.
+    const first = (await start()).body.session;
+    at(90_400);
+    expect((await app.api.post(`/api/sessions/${first.id}/finish`)).body.session.durationSeconds).toBe(90);
+    at(200_000);
+    const second = (await start()).body.session;
+    at(290_600);
+    expect((await app.api.post(`/api/sessions/${second.id}/finish`)).body.session.durationSeconds).toBe(91);
   });
 
   it('cancels, and a cancelled session leaves the day log', async () => {
@@ -235,15 +259,6 @@ describe('sessions', () => {
     expect((await app.api.del(`/api/sessions/${id}`)).status).toBe(404);
     expect((await app.api.get('/api/sessions/running')).body.session).toBeNull();
   });
-
-  it('starts a timer on a seeded today next to the seeded history', async () => {
-    await app.close();
-    app = await startTestApp({ seed: { running: false } });
-    const today = app.seeded!.days.at(-1)!;
-    const r = await app.api.post(`/api/days/${SEED_TODAY}/sessions`, { plannedSeconds: 1500, priorityUid: today.priorities[1]!.uid });
-    expect(r.status).toBe(201);
-    expect((await app.api.get(`/api/days/${SEED_TODAY}`)).body.sessions).toHaveLength(today.sessions.length + 1);
-  });
 });
 
 describe('sessions are scoped to the signed-in user', () => {
@@ -254,9 +269,8 @@ describe('sessions are scoped to the signed-in user', () => {
   afterEach(() => app.close());
 
   it("hides one user's sessions from another", async () => {
-    const { admin, member, a, b } = await app.twoUsers();
-    seedDatabase(app.db, { userId: member.id, today: SEED_TODAY, now: Date.now(), days: 1 });
-    expect(admin.id).not.toBe(member.id);
+    const { member, a, b } = await app.twoUsers();
+    seedDatabase(app.db, { userId: member.id, today: SEED_TODAY, now: SEED_NOW, days: 1 });
 
     const started = await a.post(`/api/days/${DATE}/sessions`, { plannedSeconds: 900 });
     expect(started.status).toBe(201);

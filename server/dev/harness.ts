@@ -2,11 +2,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
+import { parseSetCookie, stringifyCookie } from 'cookie';
 import { createApp } from '../app.js';
 import type { Discovery } from '../auth/oidc.js';
 import { loadConfig, type Config } from '../config.js';
 import { ensureDefaultUser, openDatabase, type DB, type UserRow } from '../db.js';
 import { ensureLocalUsers, LOCAL_USERS, seedDatabase, type SeedManifest, type SeedOptions } from './seed.js';
+import type { AuthMode } from '../../shared/api.js';
 
 /**
  * Boots the real Express app on an in-memory SQLite DB and talks to it over HTTP with
@@ -24,6 +26,11 @@ export interface ApiResponse<T = any> {
 
 export interface Client {
   get<T = any>(path: string): Promise<ApiResponse<T>>;
+  /**
+   * Without `body` a write sends no body and no content type, as the web app sends pause,
+   * resume, finish, cancel, end break and logout; Express then leaves `req.body` undefined.
+   * The same holds for put and patch.
+   */
   post<T = any>(path: string, body?: unknown): Promise<ApiResponse<T>>;
   put<T = any>(path: string, body?: unknown): Promise<ApiResponse<T>>;
   patch<T = any>(path: string, body?: unknown): Promise<ApiResponse<T>>;
@@ -57,7 +64,7 @@ export interface StartOptions {
    * `oidc` points discovery at a port nothing listens on: the routes that don't need the provider
    * can still be tested. Port 2, since fetch refuses 1 and 9 itself ("bad port") without connecting.
    */
-  authMode?: 'none' | 'local' | 'oidc';
+  authMode?: AuthMode;
   /** Seed the default user (AUTH_MODE=none only); pass options to override the defaults. */
   seed?: boolean | Partial<Omit<SeedOptions, 'userId'>>;
   /** Extra environment for `loadConfig`, e.g. `{ RETENTION_DAYS: '30' }`. */
@@ -106,16 +113,12 @@ function makeClient(baseUrl: string): Client {
   const request = async <T>(method: string, path: string, body?: unknown): Promise<ApiResponse<T>> => {
     const headers: Record<string, string> = {};
     if (body !== undefined) headers['content-type'] = 'application/json';
-    if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
+    if (jar.size) headers.cookie = stringifyCookie(Object.fromEntries(jar));
     const res = await fetch(baseUrl + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
     for (const raw of res.headers.getSetCookie()) {
-      const [pair, ...attrs] = raw.split(';');
-      const eq = pair!.indexOf('=');
-      const name = pair!.slice(0, eq).trim();
-      const value = pair!.slice(eq + 1).trim();
-      const expired = attrs.some((a) => /^\s*max-age=0\s*$/i.test(a));
-      if (expired || value === '') jar.delete(name);
-      else jar.set(name, value);
+      const c = parseSetCookie(raw);
+      if (!c.value || c.maxAge === 0) jar.delete(c.name);
+      else jar.set(c.name, c.value);
     }
     const text = await res.text();
     let parsed: unknown = text;
@@ -128,9 +131,9 @@ function makeClient(baseUrl: string): Client {
   };
   return {
     get: (p) => request('GET', p),
-    post: (p, b) => request('POST', p, b ?? {}),
-    put: (p, b) => request('PUT', p, b ?? {}),
-    patch: (p, b) => request('PATCH', p, b ?? {}),
+    post: (p, b) => request('POST', p, b),
+    put: (p, b) => request('PUT', p, b),
+    patch: (p, b) => request('PATCH', p, b),
     del: (p) => request('DELETE', p),
     cookies: () => Object.fromEntries(jar),
   };
@@ -140,7 +143,7 @@ export async function startTestApp(opts: StartOptions = {}): Promise<TestApp> {
   const authMode = opts.authMode ?? 'none';
   const oidcEnv =
     authMode === 'oidc' ? { OIDC_ISSUER: 'https://127.0.0.1:2/', OIDC_CLIENT_ID: 'clockspan', OIDC_CLIENT_SECRET: 'secret', APP_URL: 'http://localhost' } : {};
-  const config = loadConfig({ AUTH_MODE: authMode, DATA_DIR: os.tmpdir(), PORT: '0', ...oidcEnv, ...opts.env });
+  const config = loadConfig({ AUTH_MODE: authMode, ...oidcEnv, ...opts.env });
   const db = openDatabase(':memory:');
   // No client dir means the static block stays off, so /api tests never see index.html.
   const app = createApp(db, config, {
