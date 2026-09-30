@@ -198,8 +198,15 @@ describe('APP_URL and OIDC_ISSUER', () => {
     expect(warn).toHaveBeenCalledWith(
       '[config] APP_URL should be only the scheme and host the app is served at; "Https://FOCUS.example.com/Clockspan/" has more, so https://focus.example.com is used (the app runs at the root of its host)',
     );
+    // A query with no path is more than the host too, so the check reads the whole href, not the pathname.
+    expect(load({ APP_URL: 'https://focus.example.com/?x=1' }).appUrl).toBe('https://focus.example.com');
+    expect(warn).toHaveBeenLastCalledWith(
+      '[config] APP_URL should be only the scheme and host the app is served at; "https://focus.example.com/?x=1" has more, so https://focus.example.com is used (the app runs at the root of its host)',
+    );
     expect(load({ APP_URL: 'https://focus.example.com/' }).appUrl).toBe('https://focus.example.com');
-    expect(warn).toHaveBeenCalledTimes(1);
+    // A port is part of the host the app is served at (Unraid's usual form).
+    expect(load({ APP_URL: 'http://tower:8080' }).appUrl).toBe('http://tower:8080');
+    expect(warn).toHaveBeenCalledTimes(2);
     warn.mockRestore();
   });
 });
