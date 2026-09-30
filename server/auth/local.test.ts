@@ -307,7 +307,7 @@ describe('AUTH_MODE=local', () => {
     expect(await sam.del(`/api/auth/users/${adminId}`)).toMatchObject({ status: 403, body: { error: 'Only an admin can do that.' } });
     expect(app.count('users', 'id = ?', adminId)).toBe(1);
     await sam.put('/api/days/2026-09-01/punches', { punches: [{ at: Date.UTC(2026, 8, 1, 8) }, { at: null }, { at: null }, { at: null }] });
-    await sam.put('/api/days/2026-09-01/retro', { note: 'note only sam wrote' });
+    expect((await sam.put('/api/days/2026-09-01/retro', { note: 'note only sam wrote' })).status).toBe(200);
     expect(app.count('days')).toBe(1);
 
     expect((await app.api.del(`/api/auth/users/${created.body.user.id}`)).body).toEqual({ ok: true });
