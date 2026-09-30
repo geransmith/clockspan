@@ -17,7 +17,7 @@ export const SOUNDS = [
   { id: 'pop', label: 'Pop', kind: 'clip' },
 ] as const;
 
-export type Sound = (typeof SOUNDS)[number];
+type Sound = (typeof SOUNDS)[number];
 export type SoundId = Sound['id'];
 export type ClipId = Extract<Sound, { kind: 'clip' }>['id'];
 export type SynthId = Extract<Sound, { kind: 'synth' }>['id'];

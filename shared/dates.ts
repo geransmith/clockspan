@@ -15,7 +15,7 @@ export const HOUR_MS = 60 * MINUTE_MS;
 export const DAY_MS = 24 * HOUR_MS;
 
 /** Local-date key, e.g. 2026-09-16. */
-export function dateKey(d: Date): string {
+function dateKey(d: Date): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
@@ -40,8 +40,9 @@ export function isValidDateKey(s: unknown): s is string {
 /**
  * The epoch range a punch on this key can plausibly have, whatever zone wrote it. The UI
  * only ever places a time on the key's own local day; with zones from UTC-12 to UTC+14 every
- * such instant lies within the key's UTC midnight -14 h .. +36 h, so a day of slack either
- * side is generous. Computed in UTC like `isValidDateKey`, so the server never needs a zone.
+ * such instant lies within the key's UTC midnight -14 h .. +36 h. The window is the key's UTC
+ * noon ± 48 h (-36 h .. +60 h), which leaves 22 h to spare before that span and 24 h after it.
+ * Computed in UTC like `isValidDateKey`, so the server never needs a zone.
  */
 export function punchWindow(key: string): { from: number; to: number } {
   const [y, m, d] = key.split('-').map(Number) as [number, number, number];
@@ -55,11 +56,14 @@ export function addDays(key: string, n: number): string {
   return dateKey(d);
 }
 
-/** Last millisecond of the key's local day. */
+/**
+ * Last millisecond of the key's local day: one before the next day's first instant. Not this
+ * day's midnight plus a day: where a zone skips its own midnight (Chile, Cuba, Egypt, Lebanon
+ * change clocks at 00:00), parseDateKey answers 01:00 and setDate would carry that hour into
+ * the next day.
+ */
 export function endOfDay(key: string): number {
-  const d = parseDateKey(key);
-  d.setDate(d.getDate() + 1);
-  return d.getTime() - 1;
+  return parseDateKey(addDays(key, 1)).getTime() - 1;
 }
 
 /** Monday of the key's week: the review follows the work week, not the calendar one. */

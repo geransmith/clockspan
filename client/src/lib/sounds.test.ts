@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SOUND_EVENTS, SOUNDS, type ClipId } from '../../../shared/sounds';
+import { SOUND_EVENTS, SOUNDS, type ClipId } from '../../../shared/sounds.js';
 import { bundledClipIds, clipUrl, SOUND_EVENT_LABELS } from './sounds';
 
 describe('sound registry', () => {
