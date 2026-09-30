@@ -78,6 +78,12 @@ describe('PORT', () => {
   });
 });
 
+describe('DATA_DIR', () => {
+  it('is the folder that holds the database file', () => {
+    expect(load({ DATA_DIR: '/srv/clockspan' }).dbPath).toBe('/srv/clockspan/focus.db');
+  });
+});
+
 describe('SESSION_TTL_DAYS', () => {
   it('defaults to 30 days', () => {
     expect(load().sessionTtlMs).toBe(30 * 86_400_000);
@@ -128,7 +134,7 @@ describe('blank values', () => {
     expect(load({ APP_URL: 'https://focus.example.com', COOKIE_SECURE: '' }).cookieSecure).toBe(true);
     expect(load({ PORT: '', DATA_DIR: '', APP_URL: '', RETENTION_DAYS: '' })).toMatchObject({
       port: 3000,
-      dataDir: path.resolve('./data'),
+      dbPath: path.resolve('./data', 'focus.db'),
       appUrl: null,
       retentionDays: null,
     });
@@ -164,7 +170,7 @@ describe('APP_URL and OIDC_ISSUER', () => {
   it('refuse a value that is not an http(s) URL, naming the variable', () => {
     // Without a scheme this used to pass, then crash createApp with a bare "Invalid URL".
     expect(() => load({ APP_URL: 'focus.example.com' })).toThrow(
-      /^APP_URL must be the app's full public URL, starting with https:\/\/ or http:\/\/ \(got "focus.example.com"\)$/,
+      /^APP_URL must be the scheme and host the app is served at, starting with https:\/\/ or http:\/\/ \(got "focus.example.com"\)$/,
     );
     expect(() => load({ APP_URL: 'ftp://focus.example.com' })).toThrow(/APP_URL must be/);
     expect(() => oidc({ OIDC_ISSUER: 'auth.example.com' })).toThrow(
@@ -185,6 +191,17 @@ describe('APP_URL and OIDC_ISSUER', () => {
     expect(oidc({}).oidc?.issuer).toBe('https://auth.example.com/');
     expect(oidc({ OIDC_ISSUER: 'https://auth.example.com/application/o/clockspan/' }).oidc?.issuer).toBe('https://auth.example.com/application/o/clockspan/');
   });
+
+  it('keep only the scheme and host of APP_URL, and say so when there was more', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(load({ APP_URL: 'Https://FOCUS.example.com/Clockspan/' }).appUrl).toBe('https://focus.example.com');
+    expect(warn).toHaveBeenCalledWith(
+      '[config] APP_URL should be only the scheme and host the app is served at; "Https://FOCUS.example.com/Clockspan/" has more, so https://focus.example.com is used (the app runs at the root of its host)',
+    );
+    expect(load({ APP_URL: 'https://focus.example.com/' }).appUrl).toBe('https://focus.example.com');
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
 });
 
 describe('COOKIE_SECURE', () => {
@@ -195,7 +212,6 @@ describe('COOKIE_SECURE', () => {
     expect(load({ APP_URL: 'http://focus.lan' }).cookieSecure).toBe(false);
     // The scheme and host are case-insensitive; the Secure default and the OIDC redirect URI read the lowercase form.
     expect(load({ APP_URL: 'HTTPS://Focus.Example.com/' })).toMatchObject({ appUrl: 'https://focus.example.com', cookieSecure: true });
-    expect(load({ APP_URL: 'Https://FOCUS.example.com/Clockspan/' }).appUrl).toBe('https://focus.example.com/Clockspan');
     expect(load({ APP_URL: 'HTTP://Focus.lan' })).toMatchObject({ appUrl: 'http://focus.lan', cookieSecure: false });
     // Explicit wins both ways: TLS terminated at a proxy, or a plain-http test of an https URL.
     expect(load({ APP_URL: 'http://focus.lan', COOKIE_SECURE: 'true' }).cookieSecure).toBe(true);
