@@ -3,7 +3,7 @@ import * as api from '../../api';
 import { useSubmit } from '../../hooks/useSubmit';
 import { CONFIRM, PASSWORD_MISMATCH } from '../../lib/copy';
 import { PASSWORD_LENGTH, type PublicUser } from '../../types';
-import { NewPasswordFields } from '../NewPasswordFields';
+import { HiddenUsername, NewPasswordFields } from '../NewPasswordFields';
 import { UsernameInput } from '../UsernameInput';
 import { Section } from './controls';
 
@@ -11,7 +11,7 @@ export function AccountTab({ user }: { user: PublicUser | null }) {
   return (
     <>
       <Section title="Password">
-        <ChangePassword />
+        <ChangePassword username={user?.username ?? ''} />
       </Section>
       {user?.isAdmin && (
         <Section
@@ -25,7 +25,7 @@ export function AccountTab({ user }: { user: PublicUser | null }) {
   );
 }
 
-function ChangePassword() {
+function ChangePassword({ username }: { username: string }) {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -42,6 +42,7 @@ function ChangePassword() {
   });
   return (
     <form className="stack" onSubmit={submit}>
+      <HiddenUsername username={username} />
       <label className="field">
         <span>Current password</span>
         <input className="input" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
@@ -90,12 +91,14 @@ function Users({ me }: { me: PublicUser }) {
   });
   const remove = async (u: PublicUser) => {
     if (!window.confirm(CONFIRM.deleteUser(u.name))) return;
+    setError(null);
     try {
       await api.deleteUser(u.id);
-      await load();
     } catch (err) {
       setError((err as Error).message);
     }
+    // Reload either way: a 404 means another device already deleted the user, and the list should show it gone.
+    await load();
   };
 
   return (
@@ -113,7 +116,7 @@ function Users({ me }: { me: PublicUser }) {
               {u.id === me.id && <span className="muted small"> (you)</span>}
             </span>
             {u.id !== me.id && (
-              <button className="btn btn-ghost btn-danger-text" onClick={() => void remove(u)}>
+              <button className="btn btn-ghost btn-danger-text" onClick={() => void remove(u)} aria-label={`Delete ${u.name}`}>
                 Delete
               </button>
             )}

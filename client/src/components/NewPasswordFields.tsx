@@ -40,3 +40,8 @@ export function NewPasswordFields({
     </>
   );
 }
+
+/** For password managers: the account a new password belongs to, on a form with no username box. */
+export function HiddenUsername({ username }: { username: string }) {
+  return <input type="text" autoComplete="username" value={username} readOnly hidden />;
+}

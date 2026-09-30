@@ -555,7 +555,8 @@ Never commit `data/` or `.env`.
   for fills, borders, icons and bars.
 - Numeric settings inputs commit on blur or Enter, never on every keystroke (`NumberInput`);
   `DurationField` commits when focus leaves its hours / minutes pair or on Enter, so moving from
-  hours to minutes saves nothing. Priorities debounce 400 ms; punches and checkboxes save
+  hours to minutes saves nothing. A blank or non-numeric box puts the stored value back and
+  saves nothing; zero is typed as 0. Priorities debounce 400 ms; punches and checkboxes save
   immediately.
 - A form that sends a request submits through `useSubmit()` (`hooks/useSubmit.ts`): one send at
   a time with the button disabled, and one error line, cleared when a send starts and filled

@@ -40,7 +40,7 @@ export function NumberField({
   );
 }
 
-/** A number box that commits on blur or Enter, clamped to its bounds. */
+/** A number box that commits on blur or Enter, clamped to its bounds; a blank or non-numeric box puts the stored value back (zero is typed as 0). */
 export function NumberInput({
   label,
   value,
@@ -63,7 +63,8 @@ export function NumberInput({
     setV(String(value));
   }
   const commit = () => {
-    const n = Math.max(min, Math.min(max, Math.round(Number(v) || 0)));
+    const typed = v.trim() === '' ? NaN : Number(v);
+    const n = Number.isFinite(typed) ? Math.max(min, Math.min(max, Math.round(typed))) : value;
     if (n !== value) onCommit(n);
     else setV(String(value));
   };
