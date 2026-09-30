@@ -255,10 +255,14 @@ Never commit `data/` or `.env`.
   answers 404 for another user's row or none, and the handler reads the row with `owned(res)`.
 - **Settings go through `mergeSettings()` on every read and write** (`server/settings.ts`):
   the stored JSON is merged onto `DEFAULT_SETTINGS`, unknown keys are dropped, invalid values
-  fall back, and a PUT stores the merged result (so a key missing from an old row takes the
-  current default, while a value a user has saved stays put). Add settings by adding a default
-  (shared) + validation there, never by migrating rows. `DELETE /api/settings` drops the user's
-  row, which is what "Reset all settings" does.
+  fall back, and a PUT stores the whole merged object, so a key added since a user's last save
+  takes the current default while a value they saved stays put. A changed default of an
+  existing key reaches only users with no row (a new user, or one who used Reset all
+  settings). A change that must reach the others needs a `mergeSettings` rule that reads the
+  stored value (as `stickers` reads the old layout), and that rule can't tell a value left at
+  the old default from one the user chose. Add settings by adding a default (shared) +
+  validation there, never by migrating rows. `DELETE /api/settings` drops the user's row, which
+  is what "Reset all settings" does.
 - **Timeclock math lives only in `client/src/lib/timeclock.ts`; alarm scheduling only in
   `client/src/lib/alarms.ts`.** Both are pure functions of `(inputs, settings, now)` with tests.
   Components and hooks never re-derive these. Past days go through `timeclockForDate`
@@ -469,7 +473,7 @@ Never commit `data/` or `.env`.
   way the sticker chart's `stickers` setting does.
 - **A per-user setting**: add it to the `Settings` type and `DEFAULT_SETTINGS` in
   `shared/settings.ts`, and a number's bounds to `SETTING_LIMITS` there → validate it in
-  `mergeSettings()` (`server/settings.ts`; `limited(key)` checks a number against its
+  `mergeSettings()` (`server/settings.ts`; `flag(key)` takes a switch, `limited(key)` checks a number against its
   bounds) → add the control to its tab in `client/src/components/settings/` (`TimeclockTab`,
   `AlarmsTab`, `SheetTab`, `DataTab`, `AccountTab`; the Sheet tab's "History" section holds
   the calendar's switches): a `DurationField` (`components/DurationField.tsx`) for hours and
