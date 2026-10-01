@@ -34,7 +34,8 @@ afterEach(() => {
 
 describe('Review', () => {
   it('turns a past week into the month it ends in', async () => {
-    const onPeriod = await review({ kind: 'week', from: '2026-07-13' });
+    // Monday 29 June to Sunday 5 July: the month it starts in would be June.
+    const onPeriod = await review({ kind: 'week', from: '2026-06-29' });
     fireEvent.click(screen.getByRole('button', { name: 'Month' }));
     expect(onPeriod).toHaveBeenCalledWith({ kind: 'month', from: '2026-07-01' });
   });
@@ -52,8 +53,9 @@ describe('Review', () => {
   });
 
   it('steps back a period from the one on screen', async () => {
-    const onPeriod = await review({ kind: 'week', from: '2026-09-28' });
+    // A past week, so counting the offset from it rather than from today would land in April.
+    const onPeriod = await review({ kind: 'week', from: '2026-07-13' });
     fireEvent.click(screen.getByRole('button', { name: 'Previous week' }));
-    expect(onPeriod).toHaveBeenCalledWith({ kind: 'week', from: '2026-09-21' });
+    expect(onPeriod).toHaveBeenCalledWith({ kind: 'week', from: '2026-07-06' });
   });
 });
