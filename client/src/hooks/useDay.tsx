@@ -472,10 +472,10 @@ export function DayProvider({ children }: { children: ReactNode }) {
     [current, change],
   );
 
-  // Sent at once, on no queue: a prune removes whole days rather than editing one, and the
-  // queues are keyed by day, session and breaks, so there is nothing keyed by date to wait
-  // behind. A change still on its way for a day before the cutoff can land after the prune and
-  // re-create that day, which the read after it shows.
+  // Sent at once, on no queue: each queue carries one day's, one session's or the breaks'
+  // writes, and a prune spans every day before the cutoff, so there is no one queue for it to
+  // wait behind. A change still on its way for a day before the cutoff can land after the prune
+  // and re-create that day, which the read after it shows.
   const pruneBefore = useCallback(
     async (before: string) => {
       const result = await api.pruneDays(before);
