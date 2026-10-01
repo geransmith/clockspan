@@ -520,8 +520,11 @@ Never commit `data/` or `.env`.
   type to `shared/api.ts` (the route's `res.json(… satisfies <Type>)` and the client's
   `request<Type>` both name it) → cover it in that router's
   `*.test.ts`: happy path, each 400, and that another
-  user gets a 404/empty result (the scoping test is not optional). If the seed should carry
-  the new field, add it to `server/dev/seed.ts` and its manifest.
+  user gets a 404/empty result (the scoping test is not optional). The seed's manifest types
+  (`SeededDay` and the aliases beside it in `server/dev/seed.ts`) are built from `Day`,
+  `Session`, `Priority` and `Break`, so `typecheck` fails there on a new field until the
+  templates set it, or it is added to the type's `Omit` list if the server derives it (like
+  `durationSeconds`). Write its column in `insertDay` too; typecheck does not check that.
 - **A schema change**: append a migration string to `MIGRATIONS` in `db.ts`. Never edit an
   existing entry. A new table with a `user_id` also joins the README's script under "Switching
   modes later" (and its count of places); `server/db.test.ts` fails until it does.

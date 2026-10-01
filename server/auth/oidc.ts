@@ -110,9 +110,11 @@ export class Discovery {
   }
 }
 
-export function upsertOidcUser(db: DB, sub: string, rawName: string): UserRow {
+export function upsertOidcUser(db: DB, issuer: string, sub: string, rawName: string): UserRow {
+  // Stored in users.oidc_sub: changing its form orphans every OIDC account without a migration.
+  const key = `${issuer}|${sub}`;
   const displayName = rawName.slice(0, MAX_DISPLAY_NAME);
-  const existing = db.prepare(`SELECT * FROM users WHERE oidc_sub = ?`).get(sub) as UserRow | undefined;
+  const existing = db.prepare(`SELECT * FROM users WHERE oidc_sub = ?`).get(key) as UserRow | undefined;
   if (existing) {
     if (existing.display_name !== displayName) {
       db.prepare(`UPDATE users SET display_name = ? WHERE id = ?`).run(displayName, existing.id);
@@ -125,7 +127,7 @@ export function upsertOidcUser(db: DB, sub: string, rawName: string): UserRow {
   const anyUser = db.prepare(`SELECT 1 FROM users WHERE kind = 'oidc' LIMIT 1`).get();
   const info = db
     .prepare(`INSERT INTO users (kind, oidc_sub, display_name, is_admin, created_at) VALUES ('oidc', ?, ?, ?, ?)`)
-    .run(sub, displayName, anyUser ? 0 : 1, Date.now());
+    .run(key, displayName, anyUser ? 0 : 1, Date.now());
   return findUserById(db, info.lastInsertRowid)!;
 }
 
@@ -211,7 +213,7 @@ export function oidcAuthRouter(db: DB, config: Config, given?: Discovery): { api
           // Fall through to the subject as a last resort.
         }
       }
-      const user = upsertOidcUser(db, `${o.issuer}|${claims.sub}`, name ?? claims.sub);
+      const user = upsertOidcUser(db, o.issuer, claims.sub, name ?? claims.sub);
       createSession(db, config, res, user.id);
       console.log(`[oidc] ${logName(user.display_name)} (#${user.id}) signed in`);
       // createSession set the session cookie; this clears the one-time flow cookie beside it.
