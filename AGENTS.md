@@ -67,8 +67,9 @@ client/                 Vite root → dist/client
   public/               manifest, sw.js, icons/icon.svg (the icon's one source; `npm run icons` renders
                         the PNGs next to it)
   src/App.tsx           provider stack + Shell (route, settings dialog); today's alarms are hooks/useTodayAlarms.ts
-  src/api.ts            fetch wrapper (30 s timeout; UNAUTHENTICATED_EVENT on 401; throws lib/apiError.ts's
-                        ApiError, which a caller checks with instanceof); src/types.ts re-exports shared types
+  src/api.ts            fetch wrapper (30 s timeout; UNAUTHENTICATED_EVENT on a 401 from anything but login and
+                        /me; throws lib/apiError.ts's ApiError, which a caller checks with instanceof);
+                        src/types.ts re-exports shared types
   src/lib/              pure logic with a test beside each file (apiError is covered through api.test):
                         timeclock, alarms, timer, breaks, retro, review, calendar, stickers, priorities,
                         format, timefield, layout, celebrate, plan, tiles, week, theme, reload, sounds,
@@ -76,7 +77,9 @@ client/                 Vite root → dist/client
                         and `serial()`, their write queue)
     alerts.ts           the one place that plays sound, shows notifications and pushes banners
     copy.ts             every line the app raises at the user; no logic
-    storage.ts          localStorage that never throws (private mode, quota)
+    storage.ts          localStorage that never throws (private mode, quota); the per-user keys (USER_KEYS:
+                        fired alarms, Start fresh) and adoptUser, which records who the app is open for
+                        under AUTH_USER_KEY and drops the last user's keys
   src/hooks/            state and effects (useDay, useTimer, useSettings, useAlarms, …), each with a
                         happy-dom test beside it (useLatest is covered through the hooks that use it).
                         useClock is the app's one 1-second clock; useSaveStatus
@@ -215,6 +218,18 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `auth/oidc.ts`) carry fixed text: no request data or error message goes into HTML, and the
   cause goes to the log. Password hashing is async
   (`scrypt`, never `scryptSync`); login verifies against `DUMMY_HASH` when the user is unknown.
+- **Another user means another page.** Once `AuthGate` has opened the app for a user, it never
+  swaps a gate page in over it: the stores' write queues, the drafts (which save on unmount),
+  the banners and the tab title would carry on under the next session's cookie. Sign-out
+  navigates away (to `/`, or the provider's end-session URL), and an `/api/auth/me` answer
+  that no longer opens the app for that user (no one, a temporary password, someone else)
+  reloads the page. Other tabs follow `localStorage['focus:auth-user']`, which `adoptUser`
+  (`lib/storage.ts`) writes from each answer the gate shows and before a sign-out leaves,
+  dropping the last user's `USER_KEYS` when it changes: a tab whose user it no longer names
+  reloads, checked on the `storage` event, when the tab is shown again and when the bfcache
+  brings it back. Once the page is leaving, `refresh` asks nothing more, so a late 401 can't
+  turn a sign-out into a reload. A gate page whose re-read of `/me` failed shows the "Can't
+  reach the server" card, whose Retry reads again instead of sending the form twice.
 - **The server stores epoch milliseconds and never decides what "today" is.** The client sends
   the local date key `YYYY-MM-DD` (`shared/dates.ts: todayKey`). The container's TZ is
   irrelevant. The one exception is `cutoffKey` in `server/retention.ts`, which turns "keep the

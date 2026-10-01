@@ -15,7 +15,9 @@ vi.mock('../api', async (importOriginal) => {
 
 async function renderHeader(date: string) {
   const onNavigate = vi.fn();
-  vi.mocked(api.getAuth).mockResolvedValue({ mode: 'none', setupRequired: false, user: null, cookieSecure: false });
+  // What the server sends under AUTH_MODE=none: the default user.
+  const user = { id: 1, name: 'You', username: null, isAdmin: false, kind: 'default', mustChangePassword: false } as const;
+  vi.mocked(api.getAuth).mockResolvedValue({ mode: 'none', setupRequired: false, user, cookieSecure: false });
   render(
     <AuthGate>
       <Header view="sheet" date={date} today={TODAY} customize={false} onNavigate={onNavigate} onToggleCustomize={vi.fn()} onOpenSettings={vi.fn()} />

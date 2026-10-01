@@ -28,8 +28,10 @@ export const UNAUTHENTICATED_EVENT = 'focus:unauthenticated';
 
 /**
  * How long a request may take, answer included. `fetch` has no limit of its own: one that never
- * answers (a phone changing networks mid-request) would hold the day's save queue and its
- * refreshes until the browser gave up minutes later, with nothing on screen meanwhile.
+ * answers (a phone changing networks mid-request) would hold whatever waits behind it until the
+ * browser gave up minutes later, with nothing on screen meanwhile: the writes queued after it in
+ * its store (the day's, the timer's or the settings'), or the later refreshes of a day whose read
+ * is still out.
  */
 export const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -60,8 +62,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   }
   if (!res.ok) {
     const message = (data as { error?: string } | null)?.error ?? REQUEST_FAILED(res.status);
-    // The login route answers 401 for a wrong password; that is not a lost session.
-    if (res.status === 401 && path !== '/api/auth/login') window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT));
+    // The login route answers 401 for a wrong password; that is not a lost session. The event
+    // makes AuthGate ask /api/auth/me again, which the app never answers with a 401: one from
+    // there comes from a proxy in front, and announcing it would ask /me again, forever.
+    if (res.status === 401 && path !== '/api/auth/login' && path !== '/api/auth/me') window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT));
     throw new ApiError(res.status, message, data);
   }
   return data as T;

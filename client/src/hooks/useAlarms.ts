@@ -6,9 +6,9 @@ import { alarmTargets, describeEvent, dueEvents, type TargetDay } from '../lib/a
 import { alert, dismissByTag } from '../lib/alerts';
 import { ALARM_ACTIONS } from '../lib/copy';
 import { resolveHour12 } from '../lib/format';
-import { pruneStored, readStoredJson, writeStored } from '../lib/storage';
+import { pruneStored, readStoredJson, USER_KEYS, writeStored } from '../lib/storage';
 
-const STORAGE_PREFIX = 'focus:alarms:';
+const STORAGE_PREFIX = USER_KEYS.alarms;
 
 /** The keys stored for a day: what this tab, or another one open on the same device, already fired. */
 function storedFired(dateKey: string): string[] {
