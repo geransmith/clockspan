@@ -332,8 +332,9 @@ describe('AuthGate', () => {
       window.dispatchEvent(new StorageEvent('storage', { key: 'focus:theme', newValue: 'dark' }));
       expect(reload).not.toHaveBeenCalled();
 
-      otherTabSignsIn('');
       otherTabSignsIn('4');
+      expect(reload).toHaveBeenCalledTimes(1);
+      otherTabSignsIn('');
       expect(reload).toHaveBeenCalledTimes(1);
     });
 

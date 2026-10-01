@@ -49,7 +49,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
           return next;
         }
         adoptUser(key);
-        if (key !== null) openFor.current = key;
+        openFor.current = key;
         setAuth(next);
         setError(null);
         return next;

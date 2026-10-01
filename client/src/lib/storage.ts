@@ -4,8 +4,9 @@
  *
  * Most of it belongs to the device: the theme, the settings tab last picked, which timer end
  * already chimed. `USER_KEYS` hold the state of the user the app is open for, and `adoptUser`
- * drops them when someone else signs in on this browser: an alarm key names a date and a
- * minute and Start fresh names a date, so another user's would silence this one's.
+ * drops them when the user changes (a sign-out, or someone else signing in on this browser): an
+ * alarm key names a date and a minute and Start fresh names a date, so another user's would
+ * silence this one's.
  */
 export function readStored(key: string): string | null {
   try {
