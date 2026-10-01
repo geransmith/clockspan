@@ -75,7 +75,7 @@ if (opts.quarter && opts.days !== undefined) {
 const daysRaw = opts.days;
 // --quarter covers the previous calendar quarter too, so Review → Quarter has a step back.
 const days = opts.quarter ? weekdaysSince(addMonths(startOfQuarter(today), -3), today) : daysRaw === undefined ? DEFAULT_HISTORY_DAYS : Number(daysRaw);
-// Number('') is 0, so an empty `--days=` is refused by name.
+// Number('') is 0, which the range check would pass, so an empty --days= is checked for first.
 if (daysRaw === '' || !isWholeNumber(days, { min: 0, max: 400 })) {
   console.error(`--days must be a whole number from 0 to 400 (got "${daysRaw}").`);
   process.exit(2);
