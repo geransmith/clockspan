@@ -9,7 +9,7 @@ import { localAuthRouter } from './auth/local.js';
 import { publicUser } from './auth/users.js';
 import { oidcAuthRouter, type Discovery } from './auth/oidc.js';
 import { purgeExpiredSessions } from './auth/session.js';
-import { scheduleRetention } from './retention.js';
+import { runRetention } from './retention.js';
 import { rejectCrossSiteWrites, rejectUnknownHosts, securityHeaders } from './security.js';
 import { breakStartRouter, breaksRouter } from './routes/breaks.js';
 import { daysRouter } from './routes/days.js';
@@ -77,8 +77,10 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
   // ----- static SPA (production build) -----
   const clientDir = opts.clientDir ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../client');
   if (fs.existsSync(path.join(clientDir, 'index.html'))) {
-    // Vite fingerprints everything under /assets, so those can be cached for good; the
-    // manifest, icons and service worker keep the short default so an update shows up.
+    // Vite fingerprints everything under /assets, so those can be cached for good. The shell
+    // is no-cache however it is asked for: kept after an upgrade, it would name the old build's
+    // chunks. The manifest, icons and service worker keep the one-hour default so an update
+    // shows up.
     app.use(
       express.static(clientDir, {
         index: false,
@@ -86,7 +88,9 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
         setHeaders: (res, filePath) => {
           // By the path inside the build: filePath is absolute, and an install under a folder
           // named assets would otherwise pin the icons, manifest and service worker for a year.
-          if (path.relative(clientDir, filePath).startsWith(`assets${path.sep}`)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          const rel = path.relative(clientDir, filePath);
+          if (rel.startsWith(`assets${path.sep}`)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          else if (rel === 'index.html') res.setHeader('Cache-Control', 'no-cache');
         },
       }),
     );
@@ -104,33 +108,40 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
     });
   }
 
-  // JSON error handler so malformed bodies etc. don't leak stack traces.
+  // JSON errors, never a stack trace. A 4xx's message is shown unless http-errors marks it
+  // `expose: false`: send does that for a failed stat of the shell (a rebuild emptying
+  // dist/client under a running server), and that message names the build's absolute path.
+  // What isn't shown goes to the log.
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     const status = (err as { status?: number }).status ?? 500;
-    if (status >= 500) console.error(err);
-    res.status(status).json({ error: status >= 500 ? 'Internal error.' : (err as Error).message });
+    const shown = status < 500 && (err as { expose?: boolean }).expose !== false;
+    if (!shown) console.error(err);
+    res.status(status).json({ error: shown ? (err as Error).message : status >= 500 ? 'Internal error.' : 'Request failed.' });
   });
 
   return app;
 }
 
 /**
- * The server's timers: expired logins purged every few hours, old days pruned
- * (`scheduleRetention`), and under OIDC the provider looked up until it answers
- * (`Discovery.warm`, on the one `createApp` was given). The process entrypoint starts them after
- * `createApp`, so building an app (every test does) starts nothing. All are unref'd and never
- * hold the process open.
+ * The server's timers: expired logins purged every six hours, old days pruned
+ * (`runRetention`) 30 s after boot and then every six hours, and under OIDC the provider looked
+ * up until it answers (`Discovery.warm`, on the one `createApp` was given). The process
+ * entrypoint starts them after `createApp`, so building an app (every test does) starts
+ * nothing. All are unref'd and never hold the process open.
  */
 export function startBackgroundJobs(db: DB, config: Config, discovery?: Discovery): void {
   // A timer's throw is an uncaught exception: one busy or full database would end the server.
-  const purge = () => {
+  const guarded = (label: string, job: () => unknown) => () => {
     try {
-      purgeExpiredSessions(db);
+      job();
     } catch (err) {
-      console.error('[sessions]', err);
+      console.error(label, err);
     }
   };
+  const purge = guarded('[sessions]', () => purgeExpiredSessions(db));
   setInterval(purge, 6 * HOUR_MS).unref();
-  scheduleRetention(db, config);
+  const prune = guarded('[retention]', () => runRetention(db, config));
+  setTimeout(prune, 30_000).unref();
+  setInterval(prune, 6 * HOUR_MS).unref();
   if (discovery) void discovery.warm();
 }
