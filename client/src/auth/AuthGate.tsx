@@ -68,9 +68,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
     return () => window.removeEventListener(api.UNAUTHENTICATED_EVENT, onUnauth);
   }, [refresh]);
 
-  // Another tab that signs someone in or out changes this tab's cookie too, and no request of this
-  // one would notice (the new cookie is valid). Not before the first answer: until refresh has
-  // recorded this tab's user, what is stored is the last page's.
+  // Another tab that signs someone else in changes this tab's cookie too, and no request of this
+  // one would notice, since the new cookie is valid. A sign-out there would only show here at this
+  // tab's next request, which may not come for a minute, and someone could sign in before it does.
+  // Not before the first answer: until refresh has recorded this tab's user, what is stored is the
+  // last page's.
   const answered = auth !== null;
   useEffect(() => {
     if (!answered) return;

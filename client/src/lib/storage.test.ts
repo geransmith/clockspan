@@ -110,6 +110,11 @@ describe('adoptUser', () => {
   });
 
   it('does nothing, quietly, when storage is blocked or missing', () => {
+    const blocked = () => {
+      throw new Error('SecurityError');
+    };
+    vi.stubGlobal('localStorage', { getItem: blocked, setItem: blocked });
+    expect(() => adoptUser(3)).not.toThrow();
     vi.stubGlobal('localStorage', undefined);
     expect(() => adoptUser(3)).not.toThrow();
   });
