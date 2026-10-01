@@ -6,9 +6,9 @@ and expected everywhere else. They apply to the maintainer and to Claude Code al
 ## How changes land
 
 `main` is protected: no direct pushes, no force pushes, no deletion. Every change is a pull
-request, squash-merged, with the `check` and `image-smoke` jobs green. A release is one such PR: the version bump. Only collaborators can push branches or
-merge. Outsiders can open a PR from a fork; its CI run waits for a collaborator to approve it,
-and a fork PR can never publish an image or a release.
+request, squash-merged, with the `check` and `image-smoke` jobs green. Only collaborators can
+push branches or merge. Outsiders can open a PR from a fork; its CI run waits for a
+collaborator to approve it, and a fork PR can never publish an image or a release.
 
 Dependabot (`.github/dependabot.yml`) opens a few `skip-changelog` PRs a week: npm, GitHub
 Actions and the Docker base image. Version updates are only proposed 7 days after the release
@@ -53,9 +53,11 @@ git switch main && git pull
   - `npm run test:coverage`, `npm run typecheck`, `npm run lint` and `npm run format:check`
     pass locally. CI runs the same plus `npm run build`. The coverage run fails unless every
     file it measures is fully covered; `npm run format` fixes formatting.
-  - `npm run screenshots` has been re-run if a README image changed, and the PNGs are in the diff.
-  - The "How to add…" checklists in `AGENTS.md` still hold if defaults, alarms, settings or
-    response headers changed.
+  - `npm run screenshots` has been re-run if a README image changed, and the PNGs of the
+    changed surface are in the diff. A run on another day changes most of the others too:
+    restore those.
+  - A change that moves a step in one of `AGENTS.md`'s "How to add…" checklists updates that
+    checklist in the same PR.
   - Nothing from `data/` or `.env` is in the diff.
 - **One topic per PR.** A release bump is its own PR.
 
@@ -138,7 +140,7 @@ gh run rerun <run-id> --failed
 | --- | --- | --- |
 | Pull request | `check`, `image-smoke` (both required) | install without dependency scripts and check registry signatures; `npm audit --audit-level=high` (a new advisory can turn an unchanged PR red: merge the fix first); typecheck, lint, format:check, test:coverage, build; a changed version must be a higher `X.Y.Z` with no tag yet. The image is built for amd64 and for arm64 (under QEMU) and each is booted by `scripts/smoke-image.sh` (health, SPA shell, `/data` owner, root dropped, no package manager, the healthcheck command); nothing is pushed |
 | Push to `main` | `check`, `image` | both platforms are built and booted by the same script, and only then pushed as one multi-platform `ghcr.io/geransmith/clockspan:edge` |
-| Push to `main` that changes the version | `check`, `image`, `release` | `:edge`, `:X.Y.Z`, `:X.Y`, `:X`, `:latest`, the tag `vX.Y.Z` and the GitHub Release |
+| Push to `main` that changes the version | `check`, `image`, `release` | `:edge` and the release image tags (see "Image tags" below), the git tag `vX.Y.Z` and the GitHub Release |
 | Pull request, push to `main`, weekly | `CodeQL` (not required) | static security analysis of the TypeScript (`security-extended`); alerts land in code scanning, and GitHub fails the PR's CodeQL check on a new high or critical one |
 | Pull request or push that touches `.github/` | `zizmor` (not required) | a security audit of the workflows and `dependabot.yml`; findings fail the job |
 

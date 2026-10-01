@@ -108,8 +108,7 @@ npm install
 npm run dev            # API on :3000 (tsx watch, PORT pinned) + Vite on :5173 (proxies /api, /auth)
 npm test               # vitest: shared + client lib + hook + component tests + server API tests
 npm test -- server/routes/days   # one file
-npm run test:coverage  # the gate CI runs: the same suite, and every file in server/, shared/, client/src/api.ts,
-                       # client/src/lib and client/src/hooks must be 100% covered (text table of gaps + coverage/index.html)
+npm run test:coverage  # the gate CI runs (scope under "Verification expectations"); lists only files short of 100%, full report in coverage/index.html
 npm run typecheck      # client + server (tsconfig.server.test.json also covers dev/ and tests)
 npm run lint           # oxlint
 npm run format         # prettier --write . (format:check is what CI runs)
@@ -144,21 +143,20 @@ to start over, with no confirmation. Production data lives only on the Docker `/
 which the dev machine cannot reach. Run the destructive paths for real: delete a session or
 user, cancel a timer, `DELETE /api/settings`.
 
-Start from `npm run seed`, not an empty DB (`server/dev/seed.ts`; the options are in the
-`seed-cli.ts` header). A run deletes every day of the user it seeds, hand-made ones included,
-then writes the last 10 weekdays and today. Each past weekday takes a template by its distance
-back (`kindForDistance`): the last weekday has an extra out/in pair in the afternoon and a
-priority added mid-day (the README's retro shot), then come a normal day, an overtime day
-(approved, 10 h 15 m worked, with the second meal taken as an out/in pair after lunch), an
-unreviewed day (a note written but never marked reviewed, and a cancelled session) and a half
-day with its own 4 h 30 m work day and no lunch punched. Further back the templates recur at
-fixed intervals, so the default 10 are three normal days, two each of the extra pair, overtime
-and unreviewed (two cancelled sessions in all) and one half day. Every past day has two to four
-priorities and a note. Today is clocked in two hours before *now*. Its three priorities were
-planned two minutes after the last weekday's review, with that day's first open row carried to
-position 1 and the second row ticked; its log has a 50-minute session for the ticked row, an
-unplanned one paused for eight minutes and finished three minutes short of its 25, a full
-break and one cut short.
+Start from `npm run seed`, not an empty DB (`server/dev/seed.ts`). A run deletes every day of
+the user it seeds, hand-made ones included, then writes the last 10 weekdays and today. Each
+past weekday takes a template by its distance back (`kindForDistance`): the last weekday has an
+extra out/in pair in the afternoon and a priority added mid-day (the README's retro shot), then
+come a normal day, an overtime day (approved, 10 h 15 m worked, with the second meal taken as
+an out/in pair after lunch), an unreviewed day (a note written but never marked reviewed, and a
+cancelled session) and a half day with its own 4 h 30 m work day and no lunch punched. Further
+back the templates recur at fixed intervals, so the default 10 are three normal days, two each
+of the extra pair, overtime and unreviewed (two cancelled sessions in all) and one half day.
+Every past day has two to four priorities and a note. Today is clocked in two hours before
+*now*. Its three priorities were planned two minutes after the last weekday's review, with that
+day's first open row carried to position 1 and the second row ticked; its log has a 50-minute
+session for the ticked row, an unplanned one paused for eight minutes and finished three
+minutes short of its 25, a full break and one cut short.
 
 `--running` leaves a 25-minute timer running, started ten minutes before *now*, for timer work;
 `--quarter` seeds every weekday since the start of last quarter, for Month / Quarter review
@@ -174,30 +172,12 @@ provider. A run never deletes users and is safe while `npm run dev` is up (reloa
 so it also replaces the default user's days and resets its settings, and it leaves the sticker
 chart on (`stickers: true`).
 
-Ways in, cheapest first:
-
-- `npm test`: route tests boot the real app on an in-memory DB with `startTestApp()`
-  (`server/dev/harness.ts`) and call it with `fetch`. `seed: true` adds the sample days and a
-  manifest of them (`app.seeded`); `app.db` sets up what the API can't (a session that started
-  an hour ago). One app per test.
-- `curl` against `http://localhost:3000/api/...` while `npm run dev` is up; `sqlite3
-  data/focus.db` for direct inserts or a look at what a route wrote.
-- `DATA_DIR=<scratch dir>` on `npm run seed` and `npm run dev` when the current DB should
-  survive. Never point it outside the repo or the session scratchpad.
-- The UI in the preview pane, for what only the UI shows.
-
-Tests sit beside the code: pure-function tests in `shared/` and `client/src/lib`; hook tests in
-`client/src/hooks` (`// @vitest-environment happy-dom`, `vi.mock('../api')`, fake timers;
-fixtures and the provider stack in `client/src/test/hooks.tsx`); `client/src/api.test.ts` for
-every call's method, path and body (a stubbed `fetch`); component tests beside a component
-that holds logic worth pinning (drafts that save on a timer or on unmount, what `PlanNext`
-saves, the running bar's label edit, which page `AuthGate` shows), under happy-dom with the
-same fixtures; harness tests in
-`server/**/*.test.ts` for routes, validation, scoping, headers, `mergeSettings`, and migrations
-(`migrate(db, upTo)` stops early so a backfill can be tested, see `server/db.test.ts`). No temp
-files: `openDatabase(':memory:')`.
-
-Never commit `data/` or `.env`.
+The seed and the server migrate the file when they open it, so a new migration needs nothing
+done by hand. To look at or change the dev DB directly: `curl` against
+`http://localhost:3000/api/...` while `npm run dev` is up, or `sqlite3 data/focus.db` for direct
+inserts or to see what a route wrote. To keep the current DB, run `npm run seed` and
+`npm run dev` with `DATA_DIR=<scratch dir>`, never pointed outside the repo or the session
+scratchpad. The level a change is proven at is under "Verification expectations".
 
 ## Architecture rules (do not break)
 
@@ -594,23 +574,46 @@ Never commit `data/` or `.env`.
 
 Prove a change at the cheapest level that can show it, and stop there:
 
-1. Pure functions (`shared/`, `client/src/lib`): a unit test. A hook (`client/src/hooks`): a
-   happy-dom test beside it, with the API mocked and fake timers for polls, retries and races.
-   A component's own logic (when a draft saves, what a click sends, which page shows): a
-   happy-dom test beside it with `@testing-library/react`. Its looks stay a browser matter.
-2. Anything in `server/`: a harness test in the router's `*.test.ts`. Route behavior,
-   validation, scoping, headers, persistence and migrations are proven here, never by clicking.
-3. One-off looks at live data: `curl` against the seeded dev DB.
+1. Pure functions (`shared/`, `client/src/lib`): a unit test beside the file. A hook
+   (`client/src/hooks`): a test beside it with the API mocked (`vi.mock('../api')`), fake timers
+   for polls, retries and races, and the fixtures and provider stack from
+   `client/src/test/hooks.tsx`. `client/src/api.ts`: `client/src/api.test.ts` checks every
+   call's method, path and body against a stubbed `fetch`. A component's own logic (when a
+   draft saves, what a click sends, which page shows): a test beside it with
+   `@testing-library/react` and the same fixtures. Its looks stay a browser matter.
+   - A test that needs a DOM (hooks, components, `api.ts`) starts with
+     `// @vitest-environment happy-dom`; the rest of the suite runs under `node`.
+   - The suite runs in America/Los_Angeles (`test.env.TZ` in `vite.config.ts`), so a US DST
+     case uses that zone's change days (2026-03-08, 2026-11-01). A case that needs another
+     zone stubs it with `vi.stubEnv('TZ', …)` inside `try` / `finally`, with
+     `vi.unstubAllEnvs()` in the `finally`, as `shared/dates.test.ts` does for Santiago's
+     midnight change.
+2. Anything in `server/`: a test beside it, never a click.
+   - Routes (behavior, validation, scoping, headers, persistence) are harness tests in the
+     router's `*.test.ts`. `startTestApp()` (`server/dev/harness.ts`) boots the real app on an
+     in-memory DB, and the test calls it over HTTP (`app.api`, a `fetch` client). `seed: true`
+     adds the sample days and their manifest (`app.seeded`). `app.db` sets up what the API
+     can't, such as an expired login. One app per test. To move time, fake only `Date`
+     (`vi.useFakeTimers({ toFake: ['Date'] })`, so HTTP keeps its real timers) and step it with
+     `vi.setSystemTime`.
+   - Code with no route (`mergeSettings`, config, passwords, the limiter) is unit-tested
+     directly.
+   - Migrations are tested in `server/db.test.ts`, where `migrate(db, upTo)` stops early so a
+     backfill can be tested.
+   - The database is `openDatabase(':memory:')`, never a file. The static-file tests write a
+     stand-in `dist/client` with `tempClientBuild()` and remove it afterwards.
+3. One-off looks at live data: `curl` against the seeded dev DB (see "Dev data is disposable").
 4. The browser, only for what tests cannot show: how a card renders, drag/drop, banners, the
    timer bar, light/dark, the 375 px pass. Seed first (`--running` for timer work), scope it to
    the surface you touched, and make one pass at the mobile preset unless the change is
    desktop-only layout. Do not re-walk flows a test already covers.
 
-The gate: `npm run test:coverage` green and `typecheck`, `lint` and `format:check` clean. Every
-file under `server/`, `shared/`, `client/src/lib/` and `client/src/hooks/`, and `client/src/api.ts` (minus the two
-process entrypoints and `server/dev/`) must be 100% covered on statements, branches, functions
-and lines, so new code there ships with the tests that reach it. A branch that cannot be
-reached is deleted, never hidden behind a `v8 ignore` comment; `alerts.ts` shows how a
+The gate, which a change passes before it is reported done or a PR is opened:
+`npm run test:coverage` green and `typecheck`, `lint` and `format:check` clean. Every file under
+`server/`, `shared/`, `client/src/lib/` and `client/src/hooks/`, and `client/src/api.ts` (minus
+the two process entrypoints and `server/dev/`) must be 100% covered on statements, branches,
+functions and lines, so new code there ships with the tests that reach it. A branch that cannot
+be reached is deleted, never hidden behind a `v8 ignore` comment; `alerts.ts` shows how a
 browser-only module is tested (stub the globals).
 
 The browser pass for each surface (the logic under it is already tested):
@@ -619,12 +622,21 @@ The browser pass for each surface (the logic under it is already tested):
   if the change has a desktop-only branch), in light and dark.
 - **`security.ts`, `index.html` or how assets load**: the `prod` config, with the console free
   of CSP violations; `curl -sI localhost:8090/api/health` shows the headers.
-- **The timer**: make the seeded session run out (PATCH `plannedSeconds` to elapsed + 30, then
-  reload so the client has the new plan). The bar and the card count below zero, the "Time's
-  up" banner offers **Add 5 min**, and a minute or more over, **Finish** opens "How much to
-  log?". Pause and resume: the countdown holds and the log row's pill follows.
-- **Alarms**: a banner firing at the mobile preset. With "Overtime approved" on, the clock-out
-  banner stops and the lunch tile keeps counting down.
+- **The timer**: make the seeded session run out (PATCH `plannedSeconds` to
+  `ceil((elapsed + 30) / 60) * 60`, since plans are whole minutes, then reload so the client
+  has the new plan). The bar and the card count below zero, the "Time's up" banner offers
+  **Add 5 min**, and a minute or more over, **Finish** opens "How much to log?". Pause and
+  resume: the countdown holds and the log row's pill follows.
+- **Alarms**: after `npm run seed`, clear Clock in (×) on today's sheet. Set Lunch must start
+  within 3 min, Lunch length 0, Work day 10 min and Second meal due after 6 min, in Settings →
+  Timeclock or with
+  `curl -X PUT localhost:3000/api/settings -H 'content-type: application/json' -d '{"lunchDeadlineMinutes":3,"lunchMinutes":0,"workMinutes":10,"secondMealAfterMinutes":6}'`
+  and a reload. Press Now on Clock in: lunch is due at +3 min, the second meal at +6 and
+  clock-out at +10. The work day must be longer than the lunch window and the second-meal
+  threshold, or those alarms never ring. At the mobile preset each target's banner shows at
+  once. "Overtime approved" (on the card or the clock-out banner) stops the clock-out alarm,
+  while the lunch and second-meal banners still fire. When done, `npm run seed -- --fresh` or
+  `curl -X DELETE localhost:3000/api/settings` puts the default settings back.
 - **Sounds**: Settings → Alarms → Sounds. Test on a clip row fetches the file once (the network
   list); a second Test fetches nothing. A clock-out set today plays the day-complete sound once,
   and not again on reload.
@@ -646,11 +658,13 @@ The browser pass for each surface (the logic under it is already tested):
   tap clears it; with Show weekends off, five columns.
 - **Retention**: one look at Settings → Data (count line, toggle saves); drive the delete with
   curl (`POST /api/days/prune`) because of the confirm dialog.
-- **Auth**: no browser pass; `server/auth/local.test.ts` covers setup, login, the limiter,
-  password change and user management, and `server/auth/reset.test.ts` the reset-password
+- **Auth**: no browser pass; the tests in `server/auth/` (`*.test.ts`) cover local and OIDC
+  sign-in, cookie sessions, passwords, the limiter, user management and the reset-password
   command.
-- **Anything a README screenshot shows** (sheet, retro, review, settings): `npm run screenshots`
-  and commit the PNGs that changed.
+- **Anything a README screenshot shows** (sheet, retro, history, review, settings):
+  `npm run screenshots`, then commit only the shots of the surface you changed and
+  `git restore` the others; the script pins the time of day, not the date, so a run on another
+  day changes most of them.
 
 ## Gotchas
 
