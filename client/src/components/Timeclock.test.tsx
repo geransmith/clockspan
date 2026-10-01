@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
 import { unlockAudio } from '../lib/alerts';
-import { addPunchPair, emptyPunches, timeclockForDate } from '../lib/timeclock';
+import { emptyPunches, timeclockForDate } from '../lib/timeclock';
 import { makeSettings, MIN, settle, T0, TODAY } from '../test/hooks';
 import type { Punch } from '../types';
 import { Timeclock } from './Timeclock';
@@ -94,12 +94,40 @@ describe('Timeclock', () => {
     expect(onEditingChange).not.toHaveBeenCalled();
   });
 
-  it('unlocks audio before a removed pair is saved', async () => {
-    // Clocked out at 9:00, then an extra pair added: removing it hands 9:00 back to the Clock out.
-    const punches = addPunchPair(emptyPunches().map((p) => ({ ...p, at: p.position === 0 ? T0 - 60 * MIN : p.position === 3 ? T0 : null })));
-    const { onChange } = await renderCard(TODAY, punches);
+  it('undoes an Add removed before any punch changes', async () => {
+    // Clocked out at 9:00, then "Add extra out / in": removing that pair gives the Clock out its 9:00 back.
+    const day = emptyPunches().map((p) => ({ ...p, at: p.position === 0 ? T0 - 60 * MIN : p.position === 3 ? T0 : null }));
+    const { onChange, again } = await renderCard(TODAY, day);
+    fireEvent.click(screen.getByRole('button', { name: 'Add extra out / in' }));
+    again(onChange.mock.lastCall![0]);
     fireEvent.click(screen.getByRole('button', { name: 'Remove Out 1 / In 1' }));
     expect(unlockAudio).toHaveBeenCalledOnce();
-    expect(onChange).toHaveBeenCalledOnce();
+    expect(onChange).toHaveBeenLastCalledWith(day);
+  });
+
+  it('drops both rows of a pair punched after the Add', async () => {
+    const clockedIn = emptyPunches().map((p) => ({ ...p, at: p.position === 0 ? T0 - 60 * MIN : null }));
+    const { onChange, again } = await renderCard(TODAY, clockedIn);
+    fireEvent.click(screen.getByRole('button', { name: 'Add extra out / in' }));
+    const withPair = onChange.mock.lastCall![0];
+    again(withPair);
+    // Out 1 punched at 9:00, here or on another device: stepping out, which must not end the day.
+    again(withPair.map((p) => (p.position === 3 ? { ...p, at: T0 } : p)));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Out 1 / In 1' }));
+    expect(onChange.mock.lastCall![0].map((p) => p.at)).toEqual([T0 - 60 * MIN, null, null, null]);
+  });
+
+  it("shows the second meal on today's sheet only, not on a past day left clocked in", async () => {
+    // Clocked in at midnight: 9 h worked by 9:00, past the 8 h day, so the second meal is in play.
+    const longDay = emptyPunches().map((p) => ({ ...p, at: p.position === 0 ? T0 - 9 * 60 * MIN : null }));
+    await renderCard(TODAY, longDay);
+    expect(screen.getByText(/Second meal period/)).toBeTruthy();
+    cleanup();
+    // Yesterday from 8:00 and never clocked out: judged at its end, 16 h in.
+    await renderCard(
+      YESTERDAY,
+      emptyPunches().map((p) => ({ ...p, at: p.position === 0 ? T0 - 25 * 60 * MIN : null })),
+    );
+    expect(screen.queryByText(/Second meal period/)).toBeNull();
   });
 });

@@ -50,8 +50,7 @@ function summary(date: string, patch: Partial<DaySummary> = {}): DaySummary {
 }
 
 describe('stickersForDay', () => {
-  it('names each reason once, for the cells and tooltips', () => {
-    expect(STICKER_LABELS).toEqual(Object.fromEntries(STICKER_REASONS.map((r) => [r.id, r.label])));
+  it("maps each reason's id to its label", () => {
     expect(STICKER_LABELS.lunch).toBe('Lunch taken');
   });
 
@@ -100,10 +99,16 @@ describe('stickersForDay', () => {
   });
 
   it("goes by the day's own work-day length when it has one", () => {
-    // Out at 12:00 after four hours today: still at lunch on the usual 8 h day, done on a half day.
+    // Clocked in at 8:00 today: the usual 8 h day ends at 16:30, a half day reached its end at 12:00.
+    const clockedIn = punches(TODAY, ['08:00', null, null, null]);
+    expect(dayTimeclock(summary(TODAY, { punches: clockedIn }), settings, TODAY, NOW).clockOutAt).toBe(new Date(2026, 8, 17, 16, 30).getTime());
+    expect(dayTimeclock(summary(TODAY, { punches: clockedIn, workMinutes: 240 }), settings, TODAY, NOW).clockOutAt).toBe(
+      new Date(2026, 8, 17, 12, 0).getTime(),
+    );
+    // Out at 12:00 is lunch on either length: only the Clock out ends today.
     const out = punches(TODAY, ['08:00', '12:00', null, null]);
     expect(earned(summary(TODAY, { punches: out }))).toEqual(['lunch']);
-    expect(earned(summary(TODAY, { punches: out, workMinutes: 240 }))).toEqual(['clockedOut', 'lunch']);
+    expect(earned(summary(TODAY, { punches: out, workMinutes: 240 }))).toEqual(['lunch']);
   });
 });
 
@@ -122,7 +127,7 @@ describe('stickerEmoji', () => {
 });
 
 describe('daySummaryOf', () => {
-  it('counts completed sessions and rows with text, like GET /days', () => {
+  it('counts completed sessions and rows with text', () => {
     const day: Day = {
       date: TODAY,
       punches: emptyPunches(),

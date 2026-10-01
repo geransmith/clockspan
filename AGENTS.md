@@ -280,8 +280,9 @@ Never commit `data/` or `.env`.
   `PlanNext.tsx`) is a `useCelebration(moment, event)` (`hooks/useCelebration.ts`): the sound
   under `settings.sound`, the burst under `settings.celebrations`. A state's moment comes from
   `useBecameTrue`, so it is the day *becoming* done while the card is mounted, never a done day
-  opening. The sound plays after the render, so a moment set by a tap calls `unlockAudio()` in
-  that handler first.
+  opening. The work-week moment is null until `loaded`, because its target is a setting; the day
+  moment needs no wait, because done depends only on the punches. The sound plays after the
+  render, so a moment set by a tap calls `unlockAudio()` in that handler first.
 - **Timer remaining time is derived from the server's `startedAt`, `plannedSeconds` and pauses**
   on every tick (`timerView()` in `client/src/lib/timer.ts`, on `shared/timer.ts`) — never a
   client-side counter. A paused session is still `status = 'running'` with `pausedAt` set;
@@ -378,30 +379,38 @@ Never commit `data/` or `.env`.
 - **Punch positions are fixed**: 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in
   pairs, and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches`
   enforces it). Kind is parity (`kindForPosition`, `shared/punches.ts`). The math evaluates *set* punches
-  chronologically; `extraPairs()` only decides where the card *shows* a pair. An explicit
-  Clock out that is the latest punch ends the day even if the target isn't met. "Add extra
-  out / in" appends two rows, so the old Clock out becomes the new pair's Out. Lunch semantics
-  come only from positions 1 and 2.
+  chronologically; `extraPairs()` only decides where the card *shows* a pair. Today a time typed
+  ahead of now counts once the clock reaches it (its order is checked at once); a past day counts
+  every time it has. Today ends only at the Clock out, when it is the latest punch reached, with
+  the target met or not; an extra pair's Out is a break, the second meal included, and never
+  ends it. A past day ends once it is off the clock. "Add extra out / in" appends two rows, so the old Clock out
+  becomes the new pair's Out. Removing the pair an Add just made, before any punch changes,
+  undoes the Add and gives the Clock out its time back (`Timeclock` keeps the rows from before
+  it); removing any other pair drops its two rows (`removePunchPair`). Lunch semantics come only
+  from positions 1 and 2.
 - **A punch row saves only complete times.** `TimeField` (React Aria segments) commits the
   moment hour, minute and period are all filled, and throws a half-typed draft away when
   focus leaves the field, so the row never shows a time the server doesn't have. In 12-hour
   mode the period is filled in as the hour is typed (`guessPeriod` in `lib/timefield.ts`: 5–11
-  → AM, 12 and 1–4 → PM; on a later row, the other period when every minute of the hour falls
-  before the day's clock-in in this one and not in the other, so 8:10 after an 8:30 clock-in
-  stays AM), and left alone once the user has touched that segment. Clearing is the row's × button only. Punch PUTs are queued per day (see
+  → AM, 12 and 1–4 → PM; on a later row, a morning hour whose every minute falls before the
+  day's clock-in turns PM unless the PM hour does too, and an afternoon guess never turns AM, so
+  8:10 after an 8:30 clock-in stays AM), and left alone once the user has touched that segment. Clearing is the row's × button only. Punch PUTs are queued per day (see
   "Saves reach the server in the order they were made").
 - **Overtime approval (`days.overtime_approved`) silences only the `clockOut` alarm target.**
   Lunch and the second meal period stay armed: California Labor Code §512 still requires them
   on an overtime day. The setting `overtimeApproval` shows/hides the switch and banner
   button, and with it off the Clock out tile reads time past the day as "past your day"
-  rather than a red "Over by"; a flagged day is silent only while the setting is on (`useTodayAlarms`).
+  rather than a red "Over by"; a flagged day counts only while the setting is on: `overtimeOn`
+  (`lib/timeclock.ts`) decides, which `Timeclock` calls (the tiles get the flag from it).
 - **`mealRules: false` turns the meal periods off in the math, not in the components.**
   `computeTimeclock` then never needs a lunch (`not-needed`, so no lunch alarm and no lunch
   added to the clock-out time) and `secondMealApplies` is false; a lunch that was punched still
   counts. The card drops the Lunch by tile (the Focused tile shows either way), and with
   `lunchPunches: false` too it hides the Lunch out / in rows, which stay in the data at
-  positions 1 and 2: `lunchRowsShown` decides (never on a day with a lunch punched) and
-  `nextPunchPosition` skips them. `trackHours: false` only hides hours outside the day's own
+  positions 1 and 2: `lunchRowsShown` decides (never on a day with a lunch punched).
+  `lunchInPunchOrder` decides the Now order (`nextPunchPosition`): it skips the lunch rows while
+  they are hidden, on a day that needs no lunch with the meal periods on, and past the target
+  with no lunch taken. `trackHours: false` only hides hours outside the day's own
   tiles (the week line, History's hours, the Clocked out sticker via `stickerReasons`); the
   timeclock still runs.
 - **Priorities are stored sparse** (positions 1..n, contiguous, ≤ `MAX_PRIORITIES`; no `done`

@@ -7,13 +7,16 @@ import {
   daySettings,
   emptyPunches,
   extraPairs,
+  lunchInPunchOrder,
   lunchRowsShown,
   nextPunchPosition,
   normalizePunches,
+  overtimeOn,
   removePunchPair,
   secondMealApplies,
   targetFraction,
   timeclockForDate,
+  type TimeclockSettings,
 } from './timeclock';
 import type { Punch } from '../types';
 import { PUNCH_ORDER } from './copy';
@@ -63,7 +66,6 @@ describe('computeTimeclock', () => {
     expect(early.state).toBe('at-lunch');
     expect(early.lunchStatus).toBe('taken');
     expect(early.workedSeconds).toBe(4 * 3600);
-    expect(early.offClockSeconds).toBe(10 * 60);
     expect(early.clockOutAt).toBe(T0 + 8.5 * H);
 
     const long = computeTimeclock(p, settings, T0 + 4 * H + 45 * M);
@@ -75,7 +77,6 @@ describe('computeTimeclock', () => {
     const r = computeTimeclock(p, settings, T0 + 5 * H);
     expect(r.state).toBe('working');
     expect(r.workedSeconds).toBe(4 * 3600 + 15 * 60);
-    expect(r.offClockSeconds).toBe(45 * 60);
     expect(r.clockOutAt).toBe(T0 + 8 * H + 45 * M);
   });
 
@@ -86,7 +87,6 @@ describe('computeTimeclock', () => {
     expect(r.error).toBeNull();
     expect(r.state).toBe('working');
     expect(r.workedSeconds).toBe(2 * 3600);
-    expect(r.offClockSeconds).toBe(3600);
     expect(r.lunchStatus).toBe('upcoming');
     expect(r.clockOutAt).toBe(T0 + 9.5 * H); // 8h + 1h break + 30m lunch
   });
@@ -129,12 +129,30 @@ describe('computeTimeclock', () => {
   });
 
   it('is done after a final clock-out with the target met', () => {
-    const p = punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 8.5 * H, null]);
+    const p = punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 8.5 * H]);
     const r = computeTimeclock(p, settings, T0 + 12 * H);
     expect(r.state).toBe('done');
     expect(r.clockOutStatus).toBe('done');
     expect(r.clockOutAt).toBe(T0 + 8.5 * H);
-    expect(r.offClockSeconds).toBe(30 * 60); // open time after the final out is not counted
+    expect(r.workedSeconds).toBe(8 * 3600);
+  });
+
+  it("stays on a break when an extra pair's Out is punched past the target", () => {
+    // Out 1 at 17:00 after 8 h 30 m worked, a second meal on an overtime day: the day goes on.
+    const p = punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 9 * H, null, null]);
+    for (const now of [T0 + 9 * H + 10 * M, T0 + 9 * H + 25 * M]) {
+      const r = computeTimeclock(p, settings, now);
+      expect(r.state).toBe('on-break');
+      expect(r.clockOutStatus).toBe('over');
+      expect(r.clockOutAt).toBe(T0 + 8.5 * H); // the target's instant, holding still on the break
+      expect(r.secondMealStatus).toBe('taken');
+    }
+    expect(nextPunchPosition(p)).toBe(4);
+  });
+
+  it('is on a break after "Add extra out / in" on a day that met its target', () => {
+    const p = addPunchPair(punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 8.5 * H]));
+    expect(computeTimeclock(p, settings, T0 + 8.5 * H + 5 * M).state).toBe('on-break');
   });
 
   it('flags out-of-order punches instead of producing garbage', () => {
@@ -179,7 +197,7 @@ describe('computeTimeclock', () => {
     expect(computeTimeclock(p, settings, T0 + 7 * H + 11 * M).clockOutAt).toBe(T0 + 9.5 * H);
   });
 
-  it('re-anchors at the re-clock-in once the target was already met', () => {
+  it('is the target instant plus the time off since, once the target was already met', () => {
     // Worked 8h (8:00–12:00, 12:30–16:30), clocked out, came back at 19:00.
     const p = punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 8.5 * H, T0 + 11 * H, null]);
     const r = computeTimeclock(p, settings, T0 + 11 * H + 20 * M);
@@ -188,18 +206,49 @@ describe('computeTimeclock', () => {
   });
 });
 
+describe('times typed ahead of now', () => {
+  it('counts a Lunch out once the clock reaches it', () => {
+    const p = punches([T0, T0 + 4 * H, null, null]);
+    const before = computeTimeclock(p, settings, T0 + 2 * H);
+    expect(before.state).toBe('working');
+    expect(before.workedSeconds).toBe(2 * 3600);
+    expect(before.lunchOut).toBeNull();
+    expect(before.lunchStatus).toBe('upcoming');
+    expect(before.clockOutAt).toBe(T0 + 8.5 * H);
+    const reached = computeTimeclock(p, settings, T0 + 4 * H + 10 * M);
+    expect(reached.state).toBe('at-lunch');
+    expect(reached.lunchStatus).toBe('taken');
+  });
+
+  it('keeps a Lunch in planned at the Lunch out from ending the lunch', () => {
+    const r = computeTimeclock(punches([T0, T0 + 4 * H, T0 + 4.5 * H, null]), settings, T0 + 4 * H + 10 * M);
+    expect(r.state).toBe('at-lunch');
+    expect(r.workedSeconds).toBe(4 * 3600);
+    expect(r.clockOutAt).toBe(T0 + 8.5 * H);
+  });
+
+  it('ends the day at a Clock out typed ahead once it is reached', () => {
+    const p = punches([T0, null, null, T0 + 9 * H]);
+    const early = computeTimeclock(p, settings, T0 + H);
+    expect(early.state).toBe('working');
+    expect(early.clockOutStatus).toBe('upcoming');
+    expect(early.secondMealBy).not.toBeNull();
+    const reached = computeTimeclock(p, settings, T0 + 9 * H);
+    expect(reached.state).toBe('done');
+    expect(reached.clockOutAt).toBe(T0 + 9 * H);
+  });
+
+  it('flags a time out of order at once, while it is still ahead', () => {
+    // Lunch in with no Lunch out: two ins in a row, the second one still to come.
+    expect(computeTimeclock(punches([T0, null, T0 + 4.5 * H, null]), settings, T0 + H).error).toBe(PUNCH_ORDER);
+  });
+});
+
 describe('daySettings', () => {
   it("puts a day's own work-day length in place of the usual one, and nothing else", () => {
     expect(daySettings(settings, { workMinutes: 240 })).toEqual({ ...settings, workMinutes: 240 });
     expect(daySettings(settings, { workMinutes: null })).toBe(settings);
     expect(daySettings(settings, undefined)).toBe(settings);
-  });
-
-  it('moves the clock-out and drops the lunch on a half day', () => {
-    const p = punches([T0, null, null, null]);
-    const r = computeTimeclock(p, daySettings(settings, { workMinutes: 240 }), T0 + H);
-    expect(r.clockOutAt).toBe(T0 + 4 * H);
-    expect(r.lunchStatus).toBe('not-needed');
   });
 });
 
@@ -302,6 +351,14 @@ describe('second meal period', () => {
   });
 });
 
+describe('overtimeOn', () => {
+  it("counts a day's approval only while the Overtime setting is on", () => {
+    expect(overtimeOn({ overtimeApproval: false }, true)).toBe(false);
+    expect(overtimeOn({ overtimeApproval: true }, true)).toBe(true);
+    expect(overtimeOn({ overtimeApproval: true }, false)).toBe(false);
+  });
+});
+
 describe('punch rows', () => {
   it('starts with four rows ending in the clock out', () => {
     expect(emptyPunches().map((p) => p.kind)).toEqual(['in', 'out', 'in', 'out']);
@@ -361,30 +418,15 @@ describe('adding and removing an extra pair', () => {
     expect(clockOutPosition(next)).toBe(5);
   });
 
-  it("hands the Out's time back to the Clock out when the pair was added by mistake", () => {
-    // Clocked out at 4:30 PM, pressed "Add extra out / in", then removed the pair.
-    expect(removePunchPair(addPunchPair(punches(day)), 3).map((p) => p.at)).toEqual(day);
-  });
-
-  it('removes a pair and renumbers the rows after it, leaving the Clock out alone', () => {
-    const next = removePunchPair(punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 6 * H, T0 + 6.5 * H, null]), 3);
+  it('removes a pair and renumbers the rows after it, handing nothing to the Clock out', () => {
+    // Stepped out at 14:00 and not back: the Out's time goes with the pair, so the day isn't over.
+    const next = removePunchPair(punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 6 * H, null, null]), 3);
     expect(next.map((p) => [p.position, p.kind, p.at])).toEqual([
       [0, 'in', T0],
       [1, 'out', T0 + 4 * H],
       [2, 'in', T0 + 4.5 * H],
       [3, 'out', null],
     ]);
-  });
-
-  it('keeps a Clock out that already has its own time', () => {
-    const next = removePunchPair(punches([T0, T0 + 4 * H, T0 + 4.5 * H, T0 + 6 * H, null, T0 + 8.5 * H]), 3);
-    expect(next.map((p) => p.at)).toEqual(day);
-  });
-
-  it('hands nothing back from an Out without a time, or to rows with no Clock out row', () => {
-    expect(removePunchPair(punches([T0, null, null, null, null, null]), 3).map((p) => p.at)).toEqual([T0, null, null, null]);
-    // Un-normalized input: the last row is an in, so there is no Clock out to fill.
-    expect(removePunchPair(punches([T0, null, null, T0 + H, null]), 3).map((p) => p.at)).toEqual([T0, null, null]);
   });
 });
 
@@ -478,6 +520,32 @@ describe('lunchRowsShown', () => {
   it('keeps them on a day with a lunch punched, so the times stay in sight', () => {
     expect(lunchRowsShown(punches([T0, T0 + 4 * H, null, null]), off)).toBe(true);
     expect(lunchRowsShown(punches([T0, null, T0 + 4.5 * H, null]), off)).toBe(true);
+  });
+});
+
+describe('lunchInPunchOrder', () => {
+  const on = { mealRules: true, lunchPunches: true };
+  const clockedIn = punches([T0, null, null, null]);
+  const half = { ...settings, workMinutes: 240 };
+  const inOrder = (p: Punch[], s: TimeclockSettings, now: number, rows = on) => lunchInPunchOrder(p, computeTimeclock(p, s, now), rows);
+
+  it('with the meal periods on, leaves the lunch rows out only on a day that needs no lunch', () => {
+    expect(inOrder(clockedIn, half, T0 + H)).toBe(false);
+    expect(nextPunchPosition(clockedIn, false)).toBe(3);
+    expect(inOrder(clockedIn, settings, T0 + H)).toBe(true); // upcoming
+    expect(inOrder(clockedIn, settings, T0 + 5 * H + 10 * M)).toBe(true); // overdue
+    expect(inOrder(punches([T0, T0 + 2 * H, T0 + 2.5 * H, null]), half, T0 + 3 * H)).toBe(true); // taken
+  });
+
+  it('keeps them while shown with the meal periods off', () => {
+    const noMeals = { ...settings, mealRules: false };
+    expect(inOrder(clockedIn, noMeals, T0 + H, { mealRules: false, lunchPunches: true })).toBe(true);
+    expect(inOrder(clockedIn, noMeals, T0 + H, { mealRules: false, lunchPunches: false })).toBe(false);
+  });
+
+  it('goes to the Clock out past the target with no lunch taken', () => {
+    expect(inOrder(clockedIn, settings, T0 + 8 * H + 10 * M)).toBe(false);
+    expect(nextPunchPosition(clockedIn, false)).toBe(3);
   });
 });
 

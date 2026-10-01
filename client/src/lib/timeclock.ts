@@ -16,21 +16,20 @@ export type TimeclockSettings = Pick<Settings, 'workMinutes' | 'lunchDeadlineMin
 export interface TimeclockResult {
   state: TimeclockState;
   clockIn: number | null;
+  /** Null today until the clock reaches it. */
   lunchOut: number | null;
-  lunchIn: number | null;
   /** Deadline by which lunch must start (clockIn + lunchDeadlineMinutes). */
   lunchBy: number | null;
   lunchStatus: LunchStatus;
   workedSeconds: number;
-  /** Closed + open time off the clock since clock-in. */
-  offClockSeconds: number;
   remainingSeconds: number;
   /** Seconds worked beyond the target (0 while under). */
   overSeconds: number;
   /**
    * When the workday will end. Stable while working; while at lunch/on a break it moves
-   * later as the break runs long. Null before clock-in. Once the target is reached it is
-   * the instant it was reached, so alarms have a fixed anchor.
+   * later as the break runs long. Null before clock-in. Past the target it is the instant
+   * the target was reached plus any time off the clock since, and holds still while working
+   * and on a break, so alarms have a fixed anchor. Once done, the last clock-out.
    */
   clockOutAt: number | null;
   clockOutStatus: ClockOutStatus;
@@ -70,14 +69,19 @@ export interface TimeclockOptions {
  * 2 lunch in, 3+ extra out/in pairs, last = clock out); unset rows have `at: null`. Set
  * punches are evaluated in chronological order, so storage order never matters: an extra
  * break can be logged before lunch and the clock-out row can be re-punched after a return.
+ * Today a time typed ahead of now counts once the clock reaches it; a past day counts them all.
  */
 export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, now: number, opts: TimeclockOptions = {}): TimeclockResult {
   const byPos = new Map(punches.map((p) => [p.position, p.at]));
   const clockIn = byPos.get(0) ?? null;
-  const lunchOut = byPos.get(LUNCH_OUT_POSITION) ?? null;
-  const lunchIn = byPos.get(LUNCH_IN_POSITION) ?? null;
+  // A Lunch in planned at Lunch out, or a Clock out typed early, hasn't happened yet and waits
+  // for the clock. A clock-in ahead of now still counts, so the day is planned from it.
+  const upTo = opts.frozen ? Infinity : Math.max(now, clockIn ?? now);
+  const reached = (at: number | null | undefined) => (at != null && at <= upTo ? at : null);
+  const lunchOut = reached(byPos.get(LUNCH_OUT_POSITION));
+  const lunchIn = reached(byPos.get(LUNCH_IN_POSITION));
   const finalPos = clockOutPosition(punches);
-  const finalOut = finalPos == null ? null : (byPos.get(finalPos) ?? null);
+  const finalOut = finalPos == null ? null : reached(byPos.get(finalPos));
   const workTarget = settings.workMinutes * 60;
   const lunchSeconds = settings.lunchMinutes * 60;
   const secondMealTarget = settings.secondMealAfterMinutes * 60;
@@ -86,11 +90,9 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
     state: 'not-started',
     clockIn,
     lunchOut,
-    lunchIn,
     lunchBy: null,
     lunchStatus: 'none',
     workedSeconds: 0,
-    offClockSeconds: 0,
     remainingSeconds: workTarget,
     overSeconds: 0,
     clockOutAt: null,
@@ -101,27 +103,24 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
   };
   if (clockIn == null) return empty;
 
-  const set = punches
+  const typed = punches
     .filter((p): p is Punch & { at: number } => p.at != null)
     .map((p) => ({ position: p.position, kind: kindForPosition(p.position), at: p.at }))
     .sort((a, b) => a.at - b.at || a.position - b.position);
+  // Order is checked over every time typed, so a slip in one still ahead shows as it is typed.
+  const error = typed.every((p, i) => p.kind === (i % 2 === 0 ? 'in' : 'out')) ? null : PUNCH_ORDER;
+  const set = typed.filter((p) => p.at <= upTo);
 
   // Never let a future clock-in produce negative time.
   const effectiveNow = Math.max(now, clockIn);
 
-  let error: string | null = null;
   let workedMs = 0;
-  let offClosedMs = 0;
   let openIn: number | null = null;
   let lastOut: number | null = null;
   let expect: 'in' | 'out' = 'in';
   for (const p of set) {
-    if (p.kind !== expect) {
-      error = PUNCH_ORDER;
-      break;
-    }
+    if (p.kind !== expect) break;
     if (p.kind === 'in') {
-      if (lastOut != null) offClosedMs += Math.max(0, p.at - lastOut);
       openIn = p.at;
       expect = 'out';
     } else {
@@ -134,7 +133,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
   }
 
   const clockedIn = openIn != null;
-  if (clockedIn) workedMs += Math.max(0, effectiveNow - openIn!);
+  if (openIn != null) workedMs += Math.max(0, effectiveNow - openIn);
   const workedSeconds = Math.floor(workedMs / 1000);
   // The part of the worked time the floor dropped. The targets below are "now plus what is
   // left", so without it they would carry the sub-second phase of `now` and land on a
@@ -145,11 +144,11 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
   const overSeconds = Math.max(0, workedSeconds - workTarget);
 
   const atLunch = !clockedIn && lunchOut != null && lunchIn == null && lastOut === lunchOut;
-  // The day is over when the target is met, when the explicit Clock out row is the latest
-  // punch (leaving early is still leaving), or on a past day once off the clock.
-  const done = !clockedIn && (remainingSeconds === 0 || (finalOut != null && lastOut === finalOut) || (opts.frozen === true && lastOut != null));
+  // Today ends only at the explicit Clock out, when it is the latest punch reached, short of
+  // the target or past it. An out on any other row is a break, the second meal included. A
+  // past day ends once it is off the clock.
+  const done = !clockedIn && ((finalOut != null && lastOut === finalOut) || (opts.frozen === true && lastOut != null));
   const openOffMs = !clockedIn && lastOut != null && !done ? Math.max(0, effectiveNow - lastOut) : 0;
-  const offClockSeconds = Math.floor((offClosedMs + openOffMs) / 1000);
 
   const state: TimeclockState = error ? 'working' : done ? 'done' : clockedIn ? 'working' : atLunch ? 'at-lunch' : 'on-break';
 
@@ -165,7 +164,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
   const lunchStatus: LunchStatus = lunchOut != null ? 'taken' : !lunchNeeded ? 'not-needed' : now < lunchBy ? 'upcoming' : 'overdue';
 
   // Time still expected off the clock before the day can end.
-  const futureOffSeconds = lunchOut == null ? (lunchNeeded ? lunchSeconds : 0) : lunchIn == null && atLunch ? Math.max(0, lunchSeconds - openOffMs / 1000) : 0;
+  const futureOffSeconds = lunchOut == null ? (lunchNeeded ? lunchSeconds : 0) : atLunch ? Math.max(0, lunchSeconds - openOffMs / 1000) : 0;
 
   let clockOutAt: number | null;
   let clockOutStatus: ClockOutStatus;
@@ -176,7 +175,10 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
     clockOutAt = effectiveNow - subSecondMs + (remainingSeconds + futureOffSeconds) * 1000;
     clockOutStatus = 'upcoming';
   } else {
-    clockOutAt = effectiveNow - subSecondMs - overSeconds * 1000;
+    // Off the clock past the target (a break after it), the work stopped at the out that set
+    // `lastOut`, so the anchor holds still until the next in.
+    const workEnd = clockedIn ? effectiveNow : lastOut!;
+    clockOutAt = workEnd - subSecondMs - overSeconds * 1000;
     clockOutStatus = 'over';
   }
 
@@ -194,11 +196,9 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
     state,
     clockIn,
     lunchOut,
-    lunchIn,
     lunchBy,
     lunchStatus,
     workedSeconds,
-    offClockSeconds,
     remainingSeconds,
     overSeconds,
     clockOutAt,
@@ -253,10 +253,14 @@ export function secondMealApplies(
     settings.mealRules !== false &&
     tc.error == null &&
     tc.state === 'working' &&
-    tc.secondMealBy != null &&
     tc.secondMealStatus !== 'taken' &&
     (overtimeApproved || tc.overSeconds > 0 || settings.workMinutes > settings.secondMealAfterMinutes)
   );
+}
+
+/** Whether a day's "Overtime approved" counts: only while the Overtime setting is on, so a day flagged before it was turned off doesn't. */
+export function overtimeOn(settings: Pick<Settings, 'overtimeApproval'>, approved: boolean): boolean {
+  return settings.overtimeApproval && approved;
 }
 
 export interface ExtraPair {
@@ -297,9 +301,25 @@ export function lunchRowsShown(punches: Punch[], settings: Pick<Settings, 'mealR
 }
 
 /**
+ * Whether the next "Now" goes through the lunch rows. Past the target with no lunch taken the
+ * next punch ends the day, so it is the Clock out's. With the meal periods on, a day that needs
+ * no lunch goes from the clock in to the clock out; with them off the rows are in the order
+ * whenever they are shown.
+ */
+export function lunchInPunchOrder(
+  punches: Punch[],
+  tc: Pick<TimeclockResult, 'lunchStatus' | 'remainingSeconds'>,
+  settings: Pick<Settings, 'mealRules' | 'lunchPunches'>,
+): boolean {
+  if (tc.lunchStatus !== 'taken' && tc.remainingSeconds === 0) return false;
+  return settings.mealRules ? tc.lunchStatus !== 'not-needed' : lunchRowsShown(punches, settings);
+}
+
+/**
  * The first row without a time, in the order the card shows them (clock in, pairs before
  * lunch, lunch out and in, pairs after it, clock out): the one the next "Now" is for. Null
- * once every row has a time. With the lunch rows hidden (`lunchRowsShown`) they are skipped.
+ * once every row has a time. `lunchRows` false skips the lunch rows; the card passes
+ * `lunchInPunchOrder`.
  */
 export function nextPunchPosition(punches: Punch[], lunchRows = true): number | null {
   const byPos = new Map(punches.map((p) => [p.position, p]));
@@ -344,18 +364,7 @@ export function addPunchPair(punches: Punch[]): Punch[] {
   return [...punches, { position: n, kind: kindForPosition(n), at: null }, { position: n + 1, kind: kindForPosition(n + 1), at: null }];
 }
 
-/**
- * The rows without the extra pair whose Out is at `outPosition`, renumbered. A pair added by
- * mistake right after clocking out has the clock-out time in its Out and nothing in its In;
- * removing it hands that time back to the Clock out row.
- */
+/** The rows without the extra pair whose Out is at `outPosition`, renumbered. */
 export function removePunchPair(punches: Punch[], outPosition: number): Punch[] {
-  const out = punches.find((p) => p.position === outPosition);
-  const back = punches.find((p) => p.position === outPosition + 1);
-  const clockOutPos = clockOutPosition(punches);
-  let kept = punches.filter((p) => p.position !== outPosition && p.position !== outPosition + 1);
-  if (out?.at != null && back?.at == null && clockOutPos != null && kept.find((p) => p.position === clockOutPos)?.at == null) {
-    kept = kept.map((p) => (p.position === clockOutPos ? { ...p, at: out.at } : p));
-  }
-  return kept.map((p, i) => ({ ...p, position: i, kind: kindForPosition(i) }));
+  return punches.filter((p) => p.position !== outPosition && p.position !== outPosition + 1).map((p, i) => ({ ...p, position: i, kind: kindForPosition(i) }));
 }
