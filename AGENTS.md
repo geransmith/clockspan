@@ -701,4 +701,6 @@ The browser pass for each surface (the logic under it is already tested):
   Node (24 at the time of writing; it follows the active LTS). A cap it outgrows, or a package
   whose `engines` leaves its Node out under `engine-strict`, stops its npm updates without
   failing any check: the PRs just stop coming. A new Node major moves `.nvmrc`, both fields,
-  CI and the Dockerfile together.
+  the Dockerfile's two `FROM` lines and the `@types/node` major together (Dependabot skips the
+  majors of the last two), plus the docs that name the version; CI and `.claude/launch.json`
+  read `.nvmrc`.
