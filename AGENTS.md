@@ -41,7 +41,8 @@ shared/                 imported by both sides, always with a `.js` suffix
                         retention bounds
   api.ts                every wire type and `emptyDay`; the server's JSON builders and client/src/api.ts both use them
   sounds.ts             the sound catalog (SOUNDS, SOUND_EVENTS)
-  dates.ts, timer.ts    date keys; pause-aware session timing (activeMs, plannedEndAt, PLANNED_SECONDS)
+  dates.ts, timer.ts    date keys; pause-aware session timing (activeMs, plannedEndAt, pausedSecondsAfter,
+                        PLANNED_SECONDS)
   punches.ts            kindForPosition: a punch row's kind is its position's parity; punchesKey: a list's
                         rows and times as one string; samePunches compares two lists by it
   backoff.ts            nextBackoff: the wait between retries of a request that must answer
@@ -293,29 +294,31 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   paused. A finish while paused ends the session where the pause began, and a pause left for
   `PAUSE_LIMIT_SECONDS` (an hour) is finished by the client with a quiet banner. **A timer that
   runs out is not finished by the client**: it is `due`, announced once per (session, planned
-  end) — `dueKey`, kept in `localStorage['focus:timer-due']` so a reload shows the banner again
-  without a second chime — and waits `DUE_GRACE_SECONDS` (10 min) for an answer before the
-  auto-finish (which chimes only if nothing has for that end). While due the countdown shows
-  the overrun as a negative number, `adjust(+N)` is N minutes from now, `finish()` logs the
-  planned length (the server's clamp) and `finish(true)` sends `countOverrun` so the time past
-  the end is logged too. Plans are whole minutes: `adjust` rounds the new plan up to one and
-  stops at `PLANNED_SECONDS.max` (8 h), where `canAdd` turns false, + is disabled and the
-  "Time's up" banner drops its Add button. The Finish buttons call `requestFinish()`: it
-  finishes unless the timer is due and the planned and worked lengths differ in their whole
-  minutes (a minute or more over), where `finishChoice` opens the `FinishChoice` sheet
-  (Planned · Nm / Worked · Mm / Back). A finish goes out behind any press still on its way. The
-  choice belongs to the session it was asked for (`finishChoiceFor`): once that session ends,
-  however it ends, the sheet goes with it. The bar and the log's running row edit the session
-  through `useTimer` (`setLabel`, `edit`), so their writes share its queue and both show the
-  edit.
-  `useTimer` keeps the running session the way the day store keeps a day
-  (`lib/optimistic.ts`, on `useTracked`): a press (adjust, edit, pause, resume) shows at once,
-  every write (start and finish too) goes out on the timer's queue after the ones before it, a
-  failure drops only that press, and a sync's answer never hides a press still on its way.
-  Keep that pattern for new mutations.
+  end) — `dueKey`, kept in the page and in `localStorage['focus:timer-due']` so a reload shows
+  the banner again without a second chime — and waits `DUE_GRACE_SECONDS` (10 min) for an
+  answer before the auto-finish (which chimes only if nothing has for that end). The banner
+  goes while a press that took it away is on its way, and comes back, quietly, if that press
+  fails. While due the countdown shows the overrun as a negative number, +N minutes
+  (`adjust(N * 60)`; it takes seconds) is N minutes from now, `finish()` logs the planned
+  length (the server's clamp) and `finish(true)` sends `countOverrun` so the time past the end
+  is logged too. Plans are whole minutes: `adjust` rounds the new plan up to one and stops at
+  `PLANNED_SECONDS.max` (8 h), where `canAdd` turns false, + is disabled and the "Time's up"
+  banner drops its Add button. The Finish buttons call `requestFinish()`: it finishes unless
+  the timer is due and the planned and worked lengths differ in their whole minutes (a minute
+  or more over), where `finishChoice` opens the `FinishChoice` sheet
+  (Planned · Nm / Worked · Mm / Back). `lib/timer.ts` holds these rules beside `timerView`:
+  `countdownSeconds`, `adjustedPlan` (the new plan, `'finish'`, or nothing for + at the
+  longest plan), `canAdd` and `asksLength`. A finish goes out behind any press still on its
+  way. The choice belongs to the session it was asked for (`finishChoiceFor`): once that
+  session ends, however it ends, the sheet goes with it. The bar and the log's running row edit
+  the session through `useTimer().edit`, so their writes share its queue and both show the
+  edit. `useTimer` keeps the running session the way the day store keeps a day: a press
+  (adjust, edit, pause, resume) shows at once, a failure drops only that press, and a sync's
+  answer never hides a press still on its way. Keep that pattern for new mutations.
 - **One running session per user is a schema invariant** (a unique partial index), and another
   device may own it: a 409 on start is adopted with a banner, a sync whose answer differs from
-  the session shown reloads that day so the log catches up, a 404/409 on any press on the
+  the session shown refreshes that day if the store holds it so the log catches up (a day it
+  doesn't hold loads with the row when it is opened), a 404/409 on any press on the
   running session re-syncs at once (the loop's `runNow`: a sync sent after the refusal, chained
   behind any sync already out and counted for the throttle), and the completion chime only
   plays when the server says `completed`.
@@ -374,7 +377,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   break writes and `applySession`, which ends a running break on any loaded day, since one
   started before midnight sits on the day before), so it never sends an end after a session
   start: the break may already be gone. An end the server answers 404 for (the break was
-  deleted elsewhere) counts as done. Break writes share one `inOrder` key (`breaks`).
+  deleted elsewhere) counts as done. The timer card disables its break buttons while a start
+  is out, since a break write goes out on the day store's queue, not the timer's, and could
+  reach the server after the start. Break writes share one `inOrder` key (`breaks`).
 - **Saves reach the server in the order they were made**, each store's on its own queue
   (`serial()` in `lib/optimistic.ts`, made by `useTracked`). In the day store, `setPunches` and
   `setPriorities` replace a whole list, so one PUT per list and day is in flight and only the

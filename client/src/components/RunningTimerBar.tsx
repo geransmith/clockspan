@@ -7,18 +7,18 @@ import { TimerControls } from './TimerControls';
 
 /** Fixed to the top of the viewport whenever a timer is running, on every view. */
 export function RunningTimerBar() {
-  const { running, remainingSeconds, overrunSeconds, progress, paused, due, setLabel } = useTimer();
+  const { running, countdownSeconds, progress, paused, due, edit } = useTimer();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   if (!running) return null;
 
   const commitLabel = () => {
     setEditing(false);
-    if (draft.trim() !== running.label) void setLabel(draft.trim());
+    if (draft.trim() !== running.label) void edit({ label: draft.trim() });
   };
 
   return (
-    <div className={`running-bar${due ? ' is-due' : ''}`} role="status" aria-live="off">
+    <div className={`running-bar${due ? ' is-due' : ''}`}>
       <div className="running-bar-inner">
         <span className={`running-dot${paused ? ' is-paused' : ''}${due ? ' is-due' : ''}`} aria-hidden="true" />
         {editing ? (
@@ -29,6 +29,8 @@ export function RunningTimerBar() {
             onChange={(e) => setDraft(e.target.value)}
             onBlur={commitLabel}
             onKeyDown={(e) => {
+              // An input method's Enter picks a candidate and its Escape drops one: neither ends the edit.
+              if (e.nativeEvent.isComposing) return;
               if (e.key === 'Enter') commitLabel();
               if (e.key === 'Escape') setEditing(false);
             }}
@@ -49,7 +51,7 @@ export function RunningTimerBar() {
           </button>
         )}
         <span className="running-time" role="timer" aria-label={due ? 'Time over' : 'Time remaining'}>
-          {formatCountdown(due ? -overrunSeconds : remainingSeconds)}
+          {formatCountdown(countdownSeconds)}
         </span>
         <TimerControls compact />
       </div>

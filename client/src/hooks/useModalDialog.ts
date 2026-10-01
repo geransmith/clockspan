@@ -12,6 +12,10 @@ import { useEffect, useRef, type KeyboardEvent, type MouseEvent, type SyntheticE
  * gestures: Escape, Android back); an Escape keydown, where a browser routes the key
  * differently (closing twice is harmless); and a press on the ::backdrop, which lands on the
  * dialog element itself while anything inside hits the inner surface.
+ *
+ * The caller renders the `<dialog>` from its first render until it unmounts, so its parent
+ * decides whether it shows by mounting it: an early `return null` after this hook would throw
+ * on mount (no dialog to open) or leave the scroll lock on.
  */
 export function useModalDialog(onClose: () => void) {
   const ref = useRef<HTMLDialogElement>(null);

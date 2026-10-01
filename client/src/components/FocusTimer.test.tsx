@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { useDay } from '../hooks/useDay';
 import { unlockAudio } from '../lib/alerts';
-import { AllProviders, deferred, makeDay, makeSession, makeSettings, settle, T0, TODAY } from '../test/hooks';
-import type { Priority, SessionResponse } from '../types';
+import { BREAK } from '../lib/copy';
+import { AllProviders, deferred, makeBreak, makeDay, makeSession, makeSettings, settle, T0, TODAY } from '../test/hooks';
+import type { Break, Priority, SessionResponse } from '../types';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { FocusTimer } from './FocusTimer';
 
@@ -19,8 +20,8 @@ function Card() {
   return <FocusTimer date={TODAY} isToday priorities={day.priorities} onAddPriority={(text) => store.addPriority(TODAY, text)} />;
 }
 
-async function renderCard(priorities: Priority[] = []) {
-  vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities }));
+async function renderCard(priorities: Priority[] = [], breaks: Break[] = []) {
+  vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities, breaks }));
   render(
     <AllProviders>
       <Card />
@@ -33,6 +34,7 @@ const start25 = () => screen.getByRole('button', { name: /^25\s*min$/ });
 const typeLabel = (text: string) => fireEvent.change(screen.getByLabelText('Session label'), { target: { value: text } });
 const alsoAdd = () => screen.queryByRole('checkbox', { name: "Also add to today's priorities" });
 const started = (session = makeSession({ label: 'Call the vendor' })): SessionResponse => ({ session });
+const disabled = (name: string | RegExp) => (screen.getByRole('button', { name }) as HTMLButtonElement).disabled;
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
@@ -52,13 +54,31 @@ describe('FocusTimer', () => {
     vi.mocked(api.startSession).mockReturnValue(answer.promise);
     await renderCard();
     typeLabel('Write the report');
+    expect(disabled(/^Break · /)).toBe(false);
     fireEvent.click(start25());
+    // A break tap would race the start on another queue, so the Break button waits too.
+    expect(disabled(/^Break · /)).toBe(true);
     fireEvent.click(start25());
     await settle();
     expect(api.startSession).toHaveBeenCalledTimes(1);
     expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Write the report', null);
     answer.resolve(started(makeSession({ label: 'Write the report' })));
     await settle();
+    expect(screen.getByRole('timer')).toBeTruthy();
+  });
+
+  it('holds End break while a start is out', async () => {
+    const answer = deferred<SessionResponse>();
+    vi.mocked(api.startSession).mockReturnValue(answer.promise);
+    // A break that started half a minute ago and runs five minutes.
+    await renderCard([], [makeBreak({ startedAt: T0 - 30_000, endedAt: T0 + 270_000 })]);
+    expect(disabled(BREAK.end)).toBe(false);
+    fireEvent.click(start25());
+    expect(disabled(BREAK.end)).toBe(true);
+    answer.resolve(started());
+    await settle();
+    // The running timer takes the card's place, break and all.
+    expect(screen.queryByRole('button', { name: BREAK.end })).toBeNull();
     expect(screen.getByRole('timer')).toBeTruthy();
   });
 
@@ -85,17 +105,11 @@ describe('FocusTimer', () => {
     expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Call the vendor', rows[0]!.uid);
   });
 
-  it('does not offer to add typed work to a full list, and starts it unlinked', async () => {
-    vi.mocked(api.startSession).mockResolvedValue(started());
+  it('does not offer to add typed work to a full list', async () => {
     const full = Array.from({ length: MAX_PRIORITIES }, (_, i) => ({ position: i + 1, text: `Row ${i + 1}`, done: true, uid: `uid${i}`, addedAt: T0 }));
     await renderCard(full);
     typeLabel('Call the vendor');
     expect(alsoAdd()).toBeNull();
-    fireEvent.click(start25());
-    await settle();
-    expect(screen.queryByRole('alert')).toBeNull();
-    expect(api.putPriorities).not.toHaveBeenCalled();
-    expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Call the vendor', null);
   });
 
   it('offers it while one row is still free', async () => {

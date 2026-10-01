@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react';
-import { todayKey } from '../../../shared/dates.js';
 import { useDayStore } from '../hooks/useDay';
 import { useTimer } from '../hooks/useTimer';
 import { CONFIRM, UNTITLED_SESSION } from '../lib/copy';
@@ -8,21 +7,22 @@ import { breakSeconds } from '../lib/breaks';
 import { formatDuration, plural } from '../lib/format';
 import { hasText } from '../lib/priorities';
 import { focusOf } from '../lib/retro';
-import { activeMs } from '../../../shared/timer.js';
+import { timerView } from '../lib/timer';
 import { LIMITS, type Break, type Priority, type Session } from '../types';
 import { Trash } from './Icons';
 
 interface Props {
   date: string;
+  isToday: boolean;
   sessions: Session[];
   breaks: Break[];
   priorities: Priority[];
   now: number;
 }
 
-type Entry = { at: number; session: Session; brk?: never } | { at: number; brk: Break; session?: never };
+type Entry = { at: number; session: Session } | { at: number; brk: Break };
 
-export function SessionLog({ date, sessions, breaks, priorities, now }: Props) {
+export function SessionLog({ date, isToday, sessions, breaks, priorities, now }: Props) {
   const store = useDayStore();
   const { running, edit } = useTimer();
   const focus = focusOf(sessions);
@@ -40,7 +40,7 @@ export function SessionLog({ date, sessions, breaks, priorities, now }: Props) {
   if (entries.length === 0) {
     return (
       <p className="muted center">
-        {date === todayKey(now) ? 'No focus sessions yet. Sessions and breaks from the focus timer show up here.' : 'No focus sessions or breaks on this day.'}
+        {isToday ? 'No focus sessions yet. Sessions and breaks from the focus timer show up here.' : 'No focus sessions or breaks on this day.'}
       </p>
     );
   }
@@ -64,18 +64,18 @@ export function SessionLog({ date, sessions, breaks, priorities, now }: Props) {
         </div>
       )}
       <ul className="log-list">
-        {entries.map(({ session: s, brk: b }) =>
-          s ? (
+        {entries.map((e) =>
+          'session' in e ? (
             <Row
-              key={`s${s.id}`}
-              session={s}
+              key={`s${e.session.id}`}
+              session={e.session}
               now={now}
               planned={planned}
-              onEdit={(patch) => void (live(s) ? edit(patch) : store.updateSession(date, s.id, patch))}
-              onDelete={() => void store.removeSession(date, s.id)}
+              onEdit={(patch) => void (live(e.session) ? edit(patch) : store.updateSession(date, e.session.id, patch))}
+              onDelete={() => void store.removeSession(date, e.session.id)}
             />
           ) : (
-            <BreakRow key={`b${b!.id}`} brk={b!} now={now} onDelete={() => void store.removeBreak(date, b!.id)} />
+            <BreakRow key={`b${e.brk.id}`} brk={e.brk} now={now} onDelete={() => void store.removeBreak(date, e.brk.id)} />
           ),
         )}
       </ul>
@@ -132,7 +132,7 @@ function Row({
   const running = s.status === 'running';
   const paused = running && s.pausedAt != null;
   // A running row counts its focus so far, which holds still while paused.
-  const seconds = running ? Math.floor(activeMs(s, now) / 1000) : (s.durationSeconds ?? 0);
+  const seconds = running ? timerView(s, now).elapsedSeconds : (s.durationSeconds ?? 0);
   // A link to a row that was since removed reads as unplanned.
   const linked = s.priorityUid ? planned.find((p) => p.uid === s.priorityUid) : undefined;
   // One PATCH per edit: label and link together, so two responses can't land out of order.
@@ -161,6 +161,8 @@ function Row({
             autoFocus
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
+              // An input method's Enter picks a candidate and its Escape drops one: neither ends the edit.
+              if (e.nativeEvent.isComposing) return;
               if (e.key === 'Enter') commit();
               if (e.key === 'Escape') setEditing(false);
             }}

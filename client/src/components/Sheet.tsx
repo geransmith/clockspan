@@ -127,7 +127,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
       case 'timer':
         return <FocusTimer date={date} isToday={isToday} priorities={day.priorities} onAddPriority={(text) => store.addPriority(date, text)} />;
       case 'log':
-        return <SessionLog date={date} sessions={day.sessions} breaks={day.breaks} priorities={day.priorities} now={now} />;
+        return <SessionLog date={date} isToday={isToday} sessions={day.sessions} breaks={day.breaks} priorities={day.priorities} now={now} />;
       case 'retro':
         return (
           <Retro

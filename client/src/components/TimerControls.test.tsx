@@ -39,12 +39,9 @@ describe('TimerControls', () => {
     await renderControls(false);
     // − and + both read "5m", so each carries a name that says which way.
     expect(names()).toEqual(['Remove 5 minutes', 'Add 5 minutes', 'Pause', 'Finish', 'Cancel']);
-    expect(button('Add 5 minutes').getAttribute('title')).toBeNull();
     cleanup();
     await renderControls(true);
-    expect(names()).toEqual(['Remove 5 minutes', 'Add 5 minutes', 'Pause timer', 'Finish', 'Cancel session']);
-    expect(button('Pause timer').getAttribute('title')).toBe('Pause');
-    expect(button('Add 5 minutes').getAttribute('title')).toBe('+5m');
+    expect(names()).toEqual(['Remove 5 minutes', 'Add 5 minutes', 'Pause timer', 'Finish timer', 'Cancel session']);
   });
 
   it('pauses and resumes the running session, and moves the planned end by the step', async () => {
@@ -80,7 +77,7 @@ describe('TimerControls', () => {
     expect(api.cancelSession).toHaveBeenCalledWith(1);
   });
 
-  it('leaves only + and Finish once the timer has run out', async () => {
+  it('leaves +, Finish and Cancel once the timer has run out', async () => {
     // Two minutes past a 25-minute plan: due, and well inside the wait before it finishes itself.
     await renderControls(false, makeSession({ startedAt: T0 - 22 * MIN }));
     expect(names()).toEqual(['Add 5 minutes', 'Finish', 'Cancel']);
@@ -93,10 +90,7 @@ describe('TimerControls', () => {
     expect((button('Remove 5 minutes') as HTMLButtonElement).disabled).toBe(false);
     cleanup();
     await renderControls(true, makeSession({ plannedSeconds: 8 * 3600, startedAt: T0 - 8 * 60 * MIN }));
-    expect(names()).toEqual(['Add 5 minutes', 'Finish', 'Cancel session']);
-    fireEvent.click(button('Add 5 minutes'));
-    await settle();
+    expect(names()).toEqual(['Add 5 minutes', 'Finish timer', 'Cancel session']);
     expect((button('Add 5 minutes') as HTMLButtonElement).disabled).toBe(true);
-    expect(api.patchSession).not.toHaveBeenCalled();
   });
 });

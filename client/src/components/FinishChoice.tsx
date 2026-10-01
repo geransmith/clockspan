@@ -2,6 +2,7 @@ import { useModalDialog } from '../hooks/useModalDialog';
 import { useTimer } from '../hooks/useTimer';
 import { FINISH_CHOICE } from '../lib/copy';
 import { formatDuration } from '../lib/format';
+import type { Session } from '../types';
 
 /**
  * Asked when Finish is pressed after the timer ran out, once the planned and the worked length
@@ -11,14 +12,13 @@ import { formatDuration } from '../lib/format';
  */
 export function FinishChoice() {
   const { finishChoice } = useTimer();
-  return finishChoice ? <Choice /> : null;
+  return finishChoice ? <Choice session={finishChoice} /> : null;
 }
 
-function Choice() {
-  const { running, elapsedSeconds, overrunSeconds, finish, dismissFinishChoice } = useTimer();
+function Choice({ session }: { session: Session }) {
+  const { elapsedSeconds, overrunSeconds, finish, dismissFinishChoice } = useTimer();
   // Same native modal as Settings: focus on the frame, so Enter can't fire a button before the question is seen.
   const dialog = useModalDialog(dismissFinishChoice);
-  if (!running) return null;
   return (
     <dialog {...dialog} className="dialog finish-choice" aria-labelledby="finish-choice-title">
       <div className="dialog-inner">
@@ -30,7 +30,7 @@ function Choice() {
         </div>
         <footer className="dialog-foot">
           <button className="btn btn-primary" onClick={() => void finish()}>
-            {FINISH_CHOICE.planned(formatDuration(running.plannedSeconds))}
+            {FINISH_CHOICE.planned(formatDuration(session.plannedSeconds))}
           </button>
           <button className="btn" onClick={() => void finish(true)}>
             {FINISH_CHOICE.worked(formatDuration(elapsedSeconds))}
