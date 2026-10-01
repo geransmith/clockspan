@@ -43,7 +43,7 @@ describe('reading the URL', () => {
 describe('navigate', () => {
   it('pushes one history entry per move and keeps today as no date', () => {
     const push = vi.spyOn(history, 'pushState');
-    const { result } = render();
+    const { result } = renderHook(() => useRoute(), { reactStrictMode: true });
     act(() => result.current[1]({ date: '2026-09-25' }));
     expect(result.current[0]).toEqual({ view: 'sheet', date: '2026-09-25' });
     expect(window.location.search).toBe('?date=2026-09-25');
@@ -61,6 +61,26 @@ describe('navigate', () => {
     act(() => result.current[1]({ date: '2030-01-01' }));
     expect(result.current[0]).toEqual({ view: 'sheet', date: null });
     expect(window.location.search).toBe('');
+  });
+
+  it('records a day on the current entry before pushing it, so Back returns there', () => {
+    visit('/?view=history');
+    const { result } = render();
+    const push = vi.spyOn(history, 'pushState');
+    const replace = vi.spyOn(history, 'replaceState');
+    act(() => {
+      const nav = result.current[1];
+      nav({ date: '2026-07-14' }, { replace: true });
+      nav({ view: 'sheet', date: '2026-07-14' });
+    });
+    expect(replace).toHaveBeenCalledOnce();
+    expect(replace).toHaveBeenCalledWith(null, '', '/?view=history&date=2026-07-14');
+    expect(push).toHaveBeenCalledOnce();
+    expect(window.location.search).toBe('?date=2026-07-14');
+    expect(result.current[0]).toEqual({ view: 'sheet', date: '2026-07-14' });
+    act(() => history.back());
+    expect(result.current[0]).toEqual({ view: 'history', date: '2026-07-14' });
+    expect(window.location.search).toBe('?view=history&date=2026-07-14');
   });
 
   it('pushes nothing when already there', () => {
