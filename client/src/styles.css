@@ -2335,7 +2335,7 @@ dialog.dialog::backdrop {
     --hit-inset: -5px -1px;
   }
   /* 42 × 36 px (.btn-icon's side padding and a border around the icon), reaching into the row's
-     8 px padding: 52 × 46 px. */
+     8 px padding: 50 × 44 px. */
   .log-delete {
     --hit-inset: -5px;
   }
