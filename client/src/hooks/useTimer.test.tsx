@@ -121,7 +121,7 @@ describe('start', () => {
     expect(result.current.store.days[TODAY]?.sessions.map((s) => s.id)).toEqual([1]);
   });
 
-  it('follows a timer another device already runs (409) and says so', async () => {
+  it('follows a timer another device already runs (409), says so, and refreshes its day only if held', async () => {
     const theirs = makeSession({ id: 7, date: '2026-09-27', label: 'Theirs' });
     vi.mocked(api.startSession).mockRejectedValue(apiError(409, { error: 'running', session: theirs }));
     const { result } = await renderRunning(null);
