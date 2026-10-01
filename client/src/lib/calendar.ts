@@ -7,11 +7,11 @@ export interface CalendarDay {
   /** A filler cell before the 1st or after the last day: blank, never selectable. */
   outside: boolean;
   isFuture: boolean;
-  /** A day row exists for it (the cell is empty otherwise). */
+  /** The day has something on it (the caller passes only the days `hasContent` keeps); the cell is empty otherwise. */
   hasData: boolean;
   /** What the day earned (see `stickersForDay`); empty for a filler. */
   stickers: StickerId[];
-  /** The day's timeclock, worked out once for its stickers, its cell and the day panel; null without data. */
+  /** The day's timeclock, worked out once for its stickers and its cell; null without data. */
   timeclock: TimeclockResult | null;
 }
 
@@ -19,8 +19,8 @@ export interface CalendarDay {
  * The month that starts on `monthStart` as Monday-to-Sunday rows, oldest first, padded to
  * whole weeks with `outside` cells; Monday-to-Friday rows when weekends are off, so a
  * weekend day is simply not on the calendar and never counted. The days are looked up by
- * date, and each cell's timeclock and stickers are worked out here, once, for the cell, the
- * sticker count and the day panel (`pickedTimeclock`).
+ * date, and each cell's timeclock and stickers are worked out here, once, for the cell and the
+ * sticker count.
  */
 export function calendarMonth(
   days: DaySummary[],
@@ -54,13 +54,4 @@ export function calendarMonth(
     if (row.some((d) => !d.outside)) out.push(row);
   }
   return out;
-}
-
-/**
- * The timeclock for the day panel: the picked day's cell already has it. With weekends off a
- * weekend day has no cell but can still be picked (the calendar opens on the sheet's date), so
- * it is worked out from the day the same way.
- */
-export function pickedTimeclock(weeks: CalendarDay[][], day: DaySummary, settings: StickerSettings, today: string, now: number): TimeclockResult {
-  return weeks.flat().find((c) => c.date === day.date)?.timeclock ?? dayTimeclock(day, settings, today, now);
 }

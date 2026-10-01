@@ -67,8 +67,8 @@
     // The toggle-row pattern nests its text two spans deep inside the label, and UsernameInput
     // renders the <input> a label wraps.
     "jsx-a11y/label-has-associated-control": ["error", { "depth": 3, "controlComponents": ["UsernameInput"] }],
-    // Off on purpose: the History calendar is an ARIA grid over a CSS grid, and `role="status"`
-    // on a div is valid ARIA; the rule would want <table> and <output> for them.
+    // Off on purpose: `role="group"`, `role="status"` and `role="img"` on a div, span or p are
+    // valid ARIA; the rule would want <fieldset>, <output> and <img> for them.
     "jsx-a11y/prefer-tag-over-role": "off",
     // Off on purpose: the five uses are the first field of the three sign-in pages (sign in,
     // setup, new password) and two edit-in-place inputs the user just opened, where moving

@@ -1,5 +1,4 @@
 import type { Day, Punch, Settings } from '../types';
-import type { CalendarDay } from './calendar';
 import { hash } from './celebrate';
 import { STICKER_EMOJI } from './copy';
 import { hasText } from './priorities';
@@ -36,12 +35,22 @@ export function dayTimeclock(d: DaySummary, settings: TimeclockSettings, today: 
   return timeclockForDate(d.punches, daySettings(settings, d), d.date, today, now);
 }
 
+/** Every priority written was ticked: the priorities sticker, and the day panel's "all done". */
+export function allPrioritiesDone(d: Pick<DaySummary, 'prioritiesDone' | 'prioritiesTotal'>): boolean {
+  return d.prioritiesTotal > 0 && d.prioritiesDone === d.prioritiesTotal;
+}
+
+/** A day that earned every sticker this user can earn (`reasons` from `stickerReasons`). */
+export function isFullDay(stickers: StickerId[], reasons: { id: StickerId }[]): boolean {
+  return stickers.length === reasons.length;
+}
+
 /** The stickers one day earned, judged on its timeclock (`dayTimeclock`), worked out once by the caller. */
 export function stickersForDay(d: DaySummary, tc: TimeclockResult, trackHours: boolean | undefined): StickerId[] {
   const out: StickerId[] = [];
   if (tc.state === 'done' && trackHours !== false) out.push('clockedOut');
   if (tc.lunchStatus === 'taken') out.push('lunch');
-  if (d.prioritiesTotal > 0 && d.prioritiesDone === d.prioritiesTotal) out.push('priorities');
+  if (allPrioritiesDone(d)) out.push('priorities');
   if (d.focusSeconds > 0) out.push('focus');
   if (d.retroAt != null) out.push('reviewed');
   return out;
@@ -104,14 +113,14 @@ export interface StickerCount {
 }
 
 /** Stickers on the calendar's month (filler cells carry none); `reasons` is what a full day needs. */
-export function countStickers(weeks: CalendarDay[][], reasons: { id: StickerId }[] = STICKER_REASONS): StickerCount {
+export function countStickers(weeks: { stickers: StickerId[] }[][], reasons: { id: StickerId }[] = STICKER_REASONS): StickerCount {
   const byReason = Object.fromEntries(STICKER_REASONS.map((r) => [r.id, 0])) as Record<StickerId, number>;
   let total = 0;
   let full = 0;
   for (const row of weeks) {
     for (const d of row) {
       total += d.stickers.length;
-      if (d.stickers.length === reasons.length) full++;
+      if (isFullDay(d.stickers, reasons)) full++;
       for (const id of d.stickers) byReason[id]++;
     }
   }

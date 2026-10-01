@@ -58,6 +58,9 @@ describe('periodOffset', () => {
     expect(periodOffset('week', '2026-09-16', '2026-09-14')).toBe(0);
     expect(periodOffset('week', '2026-09-16', '2026-09-13')).toBe(1); // the Sunday before
     expect(periodOffset('week', '2026-09-16', '2026-01-02')).toBe(37); // across the year and a DST change
+    // A week with a 23-hour day (spring forward) and one with a 25-hour day (fall back) are still one week.
+    expect(periodOffset('week', '2026-03-09', '2026-03-02')).toBe(1);
+    expect(periodOffset('week', '2026-11-02', '2026-10-26')).toBe(1);
     expect(periodOffset('month', '2026-09-16', '2026-09-01')).toBe(0);
     expect(periodOffset('month', '2026-03-16', '2025-11-30')).toBe(4);
     expect(periodOffset('quarter', '2026-09-16', '2026-07-01')).toBe(0);
@@ -88,7 +91,7 @@ describe('reviewRange', () => {
       session(1, '2026-09-14', at('2026-09-14', 9), 3000, { priorityUid: 'uid100000000' }),
       session(2, '2026-09-14', at('2026-09-14', 14), 1200, { label: 'Fire drill' }),
     ],
-    retroNote: 'Slack ate the afternoon.',
+    retroNote: '\nSlack ate the afternoon.\n\n',
     retroAt: at('2026-09-14', 16),
   });
   const d2 = day('2026-09-15', {
@@ -110,18 +113,56 @@ describe('reviewRange', () => {
     expect(r.onPlanPercent).toBe(50);
     expect(r.prioritiesDone).toBe(2);
     expect(r.prioritiesTotal).toBe(3);
-    expect(r.prioritiesOpen).toBe(1);
     expect(r.retrosDone).toBe(1);
     expect(r.unplanned.map((u) => [u.label, u.dates])).toEqual([
       ['Help Sam', ['2026-09-15']],
       ['Fire drill', ['2026-09-14']],
     ]);
     expect(r.notDone).toEqual([{ key: 'write the proposal', text: 'Write the proposal', dates: ['2026-09-14'], focusedSeconds: 0, addedMidDay: false }]);
+    // The note as typed, without the blank lines around it.
     expect(r.notes).toEqual([{ date: '2026-09-14', note: 'Slack ate the afternoon.', reviewedAt: d1.retroAt }]);
   });
 
+  it('leaves out a day after today, such as the next day planned tonight', () => {
+    const tomorrow = day('2026-09-17', {
+      priorities: [row(1, 'Write the proposal'), row(2, 'Plan ahead')],
+      sessions: [session(9, '2026-09-17', at('2026-09-17', 9), 600, { label: 'Early' })],
+      retroNote: 'x',
+    });
+    expect(reviewRange([tomorrow], settings, '2026-09-16', now).days).toBe(0);
+    expect(reviewRange([d2, empty, d1, tomorrow], settings, '2026-09-16', now)).toEqual(reviewRange([d2, empty, d1], settings, '2026-09-16', now));
+  });
+
+  it('counts a day that was only marked reviewed', () => {
+    const reviewed = day('2026-09-16', { retroAt: at('2026-09-16', 16) });
+    expect(reviewRange([reviewed], settings, '2026-09-16', now)).toMatchObject({ days: 1, retrosDone: 1, workedSeconds: 0, notes: [] });
+  });
+
+  it('settles a priority ticked on a later day', () => {
+    const mon = day('2026-09-14', {
+      priorities: [row(1, 'Write the proposal')],
+      sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600, { priorityUid: 'uid100000000' })],
+    });
+    const tue = day('2026-09-15', { priorities: [row(1, 'write the proposal ', { done: true })] });
+    const r = reviewRange([tue, mon], settings, '2026-09-16', now);
+    // The tile still counts each day's rows; the list is what the range never finished.
+    expect(r).toMatchObject({ prioritiesDone: 1, prioritiesTotal: 2, notDone: [] });
+    // Left open again after the tick: only the days since, and only their time.
+    const wed = day('2026-09-16', { priorities: [row(1, 'Write the proposal')] });
+    expect(reviewRange([mon, tue, wed], settings, '2026-09-16', now).notDone).toEqual([
+      { key: 'write the proposal', text: 'Write the proposal', dates: ['2026-09-16'], focusedSeconds: 0, addedMidDay: false },
+    ]);
+    // Ticked and left open on one day, in either order: the tick wins.
+    for (const priorities of [
+      [row(1, 'Email', { done: true }), row(2, 'email ')],
+      [row(1, 'email '), row(2, 'Email', { done: true })],
+    ]) {
+      expect(reviewRange([day('2026-09-14', { priorities })], settings, '2026-09-16', now).notDone).toEqual([]);
+    }
+  });
+
   it('is all zeros for no days', () => {
-    expect(reviewRange([], settings, '2026-09-16', now)).toMatchObject({ days: 0, onPlanPercent: null, prioritiesOpen: 0 });
+    expect(reviewRange([], settings, '2026-09-16', now)).toMatchObject({ days: 0, onPlanPercent: null, notDone: [] });
   });
 
   it('rounds the on-plan share to a whole percent, and has none without focus logged', () => {
@@ -137,7 +178,8 @@ describe('reviewRange', () => {
     expect(reviewRange([offPlan], settings, '2026-09-16', now).onPlanPercent).toBe(0);
     // A day with a plan and no sessions still counts as a day, with its rows open.
     const r = reviewRange([{ ...third, sessions: [] }], settings, '2026-09-16', now);
-    expect(r).toMatchObject({ days: 1, focusedSeconds: 0, onPlanPercent: null, prioritiesOpen: 1 });
+    expect(r).toMatchObject({ days: 1, focusedSeconds: 0, onPlanPercent: null });
+    expect(r.notDone.map((g) => g.text)).toEqual(['Ship it']);
   });
 
   it('orders equally long unplanned work by date and reads a missing duration as zero', () => {

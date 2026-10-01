@@ -3,11 +3,12 @@ import {
   dayName,
   formatCountdown,
   formatDateFull,
-  formatDateShort,
+  formatDateSpan,
   formatDuration,
   formatDurationCeil,
   formatHours,
   formatMinutes,
+  formatMonth,
   formatTime,
   formatWeekday,
   resolveHour12,
@@ -38,10 +39,17 @@ describe('dates', () => {
     expect(formatDateFull('2026-09-16')).toMatch(/2026/);
     expect(formatDateFull('2026-09-16')).toMatch(/16/);
     expect(formatWeekday('2026-09-16')).toBe(new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(new Date(2026, 8, 16)));
-    // The short date carries the day and month and nothing of the weekday, in any locale.
-    const short = formatDateShort('2026-09-16');
-    expect(short).toBe(new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(2026, 8, 16)));
-    expect(short).not.toContain(formatWeekday('2026-09-16'));
+  });
+
+  it("writes the period labels in the locale's own patterns", () => {
+    // Compared with Intl itself: the spacing around the dash and the day-month order are the locale's.
+    expect(formatMonth('2026-09-16')).toBe(new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(new Date(2026, 8, 16)));
+    const span = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+    expect(formatDateSpan('2026-09-14', '2026-09-20')).toBe(span.formatRange(new Date(2026, 8, 14), new Date(2026, 8, 20)));
+    expect(formatDateSpan('2026-09-28', '2026-10-04')).toBe(span.formatRange(new Date(2026, 8, 28), new Date(2026, 9, 4)));
+    // Across New Year the locale adds the years.
+    expect(formatDateSpan('2025-12-29', '2026-01-04')).toBe(span.formatRange(new Date(2025, 11, 29), new Date(2026, 0, 4)));
+    expect(formatDateSpan('2025-12-29', '2026-01-04')).toMatch(/2026/);
   });
 
   it('takes an instant down to the start of its minute, never later', () => {

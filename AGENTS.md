@@ -429,15 +429,18 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   one period at a time, which lays the day store's copies over the answer so an edit shows at
   once); register any new literal path under `/days` before `/:date`.
 - **History → Days opens on the route's date.** `App.tsx` passes `route.date ?? today` to `History`;
-  the calendar starts on that month with that day picked (`periodOffset('month', …)`), and
-  only "Open day" navigates. So the header's History button lands on the month of the day
-  being viewed. "Open day" first records the picked day on the History entry
-  (`navigate(…, { replace: true })`) and then pushes the sheet, so browser Back from that day
-  reopens the calendar on its month with the day picked; History's tab and the Review period
-  are component state, so Back from a day opened in Review lands on Days with that day
-  picked. The month grid is
-  `calendarMonth()` (pure); the panel's numbers come from `timeclockForDate` + `daySummaryOf`,
-  the same math as the sheet.
+  the calendar starts on that month with that day picked, and only "Open day" navigates. So
+  the header's History button lands on the month of the day being viewed. The calendar holds
+  that month by its first day (`startOfMonth(date)`), so a month left open over midnight stays
+  on screen with its day picked; ◀ ▶ and "This month" count from today (`periodOffset`). The
+  review's period is held the same way, and switching Week / Month / Quarter keeps the time on
+  screen (the current period stays current). "Open day" first records the picked day on the
+  History entry (`navigate(…, { replace: true })`) and then pushes the sheet, so browser Back
+  from that day reopens the calendar on its month with the day picked; History's tab and the
+  Review period are component state, so Back from a day opened in Review lands on Days with
+  that day picked. The month grid is `calendarMonth()` (pure) over the days `hasContent`
+  (`lib/retro.ts`) keeps, the rule the review counts days by; the panel's numbers come from
+  `timeclockForDate` + `daySummaryOf`, the same math as the sheet.
 - **The `retro` alarm target is the clock-out instant** ("warn before" = minutes before the
   end of the day) and is **not** silenced by overtime approval; marking the day reviewed
   (`days.retro_at`), or hiding the retrospective card under Customize (`alarmTargets` reads
