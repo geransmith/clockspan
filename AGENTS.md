@@ -522,8 +522,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `*.test.ts`: happy path, each 400, and that another
   user gets a 404/empty result (the scoping test is not optional). A new `/:date` route also
   gets a row in the bad-date table at the end of `server/routes/days.test.ts`: unlike the `/:id`
-  ownership check, that table does not pick up new routes on its own. If the seed should carry
-  the new field, add it to `server/dev/seed.ts` and its manifest.
+  ownership check, that table does not pick up new routes on its own. The seed's manifest types
+  (`SeededDay` and the aliases beside it in `server/dev/seed.ts`) are built from `Day`,
+  `Session`, `Priority` and `Break`, so `typecheck` fails there on a new field until the
+  templates set it, or it is added to the type's `Omit` list if the server derives it (like
+  `durationSeconds`). Write its column in `insertDay` too; typecheck does not check that.
 - **A schema change**: append a migration string to `MIGRATIONS` in `db.ts`. Never edit an
   existing entry. A new table with a `user_id` also joins the README's script under "Switching
   modes later" (and its count of places); `server/db.test.ts` fails until it does.

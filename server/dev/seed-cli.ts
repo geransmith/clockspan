@@ -1,17 +1,11 @@
+import { parseArgs } from 'node:util';
 import { loadConfig } from '../config.js';
 import { ensureDefaultUser, openDatabase } from '../db.js';
+import { isWholeNumber } from '../validate.js';
 import { insertSession, SESSION_COOKIE } from '../auth/session.js';
-import { isValidDateKey, todayKey } from '../../shared/dates.js';
-import {
-  DEFAULT_HISTORY_DAYS,
-  LOCAL_USERS,
-  ensureLocalUsers,
-  ensureOidcDevUser,
-  quarterStart,
-  seedDatabase,
-  weekdaysSince,
-  type SeedManifest,
-} from './seed.js';
+import { AUTH_MODES, type AuthMode } from '../../shared/api.js';
+import { addMonths, isValidDateKey, startOfQuarter, todayKey } from '../../shared/dates.js';
+import { DEFAULT_HISTORY_DAYS, LOCAL_USERS, ensureLocalUsers, ensureOidcDevUser, seedDatabase, weekdaysSince, type SeedManifest } from './seed.js';
 
 // Usage: npm run seed [-- --fresh] [--running] [--days N | --quarter] [--today YYYY-MM-DD] [--now HH:MM]
 //                     [--auth none|local|oidc] [--sessions]
@@ -30,39 +24,28 @@ if (process.env.NODE_ENV === 'production') {
   process.exit(2);
 }
 
-const opts: { fresh: boolean; running: boolean; quarter: boolean; sessions: boolean; auth?: string; days?: string; today?: string; now?: string } = {
-  fresh: false,
-  running: false,
-  quarter: false,
-  sessions: false,
-};
 const USAGE = 'Options: --fresh --running --days N --quarter --today YYYY-MM-DD --now HH:MM --auth MODE --sessions';
-const args = process.argv.slice(2);
-for (let i = 0; i < args.length; i++) {
-  const [name, inline] = args[i]!.split('=', 2) as [string, string | undefined];
-  const next = () => {
-    const value = inline ?? args[++i];
-    // Left last with nothing after it, the option would otherwise be dropped without a word
-    // (and an empty `--days=` read as 0).
-    if (!value) {
-      console.error(`${name} needs a value. ${USAGE}`);
-      process.exit(2);
-    }
-    return value;
-  };
-  if (name === '--fresh') opts.fresh = true;
-  else if (name === '--running') opts.running = true;
-  else if (name === '--quarter') opts.quarter = true;
-  else if (name === '--sessions') opts.sessions = true;
-  else if (name === '--auth') opts.auth = next();
-  else if (name === '--days') opts.days = next();
-  else if (name === '--today') opts.today = next();
-  else if (name === '--now') opts.now = next();
-  else {
-    console.error(`Unknown option ${name}. ${USAGE}`);
+function readOptions() {
+  try {
+    return parseArgs({
+      options: {
+        fresh: { type: 'boolean' },
+        running: { type: 'boolean' },
+        quarter: { type: 'boolean' },
+        sessions: { type: 'boolean' },
+        auth: { type: 'string' },
+        days: { type: 'string' },
+        today: { type: 'string' },
+        now: { type: 'string' },
+      },
+    }).values;
+  } catch (err) {
+    // parseArgs refuses an unknown option, a missing value, a value on a switch (--fresh=yes) and an option where a value belongs (--days --quarter).
+    console.error(`${(err as Error).message}\n${USAGE}`);
     process.exit(2);
   }
 }
+const opts = readOptions();
 
 const clock = new Date();
 const today = opts.today ?? todayKey(clock.getTime());
@@ -91,15 +74,18 @@ if (opts.quarter && opts.days !== undefined) {
 }
 const daysRaw = opts.days;
 // --quarter covers the previous calendar quarter too, so Review → Quarter has a step back.
-const days = opts.quarter ? weekdaysSince(quarterStart(today, 1), today) : daysRaw === undefined ? DEFAULT_HISTORY_DAYS : Number(daysRaw);
-if (!Number.isInteger(days) || days < 0 || days > 400) {
+const days = opts.quarter ? weekdaysSince(addMonths(startOfQuarter(today), -3), today) : daysRaw === undefined ? DEFAULT_HISTORY_DAYS : Number(daysRaw);
+// Number('') is 0, which the range check would pass, so an empty --days= is checked for first.
+if (daysRaw === '' || !isWholeNumber(days, { min: 0, max: 400 })) {
   console.error(`--days must be a whole number from 0 to 400 (got "${daysRaw}").`);
   process.exit(2);
 }
 const { fresh, running } = opts;
 
-if (opts.auth !== undefined && !['none', 'local', 'oidc'].includes(opts.auth)) {
-  console.error(`--auth must be none, local or oidc (got "${opts.auth}").`);
+// Checked here as well as in loadConfig: `--auth=` would be dropped below, and a mixed-case
+// mode, which loadConfig accepts, would skip the OIDC placeholders.
+if (opts.auth !== undefined && !AUTH_MODES.includes(opts.auth as AuthMode)) {
+  console.error(`--auth must be one of ${AUTH_MODES.join('|')} (got "${opts.auth}").`);
   process.exit(2);
 }
 const env: NodeJS.ProcessEnv = { ...process.env, ...(opts.auth ? { AUTH_MODE: opts.auth } : {}) };

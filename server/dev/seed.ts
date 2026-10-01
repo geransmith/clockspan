@@ -1,10 +1,11 @@
 import type { Config } from '../config.js';
-import type { DB, UserRow } from '../db.js';
+import { findLocalUser, findUserById, type DB, type UserRow } from '../db.js';
 import { upsertOidcUser } from '../auth/oidc.js';
 import { hashPassword } from '../auth/password.js';
-import { addDays, addMonths, parseDateKey, startOfQuarter } from '../../shared/dates.js';
+import { revokeSessions } from '../auth/session.js';
+import { addDays, HOUR_MS, MINUTE_MS, parseDateKey } from '../../shared/dates.js';
 import { kindForPosition } from '../../shared/punches.js';
-import type { Punch, SessionStatus } from '../../shared/api.js';
+import type { Break, Day, Priority, Punch, Session } from '../../shared/api.js';
 
 /**
  * Deterministic sample data for the dev DB and for API tests. Rows are written with plain
@@ -29,50 +30,19 @@ export interface SeedOptions {
   fresh?: boolean;
 }
 
-export type SeededPunch = Punch;
+/** A priority row with text, so it always has its uid and addedAt. */
+type SeededPriority = Priority & { uid: string; addedAt: number };
+type SeededSession = Omit<Session, 'date' | 'pausedAt' | 'durationSeconds'>;
+type SeededBreak = Omit<Break, 'date'>;
 
-export interface SeededPriority {
-  position: number;
-  text: string;
-  done: boolean;
-  uid: string;
-  addedAt: number;
-}
-
-export interface SeededSession {
-  id: number;
-  label: string;
-  plannedSeconds: number;
-  startedAt: number;
-  endedAt: number | null;
-  status: SessionStatus;
-  priorityUid: string | null;
-  /** Pauses that ended; the log leaves them out of the time worked. */
-  pausedSeconds: number;
-}
-
-export interface SeededBreak {
-  id: number;
-  plannedSeconds: number;
-  startedAt: number;
-  endedAt: number;
-}
-
-export interface SeededDay {
-  date: string;
+export type SeededDay = Omit<Day, 'priorities' | 'sessions' | 'breaks'> & {
   /** Which template built the day; tests pick days by this. */
   kind: DayKind;
   createdAt: number;
-  punches: SeededPunch[];
   priorities: SeededPriority[];
   sessions: SeededSession[];
   breaks: SeededBreak[];
-  overtimeApproved: boolean;
-  retroNote: string;
-  retroAt: number | null;
-  /** The day's own work-day length, or null for the setting's. */
-  workMinutes: number | null;
-}
+};
 
 export interface SeedManifest {
   today: string;
@@ -84,8 +54,6 @@ export type DayKind = 'normal' | 'extraPair' | 'overtime' | 'unreviewed' | 'noLu
 
 export const DEFAULT_HISTORY_DAYS = 10;
 export const LOCAL_USERS = { admin: 'admin', member: 'sam', password: 'clockspan-dev' } as const;
-
-const MIN = 60_000;
 
 // ----- calendar helpers (the dev machine's zone, which is what the browser shows) -----
 
@@ -105,11 +73,6 @@ export function weekdaysSince(from: string, key: string): number {
   let n = 0;
   for (let cur = addDays(key, -1); cur >= from; cur = addDays(cur, -1)) if (!isWeekend(cur)) n++;
   return n;
-}
-
-/** First day of the calendar quarter `quartersBack` before the one holding `key`. */
-export function quarterStart(key: string, quartersBack = 0): string {
-  return addMonths(startOfQuarter(key), -3 * quartersBack);
 }
 
 /** The `n` weekdays before `key`, oldest first. */
@@ -239,20 +202,22 @@ function insertDay(ctx: Insert, day: DayDraft): SeededDay {
   return { ...day, sessions, breaks };
 }
 
-function punchRows(times: (number | null)[]): SeededPunch[] {
+function punchRows(times: (number | null)[]): Punch[] {
   return times.map((t, position) => ({ position, kind: kindForPosition(position), at: t }));
 }
 
 /**
  * A finished session planned for `minutes`. Worked shorter, it was finished early; paused, its
  * end moves out by the pause, which the log leaves out, the way the finish route records it.
+ * The cancelled and running rows are this shape with `status` set over it, and for a running
+ * row `endedAt: null`.
  */
 function completed(label: string, startedAt: number, minutes: number, priorityUid: string | null, worked = minutes, paused = 0): Omit<SeededSession, 'id'> {
   return {
     label,
     plannedSeconds: minutes * 60,
     startedAt,
-    endedAt: startedAt + (worked + paused) * MIN,
+    endedAt: startedAt + (worked + paused) * MINUTE_MS,
     status: 'completed',
     priorityUid,
     pausedSeconds: paused * 60,
@@ -261,7 +226,7 @@ function completed(label: string, startedAt: number, minutes: number, priorityUi
 
 /** A break planned for `minutes`; one `took` less was ended early. */
 function rested(startedAt: number, minutes: number, took = minutes): Omit<SeededBreak, 'id'> {
-  return { plannedSeconds: minutes * 60, startedAt, endedAt: startedAt + took * MIN };
+  return { plannedSeconds: minutes * 60, startedAt, endedAt: startedAt + took * MINUTE_MS };
 }
 
 /** Builds one past weekday. `index` counts from the oldest day; `kind` picks the template. */
@@ -270,11 +235,11 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
   const pick = <T>(arr: readonly T[]): T => arr[Math.floor(rand() * arr.length)]!;
   const texts = shuffle(PRIORITY_TEXTS, rand);
 
-  const clockIn = at(date, 8, 30) + jitter(10) * MIN;
-  const createdAt = clockIn - 4 * MIN;
-  const lunchOut = at(date, 12, 15) + jitter(10) * MIN;
-  const lunchIn = lunchOut + (30 + Math.max(0, jitter(5))) * MIN;
-  const clockOut = at(date, 17, 0) + jitter(15) * MIN;
+  const clockIn = at(date, 8, 30) + jitter(10) * MINUTE_MS;
+  const createdAt = clockIn - 4 * MINUTE_MS;
+  const lunchOut = at(date, 12, 15) + jitter(10) * MINUTE_MS;
+  const lunchIn = lunchOut + (30 + Math.max(0, jitter(5))) * MINUTE_MS;
+  const clockOut = at(date, 17, 0) + jitter(15) * MINUTE_MS;
 
   const priority = (position: number, text: string, done: boolean, addedAt = createdAt): SeededPriority => ({
     position,
@@ -289,24 +254,24 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
   if (kind === 'extraPair') {
     // An extra out/in pair in the afternoon (positions 3-4) pushes the clock out to position 5.
     const extraOut = at(date, 15, 0);
-    const extraIn = extraOut + 20 * MIN;
+    const extraIn = extraOut + 20 * MINUTE_MS;
     const priorities = [priority(1, texts[0]!, true), priority(2, texts[1]!, true), priority(3, texts[2]!, false)];
-    const firstStart = clockIn + 15 * MIN;
+    const firstStart = clockIn + 15 * MINUTE_MS;
     // Written after work started: the retrospective flags it as added mid-day.
-    priorities.push(priority(4, 'Reply to the recruiter', true, firstStart + 90 * MIN));
+    priorities.push(priority(4, 'Reply to the recruiter', true, firstStart + 90 * MINUTE_MS));
     return {
       ...base,
-      punches: punchRows([clockIn, lunchOut, lunchIn, extraOut, extraIn, clockOut + 10 * MIN]),
+      punches: punchRows([clockIn, lunchOut, lunchIn, extraOut, extraIn, clockOut + 10 * MINUTE_MS]),
       priorities,
       sessions: [
         completed(texts[0]!, firstStart, 25, priorities[0]!.uid),
-        completed(texts[1]!, firstStart + 45 * MIN, 50, priorities[1]!.uid),
-        completed('Reply to the recruiter', lunchIn + 20 * MIN, 25, priorities[3]!.uid),
-        completed(pick(UNPLANNED_LABELS), extraIn + 15 * MIN, 25, null),
+        completed(texts[1]!, firstStart + 45 * MINUTE_MS, 50, priorities[1]!.uid),
+        completed('Reply to the recruiter', lunchIn + 20 * MINUTE_MS, 25, priorities[3]!.uid),
+        completed(pick(UNPLANNED_LABELS), extraIn + 15 * MINUTE_MS, 25, null),
       ],
-      breaks: [rested(firstStart + 25 * MIN, 5)],
+      breaks: [rested(firstStart + 25 * MINUTE_MS, 5)],
       retroNote: note(NOTES.extraPair),
-      retroAt: clockOut + 15 * MIN,
+      retroAt: clockOut + 15 * MINUTE_MS,
     };
   }
 
@@ -316,13 +281,13 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
     const earlyIn = at(date, 8, 15);
     const lateOut = at(date, 19, 30);
     const priorities = [
-      priority(1, texts[0]!, true, earlyIn - 4 * MIN),
-      priority(2, texts[1]!, true, earlyIn - 4 * MIN),
-      priority(3, texts[2]!, true, earlyIn - 4 * MIN),
+      priority(1, texts[0]!, true, earlyIn - 4 * MINUTE_MS),
+      priority(2, texts[1]!, true, earlyIn - 4 * MINUTE_MS),
+      priority(3, texts[2]!, true, earlyIn - 4 * MINUTE_MS),
     ];
     return {
       ...base,
-      createdAt: earlyIn - 4 * MIN,
+      createdAt: earlyIn - 4 * MINUTE_MS,
       overtimeApproved: true,
       punches: punchRows([earlyIn, at(date, 12, 0), at(date, 12, 30), at(date, 17, 15), at(date, 17, 45), lateOut]),
       priorities,
@@ -334,7 +299,7 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
       ],
       breaks: [],
       retroNote: note(NOTES.overtime),
-      retroAt: lateOut + 5 * MIN,
+      retroAt: lateOut + 5 * MINUTE_MS,
     };
   }
 
@@ -345,18 +310,10 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
       punches: punchRows([clockIn, lunchOut, lunchIn, clockOut]),
       priorities,
       sessions: [
-        completed(texts[0]!, clockIn + 20 * MIN, 25, priorities[0]!.uid),
+        completed(texts[0]!, clockIn + 20 * MINUTE_MS, 25, priorities[0]!.uid),
         // Cancelled a few minutes in: must not count anywhere.
-        {
-          label: texts[1]!,
-          plannedSeconds: 25 * 60,
-          startedAt: clockIn + 60 * MIN,
-          endedAt: clockIn + 65 * MIN,
-          status: 'cancelled',
-          priorityUid: priorities[1]!.uid,
-          pausedSeconds: 0,
-        },
-        completed(pick(UNPLANNED_LABELS), lunchIn + 30 * MIN, 25, null),
+        { ...completed(texts[1]!, clockIn + 60 * MINUTE_MS, 25, priorities[1]!.uid, 5), status: 'cancelled' },
+        completed(pick(UNPLANNED_LABELS), lunchIn + 30 * MINUTE_MS, 25, null),
       ],
       breaks: [],
       // Written, but the day was never marked reviewed.
@@ -369,17 +326,17 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
     // A half day: its own 4.5 h work day, so it ends on target, and lunch rows never punched.
     const halfIn = at(date, 9, 0);
     const halfOut = at(date, 13, 30);
-    const priorities = [priority(1, texts[0]!, true, halfIn - 4 * MIN), priority(2, texts[1]!, false, halfIn - 4 * MIN)];
+    const priorities = [priority(1, texts[0]!, true, halfIn - 4 * MINUTE_MS), priority(2, texts[1]!, false, halfIn - 4 * MINUTE_MS)];
     return {
       ...base,
-      createdAt: halfIn - 4 * MIN,
+      createdAt: halfIn - 4 * MINUTE_MS,
       workMinutes: 270,
       punches: punchRows([halfIn, null, null, halfOut]),
       priorities,
-      sessions: [completed(texts[0]!, halfIn + 10 * MIN, 50, priorities[0]!.uid), completed(texts[0]!, halfIn + 70 * MIN, 50, priorities[0]!.uid)],
-      breaks: [rested(halfIn + 60 * MIN, 10)],
+      sessions: [completed(texts[0]!, halfIn + 10 * MINUTE_MS, 50, priorities[0]!.uid), completed(texts[0]!, halfIn + 70 * MINUTE_MS, 50, priorities[0]!.uid)],
+      breaks: [rested(halfIn + 60 * MINUTE_MS, 10)],
       retroNote: note(NOTES.noLunch),
-      retroAt: halfOut + 2 * MIN,
+      retroAt: halfOut + 2 * MINUTE_MS,
     };
   }
 
@@ -390,14 +347,14 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
     punches: punchRows([clockIn, lunchOut, lunchIn, clockOut]),
     priorities,
     sessions: [
-      completed(texts[0]!, clockIn + 15 * MIN, 25, priorities[0]!.uid),
-      completed(texts[1]!, clockIn + 60 * MIN, 50, priorities[1]!.uid),
-      completed(pick(UNPLANNED_LABELS), lunchIn + 30 * MIN, 25, null),
+      completed(texts[0]!, clockIn + 15 * MINUTE_MS, 25, priorities[0]!.uid),
+      completed(texts[1]!, clockIn + 60 * MINUTE_MS, 50, priorities[1]!.uid),
+      completed(pick(UNPLANNED_LABELS), lunchIn + 30 * MINUTE_MS, 25, null),
     ],
     // A fifth of each session before it, the way Suggest breaks sizes them.
-    breaks: [rested(clockIn + 40 * MIN, 5), rested(clockIn + 110 * MIN, 10)],
+    breaks: [rested(clockIn + 40 * MINUTE_MS, 5), rested(clockIn + 110 * MINUTE_MS, 10)],
     retroNote: note(twoDone ? NOTES.twoDone : NOTES.oneDone),
-    retroAt: clockOut + 5 * MIN,
+    retroAt: clockOut + 5 * MINUTE_MS,
   };
 }
 
@@ -420,35 +377,25 @@ export function kindForDistance(distance: number): Exclude<DayKind, 'today'> {
 /** `last` is the weekday before, whose retrospective planned today's list; none with no history. */
 function buildToday(today: string, now: number, index: number, running: boolean, last: Pick<SeededDay, 'priorities' | 'retroAt'> | undefined): DayDraft {
   // Two hours ago, on the minute, but never before today started (a seed run at 01:00) or after now.
-  const clockIn = Math.min(now, Math.max(at(today, 0, 5), Math.floor((now - 2 * 3_600_000) / MIN) * MIN));
+  const clockIn = Math.min(now, Math.max(at(today, 0, 5), Math.floor((now - 2 * HOUR_MS) / MINUTE_MS) * MINUTE_MS));
   // Planned the evening before with Plan next, which carries over what that day left open; the
   // planner's save is what stored today's row. With no history, written on arrival.
-  const plannedAt = last?.retroAt != null ? last.retroAt + 2 * MIN : clockIn - 3 * MIN;
+  const plannedAt = last?.retroAt != null ? last.retroAt + 2 * MINUTE_MS : clockIn - 3 * MINUTE_MS;
   const carried = last?.priorities.find((p) => !p.done)?.text ?? 'Update the onboarding doc';
   const row = (position: number, text: string, done: boolean): SeededPriority => ({ position, text, done, uid: uidFor(index, position), addedAt: plannedAt });
   const priorities = [row(1, carried, false), row(2, 'Ship the timeclock fix', true), row(3, 'Answer the two open support threads', false)];
 
-  const runningFrom = Math.max(clockIn, now - 10 * MIN);
+  const runningFrom = Math.max(clockIn, now - 10 * MINUTE_MS);
   // A run soon after midnight has less than two hours for these, so keep only what ended
   // before the running timer started (or before now): nothing overlaps it, and no break is
   // still running beside it, which the server would refuse.
   const until = running ? runningFrom : now;
   const sessions = [
-    completed('Ship the timeclock fix', clockIn + 10 * MIN, 50, priorities[1]!.uid),
+    completed('Ship the timeclock fix', clockIn + 10 * MINUTE_MS, 50, priorities[1]!.uid),
     // Paused eight minutes for a question, then finished three minutes short of the plan.
-    completed('Inbox', clockIn + 70 * MIN, 25, null, 22, 8),
+    completed('Inbox', clockIn + 70 * MINUTE_MS, 25, null, 22, 8),
   ].filter((s) => s.endedAt! <= until);
-  if (running) {
-    sessions.push({
-      label: 'Answer the two open support threads',
-      plannedSeconds: 25 * 60,
-      startedAt: runningFrom,
-      endedAt: null,
-      status: 'running',
-      priorityUid: priorities[2]!.uid,
-      pausedSeconds: 0,
-    });
-  }
+  if (running) sessions.push({ ...completed('Answer the two open support threads', runningFrom, 25, priorities[2]!.uid), endedAt: null, status: 'running' });
   return {
     date: today,
     kind: 'today',
@@ -459,7 +406,7 @@ function buildToday(today: string, now: number, index: number, running: boolean,
     priorities,
     sessions,
     // The second was ended early, back at the desk before its ten minutes were up.
-    breaks: [rested(clockIn + 60 * MIN, 10), rested(clockIn + 102 * MIN, 10, 6)].filter((b) => b.endedAt <= until),
+    breaks: [rested(clockIn + 60 * MINUTE_MS, 10), rested(clockIn + 102 * MINUTE_MS, 10, 6)].filter((b) => b.endedAt <= until),
     retroNote: '',
     retroAt: null,
   };
@@ -479,7 +426,7 @@ export function seedDatabase(db: DB, opts: SeedOptions): SeedManifest {
     db.prepare(`DELETE FROM days WHERE user_id = ?`).run(opts.userId);
     if (opts.fresh) {
       db.prepare(`DELETE FROM settings WHERE user_id = ?`).run(opts.userId);
-      db.prepare(`DELETE FROM auth_sessions WHERE user_id = ?`).run(opts.userId);
+      revokeSessions(db, opts.userId);
     }
     const ctx = { db, userId: opts.userId };
     const days = dates.map((date, i) => insertDay(ctx, buildPastDay(date, i, kindForDistance(dates.length - 1 - i), rand, note)));
@@ -488,20 +435,18 @@ export function seedDatabase(db: DB, opts: SeedOptions): SeedManifest {
   })();
 }
 
-/** The two local-auth users the seed fills in under AUTH_MODE=local. Idempotent. */
+/**
+ * The two local-auth users the seed fills in under AUTH_MODE=local. Idempotent: an existing
+ * account is reused whatever the case of its name, as sign-in matches names.
+ */
 export async function ensureLocalUsers(db: DB): Promise<{ admin: UserRow; member: UserRow }> {
-  const get = (username: string) => db.prepare(`SELECT * FROM users WHERE kind = 'local' AND username = ?`).get(username) as UserRow | undefined;
   const create = async (username: string, isAdmin: boolean): Promise<UserRow> => {
-    const existing = get(username);
+    const existing = findLocalUser(db, username);
     if (existing) return existing;
-    db.prepare(`INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at) VALUES ('local', ?, ?, ?, ?, ?)`).run(
-      username,
-      await hashPassword(LOCAL_USERS.password),
-      username,
-      isAdmin ? 1 : 0,
-      Date.now(),
-    );
-    return get(username)!;
+    const info = db
+      .prepare(`INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at) VALUES ('local', ?, ?, ?, ?, ?)`)
+      .run(username, await hashPassword(LOCAL_USERS.password), username, isAdmin ? 1 : 0, Date.now());
+    return findUserById(db, info.lastInsertRowid)!;
   };
   return { admin: await create(LOCAL_USERS.admin, true), member: await create(LOCAL_USERS.member, false) };
 }
@@ -511,5 +456,5 @@ export const OIDC_DEV_USER = { sub: 'clockspan-dev', name: 'Dev User' } as const
 
 /** Idempotent, and stored the way a real sign-in would store the provider's subject. */
 export function ensureOidcDevUser(db: DB, config: Config): UserRow {
-  return upsertOidcUser(db, `${config.oidc!.issuer}|${OIDC_DEV_USER.sub}`, OIDC_DEV_USER.name);
+  return upsertOidcUser(db, config.oidc!.issuer, OIDC_DEV_USER.sub, OIDC_DEV_USER.name);
 }

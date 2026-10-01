@@ -69,20 +69,20 @@ describe('AUTH_MODE=oidc', () => {
   });
 
   it('makes the first provider user the admin, later ones members, and follows a renamed user', () => {
-    const first = upsertOidcUser(app.db, 'issuer|1', 'Ada');
-    const second = upsertOidcUser(app.db, 'issuer|2', 'Bob');
+    const first = upsertOidcUser(app.db, 'issuer', '1', 'Ada');
+    const second = upsertOidcUser(app.db, 'issuer', '2', 'Bob');
     expect(first).toMatchObject({ kind: 'oidc', oidc_sub: 'issuer|1', display_name: 'Ada', is_admin: 1 });
     expect(second).toMatchObject({ kind: 'oidc', oidc_sub: 'issuer|2', display_name: 'Bob', is_admin: 0 });
     // Same subject again: same row, new name, admin flag untouched.
-    const renamed = upsertOidcUser(app.db, 'issuer|1', 'Ada L.');
+    const renamed = upsertOidcUser(app.db, 'issuer', '1', 'Ada L.');
     expect(renamed.id).toBe(first.id);
     expect(renamed.display_name).toBe('Ada L.');
     expect(renamed.is_admin).toBe(1);
     expect(app.db.prepare(`SELECT display_name FROM users WHERE id = ?`).get(first.id)).toEqual({ display_name: 'Ada L.' });
     // The same name again is a plain read.
-    expect(upsertOidcUser(app.db, 'issuer|1', 'Ada L.')).toMatchObject({ id: first.id, display_name: 'Ada L.' });
+    expect(upsertOidcUser(app.db, 'issuer', '1', 'Ada L.')).toMatchObject({ id: first.id, display_name: 'Ada L.' });
     expect(app.count('users', `kind = 'oidc'`)).toBe(2);
     // A name is a label: a provider that sends a paragraph gets the first 100 characters.
-    expect(upsertOidcUser(app.db, 'issuer|3', 'n'.repeat(500)).display_name).toBe('n'.repeat(100));
+    expect(upsertOidcUser(app.db, 'issuer', '3', 'n'.repeat(500)).display_name).toBe('n'.repeat(100));
   });
 });
