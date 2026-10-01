@@ -112,6 +112,19 @@ describe('Clock out at', () => {
     expect(tiles(afterLunch, at(17), { overtimeApproval: false }).clockOut).toEqual({ value: '16:30', sub: '30m past your day', tone: 'tile--accent' });
   });
 
+  it('says On target, not over by 0m, on a break taken at the target and for the first minute past it', () => {
+    const onTarget = { value: '16:30', sub: 'On target', tone: 'tile--accent' };
+    expect(tiles(punches(addPunchPair(empty), at(8), at(12), at(12, 30), at(16, 30)), at(16, 40)).clockOut).toEqual(onTarget);
+    expect(tiles(afterLunch, at(16, 30) + 30_000).clockOut).toEqual(onTarget);
+    expect(tiles(afterLunch, at(16, 30) + 30_000, { overtimeApproval: false }).clockOut).toEqual(onTarget);
+    // A half day's Lunch out at its 4 h: at lunch, with nothing left to work.
+    expect(tiles(punches(empty, at(8), at(12)), at(12, 10), {}, { workMinutes: 240 }).clockOut).toEqual({
+      value: '12:00',
+      sub: 'On target',
+      tone: 'tile--accent',
+    });
+  });
+
   it('holds the time the target was reached on a break past it', () => {
     const out = punches(addPunchPair(empty), at(8), at(12), at(12, 30), at(17));
     expect(tiles(out, at(17, 10)).clockOut).toEqual({ value: '16:30', sub: 'Over by 30m', tone: 'tile--danger' });

@@ -91,8 +91,9 @@ export function Timeclock({
     onChange(addPunchPair(punches));
   };
   const removePair = (outPosition: number) => {
-    // Undoing an Add can give the Clock out its time back and end the day, so the day-complete
-    // clip needs this gesture too.
+    // Removing a pair can end the day (an Add undone, or a stray Out after the Clock out gone) or
+    // reach the week's target (a removed break counts as worked again), so both clips need this
+    // gesture.
     unlockAudio();
     onChange(added && outPosition === added.length - 1 && samePunches(addPunchPair(added), punches) ? added : removePunchPair(punches, outPosition));
   };
@@ -129,7 +130,8 @@ export function Timeclock({
   // The burst and the sound mark the day *becoming* done while the card is open, not a day
   // that already was when it mounted (the sheet keys this card by date); the same clock-out
   // set again still counts. The burst flies from the notice. Done depends on the punches
-  // alone, so the settings arriving never makes a moment, and this needs no wait for them.
+  // and the clock, never on the settings, so their arrival never makes a moment, and this needs
+  // no wait for them.
   const { anchor: noticeRef, burst: dayBurst } = useCelebration<HTMLDivElement>(useBecameTrue(celebration != null), 'dayDone');
   // The same for the week's target, on today's sheet: the clock running past it, or a punch
   // that gets it there. Unknown until the settings are in, or a shorter saved week than the

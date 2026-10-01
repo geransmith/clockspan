@@ -35,8 +35,8 @@ export interface TimeclockResult {
   clockOutStatus: ClockOutStatus;
   /**
    * When worked time reaches `secondMealAfterMinutes` (California: a second meal period is
-   * due before the end of the 10th hour worked). Same behaviour as `clockOutAt`: fixed while
-   * working, drifts on a break, anchored once passed. Null before clock-in or when done.
+   * due before the end of the 10th hour worked). Fixed while working; on a break it drifts
+   * later. Null before clock-in or when done.
    */
   secondMealBy: number | null;
   /** 'taken' once any non-lunch break starts after lunch out. */

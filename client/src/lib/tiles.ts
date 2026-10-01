@@ -63,6 +63,12 @@ export function timeclockTiles(tc: TimeclockResult, o: TileOptions): { lunch: Ti
     if (tc.clockOutStatus === 'done') {
       clockOut.tone = 'tile--accent';
       clockOut.sub = 'Day complete';
+    } else if (tc.clockOutStatus === 'over' && tc.overSeconds < 60) {
+      // Punches are whole minutes, so a break taken at the target (an Add after an on-target
+      // Clock out, a half day's Lunch out) leaves the day exactly on it; like the Worked tile,
+      // under a minute past it is not "Over by 0m".
+      clockOut.tone = 'tile--accent';
+      clockOut.sub = 'On target';
     } else if (tc.clockOutStatus === 'over') {
       // With overtime off (exempt, salaried work) there's no approval, and time past the day is just later.
       clockOut.tone = o.overtimeApproved || !o.overtimeApproval ? 'tile--accent' : 'tile--danger';

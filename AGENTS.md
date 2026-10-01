@@ -281,8 +281,9 @@ Never commit `data/` or `.env`.
   under `settings.sound`, the burst under `settings.celebrations`. A state's moment comes from
   `useBecameTrue`, so it is the day *becoming* done while the card is mounted, never a done day
   opening. The work-week moment is null until `loaded`, because its target is a setting; the day
-  moment needs no wait, because done depends only on the punches. The sound plays after the
-  render, so a moment set by a tap calls `unlockAudio()` in that handler first.
+  moment needs no wait, because done depends on the punches and the clock, never on the
+  settings. The sound plays after the render, so a moment set by a tap calls `unlockAudio()` in
+  that handler first.
 - **Timer remaining time is derived from the server's `startedAt`, `plannedSeconds` and pauses**
   on every tick (`timerView()` in `client/src/lib/timer.ts`, on `shared/timer.ts`) — never a
   client-side counter. A paused session is still `status = 'running'` with `pausedAt` set;
