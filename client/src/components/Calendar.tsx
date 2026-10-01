@@ -1,13 +1,25 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
+import { startOfMonth } from '../../../shared/dates.js';
 import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
-import { calendarMonth, pickedTimeclock } from '../lib/calendar';
+import { calendarMonth, type CalendarDay } from '../lib/calendar';
 import { STICKERS_EMPTY } from '../lib/copy';
 import { dayName, formatDateLong, formatDuration, formatHours, formatWeekday, plural } from '../lib/format';
+import { hasContent } from '../lib/retro';
 import { periodOffset, periodRange } from '../lib/review';
-import { countStickers, daySummaryOf, STICKER_LABELS, stickerEmoji, stickerReasons, type StickerId } from '../lib/stickers';
+import {
+  allPrioritiesDone,
+  countStickers,
+  dayTimeclock,
+  daySummaryOf,
+  isFullDay,
+  STICKER_LABELS,
+  stickerEmoji,
+  stickerReasons,
+  type DaySummary,
+  type StickerId,
+} from '../lib/stickers';
 import { targetFraction, type TimeclockResult } from '../lib/timeclock';
-import type { Day } from '../types';
 import { Check } from './Icons';
 import { PeriodNav, PeriodReset } from './PeriodNav';
 import { Tile } from './Tile';
@@ -29,25 +41,34 @@ interface Props {
  */
 export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
   const { settings } = useSettings();
-  const [offset, setOffset] = useState(() => periodOffset('month', today, date));
-  const [selected, setSelected] = useState<string | null>(date > today ? null : date);
+  // Held by its first day, so the grid and the picked day stay put when the clock passes
+  // midnight into the next month; the offset from today only drives ◀ ▶ and "This month".
+  const [month, setMonth] = useState(() => startOfMonth(date));
+  const [selected, setSelected] = useState<string | null>(date);
   const [filter, setFilter] = useState<StickerId | null>(null);
-  const period = periodRange('month', today, offset);
+  const period = periodRange('month', month, 0);
+  const offset = periodOffset('month', today, month);
   const { days: list, error } = useRange(period.from, period.to);
-  const days = useMemo(() => (list ? new Map(list.map((d) => [d.date, d])) : null), [list]);
+  // The range lays the store's days over the answer, and one can be empty (today before a
+  // punch): only a day with something on it counts, as in the review.
+  const kept = useMemo(() => list?.filter(hasContent), [list]);
   const weeks = useMemo(
-    () => (list ? calendarMonth(list.map(daySummaryOf), settings, today, now, period.from, settings.showWeekends) : null),
-    [list, settings, today, now, period.from],
+    () => (kept ? calendarMonth(kept.map(daySummaryOf), settings, today, now, period.from, settings.showWeekends) : null),
+    [kept, settings, today, now, period.from],
   );
   const stickers = settings.stickers;
   // Hours not tracked: no Clocked out sticker, so the legend and a full day go without it.
   const { trackHours } = settings;
   const reasons = useMemo(() => stickerReasons(trackHours), [trackHours]);
   const count = useMemo(() => (weeks && stickers ? countStickers(weeks, reasons) : null), [weeks, stickers, reasons]);
-  const picked = selected == null ? undefined : days?.get(selected);
+  // Worked out from the day rather than read off its cell: with weekends off, a Saturday opened
+  // from its sheet is picked but has no cell.
+  const picked = kept?.find((d) => d.date === selected);
+  const summary = picked && daySummaryOf(picked);
+  const stats = summary && { summary, tc: dayTimeclock(summary, settings, today, now) };
 
   const step = (o: number) => {
-    setOffset(o);
+    setMonth(periodRange('month', today, o).from);
     // The panel only ever shows a day of the month on screen.
     setSelected(null);
   };
@@ -61,7 +82,7 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
       <PeriodNav kind="month" label={period.label} offset={offset} onOffset={step} noReset />
       {error && <p className="error">{error}</p>}
       {!error && !weeks && <div className="sheet-loading" aria-busy="true" />}
-      {weeks && days && (
+      {weeks && (
         <>
           {count && (
             <p className="calendar-count">
@@ -74,72 +95,34 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
               )}
             </p>
           )}
-          <div className={`calendar-grid${settings.showWeekends ? '' : ' calendar-grid--work'}`} role="grid" aria-label={period.label}>
-            <div className="calendar-row" role="row">
+          {/* Plain buttons in rows, not an ARIA grid: there are no arrow keys to go with one. */}
+          <div className={`calendar-grid${settings.showWeekends ? '' : ' calendar-grid--work'}`} role="group" aria-label={period.label}>
+            {/* Each day's name carries its weekday, so this row is for the eye only. */}
+            <div className="calendar-row" aria-hidden="true">
               {weeks[0]!.map((d) => (
-                <div key={d.date} className="calendar-weekday" role="columnheader">
+                <div key={d.date} className="calendar-weekday">
                   {formatWeekday(d.date)}
                 </div>
               ))}
             </div>
             {weeks.map((week) => (
-              <div key={week[0]!.date} className="calendar-row" role="row">
-                {week.map((d) => {
-                  if (d.outside) return <div key={d.date} className="calendar-day is-outside" role="gridcell" aria-hidden="true" />;
-                  const cls = ['calendar-day'];
-                  if (!d.hasData) cls.push('is-empty');
-                  if (d.isFuture) cls.push('is-future');
-                  if (d.date === today) cls.push('is-today');
-                  if (d.date === selected) cls.push('is-selected');
-                  if (stickers && d.stickers.length === reasons.length) cls.push('is-full');
-                  // With hours not tracked a cell shows only that the day has something on it.
-                  const clocked = trackHours && d.timeclock?.clockIn != null ? d.timeclock : null;
-                  const worked = clocked ? formatDuration(clocked.workedSeconds) : null;
-                  const done = clocked ? targetFraction(clocked) : 0;
-                  const shown = filter ? d.stickers.filter((id) => id === filter) : d.stickers;
-                  const label = stickers
-                    ? shown.length
-                      ? shown.map((id) => STICKER_LABELS[id]).join(', ')
-                      : 'no stickers'
-                    : worked
-                      ? `worked ${worked}`
-                      : d.hasData
-                        ? ''
-                        : 'nothing recorded';
-                  return (
-                    <button
+              <div key={week[0]!.date} className="calendar-row">
+                {week.map((d) =>
+                  d.outside ? (
+                    <div key={d.date} className="calendar-day is-outside" aria-hidden="true" />
+                  ) : (
+                    <DayCell
                       key={d.date}
-                      type="button"
-                      className={cls.join(' ')}
-                      role="gridcell"
-                      aria-selected={d.date === selected}
-                      aria-label={`${formatDateLong(d.date)}${label ? `, ${label}` : ''}`}
-                      data-date={d.date}
-                      disabled={d.isFuture}
-                      onClick={() => setSelected(d.date)}
-                    >
-                      <span className="calendar-daynum">{Number(d.date.slice(8))}</span>
-                      {stickers ? (
-                        <span className="sticker-row">
-                          {shown.map((id) => (
-                            <span key={id} className="sticker" title={STICKER_LABELS[id]} aria-hidden="true">
-                              {stickerEmoji(d.date, id)}
-                            </span>
-                          ))}
-                        </span>
-                      ) : clocked ? (
-                        <>
-                          <span className="calendar-worked">{formatHours(clocked.workedSeconds)}</span>
-                          <span className={`calendar-bar${done === 1 ? ' is-met' : ''}`} aria-hidden="true">
-                            <span style={{ transform: `scaleX(${done})` }} />
-                          </span>
-                        </>
-                      ) : d.hasData ? (
-                        <span className="calendar-dot" aria-hidden="true" />
-                      ) : null}
-                    </button>
-                  );
-                })}
+                      day={d}
+                      today={today}
+                      selected={d.date === selected}
+                      full={stickers && isFullDay(d.stickers, reasons)}
+                      shown={stickers ? (filter ? d.stickers.filter((id) => id === filter) : d.stickers) : null}
+                      trackHours={trackHours}
+                      onSelect={setSelected}
+                    />
+                  ),
+                )}
               </div>
             ))}
           </div>
@@ -167,9 +150,10 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
             ) : (
               <DayDetail
                 date={selected}
-                day={picked}
-                tc={picked ? pickedTimeclock(weeks, daySummaryOf(picked), settings, today, now) : null}
                 today={today}
+                stats={stats}
+                note={picked?.retroNote.trim() ?? ''}
+                trackHours={trackHours}
                 onOpen={onOpen}
                 onReviewWeek={onReviewWeek}
               />
@@ -181,32 +165,131 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
   );
 }
 
+function DayCell({
+  day: d,
+  today,
+  selected,
+  full,
+  shown,
+  trackHours,
+  onSelect,
+}: {
+  day: CalendarDay;
+  today: string;
+  selected: boolean;
+  /** It earned every sticker there is to earn. */
+  full: boolean;
+  /** The stickers to show, already narrowed by the legend; null with the sticker chart off. */
+  shown: StickerId[] | null;
+  trackHours: boolean;
+  onSelect: (date: string) => void;
+}) {
+  const cls = ['calendar-day'];
+  if (!d.hasData) cls.push('is-empty');
+  if (d.isFuture) cls.push('is-future');
+  if (d.date === today) cls.push('is-today');
+  if (selected) cls.push('is-selected');
+  if (full) cls.push('is-full');
+  // With hours not tracked a cell shows only that the day has something on it.
+  const clocked = trackHours && d.timeclock?.clockIn != null ? d.timeclock : null;
+  let label: string;
+  let face: ReactNode = null;
+  if (shown) {
+    label = shown.length ? shown.map((id) => STICKER_LABELS[id]).join(', ') : 'no stickers';
+    face = (
+      <span className="sticker-row">
+        {shown.map((id) => (
+          <span key={id} className="sticker" title={STICKER_LABELS[id]} aria-hidden="true">
+            {stickerEmoji(d.date, id)}
+          </span>
+        ))}
+      </span>
+    );
+  } else if (clocked) {
+    label = `worked ${formatDuration(clocked.workedSeconds)}`;
+    const done = targetFraction(clocked);
+    face = (
+      <>
+        <span className="calendar-worked">{formatHours(clocked.workedSeconds)}</span>
+        <span className={`calendar-bar${done === 1 ? ' is-met' : ''}`} aria-hidden="true">
+          <span style={{ transform: `scaleX(${done})` }} />
+        </span>
+      </>
+    );
+  } else if (d.hasData) {
+    label = 'something recorded';
+    face = <span className="calendar-dot" aria-hidden="true" />;
+  } else {
+    label = 'nothing recorded';
+  }
+  return (
+    <button
+      type="button"
+      className={cls.join(' ')}
+      aria-pressed={selected}
+      aria-current={d.date === today ? 'date' : undefined}
+      aria-label={`${formatDateLong(d.date)}, ${label}`}
+      data-date={d.date}
+      disabled={d.isFuture}
+      onClick={() => onSelect(d.date)}
+    >
+      <span className="calendar-daynum">{Number(d.date.slice(8))}</span>
+      {face}
+    </button>
+  );
+}
+
 function DayDetail({
   date,
-  day,
-  tc,
   today,
+  stats,
+  note,
+  trackHours,
   onOpen,
   onReviewWeek,
 }: {
   date: string;
-  day: Day | undefined;
-  /** The picked day's timeclock (`pickedTimeclock`); null without data. */
-  tc: TimeclockResult | null;
   today: string;
+  /** The picked day's numbers; undefined for a day with nothing on it. */
+  stats: { summary: DaySummary; tc: TimeclockResult } | undefined;
+  /** The day's retrospective note, trimmed. */
+  note: string;
+  trackHours: boolean;
   onOpen: (date: string) => void;
   onReviewWeek: (date: string) => void;
 }) {
-  const { settings } = useSettings();
   const name = dayName(date, today);
-  const s = day ? daySummaryOf(day) : null;
-  const note = day?.retroNote.trim() ?? '';
+  let tiles: ReactNode = <p className="muted small">Nothing recorded.</p>;
+  if (stats) {
+    const { summary: s, tc } = stats;
+    tiles = (
+      <div className="tiles calendar-tiles">
+        {trackHours && (
+          <Tile
+            label="Worked"
+            value={tc.clockIn != null ? formatDuration(tc.workedSeconds) : '—'}
+            sub={tc.clockIn == null ? 'no clock-in' : tc.lunchStatus === 'taken' ? 'lunch taken' : ''}
+          />
+        )}
+        <Tile
+          label="Focused"
+          value={s.focusSeconds > 0 ? formatDuration(s.focusSeconds) : '—'}
+          sub={s.focusSessions > 0 ? `${s.focusSessions} ${plural(s.focusSessions, 'session')}` : ''}
+        />
+        <Tile
+          label="Priorities"
+          value={s.prioritiesTotal > 0 ? `${s.prioritiesDone}/${s.prioritiesTotal}` : '—'}
+          sub={allPrioritiesDone(s) ? 'all done' : ''}
+        />
+      </div>
+    );
+  }
   return (
     <>
       <header className="calendar-detail-head">
         <strong>
           {name}
-          {day?.retroAt != null && (
+          {stats?.summary.retroAt != null && (
             <span className="history-reviewed" title="Retrospective reviewed" role="img" aria-label="Retrospective reviewed">
               <Check />
             </span>
@@ -214,29 +297,7 @@ function DayDetail({
         </strong>
         {name !== formatDateLong(date) && <span className="muted small">{formatDateLong(date)}</span>}
       </header>
-      {s && tc ? (
-        <div className="tiles calendar-tiles">
-          {settings.trackHours && (
-            <Tile
-              label="Worked"
-              value={tc.clockIn != null ? formatDuration(tc.workedSeconds) : '—'}
-              sub={tc.clockIn == null ? 'no clock-in' : tc.lunchStatus === 'taken' ? 'lunch taken' : ''}
-            />
-          )}
-          <Tile
-            label="Focused"
-            value={s.focusSeconds > 0 ? formatDuration(s.focusSeconds) : '—'}
-            sub={s.focusSessions > 0 ? `${s.focusSessions} ${plural(s.focusSessions, 'session')}` : ''}
-          />
-          <Tile
-            label="Priorities"
-            value={s.prioritiesTotal > 0 ? `${s.prioritiesDone}/${s.prioritiesTotal}` : '—'}
-            sub={s.prioritiesTotal > 0 && s.prioritiesDone === s.prioritiesTotal ? 'all done' : ''}
-          />
-        </div>
-      ) : (
-        <p className="muted small">Nothing recorded.</p>
-      )}
+      {tiles}
       {note && <p className="review-note calendar-note">{note}</p>}
       <div className="calendar-actions">
         <button className="btn" onClick={() => onOpen(date)}>

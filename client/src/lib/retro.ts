@@ -1,4 +1,4 @@
-import type { Priority, Session } from '../types';
+import type { Day, Priority, Session } from '../types';
 import { hasText } from './priorities';
 
 export interface PriorityReview {
@@ -37,6 +37,21 @@ export function focusOf(sessions: Session[]): { seconds: number; count: number }
 }
 
 /**
+ * Whether a day has anything on it: a punch, a row with text, a completed session, a note or a
+ * review. The calendar's cells and the review's day count both go by it; a padded empty row, a
+ * running session and a day's own work-day length don't count.
+ */
+export function hasContent(day: Day): boolean {
+  return (
+    day.punches.some((p) => p.at != null) ||
+    day.priorities.some(hasText) ||
+    day.sessions.some((s) => s.status === 'completed') ||
+    day.retroNote.trim() !== '' ||
+    day.retroAt != null
+  );
+}
+
+/**
  * Pure plan-vs-actual for one day. Only completed sessions count; a running one isn't
  * done yet. A session is on plan when its uid matches a row that still has text.
  */
@@ -44,15 +59,15 @@ export function reviewDay(priorities: Priority[], sessions: Session[]): DayRevie
   const rows = priorities.filter(hasText).sort((a, b) => a.position - b.position);
   const completed = sessions.filter((s) => s.status === 'completed');
   const firstStart = completed.length ? Math.min(...completed.map((s) => s.startedAt)) : null;
-  const byUid = new Map(rows.filter((p) => p.uid).map((p) => [p.uid!, p]));
+  const uids = new Set(rows.map((p) => p.uid));
 
-  const focused = new Map<string, { seconds: number; count: number }>();
+  const focused = new Map<string | null, { seconds: number; count: number }>();
   const unplanned: Session[] = [];
   let onPlanSeconds = 0;
   let offPlanSeconds = 0;
   for (const s of completed) {
     const seconds = s.durationSeconds ?? 0;
-    if (s.priorityUid && byUid.has(s.priorityUid)) {
+    if (s.priorityUid && uids.has(s.priorityUid)) {
       const cur = focused.get(s.priorityUid) ?? { seconds: 0, count: 0 };
       focused.set(s.priorityUid, { seconds: cur.seconds + seconds, count: cur.count + 1 });
       onPlanSeconds += seconds;
@@ -63,7 +78,7 @@ export function reviewDay(priorities: Priority[], sessions: Session[]): DayRevie
   }
 
   const planned = rows.map((priority) => {
-    const f = priority.uid ? focused.get(priority.uid) : undefined;
+    const f = focused.get(priority.uid);
     return {
       priority,
       focusedSeconds: f?.seconds ?? 0,

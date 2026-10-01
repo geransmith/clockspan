@@ -1,8 +1,9 @@
+import type { PeriodKind } from '../lib/review';
 import { ChevronLeft, ChevronRight } from './Icons';
 
 interface Props {
-  /** "week" / "month" / "quarter": names the buttons and the reset. */
-  kind: string;
+  /** Names the buttons and the reset. */
+  kind: PeriodKind;
   label: string;
   /** Periods back from the current one; 0 disables "next" and hides the reset. */
   offset: number;
@@ -19,7 +20,7 @@ export function PeriodNav({ kind, label, offset, onOffset, noReset }: Props) {
         <ChevronLeft />
       </button>
       <span className="period-label">{label}</span>
-      <button className="btn btn-icon" onClick={() => onOffset(Math.max(0, offset - 1))} aria-label={`Next ${kind}`} disabled={offset === 0}>
+      <button className="btn btn-icon" onClick={() => onOffset(offset - 1)} aria-label={`Next ${kind}`} disabled={offset === 0}>
         <ChevronRight />
       </button>
       {!noReset && <PeriodReset kind={kind} offset={offset} onOffset={onOffset} />}

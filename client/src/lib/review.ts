@@ -1,7 +1,7 @@
 import type { Day } from '../types';
 import { addDays, addMonths, DAY_MS, parseDateKey, startOfMonth, startOfQuarter, startOfWeek } from '../../../shared/dates.js';
 import { formatDateSpan, formatMonth, sameText } from './format';
-import { reviewDay } from './retro';
+import { hasContent, reviewDay } from './retro';
 import { daySettings, timeclockForDate, type TimeclockSettings } from './timeclock';
 
 export type PeriodKind = 'week' | 'month' | 'quarter';
@@ -14,30 +14,30 @@ export interface Period {
 }
 
 /**
- * The period `offset` steps back from the one containing `today` (0 = current). Weeks run
- * Monday to Sunday; quarters are calendar quarters.
+ * The period `offset` steps back from the one holding `date`, so offset 0 is the period
+ * holding it. Weeks run Monday to Sunday; quarters are calendar quarters.
  */
-export function periodRange(kind: PeriodKind, today: string, offset: number): Period {
+export function periodRange(kind: PeriodKind, date: string, offset: number): Period {
   if (kind === 'week') {
-    const from = addDays(startOfWeek(today), -7 * offset);
+    const from = addDays(startOfWeek(date), -7 * offset);
     const to = addDays(from, 6);
     return { kind, from, to, label: formatDateSpan(from, to) };
   }
   if (kind === 'month') {
-    const from = addMonths(startOfMonth(today), -offset);
+    const from = addMonths(startOfMonth(date), -offset);
     const to = addDays(addMonths(from, 1), -1);
     return { kind, from, to, label: formatMonth(from) };
   }
-  const from = addMonths(startOfQuarter(today), -3 * offset);
+  const from = addMonths(startOfQuarter(date), -3 * offset);
   const to = addDays(addMonths(from, 3), -1);
   const [y, m] = from.split('-').map(Number) as [number, number];
   return { kind, from, to, label: `Q${Math.floor((m - 1) / 3) + 1} ${y}` };
 }
 
 /**
- * The `offset` that makes `periodRange` land on the period holding `date`: 0 for today's
- * period and for any future date (the review never steps forward). The calendar opens on
- * the month of the day being viewed, and "Review this week" jumps to a past week with it.
+ * How many periods back from today's the period holding `date` is: what PeriodNav steps and
+ * resets a held period by. 0 for the current period and for any future date (the review never
+ * steps forward).
  */
 export function periodOffset(kind: PeriodKind, today: string, date: string): number {
   if (date >= today) return 0;
@@ -66,11 +66,11 @@ export interface UnplannedWork {
   dates: string[];
 }
 
-/** A priority left unticked, merged across the days it was written on the same way. */
-export interface UndoneGoal {
+/** A priority not ticked by the end of the range, merged across the days it was left open the same way. */
+export interface OpenPriority {
   key: string;
   text: string;
-  /** The distinct days it was left open on, oldest first. */
+  /** The distinct days it was left open on since it was last ticked, oldest first. */
   dates: string[];
   focusedSeconds: number;
   /** Added mid-day on any of those days. */
@@ -78,7 +78,7 @@ export interface UndoneGoal {
 }
 
 export interface RangeReview {
-  /** Days in the range that have anything on them. */
+  /** Days in the range, up to today, that have anything on them (`hasContent`). */
   days: number;
   workedSeconds: number;
   focusedSeconds: number;
@@ -88,20 +88,20 @@ export interface RangeReview {
   onPlanPercent: number | null;
   prioritiesDone: number;
   prioritiesTotal: number;
-  /** Rows left unticked, once per day each was written on (`notDone` merges repeats). */
-  prioritiesOpen: number;
   retrosDone: number;
   /** Off-plan work by label, most time first: where the time went instead. */
   unplanned: UnplannedWork[];
-  /** Priorities never ticked, the ones left open on the most days first, then by date. */
-  notDone: UndoneGoal[];
+  /** Priorities not ticked by the end of the range, the ones left open on the most days first, then by date. */
+  notDone: OpenPriority[];
   /** Each day's "why", in date order. */
   notes: { date: string; note: string; reviewedAt: number | null }[];
 }
 
 /**
  * Roll a range of full days up into one review. Worked time comes from the same timeclock
- * math as the sheet, frozen for past days; everything else reuses `reviewDay`.
+ * math as the sheet, frozen for past days; everything else reuses `reviewDay`. A day after
+ * today is left out: all it can hold is a plan made the evening before (Plan tomorrow), and
+ * none of it has happened yet.
  */
 export function reviewRange(days: Day[], settings: TimeclockSettings, today: string, now: number): RangeReview {
   const out: RangeReview = {
@@ -113,21 +113,19 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
     onPlanPercent: null,
     prioritiesDone: 0,
     prioritiesTotal: 0,
-    prioritiesOpen: 0,
     retrosDone: 0,
     unplanned: [],
     notDone: [],
     notes: [],
   };
   const unplanned = new Map<string, UnplannedWork>();
-  const notDone = new Map<string, UndoneGoal>();
-  for (const day of [...days].sort((a, b) => a.date.localeCompare(b.date))) {
+  const notDone = new Map<string, OpenPriority>();
+  for (const day of days.filter((d) => d.date <= today).sort((a, b) => a.date.localeCompare(b.date))) {
+    if (!hasContent(day)) continue;
     const tc = timeclockForDate(day.punches, daySettings(settings, day), day.date, today, now);
     const r = reviewDay(day.priorities, day.sessions);
-    const hasSomething = tc.clockIn != null || r.total > 0 || r.unplanned.length > 0 || r.onPlanSeconds > 0 || day.retroNote.trim() !== '';
-    if (!hasSomething) continue;
     out.days++;
-    out.workedSeconds += tc.clockIn != null ? tc.workedSeconds : 0;
+    out.workedSeconds += tc.workedSeconds;
     out.focusedSeconds += r.onPlanSeconds + r.offPlanSeconds;
     out.onPlanSeconds += r.onPlanSeconds;
     out.offPlanSeconds += r.offPlanSeconds;
@@ -143,9 +141,12 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
       g.sessions++;
       addDate(g.dates, day.date);
     }
+    // A tick settles the priority: the same text left open on an earlier day is done now.
+    const ticked = new Set(r.planned.filter((p) => p.priority.done).map((p) => sameText(p.priority.text)));
+    for (const key of ticked) notDone.delete(key);
     for (const p of r.planned) {
-      if (p.priority.done) continue;
       const key = sameText(p.priority.text);
+      if (ticked.has(key)) continue;
       let g = notDone.get(key);
       if (!g) notDone.set(key, (g = { key, text: '', dates: [], focusedSeconds: 0, addedMidDay: false }));
       g.text = p.priority.text.trim();
@@ -153,10 +154,10 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
       g.addedMidDay ||= p.addedMidDay;
       addDate(g.dates, day.date);
     }
-    if (day.retroNote.trim()) out.notes.push({ date: day.date, note: day.retroNote, reviewedAt: day.retroAt });
+    const note = day.retroNote.trim();
+    if (note) out.notes.push({ date: day.date, note, reviewedAt: day.retroAt });
   }
   if (out.focusedSeconds > 0) out.onPlanPercent = Math.round((out.onPlanSeconds / out.focusedSeconds) * 100);
-  out.prioritiesOpen = out.prioritiesTotal - out.prioritiesDone;
   out.unplanned = [...unplanned.values()].sort((a, b) => b.seconds - a.seconds || a.dates[0]!.localeCompare(b.dates[0]!));
   out.notDone = [...notDone.values()].sort((a, b) => b.dates.length - a.dates.length || a.dates[0]!.localeCompare(b.dates[0]!));
   return out;

@@ -2,8 +2,8 @@ import { useState, type ReactNode } from 'react';
 import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
 import { UNTITLED_SESSION } from '../lib/copy';
-import { formatDateShort, formatDuration, formatWeekday } from '../lib/format';
-import { periodRange, reviewRange, type PeriodKind } from '../lib/review';
+import { formatDateLong, formatDuration, formatWeekday } from '../lib/format';
+import { periodOffset, periodRange, reviewRange, type PeriodKind } from '../lib/review';
 import type { Day } from '../types';
 import { Check } from './Icons';
 import { PeriodNav } from './PeriodNav';
@@ -17,7 +17,8 @@ const KINDS: { id: PeriodKind; label: string }[] = [
 
 export interface ReviewPeriod {
   kind: PeriodKind;
-  offset: number;
+  /** The period's first day: a review left open past midnight stays on it. */
+  from: string;
 }
 
 interface Props {
@@ -33,13 +34,14 @@ interface Props {
  * The daily retrospectives rolled up: how the period's time split between the plan and
  * everything else, which priorities never got done, and each day's note on why.
  */
-export function Review({ today, now, period: { kind, offset }, onPeriod, onOpen }: Props) {
-  const { settings } = useSettings();
-  const period = periodRange(kind, today, offset);
+export function Review({ today, now, period: { kind, from }, onPeriod, onOpen }: Props) {
+  const period = periodRange(kind, from, 0);
+  const offset = periodOffset(kind, today, from);
   const { days, error } = useRange(period.from, period.to);
 
-  const pickKind = (k: PeriodKind) => onPeriod({ kind: k, offset: 0 });
-  const dayLabel = (date: string) => `${formatWeekday(date)} ${formatDateShort(date)}`;
+  // Another kind is taken around the period on screen, by its last day or today if that comes
+  // first, so a past week becomes its month and the current period stays the current one.
+  const pickKind = (k: PeriodKind) => onPeriod({ kind: k, from: periodRange(k, period.to < today ? period.to : today, 0).from });
 
   return (
     <section className="card review">
@@ -53,45 +55,30 @@ export function Review({ today, now, period: { kind, offset }, onPeriod, onOpen 
           ))}
         </span>
       </header>
-      <PeriodNav kind={kind} label={period.label} offset={offset} onOffset={(o) => onPeriod({ kind, offset: o })} />
+      <PeriodNav kind={kind} label={period.label} offset={offset} onOffset={(o) => onPeriod({ kind, from: periodRange(kind, today, o).from })} />
 
       {error && <p className="error">{error}</p>}
       {!error && !days && <div className="sheet-loading" aria-busy="true" />}
-      {days && <Body key={`${kind}:${period.from}`} days={days} today={today} now={now} kind={kind} onOpen={onOpen} dayLabel={dayLabel} settings={settings} />}
+      {days && <Body key={`${kind}:${period.from}`} days={days} today={today} now={now} kind={kind} onOpen={onOpen} />}
     </section>
   );
 }
 
-function Body({
-  days,
-  today,
-  now,
-  kind,
-  onOpen,
-  dayLabel,
-  settings,
-}: {
-  days: Day[];
-  today: string;
-  now: number;
-  kind: PeriodKind;
-  onOpen: (date: string) => void;
-  dayLabel: (date: string) => string;
-  settings: ReturnType<typeof useSettings>['settings'];
-}) {
+function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; now: number; kind: PeriodKind; onOpen: (date: string) => void }) {
+  const { settings } = useSettings();
   const r = reviewRange(days, settings, today, now);
-  if (r.days === 0) return <p className="muted center review-empty">Nothing recorded this {kind}.</p>;
+  if (r.days === 0) return <p className="muted center review-empty">Nothing recorded.</p>;
   // A row merged across days names them in a week and counts them in a longer period; it
   // opens the latest of them.
   const when = (dates: string[]) => {
     if (kind === 'week') return dates.map(formatWeekday).join(', ');
-    return dates.length === 1 ? dayLabel(dates[0]!) : `${dates.length} days`;
+    return dates.length === 1 ? formatDateLong(dates[0]!) : `${dates.length} days`;
   };
   const latest = (dates: string[]) => dates[dates.length - 1]!;
 
   return (
     <div className="review-body">
-      <div className="tiles review-tiles">
+      <div className="tiles">
         <Tile label="Days" value={String(r.days)} sub={settings.trackHours ? `worked ${formatDuration(r.workedSeconds)}` : ''} />
         <Tile label="Focused" value={formatDuration(r.focusedSeconds)} sub={r.onPlanPercent == null ? 'no sessions' : `${r.onPlanPercent}% on plan`} />
         <Tile
@@ -106,7 +93,7 @@ function Body({
           Off the plan <span className="muted">{formatDuration(r.offPlanSeconds)}</span>
         </h3>
         {r.unplanned.length === 0 ? (
-          <p className="muted small">Every logged session was for a priority.</p>
+          <p className="muted small">{r.onPlanPercent == null ? 'No sessions logged.' : 'Every logged session was for a priority.'}</p>
         ) : (
           <Folded
             items={r.unplanned.map((g) => (
@@ -126,7 +113,7 @@ function Body({
 
       <section className="review-section">
         <h3 className="retro-heading">
-          Not done <span className="muted">{r.prioritiesOpen}</span>
+          Not done <span className="muted">{r.notDone.length}</span>
         </h3>
         {r.notDone.length === 0 ? (
           <p className="muted small">{r.prioritiesTotal > 0 ? 'Every priority got ticked.' : 'No priorities were written.'}</p>
@@ -160,7 +147,7 @@ function Body({
               <li key={n.date}>
                 <button className="review-row review-row--note" onClick={() => onOpen(n.date)}>
                   <span className="review-meta review-note-head">
-                    <strong>{dayLabel(n.date)}</strong>
+                    <strong>{formatDateLong(n.date)}</strong>
                     {n.reviewedAt != null && (
                       <span className="pill pill--ok">
                         <Check /> reviewed
@@ -178,7 +165,10 @@ function Body({
   );
 }
 
-/** Past this many rows a list shows its first ones and a button for the rest. */
+/**
+ * A list longer than FOLD_AT + 1 rows shows its first FOLD_AT and a Show all button. One row
+ * over shows in full, since the button would take the space of the one row it hides.
+ */
 const FOLD_AT = 8;
 
 function Folded({ items }: { items: ReactNode[] }) {

@@ -27,22 +27,18 @@ export function formatDateFull(key: string): string {
   return dateFullFmt.format(parseDateKey(key));
 }
 
-/** "Sep 16": the day without its weekday, for a line that writes the weekday itself. */
-export function formatDateShort(key: string): string {
-  return dayShortFmt.format(parseDateKey(key));
-}
-
 /** "September 2026" */
 export function formatMonth(key: string): string {
   return monthFmt.format(parseDateKey(key));
 }
 
-/** "Sep 14 – 20" or "Sep 28 – Oct 4": an inclusive span of date keys. */
+/**
+ * "Sep 14 – 20", "Sep 28 – Oct 4" (en-US), "14–20 Sept" (en-GB): an inclusive span of date keys
+ * in the locale's own range pattern, which orders the day and month and adds the years when
+ * they differ.
+ */
 export function formatDateSpan(from: string, to: string): string {
-  const a = parseDateKey(from);
-  const b = parseDateKey(to);
-  if (from.slice(0, 7) === to.slice(0, 7)) return `${dayShortFmt.format(a)} – ${b.getDate()}`;
-  return `${dayShortFmt.format(a)} – ${dayShortFmt.format(b)}`;
+  return dayShortFmt.formatRange(parseDateKey(from), parseDateKey(to));
 }
 
 /**
