@@ -632,11 +632,13 @@ The browser pass for each surface (the logic under it is already tested):
   Timeclock or with
   `curl -X PUT localhost:3000/api/settings -H 'content-type: application/json' -d '{"lunchDeadlineMinutes":3,"lunchMinutes":0,"workMinutes":10,"secondMealAfterMinutes":6}'`
   and a reload. Press Now on Clock in: lunch is due at +3 min, the second meal at +6 and
-  clock-out at +10. The work day must be longer than the lunch window and the second-meal
-  threshold, or those alarms never ring. At the mobile preset each target's banner shows at
-  once. "Overtime approved" (on the card or the clock-out banner) stops the clock-out alarm,
-  while the lunch and second-meal banners still fire. When done, `npm run seed -- --fresh` or
-  `curl -X DELETE localhost:3000/api/settings` puts the default settings back.
+  clock-out at +10. The work day must be longer than the lunch window, or lunch reads "Not
+  needed today" and never rings, and longer than the second-meal threshold, or that alarm
+  waits for the day to run over or for overtime approval. At the mobile preset each target's
+  banner shows at once. "Overtime approved" (on the card or the clock-out banner) stops the
+  clock-out alarm, while the lunch and second-meal banners still fire. When done,
+  `npm run seed -- --fresh` or `curl -X DELETE localhost:3000/api/settings` puts the default
+  settings back.
 - **Sounds**: Settings → Alarms → Sounds. Test on a clip row fetches the file once (the network
   list); a second Test fetches nothing. A clock-out set today plays the day-complete sound once,
   and not again on reload.
