@@ -32,12 +32,11 @@ export function useTodayAlarms(today: string, now: number, openRetro: () => void
   const [editingPunches, setEditingPunches] = useState(false);
   const key = day ? punchesKey(day.punches) : null;
   const settledKey = useSettled(key, editingPunches ? HOLD_MS : 3000);
-  const settled = loaded && key != null && settledKey === key && !refreshing;
-  const punches = day?.punches;
+  const punches = loaded && day && settledKey === key && !refreshing ? day.punches : null;
   // Today's own work-day length (a half day), when one was set, is what the alarms go by.
   const workMinutes = day?.workMinutes ?? null;
   const todaySettings = useMemo(() => daySettings(settings, { workMinutes }), [settings, workMinutes]);
-  const tc = useMemo(() => (settled && punches ? computeTimeclock(punches, todaySettings, now) : null), [settled, punches, todaySettings, now]);
+  const tc = useMemo(() => (punches ? computeTimeclock(punches, todaySettings, now) : null), [punches, todaySettings, now]);
   const overtimeApproved = overtimeOn(settings, Boolean(day?.overtimeApproved));
   // On the setter, which keeps its identity: the store is a new object whenever a day changes,
   // and the alarms would run again for each.

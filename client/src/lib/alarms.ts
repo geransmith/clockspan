@@ -260,8 +260,9 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
           tone: 'warn',
         };
       }
-      if (e.kind === 'due')
+      if (e.kind === 'due') {
         return { kicker, title: 'Time to clock out', body: `You reached your ${day} for today at ${target}. Punch out now.`, tone: 'danger' };
+      }
       return {
         kicker,
         title: `Clock out is ${formatMinutes(e.minutes)} overdue`,
