@@ -4,7 +4,7 @@
  * Brave, else a Chrome for Testing build fetched once into node_modules/.cache. (Vivaldi is
  * left out on purpose: its headless mode starts but never lets DevTools drive a tab.)
  */
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -32,7 +32,7 @@ function isExecutable(p) {
   }
 }
 
-export function findBrowser() {
+async function findBrowser() {
   if (process.env.CHROME_BIN) {
     if (isExecutable(process.env.CHROME_BIN)) return process.env.CHROME_BIN;
     throw new Error(`CHROME_BIN is not an executable: ${process.env.CHROME_BIN}`);
@@ -44,48 +44,34 @@ export function findBrowser() {
       if (isExecutable(p)) return p;
     }
   }
-  return cachedBrowser() ?? fetchBrowser();
+  return cacheBrowser();
 }
 
-const CACHED_EXE_NAMES = new Set(['Google Chrome for Testing', 'chrome', 'chrome.exe']);
-
-/** A Chrome for Testing build a previous run fetched, if any. */
-function cachedBrowser() {
-  const walk = (dir, depth) => {
-    if (depth > 8 || !fs.existsSync(dir)) return null;
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      const p = path.join(dir, entry.name);
-      if (entry.isFile() && CACHED_EXE_NAMES.has(entry.name) && isExecutable(p)) return p;
-      if (entry.isDirectory()) {
-        const found = walk(p, depth + 1);
-        if (found) return found;
-      }
-    }
-    return null;
-  };
-  return walk(BROWSER_CACHE, 0);
-}
-
-/** No browser on this machine: fetch Chrome for Testing once into node_modules/.cache. */
-function fetchBrowser() {
-  console.log('[browser] no Chromium found; fetching Chrome for Testing into node_modules/.cache (one time, ~150 MB)');
-  // A devDependency, so package-lock.json pins it and what it pulls in, and Dependabot bumps it.
-  // `--no` makes npx run that copy and never download one (`--` ends npx's own options).
-  const r = spawnSync('npx', ['--no', '--', '@puppeteer/browsers', 'install', 'chrome@stable', '--path', BROWSER_CACHE], {
-    cwd: ROOT,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'inherit'],
-  });
-  // The last line is "chrome@<version> <executable path>".
-  const line = (r.stdout ?? '').trim().split('\n').at(-1) ?? '';
-  const exe = line.slice(line.indexOf(' ') + 1).trim();
-  if (r.status !== 0 || !isExecutable(exe)) {
-    throw new Error(`Could not fetch a browser (${line || 'no output'}). Install Chrome, or point CHROME_BIN at any Chromium.`);
+/**
+ * No browser on this machine: the Chrome for Testing build a previous run fetched into
+ * node_modules/.cache, else one fetched now.
+ */
+async function cacheBrowser() {
+  try {
+    // A devDependency, so package-lock.json pins it and what it pulls in, and Dependabot bumps it.
+    // Imported here because only a machine with no browser of its own needs it.
+    const { Browser, BrowserTag, detectBrowserPlatform, getInstalledBrowsers, install, resolveBuildId } = await import('@puppeteer/browsers');
+    const cached = (await getInstalledBrowsers({ cacheDir: BROWSER_CACHE })).map((b) => b.executablePath).find(isExecutable);
+    if (cached) return cached;
+    console.log('[browser] no Chromium found; fetching Chrome for Testing into node_modules/.cache (one time, ~150 MB)');
+    const platform = detectBrowserPlatform();
+    const buildId = await resolveBuildId(Browser.CHROME, platform, BrowserTag.STABLE);
+    return (await install({ browser: Browser.CHROME, buildId, platform, cacheDir: BROWSER_CACHE, downloadProgressCallback: 'default' })).executablePath;
+  } catch (err) {
+    throw new Error(`Could not fetch a browser (${err.message}). Install Chrome, or point CHROME_BIN at any Chromium.`);
   }
-  return exe;
 }
 
-export function launchBrowser(bin, profileDir) {
+/**
+ * Starts the browser; `ready` is its DevTools URL. The caller holds `child` from the start, so
+ * it can stop a browser that never gets that far.
+ */
+function launchBrowser(bin, profileDir) {
   const args = [
     '--headless=new',
     '--remote-debugging-port=0',
@@ -97,27 +83,35 @@ export function launchBrowser(bin, profileDir) {
     'about:blank',
   ];
   const child = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'] });
-  return new Promise((resolve, reject) => {
+  const ready = new Promise((resolve, reject) => {
     let err = '';
     child.stderr.on('data', (chunk) => {
       err += chunk;
       const m = /DevTools listening on (ws:\/\/\S+)/.exec(err);
-      if (m) resolve({ child, wsUrl: m[1] });
+      if (m) resolve(m[1]);
     });
     child.on('exit', (code) => reject(new Error(`Browser exited (${code}) before DevTools was ready:\n${err}`)));
     setTimeout(() => reject(new Error(`Browser did not start within 30 s:\n${err}`)), 30_000).unref();
   });
+  return { child, ready };
 }
 
 // ----- DevTools protocol -----
 
-export class Cdp {
+const closedError = (method) => new Error(`${method}: the browser closed the DevTools connection`);
+
+class Cdp {
   constructor(ws) {
     this.ws = ws;
     this.seq = 0;
     this.pending = new Map();
-    this.listeners = new Set();
     ws.onmessage = (e) => this.onMessage(JSON.parse(e.data));
+    // A browser that dies answers nothing, so its pending commands fail here instead of
+    // waiting forever.
+    ws.onclose = () => {
+      for (const p of this.pending.values()) p.reject(closedError(p.method));
+      this.pending.clear();
+    };
   }
 
   static async connect(url) {
@@ -129,19 +123,18 @@ export class Cdp {
     return new Cdp(ws);
   }
 
+  /** Settles the command a reply answers. Events carry no id; nothing here waits on one. */
   onMessage(msg) {
-    if (msg.id) {
-      const p = this.pending.get(msg.id);
-      this.pending.delete(msg.id);
-      if (!p) return;
-      if (msg.error) p.reject(new Error(`${p.method}: ${msg.error.message}`));
-      else p.resolve(msg.result);
-    } else {
-      for (const l of this.listeners) l(msg);
-    }
+    const p = this.pending.get(msg.id);
+    if (!p) return;
+    this.pending.delete(msg.id);
+    if (msg.error) p.reject(new Error(`${p.method}: ${msg.error.message}`));
+    else p.resolve(msg.result);
   }
 
   send(method, params = {}, sessionId) {
+    // WebSocket.send drops a frame on a closed socket without a word, so no reply would come.
+    if (this.ws.readyState !== WebSocket.OPEN) return Promise.reject(closedError(method));
     const id = ++this.seq;
     this.ws.send(JSON.stringify({ id, method, params, sessionId }));
     return new Promise((resolve, reject) => this.pending.set(id, { method, resolve, reject }));
@@ -157,7 +150,7 @@ export class Cdp {
  * and deletes the profile; calling it again waits for the same shutdown.
  */
 export async function openBrowser(log) {
-  const bin = findBrowser();
+  const bin = await findBrowser();
   log(`browser: ${bin}`);
   const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clockspan-browser-'));
   let child;
@@ -179,12 +172,26 @@ export async function openBrowser(log) {
   let closing;
   const close = () => (closing ??= shutDown());
   try {
-    let wsUrl;
-    ({ child, wsUrl } = await launchBrowser(bin, profileDir));
-    cdp = await Cdp.connect(wsUrl);
+    const launched = launchBrowser(bin, profileDir);
+    child = launched.child;
+    cdp = await Cdp.connect(await launched.ready);
     return { cdp, close };
   } catch (err) {
     await close();
     throw err;
   }
+}
+
+/** Opens a blank tab and returns a `send` for DevTools commands to it. */
+export async function openTab(cdp) {
+  const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
+  const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
+  const send = (method, params) => cdp.send(method, params, sessionId);
+  // For a browser that keeps the socket open but never answers a tab, as Vivaldi's headless
+  // mode does.
+  const silent = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('The browser opened a tab but never answered DevTools. Try another Chromium via CHROME_BIN.')), 15_000).unref(),
+  );
+  await Promise.race([send('Page.enable'), silent]);
+  return send;
 }

@@ -170,8 +170,9 @@ YYYY-MM-DD` moves the whole sample to that date at the current time of day (or `
 User". `--sessions` signs every seeded user in and prints a `document.cookie = 'fs_session=…'`
 line per user: run it in the page and reload to be that user, with no password typed and no
 provider. A run never deletes users and is safe while `npm run dev` is up (reload the page).
-`npm run screenshots` seeds the dev DB the same way (`--running --quarter --now 10:30`), so it
-also replaces the default user's days, and it leaves the sticker chart on (`stickers: true`).
+`npm run screenshots` seeds the dev DB the same way (`--running --quarter --now 10:30 --fresh`),
+so it also replaces the default user's days and resets its settings, and it leaves the sticker
+chart on (`stickers: true`).
 
 Ways in, cheapest first:
 

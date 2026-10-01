@@ -12,7 +12,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { openBrowser } from './browser.mjs';
+import { openBrowser, openTab } from './browser.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const DIR = path.join(ROOT, 'client', 'public', 'icons');
@@ -42,33 +42,20 @@ function pageFor({ size, scale, bleed }) {
   </style><img src="data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}">`;
 }
 
-function nextEvent(cdp, method, sessionId) {
-  return new Promise((resolve) => {
-    const listener = (msg) => {
-      if (msg.method !== method || msg.sessionId !== sessionId) return;
-      cdp.listeners.delete(listener);
-      resolve(msg.params);
-    };
-    cdp.listeners.add(listener);
-  });
-}
-
 async function main() {
   if (!background) throw new Error('icon.svg needs a width="512" background <rect> with a fill; the full-bleed icons take their colour from it');
   const browser = await openBrowser(log);
   try {
-    const { cdp } = browser;
-    const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
-    const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
-    const send = (method, params) => cdp.send(method, params, sessionId);
-    await send('Page.enable');
+    const send = await openTab(browser.cdp);
     await send('Emulation.setDefaultBackgroundColorOverride', { color: { r: 0, g: 0, b: 0, a: 0 } });
     for (const output of OUTPUTS) {
       await send('Emulation.setDeviceMetricsOverride', { width: output.size, height: output.size, deviceScaleFactor: 1, mobile: false });
-      const loaded = nextEvent(cdp, 'Page.loadEventFired', sessionId);
-      await send('Page.navigate', { url: `data:text/html;base64,${Buffer.from(pageFor(output)).toString('base64')}` });
-      await loaded;
-      await send('Runtime.evaluate', { expression: 'document.images[0].decode()', awaitPromise: true });
+      // Written into the tab rather than navigated to, so there is no load event to wait for:
+      // decode() settles once the image can be painted.
+      await send('Runtime.evaluate', {
+        expression: `document.open(); document.write(${JSON.stringify(pageFor(output))}); document.close(); document.images[0].decode()`,
+        awaitPromise: true,
+      });
       const { data } = await send('Page.captureScreenshot', { format: 'png' });
       const file = path.join(DIR, output.file);
       fs.writeFileSync(file, Buffer.from(data, 'base64'));
