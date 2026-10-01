@@ -570,10 +570,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `{ field?: unknown }` and check each field; the `no-unsafe-*` lint refuses reading it as
   `any`), return `{ error }` JSON on failure → add the call to `client/src/api.ts`, with a row
   in `client/src/api.test.ts`'s `ROUTES` table for its method, path and body (the coverage gate
-  needs it), and the response type to `shared/api.ts`, re-exported by name from
-  `client/src/types.ts`, which `api.ts` imports from (the route's
-  `res.json(… satisfies <Type>)` and the client's `request<Type>` both name it) → cover it in
-  that router's `*.test.ts`: happy path, each 400, and that another user gets a 404/empty
+  needs it), and the response type to `shared/api.ts` (the route's
+  `res.json(… satisfies <Type>)` and the client's `request<Type>` both name it), re-exported by
+  name from `client/src/types.ts`, which `api.ts` imports from → cover it in that router's
+  `*.test.ts`: happy path, each 400, and that another user gets a 404/empty
   result (the scoping test is not optional). A new `/:date` route also gets a row in the
   bad-date table at the end of `server/routes/days.test.ts`: unlike the `/:id` ownership check,
   that table does not pick up new routes on its own. The seed's manifest types
