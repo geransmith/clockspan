@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   addDays,
   addMonths,
-  dateKey,
   endOfDay,
+  HOUR_MS,
   isValidDateKey,
   parseDateKey,
   punchWindow,
@@ -28,10 +28,12 @@ describe('isValidDateKey', () => {
 });
 
 describe('date arithmetic', () => {
-  it('walks days across month and year ends', () => {
+  it('walks days across month and year ends and the DST changes', () => {
     expect(addDays('2026-01-31', 1)).toBe('2026-02-01');
     expect(addDays('2026-01-01', -1)).toBe('2025-12-31');
     expect(addDays('2024-02-28', 1)).toBe('2024-02-29');
+    expect(addDays('2026-03-09', -1)).toBe('2026-03-08');
+    expect(addDays('2026-10-31', 2)).toBe('2026-11-02');
   });
 
   it('finds the start of the week (Monday), month and quarter', () => {
@@ -49,27 +51,38 @@ describe('date arithmetic', () => {
     expect(addMonths('2026-11-01', 3)).toBe('2027-02-01');
   });
 
-  it('ends the day one millisecond before the next one starts', () => {
-    expect(endOfDay('2026-09-16')).toBe(parseDateKey('2026-09-17').getTime() - 1);
+  it('ends the day one millisecond before the next one starts, on a 23 h or 25 h day too', () => {
+    const hours = (key: string) => (endOfDay(key) + 1 - parseDateKey(key).getTime()) / HOUR_MS;
+    // These rely on the zone pinned in vite.config.ts (test.env) and fail in UTC.
+    expect(hours('2026-03-08')).toBe(23);
+    expect(hours('2026-11-01')).toBe(25);
+    vi.stubEnv('TZ', 'America/Santiago');
+    try {
+      // Chile moves its clocks at 00:00, so this day starts at 01:00.
+      expect(hours('2026-09-06')).toBe(23);
+      expect(todayKey(endOfDay('2026-09-06'))).toBe('2026-09-06');
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 
 describe('punchWindow', () => {
-  it("spans a day of slack either side of the key, in UTC, so any zone's local day fits", () => {
+  it("spans the key's UTC noon ± 48 h, in UTC, so any zone's local day fits", () => {
     const { from, to } = punchWindow('2026-09-01');
     const midnightUtc = Date.UTC(2026, 8, 1);
-    expect(from).toBe(midnightUtc - 36 * 3_600_000);
-    expect(to).toBe(midnightUtc + 60 * 3_600_000);
+    expect(from).toBe(midnightUtc - 36 * HOUR_MS);
+    expect(to).toBe(midnightUtc + 60 * HOUR_MS);
     // The extremes: local midnight in UTC+14 and the last millisecond of the day in UTC-12.
-    expect(midnightUtc - 14 * 3_600_000).toBeGreaterThanOrEqual(from);
-    expect(midnightUtc + 36 * 3_600_000 - 1).toBeLessThanOrEqual(to);
-    expect(to - from).toBe(96 * 3_600_000);
+    expect(midnightUtc - 14 * HOUR_MS).toBeGreaterThanOrEqual(from);
+    expect(midnightUtc + 36 * HOUR_MS - 1).toBeLessThanOrEqual(to);
+    expect(to - from).toBe(96 * HOUR_MS);
   });
 });
 
 describe('todayKey', () => {
   it('is the local date of the instant, now by default', () => {
     expect(todayKey(new Date(2026, 8, 16, 23, 59).getTime())).toBe('2026-09-16');
-    expect(todayKey()).toBe(dateKey(new Date()));
+    expect(todayKey()).toBe(todayKey(Date.now()));
   });
 });
