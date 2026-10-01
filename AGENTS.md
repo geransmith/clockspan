@@ -543,7 +543,9 @@ Never commit `data/` or `.env`.
   only allowed unused vars.
 - CSS: tokens on `:root` in `client/src/styles.css`, dark mode via `prefers-color-scheme`
   unless the `theme` setting forces one (`data-theme` on `<html>`, set by `lib/theme.ts`; the
-  two dark token blocks must match, `theme-css.test.ts` checks), **mobile-first** (base = phone; `@media (min-width: 640px)` enhances). Tap targets are
+  two dark token blocks must match, `index.html`'s theme-color metas repeat `--bg` for each
+  scheme and the manifest's `background_color` the light one: `theme-css.test.ts` checks all
+  three), **mobile-first** (base = phone; `@media (min-width: 640px)` enhances). Tap targets are
   44 px on a touch screen: `.btn` and `.input` set `min-height: 44px`, and a compact control
   (chip, segment, running-bar button, banner close/action, log delete) keeps its drawn size
   and gets the rest from the `@media (pointer: coarse)` block at the end of `styles.css`, an

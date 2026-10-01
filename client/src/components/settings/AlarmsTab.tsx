@@ -59,7 +59,7 @@ function AlarmEditor({ title, hint, alarm, onChange }: { title: string; hint?: s
   };
   // Every alarm has the same chips and fields; the group gives each set the alarm's name.
   return (
-    <div className={`alarm-editor${alarm.enabled ? '' : ' is-off'}`} role="group" aria-label={title}>
+    <div className="alarm-editor" role="group" aria-label={title}>
       <Toggle label={title} hint={hint} checked={alarm.enabled} onChange={(v) => onChange({ enabled: v })} />
       <div className="alarm-fields">
         <div className="setting-row">

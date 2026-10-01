@@ -7,21 +7,20 @@ const colors = () => [...document.querySelectorAll<HTMLMetaElement>('meta[name="
 beforeEach(() => {
   localStorage.clear();
   delete document.documentElement.dataset.theme;
-  // What index.html ships.
   document.head.innerHTML = `
-    <meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0f1216" media="(prefers-color-scheme: dark)" />`;
+    <meta name="theme-color" content="#light" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#dark" media="(prefers-color-scheme: dark)" />`;
 });
 
 describe('applyTheme', () => {
   it('forces a theme on the page and the browser bar, and remembers it', () => {
     applyTheme('dark');
     expect(document.documentElement.dataset.theme).toBe('dark');
-    expect(colors()).toEqual(['#0f1216', '#0f1216']);
+    expect(colors()).toEqual(['#dark', '#dark']);
     expect(storedTheme()).toBe('dark');
     applyTheme('light');
     expect(document.documentElement.dataset.theme).toBe('light');
-    expect(colors()).toEqual(['#f5f6f8', '#f5f6f8']);
+    expect(colors()).toEqual(['#light', '#light']);
     expect(storedTheme()).toBe('light');
   });
 
@@ -29,7 +28,7 @@ describe('applyTheme', () => {
     applyTheme('dark');
     applyTheme('auto');
     expect(document.documentElement.dataset.theme).toBeUndefined();
-    expect(colors()).toEqual(['#f5f6f8', '#0f1216']);
+    expect(colors()).toEqual(['#light', '#dark']);
     expect(storedTheme()).toBe('auto');
   });
 });
