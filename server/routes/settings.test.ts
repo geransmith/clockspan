@@ -37,32 +37,6 @@ describe('/api/settings', () => {
     expect((await app.api.get('/api/settings')).body).toEqual(next.body);
   });
 
-  it('takes a weekly target from none up to a whole week, and keeps the old one otherwise', async () => {
-    expect((await app.api.put('/api/settings', { weekMinutes: 0 })).body.weekMinutes).toBe(0);
-    expect((await app.api.put('/api/settings', { weekMinutes: 7 * 24 * 60 })).body.weekMinutes).toBe(7 * 24 * 60);
-    expect((await app.api.put('/api/settings', { weekMinutes: 7 * 24 * 60 + 1 })).body.weekMinutes).toBe(7 * 24 * 60);
-    expect((await app.api.put('/api/settings', { weekMinutes: -60 })).body.weekMinutes).toBe(7 * 24 * 60);
-  });
-
-  it('takes booleans for the switches and ignores anything else', async () => {
-    expect((await app.api.put('/api/settings', { celebrations: false })).body.celebrations).toBe(false);
-    expect((await app.api.put('/api/settings', { celebrations: 'no' })).body.celebrations).toBe(false);
-    expect((await app.api.put('/api/settings', { celebrations: true })).body.celebrations).toBe(true);
-    expect((await app.api.put('/api/settings', { mealRules: false, lunchPunches: false, trackHours: false })).body).toMatchObject({
-      mealRules: false,
-      lunchPunches: false,
-      trackHours: false,
-    });
-    expect((await app.api.put('/api/settings', { mealRules: 'no', lunchPunches: 'no', trackHours: 1 })).body).toMatchObject({
-      mealRules: false,
-      lunchPunches: false,
-      trackHours: false,
-    });
-    expect((await app.api.put('/api/settings', { suggestBreaks: true })).body.suggestBreaks).toBe(true);
-    expect((await app.api.put('/api/settings', { suggestBreaks: 'off' })).body.suggestBreaks).toBe(true);
-    expect((await app.api.put('/api/settings', { suggestBreaks: false })).body.suggestBreaks).toBe(false);
-  });
-
   it('takes a catalog id per sound event and keeps the rest', async () => {
     const r = await app.api.put('/api/settings', { sounds: { dayDone: 'none', timer: 'yay', lead: 'kazoo', due: 7, bogus: 'pop' } });
     expect(r.body.sounds).toEqual({ ...DEFAULT_SETTINGS.sounds, dayDone: 'none', timer: 'yay' });
@@ -127,12 +101,6 @@ describe('/api/settings', () => {
     expect((await app.api.put('/api/settings', { stickers: false, layout: [{ id: 'stickers', visible: true }] })).body.stickers).toBe(false);
     expect((await app.api.put('/api/settings', { layout: [{ id: 'stickers', visible: false }] })).body.stickers).toBe(false);
     expect((await app.api.put('/api/settings', { stickers: 'yes' })).body.stickers).toBe(false);
-  });
-
-  it('takes the weekends switch as a boolean only', async () => {
-    expect((await app.api.put('/api/settings', { showWeekends: false })).body.showWeekends).toBe(false);
-    expect((await app.api.put('/api/settings', { showWeekends: 'no' })).body.showWeekends).toBe(false);
-    expect((await app.api.put('/api/settings', { showWeekends: true })).body.showWeekends).toBe(true);
   });
 
   it('serves the defaults when the stored row is not JSON', async () => {

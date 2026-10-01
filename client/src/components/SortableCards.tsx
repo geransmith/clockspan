@@ -1,6 +1,18 @@
-import { DndContext, KeyboardSensor, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type Announcements,
+  type DragEndEvent,
+  type UniqueIdentifier,
+} from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { CARD_TITLES } from '../lib/layout';
+import type { CardId } from '../types';
 import { CardFrame, type SheetCard } from './CardFrame';
 
 /**
@@ -9,21 +21,29 @@ import { CardFrame, type SheetCard } from './CardFrame';
  */
 export function SortableCards({ cards, onReorder }: { cards: SheetCard[]; onReorder: (from: number, to: number) => void }) {
   const sensors = useSensors(
+    // Covers touch too: the pointer sensor claims a gesture on pointerdown, before touchstart, so a touch
+    // sensor here would never run; the grip's touch-action: none keeps a finger on it from scrolling the page.
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    // Long-press on touch so normal scrolling isn't hijacked.
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+  const indexOf = (id: UniqueIdentifier) => cards.findIndex((c) => c.id === id);
   const onDragEnd = (e: DragEndEvent) => {
     const over = e.over;
     if (!over || e.active.id === over.id) return;
-    onReorder(
-      cards.findIndex((c) => c.id === e.active.id),
-      cards.findIndex((c) => c.id === over.id),
-    );
+    onReorder(indexOf(e.active.id), indexOf(over.id));
+  };
+  // dnd-kit's defaults read the raw ids ("draggable item log"). onDragOver also fires at pickup,
+  // with the card over itself, so it states where the card is rather than a move.
+  const title = (id: UniqueIdentifier) => CARD_TITLES[id as CardId];
+  const place = (id: UniqueIdentifier) => `position ${indexOf(id) + 1} of ${cards.length}`;
+  const announcements: Announcements = {
+    onDragStart: ({ active }) => `Picked up ${title(active.id)}.`,
+    onDragOver: ({ active, over }) => `${title(active.id)} is at ${place((over ?? active).id)}.`,
+    onDragEnd: ({ active, over }) => `Dropped ${title(active.id)} at ${place((over ?? active).id)}.`,
+    onDragCancel: ({ active }) => `Move cancelled. ${title(active.id)} is back at ${place(active.id)}.`,
   };
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd} accessibility={{ announcements }}>
       <SortableContext items={cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
         {cards.map((c) => (
           <SortableCard key={c.id} card={c} />

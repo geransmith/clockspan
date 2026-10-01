@@ -1,4 +1,4 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { Component, type ReactNode } from 'react';
 import { RENDER_FAILED } from '../lib/copy';
 
 interface State {
@@ -6,19 +6,16 @@ interface State {
 }
 
 /**
- * The one class component: React hands a render error only to `componentDidCatch`. Without
- * it a throw anywhere (a stored value `Intl` cannot format, say) unmounts the whole tree and
- * leaves a blank page with nothing to click.
+ * The one class component: only a class can be an error boundary (`getDerivedStateFromError`).
+ * Without it a throw anywhere (a stored value `Intl` cannot format, say) unmounts the whole
+ * tree and leaves a blank page with nothing to click. React's root already logs the error it
+ * catches (createRoot's default `onCaughtError`), so nothing here logs it again.
  */
 export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
   state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State {
     return { error };
-  }
-
-  componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error(error, info.componentStack);
   }
 
   render(): ReactNode {
