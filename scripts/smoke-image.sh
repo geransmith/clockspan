@@ -25,7 +25,8 @@ step() {
   echo "--- $1"
 }
 
-docker run -d --name "$name" ${platform:+--platform "$platform"} -p 8080:8080 "$image" >/dev/null
+# Blank is how Unraid passes a cleared field and Compose a `PUID=` line: the same `${PUID:-1000}` as unset.
+docker run -d --name "$name" ${platform:+--platform "$platform"} -e PUID= -e PGID= -p 8080:8080 "$image" >/dev/null
 
 # Emulated, node takes several times as long to start.
 step "the server answers (the database opened, so the native module loaded)"
@@ -39,8 +40,8 @@ echo
 step "the built client is in the image and the SPA shell is served"
 curl -fsS http://127.0.0.1:8080/ | grep -q '<div id="root">'
 
-step "the entrypoint handed /data to PUID 1000"
-test "$(docker exec "$name" stat -c %u /data)" = 1000
+step "a blank PUID/PGID takes the default: the entrypoint handed /data to 1000:1000"
+test "$(docker exec "$name" stat -c %u:%g /data)" = 1000:1000
 
 step "root was dropped: PID 1 (node) runs as 1000"
 test "$(docker exec "$name" stat -c %u /proc/1)" = 1000
