@@ -71,11 +71,9 @@ client/                 Vite root → dist/client
   src/api.ts            fetch wrapper (30 s timeout; UNAUTHENTICATED_EVENT on a 401 from anything but login and
                         /me; throws lib/apiError.ts's ApiError, which a caller checks with instanceof);
                         src/types.ts re-exports shared types
-  src/lib/              pure logic with a test beside each file (apiError is covered through api.test):
-                        timeclock, alarms, timer, breaks, retro, review, calendar, stickers, priorities,
-                        format, timefield, layout, celebrate, plan, tiles, week, theme, reload, sounds,
-                        optimistic (a server copy plus pending changes, which the stores are built on,
-                        and `serial()`, their write queue)
+  src/lib/              pure logic with a test beside each file (apiError is covered through api.test)
+    optimistic.ts       a server copy plus pending changes, which the stores are built on, and `serial()`,
+                        their write queue
     alerts.ts           the one place that plays sound, shows notifications and pushes banners
     copy.ts             every line the app raises at the user; no logic
     storage.ts          localStorage that never throws (private mode, quota); the per-user keys (USER_KEYS:
@@ -86,9 +84,9 @@ client/                 Vite root → dist/client
                         useClock is the app's one 1-second clock; useSaveStatus
                         (Saving… / Saved / Not saved) and useLastTab (the tab it reopens on) serve the
                         settings dialog. src/test/hooks.tsx has the fixtures and provider stack
-  src/components/       the cards, History (Calendar + Review), Banners, FinishChoice; pieces more than
-                        one place uses (TimerControls, Toggle, NewPasswordFields, UsernameInput, Tile); settings/ holds
-                        SettingsDialog (the shell and tabs), a file per tab, and controls.tsx
+  src/components/       the cards, History (Calendar + Review), Banners, FinishChoice, and the pieces
+                        several of them share; settings/ holds SettingsDialog (the shell and tabs), a
+                        file per tab, and controls.tsx
   src/auth/             AuthGate and the setup / login / new-password pages
   src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
   src/styles.css        design tokens and all component CSS
@@ -189,36 +187,29 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   imported from there with a `.js` suffix. Never mirror a constant, default or type into the
   other tree; the client's `types.ts` re-exports the shared types so component imports stay
   short, and date helpers (`addDays`, `todayKey`, `MINUTE_MS`, …) come straight from
-  `shared/dates.js`, never through another module. Every response body has a `shared/api.ts` type: builders are annotated with it
-  (`sessionRowToJson(): Session`, `dayJson(): Day`, …) and each route's answer names its
+  `shared/dates.js`, never through another module. Every success body has a `shared/` type
+  (one in `api.ts`, or `Settings`), a failure is `{ error }`, which the client throws as its
+  message, and the timer-start 409 is `SessionConflict`. Builders are annotated with these
+  types (`sessionRowToJson(): Session`, `dayJson(): Day`, …) and each route's answer names its
   envelope with `satisfies` (`res.json({ deleted } satisfies PruneResult)`), while
   `client/src/api.ts` reads the same types, so a field renamed on one side fails `typecheck`
-  on the other. Server-only row types (`UserRow` in `db.ts`, a day's rows in `routes/shared.ts`)
-  take their unions from there too (`PunchRow.kind` is `Punch['kind']`).
+  on the other. Server-only row types (`UserRow` in `db.ts`, a day's rows in
+  `routes/shared.ts`) take their unions from there too (`PunchRow.kind` is `Punch['kind']`).
 - **Security headers are set only in `server/security.ts`** (applied first in `createApp`):
-  the CSP, `nosniff`, framing, referrer, HSTS and the API's `no-store`. Headers that describe
-  one answer stay with the code that sends it: the static files' `Cache-Control` in `app.ts`,
-  `Retry-After` on a 429 in `auth/limiter.ts` (`refuseTooMany`), `Set-Cookie` through `cookieOptions()`. The CSP is same-origin with no `unsafe-inline`, so no inline `<script>`/`<style>` in
-  `index.html` and no third-party assets; React `style={{}}` props are fine (CSSOM). Changing
-  it means one look at the `prod` config's console. Cookies are set only through
-  `cookieOptions()` (`auth/session.ts`), and the session is resolved under `/api` only
-  (`resolveUser` is mounted there), so a static answer, which is publicly cacheable, never
-  carries a `Set-Cookie`. `rejectCrossSiteWrites` (also in `security.ts`, mounted on `/api`
-  before `resolveUser`) refuses any non-GET request the browser marks `Sec-Fetch-Site:
-  cross-site` or `same-site`, and, from a browser that sends no `Sec-Fetch-Site` (Safari
-  before 16.4), one whose `Origin` host is neither the `Host` header nor `APP_URL`'s: under
-  `AUTH_MODE=none` there is no cookie for SameSite to hold back, and a body-less POST
-  (finish, cancel) needs no preflight. Keep write routes under
-  `/api` so it covers them. Under `AUTH_MODE=none` only, `rejectUnknownHosts` (also in
-  `security.ts`, mounted on `/api` after `/api/health`) refuses a request whose `Host` names
-  something other than an IP address, a one-word name, `localhost`, a `.local`, `.home.arpa`
-  or `.internal` name, `APP_URL`'s host or an `ALLOWED_HOSTS` entry: DNS rebinding makes a
-  page same-origin, and with no cookie nothing else would stop it reading or writing. It reads
-  the raw `Host` header, never `req.hostname`, which believes `X-Forwarded-Host` under
-  `TRUST_PROXY`, and a same-origin page can set that. The HTML pages the server writes itself (the OIDC error pages in
-  `auth/oidc.ts`) carry fixed text: no request data or error message goes into HTML, and the
-  cause goes to the log. Password hashing is async
-  (`scrypt`, never `scryptSync`); login verifies against `DUMMY_HASH` when the user is unknown.
+  the CSP, `nosniff`, framing, referrer, HSTS and the API's `no-store`. The CSP is same-origin
+  with no `unsafe-inline`, so no inline `<script>`/`<style>` in `index.html` and no third-party
+  assets; React `style={{}}` props are fine (CSSOM). The request guards live there too, each
+  with a doc comment on what it refuses and why: `rejectCrossSiteWrites` is mounted on `/api`
+  before `resolveUser`, so keep write routes under `/api`; `rejectUnknownHosts` is mounted
+  under `AUTH_MODE=none` only, on `/api` after `/api/health`, and reads the raw `Host` header,
+  never `req.hostname`. Headers that describe one answer stay with the code that sends it: the
+  static files' `Cache-Control` in `app.ts`, `Retry-After` in `refuseTooMany`
+  (`auth/limiter.ts`), and `Set-Cookie` only through `cookieOptions()` (`auth/session.ts`).
+  The session is resolved under `/api` only, so a static answer, which is publicly cacheable,
+  never carries a cookie. The HTML the server writes itself (the OIDC error pages in
+  `auth/oidc.ts`) is fixed text: no request data or error message goes into it, and the cause
+  goes to the log. Password hashing is async (`scrypt`, never `scryptSync`); login verifies
+  against `DUMMY_HASH` when the user is unknown.
 - **Another user means another page.** Once `AuthGate` has opened the app for a user, it never
   swaps a gate page in over it: the stores' write queues, the drafts (which save on unmount),
   the banners and the tab title would carry on under the next session's cookie. Sign-out
@@ -323,13 +314,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   behind any sync already out and counted for the throttle), and the completion chime only
   plays when the server says `completed`.
 - **Nothing alerts before the settings have loaded.** The timer's two alerting effects and the
-  break-over alert (`useBreak`) wait for `settings.loaded`, or an alert raised on load would use
-  the default sound and switch; the alarms (`useTodayAlarms`) wait for it the same way
-  (`settled`), or a longer work day than the default would ring the clock-out alarm on load. So
-  `loaded` only turns true on a real answer: a failed `GET /settings` is retried (`nextBackoff`
-  in `shared/backoff.ts`: 2 s doubling to a minute), never settled with the defaults. After the
-  first answer the settings are fetched again on `useRefreshLoop`, like today's day, since
-  another device may change them.
+  break-over alert (`useBreak`) wait for `useSettings().loaded`, or an alert raised on load
+  would use the default sound and switch; the alarms (`useTodayAlarms`) wait for it the same
+  way (the punches they judge stay null until `loaded`), or a longer work day than the default
+  would ring the clock-out alarm on load. So `loaded` only turns true on a real answer: a
+  failed `GET /settings` is retried (`nextBackoff` in `shared/backoff.ts`: 2 s doubling to a
+  minute), never settled with the defaults. After the first answer the settings are fetched
+  again on `useRefreshLoop`, like today's day, since another device may change them.
 - **Today's day is kept in step with the server** (`useRefreshDay` in `useDay.tsx`, on the same
   hook as the timer's sync and the settings' refresh, `useRefreshLoop`: every minute and when
   the tab comes back, throttled to 5 s per caller), so the alarms in `useTodayAlarms` judge the
@@ -372,7 +363,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   deleted newest one). The server keeps breaks from overlapping sessions: a
   break start ends a running break and is refused (409) while a focus timer runs, and a
   session start ends a running break (`endRunningBreak`, `routes/shared.ts`). However a break
-  ends, one that ran under `BREAK_SECONDS.min` is deleted, not logged (`POST /breaks/:id/end`
+  ends, one that ran under `MIN_BREAK_MS` is deleted, not logged (`POST /breaks/:id/end`
   answers `{ break: null }`). End break goes through `endRunningBreak` too, so the server
   has one copy of that rule. The client mirrors both rules with `endBreaksAt` (in `useDay`'s
   break writes and `applySession`, which ends a running break on any loaded day, since one
@@ -380,7 +371,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   start: the break may already be gone. An end the server answers 404 for (the break was
   deleted elsewhere) counts as done. The timer card disables its break buttons while a start
   is out, since a break write goes out on the day store's queue, not the timer's, and could
-  reach the server after the start. Break writes share one `inOrder` key (`breaks`).
+  reach the server after the start.
 - **Saves reach the server in the order they were made**, each store's on its own queue
   (`serial()` in `lib/optimistic.ts`, made by `useTracked`). In the day store, `setPunches` and
   `setPriorities` replace a whole list, so one PUT per list and day is in flight and only the
@@ -388,13 +379,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   the lists waiting behind it, which were built on the one refused. The day's other fields
   (`day:<date>`), each session (`session:<id>`) and the breaks (`breaks`) queue their writes
   one after another (`inOrder`). `useTimer` sends the running session's writes one at a time on
-  its own queue: start, adjust, edit, pause, resume, finish and cancel, and the log's edits of
-  the running row, which `SessionLog` sends through `useTimer().edit`. That queue is not ordered
-  against the day store's `session:<id>` queue, which carries the other rows' edits and deletes.
-  `useSettings` sends its PUTs and resets one at a time. A new write goes through one of these,
-  never straight to `api`. Reads are not queued: settings and today's day are read again on
-  `useRefreshLoop` (the same hook as the timer's sync, each call with its own throttle), and a
-  read's answer never replaces a change still on its way.
+  its own queue: start, adjust, edit, pause, resume, finish and cancel, the log's edits of the
+  running row included. That queue is not ordered against the day store's `session:<id>` queue,
+  which carries the other rows' edits and deletes. `useSettings` sends its PUTs and resets one
+  at a time. A new edit of a day's rows, the settings or the timer goes through one of these,
+  never straight to `api`; the day store's `pruneBefore` is the one write sent on no queue, as
+  the day store's rule explains. Reads are not queued, and in all three stores a read's answer
+  never replaces a change still on its way.
 - **Punch positions are fixed**: 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in
   pairs, and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches`
   enforces it). Kind is parity (`kindForPosition`, `shared/punches.ts`). The math evaluates *set* punches
@@ -417,9 +408,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   "Saves reach the server in the order they were made").
 - **Overtime approval (`days.overtime_approved`) silences only the `clockOut` alarm target.**
   Lunch and the second meal period stay armed: California Labor Code §512 still requires them
-  on an overtime day. The setting `overtimeApproval` shows/hides the switch and banner
-  button, and with it off the Clock out tile reads time past the day as "past your day"
-  rather than a red "Over by"; a flagged day counts only while the setting is on: `overtimeOn`
+  on an overtime day. Approval also arms the second meal on a day whose work day is under its
+  threshold: `secondMealApplies` counts an approved day as one that will pass it, so the alarm
+  and the card's note start when the switch is set, not when the day runs over. The setting
+  `overtimeApproval` shows/hides the switch and banner button, and with it off the Clock out
+  tile reads time past the day as "past your day" rather than a red "Over by"; a flagged day
+  counts only while the setting is on: `overtimeOn`
   (`lib/timeclock.ts`) decides, which `Timeclock` (the tiles get the flag from it) and
   `useTodayAlarms` call.
 - **`mealRules: false` turns the meal periods off in the math, not in the components.**
@@ -478,17 +472,20 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   leaves the time fields, when the card unmounts, or on the next change to the punches once
   focus has gone without a blur. The punches are compared by their times, so a refresh with the
   same times neither stops the alarms nor restarts the wait.
-- **Per-date card drafts reset by remounting**: `Sheet.tsx` keys `Priorities` and `Retro` by
-  date, so neither needs a "date changed" effect. Local drafts that mirror a prop use the
-  "adjust state while rendering" form (see `DurationField`), not a `useEffect` + `setState`,
-  unless the draft is gated by a dirty flag: a ref can't be read during render, so there the
-  effect form is the one the react-hooks rules allow. A typed draft that saves on a timer is
-  `useDebouncedDraft(stored, save, ms)` (`Priorities`, `Retro`): it saves after the wait, at
-  once on `flush()` or an edit made now, and on unmount, so a day left mid-sentence still
-  saves. Callbacks that must read the latest value use `useLatest()`, never a ref written in
-  render (the react-hooks lint enforces both).
-- Static assets are public; **all data is behind `/api/*`**. The SPA fallback serves
-  `index.html` for any non-API path. `/assets/*` is fingerprinted and cached immutable.
+- **Per-date card drafts reset by remounting**: `Sheet.tsx` keys `Timeclock`, `Priorities` and
+  `Retro` by date, so none needs a "date changed" effect. For `Timeclock` the remount is also
+  what keeps a day already done from reading as one becoming done: `useBecameTrue` compares
+  with the last render, and between two days the store holds the card would stay mounted.
+  Local drafts that mirror a prop use the "adjust state while rendering" form (see
+  `DurationField`), not a `useEffect` + `setState`, unless the draft is gated by a dirty flag:
+  a ref can't be read during render, so there the effect form is the one the react-hooks rules
+  allow. A typed draft that saves on a timer is `useDebouncedDraft(stored, save, ms)`
+  (`Priorities`, `Retro`): it saves after the wait, at once on `flush()` or an edit made now,
+  and on unmount, so a day left mid-sentence still saves. Callbacks that must read the latest
+  value use `useLatest()`, never a ref written in render (the react-hooks lint enforces both).
+- Static assets are public; **all data is behind `/api/*`**. `/assets/*` is fingerprinted and
+  cached immutable. The SPA fallback serves `index.html` for any other non-API path; a miss
+  under `/assets` is a 404 (a page from before an upgrade asking for an old chunk).
 - **History, the settings dialog and drag and drop are lazy chunks** (`lazy()` in `App.tsx`
   for `History` and `SettingsDialog`, in `Sheet.tsx` for `SortableCards`, which holds every
   `@dnd-kit` import). A static import of one of them from the first screen folds it back into
@@ -518,8 +515,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `shared/settings.ts`, and a number's bounds to `SETTING_LIMITS` there → validate it in
   `mergeSettings()` (`server/settings.ts`; `flag(key)` takes a switch, `limited(key)` checks a number against its
   bounds) → add the control to its tab in `client/src/components/settings/` (`TimeclockTab`,
-  `AlarmsTab`, `SheetTab`, `DataTab`, `AccountTab`; the Sheet tab's "History" section holds
-  the calendar's switches): a `DurationField` (`components/DurationField.tsx`) for hours and
+  `AlarmsTab`, `SheetTab`, `DataTab`; the Sheet tab's "History" section holds the calendar's
+  switches): a `DurationField` (`components/DurationField.tsx`) for hours and
   minutes or a `NumberField` (`settings/controls.tsx`) for one number, whose `unit` suffix is
   "min" unless given, each with `{...SETTING_LIMITS.<key>}` for `min` and `max`; a `Toggle` for
   a switch. `NumberInput` on its own puts several numbers on one row, like the timer's start
@@ -532,12 +529,18 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   the catalog disagree. A synthesized pattern is an entry with `kind: 'synth'` plus its
   `beep()` sequence in the `SYNTH` map in `alerts.ts` (the type makes a missing one an error).
   A new event that can make a noise is an id in `SOUND_EVENTS`, a default in
-  `DEFAULT_SETTINGS.sounds`, a label in `SOUND_EVENT_LABELS`, and a `playSound(settings.sounds.<event>)`
-  call gated by `settings.sound` (or a `useCelebration` for a moment worth a burst).
+  `DEFAULT_SETTINGS.sounds` and a label in `SOUND_EVENT_LABELS` (`lib/sounds.ts`; the types
+  make a missing default or label an error). It plays through
+  `alert({ chime: settings.sounds.<event>, sound: settings.sound, notifications: settings.notifications, … })`
+  from `lib/alerts.ts`, raised only once `useSettings().loaded` is true (see "Nothing alerts
+  before the settings have loaded"), or through a `useCelebration(moment, '<event>')` for a
+  moment worth a burst; never through a bare `playSound`.
 - **An alarm target** (existing: `lunchBy`, `clockOut`, `secondMeal`, `retro`): expose the instant from
   `computeTimeclock` → add a target to `alarmTargets()` in `lib/alarms.ts`, with an `armed` rule
   and a test case (a rule the card also needs goes in a pure helper like `secondMealApplies`) → add its default
-  under `alarms` in `shared/settings.ts` and the `AlarmId` union there → add an `AlarmEditor` in
+  under `alarms` in `shared/settings.ts` and the `AlarmId` union there, and its `mergeAlarm(…)`
+  line in `mergeSettings`'s `alarms` block (`server/settings.ts`; the type makes a missing one
+  an error) → add an `AlarmEditor` in
   `settings/AlarmsTab.tsx` → its name in `ALARM_NAMES` and a `case` in `describeEvent()`'s
   `switch (e.id)` (both in `lib/alarms.ts`; the type makes a missing name an error, and
   typecheck and the `switch-exhaustiveness-check` lint refuse a missing case): the kicker
@@ -565,11 +568,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   addressed by id gets its entry in `OwnedRows` and `NOT_FOUND` and a router from
   `ownedRouter()`, all in `routes/shared.ts`), validate input
   (cast `req.body` to `{ field?: unknown }` and check each field; the `no-unsafe-*` lint
-  refuses reading it as `any`), return `{ error }` JSON on failure → add the call to `client/src/api.ts` and the response
-  type to `shared/api.ts` (the route's `res.json(… satisfies <Type>)` and the client's
-  `request<Type>` both name it) → cover it in that router's
-  `*.test.ts`: happy path, each 400, and that another
-  user gets a 404/empty result (the scoping test is not optional). A new `/:date` route also
+  refuses reading it as `any`), return `{ error }` JSON on failure → add the call to
+  `client/src/api.ts`, with a row in `client/src/api.test.ts`'s `ROUTES` table for its method,
+  path and body (the coverage gate needs it), and the response type to `shared/api.ts`,
+  re-exported by name from `client/src/types.ts`, which `api.ts` imports from (the route's
+  `res.json(… satisfies <Type>)` and the client's `request<Type>` both name it) → cover it in
+  that router's `*.test.ts`: happy path, each 400, and that another user gets a 404/empty
+  result (the scoping test is not optional). A new `/:date` route also
   gets a row in the bad-date table at the end of `server/routes/days.test.ts`: unlike the `/:id`
   ownership check, that table does not pick up new routes on its own. The seed's manifest types
   (`SeededDay` and the aliases beside it in `server/dev/seed.ts`) are built from `Day`,
@@ -582,7 +587,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **A security header, CSP source or request guard**: `server/security.ts` only (tests in
   `server/app.test.ts`), then the `prod` config check.
 - **A config env var**: parse and validate it in `server/config.ts` (throw with a clear
-  message on a bad value) → cover it in `server/config.test.ts` → document it in
+  message on a bad value; an on/off variable goes through `parseSwitch`, which logs and keeps
+  the default instead) → cover it in `server/config.test.ts` → document it in
   `.env.example` (commented out, with its default) and the README's variables table → add a
   `Config` field for it to `unraid/clockspan.xml` (`config.test.ts` fails otherwise).
   `.env.example` is the only place the container is configured; `docker-compose.yml` never
@@ -735,11 +741,11 @@ The browser pass for each surface (the logic under it is already tested):
 - `better-sqlite3` is native but ships N-API prebuilds for every platform the image runs on
   (linux-musl x64 and arm64 included) and picks one at run time, so `node_modules` is the same on
   every platform: the Dockerfile's build stage runs on the builder's platform and only the
-  runtime stage is emulated for arm64. Its `binding.gyp` still makes npm try `node-gyp rebuild`, so the
-  Dockerfile and CI run `npm ci --ignore-scripts`, which also keeps every dependency's install
-  script from running; `npm audit signatures` then checks registry signatures. There is no
-  Docker on the dev machine: `image-smoke` (`scripts/smoke-image.sh`) on each PR is the first
-  run of the image.
+  runtime stage is emulated for arm64. Its `binding.gyp` still makes npm try
+  `node-gyp rebuild`, so the Dockerfile and CI run `npm ci --ignore-scripts`, which also keeps
+  every dependency's install script from running; only CI's `check` job then runs
+  `npm audit signatures` to check registry signatures. There is no Docker on the dev machine:
+  `image-smoke` (`scripts/smoke-image.sh`) on each PR is the first run of the image.
 - The preview harness exports `PORT=5173`, which is why `dev:server` pins `PORT=3000` and the
   `prod` config `PORT=8090`.
 - `client/public/sw.js` caches nothing, on purpose. It holds the `notificationclick` handler
@@ -761,9 +767,12 @@ The browser pass for each surface (the logic under it is already tested):
   reaches `/api/auth`.
 - scrypt at N=2^15 needs `maxmem` above Node's 32 MB default (set in `password.ts`).
   `DUMMY_HASH` is computed with a top-level `await`, so `password.ts` is ESM-only.
-- `window` `focus` events fire on ordinary clicks in some embedded browsers; timer re-sync is
-  throttled (`useRefreshLoop`, which listens for `visibilitychange` and never `focus`) for that
-  reason. Don't add unthrottled focus-driven refetches.
+- `window` `focus` events fire on ordinary clicks in some embedded browsers, so the periodic
+  and come-back refreshes (today's day, the settings, the timer's sync) go through
+  `useRefreshLoop`, which listens for `visibilitychange` and never `focus`; a new one goes
+  through it too, and nothing in the app listens for the window's `focus`. Reads tied to what
+  is shown (a held day read again when a view shows it, a range asked again after a prune,
+  `AuthGate`'s `/me` after a 401) are not refreshes and stay outside the loop.
 - `npm version` without `--no-git-tag-version` tags the branch commit, which is not the squash
   commit that lands on `main`. CI creates the `vX.Y.Z` tag on the merge.
 - Prettier (`.prettierrc`): single quotes, trailing commas, 160 columns. Markdown is left alone
