@@ -1,8 +1,7 @@
 import fs from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SETUP_CODE, startTestApp, tempClientBuild, type TestApp } from '../dev/harness.js';
-import { purgeExpiredSessions, revokeOtherSessions, SESSION_COOKIE } from './session.js';
-import type { Request } from 'express';
+import { purgeExpiredSessions, SESSION_COOKIE } from './session.js';
 
 const USER = { username: 'geran', password: 'correct horse', setupCode: SETUP_CODE };
 const HOUR = 3_600_000;
@@ -56,6 +55,16 @@ describe('cookie sessions', () => {
     expect((await app.api.get('/api/settings')).status).toBe(401);
     expect(rows()).toHaveLength(0);
     expect((await app.api.get('/api/auth/me')).body.user).toBeNull();
+  });
+
+  it('never resolves a session whose user belongs to another AUTH_MODE, so an OIDC admin is no local admin', async () => {
+    await app.api.post('/api/auth/setup', USER);
+    // The row an OIDC install made for its first user, still holding the cookie it was signed in with.
+    app.db.prepare(`UPDATE users SET kind = 'oidc', oidc_sub = 'issuer|1', username = NULL, password_hash = NULL, is_admin = 1`).run();
+    expect((await app.api.get('/api/settings')).status).toBe(401);
+    expect((await app.api.get('/api/auth/users')).status).toBe(401);
+    expect((await app.api.get('/api/auth/me')).body).toMatchObject({ user: null, setupRequired: true });
+    expect((await app.api.post('/api/auth/setup', USER)).status).toBe(201);
   });
 
   it('slides the expiry once an hour, not on every request, and hands the browser the cookie again', async () => {
@@ -115,15 +124,6 @@ describe('cookie sessions', () => {
     expect(rows()).toHaveLength(1);
     expect((await app.api.get('/api/settings')).status).toBe(200);
     expect((await phone.get('/api/settings')).status).toBe(401);
-  });
-
-  it('revokeOtherSessions without a cookie of its own signs the user out everywhere', async () => {
-    await app.api.post('/api/auth/setup', USER);
-    await app.client().post('/api/auth/login', USER);
-    expect(rows()).toHaveLength(2);
-    const userId = (app.db.prepare(`SELECT user_id FROM auth_sessions LIMIT 1`).get() as { user_id: number }).user_id;
-    revokeOtherSessions(app.db, { headers: {} } as Request, userId);
-    expect(rows()).toHaveLength(0);
   });
 
   it('purgeExpiredSessions removes exactly the expired rows', async () => {

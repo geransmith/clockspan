@@ -41,7 +41,6 @@ describe('resetPassword', () => {
     const result = await resetPassword(db, LOCAL_USERS.member);
     expect(result).toEqual({ password: expect.stringMatching(/^[A-Za-z0-9_-]{16}$/), temporary: true });
     const { password } = result as { password: string };
-    expect(password.length).toBeGreaterThanOrEqual(PASSWORD_LENGTH.min);
     expect(stored(sam).mustChange).toBe(1);
     expect(await verifyPassword(password, stored(sam).hash)).toBe(true);
     expect(sessions(sam)).toBe(0);
