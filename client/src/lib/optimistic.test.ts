@@ -71,22 +71,22 @@ describe('confirm', () => {
 describe('fetched', () => {
   it('replaces the confirmed value and never a pending change', () => {
     const t = addPending(loaded({ text: 'a', n: 0 }), 1, setText('mine'));
-    const { next, again } = fetched(t, 0, { text: 'server', n: 5 });
-    expect(again).toBe(false);
+    const { next, stale } = fetched(t, 0, { text: 'server', n: 5 });
+    expect(stale).toBe(false);
     expect(next.confirmed).toEqual({ text: 'server', n: 5 });
     expect(shown(next)).toEqual({ text: 'mine', n: 5 });
   });
 
   it('drops an answer older than a change the server confirmed since it was sent', () => {
     const t = loaded({ text: 'saved', n: 0 }, 1);
-    expect(fetched(t, 0, { text: 'old', n: 0 })).toEqual({ next: t, again: false });
+    expect(fetched(t, 0, { text: 'old', n: 0 })).toEqual({ next: t, stale: true });
   });
 
-  it('takes an older answer for a value never loaded, and asks again', () => {
+  it('takes an older answer for a value never loaded, and says it is stale', () => {
     const t = confirm(untracked<Row>(), inc);
-    const { next, again } = fetched(t, 0, { text: 'first', n: 0 });
+    const { next, stale } = fetched(t, 0, { text: 'first', n: 0 });
     expect(next.confirmed).toEqual({ text: 'first', n: 0 });
-    expect(again).toBe(true);
+    expect(stale).toBe(true);
   });
 });
 

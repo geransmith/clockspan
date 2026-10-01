@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
-import type { Day, Priority, Punch, Session } from '../types';
+import { emptyDay } from '../../../shared/api.js';
+import type { Day, Priority, PruneResult, Punch, Session } from '../types';
 import { dismissByTag, warnQuietly } from '../lib/alerts';
+import { ApiError } from '../lib/apiError';
 import { ADD_PRIORITY_FAILED, LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
 import { endBreaksAt } from '../lib/breaks';
 import { addPending, confirm, fetched, settle, shown, untracked, type Tracked } from '../lib/optimistic';
@@ -21,20 +23,37 @@ import { useTracked } from './useTracked';
  * callers that chain on it (`addPriority`, the next-day planner). Saves reach the server in the
  * order they were made: punches and priorities replace the whole list, so one PUT per list and
  * day is out and only the newest waiting list follows it; the day's other fields, each session,
- * and the breaks queue their writes one after another.
+ * and the breaks queue their writes one after another. `pruneBefore` alone goes out on no queue.
  */
 interface DayStore {
   days: Record<string, Day>;
   /** Dates whose first fetch failed, with the message; cleared by a load that succeeds. */
   errors: Record<string, string>;
-  /** Fetch a day. Never rejects: a failure is recorded in `errors` and raised as a banner. */
+  /**
+   * Fetch a day. Never rejects: a failure on a day not loaded yet is recorded in `errors` and
+   * raised as a banner; a loaded day keeps its copy and says nothing.
+   */
   load: (date: string) => Promise<void>;
   /**
-   * Fetch a day already on screen again, since another device may have changed it, or one whose
-   * first load failed. Quiet: a failure keeps the copy (or the error) shown without another
-   * banner. Resolves when the answer is in, sharing a fetch already out.
+   * Fetch a day the store holds again, since another device may have changed it, or one whose
+   * first load failed; a day it doesn't hold is left to its first load. Quiet: a failure keeps
+   * the copy (or the error) shown without another banner. Resolves when the answer is in,
+   * sharing a fetch already out.
    */
   refresh: (date: string) => Promise<void>;
+  /**
+   * `GET /days/range`, whose answer also lands on each day in it the store held when it went
+   * out (as an empty day where the answer has none), unless the server confirmed a change to
+   * that day meanwhile. Rejects on a failure, without a banner.
+   */
+  readRange: (from: string, to: string) => Promise<Day[]>;
+  /**
+   * Settings → Data's delete: `POST /days/prune`, then every held day before `before` is read
+   * again and `generation` moves. Rejects on a failure, unlike the setters.
+   */
+  pruneBefore: (before: string) => Promise<PruneResult>;
+  /** Moves after a prune: a range read before it may hold days that are gone. */
+  generation: number;
   setPunches: (date: string, punches: Punch[]) => Promise<void>;
   setPriorities: (date: string, priorities: Priority[]) => Promise<boolean>;
   /** Add a priority from outside the card (the timer). Resolves to its uid; rejects if it could not be saved. */
@@ -64,13 +83,31 @@ function normalizeDay(d: Day): Day {
   return { ...d, punches: normalizePunches(d.punches) };
 }
 
+/** `list` with row `id` replaced by `row`, in start order, or dropped when `row` is null. */
+function replaceById<T extends { id: number; startedAt: number }>(list: readonly T[], id: number, row: T | null): T[] {
+  const others = list.filter((x) => x.id !== id);
+  return row ? [...others, row].sort((a, b) => a.startedAt - b.startedAt) : others;
+}
+
 /** The day as the server now has it after confirming `session`: the row inserted, replaced or (cancelled) dropped. */
 function withSession(d: Day, session: Session): Day {
-  const others = d.sessions.filter((s) => s.id !== session.id);
-  const sessions = session.status === 'cancelled' ? others : [...others, session].sort((a, b) => a.startedAt - b.startedAt);
+  const sessions = replaceById(d.sessions, session.id, session.status === 'cancelled' ? null : session);
   // A session starting ended the running break on the server; the same here.
   const breaks = session.status === 'running' ? endBreaksAt(d.breaks, session.startedAt) : d.breaks;
   return { ...d, sessions, breaks };
+}
+
+/**
+ * A delete or a break's end answered 404 found the row gone already (another device deleted
+ * it): what was asked, so it counts as done, with null for the answer.
+ */
+async function unlessGone<T>(send: Promise<T>): Promise<T | null> {
+  try {
+    return await send;
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
 }
 
 // The shown day for each tracked value, worked out once per value: a day's object (and its
@@ -88,10 +125,11 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const latestErrors = useLatest(errors);
   const { settings } = useSettings();
   const priorityCount = useLatest(settings.priorityCount);
-  const inflight = useRef(new Map<string, Promise<boolean>>());
+  const inflight = useRef(new Map<string, Promise<void>>());
   // The date whose failed load raised the banner (one at a time: a newer one replaces it).
   const bannerFor = useRef<string | null>(null);
   const listQueues = useRef(new Map<string, { latest: unknown; ids: number[]; drained: Promise<boolean> }>());
+  const [generation, setGeneration] = useState(0);
 
   const update = useCallback(
     (date: string, fn: (t: Tracked<Day>) => Tracked<Day>) => change((all) => ({ ...all, [date]: fn(all[date] ?? untracked<Day>()) })),
@@ -101,23 +139,20 @@ export function DayProvider({ children }: { children: ReactNode }) {
   // `quiet`: a refresh, or asking again after a failed save or first load. A first load that
   // fails is recorded (the sheet shows it with Try again) and, unless quiet, raised as a banner;
   // a day already shown keeps its copy, and a failed save has already said the server is down.
-  // An answer that isn't a day fails the same way. Never rejects: it resolves to whether the
-  // answer was stale, older than a change the server confirmed after it went out.
+  // An answer that isn't a day fails the same way. Never rejects.
   const fetchDay = useCallback(
-    function fetchDay(date: string, quiet = false): Promise<boolean> {
+    function fetchDay(date: string, quiet = false): Promise<void> {
       const out = inflight.current.get(date);
       if (out) return out;
       const sentAt = (current()[date] ?? untracked<Day>()).version;
-      let again = false;
+      let stale = false;
       const p = api
         .getDay(date)
         .then((d) => {
           const day = normalizeDay(d);
-          let stale = false;
           update(date, (t) => {
             const answer = fetched(t, sentAt, day);
-            stale = t.version !== sentAt;
-            again = answer.again;
+            stale = answer.stale;
             return answer.next;
           });
           setErrors((prev) => {
@@ -130,33 +165,29 @@ export function DayProvider({ children }: { children: ReactNode }) {
             bannerFor.current = null;
             dismissByTag('load-failed');
           }
-          return stale;
         })
         .catch((err: unknown) => {
-          if (shownDay(current()[date])) return false;
+          if (shownDay(current()[date])) return;
           setErrors((prev) => ({ ...prev, [date]: (err as Error).message }));
           if (!quiet) {
             bannerFor.current = date;
             warnQuietly({ title: LOAD_FAILED.title, body: LOAD_FAILED.body, tag: 'load-failed' });
           }
-          return false;
         })
         .finally(() => {
           inflight.current.delete(date);
-          // It landed on a day never loaded, but the server confirmed a change after it went out.
-          if (again) void fetchDay(date, true);
+          // The server confirmed a change after this went out, so the answer was dropped (or, on
+          // a day never loaded, taken as the best there is) and may miss another device's
+          // change: ask again, whoever sent it. Only a change confirmed while a read is out does
+          // this, so it stops when the writes do.
+          if (stale) void fetchDay(date, true);
         });
       inflight.current.set(date, p);
       return p;
     },
     [current, update],
   );
-  const load = useCallback(
-    async (date: string) => {
-      await fetchDay(date);
-    },
-    [fetchDay],
-  );
+  const load = useCallback((date: string) => fetchDay(date), [fetchDay]);
 
   const refresh = useCallback(
     async (date: string) => {
@@ -172,8 +203,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
   // answer becomes the stored copy. Not saved: they leave it all the same, so the screen is back
   // on the stored copy at once, a banner says so (the edit vanishing on its own would look like
   // the app losing data), and the day is asked for again in case the server moved on (another
-  // device deleted the row). That shares a load already out, whose answer is dropped if a
-  // change was confirmed after it went out, so a stale answer asks once more.
+  // device deleted the row being edited). That shares a load already out, and a load whose
+  // answer comes back stale asks again itself.
   const persist = useCallback(
     async (date: string, ids: readonly number[], run: () => Promise<Commit>): Promise<boolean> => {
       try {
@@ -183,9 +214,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       } catch {
         update(date, (t) => settle(t, ids));
         warnQuietly({ title: SAVE_FAILED.title, body: SAVE_FAILED.body, tag: 'save-failed' });
-        void fetchDay(date, true).then((stale) => {
-          if (stale) void fetchDay(date, true);
-        });
+        void fetchDay(date, true);
         return false;
       }
     },
@@ -340,14 +369,28 @@ export function DayProvider({ children }: { children: ReactNode }) {
   );
 
   // Confirmed already: straight into the stored copy. On a day not loaded yet, a load already
-  // out predates it, so its answer is taken and the day asked for again (`fetched`).
-  const applySession = useCallback((session: Session) => update(session.date, (t) => confirm(t, (d) => withSession(d, session))), [update]);
+  // out predates it, so its answer is taken and the day asked for again (`fetchDay`). A session
+  // starting ended the user's running break on the server whatever its day (one started before
+  // midnight sits on the day before), so a loaded day still showing one running past the start
+  // takes the same end; the session's own day no longer does after `withSession`.
+  const applySession = useCallback(
+    (session: Session) => {
+      update(session.date, (t) => confirm(t, (d) => withSession(d, session)));
+      if (session.status !== 'running') return;
+      for (const [date, t] of Object.entries(current())) {
+        if (t.confirmed?.breaks.some((b) => b.endedAt > session.startedAt)) {
+          update(date, (u) => confirm(u, (d) => ({ ...d, breaks: endBreaksAt(d.breaks, session.startedAt) })));
+        }
+      }
+    },
+    [update, current],
+  );
 
   const removeSession = useCallback(
     async (date: string, id: number) => {
       const without = (d: Day) => ({ ...d, sessions: d.sessions.filter((s) => s.id !== id) });
       await inOrder(`session:${id}`, date, without, async () => {
-        await api.deleteSession(id);
+        await unlessGone(api.deleteSession(id));
         return without;
       });
     },
@@ -382,7 +425,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
   );
 
   // At once on screen: cut short now, or gone if it ran under a minute. The server's answer
-  // then stands, a null one meaning it dropped the break.
+  // then stands, a null one meaning it dropped the break or found it gone already.
   const endBreak = useCallback(
     async (date: string, id: number) => {
       const now = Date.now();
@@ -391,11 +434,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
         date,
         (d) => ({ ...d, breaks: d.breaks.flatMap((b) => (b.id === id ? endBreaksAt([b], now) : [b])) }),
         async () => {
-          const { break: saved } = await api.endBreak(id);
-          return (d) => {
-            const others = d.breaks.filter((b) => b.id !== id);
-            return { ...d, breaks: saved ? [...others, saved].sort((a, b) => a.startedAt - b.startedAt) : others };
-          };
+          const saved = (await unlessGone(api.endBreak(id)))?.break ?? null;
+          return (d) => ({ ...d, breaks: replaceById(d.breaks, id, saved) });
         },
       );
     },
@@ -406,11 +446,50 @@ export function DayProvider({ children }: { children: ReactNode }) {
     async (date: string, id: number) => {
       const without = (d: Day) => ({ ...d, breaks: d.breaks.filter((b) => b.id !== id) });
       await inOrder('breaks', date, without, async () => {
-        await api.deleteBreak(id);
+        await unlessGone(api.deleteBreak(id));
         return without;
       });
     },
     [inOrder],
+  );
+
+  const readRange = useCallback(
+    async (from: string, to: string) => {
+      // Only the days held when it went out: one loaded since has a newer answer of its own.
+      const sent = Object.entries(current())
+        .filter(([date, t]) => date >= from && date <= to && t.confirmed !== undefined)
+        .map(([date, t]) => [date, t.version] as const);
+      const { days } = await api.getRange(from, to);
+      const byDate = new Map(days.map((d) => [d.date, d]));
+      change((all) => {
+        const next = { ...all };
+        // A day the answer leaves out has no row on the server: `GET /days/:date` answers it as empty.
+        for (const [date, sentAt] of sent) next[date] = fetched(all[date]!, sentAt, normalizeDay(byDate.get(date) ?? emptyDay(date))).next;
+        return next;
+      });
+      return days;
+    },
+    [current, change],
+  );
+
+  // Sent at once, on no queue: a prune removes whole days rather than editing one, and the
+  // queues are keyed by day, session and breaks, so there is nothing keyed by date to wait
+  // behind. A change still on its way for a day before the cutoff can land after the prune and
+  // re-create that day, which the read after it shows.
+  const pruneBefore = useCallback(
+    async (before: string) => {
+      const result = await api.pruneDays(before);
+      for (const date of Object.keys(current())) {
+        if (date >= before) continue;
+        // Counted as a change the server confirmed: a read already out predates the prune, so
+        // its answer is dropped and the day asked for again.
+        update(date, (t) => confirm(t, (d) => d));
+        void refresh(date);
+      }
+      setGeneration((g) => g + 1);
+      return result;
+    },
+    [current, update, refresh],
   );
 
   const days = useMemo(() => {
@@ -428,6 +507,9 @@ export function DayProvider({ children }: { children: ReactNode }) {
       errors,
       load,
       refresh,
+      readRange,
+      pruneBefore,
+      generation,
       setPunches,
       setPriorities,
       addPriority,
@@ -446,6 +528,9 @@ export function DayProvider({ children }: { children: ReactNode }) {
       errors,
       load,
       refresh,
+      readRange,
+      pruneBefore,
+      generation,
       setPunches,
       setPriorities,
       addPriority,
@@ -470,25 +555,29 @@ export function useDayStore(): DayStore {
 }
 
 /**
- * The day for a date key, loading it on first use. A failed load waits for `store.load` again
- * (the sheet's Try again) or, for a day kept in step by `useRefreshDay`, its next tick.
+ * The day for a date key, loading it on first use. A day the store holds already is read again
+ * each time a view shows it, since another device may have changed it, and one whose first load
+ * failed is asked for again then, quietly. Otherwise a failed load waits for `store.load` (the
+ * sheet's Try again) or, for today, `useRefreshDay`'s next tick.
  */
 export function useDay(date: string): { day: Day | undefined; store: DayStore } {
   const store = useDayStore();
-  // `load` keeps its identity; the store is a new object whenever any day changes.
-  const { load } = store;
+  // `load` and `refresh` keep their identity; the store is a new object whenever any day changes.
+  const { load, refresh } = store;
   const day = store.days[date];
   const failed = date in store.errors;
   useEffect(() => {
     if (!day && !failed) void load(date);
   }, [date, day, failed, load]);
+  // Never keyed on `day`: each answer would send another read.
+  useEffect(() => void refresh(date), [date, refresh]);
   return { day, store };
 }
 
 /**
- * Keeps a day that is on screen in step with the server (`useRefreshLoop`: every minute and
- * when the tab comes back), which also asks again for a day whose first load failed. True
- * while a come-back refresh is out.
+ * Keeps today in step with the server for the alarms (`useRefreshLoop`: every minute and when
+ * the tab comes back), which also asks again for a day whose first load failed. True while a
+ * come-back refresh is out.
  */
 export function useRefreshDay(date: string): boolean {
   const { refresh } = useDayStore();

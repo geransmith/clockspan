@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { deferred, makeDay, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
 import type { Day } from '../types';
-import { useDay } from './useDay';
+import { useDay, useDayStore } from './useDay';
 import { useRange } from './useRange';
 
 vi.mock('../api');
@@ -86,4 +86,64 @@ it("takes the store's copy of a day it holds, in date order, and follows an edit
   await act(() => result.current.store.setRetro(wed, { note: 'edited' }));
   expect(result.current.range.days?.find((d) => d.date === wed)?.retroNote).toBe('edited');
   expect(api.getRange).toHaveBeenCalledTimes(1);
+});
+
+describe('held days', () => {
+  const tue = '2026-09-29';
+  /** The store holds today and Tuesday before the range on Monday to Tuesday is asked for. */
+  async function renderHeld() {
+    const r = renderHook(
+      (p: { from: string; to: string }) => {
+        const { store } = useDay(TODAY);
+        useDay(tue);
+        return { range: useRange(p.from, p.to), store };
+      },
+      { initialProps: { from: '2026-09-21', to: '2026-09-27' }, wrapper: SettingsAndDays },
+    );
+    await settle();
+    return r;
+  }
+
+  it("take the range's copy, and a day the answer leaves out (deleted since) shows as empty", async () => {
+    vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(makeDay(date, { retroNote: 'held' })));
+    vi.mocked(api.getRange)
+      .mockResolvedValueOnce({ days: [] })
+      .mockResolvedValueOnce({ days: [makeDay(TODAY, { retroNote: 'from the phone' })] });
+    const { result, rerender } = await renderHeld();
+    rerender({ from: TODAY, to: tue });
+    await settle();
+    expect(result.current.range.days?.map((d) => [d.date, d.retroNote])).toEqual([
+      [TODAY, 'from the phone'],
+      [tue, ''],
+    ]);
+    expect(result.current.store.days[TODAY]?.retroNote).toBe('from the phone');
+  });
+
+  it('keep a save the server confirmed while the range was out', async () => {
+    const answer = deferred<{ days: Day[] }>();
+    vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(makeDay(date)));
+    vi.mocked(api.getRange).mockResolvedValueOnce({ days: [] }).mockReturnValueOnce(answer.promise);
+    vi.mocked(api.putRetro).mockResolvedValue({ retroNote: 'edited', retroAt: null });
+    const { result, rerender } = await renderHeld();
+    rerender({ from: TODAY, to: tue });
+    await act(() => result.current.store.setRetro(TODAY, { note: 'edited' }));
+    answer.resolve({ days: [makeDay(TODAY, { retroNote: 'read before the save' })] });
+    await settle();
+    expect(result.current.store.days[TODAY]?.retroNote).toBe('edited');
+    expect(result.current.range.days?.find((d) => d.date === TODAY)?.retroNote).toBe('edited');
+  });
+});
+
+it('asks again after a prune, whose deleted days the answer on screen still holds', async () => {
+  vi.mocked(api.getRange)
+    .mockResolvedValueOnce({ days: [makeDay('2026-09-22')] })
+    .mockResolvedValueOnce({ days: [] });
+  vi.mocked(api.pruneDays).mockResolvedValue({ deleted: 1 });
+  const { result } = renderHook(() => ({ range: useRange('2026-09-21', '2026-09-27'), store: useDayStore() }), { wrapper: SettingsAndDays });
+  await settle();
+  expect(result.current.range.days?.map((d) => d.date)).toEqual(['2026-09-22']);
+  await act(() => result.current.store.pruneBefore('2026-09-23'));
+  await settle();
+  expect(api.getRange).toHaveBeenCalledTimes(2);
+  expect(result.current.range.days).toEqual([]);
 });

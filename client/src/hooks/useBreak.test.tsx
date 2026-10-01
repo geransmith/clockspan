@@ -16,7 +16,14 @@ vi.mock('../api');
 vi.mock('../lib/alerts');
 
 const settings = makeSettings({ breakMinutes: 5 });
-const render = () => renderHook(() => ({ ...useBreak(), timer: useTimer(), day: useDay(TODAY).day }), { wrapper: AllProviders });
+const render = () =>
+  renderHook(
+    () => {
+      const { day, store } = useDay(TODAY);
+      return { ...useBreak(), timer: useTimer(), day, store };
+    },
+    { wrapper: AllProviders },
+  );
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
@@ -148,19 +155,52 @@ it('sends nothing to end when no break is running', async () => {
 });
 
 it('says nothing for a break that ended early or long before the page opened', async () => {
-  const early = makeBreak({ id: 1, startedAt: T0 - 20 * MIN, endedAt: T0 - 18 * MIN });
+  const early = makeBreak({ id: 1, startedAt: T0 - 40 * MIN, endedAt: T0 - 38 * MIN });
   vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { breaks: [early] }));
   const { unmount } = render();
   await settle();
   expect(alert).not.toHaveBeenCalled();
-  expect(localStorage.getItem('focus:break-over')).toBe('1');
+  expect(localStorage.getItem('focus:break-over')).toBe(String(T0 - 40 * MIN));
   unmount();
   vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { breaks: [makeBreak({ id: 2, startedAt: T0 - 35 * MIN, endedAt: T0 - 30 * MIN })] }));
   const { result } = render();
   await settle();
   expect(result.current.endsAt).toBeNull();
   expect(alert).not.toHaveBeenCalled();
-  expect(localStorage.getItem('focus:break-over')).toBe('2');
+  expect(localStorage.getItem('focus:break-over')).toBe(String(T0 - 35 * MIN));
+});
+
+it("rings for a new break that comes back with a deleted break's id", async () => {
+  vi.mocked(api.deleteBreak).mockResolvedValue({ ok: true });
+  const { result } = render();
+  await settle();
+  act(() => result.current.start(5));
+  await settle(5 * MIN);
+  expect(alert).toHaveBeenCalledTimes(1);
+  await act(() => result.current.store.removeBreak(TODAY, 5));
+  // SQLite hands the next break the id of the deleted newest one: the start mock answers id 5 again.
+  act(() => result.current.start(5));
+  await settle(5 * MIN);
+  expect(alert).toHaveBeenCalledTimes(2);
+});
+
+it('does not ring an earlier break again when the later one is deleted', async () => {
+  let id = 4;
+  vi.mocked(api.startBreak).mockImplementation((date, plannedSeconds) =>
+    Promise.resolve({ break: makeBreak({ id: ++id, date, plannedSeconds, startedAt: Date.now(), endedAt: Date.now() + plannedSeconds * 1000 }) }),
+  );
+  vi.mocked(api.deleteBreak).mockResolvedValue({ ok: true });
+  const { result } = render();
+  await settle();
+  act(() => result.current.start(5));
+  await settle(6 * MIN);
+  act(() => result.current.start(5));
+  await settle(5 * MIN);
+  expect(alert).toHaveBeenCalledTimes(2);
+  // The first break is the last in the list again, and ended six minutes ago.
+  await act(() => result.current.store.removeBreak(TODAY, 6));
+  await settle(MIN);
+  expect(alert).toHaveBeenCalledTimes(2);
 });
 
 it('waits for the settings before announcing, so the chosen sound plays', async () => {
@@ -234,8 +274,27 @@ describe('across midnight', () => {
     await act(() => result.current.timer.start(TODAY, 1500, 'Next'));
     await settle();
     expect(result.current.endsAt).toBeNull();
+    // Ended in the store too, not only hidden behind today's session.
+    expect(result.current.days[YESTERDAY]?.breaks.map((b) => b.endedAt)).toEqual([midnight + 2 * MIN]);
     await settle(5 * MIN);
     expect(alert).not.toHaveBeenCalled();
+  });
+
+  it('stays ended when that session is cancelled', async () => {
+    const { result } = await breakBeforeMidnight();
+    await settle(7 * MIN);
+    const session = makeSession({ id: 3, startedAt: Date.now() });
+    vi.mocked(api.startSession).mockResolvedValue({ session });
+    vi.mocked(api.getRunning).mockResolvedValue({ session });
+    await act(() => result.current.timer.start(TODAY, 1500, 'Next'));
+    vi.mocked(api.cancelSession).mockResolvedValue({ session: { ...session, status: 'cancelled', endedAt: Date.now() } });
+    vi.mocked(api.getRunning).mockResolvedValue({ session: null });
+    await act(() => result.current.timer.cancel());
+    // Today is empty again, so yesterday's break is the one shown: ended, not back on the bar.
+    expect(result.current.endsAt).toBeNull();
+    await settle(5 * MIN);
+    expect(alert).not.toHaveBeenCalled();
+    expect(api.endBreak).not.toHaveBeenCalled();
   });
 });
 
@@ -311,18 +370,7 @@ describe('suggestions', () => {
   it('offers nothing after a false start, and the Break button keeps the break of the last real one', async () => {
     const { result } = await finishByHand(0.5, [done(1, 40)]);
     expect(alert).not.toHaveBeenCalled();
-    expect(result.current.next).toMatchObject({ minutes: 5, long: false });
-  });
-
-  it('offers nothing for a session the server says was cancelled elsewhere', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue({ ...settings, suggestBreaks: true });
-    const running = makeSession({ startedAt: T0 - 20 * MIN });
-    vi.mocked(api.getRunning).mockResolvedValue({ session: running });
-    const { result } = render();
-    await settle();
-    vi.mocked(api.finishSession).mockResolvedValue({ session: { ...running, status: 'cancelled', endedAt: T0 } });
-    await act(() => result.current.timer.finish());
-    expect(alert).not.toHaveBeenCalled();
+    expect(result.current.next).toMatchObject({ minutes: 5, long: false, sessionId: 1 });
   });
 
   it('offers nothing for a session that ran past midnight, which belongs to the day before', async () => {

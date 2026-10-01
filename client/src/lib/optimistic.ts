@@ -16,7 +16,7 @@
  * changes. `serial()`, the stores' write queue, lives here too.
  */
 
-export interface Pending<T> {
+interface Pending<T> {
   id: number;
   apply: (value: T) => T;
 }
@@ -72,26 +72,28 @@ export function settleWith<T>(t: Tracked<T>, ids: readonly number[], value: T): 
 }
 
 /**
- * A change the server made and confirmed without this store asking (the timer finished a
- * session, a break started): laid onto the confirmed value, and a read already out is older.
+ * A change the server made and confirmed without this store asking (the timer started or
+ * finished a session, old days were deleted): laid onto the confirmed value, and a read already
+ * out is older.
  */
 export function confirm<T>(t: Tracked<T>, change: (confirmed: T) => T): Tracked<T> {
   return { ...t, confirmed: t.confirmed === undefined ? undefined : change(t.confirmed), version: t.version + 1 };
 }
 
 /**
- * A read sent at `sentVersion` answered `value`. It lands unless the server confirmed a change
- * after it was sent, which it may not include. A value never loaded takes the answer anyway,
- * since there is nothing better to show, and `again` asks for a fresh copy that has the change.
+ * A read sent at `sentVersion` answered `value`. `stale`: the server confirmed a change after it
+ * was sent, so the answer is older than that change and may not include it. A stale answer is
+ * dropped, except on a value never loaded, which takes it anyway since there is nothing better
+ * to show.
  */
-export function fetched<T>(t: Tracked<T>, sentVersion: number, value: T): { next: Tracked<T>; again: boolean } {
+export function fetched<T>(t: Tracked<T>, sentVersion: number, value: T): { next: Tracked<T>; stale: boolean } {
   const stale = t.version !== sentVersion;
-  if (stale && t.confirmed !== undefined) return { next: t, again: false };
-  return { next: { ...t, confirmed: value }, again: stale };
+  if (stale && t.confirmed !== undefined) return { next: t, stale };
+  return { next: { ...t, confirmed: value }, stale };
 }
 
 /** Runs `job` once the jobs queued before it on the same key have settled. */
-export type Queue = <R>(job: () => Promise<R>, key?: string) => Promise<R>;
+type Queue = <R>(job: () => Promise<R>, key?: string) => Promise<R>;
 
 /**
  * A store's write queue: each job starts once the one before it on its key has answered, failed

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS } from '../../../../shared/settings.js';
 import * as api from '../../api';
+import { useDayStore } from '../../hooks/useDay';
 import { DELETE_DAYS, RESET_SETTINGS } from '../../lib/copy';
 import { addDays, todayKey } from '../../../../shared/dates.js';
 import { formatDateFull, plural } from '../../lib/format';
@@ -50,37 +51,45 @@ export function DataTab({ settings, set, onReset }: { settings: Settings; set: (
 
 /**
  * Settings → Data → "Delete old days now". The count line is the server's answer for the
- * chosen cutoff, so the confirm names exactly what will go. Not a settings save: nothing here
- * goes through the header's Saving/Saved pill.
+ * chosen cutoff, so the confirm names exactly what will go. The delete goes through the day
+ * store (`pruneBefore`), so the days on screen follow it. Not a settings save: nothing here goes
+ * through the header's Saving/Saved pill.
  */
 function DeleteOldDays() {
   const today = todayKey();
+  const { pruneBefore, generation } = useDayStore();
   const [before, setBefore] = useState(() => addDays(today, -365));
-  const [info, setInfo] = useState<PruneInfo | null>(null);
+  const [loaded, setLoaded] = useState<PruneInfo | null>(null);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // The server says which cutoff each count is for: one for another date, or cleared by a
+  // delete, is not shown, so Delete waits for the count that matches.
+  const info = loaded?.before === before ? loaded : null;
 
+  // A delete moves `generation`, which counts again for whatever date is picked by then.
   useEffect(() => {
     let cancelled = false;
     api
       .getPruneInfo(before)
-      .then((r) => !cancelled && setInfo(r))
-      .catch((err: unknown) => !cancelled && setMsg({ ok: false, text: (err as Error).message }));
+      .then((r) => !cancelled && setLoaded(r))
+      .catch((err: unknown) => !cancelled && setError((err as Error).message));
     return () => {
       cancelled = true;
     };
-  }, [before]);
+  }, [before, generation]);
 
   const remove = async () => {
     if (!info || !window.confirm(DELETE_DAYS.confirm(info.matching, formatDateFull(before)))) return;
     setBusy(true);
-    setMsg(null);
+    setDone(null);
+    setError(null);
     try {
-      const { deleted } = await api.pruneDays(before);
-      setMsg({ ok: true, text: DELETE_DAYS.done(deleted) });
-      setInfo(await api.getPruneInfo(before));
+      const { deleted } = await pruneBefore(before);
+      setDone(DELETE_DAYS.done(deleted));
+      setLoaded(null);
     } catch (err) {
-      setMsg({ ok: false, text: (err as Error).message });
+      setError((err as Error).message);
     } finally {
       setBusy(false);
     }
@@ -108,14 +117,9 @@ function DeleteOldDays() {
             // `max` doesn't stop a typed date, and a cutoff after today would delete today too.
             onChange={(e) => {
               if (!e.target.value) return;
-              const next = e.target.value < today ? e.target.value : today;
-              // A later date typed while the cutoff is already today lands on the same date: the
-              // count effect won't run again, so clearing the count would leave Delete off for good.
-              if (next === before) return;
-              setBefore(next);
-              // The count and any message were for the old date: Delete waits for the new count.
-              setInfo(null);
-              setMsg(null);
+              setBefore(e.target.value < today ? e.target.value : today);
+              setDone(null);
+              setError(null);
             }}
             aria-label="Delete days before"
           />
@@ -126,9 +130,14 @@ function DeleteOldDays() {
       </div>
       {stored && <p className="muted small">{stored}</p>}
       {info?.serverMaxDays != null && <p className="muted small">This server keeps at most {info.serverMaxDays} days for every user.</p>}
-      {msg && (
-        <p className={msg.ok ? 'success' : 'error'} role={msg.ok ? 'status' : 'alert'}>
-          {msg.text}
+      {done && (
+        <p className="success" role="status">
+          {done}
+        </p>
+      )}
+      {error && (
+        <p className="error" role="alert">
+          {error}
         </p>
       )}
     </Section>

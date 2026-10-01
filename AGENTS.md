@@ -238,7 +238,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **Old-day deletion goes through `pruneDays` (`server/retention.ts`)**, whether from the
   Data tab's button (`POST /days/prune`) or the scheduled `runRetention`. It deletes `days`
   rows before a date key (cascades take punches, priorities, sessions, breaks), never a day with a
-  running session, and never settings. The per-user setting `retention { enabled, days }` is
+  running session, and never settings. The Data tab sends it through the day store's
+  `pruneBefore`, which reads the held days before the cutoff again and moves `generation`, so
+  the ranges on screen ask again. The per-user setting `retention { enabled, days }` is
   capped by `RETENTION_DAYS` (`config.retentionDays`) via `effectiveKeepDays`; a user with no
   settings row still gets the cap. `reclaimSpace` (VACUUM + WAL checkpoint) runs after a
   prune that deleted a day and after an admin deletes a user (`DELETE /api/auth/users/:id`), so
@@ -327,21 +329,28 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   another device may change them.
 - **Today's day is kept in step with the server** (`useRefreshDay` in `useDay.tsx`, on the same
   hook as the timer's sync and the settings' refresh, `useRefreshLoop`: every minute and when
-  the tab comes back, throttled to 5 s), so the alarms in `useTodayAlarms` judge the server's
-  copy of the punches, not one from hours ago; they wait while a come-back refresh is out. A
-  today whose first load failed is loaded again on the same ticks (no second banner), so its
-  alarms come back with the server.
+  the tab comes back, throttled to 5 s per caller), so the alarms in `useTodayAlarms` judge the
+  server's copy of the punches, not one from hours ago; they wait while a come-back refresh is
+  out. A today whose first load failed is loaded again on the same ticks (no second banner), so
+  its alarms come back with the server. Any day the store holds is also read again each time a
+  view shows it (`useDay`; one whose first load failed is asked for again then, quietly), and a
+  range read (`store.readRange`) lands on the held days in it under the same `version` rule.
 - **The day store keeps the server's copy and this device's changes apart**
   (`lib/optimistic.ts`): each day is its confirmed copy plus the changes not confirmed yet, and
   the sheet shows the one laid over the other. The confirmed copy is the server's answers in the
   order they arrived (a read's copy with each save's answer laid on it), so it is not always
   what the server holds now: a save's answer can be older than a read that landed first. A
   failed write just drops its change, so the screen is back on the confirmed copy at once (with
-  the "Change not saved" banner), and the day is asked for again, once more if that answer is
-  dropped. A read's answer replaces the confirmed copy and never a change still on its way; it
-  is dropped only when the server confirmed a change after the read went out (`version`), and a
-  day never loaded takes it anyway and is asked for again. A day not loaded yet keeps its
-  changes until the server's copy arrives, so nothing made up stands in for it. The day store,
+  the "Change not saved" banner), and the day is asked for again. A delete or a break's end the
+  server answers 404 for counts as done: another device removed the row already. A read's
+  answer replaces the confirmed copy and never a change still on its way. It is stale when the
+  server confirmed a change after the read went out (`version`): a day read then drops it (a day
+  never loaded takes it anyway) and asks for the day again, whoever sent the read, while a range
+  read's stale day is left to the next read. A day not loaded yet keeps its changes until the
+  server's copy arrives, so nothing made up stands in for it. `pruneBefore` is the one store
+  write sent on no queue (the queues are keyed by day, session and breaks), so a change still on
+  its way for a day before the cutoff can land after the prune and re-create that day, which the
+  re-read after the prune shows. The day store,
   `useSettings` and `useTimer` are all built on `useTracked` (`hooks/useTracked.ts`): the
   state, a `current()` that callbacks read before the next render, ids for the changes, and the
   store's write queue. `apply` and commit functions are pure: read the clock outside them.
@@ -355,14 +364,17 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `ended_at` is the planned end from the start and moves back when the break is ended early
   (`POST /breaks/:id/end`), so nothing finishes a break that runs out: it is running while
   `endedAt` is ahead of now (`runningBreak`), and one that ended before its planned end was cut
-  short, which is why only a full-length break rings "Break's over" (once per break id,
-  `localStorage['focus:break-over']`). The server keeps breaks from overlapping sessions: a
+  short, which is why only a full-length break rings "Break's over" (once per break, keyed by
+  its start in `localStorage['focus:break-over']`, since SQLite gives a new break the id of a
+  deleted newest one). The server keeps breaks from overlapping sessions: a
   break start ends a running break and is refused (409) while a focus timer runs, and a
   session start ends a running break (`endRunningBreak`, `routes/shared.ts`). However a break
   ends, one that ran under `BREAK_SECONDS.min` is deleted, not logged (`POST /breaks/:id/end`
   answers `{ break: null }`). The client mirrors both rules with `endBreaksAt` (in `useDay`'s
-  break writes and `applySession`), so it never sends an end after a session start: the break
-  may already be gone. Break writes share one `inOrder` key (`breaks`).
+  break writes and `applySession`, which ends a running break on any loaded day, since one
+  started before midnight sits on the day before), so it never sends an end after a session
+  start: the break may already be gone. An end the server answers 404 for (the break was
+  deleted elsewhere) counts as done. Break writes share one `inOrder` key (`breaks`).
 - **Saves reach the server in the order they were made**, each store's on its own queue
   (`serial()` in `lib/optimistic.ts`, made by `useTracked`). In the day store, `setPunches` and
   `setPriorities` replace a whole list, so one PUT per list and day is in flight and only the
@@ -425,8 +437,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started —
   one rule, no clock-in fallback. `GET /days/range` returns full days and the client does the
   rollup (the review, the History calendar and the week line all fetch it through `useRange`,
-  one period at a time, which lays the day store's copies over the answer so an edit shows at
-  once); register any new literal path under `/days` before `/:date`.
+  one period at a time: it reads through `store.readRange`, lays the store's copies over the
+  answer so an edit shows at once (`useHeldOver`), and is asked again after a prune; the
+  left-open offer, `useLeftOpen`, does the same once a day); register any new literal path
+  under `/days` before `/:date`.
 - **History → Days opens on the route's date.** `App.tsx` passes `route.date ?? today` to `History`;
   the calendar starts on that month with that day picked (`periodOffset('month', …)`), and
   only "Open day" navigates. So the header's History button lands on the month of the day
