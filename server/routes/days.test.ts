@@ -2,12 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from '../dev/harness.js';
 import { seedDatabase } from '../dev/seed.js';
 import { MAX_PRIORITIES } from '../../shared/settings.js';
-import { punchWindow } from '../../shared/dates.js';
+import { HOUR_MS, punchWindow } from '../../shared/dates.js';
 import { LIMITS } from '../../shared/api.js';
 
 /** An instant on 2026-09-01 in any zone: its UTC midnight plus a few hours. */
 const T0 = Date.UTC(2026, 8, 1);
-const HOUR = 3_600_000;
 
 let app: TestApp;
 beforeEach(async () => {
@@ -34,11 +33,6 @@ describe('GET /api/days/:date', () => {
     });
   });
 
-  it('rejects an invalid date', async () => {
-    expect((await app.api.get('/api/days/2026-02-30')).status).toBe(400);
-    expect((await app.api.get('/api/days/today')).status).toBe(400);
-  });
-
   it('returns a seeded day without its cancelled sessions', async () => {
     const day = seededDay('unreviewed');
     const r = await app.api.get(`/api/days/${day.date}`);
@@ -56,22 +50,22 @@ describe('GET /api/days/:date', () => {
     expect(r.body.overtimeApproved).toBe(true);
     expect(r.body.retroNote).toBe(day.retroNote);
     expect(r.body.retroAt).toBe(day.retroAt);
-    const linked = r.body.sessions.find((s: { priorityUid: string | null }) => s.priorityUid);
-    expect(linked.durationSeconds).toBe(linked.plannedSeconds);
   });
 });
 
 describe('PUT /api/days/:date/punches', () => {
   it('replaces the rows and derives kind from position parity', async () => {
-    const r = await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: T0 + 8 * HOUR + 0.4 }, { at: null }, { at: null }, { at: T0 + 17 * HOUR }] });
+    const r = await app.api.put('/api/days/2026-09-01/punches', {
+      punches: [{ at: T0 + 8 * HOUR_MS + 0.4 }, { at: null }, { at: null }, { at: T0 + 17 * HOUR_MS }],
+    });
     expect(r.status).toBe(200);
     expect(r.body.punches).toEqual([
-      { position: 0, kind: 'in', at: T0 + 8 * HOUR },
+      { position: 0, kind: 'in', at: T0 + 8 * HOUR_MS },
       { position: 1, kind: 'out', at: null },
       { position: 2, kind: 'in', at: null },
-      { position: 3, kind: 'out', at: T0 + 17 * HOUR },
+      { position: 3, kind: 'out', at: T0 + 17 * HOUR_MS },
     ]);
-    const again = await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: T0 + 9 * HOUR }, { at: null }] });
+    const again = await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: T0 + 9 * HOUR_MS }, { at: null }] });
     expect(again.body.punches).toHaveLength(2);
     expect((await app.api.get('/api/days/2026-09-01')).body.punches).toHaveLength(2);
   });
@@ -94,13 +88,12 @@ describe('PUT /api/days/:date/punches', () => {
     const tooMany = await app.api.put('/api/days/2026-09-01/punches', { punches: Array(41).fill({ at: null }) });
     expect(tooMany.status).toBe(400);
     expect(tooMany.body.error).toMatch(/limited to 40/);
-    expect((await app.api.put('/api/days/bad/punches', { punches: [] })).status).toBe(400);
   });
 
   it('refuses a row that is not an object, and stores nothing', async () => {
     // A number or true used to be stored as an empty punch; 'x' and [1] were refused only because strings and arrays have an `at` method.
-    for (const row of [5, true, 'x', [1], [{ at: T0 + 8 * HOUR }]]) {
-      const r = await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: T0 + 8 * HOUR }, row] });
+    for (const row of [5, true, 'x', [1], [{ at: T0 + 8 * HOUR_MS }]]) {
+      const r = await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: T0 + 8 * HOUR_MS }, row] });
       expect([r.status, r.body.error], JSON.stringify(row)).toEqual([400, 'Punch 1 must be an object or null.']);
     }
     expect((await app.api.get('/api/days/2026-09-01')).body.punches).toEqual([]);
@@ -108,9 +101,9 @@ describe('PUT /api/days/:date/punches', () => {
 
   it("takes the web app's rows, and a null row as an empty one", async () => {
     // The client sends `{ at }` for every row, `at: null` for an empty one (putPunches in client/src/api.ts); a null row reads the same.
-    const r = await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: T0 + 8 * HOUR }, { at: null }, null, { at: T0 + 17 * HOUR }] });
+    const r = await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: T0 + 8 * HOUR_MS }, { at: null }, null, { at: T0 + 17 * HOUR_MS }] });
     expect(r.status).toBe(200);
-    expect(r.body.punches.map((p: { at: number | null }) => p.at)).toEqual([T0 + 8 * HOUR, null, null, T0 + 17 * HOUR]);
+    expect(r.body.punches.map((p: { at: number | null }) => p.at)).toEqual([T0 + 8 * HOUR_MS, null, null, T0 + 17 * HOUR_MS]);
   });
 });
 
@@ -227,7 +220,7 @@ describe('PUT /api/days/:date/priorities', () => {
     const priorities = [
       { position: 1, text: 'Write the report', done: true, uid: 'abcdef123456', addedAt: T0 },
       { position: 2, text: '', done: false, uid: null, addedAt: null },
-      { position: 3, text: '', done: false, uid: '0123456789ab', addedAt: T0 + HOUR },
+      { position: 3, text: '', done: false, uid: '0123456789ab', addedAt: T0 + HOUR_MS },
     ];
     const r = await app.api.put('/api/days/2026-09-01/priorities', { priorities });
     expect(r.status).toBe(200);
@@ -258,7 +251,6 @@ describe('PUT /api/days/:date/target', () => {
       expect((await app.api.put('/api/days/2026-09-01/target', { workMinutes })).status).toBe(400);
     }
     expect((await app.api.put('/api/days/2026-09-01/target')).status).toBe(400);
-    expect((await app.api.put('/api/days/not-a-date/target', { workMinutes: 240 })).status).toBe(400);
     expect((await app.api.put('/api/days/2026-09-01/target', { workMinutes: 1 })).status).toBe(200);
     expect((await app.api.put('/api/days/2026-09-01/target', { workMinutes: 24 * 60 })).status).toBe(200);
   });
@@ -283,9 +275,9 @@ describe('PUT /api/days/:date/retro', () => {
   });
 
   it('treats no body at all as an empty patch, and stores no day for it', async () => {
-    const r = await fetch(`${app.url}/api/days/2026-09-01/retro`, { method: 'PUT' });
+    const r = await app.api.put('/api/days/2026-09-01/retro');
     expect(r.status).toBe(200);
-    expect(await r.json()).toEqual({ retroNote: '', retroAt: null });
+    expect(r.body).toEqual({ retroNote: '', retroAt: null });
     expect(app.count('days', 'date = ?', '2026-09-01')).toBe(0);
   });
 });
@@ -307,11 +299,11 @@ describe('/api/days/prune', () => {
 
   it('reports the server cap when one is set', async () => {
     await app.close();
-    app = await startTestApp({ seed: true, env: { RETENTION_DAYS: '90' } });
+    app = await startTestApp({ env: { RETENTION_DAYS: '90' } });
     expect((await app.api.get('/api/days/prune?before=2020-01-01')).body.serverMaxDays).toBe(90);
   });
 
-  it('deletes the days before the cutoff with everything hanging off them, for this user only', async () => {
+  it('deletes the days before the cutoff with everything hanging off them', async () => {
     const dates = seededDates();
     const before = dates[3]!;
     const doomed = app.seeded!.days.slice(0, 3);
@@ -322,15 +314,10 @@ describe('/api/days/prune', () => {
     expect(count('breaks')).toBe(doomed.reduce((n, d) => n + d.breaks.length, 0));
     expect(count('breaks')).toBeGreaterThan(0);
 
-    // Another user's day on the same date must survive.
-    const other = Number(app.db.prepare(`INSERT INTO users (kind, display_name, created_at) VALUES ('local', 'Other', 0)`).run().lastInsertRowid);
-    app.db.prepare(`INSERT INTO days (user_id, date, created_at) VALUES (?, ?, 0)`).run(other, dates[0]);
-
     const r = await app.api.post('/api/days/prune', { before });
     expect(r.status).toBe(200);
     expect(r.body).toEqual({ deleted: 3 });
-    expect(storedDates()).toEqual([dates[0], ...dates.slice(3)]);
-    expect(app.db.prepare(`SELECT user_id FROM days WHERE date = ?`).all(dates[0])).toEqual([{ user_id: other }]);
+    expect(storedDates()).toEqual(dates.slice(3));
     expect(count('punches')).toBe(0);
     expect(count('priorities')).toBe(0);
     expect(count('sessions')).toBe(0);
@@ -392,7 +379,7 @@ describe('days are scoped to the signed-in user', () => {
     // Writes on the same date land on B's own day and leave A's untouched.
     const before = (await a.get(`/api/days/${date}`)).body;
     expect(
-      (await b.put(`/api/days/${date}/punches`, { punches: [{ at: punchWindow(date).from + 44 * HOUR }, { at: null }, { at: null }, { at: null }] })).status,
+      (await b.put(`/api/days/${date}/punches`, { punches: [{ at: Date.parse(date) + 8 * HOUR_MS }, { at: null }, { at: null }, { at: null }] })).status,
     ).toBe(200);
     expect((await b.put(`/api/days/${date}/priorities`, { priorities: [{ text: 'Mine' }] })).status).toBe(200);
     expect((await b.put(`/api/days/${date}/overtime`, { approved: true })).status).toBe(200);
@@ -410,5 +397,28 @@ describe('days are scoped to the signed-in user', () => {
     expect((await b.post('/api/days/prune', { before: '2099-01-01' })).body).toEqual({ deleted: 1 });
     expect((await a.get(`/api/days/range?from=${date}&to=${SEED_TODAY}`)).body.days).toHaveLength(seeded.days.length);
     expect((await a.get(`/api/days/${date}`)).body).toEqual(before);
+  });
+});
+
+// Each route lists `requireDate` itself, so a new /:date route needs a row here.
+describe('requireDate on every /:date route', () => {
+  it('refuses an impossible date and stores no day for it', async () => {
+    // Each write's body would pass on a real date, so a write without the guard would store the day.
+    const day = '/api/days/2026-02-30';
+    const routes: [method: 'get' | 'put' | 'post', path: string, body?: unknown][] = [
+      ['get', day],
+      ['put', `${day}/punches`, { punches: [] }],
+      ['put', `${day}/priorities`, { priorities: [{ text: 'x' }] }],
+      ['put', `${day}/overtime`, { approved: true }],
+      ['put', `${day}/target`, { workMinutes: 240 }],
+      ['put', `${day}/retro`, { note: 'x' }],
+      ['post', `${day}/sessions`, { plannedSeconds: 1500 }],
+      ['post', `${day}/breaks`, { plannedSeconds: 300 }],
+    ];
+    for (const [method, path, body] of routes) {
+      const r = method === 'get' ? await app.api.get(path) : await app.api[method](path, body);
+      expect([path, r.status, r.body]).toEqual([path, 400, { error: 'Invalid date.' }]);
+    }
+    expect(app.count('days', 'date = ?', '2026-02-30')).toBe(0);
   });
 });

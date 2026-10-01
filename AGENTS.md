@@ -528,7 +528,9 @@ Never commit `data/` or `.env`.
   type to `shared/api.ts` (the route's `res.json(… satisfies <Type>)` and the client's
   `request<Type>` both name it) → cover it in that router's
   `*.test.ts`: happy path, each 400, and that another
-  user gets a 404/empty result (the scoping test is not optional). If the seed should carry
+  user gets a 404/empty result (the scoping test is not optional). A new `/:date` route also
+  gets a row in the bad-date table at the end of `server/routes/days.test.ts`: unlike the `/:id`
+  ownership check, that table does not pick up new routes on its own. If the seed should carry
   the new field, add it to `server/dev/seed.ts` and its manifest.
 - **A schema change**: append a migration string to `MIGRATIONS` in `db.ts`. Never edit an
   existing entry. A new table with a `user_id` also joins the README's script under "Switching
