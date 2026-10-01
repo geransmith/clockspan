@@ -547,6 +547,12 @@ describe('lunchInPunchOrder', () => {
     expect(inOrder(clockedIn, settings, T0 + 8 * H + 10 * M)).toBe(false);
     expect(nextPunchPosition(clockedIn, false)).toBe(3);
   });
+
+  it('keeps them at lunch past the target, so the Now is Lunch in', () => {
+    const atLunch = punches([T0, T0 + 4 * H, null, null]);
+    expect(inOrder(atLunch, half, T0 + 4 * H + 10 * M)).toBe(true);
+    expect(nextPunchPosition(atLunch, true)).toBe(2);
+  });
 });
 
 describe('targetFraction', () => {

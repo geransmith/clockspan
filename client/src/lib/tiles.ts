@@ -65,8 +65,9 @@ export function timeclockTiles(tc: TimeclockResult, o: TileOptions): { lunch: Ti
       clockOut.sub = 'Day complete';
     } else if (tc.clockOutStatus === 'over' && tc.overSeconds < 60) {
       // Punches are whole minutes, so a break taken at the target (an Add after an on-target
-      // Clock out, a half day's Lunch out) leaves the day exactly on it; like the Worked tile,
-      // under a minute past it is not "Over by 0m".
+      // Clock out, a half day's Lunch out) leaves the day exactly on it, where this would read
+      // "Over by 0m". The first minute past it reads On target too, as the Worked tile does, so
+      // the two agree.
       clockOut.tone = 'tile--accent';
       clockOut.sub = 'On target';
     } else if (tc.clockOutStatus === 'over') {
