@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DAY_MS } from '../../../shared/dates.js';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
 import { playSound, unlockAudio } from '../lib/alerts';
@@ -145,12 +146,15 @@ describe('Priorities', () => {
 
   it("offers the last plan's open rows on an empty list, as new rows for today", async () => {
     const dismiss = vi.fn();
-    const { saved } = await renderCard([], { from: 'yesterday', rows: [row(2, 'Invoices')], dismiss });
+    // The same row written twice on the last plan, both added the day before.
+    const yesterdays = [row(2, 'Invoices'), row(3, 'invoices ')].map((p) => ({ ...p, addedAt: T0 - DAY_MS }));
+    const { saved } = await renderCard([], { from: 'yesterday', rows: yesterdays, dismiss });
     expect(screen.getByText(LEFT_OPEN.title('yesterday'))).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.dismiss }));
     expect(dismiss).toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
-    expect(saved()[0]).toMatchObject({ position: 1, text: 'Invoices', done: false });
+    expect(saved().map((p) => p.text)).toEqual(['Invoices', '', '']);
+    expect(saved()[0]).toMatchObject({ position: 1, text: 'Invoices', done: false, addedAt: T0 });
     expect(saved()[0]!.uid).not.toBe('uid2abcdef');
   });
 });

@@ -124,7 +124,7 @@ describe('PlanNext', () => {
     const { again } = await renderPlan();
     await open();
     fireEvent.click(box('Review the PR'));
-    // 'Ship it' removed on the Priorities card: the rows below it move up, with their uids.
+    // Today's list renumbered (a row above them gone): the rows below move up, with their uids.
     again([
       { ...TODAYS[1]!, position: 1 },
       { ...TODAYS[2]!, position: 2 },

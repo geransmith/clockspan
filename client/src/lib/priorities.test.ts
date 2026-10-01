@@ -130,15 +130,11 @@ describe('hasRoom', () => {
   const full = Array.from({ length: MAX_PRIORITIES }, (_, i) => row(i + 1, `p${i + 1}`));
 
   it('is false only when every row up to the cap has text', () => {
+    const oneCleared = full.map((p) => (p.position === 7 ? { ...p, text: '  ' } : p));
     expect(hasRoom([], 3)).toBe(true);
     expect(hasRoom(full, 3)).toBe(false);
     expect(hasRoom(full.slice(0, -1), 3)).toBe(true);
-    expect(
-      hasRoom(
-        full.map((p) => (p.position === 7 ? { ...p, text: '  ' } : p)),
-        3,
-      ),
-    ).toBe(true);
+    expect(hasRoom(oneCleared, 3)).toBe(true);
   });
 });
 
