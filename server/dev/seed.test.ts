@@ -115,13 +115,12 @@ describe('seedDatabase', () => {
 
       // Sessions: links resolve on the same day.
       const uids = new Set(day.priorities.map((p) => p.uid));
-      const clockIn = day.punches[0]!.at!;
       for (const s of day.sessions) {
         if (s.priorityUid !== null) expect(uids.has(s.priorityUid)).toBe(true);
         if (s.status === 'running') expect(s.endedAt).toBeNull();
         else expect(s.endedAt).toBeGreaterThan(s.startedAt);
       }
-      expect(day.createdAt).toBeLessThan(clockIn);
+      expect(day.createdAt).toBeLessThan(day.punches[0]!.at!);
     }
 
     expectConsistent(m, SEED_NOW);
