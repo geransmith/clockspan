@@ -48,15 +48,45 @@ describe('DurationField', () => {
     expect(onCommit).toHaveBeenCalledWith(495);
   });
 
-  it('keeps the total inside its bounds, and reads a blank or a stray letter as zero', () => {
-    const { hours, mins, onCommit } = renderField();
+  it('keeps the total inside its bounds and whole', () => {
+    const { hours, onCommit } = renderField();
     fireEvent.change(hours, { target: { value: '30' } });
     fireEvent.blur(hours);
     expect(onCommit).toHaveBeenLastCalledWith(24 * 60);
+    fireEvent.change(hours, { target: { value: '7.33' } });
+    fireEvent.blur(hours);
+    expect(onCommit).toHaveBeenLastCalledWith(440);
+    fireEvent.change(hours, { target: { value: '0' } });
+    fireEvent.blur(hours);
+    expect(onCommit).toHaveBeenLastCalledWith(1);
+  });
+
+  it('puts the stored value back for a blank or non-numeric box', () => {
+    // A cleared Work day used to save as 0, clamped to 1 minute, and rang the clock-out alarm.
+    const { hours, mins, onCommit } = renderField();
+    fireEvent.change(hours, { target: { value: '' } });
+    fireEvent.blur(hours);
+    expect([hours.value, mins.value]).toEqual(['8', '0']);
+
     fireEvent.change(hours, { target: { value: '' } });
     fireEvent.change(mins, { target: { value: 'x' } });
     fireEvent.blur(mins);
-    expect(onCommit).toHaveBeenLastCalledWith(1);
+    expect([hours.value, mins.value]).toEqual(['8', '0']);
+
+    fireEvent.change(hours, { target: { value: '' } });
+    fireEvent.change(mins, { target: { value: '' } });
+    fireEvent.blur(mins);
+    expect([hours.value, mins.value]).toEqual(['8', '0']);
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it('saves a typed zero', () => {
+    const onCommit = vi.fn();
+    render(<DurationField label="Work day" minutes={60} min={0} max={24 * 60} onCommit={onCommit} />);
+    const hours = screen.getByLabelText('Work day hours');
+    fireEvent.change(hours, { target: { value: '0' } });
+    fireEvent.blur(hours);
+    expect(onCommit).toHaveBeenCalledWith(0);
   });
 
   it('puts the stored value back when a draft adds up to it, and takes a new value from outside', () => {

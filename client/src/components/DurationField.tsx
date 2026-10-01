@@ -1,6 +1,10 @@
 import { useState, type FocusEvent, type KeyboardEvent } from 'react';
 
-/** Hours + minutes inputs that commit when focus leaves the pair or on Enter, so half-typed values never save. `min` and `max` are in minutes. */
+/**
+ * Hours + minutes inputs that commit when focus leaves the pair or on Enter, so half-typed values
+ * never save; a blank or non-numeric box puts the stored value back (type 0 for zero). `min` and
+ * `max` are in minutes.
+ */
 export function DurationField({
   label,
   minutes,
@@ -29,7 +33,9 @@ export function DurationField({
   // into the past for a moment and fire it.
   const onBlur = (e: FocusEvent<HTMLSpanElement>) => {
     if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
-    const total = Math.max(min, Math.min(max, (Number(h) || 0) * 60 + (Number(m) || 0)));
+    const hh = h.trim() === '' ? NaN : Number(h);
+    const mm = m.trim() === '' ? NaN : Number(m);
+    const total = Number.isFinite(hh) && Number.isFinite(mm) ? Math.max(min, Math.min(max, Math.round(hh * 60 + mm))) : minutes;
     if (total !== minutes) onCommit(total);
     else {
       setH(String(Math.floor(minutes / 60)));
