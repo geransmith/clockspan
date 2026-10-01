@@ -2,9 +2,10 @@
 
 ## Supported versions
 
-The newest release is supported. A fix ships as a patch release of the current major version,
-so `ghcr.io/geransmith/clockspan:latest` and the current major tag (`:X`, e.g. `:2`) both pick it up; a pinned
-`X.Y.Z` tag needs updating by hand. The README's Docker section has the commands.
+The newest release is supported. A fix ships as a patch release of it, so
+`ghcr.io/geransmith/clockspan:latest`, its major tag (`:X`, e.g. `:2`) and its minor tag
+(`:X.Y`, e.g. `:2.1`) all pick it up; a pinned `X.Y.Z` tag, or a major or minor tag of an
+older release, needs updating by hand. The README's Docker section has the commands.
 
 ## Reporting a vulnerability
 
@@ -18,8 +19,8 @@ Include what you can:
 - the steps to reproduce it, and what someone could do with it
 
 Clockspan has one maintainer who works on it in spare time, so there is no promised response
-time. You'll get an answer in the report's thread. A fix ships as a patch release, and the
-advisory credits you unless you'd rather not be named.
+time. You'll get an answer in the report's thread, and the advisory credits you unless you'd
+rather not be named.
 
 ## Scope
 
