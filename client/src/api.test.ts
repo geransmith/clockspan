@@ -141,7 +141,7 @@ describe('failures', () => {
     await expect(api.getDay(DATE)).rejects.toMatchObject({ status: 200, message: 'Unreadable answer (200)', body: null });
   });
 
-  it('announces a lost session on a 401, but not for a wrong password at sign-in', async () => {
+  it('announces a lost session on a 401, but not for a wrong password at sign-in or from /api/auth/me itself', async () => {
     const lost = vi.fn();
     window.addEventListener(UNAUTHENTICATED_EVENT, lost);
     try {
@@ -151,6 +151,11 @@ describe('failures', () => {
 
       answer(401, { error: 'Incorrect username or password.' });
       await expect(api.login('sam', 'wrong-pass')).rejects.toMatchObject({ status: 401, message: 'Incorrect username or password.' });
+      expect(lost).toHaveBeenCalledTimes(1);
+
+      // A proxy's own sign-in in front of the app; announcing it would ask /me again at once.
+      answer(401, { error: 'Unauthorized' });
+      await expect(api.getAuth()).rejects.toMatchObject({ status: 401 });
       expect(lost).toHaveBeenCalledTimes(1);
     } finally {
       window.removeEventListener(UNAUTHENTICATED_EVENT, lost);

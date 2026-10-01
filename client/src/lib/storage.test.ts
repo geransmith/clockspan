@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { pruneStored, readStored, readStoredJson, writeStored } from './storage';
+import { AUTH_USER_KEY, adoptUser, pruneStored, readStored, readStoredJson, writeStored } from './storage';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -62,5 +62,55 @@ describe('stored values', () => {
       },
     });
     expect(() => pruneStored('focus:alarms:', 'focus:alarms:2026-09-22')).not.toThrow();
+  });
+});
+
+describe('adoptUser', () => {
+  const DEVICE = { 'focus:theme': 'dark', 'focus:settingsTab': 'data', 'focus:timer-due': '7:1790000000000' };
+  const USERS = { 'focus:alarms:2026-09-30': '["x"]', 'focus:left-open-dismissed': '2026-09-30' };
+
+  /** A localStorage over a Map, holding the device's keys, one user's, and `focus:auth-user` when given. */
+  function stored(user?: string): Map<string, string> {
+    const store = new Map(Object.entries({ ...DEVICE, ...USERS }));
+    if (user != null) store.set(AUTH_USER_KEY, user);
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      get length() {
+        return store.size;
+      },
+      key: (i: number) => [...store.keys()][i] ?? null,
+      removeItem: (k: string) => void store.delete(k),
+    });
+    return store;
+  }
+
+  it('records the first user and keeps their keys, and keeps them for the same user', () => {
+    const store = stored();
+    adoptUser(2);
+    expect(store.get(AUTH_USER_KEY)).toBe('2');
+    expect(Object.fromEntries(store)).toMatchObject({ ...DEVICE, ...USERS });
+    adoptUser(2);
+    expect(Object.fromEntries(store)).toEqual({ ...DEVICE, ...USERS, [AUTH_USER_KEY]: '2' });
+  });
+
+  it("drops the last user's keys for another user or no one, and keeps the device's", () => {
+    const another = stored('2');
+    adoptUser(3);
+    expect(Object.fromEntries(another)).toEqual({ ...DEVICE, [AUTH_USER_KEY]: '3' });
+    const signedOut = stored('2');
+    adoptUser(null);
+    expect(Object.fromEntries(signedOut)).toEqual({ ...DEVICE, [AUTH_USER_KEY]: '' });
+  });
+
+  it('drops nothing for a user signing in after no one', () => {
+    const store = stored('');
+    adoptUser(2);
+    expect(Object.fromEntries(store)).toEqual({ ...DEVICE, ...USERS, [AUTH_USER_KEY]: '2' });
+  });
+
+  it('does nothing, quietly, when storage is blocked or missing', () => {
+    vi.stubGlobal('localStorage', undefined);
+    expect(() => adoptUser(3)).not.toThrow();
   });
 });
