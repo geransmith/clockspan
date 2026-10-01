@@ -12,13 +12,16 @@ import {
   clockOutPosition,
   daySettings,
   extraPairs,
+  lunchInPunchOrder,
   lunchRowsShown,
   nextPunchPosition,
+  overtimeOn,
   removePunchPair,
   secondMealApplies,
   type ExtraPair,
   type TimeclockResult,
 } from '../lib/timeclock';
+import { samePunches } from '../../../shared/punches.js';
 import { SETTING_LIMITS } from '../../../shared/settings.js';
 import type { WeekHours } from '../lib/week';
 import type { Punch } from '../types';
@@ -70,21 +73,29 @@ export function Timeclock({
   const { hour12, formatTime } = useTimeFormat();
   // Overtime off (exempt, salaried work): no approval switch, and time past the day is just later.
   const otFeature = settings.overtimeApproval;
-  // A day flagged while the feature was on only counts while it is still on.
-  const otOn = otFeature && overtimeApproved;
+  const otOn = overtimeOn(settings, overtimeApproved);
 
   const setAt = (position: number, at: number | null) => {
     // A punch is typed or tapped: the gesture iOS wants before any sound, so the day-complete
-    // clip (played after the save comes back) and the day's alarms can be heard.
+    // clip (played as the change renders) and the day's alarms can be heard.
     unlockAudio();
     onChange(punches.map((p) => (p.position === position ? { ...p, at } : p)));
   };
-  const addPair = () => onChange(addPunchPair(punches));
+  // The rows from before the last "Add extra out / in". Removing the pair it made while the rows
+  // are still the ones it made (by value: a refresh brings a new list) undoes the Add, and the
+  // Clock out gets its time back. Once any punch changes, removing a pair only drops its two rows:
+  // stepping out and changing your mind must not end the day.
+  const [added, setAdded] = useState<Punch[] | null>(null);
+  const addPair = () => {
+    setAdded(punches);
+    onChange(addPunchPair(punches));
+  };
   const removePair = (outPosition: number) => {
-    // Removing a pair can hand its Out's time to the Clock out and end the day, so the
-    // day-complete clip needs this gesture too.
+    // Removing a pair can end the day (an Add undone, or a stray Out after the Clock out gone) or
+    // reach the week's target (a removed break counts as worked again), so both clips need this
+    // gesture.
     unlockAudio();
-    onChange(removePunchPair(punches, outPosition));
+    onChange(added && outPosition === added.length - 1 && samePunches(addPunchPair(added), punches) ? added : removePunchPair(punches, outPosition));
   };
 
   // Only a time field on today's sheet holds today's alarms: Now, × and the pair buttons save
@@ -111,24 +122,27 @@ export function Timeclock({
     workMinutes: daySet.workMinutes,
     alarms: settings.alarms,
     overtimeApproval: otFeature,
-    overtimeApproved,
+    overtimeApproved: otOn,
     formatTime,
   });
 
   const celebration = tc.state === 'done' && tc.clockOutAt != null ? pickCelebration(tc.clockOutAt) : null;
   // The burst and the sound mark the day *becoming* done while the card is open, not a day
   // that already was when it mounted (the sheet keys this card by date); the same clock-out
-  // set again still counts. The burst flies from the notice.
+  // set again still counts. The burst flies from the notice. Done depends on the punches
+  // and the clock, never on the settings, so their arrival never makes a moment, and this needs
+  // no wait for them.
   const { anchor: noticeRef, burst: dayBurst } = useCelebration<HTMLDivElement>(useBecameTrue(celebration != null), 'dayDone');
   // The same for the week's target, on today's sheet: the clock running past it, or a punch
-  // that gets it there. Unknown until the settings are in, or a longer saved week than the
+  // that gets it there. Unknown until the settings are in, or a shorter saved week than the
   // default would read as the target just met.
   const weekShown = settings.trackHours && week != null && week.targetSeconds > 0;
   const { anchor: weekRef, burst: weekBurst } = useCelebration<HTMLParagraphElement>(
     useBecameTrue(loaded && isToday && weekShown ? week.met : null),
     'weekDone',
   );
-  const secondMeal = secondMealApplies(tc, daySet, otOn) && tc.secondMealBy != null ? tc.secondMealBy : null;
+  // Only today's sheet plans the second meal: a past day left clocked in is judged at its end.
+  const secondMeal = isToday && secondMealApplies(tc, daySet, otOn) ? tc.secondMealBy : null;
 
   // ----- rows -----
   const byPos = new Map(punches.map((p) => [p.position, p]));
@@ -141,7 +155,7 @@ export function Timeclock({
   const clockInAt = byPos.get(0)?.at ?? null;
   const lunchRows = lunchRowsShown(punches, settings);
   // Today, until the day is done, the next empty row's Now is the filled button: one obvious tap.
-  const nextPos = isToday && tc.state !== 'done' ? nextPunchPosition(punches, lunchRows) : null;
+  const nextPos = isToday && tc.state !== 'done' ? nextPunchPosition(punches, lunchInPunchOrder(punches, tc, settings)) : null;
   const row = (punch: Punch, label: string) => (
     <PunchRow
       key={punch.position}
@@ -239,7 +253,7 @@ export function Timeclock({
           label="Overtime approved"
           hint={
             overtimeApproved
-              ? `Clock-out alarm is off for today.${settings.mealRules ? ' Meal alarms stay on.' : ''}`
+              ? `Clock-out alarm is off for this day.${settings.mealRules ? ' Meal alarms stay on.' : ''}`
               : 'Silences the clock-out alarm for this day.'
           }
           checked={overtimeApproved}

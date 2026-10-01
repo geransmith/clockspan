@@ -19,21 +19,18 @@ export interface TileOptions {
   alarms: Pick<Settings['alarms'], 'lunchBy' | 'clockOut'>;
   /** Settings → Timeclock → Overtime: time past the day is overtime, and can be approved. */
   overtimeApproval: boolean;
-  /** This day's "Overtime approved" switch. */
+  /** This day's "Overtime approved" switch as it counts (`overtimeOn`): set, and the Overtime setting on. */
   overtimeApproved: boolean;
   formatTime: (ms: number) => string;
 }
 
-/** A tile turns amber once its alarm's first (largest) warning is reached; 15 min with the alarm off. */
+/** A tile turns amber once its alarm's first (largest) warning is reached; 15 min when the alarm is off or has no warnings. */
 function warnFromSeconds(alarm: AlarmSettings): number {
   return alarm.enabled && alarm.leadMinutes.length ? Math.max(...alarm.leadMinutes) * 60 : 15 * 60;
 }
 
 /** The Lunch by, Worked and Clock out at tiles for a day's timeclock. */
 export function timeclockTiles(tc: TimeclockResult, o: TileOptions): { lunch: TileView; worked: TileView; clockOut: TileView } {
-  // With overtime off (exempt, salaried work) there's no approval, and time past the day is just later.
-  const otOn = o.overtimeApproval && o.overtimeApproved;
-
   const lunch: TileView = { value: '—', sub: 'Clock in to see your deadline', tone: '' };
   if (tc.lunchBy != null) {
     const secs = (tc.lunchBy - o.now) / 1000;
@@ -43,7 +40,8 @@ export function timeclockTiles(tc: TimeclockResult, o: TileOptions): { lunch: Ti
       lunch.sub = `Taken at ${o.formatTime(tc.lunchOut!)}`;
     } else if (tc.lunchStatus === 'not-needed') {
       lunch.sub = 'Not needed today';
-    } else if (tc.state === 'done') {
+    } else if (tc.state === 'done' || !o.isToday) {
+      // A past day is judged at its end: a lunch not punched by then wasn't taken.
       lunch.sub = 'Not taken';
     } else if (tc.lunchStatus === 'overdue') {
       lunch.tone = 'tile--danger';
@@ -55,33 +53,49 @@ export function timeclockTiles(tc: TimeclockResult, o: TileOptions): { lunch: Ti
   }
 
   const clockOut: TileView = { value: '—', sub: 'Clock in to see your end time', tone: '' };
-  if (tc.clockOutAt != null) {
+  if (!o.isToday && tc.state === 'working') {
+    // A past day is judged at its end, so one still working there was never clocked out.
+    clockOut.sub = 'No clock-out recorded';
+    clockOut.tone = 'tile--warn';
+  } else if (tc.clockOutAt != null) {
     const secs = (tc.clockOutAt - o.now) / 1000;
     clockOut.value = o.formatTime(tc.clockOutAt);
     if (tc.clockOutStatus === 'done') {
       clockOut.tone = 'tile--accent';
       clockOut.sub = 'Day complete';
+    } else if (tc.clockOutStatus === 'over' && tc.overSeconds < 60) {
+      // Punches are whole minutes, so a break taken at the target (an Add after an on-target
+      // Clock out, a half day's Lunch out) leaves the day exactly on it, where this would read
+      // "Over by 0m". The first minute past it reads On target too, as the Worked tile does, so
+      // the two agree.
+      clockOut.tone = 'tile--accent';
+      clockOut.sub = 'On target';
     } else if (tc.clockOutStatus === 'over') {
-      clockOut.tone = otOn || !o.overtimeApproval ? 'tile--accent' : 'tile--danger';
+      // With overtime off (exempt, salaried work) there's no approval, and time past the day is just later.
+      clockOut.tone = o.overtimeApproved || !o.overtimeApproval ? 'tile--accent' : 'tile--danger';
       clockOut.sub = o.overtimeApproval
-        ? `Over by ${formatDurationCeil(tc.overSeconds)}${otOn ? ' · OT approved' : ''}`
+        ? `Over by ${formatDurationCeil(tc.overSeconds)}${o.overtimeApproved ? ' · OT approved' : ''}`
         : `${formatDurationCeil(tc.overSeconds)} past your day`;
     } else {
-      clockOut.tone = !otOn && secs <= warnFromSeconds(o.alarms.clockOut) ? 'tile--warn' : '';
-      clockOut.sub = !o.isToday ? 'No clock-out recorded' : tc.state === 'working' ? `In ${formatDurationCeil(secs)}` : 'If you return now';
+      clockOut.tone = !o.overtimeApproved && secs <= warnFromSeconds(o.alarms.clockOut) ? 'tile--warn' : '';
+      clockOut.sub = tc.state === 'working' ? `In ${formatDurationCeil(secs)}` : 'If you return now';
     }
   }
 
   const worked: TileView = {
     value: formatDuration(tc.workedSeconds),
+    // Punches are whole minutes, so a day can end exactly on target; and under a minute past
+    // it, "over" would read "0m over target".
     sub:
       tc.clockIn == null
         ? `${formatDuration(o.workMinutes * 60)} day`
-        : tc.overSeconds > 0
+        : tc.overSeconds >= 60
           ? `${formatDuration(tc.overSeconds)} over target`
-          : tc.state === 'done'
-            ? `${formatDurationCeil(tc.remainingSeconds)} under target`
-            : `${formatDurationCeil(tc.remainingSeconds)} to go`,
+          : tc.remainingSeconds === 0
+            ? 'On target'
+            : tc.state === 'done'
+              ? `${formatDurationCeil(tc.remainingSeconds)} under target`
+              : `${formatDurationCeil(tc.remainingSeconds)} to go`,
     // A past day left clocked in is judged at its end: nothing about it is live.
     tone: o.isToday && tc.clockIn != null && tc.state === 'working' ? 'tile--live' : '',
   };

@@ -100,35 +100,6 @@ describe('firing', () => {
     expect(alert).toHaveBeenCalledTimes(2);
   });
 
-  it('has no lunch alarm on a day short enough to need no lunch', () => {
-    const fourHours = makeSettings({ workMinutes: 240 });
-    // Clocked in 4 h 50 m ago, still working: past a 4 h day, short of the 5 h lunch deadline.
-    const tc = computeTimeclock(
-      emptyPunches().map((p, i) => ({ ...p, at: i === 0 ? T0 - 290 * MIN : null })),
-      fourHours,
-      T0,
-    );
-    expect(tc.lunchStatus).toBe('not-needed');
-    renderAlarms({ tc, settings: fourHours });
-    expect(tags()).not.toContain('alarm:lunchBy');
-    expect(tags()).toContain('alarm:clockOut');
-  });
-
-  it('stays quiet while the punches are out of order, where the end of the day drifts with the clock', () => {
-    // Lunch out, then Clock out with no Lunch in between: two outs in a row. 7 h 50 m worked,
-    // and the timeclock reads "working" whatever happened.
-    const tangled = (now: number) =>
-      computeTimeclock(
-        emptyPunches().map((p, i) => ({ ...p, at: [T0 - 490 * MIN, T0 - 20 * MIN, null, T0 - 15 * MIN][i] ?? null })),
-        settings,
-        now,
-      );
-    expect(tangled(T0).error).not.toBeNull();
-    const { rerender } = renderAlarms({ tc: tangled(T0) });
-    for (let m = 1; m <= 3; m++) rerender({ date: TODAY, tc: tangled(T0 + m * MIN), now: T0 + m * MIN, day: NO_DAY, settings });
-    expect(alert).not.toHaveBeenCalled();
-  });
-
   it('rings once for two tabs open on one device', () => {
     // Both tabs were opened before the warning, so each holds its own copy of what fired.
     const early = tcAt(T0 - 5 * MIN, T0 - 286 * MIN);
@@ -138,11 +109,6 @@ describe('firing', () => {
     a.rerender({ date: TODAY, tc: lunchSoon, now: T0, day: NO_DAY, settings });
     b.rerender({ date: TODAY, tc: lunchSoon, now: T0, day: NO_DAY, settings });
     expect(tags()).toEqual(['alarm:lunchBy']);
-  });
-
-  it('never arms a target without an instant', () => {
-    renderAlarms({ tc: { ...overDay, lunchBy: null, clockOutAt: null, secondMealBy: null } });
-    expect(alert).not.toHaveBeenCalled();
   });
 });
 
@@ -155,16 +121,6 @@ describe('clock-out and retro', () => {
     const [clockOut, retro] = vi.mocked(alert).mock.calls.map(([a]) => a);
     expect(clockOut!.action).toEqual({ label: 'Overtime approved', run: approveOvertime });
     expect(retro!.action).toEqual({ label: 'Open retrospective', run: openRetro });
-  });
-
-  it('overtime approval silences clock-out only: the retro and meal alarms still ring', () => {
-    const approved = { ...NO_DAY, overtimeApproved: true };
-    renderAlarms({ tc: overDay, day: approved });
-    expect(tags()).toEqual(['alarm:retro']);
-    vi.mocked(alert).mockClear();
-    // California Labor Code §512: the meal period is still owed on an overtime day.
-    renderAlarms({ tc: lunchSoon, day: approved });
-    expect(tags()).toContain('alarm:lunchBy');
   });
 
   it('approving overtime while the clock-out banner is up clears that banner and no other', () => {

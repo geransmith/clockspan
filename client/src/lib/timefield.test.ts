@@ -16,6 +16,10 @@ describe('msToTime / timeToMs', () => {
   it("places the time on the date key, not on the instant's own day", () => {
     expect(timeToMs(new Time(7, 30), '2026-09-17')).toBe(new Date(2026, 8, 17, 7, 30).getTime());
   });
+
+  it('moves a time in the hour the clocks skip forward an hour', () => {
+    expect(msToTime(timeToMs(new Time(2, 30), '2026-03-08'))).toEqual(new Time(3, 30));
+  });
 });
 
 describe('guessPeriod', () => {
@@ -31,12 +35,16 @@ describe('guessPeriod', () => {
     for (const [h, p] of cases) expect(guessPeriod(h, DAY, null), `${h}`).toBe(p);
   });
 
-  it('keeps a later punch after the clock-in when only the other period does', () => {
+  it('moves a morning guess to the afternoon when only the afternoon is after the clock-in', () => {
     const clockIn = at(7, 30);
     expect(guessPeriod(10, DAY, clockIn)).toBe('AM'); // 10 AM is after 7:30 AM already
     expect(guessPeriod(12, DAY, clockIn)).toBe('PM');
     expect(guessPeriod(4, DAY, clockIn)).toBe('PM');
     expect(guessPeriod(6, DAY, clockIn)).toBe('PM'); // all of 6 AM is before the clock-in, 6 PM after
+  });
+
+  it('never moves an afternoon guess to the morning', () => {
+    expect(guessPeriod(1, DAY, at(14, 0))).toBe('PM'); // 1:59 PM is before a 2 PM clock-in, and 1 AM earlier still
   });
 
   it('keeps the clock-in hour itself in the morning: the minute typed next can be after it', () => {
