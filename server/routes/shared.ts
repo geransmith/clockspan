@@ -22,14 +22,15 @@ export function dateParam(req: { params: Record<string, string | string[] | unde
 
 export interface DayRow {
   id: number;
+  date: string;
   overtime_approved: number;
   retro_note: string;
   retro_at: number | null;
   work_minutes: number | null;
 }
 
-/** The `days` columns a `Day` is built from. `findDay` and `/days/range` both read these, so a new per-day column is added here once. */
-export const DAY_COLUMNS = 'id, overtime_approved, retro_note, retro_at, work_minutes';
+/** The `days` columns a `Day` is built from. `findDay` and `daysInRange` (`routes/days.ts`) both read these, so a new per-day column is added here once, and on `DayRow`. */
+export const DAY_COLUMNS = 'id, date, overtime_approved, retro_note, retro_at, work_minutes';
 
 export function findDay(db: DB, userId: number, date: string): DayRow | undefined {
   return db.prepare(`SELECT ${DAY_COLUMNS} FROM days WHERE user_id = ? AND date = ?`).get(userId, date) as DayRow | undefined;
@@ -113,13 +114,14 @@ export function getOwned<T extends OwnedTable>(db: DB, table: T, userId: number,
  * The router for `table`'s `/:id` routes, and where the ownership check lives. It runs as the
  * router's `id` param handler, so every route on this router with an `:id` in its path gets it,
  * one added later included, without listing a guard. It answers 404 for anyone else's row, or
- * none (a non-numeric id finds none), and hands the caller's own on to the handler, which reads
- * it with `owned(res)` instead of repeating the lookup.
+ * none (an id that is not plain digits finds none), and hands the caller's own on to the
+ * handler, which reads it with `owned(res)` instead of repeating the lookup.
  */
 export function ownedRouter<T extends OwnedTable>(db: DB, table: T): { router: Router; owned: (res: Response) => Dated<OwnedRows[T]> } {
   const router = Router();
   router.param('id', (req, res, next, id: string) => {
-    const row = getOwned(db, table, currentUser(req).id, Number(id));
+    // Number() also reads '0x1', '1e0', '+1' and ' 1' (from %201) as 1.
+    const row = /^\d+$/.test(id) ? getOwned(db, table, currentUser(req).id, Number(id)) : undefined;
     if (!row) {
       res.status(404).json({ error: NOT_FOUND[table] });
       return;
@@ -141,8 +143,9 @@ export function breakRowToJson(b: Dated<BreakRow>): Break {
 }
 
 /**
- * Ends the user's running break, if any, at `now`: a new break or a focus session starting
- * means the last break is over, so no two overlap in the log. One that ran under a minute
+ * Ends the user's running break, if any, at `now`: a new break, a focus session starting or End
+ * break (`POST /breaks/:id/end`) means the break is over, so no two overlap in the log. A break
+ * start always ends the one before, so there is at most one. One that ran under `MIN_BREAK_MS`
  * is deleted instead.
  */
 export function endRunningBreak(db: DB, userId: number, now: number): void {

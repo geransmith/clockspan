@@ -37,8 +37,9 @@ export interface Punch {
 }
 
 /**
- * Positions are 1-based and contiguous; only rows that exist are stored. `uid` is the
- * stable id sessions point at (null until the row has text); `addedAt` is when it got text.
+ * A day's stored list is the one the client last sent, positions 1-based and contiguous: the
+ * card saves the rows it shows, empty ones included, and a day never edited has none. `uid` is
+ * the stable id sessions point at (null until the row has text); `addedAt` is when it got text.
  */
 export interface Priority {
   position: number;
@@ -98,7 +99,10 @@ export interface Break {
   endedAt: number;
 }
 
-/** A date with nothing stored yet: what `GET /days/:date` answers for it, and where an edit to a day the client never loaded starts. */
+/**
+ * A date with nothing stored: what `GET /days/:date` answers for it, and what the day store's
+ * `readRange` holds for a day it had that the range's answer leaves out (one pruned since, say).
+ */
 export function emptyDay(date: string): Day {
   return { date, punches: [], priorities: [], overtimeApproved: false, retroNote: '', retroAt: null, workMinutes: null, sessions: [], breaks: [] };
 }
