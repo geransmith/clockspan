@@ -3,13 +3,14 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import { DELETE_DAYS } from '../../lib/copy';
-import { makeSettings, settle, T0, TODAY } from '../../test/hooks';
+import { deferred, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../../test/hooks';
+import type { PruneResult } from '../../types';
 import { DataTab } from './DataTab';
 
 vi.mock('../../api');
 
 async function renderTab() {
-  render(<DataTab settings={makeSettings()} set={vi.fn()} onReset={vi.fn()} />);
+  render(<DataTab settings={makeSettings()} set={vi.fn()} onReset={vi.fn()} />, { wrapper: SettingsAndDays });
   await settle();
   return {
     date: screen.getByLabelText('Delete days before') as HTMLInputElement,
@@ -19,6 +20,7 @@ async function renderTab() {
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
+  vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
   vi.mocked(api.getPruneInfo).mockImplementation((before) => Promise.resolve({ before, matching: 2, total: 4, oldest: '2026-09-01', serverMaxDays: null }));
 });
 afterEach(() => {
@@ -50,5 +52,37 @@ describe('DataTab', () => {
     fireEvent.click(button);
     await settle();
     expect(screen.getByRole('status').textContent).toBe(DELETE_DAYS.done(2));
+  });
+
+  it("shows the new date's count when the date changes during a delete", async () => {
+    const later = '2026-01-01';
+    vi.mocked(api.getPruneInfo).mockImplementation((before) =>
+      Promise.resolve({ before, matching: before === later ? 5 : 2, total: 9, oldest: '2025-01-01', serverMaxDays: null }),
+    );
+    const prune = deferred<PruneResult>();
+    vi.mocked(api.pruneDays).mockReturnValue(prune.promise);
+    vi.stubGlobal('confirm', () => true);
+    const { date, button } = await renderTab();
+    fireEvent.click(button);
+    fireEvent.change(date, { target: { value: later } });
+    await settle();
+    prune.resolve({ deleted: 2 });
+    await settle();
+    expect(api.getPruneInfo).toHaveBeenLastCalledWith(later);
+    expect(screen.getByText(/5 before this date/)).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toBe(DELETE_DAYS.done(2));
+    expect(button.disabled).toBe(false);
+  });
+
+  it('keeps the result when the count after a delete fails, with Delete off', async () => {
+    vi.mocked(api.pruneDays).mockResolvedValue({ deleted: 2 });
+    vi.stubGlobal('confirm', () => true);
+    const { button } = await renderTab();
+    vi.mocked(api.getPruneInfo).mockRejectedValueOnce(new Error('Request failed (500)'));
+    fireEvent.click(button);
+    await settle();
+    expect(screen.getByRole('status').textContent).toBe(DELETE_DAYS.done(2));
+    expect(screen.getByRole('alert').textContent).toBe('Request failed (500)');
+    expect(button.disabled).toBe(true);
   });
 });

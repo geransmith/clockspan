@@ -3,9 +3,8 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import { AuthGate } from '../../auth/AuthGate';
-import { SettingsProvider } from '../../hooks/useSettings';
 import { SAVE_STATUS } from '../../lib/copy';
-import { makeSettings, settle } from '../../test/hooks';
+import { makeSettings, settle, SettingsAndDays } from '../../test/hooks';
 import type { AuthInfo } from '../../types';
 import { SettingsDialog } from './SettingsDialog';
 
@@ -35,9 +34,9 @@ async function renderDialog(auth: AuthInfo = LOCAL_ADMIN) {
   const onClose = vi.fn();
   render(
     <AuthGate>
-      <SettingsProvider>
+      <SettingsAndDays>
         <SettingsDialog onClose={onClose} />
-      </SettingsProvider>
+      </SettingsAndDays>
     </AuthGate>,
   );
   await settle();
@@ -56,7 +55,7 @@ beforeEach(() => {
   localStorage.clear();
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
   vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(makeSettings(patch)));
-  vi.mocked(api.getPruneInfo).mockResolvedValue({ before: '2025-09-28', matching: 0, total: 4, oldest: '2026-09-01', serverMaxDays: null });
+  vi.mocked(api.getPruneInfo).mockImplementation((before) => Promise.resolve({ before, matching: 0, total: 4, oldest: '2026-09-01', serverMaxDays: null }));
   vi.mocked(api.listUsers).mockResolvedValue({ users: [LOCAL_ADMIN.user!] });
 });
 afterEach(() => {

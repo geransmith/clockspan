@@ -28,7 +28,12 @@ interface BreakCtx {
 
 const Ctx = createContext<BreakCtx | null>(null);
 
-/** The last break whose end was dealt with (announced, or found ended early or long ago), so a reload doesn't ring it again. */
+/**
+ * When the last break whose end was dealt with (announced, or found ended early or long ago)
+ * started, so a reload doesn't ring it again. Keyed by the start, not the id: SQLite gives a new
+ * break the id of a deleted newest one, and a user's breaks never overlap, so one that started
+ * later is new and one that started earlier (last again after a later one was deleted) is done.
+ */
 const OVER_KEY = 'focus:break-over';
 
 /** An end older than this is from another sitting (the tab was closed): it is dropped, not announced. */
@@ -52,11 +57,12 @@ export function BreakProvider({ children }: { children: ReactNode }) {
   const today = days[date];
   // A break started before midnight stays on the day it started, which the store still has (it
   // was today's sheet), so it keeps counting down, can be ended and rings after midnight. Only
-  // until something starts today: the server ended it then.
+  // until something starts today: the server ended it then, and `applySession` ends it in the
+  // store too, so a session cancelled afterwards doesn't bring it back.
   const breaks = today?.breaks.length || today?.sessions.length ? today.breaks : (days[addDays(date, -1)] ?? today)?.breaks;
   const current = breaks ? runningBreak(breaks, now) : null;
-  const latestCurrent = useLatest(current);
-  const announced = useRef<number | null>(null);
+  // The start of the last break dealt with here (see OVER_KEY).
+  const dealtWith = useRef(0);
 
   // A start is out: a second tap before it answers would log a second break that ends the first at once.
   const starting = useRef(false);
@@ -73,9 +79,8 @@ export function BreakProvider({ children }: { children: ReactNode }) {
   );
   const end = useCallback(() => {
     dismissByTag('break');
-    const b = latestCurrent.current;
-    if (b) void endBreak(b.date, b.id);
-  }, [endBreak, latestCurrent]);
+    if (current) void endBreak(current.date, current.id);
+  }, [endBreak, current]);
 
   // A timer running means the break is over (the server ended it as the session started), and
   // so is any banner about breaks: a suggestion or Break's over.
@@ -122,11 +127,11 @@ export function BreakProvider({ children }: { children: ReactNode }) {
   // ended early was ended by hand or by a focus timer starting, so there is nothing to say.
   const last = breaks?.at(-1);
   useEffect(() => {
-    if (!last || !loaded || now < last.endedAt || announced.current === last.id) return;
-    announced.current = last.id;
-    const key = String(last.id);
-    if (readStored(OVER_KEY) === key) return;
-    writeStored(OVER_KEY, key);
+    if (!last || !loaded || now < last.endedAt || last.startedAt <= dealtWith.current) return;
+    dealtWith.current = last.startedAt;
+    // Nothing stored reads as 0, and anything unreadable as NaN: both let the break through.
+    if (Number(readStored(OVER_KEY)) >= last.startedAt) return;
+    writeStored(OVER_KEY, String(last.startedAt));
     if (last.endedAt < last.startedAt + last.plannedSeconds * 1000 || now - last.endedAt > STALE_MS) return;
     alert({
       title: BREAK.over,
