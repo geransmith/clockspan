@@ -63,7 +63,7 @@ describe('Header', () => {
     expect(showPicker).toHaveBeenCalledTimes(1);
   });
 
-  it('leaves a browser without showPicker to focus the field', async () => {
+  it('raises no error from a click in a browser without showPicker', async () => {
     setShowPicker(undefined);
     // React reports an error thrown in a handler as an `error` event on the window, not to the caller.
     const errors = vi.fn((e: Event) => e.preventDefault());
