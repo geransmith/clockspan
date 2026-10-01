@@ -482,7 +482,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       for (const date of Object.keys(current())) {
         if (date >= before) continue;
         // Counted as a change the server confirmed: a read already out predates the prune, so
-        // its answer is dropped and the day asked for again.
+        // its answer is dropped (or, on a day never loaded, taken) and the day asked for again.
         update(date, (t) => confirm(t, (d) => d));
         void refresh(date);
       }
