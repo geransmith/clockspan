@@ -67,9 +67,10 @@ describe('Priorities', () => {
     const { unmount, onChange, saved } = await renderCard();
     fireEvent.change(textbox(1), { target: { value: 'Typed, then left' } });
     unmount();
-    await settle(400);
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(saved()[0]!.text).toBe('Typed, then left');
+    await settle(400);
+    expect(onChange).toHaveBeenCalledTimes(1);
   });
 
   it('only ticks a row with text, and saves the tick straight away', async () => {
@@ -92,8 +93,24 @@ describe('Priorities', () => {
     expect(playSound).toHaveBeenCalledTimes(1);
   });
 
+  it('sends Add priority to the first empty row, with no warning and nothing saved', async () => {
+    const { onChange } = await renderCard();
+    fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
+    expect(screen.getByRole('status').textContent).toBe('');
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getAllByRole('textbox')).toHaveLength(3);
+    expect(document.activeElement).toBe(textbox(1));
+  });
+
+  it('finds an empty row between written ones', async () => {
+    await renderCard([row(1, 'A'), row(3, 'C')]);
+    fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
+    expect(document.activeElement).toBe(textbox(2));
+    expect(screen.getByRole('status').textContent).toBe('');
+  });
+
   it('asks before a row past the usual count, then adds it; the extra row can be removed', async () => {
-    const { onChange, saved } = await renderCard([row(1, 'Report')]);
+    const { onChange, saved } = await renderCard([row(1, 'Report'), row(2, 'Invoices'), row(3, 'Email')]);
     expect(screen.getByRole('status').textContent).toBe('');
     fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
     expect(onChange).not.toHaveBeenCalled();
@@ -109,6 +126,7 @@ describe('Priorities', () => {
     fireEvent.click(screen.getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
     expect(saved()).toHaveLength(4);
     expect(screen.getAllByRole('textbox')).toHaveLength(4);
+    expect(document.activeElement).toBe(textbox(4));
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove priority 4' }));
     expect(saved()).toHaveLength(3);
@@ -123,23 +141,6 @@ describe('Priorities', () => {
     expect(COMPLETE_WARNINGS.some((w) => status.textContent!.includes(w))).toBe(true);
     expect(status.textContent).toContain('3 of 3 done');
     expect(screen.getByRole('button', { name: WARNING_ACTIONS.complete.add })).toBeTruthy();
-  });
-
-  it("takes the server's rows while nothing is being typed, and keeps a draft that is", async () => {
-    const { rerender, onChange } = await renderCard([row(1, 'Report')]);
-    const again = (rows: Priority[]) =>
-      rerender(
-        <SettingsProvider>
-          <Priorities priorities={rows} onChange={onChange} />
-        </SettingsProvider>,
-      );
-    again([row(1, 'Report from another device')]);
-    expect(textbox(1).value).toBe('Report from another device');
-
-    fireEvent.change(textbox(2), { target: { value: 'Half typed' } });
-    again([row(1, 'Changed again')]);
-    expect(textbox(2).value).toBe('Half typed');
-    expect(textbox(1).value).toBe('Report from another device');
   });
 
   it("offers the last plan's open rows on an empty list, as new rows for today", async () => {

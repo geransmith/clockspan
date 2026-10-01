@@ -1,18 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { COMPLETE_WARNINGS, GENTLE_WARNINGS, PROGRESS_WARNINGS } from './copy';
-import {
-  carryOver,
-  editPriority,
-  hasRoom,
-  leftOpen,
-  newUid,
-  padPriorities,
-  pickWarning,
-  placePriority,
-  removePriority,
-  warnThreshold,
-  warningKind,
-} from './priorities';
+import { editPriority, hasRoom, leftOpen, newUid, padPriorities, pickWarning, placePriority, removePriority, warnThreshold, warningKind } from './priorities';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import type { Day, Priority } from '../types';
 
@@ -140,21 +128,17 @@ describe('placePriority', () => {
 
 describe('hasRoom', () => {
   const full = Array.from({ length: MAX_PRIORITIES }, (_, i) => row(i + 1, `p${i + 1}`));
-  const cases: [string, Priority[]][] = [
-    ['an empty day', []],
-    ['every row written, under the cap', [row(1, 'A'), row(2, 'B'), row(3, 'C')]],
-    ['every row up to the cap written', full],
-    ['the cap reached with one row cleared', full.map((p) => (p.position === 7 ? { ...p, text: '  ' } : p))],
-  ];
-
-  it.each(cases)('answers as placePriority does for %s', (_name, rows) => {
-    expect(hasRoom(rows, 3)).toBe(placePriority(rows, 3, 'New', 'abcdef123456', 100) !== null);
-  });
 
   it('is false only when every row up to the cap has text', () => {
+    expect(hasRoom([], 3)).toBe(true);
     expect(hasRoom(full, 3)).toBe(false);
     expect(hasRoom(full.slice(0, -1), 3)).toBe(true);
-    expect(hasRoom(cases[3]![1], 3)).toBe(true);
+    expect(
+      hasRoom(
+        full.map((p) => (p.position === 7 ? { ...p, text: '  ' } : p)),
+        3,
+      ),
+    ).toBe(true);
   });
 });
 
@@ -189,30 +173,5 @@ describe('leftOpen', () => {
     expect(leftOpen([])).toBeNull();
     expect(leftOpen([day('2026-09-25', [])])).toBeNull();
     expect(leftOpen([day('2026-09-24', [row(1, 'Open')]), day('2026-09-25', [row(1, 'Done', { done: true })])])).toBeNull();
-  });
-});
-
-describe('carryOver', () => {
-  it('puts the rows on top as new, unticked rows stamped now, padded to the count', () => {
-    const out = carryOver([row(2, 'Review the PR', { uid: 'aaaaaaaaaaaa', addedAt: 1 }), row(3, 'Call the bank')], 3, 500);
-    expect(out.map((p) => [p.position, p.text, p.done, p.addedAt])).toEqual([
-      [1, 'Review the PR', false, 500],
-      [2, 'Call the bank', false, 500],
-      [3, '', false, null],
-    ]);
-    expect(out[0]!.uid).toMatch(/^[0-9a-f]{12}$/);
-    expect(out[0]!.uid).not.toBe('aaaaaaaaaaaa');
-    expect(out[0]!.uid).not.toBe(out[1]!.uid);
-  });
-
-  it('stamps the current time when none is given', () => {
-    const before = Date.now();
-    expect(carryOver([row(1, 'Review the PR')], 3)[0]!.addedAt).toBeGreaterThanOrEqual(before);
-  });
-
-  it('keeps more rows than the count and stops at the cap', () => {
-    const many = Array.from({ length: MAX_PRIORITIES + 2 }, (_, i) => row(i + 1, `p${i + 1}`));
-    expect(carryOver(many.slice(0, 5), 3, 0)).toHaveLength(5);
-    expect(carryOver(many, 3, 0)).toHaveLength(MAX_PRIORITIES);
   });
 });

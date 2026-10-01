@@ -8,8 +8,9 @@ export function hasText(p: { text: string }): boolean {
 }
 
 /**
- * The server stores only the rows that exist; the card shows at least `count` rows and
- * every stored row beyond that.
+ * The stored list is what the client last sent. It can be shorter than `count` (a day never
+ * edited, or one planned the evening before) or hold empty rows the card saved. The card shows
+ * at least `count` rows and every stored row beyond that.
  */
 export function padPriorities(rows: Priority[], count: number): Priority[] {
   const byPos = new Map(rows.map((r) => [r.position, r]));
@@ -108,14 +109,4 @@ export function leftOpen(days: Day[]): LeftOpen | null {
   if (!last) return null;
   const rows = last.priorities.filter((p) => hasText(p) && !p.done).sort((a, b) => a.position - b.position);
   return rows.length ? { date: last.date, rows } : null;
-}
-
-/**
- * Today's list with the carried rows on top, padded to `count`. Each row is new to today: a
- * fresh uid (sessions point at a uid within one day) and today's `addedAt`, so the retro
- * counts it as planned unless a session already ran before it was brought over.
- */
-export function carryOver(rows: Priority[], count: number, now = Date.now()): Priority[] {
-  const carried = rows.slice(0, MAX_PRIORITIES).map((p, i) => ({ position: i + 1, text: p.text, done: false, uid: newUid(), addedAt: now }));
-  return padPriorities(carried, count);
 }

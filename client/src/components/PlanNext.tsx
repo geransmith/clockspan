@@ -84,8 +84,9 @@ function Planner({
   onCancel: () => void;
 }) {
   const { day, store } = useDay(date);
-  // Today's open rows start ticked: carrying them over is the usual answer.
-  const [picked, setPicked] = useState(() => new Set(candidates.map((p) => p.position)));
+  // Today's open rows start ticked: carrying them over is the usual answer. Held by uid, since
+  // removing a row on the Priorities card (or on another device) renumbers the rest while this is open.
+  const [picked, setPicked] = useState(() => new Set(candidates.map((p) => p.uid)));
   const [extra, setExtra] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -109,7 +110,7 @@ function Planner({
     if (!day) return;
     // The tap is the gesture iOS needs: the "next day planned" sound plays after the save answers.
     unlockAudio();
-    const texts = [...offered.filter((p) => picked.has(p.position)).map((p) => p.text), ...extra, ...(draft.trim() ? [draft] : [])];
+    const texts = [...offered.filter((p) => picked.has(p.uid)).map((p) => p.text), ...extra, ...(draft.trim() ? [draft] : [])];
     const { rows, added } = planNext(day.priorities, texts);
     if (added === 0) {
       onDone(PLAN_NEXT.nothing, 0);
@@ -130,17 +131,17 @@ function Planner({
       {offered.length + extra.length > 0 && (
         <ul className="plan-next-list">
           {offered.map((p) => (
-            <li key={p.position}>
+            <li key={p.uid}>
               <label className="inline-check">
                 <input
                   type="checkbox"
                   className="checkbox"
-                  checked={picked.has(p.position)}
+                  checked={picked.has(p.uid)}
                   onChange={(e) =>
                     setPicked((s) => {
                       const nextSet = new Set(s);
-                      if (e.target.checked) nextSet.add(p.position);
-                      else nextSet.delete(p.position);
+                      if (e.target.checked) nextSet.add(p.uid);
+                      else nextSet.delete(p.uid);
                       return nextSet;
                     })
                   }
