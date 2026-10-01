@@ -81,8 +81,8 @@ client/                 Vite root → dist/client
                         fired alarms, Start fresh) and adoptUser, which records who the app is open for
                         under AUTH_USER_KEY and drops the last user's keys
   src/hooks/            state and effects (useDay, useTimer, useSettings, useAlarms, …), each with a
-                        happy-dom test beside it (useLatest and useTimeFormat are covered through the
-                        hooks that use them). useClock is the app's one 1-second clock; useSaveStatus
+                        happy-dom test beside it (useLatest is covered through the hooks that use it).
+                        useClock is the app's one 1-second clock; useSaveStatus
                         (Saving… / Saved / Not saved) and useLastTab (the tab it reopens on) serve the
                         settings dialog. src/test/hooks.tsx has the fixtures and provider stack
   src/components/       the cards, History (Calendar + Review), Banners, FinishChoice; pieces more than
@@ -173,8 +173,9 @@ YYYY-MM-DD` moves the whole sample to that date at the current time of day (or `
 User". `--sessions` signs every seeded user in and prints a `document.cookie = 'fs_session=…'`
 line per user: run it in the page and reload to be that user, with no password typed and no
 provider. A run never deletes users and is safe while `npm run dev` is up (reload the page).
-`npm run screenshots` seeds the dev DB the same way (`--running --quarter --now 10:30`), so it
-also replaces the default user's days, and it leaves the sticker chart on (`stickers: true`).
+`npm run screenshots` seeds the dev DB the same way (`--running --quarter --now 10:30 --fresh`),
+so it also replaces the default user's days and resets its settings, and it leaves the sticker
+chart on (`stickers: true`).
 
 Ways in, cheapest first:
 
@@ -272,10 +273,14 @@ Never commit `data/` or `.env`.
   answers 404 for another user's row or none, and the handler reads the row with `owned(res)`.
 - **Settings go through `mergeSettings()` on every read and write** (`server/settings.ts`):
   the stored JSON is merged onto `DEFAULT_SETTINGS`, unknown keys are dropped, invalid values
-  fall back, and a PUT stores the merged result (so a key missing from an old row takes the
-  current default, while a value a user has saved stays put). Add settings by adding a default
-  (shared) + validation there, never by migrating rows. `DELETE /api/settings` drops the user's
-  row, which is what "Reset all settings" does.
+  fall back, and a PUT stores the whole merged object, so a key added since a user's last save
+  takes the current default while a value they saved stays put. A changed default of an
+  existing key reaches only users with no row (a new user, or one who used Reset all
+  settings). A change that must reach the others needs a `mergeSettings` rule that reads the
+  stored value (as `stickers` reads the old layout), and that rule can't tell a value left at
+  the old default from one the user chose. Add settings by adding a default (shared) +
+  validation there, never by migrating rows. `DELETE /api/settings` drops the user's row, which
+  is what "Reset all settings" does.
 - **Timeclock math lives only in `client/src/lib/timeclock.ts`; alarm scheduling only in
   `client/src/lib/alarms.ts`.** Both are pure functions of `(inputs, settings, now)` with tests.
   Components and hooks never re-derive these. Past days go through `timeclockForDate`
@@ -435,7 +440,11 @@ Never commit `data/` or `.env`.
 - **History → Days opens on the route's date.** `App.tsx` passes `route.date ?? today` to `History`;
   the calendar starts on that month with that day picked (`periodOffset('month', …)`), and
   only "Open day" navigates. So the header's History button lands on the month of the day
-  being viewed, and browser Back from a day returns to it. The month grid is
+  being viewed. "Open day" first records the picked day on the History entry
+  (`navigate(…, { replace: true })`) and then pushes the sheet, so browser Back from that day
+  reopens the calendar on its month with the day picked; History's tab and the Review period
+  are component state, so Back from a day opened in Review lands on Days with that day
+  picked. The month grid is
   `calendarMonth()` (pure); the panel's numbers come from `timeclockForDate` + `daySummaryOf`,
   the same math as the sheet.
 - **The `retro` alarm target is the clock-out instant** ("warn before" = minutes before the
@@ -466,7 +475,8 @@ Never commit `data/` or `.env`.
   the main chunk. The sheet renders plain `CardFrame`s until the first Customize and stays on
   `SortableCards` after it, since swapping lists remounts the cards. A chunk that fails to
   load (an upgrade while the page was open) reloads the page once a minute at most
-  (`vite:preloadError` in `main.tsx`, `lib/reload.ts`); otherwise the `ErrorBoundary` shows.
+  (`vite:preloadError` in `main.tsx`, `lib/reload.ts`); the `ErrorBoundary` card shows until
+  the reload lands, and stays when no reload is made.
 - **Migrations are append-only** in `server/db.ts` (`MIGRATIONS[]`, `PRAGMA user_version`).
   Every FK to `users` or `days` is `ON DELETE CASCADE`. A column nothing uses stays in the
   table rather than a migration dropping it: `sessions.notes` is one (never shown or edited;
@@ -486,7 +496,7 @@ Never commit `data/` or `.env`.
   way the sticker chart's `stickers` setting does.
 - **A per-user setting**: add it to the `Settings` type and `DEFAULT_SETTINGS` in
   `shared/settings.ts`, and a number's bounds to `SETTING_LIMITS` there → validate it in
-  `mergeSettings()` (`server/settings.ts`; `limited(key)` checks a number against its
+  `mergeSettings()` (`server/settings.ts`; `flag(key)` takes a switch, `limited(key)` checks a number against its
   bounds) → add the control to its tab in `client/src/components/settings/` (`TimeclockTab`,
   `AlarmsTab`, `SheetTab`, `DataTab`, `AccountTab`; the Sheet tab's "History" section holds
   the calendar's switches): a `DurationField` (`components/DurationField.tsx`) for hours and
@@ -535,7 +545,9 @@ Never commit `data/` or `.env`.
   type to `shared/api.ts` (the route's `res.json(… satisfies <Type>)` and the client's
   `request<Type>` both name it) → cover it in that router's
   `*.test.ts`: happy path, each 400, and that another
-  user gets a 404/empty result (the scoping test is not optional). If the seed should carry
+  user gets a 404/empty result (the scoping test is not optional). A new `/:date` route also
+  gets a row in the bad-date table at the end of `server/routes/days.test.ts`: unlike the `/:id`
+  ownership check, that table does not pick up new routes on its own. If the seed should carry
   the new field, add it to `server/dev/seed.ts` and its manifest.
 - **A schema change**: append a migration string to `MIGRATIONS` in `db.ts`. Never edit an
   existing entry. A new table with a `user_id` also joins the README's script under "Switching
@@ -558,7 +570,9 @@ Never commit `data/` or `.env`.
   only allowed unused vars.
 - CSS: tokens on `:root` in `client/src/styles.css`, dark mode via `prefers-color-scheme`
   unless the `theme` setting forces one (`data-theme` on `<html>`, set by `lib/theme.ts`; the
-  two dark token blocks must match, `theme-css.test.ts` checks), **mobile-first** (base = phone; `@media (min-width: 640px)` enhances). Tap targets are
+  two dark token blocks must match, `index.html`'s theme-color metas repeat `--bg` for each
+  scheme and the manifest's `background_color` the light one: `theme-css.test.ts` checks all
+  three), **mobile-first** (base = phone; `@media (min-width: 640px)` enhances). Tap targets are
   44 px on a touch screen: `.btn` and `.input` set `min-height: 44px`, and a compact control
   (chip, segment, running-bar button, banner close/action, log delete) keeps its drawn size
   and gets the rest from the `@media (pointer: coarse)` block at the end of `styles.css`, an
@@ -641,9 +655,10 @@ The browser pass for each surface (the logic under it is already tested):
 - **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
   Month / Quarter).
 - **The History calendar**: one month at the mobile preset: ◀ to a seeded month, tap a day,
-  **Open day** and back through the header, **Review this week** lands on that week. With the
-  sticker chart on (`PUT /api/settings {"stickers":true}`), a chip narrows the grid to one
-  sticker and a second tap clears it; with Show weekends off, five columns.
+  **Open day**, browser Back lands on that month with the day picked, and back through the
+  header, **Review this week** lands on that week. With the sticker chart on
+  (`PUT /api/settings {"stickers":true}`), a chip narrows the grid to one sticker and a second
+  tap clears it; with Show weekends off, five columns.
 - **Retention**: one look at Settings → Data (count line, toggle saves); drive the delete with
   curl (`POST /api/days/prune`) because of the confirm dialog.
 - **Auth**: no browser pass; `server/auth/local.test.ts` covers setup, login, the limiter,
@@ -664,10 +679,11 @@ The browser pass for each surface (the logic under it is already tested):
   run of the image.
 - The preview harness exports `PORT=5173`, which is why `dev:server` pins `PORT=3000` and the
   `prod` config `PORT=8090`.
-- `client/public/sw.js` is a pass-through service worker on purpose: installability, and the
-  `notificationclick` handler for notifications `alerts.ts` shows through it (Chrome on Android
-  refuses `new Notification()`). It is registered only in a production build. No caching
-  without a versioning strategy, or users see stale assets.
+- `client/public/sw.js` caches nothing, on purpose. It holds the `notificationclick` handler
+  for the notifications `alerts.ts` shows through it (Chrome on Android refuses
+  `new Notification()`). It has no fetch handler, because Chrome needs none to offer Install
+  and warns that an empty one is a no-op. It is registered only in a production build. No
+  caching without a versioning strategy, or users see stale assets.
 - `vite.config.ts` imports `defineConfig` from `vitest/config` so the `test` block type-checks.
 - OIDC: `loadConfig` normalizes `APP_URL` (only its scheme and host are kept, lowercased; a
   path is dropped with a warning), and `${APP_URL}/auth/callback` in that form must match the
@@ -703,4 +719,6 @@ The browser pass for each surface (the logic under it is already tested):
   Node (24 at the time of writing; it follows the active LTS). A cap it outgrows, or a package
   whose `engines` leaves its Node out under `engine-strict`, stops its npm updates without
   failing any check: the PRs just stop coming. A new Node major moves `.nvmrc`, both fields,
-  CI and the Dockerfile together.
+  the Dockerfile's two `FROM` lines and the `@types/node` major together (Dependabot skips the
+  majors of the last two), plus the docs that name the version; CI and `.claude/launch.json`
+  read `.nvmrc`.

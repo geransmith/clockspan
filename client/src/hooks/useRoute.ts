@@ -22,16 +22,22 @@ function read(): Route {
   };
 }
 
-function write(route: Route): void {
+function write(route: Route, replace = false): void {
   const params = new URLSearchParams();
   if (route.view === 'history') params.set('view', 'history');
   if (route.date != null) params.set('date', route.date);
   const qs = params.toString();
-  history.pushState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+  const url = `${window.location.pathname}${qs ? `?${qs}` : ''}`;
+  if (replace) history.replaceState(null, '', url);
+  else history.pushState(null, '', url);
 }
 
-/** The sheet's date and view live in the URL so reloads and back/forward behave. */
-export function useRoute(): [Route, (next: Partial<Route>) => void] {
+/**
+ * The sheet's date and view live in the URL so reloads and back/forward behave. `replace`
+ * rewrites the current entry instead of adding one, to record where the user is before
+ * moving on.
+ */
+export function useRoute(): [Route, (next: Partial<Route>, opts?: { replace?: boolean }) => void] {
   const [route, setRoute] = useState<Route>(read);
   // Read through a ref rather than inside the updater: React runs updaters twice under
   // StrictMode, and a pushState in there would push two history entries per navigation.
@@ -42,13 +48,13 @@ export function useRoute(): [Route, (next: Partial<Route>) => void] {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
   const navigate = useCallback(
-    (next: Partial<Route>) => {
+    (next: Partial<Route>, opts?: { replace?: boolean }) => {
       const merged = { ...current.current, ...next };
       if (merged.date != null && merged.date >= todayKey()) merged.date = null;
       // Already there (the brand button on today's sheet): a push would add an entry Back
       // has to step through without anything changing.
       if (merged.view === current.current.view && merged.date === current.current.date) return;
-      write(merged);
+      write(merged, opts?.replace);
       setRoute(merged);
     },
     [current],

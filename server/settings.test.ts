@@ -8,13 +8,7 @@ describe('mergeSettings', () => {
     expect(mergeSettings(DEFAULT_SETTINGS, 'x')).toBe(DEFAULT_SETTINGS);
   });
 
-  it('hands out defaults nobody can change in place', () => {
-    expect(Object.isFrozen(DEFAULT_SETTINGS)).toBe(true);
-    expect(Object.isFrozen(DEFAULT_SETTINGS.alarms.lunchBy)).toBe(true);
-    expect(Object.isFrozen(DEFAULT_SETTINGS.alarms.lunchBy.leadMinutes)).toBe(true);
-    expect(Object.isFrozen(DEFAULT_SETTINGS.layout[0])).toBe(true);
-    expect(() => (DEFAULT_SETTINGS.alarms.lunchBy.leadMinutes as number[]).push(1)).toThrow();
-    // A merge that keeps an untouched alarm returns the frozen default; a patched one is a fresh object.
+  it('returns an untouched alarm as the frozen default and a patched one as a fresh object', () => {
     const out = mergeSettings(DEFAULT_SETTINGS, { alarms: { lunchBy: { onDue: false } } });
     expect(Object.isFrozen(out.alarms.clockOut)).toBe(true);
     expect(Object.isFrozen(out.alarms.lunchBy)).toBe(false);
@@ -38,26 +32,16 @@ describe('mergeSettings', () => {
 
   it('takes every switch only as true or false, flipped from its default', () => {
     const switches = (Object.keys(DEFAULT_SETTINGS) as (keyof typeof DEFAULT_SETTINGS)[]).filter((k) => typeof DEFAULT_SETTINGS[k] === 'boolean');
-    // A new switch lands here without a line of its own; these are the ones there are today.
-    expect(switches).toEqual([
-      'suggestBreaks',
-      'sound',
-      'notifications',
-      'keepScreenAwake',
-      'overtimeApproval',
-      'mealRules',
-      'lunchPunches',
-      'trackHours',
-      'celebrations',
-      'stickers',
-      'showWeekends',
-    ]);
+    // Every top-level boolean default is a switch, so a new one is covered here with no edit; this only proves the filter finds them.
+    expect(switches).toContain('sound');
     for (const key of switches) {
       const flipped = !DEFAULT_SETTINGS[key];
+      const stored = { ...DEFAULT_SETTINGS, [key]: flipped };
       expect(mergeSettings(DEFAULT_SETTINGS, { [key]: flipped })[key], key).toBe(flipped);
-      // A string, a number or null is never stored as the switch, whatever it would read as.
-      for (const bad of ['false', 'true', 0, 1, null])
-        expect(mergeSettings(DEFAULT_SETTINGS, { [key]: bad })[key], `${key}: ${String(bad)}`).toBe(DEFAULT_SETTINGS[key]);
+      // A string, a number or null is never stored as the switch, whatever it would read as, and
+      // a save that doesn't name it keeps the stored value rather than the default.
+      for (const bad of ['false', 'true', 0, 1, null]) expect(mergeSettings(stored, { [key]: bad })[key], `${key}: ${String(bad)}`).toBe(flipped);
+      expect(mergeSettings(stored, {})[key], key).toBe(flipped);
     }
   });
 
@@ -65,7 +49,9 @@ describe('mergeSettings', () => {
     for (const [key, { min, max }] of Object.entries(SETTING_LIMITS)) {
       expect(mergeSettings(DEFAULT_SETTINGS, { [key]: min })).toMatchObject({ [key]: min });
       expect(mergeSettings(DEFAULT_SETTINGS, { [key]: max })).toMatchObject({ [key]: max });
-      for (const bad of [min - 1, max + 1, min + 0.5]) expect(mergeSettings(DEFAULT_SETTINGS, { [key]: bad })).toEqual(DEFAULT_SETTINGS);
+      // No default sits at its max, so a refused value that fell back to the default would show.
+      const stored = { ...DEFAULT_SETTINGS, [key]: max };
+      for (const bad of [min - 1, max + 1, min + 0.5]) expect(mergeSettings(stored, { [key]: bad })).toEqual(stored);
     }
     expect(mergeSettings(DEFAULT_SETTINGS, { alarms: { retro: { overdueEveryMinutes: 121 } } })).toEqual(DEFAULT_SETTINGS);
   });

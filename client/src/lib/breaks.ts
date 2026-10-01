@@ -4,8 +4,9 @@ import type { Break, Session } from '../types';
 
 /**
  * The break a focus session earns, on the Pomodoro technique's numbers: 25 minutes of focus
- * earn 5 of rest, and every fourth session in a row earns a long break of 15 to 30 minutes.
- * Sized to the work rather than fixed, so a 50-minute session earns 10 and a 15-minute one 3.
+ * earn 5 of rest, and every fourth session in a row earns a long break, a fifth of the four
+ * together, up to 30 minutes. Sized to the work rather than fixed, so a 50-minute session
+ * earns 10 and a 15-minute one 3.
  */
 
 /** A break is a fifth of the focus it follows (25 → 5). */
@@ -70,13 +71,15 @@ function breakMinutes(focusSeconds: number): number {
  */
 export function suggestBreak(sessions: readonly Session[]): BreakSuggestion | null {
   const done = sessions
-    .filter((s): s is Session & { durationSeconds: number } => s.status === 'completed' && (s.durationSeconds ?? 0) >= MIN_FOCUS_SECONDS)
+    .filter(
+      (s): s is Session & { durationSeconds: number; endedAt: number } =>
+        s.status === 'completed' && s.endedAt != null && s.durationSeconds != null && s.durationSeconds >= MIN_FOCUS_SECONDS,
+    )
     .sort((a, b) => a.startedAt - b.startedAt);
   const last = done.at(-1);
   if (!last) return null;
   let first = done.length - 1;
-  // Every completed row has an end; the type allows none, and a row without one ends the run.
-  while (first > 0 && done[first]!.startedAt - (done[first - 1]!.endedAt ?? -Infinity) < SET_GAP_MINUTES * MINUTE_MS) first--;
+  while (first > 0 && done[first]!.startedAt - done[first - 1]!.endedAt < SET_GAP_MINUTES * MINUTE_MS) first--;
   const position = ((done.length - first - 1) % SET_SIZE) + 1;
   const long = position === SET_SIZE;
   const focusSeconds = (long ? done.slice(-SET_SIZE) : [last]).reduce((sum, s) => sum + s.durationSeconds, 0);

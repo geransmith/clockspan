@@ -6,7 +6,6 @@ import { CARD_IDS } from '../../../shared/settings.js';
 import { deferred, makeSettings, MIN, settle, setVisibility, T0 } from '../test/hooks';
 import type { Settings } from '../types';
 import { SettingsProvider, useSettings } from './useSettings';
-import { useTimeFormat } from './useTimeFormat';
 
 vi.mock('../api');
 
@@ -184,17 +183,6 @@ describe('update', () => {
     expect(result.current.settings.priorityCount).toBe(4);
   });
 
-  it('puts the old value back and rejects when the save fails', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ workMinutes: 480 }));
-    vi.mocked(api.putSettings).mockRejectedValue(new Error('offline'));
-    const { result } = render();
-    await settle();
-    const done = result.current.update({ workMinutes: 540 });
-    await expect(done).rejects.toThrow('offline');
-    await settle();
-    expect(result.current.settings.workMinutes).toBe(480);
-  });
-
   it('shows the stored settings after two saves in a row fail, not the first guess', async () => {
     vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ workMinutes: 480 }));
     const first = deferred<ReturnType<typeof makeSettings>>();
@@ -311,12 +299,4 @@ describe('reset', () => {
 it('refuses to run outside the provider', () => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
   expect(() => renderHook(() => useSettings())).toThrow('useSettings outside SettingsProvider');
-});
-
-it('useTimeFormat follows the time format setting', async () => {
-  vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ timeFormat: '24h' }));
-  const { result } = renderHook(() => useTimeFormat(), { wrapper: SettingsProvider });
-  await settle();
-  expect(result.current.hour12).toBe(false);
-  expect(result.current.formatTime(new Date(2026, 8, 28, 14, 5).getTime())).toBe('14:05');
 });

@@ -19,16 +19,16 @@ export const CARD_DEFAULT_VISIBLE: Record<CardId, boolean> = {
 };
 
 /**
- * A layout made whole, from whatever was saved or sent: the cards in their order, unknown and
+ * A layout made whole, from a saved or sent list: the cards in their order, unknown and
  * repeated ids dropped, a `visible` that isn't a boolean read as the card's default, and every
  * card the layout misses (one added in a later release) appended with its default. The server
  * runs it on every settings read and write (`mergeSettings`) and the client on every answer, so
  * a new card reaches existing users on both sides.
  */
-export function normalizeLayout(raw: unknown): { id: CardId; visible: boolean }[] {
+export function normalizeLayout(raw: readonly unknown[]): { id: CardId; visible: boolean }[] {
   const seen = new Set<CardId>();
   const out: { id: CardId; visible: boolean }[] = [];
-  for (const item of Array.isArray(raw) ? (raw as unknown[]) : []) {
+  for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
     const { id, visible } = item as { id?: unknown; visible?: unknown };
     if (!CARD_IDS.includes(id as CardId) || seen.has(id as CardId)) continue;

@@ -58,16 +58,27 @@ function Shell() {
   // The route keeps today as null, so the sheet follows the date over midnight.
   const date = route.date ?? today;
   // The banner's button lands on today's sheet at the retrospective card, wherever the
-  // user was when the alarm fired.
+  // user was when the alarm fired. Today is the null route, which follows the date, so a
+  // `today` that lags the clock can't pin the sheet to yesterday.
   const openRetro = useCallback(() => {
-    navigate({ view: 'sheet', date: today });
+    navigate({ view: 'sheet', date: null });
     setJumpTo('retro');
-  }, [navigate, today]);
+  }, [navigate]);
   const onJumped = useCallback(() => setJumpTo(null), []);
   // History shows nothing finer than a minute. Handed the clock floored to the minute (and
   // memoized), it renders once a minute instead of redoing the month or quarter every second.
   const minute = floorToMinute(now);
-  const openDay = useCallback((d: string) => navigate({ view: 'sheet', date: d }), [navigate]);
+  // The calendar's month and picked day are its own state and don't survive the unmount, so
+  // the opened day is written onto the History entry first and Back reopens the calendar on
+  // it. The second call names both fields: navigate reads the route through useLatest, which
+  // isn't updated between two calls in one handler.
+  const openDay = useCallback(
+    (d: string) => {
+      navigate({ date: d }, { replace: true });
+      navigate({ view: 'sheet', date: d });
+    },
+    [navigate],
+  );
   const { setEditingPunches } = useTodayAlarms(today, now, openRetro);
 
   return (

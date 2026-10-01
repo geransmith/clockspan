@@ -99,12 +99,15 @@ describe('useCelebration', () => {
     expect(bare.result.current.c.burst).toBeNull();
   });
 
-  it('reads the settings when the moment comes, and a newer moment hides a burst still flying', async () => {
+  it('a settings change replays nothing, the next moment reads the new settings, and a newer moment hides a burst still flying', async () => {
     const { result, rerender } = await render({});
     rerender({ moment: {} });
+    expect(playSound).toHaveBeenCalledTimes(1);
     expect(result.current.c.burst).not.toBeNull();
     await act(() => result.current.s.update({ celebrations: false }));
+    expect(playSound).toHaveBeenCalledTimes(1);
     rerender({ moment: {} });
+    expect(playSound).toHaveBeenCalledTimes(2);
     expect(result.current.c.burst).toBeNull();
   });
 });

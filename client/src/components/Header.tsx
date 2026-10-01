@@ -27,7 +27,7 @@ export function Header({ view, date, today, customize, onNavigate, onToggleCusto
   return (
     <header className="topbar">
       <div className="topbar-row">
-        <button className="brand" onClick={() => onNavigate({ view: 'sheet', date: today })} title="Go to today">
+        <button className="brand" onClick={() => onNavigate({ view: 'sheet', date: null })} title="Go to today">
           <img className="brand-logo" src="/icons/icon.svg" alt="" width={28} height={28} />
           Clockspan
         </button>
@@ -87,6 +87,15 @@ export function Header({ view, date, today, customize, onNavigate, onToggleCusto
               value={date}
               max={today}
               onChange={(e) => e.target.value && onNavigate({ date: e.target.value })}
+              onClick={(e) => {
+                // The input is invisible over the label, and desktop Chromium opens its picker only from
+                // the calendar icon at the input's right end, so a click anywhere on the label asks for it.
+                try {
+                  e.currentTarget.showPicker();
+                } catch {
+                  // No showPicker (an older browser): the click still focuses the field.
+                }
+              }}
               aria-label="Pick a date"
             />
           </label>
@@ -94,7 +103,7 @@ export function Header({ view, date, today, customize, onNavigate, onToggleCusto
             <ChevronRight />
           </button>
           {!isToday && (
-            <button className="btn btn-ghost" onClick={() => onNavigate({ date: today })}>
+            <button className="btn btn-ghost" onClick={() => onNavigate({ date: null })}>
               Today
             </button>
           )}

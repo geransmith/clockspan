@@ -1,9 +1,6 @@
-// Nothing is cached, so users never see stale assets after an update. The fetch handler passes
-// every request through untouched; older Chromium builds wanted one before they offered to
-// install an app.
+// Nothing is cached, so users never see stale assets after an update. There is no fetch handler:
+// Chrome needs none to offer Install, and it warns that an empty one is a no-op.
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
-self.addEventListener('fetch', () => {});
 
 // Where the browser only shows notifications through the worker (Chrome on Android), alerts.ts
 // shows them from here, so a tap on one lands here too: bring the app forward, or open it.

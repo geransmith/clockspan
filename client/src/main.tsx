@@ -18,13 +18,15 @@ createRoot(document.getElementById('root')!).render(
 );
 
 // History, Settings and drag and drop load on demand. After an upgrade an open page asks for
-// the old build's files; reloading gets the new one. When it declines (a reload a moment ago),
-// the error reaches the ErrorBoundary and its Reload button.
+// the old build's files; reloading gets the new one. Vite still throws the failed import, so
+// the ErrorBoundary's card can show until the reload lands, and when no reload is made (one a
+// moment ago) its Reload button is the way out.
 window.addEventListener('vite:preloadError', () => {
   reloadForNewBuild(Date.now(), () => window.location.reload());
 });
 
-// Pass-through service worker: makes the app installable without caching anything.
+// The service worker caches nothing; alerts.ts shows notifications through it where the
+// browser refuses `new Notification()` (Chrome on Android).
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
