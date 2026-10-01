@@ -408,13 +408,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   "Saves reach the server in the order they were made").
 - **Overtime approval (`days.overtime_approved`) silences only the `clockOut` alarm target.**
   Lunch and the second meal period stay armed: California Labor Code §512 still requires them
-  on an overtime day. Approval also arms the second meal on a day whose work day is under its
-  threshold: `secondMealApplies` counts an approved day as one that will pass it, so the alarm
-  and the card's note start when the switch is set, not when the day runs over. The setting
-  `overtimeApproval` shows/hides the switch and banner button, and with it off the Clock out
-  tile reads time past the day as "past your day" rather than a red "Over by"; a flagged day
-  counts only while the setting is on: `overtimeOn` (`lib/timeclock.ts`) decides, which
-  `Timeclock` (the tiles get the flag from it) and `useTodayAlarms` call.
+  on an overtime day. Approval also arms the second meal on a day whose work day doesn't pass
+  its threshold: `secondMealApplies` counts an approved day as one that will pass it, so the
+  alarm and the card's note start when the switch is set, not when the day runs over. The
+  setting `overtimeApproval` shows/hides the switch and banner button, and with it off the
+  Clock out tile reads time past the day as "past your day" rather than a red "Over by"; a
+  flagged day counts only while the setting is on: `overtimeOn` (`lib/timeclock.ts`) decides,
+  which `Timeclock` (the tiles get the flag from it) and `useTodayAlarms` call.
 - **`mealRules: false` turns the meal periods off in the math, not in the components.**
   `computeTimeclock` then never needs a lunch (`not-needed`, so no lunch alarm and no lunch
   added to the clock-out time) and `secondMealApplies` is false; a lunch that was punched still
@@ -474,14 +474,15 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **Per-date card drafts reset by remounting**: `Sheet.tsx` keys `Timeclock`, `Priorities` and
   `Retro` by date, so none needs a "date changed" effect. For `Timeclock` the remount is also
   what keeps a day already done from reading as one becoming done: `useBecameTrue` compares
-  with the last render, and between two days the store holds the card would stay mounted.
-  Local drafts that mirror a prop use the "adjust state while rendering" form (see
-  `DurationField`), not a `useEffect` + `setState`, unless the draft is gated by a dirty flag:
-  a ref can't be read during render, so there the effect form is the one the react-hooks rules
-  allow. A typed draft that saves on a timer is `useDebouncedDraft(stored, save, ms)`
-  (`Priorities`, `Retro`): it saves after the wait, at once on `flush()` or an edit made now,
-  and on unmount, so a day left mid-sentence still saves. Callbacks that must read the latest
-  value use `useLatest()`, never a ref written in render (the react-hooks lint enforces both).
+  with the last render, and moving between two days the store already holds would otherwise
+  leave the card mounted. Local drafts that mirror a prop use the "adjust state while
+  rendering" form (see `DurationField`), not a `useEffect` + `setState`, unless the draft is
+  gated by a dirty flag: a ref can't be read during render, so there the effect form is the
+  one the react-hooks rules allow. A typed draft that saves on a timer is
+  `useDebouncedDraft(stored, save, ms)` (`Priorities`, `Retro`): it saves after the wait, at
+  once on `flush()` or an edit made now, and on unmount, so a day left mid-sentence still
+  saves. Callbacks that must read the latest value use `useLatest()`, never a ref written in
+  render (the react-hooks lint enforces both).
 - Static assets are public; **all data is behind `/api/*`**. `/assets/*` is fingerprinted and
   cached immutable. The SPA fallback serves `index.html` for any other non-API path; a miss
   under `/assets` is a 404 (a page from before an upgrade asking for an old chunk).
