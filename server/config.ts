@@ -7,7 +7,6 @@ import { isWholeNumber } from './validate.js';
 
 export interface Config {
   port: number;
-  dataDir: string;
   dbPath: string;
   authMode: AuthMode;
   appUrl: string | null;
@@ -155,9 +154,17 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env): Config {
 
   // The scheme and host are case-insensitive, but the value is used as a string: `HTTPS://…`
   // failed a startsWith('https://') here and dropped Secure and HSTS, and the OIDC redirect URI
-  // is compared exactly. So it is kept in the form a browser uses, lowercase.
-  const publicUrl = env.APP_URL ? parseHttpUrl('APP_URL', "the app's full public URL", env.APP_URL) : null;
-  const appUrl = publicUrl ? publicUrl.href.replace(/\/+$/, '') : null;
+  // is compared exactly. So it is kept in the form a browser uses, lowercase. Only the origin is
+  // kept, because the app runs at the root of its host: the client is built for it (no Vite
+  // `base`), and the OIDC callback rebuilds its URL on APP_URL's origin, so a path in the
+  // redirect URI never matched the one the callback sent.
+  const publicUrl = env.APP_URL ? parseHttpUrl('APP_URL', 'the scheme and host the app is served at', env.APP_URL) : null;
+  const appUrl = publicUrl?.origin ?? null;
+  if (publicUrl && publicUrl.href !== `${appUrl}/`) {
+    console.warn(
+      `[config] APP_URL should be only the scheme and host the app is served at; "${env.APP_URL}" has more, so ${appUrl} is used (the app runs at the root of its host)`,
+    );
+  }
   const cookieSecure = parseSwitch('COOKIE_SECURE', env.COOKIE_SECURE) ?? publicUrl?.protocol === 'https:';
 
   let oidc: Config['oidc'] = null;
@@ -166,7 +173,7 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env): Config {
     if (missing.length) {
       throw new Error(
         `AUTH_MODE=oidc requires ${missing.join(', ')}. ` +
-          `APP_URL is the public URL of this app; the redirect URI registered in your ` +
+          `APP_URL is the scheme and host this app is served at; the redirect URI registered in your ` +
           `provider must be \${APP_URL}/auth/callback.`,
       );
     }
@@ -182,12 +189,9 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env): Config {
     };
   }
 
-  const dataDir = path.resolve(env.DATA_DIR ?? './data');
-
   return {
     port: parsePort(env.PORT),
-    dataDir,
-    dbPath: path.join(dataDir, 'focus.db'),
+    dbPath: path.resolve(env.DATA_DIR ?? './data', 'focus.db'),
     authMode,
     appUrl,
     cookieSecure,

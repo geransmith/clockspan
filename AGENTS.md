@@ -54,7 +54,7 @@ server/                 Express API → dist/server
   config.ts, db.ts      env parsing (throws on bad config); pragmas, MIGRATIONS, the default user
   settings.ts           mergeSettings (defaults + validation on every read and write), loadSettings
   retention.ts          old-day pruning (pruneDays, runRetention, the RETENTION_DAYS cap)
-  validate.ts           isWholeNumber: the one check for every bounded number the server takes
+  validate.ts           isWholeNumber: the one check for every bounded whole number the server takes
   auth/                 session cookie, scrypt passwords, the login limiter, publicUser/logName (users.ts),
                         middleware (currentUser), local + OIDC routes, resetPassword (reset.ts: what the
                         reset-password command does)
@@ -654,11 +654,12 @@ The browser pass for each surface (the logic under it is already tested):
   refuses `new Notification()`). It is registered only in a production build. No caching
   without a versioning strategy, or users see stale assets.
 - `vite.config.ts` imports `defineConfig` from `vitest/config` so the `test` block type-checks.
-- OIDC: `loadConfig` normalizes `APP_URL` (scheme and host lowercased, trailing slash dropped),
-  and `${APP_URL}/auth/callback` in that form must match the redirect URI registered with the
-  provider exactly. The callback builds its URL from `APP_URL`, not from request headers, so it
-  works behind proxies. `OIDC_ISSUER` must be `https://` (openid-client refuses plain http) and
-  is checked but kept as written, since the provider's tokens must match it.
+- OIDC: `loadConfig` normalizes `APP_URL` (only its scheme and host are kept, lowercased; a
+  path is dropped with a warning), and `${APP_URL}/auth/callback` in that form must match the
+  redirect URI registered with the provider exactly. The callback builds its URL from
+  `APP_URL`, not from request headers, so it works behind proxies. `OIDC_ISSUER` must be
+  `https://` (openid-client refuses plain http) and is checked but kept as written, since the
+  provider's tokens must match it.
 - `TRUST_PROXY` is a hop count (`1`), never `true`: `true` trusts the leftmost
   `X-Forwarded-For`, which the client controls, and the login limiter keys on `req.ip`. Left
   unset behind a proxy, every sign-in is the proxy's address; under `AUTH_MODE=local`,

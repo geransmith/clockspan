@@ -120,10 +120,10 @@ export const MIGRATIONS: string[] = [
 
 export function openDatabase(dbPath: string): DB {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-  const db = new Database(dbPath);
+  // The seed and reset-password commands write to the same file while the server runs.
+  const db = new Database(dbPath, { timeout: 5000 });
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
-  db.pragma('busy_timeout = 5000');
   migrate(db);
   return db;
 }
