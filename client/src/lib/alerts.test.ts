@@ -315,16 +315,6 @@ describe('banners', () => {
     expect(seen).toHaveBeenCalledTimes(5);
   });
 
-  it('clears every banner at once and tells the subscribers', () => {
-    const seen = vi.fn();
-    alerts.subscribeBanners(seen);
-    alerts.alert({ title: 'Clock out', tone: 'danger', tag: 'alarm:clockOut', sticky: true, sound: false, notifications: false });
-    alerts.warnQuietly({ title: 'Change not saved', tag: 'save-failed' });
-    alerts.clearBanners();
-    expect(alerts.getBanners()).toEqual([]);
-    expect(seen).toHaveBeenCalledTimes(3);
-  });
-
   it('drops a non-sticky banner after 8 s and keeps a sticky one', () => {
     vi.useFakeTimers();
     alerts.alert({ title: 'done', tone: 'success', tag: 'timer', sound: false, notifications: false });

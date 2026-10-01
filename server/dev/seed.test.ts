@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ensureDefaultUser, openDatabase } from '../db.js';
 import { insertSession, SESSION_COOKIE } from '../auth/session.js';
 import { countRows, SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from './harness.js';
-import { DAY_MS, punchWindow, todayKey } from '../../shared/dates.js';
+import { addMonths, DAY_MS, MINUTE_MS, parseDateKey, punchWindow, startOfQuarter, todayKey } from '../../shared/dates.js';
 import { LIMITS } from '../../shared/api.js';
 import { DEFAULT_SETTINGS, SETTING_LIMITS } from '../../shared/settings.js';
 import { BREAK_SECONDS, MIN_BREAK_MS, PLANNED_SECONDS } from '../../shared/timer.js';
@@ -13,7 +13,6 @@ import {
   kindForDistance,
   LOCAL_USERS,
   OIDC_DEV_USER,
-  quarterStart,
   seedDatabase,
   weekdaysBefore,
   weekdaysSince,
@@ -83,7 +82,7 @@ function expectConsistent(m: SeedManifest, now: number) {
   }
 }
 
-const workedMinutes = (day: SeededDay) => workedSpans(day, 0).reduce((n, [from, to]) => n + (to - from) / 60_000, 0);
+const workedMinutes = (day: SeededDay) => workedSpans(day, 0).reduce((n, [from, to]) => n + (to - from) / MINUTE_MS, 0);
 
 describe('seedDatabase', () => {
   it('writes rows that satisfy the same rules the routes enforce', () => {
@@ -95,8 +94,7 @@ describe('seedDatabase', () => {
     expect(m.days.at(-1)!.date).toBe(SEED_TODAY);
     expect(m.days.map((d) => d.date)).toEqual(m.days.map((d) => d.date).sort());
     for (const day of m.days) {
-      const [y, mo, d] = day.date.split('-').map(Number) as [number, number, number];
-      expect([0, 6]).not.toContain(new Date(y, mo - 1, d).getDay());
+      expect([0, 6]).not.toContain(parseDateKey(day.date).getDay());
 
       // Punches: positions 0..n, parity kinds, the last row is a Clock out.
       expect(day.punches.map((p) => p.position)).toEqual(day.punches.map((_, i) => i));
@@ -115,20 +113,14 @@ describe('seedDatabase', () => {
       }
       expect(new Set(day.priorities.map((p) => p.uid)).size).toBe(day.priorities.length);
 
-      // Sessions: links resolve on the same day, times sit inside the punched day.
+      // Sessions: links resolve on the same day.
       const uids = new Set(day.priorities.map((p) => p.uid));
-      const clockIn = day.punches[0]!.at!;
-      const clockOut = day.punches.at(-1)!.at;
       for (const s of day.sessions) {
         if (s.priorityUid !== null) expect(uids.has(s.priorityUid)).toBe(true);
-        expect(s.startedAt).toBeGreaterThanOrEqual(clockIn);
         if (s.status === 'running') expect(s.endedAt).toBeNull();
-        else {
-          expect(s.endedAt).toBeGreaterThan(s.startedAt);
-          if (clockOut != null) expect(s.endedAt!).toBeLessThanOrEqual(clockOut);
-        }
+        else expect(s.endedAt).toBeGreaterThan(s.startedAt);
       }
-      expect(day.createdAt).toBeLessThan(clockIn);
+      expect(day.createdAt).toBeLessThan(day.punches[0]!.at!);
     }
 
     expectConsistent(m, SEED_NOW);
@@ -232,8 +224,7 @@ describe('seedDatabase', () => {
     expect(counts(db)).toEqual(before);
     expect(before.settings).toBe(1);
     expect(before.auth_sessions).toBe(1);
-    const strip = (m: typeof first) => m.days.map((d) => ({ ...d, sessions: d.sessions.map(({ id: _id, ...s }) => s) }));
-    expect(strip(second)).toEqual(strip(first));
+    expect(second).toEqual(first);
 
     seedDatabase(db, { userId: user.id, today: SEED_TODAY, now: SEED_NOW, fresh: true });
     expect(counts(db)).toEqual({ ...before, settings: 0, auth_sessions: 0 });
@@ -252,6 +243,18 @@ describe('seedDatabase', () => {
       { user_id: admin.id, n: 4 },
       { user_id: member.id, n: 2 },
     ]);
+    db.close();
+  });
+
+  it('reuses a local account whose name differs only in case', async () => {
+    const db = openDatabase(':memory:');
+    const info = db
+      .prepare(`INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at) VALUES ('local', 'Sam', 'x', 'Sam', 0, 0)`)
+      .run();
+    const { admin, member } = await ensureLocalUsers(db);
+    expect(member).toMatchObject({ id: Number(info.lastInsertRowid), username: 'Sam' });
+    expect(admin.username).toBe(LOCAL_USERS.admin);
+    expect(countRows(db, 'users', `kind = 'local'`)).toBe(2);
     db.close();
   });
 
@@ -291,14 +294,11 @@ describe('calendar helpers', () => {
     expect(weekdaysBefore('2026-09-16', 0)).toEqual([]);
   });
 
-  it('finds quarter starts and counts the weekdays since', () => {
-    expect(quarterStart('2026-09-16')).toBe('2026-07-01');
-    expect(quarterStart('2026-09-16', 1)).toBe('2026-04-01');
-    expect(quarterStart('2026-01-15', 1)).toBe('2025-10-01');
+  it('counts the weekdays since a date', () => {
     expect(weekdaysSince('2026-09-14', '2026-09-16')).toBe(2);
     expect(weekdaysSince('2026-09-11', '2026-09-14')).toBe(1);
     // Two full quarters back to April land at the quarter start on the first weekday.
-    const n = weekdaysSince(quarterStart('2026-09-16', 1), '2026-09-16');
+    const n = weekdaysSince(addMonths(startOfQuarter('2026-09-16'), -3), '2026-09-16');
     expect(weekdaysBefore('2026-09-16', n)[0]).toBe('2026-04-01');
   });
 

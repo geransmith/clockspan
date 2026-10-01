@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import * as api from '../api';
-import { NewPasswordFields } from '../components/NewPasswordFields';
+import { HiddenUsername, NewPasswordFields } from '../components/NewPasswordFields';
 import { useSubmit } from '../hooks/useSubmit';
-import { NEW_PASSWORD, PASSWORD_MISMATCH } from '../lib/copy';
+import { NEW_PASSWORD, PASSWORD_MISMATCH, SIGN_OUT_FAILED } from '../lib/copy';
 import type { AuthInfo, PublicUser } from '../types';
 
 interface Props {
   user: PublicUser;
   /** Re-reads the auth state; once the flag is cleared the app opens. */
   onDone: () => Promise<AuthInfo | null>;
-  onSignOut: () => Promise<void>;
+  /** Resolves false when the session is still here. */
+  onSignOut: () => Promise<boolean>;
 }
 
 /**
@@ -20,7 +21,7 @@ export function NewPasswordPage({ user, onDone, onSignOut }: Props) {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
-  const { busy, error, onSubmit } = useSubmit();
+  const { busy, error, setError, onSubmit } = useSubmit();
 
   const submit = onSubmit(async () => {
     if (next !== confirm) throw new Error(PASSWORD_MISMATCH);
@@ -33,8 +34,7 @@ export function NewPasswordPage({ user, onDone, onSignOut }: Props) {
       <form className="gate-card" onSubmit={submit}>
         <h1>{NEW_PASSWORD.title}</h1>
         <p className="muted">{NEW_PASSWORD.body}</p>
-        {/* For password managers: the account this new password belongs to. */}
-        <input type="text" autoComplete="username" value={user.username ?? ''} readOnly hidden />
+        <HiddenUsername username={user.username ?? ''} />
         <label className="field">
           <span>Temporary password</span>
           <input
@@ -56,7 +56,15 @@ export function NewPasswordPage({ user, onDone, onSignOut }: Props) {
         <button className="btn btn-primary btn-lg" type="submit" disabled={busy}>
           {busy ? 'Saving…' : 'Set password'}
         </button>
-        <button className="btn btn-ghost" type="button" onClick={() => void onSignOut()}>
+        <button
+          className="btn btn-ghost"
+          type="button"
+          onClick={() =>
+            void onSignOut().then((ok) => {
+              if (!ok) setError(SIGN_OUT_FAILED);
+            })
+          }
+        >
           Sign out
         </button>
       </form>

@@ -276,11 +276,14 @@ export const NEW_PASSWORD = {
   body: 'The password you signed in with was set for you. Pick one of your own to continue.',
 } as const;
 
-/** The whole page, when the first `/api/auth/me` got no answer. */
+/** The whole page, when `/api/auth/me` got no answer before the app opened. */
 export const SERVER_UNREACHABLE = {
   body: (error: string) => `Can’t reach the server: ${error}`,
   retry: 'Retry',
 } as const;
+
+/** A sign-out that did not go through: a banner over the app, the error line on the new-password page. */
+export const SIGN_OUT_FAILED = 'Not signed out: the server refused the request or did not answer.';
 
 /** The whole page, when something threw while rendering. */
 export const RENDER_FAILED = {
