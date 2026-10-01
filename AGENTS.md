@@ -373,7 +373,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   break start ends a running break and is refused (409) while a focus timer runs, and a
   session start ends a running break (`endRunningBreak`, `routes/shared.ts`). However a break
   ends, one that ran under `BREAK_SECONDS.min` is deleted, not logged (`POST /breaks/:id/end`
-  answers `{ break: null }`). The client mirrors both rules with `endBreaksAt` (in `useDay`'s
+  answers `{ break: null }`). End break goes through `endRunningBreak` too, so the server
+  has one copy of that rule. The client mirrors both rules with `endBreaksAt` (in `useDay`'s
   break writes and `applySession`, which ends a running break on any loaded day, since one
   started before midnight sits on the day before), so it never sends an end after a session
   start: the break may already be gone. An end the server answers 404 for (the break was
@@ -432,9 +433,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   with no lunch taken. `trackHours: false` only hides hours outside the day's own
   tiles (the week line, History's hours, the Clocked out sticker via `stickerReasons`); the
   timeclock still runs.
-- **Priorities are stored sparse** (positions 1..n, contiguous, ≤ `MAX_PRIORITIES`; no `done`
-  on an empty row); the client pads to `settings.priorityCount` with `padPriorities()`.
-  `PUT /days/:date/priorities` is a full replace, so removing a row is sending the list without it.
+- **Priorities are stored as the client last sent them** (positions 1..n, contiguous, ≤
+  `MAX_PRIORITIES`; no `done` on an empty row). A day never edited has none. The card saves
+  the rows it shows, its padded empty ones included, so a cleared row keeps its `uid` and the
+  sessions that point at it; `PlanNext` saves only rows with text. The server never pads: the
+  client pads to `settings.priorityCount` with `padPriorities()`, and every reader of a list
+  skips empty rows with `hasText`. `PUT /days/:date/priorities` is a full replace, so removing
+  a row is sending the list without it.
 - **A priority's identity is its `uid`, never its position.** The client mints it
   (`newUid()`) the first time a row gets text and stamps `addedAt`; both survive a text clear
   and a renumber. `sessions.priority_uid` points at it (null or a removed row = unplanned).
@@ -541,17 +546,19 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (it gets an `EventContext`; extend that if the new target needs more inputs). A banner can
   carry one `action` button (see the clock-out alarm's "Overtime approved" and the retro
   alarm's "Open retrospective", chosen in `useAlarms` from the `AlarmDayState` callbacks).
-- **A per-day field** (like `overtimeApproved`, `retroNote`/`retroAt`): append a migration adding the column to
-  `days` → add the column to `DAY_COLUMNS` (`routes/shared.ts`; `findDay` and `/days/range` both
-  read it) and return it from `dayJson` (a per-day list in a table of its own, like `breaks`, is
-  instead a list on `DayRows` and one more query in `rangeRows` in `routes/days.ts`, which loads
-  a day's child rows for both `GET /days/:date` and `/days/range`) → add a `PUT /days/:date/<field>` route (with
-  `requireDate`) → `Day` and its default in `emptyDay` (`shared/api.ts`) +
-  `client/src/api.ts` → an optimistic setter in `useDay.tsx` that goes through `inOrder` on
-  the day's `day:<date>` key with the change and a commit from the server's answer (mirror
-  `setOvertimeApproved`; a failure drops the change, raises the "Change not saved" banner and
-  reloads the day, so the setter never rejects) → pass it from `Sheet.tsx`
-  to the card, and from `useTodayAlarms` into `useAlarms` if alarms depend on it.
+- **A per-day field** (like `overtimeApproved`, `retroNote`/`retroAt`): append a migration
+  adding the column to `days` → add the column to `DAY_COLUMNS` and to the `DayRow` interface
+  beside it (`routes/shared.ts`; `findDay` and `daysInRange` in `routes/days.ts` both read
+  them) and return it from `dayJson` (a per-day list in a table of its own, like `breaks`, is
+  instead one more grouped query in `rangeRows` and a field in `dayJson`, both in
+  `routes/days.ts`; `daysInRange` loads `GET /days/:date` and `/days/range` alike) → add a
+  `PUT /days/:date/<field>` route (with `requireDate`) and its client call as "An API route"
+  says → `Day` and its default in `emptyDay` (`shared/api.ts`) → an optimistic setter in
+  `useDay.tsx` that goes through `inOrder` on the day's `day:<date>` key with the change and a
+  commit from the server's answer (mirror `setOvertimeApproved`; a failure drops the change,
+  raises the "Change not saved" banner and reloads the day, so the setter never rejects) → pass
+  it from `Sheet.tsx` to the card, and from `useTodayAlarms` into `useAlarms` if alarms depend
+  on it.
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
   `currentUser(req).id` (`requireDate` on a `/:date` route; a `/:id` route on the sessions or
   breaks router is checked by the router itself and reads its row with `owned(res)`; a new table

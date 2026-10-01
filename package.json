@@ -29,7 +29,7 @@
     "seed": "tsx server/dev/seed-cli.ts",
     "screenshots": "node scripts/screenshots.mjs",
     "icons": "node scripts/icons.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.test.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.server.test.json",
     "lint": "oxlint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

@@ -3,7 +3,7 @@ import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { breakRowToJson, dateParam, endRunningBreak, ensureDay, getOwned, ownedRouter, parsePlannedSeconds, requireDate, runningSession } from './shared.js';
 import type { BreakEndResponse, BreakResponse, OkResponse } from '../../shared/api.js';
-import { BREAK_SECONDS, MIN_BREAK_MS } from '../../shared/timer.js';
+import { BREAK_SECONDS } from '../../shared/timer.js';
 
 /** Mounted at /api/days/:date/breaks (start), like the sessions' start router. */
 export function breakStartRouter(db: DB): Router {
@@ -42,18 +42,16 @@ export function breaksRouter(db: DB): Router {
   // Every /:id route works on the caller's own break or answers 404 (`ownedRouter`).
   const { router: r, owned } = ownedRouter(db, 'breaks');
 
-  // Back early: the break ends now, or is dropped if it ran under a minute (answered as null).
-  // Idempotent, and a break that already ended keeps its end.
+  // Back early: a break still running is the user's only one, so it ends now through
+  // endRunningBreak, by the same rule as a break or session starting. One dropped for being too
+  // short answers { break: null }. Ending it again changes nothing: a break already over keeps
+  // its end, and a dropped one is a 404.
   r.post('/:id/end', (_req, res) => {
     const b = owned(res);
     const now = Date.now();
-    if (b.ended_at > now && now - b.started_at < MIN_BREAK_MS) {
-      db.prepare(`DELETE FROM breaks WHERE id = ?`).run(b.id);
-      res.json({ break: null } satisfies BreakEndResponse);
-      return;
-    }
-    if (b.ended_at > now) db.prepare(`UPDATE breaks SET ended_at = ? WHERE id = ?`).run(now, b.id);
-    res.json({ break: breakRowToJson(getOwned(db, 'breaks', b.user_id, b.id)!) } satisfies BreakEndResponse);
+    if (b.ended_at > now) endRunningBreak(db, b.user_id, now);
+    const row = getOwned(db, 'breaks', b.user_id, b.id);
+    res.json({ break: row ? breakRowToJson(row) : null } satisfies BreakEndResponse);
   });
 
   r.delete('/:id', (_req, res) => {

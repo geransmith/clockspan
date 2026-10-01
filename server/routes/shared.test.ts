@@ -53,9 +53,11 @@ describe('the ownership check on /sessions/:id and /breaks/:id', () => {
     }
   });
 
-  it('answers 404 for an id that names no row, whatever it looks like', async () => {
-    const { a } = await setUp();
-    const ids = ['abc', '1.5', '-1', '0', '%20', '9'.repeat(30), '1'.repeat(400)];
+  it('answers 404 for an id that is not plain digits or names no row', async () => {
+    const { a, session, brk } = await setUp();
+    // Row 1 of each table exists, so an id Number() reads as 1 would reach it.
+    expect([session.id, brk.id]).toEqual([1, 1]);
+    const ids = ['abc', '1.5', '-1', '0', '%20', '9'.repeat(30), '1'.repeat(400), '0x1', '1e0', '+1', '%201', '1.0'];
     for (const id of ids) {
       const sessions = [
         a.patch(`/api/sessions/${id}`, { label: 'x' }),
