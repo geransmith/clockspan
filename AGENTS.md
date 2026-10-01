@@ -549,11 +549,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `routes/days.ts`; `daysInRange` loads `GET /days/:date` and `/days/range` alike) → add a
   `PUT /days/:date/<field>` route (with `requireDate`) and its client call as "An API route"
   says → `Day` and its default in `emptyDay` (`shared/api.ts`) → an optimistic setter in
-  `useDay.tsx` that goes through `inOrder` on
-  the day's `day:<date>` key with the change and a commit from the server's answer (mirror
-  `setOvertimeApproved`; a failure drops the change, raises the "Change not saved" banner and
-  reloads the day, so the setter never rejects) → pass it from `Sheet.tsx`
-  to the card, and from `useTodayAlarms` into `useAlarms` if alarms depend on it.
+  `useDay.tsx` that goes through `inOrder` on the day's `day:<date>` key with the change and a
+  commit from the server's answer (mirror `setOvertimeApproved`; a failure drops the change,
+  raises the "Change not saved" banner and reloads the day, so the setter never rejects) → pass
+  it from `Sheet.tsx` to the card, and from `useTodayAlarms` into `useAlarms` if alarms depend
+  on it.
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
   `currentUser(req).id` (`requireDate` on a `/:date` route; a `/:id` route on the sessions or
   breaks router is checked by the router itself and reads its row with `owned(res)`; a new table
