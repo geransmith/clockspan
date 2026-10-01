@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { CARD_IDS } from '../../../shared/settings.js';
 import { alarmTargets, describeEvent, dueEvents, eventKey, type AlarmEvent, type AlarmTarget } from './alarms';
 import { formatTime } from './format';
+import { setCardVisible } from './layout';
 import { computeTimeclock, emptyPunches } from './timeclock';
 import type { AlarmId, AlarmSettings } from '../types';
 
@@ -57,11 +59,19 @@ describe('dueEvents', () => {
     expect(r2.fire.map((e) => [e.kind, e.minutes])).toEqual([['overdue', 10]]);
   });
 
-  it('collapses a catch-up burst to the latest event but marks all as crossed', () => {
+  it('collapses a catch-up burst to the latest event and marks what was crossed', () => {
     // Phone slept from T-20m to T+7m: leads 15/5/1, due and overdue 5 all crossed.
     const r = dueEvents(D, [target(T)], alarms(), new Set(), T + 7 * M);
     expect(r.fire.map((e) => [e.kind, e.minutes])).toEqual([['overdue', 5]]);
     expect(r.crossed).toHaveLength(5);
+  });
+
+  it('keeps repeating every minute however long the day runs over', () => {
+    const a = alarms(cfg(), cfg({ overdueEveryMinutes: 1 }));
+    const r = dueEvents(D, [target(T)], a, new Set(), T + 300 * M);
+    expect(r.fire.map((e) => [e.kind, e.minutes])).toEqual([['overdue', 300]]);
+    const fired = new Set(r.crossed);
+    expect(dueEvents(D, [target(T)], a, fired, T + 301 * M).fire.map((e) => [e.kind, e.minutes])).toEqual([['overdue', 301]]);
   });
 
   it('re-arms when the target moves later', () => {
@@ -95,18 +105,20 @@ describe('dueEvents', () => {
 });
 
 describe('alarmTargets', () => {
-  // 8:00 clock-in, an 8 h day, lunch by 1 PM, a second meal after 10 h.
-  const s = { workMinutes: 480, lunchDeadlineMinutes: 300, lunchMinutes: 30, secondMealAfterMinutes: 600 };
+  // 8:00 clock-in, an 8 h day, lunch by 1 PM, a second meal after 10 h, every card shown.
+  const s = {
+    workMinutes: 480,
+    lunchDeadlineMinutes: 300,
+    lunchMinutes: 30,
+    secondMealAfterMinutes: 600,
+    layout: CARD_IDS.map((id) => ({ id, visible: true })),
+  };
   const H = 60 * M;
   const IN = new Date(2026, 8, 16, 8, 0).getTime();
   const day = { overtimeApproved: false, retroDone: false };
-  // Punches in row order (in, lunch out, lunch in, out), at `now`.
-  const tc = (now: number, ...at: (number | null)[]) =>
-    computeTimeclock(
-      emptyPunches().map((p, i) => ({ ...p, at: at[i] ?? null })),
-      s,
-      now,
-    );
+  // Punches in row order (in, lunch out, lunch in, out).
+  const rows = (...at: (number | null)[]) => emptyPunches().map((p, i) => ({ ...p, at: at[i] ?? null }));
+  const tc = (now: number, ...at: (number | null)[]) => computeTimeclock(rows(...at), s, now);
   const armed = (targets: AlarmTarget[]) => Object.fromEntries(targets.map((t) => [t.id, t.armed]));
 
   it('has nothing armed before clock-in', () => {
@@ -126,6 +138,14 @@ describe('alarmTargets', () => {
     // An 8 h day never reaches the 10 h second meal.
     expect(armed(targets)).toEqual({ lunchBy: true, clockOut: true, secondMeal: false, retro: true });
     expect(armed(alarmTargets(tc(IN + 5 * H + 10 * M, IN), s, day)).lunchBy).toBe(true);
+  });
+
+  it('has no lunch alarm on a day short enough to need no lunch', () => {
+    // A 4 h day, 50 min over, is still inside the 5 h lunch window; being over brings the second meal in.
+    const half = { ...s, workMinutes: 240 };
+    const short = computeTimeclock(rows(IN), half, IN + 4 * H + 50 * M);
+    expect(short.lunchStatus).toBe('not-needed');
+    expect(armed(alarmTargets(short, half, day))).toEqual({ lunchBy: false, clockOut: true, secondMeal: true, retro: true });
   });
 
   it('disarms clock-out and the retrospective at lunch, where the end of the day drifts, and lunch once taken', () => {
@@ -155,6 +175,11 @@ describe('alarmTargets', () => {
     const typo = tc(IN + 3 * H, IN, null, null, IN - 6 * H);
     expect([typo.error, typo.state, typo.lunchStatus]).toEqual([expect.any(String), 'working', 'upcoming']);
     expect(armed(alarmTargets(typo, s, day))).toEqual({ lunchBy: true, clockOut: false, secondMeal: false, retro: false });
+  });
+
+  it('disarms the retrospective while its card is hidden', () => {
+    const hidden = { ...s, layout: setCardVisible(s.layout, 'retro', false) };
+    expect(armed(alarmTargets(tc(IN + 2 * H, IN), hidden, day))).toEqual({ lunchBy: true, clockOut: true, secondMeal: false, retro: false });
   });
 
   it('disarms the retrospective once reviewed, and everything once the day is done', () => {
@@ -227,11 +252,11 @@ describe('describeEvent', () => {
     const lead = describeEvent(ev('secondMeal', 'lead', 15, T), ctx);
     expect(lead.kicker).toBe('Second meal alarm · 15 min warning');
     expect(lead.title).toBe('Second meal break in 15 min');
-    expect(lead.body).toContain('10h of work ends at');
-    expect(lead.body).toContain('California');
+    expect(lead.body).toBe(`Your 10h of work ends at ${formatTime(T, true)}. A second meal period is due before then.`);
     expect(describeEvent(ev('secondMeal', 'due', 0, T), ctx).title).toBe('Take your second meal break');
     const over = describeEvent(ev('secondMeal', 'overdue', 5, T), ctx);
     expect(over.title).toBe('Second meal break is 5 min overdue');
+    expect(over.body).toBe(`Your 10h of work ended at ${formatTime(T, true)}. Take your second meal period as soon as you can.`);
     expect(over.tone).toBe('danger');
   });
 
@@ -254,7 +279,7 @@ describe('describeEvent', () => {
       `You reached your 8h at ${formatTime(T, true)}. Two minutes on what went to plan and what didn't.`,
     );
     expect(describeEvent(ev('secondMeal', 'due', 0, T), late).body).toBe(
-      `You reached 10h of work at ${formatTime(T, true)}. California requires a second 30-minute meal period by then unless you've waived it.`,
+      `You reached 10h of work at ${formatTime(T, true)}. A second meal period was due by then.`,
     );
   });
 
