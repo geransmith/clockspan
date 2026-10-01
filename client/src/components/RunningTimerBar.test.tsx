@@ -93,6 +93,20 @@ describe('RunningTimerBar', () => {
       expect(api.patchSession).not.toHaveBeenCalled();
     });
 
+    it('stays open while an input method is composing, and saves on the Enter after it', async () => {
+      await edit('会議');
+      // The input method's own keys: Enter picks a candidate, Escape drops one.
+      fireEvent.keyDown(input(), { key: 'Enter', isComposing: true });
+      fireEvent.keyDown(input(), { key: 'Escape', isComposing: true });
+      await settle();
+      expect(input().value).toBe('会議');
+      expect(api.patchSession).not.toHaveBeenCalled();
+      fireEvent.keyDown(input(), { key: 'Enter' });
+      await settle();
+      expect(screen.queryByRole('textbox')).toBeNull();
+      expect(api.patchSession).toHaveBeenCalledExactlyOnceWith(1, { label: '会議' });
+    });
+
     it('saves a cleared label, which reads as untitled', async () => {
       await edit('   ', 'Enter');
       expect(api.patchSession).toHaveBeenCalledExactlyOnceWith(1, { label: '' });

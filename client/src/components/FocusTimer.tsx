@@ -7,7 +7,7 @@ import { unlockAudio } from '../lib/alerts';
 import { BREAK, TIMER_DUE, UNTITLED_SESSION } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
 import { hasRoom, hasText } from '../lib/priorities';
-import { LIMITS, type Priority } from '../types';
+import { LIMITS, type Priority, type Session } from '../types';
 import { TimerControls } from './TimerControls';
 
 interface Props {
@@ -27,11 +27,14 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
   const [linked, setLinked] = useState<string | null>(null);
   const [addAsPriority, setAddAsPriority] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // A start is out. A second tap before it answers would add the priority twice and meet the
-  // first timer as a 409, which reads as one started on another device.
+  // A start is out: the start and break buttons are disabled until it answers. A second start
+  // would add the priority twice and meet the first timer as a 409, which reads as one started
+  // on another device. A break tap goes out on the day store's queue, not the timer's, so it
+  // could reach the server after the start: a new break would meet the running timer (409,
+  // "Change not saved"), and an end would find the break the start already ended.
   const [starting, setStarting] = useState(false);
 
-  if (timer.running) return <Running />;
+  if (timer.running) return <Running session={timer.running} />;
 
   // Shortest first, and a length set twice is one button.
   const lengths = [...new Set(settings.timerMinutes)].sort((a, b) => a - b);
@@ -58,7 +61,6 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
     // Here, inside the tap: `timer.start` unlocks too, but after the priority's save is
     // awaited, which iOS no longer counts as the gesture, so the completion chime stays silent.
     unlockAudio();
-    if (starting) return;
     setStarting(true);
     setError(null);
     try {
@@ -125,7 +127,7 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
             {/* A timer, like the focus ring's: a live region would read it out every second. */}
             <strong role="timer">{formatCountdown(breakTimer.remainingSeconds)}</strong>
           </span>
-          <button className="btn btn-ghost" onClick={breakTimer.end}>
+          <button className="btn btn-ghost" onClick={breakTimer.end} disabled={starting}>
             {BREAK.end}
           </button>
         </div>
@@ -146,6 +148,7 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
             unlockAudio();
             breakTimer.start(breakTimer.next.minutes);
           }}
+          disabled={starting}
         >
           {BREAK.start(breakTimer.next.minutes, breakTimer.next.long)}
         </button>
@@ -160,13 +163,12 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
   );
 }
 
-function Running() {
-  const { running, remainingSeconds, progress, paused, due, overrunSeconds } = useTimer();
-  if (!running) return null;
+function Running({ session }: { session: Session }) {
+  const { countdownSeconds, progress, paused, due } = useTimer();
   const r = 54;
   const circ = 2 * Math.PI * r;
   // Past the end the countdown goes negative; the sub-line says why.
-  const subline = due ? TIMER_DUE.title : paused ? 'Paused' : `of ${formatDuration(running.plannedSeconds)}`;
+  const subline = due ? TIMER_DUE.title : paused ? 'Paused' : `of ${formatDuration(session.plannedSeconds)}`;
 
   return (
     <div className={`timer timer--running${paused ? ' is-paused' : ''}${due ? ' is-due' : ''}`}>
@@ -176,13 +178,13 @@ function Running() {
           <circle className="ring-fill" cx="60" cy="60" r={r} strokeDasharray={circ} strokeDashoffset={circ * (1 - progress)} />
         </svg>
         <div className="ring-center">
-          <div className="countdown" role="timer" aria-live="off">
-            {formatCountdown(due ? -overrunSeconds : remainingSeconds)}
+          <div className="countdown" role="timer">
+            {formatCountdown(countdownSeconds)}
           </div>
           <div className="muted small">{subline}</div>
         </div>
       </div>
-      <div className="timer-running-label">{running.label || <span className="muted">{UNTITLED_SESSION}</span>}</div>
+      <div className="timer-running-label">{session.label || <span className="muted">{UNTITLED_SESSION}</span>}</div>
       <TimerControls />
     </div>
   );

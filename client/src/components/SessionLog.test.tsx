@@ -33,7 +33,7 @@ async function renderLog(sessions: Session[] = [DONE], breaks: Break[] = [], dat
   render(
     <AllProviders>
       <BarLabel />
-      <SessionLog date={date} sessions={sessions} breaks={breaks} priorities={PLANNED} now={T0 + 30 * MIN} />
+      <SessionLog date={date} isToday={date === TODAY} sessions={sessions} breaks={breaks} priorities={PLANNED} now={T0 + 30 * MIN} />
     </AllProviders>,
   );
   await settle();
@@ -83,6 +83,22 @@ describe('SessionLog', () => {
     fireEvent.keyDown(labelInput(), { key: 'Enter' });
     await settle();
     expect(api.patchSession).toHaveBeenCalledWith(1, { label: 'Renamed' });
+  });
+
+  it('stays in the edit while an input method is composing, and saves on the Enter after it', async () => {
+    await renderLog();
+    openEdit();
+    fireEvent.change(labelInput(), { target: { value: '会議' } });
+    // The input method's own keys: Enter picks a candidate, Escape drops one.
+    fireEvent.keyDown(labelInput(), { key: 'Enter', isComposing: true });
+    fireEvent.keyDown(labelInput(), { key: 'Escape', isComposing: true });
+    await settle();
+    expect(labelInput().value).toBe('会議');
+    expect(api.patchSession).not.toHaveBeenCalled();
+    fireEvent.keyDown(labelInput(), { key: 'Enter' });
+    await settle();
+    expect(screen.queryByRole('textbox', { name: 'Session label' })).toBeNull();
+    expect(api.patchSession).toHaveBeenCalledExactlyOnceWith(1, { label: '会議' });
   });
 
   it('keeps the stored label on Escape', async () => {
@@ -175,7 +191,9 @@ describe('SessionLog', () => {
     cleanup();
     await renderLog();
     expect(screen.queryByText('On breaks')).toBeNull();
-    cleanup();
+  });
+
+  it('says why the log is empty, today and on a past day', async () => {
     await renderLog([]);
     expect(screen.getByText(/No focus sessions yet/)).toBeTruthy();
     cleanup();

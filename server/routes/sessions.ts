@@ -15,7 +15,7 @@ import {
   UID_RE,
 } from './shared.js';
 import { LIMITS, type OkResponse, type RunningResponse, type SessionConflict, type SessionResponse } from '../../shared/api.js';
-import { PLANNED_SECONDS, plannedEndAt } from '../../shared/timer.js';
+import { pausedSecondsAfter, PLANNED_SECONDS, plannedEndAt } from '../../shared/timer.js';
 
 /**
  * A session's priority link: undefined = not mentioned, null = unplanned, a uid that must
@@ -147,8 +147,8 @@ export function sessionsRouter(db: DB): Router {
       return;
     }
     if (s.paused_at != null) {
-      const paused = Math.round((Date.now() - s.paused_at) / 1000);
-      db.prepare(`UPDATE sessions SET paused_seconds = paused_seconds + ?, paused_at = NULL WHERE id = ?`).run(paused, s.id);
+      const pausedSeconds = pausedSecondsAfter({ pausedAt: s.paused_at, pausedSeconds: s.paused_seconds }, Date.now());
+      db.prepare(`UPDATE sessions SET paused_seconds = ?, paused_at = NULL WHERE id = ?`).run(pausedSeconds, s.id);
     }
     reply(res, s.user_id, s.id);
   });

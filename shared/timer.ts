@@ -29,11 +29,21 @@ export interface SessionTiming {
 
 /**
  * Focus time in ms up to `until`: `now` for a live session, `endedAt` for a finished one. A
- * session that is paused stops at its `pausedAt`, whatever `until` says, so a session finished
- * while paused is logged up to the moment the pause began.
+ * paused session stops at its `pausedAt`, whatever `until` says, so its countdown and the log's
+ * running row hold still. Only a live session has `pausedAt`: finish and cancel clear it, and
+ * the finish route ends a paused session at its `pausedAt` itself.
  */
 export function activeMs(s: Omit<SessionTiming, 'plannedSeconds'>, until: number): number {
   return Math.max(0, (s.pausedAt ?? until) - s.startedAt - s.pausedSeconds * 1000);
+}
+
+/**
+ * The ended pauses once a resume at `at` folds the open pause in, rounded to whole seconds:
+ * what the server stores and what the client shows before it answers. Unchanged when nothing
+ * is paused.
+ */
+export function pausedSecondsAfter(s: Pick<SessionTiming, 'pausedAt' | 'pausedSeconds'>, at: number): number {
+  return s.pausedAt == null ? s.pausedSeconds : s.pausedSeconds + Math.round((at - s.pausedAt) / 1000);
 }
 
 /**

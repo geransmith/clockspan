@@ -6,10 +6,11 @@ import { Check, Minus, Pause, Play, Plus, X } from './Icons';
 /**
  * The running timer's buttons, for the bar at the top (`compact`) and for the timer card: −/+
  * move the planned end by the adjust step, Pause and Resume hold the clock, Finish asks how much
- * to log once the timer ran a minute over, and Cancel asks first. Once due, only + and Finish
- * are left; + is off at the longest plan the server takes. The bar shows the icons and hides
- * the words on a narrow screen, so there each button carries its name. − and + carry theirs
- * on the card too: the icons are hidden from screen readers and both say only the step.
+ * to log once the timer ran a minute over, and Cancel asks first. Once due, − and Pause go while
+ * +, Finish and Cancel stay; + is off at the longest plan the server takes. The bar shows the
+ * icons and hides the words on a narrow screen, so there each button carries its name. − and +
+ * carry theirs on the card too: the icons are hidden from screen readers and both say only the
+ * step.
  */
 export function TimerControls({ compact = false }: { compact?: boolean }) {
   const { paused, due, canAdd, adjust, pause, resume, requestFinish, cancel } = useTimer();
@@ -52,7 +53,7 @@ export function TimerControls({ compact = false }: { compact?: boolean }) {
             {words('Pause')}
           </button>
         ))}
-      <button className={`${btn} btn-primary`} onClick={requestFinish} title={compact ? 'Finish now' : undefined}>
+      <button className={`${btn} btn-primary`} onClick={requestFinish} {...named('Finish timer', 'Finish now')}>
         <Check />
         {words('Finish')}
       </button>
