@@ -45,20 +45,13 @@ describe('useTodayAlarms', () => {
   it('waits for the settings, and judges the day by them rather than the defaults', async () => {
     const settings = deferred<Settings>();
     render(settings.promise, overDay());
-    // The day and its punches are in, but a 10 h day by the defaults' 8 h would ring now.
+    // The day and its punches are in: 8 h 5 m worked, so an 8 h 20 m day has 15 min left, where
+    // the defaults' 8 h would ring overdue now.
     await judged();
     expect(alert).not.toHaveBeenCalled();
-    settings.resolve(makeSettings({ workMinutes: 600 }));
+    settings.resolve(makeSettings({ workMinutes: 500 }));
     await judged();
-    expect(tags()).not.toContain('alarm:clockOut');
-
-    // Another device, from scratch: the alarms already fired here are remembered in storage.
-    cleanup();
-    localStorage.clear();
-    vi.mocked(alert).mockClear();
-    render(makeSettings(), overDay());
-    await judged();
-    expect(tags()).toContain('alarm:clockOut');
+    expect(alerted().find((a) => a.tag === 'alarm:clockOut')?.title).toBe('Clock out in 15 min');
   });
 
   it("goes by today's own work-day length", async () => {
@@ -109,6 +102,21 @@ describe('useTodayAlarms', () => {
     await settle(2_900);
     expect(alert).not.toHaveBeenCalled();
     await settle(200);
+    expect(tags()).toContain('alarm:clockOut');
+  });
+
+  it('lets a hold go five minutes after the last change, though focus stays and each refresh brings a new copy', async () => {
+    vi.mocked(api.putPunches).mockImplementation((_date, punches) => Promise.resolve({ punches }));
+    const { result } = render(makeSettings(), makeDay());
+    await judged();
+    act(() => result.current.alarms.setEditingPunches(true));
+    // The server has the edit, so each minute's refresh brings the same times.
+    vi.mocked(api.getDay).mockResolvedValue(overDay());
+    await act(() => result.current.store.setPunches(TODAY, overDay().punches));
+    await settle(5 * MIN - 1000);
+    expect(vi.mocked(api.getDay).mock.calls.length).toBeGreaterThan(1);
+    expect(tags()).not.toContain('alarm:clockOut');
+    await settle(1000);
     expect(tags()).toContain('alarm:clockOut');
   });
 

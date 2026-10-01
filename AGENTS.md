@@ -42,8 +42,8 @@ shared/                 imported by both sides, always with a `.js` suffix
   api.ts                every wire type and `emptyDay`; the server's JSON builders and client/src/api.ts both use them
   sounds.ts             the sound catalog (SOUNDS, SOUND_EVENTS)
   dates.ts, timer.ts    date keys; pause-aware session timing (activeMs, plannedEndAt, PLANNED_SECONDS)
-  punches.ts            kindForPosition: a punch row's kind is its position's parity; samePunches compares
-                        two lists by value
+  punches.ts            kindForPosition: a punch row's kind is its position's parity; punchesKey: a list's
+                        rows and times as one string; samePunches compares two lists by it
   backoff.ts            nextBackoff: the wait between retries of a request that must answer
 server/                 Express API → dist/server
   app.ts                createApp(): headers, /api/health, auth routers, data routers behind
@@ -402,7 +402,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   on an overtime day. The setting `overtimeApproval` shows/hides the switch and banner
   button, and with it off the Clock out tile reads time past the day as "past your day"
   rather than a red "Over by"; a flagged day counts only while the setting is on: `overtimeOn`
-  (`lib/timeclock.ts`) decides, which `Timeclock` calls (the tiles get the flag from it).
+  (`lib/timeclock.ts`) decides, which `Timeclock` (the tiles get the flag from it) and
+  `useTodayAlarms` call.
 - **`mealRules: false` turns the meal periods off in the math, not in the components.**
   `computeTimeclock` then never needs a lunch (`not-needed`, so no lunch alarm and no lunch
   added to the clock-out time) and `secondMealApplies` is false; a lunch that was punched still
@@ -442,15 +443,17 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `timeclockForDate` + `daySummaryOf`, the same math as the sheet.
 - **The `retro` alarm target is the clock-out instant** ("warn before" = minutes before the
   end of the day) and is **not** silenced by overtime approval; marking the day reviewed
-  (`days.retro_at`) disarms it. Its banner button jumps to the card (`jumpTo` in `App.tsx`).
+  (`days.retro_at`), or hiding the retrospective card under Customize (`alarmTargets` reads
+  `settings.layout`), disarms it. Its banner button jumps to the card (`jumpTo` in `App.tsx`).
 - **Alarm event keys embed the target minute** (`eventKey`), so a moved target re-arms and a
   reload never re-fires. Fired keys live in `localStorage` under `focus:alarms:<date>` and are
   pruned to today. Today's punches are held while a punch time field on today's sheet has focus
-  (`Timeclock`'s `onEditingChange`; Now, × and the pair buttons save at once and never hold) and
-  settle for 3 s after (`useSettled(value, ms, hold)`, wired in `useTodayAlarms`) before
-  evaluation. The hold ends when focus leaves the time fields, when the card unmounts, or on the
-  next change to the punches once focus has gone without a blur. Held punches are compared with the day's by value
-  (`samePunches`), so a refresh that brings the same times doesn't stop the alarms.
+  (`Timeclock`'s `onEditingChange`; Now, × and the pair buttons save at once and never hold),
+  for at most five minutes after the last change, and settle for 3 s after (`useSettled(value,
+  ms)`, wired in `useTodayAlarms` on `punchesKey`) before evaluation. The hold ends when focus
+  leaves the time fields, when the card unmounts, or on the next change to the punches once
+  focus has gone without a blur. The punches are compared by their times, so a refresh with the
+  same times neither stops the alarms nor restarts the wait.
 - **Per-date card drafts reset by remounting**: `Sheet.tsx` keys `Priorities` and `Retro` by
   date, so neither needs a "date changed" effect. Local drafts that mirror a prop use the
   "adjust state while rendering" form (see `DurationField`), not a `useEffect` + `setState`,
@@ -511,9 +514,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `computeTimeclock` → add a target to `alarmTargets()` in `lib/alarms.ts`, with an `armed` rule
   and a test case (a rule the card also needs goes in a pure helper like `secondMealApplies`) → add its default
   under `alarms` in `shared/settings.ts` and the `AlarmId` union there → add an `AlarmEditor` in
-  `settings/AlarmsTab.tsx` → its name in `ALARM_NAMES` (`lib/alarms.ts`; the type makes a
-  missing one an error) and copy in `describeEvent()`: a `kicker` naming the alarm + rule
-  ("X alarm · 15 min warning"), a title, and a body that says where the deadline came from
+  `settings/AlarmsTab.tsx` → its name in `ALARM_NAMES` and a `case` in `describeEvent()`'s
+  `switch (e.id)` (both in `lib/alarms.ts`; the type makes a missing name an error, and
+  typecheck and the `switch-exhaustiveness-check` lint refuse a missing case): the kicker
+  ("X alarm · 15 min warning") is built from the name above the switch, and the case gives a
+  title and a body for each kind (lead, due, overdue) that say where the deadline came from
   (it gets an `EventContext`; extend that if the new target needs more inputs). A banner can
   carry one `action` button (see the clock-out alarm's "Overtime approved" and the retro
   alarm's "Open retrospective", chosen in `useAlarms` from the `AlarmDayState` callbacks).
