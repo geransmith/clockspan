@@ -34,7 +34,8 @@ export function useBecameTrue(value: boolean | null): Moment | null {
  * Plays `sound`'s pick under the master sound switch and, with Celebrations on, returns an
  * emoji burst from the element holding `anchor` for as long as one lives. The anchor is
  * measured once the moment has rendered, so it can be the notice that appears with it. The
- * settings are read when the moment comes, not when it was scheduled.
+ * settings are read through a ref instead of listed as a dependency, so a later settings change
+ * doesn't rerun the effect for the last moment and play its sound or burst again.
  */
 export function useCelebration<T extends HTMLElement>(moment: Moment | null, sound: SoundEvent): { anchor: RefObject<T | null>; burst: BurstAt | null } {
   const { settings } = useSettings();

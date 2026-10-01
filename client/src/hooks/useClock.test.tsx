@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-import { cleanup, render, renderHook } from '@testing-library/react';
+import { act, cleanup, render, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { settle, T0 } from '../test/hooks';
+import { settle, setVisibility, T0 } from '../test/hooks';
 import { ClockProvider, useClock } from './useClock';
 
 beforeEach(() => {
@@ -31,6 +31,22 @@ it('hands a reader mounted mid-second the same tick as the rest, once a second',
   expect(shown()).toEqual([T0, T0]);
   await settle(500);
   expect(shown()).toEqual([T0 + 1000, T0 + 1000]);
+});
+
+it('ticks at once when the tab comes back', async () => {
+  const { container } = render(
+    <ClockProvider>
+      <Reader />
+    </ClockProvider>,
+  );
+  const shown = () => Number(container.querySelector('output')?.textContent);
+  await settle(1000);
+  expect(shown()).toBe(T0 + 1000);
+  vi.setSystemTime(T0 + 60_000);
+  act(() => setVisibility('hidden'));
+  expect(shown()).toBe(T0 + 1000);
+  act(() => setVisibility('visible'));
+  expect(shown()).toBe(T0 + 60_000);
 });
 
 it('refuses to run outside the provider', () => {

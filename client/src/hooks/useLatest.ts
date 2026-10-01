@@ -1,10 +1,11 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react';
 
 /**
- * A ref that always holds the latest `value`, for callbacks that must read the current
- * state rather than the render they closed over (rapid −5m clicks compounding, a click right
- * after a debounced flush). Updated in a layout effect, so it is current before any event
- * handler can run and render itself stays pure.
+ * A ref holding `value` as of the last commit, for a callback, timer, listener or effect that
+ * must see the newest render without depending on it. Updated in a layout effect, so it is
+ * current before any handler runs and render stays pure. It only has what has rendered: a change
+ * made earlier in the same handler isn't in it yet, so a store's callbacks read their own state
+ * through `useTracked().current()` instead.
  */
 export function useLatest<T>(value: T): RefObject<T> {
   const ref = useRef(value);

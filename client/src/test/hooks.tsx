@@ -13,9 +13,9 @@ import { emptyPunches } from '../lib/timeclock';
 import type { Break, Day, Session, Settings } from '../types';
 
 /**
- * Shared by the hook tests, which run under happy-dom with fake timers. Each test file mocks
- * `../api` (and `../lib/alerts` where banners matter) itself: `vi.mock` only applies in the
- * file that calls it.
+ * Shared by the hook and component tests, which run under happy-dom with fake timers. Each test
+ * file mocks the `api` module (and `lib/alerts` where banners matter) itself: `vi.mock` only
+ * applies in the file that calls it.
  */
 
 /** Monday 28 September 2026, 09:00 local time, so date keys agree in any time zone. */
