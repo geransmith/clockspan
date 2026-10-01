@@ -1,7 +1,8 @@
 /**
  * A user's settings: the stored JSON merged onto the defaults on every read and every write
- * (`mergeSettings`), so a key a user never saved takes today's default and nothing a client
- * sends can store a bad value. The settings router and the retention job both read them here.
+ * (`mergeSettings`), so a key added since the user's last save takes today's default (a save
+ * stores every key, so a changed default never reaches a stored row) and nothing a client sends
+ * can store a bad value. The settings router and the retention job both read them here.
  */
 import type { DB } from './db.js';
 import {
@@ -17,17 +18,18 @@ import {
   type AlarmSettings,
   type RetentionSettings,
   type Settings,
-  type Theme,
-  type TimeFormat,
 } from '../shared/settings.js';
 import { SOUND_EVENTS, SOUND_IDS, type SoundEvent, type SoundId } from '../shared/sounds.js';
 import { isWholeNumber } from './validate.js';
 
 const isBool = (v: unknown): v is boolean => typeof v === 'boolean';
+const record = (v: unknown): Record<string, unknown> | null => (v && typeof v === 'object' ? (v as Record<string, unknown>) : null);
+const oneOf = <T extends string>(list: readonly T[], v: unknown, fallback: T): T => (list.includes(v as T) ? (v as T) : fallback);
+type SwitchKey = { [K in keyof Settings]: Settings[K] extends boolean ? K : never }[keyof Settings];
 
 function mergeAlarm(base: AlarmSettings, patch: unknown): AlarmSettings {
-  if (!patch || typeof patch !== 'object') return base;
-  const p = patch as Record<string, unknown>;
+  const p = record(patch);
+  if (!p) return base;
   return {
     enabled: isBool(p.enabled) ? p.enabled : base.enabled,
     leadMinutes: Array.isArray(p.leadMinutes)
@@ -39,16 +41,16 @@ function mergeAlarm(base: AlarmSettings, patch: unknown): AlarmSettings {
 }
 
 function mergeSounds(base: Record<SoundEvent, SoundId>, patch: unknown): Record<SoundEvent, SoundId> {
-  if (!patch || typeof patch !== 'object') return base;
-  const p = patch as Record<string, unknown>;
+  const p = record(patch);
+  if (!p) return base;
   const next = { ...base };
-  for (const event of SOUND_EVENTS) if (SOUND_IDS.includes(p[event] as SoundId)) next[event] = p[event] as SoundId;
+  for (const event of SOUND_EVENTS) next[event] = oneOf(SOUND_IDS, p[event], next[event]);
   return next;
 }
 
 function mergeRetention(base: RetentionSettings, patch: unknown): RetentionSettings {
-  if (!patch || typeof patch !== 'object') return base;
-  const p = patch as Record<string, unknown>;
+  const p = record(patch);
+  if (!p) return base;
   return {
     enabled: isBool(p.enabled) ? p.enabled : base.enabled,
     days: isWholeNumber(p.days, { min: MIN_RETENTION_DAYS, max: MAX_RETENTION_DAYS }) ? p.days : base.days,
@@ -66,16 +68,21 @@ function mergeTimerMinutes(base: number[], patch: unknown): number[] {
 }
 
 /**
- * Merge a stored/patch object onto defaults, validating every field. Unknown keys are
- * dropped and invalid values fall back, so a bad client can never corrupt settings.
+ * Merge a patch onto `base` (the defaults on a read, the user's stored settings on a write),
+ * validating every field. Unknown keys are dropped and an invalid value keeps `base`'s, so a
+ * bad client can never corrupt settings.
  */
 export function mergeSettings(base: Settings, patch: unknown): Settings {
-  if (!patch || typeof patch !== 'object') return base;
-  const p = patch as Record<string, unknown>;
-  const alarms = (p.alarms && typeof p.alarms === 'object' ? p.alarms : {}) as Record<string, unknown>;
+  const p = record(patch);
+  if (!p) return base;
+  const alarms = record(p.alarms) ?? {};
   const limited = (key: keyof typeof SETTING_LIMITS): number => {
     const v = p[key];
     return isWholeNumber(v, SETTING_LIMITS[key]) ? v : base[key];
+  };
+  const flag = (key: SwitchKey): boolean => {
+    const v = p[key];
+    return isBool(v) ? v : base[key];
   };
 
   const layout = Array.isArray(p.layout) ? normalizeLayout(p.layout) : base.layout;
@@ -94,24 +101,24 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     lunchMinutes: limited('lunchMinutes'),
     secondMealAfterMinutes: limited('secondMealAfterMinutes'),
     weekMinutes: limited('weekMinutes'),
-    timeFormat: TIME_FORMATS.includes(p.timeFormat as TimeFormat) ? (p.timeFormat as TimeFormat) : base.timeFormat,
-    theme: THEMES.includes(p.theme as Theme) ? (p.theme as Theme) : base.theme,
+    timeFormat: oneOf(TIME_FORMATS, p.timeFormat, base.timeFormat),
+    theme: oneOf(THEMES, p.theme, base.theme),
     adjustStepMinutes: limited('adjustStepMinutes'),
     breakMinutes: limited('breakMinutes'),
-    suggestBreaks: isBool(p.suggestBreaks) ? p.suggestBreaks : base.suggestBreaks,
+    suggestBreaks: flag('suggestBreaks'),
     timerMinutes: mergeTimerMinutes(base.timerMinutes, p.timerMinutes),
     priorityCount: limited('priorityCount'),
-    sound: isBool(p.sound) ? p.sound : base.sound,
-    notifications: isBool(p.notifications) ? p.notifications : base.notifications,
-    keepScreenAwake: isBool(p.keepScreenAwake) ? p.keepScreenAwake : base.keepScreenAwake,
-    overtimeApproval: isBool(p.overtimeApproval) ? p.overtimeApproval : base.overtimeApproval,
-    mealRules: isBool(p.mealRules) ? p.mealRules : base.mealRules,
-    lunchPunches: isBool(p.lunchPunches) ? p.lunchPunches : base.lunchPunches,
-    trackHours: isBool(p.trackHours) ? p.trackHours : base.trackHours,
+    sound: flag('sound'),
+    notifications: flag('notifications'),
+    keepScreenAwake: flag('keepScreenAwake'),
+    overtimeApproval: flag('overtimeApproval'),
+    mealRules: flag('mealRules'),
+    lunchPunches: flag('lunchPunches'),
+    trackHours: flag('trackHours'),
     sounds: mergeSounds(base.sounds, p.sounds),
-    celebrations: isBool(p.celebrations) ? p.celebrations : base.celebrations,
+    celebrations: flag('celebrations'),
     stickers: isBool(p.stickers) ? p.stickers : stickerCard || base.stickers,
-    showWeekends: isBool(p.showWeekends) ? p.showWeekends : base.showWeekends,
+    showWeekends: flag('showWeekends'),
     alarms: {
       lunchBy: mergeAlarm(base.alarms.lunchBy, alarms.lunchBy),
       clockOut: mergeAlarm(base.alarms.clockOut, alarms.clockOut),
