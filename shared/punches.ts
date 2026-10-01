@@ -11,9 +11,14 @@ export function kindForPosition(position: number): Punch['kind'] {
 }
 
 /**
- * The same rows at the same times. Every fetch of a day builds a new list, so a copy the
- * server sent again with nothing changed is only equal to the one before by value.
+ * A list's rows and their times as one string. Every fetch of a day builds a new list, so a
+ * copy the server sent again with nothing changed only matches the one before by value.
  */
+export function punchesKey(punches: readonly Punch[]): string {
+  return punches.map((p) => `${p.position}:${p.at ?? ''}`).join();
+}
+
+/** The same rows at the same times (`punchesKey`). */
 export function samePunches(a: readonly Punch[], b: readonly Punch[]): boolean {
-  return a.length === b.length && a.every((p, i) => p.position === b[i]?.position && p.at === b[i]?.at);
+  return punchesKey(a) === punchesKey(b);
 }

@@ -1,4 +1,4 @@
-import type { AlarmId, AlarmSettings } from '../types';
+import type { AlarmId, AlarmSettings, Settings } from '../types';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { formatMinutes, formatTime } from './format';
 import { secondMealApplies, type TimeclockResult } from './timeclock';
@@ -30,19 +30,20 @@ export interface TargetDay {
  * retrospective and the second meal wait for the punches to be fixed. Lunch stays armed: its
  * deadline comes from the clock-in and doesn't move, and a typo elsewhere must not mute the
  * meal period while the person is still working. On a day that is really over, the repeat is
- * what prompts fixing the punches.
+ * what prompts fixing the punches. A hidden retrospective card disarms its reminder, since the
+ * banner's button and Mark reviewed are on the card.
  */
-export function alarmTargets(tc: TimeclockResult, settings: Parameters<typeof secondMealApplies>[1], day: TargetDay): AlarmTarget[] {
-  const endFixed = tc.error == null && tc.clockOutAt != null && tc.state === 'working';
+export function alarmTargets(tc: TimeclockResult, settings: Parameters<typeof secondMealApplies>[1] & Pick<Settings, 'layout'>, day: TargetDay): AlarmTarget[] {
+  const endFixed = tc.error == null && tc.state === 'working';
   return [
     {
       id: 'lunchBy',
       at: tc.lunchBy ?? 0,
-      armed: tc.lunchBy != null && (tc.lunchStatus === 'upcoming' || tc.lunchStatus === 'overdue') && tc.state !== 'done',
+      armed: (tc.lunchStatus === 'upcoming' || tc.lunchStatus === 'overdue') && tc.state !== 'done',
     },
     { id: 'clockOut', at: tc.clockOutAt ?? 0, armed: endFixed && !day.overtimeApproved },
     { id: 'secondMeal', at: tc.secondMealBy ?? 0, armed: secondMealApplies(tc, settings, day.overtimeApproved) },
-    { id: 'retro', at: tc.clockOutAt ?? 0, armed: endFixed && !day.retroDone },
+    { id: 'retro', at: tc.clockOutAt ?? 0, armed: endFixed && !day.retroDone && settings.layout.some((l) => l.id === 'retro' && l.visible) },
   ];
 }
 
@@ -59,8 +60,6 @@ export interface AlarmEvent {
   target: number;
 }
 
-const MAX_OVERDUE_REPEATS = 288; // 24h at 5-minute repeats
-
 /**
  * Keys include the target instant (minute precision) so a target that moves — a long
  * lunch pushing clock-out later — re-arms automatically, while a reload never re-fires.
@@ -70,9 +69,10 @@ export function eventKey(dateKey: string, id: AlarmId, kind: AlarmKind, minutes:
 }
 
 /**
- * Pure scheduler. Returns the events to fire now and every key that has been crossed
- * (so the caller can persist them). If several thresholds for one target were crossed
- * since the last check (phone was asleep), only the latest fires — no chime burst.
+ * Pure scheduler. Returns the events to fire now and the keys crossed that could come round
+ * again (for a repeat, only the latest), for the caller to persist. If several thresholds for
+ * one target were crossed since the last check (the phone was asleep), only the latest fires,
+ * so there is no burst of chimes.
  */
 export function dueEvents(
   dateKey: string,
@@ -87,7 +87,7 @@ export function dueEvents(
   for (const target of targets) {
     if (!target.armed) continue;
     const cfg = alarms[target.id];
-    if (!cfg?.enabled) continue;
+    if (!cfg.enabled) continue;
 
     const candidates: AlarmEvent[] = [];
     for (const lead of cfg.leadMinutes) {
@@ -110,16 +110,17 @@ export function dueEvents(
         target: target.at,
       });
     }
-    if (cfg.overdueEveryMinutes > 0 && now > target.at) {
+    if (cfg.overdueEveryMinutes > 0) {
       const every = cfg.overdueEveryMinutes;
-      const k = Math.min(MAX_OVERDUE_REPEATS, Math.floor((now - target.at) / (every * MINUTE_MS)));
-      for (let i = 1; i <= k; i++) {
+      // Only the latest repeat: for a fixed target k only grows, so an earlier one never comes round again.
+      const k = Math.floor((now - target.at) / (every * MINUTE_MS));
+      if (k > 0) {
         candidates.push({
-          key: eventKey(dateKey, target.id, 'overdue', i * every, target.at),
+          key: eventKey(dateKey, target.id, 'overdue', k * every, target.at),
           id: target.id,
           kind: 'overdue',
-          minutes: i * every,
-          at: target.at + i * every * MINUTE_MS,
+          minutes: k * every,
+          at: target.at + k * every * MINUTE_MS,
           target: target.at,
         });
       }
@@ -144,7 +145,7 @@ export interface EventContext {
   workMinutes: number;
   /** Lunch deadline window in minutes (settings.lunchDeadlineMinutes). */
   lunchDeadlineMinutes: number;
-  /** Hours worked after which the second meal period is due (settings.secondMealAfterMinutes). */
+  /** Minutes worked after which the second meal period is due (settings.secondMealAfterMinutes). */
   secondMealAfterMinutes: number;
   /** When the event is shown: a warning seen late (the phone was asleep) says the time actually left. */
   now: number;
@@ -177,92 +178,95 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
   const day = formatMinutes(ctx.workMinutes);
   const alarm = ALARM_NAMES[e.id];
   const mealHours = formatMinutes(ctx.secondMealAfterMinutes);
-  const mealWhy = `Your ${mealHours} of work ends at ${target}. California requires a second 30-minute meal period before then unless you've waived it.`;
+  // The kicker names the rule that fired; a warning's title says how long is left now, which is
+  // less when the check came late.
+  const left = formatMinutes(Math.min(e.minutes, Math.max(1, Math.ceil((e.target - ctx.now) / MINUTE_MS))));
+  const rule = e.kind === 'lead' ? `${formatMinutes(e.minutes)} warning` : e.kind === 'due' ? "time's up" : `${formatMinutes(e.minutes)} overdue`;
+  const kicker = `${alarm} · ${rule}`;
 
-  // The retrospective isn't a deadline: its target is the clock-out instant and the copy
-  // stays at "warn" throughout.
-  if (e.id === 'retro') {
-    if (e.kind === 'lead') {
-      return {
-        kicker: `${alarm} · ${formatMinutes(e.minutes)} before clock-out`,
-        title: 'Look back before you clock out',
-        body: `Your day ends at ${target}. Compare what you planned with what you did while it's fresh.`,
-        tone: 'warn',
-      };
-    }
-    if (e.kind === 'due') {
-      return {
-        kicker: `${alarm} · clock-out`,
-        title: 'Clocking out? Do the retrospective first.',
-        body: `You reached your ${day} at ${target}. Two minutes on what went to plan and what didn't.`,
-        tone: 'warn',
-      };
-    }
-    return {
-      kicker: `${alarm} · ${formatMinutes(e.minutes)} overdue`,
-      title: `Retrospective is ${formatMinutes(e.minutes)} overdue`,
-      body: `Your day ended at ${target}. The retrospective card is on today's sheet.`,
-      tone: 'warn',
-    };
-  }
-
-  if (e.kind === 'lead') {
-    const kicker = `${alarm} · ${formatMinutes(e.minutes)} warning`;
-    // The kicker names the rule that fired; the title says how long is left now, which is less
-    // when the check came late.
-    const left = formatMinutes(Math.min(e.minutes, Math.max(1, Math.ceil((e.target - ctx.now) / MINUTE_MS))));
-    if (e.id === 'lunchBy') {
+  // A due event can be seen late (the app opened after the target, with repeats off), so a due
+  // body gives the target's time and never says that it is that time now.
+  switch (e.id) {
+    case 'retro':
+      // The retrospective isn't a deadline: its target is the clock-out instant and the copy
+      // stays at "warn" throughout.
+      if (e.kind === 'lead') {
+        return {
+          kicker: `${alarm} · ${formatMinutes(e.minutes)} before clock-out`,
+          title: 'Look back before you clock out',
+          body: `Your day ends at ${target}. Compare what you planned with what you did while it's fresh.`,
+          tone: 'warn',
+        };
+      }
+      if (e.kind === 'due') {
+        return {
+          kicker: `${alarm} · clock-out`,
+          title: 'Clocking out? Do the retrospective first.',
+          body: `You reached your ${day} at ${target}. Two minutes on what went to plan and what didn't.`,
+          tone: 'warn',
+        };
+      }
       return {
         kicker,
-        title: `Lunch in ${left}`,
-        body: `Lunch must start by ${target}, ${formatMinutes(ctx.lunchDeadlineMinutes)} after clocking in at ${clockIn}.`,
+        title: `Retrospective is ${formatMinutes(e.minutes)} overdue`,
+        body: `Your day ended at ${target}. The retrospective card is on today's sheet.`,
         tone: 'warn',
       };
-    }
-    if (e.id === 'secondMeal') return { kicker, title: `Second meal break in ${left}`, body: mealWhy, tone: 'warn' };
-    return {
-      kicker,
-      title: `Clock out in ${left}`,
-      body: `Your ${day} day ends at ${target} (clocked in ${clockIn}). Start wrapping up.`,
-      tone: 'warn',
-    };
-  }
-  if (e.kind === 'due') {
-    // A due event can be seen late (the app opened after the target, with repeats off), so a
-    // body gives the target's time and never says that it is that time now.
-    const kicker = `${alarm} · time's up`;
-    if (e.id === 'lunchBy') return { kicker, title: 'Take lunch now', body: `Your lunch deadline is ${target}. Start your break.`, tone: 'danger' };
-    if (e.id === 'secondMeal') {
+    case 'lunchBy':
+      if (e.kind === 'lead') {
+        return {
+          kicker,
+          title: `Lunch in ${left}`,
+          body: `Lunch must start by ${target}, ${formatMinutes(ctx.lunchDeadlineMinutes)} after clocking in at ${clockIn}.`,
+          tone: 'warn',
+        };
+      }
+      if (e.kind === 'due') return { kicker, title: 'Take lunch now', body: `Your lunch deadline is ${target}. Start your break.`, tone: 'danger' };
       return {
         kicker,
-        title: 'Take your second meal break',
-        body: `You reached ${mealHours} of work at ${target}. California requires a second 30-minute meal period by then unless you've waived it.`,
+        title: `Lunch is ${formatMinutes(e.minutes)} overdue`,
+        body: `Your lunch deadline was ${target}. Start your break as soon as you can.`,
         tone: 'danger',
       };
-    }
-    return { kicker, title: 'Time to clock out', body: `You reached your ${day} for today at ${target}. Punch out now.`, tone: 'danger' };
+    case 'secondMeal':
+      if (e.kind === 'lead') {
+        return {
+          kicker,
+          title: `Second meal break in ${left}`,
+          body: `Your ${mealHours} of work ends at ${target}. A second meal period is due before then.`,
+          tone: 'warn',
+        };
+      }
+      if (e.kind === 'due') {
+        return {
+          kicker,
+          title: 'Take your second meal break',
+          body: `You reached ${mealHours} of work at ${target}. A second meal period was due by then.`,
+          tone: 'danger',
+        };
+      }
+      return {
+        kicker,
+        title: `Second meal break is ${formatMinutes(e.minutes)} overdue`,
+        body: `Your ${mealHours} of work ended at ${target}. Take your second meal period as soon as you can.`,
+        tone: 'danger',
+      };
+    case 'clockOut':
+      if (e.kind === 'lead') {
+        return {
+          kicker,
+          title: `Clock out in ${left}`,
+          body: `Your ${day} day ends at ${target} (clocked in ${clockIn}). Start wrapping up.`,
+          tone: 'warn',
+        };
+      }
+      if (e.kind === 'due')
+        return { kicker, title: 'Time to clock out', body: `You reached your ${day} for today at ${target}. Punch out now.`, tone: 'danger' };
+      return {
+        kicker,
+        title: `Clock out is ${formatMinutes(e.minutes)} overdue`,
+        body: `Your day ended at ${target}. You're working past your ${day} target.`,
+        tone: 'danger',
+      };
   }
-  const kicker = `${alarm} · ${formatMinutes(e.minutes)} overdue`;
-  if (e.id === 'lunchBy') {
-    return {
-      kicker,
-      title: `Lunch is ${formatMinutes(e.minutes)} overdue`,
-      body: `Your lunch deadline was ${target}. Start your break as soon as you can.`,
-      tone: 'danger',
-    };
-  }
-  if (e.id === 'secondMeal') {
-    return {
-      kicker,
-      title: `Second meal break is ${formatMinutes(e.minutes)} overdue`,
-      body: `Your ${mealHours} of work ended at ${target}. Take a 30-minute break as soon as you can.`,
-      tone: 'danger',
-    };
-  }
-  return {
-    kicker,
-    title: `Clock out is ${formatMinutes(e.minutes)} overdue`,
-    body: `Your day ended at ${target}. You're working past your ${day} target.`,
-    tone: 'danger',
-  };
 }
