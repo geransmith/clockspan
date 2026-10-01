@@ -125,12 +125,19 @@ describe('start', () => {
     const theirs = makeSession({ id: 7, date: '2026-09-27', label: 'Theirs' });
     vi.mocked(api.startSession).mockRejectedValue(apiError(409, { error: 'running', session: theirs }));
     const { result } = await renderRunning(null);
+    vi.mocked(api.getDay).mockClear();
     await act(() => result.current.timer.start(TODAY, 1500, 'Mine'));
     expect(api.startSession).toHaveBeenCalledWith(TODAY, 1500, 'Mine', null);
     expect(result.current.timer.running?.id).toBe(7);
     // Not a day the store holds: it loads with the row when it is opened.
-    expect(api.getDay).not.toHaveBeenCalledWith('2026-09-27');
+    expect(api.getDay).not.toHaveBeenCalled();
     expect(alert).toHaveBeenCalledWith(expect.objectContaining({ title: TIMER_ELSEWHERE.title, tag: 'timer-elsewhere', sound: false }));
+
+    // A day the store holds is fetched again, so its log has the row.
+    await act(() => result.current.store.load('2026-09-27'));
+    vi.mocked(api.getDay).mockClear();
+    await act(() => result.current.timer.start(TODAY, 1500, 'Mine'));
+    expect(vi.mocked(api.getDay).mock.calls).toEqual([['2026-09-27']]);
   });
 
   it('rethrows any other failure for the card to show', async () => {
