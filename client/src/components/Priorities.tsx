@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useCelebration, type Moment } from '../hooks/useCelebration';
 import { useDebouncedDraft } from '../hooks/useDebouncedDraft';
 import { useSettings } from '../hooks/useSettings';
 import { unlockAudio } from '../lib/alerts';
 import { LEFT_OPEN, WARNING_ACTIONS } from '../lib/copy';
-import { carryOver, editPriority, hasText, padPriorities, pickWarning, removePriority, warnThreshold, warningKind, type WarningKind } from '../lib/priorities';
+import { planNext } from '../lib/plan';
+import { editPriority, hasText, padPriorities, pickWarning, removePriority, warnThreshold, warningKind, type WarningKind } from '../lib/priorities';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { LIMITS, type Priority } from '../types';
 import { Burst } from './Burst';
@@ -30,16 +32,9 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
   const [warning, setWarning] = useState<{ kind: WarningKind; text: string } | null>(null);
   const lastWarning = useRef<string | undefined>(undefined);
   const inputs = useRef(new Map<number, HTMLTextAreaElement>());
-  const focusNext = useRef<number | null>(null);
   // A tick gets a burst from its checkbox.
   const [ticked, setTicked] = useState<Moment | null>(null);
   const { anchor, burst } = useCelebration<HTMLInputElement>(ticked, 'priorityDone');
-
-  useEffect(() => {
-    if (focusNext.current == null) return;
-    inputs.current.get(focusNext.current)?.focus();
-    focusNext.current = null;
-  }, [local.length]);
 
   const edit = (position: number, patch: Partial<Priority>, now = false) => {
     editList(
@@ -47,11 +42,19 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
       now,
     );
   };
-  const doneRows = local.filter((p) => p.done && hasText(p));
+  const doneRows = local.filter((p) => p.done);
   const done = doneRows.length;
   const total = local.filter(hasText).length;
 
   const addRow = (force = false) => {
+    // The nudge is about a written list, so an empty row is where a new priority goes. Focusing
+    // it inside the tap is what lets iOS raise the keyboard.
+    const empty = local.find((p) => !hasText(p));
+    if (empty) {
+      setWarning(null);
+      inputs.current.get(empty.position)?.focus();
+      return;
+    }
     if (local.length >= MAX_PRIORITIES) return;
     if (!force && local.length >= warnThreshold(count)) {
       const kind = warningKind(done, total);
@@ -62,10 +65,16 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
     }
     setWarning(null);
     const next = [...local, { position: local.length + 1, text: '', done: false, uid: null, addedAt: null }];
-    focusNext.current = next.length;
-    editList(next, true);
+    // Rendered at once, so the new row is there to take focus inside the same tap.
+    flushSync(() => editList(next, true));
+    inputs.current.get(next.length)?.focus();
   };
-  const bringOver = (rows: Priority[]) => editList(carryOver(rows, count), true);
+  // The rows are new to today (fresh uids, `addedAt` now), so the retro counts them as planned
+  // unless a session ran first. A text that appears twice comes over once.
+  const bringOver = (rows: Priority[]) => {
+    const texts = rows.map((p) => p.text);
+    editList(padPriorities(planNext([], texts).rows, count), true);
+  };
   const removeRow = (position: number) => editList(removePriority(local, position), true);
 
   return (

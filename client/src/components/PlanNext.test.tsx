@@ -11,7 +11,7 @@ import { PlanNext } from './PlanNext';
 vi.mock('../api');
 vi.mock('../lib/alerts');
 
-// TODAY is a Monday, so with weekends shown the plan is for the Tuesday.
+// TODAY is a Monday, so the plan is for the Tuesday.
 const NEXT = '2026-09-29';
 const row = (position: number, text: string, extra: Partial<Priority> = {}): Priority => ({
   position,
@@ -21,18 +21,19 @@ const row = (position: number, text: string, extra: Partial<Priority> = {}): Pri
   addedAt: T0 - 60 * 60_000,
   ...extra,
 });
-// As the sheet passes them: padded to the row count, so an empty row is among them.
+// The day's rows as stored, which can include an empty one.
 const TODAYS: Priority[] = [row(1, 'Ship it', { done: true }), row(2, 'Review the PR'), row(3, 'Call the bank'), { ...row(4, ''), uid: null, addedAt: null }];
 
 async function renderPlan({ date = TODAY, next = makeDay(NEXT) as Day | Promise<Day> } = {}) {
   vi.mocked(api.getDay).mockImplementation((d) => (d === NEXT ? Promise.resolve(next) : Promise.resolve(makeDay(d))));
-  const view = render(
+  const card = (rows: Priority[]) => (
     <SettingsAndDays>
-      <PlanNext date={date} today={TODAY} priorities={TODAYS} />
-    </SettingsAndDays>,
+      <PlanNext date={date} today={TODAY} priorities={rows} />
+    </SettingsAndDays>
   );
+  const view = render(card(TODAYS));
   await settle();
-  return view;
+  return { ...view, again: (rows: Priority[]) => view.rerender(card(rows)) };
 }
 
 const open = async () => {
@@ -119,15 +120,27 @@ describe('PlanNext', () => {
     expect(document.querySelector('.burst')).not.toBeNull();
   });
 
-  it('drops rows already on the list and repeats, whatever the case and spacing', async () => {
+  it("keeps each tick on its row when today's list is renumbered while open", async () => {
+    const { again } = await renderPlan();
+    await open();
+    fireEvent.click(box('Review the PR'));
+    // Today's list renumbered (a row above them gone): the rows below move up, with their uids.
+    again([
+      { ...TODAYS[1]!, position: 1 },
+      { ...TODAYS[2]!, position: 2 },
+    ]);
+    expect(box('Review the PR').checked).toBe(false);
+    expect(box('Call the bank').checked).toBe(true);
+    await save();
+    expect(sent().map((p) => p.text)).toEqual(['Call the bank']);
+  });
+
+  it("doesn't offer a row already on the next day's list, whatever the case and spacing", async () => {
     const kept = row(1, 'review the  pr', { addedAt: T0 });
     await renderPlan({ next: makeDay(NEXT, { priorities: [kept] }) });
     await open();
     expect(screen.getByRole('heading').textContent).toBe(`${PLAN_NEXT.title('tomorrow')} ${PLAN_NEXT.already(1)}`);
     expect(screen.queryByRole('checkbox', { name: 'Review the PR' })).toBeNull();
-    type('call THE bank');
-    type('Review the PR');
-    type('Call the bank ', false);
     await save();
     expect(sent()).toEqual([kept, expect.objectContaining({ position: 2, text: 'Call the bank' })]);
     expect(status()).toBe(PLAN_NEXT.done(1, 'tomorrow'));

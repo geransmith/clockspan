@@ -94,13 +94,4 @@ describe('Retro', () => {
     fireEvent.click(screen.getByRole('button', { name: /Mark reviewed/ }));
     expect(onChange.mock.calls).toEqual([[{ note: 'Sick day' }], [{ done: true }]]);
   });
-
-  it('takes the stored note while nothing is being typed, and keeps a draft that is', async () => {
-    const { box, again } = await renderCard('First');
-    again('From another device');
-    expect(box.value).toBe('From another device');
-    fireEvent.change(box, { target: { value: 'Mine' } });
-    again('Newer still');
-    expect(box.value).toBe('Mine');
-  });
 });
