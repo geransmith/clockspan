@@ -4,8 +4,9 @@
 
 The newest release is supported. A fix ships as a patch release of it, so
 `ghcr.io/geransmith/clockspan:latest`, its major tag (`:X`, e.g. `:2`) and its minor tag
-(`:X.Y`, e.g. `:2.1`) all pick it up; a pinned `X.Y.Z` tag, or a major or minor tag of an
-older release, needs updating by hand. The README's Docker section has the commands.
+(`:X.Y`, e.g. `:2.1`) all pick it up; a pinned `X.Y.Z` tag, or the tag of an older major or
+minor version (`:1` once 2.0 is out, `:2.0` once 2.1 is), needs updating by hand. The README's
+Docker section has the commands.
 
 ## Reporting a vulnerability
 
