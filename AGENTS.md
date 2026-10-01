@@ -188,9 +188,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   other tree; the client's `types.ts` re-exports the shared types so component imports stay
   short, and date helpers (`addDays`, `todayKey`, `MINUTE_MS`, …) come straight from
   `shared/dates.js`, never through another module. Every success body has a `shared/` type
-  (one in `api.ts`, or `Settings`), a failure is `{ error }`, which the client throws as its
-  message, and the timer-start 409 is `SessionConflict`. Builders are annotated with these
-  types (`sessionRowToJson(): Session`, `dayJson(): Day`, …) and each route's answer names its
+  (one in `api.ts`, or `Settings`); a failure is `{ error }`, which the client throws as its
+  message; the timer-start 409 is `SessionConflict`. Builders are annotated with these types
+  (`sessionRowToJson(): Session`, `dayJson(): Day`, …) and each route's answer names its
   envelope with `satisfies` (`res.json({ deleted } satisfies PruneResult)`), while
   `client/src/api.ts` reads the same types, so a field renamed on one side fails `typecheck`
   on the other. Server-only row types (`UserRow` in `db.ts`, a day's rows in
@@ -383,9 +383,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   running row included. That queue is not ordered against the day store's `session:<id>` queue,
   which carries the other rows' edits and deletes. `useSettings` sends its PUTs and resets one
   at a time. A new edit of a day's rows, the settings or the timer goes through one of these,
-  never straight to `api`; the day store's `pruneBefore` is the one write sent on no queue, as
-  the day store's rule explains. Reads are not queued, and in all three stores a read's answer
-  never replaces a change still on its way.
+  never straight to `api`; the day store's `pruneBefore` is the one store write sent on no
+  queue, as the day store's rule explains. Reads are not queued, and in all three stores a
+  read's answer never replaces a change still on its way.
 - **Punch positions are fixed**: 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in
   pairs, and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches`
   enforces it). Kind is parity (`kindForPosition`, `shared/punches.ts`). The math evaluates *set* punches
@@ -413,9 +413,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   and the card's note start when the switch is set, not when the day runs over. The setting
   `overtimeApproval` shows/hides the switch and banner button, and with it off the Clock out
   tile reads time past the day as "past your day" rather than a red "Over by"; a flagged day
-  counts only while the setting is on: `overtimeOn`
-  (`lib/timeclock.ts`) decides, which `Timeclock` (the tiles get the flag from it) and
-  `useTodayAlarms` call.
+  counts only while the setting is on: `overtimeOn` (`lib/timeclock.ts`) decides, which
+  `Timeclock` (the tiles get the flag from it) and `useTodayAlarms` call.
 - **`mealRules: false` turns the meal periods off in the math, not in the components.**
   `computeTimeclock` then never needs a lunch (`not-needed`, so no lunch alarm and no lunch
   added to the clock-out time) and `secondMealApplies` is false; a lunch that was punched still
@@ -513,10 +512,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   way the sticker chart's `stickers` setting does.
 - **A per-user setting**: add it to the `Settings` type and `DEFAULT_SETTINGS` in
   `shared/settings.ts`, and a number's bounds to `SETTING_LIMITS` there → validate it in
-  `mergeSettings()` (`server/settings.ts`; `flag(key)` takes a switch, `limited(key)` checks a number against its
-  bounds) → add the control to its tab in `client/src/components/settings/` (`TimeclockTab`,
-  `AlarmsTab`, `SheetTab`, `DataTab`; the Sheet tab's "History" section holds the calendar's
-  switches): a `DurationField` (`components/DurationField.tsx`) for hours and
+  `mergeSettings()` (`server/settings.ts`; `flag(key)` takes a switch, `limited(key)` checks a
+  number against its bounds) → add the control to its tab in `client/src/components/settings/`
+  (`TimeclockTab`, `AlarmsTab`, `SheetTab`, `DataTab`; the Sheet tab's "History" section holds
+  the calendar's switches): a `DurationField` (`components/DurationField.tsx`) for hours and
   minutes or a `NumberField` (`settings/controls.tsx`) for one number, whose `unit` suffix is
   "min" unless given, each with `{...SETTING_LIMITS.<key>}` for `min` and `max`; a `Toggle` for
   a switch. `NumberInput` on its own puts several numbers on one row, like the timer's start
@@ -535,12 +534,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   from `lib/alerts.ts`, raised only once `useSettings().loaded` is true (see "Nothing alerts
   before the settings have loaded"), or through a `useCelebration(moment, '<event>')` for a
   moment worth a burst; never through a bare `playSound`.
-- **An alarm target** (existing: `lunchBy`, `clockOut`, `secondMeal`, `retro`): expose the instant from
-  `computeTimeclock` → add a target to `alarmTargets()` in `lib/alarms.ts`, with an `armed` rule
-  and a test case (a rule the card also needs goes in a pure helper like `secondMealApplies`) → add its default
-  under `alarms` in `shared/settings.ts` and the `AlarmId` union there, and its `mergeAlarm(…)`
-  line in `mergeSettings`'s `alarms` block (`server/settings.ts`; the type makes a missing one
-  an error) → add an `AlarmEditor` in
+- **An alarm target** (existing: `lunchBy`, `clockOut`, `secondMeal`, `retro`): expose the
+  instant from `computeTimeclock` → add a target to `alarmTargets()` in `lib/alarms.ts`, with
+  an `armed` rule and a test case (a rule the card also needs goes in a pure helper like
+  `secondMealApplies`) → add its default under `alarms` in `shared/settings.ts` and the
+  `AlarmId` union there, and its `mergeAlarm(…)` line in `mergeSettings`'s `alarms` block
+  (`server/settings.ts`; the type makes a missing one an error) → add an `AlarmEditor` in
   `settings/AlarmsTab.tsx` → its name in `ALARM_NAMES` and a `case` in `describeEvent()`'s
   `switch (e.id)` (both in `lib/alarms.ts`; the type makes a missing name an error, and
   typecheck and the `switch-exhaustiveness-check` lint refuse a missing case): the kicker
@@ -564,19 +563,19 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   on it.
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
   `currentUser(req).id` (`requireDate` on a `/:date` route; a `/:id` route on the sessions or
-  breaks router is checked by the router itself and reads its row with `owned(res)`; a new table
-  addressed by id gets its entry in `OwnedRows` and `NOT_FOUND` and a router from
-  `ownedRouter()`, all in `routes/shared.ts`), validate input
-  (cast `req.body` to `{ field?: unknown }` and check each field; the `no-unsafe-*` lint
-  refuses reading it as `any`), return `{ error }` JSON on failure → add the call to
-  `client/src/api.ts`, with a row in `client/src/api.test.ts`'s `ROUTES` table for its method,
-  path and body (the coverage gate needs it), and the response type to `shared/api.ts`,
-  re-exported by name from `client/src/types.ts`, which `api.ts` imports from (the route's
+  breaks router is checked by the router itself and reads its row with `owned(res)`; a new
+  table addressed by id gets its entry in `OwnedRows` and `NOT_FOUND` and a router from
+  `ownedRouter()`, all in `routes/shared.ts`), validate input (cast `req.body` to
+  `{ field?: unknown }` and check each field; the `no-unsafe-*` lint refuses reading it as
+  `any`), return `{ error }` JSON on failure → add the call to `client/src/api.ts`, with a row
+  in `client/src/api.test.ts`'s `ROUTES` table for its method, path and body (the coverage gate
+  needs it), and the response type to `shared/api.ts`, re-exported by name from
+  `client/src/types.ts`, which `api.ts` imports from (the route's
   `res.json(… satisfies <Type>)` and the client's `request<Type>` both name it) → cover it in
   that router's `*.test.ts`: happy path, each 400, and that another user gets a 404/empty
-  result (the scoping test is not optional). A new `/:date` route also
-  gets a row in the bad-date table at the end of `server/routes/days.test.ts`: unlike the `/:id`
-  ownership check, that table does not pick up new routes on its own. The seed's manifest types
+  result (the scoping test is not optional). A new `/:date` route also gets a row in the
+  bad-date table at the end of `server/routes/days.test.ts`: unlike the `/:id` ownership check,
+  that table does not pick up new routes on its own. The seed's manifest types
   (`SeededDay` and the aliases beside it in `server/dev/seed.ts`) are built from `Day`,
   `Session`, `Priority` and `Break`, so `typecheck` fails there on a new field until the
   templates set it, or it is added to the type's `Omit` list if the server derives it (like
