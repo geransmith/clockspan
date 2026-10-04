@@ -1,18 +1,24 @@
-import { DEFAULT_SETTINGS, SETTING_LIMITS, TIMER_MINUTES, type Theme } from '../../../../shared/settings.js';
+import { DEFAULT_SETTINGS, SETTING_LIMITS, THEMES, TIMER_MINUTES, type Theme } from '../../../../shared/settings.js';
+import { stickerReasons } from '../../lib/stickers';
 import type { Settings } from '../../types';
 import { Toggle } from '../Toggle';
 import { NumberField, NumberInput, Section } from './controls';
 
+const THEME_LABELS: Record<Theme, string> = { auto: 'Automatic', light: 'Light', dark: 'Dark' };
+
 export function SheetTab({ settings, set }: { settings: Settings; set: (patch: Partial<Settings>) => void }) {
+  const reasons = stickerReasons(settings.trackHours).map((r) => r.label.toLowerCase());
   return (
     <>
       <Section title="Appearance">
         <div className="setting-row">
           <span>Theme</span>
           <select className="input select" value={settings.theme} onChange={(e) => set({ theme: e.target.value as Theme })} aria-label="Theme">
-            <option value="auto">Automatic</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
+            {THEMES.map((t) => (
+              <option key={t} value={t}>
+                {THEME_LABELS[t]}
+              </option>
+            ))}
           </select>
         </div>
         <p className="muted small">Automatic follows your device.</p>
@@ -74,7 +80,7 @@ export function SheetTab({ settings, set }: { settings: Settings; set: (patch: P
       <Section title="History">
         <Toggle
           label="Sticker chart"
-          hint="Every day on the calendar wears a sticker for each thing it did: clocked out, lunch taken, all priorities done, a focus session logged, retrospective reviewed."
+          hint={`Every day on the calendar wears a sticker for each thing it did: ${reasons.join(', ')}.`}
           checked={settings.stickers}
           onChange={(v) => set({ stickers: v })}
         />
