@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
-import { TEST_SETTINGS } from '../test/fixtures';
+import { punchesAt, TEST_SETTINGS } from '../test/fixtures';
 import { alarmTargets, describeEvent, dueEvents, eventKey, type AlarmEvent, type AlarmTarget } from './alarms';
 import { formatTime } from './format';
 import { setCardVisible } from './layout';
-import { computeTimeclock, emptyPunches } from './timeclock';
+import { computeTimeclock } from './timeclock';
 import type { AlarmId, AlarmSettings } from '../types';
 
 const T = new Date(2026, 8, 16, 13, 0).getTime();
@@ -115,9 +115,7 @@ describe('alarmTargets', () => {
   const s = TEST_SETTINGS;
   const IN = new Date(2026, 8, 16, 8, 0).getTime();
   const day = { overtimeApproved: false, retroDone: false };
-  // Punches in row order (in, lunch out, lunch in, out).
-  const rows = (...at: (number | null)[]) => emptyPunches().map((p, i) => ({ ...p, at: at[i] ?? null }));
-  const tc = (now: number, ...at: (number | null)[]) => computeTimeclock(rows(...at), s, now);
+  const tc = (now: number, ...at: (number | null)[]) => computeTimeclock(punchesAt(...at), s, now);
   const armed = (targets: AlarmTarget[]) => Object.fromEntries(targets.map((t) => [t.id, t.armed]));
 
   it('has nothing armed before clock-in', () => {
@@ -142,7 +140,7 @@ describe('alarmTargets', () => {
   it('has no lunch alarm on a day short enough to need no lunch', () => {
     // A 4 h day, 50 min over, is still inside the 5 h lunch window; being over brings the second meal in.
     const half = { ...s, workMinutes: 240 };
-    const short = computeTimeclock(rows(IN), half, IN + 4 * HOUR_MS + 50 * MINUTE_MS);
+    const short = computeTimeclock(punchesAt(IN), half, IN + 4 * HOUR_MS + 50 * MINUTE_MS);
     expect(short.lunchStatus).toBe('not-needed');
     expect(armed(alarmTargets(short, half, day))).toEqual({ lunchBy: false, clockOut: true, secondMeal: true, retro: true });
   });

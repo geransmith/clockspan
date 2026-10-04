@@ -90,7 +90,8 @@ client/                 Vite root → dist/client
                         (Saving… / Saved / Not saved) and useLastTab (the tab it reopens on) serve the
                         settings dialog. src/test/fixtures.ts has the plain factories and
                         TEST_SETTINGS (no React); src/test/hooks.tsx re-exports fixtures.ts and
-                        AppProviders (as AllProviders) and has SettingsAndDays and the act() helpers
+                        AppProviders (as AllProviders) and has SettingsAndDays, serveRange (a mocked
+                        getRange that answers from a list of days) and the act() helpers
   src/components/       the cards, History (Calendar + Review), Banners, FinishChoice, and the pieces
                         several of them share; settings/ holds SettingsDialog (the shell and tabs), a
                         file per tab, and controls.tsx

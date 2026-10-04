@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { completedSession, makeDay, makeSession, makeSummary, TEST_SETTINGS } from '../test/fixtures';
+import { atTime } from '../../../shared/dates.js';
+import { completedSession, makeDay, makeSession, makeSummary, punchesAt, TEST_SETTINGS } from '../test/fixtures';
 import type { Punch } from '../types';
 import { STICKER_EMOJI } from './copy';
 import { calendarMonth } from './calendar';
@@ -14,22 +15,20 @@ import {
   type DaySummary,
   type StickerSettings,
 } from './stickers';
-import { dayTimeclock, emptyPunches } from './timeclock';
+import { dayTimeclock } from './timeclock';
 
 const settings = TEST_SETTINGS;
 const TODAY = '2026-09-17'; // a Thursday
 const NOW = new Date(2026, 8, 17, 15, 0).getTime();
 
 function punches(date: string, times: (string | null)[]): Punch[] {
-  const rows = emptyPunches();
-  times.forEach((t, i) => {
-    if (!t) return;
-    const [h, m] = t.split(':').map(Number);
-    const d = new Date(`${date}T00:00:00`);
-    d.setHours(h!, m!, 0, 0);
-    rows[i]!.at = d.getTime();
-  });
-  return rows;
+  return punchesAt(
+    ...times.map((t) => {
+      if (!t) return null;
+      const [h, m] = t.split(':').map(Number);
+      return atTime(date, h!, m!);
+    }),
+  );
 }
 
 /** What the calendar gives a day: its stickers, judged on its timeclock worked out once. */

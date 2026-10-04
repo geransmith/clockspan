@@ -2,20 +2,16 @@
 import { cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { alert, dismissByTag } from '../lib/alerts';
-import { computeTimeclock, emptyPunches, type TimeclockResult } from '../lib/timeclock';
-import { makeSettings, MIN, T0, TODAY } from '../test/hooks';
+import { computeTimeclock, type TimeclockResult } from '../lib/timeclock';
+import { MINUTE_MS } from '../../../shared/dates.js';
+import { makeSettings, punchesAt, T0, TODAY } from '../test/hooks';
 import type { Settings } from '../types';
 import { useAlarms, type AlarmDayState } from './useAlarms';
 
 vi.mock('../lib/alerts');
 
 const settings = makeSettings();
-const tcAt = (now: number, ...at: (number | null)[]) =>
-  computeTimeclock(
-    emptyPunches().map((p, i) => ({ ...p, at: at[i] ?? null })),
-    settings,
-    now,
-  );
+const tcAt = (now: number, ...at: (number | null)[]) => computeTimeclock(punchesAt(...at), settings, now);
 
 interface Props {
   date: string;
@@ -34,9 +30,9 @@ function renderAlarms(props: Partial<Props> = {}) {
 const tags = () => vi.mocked(alert).mock.calls.map(([a]) => a.tag);
 
 // Lunch is due 5 h after clock-in by default: clocked in 4 h 46 m ago, it is due in 14 min.
-const lunchSoon = tcAt(T0, T0 - 286 * MIN);
+const lunchSoon = tcAt(T0, T0 - 286 * MINUTE_MS);
 // Clocked in 8 h 35 m ago with a 30 min lunch: 5 min past the 8 h day.
-const overDay = tcAt(T0, T0 - 515 * MIN, T0 - 300 * MIN, T0 - 270 * MIN);
+const overDay = tcAt(T0, T0 - 515 * MINUTE_MS, T0 - 300 * MINUTE_MS, T0 - 270 * MINUTE_MS);
 
 beforeEach(() => {
   localStorage.clear();
@@ -70,8 +66,8 @@ describe('firing', () => {
     rerender({ date: TODAY, tc: lunchSoon, now: T0 + 1000, day: NO_DAY, settings });
     expect(alert).toHaveBeenCalledTimes(1);
 
-    const later = T0 + 10 * MIN;
-    rerender({ date: TODAY, tc: tcAt(later, T0 - 286 * MIN), now: later, day: NO_DAY, settings });
+    const later = T0 + 10 * MINUTE_MS;
+    rerender({ date: TODAY, tc: tcAt(later, T0 - 286 * MINUTE_MS), now: later, day: NO_DAY, settings });
     expect(alert).toHaveBeenCalledTimes(2);
     expect(vi.mocked(alert).mock.calls[1]![0].kicker).toMatch(/5 min/);
   });
@@ -102,9 +98,9 @@ describe('firing', () => {
 
   it('rings once for two tabs open on one device', () => {
     // Both tabs were opened before the warning, so each holds its own copy of what fired.
-    const early = tcAt(T0 - 5 * MIN, T0 - 286 * MIN);
-    const a = renderAlarms({ tc: early, now: T0 - 5 * MIN });
-    const b = renderAlarms({ tc: early, now: T0 - 5 * MIN });
+    const early = tcAt(T0 - 5 * MINUTE_MS, T0 - 286 * MINUTE_MS);
+    const a = renderAlarms({ tc: early, now: T0 - 5 * MINUTE_MS });
+    const b = renderAlarms({ tc: early, now: T0 - 5 * MINUTE_MS });
     expect(alert).not.toHaveBeenCalled();
     a.rerender({ date: TODAY, tc: lunchSoon, now: T0, day: NO_DAY, settings });
     b.rerender({ date: TODAY, tc: lunchSoon, now: T0, day: NO_DAY, settings });
@@ -153,7 +149,7 @@ describe('clock-out and retro', () => {
     const { rerender } = renderAlarms({ tc: overDay, day: { ...NO_DAY, retroDone: true } });
     expect(tags()).toEqual(['alarm:clockOut']);
     // The Clock out punch moved 10 min later: the clock-out banner is stale.
-    const moved = { ...overDay, clockOutAt: overDay.clockOutAt! + 10 * MIN };
+    const moved = { ...overDay, clockOutAt: overDay.clockOutAt! + 10 * MINUTE_MS };
     rerender({ date: TODAY, tc: moved, now: T0, day: { ...NO_DAY, retroDone: true }, settings });
     expect(dismissByTag).toHaveBeenCalledWith('alarm:clockOut');
   });

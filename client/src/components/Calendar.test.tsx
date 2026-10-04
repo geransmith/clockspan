@@ -4,9 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { LOAD_FAILED } from '../lib/copy';
 import { formatMonth } from '../lib/format';
-import { emptyPunches } from '../lib/timeclock';
-import { makeDay, makeSettings, SettingsAndDays, settle } from '../test/hooks';
-import type { Day } from '../types';
+import { makeDay, makeSettings, punchesAt, serveRange, SettingsAndDays, settle } from '../test/hooks';
 import { Calendar } from './Calendar';
 
 vi.mock('../api');
@@ -16,12 +14,7 @@ const LAST = '2026-09-30';
 const FIRST = '2026-10-01';
 const LAST_EVENING = new Date(2026, 8, 30, 17).getTime();
 const AFTER_MIDNIGHT = new Date(2026, 9, 1, 0, 1).getTime();
-const clockedIn = makeDay(LAST, { punches: emptyPunches().map((p) => (p.position === 0 ? { ...p, at: new Date(2026, 8, 30, 9).getTime() } : p)) });
-
-/** The server answers a range with the days it holds in it. */
-function serve(days: Day[]) {
-  vi.mocked(api.getRange).mockImplementation((from, to) => Promise.resolve({ days: days.filter((d) => d.date >= from && d.date <= to) }));
-}
+const clockedIn = makeDay(LAST, { punches: punchesAt(new Date(2026, 8, 30, 9).getTime()) });
 
 function calendar(today: string, now: number) {
   return (
@@ -45,7 +38,7 @@ afterEach(() => {
 
 describe('Calendar', () => {
   it('keeps its month and picked day over midnight, and This month moves on', async () => {
-    serve([clockedIn]);
+    serveRange([clockedIn]);
     const view = render(calendar(LAST, LAST_EVENING));
     await settle();
     expect(screen.getByRole('group', { name: formatMonth(LAST) })).toBeTruthy();
@@ -69,7 +62,7 @@ describe('Calendar', () => {
   });
 
   it('shows a failed load with Try again, which loads the month', async () => {
-    serve([clockedIn]);
+    serveRange([clockedIn]);
     vi.mocked(api.getRange).mockRejectedValueOnce(new Error('Request failed (502)'));
     render(calendar(LAST, LAST_EVENING));
     await settle();
@@ -83,7 +76,7 @@ describe('Calendar', () => {
 
   it('reads a picked day with nothing on it as nothing recorded', async () => {
     // The store's copy of a day the server has no row for: padded punches and nothing else.
-    serve([makeDay(LAST)]);
+    serveRange([makeDay(LAST)]);
     render(calendar(LAST, LAST_EVENING));
     await settle();
     expect(picked().getAttribute('aria-label')).toMatch(/, nothing recorded$/);
