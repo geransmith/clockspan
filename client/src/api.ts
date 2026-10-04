@@ -91,8 +91,6 @@ export const resetSettings = () => request<Settings>('DELETE', '/api/settings');
 // ----- days -----
 /** The body of PUT /days/:date/retro: a field left out keeps its stored value. */
 export type RetroPatch = { note?: string; done?: boolean };
-/** What the log and the timer bar change on a session (PATCH /sessions/:id also takes plannedSeconds). */
-export type SessionEdit = { label?: string; priorityUid?: string | null };
 
 export const getDay = (date: string) => request<Day>('GET', `/api/days/${date}`);
 export const putPunches = (date: string, punches: Punch[]) =>
@@ -106,6 +104,9 @@ export const getPruneInfo = (before: string) => request<PruneInfo>('GET', `/api/
 export const pruneDays = (before: string) => request<PruneResult>('POST', '/api/days/prune', { before });
 
 // ----- sessions -----
+/** What the log and the timer bar change on a session (PATCH /sessions/:id also takes plannedSeconds). */
+export type SessionEdit = { label?: string; priorityUid?: string | null };
+
 export const getRunning = () => request<RunningResponse>('GET', '/api/sessions/running');
 export const startSession = (date: string, plannedSeconds: number, label: string, priorityUid: string | null = null) =>
   request<SessionResponse>('POST', `/api/days/${date}/sessions`, { plannedSeconds, label, priorityUid });
