@@ -5,7 +5,7 @@ import * as api from '../api';
 import { alert, dismissByTag, unlockAudio, type AlertOptions } from '../lib/alerts';
 import { todayKey } from '../../../shared/dates.js';
 import { BREAK, BREAK_SUGGESTION } from '../lib/copy';
-import { AllProviders, deferred, makeBreak, makeDay, makeSession, makeSettings, MIN, settle, T0, TODAY } from '../test/hooks';
+import { AllProviders, completedSession, deferred, endSession, makeBreak, makeDay, makeSession, makeSettings, MIN, settle, T0, TODAY } from '../test/hooks';
 import type { Day, Session } from '../types';
 import { useBreak } from './useBreak';
 import { useClock } from './useClock';
@@ -287,7 +287,7 @@ describe('across midnight', () => {
     vi.mocked(api.startSession).mockResolvedValue({ session });
     vi.mocked(api.getRunning).mockResolvedValue({ session });
     await act(() => result.current.timer.start(TODAY, 1500, 'Next'));
-    vi.mocked(api.cancelSession).mockResolvedValue({ session: { ...session, status: 'cancelled', endedAt: Date.now() } });
+    vi.mocked(api.cancelSession).mockResolvedValue({ session: endSession(session, { status: 'cancelled', endedAt: Date.now() }) });
     vi.mocked(api.getRunning).mockResolvedValue({ session: null });
     await act(() => result.current.timer.cancel());
     // Today is empty again, so yesterday's break is the one shown: ended, not back on the bar.
@@ -304,9 +304,8 @@ it('is only there inside its provider', () => {
 });
 
 describe('suggestions', () => {
-  /** A session of `minutes` that ended `gap` minutes before the next one started, `at` minutes before T0. */
-  const done = (id: number, at: number, minutes = 25): Session =>
-    makeSession({ id, startedAt: T0 - at * MIN, endedAt: T0 - (at - minutes) * MIN, status: 'completed', durationSeconds: minutes * 60 });
+  /** A completed 25-minute session that started `at` minutes before T0. */
+  const done = (id: number, at: number): Session => completedSession(id, T0 - at * MIN, 25 * 60);
 
   /** Today with `earlier` logged and a timer running since `startedAt`, finished by hand after `minutes` of focus. */
   async function finishByHand(minutes: number, earlier: Session[] = [], patch: Partial<typeof settings> = {}) {
@@ -316,7 +315,7 @@ describe('suggestions', () => {
     vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { sessions: [...earlier, running] }));
     const r = render();
     await settle();
-    vi.mocked(api.finishSession).mockResolvedValue({ session: { ...running, status: 'completed', endedAt: T0, durationSeconds: minutes * 60 } });
+    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(running, { endedAt: T0, durationSeconds: minutes * 60 }) });
     vi.mocked(api.getRunning).mockResolvedValue({ session: null });
     await act(() => r.result.current.timer.finish());
     return r;
@@ -380,13 +379,13 @@ describe('suggestions', () => {
     const running = makeSession({ date: '2026-09-27', startedAt: midnight - 20 * MIN, plannedSeconds: 30 * 60 });
     // Today already earned a break of its own, so a suggestion exists: only the check that it
     // belongs to the session just finished keeps it off the screen.
-    const todays = makeSession({ id: 9, status: 'completed', startedAt: midnight + MIN, endedAt: midnight + 4 * MIN, durationSeconds: 3 * 60 });
+    const todays = endSession(makeSession({ id: 9, startedAt: midnight + MIN }), { endedAt: midnight + 4 * MIN, durationSeconds: 3 * 60 });
     vi.mocked(api.getRunning).mockResolvedValue({ session: running });
     vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(makeDay(date, { sessions: date === TODAY ? [todays] : [running] })));
     const { result } = render();
     await settle();
     expect(result.current.next).toMatchObject({ minutes: 1, long: false, sessionId: 9 });
-    vi.mocked(api.finishSession).mockResolvedValue({ session: { ...running, status: 'completed', endedAt: Date.now(), durationSeconds: 25 * 60 } });
+    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(running, { endedAt: Date.now(), durationSeconds: 25 * 60 }) });
     await act(() => result.current.timer.finish());
     expect(result.current.timer.finished).not.toBeNull();
     expect(alert).not.toHaveBeenCalled();
@@ -400,7 +399,7 @@ describe('suggestions', () => {
     await settle();
     // The settings are in; today's sessions are not.
     expect(result.current.next).toEqual({ minutes: 7, long: false });
-    today.resolve(makeDay(TODAY, { sessions: [makeSession({ status: 'cancelled', endedAt: T0 })] }));
+    today.resolve(makeDay(TODAY, { sessions: [endSession(makeSession(), { status: 'cancelled', endedAt: T0 })] }));
     await settle();
     expect(result.current.next).toEqual({ minutes: 7, long: false });
   });

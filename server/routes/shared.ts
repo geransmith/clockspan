@@ -70,19 +70,19 @@ export interface PriorityRow {
   added_at: number | null;
 }
 
-export interface SessionRow {
+interface SessionRowFields {
   id: number;
   day_id: number;
   user_id: number;
   label: string;
   planned_seconds: number;
   started_at: number;
-  ended_at: number | null;
-  status: SessionStatus;
   priority_uid: string | null;
   paused_seconds: number;
   paused_at: number | null;
 }
+
+export type SessionRow = SessionRowFields & ({ status: 'running'; ended_at: null } | { status: Exclude<SessionStatus, 'running'>; ended_at: number });
 
 export interface BreakRow {
   id: number;
@@ -154,18 +154,16 @@ export function endRunningBreak(db: DB, userId: number, now: number): void {
 }
 
 export function sessionRowToJson(s: Dated<SessionRow>): Session {
-  const timing = { startedAt: s.started_at, pausedSeconds: s.paused_seconds, pausedAt: s.paused_at };
-  return {
+  const fields = {
     id: s.id,
     date: s.date,
     label: s.label,
     plannedSeconds: s.planned_seconds,
     startedAt: s.started_at,
-    endedAt: s.ended_at,
-    status: s.status,
     pausedSeconds: s.paused_seconds,
     pausedAt: s.paused_at,
-    durationSeconds: s.ended_at != null ? Math.round(activeMs(timing, s.ended_at) / 1000) : null,
     priorityUid: s.priority_uid,
   };
+  if (s.status === 'running') return { ...fields, status: 'running', endedAt: null, durationSeconds: null };
+  return { ...fields, status: s.status, endedAt: s.ended_at, durationSeconds: Math.round(activeMs(fields, s.ended_at) / 1000) };
 }

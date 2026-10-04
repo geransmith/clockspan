@@ -174,7 +174,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         if (forgotten) {
           alert({
             title: TIMER_PAUSED_OUT.title,
-            body: TIMER_PAUSED_OUT.body(session.label, formatDuration(done.durationSeconds ?? 0)),
+            body: TIMER_PAUSED_OUT.body(session.label, formatDuration(done.durationSeconds)),
             tone: 'info',
             tag: 'timer-complete',
             sound: false,
@@ -187,7 +187,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         const chimed = announcedEnd.current === key || readStored(DUE_STORAGE_KEY) === key;
         alert({
           title: TIMER_DONE.title,
-          body: TIMER_DONE.body(session.label, formatDuration(done.durationSeconds ?? 0)),
+          body: TIMER_DONE.body(session.label, formatDuration(done.durationSeconds)),
           tone: 'success',
           chime: settings.sounds.timer,
           tag: 'timer-complete',

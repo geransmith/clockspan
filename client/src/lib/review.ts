@@ -145,7 +145,7 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
       let g = unplanned.get(key);
       if (!g) unplanned.set(key, (g = { key, label: '', seconds: 0, sessions: 0, dates: [] }));
       g.label = session.label.trim();
-      g.seconds += session.durationSeconds ?? 0;
+      g.seconds += session.durationSeconds;
       g.sessions++;
       addDate(g.dates, day.date);
     }

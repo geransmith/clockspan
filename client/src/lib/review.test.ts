@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptyDay } from '../../../shared/api.js';
-import { completedSession, TEST_SETTINGS } from '../test/fixtures';
-import type { Day, Priority, Session } from '../types';
+import { completedSession, TEST_SETTINGS, type EndPatch } from '../test/fixtures';
+import type { Day, Priority } from '../types';
 import { periodOffset, periodRange, reviewRange } from './review';
 
 const settings = TEST_SETTINGS;
@@ -17,7 +17,7 @@ const row = (position: number, text: string, extra: Partial<Priority> = {}): Pri
   addedAt: 0,
   ...extra,
 });
-const session = (id: number, date: string, startedAt: number, seconds: number, extra: Partial<Session> = {}) =>
+const session = (id: number, date: string, startedAt: number, seconds: number, extra: EndPatch = {}) =>
   completedSession(id, startedAt, seconds, { date, ...extra });
 const day = (date: string, extra: Partial<Day> = {}): Day => ({ ...emptyDay(date), ...extra });
 
@@ -161,16 +161,13 @@ describe('reviewRange', () => {
     expect(r.notDone.map((g) => g.text)).toEqual(['Ship it']);
   });
 
-  it('orders equally long unplanned work by date and reads a missing duration as zero', () => {
+  it('orders equally long unplanned work by date', () => {
     const later = day('2026-09-15', { sessions: [session(3, '2026-09-15', at('2026-09-15', 9), 600)] });
-    const earlier = day('2026-09-14', {
-      sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600), session(2, '2026-09-14', at('2026-09-14', 11), 900, { durationSeconds: null })],
-    });
+    const earlier = day('2026-09-14', { sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600)] });
     const r = reviewRange([later, earlier], settings, '2026-09-16', now);
     expect(r.unplanned.map((u) => [u.label, u.seconds])).toEqual([
       ['s1', 600],
       ['s3', 600],
-      ['s2', 0],
     ]);
     expect(r.focusedSeconds).toBe(1200);
   });

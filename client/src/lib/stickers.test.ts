@@ -138,9 +138,6 @@ describe('daySummaryOf', () => {
       retroAt: 5,
       workMinutes: null,
     });
-    // A completed session whose end was never written counts for nothing rather than NaN.
-    const unfinished = { ...day, sessions: [{ ...day.sessions[0]!, durationSeconds: null }] };
-    expect(daySummaryOf(unfinished).focusSeconds).toBe(0);
   });
 });
 

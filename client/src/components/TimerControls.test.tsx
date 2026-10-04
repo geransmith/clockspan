@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
-import { AllProviders, makeDay, makeSession, makeSettings, MIN, settle, T0 } from '../test/hooks';
+import { AllProviders, endSession, makeDay, makeSession, makeSettings, MIN, settle, T0 } from '../test/hooks';
 import type { Session } from '../types';
 import { TimerControls } from './TimerControls';
 
@@ -69,7 +69,7 @@ describe('TimerControls', () => {
     fireEvent.click(button(/Cancel/));
     expect(confirm).toHaveBeenCalled();
     expect(api.cancelSession).not.toHaveBeenCalled();
-    vi.mocked(api.cancelSession).mockResolvedValue({ session: { ...makeSession(), status: 'cancelled' } });
+    vi.mocked(api.cancelSession).mockResolvedValue({ session: endSession(makeSession(), { status: 'cancelled' }) });
     confirm.mockReturnValue(true);
     fireEvent.click(button(/Cancel/));
     // It goes out after any write still queued, a tick later.

@@ -5,7 +5,21 @@ import * as api from '../api';
 import { dismissByTag, warnQuietly } from '../lib/alerts';
 import { ADD_PRIORITY_FAILED, SAVE_FAILED } from '../lib/copy';
 import { emptyPunches } from '../lib/timeclock';
-import { apiError, deferred, makeBreak, makeDay, makeSession, makeSettings, MIN, settle, SettingsAndDays, setVisibility, T0, TODAY } from '../test/hooks';
+import {
+  apiError,
+  deferred,
+  endSession,
+  makeBreak,
+  makeDay,
+  makeSession,
+  makeSettings,
+  MIN,
+  settle,
+  SettingsAndDays,
+  setVisibility,
+  T0,
+  TODAY,
+} from '../test/hooks';
 import type { BreakEndResponse, BreakResponse, Day, OkResponse, OvertimeResponse, Priority, PruneResult, Punch, PunchesResponse, Session } from '../types';
 import { useDay, useDays, useDayStore, useRefreshDay } from './useDay';
 
@@ -218,7 +232,7 @@ describe('load after a write', () => {
   it('does not make up a day for a session confirmed before its first load, and asks for the day again', async () => {
     // Today's first load is out when the timer's auto-finish comes back.
     const first = deferred<Day>();
-    const done = makeSession({ id: 5, status: 'completed', endedAt: T0 + 25 * MIN, durationSeconds: 1500 });
+    const done = endSession(makeSession({ id: 5 }), { endedAt: T0 + 25 * MIN, durationSeconds: 1500 });
     vi.mocked(api.getDay)
       .mockReturnValueOnce(first.promise)
       .mockResolvedValueOnce(makeDay(TODAY, { punches: punchesAt(T0), sessions: [done] }));
@@ -666,7 +680,7 @@ describe('sessions', () => {
     expect(result.current.days[TODAY]?.sessions.map((s) => s.id)).toEqual([1, 2]);
     act(() => result.current.applySession({ ...later, label: 'Renamed' }));
     expect(result.current.days[TODAY]?.sessions[1]?.label).toBe('Renamed');
-    act(() => result.current.applySession({ ...earlier, status: 'cancelled' }));
+    act(() => result.current.applySession(endSession(earlier, { status: 'cancelled' })));
     expect(result.current.days[TODAY]?.sessions.map((s) => s.id)).toEqual([2]);
   });
 
@@ -849,7 +863,7 @@ describe('breaks', () => {
     act(() => result.current.applySession(makeSession({ id: 5, startedAt: T0 })));
     expect(result.current.days[TODAY]?.breaks).toEqual([over, { ...running, endedAt: T0 }]);
     // A finished session leaves breaks as they are.
-    act(() => result.current.applySession(makeSession({ id: 5, startedAt: T0, status: 'completed', endedAt: T0 + MIN, durationSeconds: 60 })));
+    act(() => result.current.applySession(endSession(makeSession({ id: 5, startedAt: T0 }), { endedAt: T0 + MIN, durationSeconds: 60 })));
     expect(result.current.days[TODAY]?.breaks).toEqual([over, { ...running, endedAt: T0 }]);
 
     vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { breaks: [over, blip] }));

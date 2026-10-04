@@ -133,7 +133,7 @@ function Row({
   const running = s.status === 'running';
   const paused = running && s.pausedAt != null;
   // A running row counts its focus so far, which holds still while paused.
-  const seconds = running ? timerView(s, now).elapsedSeconds : (s.durationSeconds ?? 0);
+  const seconds = running ? timerView(s, now).elapsedSeconds : s.durationSeconds;
   // A link to a row that was since removed reads as unplanned.
   const linked = s.priorityUid ? planned.find((p) => p.uid === s.priorityUid) : undefined;
   // One PATCH per edit: label and link together, so two responses can't land out of order.

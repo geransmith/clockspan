@@ -1,6 +1,6 @@
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { MIN_BREAK_MS } from '../../../shared/timer.js';
-import type { Break, Session } from '../types';
+import type { Break, CompletedSession, Session } from '../types';
 
 /**
  * The break a focus session earns, on the Pomodoro technique's numbers: 25 minutes of focus
@@ -71,10 +71,7 @@ function breakMinutes(focusSeconds: number): number {
  */
 export function suggestBreak(sessions: readonly Session[]): BreakSuggestion | null {
   const done = sessions
-    .filter(
-      (s): s is Session & { durationSeconds: number; endedAt: number } =>
-        s.status === 'completed' && s.endedAt != null && s.durationSeconds != null && s.durationSeconds >= MIN_FOCUS_SECONDS,
-    )
+    .filter((s): s is CompletedSession => s.status === 'completed' && s.durationSeconds >= MIN_FOCUS_SECONDS)
     .sort((a, b) => a.startedAt - b.startedAt);
   const last = done.at(-1);
   if (!last) return null;
