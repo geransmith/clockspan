@@ -642,8 +642,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   saves nothing; zero is typed as 0. Priorities debounce 400 ms; punches and checkboxes save
   immediately.
 - A form that sends a request submits through `useSubmit()` (`hooks/useSubmit.ts`): one send at
-  a time with the button disabled, and one error line, cleared when a send starts and filled
-  with what it throws (a mismatched confirmation throws too).
+  a time with the button disabled, and one error line (`ErrorLine`), cleared when a send starts
+  and filled with what it throws (a mismatched confirmation throws too).
 - Comments explain *why* (browser quirks, math), not what.
 - No new dependency (a server one or a client library the bundle carries) without stating the
   reason in the commit message.

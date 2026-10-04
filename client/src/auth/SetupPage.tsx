@@ -4,15 +4,10 @@ import { NewPasswordFields } from '../components/NewPasswordFields';
 import { useSubmit } from '../hooks/useSubmit';
 import { PASSWORD_MISMATCH } from '../lib/copy';
 import { UsernameInput } from '../components/UsernameInput';
-import type { AuthInfo } from '../types';
+import type { GateProps } from './LoginPage';
+import { ErrorLine } from '../components/ErrorLine';
 
-interface Props {
-  onDone: () => Promise<AuthInfo | null>;
-  /** See `LoginPage`. */
-  hint?: string | null;
-}
-
-export function SetupPage({ onDone, hint }: Props) {
+export function SetupPage({ onDone, hint }: GateProps) {
   const [code, setCode] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -21,7 +16,7 @@ export function SetupPage({ onDone, hint }: Props) {
 
   const submit = onSubmit(async () => {
     if (password !== confirm) throw new Error(PASSWORD_MISMATCH);
-    await api.setup(code, username.trim(), password);
+    await api.setup(code, username, password);
     await onDone();
   });
 
@@ -53,11 +48,7 @@ export function SetupPage({ onDone, hint }: Props) {
           <UsernameInput autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} />
         </label>
         <NewPasswordFields label="Password" value={password} confirm={confirm} onValue={setPassword} onConfirm={setConfirm} />
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
+        <ErrorLine error={error} />
         <button className="btn btn-primary btn-lg" type="submit" disabled={busy}>
           {busy ? 'Creating…' : 'Create account'}
         </button>

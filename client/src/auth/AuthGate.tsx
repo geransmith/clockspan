@@ -7,6 +7,7 @@ import { adoptUser, AUTH_USER_KEY, readStored } from '../lib/storage';
 import { LoginPage, OidcLoginPage } from './LoginPage';
 import { NewPasswordPage } from './NewPasswordPage';
 import { SetupPage } from './SetupPage';
+import { ErrorLine } from '../components/ErrorLine';
 
 interface AuthCtx {
   auth: AuthInfo;
@@ -143,9 +144,7 @@ function Unreachable({ error, onRetry }: { error: string; onRetry: () => void })
     <div className="gate">
       <div className="gate-card">
         <h1>Clockspan</h1>
-        <p className="error" role="alert">
-          {SERVER_UNREACHABLE.body(error)}
-        </p>
+        <ErrorLine error={SERVER_UNREACHABLE.body(error)} />
         <button className="btn btn-primary" onClick={onRetry}>
           {SERVER_UNREACHABLE.retry}
         </button>

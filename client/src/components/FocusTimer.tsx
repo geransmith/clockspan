@@ -9,6 +9,7 @@ import { formatCountdown, formatDuration } from '../lib/format';
 import { hasRoom, hasText } from '../lib/priorities';
 import { LIMITS, type Priority, type Session } from '../types';
 import { TimerControls } from './TimerControls';
+import { ErrorLine } from './ErrorLine';
 
 interface Props {
   date: string;
@@ -154,11 +155,7 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
         </button>
       )}
       {!isToday && <p className="muted center">Timers can only be started on today's sheet.</p>}
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+      <ErrorLine error={error} />
     </div>
   );
 }
