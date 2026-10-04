@@ -690,23 +690,29 @@ button {
   border-style: dashed;
   border-color: var(--accent);
 }
+/* A head too wide for its card wraps: the timeclock's pill and the three Customize buttons don't
+   fit beside the title on a phone. The title grows rather than taking an auto margin, which would
+   split the free space with the tools' and leave the pill halfway along the row. */
 .card-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   padding: 14px 16px 0;
 }
 .card-title {
-  margin-right: auto;
+  flex-grow: 1;
 }
 .card-aside {
   display: flex;
   align-items: center;
   gap: 8px;
 }
+/* On a row of their own, the tools stay on the right. */
 .card-tools {
   display: flex;
   gap: 2px;
+  margin-left: auto;
 }
 .card-grip {
   cursor: grab;
@@ -1972,9 +1978,6 @@ button {
 }
 
 /* ---------- review (week / month / quarter) ---------- */
-.review .card-head {
-  flex-wrap: wrap;
-}
 .review-empty {
   padding: 14px 16px 18px;
 }
