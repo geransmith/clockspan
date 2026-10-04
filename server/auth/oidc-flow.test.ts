@@ -34,8 +34,6 @@ describe('OIDC code grant', () => {
     vi.mocked(oidc.discovery).mockReset().mockResolvedValue(configuration());
     vi.mocked(oidc.authorizationCodeGrant).mockReset();
     vi.mocked(oidc.fetchUserInfo).mockReset();
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-    vi.spyOn(console, 'error').mockImplementation(() => {});
     app = await startTestApp({ authMode: 'oidc', env: { OIDC_ISSUER: ISSUER } });
   });
   afterEach(async () => {
@@ -229,7 +227,6 @@ describe('Discovery', () => {
 
   it('keeps retrying while the provider is down or starting, and logs what went wrong', async () => {
     vi.useFakeTimers();
-    vi.spyOn(console, 'log').mockImplementation(() => {});
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.mocked(oidc.discovery)
       .mockReset()

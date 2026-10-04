@@ -50,6 +50,5 @@ it('ticks at once when the tab comes back', async () => {
 });
 
 it('refuses to run outside the provider', () => {
-  vi.spyOn(console, 'error').mockImplementation(() => {});
   expect(() => renderHook(() => useClock())).toThrow('useClock outside ClockProvider');
 });

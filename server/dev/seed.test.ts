@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { ensureDefaultUser, openDatabase } from '../db.js';
 import { insertSession, SESSION_COOKIE } from '../auth/session.js';
 import { countRows, SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from './harness.js';
@@ -325,8 +325,6 @@ describe('--sessions', () => {
   });
 
   it('makes one OIDC dev user, stored like a real sign-in, and signs it in the same way', async () => {
-    // No provider listens at the issuer, and nothing here needs one: keep any logged attempt to reach it out of the output.
-    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
     const app = await startTestApp({ authMode: 'oidc' });
     try {
       const user = ensureOidcDevUser(app.db, app.config);
@@ -335,7 +333,6 @@ describe('--sessions', () => {
       expect((await me(app, insertSession(app.db, app.config, user.id))).user).toMatchObject({ name: OIDC_DEV_USER.name, kind: 'oidc' });
     } finally {
       await app.close();
-      quiet.mockRestore();
     }
   });
 });

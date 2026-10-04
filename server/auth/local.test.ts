@@ -15,7 +15,7 @@ const FIRST_RUN = { ...ADMIN, setupCode: SETUP_CODE };
 
 describe('AUTH_MODE=local', () => {
   let app: TestApp;
-  // Every auth event writes a log line; keep them out of the test output.
+  // Every auth event writes a log line; the tests below read them.
   let log: ReturnType<typeof vi.spyOn>;
   let warn: ReturnType<typeof vi.spyOn>;
   beforeEach(async () => {
