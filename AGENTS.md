@@ -573,8 +573,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `ownedRouter()`, all in `routes/shared.ts`), validate input (cast `req.body` to
   `{ field?: unknown }` and check each field; the `no-unsafe-*` lint refuses reading it as
   `any`), return `{ error }` JSON on failure → add the call to `client/src/api.ts` (a request
-  body the client builds in more than one place gets its type there, beside the call that sends
-  it, as `RetroPatch` and `SessionEdit` do: the server reads every body as `unknown`), with a
+  body the client builds in more than one place gets its type there, at the head of the section
+  whose calls send it, as `RetroPatch` and `SessionEdit` do: the server reads every body as `unknown`), with a
   row in `client/src/api.test.ts`'s `ROUTES` table for its method, path and body (the coverage
   gate needs it), and the response type to `shared/api.ts` (the route's
   `res.json(… satisfies <Type>)` and the client's `request<Type>` both name it), re-exported by
