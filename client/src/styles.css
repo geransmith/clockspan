@@ -1446,6 +1446,10 @@ button {
   background: none;
   color: var(--text-3);
 }
+.banners-more {
+  align-self: flex-end;
+  box-shadow: var(--shadow);
+}
 @keyframes slide-in {
   from {
     opacity: 0;

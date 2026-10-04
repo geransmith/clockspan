@@ -202,6 +202,9 @@ export const TIMER_ELSEWHERE = {
   body: 'It was started on another device. This sheet now shows that one.',
 } as const;
 
+/** Above the banner stack when more are raised than it draws; closing one brings the next back. */
+export const BANNERS_MORE = (n: number) => `${n} more ${plural(n, 'alert')}`;
+
 /** Under the timeclock's tiles while the second meal period applies: when it is due, and after how long. */
 export const SECOND_MEAL_NOTE = (overdue: boolean, at: string, worked: string) =>
   `Second meal period ${overdue ? 'was due' : 'due'} by ${at} (${worked} worked)`;

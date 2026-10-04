@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BANNERS_MORE,
   BREAK,
   BREAK_SUGGESTION,
   CELEBRATION_PHRASES,
@@ -106,6 +107,11 @@ describe('copy builders', () => {
     expect(DELETE_DAYS.confirm(12, 'Monday, June 1, 2026')).toMatch(/^Delete 12 days before /);
     expect(DELETE_DAYS.done(0)).toBe('Deleted 0 days.');
     expect(DELETE_DAYS.done(1)).toBe('Deleted 1 day.');
+  });
+
+  it('counts the alerts the banner stack leaves out', () => {
+    expect(BANNERS_MORE(1)).toBe('1 more alert');
+    expect(BANNERS_MORE(2)).toBe('2 more alerts');
   });
 });
 
