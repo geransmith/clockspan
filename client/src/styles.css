@@ -705,13 +705,12 @@ button {
 .card-body {
   padding: 14px 16px 16px;
 }
-/* The card's wrapper, which a jump to a card ("Open retrospective") scrolls to: it stops with the
-   card's head below the status bar and the running bar, not under them. */
-.sortable {
-  position: relative;
+/* A sheet card, which a jump to a card ("Open retrospective") scrolls to: it stops with the card's
+   head below the status bar and the running bar. */
+.sheet-card {
   scroll-margin-top: calc(var(--safe-top) + 8px);
 }
-.app--has-bar .sortable {
+.app--has-bar .sheet-card {
   scroll-margin-top: calc(var(--bar-h) + var(--safe-top) + 8px);
 }
 .hidden-strip {
