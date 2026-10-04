@@ -1,4 +1,4 @@
-import { PASSWORD_LENGTH } from '../types';
+import { PASSWORD_LENGTH } from '../../../shared/api.js';
 
 /**
  * A new password typed twice, for the setup page, the temporary-password page and Settings →

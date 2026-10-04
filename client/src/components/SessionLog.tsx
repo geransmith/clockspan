@@ -2,15 +2,17 @@ import { useRef, useState } from 'react';
 import type { SessionEdit } from '../api';
 import { useDayStore } from '../hooks/useDay';
 import { useTimer } from '../hooks/useTimer';
-import { CONFIRM, UNTITLED_SESSION } from '../lib/copy';
+import { CONFIRM } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { breakSeconds } from '../lib/breaks';
 import { counted, formatDuration } from '../lib/format';
 import { hasText } from '../lib/priorities';
 import { focusOf } from '../lib/retro';
 import { timerView } from '../lib/timer';
-import { LIMITS, type Break, type Priority, type Session } from '../types';
+import { LIMITS } from '../../../shared/api.js';
+import type { Break, Priority, Session } from '../types';
 import { Trash } from './Icons';
+import { SessionLabel } from './SessionLabel';
 
 interface Props {
   date: string;
@@ -60,7 +62,7 @@ export function SessionLog({ date, isToday, sessions, breaks, priorities, now }:
           <span className="muted">· {counted(breaks.length, 'break')}</span>
         </div>
       )}
-      <ul className="log-list">
+      <ul>
         {entries.map((e) =>
           'session' in e ? (
             <Row
@@ -145,7 +147,7 @@ function Row({
       if (editBox.current && !editBox.current.contains(document.activeElement)) commit();
     }, 0);
   return (
-    <li className={`log-row${running ? ' is-running' : ''}${editing ? ' is-editing' : ''}`}>
+    <li className={`log-row${running ? ' is-running' : ''}`}>
       <span className="log-time">
         {formatTime(s.startedAt)}
         {s.endedAt != null && <> – {formatTime(s.endedAt)}</>}
@@ -196,7 +198,7 @@ function Row({
               {linked.position}
             </span>
           )}
-          {s.label || <span className="muted">{UNTITLED_SESSION}</span>}
+          <SessionLabel label={s.label} />
         </button>
       )}
       <span className="log-duration">

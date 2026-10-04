@@ -1,13 +1,14 @@
 import { useState, type ReactNode } from 'react';
 import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
-import { LOAD_FAILED, UNTITLED_SESSION } from '../lib/copy';
+import { LOAD_FAILED } from '../lib/copy';
 import { formatDateLong, formatDuration, formatWeekday } from '../lib/format';
 import { PERIOD_KINDS, periodOffset, periodRange, reviewRange, type PeriodKind, type ReviewPeriod } from '../lib/review';
 import type { Day } from '../types';
 import { Check } from './Icons';
 import { LoadFailed } from './LoadFailed';
 import { PeriodNav } from './PeriodNav';
+import { SessionLabel } from './SessionLabel';
 import { Tile } from './Tile';
 
 const PERIOD_LABELS: Record<PeriodKind, string> = { week: 'Week', month: 'Month', quarter: 'Quarter' };
@@ -43,7 +44,7 @@ export function Review({ today, now, period: { kind, from }, onPeriod, onOpen }:
         <h2 className="card-title">Review</h2>
         <span className="chips" role="group" aria-label="Period">
           {PERIOD_KINDS.map((k) => (
-            <button key={k} className={`chip${kind === k ? ' is-on' : ''}`} onClick={() => pickKind(k)} aria-pressed={kind === k}>
+            <button key={k} className="chip" onClick={() => pickKind(k)} aria-pressed={kind === k}>
               {PERIOD_LABELS[k]}
             </button>
           ))}
@@ -82,7 +83,7 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
       </div>
 
       <section className="review-section">
-        <h3 className="retro-heading">
+        <h3 className="section-heading">
           Off the plan <span className="muted">{formatDuration(r.offPlanSeconds)}</span>
         </h3>
         {r.unplanned.length === 0 ? (
@@ -92,7 +93,9 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
             items={r.unplanned.map((g) => (
               <li key={g.key}>
                 <button className="review-row" onClick={() => onOpen(latest(g.dates))}>
-                  <span className="review-text">{g.label || <span className="muted">{UNTITLED_SESSION}</span>}</span>
+                  <span className="review-text">
+                    <SessionLabel label={g.label} />
+                  </span>
                   <span className="review-meta">
                     <span className="muted small">{when(g.dates)}</span>
                     <span className="review-time">{formatDuration(g.seconds)}</span>
@@ -105,7 +108,7 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
       </section>
 
       <section className="review-section">
-        <h3 className="retro-heading">
+        <h3 className="section-heading">
           Not done <span className="muted">{r.notDone.length}</span>
         </h3>
         {r.notDone.length === 0 ? (
@@ -117,7 +120,7 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
                 <button className="review-row" onClick={() => onOpen(latest(g.dates))}>
                   <span className="review-text">
                     {g.text}
-                    {g.addedMidDay && <span className="pill pill--warn retro-late">mid-day</span>}
+                    {g.addedMidDay && <span className="pill pill--warn inline-pill">mid-day</span>}
                   </span>
                   <span className="review-meta">
                     <span className="muted small">{when(g.dates)}</span>
@@ -131,7 +134,7 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
       </section>
 
       <section className="review-section">
-        <h3 className="retro-heading">Why</h3>
+        <h3 className="section-heading">Why</h3>
         {r.notes.length === 0 ? (
           <p className="muted small">No retrospective notes yet. Each day's retrospective card is where they go.</p>
         ) : (

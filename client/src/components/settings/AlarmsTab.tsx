@@ -67,13 +67,7 @@ function AlarmEditor({ title, hint, alarm, onChange }: { title: string; hint?: s
           <span className="muted small">Warn before</span>
           <span className="chips">
             {LEAD_CHOICES.map((m) => (
-              <button
-                key={m}
-                className={`chip${alarm.leadMinutes.includes(m) ? ' is-on' : ''}`}
-                onClick={() => toggleLead(m)}
-                disabled={!alarm.enabled}
-                aria-pressed={alarm.leadMinutes.includes(m)}
-              >
+              <button key={m} className="chip" onClick={() => toggleLead(m)} disabled={!alarm.enabled} aria-pressed={alarm.leadMinutes.includes(m)}>
                 {m}m
               </button>
             ))}
@@ -117,7 +111,7 @@ function SoundRow({ event, value, disabled, onChange }: { event: SoundEvent; val
   return (
     <div className="setting-row">
       <span>{label}</span>
-      <span className="duration-inputs">
+      <span className="inline-controls">
         <select className="input select" value={value} onChange={(e) => onChange(e.target.value as SoundId)} disabled={disabled} aria-label={`${label} sound`}>
           {SOUNDS.map((s) => (
             <option key={s.id} value={s.id}>

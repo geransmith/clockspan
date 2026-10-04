@@ -36,7 +36,7 @@ export function SheetTab({ settings, set }: { settings: Settings; set: (patch: P
       <Section title="Focus timer">
         <div className="setting-row">
           <span>Start buttons</span>
-          <span className="duration-inputs">
+          <span className="inline-controls">
             {settings.timerMinutes.map((m, i) => (
               <NumberInput
                 key={i}

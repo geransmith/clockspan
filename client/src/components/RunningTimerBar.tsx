@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useTimer } from '../hooks/useTimer';
-import { UNTITLED_SESSION } from '../lib/copy';
-import { LIMITS } from '../types';
+import { LIMITS } from '../../../shared/api.js';
 import { formatCountdown } from '../lib/format';
+import { SessionLabel } from './SessionLabel';
 import { TimerControls } from './TimerControls';
 
 /** Fixed to the top of the viewport whenever a timer is running, on every view. */
@@ -47,7 +47,7 @@ export function RunningTimerBar() {
             }}
             title="Edit label"
           >
-            {running.label || <span className="muted">{UNTITLED_SESSION}</span>}
+            <SessionLabel label={running.label} />
           </button>
         )}
         <span className="running-time" role="timer" aria-label={due ? 'Time over' : 'Time remaining'}>

@@ -7,7 +7,8 @@ import { LOAD_FAILED, PLAN_NEXT } from '../lib/copy';
 import { dayName, sameText } from '../lib/format';
 import { nextWorkDay, planNext } from '../lib/plan';
 import { hasText } from '../lib/priorities';
-import { LIMITS, type Priority } from '../types';
+import { LIMITS } from '../../../shared/api.js';
+import type { Priority } from '../types';
 import { Burst } from './Burst';
 import { Plus } from './Icons';
 import { LoadFailed } from './LoadFailed';
@@ -126,7 +127,7 @@ function Planner({
 
   return (
     <div className="plan-next-editor">
-      <h3 className="retro-heading">
+      <h3 className="section-heading">
         {PLAN_NEXT.title(name)} {already > 0 && <span className="muted">{PLAN_NEXT.already(already)}</span>}
       </h3>
       {failed && <LoadFailed title={LOAD_FAILED.title} onRetry={() => void store.load(date)} />}

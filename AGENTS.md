@@ -74,7 +74,7 @@ client/                 Vite root → dist/client
                         alarms are hooks/useTodayAlarms.ts
   src/api.ts            fetch wrapper (30 s timeout; UNAUTHENTICATED_EVENT on a 401 from anything but login and
                         /me; throws lib/apiError.ts's ApiError, which a caller checks with instanceof);
-                        src/types.ts re-exports shared types
+                        src/types.ts re-exports the shared types (types only)
   src/lib/              pure logic with a test beside each file (apiError is covered through api.test)
     optimistic.ts       a server copy plus pending changes, which the stores are built on, and `serial()`,
                         their write queue
@@ -192,9 +192,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 
 - **Anything both sides need lives in `shared/`** (`settings.ts`, `dates.ts`, `api.ts`) and is
   imported from there with a `.js` suffix. Never mirror a constant, default or type into the
-  other tree; the client's `types.ts` re-exports the shared types so component imports stay
-  short, and date helpers (`addDays`, `todayKey`, `MINUTE_MS`, …) come straight from
-  `shared/dates.js`, never through another module. Every success body has a `shared/` type
+  other tree; the client's `types.ts` re-exports every type of `shared/settings`, `sounds` and
+  `api` (`export type *`, no list), so component imports stay short; constants and helpers, the
+  date helpers (`addDays`, `todayKey`, `MINUTE_MS`, …) included, come straight from `shared/`,
+  never through another module (a constant read through `types.ts` fails `typecheck`). Every
+  success body has a `shared/` type
   (one in `api.ts`, or `Settings`); a failure is `ErrorResponse` (`{ error }`, whose message
   the client throws), sent through `refuse()` (`server/refuse.ts`); the timer-start 409 is
   `SessionConflict`, which extends it with the running session and is the one refusal sent
@@ -618,9 +620,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   whose calls send it, as `RetroPatch` and `SessionEdit` do: the server reads every body as `unknown`), with a
   row in `client/src/api.test.ts`'s `ROUTES` table for its method, path and body (the coverage
   gate needs it), and the response type to `shared/api.ts` (the route's
-  `res.json(… satisfies <Type>)` and the client's `request<Type>` both name it), re-exported by
-  name from `client/src/types.ts`, which `api.ts` imports from → cover it in that router's
-  `*.test.ts`: happy path, each 400, and that another user gets a 404/empty
+  `res.json(… satisfies <Type>)` and the client's `request<Type>` both name it) → cover it in
+  that router's `*.test.ts`: happy path, each 400, and that another user gets a 404/empty
   result (the scoping test is not optional). A new `/:date` route also gets a row in the
   bad-date table at the end of `server/routes/days.test.ts`. The seed's manifest types
   (`SeededDay` and the aliases beside it in `server/dev/seed.ts`) are built from `Day`,
@@ -657,7 +658,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   and gets the rest from the `@media (pointer: coarse)` block at the end of `styles.css`, an
   empty `::after` reaching past its edge (a control that clips its overflow grows its padding
   instead). Where two controls sit closer than that, each reaches half the gap. A new compact
-  control joins that block. Inputs are 16 px so iOS doesn't zoom. No external
+  control joins that block. A toggle's on state is styled from its ARIA attribute
+  (`[aria-pressed='true']`, `[aria-selected='true']`), never a parallel `is-on` / `is-active`
+  class. Inputs are 16 px so iOS doesn't zoom. No external
   fonts or assets (the CSP would block them anyway). Safe-area insets via `--safe-top`,
   `--safe-bottom`, `--safe-left` and `--safe-right` (a phone held sideways puts the notch on a
   side). Words in a tone's colour use its `-ink` token (`--accent-ink`, `--ok-ink`,

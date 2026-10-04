@@ -1,35 +1,6 @@
-// The wire types live in shared/ so the server's JSON builders are checked against them;
-// re-exported here so component imports stay short.
-export type { AlarmId, AlarmSettings, CardId, Settings, Theme } from '../../shared/settings.js';
-export type { SoundEvent, SoundId } from '../../shared/sounds.js';
-export type {
-  AuthInfo,
-  Break,
-  BreakEndResponse,
-  BreakResponse,
-  CancelledSession,
-  CompletedSession,
-  Day,
-  ErrorResponse,
-  LogoutResponse,
-  OkResponse,
-  OvertimeResponse,
-  PrioritiesResponse,
-  Priority,
-  PruneInfo,
-  PruneResult,
-  PublicUser,
-  Punch,
-  PunchesResponse,
-  RangeResponse,
-  RetroResponse,
-  RunningResponse,
-  RunningSession,
-  Session,
-  SessionConflict,
-  SessionResponse,
-  TargetResponse,
-  UserResponse,
-  UsersResponse,
-} from '../../shared/api.js';
-export { LIMITS, PASSWORD_LENGTH, USERNAME } from '../../shared/api.js';
+// The wire and settings types live in shared/ so the server's JSON builders are checked
+// against them; re-exported here, types only, so component imports stay short. Constants
+// and helpers come straight from shared/.
+export type * from '../../shared/settings.js';
+export type * from '../../shared/sounds.js';
+export type * from '../../shared/api.js';

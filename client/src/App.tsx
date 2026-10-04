@@ -87,7 +87,7 @@ function Shell() {
         onToggleCustomize={() => setCustomize((c) => !c)}
         onOpenSettings={() => setSettingsOpen(true)}
       />
-      <main className="main">
+      <main>
         {route.view === 'sheet' ? (
           <Sheet date={date} today={today} now={now} customize={customize} jumpTo={jumpTo} onJumped={onJumped} onPunchEditing={setEditingPunches} />
         ) : (

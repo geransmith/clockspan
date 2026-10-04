@@ -187,6 +187,21 @@ button {
   flex-direction: column;
   gap: 12px;
 }
+.section-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+.section-heading .muted {
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
 
 /* ---------- controls ---------- */
 .btn {
@@ -236,8 +251,8 @@ button {
 }
 /* The pressed tint holds under the pointer, and after a tap on a phone, where :hover stays on
    the tapped button. This :hover ties with .btn:hover and comes after it. */
-.btn-icon.is-active,
-.btn-icon.is-active:hover {
+.btn-icon[aria-pressed='true'],
+.btn-icon[aria-pressed='true']:hover {
   background: var(--accent-soft);
   border-color: transparent;
   color: var(--accent-ink);
@@ -375,6 +390,10 @@ button {
   background: var(--danger-soft);
   color: var(--danger-ink);
 }
+.inline-pill {
+  margin-left: 8px;
+  vertical-align: 1px;
+}
 .chip {
   display: inline-flex;
   align-items: center;
@@ -387,7 +406,7 @@ button {
   font-size: 0.88rem;
   font-weight: 550;
 }
-.chip.is-on {
+.chip[aria-pressed='true'] {
   background: var(--accent-soft);
   border-color: transparent;
   color: var(--accent-ink);
@@ -563,11 +582,6 @@ button {
 }
 .app--has-bar {
   padding-top: calc(var(--bar-h) + var(--safe-top));
-}
-.main {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
 }
 .sheet {
   display: flex;
@@ -1110,7 +1124,7 @@ button {
   background: var(--surface-3);
   color: var(--text-2);
 }
-.chip.is-on .chip-num {
+.chip[aria-pressed='true'] .chip-num {
   background: var(--accent);
   color: var(--accent-text);
 }
@@ -1470,10 +1484,6 @@ button {
 .log-total strong {
   font-size: 1.2rem;
 }
-.log-list {
-  display: flex;
-  flex-direction: column;
-}
 .log-row {
   display: grid;
   grid-template-columns: 1fr auto auto;
@@ -1562,7 +1572,6 @@ button {
   .log-row {
     grid-template-columns: auto 1fr auto auto;
     grid-template-areas: none;
-    row-gap: 10px;
   }
   .log-time,
   .log-label,
@@ -1586,25 +1595,6 @@ button {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-.retro-heading {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-size: 0.8rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-2);
-}
-.retro-heading .muted {
-  font-weight: 600;
-  text-transform: none;
-  letter-spacing: 0;
-}
-.retro-list {
-  display: flex;
-  flex-direction: column;
 }
 /* Phone: text on the first line, time under it. Wider: one line with the time on the right. */
 .retro-row {
@@ -1667,10 +1657,6 @@ button {
   font-weight: 700;
   font-size: 0.85rem;
 }
-.retro-late {
-  margin-left: 8px;
-  vertical-align: 1px;
-}
 .retro-when {
   white-space: nowrap;
 }
@@ -1718,7 +1704,7 @@ button {
   flex-direction: column;
   gap: 10px;
 }
-.plan-next-editor .retro-heading {
+.plan-next-editor .section-heading {
   flex-wrap: wrap;
   row-gap: 2px;
 }
@@ -1778,7 +1764,7 @@ button {
   color: var(--text-2);
   font-weight: 600;
 }
-.segment.is-on {
+.segment[aria-pressed='true'] {
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--shadow);
@@ -1871,7 +1857,7 @@ button {
   border-color: var(--accent);
   opacity: 1;
 }
-.calendar-day.is-selected {
+.calendar-day[aria-pressed='true'] {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent);
   opacity: 1;
@@ -2002,10 +1988,6 @@ button {
   display: flex;
   flex-direction: column;
   gap: 6px;
-}
-.review-list {
-  display: flex;
-  flex-direction: column;
 }
 .review-list li + li {
   border-top: 1px solid var(--border);
@@ -2148,10 +2130,10 @@ dialog.dialog::backdrop {
   font-weight: 550;
   white-space: nowrap;
 }
-.tab:hover:not(.is-active) {
+.tab:hover:not([aria-selected='true']) {
   color: var(--text);
 }
-.tab.is-active {
+.tab[aria-selected='true'] {
   color: var(--accent-ink);
   border-bottom-color: var(--accent);
 }
@@ -2216,7 +2198,7 @@ dialog.dialog::backdrop {
   flex-wrap: wrap;
   min-height: 44px;
 }
-.duration-inputs {
+.inline-controls {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -2249,10 +2231,6 @@ dialog.dialog::backdrop {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-.user-list {
-  display: flex;
-  flex-direction: column;
 }
 .user-row {
   display: flex;

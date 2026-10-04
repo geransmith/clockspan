@@ -4,7 +4,7 @@ import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
 import { calendarMonth, type CalendarDay } from '../lib/calendar';
 import { LOAD_FAILED } from '../lib/copy';
-import { dayName, formatDateLong, formatDuration, formatHours, formatWeekday, plural } from '../lib/format';
+import { counted, dayName, formatDateLong, formatDuration, formatHours, formatWeekday, plural } from '../lib/format';
 import { hasContent } from '../lib/retro';
 import { periodOffset, periodRange } from '../lib/review';
 import {
@@ -87,12 +87,7 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
           {count && (
             <p className="calendar-count">
               <strong>{count.total}</strong> {plural(count.total, 'sticker')}
-              {count.full > 0 && (
-                <>
-                  {' '}
-                  · {count.full} full {plural(count.full, 'day')}
-                </>
-              )}
+              {count.full > 0 && <> · {counted(count.full, 'full day')}</>}
             </p>
           )}
           {/* Plain buttons in rows, not an ARIA grid: there are no arrow keys to go with one. */}
@@ -132,13 +127,7 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
             ) : (
               <div className="chips calendar-legend" role="group" aria-label="Show only">
                 {reasons.map((r) => (
-                  <button
-                    key={r.id}
-                    type="button"
-                    className={`chip${filter === r.id ? ' is-on' : ''}`}
-                    aria-pressed={filter === r.id}
-                    onClick={() => setFilter((f) => (f === r.id ? null : r.id))}
-                  >
+                  <button key={r.id} type="button" className="chip" aria-pressed={filter === r.id} onClick={() => setFilter((f) => (f === r.id ? null : r.id))}>
                     {r.label} <span className="chip-num">{count.byReason[r.id]}</span>
                   </button>
                 ))}
@@ -188,7 +177,6 @@ function DayCell({
   if (!d.hasData) cls.push('is-empty');
   if (d.isFuture) cls.push('is-future');
   if (d.date === today) cls.push('is-today');
-  if (selected) cls.push('is-selected');
   if (full) cls.push('is-full');
   // With hours not tracked a cell shows only that the day has something on it.
   const clocked = trackHours && d.timeclock?.clockIn != null ? d.timeclock : null;
@@ -199,7 +187,7 @@ function DayCell({
     face = (
       <span className="sticker-row">
         {shown.map((id) => (
-          <span key={id} className="sticker" title={STICKER_LABELS[id]} aria-hidden="true">
+          <span key={id} title={STICKER_LABELS[id]} aria-hidden="true">
             {stickerEmoji(d.date, id)}
           </span>
         ))}
@@ -274,7 +262,7 @@ function DayDetail({
         <Tile
           label="Focused"
           value={s.focusSeconds > 0 ? formatDuration(s.focusSeconds) : '—'}
-          sub={s.focusSessions > 0 ? `${s.focusSessions} ${plural(s.focusSessions, 'session')}` : ''}
+          sub={s.focusSessions > 0 ? counted(s.focusSessions, 'session') : ''}
         />
         <Tile
           label="Priorities"
@@ -298,7 +286,7 @@ function DayDetail({
         {name !== formatDateLong(date) && <span className="muted small">{formatDateLong(date)}</span>}
       </header>
       {tiles}
-      {note && <p className="review-note calendar-note">{note}</p>}
+      {note && <p className="review-note">{note}</p>}
       <div className="calendar-actions">
         <button className="btn" onClick={() => onOpen(date)}>
           Open day
