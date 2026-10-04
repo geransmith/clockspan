@@ -55,7 +55,7 @@ describe('Banners', () => {
     expect(screen.queryByText(/more alert/)).toBeNull();
   });
 
-  it('runs a banner’s action once and closes that banner', async () => {
+  it("runs a banner's action once and closes that banner", async () => {
     const run = vi.fn();
     raise('Clock out', { label: 'Overtime approved', run });
     raise('Retrospective');
