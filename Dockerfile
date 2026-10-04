@@ -28,8 +28,8 @@ FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b533
 WORKDIR /app
 # su-exec drops root in the entrypoint. The HEALTHCHECK's wget is busybox's, already in the
 # base image; CI's image-smoke job runs that exact command inside the container. The app runs
-# on `node` alone (reset-password too: `node dist/server/cli.js`), so the package managers the
-# base image ships are removed: npm, npx, corepack and yarn, with the packages they bundle,
+# on `node` alone (reset-password too: `node dist/server/cli.js`), so the Node package managers
+# the base image ships are removed: npm, npx, corepack and yarn, with the packages they bundle,
 # which scanners would otherwise report against this image.
 RUN apk add --no-cache su-exec \
  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-* \
