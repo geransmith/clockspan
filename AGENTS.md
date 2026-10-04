@@ -44,7 +44,8 @@ shared/                 imported by both sides, always with a `.js` suffix
   dates.ts, timer.ts    date keys; pause-aware session timing (activeMs, plannedEndAt, pausedSecondsAfter,
                         PLANNED_SECONDS)
   punches.ts            kindForPosition: a punch row's kind is its position's parity; punchesKey: a list's
-                        rows and times as one string; samePunches compares two lists by it
+                        rows and times as one string; samePunches compares two lists by it;
+                        MAX_PUNCHES (the server's row cap; the card hides Add extra out / in at it)
   backoff.ts            nextBackoff: the wait between retries of a request that must answer
 server/                 Express API → dist/server
   app.ts                createApp(): headers, /api/health, /api/auth/me for every mode, auth routers,
@@ -401,12 +402,14 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   from positions 1 and 2.
 - **A punch row saves only complete times.** `TimeField` (React Aria segments) commits the
   moment hour, minute and period are all filled, and throws a half-typed draft away when
-  focus leaves the field, so the row never shows a time the server doesn't have. In 12-hour
-  mode the period is filled in as the hour is typed (`guessPeriod` in `lib/timefield.ts`: 5–11
-  → AM, 12 and 1–4 → PM; on a later row, a morning hour whose every minute falls before the
-  day's clock-in turns PM unless the PM hour does too, and an afternoon guess never turns AM, so
-  8:10 after an 8:30 clock-in stays AM), and left alone once the user has touched that segment. Clearing is the row's × button only. Punch PUTs are queued per day (see
-  "Saves reach the server in the order they were made").
+  focus leaves the field or on Escape, which keeps focus in the field, so the row never shows a
+  time the server doesn't have. In 12-hour mode the period is filled in as the hour is typed
+  (`guessPeriod` in `lib/timefield.ts`: 5–11 → AM, 12 and 1–4 → PM; on a later row, a morning
+  hour whose every minute falls before the day's clock-in turns PM unless the PM hour does too,
+  and an afternoon guess never turns AM, so 8:10 after an 8:30 clock-in stays AM), and left
+  alone once the user has touched that segment, until the row is cleared. Clearing is the row's
+  × button only. Punch PUTs are queued per day (see "Saves reach the server in the order they
+  were made").
 - **Overtime approval (`days.overtime_approved`) silences only the `clockOut` alarm target.**
   Lunch and the second meal period stay armed: California Labor Code §512 still requires them
   on an overtime day. Approval also arms the second meal on a day whose work day doesn't pass
@@ -467,11 +470,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   reload never re-fires. Fired keys live in `localStorage` under `focus:alarms:<date>` and are
   pruned to today. Today's punches are held while a punch time field on today's sheet has focus
   (`Timeclock`'s `onEditingChange`; Now, × and the pair buttons save at once and never hold),
-  for at most five minutes after the last change, and settle for 3 s after (`useSettled(value,
-  ms)`, wired in `useTodayAlarms` on `punchesKey`) before evaluation. The hold ends when focus
-  leaves the time fields, when the card unmounts, or on the next change to the punches once
-  focus has gone without a blur. The punches are compared by their times, so a refresh with the
-  same times neither stops the alarms nor restarts the wait.
+  for at most five minutes after the last change or move to another time field, and settle for
+  3 s after (`useSettled(value, ms)`, wired in `useTodayAlarms` on `punchesKey`) before
+  evaluation. The hold ends when focus leaves a time field or the field goes with focus inside
+  (the card unmounts, its pair is removed or moves across lunch): `TimeField` reports both,
+  since a removed field gets no blur. The punches are compared by their times, so a refresh
+  with the same times neither stops the alarms nor restarts the wait.
 - **Per-date card drafts reset by remounting**: `Sheet.tsx` keys `Timeclock`, `Priorities` and
   `Retro` by date, so none needs a "date changed" effect. For `Timeclock` the remount is also
   what keeps a day already done from reading as one becoming done: `useBecameTrue` compares
@@ -715,8 +719,9 @@ The browser pass for each surface (the logic under it is already tested):
   out / in" after it (the old Clock out becomes Out N) and removing that pair. In the time
   field: clear Clock in and press `0` `7` `3` `0` (the hour advances, the period fills, the
   tiles move with no further key), `p` flips the period, ↑/↓ on a segment saves each step, and
-  a half-typed row reverts when focus leaves. In the browser pane send single `key` presses;
-  the `type` action pastes the whole string into one segment.
+  a half-typed row reverts when focus leaves, and on Escape with focus left on the hour. In the
+  browser pane send single `key` presses; the `type` action pastes the whole string into one
+  segment.
 - **Priorities or the timer card**: tick one row and press Add priority (the notice lists the
   ticked row); tap a chip, start, and the log row shows the number; "Also add to today's
   priorities" fills the first empty row; a log row's select reassigns it.

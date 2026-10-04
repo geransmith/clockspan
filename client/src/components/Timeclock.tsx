@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useBecameTrue, useCelebration } from '../hooks/useCelebration';
 import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
@@ -21,7 +21,7 @@ import {
   type ExtraPair,
   type TimeclockResult,
 } from '../lib/timeclock';
-import { samePunches } from '../../../shared/punches.js';
+import { MAX_PUNCHES, samePunches } from '../../../shared/punches.js';
 import { SETTING_LIMITS } from '../../../shared/settings.js';
 import type { WeekHours } from '../lib/week';
 import type { Punch } from '../types';
@@ -98,24 +98,6 @@ export function Timeclock({
     onChange(added && outPosition === added.length - 1 && samePunches(addPunchPair(added), punches) ? added : removePunchPair(punches, outPosition));
   };
 
-  // Only a time field on today's sheet holds today's alarms: Now, × and the pair buttons save
-  // at once, and on a desktop a clicked button keeps focus until something else is clicked.
-  // The cleanup lets the hold go as well as the blur, because the card can unmount with a
-  // field focused (Back to another day) and not every browser sends a blur for a removed element.
-  const [typing, setTyping] = useState(false);
-  useEffect(() => {
-    if (!typing || !isToday || !onEditingChange) return;
-    onEditingChange(true);
-    return () => onEditingChange(false);
-  }, [typing, isToday, onEditingChange]);
-  // A field remounted while focused (Escape throws its draft away) drops focus on the page with
-  // no blur in Chrome or Firefox, so a hold left that way ends on the next change to the punches.
-  const rowsRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = document.activeElement;
-    if (typing && !(el?.closest('.timefield') && rowsRef.current?.contains(el))) setTyping(false);
-  }, [punches, typing]);
-
   const tiles = timeclockTiles(tc, {
     now,
     isToday,
@@ -166,6 +148,9 @@ export function Timeclock({
       hour12={hour12}
       anchorAt={punch.position === 0 ? null : clockInAt}
       next={punch.position === nextPos}
+      // Only a time field on today's sheet holds today's alarms: Now, × and the pair buttons
+      // save at once.
+      onFocusChange={isToday ? onEditingChange : undefined}
       onSet={(at) => setAt(punch.position, at)}
     />
   );
@@ -261,24 +246,19 @@ export function Timeclock({
         />
       )}
 
-      <div
-        className="punches"
-        ref={rowsRef}
-        onFocus={(e) => setTyping(e.target.closest('.timefield') != null)}
-        onBlur={(e) => {
-          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setTyping(false);
-        }}
-      >
+      <div className="punches">
         {fixedRow(0, 'Clock in')}
         {pairBlock(before, 0)}
         {lunchRows && fixedRow(1, 'Lunch out')}
         {lunchRows && fixedRow(2, 'Lunch in')}
         {pairBlock(after, before.length)}
         {clockOutPos != null && fixedRow(clockOutPos, 'Clock out')}
-        <button className="btn btn-ghost punch-add" onClick={addPair}>
-          <Plus />
-          Add extra out / in
-        </button>
+        {punches.length + 2 <= MAX_PUNCHES && (
+          <button className="btn btn-ghost punch-add" onClick={addPair}>
+            <Plus />
+            Add extra out / in
+          </button>
+        )}
       </div>
     </div>
   );
@@ -332,6 +312,7 @@ function PunchRow({
   hour12,
   anchorAt,
   next,
+  onFocusChange,
   onSet,
 }: {
   label: string;
@@ -342,16 +323,18 @@ function PunchRow({
   anchorAt: number | null;
   /** The row the next punch belongs in. */
   next: boolean;
+  onFocusChange?: (focused: boolean) => void;
   onSet: (at: number | null) => void;
 }) {
   return (
     <div className={`punch-row punch-row--${punch.kind}${punch.at != null ? ' is-set' : ''}`}>
       <span className="punch-label">{label}</span>
-      <TimeField value={punch.at} date={date} hour12={hour12} anchorAt={anchorAt} label={label} onCommit={onSet} />
+      <TimeField value={punch.at} date={date} hour12={hour12} anchorAt={anchorAt} label={label} onCommit={onSet} onFocusChange={onFocusChange} />
       <button
         className={`btn ${next ? 'btn-primary' : 'btn-ghost'} punch-now`}
         onClick={() => onSet(floorToMinute(Date.now()))}
         disabled={!isToday}
+        aria-label={`Now: ${label}`}
         title={isToday ? 'Use the current time' : 'Only available today'}
       >
         Now

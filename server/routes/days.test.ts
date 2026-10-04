@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from '../dev/harness.js';
 import { seedDatabase } from '../dev/seed.js';
 import { MAX_PRIORITIES } from '../../shared/settings.js';
+import { MAX_PUNCHES } from '../../shared/punches.js';
 import { HOUR_MS, punchWindow } from '../../shared/dates.js';
 import { LIMITS } from '../../shared/api.js';
 
@@ -85,9 +86,9 @@ describe('PUT /api/days/:date/punches', () => {
     expect((await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: from - 1 }] })).status).toBe(400);
     expect((await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: null }, { at: to + 1 }] })).body.error).toBe('Punch 1 has an invalid time.');
     expect((await app.api.get('/api/days/2026-09-01')).body.punches.map((p: { at: number }) => p.at)).toEqual([from, to]);
-    const tooMany = await app.api.put('/api/days/2026-09-01/punches', { punches: Array(41).fill({ at: null }) });
-    expect(tooMany.status).toBe(400);
-    expect(tooMany.body.error).toMatch(/limited to 40/);
+    const tooMany = await app.api.put('/api/days/2026-09-01/punches', { punches: Array(MAX_PUNCHES + 1).fill({ at: null }) });
+    expect([tooMany.status, tooMany.body.error]).toEqual([400, `punches is limited to ${MAX_PUNCHES} rows.`]);
+    expect((await app.api.put('/api/days/2026-09-01/punches', { punches: Array(MAX_PUNCHES).fill({ at: null }) })).status).toBe(200);
   });
 
   it('refuses a row that is not an object, and stores nothing', async () => {
