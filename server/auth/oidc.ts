@@ -1,16 +1,15 @@
 import { Router } from 'express';
-import { parseCookie, stringifySetCookie } from 'cookie';
 import * as oidc from 'openid-client';
 import { findUserById, type DB, type UserRow } from '../db.js';
 import type { Config } from '../config.js';
-import { cookieOptions, createSession, destroySession } from './session.js';
-import { logName, publicUser } from './users.js';
-import type { AuthInfo, LogoutResponse } from '../../shared/api.js';
+import { cookieHeader, createSession, destroySession, readCookie } from './session.js';
+import { logName } from './users.js';
+import type { LogoutResponse } from '../../shared/api.js';
 import { nextBackoff } from '../../shared/backoff.js';
 
 const FLOW_COOKIE = 'fs_oidc';
 const FLOW_TTL_SEC = 600;
-/** The provider's claim is stored as-is otherwise; a name is a label, not a document. */
+/** The provider's claim is stored trimmed and otherwise as sent, up to this length; a name is a label, not a document. */
 const MAX_DISPLAY_NAME = 100;
 
 /**
@@ -21,9 +20,9 @@ const RETRY = '<a href="/auth/login">Try again</a>.';
 const PROVIDER_DOWN = `Identity provider is unreachable. ${RETRY}`;
 const SIGN_IN_FAILED = `Sign-in failed. ${RETRY}`;
 
-/** The first value that is a non-empty string: which name claims a provider fills, and with what, varies. */
-function firstName(...values: unknown[]): string | undefined {
-  return values.find((v): v is string => typeof v === 'string' && v.trim() !== '');
+/** The first value that is a string with something in it, trimmed: which name claims a provider fills, and with what, varies. */
+function firstNonBlank(...values: unknown[]): string | undefined {
+  return values.map((v) => (typeof v === 'string' ? v.trim() : '')).find((v) => v !== '');
 }
 
 /**
@@ -122,12 +121,7 @@ export function upsertOidcUser(db: DB, issuer: string, sub: string, rawName: str
     }
     return existing;
   }
-  // The first OIDC user is marked admin, like the first local account. Nothing reads the flag
-  // under OIDC yet: the provider decides who signs in, and the Users tab is local-only.
-  const anyUser = db.prepare(`SELECT 1 FROM users WHERE kind = 'oidc' LIMIT 1`).get();
-  const info = db
-    .prepare(`INSERT INTO users (kind, oidc_sub, display_name, is_admin, created_at) VALUES ('oidc', ?, ?, ?, ?)`)
-    .run(key, displayName, anyUser ? 0 : 1, Date.now());
+  const info = db.prepare(`INSERT INTO users (kind, oidc_sub, display_name, created_at) VALUES ('oidc', ?, ?, ?)`).run(key, displayName, Date.now());
   return findUserById(db, info.lastInsertRowid)!;
 }
 
@@ -140,10 +134,6 @@ export function oidcAuthRouter(db: DB, config: Config, given?: Discovery): { api
 
   const api = Router();
   const web = Router();
-
-  api.get('/me', (req, res) => {
-    res.json({ mode: 'oidc', setupRequired: false, user: req.user ? publicUser(req.user) : null, cookieSecure: config.cookieSecure } satisfies AuthInfo);
-  });
 
   api.post('/logout', (req, res) => {
     destroySession(db, config, req, res);
@@ -179,20 +169,17 @@ export function oidcAuthRouter(db: DB, config: Config, given?: Discovery): { api
       code_challenge_method: 'S256',
       state,
     });
-    res.setHeader(
-      'Set-Cookie',
-      stringifySetCookie({ name: FLOW_COOKIE, value: JSON.stringify({ codeVerifier, state }), ...cookieOptions(config, '/auth'), maxAge: FLOW_TTL_SEC }),
-    );
+    res.setHeader('Set-Cookie', cookieHeader(config, FLOW_COOKIE, JSON.stringify({ codeVerifier, state }), FLOW_TTL_SEC, '/auth'));
     res.redirect(url.href);
   });
 
   web.get('/callback', async (req, res) => {
-    const raw = req.headers.cookie ? parseCookie(req.headers.cookie)[FLOW_COOKIE] : undefined;
+    const raw = readCookie(req, FLOW_COOKIE);
     if (!raw) {
       res.status(400).send(`Sign-in session expired. ${RETRY}`);
       return;
     }
-    const clearFlow = stringifySetCookie({ name: FLOW_COOKIE, value: '', ...cookieOptions(config, '/auth'), maxAge: 0 });
+    const clearFlow = cookieHeader(config, FLOW_COOKIE, '', 0, '/auth');
     try {
       const { codeVerifier, state } = JSON.parse(raw) as { codeVerifier: string; state: string };
       const c = await discovery.get();
@@ -204,13 +191,14 @@ export function oidcAuthRouter(db: DB, config: Config, given?: Discovery): { api
       });
       const claims = tokens.claims();
       if (!claims?.sub) throw new Error('ID token has no subject');
-      let name = firstName(claims.name, claims.preferred_username, claims.email);
+      let name = firstNonBlank(claims.name, claims.preferred_username, claims.email);
       if (!name) {
         try {
           const info = await oidc.fetchUserInfo(c, tokens.access_token, claims.sub);
-          name = firstName(info.name, info.preferred_username, info.email);
-        } catch {
-          // Fall through to the subject as a last resort.
+          name = firstNonBlank(info.name, info.preferred_username, info.email);
+        } catch (err) {
+          // The user still signs in, under their subject, until a later sign-in finds a name.
+          console.warn(`[oidc] userinfo failed (${reason(err)}); naming the user by their subject`);
         }
       }
       const user = upsertOidcUser(db, o.issuer, claims.sub, name ?? claims.sub);

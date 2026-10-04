@@ -8,7 +8,7 @@ import { createSession, destroySession, revokeSessions } from './session.js';
 import { currentUser, requireAdmin, requireAuth } from './middleware.js';
 import { accountKey, LoginLimiter, limiterKey, MAX_ACCOUNT_FAILURES, refuseTooMany, warnUntrustedProxy } from './limiter.js';
 import { logName, publicUser } from './users.js';
-import type { AuthInfo, OkResponse, UserResponse, UsersResponse } from '../../shared/api.js';
+import type { OkResponse, UserResponse, UsersResponse } from '../../shared/api.js';
 
 /** Letters and digits that can't be read as one another: no 0/O, no 1/I/L. */
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -28,7 +28,8 @@ export function setupCodeMatches(expected: string, typed: unknown): boolean {
   return typeof typed === 'string' && timingSafeEqual(norm(expected), norm(typed));
 }
 
-function userCount(db: DB): number {
+/** Local accounts; none yet means the first visit is setup. */
+export function userCount(db: DB): number {
   return (db.prepare(`SELECT COUNT(*) AS n FROM users WHERE kind = 'local'`).get() as { n: number }).n;
 }
 
@@ -43,15 +44,6 @@ export function localAuthRouter(db: DB, config: Config, setupCode: string = newS
   const accounts = new LoginLimiter(MAX_ACCOUNT_FAILURES);
   r.use(warnUntrustedProxy(config));
   if (userCount(db) === 0) console.log(`[auth] No account yet. The setup page asks for this code: ${setupCode}`);
-
-  r.get('/me', (req, res) => {
-    res.json({
-      mode: 'local',
-      setupRequired: userCount(db) === 0,
-      user: req.user ? publicUser(req.user) : null,
-      cookieSecure: config.cookieSecure,
-    } satisfies AuthInfo);
-  });
 
   r.post('/setup', async (req, res) => {
     if (userCount(db) > 0) {

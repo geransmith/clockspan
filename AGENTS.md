@@ -47,10 +47,10 @@ shared/                 imported by both sides, always with a `.js` suffix
                         rows and times as one string; samePunches compares two lists by it
   backoff.ts            nextBackoff: the wait between retries of a request that must answer
 server/                 Express API → dist/server
-  app.ts                createApp(): headers, /api/health, auth routers, data routers behind
-                        requireAuth, static files and the SPA fallback; startBackgroundJobs() (the
-                        login purge, the retention schedule and, under OIDC, warming the `Discovery`
-                        index.ts passes in; started by index.ts only)
+  app.ts                createApp(): headers, /api/health, /api/auth/me for every mode, auth routers,
+                        data routers behind requireAuth, static files and the SPA fallback;
+                        startBackgroundJobs() (the login purge, the retention schedule and, under
+                        OIDC, warming the `Discovery` index.ts passes in; started by index.ts only)
   security.ts           every security header, rejectCrossSiteWrites and rejectUnknownHosts
   config.ts, db.ts      env parsing (throws on bad config); pragmas, MIGRATIONS, the default user
   settings.ts           mergeSettings (defaults + validation on every read and write), loadSettings
@@ -204,12 +204,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   under `AUTH_MODE=none` only, on `/api` after `/api/health`, and reads the raw `Host` header,
   never `req.hostname`. Headers that describe one answer stay with the code that sends it: the
   static files' `Cache-Control` in `app.ts`, `Retry-After` in `refuseTooMany`
-  (`auth/limiter.ts`), and `Set-Cookie` only through `cookieOptions()` (`auth/session.ts`).
-  The session is resolved under `/api` only, so a static answer, which is publicly cacheable,
-  never carries a cookie. The HTML the server writes itself (the OIDC error pages in
-  `auth/oidc.ts`) is fixed text: no request data or error message goes into it, and the cause
-  goes to the log. Password hashing is async (`scrypt`, never `scryptSync`); login verifies
-  against `DUMMY_HASH` when the user is unknown.
+  (`auth/limiter.ts`), and `Set-Cookie` only through `cookieHeader()` (`auth/session.ts`). A
+  request's cookies are read only through `readCookie()` there; outside `server/dev/` (the test
+  harness's cookie jar) no other module imports `cookie`. The session is resolved under `/api`
+  only, so a static answer, which is publicly cacheable, never carries a cookie. The HTML the
+  server writes itself (the OIDC error pages in `auth/oidc.ts`) is fixed text: no request data
+  or error message goes into it, and the cause goes to the log. Password hashing is async
+  (`scrypt`, never `scryptSync`); login verifies against `DUMMY_HASH` when the user is unknown.
 - **Another user means another page.** Once `AuthGate` has opened the app for a user, it never
   swaps a gate page in over it: the stores' write queues, the drafts (which save on unmount),
   the banners and the tab title would carry on under the next session's cookie. Sign-out

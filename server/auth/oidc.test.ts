@@ -6,7 +6,8 @@ import { upsertOidcUser } from './oidc.js';
 /**
  * The harness points discovery at a port nothing listens on, so these cover everything that
  * does not need a live provider: the mode answer, the two error pages, the flow cookie, and
- * the user upsert. The code grant itself is exercised against a real provider only.
+ * the user upsert. The code grant, with the token exchange and userinfo faked, is in
+ * `oidc-flow.test.ts`.
  */
 describe('AUTH_MODE=oidc', () => {
   let app: TestApp;
@@ -61,23 +62,15 @@ describe('AUTH_MODE=oidc', () => {
     expect(app.count('auth_sessions')).toBe(0);
   });
 
-  it('logs out locally, with no end-session URL, while discovery has never reached the provider', async () => {
-    const r = await app.api.post('/api/auth/logout');
-    expect(r.status).toBe(200);
-    expect(r.body).toEqual({ ok: true, redirect: null });
-    expect(app.api.cookies()).not.toHaveProperty(SESSION_COOKIE);
-  });
-
-  it('makes the first provider user the admin, later ones members, and follows a renamed user', () => {
+  it('creates provider users, none of them admin, and follows a renamed user', () => {
     const first = upsertOidcUser(app.db, 'issuer', '1', 'Ada');
     const second = upsertOidcUser(app.db, 'issuer', '2', 'Bob');
-    expect(first).toMatchObject({ kind: 'oidc', oidc_sub: 'issuer|1', display_name: 'Ada', is_admin: 1 });
+    expect(first).toMatchObject({ kind: 'oidc', oidc_sub: 'issuer|1', display_name: 'Ada', is_admin: 0 });
     expect(second).toMatchObject({ kind: 'oidc', oidc_sub: 'issuer|2', display_name: 'Bob', is_admin: 0 });
-    // Same subject again: same row, new name, admin flag untouched.
+    // Same subject again: same row, new name.
     const renamed = upsertOidcUser(app.db, 'issuer', '1', 'Ada L.');
     expect(renamed.id).toBe(first.id);
     expect(renamed.display_name).toBe('Ada L.');
-    expect(renamed.is_admin).toBe(1);
     expect(app.db.prepare(`SELECT display_name FROM users WHERE id = ?`).get(first.id)).toEqual({ display_name: 'Ada L.' });
     // The same name again is a plain read.
     expect(upsertOidcUser(app.db, 'issuer', '1', 'Ada L.')).toMatchObject({ id: first.id, display_name: 'Ada L.' });
