@@ -22,3 +22,9 @@ export function punchesKey(punches: readonly Punch[]): string {
 export function samePunches(a: readonly Punch[], b: readonly Punch[]): boolean {
   return punchesKey(a) === punchesKey(b);
 }
+
+/**
+ * Punch rows a day can hold: clock in, lunch out and in, 18 extra out/in pairs and the clock out.
+ * The server refuses more, and the card stops offering Add extra out / in at it.
+ */
+export const MAX_PUNCHES = 40;

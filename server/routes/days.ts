@@ -22,7 +22,7 @@ import {
   type PunchRow,
   type SessionRow,
 } from './shared.js';
-import { kindForPosition } from '../../shared/punches.js';
+import { kindForPosition, MAX_PUNCHES } from '../../shared/punches.js';
 import { MAX_PRIORITIES, SETTING_LIMITS } from '../../shared/settings.js';
 import {
   emptyDay,
@@ -41,7 +41,6 @@ import {
 } from '../../shared/api.js';
 
 const MAX_RANGE_DAYS = 400;
-const MAX_PUNCHES = 40;
 
 /**
  * A stored instant is a safe integer the client can format; anything else (1e308, say) would

@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
 import { unlockAudio } from '../lib/alerts';
-import { emptyPunches, timeclockForDate } from '../lib/timeclock';
+import { addPunchPair, emptyPunches, removePunchPair, timeclockForDate } from '../lib/timeclock';
 import { makeSettings, MIN, settle, T0, TODAY } from '../test/hooks';
+import { kindForPosition, MAX_PUNCHES } from '../../../shared/punches.js';
 import type { Punch } from '../types';
 import { Timeclock } from './Timeclock';
 
@@ -43,7 +44,7 @@ async function renderCard(date = TODAY, punches: Punch[] = emptyPunches()) {
 
 /** A segment of the row's time field, where typing a time starts. */
 const field = (label: string) => within(screen.getByRole('group', { name: `${label} time` })).getAllByRole('spinbutton')[0]!;
-const nowButton = () => screen.getAllByRole('button', { name: 'Now' })[0]!;
+const nowButton = () => screen.getByRole('button', { name: 'Now: Clock in' });
 const focus = (el: HTMLElement) => act(() => el.focus());
 
 beforeEach(() => {
@@ -75,16 +76,13 @@ describe('Timeclock', () => {
     expect(onEditingChange).toHaveBeenLastCalledWith(false);
   });
 
-  it('lets the hold go on the next change to the punches once focus is lost with no blur', async () => {
-    const { onEditingChange, again } = await renderCard();
-    focus(field('Clock in'));
+  it("lets the hold go when the focused field's pair is removed", async () => {
+    const punches = addPunchPair(emptyPunches());
+    const { onEditingChange, again } = await renderCard(TODAY, punches);
+    focus(field('Out 1'));
     expect(onEditingChange).toHaveBeenLastCalledWith(true);
-    // Escape throws the draft away by remounting the field; the focused segment goes with it.
-    fireEvent.keyDown(field('Clock in'), { key: 'Escape' });
-    expect(document.activeElement?.closest('.timefield')).toBeFalsy();
-    expect(onEditingChange).toHaveBeenLastCalledWith(true);
-    // Another device punches in.
-    again(emptyPunches().map((p) => ({ ...p, at: p.position === 0 ? T0 : null })));
+    // Another device removed the pair: the focused field goes with it, and no blur is sent.
+    again(removePunchPair(punches, 3));
     expect(onEditingChange).toHaveBeenLastCalledWith(false);
   });
 
@@ -115,6 +113,15 @@ describe('Timeclock', () => {
     again(withPair.map((p) => (p.position === 3 ? { ...p, at: T0 } : p)));
     fireEvent.click(screen.getByRole('button', { name: 'Remove Out 1 / In 1' }));
     expect(onChange.mock.lastCall![0].map((p) => p.at)).toEqual([T0 - 60 * MIN, null, null, null]);
+  });
+
+  it('stops offering Add extra out / in at the row cap', async () => {
+    const rows = (n: number) => Array.from({ length: n }, (_, position) => ({ position, kind: kindForPosition(position), at: null }));
+    await renderCard(TODAY, rows(MAX_PUNCHES - 2));
+    expect(screen.getByRole('button', { name: 'Add extra out / in' })).toBeTruthy();
+    cleanup();
+    await renderCard(TODAY, rows(MAX_PUNCHES));
+    expect(screen.queryByRole('button', { name: 'Add extra out / in' })).toBeNull();
   });
 
   it("shows the second meal on today's sheet only, not on a past day left clocked in", async () => {

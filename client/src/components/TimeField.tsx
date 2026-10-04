@@ -1,5 +1,5 @@
-import { useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type KeyboardEvent } from 'react';
-import { mergeProps, useDateSegment, useLocale, useTimeField } from 'react-aria';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useDateSegment, useLocale, useTimeField } from 'react-aria';
 import { useTimeFieldState, type DateFieldState, type DateSegment } from 'react-stately';
 import type { Time } from '@internationalized/date';
 import { useLatest } from '../hooks/useLatest';
@@ -15,24 +15,42 @@ interface Props {
   label: string;
   /** Called with a complete time only; clearing is the row's own button. */
   onCommit: (ms: number) => void;
+  /** Focus entered or left the field; a field removed with focus inside reports leaving. */
+  onFocusChange?: (focused: boolean) => void;
 }
 
 /**
  * Hour / minute / AM-PM segments on React Aria: typing advances, ↑/↓ step, `a`/`p` set the
  * period. The value saves the moment every segment is filled, and a half-typed draft is
  * thrown away when focus leaves the field, so the row never shows a time it hasn't stored.
+ * Escape throws the draft away too, and puts focus back on the new field's first segment.
  * Remounting is how the draft is discarded.
  */
 export function TimeField(props: Props) {
-  const [generation, setGeneration] = useState(0);
-  return <Field key={generation} {...props} onDiscard={() => setGeneration((g) => g + 1)} />;
+  const [{ generation, refocus }, setField] = useState({ generation: 0, refocus: false });
+  return <Field key={generation} {...props} refocus={refocus} onDiscard={(keepFocus) => setField({ generation: generation + 1, refocus: keepFocus })} />;
 }
 
-function Field({ value, date, hour12, anchorAt, label, onCommit, onDiscard }: Props & { onDiscard: () => void }) {
+function Field({
+  value,
+  date,
+  hour12,
+  anchorAt,
+  label,
+  onCommit,
+  onFocusChange,
+  refocus,
+  onDiscard,
+}: Props & { refocus: boolean; onDiscard: (keepFocus: boolean) => void }) {
   const { locale } = useLocale();
   const ref = useRef<HTMLDivElement>(null);
-  // Once the user has set the period themselves the guess keeps its hands off.
+  // Once the user has set the period themselves the guess keeps its hands off, until the row is
+  // cleared (×, another device): what is typed next is a new entry. Resetting on a save would
+  // not hold: the Enter or Tab that leaves a saved time lands on the period segment.
   const periodTouched = useRef(false);
+  useEffect(() => {
+    if (value == null) periodTouched.current = false;
+  }, [value]);
   // A fresh Time per render would read as a new value and wipe the draft every second.
   const time = useMemo(() => msToTime(value), [value]);
   const fieldProps = {
@@ -46,7 +64,35 @@ function Field({ value, date, hour12, anchorAt, label, onCommit, onDiscard }: Pr
     shouldForceLeadingZeros: true,
   };
   const state = useTimeFieldState({ ...fieldProps, locale });
-  const { fieldProps: groupProps } = useTimeField(fieldProps, state, ref);
+  const editable = state.segments.filter((s) => s.isEditable);
+  const partial = editable.some((s) => !s.isPlaceholder) && editable.some((s) => s.isPlaceholder);
+  const [focused, setFocused] = useState(false);
+  const { fieldProps: groupProps } = useTimeField(
+    {
+      ...fieldProps,
+      autoFocus: refocus,
+      onFocusChange: setFocused,
+      // React Aria calls this only when focus leaves the whole field, never on a move between
+      // its segments. The stored value comes back, or the row stays empty.
+      onBlur: () => {
+        if (partial) onDiscard(false);
+      },
+      onKeyDown: (e) => {
+        if (e.key === 'Escape') onDiscard(true);
+        else if (e.key === 'Enter') (e.target as HTMLElement).blur();
+      },
+    },
+    state,
+    ref,
+  );
+  // The cleanup also reports a field removed with focus inside, which Chrome and Firefox don't
+  // announce with a blur: the card unmounting, its pair removed or moved across lunch, and
+  // Escape's remount.
+  useEffect(() => {
+    if (!focused || !onFocusChange) return;
+    onFocusChange(true);
+    return () => onFocusChange(false);
+  }, [focused, onFocusChange]);
 
   // React Stately fills the period from its placeholder (AM) as soon as an hour is typed.
   // Replace that with the guess while the hour is still being typed: once the minute is in,
@@ -65,23 +111,8 @@ function Field({ value, date, hour12, anchorAt, label, onCommit, onDiscard }: Pr
     if (period && period.value !== wanted) latest.current.setSegment('dayPeriod', wanted);
   }, [hour12, hourValue, minuteEmpty, date, anchorAt, latest]);
 
-  const editable = state.segments.filter((s) => s.isEditable);
-  const filled = editable.some((s) => !s.isPlaceholder);
-  const partial = filled && editable.some((s) => s.isPlaceholder);
-
-  // Leaving the field with a half-typed time: the stored value comes back (or the row stays
-  // empty). A blur to another segment of the same field is not leaving.
-  const onBlur = (e: FocusEvent<HTMLDivElement>) => {
-    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
-    if (partial || (value != null && !filled)) onDiscard();
-  };
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Escape') onDiscard();
-    else if (e.key === 'Enter') (e.target as HTMLElement).blur();
-  };
-
   return (
-    <div {...mergeProps(groupProps, { onBlur, onKeyDown })} ref={ref} className={`input timefield${partial ? ' is-partial' : ''}`}>
+    <div {...groupProps} ref={ref} className={`input timefield${partial ? ' is-partial' : ''}`}>
       {state.segments.map((segment, i) => (
         <Segment key={i} segment={segment} state={state} onTouch={segment.type === 'dayPeriod' ? () => (periodTouched.current = true) : undefined} />
       ))}
