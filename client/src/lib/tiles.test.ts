@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS } from '../../../shared/settings.js';
+import { TEST_SETTINGS } from '../test/fixtures';
 import type { Punch, Settings } from '../types';
 import { addPunchPair, clampToDay, computeTimeclock, emptyPunches, timeclockForDate } from './timeclock';
 import { focusTile, timeclockTiles, type TileOptions } from './tiles';
@@ -14,7 +14,7 @@ const hhmm = (ms: number) => {
 };
 
 function tiles(rows: Punch[], now: number, patch: Partial<TileOptions> = {}, settings: Partial<Settings> = {}) {
-  const s = { ...DEFAULT_SETTINGS, ...settings };
+  const s = { ...TEST_SETTINGS, ...settings };
   const tc = computeTimeclock(rows, s, now);
   return timeclockTiles(tc, {
     now,
@@ -30,7 +30,7 @@ function tiles(rows: Punch[], now: number, patch: Partial<TileOptions> = {}, set
 
 /** A past day's tiles as the sheet builds them: frozen at the day's end, seen from the next morning. */
 function pastTiles(rows: Punch[]) {
-  const s = DEFAULT_SETTINGS;
+  const s = TEST_SETTINGS;
   const next = new Date(2026, 8, 29, 9).getTime();
   return timeclockTiles(timeclockForDate(rows, s, DAY, '2026-09-29', next), {
     now: clampToDay(DAY, '2026-09-29', next),
@@ -66,9 +66,8 @@ describe('Lunch by', () => {
   });
 
   it("warns from the alarm's largest lead, or 15 minutes when the alarm is off or has no warnings", () => {
-    const lunchBy = (enabled: boolean, leadMinutes: number[]) => ({ ...DEFAULT_SETTINGS.alarms.lunchBy, enabled, leadMinutes });
-    const twentyLeft = (alarm: ReturnType<typeof lunchBy>) =>
-      tiles(clockedIn, at(12, 40), { alarms: { ...DEFAULT_SETTINGS.alarms, lunchBy: alarm } }).lunch.tone;
+    const lunchBy = (enabled: boolean, leadMinutes: number[]) => ({ ...TEST_SETTINGS.alarms.lunchBy, enabled, leadMinutes });
+    const twentyLeft = (alarm: ReturnType<typeof lunchBy>) => tiles(clockedIn, at(12, 40), { alarms: { ...TEST_SETTINGS.alarms, lunchBy: alarm } }).lunch.tone;
     expect(twentyLeft(lunchBy(true, [30, 5]))).toBe('tile--warn');
     expect(twentyLeft(lunchBy(false, [30, 5]))).toBe('');
     expect(twentyLeft(lunchBy(true, []))).toBe('');

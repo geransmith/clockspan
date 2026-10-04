@@ -85,7 +85,9 @@ client/                 Vite root → dist/client
                         happy-dom test beside it (useLatest is covered through the hooks that use it).
                         useClock is the app's one 1-second clock; useSaveStatus
                         (Saving… / Saved / Not saved) and useLastTab (the tab it reopens on) serve the
-                        settings dialog. src/test/hooks.tsx has the fixtures and provider stack
+                        settings dialog. src/test/fixtures.ts has the plain factories and
+                        TEST_SETTINGS (no React); src/test/hooks.tsx has the provider stack and
+                        act() helpers and re-exports fixtures.ts
   src/components/       the cards, History (Calendar + Review), Banners, FinishChoice, and the pieces
                         several of them share; settings/ holds SettingsDialog (the shell and tabs), a
                         file per tab, and controls.tsx
@@ -530,7 +532,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   minutes or a `NumberField` (`settings/controls.tsx`) for one number, whose `unit` suffix is
   "min" unless given, each with `{...SETTING_LIMITS.<key>}` for `min` and `max`; a `Toggle` for
   a switch. `NumberInput` on its own puts several numbers on one row, like the timer's start
-  buttons. Nothing else to mirror.
+  buttons. The new setting also goes in `TEST_SETTINGS` (`client/src/test/fixtures.ts`), and
+  the type makes a missing one an error. Nothing else to mirror.
 - **A sound**: drop the clip in as `client/src/sounds/<id>.mp3` (CC0 only, MP3 so Safari can
   decode it, a couple of seconds at most) → add `{ id, label, kind: 'clip' }` to `SOUNDS` in
   `shared/sounds.ts` → add its title, author and source line to `client/src/sounds/README.md`.
@@ -540,7 +543,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `beep()` sequence in the `SYNTH` map in `alerts.ts` (the type makes a missing one an error).
   A new event that can make a noise is an id in `SOUND_EVENTS`, a default in
   `DEFAULT_SETTINGS.sounds` and a label in `SOUND_EVENT_LABELS` (`lib/sounds.ts`; the types
-  make a missing default or label an error). It plays through
+  make a missing default or label an error); its sound also goes in `TEST_SETTINGS.sounds`
+  (`client/src/test/fixtures.ts`), and the type makes a missing one an error. It plays through
   `alert({ chime: settings.sounds.<event>, sound: settings.sound, notifications: settings.notifications, … })`
   from `lib/alerts.ts`, raised only once `useSettings().loaded` is true (see "Nothing alerts
   before the settings have loaded"), or through a `useCelebration(moment, '<event>')` for a
@@ -550,15 +554,17 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   an `armed` rule and a test case (a rule the card also needs goes in a pure helper like
   `secondMealApplies`) → add its default under `alarms` in `shared/settings.ts` and the
   `AlarmId` union there, and its `mergeAlarm(…)` line in `mergeSettings`'s `alarms` block
-  (`server/settings.ts`; the type makes a missing one an error) → add an `AlarmEditor` in
-  `settings/AlarmsTab.tsx` → its name in `ALARM_NAMES` and a `case` in `describeEvent()`'s
-  `switch (e.id)` (both in `lib/alarms.ts`; the type makes a missing name an error, and
-  typecheck and the `switch-exhaustiveness-check` lint refuse a missing case): the kicker
-  ("X alarm · 15 min warning") is built from the name above the switch, and the case gives a
-  title and a body for each kind (lead, due, overdue) that say where the deadline came from
-  (it gets an `EventContext`; extend that if the new target needs more inputs). A banner can
-  carry one `action` button (see the clock-out alarm's "Overtime approved" and the retro
-  alarm's "Open retrospective", chosen in `useAlarms` from the `AlarmDayState` callbacks).
+  (`server/settings.ts`; the type makes a missing one an error); its settings also go in
+  `TEST_SETTINGS.alarms` (`client/src/test/fixtures.ts`), and the type makes a missing one an
+  error → add an `AlarmEditor` in `settings/AlarmsTab.tsx` → its name in `ALARM_NAMES` and a
+  `case` in `describeEvent()`'s `switch (e.id)` (both in `lib/alarms.ts`; the type makes a
+  missing name an error, and typecheck and the `switch-exhaustiveness-check` lint refuse a
+  missing case): the kicker ("X alarm · 15 min warning") is built from the name above the
+  switch, and the case gives a title and a body for each kind (lead, due, overdue) that say
+  where the deadline came from (it gets an `EventContext`; extend that if the new target needs
+  more inputs). A banner can carry one `action` button (see the clock-out alarm's "Overtime
+  approved" and the retro alarm's "Open retrospective", chosen in `useAlarms` from the
+  `AlarmDayState` callbacks).
 - **A per-day field** (like `overtimeApproved`, `retroNote`/`retroAt`): append a migration
   adding the column to `days` → add the column to `DAY_COLUMNS` and to the `DayRow` interface
   beside it (`routes/shared.ts`; `findDay` and `daysInRange` in `routes/days.ts` both read
@@ -655,13 +661,20 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 
 Prove a change at the cheapest level that can show it, and stop there:
 
-1. Pure functions (`shared/`, `client/src/lib`): a unit test beside the file. A hook
-   (`client/src/hooks`): a test beside it with the API mocked (`vi.mock('../api')`), fake timers
-   for polls, retries and races, and the fixtures and provider stack from
-   `client/src/test/hooks.tsx`. `client/src/api.ts`: `client/src/api.test.ts` checks every
-   call's method, path and body against a stubbed `fetch`. A component's own logic (when a
-   draft saves, what a click sends, which page shows): a test beside it with
-   `@testing-library/react` and the same fixtures. Its looks stay a browser matter.
+1. Pure functions (`shared/`, `client/src/lib`): a unit test beside the file (a lib test takes
+   its fixtures from `client/src/test/fixtures.ts`). A hook (`client/src/hooks`): a test beside
+   it with the API mocked (`vi.mock('../api')`), fake timers for polls, retries and races, and
+   the fixtures and provider stack from `client/src/test/hooks.tsx`. `client/src/api.ts`:
+   `client/src/api.test.ts` checks every call's method, path and body against a stubbed
+   `fetch`. A component's own logic (when a draft saves, what a click sends, which page shows):
+   a test beside it with `@testing-library/react` and the same fixtures and providers. Its
+   looks stay a browser matter.
+   - The client's lib, hook and component tests build their settings from `TEST_SETTINGS`
+     (`makeSettings(patch)` in hook and component tests), never `DEFAULT_SETTINGS`, so a
+     changed default moves no expectation. Only a test of the defaults themselves reads
+     `DEFAULT_SETTINGS`: `useSettings`' fallback before the first answer,
+     `shared/settings.test.ts`, and the server's tests, where a user with no settings row gets
+     the defaults. Minutes and hours are `MINUTE_MS` and `HOUR_MS` from `shared/dates.js`.
    - A test that needs a DOM (hooks, components, `api.ts`) starts with
      `// @vitest-environment happy-dom`; the rest of the suite runs under `node`.
    - The suite runs in America/Los_Angeles (`test.env.TZ` in `vite.config.ts`), so a US DST

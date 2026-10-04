@@ -1,73 +1,23 @@
 import { act } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { vi } from 'vitest';
-import { emptyDay } from '../../../shared/api.js';
-import { DEFAULT_SETTINGS } from '../../../shared/settings.js';
 import { BreakProvider } from '../hooks/useBreak';
 import { ClockProvider } from '../hooks/useClock';
 import { DayProvider } from '../hooks/useDay';
 import { SettingsProvider } from '../hooks/useSettings';
 import { TimerProvider } from '../hooks/useTimer';
-import { ApiError } from '../lib/apiError';
-import { emptyPunches } from '../lib/timeclock';
-import type { Break, Day, Session, Settings } from '../types';
+
+export * from './fixtures';
 
 /**
- * Shared by the hook and component tests, which run under happy-dom with fake timers. Each test
- * file mocks the `api` module (and `lib/alerts` where banners matter) itself: `vi.mock` only
- * applies in the file that calls it.
+ * The provider stack and act() helpers for the hook and component tests, which run under
+ * happy-dom with fake timers. The plain factories and TEST_SETTINGS live in `fixtures.ts`, with
+ * no React; this module re-exports them, so a happy-dom test imports one module, while a lib
+ * test (`node`) imports `fixtures.ts`. Each test file mocks the `api` module (and `lib/alerts`
+ * where banners matter) itself: `vi.mock` only applies in the file that calls it.
  */
 
-/** Monday 28 September 2026, 09:00 local time, so date keys agree in any time zone. */
-export const T0 = new Date(2026, 8, 28, 9, 0).getTime();
-export const TODAY = '2026-09-28';
 export const MIN = 60_000;
-
-export function makeSettings(patch: Partial<Settings> = {}): Settings {
-  return { ...DEFAULT_SETTINGS, ...patch };
-}
-
-export function makeDay(date = TODAY, patch: Partial<Day> = {}): Day {
-  return { ...emptyDay(date), punches: emptyPunches(), ...patch };
-}
-
-export function makeSession(patch: Partial<Session> = {}): Session {
-  return {
-    id: 1,
-    date: TODAY,
-    label: 'Write the report',
-    plannedSeconds: 25 * 60,
-    startedAt: T0,
-    endedAt: null,
-    status: 'running',
-    pausedSeconds: 0,
-    pausedAt: null,
-    durationSeconds: null,
-    priorityUid: null,
-    ...patch,
-  };
-}
-
-/** A five-minute break from T0 that ran its full length. */
-export function makeBreak(patch: Partial<Break> = {}): Break {
-  return { id: 1, date: TODAY, plannedSeconds: 5 * 60, startedAt: T0, endedAt: T0 + 5 * MIN, ...patch };
-}
-
-/** A promise the test settles by hand, for answers that must arrive in a chosen order. */
-export function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
-
-/** An API failure the way `request()` throws one: a status, and the body for a 409. */
-export function apiError(status: number, body?: unknown): ApiError {
-  return new ApiError(status, `Request failed (${status})`, body);
-}
 
 /** Moves the fake clock (0 = just the pending promises) and lets React render what changed. */
 export async function settle(ms = 0): Promise<void> {

@@ -1,26 +1,20 @@
 import { describe, expect, it } from 'vitest';
+import { makeSummary, TEST_SETTINGS } from '../test/fixtures';
 import { calendarMonth } from './calendar';
-import type { DaySummary } from './stickers';
-import { emptyPunches } from './timeclock';
 
-const settings = { workMinutes: 480, lunchDeadlineMinutes: 300, lunchMinutes: 30, secondMealAfterMinutes: 600 };
+const settings = TEST_SETTINGS;
 const TODAY = '2026-09-17'; // a Thursday
 const NOW = new Date(2026, 8, 17, 15, 0).getTime();
-const summary = (date: string, patch: Partial<DaySummary> = {}): DaySummary => ({
-  date,
-  punches: emptyPunches(),
-  focusSeconds: 0,
-  focusSessions: 0,
-  prioritiesDone: 0,
-  prioritiesTotal: 0,
-  retroAt: null,
-  workMinutes: null,
-  ...patch,
-});
 
 describe('calendarMonth', () => {
   it('pads the month to Monday-start weeks and places the days with their stickers', () => {
-    const weeks = calendarMonth([summary('2026-09-14', { retroAt: 1 }), summary('2026-08-31', { focusSeconds: 10 })], settings, TODAY, NOW, '2026-09-01');
+    const weeks = calendarMonth(
+      [makeSummary('2026-09-14', { retroAt: 1 }), makeSummary('2026-08-31', { focusSeconds: 10 })],
+      settings,
+      TODAY,
+      NOW,
+      '2026-09-01',
+    );
     expect(weeks).toHaveLength(5);
     expect(weeks.map((w) => w.length)).toEqual([7, 7, 7, 7, 7]);
     expect(weeks[0]![0]).toEqual({ date: '2026-08-31', outside: true, isFuture: false, hasData: false, stickers: [], timeclock: null }); // a filler never shows data
@@ -35,7 +29,7 @@ describe('calendarMonth', () => {
   });
 
   it('drops Saturday and Sunday, and what they earned, when weekends are off', () => {
-    const days = [summary('2026-09-12', { retroAt: 1 }), summary('2026-09-14', { retroAt: 1 })]; // a Saturday and a Monday
+    const days = [makeSummary('2026-09-12', { retroAt: 1 }), makeSummary('2026-09-14', { retroAt: 1 })]; // a Saturday and a Monday
     const weeks = calendarMonth(days, settings, TODAY, NOW, '2026-09-01', false);
     expect(weeks).toHaveLength(5);
     expect(weeks.map((w) => w.length)).toEqual([5, 5, 5, 5, 5]);

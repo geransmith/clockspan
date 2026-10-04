@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { HOUR_MS } from '../../shared/dates.js';
 import { SETUP_CODE, startTestApp, tempClientBuild, type TestApp } from '../dev/harness.js';
 import { purgeExpiredSessions, SESSION_COOKIE } from './session.js';
 
 const USER = { username: 'geran', password: 'correct horse', setupCode: SETUP_CODE };
-const HOUR = 3_600_000;
 
 type SessionRow = { id: number; expires_at: number; last_seen_at: number };
 
@@ -79,7 +79,7 @@ describe('cookie sessions', () => {
     const before = Date.now();
     app.db
       .prepare(`UPDATE auth_sessions SET last_seen_at = ?, expires_at = ? WHERE id = ?`)
-      .run(first.last_seen_at - 2 * HOUR, first.expires_at - 2 * HOUR, first.id);
+      .run(first.last_seen_at - 2 * HOUR_MS, first.expires_at - 2 * HOUR_MS, first.id);
     const slidRes = await app.api.get('/api/settings');
     expect(slidRes.status).toBe(200);
     const slid = only();
@@ -98,7 +98,7 @@ describe('cookie sessions', () => {
       const first = only();
       app.db
         .prepare(`UPDATE auth_sessions SET last_seen_at = ?, expires_at = ? WHERE id = ?`)
-        .run(first.last_seen_at - 2 * HOUR, first.expires_at - 2 * HOUR, first.id);
+        .run(first.last_seen_at - 2 * HOUR_MS, first.expires_at - 2 * HOUR_MS, first.id);
       // An hour-old session and a cookie on the request: the asset and the shell still answer
       // without a Set-Cookie, and the row is untouched.
       for (const p of ['/assets/index-abc123.js', '/']) {
@@ -106,7 +106,7 @@ describe('cookie sessions', () => {
         expect(r.status).toBe(200);
         expect(r.headers.getSetCookie()).toEqual([]);
       }
-      expect(only().last_seen_at).toBe(first.last_seen_at - 2 * HOUR);
+      expect(only().last_seen_at).toBe(first.last_seen_at - 2 * HOUR_MS);
       // The next API call slides as usual.
       expect(setCookie(await app.api.get('/api/settings'))).toBe(issued);
       expect(only().last_seen_at).toBeGreaterThan(first.last_seen_at);

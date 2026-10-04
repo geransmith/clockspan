@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { emptyDay } from '../../../shared/api.js';
+import { completedSession, TEST_SETTINGS } from '../test/fixtures';
 import type { Day, Priority, Session } from '../types';
 import { periodOffset, periodRange, reviewRange } from './review';
 
-const settings = { workMinutes: 480, lunchDeadlineMinutes: 300, lunchMinutes: 30, secondMealAfterMinutes: 600 };
+const settings = TEST_SETTINGS;
 const at = (key: string, h: number, m = 0) => {
   const [y, mo, d] = key.split('-').map(Number) as [number, number, number];
   return new Date(y, mo - 1, d, h, m).getTime();
@@ -15,32 +17,9 @@ const row = (position: number, text: string, extra: Partial<Priority> = {}): Pri
   addedAt: 0,
   ...extra,
 });
-const session = (id: number, date: string, startedAt: number, seconds: number, extra: Partial<Session> = {}): Session => ({
-  id,
-  date,
-  label: `s${id}`,
-  plannedSeconds: seconds,
-  startedAt,
-  endedAt: startedAt + seconds * 1000,
-  status: 'completed',
-  pausedSeconds: 0,
-  pausedAt: null,
-  durationSeconds: seconds,
-  priorityUid: null,
-  ...extra,
-});
-const day = (date: string, extra: Partial<Day> = {}): Day => ({
-  date,
-  punches: [],
-  priorities: [],
-  overtimeApproved: false,
-  retroNote: '',
-  retroAt: null,
-  workMinutes: null,
-  sessions: [],
-  breaks: [],
-  ...extra,
-});
+const session = (id: number, date: string, startedAt: number, seconds: number, extra: Partial<Session> = {}) =>
+  completedSession(id, startedAt, seconds, { date, ...extra });
+const day = (date: string, extra: Partial<Day> = {}): Day => ({ ...emptyDay(date), ...extra });
 
 describe('periodRange', () => {
   it('steps weeks, months and quarters back from today', () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { COMPLETE_WARNINGS, GENTLE_WARNINGS, PROGRESS_WARNINGS } from './copy';
 import { editPriority, hasRoom, leftOpen, newUid, padPriorities, pickWarning, placePriority, removePriority, warnThreshold, warningKind } from './priorities';
+import { emptyDay } from '../../../shared/api.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import type { Day, Priority } from '../types';
 
@@ -138,17 +139,7 @@ describe('hasRoom', () => {
   });
 });
 
-const day = (date: string, priorities: Priority[]): Day => ({
-  date,
-  punches: [],
-  priorities,
-  overtimeApproved: false,
-  retroNote: '',
-  retroAt: null,
-  workMinutes: null,
-  sessions: [],
-  breaks: [],
-});
+const day = (date: string, priorities: Priority[]): Day => ({ ...emptyDay(date), priorities });
 
 describe('leftOpen', () => {
   it('takes the latest day that had a plan and returns its unticked rows in order', () => {
