@@ -223,7 +223,7 @@ const SHOTS = [
   { name: 'sheet-phone-dark', url: '/', device: PHONE_TALL, scheme: 'dark', ready: READY_SHEET },
   { name: 'sheet-desktop', url: '/', device: DESKTOP, scheme: 'dark', ready: READY_SHEET, fullPage: true },
   // The seed makes the last weekday the one with a priority added mid-day.
-  { name: 'retro', url: `/?date=${lastWeekday()}`, device: PHONE, scheme: 'light', ready: '#card-retro .card', clip: '#card-retro' },
+  { name: 'retro', url: `/?date=${lastWeekday()}`, device: PHONE, scheme: 'light', ready: '#card-retro', clip: '#card-retro' },
   // The route's date picks the day, so the panel is filled before the first paint settles.
   { name: 'history', url: `/?view=history&date=${lastWeekday()}`, device: PHONE, scheme: 'light', ready: '.calendar-detail .tile', fullPage: true },
   {

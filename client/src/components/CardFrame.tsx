@@ -32,32 +32,30 @@ export function CardFrame({
   const title = CARD_TITLES[card.id];
   const { customize } = card;
   return (
-    <div ref={nodeRef} style={style} className="sortable" id={`card-${card.id}`}>
-      <section className={`card${customize ? ' card--customize' : ''}`}>
-        <header className="card-head">
-          {customize && (
-            <button className="btn btn-icon card-grip" {...handleProps} aria-label={`Drag to move ${title}`} title="Drag to reorder">
-              <Grip />
+    <section ref={nodeRef} style={style} id={`card-${card.id}`} className={`card sheet-card${customize ? ' card--customize' : ''}`}>
+      <header className="card-head">
+        {customize && (
+          <button className="btn btn-icon card-grip" {...handleProps} aria-label={`Drag to move ${title}`} title="Drag to reorder">
+            <Grip />
+          </button>
+        )}
+        <h2 className="card-title">{title}</h2>
+        {card.aside && <div className="card-aside">{card.aside}</div>}
+        {customize && (
+          <div className="card-tools">
+            <button className="btn btn-icon" onClick={() => customize.onMove(-1)} disabled={!customize.canUp} aria-label={`Move ${title} up`}>
+              <ArrowUp />
             </button>
-          )}
-          <h2 className="card-title">{title}</h2>
-          {card.aside && <div className="card-aside">{card.aside}</div>}
-          {customize && (
-            <div className="card-tools">
-              <button className="btn btn-icon" onClick={() => customize.onMove(-1)} disabled={!customize.canUp} aria-label={`Move ${title} up`}>
-                <ArrowUp />
-              </button>
-              <button className="btn btn-icon" onClick={() => customize.onMove(1)} disabled={!customize.canDown} aria-label={`Move ${title} down`}>
-                <ArrowDown />
-              </button>
-              <button className="btn btn-icon" onClick={customize.onHide} aria-label={`Hide ${title}`} title="Hide">
-                <EyeOff />
-              </button>
-            </div>
-          )}
-        </header>
-        <div className="card-body">{card.body}</div>
-      </section>
-    </div>
+            <button className="btn btn-icon" onClick={() => customize.onMove(1)} disabled={!customize.canDown} aria-label={`Move ${title} down`}>
+              <ArrowDown />
+            </button>
+            <button className="btn btn-icon" onClick={customize.onHide} aria-label={`Hide ${title}`} title="Hide">
+              <EyeOff />
+            </button>
+          </div>
+        )}
+      </header>
+      <div className="card-body">{card.body}</div>
+    </section>
   );
 }
