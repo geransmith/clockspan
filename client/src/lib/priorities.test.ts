@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COMPLETE_WARNINGS, GENTLE_WARNINGS, PROGRESS_WARNINGS } from './copy';
+import { PRIORITY_WARNINGS } from './copy';
 import { editPriority, hasRoom, leftOpen, newUid, padPriorities, pickWarning, placePriority, removePriority, warnThreshold, warningKind } from './priorities';
 import { emptyDay } from '../../../shared/api.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
@@ -48,21 +48,18 @@ describe('warningKind', () => {
 
 describe('pickWarning', () => {
   it('draws from the pool for the kind', () => {
-    expect(GENTLE_WARNINGS).toHaveLength(20);
-    expect(PROGRESS_WARNINGS.length).toBeGreaterThanOrEqual(10);
-    expect(COMPLETE_WARNINGS.length).toBeGreaterThanOrEqual(10);
-    expect(GENTLE_WARNINGS).toContain(pickWarning('fresh'));
-    expect(PROGRESS_WARNINGS).toContain(pickWarning('progress'));
-    expect(COMPLETE_WARNINGS).toContain(pickWarning('complete'));
-    expect(pickWarning('fresh', () => 0)).toBe(GENTLE_WARNINGS[0]);
-    expect(pickWarning('fresh', () => 0.999999)).toBe(GENTLE_WARNINGS[19]);
-    expect(pickWarning('complete', () => 0)).toBe(COMPLETE_WARNINGS[0]);
+    expect(PRIORITY_WARNINGS.fresh).toContain(pickWarning('fresh'));
+    expect(PRIORITY_WARNINGS.progress).toContain(pickWarning('progress'));
+    expect(PRIORITY_WARNINGS.complete).toContain(pickWarning('complete'));
+    expect(pickWarning('fresh', () => 0)).toBe(PRIORITY_WARNINGS.fresh[0]);
+    expect(pickWarning('fresh', () => 0.999999)).toBe(PRIORITY_WARNINGS.fresh.at(-1));
+    expect(pickWarning('complete', () => 0)).toBe(PRIORITY_WARNINGS.complete[0]);
   });
 
   it('never repeats the previous phrase', () => {
-    const first = PROGRESS_WARNINGS[0]!;
+    const first = PRIORITY_WARNINGS.progress[0]!;
     for (let i = 0; i < 50; i++) expect(pickWarning('progress', Math.random, first)).not.toBe(first);
-    expect(pickWarning('progress', () => 0, first)).toBe(PROGRESS_WARNINGS[1]);
+    expect(pickWarning('progress', () => 0, first)).toBe(PRIORITY_WARNINGS.progress[1]);
   });
 });
 

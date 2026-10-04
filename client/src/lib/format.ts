@@ -95,7 +95,7 @@ export function formatCountdown(seconds: number): string {
 }
 
 /** Whether times get AM/PM: the setting, or for 'auto' whatever the browser locale does. */
-export function resolveHour12(pref: TimeFormat = 'auto'): boolean {
+export function resolveHour12(pref: TimeFormat): boolean {
   if (pref === '12h') return true;
   if (pref === '24h') return false;
   // `hour12` is always resolved once `hour` is in the options; the comparison keeps 12-hour as the default.
@@ -110,9 +110,14 @@ export function floorToMinute(ms: number): number {
   return Math.floor(ms / MINUTE_MS) * MINUTE_MS;
 }
 
-/** The word for `n` of something: "day" for 1, "days" otherwise (or the `many` given). */
-export function plural(n: number, one: string, many = `${one}s`): string {
-  return n === 1 ? one : many;
+/** The word for `n` of something: "day" for 1, "days" otherwise. */
+export function plural(n: number, one: string): string {
+  return n === 1 ? one : `${one}s`;
+}
+
+/** `n` with its word: "1 day", "3 days". */
+export function counted(n: number, one: string): string {
+  return `${n} ${plural(n, one)}`;
 }
 
 /** The same text typed twice, whatever its case or spacing: the key repeats are merged by. */

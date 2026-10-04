@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { RETENTION_LIMITS } from '../../../../shared/settings.js';
 import * as api from '../../api';
 import { useDays, useDayStore } from '../../hooks/useDay';
-import { DELETE_DAYS, RESET_SETTINGS } from '../../lib/copy';
+import { CONFIRM, DAYS_DELETED } from '../../lib/copy';
 import { addDays, todayKey } from '../../../../shared/dates.js';
-import { formatDateFull, plural } from '../../lib/format';
+import { counted, formatDateFull } from '../../lib/format';
 import type { PruneInfo, Settings } from '../../types';
 import { Toggle } from '../Toggle';
 import { NumberField, Section } from './controls';
@@ -27,10 +27,10 @@ export function DataTab({ settings, set, onReset }: { settings: Settings; set: (
         />
       </Section>
       <DeleteOldDays />
-      <Section title="Reset" hint={RESET_SETTINGS.hint}>
+      <Section title="Reset" hint="Every setting goes back to its default. Days, punches and sessions are kept.">
         <div>
           <button className="btn btn-ghost btn-danger-text" onClick={onReset}>
-            {RESET_SETTINGS.button}
+            Reset all settings
           </button>
         </div>
       </Section>
@@ -76,13 +76,13 @@ function DeleteOldDays() {
   }, [before, generation]);
 
   const remove = async () => {
-    if (!info || !window.confirm(DELETE_DAYS.confirm(info.matching, formatDateFull(before)))) return;
+    if (!info || !window.confirm(CONFIRM.deleteDays(info.matching, formatDateFull(before)))) return;
     setBusy(true);
     setDone(null);
     setError(null);
     try {
       const { deleted } = await pruneBefore(before);
-      setDone(DELETE_DAYS.done(deleted));
+      setDone(DAYS_DELETED(deleted));
       setLoaded(null);
     } catch (err) {
       setError((err as Error).message);
@@ -95,7 +95,7 @@ function DeleteOldDays() {
     ? null
     : info.total === 0
       ? 'No days stored.'
-      : `${info.total} ${plural(info.total, 'day')} stored, oldest ${formatDateFull(info.oldest!)}. ${info.matching} before this date.`;
+      : `${counted(info.total, 'day')} stored, oldest ${formatDateFull(info.oldest!)}. ${info.matching} before this date.`;
 
   return (
     <Section

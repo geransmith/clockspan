@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import { AuthGate } from '../../auth/AuthGate';
-import { SAVE_STATUS } from '../../lib/copy';
+import { PASSWORD_CHANGED, SAVE_STATUS } from '../../lib/copy';
 import { applySettingsPatch } from '../../lib/settings';
 import { SOUND_EVENT_LABELS } from '../../lib/sounds';
 import { makeSettings, settle, SettingsAndDays } from '../../test/hooks';
@@ -47,6 +47,7 @@ async function renderDialog(auth: AuthInfo = LOCAL_ADMIN) {
 
 const tabNames = () => screen.getAllByRole('tab', { hidden: true }).map((t) => t.textContent);
 const toggle = (name: string) => screen.getByRole('switch', { name, hidden: true });
+const hint = (name: string) => document.getElementById(toggle(name).getAttribute('aria-describedby')!)!.textContent;
 const openTab = async (name: string) => {
   fireEvent.click(screen.getByRole('tab', { name, hidden: true }));
   await settle();
@@ -103,8 +104,7 @@ describe('SettingsDialog', () => {
 
   it('names a switch by its label and describes it with the hint', async () => {
     await renderDialog();
-    const hint = toggle('Meal periods').getAttribute('aria-describedby');
-    expect(document.getElementById(hint!)!.textContent).toMatch(/^The lunch deadline and the second meal period/);
+    expect(hint('Meal periods')).toMatch(/^The lunch deadline and the second meal period/);
   });
 
   it('saves a switch through the settings provider and says so in the header', async () => {
@@ -146,16 +146,26 @@ describe('SettingsDialog', () => {
   });
 
   it('lists the stickers the calendar gives, without clocked out when hours are hidden', async () => {
-    const stickerHint = () => document.getElementById(toggle('Sticker chart').getAttribute('aria-describedby')!)!.textContent;
     await renderDialog();
     await openTab('Sheet');
-    expect(stickerHint()).toContain('clocked out');
+    expect(hint('Sticker chart')).toContain('clocked out');
     await openTab('Timeclock');
     fireEvent.click(toggle('Show hours'));
     await settle();
     await openTab('Sheet');
-    expect(stickerHint()).toMatch(/: lunch taken, all priorities done, focus session logged, retrospective reviewed\.$/);
-    expect(stickerHint()).not.toContain('clocked out');
+    expect(hint('Sticker chart')).toMatch(/: lunch taken, all priorities done, focus session logged, retrospective reviewed\.$/);
+    expect(hint('Sticker chart')).not.toContain('clocked out');
+  });
+
+  it('drops the overtime clause from the retrospective hint when Overtime is off', async () => {
+    await renderDialog();
+    await openTab('Alarms');
+    expect(hint('Retrospective')).toMatch(/Overtime approval doesn't silence it\.$/);
+    await openTab('Timeclock');
+    fireEvent.click(toggle('Overtime'));
+    await settle();
+    await openTab('Alarms');
+    expect(hint('Retrospective')).not.toContain('Overtime approval');
   });
 
   it('saves one alarm field or one sound without touching the others', async () => {
@@ -185,6 +195,6 @@ describe('SettingsDialog', () => {
     fireEvent.submit(screen.getByRole('button', { name: 'Change password', hidden: true }).closest('form')!);
     await settle();
     expect(api.changePassword).toHaveBeenCalledWith('old-pass-123', 'new-pass-123');
-    expect(screen.getByText('Password updated.').getAttribute('role')).toBe('status');
+    expect(screen.getByText(PASSWORD_CHANGED).getAttribute('role')).toBe('status');
   });
 });

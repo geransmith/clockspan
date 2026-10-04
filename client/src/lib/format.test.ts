@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+  counted,
   dayName,
   formatCountdown,
   formatDateFull,
@@ -107,15 +108,29 @@ describe('formatTime', () => {
   it('resolves the fixed formats and falls back to the locale for auto', () => {
     expect(resolveHour12('12h')).toBe(true);
     expect(resolveHour12('24h')).toBe(false);
-    expect(typeof resolveHour12('auto')).toBe('boolean');
+    const real = new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions();
+    const spy = vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions');
+    try {
+      spy.mockReturnValue({ ...real, hour12: false });
+      expect(resolveHour12('auto')).toBe(false);
+      spy.mockReturnValue({ ...real, hour12: true });
+      expect(resolveHour12('auto')).toBe(true);
+      // A locale that names no cycle reads as 12-hour.
+      spy.mockReturnValue({ ...real, hour12: undefined });
+      expect(resolveHour12('auto')).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
 describe('words', () => {
-  it('picks one or many by the count', () => {
-    expect(`1 ${plural(1, 'day')}`).toBe('1 day');
-    expect(`0 ${plural(0, 'day')}`).toBe('0 days');
-    expect(`3 ${plural(3, 'entry', 'entries')}`).toBe('3 entries');
+  it('picks the word by the count, and writes the count in front of it', () => {
+    expect(plural(1, 'day')).toBe('day');
+    expect(plural(0, 'day')).toBe('days');
+    expect(counted(1, 'day')).toBe('1 day');
+    expect(counted(0, 'day')).toBe('0 days');
+    expect(counted(2, 'more alert')).toBe('2 more alerts');
   });
 
   it('keys text by its words, whatever the case or spacing', () => {

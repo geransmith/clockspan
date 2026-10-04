@@ -4,7 +4,7 @@ import { useLastTab } from '../../hooks/useLastTab';
 import { useModalDialog } from '../../hooks/useModalDialog';
 import { useSaveStatus, type SaveState } from '../../hooks/useSaveStatus';
 import { useSettings } from '../../hooks/useSettings';
-import { RESET_SETTINGS, SAVE_STATUS } from '../../lib/copy';
+import { CONFIRM, SAVE_STATUS } from '../../lib/copy';
 import type { SettingsPatch } from '../../api';
 import { Check, X } from '../Icons';
 import { AccountTab } from './AccountTab';
@@ -36,7 +36,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 
   const set = (patch: SettingsPatch) => void save(() => update(patch));
   const onReset = () => {
-    if (window.confirm(RESET_SETTINGS.confirm)) void save(reset);
+    if (window.confirm(CONFIRM.resetSettings)) void save(reset);
   };
 
   // The ARIA tabs pattern: Left/Right move between the tabs (roving tabindex), so the handler

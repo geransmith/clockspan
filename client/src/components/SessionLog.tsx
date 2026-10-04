@@ -5,7 +5,7 @@ import { useTimer } from '../hooks/useTimer';
 import { CONFIRM, UNTITLED_SESSION } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { breakSeconds } from '../lib/breaks';
-import { formatDuration, plural } from '../lib/format';
+import { counted, formatDuration } from '../lib/format';
 import { hasText } from '../lib/priorities';
 import { focusOf } from '../lib/retro';
 import { timerView } from '../lib/timer';
@@ -51,17 +51,13 @@ export function SessionLog({ date, isToday, sessions, breaks, priorities, now }:
       <div className="log-total">
         <span className="muted">Total focused</span>
         <strong>{formatDuration(focus.seconds)}</strong>
-        <span className="muted">
-          · {focus.count} {plural(focus.count, 'session')}
-        </span>
+        <span className="muted">· {counted(focus.count, 'session')}</span>
       </div>
       {breaks.length > 0 && (
         <div className="log-total">
           <span className="muted">On breaks</span>
           <strong>{formatDuration(rested)}</strong>
-          <span className="muted">
-            · {breaks.length} {plural(breaks.length, 'break')}
-          </span>
+          <span className="muted">· {counted(breaks.length, 'break')}</span>
         </div>
       )}
       <ul className="log-list">

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import * as api from '../../api';
 import { useSubmit } from '../../hooks/useSubmit';
-import { CONFIRM, PASSWORD_MISMATCH } from '../../lib/copy';
+import { CONFIRM, PASSWORD_CHANGED, PASSWORD_MISMATCH } from '../../lib/copy';
 import { PASSWORD_LENGTH, type PublicUser } from '../../types';
 import { HiddenUsername, NewPasswordFields } from '../NewPasswordFields';
 import { UsernameInput } from '../UsernameInput';
@@ -53,7 +53,7 @@ function ChangePassword({ username }: { username: string }) {
       <ErrorLine error={error} />
       {done && (
         <p className="success" role="status">
-          Password updated.
+          {PASSWORD_CHANGED}
         </p>
       )}
       <div>

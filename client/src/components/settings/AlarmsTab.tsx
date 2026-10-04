@@ -35,7 +35,7 @@ export function AlarmsTab({ settings, set }: { settings: Settings; set: (patch: 
         )}
         <AlarmEditor
           title="Retrospective"
-          hint="Compare the plan with the day log before you clock out. 'Warn before' is how long before clock-out. Overtime approval doesn't silence it."
+          hint={`Compare the plan with the day log before you clock out. 'Warn before' is how long before clock-out.${settings.overtimeApproval ? " Overtime approval doesn't silence it." : ''}`}
           alarm={settings.alarms.retro}
           onChange={(p) => setAlarm('retro', p)}
         />
