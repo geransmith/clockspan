@@ -143,6 +143,19 @@ describe('SettingsDialog', () => {
     expect(api.putSettings).toHaveBeenLastCalledWith({ lunchPunches: false });
   });
 
+  it('lists the stickers the calendar gives, without clocked out when hours are hidden', async () => {
+    const stickerHint = () => document.getElementById(toggle('Sticker chart').getAttribute('aria-describedby')!)!.textContent;
+    await renderDialog();
+    await openTab('Sheet');
+    expect(stickerHint()).toContain('clocked out');
+    await openTab('Timeclock');
+    fireEvent.click(toggle('Show hours'));
+    await settle();
+    await openTab('Sheet');
+    expect(stickerHint()).toMatch(/: lunch taken, all priorities done, focus session logged, retrospective reviewed\.$/);
+    expect(stickerHint()).not.toContain('clocked out');
+  });
+
   it('saves one alarm field without touching the others', async () => {
     await renderDialog();
     await openTab('Alarms');
