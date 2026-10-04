@@ -1,8 +1,10 @@
-import { SETTING_LIMITS, type TimeFormat } from '../../../../shared/settings.js';
+import { SETTING_LIMITS, TIME_FORMATS, type TimeFormat } from '../../../../shared/settings.js';
 import type { Settings } from '../../types';
 import { DurationField } from '../DurationField';
 import { Toggle } from '../Toggle';
 import { NumberField, Section } from './controls';
+
+const TIME_FORMAT_LABELS: Record<TimeFormat, string> = { auto: 'Automatic', '12h': '12-hour', '24h': '24-hour' };
 
 export function TimeclockTab({ settings, set }: { settings: Settings; set: (patch: Partial<Settings>) => void }) {
   return (
@@ -65,9 +67,11 @@ export function TimeclockTab({ settings, set }: { settings: Settings; set: (patc
           onChange={(e) => set({ timeFormat: e.target.value as TimeFormat })}
           aria-label="Time format"
         >
-          <option value="auto">Automatic</option>
-          <option value="12h">12-hour</option>
-          <option value="24h">24-hour</option>
+          {TIME_FORMATS.map((f) => (
+            <option key={f} value={f}>
+              {TIME_FORMAT_LABELS[f]}
+            </option>
+          ))}
         </select>
       </div>
     </Section>
