@@ -46,7 +46,7 @@ test "$(docker exec "$name" stat -c %u:%g /data)" = 1000:1000
 step "root was dropped: PID 1 (node) runs as 1000"
 test "$(docker exec "$name" stat -c %u /proc/1)" = 1000
 
-step "no package manager ships in the image: npm, npx, corepack and yarn were removed"
+step "npm, npx, corepack and yarn were removed from the image"
 docker exec "$name" sh -c '! command -v npm && ! command -v npx && ! command -v corepack && ! command -v yarn' >/dev/null
 
 step "the image's own HEALTHCHECK command passes where Docker runs it"

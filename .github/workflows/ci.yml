@@ -127,8 +127,8 @@ jobs:
           # Reads the layers main's image job caches; a pull request never writes the cache.
           cache-from: type=gha
           provenance: false
-      # Health, the SPA shell, /data's owner, root dropped, no package manager, the HEALTHCHECK
-      # command. The image job on main runs the same script before it pushes.
+      # Health, the SPA shell, /data's owner, root dropped, no npm, npx, corepack or yarn, the
+      # HEALTHCHECK command. The image job on main runs the same script before it pushes.
       - name: Boot the amd64 image and check it serves
         run: sh scripts/smoke-image.sh clockspan:smoke
       - name: Build the arm64 image
