@@ -35,8 +35,10 @@ export default defineConfig({
     include: ['client/src/**/*.test.{ts,tsx}', 'server/**/*.test.ts', 'shared/**/*.test.ts'],
     root: '.',
     // The server logs every setup, sign-in and retention run, so the route tests would fill a
-    // green run with them. A failing test still prints its own output; `npm test -- --silent=false`
-    // shows everything.
+    // green run with them. A failing test still prints its own output, and
+    // `npm test -- --reporter=default --silent=false` shows everything. The reporter flag matters
+    // under an agent, where Vitest picks its minimal reporter, which hides passing tests' output
+    // whatever `silent` says.
     silent: 'passed-only',
     // The CI runner is UTC, which has no DST, so a DST case would prove nothing there. Los
     // Angeles is the owner's zone and the one the meal rules follow.
