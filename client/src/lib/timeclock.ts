@@ -38,7 +38,7 @@ export interface TimeclockResult {
   secondMealBy: number | null;
   /** 'taken' once any non-lunch break starts after lunch out. */
   secondMealStatus: SecondMealStatus;
-  /** Set punch times don't alternate in/out chronologically. */
+  /** The punch times typed so far, ahead of now included, don't alternate in/out chronologically. */
   outOfOrder: boolean;
 }
 

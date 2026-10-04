@@ -58,7 +58,7 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
   );
   const stickers = settings.stickers;
   // Hours not tracked, or lunch not tracked (meal periods and lunch punches both off): no Clocked
-  // out or Lunch taken sticker, so the legend and a full day go without it.
+  // out or Lunch taken sticker, so the legend and a full day go without them.
   const reasons = useMemo(() => stickerReasons(settings), [settings]);
   const { trackHours } = settings;
   const count = useMemo(() => (weeks && stickers ? countStickers(weeks, reasons) : null), [weeks, stickers, reasons]);
