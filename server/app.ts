@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url';
 import express, { type Express } from 'express';
 import type { Config } from './config.js';
 import type { DB } from './db.js';
-import { currentUser, requireAuth, requireOwnPassword, resolveUser } from './auth/middleware.js';
-import { localAuthRouter } from './auth/local.js';
+import { requireAuth, requireOwnPassword, resolveUser } from './auth/middleware.js';
+import { localAuthRouter, userCount } from './auth/local.js';
 import { publicUser } from './auth/users.js';
 import { oidcAuthRouter, type Discovery } from './auth/oidc.js';
 import { purgeExpiredSessions } from './auth/session.js';
@@ -51,12 +51,17 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
     const { api, web } = oidcAuthRouter(db, config, opts.discovery);
     app.use('/api/auth', api);
     app.use('/auth', web);
-  } else {
-    app.get('/api/auth/me', (req, res) => {
-      // resolveUser attaches the default user to every request in this mode.
-      res.json({ mode: 'none', setupRequired: false, user: publicUser(currentUser(req)), cookieSecure: config.cookieSecure } satisfies AuthInfo);
-    });
   }
+  // After the mode's router, so a request for it passes the local router's warnUntrustedProxy
+  // first. Under AUTH_MODE=none, resolveUser has attached the default user.
+  app.get('/api/auth/me', (req, res) => {
+    res.json({
+      mode: config.authMode,
+      setupRequired: config.authMode === 'local' && userCount(db) === 0,
+      user: req.user ? publicUser(req.user) : null,
+      cookieSecure: config.cookieSecure,
+    } satisfies AuthInfo);
+  });
 
   // ----- data (all behind auth, all scoped to req.user) -----
   const api = express.Router();

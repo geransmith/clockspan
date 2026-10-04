@@ -93,7 +93,7 @@ describe('OIDC code grant', () => {
     expect(cookies.find((c) => c.startsWith(`${SESSION_COOKIE}=`))).toMatch(/HttpOnly/i);
     expect(cookies.find((c) => c.startsWith('fs_oidc='))).toMatch(/Max-Age=0/i);
     expect(app.db.prepare(`SELECT oidc_sub, display_name, is_admin FROM users`).all()).toEqual([
-      { oidc_sub: `${ISSUER}|u1`, display_name: 'Ada', is_admin: 1 },
+      { oidc_sub: `${ISSUER}|u1`, display_name: 'Ada', is_admin: 0 },
     ]);
     expect(oidc.fetchUserInfo).not.toHaveBeenCalled();
 
@@ -105,6 +105,7 @@ describe('OIDC code grant', () => {
 
   it('takes the name from the claims in order, then from userinfo, then falls back to the subject', async () => {
     const names = () => (app.db.prepare(`SELECT display_name FROM users ORDER BY id`).all() as { display_name: string }[]).map((u) => u.display_name);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     expect((await callback({ sub: 'a', preferred_username: 'ada', email: 'ada@example.com' })).r.status).toBe(302);
     expect((await callback({ sub: 'b', email: 'bob@example.com' })).r.status).toBe(302);
     expect((await callback({ sub: 'c' }, { sub: 'c', name: 'Cy' })).r.status).toBe(302);
@@ -112,11 +113,14 @@ describe('OIDC code grant', () => {
     expect((await callback({ sub: 'e' }, { sub: 'e', email: 'e@example.com' })).r.status).toBe(302);
     expect((await callback({ sub: 'f' }, { sub: 'f' })).r.status).toBe(302);
     expect((await callback({ sub: 'g' }, new Error('userinfo down'))).r.status).toBe(302);
-    // A claim that isn't a usable string is skipped, not trusted.
+    expect(warn).toHaveBeenCalledExactlyOnceWith('[oidc] userinfo failed (userinfo down); naming the user by their subject');
+    // A claim that isn't a usable string is skipped, not trusted, and a padded one is trimmed.
     expect((await callback({ sub: 'h', name: 42, preferred_username: 'hal' })).r.status).toBe(302);
     expect((await callback({ sub: 'i', name: '  ' }, { sub: 'i', name: ['Ivy'] as unknown as string, email: 'i@example.com' })).r.status).toBe(302);
-    expect(names()).toEqual(['ada', 'bob@example.com', 'Cy', 'dee', 'e@example.com', 'f', 'g', 'hal', 'i@example.com']);
-    expect(oidc.fetchUserInfo).toHaveBeenCalledTimes(6);
+    expect((await callback({ sub: 'j', name: '  Jo ' })).r.status).toBe(302);
+    expect((await callback({ sub: 'k' }, { sub: 'k', preferred_username: ' kay ' })).r.status).toBe(302);
+    expect(names()).toEqual(['ada', 'bob@example.com', 'Cy', 'dee', 'e@example.com', 'f', 'g', 'hal', 'i@example.com', 'Jo', 'kay']);
+    expect(oidc.fetchUserInfo).toHaveBeenCalledTimes(7);
     expect(vi.mocked(oidc.fetchUserInfo).mock.calls[0]!.slice(1)).toEqual(['at', 'c']);
   });
 

@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { parseCookie, stringifySetCookie, type SetCookie } from 'cookie';
+import { parseCookie, stringifySetCookie } from 'cookie';
 import type { Request, Response } from 'express';
 import type { DB, UserRow } from '../db.js';
 import type { Config } from '../config.js';
@@ -11,16 +11,19 @@ function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
-/** The attributes every cookie this app sets shares; `secure` follows the deployment. */
-type CookieOptions = Omit<SetCookie, 'name' | 'value'>;
+/** Builds every cookie this app sets: HttpOnly and SameSite=Lax, with `Secure` following the deployment. A Max-Age of 0 clears one. */
+export function cookieHeader(config: Config, name: string, value: string, maxAgeSec: number, path = '/'): string {
+  return stringifySetCookie({ name, value, httpOnly: true, sameSite: 'lax', secure: config.cookieSecure, path, maxAge: maxAgeSec });
+}
 
-export function cookieOptions(config: Config, path = '/'): CookieOptions {
-  return { httpOnly: true, sameSite: 'lax', secure: config.cookieSecure, path };
+export function readCookie(req: Request, name: string): string | undefined {
+  const header = req.headers.cookie;
+  return header ? parseCookie(header)[name] : undefined;
 }
 
 /** The session cookie with a full TTL ahead of it; sent at login and again whenever the expiry slides. */
 function sessionCookie(config: Config, token: string): string {
-  return stringifySetCookie({ name: SESSION_COOKIE, value: token, ...cookieOptions(config), maxAge: Math.floor(config.sessionTtlMs / 1000) });
+  return cookieHeader(config, SESSION_COOKIE, token, Math.floor(config.sessionTtlMs / 1000));
 }
 
 /** Stores a new session for the user and returns its token; only the hash is kept. Login and the dev seed's `--sessions` both come here. */
@@ -38,12 +41,6 @@ export function createSession(db: DB, config: Config, res: Response, userId: num
   res.setHeader('Set-Cookie', sessionCookie(config, insertSession(db, config, userId)));
 }
 
-function readSessionToken(req: Request): string | null {
-  const header = req.headers.cookie;
-  if (!header) return null;
-  return parseCookie(header)[SESSION_COOKIE] ?? null;
-}
-
 /**
  * Returns the user for a valid session and slides its expiry; null otherwise. A valid session
  * is one whose user belongs to the running AUTH_MODE: one made before a mode switch never
@@ -51,7 +48,7 @@ function readSessionToken(req: Request): string | null {
  * `purgeExpiredSessions` removes it.
  */
 export function resolveSession(db: DB, config: Config, req: Request, res: Response): UserRow | null {
-  const token = readSessionToken(req);
+  const token = readCookie(req, SESSION_COOKIE);
   if (!token) return null;
   const now = Date.now();
   const row = db
@@ -78,9 +75,9 @@ export function resolveSession(db: DB, config: Config, req: Request, res: Respon
 }
 
 export function destroySession(db: DB, config: Config, req: Request, res: Response): void {
-  const token = readSessionToken(req);
+  const token = readCookie(req, SESSION_COOKIE);
   if (token) db.prepare(`DELETE FROM auth_sessions WHERE token_hash = ?`).run(hashToken(token));
-  res.setHeader('Set-Cookie', stringifySetCookie({ name: SESSION_COOKIE, value: '', ...cookieOptions(config), maxAge: 0 }));
+  res.setHeader('Set-Cookie', cookieHeader(config, SESSION_COOKIE, '', 0));
 }
 
 /** Ends every session of the user: a password change (which then issues a new one) and the reset-password command. */
