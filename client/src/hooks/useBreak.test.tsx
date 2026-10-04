@@ -48,6 +48,7 @@ it("starts a break on today's sheet, counts it down and announces its end once, 
   await settle();
   expect(result.current.endsAt).toBeNull();
   act(() => result.current.start(5));
+  expect(unlockAudio).toHaveBeenCalled();
   expect(dismissByTag).toHaveBeenCalledWith('break');
   await settle();
   expect(api.startBreak).toHaveBeenCalledWith(TODAY, 300);

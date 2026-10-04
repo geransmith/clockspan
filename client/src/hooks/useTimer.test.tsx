@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
-import { alert, dismissByTag, unlockAudio, warnQuietly } from '../lib/alerts';
+import { alert, dismissByTag, warnQuietly } from '../lib/alerts';
 import { TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
 import { formatCountdown } from '../lib/format';
 import { dueKey } from '../lib/timer';
@@ -114,11 +114,10 @@ describe('sync with the server', () => {
 });
 
 describe('start', () => {
-  it('unlocks audio, starts on the server and logs the row', async () => {
+  it('starts on the server and logs the row', async () => {
     vi.mocked(api.startSession).mockResolvedValue({ session: makeSession({ priorityUid: 'u1' }) });
     const { result } = await renderRunning(null);
     await act(() => result.current.timer.start(TODAY, 1500, 'Write the report', 'u1'));
-    expect(unlockAudio).toHaveBeenCalled();
     expect(api.startSession).toHaveBeenCalledWith(TODAY, 1500, 'Write the report', 'u1');
     expect(result.current.timer.running?.priorityUid).toBe('u1');
     expect(result.current.store.days[TODAY]?.sessions.map((s) => s.id)).toEqual([1]);

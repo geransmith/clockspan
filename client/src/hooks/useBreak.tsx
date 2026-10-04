@@ -20,7 +20,7 @@ interface BreakCtx {
    * earned (`suggestBreak`); otherwise, or before a session is logged, `settings.breakMinutes`.
    */
   next: { minutes: number; long: boolean };
-  /** A break of `minutes` from now, logged on today's sheet. */
+  /** A break of `minutes` from now, logged on today's sheet. Call it from a tap: it unlocks audio for the Break over sound. */
   start: (minutes: number) => void;
   /** Back early: the break ends now without an alert (dropped if it ran under a minute), and a suggestion still up goes. */
   end: () => void;
@@ -69,6 +69,7 @@ export function BreakProvider({ children }: { children: ReactNode }) {
   const starting = useRef(false);
   const start = useCallback(
     (minutes: number) => {
+      unlockAudio(); // a tap: lets the Break over sound play later on iOS
       if (starting.current) return;
       starting.current = true;
       dismissByTag('break');
@@ -112,11 +113,7 @@ export function BreakProvider({ children }: { children: ReactNode }) {
       tag: 'break',
       action: {
         label: BREAK_SUGGESTION.start,
-        run: () => {
-          // A gesture, so iOS lets the Break over sound play later.
-          unlockAudio();
-          start(earned.minutes);
-        },
+        run: () => start(earned.minutes),
       },
       sound: false,
       notifications: false,

@@ -59,8 +59,9 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
   };
 
   const start = async (minutes: number) => {
-    // Here, inside the tap: `timer.start` unlocks too, but after the priority's save is
-    // awaited, which iOS no longer counts as the gesture, so the completion chime stays silent.
+    // Here, in the tap and before any await: iOS counts only the tap as the gesture, and with
+    // "Also add to today's priorities" ticked the new row is saved before the timer starts, so
+    // the completion chime would stay silent otherwise.
     unlockAudio();
     setStarting(true);
     setError(null);
@@ -142,15 +143,7 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
         ))}
       </div>
       {isToday && breakTimer.endsAt == null && (
-        <button
-          className="btn btn-ghost timer-break-start"
-          onClick={() => {
-            // A gesture, so iOS lets the Break over sound play later.
-            unlockAudio();
-            breakTimer.start(breakTimer.next.minutes);
-          }}
-          disabled={starting}
-        >
+        <button className="btn btn-ghost timer-break-start" onClick={() => breakTimer.start(breakTimer.next.minutes)} disabled={starting}>
           {BREAK.start(breakTimer.next.minutes, breakTimer.next.long)}
         </button>
       )}
