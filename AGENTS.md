@@ -283,9 +283,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **All user-facing alerts go through `client/src/lib/alerts.ts`** (`alert()`, `playSound()`,
   banners). Never call `new Notification(...)` or `showNotification()` (its fallback where the
   constructor is refused, Chrome on Android), create an `AudioContext` or fetch a clip
-  anywhere else. `unlockAudio()` must be called from a user gesture (timer start and every
-  punch commit do this) for iOS. What plays is `settings.sounds[event]`, an id from the
-  catalog in `shared/sounds.ts`; `settings.sound` is the master switch over all of them, and
+  anywhere else. `unlockAudio()` must be called from a user gesture (the timer card's start
+  buttons, `useBreak`'s `start` and every punch commit do this) for iOS. What plays is
+  `settings.sounds[event]`, an id from the catalog in `shared/sounds.ts`;
+  `settings.sound` is the master switch over all of them, and
   `none` is the per-event off. A celebration (day complete and work week reached in
   `Timeclock.tsx`, a priority ticked in `Priorities.tsx`, the next day planned in
   `PlanNext.tsx`) is a `useCelebration(moment, event)` (`hooks/useCelebration.ts`): the sound

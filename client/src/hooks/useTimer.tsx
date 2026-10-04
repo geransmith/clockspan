@@ -3,7 +3,7 @@ import * as api from '../api';
 import { nextBackoff } from '../../../shared/backoff.js';
 import { pausedSecondsAfter } from '../../../shared/timer.js';
 import type { Session, SessionConflict } from '../types';
-import { alert, dismissByTag, unlockAudio, warnQuietly } from '../lib/alerts';
+import { alert, dismissByTag, warnQuietly } from '../lib/alerts';
 import { ApiError } from '../lib/apiError';
 import { SAVE_FAILED, TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
@@ -28,6 +28,7 @@ interface TimerCtx {
   /** The planned time is used up; the session waits for more time or a finish. */
   due: boolean;
   overrunSeconds: number;
+  /** Leaves `unlockAudio()` to the caller, in its tap: the timer card may await a new priority's save before it starts. */
   start: (date: string, plannedSeconds: number, label: string, priorityUid?: string | null) => Promise<void>;
   /** Mid-session, ± the planned length; once due, +N is N more minutes from now. Plans are whole minutes. */
   adjust: (deltaSeconds: number) => Promise<void>;
@@ -219,7 +220,6 @@ export function TimerProvider({ children }: { children: ReactNode }) {
 
   const start = useCallback(
     async (date: string, plannedSeconds: number, label: string, priorityUid: string | null = null) => {
-      unlockAudio(); // user gesture: lets the completion chime play later on iOS
       try {
         const { session } = await queue(async () => {
           // A chip can link a row whose priorities save is still out.
