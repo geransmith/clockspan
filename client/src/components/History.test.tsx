@@ -70,6 +70,18 @@ describe('History', () => {
     expect(onOpen).toHaveBeenCalledWith(JULY_DAY.date, period);
   });
 
+  it('sends the period stepped to in Review, not the one History opened on', async () => {
+    const onOpen = await history(TODAY);
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Month' }));
+    await settle();
+    // The hidden calendar's own Previous month is left out of role queries.
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: /The report ran long/ }));
+    expect(onOpen).toHaveBeenCalledWith(AUGUST_DAY.date, { kind: 'month', from: '2026-08-01' });
+  });
+
   it('opens a day picked on Days with no review period', async () => {
     const onOpen = await history(AUGUST_DAY.date);
     fireEvent.click(screen.getByRole('button', { name: 'Open day' }));
