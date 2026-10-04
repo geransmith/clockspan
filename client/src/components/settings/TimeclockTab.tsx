@@ -19,7 +19,7 @@ export function TimeclockTab({ settings, set }: { settings: Settings; set: (patc
       {!settings.mealRules && (
         <Toggle
           label="Lunch punches"
-          hint="The Lunch out and Lunch in rows on the timeclock. Off hides them, except on a day with a lunch already punched."
+          hint="The Lunch out and Lunch in rows on the timeclock, and the Lunch taken sticker. Off hides the rows, except on a day with a lunch already punched, and drops the sticker."
           checked={settings.lunchPunches}
           onChange={(v) => set({ lunchPunches: v })}
         />

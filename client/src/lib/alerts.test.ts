@@ -139,7 +139,7 @@ afterEach(() => {
 });
 
 describe('audio', () => {
-  it('creates one context on unlock, resumes it when suspended, and survives a browser without audio', () => {
+  it('creates one context on unlock and resumes it when suspended', () => {
     alerts.unlockAudio();
     alerts.unlockAudio();
     expect(FakeAudioContext.instances).toHaveLength(1);
@@ -162,13 +162,14 @@ describe('audio', () => {
   it('plays a distinct pattern per synthesized sound, unlocking and resuming on the way', () => {
     alerts.playSound('none');
     expect(FakeAudioContext.instances).toHaveLength(0);
-    const notes: Record<string, number> = {};
+    const freqs: Record<string, number[]> = {};
     for (const id of ['triad', 'taps', 'notes', 'double'] as const) {
       const before = FakeAudioContext.instances[0]?.oscillators.length ?? 0;
       alerts.playSound(id);
-      notes[id] = FakeAudioContext.instances[0]!.oscillators.length - before;
+      freqs[id] = FakeAudioContext.instances[0]!.oscillators.slice(before).map((o) => o.frequency.value);
     }
-    expect(notes).toEqual({ triad: 3, taps: 2, notes: 3, double: 2 });
+    expect(Object.values(freqs).map((f) => f.length)).toEqual([3, 2, 3, 2]);
+    expect(new Set(Object.values(freqs).map(String)).size).toBe(4);
     const ctx = FakeAudioContext.instances[0]!;
     const first = ctx.oscillators[0]!;
     expect(first.type).toBe('sine');
@@ -349,9 +350,15 @@ describe('banners', () => {
     expect(FakeAudioContext.instances[0]!.oscillators).toHaveLength(3);
   });
 
-  it('raises a failed request as a silent danger banner with an action', () => {
-    const run = vi.fn();
+  it('warnQuietly raises a non-sticky danger banner with no sound and no notification', () => {
     alerts.warnQuietly({ title: 'Change not saved', body: 'The server did not answer.', tag: 'save-failed' });
+    expect(FakeAudioContext.instances).toHaveLength(0);
+    expect(FakeNotification.created).toHaveLength(0);
+    expect(alerts.getBanners()[0]).toMatchObject({ title: 'Change not saved', tone: 'danger', sticky: false });
+  });
+
+  it('an alert carries its action to the banner', () => {
+    const run = vi.fn();
     alerts.alert({
       title: 'Clock out',
       tone: 'danger',
@@ -361,11 +368,7 @@ describe('banners', () => {
       sound: false,
       notifications: false,
     });
-    expect(FakeAudioContext.instances).toHaveLength(0);
-    expect(FakeNotification.created).toHaveLength(0);
-    const [quiet, withAction] = alerts.getBanners();
-    expect(quiet).toMatchObject({ title: 'Change not saved', tone: 'danger', sticky: false });
-    withAction!.action!.run();
+    alerts.getBanners()[0]!.action!.run();
     expect(run).toHaveBeenCalledOnce();
   });
 });

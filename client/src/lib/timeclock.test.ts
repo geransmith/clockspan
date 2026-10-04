@@ -7,6 +7,7 @@ import {
   clockOutPosition,
   computeTimeclock,
   daySettings,
+  dayTimeclock,
   emptyPunches,
   extraPairs,
   lunchInPunchOrder,
@@ -21,7 +22,6 @@ import {
   type TimeclockSettings,
 } from './timeclock';
 import type { Punch } from '../types';
-import { PUNCH_ORDER } from './copy';
 
 const settings = TEST_SETTINGS;
 const T0 = new Date(2026, 8, 16, 8, 0).getTime(); // 8:00 local
@@ -84,7 +84,7 @@ describe('computeTimeclock', () => {
     // 8:00 in, 9:30 out (appointment), 10:30 in, lunch not yet taken.
     const p = punches([T0, null, null, T0 + 1.5 * HOUR_MS, T0 + 2.5 * HOUR_MS]);
     const r = computeTimeclock(p, settings, T0 + 3 * HOUR_MS);
-    expect(r.error).toBeNull();
+    expect(r.outOfOrder).toBe(false);
     expect(r.state).toBe('working');
     expect(r.workedSeconds).toBe(2 * 3600);
     expect(r.lunchStatus).toBe('upcoming');
@@ -147,7 +147,7 @@ describe('computeTimeclock', () => {
       expect(r.clockOutAt).toBe(T0 + 8.5 * HOUR_MS); // the target's instant, holding still on the break
       expect(r.secondMealStatus).toBe('taken');
     }
-    expect(nextPunchPosition(p)).toBe(4);
+    expect(nextPunchPosition(p, true)).toBe(4);
   });
 
   it('is on a break after "Add extra out / in" on a day that met its target', () => {
@@ -158,13 +158,13 @@ describe('computeTimeclock', () => {
   it('flags out-of-order punches instead of producing garbage', () => {
     const p = punches([T0, T0 + 2 * HOUR_MS, T0 + 1 * HOUR_MS]);
     const r = computeTimeclock(p, settings, T0 + 3 * HOUR_MS);
-    expect(r.error).toBe(PUNCH_ORDER);
+    expect(r.outOfOrder).toBe(true);
   });
 
-  it('keeps row order for two punches at the same minute', () => {
-    // Lunch out and back in at the same instant: a zero-length lunch, not an error.
-    const r = computeTimeclock(punches([T0, T0 + 4 * HOUR_MS, T0 + 4 * HOUR_MS, null]), settings, T0 + 5 * HOUR_MS);
-    expect(r.error).toBeNull();
+  it('orders two punches at the same minute by row, whatever order the rows arrive in', () => {
+    // Lunch out and back in at the same instant: a zero-length lunch, not out of order.
+    const r = computeTimeclock(punches([T0, T0 + 4 * HOUR_MS, T0 + 4 * HOUR_MS, null]).reverse(), settings, T0 + 5 * HOUR_MS);
+    expect(r.outOfOrder).toBe(false);
     expect(r.state).toBe('working');
     expect(r.workedSeconds).toBe(5 * 3600);
   });
@@ -240,7 +240,7 @@ describe('times typed ahead of now', () => {
 
   it('flags a time out of order at once, while it is still ahead', () => {
     // Lunch in with no Lunch out: two ins in a row, the second one still to come.
-    expect(computeTimeclock(punches([T0, null, T0 + 4.5 * HOUR_MS, null]), settings, T0 + HOUR_MS).error).toBe(PUNCH_ORDER);
+    expect(computeTimeclock(punches([T0, null, T0 + 4.5 * HOUR_MS, null]), settings, T0 + HOUR_MS).outOfOrder).toBe(true);
   });
 });
 
@@ -458,6 +458,13 @@ describe('timeclockForDate', () => {
     expect(r.workedSeconds).toBe(2 * 3600);
   });
 
+  it('runs a stored day on its own work-day length (dayTimeclock)', () => {
+    const p = punches([T0 + 24 * HOUR_MS, null, null, null]);
+    expect(dayTimeclock({ date: today, punches: p, workMinutes: null }, settings, today, nowToday).clockOutAt).toBe(T0 + 32.5 * HOUR_MS);
+    // A 4 h day needs no lunch, so none is added to its end.
+    expect(dayTimeclock({ date: today, punches: p, workMinutes: 240 }, settings, today, nowToday).clockOutAt).toBe(T0 + 28 * HOUR_MS);
+  });
+
   it('stops a past day with an unclosed clock-in at the end of that day', () => {
     expect(clampToDay(yesterday, today, nowToday)).toBe(new Date(2026, 8, 17, 0, 0).getTime() - 1);
     const r = timeclockForDate(punches([T0, null, null]), settings, yesterday, today, nowToday);
@@ -466,34 +473,37 @@ describe('timeclockForDate', () => {
   });
 
   it('marks a past day done once it is off the clock, target or not', () => {
-    const r = timeclockForDate(punches([T0, null, null, T0 + 3 * HOUR_MS]), settings, yesterday, today, nowToday);
+    // Out for lunch and never back: the same punches read as at lunch on a day still running.
+    const p = punches([T0, T0 + 4 * HOUR_MS, null, null]);
+    const r = timeclockForDate(p, settings, yesterday, today, nowToday);
     expect(r.state).toBe('done');
-    expect(r.clockOutAt).toBe(T0 + 3 * HOUR_MS);
+    expect(r.clockOutAt).toBe(T0 + 4 * HOUR_MS);
+    expect(computeTimeclock(p, settings, T0 + 16 * HOUR_MS).state).toBe('at-lunch');
   });
 });
 
 describe('nextPunchPosition', () => {
   it('walks the fixed rows in order', () => {
-    expect(nextPunchPosition(emptyPunches())).toBe(0);
-    expect(nextPunchPosition(punches([T0, null, null, null]))).toBe(1);
-    expect(nextPunchPosition(punches([T0, T0 + 4 * HOUR_MS, null, null]))).toBe(2);
-    expect(nextPunchPosition(punches([T0, T0 + 4 * HOUR_MS, T0 + 4.5 * HOUR_MS, null]))).toBe(3);
-    expect(nextPunchPosition(punches([T0, T0 + 4 * HOUR_MS, T0 + 4.5 * HOUR_MS, T0 + 8.5 * HOUR_MS]))).toBeNull();
+    expect(nextPunchPosition(normalizePunches([]), true)).toBe(0);
+    expect(nextPunchPosition(punches([T0, null, null, null]), true)).toBe(1);
+    expect(nextPunchPosition(punches([T0, T0 + 4 * HOUR_MS, null, null]), true)).toBe(2);
+    expect(nextPunchPosition(punches([T0, T0 + 4 * HOUR_MS, T0 + 4.5 * HOUR_MS, null]), true)).toBe(3);
+    expect(nextPunchPosition(punches([T0, T0 + 4 * HOUR_MS, T0 + 4.5 * HOUR_MS, T0 + 8.5 * HOUR_MS]), true)).toBeNull();
   });
 
   it('puts a pair before lunch ahead of lunch, and one after lunch ahead of the clock out', () => {
     // Out 1 at 10:00, before a lunch not taken yet: its In is next, not Lunch out.
-    expect(nextPunchPosition(punches([T0, null, null, T0 + 2 * HOUR_MS, null, null]))).toBe(4);
+    expect(nextPunchPosition(punches([T0, null, null, T0 + 2 * HOUR_MS, null, null]), true)).toBe(4);
     // Lunch taken, then a pair added: its Out comes before the Clock out row.
-    expect(nextPunchPosition(punches([T0, T0 + 4 * HOUR_MS, T0 + 4.5 * HOUR_MS, null, null, null]))).toBe(3);
+    expect(nextPunchPosition(punches([T0, T0 + 4 * HOUR_MS, T0 + 4.5 * HOUR_MS, null, null, null]), true)).toBe(3);
     // Clocked out, then "Add extra out / in": the old clock out is Out 1, so In 1 is next.
-    expect(nextPunchPosition(punches([T0, T0 + 4 * HOUR_MS, T0 + 4.5 * HOUR_MS, T0 + 6 * HOUR_MS, null, null]))).toBe(4);
+    expect(nextPunchPosition(punches([T0, T0 + 4 * HOUR_MS, T0 + 4.5 * HOUR_MS, T0 + 6 * HOUR_MS, null, null]), true)).toBe(4);
   });
 
   it('skips rows that are missing', () => {
-    expect(nextPunchPosition([])).toBeNull();
-    expect(nextPunchPosition(punches([T0, null, null]))).toBe(1);
-    expect(nextPunchPosition(punches([T0, T0 + 4 * HOUR_MS, T0 + 4.5 * HOUR_MS]))).toBeNull();
+    expect(nextPunchPosition([], true)).toBeNull();
+    expect(nextPunchPosition(punches([T0, null, null]), true)).toBe(1);
+    expect(nextPunchPosition(punches([T0, T0 + 4 * HOUR_MS, T0 + 4.5 * HOUR_MS]), true)).toBeNull();
   });
 
   it('goes from the clock in to the clock out with the lunch rows hidden', () => {

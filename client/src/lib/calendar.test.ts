@@ -30,7 +30,7 @@ describe('calendarMonth', () => {
 
   it('drops Saturday and Sunday, and what they earned, when weekends are off', () => {
     const days = [makeSummary('2026-09-12', { retroAt: 1 }), makeSummary('2026-09-14', { retroAt: 1 })]; // a Saturday and a Monday
-    const weeks = calendarMonth(days, settings, TODAY, NOW, '2026-09-01', false);
+    const weeks = calendarMonth(days, { ...settings, showWeekends: false }, TODAY, NOW, '2026-09-01');
     expect(weeks).toHaveLength(5);
     expect(weeks.map((w) => w.length)).toEqual([5, 5, 5, 5, 5]);
     expect(weeks.flat().map((d) => d.date)).not.toContain('2026-09-12');
@@ -43,7 +43,7 @@ describe('calendarMonth', () => {
         .map((d) => d.date),
     ).toEqual(['2026-09-14']);
     // August 2026 starts on a Saturday: its first work week is the 3rd, not a row of filler.
-    const august = calendarMonth([], settings, TODAY, NOW, '2026-08-01', false);
+    const august = calendarMonth([], { ...settings, showWeekends: false }, TODAY, NOW, '2026-08-01');
     expect(august[0]![0]!.date).toBe('2026-08-03');
     expect(august).toHaveLength(5);
     expect(august[4]![0]!.date).toBe('2026-08-31'); // a Monday alone in its row

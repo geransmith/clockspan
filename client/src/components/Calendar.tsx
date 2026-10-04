@@ -10,7 +10,6 @@ import { periodOffset, periodRange } from '../lib/review';
 import {
   allPrioritiesDone,
   countStickers,
-  dayTimeclock,
   daySummaryOf,
   isFullDay,
   STICKER_LABELS,
@@ -19,7 +18,7 @@ import {
   type DaySummary,
   type StickerId,
 } from '../lib/stickers';
-import { targetFraction, type TimeclockResult } from '../lib/timeclock';
+import { dayTimeclock, targetFraction, type TimeclockResult } from '../lib/timeclock';
 import { Check } from './Icons';
 import { LoadFailed } from './LoadFailed';
 import { PeriodNav, PeriodReset } from './PeriodNav';
@@ -54,13 +53,14 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
   // punch): only a day with something on it counts, as in the review.
   const kept = useMemo(() => list?.filter(hasContent), [list]);
   const weeks = useMemo(
-    () => (kept ? calendarMonth(kept.map(daySummaryOf), settings, today, now, period.from, settings.showWeekends) : null),
+    () => (kept ? calendarMonth(kept.map(daySummaryOf), settings, today, now, period.from) : null),
     [kept, settings, today, now, period.from],
   );
   const stickers = settings.stickers;
-  // Hours not tracked: no Clocked out sticker, so the legend and a full day go without it.
+  // Hours not tracked, or lunch not tracked (meal periods and lunch punches both off): no Clocked
+  // out or Lunch taken sticker, so the legend and a full day go without them.
+  const reasons = useMemo(() => stickerReasons(settings), [settings]);
   const { trackHours } = settings;
-  const reasons = useMemo(() => stickerReasons(trackHours), [trackHours]);
   const count = useMemo(() => (weeks && stickers ? countStickers(weeks, reasons) : null), [weeks, stickers, reasons]);
   // Worked out from the day rather than read off its cell: with weekends off, a Saturday opened
   // from its sheet is picked but has no cell.

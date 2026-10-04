@@ -1,6 +1,6 @@
 import { addDays, addMonths, startOfWeek } from '../../../shared/dates.js';
-import { dayTimeclock, stickersForDay, type DaySummary, type StickerId, type StickerSettings } from './stickers';
-import type { TimeclockResult } from './timeclock';
+import { stickerReasons, stickersForDay, type DaySummary, type StickerId, type StickerSettings } from './stickers';
+import { dayTimeclock, type TimeclockResult } from './timeclock';
 
 export interface CalendarDay {
   date: string;
@@ -24,15 +24,15 @@ export interface CalendarDay {
  */
 export function calendarMonth(
   days: DaySummary[],
-  settings: StickerSettings,
+  settings: StickerSettings & { showWeekends: boolean },
   today: string,
   now: number,
   monthStart: string,
-  showWeekends = true,
 ): CalendarDay[][] {
   const byDate = new Map(days.map((d) => [d.date, d]));
   const monthEnd = addDays(addMonths(monthStart, 1), -1);
-  const width = showWeekends ? 7 : 5;
+  const width = settings.showWeekends ? 7 : 5;
+  const reasons = stickerReasons(settings);
   const out: CalendarDay[][] = [];
   for (let monday = startOfWeek(monthStart); monday <= monthEnd; monday = addDays(monday, 7)) {
     const row: CalendarDay[] = [];
@@ -46,7 +46,7 @@ export function calendarMonth(
         outside,
         isFuture: date > today,
         hasData: d != null,
-        stickers: d && timeclock ? stickersForDay(d, timeclock, settings.trackHours) : [],
+        stickers: d && timeclock ? stickersForDay(d, timeclock, reasons) : [],
         timeclock,
       });
     }

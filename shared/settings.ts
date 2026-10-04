@@ -96,8 +96,9 @@ export interface Settings {
   /** The lunch deadline and second meal period rules, with their alarms. Off where they don't apply (exempt work, another state). */
   mealRules: boolean;
   /**
-   * The timeclock's Lunch out and Lunch in rows while `mealRules` is off. Off hides them on a
-   * day with no lunch punched; with the meal periods on they always show.
+   * The timeclock's Lunch out and Lunch in rows, and the Lunch taken sticker, while `mealRules`
+   * is off. Off hides the rows on a day with no lunch punched and drops the sticker; with the
+   * meal periods on, both stay.
    */
   lunchPunches: boolean;
   /** Hours worked shown past the day's own tiles: the week line, the hours in History and the Clocked out sticker. */

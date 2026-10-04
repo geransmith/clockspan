@@ -5,7 +5,6 @@ import { STICKER_EMOJI } from './copy';
 import { calendarMonth } from './calendar';
 import {
   countStickers,
-  dayTimeclock,
   daySummaryOf,
   STICKER_LABELS,
   STICKER_REASONS,
@@ -15,7 +14,7 @@ import {
   type DaySummary,
   type StickerSettings,
 } from './stickers';
-import { emptyPunches } from './timeclock';
+import { dayTimeclock, emptyPunches } from './timeclock';
 
 const settings = TEST_SETTINGS;
 const TODAY = '2026-09-17'; // a Thursday
@@ -34,7 +33,7 @@ function punches(date: string, times: (string | null)[]): Punch[] {
 }
 
 /** What the calendar gives a day: its stickers, judged on its timeclock worked out once. */
-const earned = (d: DaySummary, s: StickerSettings = settings) => stickersForDay(d, dayTimeclock(d, s, TODAY, NOW), s.trackHours);
+const earned = (d: DaySummary, s: StickerSettings = settings) => stickersForDay(d, dayTimeclock(d, s, TODAY, NOW), stickerReasons(s));
 
 describe('stickersForDay', () => {
   it("maps each reason's id to its label", () => {
@@ -69,9 +68,8 @@ describe('stickersForDay', () => {
     const noHours = { ...settings, trackHours: false };
     const lunchOnly = makeSummary('2026-09-14', { punches: punches('2026-09-14', ['08:00', '12:00', null, null]) });
     expect(earned(lunchOnly, noHours)).toEqual(['lunch']);
-    expect(stickerReasons(false).map((r) => r.id)).toEqual(['lunch', 'priorities', 'focus', 'reviewed']);
-    expect(stickerReasons(true)).toBe(STICKER_REASONS);
-    expect(stickerReasons(undefined)).toBe(STICKER_REASONS);
+    expect(stickerReasons(noHours).map((r) => r.id)).toEqual(['lunch', 'priorities', 'focus', 'reviewed']);
+    expect(stickerReasons(settings)).toEqual(STICKER_REASONS);
     // Everything such a day can earn makes it full.
     const all = makeSummary('2026-09-14', {
       punches: punches('2026-09-14', ['08:00', '12:00', '12:30', '16:30']),
@@ -81,17 +79,31 @@ describe('stickersForDay', () => {
       retroAt: 1,
     });
     const weeks = calendarMonth([all], noHours, TODAY, NOW, '2026-09-01');
-    expect(countStickers(weeks, stickerReasons(false)).full).toBe(1);
-    expect(countStickers(weeks).full).toBe(0);
+    expect(countStickers(weeks, stickerReasons(noHours)).full).toBe(1);
+    expect(countStickers(weeks, STICKER_REASONS).full).toBe(0);
   });
 
-  it("goes by the day's own work-day length when it has one", () => {
-    // Clocked in at 8:00 today: the usual 8 h day ends at 16:30, a half day reached its end at 12:00.
-    const clockedIn = punches(TODAY, ['08:00', null, null, null]);
-    expect(dayTimeclock(makeSummary(TODAY, { punches: clockedIn }), settings, TODAY, NOW).clockOutAt).toBe(new Date(2026, 8, 17, 16, 30).getTime());
-    expect(dayTimeclock(makeSummary(TODAY, { punches: clockedIn, workMinutes: 240 }), settings, TODAY, NOW).clockOutAt).toBe(
-      new Date(2026, 8, 17, 12, 0).getTime(),
-    );
+  it('gives no Lunch taken sticker with the meal periods and lunch punches both off, and a legend and full day without it', () => {
+    const noLunch = { ...settings, mealRules: false, lunchPunches: false };
+    expect(stickerReasons(noLunch).map((r) => r.id)).toEqual(['clockedOut', 'priorities', 'focus', 'reviewed']);
+    expect(stickerReasons({ ...settings, mealRules: false })).toEqual(STICKER_REASONS);
+    expect(stickerReasons({ ...noLunch, trackHours: false }).map((r) => r.id)).toEqual(['priorities', 'focus', 'reviewed']);
+    // A lunch punched anyway still counts on the timeclock, but earns no sticker the legend leaves out.
+    const all = makeSummary('2026-09-14', {
+      punches: punches('2026-09-14', ['08:00', '12:00', '12:30', '16:30']),
+      prioritiesDone: 1,
+      prioritiesTotal: 1,
+      focusSeconds: 60,
+      retroAt: 1,
+    });
+    expect(dayTimeclock(all, noLunch, TODAY, NOW).lunchStatus).toBe('taken');
+    expect(earned(all, noLunch)).toEqual(['clockedOut', 'priorities', 'focus', 'reviewed']);
+    const weeks = calendarMonth([all], noLunch, TODAY, NOW, '2026-09-01');
+    expect(countStickers(weeks, stickerReasons(noLunch)).full).toBe(1);
+    expect(countStickers(weeks, STICKER_REASONS).full).toBe(0);
+  });
+
+  it("earns Lunch taken, not Clocked out, for an out at a half day's end", () => {
     // Out at 12:00 is lunch on either length: only the Clock out ends today.
     const out = punches(TODAY, ['08:00', '12:00', null, null]);
     expect(earned(makeSummary(TODAY, { punches: out }))).toEqual(['lunch']);
@@ -151,7 +163,7 @@ describe('countStickers', () => {
       retroAt: 1,
     });
     const days = [full, makeSummary('2026-09-14', { retroAt: 1 }), makeSummary('2026-09-02', { focusSeconds: 10 })];
-    expect(countStickers(calendarMonth(days, settings, TODAY, NOW, '2026-09-01'))).toEqual({
+    expect(countStickers(calendarMonth(days, settings, TODAY, NOW, '2026-09-01'), STICKER_REASONS)).toEqual({
       total: 7,
       full: 1,
       byReason: { clockedOut: 1, lunch: 1, priorities: 1, focus: 2, reviewed: 2 },

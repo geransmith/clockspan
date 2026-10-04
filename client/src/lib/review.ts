@@ -2,7 +2,7 @@ import type { Day } from '../types';
 import { addDays, addMonths, DAY_MS, parseDateKey, startOfMonth, startOfQuarter, startOfWeek } from '../../../shared/dates.js';
 import { formatDateSpan, formatMonth, sameText } from './format';
 import { hasContent, reviewDay } from './retro';
-import { daySettings, timeclockForDate, type TimeclockSettings } from './timeclock';
+import { dayTimeclock, type TimeclockSettings } from './timeclock';
 
 export const PERIOD_KINDS = ['week', 'month', 'quarter'] as const;
 export type PeriodKind = (typeof PERIOD_KINDS)[number];
@@ -130,7 +130,7 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
   const notDone = new Map<string, OpenPriority>();
   for (const day of days.filter((d) => d.date <= today).sort((a, b) => a.date.localeCompare(b.date))) {
     if (!hasContent(day)) continue;
-    const tc = timeclockForDate(day.punches, daySettings(settings, day), day.date, today, now);
+    const tc = dayTimeclock(day, settings, today, now);
     const r = reviewDay(day.priorities, day.sessions);
     out.days++;
     out.workedSeconds += tc.workedSeconds;
