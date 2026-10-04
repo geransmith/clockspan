@@ -7,11 +7,7 @@ import { AuthGate } from '../auth/AuthGate';
 import { settle, TODAY } from '../test/hooks';
 import { Header } from './Header';
 
-// The header reads the signed-in user from AuthGate, which needs an answer from getAuth and the real event name.
-vi.mock('../api', async (importOriginal) => {
-  const { UNAUTHENTICATED_EVENT } = await importOriginal<typeof import('../api')>();
-  return { UNAUTHENTICATED_EVENT, getAuth: vi.fn(), logout: vi.fn() };
-});
+vi.mock('../api');
 
 async function renderHeader(date: string) {
   const onNavigate = vi.fn();

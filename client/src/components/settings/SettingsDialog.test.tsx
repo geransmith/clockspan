@@ -10,18 +10,7 @@ import { makeSettings, settle, SettingsAndDays } from '../../test/hooks';
 import type { AuthInfo } from '../../types';
 import { SettingsDialog } from './SettingsDialog';
 
-vi.mock('../../api', async (importOriginal) => {
-  const { UNAUTHENTICATED_EVENT } = await importOriginal<typeof import('../../api')>();
-  return {
-    UNAUTHENTICATED_EVENT,
-    getAuth: vi.fn(),
-    getSettings: vi.fn(),
-    putSettings: vi.fn(),
-    getPruneInfo: vi.fn(),
-    listUsers: vi.fn(),
-    changePassword: vi.fn(),
-  };
-});
+vi.mock('../../api');
 vi.mock('../../lib/alerts');
 
 const LOCAL_ADMIN: AuthInfo = {
