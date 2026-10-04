@@ -7,13 +7,15 @@
  * - A save that fails just leaves `pending`, so the screen falls back to what the server has,
  *   with any other change still on its way laid over it. Nothing has to remember an old value
  *   to put back, and two failures in a row can't put back each other's guesses.
- * - A read's answer replaces `confirmed` and never a pending change, which stays on top. Only an
- *   answer older than a change the server has since confirmed is dropped: `version` moves with
- *   every confirmed change, and a read carries the version it was sent at.
+ * - A read's answer replaces `confirmed` and never a pending change, which stays on top. An
+ *   answer older than a change the server has since confirmed is dropped (`version` moves with
+ *   every confirmed change, and a read carries the version it was sent at), and one the same as
+ *   `confirmed` changes nothing.
  *
- * Pure and immutable: every function on a `Tracked` returns a new one. `apply` and `commit` must
- * be pure too (no clock reads inside them), since the shown value is worked out again whenever it
- * changes. `serial()`, the stores' write queue, lives here too.
+ * Pure and immutable: no function changes a `Tracked`; each returns a new one, or the same one
+ * when nothing changed (`fetched`). `apply` and `commit` must be pure too (no clock reads inside
+ * them), since the shown value is worked out again whenever it changes. `serial()`, the stores'
+ * write queue, lives here too.
  */
 
 interface Pending<T> {
@@ -84,11 +86,15 @@ export function confirm<T>(t: Tracked<T>, change: (confirmed: T) => T): Tracked<
  * A read sent at `sentVersion` answered `value`. `stale`: the server confirmed a change after it
  * was sent, so the answer is older than that change and may not include it. A stale answer is
  * dropped, except on a value never loaded, which takes it anyway since there is nothing better
- * to show.
+ * to show. An answer that prints the same as the confirmed value changes nothing and `t` itself
+ * comes back, so a store that works out what it shows per tracked value (useDay's `shownDays`,
+ * the memos in useSettings and useTimer) keeps that value's identity, lists and all. The server
+ * builds days, settings and sessions in one fixed key order, and commits spread onto them in
+ * place, so a key-order difference only costs a replace.
  */
 export function fetched<T>(t: Tracked<T>, sentVersion: number, value: T): { next: Tracked<T>; stale: boolean } {
   const stale = t.version !== sentVersion;
-  if (stale && t.confirmed !== undefined) return { next: t, stale };
+  if (t.confirmed !== undefined && (stale || JSON.stringify(value) === JSON.stringify(t.confirmed))) return { next: t, stale };
   return { next: { ...t, confirmed: value }, stale };
 }
 

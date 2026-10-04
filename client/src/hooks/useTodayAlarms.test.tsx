@@ -105,13 +105,14 @@ describe('useTodayAlarms', () => {
     expect(tags()).toContain('alarm:clockOut');
   });
 
-  it('lets a hold go five minutes after the last change, though focus stays and each refresh brings a new copy', async () => {
+  it('lets a hold go five minutes after the last change, though focus stays and a refresh brings the same times in a new list', async () => {
     vi.mocked(api.putPunches).mockImplementation((_date, punches) => Promise.resolve({ punches }));
     const { result } = render(makeSettings(), makeDay());
     await judged();
     act(() => result.current.alarms.setEditingPunches(true));
-    // The server has the edit, so each minute's refresh brings the same times.
-    vi.mocked(api.getDay).mockResolvedValue(overDay());
+    // The server has the edit, and a note written on another device makes the next refresh a new
+    // list with the same times.
+    vi.mocked(api.getDay).mockResolvedValue(overDay({ retroNote: 'From the phone' }));
     await act(() => result.current.store.setPunches(TODAY, overDay().punches));
     await settle(5 * MIN - 1000);
     expect(vi.mocked(api.getDay).mock.calls.length).toBeGreaterThan(1);
@@ -120,13 +121,16 @@ describe('useTodayAlarms', () => {
     expect(tags()).toContain('alarm:clockOut');
   });
 
-  it('keeps judging while a field has focus and nothing was typed, though each refresh brings a new copy', async () => {
+  it('keeps judging while a field has focus and nothing was typed, though a refresh brings the same times in a new list', async () => {
     // Clocked in 8 h 29 m ago with a 30 min lunch: the day ends a minute from now.
-    const { result } = render(makeSettings(), makeDay(TODAY, { punches: punchesAt(T0 - 509 * MIN, T0 - 300 * MIN, T0 - 270 * MIN) }));
+    const day = makeDay(TODAY, { punches: punchesAt(T0 - 509 * MIN, T0 - 300 * MIN, T0 - 270 * MIN) });
+    const { result } = render(makeSettings(), day);
     await judged();
     act(() => result.current.alarms.setEditingPunches(true));
+    vi.mocked(api.getDay).mockResolvedValue({ ...day, retroNote: 'From the phone' });
     vi.mocked(alert).mockClear();
-    // The minute's refresh lands as the day ends: the same times in a new list.
+    // The minute's refresh lands as the day ends, with a note from another device: the same times
+    // in a new list.
     await settle(MIN);
     expect(api.getDay).toHaveBeenCalledTimes(2);
     expect(alerted().find((a) => a.tag === 'alarm:clockOut')?.title).toBe('Time to clock out');

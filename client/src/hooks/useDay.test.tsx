@@ -372,6 +372,16 @@ describe('refresh', () => {
     expect(result.current.days[TODAY]?.retroNote).toBe('from the phone');
   });
 
+  it('keeps a day a refresh brings back unchanged', async () => {
+    vi.mocked(api.getDay).mockImplementation(() => Promise.resolve(makeDay(TODAY, { punches: punchesAt(T0) })));
+    const { result } = renderStore();
+    await settle();
+    const before = result.current.days[TODAY];
+    await act(() => result.current.refresh(TODAY));
+    expect(api.getDay).toHaveBeenCalledTimes(2);
+    expect(result.current.days[TODAY]).toBe(before);
+  });
+
   it('sends nothing for a day not loaded yet, and a change still out stays on top of the answer', async () => {
     const first = deferred<Day>();
     vi.mocked(api.getDay).mockReturnValueOnce(first.promise);
