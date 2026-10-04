@@ -58,7 +58,7 @@ server/                 Express API → dist/server
   settings.ts           mergeSettings (defaults + validation on every read and write), loadSettings
   retention.ts          old-day pruning (pruneDays, runRetention, the RETENTION_DAYS cap)
   validate.ts           isWholeNumber: the one check for every bounded whole number the server takes
-  refuse.ts             refuse(): sends an ErrorResponse; every refusal but the timer-start 409 goes through it
+  refuse.ts             refuse(): sends an ErrorResponse; every API refusal but the timer-start 409 goes through it
   auth/                 session cookie, scrypt passwords, the login limiter, publicUser/logName (users.ts),
                         middleware (currentUser), local + OIDC routes, resetPassword (reset.ts: what the
                         reset-password command does)
