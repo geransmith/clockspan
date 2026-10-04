@@ -452,9 +452,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   one rule, no clock-in fallback. `GET /days/range` returns full days and the client does the
   rollup (the review, the History calendar and the week line all fetch it through `useRange`,
   one period at a time: it reads through `store.readRange`, lays the store's copies over the
-  answer so an edit shows at once (`useHeldOver`), and is asked again after a prune or on Try
-  again (`retry`) after a failed read; the left-open offer, `useLeftOpen`, does the same once a
-  day); register any new literal path under `/days` before `/:date`.
+  answer so an edit shows at once (`useHeldOver`), and is asked again after a prune, or on Try
+  again (`retry`) after a failed read; the left-open offer, `useLeftOpen`, reads the same way
+  once a day and offers nothing when the read fails); register any new literal path under
+  `/days` before `/:date`.
 - **History → Days opens on the route's date.** `App.tsx` passes `route.date ?? today` to `History`;
   the calendar starts on that month with that day picked, and only "Open day" navigates. So
   the header's History button lands on the month of the day being viewed. The calendar holds
