@@ -1,4 +1,4 @@
-import type { Day, Priority, Session } from '../types';
+import type { CompletedSession, Day, Priority, Session } from '../types';
 import { hasText } from './priorities';
 
 export interface PriorityReview {
@@ -14,7 +14,7 @@ export interface DayReview {
   /** Rows with text, in position order. */
   planned: PriorityReview[];
   /** Completed sessions not linked to a row (or linked to one that was removed). */
-  unplanned: Session[];
+  unplanned: CompletedSession[];
   onPlanSeconds: number;
   offPlanSeconds: number;
   done: number;
@@ -30,7 +30,7 @@ export function focusOf(sessions: Session[]): { seconds: number; count: number }
   let count = 0;
   for (const s of sessions) {
     if (s.status !== 'completed') continue;
-    seconds += s.durationSeconds ?? 0;
+    seconds += s.durationSeconds;
     count++;
   }
   return { seconds, count };
@@ -62,11 +62,11 @@ export function reviewDay(priorities: Priority[], sessions: Session[]): DayRevie
   const uids = new Set(rows.map((p) => p.uid));
 
   const focused = new Map<string | null, { seconds: number; count: number }>();
-  const unplanned: Session[] = [];
+  const unplanned: CompletedSession[] = [];
   let onPlanSeconds = 0;
   let offPlanSeconds = 0;
   for (const s of completed) {
-    const seconds = s.durationSeconds ?? 0;
+    const seconds = s.durationSeconds;
     if (s.priorityUid && uids.has(s.priorityUid)) {
       const cur = focused.get(s.priorityUid) ?? { seconds: 0, count: 0 };
       focused.set(s.priorityUid, { seconds: cur.seconds + seconds, count: cur.count + 1 });

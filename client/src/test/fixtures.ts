@@ -6,7 +6,7 @@ import { ApiError } from '../lib/apiError';
 import { REQUEST_FAILED } from '../lib/copy';
 import type { DaySummary } from '../lib/stickers';
 import { normalizePunches } from '../lib/timeclock';
-import type { Break, Day, Punch, Session, Settings } from '../types';
+import type { Break, CancelledSession, CompletedSession, Day, Punch, RunningSession, Settings } from '../types';
 
 /**
  * The plain test factories, with no React and no providers, so a lib test (which runs under
@@ -77,7 +77,7 @@ export function makeDay(date = TODAY, patch: Partial<Day> = {}): Day {
   return { ...emptyDay(date), punches: punchesAt(), ...patch };
 }
 
-export function makeSession(patch: Partial<Session> = {}): Session {
+export function makeSession(patch: Partial<RunningSession> = {}): RunningSession {
   return {
     id: 1,
     date: TODAY,
@@ -94,18 +94,17 @@ export function makeSession(patch: Partial<Session> = {}): Session {
   };
 }
 
+/** What `endSession` may set on the ended session. */
+export type EndPatch = Partial<CompletedSession | CancelledSession>;
+
+/** `s` as the server answers once it ended: finished after its whole plan, unless `patch` says otherwise. */
+export function endSession(s: RunningSession, patch: EndPatch = {}): CompletedSession | CancelledSession {
+  return { ...s, status: 'completed', endedAt: s.startedAt + s.plannedSeconds * 1000, durationSeconds: s.plannedSeconds, pausedAt: null, ...patch };
+}
+
 /** A session that ran its whole plan of `seconds` from `startedAt` and was finished. */
-export function completedSession(id: number, startedAt: number, seconds: number, patch: Partial<Session> = {}): Session {
-  return makeSession({
-    id,
-    label: `s${id}`,
-    startedAt,
-    plannedSeconds: seconds,
-    endedAt: startedAt + seconds * 1000,
-    status: 'completed',
-    durationSeconds: seconds,
-    ...patch,
-  });
+export function completedSession(id: number, startedAt: number, seconds: number, patch: EndPatch = {}): CompletedSession | CancelledSession {
+  return endSession(makeSession({ id, label: `s${id}`, startedAt, plannedSeconds: seconds }), patch);
 }
 
 /** A five-minute break from T0 that ran its full length. */

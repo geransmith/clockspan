@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { completedSession, makeDay } from '../test/fixtures';
+import { completedSession, makeDay, makeSession } from '../test/fixtures';
 import type { Day, Priority } from '../types';
 import { focusOf, hasContent, reviewDay } from './retro';
 import { emptyPunches } from './timeclock';
@@ -18,7 +18,7 @@ describe('focusOf', () => {
     const sessions = [
       completedSession(1, 0, 600),
       completedSession(2, 1, 300),
-      completedSession(3, 2, 900, { status: 'running', endedAt: null, durationSeconds: null }),
+      makeSession({ id: 3, startedAt: 2, plannedSeconds: 900 }),
       completedSession(4, 3, 100, { status: 'cancelled' }),
     ];
     expect(focusOf(sessions)).toEqual({ seconds: 900, count: 2 });
@@ -33,7 +33,7 @@ describe('hasContent', () => {
   it('is false for a day with nothing on it', () => {
     expect(hasContent(blank())).toBe(false);
     expect(hasContent(blank({ priorities: [row(1, '  ', { uid: null, addedAt: null })], retroNote: ' \n' }))).toBe(false);
-    expect(hasContent(blank({ sessions: [completedSession(1, 0, 600, { status: 'running', endedAt: null, durationSeconds: null })] }))).toBe(false);
+    expect(hasContent(blank({ sessions: [makeSession({ startedAt: 0, plannedSeconds: 600 })] }))).toBe(false);
     expect(hasContent(blank({ sessions: [completedSession(1, 0, 600, { status: 'cancelled' })], workMinutes: 270, overtimeApproved: true }))).toBe(false);
   });
 
@@ -67,17 +67,13 @@ describe('reviewDay', () => {
     expect(r.offPlanSeconds).toBe(900);
   });
 
-  it('counts a completed session with no duration as zero', () => {
-    // `durationSeconds` is nullable: a completed session whose end was never written reads as none.
-    const r = reviewDay([row(1, 'Planned')], [completedSession(1, 10_000, 600, { durationSeconds: null, priorityUid: 'uid100000000' })]);
-    expect(r.planned.map((p) => [p.priority.position, p.focusedSeconds, p.sessions])).toEqual([[1, 0, 1]]);
-    expect(r.onPlanSeconds).toBe(0);
-  });
-
   it('ignores running and cancelled sessions', () => {
     const r = reviewDay(
       [row(1, 'A')],
-      [completedSession(1, 10_000, 600, { status: 'running', endedAt: null, durationSeconds: null, priorityUid: 'uid100000000' })],
+      [
+        makeSession({ startedAt: 10_000, plannedSeconds: 600, priorityUid: 'uid100000000' }),
+        completedSession(2, 20_000, 600, { status: 'cancelled', priorityUid: 'uid100000000' }),
+      ],
     );
     expect(r.onPlanSeconds).toBe(0);
     expect(r.unplanned).toHaveLength(0);

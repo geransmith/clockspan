@@ -6,8 +6,8 @@ import { alert, dismissByTag, unlockAudio, warnQuietly } from '../lib/alerts';
 import { TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
 import { formatCountdown } from '../lib/format';
 import { dueKey } from '../lib/timer';
-import { AllProviders, apiError, deferred, makeDay, makeSession, makeSettings, MIN, settle, T0, TODAY } from '../test/hooks';
-import type { Priority, Session } from '../types';
+import { AllProviders, apiError, deferred, endSession, makeDay, makeSession, makeSettings, MIN, settle, T0, TODAY } from '../test/hooks';
+import type { Priority, RunningSession, Session } from '../types';
 import { useDays, useDayStore } from './useDay';
 import { useTimer } from './useTimer';
 
@@ -34,7 +34,7 @@ async function renderRunning(session: Session | null = makeSession()) {
 const justTyped: Priority = { position: 1, text: 'Just typed', done: false, uid: 'u1', addedAt: T0 };
 
 /** A session that started `minutes` ago with the default 25 min plan. */
-const startedAgo = (minutes: number, patch: Partial<Session> = {}) => makeSession({ startedAt: Date.now() - minutes * MIN, ...patch });
+const startedAgo = (minutes: number, patch: Partial<RunningSession> = {}) => makeSession({ startedAt: Date.now() - minutes * MIN, ...patch });
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
@@ -263,7 +263,7 @@ describe('adjust', () => {
 
     // 23 s past the new end, Finish has nothing to ask.
     vi.mocked(api.getRunning).mockResolvedValue({ session: longer });
-    vi.mocked(api.finishSession).mockResolvedValue({ session: { ...longer, status: 'completed', durationSeconds: 31 * 60 } });
+    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(longer, { durationSeconds: 31 * 60 }) });
     await settle((31 * 60 - 1537 + 23) * 1000);
     expect(result.current.timer.overrunSeconds).toBe(23);
     act(() => result.current.timer.requestFinish());
@@ -274,7 +274,7 @@ describe('adjust', () => {
 
   it('finishes when the new plan is already used up', async () => {
     const { result } = await renderRunning(startedAgo(1.5, { plannedSeconds: 120 }));
-    vi.mocked(api.finishSession).mockResolvedValue({ session: startedAgo(1.5, { status: 'completed', durationSeconds: 90 }) });
+    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(startedAgo(1.5), { durationSeconds: 90 }) });
     await act(() => result.current.timer.adjust(-5 * 60));
     expect(api.patchSession).not.toHaveBeenCalled();
     expect(api.finishSession).toHaveBeenCalledWith(1, false);
@@ -285,7 +285,7 @@ describe('adjust', () => {
 
   it('reports no finish when shrinking finds it cancelled elsewhere', async () => {
     const { result } = await renderRunning(startedAgo(1.5, { plannedSeconds: 120 }));
-    vi.mocked(api.finishSession).mockResolvedValue({ session: startedAgo(1.5, { status: 'cancelled' }) });
+    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(startedAgo(1.5), { status: 'cancelled' }) });
     await act(() => result.current.timer.adjust(-5 * 60));
     expect(result.current.timer.running).toBeNull();
     expect(result.current.timer.finished).toBeNull();
@@ -384,7 +384,7 @@ describe('edit', () => {
     vi.mocked(api.getRunning).mockResolvedValue({ session: makeSession({ id: 3, label: 'Third' }) });
     await settle(MIN);
     expect(result.current.timer.running).toMatchObject({ id: 3, label: 'Third' });
-    rename.resolve({ session: startedAgo(5, { label: 'Renamed', status: 'completed', endedAt: T0, durationSeconds: 300 }) });
+    rename.resolve({ session: endSession(startedAgo(5, { label: 'Renamed' }), { endedAt: T0, durationSeconds: 300 }) });
     await act(() => a);
     expect(result.current.timer.running).toMatchObject({ id: 3, label: 'Third' });
     expect(result.current.store.days[TODAY]?.sessions.find((s) => s.id === 1)).toMatchObject({ status: 'completed', label: 'Renamed' });
@@ -430,7 +430,7 @@ describe('a press the server answers differently', () => {
   it('drops a session that answers a press as ended elsewhere, and logs its row', async () => {
     const { result } = await renderRunning(startedAgo(5));
     vi.mocked(api.patchSession).mockResolvedValue({
-      session: startedAgo(5, { label: 'Renamed', status: 'completed', endedAt: T0, durationSeconds: 300 }),
+      session: endSession(startedAgo(5, { label: 'Renamed' }), { endedAt: T0, durationSeconds: 300 }),
     });
     await act(() => result.current.timer.edit({ label: 'Renamed' }));
     expect(result.current.timer.running).toBeNull();
@@ -541,12 +541,12 @@ describe('pause and resume', () => {
   it('closes a pause left for an hour, quietly, logging the time before it', async () => {
     const { result } = await renderRunning(startedAgo(70, { pausedAt: T0 - 59 * MIN, label: '' }));
     expect(api.finishSession).not.toHaveBeenCalled();
-    vi.mocked(api.finishSession).mockResolvedValue({ session: startedAgo(71, { status: 'completed', durationSeconds: null }) });
+    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(startedAgo(70, { label: '' }), { endedAt: T0 - 59 * MIN, durationSeconds: 660 }) });
     await settle(MIN);
     expect(api.finishSession).toHaveBeenCalledWith(1);
     expect(result.current.timer.running).toBeNull();
     expect(alert).toHaveBeenCalledWith(
-      expect.objectContaining({ title: TIMER_PAUSED_OUT.title, body: TIMER_PAUSED_OUT.body('', '0m'), sound: false, notifications: false }),
+      expect.objectContaining({ title: TIMER_PAUSED_OUT.title, body: TIMER_PAUSED_OUT.body('', '11m'), sound: false, notifications: false }),
     );
   });
 });
@@ -554,7 +554,7 @@ describe('pause and resume', () => {
 describe('finish and cancel', () => {
   it('finish logs the session and clears the timer', async () => {
     const { result } = await renderRunning(startedAgo(5));
-    vi.mocked(api.finishSession).mockResolvedValue({ session: startedAgo(5, { status: 'completed', durationSeconds: 300 }) });
+    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(startedAgo(5), { durationSeconds: 300 }) });
     expect(result.current.timer.finished).toBeNull();
     await act(() => result.current.timer.finish(true));
     expect(api.finishSession).toHaveBeenCalledWith(1, true);
@@ -568,7 +568,7 @@ describe('finish and cancel', () => {
     const { result } = await renderRunning(startedAgo(5));
     const plus = deferred<Answer>();
     vi.mocked(api.patchSession).mockReturnValueOnce(plus.promise);
-    vi.mocked(api.finishSession).mockResolvedValue({ session: startedAgo(5, { status: 'completed', durationSeconds: 300 }) });
+    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(startedAgo(5), { durationSeconds: 300 }) });
     let a!: Promise<void>;
     let f!: Promise<void>;
     act(() => {
@@ -587,7 +587,7 @@ describe('finish and cancel', () => {
 
   it('reports no finish for a session the server says was cancelled elsewhere', async () => {
     const { result } = await renderRunning(startedAgo(5));
-    vi.mocked(api.finishSession).mockResolvedValue({ session: startedAgo(5, { status: 'cancelled' }) });
+    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(startedAgo(5), { status: 'cancelled' }) });
     await act(() => result.current.timer.finish());
     expect(result.current.timer.running).toBeNull();
     expect(result.current.timer.finished).toBeNull();
@@ -597,7 +597,7 @@ describe('finish and cancel', () => {
     const { result } = await renderRunning(startedAgo(5));
     vi.mocked(api.cancelSession)
       .mockRejectedValueOnce(apiError(409))
-      .mockResolvedValueOnce({ session: startedAgo(5, { status: 'cancelled' }) });
+      .mockResolvedValueOnce({ session: endSession(startedAgo(5), { status: 'cancelled' }) });
     await act(() => result.current.timer.cancel());
     expect(api.getRunning).toHaveBeenCalledTimes(2);
     await settle();
@@ -609,7 +609,7 @@ describe('finish and cancel', () => {
 
   it('requestFinish finishes at once before the end', async () => {
     const { result } = await renderRunning(startedAgo(5));
-    vi.mocked(api.finishSession).mockResolvedValue({ session: startedAgo(5, { status: 'completed', durationSeconds: 300 }) });
+    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(startedAgo(5), { durationSeconds: 300 }) });
     act(() => result.current.timer.requestFinish());
     await settle();
     expect(api.finishSession).toHaveBeenCalledTimes(1);
@@ -633,7 +633,7 @@ describe('finish and cancel', () => {
     // The sheet closes on the press, while the session is still shown.
     expect(result.current.timer.running?.id).toBe(1);
     expect(result.current.timer.finishChoice).toBeNull();
-    finishing.resolve({ session: startedAgo(27, { status: 'completed', durationSeconds: 27 * 60 }) });
+    finishing.resolve({ session: endSession(startedAgo(27), { durationSeconds: 27 * 60 }) });
     await act(() => f);
     expect(api.finishSession).toHaveBeenCalledWith(1, true);
   });
@@ -739,7 +739,7 @@ describe("time's up", () => {
   it('finishes at the planned length after the grace, with a chime only if none played for that end', async () => {
     const { result } = await renderRunning(startedAgo(34.9, { label: '' }));
     expect(alert).toHaveBeenCalledTimes(1); // the due banner, chimed
-    vi.mocked(api.finishSession).mockResolvedValue({ session: startedAgo(35, { status: 'completed', durationSeconds: 1500, label: '' }) });
+    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(startedAgo(35, { label: '' }), { durationSeconds: 1500 }) });
     await settle(6000);
     expect(api.finishSession).toHaveBeenCalledWith(1);
     expect(result.current.timer.running).toBeNull();
@@ -757,7 +757,7 @@ describe("time's up", () => {
     vi.stubGlobal('localStorage', { getItem: blocked, setItem: blocked });
     await renderRunning(startedAgo(34.9));
     expect(vi.mocked(alert).mock.lastCall![0]).toMatchObject({ tag: 'timer-due', sound: true });
-    vi.mocked(api.finishSession).mockResolvedValue({ session: startedAgo(35, { status: 'completed', durationSeconds: 1500 }) });
+    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(startedAgo(35), { durationSeconds: 1500 }) });
     await settle(6000);
     expect(alert).toHaveBeenCalledTimes(2);
     expect(alert).toHaveBeenLastCalledWith(expect.objectContaining({ title: TIMER_DONE.title, sound: false, notifications: false }));
@@ -767,7 +767,7 @@ describe("time's up", () => {
     const session = startedAgo(45);
     // The page that chimed was closed or reloaded before the grace ran out.
     localStorage.setItem('focus:timer-due', dueKey(1, session.startedAt + 25 * MIN));
-    vi.mocked(api.finishSession).mockResolvedValue({ session: startedAgo(45, { status: 'completed', durationSeconds: 1500 }) });
+    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(startedAgo(45), { durationSeconds: 1500 }) });
     const { result } = await renderRunning(session);
     await settle();
     expect(result.current.timer.running).toBeNull();
@@ -776,17 +776,17 @@ describe("time's up", () => {
   });
 
   it('chimes the completion for a session that ran out while the page was closed', async () => {
-    vi.mocked(api.finishSession).mockResolvedValue({ session: startedAgo(45, { status: 'completed', durationSeconds: null }) });
+    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(startedAgo(45)) });
     const { result } = await renderRunning(startedAgo(45));
     await settle();
     expect(result.current.timer.running).toBeNull();
     // Found past the grace: no due banner, just the completion.
     expect(alert).toHaveBeenCalledTimes(1);
-    expect(alert).toHaveBeenCalledWith(expect.objectContaining({ title: TIMER_DONE.title, body: TIMER_DONE.body('Write the report', '0m'), sound: true }));
+    expect(alert).toHaveBeenCalledWith(expect.objectContaining({ title: TIMER_DONE.title, body: TIMER_DONE.body('Write the report', '25m'), sound: true }));
   });
 
   it('says nothing when the server reports it was cancelled elsewhere', async () => {
-    vi.mocked(api.finishSession).mockResolvedValue({ session: startedAgo(45, { status: 'cancelled' }) });
+    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(startedAgo(45), { status: 'cancelled' }) });
     const { result } = await renderRunning(startedAgo(45));
     await settle();
     expect(result.current.timer.running).toBeNull();
@@ -809,7 +809,7 @@ describe("time's up", () => {
     expect(api.finishSession).toHaveBeenCalledTimes(2);
     await settle(3000);
     expect(api.finishSession).toHaveBeenCalledTimes(2);
-    vi.mocked(api.finishSession).mockResolvedValueOnce({ session: startedAgo(45, { status: 'completed', durationSeconds: 1500 }) });
+    vi.mocked(api.finishSession).mockResolvedValueOnce({ session: endSession(startedAgo(45), { durationSeconds: 1500 }) });
     await settle(1000);
     expect(api.finishSession).toHaveBeenCalledTimes(3);
     expect(result.current.timer.running).toBeNull();

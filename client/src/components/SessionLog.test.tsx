@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { CONFIRM } from '../lib/copy';
 import { useTimer } from '../hooks/useTimer';
-import { AllProviders, deferred, makeDay, makeSession, makeSettings, MIN, settle, T0, TODAY } from '../test/hooks';
+import { AllProviders, deferred, endSession, makeDay, makeSession, makeSettings, MIN, settle, T0, TODAY } from '../test/hooks';
 import type { Break, Priority, Session, SessionResponse } from '../types';
 import { SessionLog } from './SessionLog';
 
@@ -12,7 +12,7 @@ vi.mock('../api');
 vi.mock('../lib/alerts');
 
 const PLANNED: Priority[] = [{ position: 1, text: 'Ship the fix', done: false, uid: 'abcdef123456', addedAt: T0 }];
-const DONE = makeSession({ status: 'completed', endedAt: T0 + 25 * MIN, durationSeconds: 25 * 60 });
+const DONE = endSession(makeSession(), { endedAt: T0 + 25 * MIN, durationSeconds: 25 * 60 });
 const RUNNING = makeSession({ id: 2, label: 'Still going', startedAt: T0 + 26 * MIN });
 
 /** A break of `minutes` that started `at` minutes after T0 and ran its length. */
@@ -173,7 +173,7 @@ describe('SessionLog', () => {
   });
 
   it('lists breaks between the sessions they followed, with their own total', async () => {
-    const later = makeSession({ id: 2, label: 'Second one', startedAt: T0 + 40 * MIN, status: 'completed', endedAt: T0 + 50 * MIN, durationSeconds: 600 });
+    const later = endSession(makeSession({ id: 2, label: 'Second one', startedAt: T0 + 40 * MIN }), { endedAt: T0 + 50 * MIN, durationSeconds: 600 });
     // A break still running at `now` counts what it has so far.
     await renderLog([later, DONE], [rest(1, 25, 5), rest(2, 28, 5)]);
     const rows = screen.getAllByRole('listitem').map((li) => li.textContent);

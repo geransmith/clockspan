@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { BREAK_SECONDS } from '../../../shared/timer.js';
-import { completedSession, T0 } from '../test/fixtures';
-import type { Break, Session } from '../types';
+import { completedSession, makeSession, T0, type EndPatch } from '../test/fixtures';
+import type { Break } from '../types';
 import { breakSeconds, endBreaksAt, MAX_BREAK_MINUTES, MIN_FOCUS_SECONDS, runningBreak, SET_GAP_MINUTES, SET_SIZE, suggestBreak } from './breaks';
 
-const session = (id: number, startedAt: number, minutes: number, extra: Partial<Session> = {}) => completedSession(id, startedAt, minutes * 60, extra);
+const session = (id: number, startedAt: number, minutes: number, extra: EndPatch = {}) => completedSession(id, startedAt, minutes * 60, extra);
 
 /** Sessions of these lengths one after another, each `gap` minutes after the last one ended. */
-function inARow(lengths: number[], gap = 5): Session[] {
+function inARow(lengths: number[], gap = 5) {
   let at = T0;
   return lengths.map((m, i) => {
     const s = session(i + 1, at, m);
@@ -20,7 +20,7 @@ function inARow(lengths: number[], gap = 5): Session[] {
 describe('suggestBreak', () => {
   it('has nothing to size before a session is completed', () => {
     expect(suggestBreak([])).toBeNull();
-    expect(suggestBreak([session(1, T0, 25, { status: 'running', endedAt: null, durationSeconds: null })])).toBeNull();
+    expect(suggestBreak([makeSession()])).toBeNull();
     expect(suggestBreak([session(1, T0, 25, { status: 'cancelled' })])).toBeNull();
   });
 
@@ -39,7 +39,7 @@ describe('suggestBreak', () => {
 
   it('passes over a false start: under a minute of focus earns nothing and is not one of a set', () => {
     const [a, b, c] = inARow([25, 25, 25]);
-    const blip = session(9, c!.endedAt! + 2 * MINUTE_MS, 0.5);
+    const blip = session(9, c!.endedAt + 2 * MINUTE_MS, 0.5);
     expect(suggestBreak([blip])).toBeNull();
     expect(suggestBreak([{ ...blip, durationSeconds: MIN_FOCUS_SECONDS }])).toMatchObject({ sessionId: 9, minutes: 1 });
     // The latest real session is still c, third of its set.
@@ -72,9 +72,9 @@ describe('suggestBreak', () => {
 
   it('starts the count over after a gap as long as a long break', () => {
     const before = inARow([25, 25, 25]);
-    const after = session(4, before[2]!.endedAt! + SET_GAP_MINUTES * MINUTE_MS, 25);
+    const after = session(4, before[2]!.endedAt + SET_GAP_MINUTES * MINUTE_MS, 25);
     expect(suggestBreak([...before, after])).toMatchObject({ minutes: 5, long: false, position: 1 });
-    const justUnder = session(4, before[2]!.endedAt! + SET_GAP_MINUTES * MINUTE_MS - 1, 25);
+    const justUnder = session(4, before[2]!.endedAt + SET_GAP_MINUTES * MINUTE_MS - 1, 25);
     expect(suggestBreak([...before, justUnder])).toMatchObject({ minutes: 20, long: true });
   });
 

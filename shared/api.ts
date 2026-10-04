@@ -49,25 +49,36 @@ export interface Priority {
   addedAt: number | null;
 }
 
-export type SessionStatus = 'running' | 'completed' | 'cancelled';
-
-export interface Session {
+/** What a session has whatever its status. */
+interface SessionFields {
   id: number;
   date: string;
   label: string;
   plannedSeconds: number;
   startedAt: number;
-  endedAt: number | null;
-  status: SessionStatus;
   /** Pauses that have ended, in total; the open one (`pausedAt`) is not in here yet. */
   pausedSeconds: number;
   /** When the current pause began; null while counting down or once ended. */
   pausedAt: number | null;
-  /** Focus time once ended: the span minus its pauses. */
-  durationSeconds: number | null;
   /** The priority this session was for; null (or a removed row's uid) means unplanned. */
   priorityUid: string | null;
 }
+
+/** A session still going, paused or not: it has no end and no focus time yet. */
+export type RunningSession = SessionFields & { status: 'running'; endedAt: null; durationSeconds: null };
+
+export type CompletedSession = SessionFields & {
+  status: 'completed';
+  endedAt: number;
+  /** Focus time once ended: the span minus its pauses. */
+  durationSeconds: number;
+};
+
+export type CancelledSession = SessionFields & { status: 'cancelled'; endedAt: number; durationSeconds: number };
+
+export type Session = RunningSession | CompletedSession | CancelledSession;
+
+export type SessionStatus = Session['status'];
 
 /** `GET /days/:date` and each entry of `GET /days/range`. */
 export interface Day {
