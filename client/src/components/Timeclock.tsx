@@ -85,7 +85,8 @@ export function Timeclock({
   // are still the ones it made (by value: a save's answer, or a refresh that changed something
   // else, brings a new list) undoes the Add, and the Clock out gets its time back. Once any punch
   // changes, removing a pair only drops its two rows: stepping out and changing your mind must not
-  // end the day.
+  // end the day. The rows live in this card's state, so a remount (a reload, another date, the
+  // first Customize) ends the undo: the stored rows can't tell an Add from an Out typed later.
   const [added, setAdded] = useState<Punch[] | null>(null);
   const addPair = () => {
     setAdded(punches);
