@@ -141,7 +141,20 @@ describe('reviewRange', () => {
   });
 
   it('is all zeros for no days', () => {
-    expect(reviewRange([], settings, '2026-09-16', now)).toMatchObject({ days: 0, onPlanPercent: null, notDone: [] });
+    expect(reviewRange([], settings, '2026-09-16', now)).toEqual({
+      days: 0,
+      workedSeconds: 0,
+      focusedSeconds: 0,
+      onPlanSeconds: 0,
+      offPlanSeconds: 0,
+      onPlanPercent: null,
+      prioritiesDone: 0,
+      prioritiesTotal: 0,
+      retrosDone: 0,
+      unplanned: [],
+      notDone: [],
+      notes: [],
+    });
   });
 
   it('rounds the on-plan share to a whole percent, and has none without focus logged', () => {

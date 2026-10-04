@@ -1,7 +1,7 @@
 import type { AlarmId, AlarmSettings, Settings } from '../types';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { formatMinutes, formatTime } from './format';
-import { secondMealApplies, type TimeclockResult } from './timeclock';
+import { secondMealApplies, type TimeclockResult, type TimeclockSettings } from './timeclock';
 
 export interface AlarmTarget {
   id: AlarmId;
@@ -33,8 +33,8 @@ export interface TargetDay {
  * what prompts fixing the punches. A hidden retrospective card disarms its reminder, since the
  * banner's button and Mark reviewed are on the card.
  */
-export function alarmTargets(tc: TimeclockResult, settings: Parameters<typeof secondMealApplies>[1] & Pick<Settings, 'layout'>, day: TargetDay): AlarmTarget[] {
-  const endFixed = tc.error == null && tc.state === 'working';
+export function alarmTargets(tc: TimeclockResult, settings: TimeclockSettings & Pick<Settings, 'layout'>, day: TargetDay): AlarmTarget[] {
+  const endFixed = !tc.outOfOrder && tc.state === 'working';
   return [
     {
       id: 'lunchBy',

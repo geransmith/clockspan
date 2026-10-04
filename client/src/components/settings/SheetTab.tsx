@@ -7,7 +7,7 @@ import { NumberField, NumberInput, Section } from './controls';
 const THEME_LABELS: Record<Theme, string> = { auto: 'Automatic', light: 'Light', dark: 'Dark' };
 
 export function SheetTab({ settings, set }: { settings: Settings; set: (patch: Partial<Settings>) => void }) {
-  const reasons = stickerReasons(settings.trackHours).map((r) => r.label.toLowerCase());
+  const reasons = stickerReasons(settings).map((r) => r.label.toLowerCase());
   return (
     <>
       <Section title="Appearance">

@@ -267,8 +267,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   drops the user's row, which is what "Reset all settings" does.
 - **Timeclock math lives only in `client/src/lib/timeclock.ts`; alarm scheduling only in
   `client/src/lib/alarms.ts`.** Both are pure functions of `(inputs, settings, now)` with tests.
-  Components and hooks never re-derive these. Past days go through `timeclockForDate`
-  (`now = min(now, endOfDay)` and `{ frozen: true }`).
+  Components and hooks never re-derive these. A stored day goes through `dayTimeclock`: its own
+  length through `daySettings`, then `timeclockForDate`'s clamp (`now = min(now, endOfDay)`) and
+  `{ frozen: true }` once past.
 - **Times are written through `useTimeFormat()`** (components) or `formatTime(ms, hour12)` with
   an explicit `hour12` (pure libs: `describeEvent` takes it on `EventContext`). The setting is
   `timeFormat: 'auto' | '12h' | '24h'`; `resolveHour12('auto')` asks the browser locale, so the
@@ -435,12 +436,14 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   added to the clock-out time) and `secondMealApplies` is false; a lunch that was punched still
   counts. The card drops the Lunch by tile (the Focused tile shows either way), and with
   `lunchPunches: false` too it hides the Lunch out / in rows, which stay in the data at
-  positions 1 and 2: `lunchRowsShown` decides (never on a day with a lunch punched).
-  `lunchInPunchOrder` decides the Now order (`nextPunchPosition`): it skips the lunch rows while
-  they are hidden, on a day that needs no lunch with the meal periods on, and past the target
-  with no lunch taken. `trackHours: false` only hides hours outside the day's own
-  tiles (the week line, History's hours, the Clocked out sticker via `stickerReasons`); the
-  timeclock still runs.
+  positions 1 and 2: `lunchRowsShown` decides (never on a day with a lunch punched). With
+  `lunchPunches: false` too, `stickerReasons` drops the Lunch taken sticker (`lunchTracked`, the
+  settings half of `lunchRowsShown`), and `stickersForDay` returns only the reasons it is given,
+  so a day never wears a sticker the legend leaves out. `lunchInPunchOrder` decides the Now
+  order (`nextPunchPosition`): it skips the lunch rows while they are hidden, on a day that
+  needs no lunch with the meal periods on, and past the target with no lunch taken.
+  `trackHours: false` only hides hours outside the day's own tiles (the week line, History's
+  hours, the Clocked out sticker via `stickerReasons`); the timeclock still runs.
 - **Priorities are stored as the client last sent them** (positions 1..n, contiguous, ≤
   `MAX_PRIORITIES`; no `done` on an empty row). A day never edited has none. The card saves
   the rows it shows, its padded empty ones included, so a cleared row keeps its `uid` and the
@@ -473,7 +476,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   records the period with it (`route.review`), so Back reopens Review there. The calendar stays
   mounted while Review shows, so a tab switch keeps its month and pick. The month grid is
   `calendarMonth()` (pure) over the days `hasContent` (`lib/retro.ts`) keeps, the rule the
-  review counts days by; the panel's numbers come from `timeclockForDate` + `daySummaryOf`, the
+  review counts days by; the panel's numbers come from `dayTimeclock` + `daySummaryOf`, the
   same math as the sheet.
 - **The `retro` alarm target is the clock-out instant** ("warn before" = minutes before the
   end of the day) and is **not** silenced by overtime approval; marking the day reviewed

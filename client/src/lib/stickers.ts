@@ -3,7 +3,7 @@ import { hash } from './celebrate';
 import { STICKER_EMOJI } from './copy';
 import { hasText } from './priorities';
 import { focusOf } from './retro';
-import { daySettings, timeclockForDate, type TimeclockResult, type TimeclockSettings } from './timeclock';
+import { lunchTracked, type TimeclockResult, type TimeclockSettings } from './timeclock';
 
 export type StickerId = 'clockedOut' | 'lunch' | 'priorities' | 'focus' | 'reviewed';
 
@@ -19,20 +19,16 @@ export const STICKER_REASONS: { id: StickerId; label: string }[] = [
 /** Each reason's label, for a cell's name and a sticker's tooltip. */
 export const STICKER_LABELS = Object.fromEntries(STICKER_REASONS.map((r) => [r.id, r.label])) as Record<StickerId, string>;
 
-/** What the chart needs to judge a day: its timeclock, and whether hours are tracked at all. */
-export type StickerSettings = TimeclockSettings & Partial<Pick<Settings, 'trackHours'>>;
+/** What the chart needs to judge a day: its timeclock, and whether hours and lunch are tracked at all. */
+export type StickerSettings = TimeclockSettings & Pick<Settings, 'trackHours' | 'lunchPunches'>;
 
 /**
- * The reasons a day can earn a sticker for this user: with hours not tracked there is no
- * clocking out to reward, so the chart, its legend and a "full" day go without that one.
+ * The reasons a day can earn a sticker for this user. With hours not tracked there is no
+ * clocking out to reward, and with the meal periods and lunch punches both off no lunch, so the
+ * chart, its legend and a full day go without them.
  */
-export function stickerReasons(trackHours: boolean | undefined): { id: StickerId; label: string }[] {
-  return trackHours === false ? STICKER_REASONS.filter((r) => r.id !== 'clockedOut') : STICKER_REASONS;
-}
-
-/** A day's timeclock as the calendar judges it: by its own work-day length, frozen once past. */
-export function dayTimeclock(d: DaySummary, settings: TimeclockSettings, today: string, now: number): TimeclockResult {
-  return timeclockForDate(d.punches, daySettings(settings, d), d.date, today, now);
+export function stickerReasons(settings: Pick<Settings, 'trackHours' | 'mealRules' | 'lunchPunches'>): { id: StickerId; label: string }[] {
+  return STICKER_REASONS.filter((r) => (r.id !== 'clockedOut' || settings.trackHours) && (r.id !== 'lunch' || lunchTracked(settings)));
 }
 
 /** Every priority written was ticked: the priorities sticker, and the day panel's "all done". */
@@ -45,15 +41,20 @@ export function isFullDay(stickers: StickerId[], reasons: { id: StickerId }[]): 
   return stickers.length === reasons.length;
 }
 
-/** The stickers one day earned, judged on its timeclock (`dayTimeclock`), worked out once by the caller. */
-export function stickersForDay(d: DaySummary, tc: TimeclockResult, trackHours: boolean | undefined): StickerId[] {
-  const out: StickerId[] = [];
-  if (tc.state === 'done' && trackHours !== false) out.push('clockedOut');
-  if (tc.lunchStatus === 'taken') out.push('lunch');
-  if (allPrioritiesDone(d)) out.push('priorities');
-  if (d.focusSeconds > 0) out.push('focus');
-  if (d.retroAt != null) out.push('reviewed');
-  return out;
+/**
+ * The stickers one day earned out of `reasons` (from `stickerReasons`), in their order, judged
+ * on its timeclock (`dayTimeclock`) worked out once by the caller. A day never wears one the
+ * legend leaves out, which `isFullDay`'s count relies on.
+ */
+export function stickersForDay(d: DaySummary, tc: TimeclockResult, reasons: { id: StickerId }[]): StickerId[] {
+  const earned: Record<StickerId, boolean> = {
+    clockedOut: tc.state === 'done',
+    lunch: tc.lunchStatus === 'taken',
+    priorities: allPrioritiesDone(d),
+    focus: d.focusSeconds > 0,
+    reviewed: d.retroAt != null,
+  };
+  return reasons.filter((r) => earned[r.id]).map((r) => r.id);
 }
 
 /**
@@ -113,7 +114,7 @@ export interface StickerCount {
 }
 
 /** Stickers on the calendar's month (filler cells carry none); `reasons` is what a full day needs. */
-export function countStickers(weeks: { stickers: StickerId[] }[][], reasons: { id: StickerId }[] = STICKER_REASONS): StickerCount {
+export function countStickers(weeks: { stickers: StickerId[] }[][], reasons: { id: StickerId }[]): StickerCount {
   const byReason = Object.fromEntries(STICKER_REASONS.map((r) => [r.id, 0])) as Record<StickerId, number>;
   let total = 0;
   let full = 0;

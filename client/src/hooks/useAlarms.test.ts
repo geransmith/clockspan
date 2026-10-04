@@ -24,7 +24,7 @@ interface Props {
   day: AlarmDayState;
   settings: Settings;
 }
-const NO_DAY: AlarmDayState = { overtimeApproved: false, retroDone: false };
+const NO_DAY: AlarmDayState = { overtimeApproved: false, retroDone: false, openRetro: vi.fn() };
 
 function renderAlarms(props: Partial<Props> = {}) {
   const initialProps: Props = { date: TODAY, tc: null, now: T0, day: NO_DAY, settings, ...props };

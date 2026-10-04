@@ -4,13 +4,13 @@ import { useLeftOpen } from '../hooks/useLeftOpen';
 import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
 import { warnQuietly } from '../lib/alerts';
-import { LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
+import { LOAD_FAILED, PUNCH_ORDER, SAVE_FAILED } from '../lib/copy';
 import { startOfWeek } from '../../../shared/dates.js';
 import { dayName } from '../lib/format';
 import { CARD_TITLES, moveCard, setCardVisible } from '../lib/layout';
 import { hasText } from '../lib/priorities';
 import { focusOf } from '../lib/retro';
-import { clampToDay, daySettings, timeclockForDate, type TimeclockState } from '../lib/timeclock';
+import { clampToDay, dayTimeclock, type TimeclockState } from '../lib/timeclock';
 import { weekHours } from '../lib/week';
 import type { CardId } from '../types';
 import { CardFrame, type SheetCard } from './CardFrame';
@@ -29,20 +29,20 @@ interface Props {
   now: number;
   customize: boolean;
   /** A card to scroll into view once the sheet has rendered (a banner's "Open …" button). */
-  jumpTo?: CardId | null;
-  onJumped?: () => void;
+  jumpTo: CardId | null;
+  onJumped: () => void;
   /** See `Timeclock.onEditingChange`. */
-  onPunchEditing?: (editing: boolean) => void;
+  onPunchEditing: (editing: boolean) => void;
 }
 
 export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEditing }: Props) {
   const { settings, update } = useSettings();
   const { day, failed, store } = useDay(date);
   const isToday = date === today;
-  const tc = useMemo(() => (day ? timeclockForDate(day.punches, daySettings(settings, day), date, today, now) : null), [day, settings, date, today, now]);
+  const tc = useMemo(() => (day ? dayTimeclock(day, settings, today, now) : null), [day, settings, today, now]);
   // The week so far, up to this sheet's day, for the timeclock's week line.
   const { days: weekDays } = useRange(startOfWeek(date), date);
-  const week = useMemo(() => (weekDays ? weekHours(weekDays, settings, date, today, now) : null), [weekDays, settings, date, today, now]);
+  const week = useMemo(() => (weekDays ? weekHours(weekDays, settings, today, now) : null), [weekDays, settings, today, now]);
   const focus = useMemo(() => focusOf(day?.sessions ?? []), [day]);
   // Today's list with nothing written yet offers what the last planned day left unticked.
   const { leftOpen, dismiss: dismissLeftOpen } = useLeftOpen(today, isToday && day != null && !day.priorities.some(hasText));
@@ -70,7 +70,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
   useEffect(() => {
     if (!jumpTo || !ready) return;
     document.getElementById(`card-${jumpTo}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    onJumped?.();
+    onJumped();
   }, [jumpTo, ready, onJumped]);
 
   if (!day || !tc)
@@ -144,7 +144,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
 
   return (
     <div className="sheet">
-      {tc.error && <div className="notice notice--danger">{tc.error}</div>}
+      {tc.outOfOrder && <div className="notice notice--danger">{PUNCH_ORDER}</div>}
       {sortable ? (
         <Suspense fallback={plain}>
           <SortableCards cards={cards} onReorder={reorder} />

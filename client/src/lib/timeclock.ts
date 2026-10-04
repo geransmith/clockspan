@@ -1,7 +1,6 @@
 import { endOfDay, MINUTE_MS } from '../../../shared/dates.js';
 import { kindForPosition } from '../../../shared/punches.js';
 import type { Punch, Settings } from '../types';
-import { PUNCH_ORDER } from './copy';
 
 export type TimeclockState = 'not-started' | 'working' | 'at-lunch' | 'on-break' | 'done';
 /** `not-needed`: the day's work fits inside the lunch window, so no lunch is planned or alarmed. */
@@ -9,9 +8,7 @@ export type LunchStatus = 'none' | 'upcoming' | 'overdue' | 'taken' | 'not-neede
 export type ClockOutStatus = 'none' | 'upcoming' | 'over' | 'done';
 export type SecondMealStatus = 'none' | 'upcoming' | 'overdue' | 'taken';
 
-/** `mealRules` is optional so a caller that only has the lengths (tests) keeps the meal rules on. */
-export type TimeclockSettings = Pick<Settings, 'workMinutes' | 'lunchDeadlineMinutes' | 'lunchMinutes' | 'secondMealAfterMinutes'> &
-  Partial<Pick<Settings, 'mealRules'>>;
+export type TimeclockSettings = Pick<Settings, 'workMinutes' | 'lunchDeadlineMinutes' | 'lunchMinutes' | 'secondMealAfterMinutes' | 'mealRules'>;
 
 export interface TimeclockResult {
   state: TimeclockState;
@@ -41,8 +38,8 @@ export interface TimeclockResult {
   secondMealBy: number | null;
   /** 'taken' once any non-lunch break starts after lunch out. */
   secondMealStatus: SecondMealStatus;
-  /** Set when punch times don't alternate in/out chronologically. */
-  error: string | null;
+  /** Set punch times don't alternate in/out chronologically. */
+  outOfOrder: boolean;
 }
 
 const LUNCH_OUT_POSITION = 1;
@@ -99,7 +96,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
     clockOutStatus: 'none',
     secondMealBy: null,
     secondMealStatus: 'none',
-    error: null,
+    outOfOrder: false,
   };
   if (clockIn == null) return empty;
 
@@ -108,7 +105,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
     .map((p) => ({ position: p.position, kind: kindForPosition(p.position), at: p.at }))
     .sort((a, b) => a.at - b.at || a.position - b.position);
   // Order is checked over every time typed, so a slip in one still ahead shows as it is typed.
-  const error = typed.every((p, i) => p.kind === (i % 2 === 0 ? 'in' : 'out')) ? null : PUNCH_ORDER;
+  const outOfOrder = !typed.every((p, i) => p.kind === (i % 2 === 0 ? 'in' : 'out'));
   const set = typed.filter((p) => p.at <= upTo);
 
   // Never let a future clock-in produce negative time.
@@ -150,7 +147,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
   const done = !clockedIn && ((finalOut != null && lastOut === finalOut) || (opts.frozen === true && lastOut != null));
   const openOffMs = !clockedIn && lastOut != null && !done ? Math.max(0, effectiveNow - lastOut) : 0;
 
-  const state: TimeclockState = error ? 'working' : done ? 'done' : clockedIn ? 'working' : atLunch ? 'at-lunch' : 'on-break';
+  const state: TimeclockState = outOfOrder ? 'working' : done ? 'done' : clockedIn ? 'working' : atLunch ? 'at-lunch' : 'on-break';
 
   const lunchBy = clockIn + settings.lunchDeadlineMinutes * MINUTE_MS;
   // A day with no more work than the lunch window has no lunch to plan: California owes none
@@ -160,7 +157,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
   const dayWorkSeconds = done ? workedSeconds : Math.max(workTarget, workedSeconds);
   // With the meal-period rules off (exempt work, another state) lunch is never planned or
   // alarmed; a lunch that was punched is still taken.
-  const lunchNeeded = settings.mealRules !== false && dayWorkSeconds > settings.lunchDeadlineMinutes * 60;
+  const lunchNeeded = settings.mealRules && dayWorkSeconds > settings.lunchDeadlineMinutes * 60;
   const lunchStatus: LunchStatus = lunchOut != null ? 'taken' : !lunchNeeded ? 'not-needed' : now < lunchBy ? 'upcoming' : 'overdue';
 
   // Time still expected off the clock before the day can end.
@@ -205,7 +202,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
     clockOutStatus,
     secondMealBy,
     secondMealStatus,
-    error,
+    outOfOrder,
   };
 }
 
@@ -236,6 +233,16 @@ export function timeclockForDate(punches: Punch[], settings: TimeclockSettings, 
   return computeTimeclock(punches, settings, clampToDay(date, today, now), { frozen: date !== today });
 }
 
+/** A stored day's timeclock: on its own work-day length (daySettings), live today, frozen once past. */
+export function dayTimeclock(
+  day: { date: string; punches: Punch[]; workMinutes: number | null },
+  settings: TimeclockSettings,
+  today: string,
+  now: number,
+): TimeclockResult {
+  return timeclockForDate(day.punches, daySettings(settings, day), day.date, today, now);
+}
+
 /**
  * Whether the second meal period is in play: only while working, not yet taken, and only
  * when a day past the threshold is actually expected (overtime approved, already over the
@@ -244,14 +251,10 @@ export function timeclockForDate(punches: Punch[], settings: TimeclockSettings, 
  * same "more than" the lunch rule above uses. Punches out of order read as working whatever
  * happened, so they put it off until they are fixed.
  */
-export function secondMealApplies(
-  tc: TimeclockResult,
-  settings: Pick<Settings, 'workMinutes' | 'secondMealAfterMinutes'> & Partial<Pick<Settings, 'mealRules'>>,
-  overtimeApproved: boolean,
-): boolean {
+export function secondMealApplies(tc: TimeclockResult, settings: TimeclockSettings, overtimeApproved: boolean): boolean {
   return (
-    settings.mealRules !== false &&
-    tc.error == null &&
+    settings.mealRules &&
+    !tc.outOfOrder &&
     tc.state === 'working' &&
     tc.secondMealStatus !== 'taken' &&
     (overtimeApproved || tc.overSeconds > 0 || settings.workMinutes > settings.secondMealAfterMinutes)
@@ -290,13 +293,18 @@ export function extraPairs(punches: Punch[]): ExtraPair[] {
   return pairs;
 }
 
+/** Whether lunch is tracked at all: the meal periods are on, or the Lunch out / in rows are kept with them off. */
+export function lunchTracked(settings: Pick<Settings, 'mealRules' | 'lunchPunches'>): boolean {
+  return settings.mealRules || settings.lunchPunches;
+}
+
 /**
  * Whether the card shows the Lunch out and Lunch in rows. Only the meal periods off with
  * Lunch punches off hides them, and never on a day with a lunch punched: the math still
  * counts that lunch, so its times stay where they can be seen and cleared.
  */
 export function lunchRowsShown(punches: Punch[], settings: Pick<Settings, 'mealRules' | 'lunchPunches'>): boolean {
-  if (settings.mealRules || settings.lunchPunches) return true;
+  if (lunchTracked(settings)) return true;
   return punches.some((p) => (p.position === LUNCH_OUT_POSITION || p.position === LUNCH_IN_POSITION) && p.at != null);
 }
 
@@ -321,7 +329,7 @@ export function lunchInPunchOrder(
  * once every row has a time. `lunchRows` false skips the lunch rows; the card passes
  * `lunchInPunchOrder`.
  */
-export function nextPunchPosition(punches: Punch[], lunchRows = true): number | null {
+export function nextPunchPosition(punches: Punch[], lunchRows: boolean): number | null {
   const byPos = new Map(punches.map((p) => [p.position, p]));
   const pairs = extraPairs(punches);
   const pairRows = (beforeLunch: boolean) => pairs.filter((p) => p.beforeLunch === beforeLunch).flatMap((p) => [p.out, p.in]);

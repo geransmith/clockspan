@@ -18,8 +18,9 @@ function storedFired(dateKey: string): string[] {
 
 /** The day's switches (which targets are armed is `alarmTargets`) and the banner buttons. */
 export interface AlarmDayState extends TargetDay {
+  /** Left out while the Overtime approval setting is off. */
   approveOvertime?: () => void;
-  openRetro?: () => void;
+  openRetro: () => void;
 }
 
 /**
@@ -87,7 +88,7 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
       const action =
         e.id === 'clockOut' && approveOvertime
           ? { label: ALARM_ACTIONS.approveOvertime, run: approveOvertime }
-          : e.id === 'retro' && openRetro
+          : e.id === 'retro'
             ? { label: ALARM_ACTIONS.openRetro, run: openRetro }
             : undefined;
       alert({
