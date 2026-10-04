@@ -9,15 +9,21 @@ import { useLatest } from './useLatest';
  * store outlives the card and the save still lands. While nothing is waiting to be saved the
  * draft follows `stored`, so a change from another device shows; a draft being typed is kept.
  * `stored` must keep its identity between renders when nothing changed (memoize a derived one).
+ *
+ * `save` says whether the draft can be let go. An edit stays unsaved, and the draft does not
+ * follow `stored`, until its save answers true; one that answers false stays in the box and
+ * goes again on the next edit, flush or unmount. A flush while a save is out sends nothing
+ * more. `flush()` resolves to whether the draft is saved.
  */
 export function useDebouncedDraft<T>(
   stored: T,
-  save: (value: T) => void,
+  save: (value: T) => boolean | Promise<boolean>,
   ms: number,
-): { draft: T; edit: (value: T, now?: boolean) => void; flush: () => void } {
+): { draft: T; edit: (value: T, now?: boolean) => void; flush: () => Promise<boolean> } {
   const [draft, setDraft] = useState(stored);
-  // The edit waiting to be saved, boxed so any value (an empty string) counts as one.
-  const unsaved = useRef<{ value: T } | null>(null);
+  // The edit waiting to be saved, boxed so any value (an empty string) counts as one, with its
+  // save while that is out.
+  const unsaved = useRef<{ value: T; sent?: Promise<boolean> } | null>(null);
   const timer = useRef<number | undefined>(undefined);
   const latestSave = useLatest(save);
 
@@ -28,9 +34,17 @@ export function useDebouncedDraft<T>(
 
   const flush = useCallback(() => {
     window.clearTimeout(timer.current);
-    const pending = unsaved.current;
-    unsaved.current = null;
-    if (pending) latestSave.current(pending.value);
+    const box = unsaved.current;
+    if (!box) return Promise.resolve(true);
+    box.sent ??= Promise.resolve(latestSave.current(box.value)).then((ok) => {
+      // An edit made since has a box of its own, which this answer says nothing about.
+      if (unsaved.current === box) {
+        if (ok) unsaved.current = null;
+        else box.sent = undefined;
+      }
+      return ok;
+    });
+    return box.sent;
   }, [latestSave]);
 
   const edit = useCallback(
@@ -38,13 +52,13 @@ export function useDebouncedDraft<T>(
       setDraft(value);
       unsaved.current = { value };
       window.clearTimeout(timer.current);
-      if (now) flush();
-      else timer.current = window.setTimeout(flush, ms);
+      if (now) void flush();
+      else timer.current = window.setTimeout(() => void flush(), ms);
     },
     [flush, ms],
   );
 
-  useEffect(() => flush, [flush]);
+  useEffect(() => () => void flush(), [flush]);
 
   return { draft, edit, flush };
 }

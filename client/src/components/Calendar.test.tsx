@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
+import { LOAD_FAILED } from '../lib/copy';
 import { formatMonth } from '../lib/format';
 import { emptyPunches } from '../lib/timeclock';
 import { makeDay, makeSettings, SettingsAndDays, settle } from '../test/hooks';
@@ -65,6 +66,19 @@ describe('Calendar', () => {
     expect(api.getRange).toHaveBeenLastCalledWith(FIRST, '2026-10-31');
     expect(screen.getByRole('group', { name: formatMonth(FIRST) })).toBeTruthy();
     expect(screen.getByText('Tap a day to see it.')).toBeTruthy();
+  });
+
+  it('shows a failed load with Try again, which loads the month', async () => {
+    serve([clockedIn]);
+    vi.mocked(api.getRange).mockRejectedValueOnce(new Error('Request failed (502)'));
+    render(calendar(LAST, LAST_EVENING));
+    await settle();
+    expect(screen.getByRole('alert').textContent).toContain(LOAD_FAILED.range);
+    fireEvent.click(screen.getByRole('button', { name: LOAD_FAILED.retry }));
+    await settle();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('group', { name: formatMonth(LAST) })).toBeTruthy();
+    expect(api.getRange).toHaveBeenCalledTimes(2);
   });
 
   it('reads a picked day with nothing on it as nothing recorded', async () => {

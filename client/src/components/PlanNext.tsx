@@ -3,13 +3,14 @@ import { useCelebration, type Moment } from '../hooks/useCelebration';
 import { useDay } from '../hooks/useDay';
 import { useSettings } from '../hooks/useSettings';
 import { unlockAudio } from '../lib/alerts';
-import { PLAN_NEXT } from '../lib/copy';
+import { LOAD_FAILED, PLAN_NEXT } from '../lib/copy';
 import { dayName, sameText } from '../lib/format';
 import { nextWorkDay, planNext } from '../lib/plan';
 import { hasText } from '../lib/priorities';
 import { LIMITS, type Priority } from '../types';
 import { Burst } from './Burst';
 import { Plus } from './Icons';
+import { LoadFailed } from './LoadFailed';
 
 interface Props {
   /** The day the retrospective is for; only today's offers a plan, since the next day is ahead. */
@@ -83,7 +84,7 @@ function Planner({
   onDone: (message: string, added: number) => void;
   onCancel: () => void;
 }) {
-  const { day, store } = useDay(date);
+  const { day, failed, store } = useDay(date);
   // Today's open rows start ticked: carrying them over is the usual answer. Held by uid, since
   // removing a row on the Priorities card (or on another device) renumbers the rest while this is open.
   const [picked, setPicked] = useState(() => new Set(candidates.map((p) => p.uid)));
@@ -128,6 +129,7 @@ function Planner({
       <h3 className="retro-heading">
         {PLAN_NEXT.title(name)} {already > 0 && <span className="muted">{PLAN_NEXT.already(already)}</span>}
       </h3>
+      {failed && <LoadFailed title={LOAD_FAILED.title} onRetry={() => void store.load(date)} />}
       {offered.length + extra.length > 0 && (
         <ul className="plan-next-list">
           {offered.map((p) => (

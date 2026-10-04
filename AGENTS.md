@@ -452,9 +452,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   one rule, no clock-in fallback. `GET /days/range` returns full days and the client does the
   rollup (the review, the History calendar and the week line all fetch it through `useRange`,
   one period at a time: it reads through `store.readRange`, lays the store's copies over the
-  answer so an edit shows at once (`useHeldOver`), and is asked again after a prune; the
-  left-open offer, `useLeftOpen`, does the same once a day); register any new literal path
-  under `/days` before `/:date`.
+  answer so an edit shows at once (`useHeldOver`), and is asked again after a prune, or on Try
+  again (`retry`) after a failed read; the left-open offer, `useLeftOpen`, reads the same way
+  once a day and offers nothing when the read fails); register any new literal path under
+  `/days` before `/:date`.
 - **History → Days opens on the route's date.** `App.tsx` passes `route.date ?? today` to `History`;
   the calendar starts on that month with that day picked, and only "Open day" navigates. So
   the header's History button lands on the month of the day being viewed. The calendar holds
@@ -493,8 +494,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   one the react-hooks rules allow. A typed draft that saves on a timer is
   `useDebouncedDraft(stored, save, ms)` (`Priorities`, `Retro`): it saves after the wait, at
   once on `flush()` or an edit made now, and on unmount, so a day left mid-sentence still
-  saves. Callbacks that must read the latest value use `useLatest()`, never a ref written in
-  render (the react-hooks lint enforces both).
+  saves. `save` says whether the draft can be let go: `Retro` passes the store's answer, so a
+  note whose save fails stays in its box, unsaved, though the store has dropped the change,
+  and goes again on the next edit, blur or unmount; `Priorities` lets its list go once sent,
+  because a list held after a failure would replace rows added meanwhile. Callbacks that must
+  read the latest value use `useLatest()`, never a ref written in render (the react-hooks lint
+  enforces both).
 - Static assets are public; **all data is behind `/api/*`**. `/assets/*` is fingerprinted and
   cached immutable. The SPA fallback serves `index.html` for any other non-API path; a miss
   under `/assets` is a 404 (a page from before an upgrade asking for an old chunk).

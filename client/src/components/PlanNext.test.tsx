@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { playSound, unlockAudio } from '../lib/alerts';
-import { PLAN_NEXT } from '../lib/copy';
+import { LOAD_FAILED, PLAN_NEXT } from '../lib/copy';
 import { deferred, makeDay, makeSettings, SettingsAndDays, settle, T0, TODAY } from '../test/hooks';
 import type { Day, Priority } from '../types';
 import { PlanNext } from './PlanNext';
@@ -88,6 +88,24 @@ describe('PlanNext', () => {
     expect(screen.queryByRole('button', { name: PLAN_NEXT.save('tomorrow') })).toBeNull();
     expect(api.putPriorities).not.toHaveBeenCalled();
     expect(status()).toBe('');
+  });
+
+  it('shows a failed load of the next day with Try again, and can add once it loads', async () => {
+    await renderPlan();
+    vi.mocked(api.getDay).mockRejectedValueOnce(new Error('Request failed (502)'));
+    await open();
+    expect(screen.getByRole('alert').textContent).toContain(LOAD_FAILED.title);
+    expect(saveButton().disabled).toBe(true);
+    expect(box('Review the PR').checked).toBe(true);
+    fireEvent.click(box('Call the bank'));
+    fireEvent.click(screen.getByRole('button', { name: LOAD_FAILED.retry }));
+    await settle();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(saveButton().disabled).toBe(false);
+    // The ticks made before the retry are still there.
+    expect(box('Review the PR').checked).toBe(true);
+    expect(box('Call the bank').checked).toBe(false);
+    expect(vi.mocked(api.getDay).mock.calls).toEqual([[NEXT], [NEXT]]);
   });
 
   it("carries today's open rows over ticked, with what was typed after them", async () => {

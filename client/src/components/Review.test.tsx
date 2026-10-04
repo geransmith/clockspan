@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
+import { LOAD_FAILED } from '../lib/copy';
 import type { ReviewPeriod } from '../lib/review';
 import { makeSettings, SettingsAndDays, settle } from '../test/hooks';
 import { Review } from './Review';
@@ -34,6 +35,17 @@ afterEach(() => {
 });
 
 describe('Review', () => {
+  it('shows a failed load with Try again, which loads the review', async () => {
+    vi.mocked(api.getRange).mockRejectedValueOnce(new Error('Request failed (502)'));
+    await review({ kind: 'week', from: '2026-09-28' });
+    expect(screen.getByRole('alert').textContent).toContain(LOAD_FAILED.range);
+    fireEvent.click(screen.getByRole('button', { name: LOAD_FAILED.retry }));
+    await settle();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText('Nothing recorded.')).toBeTruthy();
+    expect(api.getRange).toHaveBeenCalledTimes(2);
+  });
+
   it('turns a past week into the month it ends in', async () => {
     // Monday 29 June to Sunday 5 July: the month it starts in would be June.
     const onPeriod = await review({ kind: 'week', from: '2026-06-29' });
