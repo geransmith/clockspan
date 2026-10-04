@@ -6,6 +6,8 @@ import { PASSWORD_LENGTH, type PublicUser } from '../../types';
 import { HiddenUsername, NewPasswordFields } from '../NewPasswordFields';
 import { UsernameInput } from '../UsernameInput';
 import { Section } from './controls';
+import { ErrorLine } from '../ErrorLine';
+import { Avatar } from '../Avatar';
 
 export function AccountTab({ user }: { user: PublicUser | null }) {
   return (
@@ -48,11 +50,7 @@ function ChangePassword({ username }: { username: string }) {
         <input className="input" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
       </label>
       <NewPasswordFields value={next} confirm={confirm} onValue={setNext} onConfirm={setConfirm} />
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+      <ErrorLine error={error} />
       {done && (
         <p className="success" role="status">
           Password updated.
@@ -84,7 +82,7 @@ function Users({ me }: { me: PublicUser }) {
   useEffect(() => void load(), [load]);
 
   const add = onSubmit(async () => {
-    await api.addUser(username.trim(), password);
+    await api.addUser(username, password);
     setUsername('');
     setPassword('');
     await load();
@@ -106,9 +104,7 @@ function Users({ me }: { me: PublicUser }) {
       <ul className="user-list">
         {(users ?? []).map((u) => (
           <li key={u.id} className="user-row">
-            <span className="avatar" aria-hidden="true">
-              {u.name.slice(0, 1).toUpperCase()}
-            </span>
+            <Avatar name={u.name} />
             <span className="user-name">
               {u.name}
               {u.isAdmin && <span className="pill pill--accent">admin</span>}
@@ -141,11 +137,7 @@ function Users({ me }: { me: PublicUser }) {
           Add user
         </button>
       </form>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+      <ErrorLine error={error} />
     </div>
   );
 }

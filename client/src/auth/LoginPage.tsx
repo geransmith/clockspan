@@ -3,8 +3,9 @@ import * as api from '../api';
 import { useSubmit } from '../hooks/useSubmit';
 import { HTTPS_ONLY } from '../lib/copy';
 import type { AuthInfo } from '../types';
+import { ErrorLine } from '../components/ErrorLine';
 
-interface GateProps {
+export interface GateProps {
   /** Re-reads the auth state; the answer says whether the sign-in stuck. */
   onDone: () => Promise<AuthInfo | null>;
   /** A line above the form when a sign-in from this page cannot work (plain http, Secure cookie). */
@@ -17,7 +18,7 @@ export function LoginPage({ onDone, hint }: GateProps) {
   const { busy, error, onSubmit } = useSubmit();
 
   const submit = onSubmit(async () => {
-    await api.login(username.trim(), password);
+    await api.login(username, password);
     // A 200 with no session on the next request: the browser dropped the cookie.
     const next = await onDone();
     if (next && !next.user) throw new Error(HTTPS_ONLY.notKept);
@@ -36,11 +37,7 @@ export function LoginPage({ onDone, hint }: GateProps) {
           <span>Password</span>
           <input className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         </label>
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
+        <ErrorLine error={error} />
         <button className="btn btn-primary btn-lg" type="submit" disabled={busy}>
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
@@ -49,7 +46,7 @@ export function LoginPage({ onDone, hint }: GateProps) {
   );
 }
 
-export function OidcLoginPage({ hint }: { hint?: string | null }) {
+export function OidcLoginPage({ hint }: Pick<GateProps, 'hint'>) {
   return (
     <div className="gate">
       <div className="gate-card">

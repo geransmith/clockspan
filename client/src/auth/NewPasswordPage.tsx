@@ -4,6 +4,7 @@ import { HiddenUsername, NewPasswordFields } from '../components/NewPasswordFiel
 import { useSubmit } from '../hooks/useSubmit';
 import { NEW_PASSWORD, PASSWORD_MISMATCH, SIGN_OUT_FAILED } from '../lib/copy';
 import type { AuthInfo, PublicUser } from '../types';
+import { ErrorLine } from '../components/ErrorLine';
 
 interface Props {
   user: PublicUser;
@@ -48,11 +49,7 @@ export function NewPasswordPage({ user, onDone, onSignOut }: Props) {
           />
         </label>
         <NewPasswordFields value={next} confirm={confirm} onValue={setNext} onConfirm={setConfirm} />
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
+        <ErrorLine error={error} />
         <button className="btn btn-primary btn-lg" type="submit" disabled={busy}>
           {busy ? 'Saving…' : 'Set password'}
         </button>

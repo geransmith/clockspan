@@ -4,6 +4,7 @@ import { CONFIRM } from '../lib/copy';
 import { addDays } from '../../../shared/dates.js';
 import { dayName, formatDateLong } from '../lib/format';
 import { ChevronLeft, ChevronRight, Gear, Layout, List } from './Icons';
+import { Avatar } from './Avatar';
 
 interface Props {
   view: Route['view'];
@@ -65,9 +66,7 @@ export function Header({ view, date, today, customize, onNavigate, onToggleCusto
               }}
               title={`Signed in as ${auth.user.name}. Click to sign out.`}
             >
-              <span className="avatar" aria-hidden="true">
-                {auth.user.name.slice(0, 1).toUpperCase()}
-              </span>
+              <Avatar name={auth.user.name} />
               <span className="btn-text">Sign out</span>
             </button>
           )}
