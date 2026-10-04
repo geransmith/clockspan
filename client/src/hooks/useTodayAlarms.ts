@@ -18,12 +18,13 @@ const HOLD_MS = 5 * MINUTE_MS;
  * at most five minutes after the later of that change and the start of the hold (a new `ms`
  * restarts `useSettled`'s count), so back-filling a day is judged on the finished set, not on
  * each half-entered state; nothing here is finer than a minute. The punches are compared by
- * their times: every refresh brings a new list, and one with the same times neither stops the
- * alarms nor restarts the wait. Another device may have punched meanwhile: the copy is fetched
- * again when the tab comes back and every minute, and the alarms sit out a come-back refresh
- * (and the settle after its answer) rather than fire on a lunch this tab never saw taken. They
- * also wait for the settings, like the timer's alerts: judged against the defaults, a longer
- * work day would ring the clock-out alarm on load, with the default sound.
+ * their times: a save's answer, or a refresh that changed something else in the day, brings a
+ * new list, and one with the same times neither stops the alarms nor restarts the wait. Another
+ * device may have punched meanwhile: the copy is fetched again when the tab comes back and every
+ * minute, and the alarms sit out a come-back refresh (and the settle after its answer) rather
+ * than fire on a lunch this tab never saw taken. They also wait for the settings, like the
+ * timer's alerts: judged against the defaults, a longer work day would ring the clock-out alarm
+ * on load, with the default sound.
  */
 export function useTodayAlarms(today: string, now: number, openRetro: () => void): { setEditingPunches: (editing: boolean) => void } {
   const { settings, loaded } = useSettings();

@@ -33,17 +33,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const { tracked, current, change, nextId, queue } = useTracked<Tracked<Settings>>(untracked);
 
   // A read's answer. A save answered while it was out already brought all the settings, newer
-  // than these (`fetched`). Settings the same as the stored copy change nothing, so `settings`
-  // keeps its identity; the server builds them in one fixed order (`mergeSettings`), so equal
-  // settings print the same.
-  const land = useCallback(
-    (sentAt: number, s: Settings) =>
-      change((t) => {
-        const value = fromServer(s);
-        return JSON.stringify(value) === JSON.stringify(t.confirmed) ? t : fetched(t, sentAt, value).next;
-      }),
-    [change],
-  );
+  // than these (`fetched`).
+  const land = useCallback((sentAt: number, s: Settings) => change((t) => fetched(t, sentAt, fromServer(s)).next), [change]);
 
   // A failed fetch is asked again rather than settled with the defaults: `loaded` is what holds
   // the alarms and the timer's alerts, and judged against the defaults they would ring at the

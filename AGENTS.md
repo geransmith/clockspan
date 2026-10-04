@@ -350,11 +350,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   answer replaces the confirmed copy and never a change still on its way. It is stale when the
   server confirmed a change after the read went out (`version`): a day read then drops it (a day
   never loaded takes it anyway) and asks for the day again, whoever sent the read, while a range
-  read's stale day is left to the next read. A day not loaded yet keeps its changes until the
-  server's copy arrives, so nothing made up stands in for it. `pruneBefore` is the one store
-  write sent on no queue (the queues are keyed by day, session and breaks), so a change still on
-  its way for a day before the cutoff can land after the prune and re-create that day, which the
-  re-read after the prune shows. The day store,
+  read's stale day is left to the next read. An answer the same as the confirmed copy changes
+  nothing, so a day that didn't change keeps its identity. A day not loaded yet keeps its
+  changes until the server's copy arrives, so nothing made up stands in for it. `pruneBefore` is
+  the one store write sent on no queue (the queues are keyed by day, session and breaks), so a
+  change still on its way for a day before the cutoff can land after the prune and re-create
+  that day, which the re-read after the prune shows. The day store,
   `useSettings` and `useTimer` are all built on `useTracked` (`hooks/useTracked.ts`): the
   state, a `current()` that callbacks read before the next render, ids for the changes, and the
   store's write queue. `apply` and commit functions are pure: read the clock outside them.

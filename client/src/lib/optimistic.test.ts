@@ -58,6 +58,11 @@ describe('settleWith', () => {
     t = settleWith(t, [1], { text: 'B', n: 0 });
     expect(t).toMatchObject({ confirmed: { text: 'B', n: 0 }, version: 1 });
     expect(shown(t)).toEqual({ text: 'B', n: 1 });
+    expect(settleWith(addPending(loaded({ text: 'a', n: 0 }, 2), 1, setText('b')), [1], { text: 'B', n: 0 })).toEqual({
+      confirmed: { text: 'B', n: 0 },
+      pending: [],
+      version: 3,
+    });
   });
 });
 
@@ -80,6 +85,14 @@ describe('fetched', () => {
   it('drops an answer older than a change the server confirmed since it was sent', () => {
     const t = loaded({ text: 'saved', n: 0 }, 1);
     expect(fetched(t, 0, { text: 'old', n: 0 })).toEqual({ next: t, stale: true });
+  });
+
+  it('keeps the tracked value itself when the answer is the same as the confirmed one', () => {
+    const row = { text: 'a', n: 0 };
+    const t = addPending(loaded(row), 1, inc);
+    const { next, stale } = fetched(t, 0, { ...row });
+    expect(next).toBe(t);
+    expect(stale).toBe(false);
   });
 
   it('takes an older answer for a value never loaded, and says it is stale', () => {

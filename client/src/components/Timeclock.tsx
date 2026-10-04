@@ -82,9 +82,10 @@ export function Timeclock({
     onChange(punches.map((p) => (p.position === position ? { ...p, at } : p)));
   };
   // The rows from before the last "Add extra out / in". Removing the pair it made while the rows
-  // are still the ones it made (by value: a refresh brings a new list) undoes the Add, and the
-  // Clock out gets its time back. Once any punch changes, removing a pair only drops its two rows:
-  // stepping out and changing your mind must not end the day.
+  // are still the ones it made (by value: a save's answer, or a refresh that changed something
+  // else, brings a new list) undoes the Add, and the Clock out gets its time back. Once any punch
+  // changes, removing a pair only drops its two rows: stepping out and changing your mind must not
+  // end the day.
   const [added, setAdded] = useState<Punch[] | null>(null);
   const addPair = () => {
     setAdded(punches);

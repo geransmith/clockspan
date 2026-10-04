@@ -11,8 +11,9 @@ export function kindForPosition(position: number): Punch['kind'] {
 }
 
 /**
- * A list's rows and their times as one string. Every fetch of a day builds a new list, so a
- * copy the server sent again with nothing changed only matches the one before by value.
+ * A list's rows and their times as one string. A save's answer, or a fetch that changed something
+ * else in the day, brings a new list with the same times, which matches the one before only by
+ * value.
  */
 export function punchesKey(punches: readonly Punch[]): string {
   return punches.map((p) => `${p.position}:${p.at ?? ''}`).join();
