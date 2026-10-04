@@ -101,6 +101,6 @@ export function leftOpen(days: Day[]): LeftOpen | null {
   let last: Day | null = null;
   for (const d of days) if (d.priorities.some(hasText) && (!last || d.date > last.date)) last = d;
   if (!last) return null;
-  const rows = last.priorities.filter((p) => hasText(p) && !p.done).sort((a, b) => a.position - b.position);
+  const rows = last.priorities.filter((p) => hasText(p) && !p.done);
   return rows.length ? { date: last.date, rows } : null;
 }

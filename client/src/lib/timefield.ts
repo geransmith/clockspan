@@ -1,5 +1,5 @@
 import { Time } from '@internationalized/date';
-import { parseDateKey } from '../../../shared/dates.js';
+import { atTime } from '../../../shared/dates.js';
 
 export type Period = 'AM' | 'PM';
 
@@ -10,14 +10,9 @@ export function msToTime(ms: number | null): Time | null {
   return new Time(d.getHours(), d.getMinutes());
 }
 
-/**
- * The instant for a wall-clock time on the given local date (seconds dropped). A time in the
- * hour a spring-forward day skips lands an hour later, because `setHours` moves it forward.
- */
+/** The instant for a time field's value on the given local date (see `atTime`). */
 export function timeToMs(t: Time, dateKey: string): number {
-  const d = parseDateKey(dateKey);
-  d.setHours(t.hour, t.minute, 0, 0);
-  return d.getTime();
+  return atTime(dateKey, t.hour, t.minute);
 }
 
 /**

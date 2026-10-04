@@ -3,7 +3,7 @@ import { findLocalUser, findUserById, type DB, type UserRow } from '../db.js';
 import { upsertOidcUser } from '../auth/oidc.js';
 import { hashPassword } from '../auth/password.js';
 import { revokeSessions } from '../auth/session.js';
-import { addDays, HOUR_MS, MINUTE_MS, parseDateKey } from '../../shared/dates.js';
+import { addDays, atTime, HOUR_MS, isWeekend, MINUTE_MS } from '../../shared/dates.js';
 import { kindForPosition } from '../../shared/punches.js';
 import type { Break, Day, Priority, Punch, Session } from '../../shared/api.js';
 
@@ -56,17 +56,6 @@ export const DEFAULT_HISTORY_DAYS = 10;
 export const LOCAL_USERS = { admin: 'admin', member: 'sam', password: 'clockspan-dev' } as const;
 
 // ----- calendar helpers (the dev machine's zone, which is what the browser shows) -----
-
-function at(key: string, hour: number, minute: number): number {
-  const d = parseDateKey(key);
-  d.setHours(hour, minute, 0, 0);
-  return d.getTime();
-}
-
-function isWeekend(key: string): boolean {
-  const wd = parseDateKey(key).getDay();
-  return wd === 0 || wd === 6;
-}
 
 /** Weekdays between `from` and the day before `key` inclusive, for --quarter. */
 export function weekdaysSince(from: string, key: string): number {
@@ -235,11 +224,11 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
   const pick = <T>(arr: readonly T[]): T => arr[Math.floor(rand() * arr.length)]!;
   const texts = shuffle(PRIORITY_TEXTS, rand);
 
-  const clockIn = at(date, 8, 30) + jitter(10) * MINUTE_MS;
+  const clockIn = atTime(date, 8, 30) + jitter(10) * MINUTE_MS;
   const createdAt = clockIn - 4 * MINUTE_MS;
-  const lunchOut = at(date, 12, 15) + jitter(10) * MINUTE_MS;
+  const lunchOut = atTime(date, 12, 15) + jitter(10) * MINUTE_MS;
   const lunchIn = lunchOut + (30 + Math.max(0, jitter(5))) * MINUTE_MS;
-  const clockOut = at(date, 17, 0) + jitter(15) * MINUTE_MS;
+  const clockOut = atTime(date, 17, 0) + jitter(15) * MINUTE_MS;
 
   const priority = (position: number, text: string, done: boolean, addedAt = createdAt): SeededPriority => ({
     position,
@@ -253,7 +242,7 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
 
   if (kind === 'extraPair') {
     // An extra out/in pair in the afternoon (positions 3-4) pushes the clock out to position 5.
-    const extraOut = at(date, 15, 0);
+    const extraOut = atTime(date, 15, 0);
     const extraIn = extraOut + 20 * MINUTE_MS;
     const priorities = [priority(1, texts[0]!, true), priority(2, texts[1]!, true), priority(3, texts[2]!, false)];
     const firstStart = clockIn + 15 * MINUTE_MS;
@@ -278,8 +267,8 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
   if (kind === 'overtime') {
     // Over ten hours worked, so a second meal period is owed (California): taken as an out / in
     // pair after lunch, well before the tenth hour ends.
-    const earlyIn = at(date, 8, 15);
-    const lateOut = at(date, 19, 30);
+    const earlyIn = atTime(date, 8, 15);
+    const lateOut = atTime(date, 19, 30);
     const priorities = [
       priority(1, texts[0]!, true, earlyIn - 4 * MINUTE_MS),
       priority(2, texts[1]!, true, earlyIn - 4 * MINUTE_MS),
@@ -289,13 +278,13 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
       ...base,
       createdAt: earlyIn - 4 * MINUTE_MS,
       overtimeApproved: true,
-      punches: punchRows([earlyIn, at(date, 12, 0), at(date, 12, 30), at(date, 17, 15), at(date, 17, 45), lateOut]),
+      punches: punchRows([earlyIn, atTime(date, 12, 0), atTime(date, 12, 30), atTime(date, 17, 15), atTime(date, 17, 45), lateOut]),
       priorities,
       sessions: [
-        completed(texts[0]!, at(date, 8, 30), 50, priorities[0]!.uid),
-        completed(texts[1]!, at(date, 10, 0), 50, priorities[1]!.uid),
-        completed(texts[2]!, at(date, 14, 0), 50, priorities[2]!.uid),
-        completed(texts[2]!, at(date, 18, 0), 50, priorities[2]!.uid),
+        completed(texts[0]!, atTime(date, 8, 30), 50, priorities[0]!.uid),
+        completed(texts[1]!, atTime(date, 10, 0), 50, priorities[1]!.uid),
+        completed(texts[2]!, atTime(date, 14, 0), 50, priorities[2]!.uid),
+        completed(texts[2]!, atTime(date, 18, 0), 50, priorities[2]!.uid),
       ],
       breaks: [],
       retroNote: note(NOTES.overtime),
@@ -324,8 +313,8 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
 
   if (kind === 'noLunch') {
     // A half day: its own 4.5 h work day, so it ends on target, and lunch rows never punched.
-    const halfIn = at(date, 9, 0);
-    const halfOut = at(date, 13, 30);
+    const halfIn = atTime(date, 9, 0);
+    const halfOut = atTime(date, 13, 30);
     const priorities = [priority(1, texts[0]!, true, halfIn - 4 * MINUTE_MS), priority(2, texts[1]!, false, halfIn - 4 * MINUTE_MS)];
     return {
       ...base,
@@ -377,7 +366,7 @@ export function kindForDistance(distance: number): Exclude<DayKind, 'today'> {
 /** `last` is the weekday before, whose retrospective planned today's list; none with no history. */
 function buildToday(today: string, now: number, index: number, running: boolean, last: Pick<SeededDay, 'priorities' | 'retroAt'> | undefined): DayDraft {
   // Two hours ago, on the minute, but never before today started (a seed run at 01:00) or after now.
-  const clockIn = Math.min(now, Math.max(at(today, 0, 5), Math.floor((now - 2 * HOUR_MS) / MINUTE_MS) * MINUTE_MS));
+  const clockIn = Math.min(now, Math.max(atTime(today, 0, 5), Math.floor((now - 2 * HOUR_MS) / MINUTE_MS) * MINUTE_MS));
   // Planned the evening before with Plan next, which carries over what that day left open; the
   // planner's save is what stored today's row. With no history, written on arrival.
   const plannedAt = last?.retroAt != null ? last.retroAt + 2 * MINUTE_MS : clockIn - 3 * MINUTE_MS;

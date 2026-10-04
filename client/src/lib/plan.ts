@@ -1,5 +1,5 @@
 import type { Priority } from '../types';
-import { addDays, parseDateKey } from '../../../shared/dates.js';
+import { addDays, isWeekend } from '../../../shared/dates.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { sameText } from './format';
 import { hasText, newUid } from './priorities';
@@ -10,7 +10,7 @@ import { hasText, newUid } from './priorities';
  */
 export function nextWorkDay(date: string, showWeekends: boolean): string {
   let next = addDays(date, 1);
-  if (!showWeekends) while ([0, 6].includes(parseDateKey(next).getDay())) next = addDays(next, 1);
+  if (!showWeekends) while (isWeekend(next)) next = addDays(next, 1);
   return next;
 }
 
@@ -20,7 +20,7 @@ export function nextWorkDay(date: string, showWeekends: boolean): string {
  * `addedAt` now, the evening before, so the next day's retrospective counts it as planned.
  */
 export function planNext(existing: Priority[], texts: string[], now = Date.now()): { rows: Priority[]; added: number } {
-  const kept = existing.filter(hasText).sort((a, b) => a.position - b.position);
+  const kept = existing.filter(hasText);
   const seen = new Set(kept.map((p) => sameText(p.text)));
   const rows = [...kept];
   for (const text of texts) {

@@ -2,9 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   addDays,
   addMonths,
+  atTime,
+  daysBetween,
   endOfDay,
   HOUR_MS,
   isValidDateKey,
+  isWeekend,
   parseDateKey,
   punchWindow,
   startOfMonth,
@@ -36,6 +39,22 @@ describe('date arithmetic', () => {
     expect(addDays('2026-10-31', 2)).toBe('2026-11-02');
   });
 
+  it('counts whole days between two keys, across year ends, leap days and the DST changes', () => {
+    expect(daysBetween('2026-09-16', '2026-09-16')).toBe(0);
+    expect(daysBetween('2025-12-31', '2026-01-01')).toBe(1);
+    // The pinned zone's DST changes: a 23 h and a 25 h day still count as one each.
+    expect(daysBetween('2026-03-07', '2026-03-09')).toBe(2);
+    expect(daysBetween('2026-10-31', '2026-11-02')).toBe(2);
+    expect(daysBetween('2024-02-28', '2024-03-01')).toBe(2);
+    expect(daysBetween('2026-03-09', '2026-03-07')).toBe(-2);
+  });
+
+  it('tells a weekend from a weekday', () => {
+    expect(isWeekend('2026-09-26')).toBe(true); // Saturday
+    expect(isWeekend('2026-09-27')).toBe(true); // Sunday
+    expect(isWeekend('2026-09-28')).toBe(false); // Monday
+  });
+
   it('finds the start of the week (Monday), month and quarter', () => {
     expect(startOfWeek('2026-09-16')).toBe('2026-09-14'); // a Wednesday
     expect(startOfWeek('2026-09-14')).toBe('2026-09-14');
@@ -49,6 +68,7 @@ describe('date arithmetic', () => {
     expect(addMonths('2026-01-31', 1)).toBe('2026-02-01');
     expect(addMonths('2026-01-15', -1)).toBe('2025-12-01');
     expect(addMonths('2026-11-01', 3)).toBe('2027-02-01');
+    expect(addMonths('2026-09-16', 0)).toBe('2026-09-01');
   });
 
   it('ends the day one millisecond before the next one starts, on a 23 h or 25 h day too', () => {
@@ -64,6 +84,17 @@ describe('date arithmetic', () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+});
+
+describe('atTime', () => {
+  it("places a wall-clock time on the key's local date", () => {
+    expect(atTime('2026-09-17', 7, 30)).toBe(new Date(2026, 8, 17, 7, 30).getTime());
+  });
+
+  it('moves a time in the hour the clocks skip forward an hour', () => {
+    // This relies on the zone pinned in vite.config.ts (test.env) and fails in UTC.
+    expect(atTime('2026-03-08', 2, 30)).toBe(new Date(2026, 2, 8, 3, 30).getTime());
   });
 });
 

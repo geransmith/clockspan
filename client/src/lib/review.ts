@@ -1,5 +1,5 @@
 import type { Day } from '../types';
-import { addDays, addMonths, DAY_MS, parseDateKey, startOfMonth, startOfQuarter, startOfWeek } from '../../../shared/dates.js';
+import { addDays, addMonths, daysBetween, startOfQuarter, startOfWeek } from '../../../shared/dates.js';
 import { formatDateSpan, formatMonth, sameText } from './format';
 import { hasContent, reviewDay } from './retro';
 import { dayTimeclock, type TimeclockSettings } from './timeclock';
@@ -14,8 +14,7 @@ export interface ReviewPeriod {
   from: string;
 }
 
-export interface Period {
-  kind: PeriodKind;
+interface PeriodRange {
   from: string;
   to: string;
   label: string;
@@ -25,21 +24,21 @@ export interface Period {
  * The period `offset` steps back from the one holding `date`, so offset 0 is the period
  * holding it. Weeks run Monday to Sunday; quarters are calendar quarters.
  */
-export function periodRange(kind: PeriodKind, date: string, offset: number): Period {
+export function periodRange(kind: PeriodKind, date: string, offset: number): PeriodRange {
   if (kind === 'week') {
     const from = addDays(startOfWeek(date), -7 * offset);
     const to = addDays(from, 6);
-    return { kind, from, to, label: formatDateSpan(from, to) };
+    return { from, to, label: formatDateSpan(from, to) };
   }
   if (kind === 'month') {
-    const from = addMonths(startOfMonth(date), -offset);
+    const from = addMonths(date, -offset);
     const to = addDays(addMonths(from, 1), -1);
-    return { kind, from, to, label: formatMonth(from) };
+    return { from, to, label: formatMonth(from) };
   }
   const from = addMonths(startOfQuarter(date), -3 * offset);
   const to = addDays(addMonths(from, 3), -1);
   const [y, m] = from.split('-').map(Number) as [number, number];
-  return { kind, from, to, label: `Q${Math.floor((m - 1) / 3) + 1} ${y}` };
+  return { from, to, label: `Q${Math.floor((m - 1) / 3) + 1} ${y}` };
 }
 
 /**
@@ -49,15 +48,11 @@ export function periodRange(kind: PeriodKind, date: string, offset: number): Per
  */
 export function periodOffset(kind: PeriodKind, today: string, date: string): number {
   if (date >= today) return 0;
-  if (kind === 'week') {
-    // Whole weeks between the two Mondays; rounding absorbs a DST hour.
-    const ms = parseDateKey(startOfWeek(today)).getTime() - parseDateKey(startOfWeek(date)).getTime();
-    return Math.max(0, Math.round(ms / (7 * DAY_MS)));
-  }
+  if (kind === 'week') return daysBetween(startOfWeek(date), startOfWeek(today)) / 7;
   const [ty, tm] = today.split('-').map(Number) as [number, number];
   const [dy, dm] = date.split('-').map(Number) as [number, number];
-  if (kind === 'month') return Math.max(0, (ty - dy) * 12 + (tm - dm));
-  return Math.max(0, (ty - dy) * 4 + Math.floor((tm - 1) / 3) - Math.floor((dm - 1) / 3));
+  if (kind === 'month') return (ty - dy) * 12 + (tm - dm);
+  return (ty - dy) * 4 + Math.floor((tm - 1) / 3) - Math.floor((dm - 1) / 3);
 }
 
 /**
@@ -69,7 +64,6 @@ export interface UnplannedWork {
   key: string;
   label: string;
   seconds: number;
-  sessions: number;
   /** The distinct days it happened on, oldest first. */
   dates: string[];
 }
@@ -143,10 +137,9 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
     for (const session of r.unplanned) {
       const key = sameText(session.label);
       let g = unplanned.get(key);
-      if (!g) unplanned.set(key, (g = { key, label: '', seconds: 0, sessions: 0, dates: [] }));
+      if (!g) unplanned.set(key, (g = { key, label: '', seconds: 0, dates: [] }));
       g.label = session.label.trim();
       g.seconds += session.durationSeconds;
-      g.sessions++;
       addDate(g.dates, day.date);
     }
     // A tick settles the priority: the same text left open on an earlier day is done now.

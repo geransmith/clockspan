@@ -50,10 +50,34 @@ export function punchWindow(key: string): { from: number; to: number } {
   return { from: midnightUtc - 36 * HOUR_MS, to: midnightUtc + 60 * HOUR_MS };
 }
 
+/**
+ * Whole days from `from` to `to`, negative when `to` is earlier. A date-only key parses as UTC
+ * midnight, so a DST change never shifts it by an hour.
+ */
+export function daysBetween(from: string, to: string): number {
+  return (Date.parse(to) - Date.parse(from)) / DAY_MS;
+}
+
 export function addDays(key: string, n: number): string {
   const d = parseDateKey(key);
   d.setDate(d.getDate() + n);
   return dateKey(d);
+}
+
+/** Saturday or Sunday on the key's local date. */
+export function isWeekend(key: string): boolean {
+  const wd = parseDateKey(key).getDay();
+  return wd === 0 || wd === 6;
+}
+
+/**
+ * The instant for a local wall-clock time on the key's date (seconds dropped). A time in the
+ * hour a spring-forward day skips lands an hour later, because setHours moves it forward.
+ */
+export function atTime(key: string, hour: number, minute: number): number {
+  const d = parseDateKey(key);
+  d.setHours(hour, minute, 0, 0);
+  return d.getTime();
 }
 
 /**
