@@ -3,6 +3,7 @@ import type {
   BreakEndResponse,
   BreakResponse,
   Day,
+  ErrorResponse,
   LogoutResponse,
   OkResponse,
   OvertimeResponse,
@@ -61,7 +62,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     if (res.ok) throw new ApiError(res.status, UNREADABLE_ANSWER(res.status), null);
   }
   if (!res.ok) {
-    const message = (data as { error?: string } | null)?.error ?? REQUEST_FAILED(res.status);
+    // Partial: a proxy in front can answer an error as JSON of another shape.
+    const message = (data as Partial<ErrorResponse> | null)?.error ?? REQUEST_FAILED(res.status);
     // The login route answers 401 for a wrong password; that is not a lost session. The event
     // makes AuthGate ask /api/auth/me again, which the app never answers with a 401: one from
     // there comes from a proxy in front, and announcing it would ask /me again, forever.

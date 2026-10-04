@@ -1,28 +1,23 @@
-import { Router } from 'express';
+import type { RequestHandler, Router } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
-import { breakRowToJson, dateParam, endRunningBreak, ensureDay, getOwned, ownedRouter, parsePlannedSeconds, requireDate, runningSession } from './shared.js';
+import { refuse } from '../refuse.js';
+import { breakRowToJson, dateParam, endRunningBreak, ensureDay, getOwned, ownedRouter, parsePlannedSeconds, runningSession } from './shared.js';
 import type { BreakEndResponse, BreakResponse, OkResponse } from '../../shared/api.js';
 import { BREAK_SECONDS } from '../../shared/timer.js';
 
-/** Mounted at /api/days/:date/breaks (start), like the sessions' start router. */
-export function breakStartRouter(db: DB): Router {
-  const r = Router({ mergeParams: true });
-
-  // A break starts now and runs for `plannedSeconds`. One that was still running ends here;
-  // a focus timer running refuses it, since a break is the time between sessions.
-  r.post('/', requireDate, (req, res) => {
+/**
+ * `POST /days/:date/breaks`, registered on the days router, whose date check has already run.
+ * A break starts now and runs for `plannedSeconds`. One that was still running ends here; a
+ * focus timer running refuses it, since a break is the time between sessions.
+ */
+export function startBreak(db: DB): RequestHandler {
+  return (req, res) => {
     const user = currentUser(req);
-    const { plannedSeconds } = (req.body ?? {}) as { plannedSeconds?: unknown };
+    const { plannedSeconds } = req.body as { plannedSeconds?: unknown };
     const planned = parsePlannedSeconds(plannedSeconds, BREAK_SECONDS);
-    if ('error' in planned) {
-      res.status(400).json({ error: planned.error });
-      return;
-    }
-    if (runningSession(db, user.id)) {
-      res.status(409).json({ error: 'A focus timer is running.' });
-      return;
-    }
+    if ('error' in planned) return refuse(res, 400, planned.error);
+    if (runningSession(db, user.id)) return refuse(res, 409, 'A focus timer is running.');
     const id = db.transaction(() => {
       const now = Date.now();
       endRunningBreak(db, user.id, now);
@@ -33,9 +28,7 @@ export function breakStartRouter(db: DB): Router {
       return Number(info.lastInsertRowid);
     })();
     res.status(201).json({ break: breakRowToJson(getOwned(db, 'breaks', user.id, id)!) } satisfies BreakResponse);
-  });
-
-  return r;
+  };
 }
 
 export function breaksRouter(db: DB): Router {

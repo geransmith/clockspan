@@ -1,6 +1,7 @@
 import { isIP } from 'node:net';
 import type { RequestHandler } from 'express';
 import type { Config } from './config.js';
+import { refuse } from './refuse.js';
 
 /**
  * Response headers for every request. The app is a same-origin SPA with no third-party
@@ -46,10 +47,7 @@ export function rejectCrossSiteWrites(config: Config): RequestHandler {
       const site = req.get('sec-fetch-site');
       const origin = req.get('origin');
       const crossSite = site ? site === 'cross-site' || site === 'same-site' : origin !== undefined && foreign(origin, req.get('host'));
-      if (crossSite) {
-        res.status(403).json({ error: 'Cross-site request refused.' });
-        return;
-      }
+      if (crossSite) return refuse(res, 403, 'Cross-site request refused.');
     }
     next();
   };
@@ -115,7 +113,7 @@ export function rejectUnknownHosts(config: Config): RequestHandler {
         `[host] API request for ${JSON.stringify(name)} refused: with AUTH_MODE=none the API only answers names it knows. If the name is yours, add it to ALLOWED_HOSTS.`,
       );
     }
-    res.status(403).json({ error: name === null ? 'Invalid Host header.' : `This server does not answer to ${name}. Add it to ALLOWED_HOSTS.` });
+    refuse(res, 403, name === null ? 'Invalid Host header.' : `This server does not answer to ${name}. Add it to ALLOWED_HOSTS.`);
   };
 }
 

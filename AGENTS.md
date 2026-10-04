@@ -58,11 +58,12 @@ server/                 Express API → dist/server
   settings.ts           mergeSettings (defaults + validation on every read and write), loadSettings
   retention.ts          old-day pruning (pruneDays, runRetention, the RETENTION_DAYS cap)
   validate.ts           isWholeNumber: the one check for every bounded whole number the server takes
+  refuse.ts             refuse(): sends an ErrorResponse; every API refusal but the timer-start 409 goes through it
   auth/                 session cookie, scrypt passwords, the login limiter, publicUser/logName (users.ts),
                         middleware (currentUser), local + OIDC routes, resetPassword (reset.ts: what the
                         reset-password command does)
-  routes/               the days, sessions, breaks and settings routers; shared.ts has requireDate, findDay,
-                        ownedRouter and the session and break row → JSON builders (dayJson is in days.ts)
+  routes/               the days, sessions, breaks and settings routers; shared.ts has findDay, ownedRouter
+                        and the session and break row → JSON builders (dayJson is in days.ts)
   dev/                  seed.ts + seed-cli.ts (`npm run seed`), harness.ts (startTestApp for route tests)
   index.ts, cli.ts      the process entrypoints: the server (warns under AUTH_MODE=none), reset-password
                         (reads the arguments and prints resetPassword's answer)
@@ -194,8 +195,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   other tree; the client's `types.ts` re-exports the shared types so component imports stay
   short, and date helpers (`addDays`, `todayKey`, `MINUTE_MS`, …) come straight from
   `shared/dates.js`, never through another module. Every success body has a `shared/` type
-  (one in `api.ts`, or `Settings`); a failure is `{ error }`, which the client throws as its
-  message; the timer-start 409 is `SessionConflict`. Builders are annotated with these types
+  (one in `api.ts`, or `Settings`); a failure is `ErrorResponse` (`{ error }`, whose message
+  the client throws), sent through `refuse()` (`server/refuse.ts`); the timer-start 409 is
+  `SessionConflict`, which extends it with the running session and is the one refusal sent
+  without `refuse()`. Builders are annotated with these types
   (`sessionRowToJson(): Session`, `dayJson(): Day`, …) and each route's answer names its
   envelope with `satisfies` (`res.json({ deleted } satisfies PruneResult)`), while
   `client/src/api.ts` reads the same types, so a field renamed on one side fails `typecheck`
@@ -247,7 +250,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   transaction.
 - **Every data query is scoped by `req.user.id`** (`currentUser(req)`). In `AUTH_MODE=none` that
   is the single `kind='default'` user. Never add a data route outside the `requireAuth` router
-  in `app.ts`. `/:date` routes take `requireDate`. The `/sessions/:id` and `/breaks/:id` routes
+  in `app.ts`. Every `/:date` route sits on the days router (`routes/days.ts`), whose `date`
+  param handler (`router.param`) answers 400 for anything but a real `YYYY-MM-DD`, so a route
+  added there is checked with nothing to list; the session and break starts are registered
+  there with handlers from their own files. The `/sessions/:id` and `/breaks/:id` routes
   sit on a router made by `ownedRouter()` in `routes/shared.ts`, which is where the ownership
   check lives: it is that router's `id` param handler (`router.param`), so every route on it
   with an `:id` is checked, one added later included, with nothing to list on the route. It
@@ -586,7 +592,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   them) and return it from `dayJson` (a per-day list in a table of its own, like `breaks`, is
   instead one more grouped query in `rangeRows` and a field in `dayJson`, both in
   `routes/days.ts`; `daysInRange` loads `GET /days/:date` and `/days/range` alike) → add a
-  `PUT /days/:date/<field>` route (with `requireDate`) and its client call as "An API route"
+  `PUT /days/:date/<field>` route (on the days router) and its client call as "An API route"
   says → `Day` and its default in `emptyDay` (`shared/api.ts`) → a setter in `useDay.tsx` that
   calls `putDayFields(date, apply, send)`: the change shows at once, goes out on the day's
   `day:<date>` queue, and the route's answer (a `Pick<Day, …>` in `shared/api.ts`) is laid on
@@ -595,12 +601,14 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   it from `Sheet.tsx` to the card, and from `useTodayAlarms` into `useAlarms` if alarms depend
   on it.
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
-  `currentUser(req).id` (`requireDate` on a `/:date` route; a `/:id` route on the sessions or
-  breaks router is checked by the router itself and reads its row with `owned(res)`; a new
-  table addressed by id gets its entry in `OwnedRows` and `NOT_FOUND` and a router from
-  `ownedRouter()`, all in `routes/shared.ts`), validate input (cast `req.body` to
-  `{ field?: unknown }` and check each field; the `no-unsafe-*` lint refuses reading it as
-  `any`), return `{ error }` JSON on failure → add the call to `client/src/api.ts` (a request
+  `currentUser(req).id` (a `/:date` route goes on the days router, whose param handler checks
+  the date; a `/:id` route on the sessions or breaks router is checked by the router itself and
+  reads its row with `owned(res)`; a new table addressed by id gets its entry in `OwnedRows` and
+  `NOT_FOUND` and a router from `ownedRouter()`, all in `routes/shared.ts`), validate input
+  (`app.ts` makes a missing or non-JSON body `{}`, so a route reads fields straight off
+  `req.body as { field?: unknown }`, with no `?? {}` or `?.`, and checks each one; the
+  `no-unsafe-*` lint refuses reading it as `any`), refuse with
+  `return refuse(res, status, message)` → add the call to `client/src/api.ts` (a request
   body the client builds in more than one place gets its type there, at the head of the section
   whose calls send it, as `RetroPatch` and `SessionEdit` do: the server reads every body as `unknown`), with a
   row in `client/src/api.test.ts`'s `ROUTES` table for its method, path and body (the coverage
@@ -609,8 +617,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   name from `client/src/types.ts`, which `api.ts` imports from → cover it in that router's
   `*.test.ts`: happy path, each 400, and that another user gets a 404/empty
   result (the scoping test is not optional). A new `/:date` route also gets a row in the
-  bad-date table at the end of `server/routes/days.test.ts`: unlike the `/:id` ownership check,
-  that table does not pick up new routes on its own. The seed's manifest types
+  bad-date table at the end of `server/routes/days.test.ts`. The seed's manifest types
   (`SeededDay` and the aliases beside it in `server/dev/seed.ts`) are built from `Day`,
   `Session`, `Priority` and `Break`, so `typecheck` fails there on a new field until the
   templates set it, or it is added to the type's `Omit` list if the server derives it (like

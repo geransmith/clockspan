@@ -28,7 +28,7 @@ export interface Client {
   get<T = any>(path: string): Promise<ApiResponse<T>>;
   /**
    * Without `body` a write sends no body and no content type, as the web app sends pause,
-   * resume, finish, cancel, end break and logout; Express then leaves `req.body` undefined.
+   * resume, finish, cancel, end break and logout; app.ts then reads `req.body` as `{}`.
    * The same holds for put and patch.
    */
   post<T = any>(path: string, body?: unknown): Promise<ApiResponse<T>>;

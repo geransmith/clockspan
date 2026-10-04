@@ -1,6 +1,7 @@
-import { Router, type Response } from 'express';
+import type { RequestHandler, Response, Router } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
+import { refuse } from '../refuse.js';
 import {
   dateParam,
   endRunningBreak,
@@ -9,7 +10,6 @@ import {
   getOwned,
   ownedRouter,
   parsePlannedSeconds,
-  requireDate,
   runningSession,
   sessionRowToJson,
   UID_RE,
@@ -22,33 +22,35 @@ import { pausedSecondsAfter, PLANNED_SECONDS, plannedEndAt } from '../../shared/
  * exist on that day (`dayId` undefined: a day not stored yet, which has none). Returns an
  * error message for anything else.
  */
-function parsePriorityUid(db: DB, dayId: number | undefined, raw: unknown): { uid: string | null | undefined; error?: string } {
+function parsePriorityUid(db: DB, dayId: number | undefined, raw: unknown): { uid: string | null | undefined } | { error: string } {
   if (raw === undefined) return { uid: undefined };
   if (raw === null) return { uid: null };
-  if (typeof raw !== 'string' || !UID_RE.test(raw)) return { uid: undefined, error: 'priorityUid must be a priority id or null.' };
+  if (typeof raw !== 'string' || !UID_RE.test(raw)) return { error: 'priorityUid must be a priority id or null.' };
   const uid = raw.toLowerCase();
   const hit = dayId !== undefined && db.prepare(`SELECT 1 FROM priorities WHERE day_id = ? AND uid = ?`).get(dayId, uid);
-  return hit ? { uid } : { uid: undefined, error: 'That priority is not on this day.' };
+  return hit ? { uid } : { error: 'That priority is not on this day.' };
 }
 
-/** Mounted at /api/days/:date/sessions (start) — separate router so params flow cleanly. */
-export function sessionStartRouter(db: DB): Router {
-  const r = Router({ mergeParams: true });
+/**
+ * A session's label: undefined = not mentioned, a string cut to `LIMITS.sessionLabel`. Anything
+ * else is refused, on start as on PATCH, rather than quietly stored as ''.
+ */
+function parseLabel(raw: unknown): { label: string | undefined } | { error: string } {
+  if (raw === undefined) return { label: undefined };
+  if (typeof raw !== 'string') return { error: 'label must be a string.' };
+  return { label: raw.slice(0, LIMITS.sessionLabel) };
+}
 
-  r.post('/', requireDate, (req, res) => {
+/** `POST /days/:date/sessions`, registered on the days router, whose date check has already run. */
+export function startSession(db: DB): RequestHandler {
+  return (req, res) => {
     const user = currentUser(req);
     const date = dateParam(req);
-    const { label, plannedSeconds, priorityUid } = (req.body ?? {}) as { label?: unknown; plannedSeconds?: unknown; priorityUid?: unknown };
+    const { label, plannedSeconds, priorityUid } = req.body as { label?: unknown; plannedSeconds?: unknown; priorityUid?: unknown };
     const planned = parsePlannedSeconds(plannedSeconds, PLANNED_SECONDS);
-    if ('error' in planned) {
-      res.status(400).json({ error: planned.error });
-      return;
-    }
-    // Refused like the same field on PATCH, rather than quietly stored as ''.
-    if (label !== undefined && typeof label !== 'string') {
-      res.status(400).json({ error: 'label must be a string.' });
-      return;
-    }
+    if ('error' in planned) return refuse(res, 400, planned.error);
+    const name = parseLabel(label);
+    if ('error' in name) return refuse(res, 400, name.error);
     const existing = runningSession(db, user.id);
     if (existing) {
       res.status(409).json({ error: 'A timer is already running.', session: sessionRowToJson(existing) } satisfies SessionConflict);
@@ -56,10 +58,7 @@ export function sessionStartRouter(db: DB): Router {
     }
     // Checked before the day is stored, so a refused start leaves no empty day behind.
     const link = parsePriorityUid(db, findDay(db, user.id, date)?.id, priorityUid);
-    if (link.error) {
-      res.status(400).json({ error: link.error });
-      return;
-    }
+    if ('error' in link) return refuse(res, 400, link.error);
     const id = db.transaction(() => {
       const dayId = ensureDay(db, user.id, date);
       const now = Date.now();
@@ -70,13 +69,11 @@ export function sessionStartRouter(db: DB): Router {
           `INSERT INTO sessions (day_id, user_id, label, planned_seconds, started_at, ended_at, status, priority_uid)
            VALUES (?, ?, ?, ?, ?, NULL, 'running', ?)`,
         )
-        .run(dayId, user.id, typeof label === 'string' ? label.slice(0, LIMITS.sessionLabel) : '', planned.seconds, now, link.uid ?? null);
+        .run(dayId, user.id, name.label ?? '', planned.seconds, now, link.uid ?? null);
       return Number(info.lastInsertRowid);
     })();
     res.status(201).json({ session: sessionRowToJson(getOwned(db, 'sessions', user.id, id)!) } satisfies SessionResponse);
-  });
-
-  return r;
+  };
 }
 
 export function sessionsRouter(db: DB): Router {
@@ -93,37 +90,24 @@ export function sessionsRouter(db: DB): Router {
 
   r.patch('/:id', (req, res) => {
     const s = owned(res);
-    const { plannedSeconds, label, priorityUid } = (req.body ?? {}) as Record<string, unknown>;
+    const { plannedSeconds, label, priorityUid } = req.body as Record<string, unknown>;
     const next = {
       planned: s.planned_seconds,
       label: s.label,
       priorityUid: s.priority_uid,
     };
     const link = parsePriorityUid(db, s.day_id, priorityUid);
-    if (link.error) {
-      res.status(400).json({ error: link.error });
-      return;
-    }
+    if ('error' in link) return refuse(res, 400, link.error);
     if (link.uid !== undefined) next.priorityUid = link.uid;
     if (plannedSeconds !== undefined) {
       const planned = parsePlannedSeconds(plannedSeconds, PLANNED_SECONDS);
-      if ('error' in planned) {
-        res.status(400).json({ error: planned.error });
-        return;
-      }
-      if (s.status !== 'running') {
-        res.status(409).json({ error: 'Only a running timer can be adjusted.' });
-        return;
-      }
+      if ('error' in planned) return refuse(res, 400, planned.error);
+      if (s.status !== 'running') return refuse(res, 409, 'Only a running timer can be adjusted.');
       next.planned = planned.seconds;
     }
-    if (label !== undefined) {
-      if (typeof label !== 'string') {
-        res.status(400).json({ error: 'label must be a string.' });
-        return;
-      }
-      next.label = label.slice(0, LIMITS.sessionLabel);
-    }
+    const name = parseLabel(label);
+    if ('error' in name) return refuse(res, 400, name.error);
+    if (name.label !== undefined) next.label = name.label;
     db.prepare(`UPDATE sessions SET planned_seconds = ?, label = ?, priority_uid = ? WHERE id = ?`).run(next.planned, next.label, next.priorityUid, s.id);
     reply(res, s.user_id, s.id);
   });
@@ -132,20 +116,14 @@ export function sessionsRouter(db: DB): Router {
   // paused_seconds. Both are idempotent like finish and cancel: the row is answered as it is.
   r.post('/:id/pause', (_req, res) => {
     const s = owned(res);
-    if (s.status !== 'running') {
-      res.status(409).json({ error: 'Only a running timer can be paused.' });
-      return;
-    }
+    if (s.status !== 'running') return refuse(res, 409, 'Only a running timer can be paused.');
     if (s.paused_at == null) db.prepare(`UPDATE sessions SET paused_at = ? WHERE id = ?`).run(Date.now(), s.id);
     reply(res, s.user_id, s.id);
   });
 
   r.post('/:id/resume', (_req, res) => {
     const s = owned(res);
-    if (s.status !== 'running') {
-      res.status(409).json({ error: 'Only a running timer can be resumed.' });
-      return;
-    }
+    if (s.status !== 'running') return refuse(res, 409, 'Only a running timer can be resumed.');
     if (s.paused_at != null) {
       const pausedSeconds = pausedSecondsAfter({ pausedAt: s.paused_at, pausedSeconds: s.paused_seconds }, Date.now());
       db.prepare(`UPDATE sessions SET paused_seconds = ?, paused_at = NULL WHERE id = ?`).run(pausedSeconds, s.id);
@@ -159,11 +137,8 @@ export function sessionsRouter(db: DB): Router {
   // when the pause began (no work happened since), so the log excludes every pause.
   r.post('/:id/finish', (req, res) => {
     const s = owned(res);
-    const { countOverrun } = (req.body ?? {}) as { countOverrun?: unknown };
-    if (countOverrun !== undefined && typeof countOverrun !== 'boolean') {
-      res.status(400).json({ error: 'countOverrun must be a boolean.' });
-      return;
-    }
+    const { countOverrun } = req.body as { countOverrun?: unknown };
+    if (countOverrun !== undefined && typeof countOverrun !== 'boolean') return refuse(res, 400, 'countOverrun must be a boolean.');
     if (s.status === 'running') {
       const now = Date.now();
       const timing = { startedAt: s.started_at, plannedSeconds: s.planned_seconds, pausedSeconds: s.paused_seconds, pausedAt: s.paused_at };

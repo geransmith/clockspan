@@ -1,11 +1,13 @@
 import { isIPv6 } from 'node:net';
 import type { RequestHandler, Response } from 'express';
 import type { Config } from '../config.js';
+import { refuse } from '../refuse.js';
 import { USERNAME } from '../../shared/api.js';
 import { MINUTE_MS } from '../../shared/dates.js';
 
 /**
- * The sign-in limits: failures per address (an IPv6 client by its /64) and per account name.
+ * The sign-in limits: failures per address (an IPv6 client by its /64) and per account name, and
+ * wrong current passwords per user.
  * The local auth router counts sign-ins, wrong setup codes and wrong current passwords here.
  */
 
@@ -22,14 +24,14 @@ const WINDOW_MS = 15 * MINUTE_MS;
 // make it grow without bound.
 const SWEEP_ABOVE = 1000;
 
-/** Simple login limiter, per address or per account. In-memory is fine for a single-process self-hosted app. */
+/** Simple login limiter: failures per key (an address, an account name or a user). In-memory is fine for a single-process self-hosted app. */
 export class LoginLimiter {
   private attempts = new Map<string, { count: number; resetAt: number }>();
 
   constructor(private readonly maxAttempts = MAX_ATTEMPTS) {}
 
-  check(ip: string): { ok: boolean; retryAfterSec: number } {
-    const entry = this.attempts.get(ip);
+  check(key: string): { ok: boolean; retryAfterSec: number } {
+    const entry = this.attempts.get(key);
     if (!entry || entry.resetAt <= Date.now()) return { ok: true, retryAfterSec: 0 };
     if (entry.count >= this.maxAttempts) {
       return { ok: false, retryAfterSec: Math.ceil((entry.resetAt - Date.now()) / 1000) };
@@ -37,13 +39,13 @@ export class LoginLimiter {
     return { ok: true, retryAfterSec: 0 };
   }
 
-  fail(ip: string): void {
+  fail(key: string): void {
     const now = Date.now();
     if (this.attempts.size >= SWEEP_ABOVE) {
       for (const [k, v] of this.attempts) if (v.resetAt <= now) this.attempts.delete(k);
     }
-    const entry = this.attempts.get(ip);
-    if (!entry || entry.resetAt <= now) this.attempts.set(ip, { count: 1, resetAt: now + WINDOW_MS });
+    const entry = this.attempts.get(key);
+    if (!entry || entry.resetAt <= now) this.attempts.set(key, { count: 1, resetAt: now + WINDOW_MS });
     else entry.count += 1;
   }
 
@@ -52,8 +54,8 @@ export class LoginLimiter {
    * failures before it stay: if a success cleared them, anyone with an account of their own
    * could sign in between guesses at someone else's password and never reach the limit.
    */
-  succeed(ip: string): void {
-    const entry = this.attempts.get(ip);
+  succeed(key: string): void {
+    const entry = this.attempts.get(key);
     if (entry) entry.count -= 1;
   }
 }
@@ -112,5 +114,5 @@ export function warnUntrustedProxy(config: Config): RequestHandler {
 /** The 429 for a request the limiter holds back, with when to try again. */
 export function refuseTooMany(res: Response, retryAfterSec: number): void {
   res.setHeader('Retry-After', String(retryAfterSec));
-  res.status(429).json({ error: `Too many attempts. Try again in ${Math.ceil(retryAfterSec / 60)} min.` });
+  refuse(res, 429, `Too many attempts. Try again in ${Math.ceil(retryAfterSec / 60)} min.`);
 }

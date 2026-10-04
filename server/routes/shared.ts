@@ -1,21 +1,12 @@
-import { Router, type RequestHandler, type Response } from 'express';
+import { Router, type Response } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
+import { refuse } from '../refuse.js';
 import { isWholeNumber } from '../validate.js';
-import { isValidDateKey } from '../../shared/dates.js';
 import type { Break, Punch, Session, SessionStatus } from '../../shared/api.js';
 import { activeMs, MIN_BREAK_MS } from '../../shared/timer.js';
 
-/** Guards a `/:date` route: 400 unless the param is a real `YYYY-MM-DD`. Works under `mergeParams` too. */
-export const requireDate: RequestHandler = (req, res, next) => {
-  if (!isValidDateKey(req.params.date)) {
-    res.status(400).json({ error: 'Invalid date.' });
-    return;
-  }
-  next();
-};
-
-/** The `:date` param after `requireDate`; typed so handlers don't repeat the cast. */
+/** The `:date` param, which the days router's param handler has checked; typed so handlers don't repeat the cast. */
 export function dateParam(req: { params: Record<string, string | string[] | undefined> }): string {
   return req.params.date as string;
 }
@@ -122,10 +113,7 @@ export function ownedRouter<T extends OwnedTable>(db: DB, table: T): { router: R
   router.param('id', (req, res, next, id: string) => {
     // Number() also reads '0x1', '1e0', '+1' and ' 1' (from %201) as 1.
     const row = /^\d+$/.test(id) ? getOwned(db, table, currentUser(req).id, Number(id)) : undefined;
-    if (!row) {
-      res.status(404).json({ error: NOT_FOUND[table] });
-      return;
-    }
+    if (!row) return refuse(res, 404, NOT_FOUND[table]);
     res.locals.owned = row;
     next();
   });

@@ -57,13 +57,13 @@ describe('sessions', () => {
     expect([label.status, label.body.error]).toEqual([400, 'label must be a string.']);
     // Refused before anything is stored.
     expect(app.count('days')).toBe(0);
-    // No body at all: the same 400, not a crash on reading a field of undefined.
-    expect((await app.api.post(`/api/days/${DATE}/sessions`)).status).toBe(400);
+    // No plannedSeconds at all: the same 400.
+    expect((await app.api.post(`/api/days/${DATE}/sessions`, {})).status).toBe(400);
   });
 
-  it('leaves a session as it is when patched with no body', async () => {
+  it('leaves a session as it is on an empty patch', async () => {
     const { id } = (await start()).body.session;
-    const r = await app.api.patch(`/api/sessions/${id}`);
+    const r = await app.api.patch(`/api/sessions/${id}`, {});
     expect(r.status).toBe(200);
     expect(r.body.session).toMatchObject({ label: 'Work', plannedSeconds: 1500 });
   });
@@ -201,7 +201,7 @@ describe('sessions', () => {
     const { id } = (await start({ plannedSeconds: 600 })).body.session;
     at(HOUR_MS);
     expect((await app.api.post(`/api/sessions/${id}/finish`, { countOverrun: 'yes' })).status).toBe(400);
-    // No body at all (curl) reads as "not asked", not a crash.
+    // No body, as the web app sends a plain Finish: not asked.
     const bare = await app.api.post(`/api/sessions/${id}/finish`);
     expect(bare.status).toBe(200);
     expect(bare.body.session.durationSeconds).toBe(600);
