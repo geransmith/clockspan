@@ -4,7 +4,15 @@ import { formatDateSpan, formatMonth, sameText } from './format';
 import { hasContent, reviewDay } from './retro';
 import { daySettings, timeclockForDate, type TimeclockSettings } from './timeclock';
 
-export type PeriodKind = 'week' | 'month' | 'quarter';
+export const PERIOD_KINDS = ['week', 'month', 'quarter'] as const;
+export type PeriodKind = (typeof PERIOD_KINDS)[number];
+
+/** The period History → Review shows. */
+export interface ReviewPeriod {
+  kind: PeriodKind;
+  /** The period's first day: a review left open past midnight stays on it. */
+  from: string;
+}
 
 export interface Period {
   kind: PeriodKind;

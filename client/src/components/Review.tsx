@@ -3,28 +3,21 @@ import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
 import { UNTITLED_SESSION } from '../lib/copy';
 import { formatDateLong, formatDuration, formatWeekday } from '../lib/format';
-import { periodOffset, periodRange, reviewRange, type PeriodKind } from '../lib/review';
+import { PERIOD_KINDS, periodOffset, periodRange, reviewRange, type PeriodKind, type ReviewPeriod } from '../lib/review';
 import type { Day } from '../types';
 import { Check } from './Icons';
 import { PeriodNav } from './PeriodNav';
 import { Tile } from './Tile';
 
-const KINDS: { id: PeriodKind; label: string }[] = [
-  { id: 'week', label: 'Week' },
-  { id: 'month', label: 'Month' },
-  { id: 'quarter', label: 'Quarter' },
-];
-
-export interface ReviewPeriod {
-  kind: PeriodKind;
-  /** The period's first day: a review left open past midnight stays on it. */
-  from: string;
-}
+const PERIOD_LABELS: Record<PeriodKind, string> = { week: 'Week', month: 'Month', quarter: 'Quarter' };
 
 interface Props {
   today: string;
   now: number;
-  /** Owned by History so the calendar's "Review this week" can point it at a week. */
+  /**
+   * Owned by History so the calendar's "Review this week" can point it at a week. A day opened
+   * from here takes the period along, so Back reopens the review on it.
+   */
   period: ReviewPeriod;
   onPeriod: (next: ReviewPeriod) => void;
   onOpen: (date: string) => void;
@@ -48,9 +41,9 @@ export function Review({ today, now, period: { kind, from }, onPeriod, onOpen }:
       <header className="card-head">
         <h2 className="card-title">Review</h2>
         <span className="chips" role="group" aria-label="Period">
-          {KINDS.map((k) => (
-            <button key={k.id} className={`chip${kind === k.id ? ' is-on' : ''}`} onClick={() => pickKind(k.id)} aria-pressed={kind === k.id}>
-              {k.label}
+          {PERIOD_KINDS.map((k) => (
+            <button key={k} className={`chip${kind === k ? ' is-on' : ''}`} onClick={() => pickKind(k)} aria-pressed={kind === k}>
+              {PERIOD_LABELS[k]}
             </button>
           ))}
         </span>

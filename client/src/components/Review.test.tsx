@@ -2,8 +2,9 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
+import type { ReviewPeriod } from '../lib/review';
 import { makeSettings, SettingsAndDays, settle } from '../test/hooks';
-import { Review, type ReviewPeriod } from './Review';
+import { Review } from './Review';
 
 vi.mock('../api');
 

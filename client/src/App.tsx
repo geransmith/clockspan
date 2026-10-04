@@ -14,6 +14,7 @@ import { TimerProvider, useTimer } from './hooks/useTimer';
 import { useTodayAlarms } from './hooks/useTodayAlarms';
 import { todayKey } from '../../shared/dates.js';
 import { floorToMinute } from './lib/format';
+import type { ReviewPeriod } from './lib/review';
 import { applyTheme } from './lib/theme';
 import type { CardId } from './types';
 
@@ -70,11 +71,12 @@ function Shell() {
   const minute = floorToMinute(now);
   // The calendar's month and picked day are its own state and don't survive the unmount, so
   // the opened day is written onto the History entry first and Back reopens the calendar on
-  // it. The second call names both fields: navigate reads the route through useLatest, which
-  // isn't updated between two calls in one handler.
+  // it. A day opened from Review records the period with it, so Back reopens the review
+  // there. The second call names both fields: navigate reads the route through useLatest,
+  // which isn't updated between two calls in one handler.
   const openDay = useCallback(
-    (d: string) => {
-      navigate({ date: d }, { replace: true });
+    (d: string, review: ReviewPeriod | null) => {
+      navigate({ date: d, review }, { replace: true });
       navigate({ view: 'sheet', date: d });
     },
     [navigate],
@@ -99,7 +101,7 @@ function Shell() {
           <Sheet date={date} today={today} now={now} customize={customize} jumpTo={jumpTo} onJumped={onJumped} onPunchEditing={setEditingPunches} />
         ) : (
           <Suspense fallback={<div className="sheet-loading" aria-busy="true" />}>
-            <History today={today} now={minute} date={date} onOpen={openDay} />
+            <History today={today} now={minute} date={date} review={route.review} onOpen={openDay} />
           </Suspense>
         )}
       </main>
