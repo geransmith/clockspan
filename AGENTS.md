@@ -381,11 +381,14 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   one after another (`inOrder`). `useTimer` sends the running session's writes one at a time on
   its own queue: start, adjust, edit, pause, resume, finish and cancel, the log's edits of the
   running row included. That queue is not ordered against the day store's `session:<id>` queue,
-  which carries the other rows' edits and deletes. `useSettings` sends its PUTs and resets one
-  at a time. A new edit of a day's rows, the settings or the timer goes through one of these,
-  never straight to `api`; the day store's `pruneBefore` is the one store write sent on no
-  queue, as the day store's rule explains. Reads are not queued, and in all three stores a
-  read's answer never replaces a change still on its way.
+  which carries the other rows' edits and deletes. The one wait across queues: a session start
+  or edit that names a priority's uid first waits, inside its own queue's job, for that day's
+  priorities save still out (`prioritiesSaved`), since the server refuses a uid it hasn't
+  stored. `useSettings` sends its PUTs and resets one at a time. A new edit of a day's rows, the
+  settings or the timer goes through one of these, never straight to `api`; the day store's
+  `pruneBefore` is the one store write sent on no queue, as the day store's rule explains. Reads
+  are not queued, and in all three stores a read's answer never replaces a change still on its
+  way.
 - **Punch positions are fixed**: 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in
   pairs, and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches`
   enforces it). Kind is parity (`kindForPosition`, `shared/punches.ts`). The math evaluates *set* punches
@@ -556,10 +559,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   instead one more grouped query in `rangeRows` and a field in `dayJson`, both in
   `routes/days.ts`; `daysInRange` loads `GET /days/:date` and `/days/range` alike) → add a
   `PUT /days/:date/<field>` route (with `requireDate`) and its client call as "An API route"
-  says → `Day` and its default in `emptyDay` (`shared/api.ts`) → an optimistic setter in
-  `useDay.tsx` that goes through `inOrder` on the day's `day:<date>` key with the change and a
-  commit from the server's answer (mirror `setOvertimeApproved`; a failure drops the change,
-  raises the "Change not saved" banner and reloads the day, so the setter never rejects) → pass
+  says → `Day` and its default in `emptyDay` (`shared/api.ts`) → a setter in `useDay.tsx` that
+  calls `putDayFields(date, apply, send)`: the change shows at once, goes out on the day's
+  `day:<date>` queue, and the route's answer (a `Pick<Day, …>` in `shared/api.ts`) is laid on
+  the stored copy (mirror `setOvertimeApproved`; a failure drops the change, raises the "Change
+  not saved" banner and reloads the day, so the setter resolves false and never rejects) → pass
   it from `Sheet.tsx` to the card, and from `useTodayAlarms` into `useAlarms` if alarms depend
   on it.
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
@@ -568,9 +572,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   table addressed by id gets its entry in `OwnedRows` and `NOT_FOUND` and a router from
   `ownedRouter()`, all in `routes/shared.ts`), validate input (cast `req.body` to
   `{ field?: unknown }` and check each field; the `no-unsafe-*` lint refuses reading it as
-  `any`), return `{ error }` JSON on failure → add the call to `client/src/api.ts`, with a row
-  in `client/src/api.test.ts`'s `ROUTES` table for its method, path and body (the coverage gate
-  needs it), and the response type to `shared/api.ts` (the route's
+  `any`), return `{ error }` JSON on failure → add the call to `client/src/api.ts` (a request
+  body the client builds in more than one place gets its type there, beside the call that sends
+  it, as `RetroPatch` and `SessionEdit` do: the server reads every body as `unknown`), with a
+  row in `client/src/api.test.ts`'s `ROUTES` table for its method, path and body (the coverage
+  gate needs it), and the response type to `shared/api.ts` (the route's
   `res.json(… satisfies <Type>)` and the client's `request<Type>` both name it), re-exported by
   name from `client/src/types.ts`, which `api.ts` imports from → cover it in that router's
   `*.test.ts`: happy path, each 400, and that another user gets a 404/empty

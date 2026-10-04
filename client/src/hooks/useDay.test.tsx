@@ -7,18 +7,18 @@ import { ADD_PRIORITY_FAILED, SAVE_FAILED } from '../lib/copy';
 import { emptyPunches } from '../lib/timeclock';
 import { apiError, deferred, makeBreak, makeDay, makeSession, makeSettings, MIN, settle, SettingsAndDays, setVisibility, T0, TODAY } from '../test/hooks';
 import type { BreakEndResponse, BreakResponse, Day, OkResponse, OvertimeResponse, Priority, PruneResult, Punch, PunchesResponse, Session } from '../types';
-import { useDay, useDayStore, useRefreshDay } from './useDay';
+import { useDay, useDays, useDayStore, useRefreshDay } from './useDay';
 
 vi.mock('../api');
 vi.mock('../lib/alerts');
 
 const OTHER = '2026-09-25';
 
-/** The store, plus `useDay(date)` so the day loads the way the sheet loads it. */
+/** The store's functions and state, plus `useDay(date)` so the day loads the way the sheet loads it. */
 function renderStore(date: string | null = TODAY) {
   return renderHook(
     () => {
-      const store = useDayStore();
+      const store = { ...useDayStore(), ...useDays() };
       if (date) useDay(date);
       return store;
     },
@@ -78,13 +78,13 @@ describe('load', () => {
     vi.mocked(api.getDay).mockResolvedValueOnce(null as unknown as Day);
     const { result } = renderStore();
     await settle();
-    expect(result.current.errors[TODAY]).toBeDefined();
+    expect(result.current.failed.has(TODAY)).toBe(true);
     expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ tag: 'load-failed' }));
 
     vi.mocked(api.getDay).mockResolvedValueOnce(makeDay());
     await act(() => result.current.load(TODAY));
     expect(api.getDay).toHaveBeenCalledTimes(2);
-    expect(result.current.errors).toEqual({});
+    expect(result.current.failed.size).toBe(0);
     expect(result.current.days[TODAY]).toBeDefined();
   });
 
@@ -108,7 +108,7 @@ describe('load', () => {
     vi.mocked(api.getDay).mockRejectedValueOnce(new Error('Request failed (502)'));
     const { result } = renderStore();
     await settle();
-    expect(result.current.errors[TODAY]).toBe('Request failed (502)');
+    expect(result.current.failed.has(TODAY)).toBe(true);
     expect(result.current.days[TODAY]).toBeUndefined();
     expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ tag: 'load-failed' }));
     // useDay does not ask again on its own: the failure is on screen with a Try again button.
@@ -117,7 +117,7 @@ describe('load', () => {
 
     vi.mocked(api.getDay).mockResolvedValueOnce(makeDay());
     await act(() => result.current.load(TODAY));
-    expect(result.current.errors).toEqual({});
+    expect(result.current.failed.size).toBe(0);
     expect(result.current.days[TODAY]).toBeDefined();
   });
 
@@ -128,7 +128,7 @@ describe('load', () => {
     vi.mocked(api.getDay).mockRejectedValueOnce(new Error('offline'));
     await act(() => result.current.load(TODAY));
     expect(result.current.days[TODAY]?.retroNote).toBe('kept');
-    expect(result.current.errors).toEqual({});
+    expect(result.current.failed.size).toBe(0);
     expect(warnQuietly).not.toHaveBeenCalled();
   });
 });
@@ -165,7 +165,7 @@ describe('a day shown again', () => {
     rerender({ date: TODAY });
     await settle();
     expect(api.getDay).toHaveBeenCalledTimes(3);
-    expect(result.current.store.errors[TODAY]).toBe('Request failed (504)');
+    expect(result.current.failed).toBe(true);
     expect(warnQuietly).toHaveBeenCalledTimes(1);
   });
 });
@@ -242,7 +242,7 @@ describe('load after a write', () => {
     const stale = deferred<Day>();
     vi.mocked(api.getDay).mockReturnValueOnce(stale.promise);
     // Clock in goes out, lunch out waits behind it, and then a background read asks for the day.
-    let saved!: Promise<void>;
+    let saved!: Promise<boolean>;
     act(() => {
       void result.current.setPunches(TODAY, punchesAt(T0));
       saved = result.current.setPunches(TODAY, punchesAt(T0, T0 + 240 * MIN));
@@ -320,7 +320,7 @@ describe('load after a write', () => {
     await settle();
     expect(api.getDay).toHaveBeenCalledTimes(2);
     expect(result.current.days[TODAY]?.punches[0]?.at).toBeNull();
-    expect(result.current.errors).toEqual({});
+    expect(result.current.failed.size).toBe(0);
     expect(vi.mocked(warnQuietly).mock.calls.map(([w]) => w.tag)).toEqual(['save-failed']);
   });
 
@@ -392,12 +392,12 @@ describe('refresh after a failed first load', () => {
     vi.mocked(api.getDay).mockRejectedValueOnce(new Error('Request failed (504)'));
     await act(() => result.current.refresh(TODAY));
     expect(api.getDay).toHaveBeenCalledTimes(2);
-    expect(result.current.errors[TODAY]).toBe('Request failed (504)');
+    expect(result.current.failed.has(TODAY)).toBe(true);
     expect(warnQuietly).toHaveBeenCalledTimes(1);
 
     vi.mocked(api.getDay).mockResolvedValueOnce(makeDay(TODAY, { retroNote: 'back' }));
     await act(() => result.current.refresh(TODAY));
-    expect(result.current.errors).toEqual({});
+    expect(result.current.failed.size).toBe(0);
     expect(result.current.days[TODAY]?.retroNote).toBe('back');
     expect(dismissByTag).toHaveBeenCalledWith('load-failed');
   });
@@ -410,7 +410,7 @@ describe('setPunches', () => {
     vi.mocked(api.putPunches).mockReturnValueOnce(first.promise).mockImplementation(echoPunches);
     const { result } = renderStore();
     await settle();
-    let done!: Promise<void>;
+    let done!: Promise<boolean>;
     act(() => {
       done = result.current.setPunches(TODAY, punchesAt(T0));
     });
@@ -433,7 +433,7 @@ describe('setPunches', () => {
     vi.mocked(api.putPunches).mockReturnValueOnce(first.promise);
     const { result } = renderStore();
     await settle();
-    let done!: Promise<void>;
+    let done!: Promise<boolean>;
     act(() => {
       done = result.current.setPunches(TODAY, punchesAt(T0));
     });
@@ -515,9 +515,62 @@ describe('priorities', () => {
     await expect(act(() => result.current.addPriority(OTHER, 'Unsaved'))).rejects.toThrow(SAVE_FAILED.title);
     expect(api.putPriorities).toHaveBeenCalledTimes(1);
   });
+
+  it('prioritiesSaved resolves at once with no priorities save out', async () => {
+    const { result } = renderStore(null);
+    await expect(result.current.prioritiesSaved(TODAY)).resolves.toBeUndefined();
+    expect(api.putPriorities).not.toHaveBeenCalled();
+  });
+
+  it('prioritiesSaved waits for the save out and the list waiting behind it', async () => {
+    vi.mocked(api.getDay).mockResolvedValue(makeDay());
+    const first = deferred<{ priorities: Priority[] }>();
+    const second = deferred<{ priorities: Priority[] }>();
+    vi.mocked(api.putPriorities).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const { result } = renderStore();
+    await settle();
+    let saved = false;
+    act(() => {
+      void result.current.setPriorities(TODAY, [priority(1, 'One')]);
+      void result.current.setPriorities(TODAY, [priority(1, 'One'), priority(2, 'Two')]);
+      void result.current.prioritiesSaved(TODAY).then(() => (saved = true));
+    });
+    first.resolve({ priorities: [priority(1, 'One')] });
+    await settle();
+    expect(api.putPriorities).toHaveBeenCalledTimes(2);
+    expect(saved).toBe(false);
+    second.resolve({ priorities: [priority(1, 'One'), priority(2, 'Two')] });
+    await settle();
+    expect(saved).toBe(true);
+  });
+
+  it('prioritiesSaved resolves, without rejecting, when the save is refused', async () => {
+    vi.mocked(api.getDay).mockResolvedValue(makeDay());
+    const refused = deferred<{ priorities: Priority[] }>();
+    vi.mocked(api.putPriorities).mockReturnValueOnce(refused.promise);
+    const { result } = renderStore();
+    await settle();
+    let saved!: Promise<void>;
+    act(() => {
+      void result.current.setPriorities(TODAY, [priority(1, 'Lost')]);
+      saved = result.current.prioritiesSaved(TODAY);
+    });
+    refused.reject(new Error('offline'));
+    await act(() => expect(saved).resolves.toBeUndefined());
+  });
 });
 
 describe('per-day fields', () => {
+  it('setOvertimeApproved says whether the server saved it', async () => {
+    vi.mocked(api.getDay).mockResolvedValue(makeDay());
+    vi.mocked(api.putOvertime).mockResolvedValueOnce({ overtimeApproved: true }).mockRejectedValueOnce(new Error('offline'));
+    const { result } = renderStore();
+    await settle();
+    await act(async () => expect(await result.current.setOvertimeApproved(TODAY, true)).toBe(true));
+    expect(result.current.days[TODAY]?.overtimeApproved).toBe(true);
+    await act(async () => expect(await result.current.setOvertimeApproved(TODAY, false)).toBe(false));
+  });
+
   it('setRetro keeps the note and stamp it was not asked to change, then takes the stored stamp', async () => {
     vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { retroNote: 'why', retroAt: null }));
     const saved = deferred<{ retroNote: string; retroAt: number | null }>();
@@ -525,7 +578,7 @@ describe('per-day fields', () => {
     const { result } = renderStore();
     await settle();
 
-    let done!: Promise<void>;
+    let done!: Promise<boolean>;
     act(() => {
       done = result.current.setRetro(TODAY, { done: true });
     });
@@ -563,7 +616,7 @@ describe('per-day fields', () => {
     const reload = deferred<Day>();
     vi.mocked(api.getDay).mockReturnValueOnce(reload.promise);
     vi.mocked(api.putTarget).mockRejectedValueOnce(new Error('offline'));
-    let done!: Promise<void>;
+    let done!: Promise<boolean>;
     act(() => {
       done = result.current.setWorkMinutes(TODAY, 300);
     });
@@ -584,7 +637,7 @@ describe('per-day fields', () => {
     vi.mocked(api.putTarget).mockResolvedValueOnce({ workMinutes: 240 });
     const { result } = renderStore();
     await settle();
-    let done!: Promise<void>;
+    let done!: Promise<boolean>;
     act(() => void result.current.setOvertimeApproved(TODAY, true));
     act(() => void result.current.setOvertimeApproved(TODAY, false));
     act(() => {
@@ -623,7 +676,7 @@ describe('sessions', () => {
     vi.mocked(api.deleteSession).mockReturnValue(answer.promise);
     const { result } = renderStore();
     await settle();
-    let done!: Promise<void>;
+    let done!: Promise<boolean>;
     act(() => {
       done = result.current.removeSession(TODAY, 1);
     });
@@ -653,7 +706,7 @@ describe('sessions', () => {
     vi.mocked(api.patchSession).mockReturnValueOnce(answer.promise);
     const { result } = renderStore();
     await settle();
-    let done!: Promise<void>;
+    let done!: Promise<boolean>;
     act(() => {
       done = result.current.updateSession(TODAY, 1, { label: 'Renamed' });
     });
@@ -661,6 +714,27 @@ describe('sessions', () => {
     answer.resolve({ session: makeSession({ label: 'Renamed (stored)' }) });
     await act(() => done);
     expect(result.current.days[TODAY]?.sessions[0]?.label).toBe('Renamed (stored)');
+  });
+
+  it('updateSession links a row to a priority only once that priorities save has answered', async () => {
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { sessions: [makeSession()] }));
+    const rows = deferred<{ priorities: Priority[] }>();
+    vi.mocked(api.putPriorities).mockReturnValueOnce(rows.promise);
+    vi.mocked(api.patchSession).mockResolvedValueOnce({ session: makeSession({ priorityUid: 'u1' }) });
+    const { result } = renderStore();
+    await settle();
+    let done!: Promise<boolean>;
+    act(() => {
+      void result.current.setPriorities(TODAY, [priority(1, 'Just typed')]);
+      done = result.current.updateSession(TODAY, 1, { priorityUid: 'u1' });
+    });
+    expect(result.current.days[TODAY]?.sessions[0]?.priorityUid).toBe('u1');
+    await settle();
+    // The server refuses a uid it hasn't stored.
+    expect(api.patchSession).not.toHaveBeenCalled();
+    rows.resolve({ priorities: [priority(1, 'Just typed')] });
+    expect(await act(() => done)).toBe(true);
+    expect(api.patchSession).toHaveBeenCalledWith(1, { priorityUid: 'u1' });
   });
 });
 
@@ -674,7 +748,7 @@ describe('breaks', () => {
     vi.mocked(api.startBreak).mockReturnValue(answer.promise);
     const { result } = renderStore();
     await settle();
-    let done!: Promise<void>;
+    let done!: Promise<boolean>;
     act(() => {
       done = result.current.startBreak(TODAY, 600);
     });
@@ -716,7 +790,7 @@ describe('breaks', () => {
     vi.mocked(api.endBreak).mockReturnValue(answer.promise);
     const { result } = renderStore();
     await settle();
-    let done!: Promise<void>;
+    let done!: Promise<boolean>;
     act(() => {
       done = result.current.endBreak(TODAY, 2);
     });
@@ -737,7 +811,7 @@ describe('breaks', () => {
     vi.mocked(api.endBreak).mockReturnValueOnce(answer.promise);
     const { result } = renderStore();
     await settle();
-    let done!: Promise<void>;
+    let done!: Promise<boolean>;
     act(() => {
       done = result.current.endBreak(TODAY, 2);
     });
@@ -813,7 +887,7 @@ describe('breaks', () => {
     vi.mocked(api.deleteBreak).mockReturnValue(answer.promise);
     const { result } = renderStore();
     await settle();
-    let done!: Promise<void>;
+    let done!: Promise<boolean>;
     act(() => {
       done = result.current.removeBreak(TODAY, 1);
     });
@@ -969,7 +1043,24 @@ describe('useRefreshDay', () => {
   });
 });
 
+it('useDayStore() stays the same object when a refresh changes a day', async () => {
+  vi.mocked(api.getDay)
+    .mockResolvedValueOnce(makeDay())
+    .mockResolvedValueOnce(makeDay(TODAY, { retroNote: 'from the phone' }));
+  const { result } = renderHook(() => ({ store: useDayStore(), days: useDays().days }), { wrapper: SettingsAndDays });
+  const store = result.current.store;
+  await act(() => store.load(TODAY));
+  await act(() => store.refresh(TODAY));
+  expect(result.current.days[TODAY]?.retroNote).toBe('from the phone');
+  expect(result.current.store).toBe(store);
+});
+
 it('useDayStore refuses to run outside the provider', () => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
   expect(() => renderHook(() => useDayStore())).toThrow('useDayStore outside DayProvider');
+});
+
+it('useDays refuses to run outside the provider', () => {
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  expect(() => renderHook(() => useDays())).toThrow('useDays outside DayProvider');
 });

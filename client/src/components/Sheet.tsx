@@ -36,7 +36,7 @@ interface Props {
 
 export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEditing }: Props) {
   const { settings, update } = useSettings();
-  const { day, store } = useDay(date);
+  const { day, failed, store } = useDay(date);
   const isToday = date === today;
   const tc = useMemo(() => (day ? timeclockForDate(day.punches, daySettings(settings, day), date, today, now) : null), [day, settings, date, today, now]);
   // The week so far, up to this sheet's day, for the timeclock's week line.
@@ -56,9 +56,9 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
   const [sortable, setSortable] = useState(customize);
   if (customize && !sortable) setSortable(true);
 
-  // The provider puts the old layout back on failure; the banner is the only sign it happened.
-  const saveLayout = (next: typeof layout) =>
-    update({ layout: next }).catch(() => warnQuietly({ title: SAVE_FAILED.title, body: SAVE_FAILED.body, tag: 'save-failed' }));
+  // A failed save drops the change, so the stored layout shows again under any later change;
+  // the banner is the only sign it happened.
+  const saveLayout = (next: typeof layout) => update({ layout: next }).catch(() => warnQuietly({ ...SAVE_FAILED, tag: 'save-failed' }));
   const reorder = (from: number, to: number) => {
     const next = moveCard(layout, from, to);
     if (next) void saveLayout(next);
@@ -73,7 +73,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
   }, [jumpTo, ready, onJumped]);
 
   if (!day || !tc) {
-    if (store.errors[date]) {
+    if (failed) {
       return (
         <div className="notice notice--danger sheet-error" role="alert">
           <span>

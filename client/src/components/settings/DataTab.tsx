@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS } from '../../../../shared/settings.js';
 import * as api from '../../api';
-import { useDayStore } from '../../hooks/useDay';
+import { useDays, useDayStore } from '../../hooks/useDay';
 import { DELETE_DAYS, RESET_SETTINGS } from '../../lib/copy';
 import { addDays, todayKey } from '../../../../shared/dates.js';
 import { formatDateFull, plural } from '../../lib/format';
@@ -57,7 +57,8 @@ export function DataTab({ settings, set, onReset }: { settings: Settings; set: (
  */
 function DeleteOldDays() {
   const today = todayKey();
-  const { pruneBefore, generation } = useDayStore();
+  const { pruneBefore } = useDayStore();
+  const { generation } = useDays();
   const [before, setBefore] = useState(() => addDays(today, -365));
   const [loaded, setLoaded] = useState<PruneInfo | null>(null);
   const [busy, setBusy] = useState(false);

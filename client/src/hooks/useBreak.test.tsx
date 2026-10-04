@@ -9,7 +9,7 @@ import { AllProviders, deferred, makeBreak, makeDay, makeSession, makeSettings, 
 import type { Day, Session } from '../types';
 import { useBreak } from './useBreak';
 import { useClock } from './useClock';
-import { useDay, useDayStore } from './useDay';
+import { useDay, useDays } from './useDay';
 import { useTimer } from './useTimer';
 
 vi.mock('../api');
@@ -220,7 +220,7 @@ describe('across midnight', () => {
   const midnight = new Date(2026, 8, 28).getTime();
   /** The sheet as App shows it: today's, moving to the new day at midnight, while the store keeps the old one. */
   const renderSheet = () =>
-    renderHook(() => ({ ...useBreak(), timer: useTimer(), sheet: useDay(todayKey(useClock())).day, days: useDayStore().days }), { wrapper: AllProviders });
+    renderHook(() => ({ ...useBreak(), timer: useTimer(), sheet: useDay(todayKey(useClock())).day, days: useDays().days }), { wrapper: AllProviders });
 
   /** A ten-minute break started at 23:55 on yesterday's sheet. */
   async function breakBeforeMidnight() {

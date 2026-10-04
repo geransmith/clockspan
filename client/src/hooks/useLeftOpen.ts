@@ -3,7 +3,7 @@ import { addDays } from '../../../shared/dates.js';
 import { leftOpen, type LeftOpen } from '../lib/priorities';
 import { readStored, USER_KEYS, writeStored } from '../lib/storage';
 import type { Day } from '../types';
-import { useDayStore } from './useDay';
+import { useDays, useDayStore } from './useDay';
 import { useHeldOver } from './useRange';
 
 /** How far back the last plan is looked for: a week off still finds the Friday before it. */
@@ -18,7 +18,8 @@ const LOOKBACK_DAYS = 14;
  * is a shortcut, not worth a banner.
  */
 export function useLeftOpen(today: string, wanted: boolean): { leftOpen: LeftOpen | null; dismiss: () => void } {
-  const { readRange, generation } = useDayStore();
+  const { readRange } = useDayStore();
+  const { generation } = useDays();
   const [dismissedOn, setDismissedOn] = useState(() => readStored(USER_KEYS.leftOpenDismissed));
   const [found, setFound] = useState<{ today: string; generation: number; days: Day[] | null } | null>(null);
   const active = wanted && dismissedOn !== today;
