@@ -84,8 +84,20 @@ export const addUser = (username: string, password: string) => request<UserRespo
 export const deleteUser = (id: number) => request<OkResponse>('DELETE', `/api/auth/users/${id}`);
 
 // ----- settings -----
+/**
+ * The body of PUT /api/settings and of useSettings().update: only what changed. mergeSettings
+ * merges `alarms` (per alarm and field), `sounds` (per event) and `retention` (per field) onto
+ * the stored copy, so a save that names one field leaves another device's change to the rest
+ * alone. Lists (`timerMinutes`, `layout`) go whole.
+ */
+export type SettingsPatch = Partial<Omit<Settings, 'alarms' | 'sounds' | 'retention'>> & {
+  alarms?: { [K in keyof Settings['alarms']]?: Partial<Settings['alarms'][K]> };
+  sounds?: Partial<Settings['sounds']>;
+  retention?: Partial<Settings['retention']>;
+};
+
 export const getSettings = () => request<Settings>('GET', '/api/settings');
-export const putSettings = (patch: Partial<Settings>) => request<Settings>('PUT', '/api/settings', patch);
+export const putSettings = (patch: SettingsPatch) => request<Settings>('PUT', '/api/settings', patch);
 export const resetSettings = () => request<Settings>('DELETE', '/api/settings');
 
 // ----- days -----

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { playSound } from '../lib/alerts';
 import { BURST_MS } from '../lib/celebrate';
+import { applySettingsPatch } from '../lib/settings';
 import { makeSettings, settle, T0 } from '../test/hooks';
 import type { Settings } from '../types';
 import { useBecameTrue, useCelebration, type Moment } from './useCelebration';
@@ -59,7 +60,7 @@ describe('useCelebration', () => {
 
   async function render(settings: Partial<Settings>, withAnchor = true) {
     vi.mocked(api.getSettings).mockResolvedValue(makeSettings(settings));
-    vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(makeSettings({ ...settings, ...patch })));
+    vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(applySettingsPatch(makeSettings(settings), patch)));
     const hook = renderHook(({ moment }: { moment: Moment | null }) => ({ c: useCelebration<HTMLDivElement>(moment, 'weekDone'), s: useSettings() }), {
       initialProps: { moment: null as Moment | null },
       wrapper: SettingsProvider,

@@ -8,9 +8,8 @@ import type { DB } from './db.js';
 import {
   ALARM_LIMITS,
   DEFAULT_SETTINGS,
-  MAX_RETENTION_DAYS,
-  MIN_RETENTION_DAYS,
   normalizeLayout,
+  RETENTION_LIMITS,
   SETTING_LIMITS,
   THEMES,
   TIMER_MINUTES,
@@ -53,7 +52,7 @@ function mergeRetention(base: RetentionSettings, patch: unknown): RetentionSetti
   if (!p) return base;
   return {
     enabled: isBool(p.enabled) ? p.enabled : base.enabled,
-    days: isWholeNumber(p.days, { min: MIN_RETENTION_DAYS, max: MAX_RETENTION_DAYS }) ? p.days : base.days,
+    days: isWholeNumber(p.days, RETENTION_LIMITS) ? p.days : base.days,
   };
 }
 

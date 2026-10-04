@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS } from '../../../../shared/settings.js';
+import { RETENTION_LIMITS } from '../../../../shared/settings.js';
 import * as api from '../../api';
 import { useDays, useDayStore } from '../../hooks/useDay';
 import { DELETE_DAYS, RESET_SETTINGS } from '../../lib/copy';
@@ -9,26 +9,21 @@ import type { PruneInfo, Settings } from '../../types';
 import { Toggle } from '../Toggle';
 import { NumberField, Section } from './controls';
 
-export function DataTab({ settings, set, onReset }: { settings: Settings; set: (patch: Partial<Settings>) => void; onReset: () => void }) {
+export function DataTab({ settings, set, onReset }: { settings: Settings; set: (patch: api.SettingsPatch) => void; onReset: () => void }) {
   return (
     <>
       <Section
         title="Automatic cleanup"
         hint="Deletes days older than this, with their punches, priorities, sessions, breaks and notes. Settings are kept. Runs on the server every few hours."
       >
-        <Toggle
-          label="Delete old days automatically"
-          checked={settings.retention.enabled}
-          onChange={(v) => set({ retention: { ...settings.retention, enabled: v } })}
-        />
+        <Toggle label="Delete old days automatically" checked={settings.retention.enabled} onChange={(v) => set({ retention: { enabled: v } })} />
         <NumberField
           label="Keep the last"
           unit="days"
           value={settings.retention.days}
-          min={MIN_RETENTION_DAYS}
-          max={MAX_RETENTION_DAYS}
+          {...RETENTION_LIMITS}
           disabled={!settings.retention.enabled}
-          onCommit={(m) => set({ retention: { ...settings.retention, days: m } })}
+          onCommit={(m) => set({ retention: { days: m } })}
         />
       </Section>
       <DeleteOldDays />

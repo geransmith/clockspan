@@ -39,7 +39,7 @@ File names say most of it. This lists where things live and the files a rule is 
 ```
 shared/                 imported by both sides, always with a `.js` suffix
   settings.ts           Settings, DEFAULT_SETTINGS, CARD_IDS, normalizeLayout, MAX_PRIORITIES, SETTING_LIMITS,
-                        retention bounds
+                        RETENTION_LIMITS
   api.ts                every wire type and `emptyDay`; the server's JSON builders and client/src/api.ts both use them
   sounds.ts             the sound catalog (SOUNDS, SOUND_EVENTS)
   dates.ts, timer.ts    date keys; pause-aware session timing (activeMs, plannedEndAt, pausedSecondsAfter,
@@ -253,7 +253,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **Settings go through `mergeSettings()` on every read and write** (`server/settings.ts`):
   the stored JSON is merged onto `DEFAULT_SETTINGS`, unknown keys are dropped, invalid values
   fall back, and a PUT stores the whole merged object, so a key added since a user's last save
-  takes the current default while a value they saved stays put. A changed default of an
+  takes the current default while a value they saved stays put. The merge goes field by field
+  through `alarms`, `sounds` and `retention`, so the client sends only what it changed
+  (`SettingsPatch` in `client/src/api.ts`), down to one alarm's field, and a save on one device
+  never writes its stale copy of the rest over another device's change; lists (`timerMinutes`,
+  `layout`) go whole. A changed default of an
   existing key reaches only users with no row (a new user, or one who used Reset all
   settings). A change that must reach the others needs a `mergeSettings` rule that reads the
   stored value (as `stickers` reads the old layout), and that rule can't tell a value left at
@@ -533,7 +537,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   "min" unless given, each with `{...SETTING_LIMITS.<key>}` for `min` and `max`; a `Toggle` for
   a switch. `NumberInput` on its own puts several numbers on one row, like the timer's start
   buttons. The new setting also goes in `TEST_SETTINGS` (`client/src/test/fixtures.ts`), and
-  the type makes a missing one an error. Nothing else to mirror.
+  the type makes a missing one an error. A setting that is an object edited a field at a time
+  is merged field by field in `mergeSettings` (as `mergeRetention` does), and gets a partial
+  entry in `SettingsPatch` (`client/src/api.ts`) and a merge in `applySettingsPatch`
+  (`client/src/lib/settings.ts`). Nothing else to mirror.
 - **A sound**: drop the clip in as `client/src/sounds/<id>.mp3` (CC0 only, MP3 so Safari can
   decode it, a couple of seconds at most) → add `{ id, label, kind: 'clip' }` to `SOUNDS` in
   `shared/sounds.ts` → add its title, author and source line to `client/src/sounds/README.md`.
@@ -554,7 +561,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   an `armed` rule and a test case (a rule the card also needs goes in a pure helper like
   `secondMealApplies`) → add its default under `alarms` in `shared/settings.ts` and the
   `AlarmId` union there, and its `mergeAlarm(…)` line in `mergeSettings`'s `alarms` block
-  (`server/settings.ts`; the type makes a missing one an error); its settings also go in
+  (`server/settings.ts`; the type makes a missing one an error) and its line in
+  `applySettingsPatch`'s `alarms` block (`client/src/lib/settings.ts`; the type makes a missing
+  one an error); its settings also go in
   `TEST_SETTINGS.alarms` (`client/src/test/fixtures.ts`), and the type makes a missing one an
   error → add an `AlarmEditor` in `settings/AlarmsTab.tsx` → its name in `ALARM_NAMES` and a
   `case` in `describeEvent()`'s `switch (e.id)` (both in `lib/alarms.ts`; the type makes a

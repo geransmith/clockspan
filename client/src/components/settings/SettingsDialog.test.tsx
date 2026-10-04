@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import { AuthGate } from '../../auth/AuthGate';
 import { SAVE_STATUS } from '../../lib/copy';
+import { applySettingsPatch } from '../../lib/settings';
+import { SOUND_EVENT_LABELS } from '../../lib/sounds';
 import { makeSettings, settle, SettingsAndDays } from '../../test/hooks';
 import type { AuthInfo } from '../../types';
 import { SettingsDialog } from './SettingsDialog';
@@ -54,7 +56,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   localStorage.clear();
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
-  vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(makeSettings(patch)));
+  vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(applySettingsPatch(makeSettings(), patch)));
   vi.mocked(api.getPruneInfo).mockImplementation((before) => Promise.resolve({ before, matching: 0, total: 4, oldest: '2026-09-01', serverMaxDays: null }));
   vi.mocked(api.listUsers).mockResolvedValue({ users: [LOCAL_ADMIN.user!] });
 });
@@ -156,15 +158,17 @@ describe('SettingsDialog', () => {
     expect(stickerHint()).not.toContain('clocked out');
   });
 
-  it('saves one alarm field without touching the others', async () => {
+  it('saves one alarm field or one sound without touching the others', async () => {
     await renderDialog();
     await openTab('Alarms');
-    const defaults = makeSettings().alarms;
     const clockOut = screen.getByRole('group', { name: 'Clock-out', hidden: true });
     expect(within(clockOut).getByRole('switch', { name: 'Clock-out', hidden: true })).toBeTruthy();
     fireEvent.click(within(clockOut).getByRole('button', { name: '30m', hidden: true }));
     await settle();
-    expect(api.putSettings).toHaveBeenCalledWith({ alarms: { ...defaults, clockOut: { ...defaults.clockOut, leadMinutes: [30, 15, 5, 1] } } });
+    expect(api.putSettings).toHaveBeenCalledWith({ alarms: { clockOut: { leadMinutes: [30, 15, 5, 1] } } });
+    fireEvent.change(screen.getByRole('combobox', { name: `${SOUND_EVENT_LABELS.timer} sound`, hidden: true }), { target: { value: 'bell' } });
+    await settle();
+    expect(api.putSettings).toHaveBeenLastCalledWith({ sounds: { timer: 'bell' } });
   });
 
   it('labels the add-user fields and announces a changed password', async () => {
@@ -180,6 +184,7 @@ describe('SettingsDialog', () => {
     type('Confirm new password', 'new-pass-123');
     fireEvent.submit(screen.getByRole('button', { name: 'Change password', hidden: true }).closest('form')!);
     await settle();
+    expect(api.changePassword).toHaveBeenCalledWith('old-pass-123', 'new-pass-123');
     expect(screen.getByText('Password updated.').getAttribute('role')).toBe('status');
   });
 });

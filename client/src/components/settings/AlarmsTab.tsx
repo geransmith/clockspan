@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { SOUND_EVENTS, SOUNDS } from '../../../../shared/sounds.js';
-import { notificationPermission, playSound, requestNotificationPermission, unlockAudio } from '../../lib/alerts';
+import type { SettingsPatch } from '../../api';
+import { notificationPermission, playSound, requestNotificationPermission } from '../../lib/alerts';
 import { SOUND_EVENT_LABELS } from '../../lib/sounds';
 import type { AlarmId, AlarmSettings, Settings, SoundEvent, SoundId } from '../../types';
 import { Toggle } from '../Toggle';
@@ -9,9 +10,9 @@ import { Section } from './controls';
 const LEAD_CHOICES = [30, 15, 10, 5, 1];
 const REPEAT_CHOICES = [0, 1, 2, 5, 10, 15];
 
-export function AlarmsTab({ settings, set }: { settings: Settings; set: (patch: Partial<Settings>) => void }) {
-  const setAlarm = (id: AlarmId, patch: Partial<AlarmSettings>) => set({ alarms: { ...settings.alarms, [id]: { ...settings.alarms[id], ...patch } } });
-  const setSound = (event: SoundEvent, id: SoundId) => set({ sounds: { ...settings.sounds, [event]: id } });
+export function AlarmsTab({ settings, set }: { settings: Settings; set: (patch: SettingsPatch) => void }) {
+  const setAlarm = (id: AlarmId, patch: Partial<AlarmSettings>) => set({ alarms: { [id]: patch } });
+  const setSound = (event: SoundEvent, id: SoundId) => set({ sounds: { [event]: id } });
   return (
     <>
       <Section
@@ -124,15 +125,7 @@ function SoundRow({ event, value, disabled, onChange }: { event: SoundEvent; val
             </option>
           ))}
         </select>
-        <button
-          className="btn btn-ghost"
-          onClick={() => {
-            unlockAudio();
-            playSound(value);
-          }}
-          disabled={disabled || value === 'none'}
-          aria-label={`Test ${label} sound`}
-        >
+        <button className="btn btn-ghost" onClick={() => playSound(value)} disabled={disabled || value === 'none'} aria-label={`Test ${label} sound`}>
           Test
         </button>
       </span>
