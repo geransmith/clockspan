@@ -2,6 +2,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
+import { MINUTE_MS } from '../../../shared/dates.js';
 import { CARD_IDS, DEFAULT_SETTINGS } from '../../../shared/settings.js';
 import { deferred, makeSettings, MIN, settle, setVisibility, T0 } from '../test/hooks';
 import type { Settings } from '../types';
@@ -204,6 +205,49 @@ describe('update', () => {
     await expect(b).rejects.toThrow('offline');
     await settle();
     expect(result.current.settings).toMatchObject({ workMinutes: 480, priorityCount: 3 });
+  });
+
+  it("sends one alarm field alone, so a refresh's change to another alarm shows beside it", async () => {
+    const stored = makeSettings();
+    const elsewhere = { ...stored.alarms, clockOut: { ...stored.alarms.clockOut, leadMinutes: [30] } };
+    vi.mocked(api.getSettings)
+      .mockResolvedValueOnce(stored)
+      .mockResolvedValue(makeSettings({ alarms: elsewhere }));
+    const saved = deferred<Settings>();
+    vi.mocked(api.putSettings).mockReturnValueOnce(saved.promise);
+    const { result } = render();
+    await settle();
+    const done = result.current.update({ alarms: { lunchBy: { enabled: false } } });
+    await settle();
+    expect(api.putSettings).toHaveBeenCalledWith({ alarms: { lunchBy: { enabled: false } } });
+    // Another device changed the clock-out alarm; the refresh lands while the save is out.
+    await settle(MINUTE_MS);
+    expect(api.getSettings).toHaveBeenCalledTimes(2);
+    expect(result.current.settings.alarms).toMatchObject({ lunchBy: { enabled: false }, clockOut: { leadMinutes: [30] } });
+    saved.resolve(makeSettings({ alarms: { ...elsewhere, lunchBy: { ...stored.alarms.lunchBy, enabled: false } } }));
+    await done;
+  });
+
+  it('drops only the failed one of two saves to different alarms, and sends the other alone', async () => {
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
+    const first = deferred<Settings>();
+    const second = deferred<Settings>();
+    vi.mocked(api.putSettings).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const { result } = render();
+    await settle();
+    const a = result.current.update({ alarms: { lunchBy: { enabled: false } } });
+    await settle();
+    const b = result.current.update({ alarms: { retro: { leadMinutes: [15] } } });
+    await settle();
+    expect(result.current.settings.alarms).toMatchObject({ lunchBy: { enabled: false }, retro: { leadMinutes: [15] } });
+    first.reject(new Error('offline'));
+    await expect(a).rejects.toThrow('offline');
+    await settle();
+    expect(result.current.settings.alarms).toMatchObject({ lunchBy: { enabled: true }, retro: { leadMinutes: [15] } });
+    expect(api.putSettings).toHaveBeenLastCalledWith({ alarms: { retro: { leadMinutes: [15] } } });
+    const stored = makeSettings();
+    second.resolve(makeSettings({ alarms: { ...stored.alarms, retro: { ...stored.alarms.retro, leadMinutes: [15] } } }));
+    await b;
   });
 
   it("takes a save's answer as loaded, and drops the first load when it answers later", async () => {

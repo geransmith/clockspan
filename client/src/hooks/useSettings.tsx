@@ -4,13 +4,14 @@ import type { Settings } from '../types';
 import { nextBackoff } from '../../../shared/backoff.js';
 import { DEFAULT_SETTINGS, normalizeLayout } from '../../../shared/settings.js';
 import { addPending, fetched, settle, settleWith, shown, untracked, type Tracked } from '../lib/optimistic';
+import { applySettingsPatch } from '../lib/settings';
 import { useRefreshLoop } from './useRefreshLoop';
 import { useTracked } from './useTracked';
 
 interface SettingsCtx {
   settings: Settings;
   loaded: boolean;
-  update: (patch: Partial<Settings>) => Promise<void>;
+  update: (patch: api.SettingsPatch) => Promise<void>;
   reset: () => Promise<void>;
 }
 
@@ -24,7 +25,9 @@ function fromServer(s: Settings): Settings {
 /**
  * The user's settings: the server's copy plus the changes not confirmed yet, like a day
  * (`lib/optimistic.ts`). A change shows at once; a save that fails leaves the server's copy
- * showing, with any later change still on top, and rejects so the dialog can say so.
+ * showing, with any later change still on top, and rejects so the dialog can say so. A change
+ * carries only the fields it sets (`api.SettingsPatch`), so a refresh's newer copy shows through
+ * the fields it does not name.
  */
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const { tracked, current, change, nextId, queue } = useTracked<Tracked<Settings>>(untracked);
@@ -84,9 +87,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useRefreshLoop(refresh);
 
   const update = useCallback(
-    async (patch: Partial<Settings>) => {
+    async (patch: api.SettingsPatch) => {
       const id = nextId();
-      change((t) => addPending(t, id, (s) => ({ ...s, ...patch })));
+      change((t) => addPending(t, id, (s) => applySettingsPatch(s, patch)));
       try {
         const saved = await queue(() => api.putSettings(patch));
         change((t) => settleWith(t, [id], fromServer(saved)));

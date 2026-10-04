@@ -3,16 +3,19 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import { DELETE_DAYS } from '../../lib/copy';
+import { formatDateFull } from '../../lib/format';
 import { deferred, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../../test/hooks';
 import type { PruneResult } from '../../types';
 import { DataTab } from './DataTab';
 
 vi.mock('../../api');
 
-async function renderTab() {
-  render(<DataTab settings={makeSettings()} set={vi.fn()} onReset={vi.fn()} />, { wrapper: SettingsAndDays });
+async function renderTab(settings = makeSettings()) {
+  const set = vi.fn();
+  render(<DataTab settings={settings} set={set} onReset={vi.fn()} />, { wrapper: SettingsAndDays });
   await settle();
   return {
+    set,
     date: screen.getByLabelText('Delete days before') as HTMLInputElement,
     button: screen.getByRole('button', { name: 'Delete…' }) as HTMLButtonElement,
   };
@@ -31,6 +34,20 @@ afterEach(() => {
 });
 
 describe('DataTab', () => {
+  it('turns the automatic cleanup on without sending the days to keep', async () => {
+    const { set } = await renderTab();
+    fireEvent.click(screen.getByRole('switch', { name: 'Delete old days automatically' }));
+    expect(set).toHaveBeenCalledWith({ retention: { enabled: true } });
+  });
+
+  it('saves the days to keep without sending the switch', async () => {
+    const { set } = await renderTab(makeSettings({ retention: { enabled: true, days: 365 } }));
+    const keep = screen.getByLabelText('Keep the last');
+    fireEvent.change(keep, { target: { value: '90' } });
+    fireEvent.blur(keep);
+    expect(set).toHaveBeenCalledWith({ retention: { days: 90 } });
+  });
+
   it('clamps a typed date after today to today, and keeps the count when that is already the cutoff', async () => {
     const { date, button } = await renderTab();
     fireEvent.change(date, { target: { value: '2026-10-05' } });
@@ -45,12 +62,17 @@ describe('DataTab', () => {
     expect(button.disabled).toBe(false);
   });
 
-  it('announces a finished delete as a status line', async () => {
+  it('deletes before the picked date after a confirm that names the count, and says how many went', async () => {
     vi.mocked(api.pruneDays).mockResolvedValue({ deleted: 2 });
-    vi.stubGlobal('confirm', () => true);
-    const { button } = await renderTab();
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal('confirm', confirm);
+    const { date, button } = await renderTab();
+    fireEvent.change(date, { target: { value: '2026-06-01' } });
+    await settle();
     fireEvent.click(button);
     await settle();
+    expect(confirm).toHaveBeenCalledWith(DELETE_DAYS.confirm(2, formatDateFull('2026-06-01')));
+    expect(api.pruneDays).toHaveBeenCalledWith('2026-06-01');
     expect(screen.getByRole('status').textContent).toBe(DELETE_DAYS.done(2));
   });
 

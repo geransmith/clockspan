@@ -5,7 +5,7 @@ import { useModalDialog } from '../../hooks/useModalDialog';
 import { useSaveStatus, type SaveState } from '../../hooks/useSaveStatus';
 import { useSettings } from '../../hooks/useSettings';
 import { RESET_SETTINGS, SAVE_STATUS } from '../../lib/copy';
-import type { Settings } from '../../types';
+import type { SettingsPatch } from '../../api';
 import { Check, X } from '../Icons';
 import { AccountTab } from './AccountTab';
 import { AlarmsTab } from './AlarmsTab';
@@ -34,7 +34,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   // Focus lands on the dialog, not on the Close button, where Enter would shut what was just opened.
   const dialog = useModalDialog(onClose);
 
-  const set = (patch: Partial<Settings>) => void save(() => update(patch));
+  const set = (patch: SettingsPatch) => void save(() => update(patch));
   const onReset = () => {
     if (window.confirm(RESET_SETTINGS.confirm)) void save(reset);
   };
@@ -45,8 +45,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
     const i = tabs.findIndex((t) => t.id === tab);
-    const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
-    if (!next) return;
+    const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length]!;
     setTab(next.id);
     document.getElementById(`tab-${next.id}`)?.focus();
   };

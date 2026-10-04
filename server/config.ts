@@ -2,7 +2,7 @@ import { isIP } from 'node:net';
 import path from 'node:path';
 import { AUTH_MODES, type AuthMode } from '../shared/api.js';
 import { DAY_MS } from '../shared/dates.js';
-import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS } from '../shared/settings.js';
+import { RETENTION_LIMITS } from '../shared/settings.js';
 import { isWholeNumber } from './validate.js';
 
 export interface Config {
@@ -99,9 +99,9 @@ function parseSessionTtlDays(raw: string | undefined): number {
 function parseRetentionDays(raw: string | undefined): number | null {
   if (!raw) return null;
   const n = Number(raw);
-  if (!isWholeNumber(n, { min: MIN_RETENTION_DAYS, max: MAX_RETENTION_DAYS })) {
+  if (!isWholeNumber(n, RETENTION_LIMITS)) {
     throw new Error(
-      `RETENTION_DAYS must be a whole number of days from ${MIN_RETENTION_DAYS} to ${MAX_RETENTION_DAYS}, or unset to keep everything (got "${raw}")`,
+      `RETENTION_DAYS must be a whole number of days from ${RETENTION_LIMITS.min} to ${RETENTION_LIMITS.max}, or unset to keep everything (got "${raw}")`,
     );
   }
   return n;
