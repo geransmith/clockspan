@@ -25,17 +25,24 @@ afterEach(() => {
 it('loads the days of a range', async () => {
   vi.mocked(api.getRange).mockResolvedValue({ days: [makeDay('2026-09-21')] });
   const { result } = render('2026-09-21', '2026-09-27');
-  expect(result.current).toEqual({ days: null, error: null });
+  expect(result.current).toMatchObject({ days: null, failed: false });
   await settle();
   expect(api.getRange).toHaveBeenCalledWith('2026-09-21', '2026-09-27');
   expect(result.current.days?.map((d) => d.date)).toEqual(['2026-09-21']);
 });
 
-it('reports a failure', async () => {
-  vi.mocked(api.getRange).mockRejectedValue(new Error('Request failed (500)'));
+it('reads a failure as failed, and retry asks again at once', async () => {
+  vi.mocked(api.getRange)
+    .mockRejectedValueOnce(new Error('Request failed (500)'))
+    .mockResolvedValueOnce({ days: [makeDay('2026-09-21')] });
   const { result } = render('2026-09-21', '2026-09-27');
   await settle();
-  expect(result.current).toEqual({ days: null, error: 'Request failed (500)' });
+  expect(result.current).toMatchObject({ days: null, failed: true });
+  act(() => result.current.retry());
+  expect(result.current).toMatchObject({ days: null, failed: false });
+  await settle();
+  expect(result.current.days?.map((d) => d.date)).toEqual(['2026-09-21']);
+  expect(api.getRange).toHaveBeenCalledTimes(2);
 });
 
 it('reads as loading straight away on a new range, and drops the answer for the old one', async () => {
@@ -55,7 +62,7 @@ it('reads as loading straight away on a new range, and drops the answer for the 
   old.resolve({ days: [makeDay('2026-09-28')] });
   failing.reject(new Error('late'));
   await settle();
-  expect(result.current).toEqual({ days: [makeDay('2026-10-05')], error: null });
+  expect(result.current).toMatchObject({ days: [makeDay('2026-10-05')], failed: false });
 });
 
 it("takes the store's copy of a day it holds, in date order, and follows an edit made since", async () => {

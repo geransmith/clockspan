@@ -1,3 +1,4 @@
+import type { RetroPatch } from '../api';
 import { useDebouncedDraft } from '../hooks/useDebouncedDraft';
 import { RETRO_PROMPT, UNTITLED_SESSION } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
@@ -14,26 +15,22 @@ interface Props {
   sessions: Session[];
   note: string;
   reviewedAt: number | null;
-  onChange: (patch: { note?: string; done?: boolean }) => void;
+  onChange: (patch: RetroPatch) => Promise<boolean>;
 }
 
 /**
  * Plan vs. actual for one day: each priority with the focus time logged against it,
  * the sessions that weren't on the plan, and a note on why. The note saves 800 ms after
- * the last keystroke or on blur; "Mark reviewed" saves immediately. Keyed by date in the
- * sheet, so a new day mounts with its own note.
+ * the last keystroke or on blur; a note whose save fails stays in its box and goes again.
+ * "Mark reviewed" ticks the day once the note has saved. Keyed by date in the sheet, so a
+ * new day mounts with its own note.
  */
 export function Retro({ date, today, priorities, sessions, note, reviewedAt, onChange }: Props) {
   const { formatTime } = useTimeFormat();
   const review = reviewDay(priorities, sessions);
-  // A note typed back to what was stored saves nothing.
-  const { draft, edit, flush } = useDebouncedDraft(
-    note,
-    (value) => {
-      if (value !== note) onChange({ note: value });
-    },
-    800,
-  );
+  // A note typed back to `note` is sent too: `note` can hold a save still out, and a box let go
+  // for matching it would follow the note back if that save fails.
+  const { draft, edit, flush } = useDebouncedDraft(note, (value) => onChange({ note: value }), 800);
 
   // An empty day still gets the note and Mark reviewed: the retro alarm stays armed until the
   // day is reviewed, and its banner opens this card.
@@ -130,7 +127,7 @@ export function Retro({ date, today, priorities, sessions, note, reviewedAt, onC
           rows={3}
           maxLength={LIMITS.retroNote}
           onChange={(e) => edit(e.target.value)}
-          onBlur={flush}
+          onBlur={() => void flush()}
         />
       </label>
 
@@ -140,18 +137,12 @@ export function Retro({ date, today, priorities, sessions, note, reviewedAt, onC
             <span className="pill pill--ok">
               <Check /> Reviewed {formatTime(reviewedAt)}
             </span>
-            <button className="btn btn-ghost" onClick={() => onChange({ done: false })}>
+            <button className="btn btn-ghost" onClick={() => void onChange({ done: false })}>
               Undo
             </button>
           </>
         ) : (
-          <button
-            className="btn btn-primary"
-            onClick={() => {
-              flush();
-              onChange({ done: true });
-            }}
-          >
+          <button className="btn btn-primary" onClick={() => void flush().then((ok) => ok && onChange({ done: true }))}>
             <Check /> Mark reviewed
           </button>
         )}

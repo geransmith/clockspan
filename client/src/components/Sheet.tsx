@@ -15,6 +15,7 @@ import { weekHours } from '../lib/week';
 import type { CardId } from '../types';
 import { CardFrame, type SheetCard } from './CardFrame';
 import { FocusTimer } from './FocusTimer';
+import { LoadFailed } from './LoadFailed';
 import { Priorities } from './Priorities';
 import { Retro } from './Retro';
 import { SessionLog } from './SessionLog';
@@ -72,21 +73,8 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
     onJumped?.();
   }, [jumpTo, ready, onJumped]);
 
-  if (!day || !tc) {
-    if (failed) {
-      return (
-        <div className="notice notice--danger sheet-error" role="alert">
-          <span>
-            <strong>{LOAD_FAILED.title}.</strong> {LOAD_FAILED.body}
-          </span>
-          <button className="btn" onClick={() => void store.load(date)}>
-            {LOAD_FAILED.retry}
-          </button>
-        </div>
-      );
-    }
-    return <div className="sheet-loading" aria-busy="true" />;
-  }
+  if (!day || !tc)
+    return failed ? <LoadFailed title={LOAD_FAILED.title} onRetry={() => void store.load(date)} /> : <div className="sheet-loading" aria-busy="true" />;
 
   const render = (id: CardId) => {
     switch (id) {
@@ -138,7 +126,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
             sessions={day.sessions}
             note={day.retroNote}
             reviewedAt={day.retroAt}
-            onChange={(patch) => void store.setRetro(date, patch)}
+            onChange={(patch) => store.setRetro(date, patch)}
           />
         );
     }

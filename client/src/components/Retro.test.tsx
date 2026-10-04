@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
 import { RETRO_PROMPT } from '../lib/copy';
-import { makeSettings, settle, T0 } from '../test/hooks';
+import { deferred, makeSettings, settle, T0 } from '../test/hooks';
 import type { Priority } from '../types';
 import { Retro } from './Retro';
 
@@ -17,7 +17,7 @@ const TODAY = '2026-09-28';
 const PRIORITIES: Priority[] = [{ position: 1, text: 'Report', done: false, uid: 'abcdef123456', addedAt: T0 }];
 
 async function renderCard(note = '', reviewedAt: number | null = null, priorities = PRIORITIES) {
-  const onChange = vi.fn<(patch: { note?: string; done?: boolean }) => void>();
+  const onChange = vi.fn<(patch: api.RetroPatch) => Promise<boolean>>(() => Promise.resolve(true));
   const card = (n: string, r: number | null) => (
     <SettingsProvider>
       <Retro date={DATE} today={TODAY} priorities={priorities} sessions={[]} note={n} reviewedAt={r} onChange={onChange} />
@@ -32,6 +32,8 @@ async function renderCard(note = '', reviewedAt: number | null = null, prioritie
     box: screen.getByPlaceholderText(RETRO_PROMPT) as HTMLTextAreaElement,
   };
 }
+
+const markReviewed = () => fireEvent.click(screen.getByRole('button', { name: /Mark reviewed/ }));
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
@@ -55,7 +57,7 @@ describe('Retro', () => {
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
-  it('saves on leaving the box, and not at all for a note put back as it was', async () => {
+  it('saves on leaving the box, a note put back as it was too', async () => {
     const { box, onChange } = await renderCard('Kept');
     fireEvent.change(box, { target: { value: 'Kept, and more' } });
     fireEvent.blur(box);
@@ -64,7 +66,7 @@ describe('Retro', () => {
     onChange.mockClear();
     fireEvent.change(box, { target: { value: 'Kept' } });
     fireEvent.blur(box);
-    expect(onChange).not.toHaveBeenCalled();
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ note: 'Kept' });
   });
 
   it('still saves a note typed just before the card goes away', async () => {
@@ -74,15 +76,88 @@ describe('Retro', () => {
     expect(onChange).toHaveBeenCalledExactlyOnceWith({ note: 'Left mid-sentence' });
   });
 
-  it('Mark reviewed saves the unsaved note first, then the tick; Undo clears it', async () => {
+  it('a note whose save fails stays in the box and goes again on blur', async () => {
+    const { box, onChange, again } = await renderCard('Kept');
+    onChange.mockResolvedValueOnce(false);
+    fireEvent.change(box, { target: { value: 'Meetings ran long' } });
+    again('Meetings ran long'); // the store's copy with the change on it
+    await settle(800);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ note: 'Meetings ran long' });
+    again('Kept'); // the store dropped the change
+    expect(box.value).toBe('Meetings ran long');
+    fireEvent.blur(box);
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(onChange).toHaveBeenLastCalledWith({ note: 'Meetings ran long' });
+  });
+
+  it('a note typed back to one whose save is still out is kept when that save fails', async () => {
+    const first = deferred<boolean>();
+    const second = deferred<boolean>();
+    const { box, onChange, again } = await renderCard('');
+    onChange.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    fireEvent.change(box, { target: { value: 'Meetings' } });
+    await settle(800);
+    again('Meetings'); // the store's copy with the change on it
+    fireEvent.change(box, { target: { value: 'Meetingsx' } });
+    fireEvent.change(box, { target: { value: 'Meetings' } });
+    await settle(800);
+    expect(onChange.mock.calls).toEqual([[{ note: 'Meetings' }], [{ note: 'Meetings' }]]);
+    first.resolve(false);
+    await settle();
+    again(''); // the store dropped the first change
+    expect(box.value).toBe('Meetings');
+    second.resolve(true);
+    await settle();
+    again('Meetings');
+    expect(box.value).toBe('Meetings');
+  });
+
+  it('Mark reviewed waits for the unsaved note to save, then ticks; Undo clears it', async () => {
+    const note = deferred<boolean>();
     const { box, onChange, again } = await renderCard();
+    onChange.mockReturnValueOnce(note.promise);
     fireEvent.change(box, { target: { value: 'Went to plan' } });
-    fireEvent.click(screen.getByRole('button', { name: /Mark reviewed/ }));
+    markReviewed();
+    await settle();
+    expect(onChange.mock.calls).toEqual([[{ note: 'Went to plan' }]]);
+    note.resolve(true);
+    await settle();
     expect(onChange.mock.calls).toEqual([[{ note: 'Went to plan' }], [{ done: true }]]);
 
     again('Went to plan', T0);
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     expect(onChange).toHaveBeenLastCalledWith({ done: false });
+
+    // Nothing waiting: the tick goes alone.
+    onChange.mockClear();
+    again('Went to plan');
+    markReviewed();
+    await settle();
+    expect(onChange.mock.calls).toEqual([[{ done: true }]]);
+  });
+
+  it('Mark reviewed sends no tick when the note fails, and the box keeps the text', async () => {
+    const { box, onChange } = await renderCard();
+    onChange.mockResolvedValueOnce(false);
+    fireEvent.change(box, { target: { value: 'Went to plan' } });
+    markReviewed();
+    await settle();
+    expect(onChange.mock.calls).toEqual([[{ note: 'Went to plan' }]]);
+    expect(box.value).toBe('Went to plan');
+  });
+
+  it('Mark reviewed right after the 800 ms save fired waits for that save and sends no second note', async () => {
+    const note = deferred<boolean>();
+    const { box, onChange } = await renderCard();
+    onChange.mockReturnValueOnce(note.promise);
+    fireEvent.change(box, { target: { value: 'Went to plan' } });
+    await settle(800);
+    markReviewed();
+    await settle();
+    expect(onChange.mock.calls).toEqual([[{ note: 'Went to plan' }]]);
+    note.resolve(true);
+    await settle();
+    expect(onChange.mock.calls).toEqual([[{ note: 'Went to plan' }], [{ done: true }]]);
   });
 
   it('keeps the note and Mark reviewed on a day with nothing planned or logged', async () => {
@@ -91,7 +166,8 @@ describe('Retro', () => {
     expect(screen.getByText(/Write priorities and log a session or two/)).toBeTruthy();
     expect(screen.queryByText('On plan')).toBeNull();
     fireEvent.change(box, { target: { value: 'Sick day' } });
-    fireEvent.click(screen.getByRole('button', { name: /Mark reviewed/ }));
+    markReviewed();
+    await settle();
     expect(onChange.mock.calls).toEqual([[{ note: 'Sick day' }], [{ done: true }]]);
   });
 });

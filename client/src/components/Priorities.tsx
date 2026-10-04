@@ -28,7 +28,14 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
   const { settings } = useSettings();
   const count = settings.priorityCount;
   const stored = useMemo(() => padPriorities(priorities, count), [priorities, count]);
-  const { draft: local, edit: editList, flush } = useDebouncedDraft(stored, onChange, 400);
+  // Let go once sent: the PUT replaces the whole list, so a list held after a failed save would
+  // drop a row that the timer's "Also add to today's priorities" or another device added
+  // meanwhile. A failed row goes back to the stored copy, with the banner.
+  const sendList = (list: Priority[]) => {
+    onChange(list);
+    return true;
+  };
+  const { draft: local, edit: editList, flush } = useDebouncedDraft(stored, sendList, 400);
   const [warning, setWarning] = useState<{ kind: WarningKind; text: string } | null>(null);
   const lastWarning = useRef<string | undefined>(undefined);
   const inputs = useRef(new Map<number, HTMLTextAreaElement>());
@@ -145,7 +152,7 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
                   if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.preventDefault();
                 }}
                 onChange={(e) => edit(p.position, { text: e.target.value.replace(/[\r\n]+/g, ' ') })}
-                onBlur={flush}
+                onBlur={() => void flush()}
                 maxLength={LIMITS.priorityText}
               />
             </span>

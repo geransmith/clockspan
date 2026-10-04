@@ -577,13 +577,17 @@ button {
 .sheet-loading {
   min-height: 200px;
 }
-/* A day that would not load: the message and its retry button, side by side when they fit. */
-.sheet-error {
+/* A load that failed (LoadFailed): the message and its retry button, side by side when they fit. */
+.load-failed {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+/* A History tab's card has no padding of its own, so the notice keeps off its edges. */
+.card > .load-failed {
+  margin: 12px 16px 16px;
 }
 
 /* ---------- top bar ---------- */

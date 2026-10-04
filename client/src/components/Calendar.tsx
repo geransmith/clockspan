@@ -3,7 +3,7 @@ import { startOfMonth } from '../../../shared/dates.js';
 import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
 import { calendarMonth, type CalendarDay } from '../lib/calendar';
-import { STICKERS_EMPTY } from '../lib/copy';
+import { LOAD_FAILED } from '../lib/copy';
 import { dayName, formatDateLong, formatDuration, formatHours, formatWeekday, plural } from '../lib/format';
 import { hasContent } from '../lib/retro';
 import { periodOffset, periodRange } from '../lib/review';
@@ -21,6 +21,7 @@ import {
 } from '../lib/stickers';
 import { targetFraction, type TimeclockResult } from '../lib/timeclock';
 import { Check } from './Icons';
+import { LoadFailed } from './LoadFailed';
 import { PeriodNav, PeriodReset } from './PeriodNav';
 import { Tile } from './Tile';
 
@@ -48,7 +49,7 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
   const [filter, setFilter] = useState<StickerId | null>(null);
   const period = periodRange('month', month, 0);
   const offset = periodOffset('month', today, month);
-  const { days: list, error } = useRange(period.from, period.to);
+  const { days: list, failed, retry } = useRange(period.from, period.to);
   // The range lays the store's days over the answer, and one can be empty (today before a
   // punch): only a day with something on it counts, as in the review.
   const kept = useMemo(() => list?.filter(hasContent), [list]);
@@ -80,8 +81,7 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
         <PeriodReset kind="month" offset={offset} onOffset={step} />
       </header>
       <PeriodNav kind="month" label={period.label} offset={offset} onOffset={step} noReset />
-      {error && <p className="error">{error}</p>}
-      {!error && !weeks && <div className="sheet-loading" aria-busy="true" />}
+      {failed ? <LoadFailed title={LOAD_FAILED.range} onRetry={retry} /> : !weeks && <div className="sheet-loading" aria-busy="true" />}
       {weeks && (
         <>
           {count && (
@@ -128,7 +128,7 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
           </div>
           {count &&
             (count.total === 0 ? (
-              <p className="muted small calendar-legend">{STICKERS_EMPTY}</p>
+              <p className="muted small calendar-legend">Nothing here yet. Stickers appear as days get logged.</p>
             ) : (
               <div className="chips calendar-legend" role="group" aria-label="Show only">
                 {reasons.map((r) => (

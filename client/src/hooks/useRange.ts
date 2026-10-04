@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Day } from '../types';
 import { useDays, useDayStore } from './useDay';
 
@@ -23,21 +23,24 @@ export function useHeldOver(fetched: Day[] | null | undefined, from: string, to:
  * change was confirmed meanwhile, then laid over with the store's copies (`useHeldOver`). Asked
  * again after a prune (`generation`), whose deleted days the answer on screen may still hold.
  * The answer is tagged with the range it is for, so stepping to another period reads as
- * loading (both null) straight away without clearing state inside the effect.
+ * loading (days null, not failed) straight away without clearing state inside the effect. A
+ * failed read reads as `failed` until `retry` asks again (a History tab's Try again).
  */
-export function useRange(from: string, to: string): { days: Day[] | null; error: string | null } {
-  const key = `${from}:${to}`;
+export function useRange(from: string, to: string): { days: Day[] | null; failed: boolean; retry: () => void } {
+  const [attempt, setAttempt] = useState(0);
+  const key = `${from}:${to}:${attempt}`;
   const { readRange } = useDayStore();
   const { generation } = useDays();
-  const [fetched, setFetched] = useState<{ key: string; days?: Day[]; error?: string } | null>(null);
+  // Null days: the read failed.
+  const [fetched, setFetched] = useState<{ key: string; days: Day[] | null } | null>(null);
   useEffect(() => {
     let cancelled = false;
     readRange(from, to)
       .then((days) => {
         if (!cancelled) setFetched({ key, days });
       })
-      .catch((err: unknown) => {
-        if (!cancelled) setFetched({ key, error: (err as Error).message });
+      .catch(() => {
+        if (!cancelled) setFetched({ key, days: null });
       });
     return () => {
       cancelled = true;
@@ -45,5 +48,6 @@ export function useRange(from: string, to: string): { days: Day[] | null; error:
   }, [from, to, key, readRange, generation]);
   const current = fetched?.key === key ? fetched : null;
   const days = useHeldOver(current?.days, from, to);
-  return { days, error: current?.error ?? null };
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
+  return { days, failed: current?.days === null, retry };
 }

@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from 'react';
 import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
-import { UNTITLED_SESSION } from '../lib/copy';
+import { LOAD_FAILED, UNTITLED_SESSION } from '../lib/copy';
 import { formatDateLong, formatDuration, formatWeekday } from '../lib/format';
 import { PERIOD_KINDS, periodOffset, periodRange, reviewRange, type PeriodKind, type ReviewPeriod } from '../lib/review';
 import type { Day } from '../types';
 import { Check } from './Icons';
+import { LoadFailed } from './LoadFailed';
 import { PeriodNav } from './PeriodNav';
 import { Tile } from './Tile';
 
@@ -30,7 +31,7 @@ interface Props {
 export function Review({ today, now, period: { kind, from }, onPeriod, onOpen }: Props) {
   const period = periodRange(kind, from, 0);
   const offset = periodOffset(kind, today, from);
-  const { days, error } = useRange(period.from, period.to);
+  const { days, failed, retry } = useRange(period.from, period.to);
 
   // Another kind is taken around the period on screen, by its last day or today if that comes
   // first, so a past week becomes its month and the current period stays the current one.
@@ -50,8 +51,7 @@ export function Review({ today, now, period: { kind, from }, onPeriod, onOpen }:
       </header>
       <PeriodNav kind={kind} label={period.label} offset={offset} onOffset={(o) => onPeriod({ kind, from: periodRange(kind, today, o).from })} />
 
-      {error && <p className="error">{error}</p>}
-      {!error && !days && <div className="sheet-loading" aria-busy="true" />}
+      {failed ? <LoadFailed title={LOAD_FAILED.range} onRetry={retry} /> : !days && <div className="sheet-loading" aria-busy="true" />}
       {days && <Body key={`${kind}:${period.from}`} days={days} today={today} now={now} kind={kind} onOpen={onOpen} />}
     </section>
   );

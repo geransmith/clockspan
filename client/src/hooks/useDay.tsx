@@ -154,9 +154,10 @@ export function DayProvider({ children }: { children: ReactNode }) {
   );
 
   // `quiet`: a refresh, or asking again after a failed save or first load. A first load that
-  // fails is recorded (the sheet shows it with Try again) and, unless quiet, raised as a banner;
-  // a day already shown keeps its copy, and a failed save has already said the server is down.
-  // An answer that isn't a day fails the same way. Never rejects.
+  // fails is recorded (the sheet and the next-day planner show it with Try again) and, unless
+  // quiet, raised as a banner; a day already shown keeps its copy, and a failed save has
+  // already said the server is down. An answer that isn't a day fails the same way. Never
+  // rejects.
   const fetchDay = useCallback(
     function fetchDay(date: string, quiet = false): Promise<void> {
       const out = inflight.current.get(date);

@@ -233,10 +233,12 @@ export const RETRO_PROMPT = 'What got in the way? What went to plan?';
  * Banner when a punch, priority, note, log edit, timer action or layout change isn't saved.
  * One banner covers a request that got no answer and one the server turned down (a break
  * started while a timer runs, a session another device deleted), so the body names both.
+ * It says nothing of what the sheet shows: the change is gone from it, except a retro note,
+ * which stays in its box to send again (`useDebouncedDraft`).
  */
 export const SAVE_FAILED = {
   title: 'Change not saved',
-  body: 'The server refused it or did not answer. The sheet shows what is stored.',
+  body: 'The server refused it or did not answer.',
 } as const;
 
 /** Under the timer's Start buttons when "Also add to today's priorities" can't add the row. */
@@ -254,9 +256,14 @@ export const REQUEST_FAILED = (status: number) => `Request failed (${status})`;
 /** A 2xx answer that isn't JSON (`api.ts`): a page from something in between, such as a proxy's sign-in page. */
 export const UNREADABLE_ANSWER = (status: number) => `Unreadable answer (${status})`;
 
-/** In place of a sheet whose day could not be fetched; the button asks again. Covers a refusal too, like `SAVE_FAILED`. */
+/**
+ * In place of what could not be fetched (a sheet's day, the next-day planner's, a History tab's
+ * days), and the banner a failed day load raises; the button asks again. Covers a refusal too,
+ * like `SAVE_FAILED`.
+ */
 export const LOAD_FAILED = {
   title: 'Could not load this day',
+  range: 'Could not load these days',
   body: 'The server refused the request or did not answer.',
   retry: 'Try again',
 } as const;
