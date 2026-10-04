@@ -7,8 +7,8 @@ import { TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib
 import { formatCountdown } from '../lib/format';
 import { dueKey } from '../lib/timer';
 import { AllProviders, apiError, deferred, makeDay, makeSession, makeSettings, MIN, settle, T0, TODAY } from '../test/hooks';
-import type { Session } from '../types';
-import { useDayStore } from './useDay';
+import type { Priority, Session } from '../types';
+import { useDays, useDayStore } from './useDay';
 import { useTimer } from './useTimer';
 
 vi.mock('../api');
@@ -17,7 +17,7 @@ vi.mock('../lib/alerts');
 type Answer = { session: Session };
 
 function renderTimer() {
-  return renderHook(() => ({ timer: useTimer(), store: useDayStore() }), { wrapper: AllProviders });
+  return renderHook(() => ({ timer: useTimer(), store: { ...useDayStore(), ...useDays() } }), { wrapper: AllProviders });
 }
 
 /** Renders with `session` running on the server (every poll says so), and waits for the first sync. */
@@ -29,6 +29,9 @@ async function renderRunning(session: Session | null = makeSession()) {
   await act(() => r.result.current.store.load(TODAY));
   return r;
 }
+
+/** A row just given text on today's list, whose save the tests hold back. */
+const justTyped: Priority = { position: 1, text: 'Just typed', done: false, uid: 'u1', addedAt: T0 };
 
 /** A session that started `minutes` ago with the default 25 min plan. */
 const startedAgo = (minutes: number, patch: Partial<Session> = {}) => makeSession({ startedAt: Date.now() - minutes * MIN, ...patch });
@@ -138,6 +141,25 @@ describe('start', () => {
     vi.mocked(api.getDay).mockClear();
     await act(() => result.current.timer.start(TODAY, 1500, 'Mine'));
     expect(vi.mocked(api.getDay).mock.calls).toEqual([['2026-09-27']]);
+  });
+
+  it('waits for a priorities save still out before starting on a row from it', async () => {
+    const { result } = await renderRunning(null);
+    const rows = deferred<{ priorities: Priority[] }>();
+    vi.mocked(api.putPriorities).mockReturnValueOnce(rows.promise);
+    vi.mocked(api.startSession).mockResolvedValue({ session: makeSession({ priorityUid: 'u1' }) });
+    let started!: Promise<void>;
+    act(() => {
+      void result.current.store.setPriorities(TODAY, [justTyped]);
+      started = result.current.timer.start(TODAY, 1500, 'Write the report', 'u1');
+    });
+    await settle();
+    // The server refuses a uid it hasn't stored.
+    expect(api.startSession).not.toHaveBeenCalled();
+    rows.resolve({ priorities: [justTyped] });
+    await act(() => started);
+    expect(api.startSession).toHaveBeenCalledWith(TODAY, 1500, 'Write the report', 'u1');
+    expect(result.current.timer.running?.priorityUid).toBe('u1');
   });
 
   it('rethrows any other failure for the card to show', async () => {
@@ -325,6 +347,30 @@ describe('adjust', () => {
 });
 
 describe('edit', () => {
+  it('links to a row once its priorities save answers, and a pause pressed meanwhile goes out after', async () => {
+    const { result } = await renderRunning(startedAgo(5));
+    const rows = deferred<{ priorities: Priority[] }>();
+    vi.mocked(api.putPriorities).mockReturnValueOnce(rows.promise);
+    vi.mocked(api.patchSession).mockResolvedValue({ session: startedAgo(5, { priorityUid: 'u1' }) });
+    vi.mocked(api.pauseSession).mockResolvedValue({ session: startedAgo(5, { priorityUid: 'u1', pausedAt: T0 }) });
+    let linked!: Promise<void>;
+    let paused!: Promise<void>;
+    act(() => {
+      void result.current.store.setPriorities(TODAY, [justTyped]);
+      linked = result.current.timer.edit({ priorityUid: 'u1' });
+      paused = result.current.timer.pause();
+    });
+    expect(result.current.timer.running).toMatchObject({ priorityUid: 'u1', pausedAt: T0 });
+    await settle();
+    expect(api.patchSession).not.toHaveBeenCalled();
+    expect(api.pauseSession).not.toHaveBeenCalled();
+    rows.resolve({ priorities: [justTyped] });
+    await act(() => Promise.all([linked, paused]));
+    expect(api.patchSession).toHaveBeenCalledWith(1, { priorityUid: 'u1' });
+    expect(vi.mocked(api.patchSession).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(api.pauseSession).mock.invocationCallOrder[0]!);
+    expect(result.current.timer.running).toMatchObject({ priorityUid: 'u1', pausedAt: T0 });
+  });
+
   it('leaves the session a sync showed alone when the rename answers after it', async () => {
     const { result } = await renderRunning(startedAgo(5));
     // Finished on the phone and the next one started there, and this tab's sync saw it before

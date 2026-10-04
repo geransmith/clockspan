@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { deferred, makeDay, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
 import type { Day } from '../types';
-import { useDay, useDayStore } from './useDay';
+import { useDay, useDays, useDayStore } from './useDay';
 import { useRange } from './useRange';
 
 vi.mock('../api');
@@ -96,7 +96,7 @@ describe('held days', () => {
       (p: { from: string; to: string }) => {
         const { store } = useDay(TODAY);
         useDay(tue);
-        return { range: useRange(p.from, p.to), store };
+        return { range: useRange(p.from, p.to), store, days: useDays().days };
       },
       { initialProps: { from: '2026-09-21', to: '2026-09-27' }, wrapper: SettingsAndDays },
     );
@@ -116,7 +116,7 @@ describe('held days', () => {
       [TODAY, 'from the phone'],
       [tue, ''],
     ]);
-    expect(result.current.store.days[TODAY]?.retroNote).toBe('from the phone');
+    expect(result.current.days[TODAY]?.retroNote).toBe('from the phone');
   });
 
   it('keep a save the server confirmed while the range was out', async () => {
@@ -129,7 +129,7 @@ describe('held days', () => {
     await act(() => result.current.store.setRetro(TODAY, { note: 'edited' }));
     answer.resolve({ days: [makeDay(TODAY, { retroNote: 'read before the save' })] });
     await settle();
-    expect(result.current.store.days[TODAY]?.retroNote).toBe('edited');
+    expect(result.current.days[TODAY]?.retroNote).toBe('edited');
     expect(result.current.range.days?.find((d) => d.date === TODAY)?.retroNote).toBe('edited');
   });
 });

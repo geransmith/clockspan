@@ -137,20 +137,13 @@ export interface PrioritiesResponse {
 }
 
 /** `PUT /days/:date/overtime`. */
-export interface OvertimeResponse {
-  overtimeApproved: boolean;
-}
+export type OvertimeResponse = Pick<Day, 'overtimeApproved'>;
 
 /** `PUT /days/:date/retro`: the note and the first reviewed-at, as stored. */
-export interface RetroResponse {
-  retroNote: string;
-  retroAt: number | null;
-}
+export type RetroResponse = Pick<Day, 'retroNote' | 'retroAt'>;
 
 /** `PUT /days/:date/target`: the day's own work-day length as stored (null = the usual one). */
-export interface TargetResponse {
-  workMinutes: number | null;
-}
+export type TargetResponse = Pick<Day, 'workMinutes'>;
 
 /** Every session route that answers with one session: start, PATCH, pause, resume, finish, cancel. */
 export interface SessionResponse {

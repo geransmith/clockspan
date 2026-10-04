@@ -89,23 +89,28 @@ export const putSettings = (patch: Partial<Settings>) => request<Settings>('PUT'
 export const resetSettings = () => request<Settings>('DELETE', '/api/settings');
 
 // ----- days -----
+/** The body of PUT /days/:date/retro: a field left out keeps its stored value. */
+export type RetroPatch = { note?: string; done?: boolean };
+
 export const getDay = (date: string) => request<Day>('GET', `/api/days/${date}`);
 export const putPunches = (date: string, punches: Punch[]) =>
   request<PunchesResponse>('PUT', `/api/days/${date}/punches`, { punches: punches.map((p) => ({ at: p.at })) });
 export const putPriorities = (date: string, priorities: Priority[]) => request<PrioritiesResponse>('PUT', `/api/days/${date}/priorities`, { priorities });
 export const putOvertime = (date: string, approved: boolean) => request<OvertimeResponse>('PUT', `/api/days/${date}/overtime`, { approved });
 export const putTarget = (date: string, workMinutes: number | null) => request<TargetResponse>('PUT', `/api/days/${date}/target`, { workMinutes });
-export const putRetro = (date: string, patch: { note?: string; done?: boolean }) => request<RetroResponse>('PUT', `/api/days/${date}/retro`, patch);
+export const putRetro = (date: string, patch: RetroPatch) => request<RetroResponse>('PUT', `/api/days/${date}/retro`, patch);
 export const getRange = (from: string, to: string) => request<RangeResponse>('GET', `/api/days/range?from=${from}&to=${to}`);
 export const getPruneInfo = (before: string) => request<PruneInfo>('GET', `/api/days/prune?before=${before}`);
 export const pruneDays = (before: string) => request<PruneResult>('POST', '/api/days/prune', { before });
 
 // ----- sessions -----
+/** What the log and the timer bar change on a session (PATCH /sessions/:id also takes plannedSeconds). */
+export type SessionEdit = { label?: string; priorityUid?: string | null };
+
 export const getRunning = () => request<RunningResponse>('GET', '/api/sessions/running');
 export const startSession = (date: string, plannedSeconds: number, label: string, priorityUid: string | null = null) =>
   request<SessionResponse>('POST', `/api/days/${date}/sessions`, { plannedSeconds, label, priorityUid });
-export const patchSession = (id: number, patch: { plannedSeconds?: number; label?: string; priorityUid?: string | null }) =>
-  request<SessionResponse>('PATCH', `/api/sessions/${id}`, patch);
+export const patchSession = (id: number, patch: SessionEdit & { plannedSeconds?: number }) => request<SessionResponse>('PATCH', `/api/sessions/${id}`, patch);
 export const pauseSession = (id: number) => request<SessionResponse>('POST', `/api/sessions/${id}/pause`);
 export const resumeSession = (id: number) => request<SessionResponse>('POST', `/api/sessions/${id}/resume`);
 export const finishSession = (id: number, countOverrun = false) =>

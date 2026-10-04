@@ -17,8 +17,6 @@ import { useSettings } from './useSettings';
 import { useTracked } from './useTracked';
 import { useWakeLock } from './useWakeLock';
 
-type SessionEdit = { label?: string; priorityUid?: string | null };
-
 interface TimerCtx {
   running: Session | null;
   /** Seconds left; below zero once due. Derived from the server's startedAt and pauses every tick. */
@@ -39,7 +37,7 @@ interface TimerCtx {
    * Renames the running session or links it to another priority. The bar and the log's running
    * row both edit through here, so the session's writes share one queue and both show the edit.
    */
-  edit: (patch: SessionEdit) => Promise<void>;
+  edit: (patch: api.SessionEdit) => Promise<void>;
   pause: () => Promise<void>;
   resume: () => Promise<void>;
   /** `countOverrun` logs the time past the planned end too; otherwise a late finish logs the plan. */
@@ -94,11 +92,10 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   const [finished, setFinished] = useState<Session | null>(null);
   const now = useClock();
   // `loaded` gates the two effects that alert: on a fresh load the running session can answer
-  // before the settings do, and an alert then would use the default sound and volume switch.
+  // before the settings do, and an alert then would use the default sounds and Sound switch
+  // (`settings.sounds`, `settings.sound`).
   const { settings, loaded } = useSettings();
-  // Only the store's functions, which keep their identity: the store itself is a new object
-  // whenever a day changes, and the callbacks and effects below would follow it.
-  const { refresh, applySession } = useDayStore();
+  const { refresh, applySession, prioritiesSaved } = useDayStore();
   const completing = useRef(false);
   // After a failed finish (server unreachable) wait before trying again (`nextBackoff`). The
   // server clamps ended_at to the planned end, so a late finish still logs the planned
@@ -224,7 +221,11 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     async (date: string, plannedSeconds: number, label: string, priorityUid: string | null = null) => {
       unlockAudio(); // user gesture: lets the completion chime play later on iOS
       try {
-        const { session } = await queue(() => api.startSession(date, plannedSeconds, label, priorityUid));
+        const { session } = await queue(async () => {
+          // A chip can link a row whose priorities save is still out.
+          if (priorityUid) await prioritiesSaved(date);
+          return api.startSession(date, plannedSeconds, label, priorityUid);
+        });
         change((t) => settleWith(t, [], session));
         applySession(session);
       } catch (err) {
@@ -238,7 +239,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         alert({ ...TIMER_ELSEWHERE, tone: 'info', tag: 'timer-elsewhere', sound: false, notifications: false });
       }
     },
-    [change, queue, applySession, refresh],
+    [change, queue, applySession, refresh, prioritiesSaved],
   );
 
   // The bar and the card call these with `void`, so a failure has to be reported here: the
@@ -251,7 +252,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       try {
         await run(cur);
       } catch (err) {
-        warnQuietly({ title: SAVE_FAILED.title, body: SAVE_FAILED.body, tag: 'save-failed' });
+        warnQuietly({ ...SAVE_FAILED, tag: 'save-failed' });
         // Gone, or no longer running: it ended on another device. Show that now, not at the
         // next poll.
         if (err instanceof ApiError && (err.status === 404 || err.status === 409)) void syncNow();
@@ -303,15 +304,18 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   );
 
   const edit = useCallback(
-    (patch: SessionEdit) =>
+    (patch: api.SessionEdit) =>
       attempt((cur) =>
         press(
           cur,
           (s) => ({ ...s, ...patch }),
-          () => api.patchSession(cur.id, patch),
+          async () => {
+            if (patch.priorityUid) await prioritiesSaved(cur.date);
+            return api.patchSession(cur.id, patch);
+          },
         ),
       ),
-    [attempt, press],
+    [attempt, press, prioritiesSaved],
   );
 
   const setPaused = useCallback(

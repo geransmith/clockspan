@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import type { SessionEdit } from '../api';
 import { useDayStore } from '../hooks/useDay';
 import { useTimer } from '../hooks/useTimer';
 import { CONFIRM, UNTITLED_SESSION } from '../lib/copy';
@@ -122,7 +123,7 @@ function Row({
   session: Session;
   now: number;
   planned: Priority[];
-  onEdit: (patch: { label?: string; priorityUid?: string | null }) => void;
+  onEdit: (patch: SessionEdit) => void;
   onDelete: () => void;
 }) {
   const { formatTime } = useTimeFormat();
@@ -136,7 +137,7 @@ function Row({
   // A link to a row that was since removed reads as unplanned.
   const linked = s.priorityUid ? planned.find((p) => p.uid === s.priorityUid) : undefined;
   // One PATCH per edit: label and link together, so two responses can't land out of order.
-  const commit = (extra: { priorityUid?: string | null } = {}) => {
+  const commit = (extra: Pick<SessionEdit, 'priorityUid'> = {}) => {
     setEditing(false);
     const patch = { ...extra, ...(draft.trim() !== s.label ? { label: draft.trim() } : {}) };
     if (Object.keys(patch).length > 0) onEdit(patch);

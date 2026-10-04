@@ -5,7 +5,7 @@ import { BREAK, BREAK_SUGGESTION } from '../lib/copy';
 import { addDays, MINUTE_MS, todayKey } from '../../../shared/dates.js';
 import { formatDuration } from '../lib/format';
 import { readStored, writeStored } from '../lib/storage';
-import { useDayStore } from './useDay';
+import { useDays, useDayStore } from './useDay';
 import { useLatest } from './useLatest';
 import { useClock } from './useClock';
 import { useSettings } from './useSettings';
@@ -51,7 +51,8 @@ const STALE_MS = 10 * MINUTE_MS;
 export function BreakProvider({ children }: { children: ReactNode }) {
   const { settings, loaded } = useSettings();
   const { finished, running } = useTimer();
-  const { days, startBreak, endBreak } = useDayStore();
+  const { days } = useDays();
+  const { startBreak, endBreak } = useDayStore();
   const now = useClock();
   const date = todayKey(now);
   const today = days[date];

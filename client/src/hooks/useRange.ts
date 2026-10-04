@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Day } from '../types';
-import { useDayStore } from './useDay';
+import { useDays, useDayStore } from './useDay';
 
 /**
  * `fetched` with the day store's copy in place of each day it holds in [from, to] (or added), in
@@ -8,7 +8,7 @@ import { useDayStore } from './useDay';
  * whose save was still out when the range was asked for.
  */
 export function useHeldOver(fetched: Day[] | null | undefined, from: string, to: string): Day[] | null {
-  const { days: held } = useDayStore();
+  const { days: held } = useDays();
   return useMemo(() => {
     if (!fetched) return null;
     const byDate = new Map(fetched.map((d) => [d.date, d]));
@@ -27,7 +27,8 @@ export function useHeldOver(fetched: Day[] | null | undefined, from: string, to:
  */
 export function useRange(from: string, to: string): { days: Day[] | null; error: string | null } {
   const key = `${from}:${to}`;
-  const { readRange, generation } = useDayStore();
+  const { readRange } = useDayStore();
+  const { generation } = useDays();
   const [fetched, setFetched] = useState<{ key: string; days?: Day[]; error?: string } | null>(null);
   useEffect(() => {
     let cancelled = false;

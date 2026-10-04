@@ -15,7 +15,8 @@ const HOLD_MS = 5 * MINUTE_MS;
 /**
  * Today's alarms, whatever the sheet is showing. A change to the punches is judged 3 s after
  * the last one, and while a punch time is being typed on today's sheet (`setEditingPunches`)
- * at most five minutes after it, so back-filling a day is judged on the finished set, not on
+ * at most five minutes after the later of that change and the start of the hold (a new `ms`
+ * restarts `useSettled`'s count), so back-filling a day is judged on the finished set, not on
  * each half-entered state; nothing here is finer than a minute. The punches are compared by
  * their times: every refresh brings a new list, and one with the same times neither stops the
  * alarms nor restarts the wait. Another device may have punched meanwhile: the copy is fetched
@@ -27,7 +28,6 @@ const HOLD_MS = 5 * MINUTE_MS;
 export function useTodayAlarms(today: string, now: number, openRetro: () => void): { setEditingPunches: (editing: boolean) => void } {
   const { settings, loaded } = useSettings();
   const { day, store } = useDay(today);
-  const { setOvertimeApproved } = store;
   const refreshing = useRefreshDay(today);
   const [editingPunches, setEditingPunches] = useState(false);
   const key = day ? punchesKey(day.punches) : null;
@@ -38,9 +38,7 @@ export function useTodayAlarms(today: string, now: number, openRetro: () => void
   const todaySettings = useMemo(() => daySettings(settings, { workMinutes }), [settings, workMinutes]);
   const tc = useMemo(() => (punches ? computeTimeclock(punches, todaySettings, now) : null), [punches, todaySettings, now]);
   const overtimeApproved = overtimeOn(settings, Boolean(day?.overtimeApproved));
-  // On the setter, which keeps its identity: the store is a new object whenever a day changes,
-  // and the alarms would run again for each.
-  const approveOvertime = useCallback(() => void setOvertimeApproved(today, true), [setOvertimeApproved, today]);
+  const approveOvertime = useCallback(() => void store.setOvertimeApproved(today, true), [store, today]);
   useAlarms(today, tc, todaySettings, now, {
     overtimeApproved,
     retroDone: Boolean(day?.retroAt),
