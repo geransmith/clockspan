@@ -68,7 +68,13 @@ describe('reviewDay', () => {
   });
 
   it('ignores running and cancelled sessions', () => {
-    const r = reviewDay([row(1, 'A')], [makeSession({ startedAt: 10_000, plannedSeconds: 600, priorityUid: 'uid100000000' })]);
+    const r = reviewDay(
+      [row(1, 'A')],
+      [
+        makeSession({ startedAt: 10_000, plannedSeconds: 600, priorityUid: 'uid100000000' }),
+        completedSession(2, 20_000, 600, { status: 'cancelled', priorityUid: 'uid100000000' }),
+      ],
+    );
     expect(r.onPlanSeconds).toBe(0);
     expect(r.unplanned).toHaveLength(0);
   });
