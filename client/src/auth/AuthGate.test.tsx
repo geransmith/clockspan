@@ -9,11 +9,7 @@ import { setVisibility, settle } from '../test/hooks';
 import type { AuthInfo, PublicUser } from '../types';
 import { AuthGate, useAuth } from './AuthGate';
 
-vi.mock('../api', async (importOriginal) => {
-  // The event name has to stay the real one: the gate listens for what `request()` dispatches.
-  const { UNAUTHENTICATED_EVENT } = await importOriginal<typeof import('../api')>();
-  return { UNAUTHENTICATED_EVENT, getAuth: vi.fn(), logout: vi.fn(), changePassword: vi.fn() };
-});
+vi.mock('../api');
 
 const USER: PublicUser = { id: 2, name: 'sam', username: 'sam', isAdmin: false, kind: 'local', mustChangePassword: false };
 const TEMPORARY: PublicUser = { ...USER, mustChangePassword: true };
