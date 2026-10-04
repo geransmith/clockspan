@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Day, Punch } from '../types';
+import { completedSession, makeDay, makeSession, makeSummary, TEST_SETTINGS } from '../test/fixtures';
+import type { Punch } from '../types';
 import { STICKER_EMOJI } from './copy';
 import { calendarMonth } from './calendar';
 import {
@@ -16,7 +17,7 @@ import {
 } from './stickers';
 import { emptyPunches } from './timeclock';
 
-const settings = { workMinutes: 480, lunchDeadlineMinutes: 300, lunchMinutes: 30, secondMealAfterMinutes: 600 };
+const settings = TEST_SETTINGS;
 const TODAY = '2026-09-17'; // a Thursday
 const NOW = new Date(2026, 8, 17, 15, 0).getTime();
 
@@ -35,31 +36,17 @@ function punches(date: string, times: (string | null)[]): Punch[] {
 /** What the calendar gives a day: its stickers, judged on its timeclock worked out once. */
 const earned = (d: DaySummary, s: StickerSettings = settings) => stickersForDay(d, dayTimeclock(d, s, TODAY, NOW), s.trackHours);
 
-function summary(date: string, patch: Partial<DaySummary> = {}): DaySummary {
-  return {
-    date,
-    punches: emptyPunches(),
-    focusSeconds: 0,
-    focusSessions: 0,
-    prioritiesDone: 0,
-    prioritiesTotal: 0,
-    retroAt: null,
-    workMinutes: null,
-    ...patch,
-  };
-}
-
 describe('stickersForDay', () => {
   it("maps each reason's id to its label", () => {
     expect(STICKER_LABELS.lunch).toBe('Lunch taken');
   });
 
   it('earns nothing for an empty day', () => {
-    expect(earned(summary('2026-09-14'))).toEqual([]);
+    expect(earned(makeSummary('2026-09-14'))).toEqual([]);
   });
 
   it('earns one sticker per thing the day did', () => {
-    const full = summary('2026-09-14', {
+    const full = makeSummary('2026-09-14', {
       punches: punches('2026-09-14', ['08:00', '12:00', '12:30', '16:30']),
       focusSeconds: 1500,
       prioritiesDone: 3,
@@ -70,23 +57,23 @@ describe('stickersForDay', () => {
   });
 
   it('judges each reason on its own', () => {
-    const lunchOnly = summary('2026-09-14', { punches: punches('2026-09-14', ['08:00', '12:00', null, null]) });
+    const lunchOnly = makeSummary('2026-09-14', { punches: punches('2026-09-14', ['08:00', '12:00', null, null]) });
     expect(earned(lunchOnly)).toEqual(['clockedOut', 'lunch']); // a past day off the clock is done
-    const halfPlan = summary('2026-09-14', { prioritiesDone: 1, prioritiesTotal: 2 });
+    const halfPlan = makeSummary('2026-09-14', { prioritiesDone: 1, prioritiesTotal: 2 });
     expect(earned(halfPlan)).toEqual([]);
-    const openToday = summary(TODAY, { punches: punches(TODAY, ['08:00', null, null, null]), focusSeconds: 60 });
+    const openToday = makeSummary(TODAY, { punches: punches(TODAY, ['08:00', null, null, null]), focusSeconds: 60 });
     expect(earned(openToday)).toEqual(['focus']);
   });
 
   it('gives no Clocked out sticker with hours not tracked, and a legend and full day without it', () => {
     const noHours = { ...settings, trackHours: false };
-    const lunchOnly = summary('2026-09-14', { punches: punches('2026-09-14', ['08:00', '12:00', null, null]) });
+    const lunchOnly = makeSummary('2026-09-14', { punches: punches('2026-09-14', ['08:00', '12:00', null, null]) });
     expect(earned(lunchOnly, noHours)).toEqual(['lunch']);
     expect(stickerReasons(false).map((r) => r.id)).toEqual(['lunch', 'priorities', 'focus', 'reviewed']);
     expect(stickerReasons(true)).toBe(STICKER_REASONS);
     expect(stickerReasons(undefined)).toBe(STICKER_REASONS);
     // Everything such a day can earn makes it full.
-    const all = summary('2026-09-14', {
+    const all = makeSummary('2026-09-14', {
       punches: punches('2026-09-14', ['08:00', '12:00', '12:30', '16:30']),
       prioritiesDone: 1,
       prioritiesTotal: 1,
@@ -101,14 +88,14 @@ describe('stickersForDay', () => {
   it("goes by the day's own work-day length when it has one", () => {
     // Clocked in at 8:00 today: the usual 8 h day ends at 16:30, a half day reached its end at 12:00.
     const clockedIn = punches(TODAY, ['08:00', null, null, null]);
-    expect(dayTimeclock(summary(TODAY, { punches: clockedIn }), settings, TODAY, NOW).clockOutAt).toBe(new Date(2026, 8, 17, 16, 30).getTime());
-    expect(dayTimeclock(summary(TODAY, { punches: clockedIn, workMinutes: 240 }), settings, TODAY, NOW).clockOutAt).toBe(
+    expect(dayTimeclock(makeSummary(TODAY, { punches: clockedIn }), settings, TODAY, NOW).clockOutAt).toBe(new Date(2026, 8, 17, 16, 30).getTime());
+    expect(dayTimeclock(makeSummary(TODAY, { punches: clockedIn, workMinutes: 240 }), settings, TODAY, NOW).clockOutAt).toBe(
       new Date(2026, 8, 17, 12, 0).getTime(),
     );
     // Out at 12:00 is lunch on either length: only the Clock out ends today.
     const out = punches(TODAY, ['08:00', '12:00', null, null]);
-    expect(earned(summary(TODAY, { punches: out }))).toEqual(['lunch']);
-    expect(earned(summary(TODAY, { punches: out, workMinutes: 240 }))).toEqual(['lunch']);
+    expect(earned(makeSummary(TODAY, { punches: out }))).toEqual(['lunch']);
+    expect(earned(makeSummary(TODAY, { punches: out, workMinutes: 240 }))).toEqual(['lunch']);
   });
 });
 
@@ -128,61 +115,19 @@ describe('stickerEmoji', () => {
 
 describe('daySummaryOf', () => {
   it('counts completed sessions and rows with text', () => {
-    const day: Day = {
-      date: TODAY,
-      punches: emptyPunches(),
+    const day = makeDay(TODAY, {
       priorities: [
         { position: 1, text: 'a', done: true, uid: 'u1', addedAt: 1 },
         { position: 2, text: '  ', done: false, uid: null, addedAt: null },
         { position: 3, text: 'b', done: false, uid: 'u3', addedAt: 1 },
       ],
-      overtimeApproved: false,
-      retroNote: '',
       retroAt: 5,
-      workMinutes: null,
       sessions: [
-        {
-          id: 1,
-          date: TODAY,
-          label: '',
-          plannedSeconds: 1500,
-          startedAt: 1,
-          endedAt: 2,
-          status: 'completed',
-          durationSeconds: 1500,
-          priorityUid: null,
-          pausedSeconds: 0,
-          pausedAt: null,
-        },
-        {
-          id: 2,
-          date: TODAY,
-          label: '',
-          plannedSeconds: 1500,
-          startedAt: 3,
-          endedAt: 4,
-          status: 'cancelled',
-          durationSeconds: 100,
-          priorityUid: null,
-          pausedSeconds: 0,
-          pausedAt: null,
-        },
-        {
-          id: 3,
-          date: TODAY,
-          label: '',
-          plannedSeconds: 1500,
-          startedAt: 5,
-          endedAt: null,
-          status: 'running',
-          durationSeconds: null,
-          priorityUid: null,
-          pausedSeconds: 0,
-          pausedAt: null,
-        },
+        completedSession(1, 1, 1500, { label: '' }),
+        completedSession(2, 3, 1500, { label: '', status: 'cancelled', durationSeconds: 100 }),
+        makeSession({ id: 3, label: '', startedAt: 5 }),
       ],
-      breaks: [],
-    };
+    });
     expect(daySummaryOf(day)).toEqual({
       date: TODAY,
       punches: day.punches,
@@ -201,14 +146,14 @@ describe('daySummaryOf', () => {
 
 describe('countStickers', () => {
   it('totals the month by reason and counts a day with every sticker as full', () => {
-    const full = summary('2026-09-15', {
+    const full = makeSummary('2026-09-15', {
       punches: punches('2026-09-15', ['08:00', '12:00', '12:30', '16:30']),
       focusSeconds: 1,
       prioritiesDone: 1,
       prioritiesTotal: 1,
       retroAt: 1,
     });
-    const days = [full, summary('2026-09-14', { retroAt: 1 }), summary('2026-09-02', { focusSeconds: 10 })];
+    const days = [full, makeSummary('2026-09-14', { retroAt: 1 }), makeSummary('2026-09-02', { focusSeconds: 10 })];
     expect(countStickers(calendarMonth(days, settings, TODAY, NOW, '2026-09-01'))).toEqual({
       total: 7,
       full: 1,

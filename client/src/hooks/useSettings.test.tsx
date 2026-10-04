@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
-import { CARD_IDS } from '../../../shared/settings.js';
+import { CARD_IDS, DEFAULT_SETTINGS } from '../../../shared/settings.js';
 import { deferred, makeSettings, MIN, settle, setVisibility, T0 } from '../test/hooks';
 import type { Settings } from '../types';
 import { SettingsProvider, useSettings } from './useSettings';
@@ -26,7 +26,7 @@ describe('loading', () => {
     vi.mocked(api.getSettings).mockReturnValue(answer.promise);
     const { result } = render();
     expect(result.current.loaded).toBe(false);
-    expect(result.current.settings.workMinutes).toBe(makeSettings().workMinutes);
+    expect(result.current.settings.workMinutes).toBe(DEFAULT_SETTINGS.workMinutes);
     answer.resolve(makeSettings({ workMinutes: 600, layout: [{ id: 'retro', visible: false }] }));
     await settle();
     expect(result.current.loaded).toBe(true);
@@ -156,15 +156,15 @@ describe('update', () => {
     vi.mocked(api.putSettings).mockReturnValueOnce(saved.promise);
     const { result } = render();
     await settle();
-    const sound = !makeSettings().sound;
+    const sound = !DEFAULT_SETTINGS.sound;
     const done = result.current.update({ sound });
     await settle();
-    expect(result.current).toMatchObject({ loaded: false, settings: { sound, workMinutes: makeSettings().workMinutes } });
+    expect(result.current).toMatchObject({ loaded: false, settings: { sound, workMinutes: DEFAULT_SETTINGS.workMinutes } });
     // The server is down for the save too: back to the defaults.
     saved.reject(new Error('offline'));
     await expect(done).rejects.toThrow('offline');
     await settle();
-    expect(result.current.settings).toEqual(makeSettings());
+    expect(result.current.settings).toEqual(DEFAULT_SETTINGS);
   });
 
   it('shows the change at once and adopts what the server stored', async () => {

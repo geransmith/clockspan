@@ -1,32 +1,18 @@
 import { describe, expect, it } from 'vitest';
+import { MINUTE_MS } from '../../../shared/dates.js';
 import { BREAK_SECONDS } from '../../../shared/timer.js';
+import { completedSession, T0 } from '../test/fixtures';
 import type { Break, Session } from '../types';
 import { breakSeconds, endBreaksAt, MAX_BREAK_MINUTES, MIN_FOCUS_SECONDS, runningBreak, SET_GAP_MINUTES, SET_SIZE, suggestBreak } from './breaks';
 
-const MIN = 60_000;
-const T0 = new Date(2026, 8, 28, 9, 0).getTime();
-
-const session = (id: number, startedAt: number, minutes: number, extra: Partial<Session> = {}): Session => ({
-  id,
-  date: '2026-09-28',
-  label: `s${id}`,
-  plannedSeconds: minutes * 60,
-  startedAt,
-  endedAt: startedAt + minutes * MIN,
-  status: 'completed',
-  pausedSeconds: 0,
-  pausedAt: null,
-  durationSeconds: minutes * 60,
-  priorityUid: null,
-  ...extra,
-});
+const session = (id: number, startedAt: number, minutes: number, extra: Partial<Session> = {}) => completedSession(id, startedAt, minutes * 60, extra);
 
 /** Sessions of these lengths one after another, each `gap` minutes after the last one ended. */
 function inARow(lengths: number[], gap = 5): Session[] {
   let at = T0;
   return lengths.map((m, i) => {
     const s = session(i + 1, at, m);
-    at += (m + gap) * MIN;
+    at += (m + gap) * MINUTE_MS;
     return s;
   });
 }
@@ -53,7 +39,7 @@ describe('suggestBreak', () => {
 
   it('passes over a false start: under a minute of focus earns nothing and is not one of a set', () => {
     const [a, b, c] = inARow([25, 25, 25]);
-    const blip = session(9, c!.endedAt! + 2 * MIN, 0.5);
+    const blip = session(9, c!.endedAt! + 2 * MINUTE_MS, 0.5);
     expect(suggestBreak([blip])).toBeNull();
     expect(suggestBreak([{ ...blip, durationSeconds: MIN_FOCUS_SECONDS }])).toMatchObject({ sessionId: 9, minutes: 1 });
     // The latest real session is still c, third of its set.
@@ -86,9 +72,9 @@ describe('suggestBreak', () => {
 
   it('starts the count over after a gap as long as a long break', () => {
     const before = inARow([25, 25, 25]);
-    const after = session(4, before[2]!.endedAt! + SET_GAP_MINUTES * MIN, 25);
+    const after = session(4, before[2]!.endedAt! + SET_GAP_MINUTES * MINUTE_MS, 25);
     expect(suggestBreak([...before, after])).toMatchObject({ minutes: 5, long: false, position: 1 });
-    const justUnder = session(4, before[2]!.endedAt! + SET_GAP_MINUTES * MIN - 1, 25);
+    const justUnder = session(4, before[2]!.endedAt! + SET_GAP_MINUTES * MINUTE_MS - 1, 25);
     expect(suggestBreak([...before, justUnder])).toMatchObject({ minutes: 20, long: true });
   });
 
@@ -101,38 +87,38 @@ describe('suggestBreak', () => {
 });
 
 describe('logged breaks', () => {
-  const rest = (id: number, at: number, minutes: number, endedAt = T0 + (at + minutes) * MIN): Break => ({
+  const rest = (id: number, at: number, minutes: number, endedAt = T0 + (at + minutes) * MINUTE_MS): Break => ({
     id,
     date: '2026-09-28',
     plannedSeconds: minutes * 60,
-    startedAt: T0 + at * MIN,
+    startedAt: T0 + at * MINUTE_MS,
     endedAt,
   });
 
   it('counts the rest so far while a break runs, and its whole length once over', () => {
     const b = rest(1, 0, 5);
-    expect(breakSeconds(b, T0 - MIN)).toBe(0);
-    expect(breakSeconds(b, T0 + 2 * MIN)).toBe(120);
-    expect(breakSeconds(b, T0 + 60 * MIN)).toBe(300);
-    expect(breakSeconds(rest(2, 0, 5, T0 + 90_000), T0 + 60 * MIN)).toBe(90);
+    expect(breakSeconds(b, T0 - MINUTE_MS)).toBe(0);
+    expect(breakSeconds(b, T0 + 2 * MINUTE_MS)).toBe(120);
+    expect(breakSeconds(b, T0 + 60 * MINUTE_MS)).toBe(300);
+    expect(breakSeconds(rest(2, 0, 5, T0 + 90_000), T0 + 60 * MINUTE_MS)).toBe(90);
   });
 
   it('ends the break running at a moment there, and drops it if it ran under a minute', () => {
     const over = rest(1, 0, 5);
     const running = rest(2, 30, 10);
-    expect(endBreaksAt([over, running], T0 + 32 * MIN)).toEqual([over, { ...running, endedAt: T0 + 32 * MIN }]);
-    expect(endBreaksAt([over, running], T0 + 31 * MIN)).toEqual([over, { ...running, endedAt: T0 + 31 * MIN }]);
-    expect(endBreaksAt([over, running], T0 + 31 * MIN - 1)).toEqual([over]);
+    expect(endBreaksAt([over, running], T0 + 32 * MINUTE_MS)).toEqual([over, { ...running, endedAt: T0 + 32 * MINUTE_MS }]);
+    expect(endBreaksAt([over, running], T0 + 31 * MINUTE_MS)).toEqual([over, { ...running, endedAt: T0 + 31 * MINUTE_MS }]);
+    expect(endBreaksAt([over, running], T0 + 31 * MINUTE_MS - 1)).toEqual([over]);
     // Nothing running then: nothing changes.
-    expect(endBreaksAt([over, running], T0 + 50 * MIN)).toEqual([over, running]);
+    expect(endBreaksAt([over, running], T0 + 50 * MINUTE_MS)).toEqual([over, running]);
   });
 
   it('finds the break running now: the latest one, while its end is ahead', () => {
     const breaks = [rest(1, 0, 5), rest(2, 30, 10)];
     expect(runningBreak([], T0)).toBeNull();
-    expect(runningBreak(breaks.slice(0, 1), T0 + 2 * MIN)).toBe(breaks[0]);
-    expect(runningBreak(breaks.slice(0, 1), T0 + 5 * MIN)).toBeNull();
-    expect(runningBreak(breaks, T0 + 35 * MIN)).toBe(breaks[1]);
-    expect(runningBreak(breaks, T0 + 40 * MIN)).toBeNull();
+    expect(runningBreak(breaks.slice(0, 1), T0 + 2 * MINUTE_MS)).toBe(breaks[0]);
+    expect(runningBreak(breaks.slice(0, 1), T0 + 5 * MINUTE_MS)).toBeNull();
+    expect(runningBreak(breaks, T0 + 35 * MINUTE_MS)).toBe(breaks[1]);
+    expect(runningBreak(breaks, T0 + 40 * MINUTE_MS)).toBeNull();
   });
 });

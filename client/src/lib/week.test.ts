@@ -1,20 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import type { Day, Punch } from '../types';
-import { emptyPunches } from './timeclock';
+import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
+import { makeDay, punchesAt, TEST_SETTINGS } from '../test/fixtures';
+import type { Day } from '../types';
 import { weekHours } from './week';
 
-const settings = { workMinutes: 480, lunchDeadlineMinutes: 300, lunchMinutes: 30, secondMealAfterMinutes: 600, weekMinutes: 2400 };
-const H = 3_600_000;
+const settings = TEST_SETTINGS;
 const TODAY = '2026-09-30'; // a Wednesday
 const NOW = new Date(2026, 8, 30, 12, 0).getTime();
 
 /** A day clocked in at 8:00 and out `hours` later, or still in when `hours` is null. */
 function day(date: string, hours: number | null, patch: Partial<Day> = {}): Day {
   const start = new Date(`${date}T08:00:00`).getTime();
-  const punches: Punch[] = emptyPunches().map((p) =>
-    p.position === 0 ? { ...p, at: start } : p.position === 3 && hours != null ? { ...p, at: start + hours * H } : p,
-  );
-  return { date, punches, priorities: [], overtimeApproved: false, retroNote: '', retroAt: null, workMinutes: null, sessions: [], breaks: [], ...patch };
+  return makeDay(date, { punches: punchesAt(start, null, null, hours == null ? null : start + hours * HOUR_MS), ...patch });
 }
 
 describe('weekHours', () => {
@@ -56,7 +53,7 @@ describe('weekHours', () => {
     const four = { ...settings, weekMinutes: 4 * 60 };
     expect(weekHours(days, four, TODAY, TODAY, NOW)).toMatchObject({ met: true, overSeconds: 0 });
     expect(weekHours(days, four, TODAY, TODAY, NOW + 59_000).overSeconds).toBe(0);
-    expect(weekHours(days, four, TODAY, TODAY, NOW + 60_000).overSeconds).toBe(60);
-    expect(weekHours(days, four, TODAY, TODAY, NOW + 90 * 60_000).overSeconds).toBe(90 * 60);
+    expect(weekHours(days, four, TODAY, TODAY, NOW + MINUTE_MS).overSeconds).toBe(60);
+    expect(weekHours(days, four, TODAY, TODAY, NOW + 90 * MINUTE_MS).overSeconds).toBe(90 * 60);
   });
 });
