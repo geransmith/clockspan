@@ -4,18 +4,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
 import { unlockAudio } from '../lib/alerts';
-import { addPunchPair, emptyPunches, removePunchPair, timeclockForDate } from '../lib/timeclock';
-import { makeSettings, MIN, settle, T0, TODAY } from '../test/hooks';
-import { kindForPosition, MAX_PUNCHES } from '../../../shared/punches.js';
+import { addPunchPair, removePunchPair, timeclockForDate } from '../lib/timeclock';
+import { makeSettings, punchesAt, settle, T0, TODAY, YESTERDAY } from '../test/hooks';
+import { HOUR_MS } from '../../../shared/dates.js';
+import { MAX_PUNCHES } from '../../../shared/punches.js';
 import type { Punch } from '../types';
 import { Timeclock } from './Timeclock';
 
 vi.mock('../api');
 vi.mock('../lib/alerts');
 
-const YESTERDAY = '2026-09-27';
-
-async function renderCard(date = TODAY, punches: Punch[] = emptyPunches()) {
+async function renderCard(date = TODAY, punches: Punch[] = punchesAt()) {
   const onEditingChange = vi.fn<(editing: boolean) => void>();
   const onChange = vi.fn<(punches: Punch[]) => void>();
   const card = (p: Punch[]) => (
@@ -77,7 +76,7 @@ describe('Timeclock', () => {
   });
 
   it("lets the hold go when the focused field's pair is removed", async () => {
-    const punches = addPunchPair(emptyPunches());
+    const punches = addPunchPair(punchesAt());
     const { onEditingChange, again } = await renderCard(TODAY, punches);
     focus(field('Out 1'));
     expect(onEditingChange).toHaveBeenLastCalledWith(true);
@@ -94,7 +93,7 @@ describe('Timeclock', () => {
 
   it('undoes an Add removed before any punch changes', async () => {
     // Clocked out at 9:00, then "Add extra out / in": removing that pair gives the Clock out its 9:00 back.
-    const day = emptyPunches().map((p) => ({ ...p, at: p.position === 0 ? T0 - 60 * MIN : p.position === 3 ? T0 : null }));
+    const day = punchesAt(T0 - HOUR_MS, null, null, T0);
     const { onChange, again } = await renderCard(TODAY, day);
     fireEvent.click(screen.getByRole('button', { name: 'Add extra out / in' }));
     again(onChange.mock.lastCall![0]);
@@ -104,7 +103,7 @@ describe('Timeclock', () => {
   });
 
   it('drops both rows of a pair punched after the Add', async () => {
-    const clockedIn = emptyPunches().map((p) => ({ ...p, at: p.position === 0 ? T0 - 60 * MIN : null }));
+    const clockedIn = punchesAt(T0 - HOUR_MS);
     const { onChange, again } = await renderCard(TODAY, clockedIn);
     fireEvent.click(screen.getByRole('button', { name: 'Add extra out / in' }));
     const withPair = onChange.mock.lastCall![0];
@@ -112,11 +111,11 @@ describe('Timeclock', () => {
     // Out 1 punched at 9:00, here or on another device: stepping out, which must not end the day.
     again(withPair.map((p) => (p.position === 3 ? { ...p, at: T0 } : p)));
     fireEvent.click(screen.getByRole('button', { name: 'Remove Out 1 / In 1' }));
-    expect(onChange.mock.lastCall![0].map((p) => p.at)).toEqual([T0 - 60 * MIN, null, null, null]);
+    expect(onChange.mock.lastCall![0].map((p) => p.at)).toEqual([T0 - HOUR_MS, null, null, null]);
   });
 
   it('stops offering Add extra out / in at the row cap', async () => {
-    const rows = (n: number) => Array.from({ length: n }, (_, position) => ({ position, kind: kindForPosition(position), at: null }));
+    const rows = (n: number) => punchesAt(...Array<null>(n).fill(null));
     await renderCard(TODAY, rows(MAX_PUNCHES - 2));
     expect(screen.getByRole('button', { name: 'Add extra out / in' })).toBeTruthy();
     cleanup();
@@ -126,15 +125,12 @@ describe('Timeclock', () => {
 
   it("shows the second meal on today's sheet only, not on a past day left clocked in", async () => {
     // Clocked in at midnight: 9 h worked by 9:00, past the 8 h day, so the second meal is in play.
-    const longDay = emptyPunches().map((p) => ({ ...p, at: p.position === 0 ? T0 - 9 * 60 * MIN : null }));
+    const longDay = punchesAt(T0 - 9 * HOUR_MS);
     await renderCard(TODAY, longDay);
     expect(screen.getByText(/Second meal period/)).toBeTruthy();
     cleanup();
     // Yesterday from 8:00 and never clocked out: judged at its end, 16 h in.
-    await renderCard(
-      YESTERDAY,
-      emptyPunches().map((p) => ({ ...p, at: p.position === 0 ? T0 - 25 * 60 * MIN : null })),
-    );
+    await renderCard(YESTERDAY, punchesAt(T0 - 25 * HOUR_MS));
     expect(screen.queryByText(/Second meal period/)).toBeNull();
   });
 });

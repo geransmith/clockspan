@@ -3,18 +3,18 @@ import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { alert } from '../lib/alerts';
-import { emptyPunches } from '../lib/timeclock';
-import { deferred, makeDay, makeSettings, MIN, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
-import type { Day, Punch, Settings } from '../types';
+import { MINUTE_MS } from '../../../shared/dates.js';
+import { deferred, makeDay, makeSettings, punchesAt, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
+import type { Day, Settings } from '../types';
 import { useDayStore } from './useDay';
 import { useTodayAlarms } from './useTodayAlarms';
 
 vi.mock('../api');
 vi.mock('../lib/alerts');
 
-const punchesAt = (...at: (number | null)[]): Punch[] => emptyPunches().map((p, i) => ({ ...p, at: at[i] ?? null }));
 // Clocked in 8 h 35 m ago with a 30 min lunch: 5 min past an 8 h day.
-const overDay = (patch: Partial<Day> = {}) => makeDay(TODAY, { punches: punchesAt(T0 - 515 * MIN, T0 - 300 * MIN, T0 - 270 * MIN), ...patch });
+const overDay = (patch: Partial<Day> = {}) =>
+  makeDay(TODAY, { punches: punchesAt(T0 - 515 * MINUTE_MS, T0 - 300 * MINUTE_MS, T0 - 270 * MINUTE_MS), ...patch });
 
 /** Lets the loads land, then waits out the three seconds the punches take to settle. */
 async function judged(): Promise<void> {
@@ -29,6 +29,13 @@ function render(settings: Settings | Promise<Settings>, day: Day) {
   vi.mocked(api.getSettings).mockReturnValue(Promise.resolve(settings));
   vi.mocked(api.getDay).mockResolvedValue(day);
   return renderHook(() => ({ alarms: useTodayAlarms(TODAY, Date.now(), vi.fn()), store: useDayStore() }), { wrapper: SettingsAndDays });
+}
+
+/** Another device, from scratch: the alarms already fired here are remembered in storage. */
+function freshDevice() {
+  cleanup();
+  localStorage.clear();
+  vi.mocked(alert).mockClear();
 }
 
 beforeEach(() => {
@@ -56,7 +63,7 @@ describe('useTodayAlarms', () => {
 
   it("goes by today's own work-day length", async () => {
     // A half day, clocked in 4 h 10 m ago: over by 10 min, where the usual 8 h is hours away.
-    render(makeSettings(), makeDay(TODAY, { punches: punchesAt(T0 - 250 * MIN), workMinutes: 240 }));
+    render(makeSettings(), makeDay(TODAY, { punches: punchesAt(T0 - 250 * MINUTE_MS), workMinutes: 240 }));
     await judged();
     expect(alerted().find((a) => a.tag === 'alarm:clockOut')?.title).toBe('Clock out is 10 min overdue');
   });
@@ -66,20 +73,14 @@ describe('useTodayAlarms', () => {
     await judged();
     expect(tags()).toEqual(['alarm:retro']);
 
-    // Another device, from scratch: the alarms already fired here are remembered in storage.
-    cleanup();
-    localStorage.clear();
-    vi.mocked(alert).mockClear();
+    freshDevice();
     render(makeSettings({ overtimeApproval: false }), overDay({ overtimeApproved: true }));
     await judged();
     const clockOut = alerted().find((a) => a.tag === 'alarm:clockOut');
     expect(clockOut).toBeDefined();
     expect(clockOut!.action).toBeUndefined();
 
-    // Another device, from scratch: the alarms already fired here are remembered in storage.
-    cleanup();
-    localStorage.clear();
-    vi.mocked(alert).mockClear();
+    freshDevice();
     render(makeSettings(), overDay());
     await judged();
     const action = alerted().find((a) => a.tag === 'alarm:clockOut')!.action!;
@@ -114,7 +115,7 @@ describe('useTodayAlarms', () => {
     // list with the same times.
     vi.mocked(api.getDay).mockResolvedValue(overDay({ retroNote: 'From the phone' }));
     await act(() => result.current.store.setPunches(TODAY, overDay().punches));
-    await settle(5 * MIN - 1000);
+    await settle(5 * MINUTE_MS - 1000);
     expect(vi.mocked(api.getDay).mock.calls.length).toBeGreaterThan(1);
     expect(tags()).not.toContain('alarm:clockOut');
     await settle(1000);
@@ -123,7 +124,7 @@ describe('useTodayAlarms', () => {
 
   it('keeps judging while a field has focus and nothing was typed, though a refresh brings the same times in a new list', async () => {
     // Clocked in 8 h 29 m ago with a 30 min lunch: the day ends a minute from now.
-    const day = makeDay(TODAY, { punches: punchesAt(T0 - 509 * MIN, T0 - 300 * MIN, T0 - 270 * MIN) });
+    const day = makeDay(TODAY, { punches: punchesAt(T0 - 509 * MINUTE_MS, T0 - 300 * MINUTE_MS, T0 - 270 * MINUTE_MS) });
     const { result } = render(makeSettings(), day);
     await judged();
     act(() => result.current.alarms.setEditingPunches(true));
@@ -131,7 +132,7 @@ describe('useTodayAlarms', () => {
     vi.mocked(alert).mockClear();
     // The minute's refresh lands as the day ends, with a note from another device: the same times
     // in a new list.
-    await settle(MIN);
+    await settle(MINUTE_MS);
     expect(api.getDay).toHaveBeenCalledTimes(2);
     expect(alerted().find((a) => a.tag === 'alarm:clockOut')?.title).toBe('Time to clock out');
   });

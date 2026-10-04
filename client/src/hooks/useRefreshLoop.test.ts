@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { deferred, MIN, settle, setVisibility, T0 } from '../test/hooks';
+import { MINUTE_MS } from '../../../shared/dates.js';
+import { deferred, settle, setVisibility, T0 } from '../test/hooks';
 import { useRefreshLoop } from './useRefreshLoop';
 
 beforeEach(() => {
@@ -18,9 +19,9 @@ describe('useRefreshLoop', () => {
     const run = vi.fn(() => Promise.resolve());
     renderHook(() => useRefreshLoop(run));
     expect(run).not.toHaveBeenCalled();
-    await settle(MIN);
+    await settle(MINUTE_MS);
     expect(run).toHaveBeenCalledTimes(1);
-    await settle(MIN);
+    await settle(MINUTE_MS);
     expect(run).toHaveBeenCalledTimes(2);
 
     cleanup();
@@ -55,7 +56,7 @@ describe('useRefreshLoop', () => {
     const run = vi.fn(() => answer.promise);
     const { result } = renderHook(() => useRefreshLoop(run).pending);
     // The minute's run goes out just as a frozen page resumes, then the tab reports visible.
-    await settle(MIN);
+    await settle(MINUTE_MS);
     act(() => setVisibility('visible'));
     expect(run).toHaveBeenCalledTimes(1);
     expect(result.current).toBe(true);
@@ -125,10 +126,10 @@ describe('useRefreshLoop', () => {
     const second = vi.fn(() => Promise.resolve());
     const { rerender, unmount } = renderHook(({ run }) => useRefreshLoop(run), { initialProps: { run: first } });
     rerender({ run: second });
-    await settle(MIN);
+    await settle(MINUTE_MS);
     expect([first.mock.calls.length, second.mock.calls.length]).toEqual([0, 1]);
     unmount();
-    await settle(5 * MIN);
+    await settle(5 * MINUTE_MS);
     act(() => setVisibility('visible'));
     expect(second).toHaveBeenCalledTimes(1);
   });

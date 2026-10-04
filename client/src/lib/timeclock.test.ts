@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
+import { kindForPosition } from '../../../shared/punches.js';
 import { TEST_SETTINGS } from '../test/fixtures';
 import {
   addPunchPair,
@@ -8,7 +9,6 @@ import {
   computeTimeclock,
   daySettings,
   dayTimeclock,
-  emptyPunches,
   extraPairs,
   lunchInPunchOrder,
   lunchRowsShown,
@@ -27,12 +27,12 @@ const settings = TEST_SETTINGS;
 const T0 = new Date(2026, 8, 16, 8, 0).getTime(); // 8:00 local
 
 function punches(times: (number | null)[]): Punch[] {
-  return times.map((at, position) => ({ position, kind: position % 2 === 0 ? 'in' : 'out', at }));
+  return times.map((at, position) => ({ position, kind: kindForPosition(position), at }));
 }
 
 describe('computeTimeclock', () => {
   it('is empty before clock-in', () => {
-    const r = computeTimeclock(emptyPunches(), settings, T0);
+    const r = computeTimeclock(normalizePunches([]), settings, T0);
     expect(r.state).toBe('not-started');
     expect(r.lunchBy).toBeNull();
     expect(r.clockOutAt).toBeNull();
@@ -361,8 +361,8 @@ describe('overtimeOn', () => {
 
 describe('punch rows', () => {
   it('starts with four rows ending in the clock out', () => {
-    expect(emptyPunches().map((p) => p.kind)).toEqual(['in', 'out', 'in', 'out']);
-    expect(clockOutPosition(emptyPunches())).toBe(3);
+    expect(normalizePunches([]).map((p) => p.kind)).toEqual(['in', 'out', 'in', 'out']);
+    expect(clockOutPosition(normalizePunches([]))).toBe(3);
     expect(clockOutPosition(punches([T0, null, null]))).toBeNull();
   });
 
@@ -389,7 +389,7 @@ describe('punch rows', () => {
     expect(extraPairs(early).map((p) => p.beforeLunch)).toEqual([true]);
     const late = normalizePunches(punches([T0, T0 + 4 * HOUR_MS, T0 + 4.5 * HOUR_MS, T0 + 6 * HOUR_MS, T0 + 7 * HOUR_MS, null]));
     expect(extraPairs(late).map((p) => [p.out.position, p.in.position, p.beforeLunch])).toEqual([[3, 4, false]]);
-    expect(extraPairs(emptyPunches())).toEqual([]);
+    expect(extraPairs(normalizePunches([]))).toEqual([]);
   });
 
   it('lists no extra pairs for rows without a clock-out row, and stops at a gap', () => {
@@ -507,7 +507,7 @@ describe('nextPunchPosition', () => {
   });
 
   it('goes from the clock in to the clock out with the lunch rows hidden', () => {
-    expect(nextPunchPosition(emptyPunches(), false)).toBe(0);
+    expect(nextPunchPosition(normalizePunches([]), false)).toBe(0);
     expect(nextPunchPosition(punches([T0, null, null, null]), false)).toBe(3);
     expect(nextPunchPosition(punches([T0, null, null, T0 + 8 * HOUR_MS]), false)).toBeNull();
     // Stepped out and back: with no lunch every pair sits before the clock out.
@@ -520,10 +520,10 @@ describe('lunchRowsShown', () => {
   const off = { mealRules: false, lunchPunches: false };
 
   it('shows the lunch rows unless the meal periods and the lunch punches are both off', () => {
-    expect(lunchRowsShown(emptyPunches(), { mealRules: true, lunchPunches: true })).toBe(true);
-    expect(lunchRowsShown(emptyPunches(), { mealRules: true, lunchPunches: false })).toBe(true);
-    expect(lunchRowsShown(emptyPunches(), { mealRules: false, lunchPunches: true })).toBe(true);
-    expect(lunchRowsShown(emptyPunches(), off)).toBe(false);
+    expect(lunchRowsShown(normalizePunches([]), { mealRules: true, lunchPunches: true })).toBe(true);
+    expect(lunchRowsShown(normalizePunches([]), { mealRules: true, lunchPunches: false })).toBe(true);
+    expect(lunchRowsShown(normalizePunches([]), { mealRules: false, lunchPunches: true })).toBe(true);
+    expect(lunchRowsShown(normalizePunches([]), off)).toBe(false);
     expect(lunchRowsShown(punches([T0, null, null, T0 + 8 * HOUR_MS]), off)).toBe(false);
   });
 
@@ -567,7 +567,7 @@ describe('lunchInPunchOrder', () => {
 
 describe('targetFraction', () => {
   it('is the share of the work day worked, and stays at 1 past it', () => {
-    expect(targetFraction(computeTimeclock(emptyPunches(), settings, T0))).toBe(0);
+    expect(targetFraction(computeTimeclock(normalizePunches([]), settings, T0))).toBe(0);
     expect(targetFraction(computeTimeclock(punches([T0, null, null]), settings, T0 + 2 * HOUR_MS))).toBe(0.25);
     expect(targetFraction(computeTimeclock(punches([T0, null, null]), settings, T0 + 10 * HOUR_MS))).toBe(1);
   });

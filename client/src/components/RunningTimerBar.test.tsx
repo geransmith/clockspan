@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { UNTITLED_SESSION } from '../lib/copy';
 import { formatCountdown } from '../lib/format';
-import { AllProviders, makeDay, makeSession, makeSettings, MIN, settle, T0 } from '../test/hooks';
+import { MINUTE_MS } from '../../../shared/dates.js';
+import { AllProviders, makeDay, makeSession, makeSettings, settle, T0 } from '../test/hooks';
 import type { Session } from '../types';
 import { RunningTimerBar } from './RunningTimerBar';
 
@@ -22,7 +23,7 @@ async function renderBar(session: Session) {
 }
 
 beforeEach(() => {
-  vi.useFakeTimers({ now: T0 + 5 * MIN });
+  vi.useFakeTimers({ now: T0 + 5 * MINUTE_MS });
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
   vi.mocked(api.getDay).mockResolvedValue(makeDay());
 });
@@ -38,7 +39,7 @@ describe('RunningTimerBar', () => {
     expect(screen.getByRole('timer', { name: 'Time remaining' }).textContent).toBe('20:00');
     cleanup();
     // Two minutes past a 25-minute plan.
-    await renderBar(makeSession({ startedAt: T0 - 22 * MIN }));
+    await renderBar(makeSession({ startedAt: T0 - 22 * MINUTE_MS }));
     expect(screen.getByRole('timer', { name: 'Time over' }).textContent).toBe(formatCountdown(-120));
   });
 

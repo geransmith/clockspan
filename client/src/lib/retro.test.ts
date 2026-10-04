@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { completedSession, makeDay, makeSession } from '../test/fixtures';
+import { completedSession, makeDay, makeSession, punchesAt } from '../test/fixtures';
 import type { Day, Priority } from '../types';
 import { focusOf, hasContent, reviewDay } from './retro';
-import { emptyPunches } from './timeclock';
 
 const row = (position: number, text: string, extra: Partial<Priority> = {}): Priority => ({
   position,
@@ -38,7 +37,7 @@ describe('hasContent', () => {
   });
 
   it('is true for any one thing on the day', () => {
-    expect(hasContent(blank({ punches: emptyPunches().map((p) => (p.position === 1 ? { ...p, at: 1000 } : p)) }))).toBe(true);
+    expect(hasContent(blank({ punches: punchesAt(null, 1000) }))).toBe(true);
     expect(hasContent(blank({ priorities: [row(1, 'Ship it')] }))).toBe(true);
     expect(hasContent(blank({ sessions: [completedSession(1, 0, 600)] }))).toBe(true);
     expect(hasContent(blank({ retroNote: 'Why' }))).toBe(true);

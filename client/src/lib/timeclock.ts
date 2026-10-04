@@ -344,11 +344,6 @@ export function nextPunchPosition(punches: Punch[], lunchRows: boolean): number 
   return order.find((p) => p != null && p.at == null)?.position ?? null;
 }
 
-/** Empty punch rows for a fresh day: clock in, lunch out, lunch in, clock out. */
-export function emptyPunches(): Punch[] {
-  return [0, 1, 2, CLOCK_OUT_MIN_POSITION].map((position) => ({ position, kind: kindForPosition(position), at: null }));
-}
-
 /** Ensure the fixed rows exist, positions are contiguous and the last row is the clock out. */
 export function normalizePunches(punches: Punch[]): Punch[] {
   const byPos = new Map(punches.map((p) => [p.position, p.at]));

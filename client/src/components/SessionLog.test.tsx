@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { CONFIRM } from '../lib/copy';
 import { useTimer } from '../hooks/useTimer';
-import { AllProviders, deferred, endSession, makeDay, makeSession, makeSettings, MIN, settle, T0, TODAY } from '../test/hooks';
+import { MINUTE_MS } from '../../../shared/dates.js';
+import { AllProviders, deferred, endSession, makeDay, makeSession, makeSettings, settle, T0, TODAY } from '../test/hooks';
 import type { Break, Priority, Session, SessionResponse } from '../types';
 import { SessionLog } from './SessionLog';
 
@@ -12,16 +13,16 @@ vi.mock('../api');
 vi.mock('../lib/alerts');
 
 const PLANNED: Priority[] = [{ position: 1, text: 'Ship the fix', done: false, uid: 'abcdef123456', addedAt: T0 }];
-const DONE = endSession(makeSession(), { endedAt: T0 + 25 * MIN, durationSeconds: 25 * 60 });
-const RUNNING = makeSession({ id: 2, label: 'Still going', startedAt: T0 + 26 * MIN });
+const DONE = endSession(makeSession(), { endedAt: T0 + 25 * MINUTE_MS, durationSeconds: 25 * 60 });
+const RUNNING = makeSession({ id: 2, label: 'Still going', startedAt: T0 + 26 * MINUTE_MS });
 
 /** A break of `minutes` that started `at` minutes after T0 and ran its length. */
 const rest = (id: number, at: number, minutes: number): Break => ({
   id,
   date: TODAY,
   plannedSeconds: minutes * 60,
-  startedAt: T0 + at * MIN,
-  endedAt: T0 + (at + minutes) * MIN,
+  startedAt: T0 + at * MINUTE_MS,
+  endedAt: T0 + (at + minutes) * MINUTE_MS,
 });
 
 /** The running timer's label, as the bar at the top shows it. */
@@ -33,7 +34,7 @@ async function renderLog(sessions: Session[] = [DONE], breaks: Break[] = [], dat
   render(
     <AllProviders>
       <BarLabel />
-      <SessionLog date={date} isToday={date === TODAY} sessions={sessions} breaks={breaks} priorities={PLANNED} now={T0 + 30 * MIN} />
+      <SessionLog date={date} isToday={date === TODAY} sessions={sessions} breaks={breaks} priorities={PLANNED} now={T0 + 30 * MINUTE_MS} />
     </AllProviders>,
   );
   await settle();
@@ -45,7 +46,7 @@ const planSelect = () => screen.getByRole('combobox', { name: 'Priority this ses
 const bar = () => screen.getByRole('status', { name: 'Running bar' }).textContent;
 
 beforeEach(() => {
-  vi.useFakeTimers({ now: T0 + 30 * MIN });
+  vi.useFakeTimers({ now: T0 + 30 * MINUTE_MS });
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
   vi.mocked(api.getRunning).mockResolvedValue({ session: null });
   vi.mocked(api.getDay).mockResolvedValue(makeDay());
@@ -150,7 +151,7 @@ describe('SessionLog', () => {
 
   it('shows the running row as the timer has it', async () => {
     // Renamed in the bar: the day's copy hasn't heard yet.
-    vi.mocked(api.getRunning).mockResolvedValue({ session: { ...RUNNING, label: 'Renamed in the bar', pausedAt: T0 + 29 * MIN } });
+    vi.mocked(api.getRunning).mockResolvedValue({ session: { ...RUNNING, label: 'Renamed in the bar', pausedAt: T0 + 29 * MINUTE_MS } });
     await renderLog([DONE, RUNNING]);
     const row = screen.getAllByRole('listitem')[1]!.textContent;
     expect(row).toMatch(/Renamed in the bar/);
@@ -173,7 +174,10 @@ describe('SessionLog', () => {
   });
 
   it('lists breaks between the sessions they followed, with their own total', async () => {
-    const later = endSession(makeSession({ id: 2, label: 'Second one', startedAt: T0 + 40 * MIN }), { endedAt: T0 + 50 * MIN, durationSeconds: 600 });
+    const later = endSession(makeSession({ id: 2, label: 'Second one', startedAt: T0 + 40 * MINUTE_MS }), {
+      endedAt: T0 + 50 * MINUTE_MS,
+      durationSeconds: 600,
+    });
     // A break still running at `now` counts what it has so far.
     await renderLog([later, DONE], [rest(1, 25, 5), rest(2, 28, 5)]);
     const rows = screen.getAllByRole('listitem').map((li) => li.textContent);

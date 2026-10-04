@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { TEST_SETTINGS } from '../test/fixtures';
+import { atTime } from '../../../shared/dates.js';
+import { punchesAt, TEST_SETTINGS } from '../test/fixtures';
 import type { Punch, Settings } from '../types';
-import { addPunchPair, clampToDay, computeTimeclock, emptyPunches, timeclockForDate } from './timeclock';
+import { addPunchPair, clampToDay, computeTimeclock, timeclockForDate } from './timeclock';
 import { focusTile, timeclockTiles, type TileOptions } from './tiles';
 
 const DAY = '2026-09-28';
-const at = (h: number, m = 0) => new Date(2026, 8, 28, h, m).getTime();
-/** Punch rows with these times from position 0; the rest empty. */
-const punches = (rows: Punch[], ...times: (number | null)[]) => rows.map((p, i) => ({ ...p, at: times[i] ?? null }));
+const at = (h: number, m = 0) => atTime(DAY, h, m);
 const hhmm = (ms: number) => {
   const d = new Date(ms);
   return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -43,9 +42,9 @@ function pastTiles(rows: Punch[]) {
   });
 }
 
-const empty = emptyPunches();
-const clockedIn = punches(empty, at(8));
-const afterLunch = punches(empty, at(8), at(12), at(12, 30));
+const empty = punchesAt();
+const clockedIn = punchesAt(at(8));
+const afterLunch = punchesAt(at(8), at(12), at(12, 30));
 
 describe('before clock-in', () => {
   it('shows dashes, the day length, and what clocking in will show', () => {
@@ -74,9 +73,9 @@ describe('Lunch by', () => {
   });
 
   it('says when it was taken, when none is needed, and when a finished day went without', () => {
-    expect(tiles(punches(empty, at(8), at(12)), at(12, 10)).lunch).toEqual({ value: '13:00', sub: 'Taken at 12:00', tone: 'tile--ok' });
+    expect(tiles(punchesAt(at(8), at(12)), at(12, 10)).lunch).toEqual({ value: '13:00', sub: 'Taken at 12:00', tone: 'tile--ok' });
     expect(tiles(clockedIn, at(9), {}, { workMinutes: 240 }).lunch.sub).toBe('Not needed today');
-    expect(tiles(punches(empty, at(8), null, null, at(14)), at(14)).lunch).toEqual({ value: '13:00', sub: 'Not taken', tone: '' });
+    expect(tiles(punchesAt(at(8), null, null, at(14)), at(14)).lunch).toEqual({ value: '13:00', sub: 'Not taken', tone: '' });
   });
 });
 
@@ -84,11 +83,11 @@ describe('Worked', () => {
   it('is live while working, and says what is left, over or under', () => {
     expect(tiles(clockedIn, at(9)).worked).toEqual({ value: '1h 00m', sub: '7h 00m to go', tone: 'tile--live' });
     expect(tiles(afterLunch, at(17)).worked).toEqual({ value: '8h 30m', sub: '30m over target', tone: 'tile--live' });
-    expect(tiles(punches(empty, at(8), null, null, at(14)), at(14)).worked).toEqual({ value: '6h 00m', sub: '2h 00m under target', tone: '' });
+    expect(tiles(punchesAt(at(8), null, null, at(14)), at(14)).worked).toEqual({ value: '6h 00m', sub: '2h 00m under target', tone: '' });
   });
 
   it('says On target at the target and for the first minute past it', () => {
-    expect(tiles(punches(empty, at(8), at(12), at(12, 30), at(16, 30)), at(17)).worked).toEqual({ value: '8h 00m', sub: 'On target', tone: '' });
+    expect(tiles(punchesAt(at(8), at(12), at(12, 30), at(16, 30)), at(17)).worked).toEqual({ value: '8h 00m', sub: 'On target', tone: '' });
     expect(tiles(afterLunch, at(16, 30) + 30_000).worked).toEqual({ value: '8h 00m', sub: 'On target', tone: 'tile--live' });
     expect(tiles(afterLunch, at(16, 31)).worked.sub).toBe('1m over target');
   });
@@ -102,7 +101,7 @@ describe('Clock out at', () => {
   });
 
   it('shows where the day would end on a break', () => {
-    expect(tiles(punches(empty, at(8), at(12)), at(12, 10)).clockOut.sub).toBe('If you return now');
+    expect(tiles(punchesAt(at(8), at(12)), at(12, 10)).clockOut.sub).toBe('If you return now');
   });
 
   it('reads time past the day as overtime, approved or not, or as later when overtime is off', () => {
@@ -113,11 +112,11 @@ describe('Clock out at', () => {
 
   it('says On target, not over by 0m, on a break taken at the target and for the first minute past it', () => {
     const onTarget = { value: '16:30', sub: 'On target', tone: 'tile--accent' };
-    expect(tiles(punches(addPunchPair(empty), at(8), at(12), at(12, 30), at(16, 30)), at(16, 40)).clockOut).toEqual(onTarget);
+    expect(tiles(addPunchPair(punchesAt(at(8), at(12), at(12, 30), at(16, 30))), at(16, 40)).clockOut).toEqual(onTarget);
     expect(tiles(afterLunch, at(16, 30) + 30_000).clockOut).toEqual(onTarget);
     expect(tiles(afterLunch, at(16, 30) + 30_000, { overtimeApproval: false }).clockOut).toEqual(onTarget);
     // A half day's Lunch out at its 4 h: at lunch, with nothing left to work.
-    expect(tiles(punches(empty, at(8), at(12)), at(12, 10), {}, { workMinutes: 240 }).clockOut).toEqual({
+    expect(tiles(punchesAt(at(8), at(12)), at(12, 10), {}, { workMinutes: 240 }).clockOut).toEqual({
       value: '12:00',
       sub: 'On target',
       tone: 'tile--accent',
@@ -125,13 +124,13 @@ describe('Clock out at', () => {
   });
 
   it('holds the time the target was reached on a break past it', () => {
-    const out = punches(addPunchPair(empty), at(8), at(12), at(12, 30), at(17));
+    const out = addPunchPair(punchesAt(at(8), at(12), at(12, 30), at(17)));
     expect(tiles(out, at(17, 10)).clockOut).toEqual({ value: '16:30', sub: 'Over by 30m', tone: 'tile--danger' });
     expect(tiles(out, at(17, 40)).clockOut).toEqual({ value: '16:30', sub: 'Over by 30m', tone: 'tile--danger' });
   });
 
   it('marks the day complete once clocked out', () => {
-    const extra = punches(addPunchPair(empty), at(8), at(12), at(12, 30), at(14), at(14, 15), at(16, 45));
+    const extra = punchesAt(at(8), at(12), at(12, 30), at(14), at(14, 15), at(16, 45));
     expect(tiles(extra, at(17)).clockOut).toEqual({ value: '16:45', sub: 'Day complete', tone: 'tile--accent' });
   });
 });
@@ -144,7 +143,7 @@ describe('a past day', () => {
       clockOut: { value: '—', sub: 'No clock-out recorded', tone: 'tile--warn' },
     });
     // Clocked in late enough to stay short of the target by midnight.
-    const late = pastTiles(punches(empty, at(20)));
+    const late = pastTiles(punchesAt(at(20)));
     expect(late.clockOut).toEqual({ value: '—', sub: 'No clock-out recorded', tone: 'tile--warn' });
     expect(late.lunch.sub).toBe('Not taken');
   });

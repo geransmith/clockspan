@@ -16,6 +16,10 @@ import type { Break, CancelledSession, CompletedSession, Day, Punch, RunningSess
 /** Monday 28 September 2026, 09:00 local time, so date keys agree in any time zone. */
 export const T0 = new Date(2026, 8, 28, 9, 0).getTime();
 export const TODAY = '2026-09-28';
+/** The day before TODAY. */
+export const YESTERDAY = '2026-09-27';
+/** The midnight that starts TODAY. */
+export const MIDNIGHT = new Date(2026, 8, 28).getTime();
 
 /**
  * The settings every test starts from. Written out rather than taken from `DEFAULT_SETTINGS`,

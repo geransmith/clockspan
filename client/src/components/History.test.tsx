@@ -4,8 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { formatDateLong, formatMonth } from '../lib/format';
 import type { ReviewPeriod } from '../lib/review';
-import { makeDay, makeSettings, SettingsAndDays, settle } from '../test/hooks';
-import type { Day } from '../types';
+import { makeDay, makeSettings, serveRange, SettingsAndDays, settle } from '../test/hooks';
 import { History } from './History';
 
 vi.mock('../api');
@@ -14,14 +13,6 @@ const TODAY = '2026-09-30';
 const NOW = new Date(2026, 8, 30, 17).getTime();
 const AUGUST_DAY = makeDay('2026-08-14', { retroNote: 'The report ran long' });
 const JULY_DAY = makeDay('2026-07-14', { retroNote: 'Meetings took the afternoon' });
-
-/**
- * The server answers a range with the days it holds in it. The same as Calendar.test.tsx's
- * until both move into test/hooks.tsx.
- */
-function serve(days: Day[]) {
-  vi.mocked(api.getRange).mockImplementation((from, to) => Promise.resolve({ days: days.filter((d) => d.date >= from && d.date <= to) }));
-}
 
 async function history(date: string, review: ReviewPeriod | null = null) {
   const onOpen = vi.fn();
@@ -37,7 +28,7 @@ async function history(date: string, review: ReviewPeriod | null = null) {
 beforeEach(() => {
   vi.useFakeTimers({ now: NOW });
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
-  serve([AUGUST_DAY, JULY_DAY]);
+  serveRange([AUGUST_DAY, JULY_DAY]);
 });
 afterEach(() => {
   cleanup();

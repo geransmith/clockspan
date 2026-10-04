@@ -2,7 +2,8 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
-import { AllProviders, endSession, makeDay, makeSession, makeSettings, MIN, settle, T0 } from '../test/hooks';
+import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
+import { AllProviders, endSession, makeDay, makeSession, makeSettings, settle, T0 } from '../test/hooks';
 import type { Session } from '../types';
 import { TimerControls } from './TimerControls';
 
@@ -23,7 +24,7 @@ const button = (name: string | RegExp) => screen.getByRole('button', { name });
 const names = () => screen.getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent!.trim());
 
 beforeEach(() => {
-  vi.useFakeTimers({ now: T0 + 5 * MIN });
+  vi.useFakeTimers({ now: T0 + 5 * MINUTE_MS });
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ adjustStepMinutes: 5 }));
   vi.mocked(api.getDay).mockResolvedValue(makeDay());
 });
@@ -79,7 +80,7 @@ describe('TimerControls', () => {
 
   it('leaves +, Finish and Cancel once the timer has run out', async () => {
     // Two minutes past a 25-minute plan: due, and well inside the wait before it finishes itself.
-    await renderControls(false, makeSession({ startedAt: T0 - 22 * MIN }));
+    await renderControls(false, makeSession({ startedAt: T0 - 22 * MINUTE_MS }));
     expect(names()).toEqual(['Add 5 minutes', 'Finish', 'Cancel']);
     expect((button('Add 5 minutes') as HTMLButtonElement).disabled).toBe(false);
   });
@@ -89,7 +90,7 @@ describe('TimerControls', () => {
     expect((button('Add 5 minutes') as HTMLButtonElement).disabled).toBe(true);
     expect((button('Remove 5 minutes') as HTMLButtonElement).disabled).toBe(false);
     cleanup();
-    await renderControls(true, makeSession({ plannedSeconds: 8 * 3600, startedAt: T0 - 8 * 60 * MIN }));
+    await renderControls(true, makeSession({ plannedSeconds: 8 * 3600, startedAt: T0 - 8 * HOUR_MS }));
     expect(names()).toEqual(['Add 5 minutes', 'Finish timer', 'Cancel session']);
     expect((button('Add 5 minutes') as HTMLButtonElement).disabled).toBe(true);
   });

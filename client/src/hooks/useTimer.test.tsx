@@ -6,8 +6,9 @@ import { alert, dismissByTag, warnQuietly } from '../lib/alerts';
 import { TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
 import { formatCountdown } from '../lib/format';
 import { dueKey } from '../lib/timer';
-import { AllProviders, apiError, deferred, endSession, makeDay, makeSession, makeSettings, MIN, settle, T0, TODAY } from '../test/hooks';
-import type { Priority, RunningSession, Session } from '../types';
+import { MINUTE_MS } from '../../../shared/dates.js';
+import { AllProviders, apiError, deferred, endSession, makeDay, makeSession, makeSettings, settle, T0, TODAY, YESTERDAY } from '../test/hooks';
+import type { Priority, RunningSession, Session, Settings } from '../types';
 import { useDays, useDayStore } from './useDay';
 import { useTimer } from './useTimer';
 
@@ -34,7 +35,7 @@ async function renderRunning(session: Session | null = makeSession()) {
 const justTyped: Priority = { position: 1, text: 'Just typed', done: false, uid: 'u1', addedAt: T0 };
 
 /** A session that started `minutes` ago with the default 25 min plan. */
-const startedAgo = (minutes: number, patch: Partial<RunningSession> = {}) => makeSession({ startedAt: Date.now() - minutes * MIN, ...patch });
+const startedAgo = (minutes: number, patch: Partial<RunningSession> = {}) => makeSession({ startedAt: Date.now() - minutes * MINUTE_MS, ...patch });
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
@@ -64,26 +65,28 @@ describe('sync with the server', () => {
 
   it('refreshes the held day of a session another device started or ended', async () => {
     const { result } = await renderRunning(null);
-    await act(() => result.current.store.load('2026-09-27'));
+    await act(() => result.current.store.load(YESTERDAY));
     vi.mocked(api.getDay).mockClear();
-    vi.mocked(api.getRunning).mockResolvedValueOnce({ session: makeSession({ date: '2026-09-27' }) });
-    await settle(MIN);
-    expect(result.current.timer.running?.date).toBe('2026-09-27');
-    expect(vi.mocked(api.getDay).mock.calls).toEqual([['2026-09-27']]);
+    vi.mocked(api.getRunning).mockResolvedValueOnce({ session: makeSession({ date: YESTERDAY }) });
+    await settle(MINUTE_MS);
+    expect(result.current.timer.running?.date).toBe(YESTERDAY);
+    expect(vi.mocked(api.getDay).mock.calls).toEqual([[YESTERDAY]]);
 
     // The same session again: nothing to refresh.
-    vi.mocked(api.getRunning).mockResolvedValueOnce({ session: makeSession({ date: '2026-09-27' }) });
-    await settle(MIN);
+    const before = result.current.timer.running;
+    vi.mocked(api.getRunning).mockResolvedValueOnce({ session: makeSession({ date: YESTERDAY }) });
+    await settle(MINUTE_MS);
+    expect(result.current.timer.running).toBe(before);
     expect(api.getDay).toHaveBeenCalledTimes(1);
 
     vi.mocked(api.getRunning).mockResolvedValueOnce({ session: null });
-    await settle(MIN);
+    await settle(MINUTE_MS);
     expect(result.current.timer.running).toBeNull();
     expect(api.getDay).toHaveBeenCalledTimes(2);
 
     // A day the store doesn't hold loads with the row when it is opened: nothing to fetch now.
     vi.mocked(api.getRunning).mockResolvedValueOnce({ session: makeSession({ id: 2, date: '2026-09-26' }) });
-    await settle(MIN);
+    await settle(MINUTE_MS);
     expect(result.current.timer.running?.date).toBe('2026-09-26');
     expect(api.getDay).toHaveBeenCalledTimes(2);
   });
@@ -99,7 +102,7 @@ describe('sync with the server', () => {
     expect(result.current.timer.running?.id).toBe(1);
 
     vi.mocked(api.getRunning).mockRejectedValueOnce(new Error('offline'));
-    await settle(MIN);
+    await settle(MINUTE_MS);
     expect(result.current.timer.running?.id).toBe(1);
     expect(warnQuietly).not.toHaveBeenCalled();
     expect(alert).not.toHaveBeenCalled();
@@ -124,7 +127,7 @@ describe('start', () => {
   });
 
   it('follows a timer another device already runs (409), says so, and refreshes its day only if held', async () => {
-    const theirs = makeSession({ id: 7, date: '2026-09-27', label: 'Theirs' });
+    const theirs = makeSession({ id: 7, date: YESTERDAY, label: 'Theirs' });
     vi.mocked(api.startSession).mockRejectedValue(apiError(409, { error: 'running', session: theirs }));
     const { result } = await renderRunning(null);
     vi.mocked(api.getDay).mockClear();
@@ -136,10 +139,10 @@ describe('start', () => {
     expect(alert).toHaveBeenCalledWith(expect.objectContaining({ title: TIMER_ELSEWHERE.title, tag: 'timer-elsewhere', sound: false }));
 
     // A day the store holds is fetched again, so its log has the row.
-    await act(() => result.current.store.load('2026-09-27'));
+    await act(() => result.current.store.load(YESTERDAY));
     vi.mocked(api.getDay).mockClear();
     await act(() => result.current.timer.start(TODAY, 1500, 'Mine'));
-    expect(vi.mocked(api.getDay).mock.calls).toEqual([['2026-09-27']]);
+    expect(vi.mocked(api.getDay).mock.calls).toEqual([[YESTERDAY]]);
   });
 
   it('waits for a priorities save still out before starting on a row from it', async () => {
@@ -306,7 +309,7 @@ describe('adjust', () => {
     // The minute's sync goes out before the phone ends the session, and answers late.
     const minute = deferred<{ session: Session | null }>();
     vi.mocked(api.getRunning).mockReturnValueOnce(minute.promise).mockResolvedValue({ session: null });
-    await settle(MIN);
+    await settle(MINUTE_MS);
     expect(api.getRunning).toHaveBeenCalledTimes(2);
     vi.mocked(api.patchSession).mockRejectedValue(apiError(404));
     await act(() => result.current.timer.adjust(5 * 60));
@@ -381,7 +384,7 @@ describe('edit', () => {
       a = result.current.timer.edit({ label: 'Renamed' });
     });
     vi.mocked(api.getRunning).mockResolvedValue({ session: makeSession({ id: 3, label: 'Third' }) });
-    await settle(MIN);
+    await settle(MINUTE_MS);
     expect(result.current.timer.running).toMatchObject({ id: 3, label: 'Third' });
     rename.resolve({ session: endSession(startedAgo(5, { label: 'Renamed' }), { endedAt: T0, durationSeconds: 300 }) });
     await act(() => a);
@@ -396,7 +399,7 @@ describe('edit', () => {
       b = result.current.timer.edit({ label: 'Third, renamed' });
     });
     vi.mocked(api.getRunning).mockResolvedValue({ session: null });
-    await settle(MIN);
+    await settle(MINUTE_MS);
     late.resolve({ session: makeSession({ id: 3, label: 'Third, renamed' }) });
     await act(() => b);
     expect(result.current.timer.running).toBeNull();
@@ -444,17 +447,17 @@ describe('a press the server answers differently', () => {
     act(() => {
       p = result.current.timer.pause();
     });
-    const elsewhere = startedAgo(5, { pausedAt: T0 - 2 * MIN });
+    const elsewhere = startedAgo(5, { pausedAt: T0 - 2 * MINUTE_MS });
     vi.mocked(api.getRunning).mockResolvedValue({ session: elsewhere });
-    await settle(MIN);
-    expect(result.current.timer.running?.pausedAt).toBe(T0 - 2 * MIN);
+    await settle(MINUTE_MS);
+    expect(result.current.timer.running?.pausedAt).toBe(T0 - 2 * MINUTE_MS);
     pausing.resolve({ session: elsewhere });
     await act(() => p);
-    expect(result.current.timer.running?.pausedAt).toBe(T0 - 2 * MIN);
+    expect(result.current.timer.running?.pausedAt).toBe(T0 - 2 * MINUTE_MS);
   });
 
   it('keeps a resume another device made when a sync lands under a resume of its own', async () => {
-    const { result } = await renderRunning(startedAgo(15, { pausedAt: T0 - 10 * MIN }));
+    const { result } = await renderRunning(startedAgo(15, { pausedAt: T0 - 10 * MINUTE_MS }));
     const resuming = deferred<Answer>();
     vi.mocked(api.resumeSession).mockReturnValueOnce(resuming.promise);
     let r!: Promise<void>;
@@ -464,7 +467,7 @@ describe('a press the server answers differently', () => {
     // The phone resumed it first, and banked a shorter pause.
     const elsewhere = startedAgo(15, { pausedSeconds: 300 });
     vi.mocked(api.getRunning).mockResolvedValue({ session: elsewhere });
-    await settle(MIN);
+    await settle(MINUTE_MS);
     expect(result.current.timer.running).toMatchObject({ pausedAt: null, pausedSeconds: 300 });
     resuming.resolve({ session: elsewhere });
     await act(() => r);
@@ -486,7 +489,7 @@ describe('pause and resume', () => {
     await act(() => p);
     expect(result.current.store.days[TODAY]?.sessions[0]?.pausedAt).toBe(T0);
     vi.mocked(api.getRunning).mockResolvedValue({ session: startedAgo(5, { pausedAt: T0 }) });
-    await settle(10 * MIN);
+    await settle(10 * MINUTE_MS);
     expect(result.current.timer.countdownSeconds).toBe(1200);
     expect(document.title).toBe('Paused 20:00 · Write the report — Clockspan');
     // A second pause is a no-op.
@@ -495,7 +498,7 @@ describe('pause and resume', () => {
   });
 
   it('resumes with the pause counted, and a second resume is a no-op', async () => {
-    const { result } = await renderRunning(startedAgo(15, { pausedAt: T0 - 10 * MIN }));
+    const { result } = await renderRunning(startedAgo(15, { pausedAt: T0 - 10 * MINUTE_MS }));
     vi.mocked(api.resumeSession).mockResolvedValue({ session: startedAgo(15, { pausedSeconds: 600 }) });
     let done!: Promise<void>;
     act(() => {
@@ -538,10 +541,12 @@ describe('pause and resume', () => {
   });
 
   it('closes a pause left for an hour, quietly, logging the time before it', async () => {
-    const { result } = await renderRunning(startedAgo(70, { pausedAt: T0 - 59 * MIN, label: '' }));
+    const { result } = await renderRunning(startedAgo(70, { pausedAt: T0 - 59 * MINUTE_MS, label: '' }));
     expect(api.finishSession).not.toHaveBeenCalled();
-    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(startedAgo(70, { label: '' }), { endedAt: T0 - 59 * MIN, durationSeconds: 660 }) });
-    await settle(MIN);
+    vi.mocked(api.finishSession).mockResolvedValue({
+      session: endSession(startedAgo(70, { label: '' }), { endedAt: T0 - 59 * MINUTE_MS, durationSeconds: 660 }),
+    });
+    await settle(MINUTE_MS);
     expect(api.finishSession).toHaveBeenCalledWith(1);
     expect(result.current.timer.running).toBeNull();
     expect(alert).toHaveBeenCalledWith(
@@ -575,7 +580,7 @@ describe('finish and cancel', () => {
       f = result.current.timer.finish();
     });
     vi.mocked(api.getRunning).mockResolvedValue({ session: makeSession({ id: 3, label: 'Third' }) });
-    await settle(MIN);
+    await settle(MINUTE_MS);
     plus.reject(apiError(409));
     await act(() => a);
     await act(() => f);
@@ -641,7 +646,7 @@ describe('finish and cancel', () => {
     const { result } = await renderRunning(startedAgo(27));
     act(() => result.current.timer.requestFinish());
     vi.mocked(api.getRunning).mockResolvedValueOnce({ session: null });
-    await settle(MIN);
+    await settle(MINUTE_MS);
     expect(result.current.timer.finishChoice).toBeNull();
     vi.mocked(api.startSession).mockResolvedValue({ session: makeSession({ id: 2, startedAt: Date.now() }) });
     await act(() => result.current.timer.start(TODAY, 1500, 'Next'));
@@ -655,7 +660,7 @@ describe("time's up", () => {
     expect(alert).not.toHaveBeenCalled();
     await settle(6000);
     expect(result.current.timer.due).toBe(true);
-    const endAt = T0 - 24.9 * MIN + 25 * MIN;
+    const endAt = T0 - 24.9 * MINUTE_MS + 25 * MINUTE_MS;
     expect(alert).toHaveBeenCalledTimes(1);
     expect(alert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -673,7 +678,7 @@ describe("time's up", () => {
     expect(alert).toHaveBeenCalledTimes(1);
 
     // The button: five more minutes from now.
-    vi.mocked(api.patchSession).mockImplementation(async (_id, patch) => ({ session: startedAgo(0, { ...patch, startedAt: T0 - 24.9 * MIN }) }));
+    vi.mocked(api.patchSession).mockImplementation(async (_id, patch) => ({ session: startedAgo(0, { ...patch, startedAt: T0 - 24.9 * MINUTE_MS }) }));
     const action = vi.mocked(alert).mock.calls[0]![0].action!;
     expect(action.label).toBe(TIMER_DUE.more(makeSettings().adjustStepMinutes));
     vi.mocked(dismissByTag).mockClear();
@@ -688,16 +693,16 @@ describe("time's up", () => {
     // A minute past a 7 h 55 min plan: five more minutes are still there to add.
     await renderRunning(startedAgo(8 * 60 - 4, { plannedSeconds: 8 * 3600 - 5 * 60 }));
     expect(vi.mocked(alert).mock.lastCall![0]).toMatchObject({ tag: 'timer-due', sound: true, action: { label: TIMER_DUE.more(5) } });
-    await settle(3 * MIN);
+    await settle(3 * MINUTE_MS);
     expect(alert).toHaveBeenCalledTimes(1);
-    await settle(2 * MIN);
+    await settle(2 * MINUTE_MS);
     expect(alert).toHaveBeenCalledTimes(2);
     expect(vi.mocked(alert).mock.lastCall![0]).toMatchObject({ tag: 'timer-due', sound: false, notifications: false, action: undefined });
   });
 
   it('shows the banner again after a reload without a second chime', async () => {
     const session = startedAgo(26);
-    localStorage.setItem('focus:timer-due', dueKey(1, session.startedAt + 25 * MIN));
+    localStorage.setItem('focus:timer-due', dueKey(1, session.startedAt + 25 * MINUTE_MS));
     await renderRunning(session);
     expect(alert).toHaveBeenCalledWith(expect.objectContaining({ tag: 'timer-due', sound: false, notifications: false }));
   });
@@ -725,7 +730,7 @@ describe("time's up", () => {
   });
 
   it('waits for the settings before any alert, so the right sound plays', async () => {
-    const settings = deferred<ReturnType<typeof makeSettings>>();
+    const settings = deferred<Settings>();
     vi.mocked(api.getSettings).mockReset().mockReturnValue(settings.promise);
     await renderRunning(startedAgo(26));
     await settle(1000);
@@ -765,7 +770,7 @@ describe("time's up", () => {
   it('finishes quietly on a page opened past the grace when that end already chimed', async () => {
     const session = startedAgo(45);
     // The page that chimed was closed or reloaded before the grace ran out.
-    localStorage.setItem('focus:timer-due', dueKey(1, session.startedAt + 25 * MIN));
+    localStorage.setItem('focus:timer-due', dueKey(1, session.startedAt + 25 * MINUTE_MS));
     vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(startedAgo(45), { durationSeconds: 1500 }) });
     const { result } = await renderRunning(session);
     await settle();
@@ -816,6 +821,5 @@ describe("time's up", () => {
 });
 
 it('useTimer refuses to run outside the provider', () => {
-  vi.spyOn(console, 'error').mockImplementation(() => {});
   expect(() => renderHook(() => useTimer())).toThrow('useTimer outside TimerProvider');
 });
