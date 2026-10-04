@@ -325,6 +325,21 @@ describe('banners', () => {
     expect(alerts.getBanners().map((b) => b.title)).toEqual(['stay']);
   });
 
+  it('lets the timer of a replaced banner pass without an update', () => {
+    vi.useFakeTimers();
+    const seen = vi.fn();
+    alerts.subscribeBanners(seen);
+    alerts.alert({ title: 'first', tone: 'info', tag: 't', sound: false, notifications: false });
+    vi.advanceTimersByTime(4_000);
+    alerts.alert({ title: 'second', tone: 'info', tag: 't', sound: false, notifications: false });
+    vi.advanceTimersByTime(4_000);
+    expect(alerts.getBanners().map((b) => b.title)).toEqual(['second']);
+    expect(seen).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(4_000);
+    expect(alerts.getBanners()).toEqual([]);
+    expect(seen).toHaveBeenCalledTimes(3);
+  });
+
   it('plays only when asked to and sound is on', () => {
     alerts.alert({ title: 'a', tone: 'info', tag: 'a', chime: 'notes', sound: true, notifications: false });
     expect(FakeAudioContext.instances[0]!.oscillators).toHaveLength(3);
