@@ -103,7 +103,7 @@ describe('OIDC code grant', () => {
     expect(((await me.json()) as { user: { name: string } }).user.name).toBe('Ada');
   });
 
-  it('takes the trimmed name from the claims in order, then from userinfo, then falls back to the subject and logs why', async () => {
+  it('takes the trimmed name from the claims in order, then from userinfo, then falls back to the subject, logging a failed userinfo call', async () => {
     const names = () => (app.db.prepare(`SELECT display_name FROM users ORDER BY id`).all() as { display_name: string }[]).map((u) => u.display_name);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     expect((await callback({ sub: 'a', preferred_username: 'ada', email: 'ada@example.com' })).r.status).toBe(302);
