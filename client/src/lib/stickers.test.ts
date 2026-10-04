@@ -96,6 +96,7 @@ describe('stickersForDay', () => {
       focusSeconds: 60,
       retroAt: 1,
     });
+    expect(dayTimeclock(all, noLunch, TODAY, NOW).lunchStatus).toBe('taken');
     expect(earned(all, noLunch)).toEqual(['clockedOut', 'priorities', 'focus', 'reviewed']);
     const weeks = calendarMonth([all], noLunch, TODAY, NOW, '2026-09-01');
     expect(countStickers(weeks, stickerReasons(noLunch)).full).toBe(1);
