@@ -1,16 +1,15 @@
 import { act } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { vi } from 'vitest';
-import { BreakProvider } from '../hooks/useBreak';
-import { ClockProvider } from '../hooks/useClock';
 import { DayProvider } from '../hooks/useDay';
 import { SettingsProvider } from '../hooks/useSettings';
-import { TimerProvider } from '../hooks/useTimer';
 
 export * from './fixtures';
+export { AppProviders as AllProviders } from '../hooks/AppProviders';
 
 /**
- * The provider stack and act() helpers for the hook and component tests, which run under
+ * The app's provider stack (AllProviders, re-exported from hooks/AppProviders.tsx),
+ * SettingsAndDays and the act() helpers for the hook and component tests, which run under
  * happy-dom with fake timers. The plain factories and TEST_SETTINGS live in `fixtures.ts`, with
  * no React; this module re-exports them, so a happy-dom test imports one module, while a lib
  * test (`node`) imports `fixtures.ts`. Each test file mocks the `api` module (and `lib/alerts`
@@ -37,18 +36,5 @@ export function SettingsAndDays({ children }: { children: ReactNode }) {
     <SettingsProvider>
       <DayProvider>{children}</DayProvider>
     </SettingsProvider>
-  );
-}
-
-/** The provider stack as `App.tsx` builds it. */
-export function AllProviders({ children }: { children: ReactNode }) {
-  return (
-    <ClockProvider>
-      <SettingsAndDays>
-        <TimerProvider>
-          <BreakProvider>{children}</BreakProvider>
-        </TimerProvider>
-      </SettingsAndDays>
-    </ClockProvider>
   );
 }
