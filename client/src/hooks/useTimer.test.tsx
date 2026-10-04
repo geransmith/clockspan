@@ -114,6 +114,26 @@ describe('sync with the server', () => {
     unmount();
     expect(document.title).toBe('Clockspan');
   });
+
+  it('writes each count to the tab once, with no plain title between two ticks, before the end and past it', async () => {
+    // Two seconds left on the 25 min plan, so the ticks run on into the overrun, where it was seen.
+    const { result, unmount } = await renderRunning(makeSession({ startedAt: T0 - 25 * MINUTE_MS + 2000 }));
+    const titleAt = (seconds: number) => `${formatCountdown(seconds)} · Write the report — Clockspan`;
+    expect(document.title).toBe(titleAt(2));
+    // A host that shows every title change (the desktop app's browser pane) flashed "Clockspan"
+    // once a second while each tick put the plain title back before writing the new count.
+    const writes = vi.spyOn(document, 'title', 'set');
+    try {
+      // One settle per tick: ticks inside one act render once.
+      for (let tick = 0; tick < 4; tick++) await settle(1000);
+      expect(result.current.timer).toMatchObject({ due: true, countdownSeconds: -2 });
+      unmount();
+      expect(writes.mock.calls.flat()).toEqual([...[1, 0, -1, -2].map(titleAt), 'Clockspan']);
+    } finally {
+      // afterEach's resetAllMocks would leave the spy on document.
+      writes.mockRestore();
+    }
+  });
 });
 
 describe('start', () => {
