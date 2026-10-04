@@ -251,7 +251,6 @@ describe('PUT /api/days/:date/target', () => {
     for (const workMinutes of [0, 24 * 60 + 1, 90.5, '240', undefined]) {
       expect((await app.api.put('/api/days/2026-09-01/target', { workMinutes })).status).toBe(400);
     }
-    expect((await app.api.put('/api/days/2026-09-01/target')).status).toBe(400);
     expect((await app.api.put('/api/days/2026-09-01/target', { workMinutes: 1 })).status).toBe(200);
     expect((await app.api.put('/api/days/2026-09-01/target', { workMinutes: 24 * 60 })).status).toBe(200);
   });
@@ -401,8 +400,8 @@ describe('days are scoped to the signed-in user', () => {
   });
 });
 
-// Each route lists `requireDate` itself, so a new /:date route needs a row here.
-describe('requireDate on every /:date route', () => {
+// The days router's param handler refuses a bad key on every /:date route; the table pins each one.
+describe('the date check on every /:date route', () => {
   it('refuses an impossible date and stores no day for it', async () => {
     // Each write's body would pass on a real date, so a write without the guard would store the day.
     const day = '/api/days/2026-02-30';

@@ -10,10 +10,11 @@ import { publicUser } from './auth/users.js';
 import { oidcAuthRouter, type Discovery } from './auth/oidc.js';
 import { purgeExpiredSessions } from './auth/session.js';
 import { runRetention } from './retention.js';
+import { refuse } from './refuse.js';
 import { rejectCrossSiteWrites, rejectUnknownHosts, securityHeaders } from './security.js';
-import { breakStartRouter, breaksRouter } from './routes/breaks.js';
+import { breaksRouter } from './routes/breaks.js';
 import { daysRouter } from './routes/days.js';
-import { sessionStartRouter, sessionsRouter } from './routes/sessions.js';
+import { sessionsRouter } from './routes/sessions.js';
 import { settingsRouter } from './routes/settings.js';
 import type { AuthInfo, OkResponse } from '../shared/api.js';
 import { HOUR_MS } from '../shared/dates.js';
@@ -33,6 +34,12 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
   if (config.trustProxy !== false) app.set('trust proxy', config.trustProxy);
   app.use(securityHeaders(config));
   app.use(express.json({ limit: '256kb' }));
+  // Express 5 leaves req.body undefined when nothing was parsed (no body, or not JSON), and
+  // every route reads fields off it.
+  app.use((req, _res, next) => {
+    req.body ??= {};
+    next();
+  });
 
   app.get('/api/health', (_req, res) => res.json({ ok: true } satisfies OkResponse));
   // With no sign-in, the Host header is what tells the owner's browser from a rebound name.
@@ -67,16 +74,12 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
   const api = express.Router();
   api.use(requireAuth, requireOwnPassword);
   api.use('/settings', settingsRouter(db));
-  api.use('/days/:date/sessions', sessionStartRouter(db));
-  api.use('/days/:date/breaks', breakStartRouter(db));
   api.use('/days', daysRouter(db, config));
   api.use('/sessions', sessionsRouter(db));
   api.use('/breaks', breaksRouter(db));
   app.use('/api', api);
 
-  const notFound: express.RequestHandler = (_req, res) => {
-    res.status(404).json({ error: 'Not found.' });
-  };
+  const notFound: express.RequestHandler = (_req, res) => refuse(res, 404, 'Not found.');
   app.use('/api', notFound);
 
   // ----- static SPA (production build) -----
@@ -121,7 +124,7 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
     const status = (err as { status?: number }).status ?? 500;
     const shown = status < 500 && (err as { expose?: boolean }).expose !== false;
     if (!shown) console.error(err);
-    res.status(status).json({ error: shown ? (err as Error).message : status >= 500 ? 'Internal error.' : 'Request failed.' });
+    refuse(res, status, shown ? (err as Error).message : status >= 500 ? 'Internal error.' : 'Request failed.');
   });
 
   return app;

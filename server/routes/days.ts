@@ -3,6 +3,7 @@ import { Router } from 'express';
 import type { Config } from '../config.js';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
+import { refuse } from '../refuse.js';
 import { countDays, pruneDays, reclaimSpace } from '../retention.js';
 import { isWholeNumber } from '../validate.js';
 import { DAY_MS, isValidDateKey, punchWindow } from '../../shared/dates.js';
@@ -12,7 +13,6 @@ import {
   dateParam,
   ensureDay,
   findDay,
-  requireDate,
   sessionRowToJson,
   UID_RE,
   type BreakRow,
@@ -22,6 +22,8 @@ import {
   type PunchRow,
   type SessionRow,
 } from './shared.js';
+import { startBreak } from './breaks.js';
+import { startSession } from './sessions.js';
 import { kindForPosition, MAX_PUNCHES } from '../../shared/punches.js';
 import { MAX_PRIORITIES, SETTING_LIMITS } from '../../shared/settings.js';
 import {
@@ -132,21 +134,22 @@ function daysInRange(db: DB, userId: number, from: string, to: string): Day[] {
 export function daysRouter(db: DB, config: Config): Router {
   const r = Router();
 
+  // Every route here with a :date in its path, one added later included, has the date checked
+  // once before its handler runs. /range and /prune are literal paths, so it never runs for them.
+  r.param('date', (_req, res, next, date: string) => {
+    if (!isValidDateKey(date)) return refuse(res, 400, 'Invalid date.');
+    next();
+  });
+
   // Full days for a date range, for the review and the History calendar. Only days that exist
   // are returned; the client does the math. Registered before /:date so "range" isn't
   // read as a date.
   r.get('/range', (req, res) => {
     const user = currentUser(req);
     const { from, to } = req.query;
-    if (!isValidDateKey(from) || !isValidDateKey(to) || from > to) {
-      res.status(400).json({ error: 'from and to must be dates (YYYY-MM-DD) with from <= to.' });
-      return;
-    }
+    if (!isValidDateKey(from) || !isValidDateKey(to) || from > to) return refuse(res, 400, 'from and to must be dates (YYYY-MM-DD) with from <= to.');
     const span = (Date.parse(to) - Date.parse(from)) / DAY_MS;
-    if (span > MAX_RANGE_DAYS) {
-      res.status(400).json({ error: `Range is limited to ${MAX_RANGE_DAYS} days.` });
-      return;
-    }
+    if (span > MAX_RANGE_DAYS) return refuse(res, 400, `Range is limited to ${MAX_RANGE_DAYS} days.`);
     res.json({ days: daysInRange(db, user.id, from, to) } satisfies RangeResponse);
   });
 
@@ -154,57 +157,39 @@ export function daysRouter(db: DB, config: Config): Router {
   // Literal paths, so they sit before /:date like /range.
   r.get('/prune', (req, res) => {
     const { before } = req.query;
-    if (!isValidDateKey(before)) {
-      res.status(400).json({ error: 'before must be a date (YYYY-MM-DD).' });
-      return;
-    }
+    if (!isValidDateKey(before)) return refuse(res, 400, 'before must be a date (YYYY-MM-DD).');
     res.json({ before, ...countDays(db, currentUser(req).id, before), serverMaxDays: config.retentionDays } satisfies PruneInfo);
   });
 
   r.post('/prune', (req, res) => {
-    const before = (req.body as { before?: unknown })?.before;
-    if (!isValidDateKey(before)) {
-      res.status(400).json({ error: 'before must be a date (YYYY-MM-DD).' });
-      return;
-    }
+    const before = (req.body as { before?: unknown }).before;
+    if (!isValidDateKey(before)) return refuse(res, 400, 'before must be a date (YYYY-MM-DD).');
     const deleted = pruneDays(db, currentUser(req).id, before);
     if (deleted > 0) reclaimSpace(db);
     res.json({ deleted } satisfies PruneResult);
   });
 
-  r.get('/:date', requireDate, (req, res) => {
+  r.get('/:date', (req, res) => {
     const date = dateParam(req);
     res.json((daysInRange(db, currentUser(req).id, date, date)[0] ?? emptyDay(date)) satisfies Day);
   });
 
   // Full replace. Position parity defines kind: even = in, odd = out.
-  r.put('/:date/punches', requireDate, (req, res) => {
+  r.put('/:date/punches', (req, res) => {
     const user = currentUser(req);
     const date = dateParam(req);
-    const input = (req.body as { punches?: unknown })?.punches;
-    if (!Array.isArray(input)) {
-      res.status(400).json({ error: 'punches must be an array.' });
-      return;
-    }
-    if (input.length > MAX_PUNCHES) {
-      res.status(400).json({ error: `punches is limited to ${MAX_PUNCHES} rows.` });
-      return;
-    }
+    const input = (req.body as { punches?: unknown }).punches;
+    if (!Array.isArray(input)) return refuse(res, 400, 'punches must be an array.');
+    if (input.length > MAX_PUNCHES) return refuse(res, 400, `punches is limited to ${MAX_PUNCHES} rows.`);
     // A punch belongs to its day: a time days away from the key is a client bug, not data.
     const window = punchWindow(date);
     const punches: Punch[] = [];
     for (let i = 0; i < input.length; i++) {
       const item: unknown = input[i];
-      if (!isRow(item)) {
-        res.status(400).json({ error: `Punch ${i} must be an object or null.` });
-        return;
-      }
+      if (!isRow(item)) return refuse(res, 400, `Punch ${i} must be an object or null.`);
       const raw = item?.at;
       const at = raw == null ? null : parseInstant(raw, window.from, window.to);
-      if (raw != null && at == null) {
-        res.status(400).json({ error: `Punch ${i} has an invalid time.` });
-        return;
-      }
+      if (raw != null && at == null) return refuse(res, 400, `Punch ${i} has an invalid time.`);
       punches.push({ position: i, kind: kindForPosition(i), at });
     }
     db.transaction(() => {
@@ -218,14 +203,11 @@ export function daysRouter(db: DB, config: Config): Router {
 
   // Full replace, like punches: array order is the position, so removing a row is just
   // sending the list without it. An empty row can never be "done".
-  r.put('/:date/priorities', requireDate, (req, res) => {
+  r.put('/:date/priorities', (req, res) => {
     const user = currentUser(req);
     const date = dateParam(req);
-    const input = (req.body as { priorities?: unknown })?.priorities;
-    if (!Array.isArray(input) || input.length > MAX_PRIORITIES) {
-      res.status(400).json({ error: `priorities must be an array of at most ${MAX_PRIORITIES}.` });
-      return;
-    }
+    const input = (req.body as { priorities?: unknown }).priorities;
+    if (!Array.isArray(input) || input.length > MAX_PRIORITIES) return refuse(res, 400, `priorities must be an array of at most ${MAX_PRIORITIES}.`);
     // The web app mints a uid and stamps addedAt the first time a row gets text, and always sends
     // both. The server fills them in for a text row that arrives without (curl, the route tests),
     // so every row with text has a uid a session can point at and an addedAt the retro can judge.
@@ -233,41 +215,23 @@ export function daysRouter(db: DB, config: Config): Router {
     const seen = new Set<string>();
     for (let i = 0; i < input.length; i++) {
       const row: unknown = input[i];
-      if (!isRow(row)) {
-        res.status(400).json({ error: `Priority ${i + 1} must be an object or null.` });
-        return;
-      }
+      if (!isRow(row)) return refuse(res, 400, `Priority ${i + 1} must be an object or null.`);
       const item: Record<string, unknown> = row ?? {};
       // Checked like every other field: a value of the wrong kind is a client bug, not a row to guess at.
-      if (item.text != null && typeof item.text !== 'string') {
-        res.status(400).json({ error: `Priority ${i + 1} has invalid text.` });
-        return;
-      }
-      if (item.uid != null && !(typeof item.uid === 'string' && UID_RE.test(item.uid))) {
-        res.status(400).json({ error: `Priority ${i + 1} has an invalid uid.` });
-        return;
-      }
+      if (item.text != null && typeof item.text !== 'string') return refuse(res, 400, `Priority ${i + 1} has invalid text.`);
+      if (item.uid != null && !(typeof item.uid === 'string' && UID_RE.test(item.uid))) return refuse(res, 400, `Priority ${i + 1} has an invalid uid.`);
       const text = typeof item.text === 'string' ? item.text.slice(0, LIMITS.priorityText) : '';
       const hasText = text.trim() !== '';
       let uid = typeof item.uid === 'string' ? item.uid.toLowerCase() : null;
-      if (uid && seen.has(uid)) {
-        res.status(400).json({ error: `Priority ${i + 1} repeats another row's uid.` });
-        return;
-      }
+      if (uid && seen.has(uid)) return refuse(res, 400, `Priority ${i + 1} repeats another row's uid.`);
       if (!uid && hasText) uid = randomBytes(6).toString('hex');
       if (uid) seen.add(uid);
       // Stamped by the client when the row first got text; at most a day ahead, for a device clock running fast.
       let addedAt = item.addedAt == null ? null : parseInstant(item.addedAt, 0, Date.now() + DAY_MS);
-      if (item.addedAt != null && addedAt == null) {
-        res.status(400).json({ error: `Priority ${i + 1} has an invalid addedAt.` });
-        return;
-      }
+      if (item.addedAt != null && addedAt == null) return refuse(res, 400, `Priority ${i + 1} has an invalid addedAt.`);
       if (addedAt == null && hasText) addedAt = Date.now();
       // Checked like every other flag: `Boolean("false")` would tick the row. Null is absent, as for the other fields.
-      if (item.done != null && typeof item.done !== 'boolean') {
-        res.status(400).json({ error: `Priority ${i + 1} has an invalid done flag.` });
-        return;
-      }
+      if (item.done != null && typeof item.done !== 'boolean') return refuse(res, 400, `Priority ${i + 1} has an invalid done flag.`);
       rows.push({ position: i + 1, text, done: hasText && item.done === true, uid, addedAt });
     }
     db.transaction(() => {
@@ -279,14 +243,11 @@ export function daysRouter(db: DB, config: Config): Router {
     res.json({ priorities: rows } satisfies PrioritiesResponse);
   });
 
-  r.put('/:date/overtime', requireDate, (req, res) => {
+  r.put('/:date/overtime', (req, res) => {
     const user = currentUser(req);
     const date = dateParam(req);
-    const approved = (req.body as { approved?: unknown })?.approved;
-    if (typeof approved !== 'boolean') {
-      res.status(400).json({ error: 'approved must be a boolean.' });
-      return;
-    }
+    const approved = (req.body as { approved?: unknown }).approved;
+    if (typeof approved !== 'boolean') return refuse(res, 400, 'approved must be a boolean.');
     const dayId = ensureDay(db, user.id, date);
     db.prepare(`UPDATE days SET overtime_approved = ? WHERE id = ?`).run(approved ? 1 : 0, dayId);
     res.json({ overtimeApproved: approved } satisfies OvertimeResponse);
@@ -294,15 +255,13 @@ export function daysRouter(db: DB, config: Config): Router {
 
   // This day's own work-day length (a half day, a long one); null goes back to the setting.
   // Same bounds as the setting, so every timeclock can take it in its place.
-  r.put('/:date/target', requireDate, (req, res) => {
+  r.put('/:date/target', (req, res) => {
     const user = currentUser(req);
     const date = dateParam(req);
-    const minutes = (req.body as { workMinutes?: unknown })?.workMinutes;
+    const minutes = (req.body as { workMinutes?: unknown }).workMinutes;
     const bounds = SETTING_LIMITS.workMinutes;
-    if (minutes !== null && !isWholeNumber(minutes, bounds)) {
-      res.status(400).json({ error: `workMinutes must be a whole number from ${bounds.min} to ${bounds.max}, or null.` });
-      return;
-    }
+    if (minutes !== null && !isWholeNumber(minutes, bounds))
+      return refuse(res, 400, `workMinutes must be a whole number from ${bounds.min} to ${bounds.max}, or null.`);
     const dayId = ensureDay(db, user.id, date);
     db.prepare(`UPDATE days SET work_minutes = ? WHERE id = ?`).run(minutes, dayId);
     res.json({ workMinutes: minutes } satisfies TargetResponse);
@@ -310,18 +269,12 @@ export function daysRouter(db: DB, config: Config): Router {
 
   // The day's retrospective: a free-text "why" and whether it has been reviewed. Marking it
   // reviewed keeps the first reviewed-at; un-marking clears it.
-  r.put('/:date/retro', requireDate, (req, res) => {
+  r.put('/:date/retro', (req, res) => {
     const user = currentUser(req);
     const date = dateParam(req);
-    const { note, done } = (req.body ?? {}) as { note?: unknown; done?: unknown };
-    if (note !== undefined && typeof note !== 'string') {
-      res.status(400).json({ error: 'note must be a string.' });
-      return;
-    }
-    if (done !== undefined && typeof done !== 'boolean') {
-      res.status(400).json({ error: 'done must be a boolean.' });
-      return;
-    }
+    const { note, done } = req.body as { note?: unknown; done?: unknown };
+    if (note !== undefined && typeof note !== 'string') return refuse(res, 400, 'note must be a string.');
+    if (done !== undefined && typeof done !== 'boolean') return refuse(res, 400, 'done must be a boolean.');
     // An empty patch changes nothing, so it stores no day either; it answers what is there.
     if (note !== undefined || done !== undefined) {
       const dayId = ensureDay(db, user.id, date);
@@ -332,6 +285,9 @@ export function daysRouter(db: DB, config: Config): Router {
     const day = findDay(db, user.id, date);
     res.json({ retroNote: day?.retro_note ?? '', retroAt: day?.retro_at ?? null } satisfies RetroResponse);
   });
+
+  r.post('/:date/sessions', startSession(db));
+  r.post('/:date/breaks', startBreak(db));
 
   return r;
 }

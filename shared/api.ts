@@ -176,13 +176,17 @@ export interface RunningResponse {
   session: Session | null;
 }
 
-/** The 409 from starting a timer while one runs (on this device or another): the one that runs. */
-export interface SessionConflict {
+/** Every refusal the API sends: the message the client shows. */
+export interface ErrorResponse {
   error: string;
+}
+
+/** The 409 from starting a timer while one runs (on this device or another): the one that runs. */
+export interface SessionConflict extends ErrorResponse {
   session: Session;
 }
 
-/** A write with nothing else to report (logout, password change, a delete). */
+/** A write with nothing else to report (a password change, a delete), and the health check. */
 export interface OkResponse {
   ok: true;
 }
@@ -219,7 +223,7 @@ export interface UsersResponse {
   users: PublicUser[];
 }
 
-/** `POST /auth/logout`: under OIDC, where to send the browser to end the provider's session too. */
+/** `POST /auth/logout` under local and OIDC sign-in; under OIDC, `redirect` is where to send the browser to end the provider's session too. */
 export interface LogoutResponse {
   ok: true;
   redirect?: string | null;

@@ -10,6 +10,7 @@ export type {
   CancelledSession,
   CompletedSession,
   Day,
+  ErrorResponse,
   LogoutResponse,
   OkResponse,
   OvertimeResponse,

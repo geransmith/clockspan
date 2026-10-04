@@ -34,7 +34,7 @@ describe('breaks', () => {
     expect((await start({ plannedSeconds: 3601 })).status).toBe(400);
     expect((await start({ plannedSeconds: 90.5 })).status).toBe(400);
     expect((await start({ plannedSeconds: '300' })).status).toBe(400);
-    expect((await app.api.post(`/api/days/${DATE}/breaks`)).status).toBe(400);
+    expect((await start({})).status).toBe(400);
     expect((await start({ plannedSeconds: 3600 })).status).toBe(201);
   });
 

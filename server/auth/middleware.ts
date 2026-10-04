@@ -2,6 +2,7 @@ import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import type { DB, UserRow } from '../db.js';
 import type { Config } from '../config.js';
 import { ensureDefaultUser } from '../db.js';
+import { refuse } from '../refuse.js';
 import { resolveSession } from './session.js';
 
 declare module 'express-serve-static-core' {
@@ -27,10 +28,7 @@ export function resolveUser(db: DB, config: Config): RequestHandler {
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
-  if (!req.user) {
-    res.status(401).json({ error: 'Not signed in.' });
-    return;
-  }
+  if (!req.user) return refuse(res, 401, 'Not signed in.');
   next();
 }
 
@@ -40,20 +38,14 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
  * page first, so only a stale tab or a script meets the 403.
  */
 export function requireOwnPassword(req: Request, res: Response, next: NextFunction): void {
-  if (currentUser(req).must_change_password) {
-    res.status(403).json({ error: 'Choose a new password first.' });
-    return;
-  }
+  if (currentUser(req).must_change_password) return refuse(res, 403, 'Choose a new password first.');
   next();
 }
 
 /** requireAuth, then an admin, then one on their own password. */
 export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
   requireAuth(req, res, () => {
-    if (!currentUser(req).is_admin) {
-      res.status(403).json({ error: 'Only an admin can do that.' });
-      return;
-    }
+    if (!currentUser(req).is_admin) return refuse(res, 403, 'Only an admin can do that.');
     requireOwnPassword(req, res, next);
   });
 }

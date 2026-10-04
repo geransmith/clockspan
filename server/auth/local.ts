@@ -2,13 +2,14 @@ import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import { Router } from 'express';
 import { findLocalUser, findUserById, type DB, type UserRow } from '../db.js';
 import type { Config } from '../config.js';
+import { refuse } from '../refuse.js';
 import { reclaimSpace } from '../retention.js';
 import { DUMMY_HASH, hashPassword, parseCredentials, parsePassword, verifyPassword } from './password.js';
 import { createSession, destroySession, revokeSessions } from './session.js';
 import { currentUser, requireAdmin, requireAuth } from './middleware.js';
 import { accountKey, LoginLimiter, limiterKey, MAX_ACCOUNT_FAILURES, refuseTooMany, warnUntrustedProxy } from './limiter.js';
 import { logName, publicUser } from './users.js';
-import type { OkResponse, UserResponse, UsersResponse } from '../../shared/api.js';
+import type { LogoutResponse, OkResponse, UserResponse, UsersResponse } from '../../shared/api.js';
 
 /** Letters and digits that can't be read as one another: no 0/O, no 1/I/L. */
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -40,41 +41,29 @@ export function userCount(db: DB): number {
  */
 export function localAuthRouter(db: DB, config: Config, setupCode: string = newSetupCode()): Router {
   const r = Router();
-  const limiter = new LoginLimiter();
+  const addresses = new LoginLimiter();
   const accounts = new LoginLimiter(MAX_ACCOUNT_FAILURES);
+  const passwordChecks = new LoginLimiter();
   r.use(warnUntrustedProxy(config));
   if (userCount(db) === 0) console.log(`[auth] No account yet. The setup page asks for this code: ${setupCode}`);
 
   r.post('/setup', async (req, res) => {
-    if (userCount(db) > 0) {
-      res.status(403).json({ error: 'Setup has already been completed.' });
-      return;
-    }
+    if (userCount(db) > 0) return refuse(res, 403, 'Setup has already been completed.');
     // Wrong codes count against the address like failed sign-ins do.
     const key = limiterKey(String(req.ip));
-    const gate = limiter.check(key);
-    if (!gate.ok) {
-      refuseTooMany(res, gate.retryAfterSec);
-      return;
-    }
-    if (!setupCodeMatches(setupCode, (req.body as { setupCode?: unknown } | undefined)?.setupCode)) {
-      limiter.fail(key);
+    const gate = addresses.check(key);
+    if (!gate.ok) return refuseTooMany(res, gate.retryAfterSec);
+    if (!setupCodeMatches(setupCode, (req.body as { setupCode?: unknown }).setupCode)) {
+      addresses.fail(key);
       console.warn(`[auth] setup refused from ${req.ip}: wrong setup code`);
-      res.status(403).json({ error: "That setup code doesn't match the one in the server log." });
-      return;
+      return refuse(res, 403, "That setup code doesn't match the one in the server log.");
     }
     const creds = parseCredentials(req.body);
-    if ('error' in creds) {
-      res.status(400).json({ error: creds.error });
-      return;
-    }
+    if ('error' in creds) return refuse(res, 400, creds.error);
     const hash = await hashPassword(creds.password);
     // Re-check after the await: two first visitors racing each other must not both become
     // admin. The check and the insert below run without yielding, so this one is decisive.
-    if (userCount(db) > 0) {
-      res.status(403).json({ error: 'Setup has already been completed.' });
-      return;
-    }
+    if (userCount(db) > 0) return refuse(res, 403, 'Setup has already been completed.');
     const info = db
       .prepare(
         `INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at)
@@ -91,9 +80,9 @@ export function localAuthRouter(db: DB, config: Config, setupCode: string = newS
     // Only undefined once the socket is gone, when no answer can be sent anyway.
     const ip = String(req.ip);
     const key = limiterKey(ip);
-    const { username, password } = (req.body ?? {}) as { username?: unknown; password?: unknown };
+    const { username, password } = req.body as { username?: unknown; password?: unknown };
     const account = accountKey(username);
-    const gate = limiter.check(key);
+    const gate = addresses.check(key);
     const accountGate = accounts.check(account);
     if (!gate.ok || !accountGate.ok) {
       const retryAfterSec = Math.max(gate.retryAfterSec, accountGate.retryAfterSec);
@@ -102,14 +91,13 @@ export function localAuthRouter(db: DB, config: Config, setupCode: string = newS
           ? `[auth] login blocked for ${logName(username)} from ${ip}: too many failures on this account`
           : `[auth] login blocked from ${ip}: too many attempts`,
       );
-      refuseTooMany(res, retryAfterSec);
-      return;
+      return refuseTooMany(res, retryAfterSec);
     }
     // Counted now, before the hash: the checks above and these lines run without yielding, so
     // each of a burst of requests sees the ones before it. Counted after the await, a burst
     // would all pass the gate while the first was still hashing. A correct password takes its
     // own count back.
-    limiter.fail(key);
+    addresses.fail(key);
     accounts.fail(account);
     const user = typeof username === 'string' ? findLocalUser(db, username.trim()) : undefined;
     // Always run the hash, against a dummy when the name is unknown, so timing can't tell
@@ -117,10 +105,9 @@ export function localAuthRouter(db: DB, config: Config, setupCode: string = newS
     const ok = typeof password === 'string' && (await verifyPassword(password, user?.password_hash ?? DUMMY_HASH));
     if (!ok || !user) {
       console.warn(`[auth] login failed for ${logName(username)} from ${ip}`);
-      res.status(401).json({ error: 'Incorrect username or password.' });
-      return;
+      return refuse(res, 401, 'Incorrect username or password.');
     }
-    limiter.succeed(key);
+    addresses.succeed(key);
     accounts.succeed(account);
     createSession(db, config, res, user.id);
     console.log(`[auth] ${logName(user.username)} signed in from ${ip}`);
@@ -129,38 +116,31 @@ export function localAuthRouter(db: DB, config: Config, setupCode: string = newS
 
   r.post('/logout', (req, res) => {
     destroySession(db, config, req, res);
-    res.json({ ok: true } satisfies OkResponse);
+    res.json({ ok: true } satisfies LogoutResponse);
   });
 
-  // The current-password check is a login in disguise: a stolen cookie must not be able to
-  // guess it at scrypt speed. Same limiter, keyed by the account rather than the address.
+  // The current-password check is a login in disguise: a stolen cookie must not guess it at
+  // scrypt speed. It has a limiter of its own, keyed by the user, so the lock holds across every
+  // session and address of that user.
   r.post('/password', requireAuth, async (req, res) => {
     const user = currentUser(req);
-    const key = `user:${user.id}`;
-    const gate = limiter.check(key);
+    const key = String(user.id);
+    const gate = passwordChecks.check(key);
     if (!gate.ok) {
       console.warn(`[auth] password change blocked for ${logName(user.username)}: too many attempts`);
-      refuseTooMany(res, gate.retryAfterSec);
-      return;
+      return refuseTooMany(res, gate.retryAfterSec);
     }
     // Counted before the hash, like a login.
-    limiter.fail(key);
-    const { currentPassword, newPassword } = (req.body ?? {}) as { currentPassword?: unknown; newPassword?: unknown };
+    passwordChecks.fail(key);
+    const { currentPassword, newPassword } = req.body as { currentPassword?: unknown; newPassword?: unknown };
     if (!user.password_hash || typeof currentPassword !== 'string' || !(await verifyPassword(currentPassword, user.password_hash))) {
       console.warn(`[auth] password change refused for ${logName(user.username)}: current password wrong`);
-      res.status(400).json({ error: 'Current password is incorrect.' });
-      return;
+      return refuse(res, 400, 'Current password is incorrect.');
     }
-    limiter.succeed(key);
+    passwordChecks.succeed(key);
     const next = parsePassword(newPassword);
-    if ('error' in next) {
-      res.status(400).json({ error: next.error });
-      return;
-    }
-    if (user.must_change_password && next.password === currentPassword) {
-      res.status(400).json({ error: 'Choose a password other than the temporary one.' });
-      return;
-    }
+    if ('error' in next) return refuse(res, 400, next.error);
+    if (user.must_change_password && next.password === currentPassword) return refuse(res, 400, 'Choose a password other than the temporary one.');
     db.prepare(`UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?`).run(await hashPassword(next.password), user.id);
     // A changed password is usually "someone else may have the old one", and what leaked may be
     // this session's own cookie: end every session, this one included, and give this browser a
@@ -180,10 +160,7 @@ export function localAuthRouter(db: DB, config: Config, setupCode: string = newS
 
   r.post('/users', requireAdmin, async (req, res) => {
     const creds = parseCredentials(req.body);
-    if ('error' in creds) {
-      res.status(400).json({ error: creds.error });
-      return;
-    }
+    if ('error' in creds) return refuse(res, 400, creds.error);
     const name = creds.username;
     const hash = await hashPassword(creds.password);
     // The uniqueness check is part of the insert: a pre-check before the hash could be
@@ -196,10 +173,7 @@ export function localAuthRouter(db: DB, config: Config, setupCode: string = newS
          WHERE NOT EXISTS (SELECT 1 FROM users WHERE username = @name COLLATE NOCASE)`,
       )
       .run({ name, hash, now: Date.now() });
-    if (info.changes === 0) {
-      res.status(409).json({ error: 'That username is already taken.' });
-      return;
-    }
+    if (info.changes === 0) return refuse(res, 409, 'That username is already taken.');
     const user = findUserById(db, info.lastInsertRowid)!;
     console.log(`[auth] user ${logName(name)} created by ${logName(currentUser(req).username)}`);
     res.status(201).json({ user: publicUser(user) } satisfies UserResponse);
@@ -208,15 +182,9 @@ export function localAuthRouter(db: DB, config: Config, setupCode: string = newS
   r.delete('/users/:id', requireAdmin, (req, res) => {
     const id = Number(req.params.id);
     const me = currentUser(req);
-    if (id === me.id) {
-      res.status(400).json({ error: 'You cannot delete your own account.' });
-      return;
-    }
+    if (id === me.id) return refuse(res, 400, 'You cannot delete your own account.');
     const info = db.prepare(`DELETE FROM users WHERE id = ? AND kind = 'local'`).run(id);
-    if (info.changes === 0) {
-      res.status(404).json({ error: 'User not found.' });
-      return;
-    }
+    if (info.changes === 0) return refuse(res, 404, 'User not found.');
     // A deleted user's text must not stay readable in the file's free pages.
     reclaimSpace(db);
     console.log(`[auth] user #${id} and their data deleted by ${logName(me.username)}`);

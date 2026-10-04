@@ -39,9 +39,9 @@
     // no-unsafe-*: Express's `req.body` is `any`, and these refuse reading a field off it
     // before it is checked (cast it to `{ field?: unknown }`, as the routes do). Off for tests
     // and the plain-JavaScript scripts (see the override below).
-    // Left off: no-unnecessary-condition (it wants the guards on `req.body` and
-    // `navigator.serviceWorker` gone, which the runtime can still leave undefined), and the
-    // style rules (strict-boolean-expressions, promise-function-async, …).
+    // Left off: no-unnecessary-condition (it wants the guard on `navigator.serviceWorker` gone,
+    // which the runtime can still leave undefined), and the style rules
+    // (strict-boolean-expressions, promise-function-async, …).
     "typescript/await-thenable": "error",
     "typescript/no-array-delete": "error",
     "typescript/no-base-to-string": "error",

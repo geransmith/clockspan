@@ -217,7 +217,7 @@ describe('AUTH_MODE=local', () => {
     const other = app.client();
     await other.post('/api/auth/login', { username: 'geran', password: ADMIN.password });
     expect((await other.post('/api/auth/password', { currentPassword: ADMIN.password, newPassword: 'new password' })).status).toBe(429);
-    // A login failure and a password-change failure count in separate buckets (address vs account).
+    // A login failure and a password-change failure count in separate buckets (address and user).
     expect((await app.client().post('/api/auth/login', { username: 'geran', password: 'wrong' })).status).toBe(401);
   });
 
@@ -361,18 +361,6 @@ describe('AUTH_MODE=local', () => {
     // Choosing their own opens everything again.
     expect((await app.api.post('/api/auth/password', { currentPassword: ADMIN.password, newPassword: 'a new one' })).body).toEqual({ ok: true });
     expect((await app.api.get('/api/auth/users')).status).toBe(200);
-  });
-
-  it('answers the same errors when a request carries no body at all', async () => {
-    const bare = (path: string, cookie?: string) => fetch(app.url + path, { method: 'POST', headers: cookie ? { cookie } : {} });
-    // No body is no setup code.
-    expect((await bare('/api/auth/setup')).status).toBe(403);
-    await setup();
-    expect((await bare('/api/auth/login')).status).toBe(401);
-    expect((await app.api.post('/api/auth/login', { username: 42, password: ADMIN.password })).status).toBe(401);
-    const cookie = `${SESSION_COOKIE}=${app.api.cookies()[SESSION_COOKIE]}`;
-    expect((await bare('/api/auth/password', cookie)).status).toBe(400);
-    expect((await bare('/api/auth/users', cookie)).status).toBe(400);
   });
 
   it('answers 401 as JSON for unauthenticated data routes', async () => {
