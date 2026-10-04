@@ -12,7 +12,7 @@ import { upsertOidcUser } from './oidc.js';
 describe('AUTH_MODE=oidc', () => {
   let app: TestApp;
   beforeEach(async () => {
-    // The routes log why a sign-in failed; keep the run quiet.
+    // The routes log why a sign-in failed; two tests read it.
     vi.spyOn(console, 'error').mockImplementation(() => {});
     app = await startTestApp({ authMode: 'oidc' });
   });
