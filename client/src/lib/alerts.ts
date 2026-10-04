@@ -128,9 +128,8 @@ function playClip(ctx: AudioContext, id: ClipId): void {
 /** Play a catalog sound now; `none` is silence. Unlocks and resumes the context on the way. */
 export function playSound(id: SoundId): void {
   if (id === 'none') return;
-  if (!ctx) unlockAudio();
+  unlockAudio();
   if (!ctx) return;
-  if (ctx.state === 'suspended') void ctx.resume();
   if (isSynth(id)) SYNTH[id](ctx, ctx.currentTime + 0.02);
   else playClip(ctx, id);
 }
@@ -201,6 +200,7 @@ export function getBanners(): Banner[] {
 }
 
 export function dismissBanner(id: number): void {
+  if (!banners.some((b) => b.id === id)) return;
   banners = banners.filter((b) => b.id !== id);
   emit();
 }

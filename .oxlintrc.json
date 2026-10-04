@@ -13,6 +13,11 @@
     // `_`-prefixed names are the convention for "deliberately unused" (rest-destructuring a
     // row to drop columns, unused handler params).
     "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_", "destructuredArrayIgnorePattern": "^_" }],
+    // lib/alerts.ts exports an alert() with the browser's name, and lib.dom's alert takes
+    // `any`, so a call that lost its import still type-checks and opens a dialog reading
+    // "[object Object]". The imported alert is a module binding, which this rule leaves alone.
+    // no-alert would also refuse the window.confirm calls the app makes on purpose.
+    "no-restricted-globals": ["error", { "name": "alert", "message": "Import alert from client/src/lib/alerts; the browser's alert() is never used." }],
     // The automatic JSX runtime needs no React import.
     "react/react-in-jsx-scope": "off",
     // eslint-plugin-react-hooks' recommended set, including the React Compiler rules.
