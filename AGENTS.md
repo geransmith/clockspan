@@ -522,8 +522,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   minutes or a `NumberField` (`settings/controls.tsx`) for one number, whose `unit` suffix is
   "min" unless given, each with `{...SETTING_LIMITS.<key>}` for `min` and `max`; a `Toggle` for
   a switch. `NumberInput` on its own puts several numbers on one row, like the timer's start
-  buttons. Its value also goes in `TEST_SETTINGS` (`client/src/test/fixtures.ts`), and the
-  type makes a missing one an error. Nothing else to mirror.
+  buttons. The new setting also goes in `TEST_SETTINGS` (`client/src/test/fixtures.ts`), and
+  the type makes a missing one an error. Nothing else to mirror.
 - **A sound**: drop the clip in as `client/src/sounds/<id>.mp3` (CC0 only, MP3 so Safari can
   decode it, a couple of seconds at most) → add `{ id, label, kind: 'clip' }` to `SOUNDS` in
   `shared/sounds.ts` → add its title, author and source line to `client/src/sounds/README.md`.
