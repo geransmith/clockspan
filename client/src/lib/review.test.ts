@@ -1,14 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { emptyDay } from '../../../shared/api.js';
+import { atTime } from '../../../shared/dates.js';
 import { completedSession, TEST_SETTINGS, type EndPatch } from '../test/fixtures';
 import type { Day, Priority } from '../types';
 import { periodOffset, periodRange, reviewRange } from './review';
 
 const settings = TEST_SETTINGS;
-const at = (key: string, h: number, m = 0) => {
-  const [y, mo, d] = key.split('-').map(Number) as [number, number, number];
-  return new Date(y, mo - 1, d, h, m).getTime();
-};
+const at = (key: string, h: number, m = 0) => atTime(key, h, m);
 const row = (position: number, text: string, extra: Partial<Priority> = {}): Priority => ({
   position,
   text,
@@ -204,8 +202,8 @@ describe('reviewRange', () => {
     });
     const r = reviewRange([tue, mon], settings, '2026-09-16', now);
     expect(r.unplanned).toEqual([
-      { key: 'expense receipts', label: 'Expense Receipts', seconds: 1500, sessions: 3, dates: ['2026-09-14', '2026-09-15'] },
-      { key: '', label: '', seconds: 1500, sessions: 1, dates: ['2026-09-14'] },
+      { key: 'expense receipts', label: 'Expense Receipts', seconds: 1500, dates: ['2026-09-14', '2026-09-15'] },
+      { key: '', label: '', seconds: 1500, dates: ['2026-09-14'] },
     ]);
     // Left open on two days comes first, then by date; the latest spelling wins; mid-day on either day counts.
     expect(r.notDone).toEqual([

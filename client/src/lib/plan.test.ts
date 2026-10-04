@@ -24,7 +24,7 @@ describe('nextWorkDay', () => {
 
 describe('planNext', () => {
   it('adds after what the day holds, skipping text already there and empty rows', () => {
-    const existing = [row(2, 'Call the bank'), row(1, ''), row(3, 'Ship it')];
+    const existing = [row(1, ''), row(2, 'Call the bank'), row(3, 'Ship it')];
     const { rows, added } = planNext(existing, ['ship  IT', 'Write the report', ' ', 'write the report'], 99);
     expect(added).toBe(1);
     expect(rows.map((p) => [p.position, p.text])).toEqual([

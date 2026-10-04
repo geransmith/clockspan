@@ -6,7 +6,7 @@ import { currentUser } from '../auth/middleware.js';
 import { refuse } from '../refuse.js';
 import { countDays, pruneDays, reclaimSpace } from '../retention.js';
 import { isWholeNumber } from '../validate.js';
-import { DAY_MS, isValidDateKey, punchWindow } from '../../shared/dates.js';
+import { DAY_MS, daysBetween, isValidDateKey, punchWindow } from '../../shared/dates.js';
 import {
   breakRowToJson,
   DAY_COLUMNS,
@@ -148,7 +148,7 @@ export function daysRouter(db: DB, config: Config): Router {
     const user = currentUser(req);
     const { from, to } = req.query;
     if (!isValidDateKey(from) || !isValidDateKey(to) || from > to) return refuse(res, 400, 'from and to must be dates (YYYY-MM-DD) with from <= to.');
-    const span = (Date.parse(to) - Date.parse(from)) / DAY_MS;
+    const span = daysBetween(from, to);
     if (span > MAX_RANGE_DAYS) return refuse(res, 400, `Range is limited to ${MAX_RANGE_DAYS} days.`);
     res.json({ days: daysInRange(db, user.id, from, to) } satisfies RangeResponse);
   });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ensureDefaultUser, openDatabase } from '../db.js';
 import { insertSession, SESSION_COOKIE } from '../auth/session.js';
 import { countRows, SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from './harness.js';
-import { addMonths, DAY_MS, MINUTE_MS, parseDateKey, punchWindow, startOfQuarter, todayKey } from '../../shared/dates.js';
+import { addMonths, DAY_MS, isWeekend, MINUTE_MS, punchWindow, startOfQuarter, todayKey } from '../../shared/dates.js';
 import { LIMITS } from '../../shared/api.js';
 import { DEFAULT_SETTINGS, SETTING_LIMITS } from '../../shared/settings.js';
 import { BREAK_SECONDS, MIN_BREAK_MS, PLANNED_SECONDS } from '../../shared/timer.js';
@@ -94,7 +94,7 @@ describe('seedDatabase', () => {
     expect(m.days.at(-1)!.date).toBe(SEED_TODAY);
     expect(m.days.map((d) => d.date)).toEqual(m.days.map((d) => d.date).sort());
     for (const day of m.days) {
-      expect([0, 6]).not.toContain(parseDateKey(day.date).getDay());
+      expect(isWeekend(day.date)).toBe(false);
 
       // Punches: positions 0..n, parity kinds, the last row is a Clock out.
       expect(day.punches.map((p) => p.position)).toEqual(day.punches.map((_, i) => i));

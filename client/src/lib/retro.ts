@@ -56,7 +56,7 @@ export function hasContent(day: Day): boolean {
  * done yet. A session is on plan when its uid matches a row that still has text.
  */
 export function reviewDay(priorities: Priority[], sessions: Session[]): DayReview {
-  const rows = priorities.filter(hasText).sort((a, b) => a.position - b.position);
+  const rows = priorities.filter(hasText);
   const completed = sessions.filter((s) => s.status === 'completed');
   const firstStart = completed.length ? Math.min(...completed.map((s) => s.startedAt)) : null;
   const uids = new Set(rows.map((p) => p.uid));

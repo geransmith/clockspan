@@ -142,7 +142,7 @@ describe('leftOpen', () => {
   it('takes the latest day that had a plan and returns its unticked rows in order', () => {
     const days = [
       day('2026-09-24', [row(1, 'Old thing')]),
-      day('2026-09-25', [row(3, 'Call the bank'), row(1, 'Ship it', { done: true }), row(2, 'Review the PR'), row(4, '  ')]),
+      day('2026-09-25', [row(1, 'Ship it', { done: true }), row(2, 'Review the PR'), row(3, 'Call the bank'), row(4, '  ')]),
       // A later day with nothing written doesn't count as a plan.
       day('2026-09-26', [row(1, '')]),
     ];

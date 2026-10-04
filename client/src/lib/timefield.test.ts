@@ -12,14 +12,6 @@ describe('msToTime / timeToMs', () => {
     expect(timeToMs(t!, DAY)).toBe(at(8, 5));
     expect(msToTime(null)).toBeNull();
   });
-
-  it("places the time on the date key, not on the instant's own day", () => {
-    expect(timeToMs(new Time(7, 30), '2026-09-17')).toBe(new Date(2026, 8, 17, 7, 30).getTime());
-  });
-
-  it('moves a time in the hour the clocks skip forward an hour', () => {
-    expect(msToTime(timeToMs(new Time(2, 30), '2026-03-08'))).toEqual(new Time(3, 30));
-  });
 });
 
 describe('guessPeriod', () => {

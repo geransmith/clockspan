@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from '../dev/harness.js';
 import { seedDatabase } from '../dev/seed.js';
+import { ensureDay } from './shared.js';
 import { MAX_PRIORITIES } from '../../shared/settings.js';
 import { MAX_PUNCHES } from '../../shared/punches.js';
 import { HOUR_MS, punchWindow } from '../../shared/dates.js';
@@ -51,6 +52,17 @@ describe('GET /api/days/:date', () => {
     expect(r.body.overtimeApproved).toBe(true);
     expect(r.body.retroNote).toBe(day.retroNote);
     expect(r.body.retroAt).toBe(day.retroAt);
+  });
+
+  it('answers priorities in position order, here and in a range, whatever order the rows went in', async () => {
+    const user = (app.db.prepare(`SELECT id FROM users`).get() as { id: number }).id;
+    const dayId = ensureDay(app.db, user, '2026-09-01');
+    const insert = app.db.prepare(`INSERT INTO priorities (day_id, position, text) VALUES (?, ?, ?)`);
+    insert.run(dayId, 2, 'Second');
+    insert.run(dayId, 1, 'First');
+    const positions = (priorities: { position: number }[]) => priorities.map((p) => p.position);
+    expect(positions((await app.api.get('/api/days/2026-09-01')).body.priorities)).toEqual([1, 2]);
+    expect(positions((await app.api.get('/api/days/range?from=2026-09-01&to=2026-09-01')).body.days[0].priorities)).toEqual([1, 2]);
   });
 });
 

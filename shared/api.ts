@@ -27,8 +27,10 @@ export const PASSWORD_LENGTH = { min: 8, max: 200 } as const;
 export const USERNAME = { min: 2, max: 40, pattern: '\\s*[A-Za-z0-9._\\-]+\\s*', chars: 'letters, numbers, . _ and -' } as const;
 
 /**
- * Position 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in pairs, and the last
- * row (always an odd position ≥ 3) is the final clock out.
+ * Position 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in pairs; `kind` is the
+ * position's parity (`kindForPosition`). The server stores the rows in the order sent, up to
+ * `MAX_PUNCHES`, and a day never punched has none; the day store pads each day it holds to the
+ * fixed rows, with the Clock out last at an odd position ≥ 3 (`normalizePunches`).
  */
 export interface Punch {
   position: number;
@@ -37,9 +39,10 @@ export interface Punch {
 }
 
 /**
- * A day's stored list is the one the client last sent, positions 1-based and contiguous: the
- * card saves the rows it shows, empty ones included, and a day never edited has none. `uid` is
- * the stable id sessions point at (null until the row has text); `addedAt` is when it got text.
+ * A day's stored list is the one the client last sent, in position order (1-based and
+ * contiguous): the card saves the rows it shows, empty ones included, and a day never edited
+ * has none. `uid` is the stable id sessions point at (null until the row has text); `addedAt`
+ * is when it got text.
  */
 export interface Priority {
   position: number;
