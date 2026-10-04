@@ -32,7 +32,7 @@ export function NumberField({
   return (
     <div className="setting-row">
       <span>{label}</span>
-      <span className="duration-inputs">
+      <span className="inline-controls">
         <NumberInput label={label} value={value} min={min} max={max} disabled={disabled} onCommit={onCommit} />
         <span className="muted">{unit}</span>
       </span>

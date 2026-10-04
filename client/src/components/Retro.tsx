@@ -1,12 +1,14 @@
 import type { RetroPatch } from '../api';
 import { useDebouncedDraft } from '../hooks/useDebouncedDraft';
-import { RETRO_PROMPT, UNTITLED_SESSION } from '../lib/copy';
+import { RETRO_PROMPT } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { counted, formatDuration } from '../lib/format';
 import { reviewDay } from '../lib/retro';
-import { LIMITS, type Priority, type Session } from '../types';
+import { LIMITS } from '../../../shared/api.js';
+import type { Priority, Session } from '../types';
 import { Check } from './Icons';
 import { PlanNext } from './PlanNext';
+import { SessionLabel } from './SessionLabel';
 
 interface Props {
   date: string;
@@ -42,13 +44,13 @@ export function Retro({ date, today, priorities, sessions, note, reviewedAt, onC
 
       {review.total > 0 && (
         <section className="retro-section">
-          <h3 className="retro-heading">
+          <h3 className="section-heading">
             Planned{' '}
             <span className="muted">
               {review.done} of {review.total} done
             </span>
           </h3>
-          <ul className="retro-list">
+          <ul>
             {review.planned.map(({ priority: p, focusedSeconds, sessions: n, addedMidDay }) => (
               <li key={p.uid ?? p.position} className={`retro-row${p.done ? ' is-done' : ''}`}>
                 <span className={`retro-tick${p.done ? ' is-done' : ''}`} role="img" aria-label={p.done ? 'Done' : 'Not done'}>
@@ -59,7 +61,7 @@ export function Retro({ date, today, priorities, sessions, note, reviewedAt, onC
                     {p.position}
                   </span>
                   {p.text}
-                  {addedMidDay && p.addedAt != null && <span className="pill pill--warn retro-late">added {formatTime(p.addedAt)}</span>}
+                  {addedMidDay && p.addedAt != null && <span className="pill pill--warn inline-pill">added {formatTime(p.addedAt)}</span>}
                 </span>
                 <span className="retro-time">
                   {n > 0 ? (
@@ -78,18 +80,18 @@ export function Retro({ date, today, priorities, sessions, note, reviewedAt, onC
 
       {review.unplanned.length > 0 && (
         <section className="retro-section">
-          <h3 className="retro-heading">
+          <h3 className="section-heading">
             Not on the plan <span className="muted">{formatDuration(review.offPlanSeconds)}</span>
           </h3>
-          <ul className="retro-list">
+          <ul>
             {review.unplanned.map((s) => (
               <li key={s.id} className="retro-row retro-row--unplanned">
                 <span className="retro-tick" aria-hidden="true" />
                 <span className="retro-text">
-                  {s.label || <span className="muted">{UNTITLED_SESSION}</span>}
+                  <SessionLabel label={s.label} />
                   <span className="muted small retro-when"> {formatTime(s.startedAt)}</span>
                 </span>
-                <span className="retro-time">{formatDuration(s.durationSeconds ?? 0)}</span>
+                <span className="retro-time">{formatDuration(s.durationSeconds)}</span>
               </li>
             ))}
           </ul>
@@ -115,7 +117,7 @@ export function Retro({ date, today, priorities, sessions, note, reviewedAt, onC
         </p>
       )}
 
-      <label className="field retro-note">
+      <label className="field">
         <span className="muted small">Why did the day go this way?</span>
         <textarea
           className="input retro-textarea"

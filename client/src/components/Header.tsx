@@ -29,27 +29,17 @@ export function Header({ view, date, today, customize, onNavigate, onToggleCusto
     <header className="topbar">
       <div className="topbar-row">
         <button className="brand" onClick={() => onNavigate({ view: 'sheet', date: null })} title="Go to today">
-          <img className="brand-logo" src="/icons/icon.svg" alt="" width={28} height={28} />
+          <img src="/icons/icon.svg" alt="" width={28} height={28} />
           Clockspan
         </button>
         <div className="topbar-actions">
           {onSheet && (
-            <button
-              className={`btn btn-icon${customize ? ' is-active' : ''}`}
-              onClick={onToggleCustomize}
-              aria-pressed={customize}
-              title={customize ? 'Done customizing' : 'Customize layout'}
-            >
+            <button className="btn btn-icon" onClick={onToggleCustomize} aria-pressed={customize} title={customize ? 'Done customizing' : 'Customize layout'}>
               <Layout />
               <span className="btn-text">{customize ? 'Done' : 'Customize'}</span>
             </button>
           )}
-          <button
-            className={`btn btn-icon${!onSheet ? ' is-active' : ''}`}
-            onClick={() => onNavigate({ view: onSheet ? 'history' : 'sheet' })}
-            aria-pressed={!onSheet}
-            title="History"
-          >
+          <button className="btn btn-icon" onClick={() => onNavigate({ view: onSheet ? 'history' : 'sheet' })} aria-pressed={!onSheet} title="History">
             <List />
             <span className="btn-text">History</span>
           </button>

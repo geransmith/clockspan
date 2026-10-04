@@ -49,7 +49,7 @@ interface Props {
   onOvertimeChange: (approved: boolean) => void;
   onWorkMinutesChange: (minutes: number | null) => void;
   /** A punch time is being typed on today's sheet, or no longer is: the app holds today's alarms meanwhile. */
-  onEditingChange?: (editing: boolean) => void;
+  onEditingChange: (editing: boolean) => void;
 }
 
 export function Timeclock({
@@ -219,7 +219,7 @@ export function Timeclock({
       )}
 
       {weekShown && (
-        <p className="timeclock-note week-line" ref={weekRef}>
+        <p className="timeclock-note" ref={weekRef}>
           This week <strong>{formatDuration(week.workedSeconds)}</strong> of {formatDuration(week.targetSeconds)}
           {week.overSeconds > 0 && (
             <>
@@ -291,10 +291,10 @@ function WorkDay({ usual, own, onChange }: { usual: number; own: number | null; 
       {open && (
         <div className="target-edit">
           <span className="chips">
-            <button className={`chip${target === half ? ' is-on' : ''}`} onClick={() => set(half)} aria-pressed={target === half}>
+            <button className="chip" onClick={() => set(half)} aria-pressed={target === half}>
               Half day · {formatDuration(half * 60)}
             </button>
-            <button className={`chip${own == null ? ' is-on' : ''}`} onClick={() => onChange(null)} aria-pressed={own == null}>
+            <button className="chip" onClick={() => onChange(null)} aria-pressed={own == null}>
               Usual · {formatDuration(usual * 60)}
             </button>
           </span>
@@ -328,7 +328,7 @@ function PunchRow({
   onSet: (at: number | null) => void;
 }) {
   return (
-    <div className={`punch-row punch-row--${punch.kind}${punch.at != null ? ' is-set' : ''}`}>
+    <div className={`punch-row punch-row--${punch.kind}`}>
       <span className="punch-label">{label}</span>
       <TimeField value={punch.at} date={date} hour12={hour12} anchorAt={anchorAt} label={label} onCommit={onSet} onFocusChange={onFocusChange} />
       <button

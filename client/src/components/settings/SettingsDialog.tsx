@@ -85,7 +85,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               aria-selected={tab === t.id}
               aria-controls={`panel-${t.id}`}
               tabIndex={tab === t.id ? 0 : -1}
-              className={`tab${tab === t.id ? ' is-active' : ''}`}
+              className="tab"
               onClick={() => setTab(t.id)}
               onKeyDown={onTabKey}
             >

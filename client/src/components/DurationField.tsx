@@ -46,7 +46,7 @@ export function DurationField({
   return (
     <div className="setting-row">
       <span>{label}</span>
-      <span className="duration-inputs" onBlur={onBlur}>
+      <span className="inline-controls" onBlur={onBlur}>
         <input
           className="input input-num"
           inputMode="numeric"

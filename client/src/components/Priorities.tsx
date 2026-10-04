@@ -7,8 +7,9 @@ import { unlockAudio } from '../lib/alerts';
 import { LEFT_OPEN, WARNING_ACTIONS } from '../lib/copy';
 import { planNext } from '../lib/plan';
 import { editPriority, hasText, padPriorities, pickWarning, removePriority, warnThreshold, warningKind, type WarningKind } from '../lib/priorities';
+import { LIMITS } from '../../../shared/api.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
-import { LIMITS, type Priority } from '../types';
+import type { Priority } from '../types';
 import { Burst } from './Burst';
 import { Check, Plus, X } from './Icons';
 

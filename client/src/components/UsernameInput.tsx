@@ -1,5 +1,5 @@
 import type { InputHTMLAttributes } from 'react';
-import { USERNAME } from '../types';
+import { USERNAME } from '../../../shared/api.js';
 
 /**
  * A username field with the server's rules (`USERNAME` in shared/api.ts): the browser refuses

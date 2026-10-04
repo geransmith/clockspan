@@ -8,6 +8,7 @@ import { counted, formatDateFull } from '../../lib/format';
 import type { PruneInfo, Settings } from '../../types';
 import { Toggle } from '../Toggle';
 import { NumberField, Section } from './controls';
+import { ErrorLine } from '../ErrorLine';
 
 export function DataTab({ settings, set, onReset }: { settings: Settings; set: (patch: api.SettingsPatch) => void; onReset: () => void }) {
   return (
@@ -104,7 +105,7 @@ function DeleteOldDays() {
     >
       <div className="setting-row">
         <span>Delete days before</span>
-        <span className="duration-inputs">
+        <span className="inline-controls">
           <input
             className="input"
             type="date"
@@ -131,11 +132,7 @@ function DeleteOldDays() {
           {done}
         </p>
       )}
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+      <ErrorLine error={error} />
     </Section>
   );
 }

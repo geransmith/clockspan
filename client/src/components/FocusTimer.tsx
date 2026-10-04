@@ -4,10 +4,12 @@ import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { useTimer } from '../hooks/useTimer';
 import { unlockAudio } from '../lib/alerts';
-import { BREAK, TIMER_DUE, UNTITLED_SESSION } from '../lib/copy';
+import { BREAK, TIMER_DUE } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
 import { hasRoom, hasText } from '../lib/priorities';
-import { LIMITS, type Priority, type Session } from '../types';
+import { LIMITS } from '../../../shared/api.js';
+import type { Priority, Session } from '../types';
+import { SessionLabel } from './SessionLabel';
 import { TimerControls } from './TimerControls';
 import { ErrorLine } from './ErrorLine';
 
@@ -89,7 +91,7 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
   return (
     <div className="timer timer--idle">
       <input
-        className="input timer-label"
+        className="input"
         value={label}
         onChange={(e) => setLabel(e.target.value)}
         placeholder="What are you working on?"
@@ -104,7 +106,7 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
             {open.map((p) => (
               <button
                 key={p.uid}
-                className={`chip${linked === p.uid ? ' is-on' : ''}`}
+                className="chip"
                 onClick={() => pick(p)}
                 aria-pressed={linked === p.uid}
                 title={linked === p.uid ? 'Unlink from this priority' : `Link the next session to priority ${p.position}`}
@@ -174,7 +176,9 @@ function Running({ session }: { session: Session }) {
           <div className="muted small">{subline}</div>
         </div>
       </div>
-      <div className="timer-running-label">{session.label || <span className="muted">{UNTITLED_SESSION}</span>}</div>
+      <div className="timer-running-label">
+        <SessionLabel label={session.label} />
+      </div>
       <TimerControls />
     </div>
   );

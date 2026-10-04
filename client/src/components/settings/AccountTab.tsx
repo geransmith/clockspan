@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import * as api from '../../api';
 import { useSubmit } from '../../hooks/useSubmit';
 import { CONFIRM, PASSWORD_CHANGED, PASSWORD_MISMATCH } from '../../lib/copy';
-import { PASSWORD_LENGTH, type PublicUser } from '../../types';
+import { PASSWORD_LENGTH } from '../../../../shared/api.js';
+import type { PublicUser } from '../../types';
 import { HiddenUsername, NewPasswordFields } from '../NewPasswordFields';
 import { UsernameInput } from '../UsernameInput';
 import { Section } from './controls';
@@ -101,7 +102,7 @@ function Users({ me }: { me: PublicUser }) {
 
   return (
     <div className="stack">
-      <ul className="user-list">
+      <ul>
         {(users ?? []).map((u) => (
           <li key={u.id} className="user-row">
             <Avatar name={u.name} />
