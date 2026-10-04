@@ -257,13 +257,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   through `alarms`, `sounds` and `retention`, so the client sends only what it changed
   (`SettingsPatch` in `client/src/api.ts`), down to one alarm's field, and a save on one device
   never writes its stale copy of the rest over another device's change; lists (`timerMinutes`,
-  `layout`) go whole. A changed default of an
-  existing key reaches only users with no row (a new user, or one who used Reset all
-  settings). A change that must reach the others needs a `mergeSettings` rule that reads the
-  stored value (as `stickers` reads the old layout), and that rule can't tell a value left at
-  the old default from one the user chose. Add settings by adding a default (shared) +
-  validation there, never by migrating rows. `DELETE /api/settings` drops the user's row, which
-  is what "Reset all settings" does.
+  `layout`) go whole. A changed default of an existing key reaches only users with no row (a
+  new user, or one who used Reset all settings). A change that must reach the others needs a
+  `mergeSettings` rule that reads the stored value (as `stickers` reads the old layout), and
+  that rule can't tell a value left at the old default from one the user chose. Add settings by
+  adding a default (shared) + validation there, never by migrating rows. `DELETE /api/settings`
+  drops the user's row, which is what "Reset all settings" does.
 - **Timeclock math lives only in `client/src/lib/timeclock.ts`; alarm scheduling only in
   `client/src/lib/alarms.ts`.** Both are pure functions of `(inputs, settings, now)` with tests.
   Components and hooks never re-derive these. Past days go through `timeclockForDate`
