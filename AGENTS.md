@@ -421,8 +421,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   ends it. A past day ends once it is off the clock. "Add extra out / in" appends two rows, so the old Clock out
   becomes the new pair's Out. Removing the pair an Add just made, before any punch changes,
   undoes the Add and gives the Clock out its time back (`Timeclock` keeps the rows from before
-  it); removing any other pair drops its two rows (`removePunchPair`). Lunch semantics come only
-  from positions 1 and 2.
+  it in its state, so the undo ends when the card remounts: a reload, another date, the first
+  Customize); removing any other pair drops its two rows (`removePunchPair`). Lunch semantics
+  come only from positions 1 and 2.
 - **A punch row saves only complete times.** `TimeField` (React Aria segments) commits the
   moment hour, minute and period are all filled, and throws a half-typed draft away when
   focus leaves the field or on Escape, which keeps focus in the field, so the row never shows a
