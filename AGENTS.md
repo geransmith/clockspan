@@ -69,7 +69,8 @@ server/                 Express API → dist/server
 client/                 Vite root → dist/client
   public/               manifest, sw.js, icons/icon.svg (the icon's one source; `npm run icons` renders
                         the PNGs next to it)
-  src/App.tsx           provider stack + Shell (route, settings dialog); today's alarms are hooks/useTodayAlarms.ts
+  src/App.tsx           Shell (route, settings dialog) inside AppProviders (hooks/AppProviders.tsx); today's
+                        alarms are hooks/useTodayAlarms.ts
   src/api.ts            fetch wrapper (30 s timeout; UNAUTHENTICATED_EVENT on a 401 from anything but login and
                         /me; throws lib/apiError.ts's ApiError, which a caller checks with instanceof);
                         src/types.ts re-exports shared types
@@ -82,12 +83,13 @@ client/                 Vite root → dist/client
                         fired alarms, Start fresh) and adoptUser, which records who the app is open for
                         under AUTH_USER_KEY and drops the last user's keys
   src/hooks/            state and effects (useDay, useTimer, useSettings, useAlarms, …), each with a
-                        happy-dom test beside it (useLatest is covered through the hooks that use it).
+                        happy-dom test beside it (useLatest is covered through the hooks that use it, and
+                        AppProviders through the tests that render it as AllProviders).
                         useClock is the app's one 1-second clock; useSaveStatus
                         (Saving… / Saved / Not saved) and useLastTab (the tab it reopens on) serve the
                         settings dialog. src/test/fixtures.ts has the plain factories and
-                        TEST_SETTINGS (no React); src/test/hooks.tsx has the provider stack and
-                        act() helpers and re-exports fixtures.ts
+                        TEST_SETTINGS (no React); src/test/hooks.tsx re-exports fixtures.ts and
+                        AppProviders (as AllProviders) and has SettingsAndDays and the act() helpers
   src/components/       the cards, History (Calendar + Review), Banners, FinishChoice, and the pieces
                         several of them share; settings/ holds SettingsDialog (the shell and tabs), a
                         file per tab, and controls.tsx

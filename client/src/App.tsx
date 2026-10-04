@@ -5,12 +5,11 @@ import { Header } from './components/Header';
 import { RunningTimerBar } from './components/RunningTimerBar';
 import { FinishChoice } from './components/FinishChoice';
 import { Sheet } from './components/Sheet';
-import { BreakProvider } from './hooks/useBreak';
-import { DayProvider } from './hooks/useDay';
-import { ClockProvider, useClock } from './hooks/useClock';
+import { AppProviders } from './hooks/AppProviders';
+import { useClock } from './hooks/useClock';
 import { useRoute } from './hooks/useRoute';
-import { SettingsProvider, useSettings } from './hooks/useSettings';
-import { TimerProvider, useTimer } from './hooks/useTimer';
+import { useSettings } from './hooks/useSettings';
+import { useTimer } from './hooks/useTimer';
 import { useTodayAlarms } from './hooks/useTodayAlarms';
 import { todayKey } from '../../shared/dates.js';
 import { floorToMinute } from './lib/format';
@@ -27,17 +26,9 @@ const SettingsDialog = lazy(() => import('./components/settings/SettingsDialog')
 export function App() {
   return (
     <AuthGate>
-      <ClockProvider>
-        <SettingsProvider>
-          <DayProvider>
-            <TimerProvider>
-              <BreakProvider>
-                <Shell />
-              </BreakProvider>
-            </TimerProvider>
-          </DayProvider>
-        </SettingsProvider>
-      </ClockProvider>
+      <AppProviders>
+        <Shell />
+      </AppProviders>
     </AuthGate>
   );
 }
