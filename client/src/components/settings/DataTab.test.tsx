@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
-import { DELETE_DAYS } from '../../lib/copy';
+import { CONFIRM, DAYS_DELETED } from '../../lib/copy';
 import { formatDateFull } from '../../lib/format';
 import { deferred, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../../test/hooks';
 import type { PruneResult } from '../../types';
@@ -71,9 +71,9 @@ describe('DataTab', () => {
     await settle();
     fireEvent.click(button);
     await settle();
-    expect(confirm).toHaveBeenCalledWith(DELETE_DAYS.confirm(2, formatDateFull('2026-06-01')));
+    expect(confirm).toHaveBeenCalledWith(CONFIRM.deleteDays(2, formatDateFull('2026-06-01')));
     expect(api.pruneDays).toHaveBeenCalledWith('2026-06-01');
-    expect(screen.getByRole('status').textContent).toBe(DELETE_DAYS.done(2));
+    expect(screen.getByRole('status').textContent).toBe(DAYS_DELETED(2));
   });
 
   it("shows the new date's count when the date changes during a delete", async () => {
@@ -92,7 +92,7 @@ describe('DataTab', () => {
     await settle();
     expect(api.getPruneInfo).toHaveBeenLastCalledWith(later);
     expect(screen.getByText(/5 before this date/)).toBeTruthy();
-    expect(screen.getByRole('status').textContent).toBe(DELETE_DAYS.done(2));
+    expect(screen.getByRole('status').textContent).toBe(DAYS_DELETED(2));
     expect(button.disabled).toBe(false);
   });
 
@@ -103,7 +103,7 @@ describe('DataTab', () => {
     vi.mocked(api.getPruneInfo).mockRejectedValueOnce(new Error('Request failed (500)'));
     fireEvent.click(button);
     await settle();
-    expect(screen.getByRole('status').textContent).toBe(DELETE_DAYS.done(2));
+    expect(screen.getByRole('status').textContent).toBe(DAYS_DELETED(2));
     expect(screen.getByRole('alert').textContent).toBe('Request failed (500)');
     expect(button.disabled).toBe(true);
   });

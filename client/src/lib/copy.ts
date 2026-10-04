@@ -6,16 +6,13 @@
  * convention in AGENTS.md.
  */
 
-import { plural } from './format';
+import { counted } from './format';
 
 /** Shown once the day is done. One is picked per clock-out. */
 export const CELEBRATION_EMOJI = ['🎉', '🥳', '🌟', '✨', '🙌', '💪', '🏆', '🎈', '🚀', '🌈', '🍀', '🎊', '👏', '😎', '🔥', '🥇', '🌻', '🫶', '🏁', '🧠'];
 
 /** The sticker chart's stickers: one per thing a day did, drawn at random from here. */
 export const STICKER_EMOJI = ['🐱', '🐶', '🐰', '🦊', '🐻', '🐼', '🐨', '🐸', '🦄', '🐥', '🐢', '🦋', '🐝', '🐧', '🦉', '🐹', '🐣', '🌸', '🌷', '🍓'];
-
-/** The sticker chart before any day in its window has earned one. */
-export const STICKERS_EMPTY = 'Nothing here yet. Stickers appear as days get logged.';
 
 /** The Timeclock notice once the day is done; one of the phrases below follows it. */
 export const DAY_COMPLETE = 'Day complete.';
@@ -64,57 +61,59 @@ export const CELEBRATION_PHRASES = [
   'Take the long way home, if there is one.',
 ];
 
-/** Shown when adding a priority past the threshold. One is picked per attempt. */
-export const GENTLE_WARNINGS = [
-  "That's a full plate already. Sure about one more?",
-  'More rows means each one matters a little less.',
-  "Everything can't be the most important thing.",
-  'A long list is where priorities go to hide.',
-  'Is this for today, or for some day?',
-  'Fine, but if you could only do one today, which one?',
-  'Carrying a few plates is one thing. Juggling them is another.',
-  "The list doesn't get shorter by getting longer.",
-  'Bold move. Today thing or someday thing?',
-  'Done beats listed.',
-  'Sure? Tomorrow has room too.',
-  "That's another promise to yourself. Still want it?",
-  'The top of the list is prime real estate. The bottom is the suburbs.',
-  'Ambition noted. Energy budget also noted.',
-  'You could also just not.',
-  'This is where "top" quietly becomes "all".',
-  'Short lists get finished more often.',
-  'Adding is easy. Crossing off is the fun part.',
-  "If it won't make today a win, park it for tomorrow.",
-  'Is that a priority, or a worry in a to-do costume?',
-];
-
-/** Shown instead when some rows are already ticked. Counts live in the notice header, not here. */
-export const PROGRESS_WARNINGS = [
-  'Some of this is already done. Are you adding, or avoiding what is left?',
-  'You have cleared part of the list. The open rows still need the rest of the day.',
-  'A few are ticked. Do the open ones fit before this new one?',
-  'There is still an open row. Is this more important than it?',
-  'You have done real work already. A new row does not count more than that.',
-  'Adding now, with rows still open, means one of them slips. Which one?',
-  'Part of the plan is done. Is this the rest of it, or a new plan?',
-  'Does this belong today, or is it leaking in from tomorrow?',
-  "The ticked ones are today's win. Don't bury them under new rows.",
-  'The open rows were the plan. Do them first?',
-];
-
-/** Shown when every row is ticked. */
-export const COMPLETE_WARNINGS = [
-  'Everything is ticked. Anything you add now is extra, not owed.',
-  "The plan is done. This one is a bonus, or it is tomorrow's first row.",
-  "You finished the list. Adding more means today can't end as a clean win.",
-  "All done. Sure you're not just filling the quiet?",
-  'Plan complete. A new row now is optional. Treat it that way.',
-  'Nothing is open. Is this urgent, or just available?',
-  "You did what you said you'd do. Stop there, or add one with a light grip.",
-  'List cleared. If you add this, it is allowed to stay unfinished.',
-  "Done means done. Tomorrow's sheet has empty rows.",
-  "You set the bar this morning. Don't raise it now.",
-];
+/**
+ * Shown when adding a priority past the threshold, by how much of the list is ticked
+ * (`warningKind`): none, some, all. One is picked per attempt; counts live in the notice header,
+ * not here.
+ */
+export const PRIORITY_WARNINGS = {
+  fresh: [
+    "That's a full plate already. Sure about one more?",
+    'More rows means each one matters a little less.',
+    "Everything can't be the most important thing.",
+    'A long list is where priorities go to hide.',
+    'Is this for today, or for some day?',
+    'Fine, but if you could only do one today, which one?',
+    'Carrying a few plates is one thing. Juggling them is another.',
+    "The list doesn't get shorter by getting longer.",
+    'Bold move. Today thing or someday thing?',
+    'Done beats listed.',
+    'Sure? Tomorrow has room too.',
+    "That's another promise to yourself. Still want it?",
+    'The top of the list is prime real estate. The bottom is the suburbs.',
+    'Ambition noted. Energy budget also noted.',
+    'You could also just not.',
+    'This is where "top" quietly becomes "all".',
+    'Short lists get finished more often.',
+    'Adding is easy. Crossing off is the fun part.',
+    "If it won't make today a win, park it for tomorrow.",
+    'Is that a priority, or a worry in a to-do costume?',
+  ],
+  progress: [
+    'Some of this is already done. Are you adding, or avoiding what is left?',
+    'You have cleared part of the list. The open rows still need the rest of the day.',
+    'A few are ticked. Do the open ones fit before this new one?',
+    'There is still an open row. Is this more important than it?',
+    'You have done real work already. A new row does not count more than that.',
+    'Adding now, with rows still open, means one of them slips. Which one?',
+    'Part of the plan is done. Is this the rest of it, or a new plan?',
+    'Does this belong today, or is it leaking in from tomorrow?',
+    "The ticked ones are today's win. Don't bury them under new rows.",
+    'The open rows were the plan. Do them first?',
+  ],
+  complete: [
+    'Everything is ticked. Anything you add now is extra.',
+    "The plan is done. This one is a bonus, or it is tomorrow's first row.",
+    "You finished the list. Adding more means today can't end as a clean win.",
+    "All done. Sure you're not just filling the quiet?",
+    'Plan complete. A new row now is optional. Treat it that way.',
+    'Nothing is open. Is this urgent, or just available?',
+    "You did what you said you'd do. Stop there, or add one with a light grip.",
+    'List cleared. If you add this, it is allowed to stay unfinished.',
+    "Done means done. Tomorrow's sheet has empty rows.",
+    "You set the bar this morning. Don't raise it now.",
+  ],
+};
 
 /** Buttons under the warning, by how much of the list is done. */
 export const WARNING_ACTIONS = {
@@ -137,7 +136,12 @@ export const CONFIRM = {
   deleteBreak: 'Delete this break from the log?',
   deleteUser: (name: string) => `Delete ${name} and ALL of their data? This cannot be undone.`,
   signOut: 'Sign out of Clockspan on this device?',
+  resetSettings: 'Reset every setting to its default? Days, punches and sessions are kept.',
+  deleteDays: (n: number, before: string) => `Delete ${counted(n, 'day')} before ${before}? This cannot be undone.`,
 } as const;
+
+/** A timer line, with the session's label in front when it has one. */
+const labelled = (label: string, text: string) => (label ? `${label} · ${text}` : text);
 
 /**
  * The alert when a focus timer reaches zero: the session stays open until it is finished or
@@ -145,7 +149,7 @@ export const CONFIRM = {
  */
 export const TIMER_DUE = {
   title: "Time's up",
-  body: (label: string, planned: string) => `${label ? `${label} · ` : ''}${planned}. Finish, or add more time.`,
+  body: (label: string, planned: string) => labelled(label, `${planned}. Finish, or add more time.`),
   more: (minutes: number) => `Add ${minutes} min`,
 } as const;
 
@@ -161,13 +165,13 @@ export const FINISH_CHOICE = {
 /** The alert when a timer that ran out got no answer and was logged at its planned length. */
 export const TIMER_DONE = {
   title: 'Focus session complete',
-  body: (label: string, duration: string) => (label ? `${label} · ${duration}` : `${duration} logged.`),
+  body: (label: string, duration: string) => labelled(label, `${duration} logged.`),
 } as const;
 
 /** Banner when a pause was left for an hour: the session was closed where the pause began. */
 export const TIMER_PAUSED_OUT = {
   title: 'Focus session closed',
-  body: (label: string, duration: string) => `${label ? `${label} · ` : ''}${duration} logged. It sat paused for an hour, so it ended where the pause began.`,
+  body: (label: string, duration: string) => labelled(label, `${duration} logged. It sat paused for an hour, so it ended where the pause began.`),
 } as const;
 
 /** The focus timer's break: the button, the line while it runs, and the banner when it's over. */
@@ -203,7 +207,7 @@ export const TIMER_ELSEWHERE = {
 } as const;
 
 /** Above the banner stack when more are raised than it draws; closing one brings the next back. */
-export const BANNERS_MORE = (n: number) => `${n} more ${plural(n, 'alert')}`;
+export const BANNERS_MORE = (n: number) => counted(n, 'more alert');
 
 /** Under the timeclock's tiles while the second meal period applies: when it is due, and after how long. */
 export const SECOND_MEAL_NOTE = (overdue: boolean, at: string, worked: string) =>
@@ -222,7 +226,7 @@ export const PLAN_NEXT = {
   already: (n: number) => `${n} already on the list`,
   placeholder: 'Something else for the list',
   save: (name: string) => `Add to ${name}`,
-  done: (n: number, name: string) => `${n} ${plural(n, 'row')} added for ${name}.`,
+  done: (n: number, name: string) => `${counted(n, 'row')} added for ${name}.`,
   nothing: 'Nothing new to add.',
 } as const;
 
@@ -280,6 +284,9 @@ export const HTTPS_ONLY = {
 /** Under the new-password fields (setup, a temporary password, Settings → Account) when the two differ. */
 export const PASSWORD_MISMATCH = 'The two passwords do not match.';
 
+/** Settings → Account, once the password was changed. */
+export const PASSWORD_CHANGED = 'Password updated.';
+
 /** After signing in on a temporary password (an admin's, or one the CLI generated), before the app. */
 export const NEW_PASSWORD = {
   title: 'Choose your own password',
@@ -288,7 +295,7 @@ export const NEW_PASSWORD = {
 
 /** The whole page, when `/api/auth/me` got no answer before the app opened. */
 export const SERVER_UNREACHABLE = {
-  body: (error: string) => `Can’t reach the server: ${error}`,
+  body: (error: string) => `Can't reach the server: ${error}`,
   retry: 'Retry',
 } as const;
 
@@ -310,15 +317,5 @@ export const SAVE_STATUS = {
   failedDetail: "The last change didn't save and was put back.",
 } as const;
 
-/** Settings → Data → Reset: the button, its hint and the confirm before every setting goes back to default. */
-export const RESET_SETTINGS = {
-  button: 'Reset all settings',
-  hint: 'Every setting goes back to its default. Days, punches and sessions are kept.',
-  confirm: 'Reset every setting to its default? Days, punches and sessions are kept.',
-} as const;
-
-/** Settings → Data: the confirm before old days are deleted, and the result line. */
-export const DELETE_DAYS = {
-  confirm: (n: number, before: string) => `Delete ${n} ${plural(n, 'day')} before ${before}? This cannot be undone.`,
-  done: (n: number) => `Deleted ${n} ${plural(n, 'day')}.`,
-} as const;
+/** Settings → Data: the line after old days are deleted. */
+export const DAYS_DELETED = (n: number) => `Deleted ${counted(n, 'day')}.`;

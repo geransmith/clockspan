@@ -5,7 +5,7 @@ import { DAY_MS } from '../../../shared/dates.js';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
 import { playSound, unlockAudio } from '../lib/alerts';
-import { COMPLETE_WARNINGS, GENTLE_WARNINGS, LEFT_OPEN, WARNING_ACTIONS } from '../lib/copy';
+import { LEFT_OPEN, PRIORITY_WARNINGS, WARNING_ACTIONS } from '../lib/copy';
 import { makeSettings, settle, T0 } from '../test/hooks';
 import type { Priority } from '../types';
 import { Priorities } from './Priorities';
@@ -117,7 +117,7 @@ describe('Priorities', () => {
     expect(onChange).not.toHaveBeenCalled();
     // The live region is there before the warning, so a screen reader hears it arrive.
     const status = screen.getByRole('status');
-    expect(GENTLE_WARNINGS.some((w) => status.textContent!.includes(w))).toBe(true);
+    expect(PRIORITY_WARNINGS.fresh.some((w) => status.textContent!.includes(w))).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: WARNING_ACTIONS.fresh.keep }));
     expect(screen.getByRole('status')).toBe(status);
@@ -139,7 +139,7 @@ describe('Priorities', () => {
     await renderCard([row(1, 'Report', true), row(2, 'Invoices', true), row(3, 'Email', true)]);
     fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
     const status = screen.getByRole('status');
-    expect(COMPLETE_WARNINGS.some((w) => status.textContent!.includes(w))).toBe(true);
+    expect(PRIORITY_WARNINGS.complete.some((w) => status.textContent!.includes(w))).toBe(true);
     expect(status.textContent).toContain('3 of 3 done');
     expect(screen.getByRole('button', { name: WARNING_ACTIONS.complete.add })).toBeTruthy();
   });

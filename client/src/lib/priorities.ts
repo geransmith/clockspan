@@ -1,6 +1,6 @@
 import type { Day, Priority } from '../types';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
-import { COMPLETE_WARNINGS, GENTLE_WARNINGS, PROGRESS_WARNINGS } from './copy';
+import { PRIORITY_WARNINGS } from './copy';
 
 /** A row with something written in it; the others are the card's empty slots. */
 export function hasText(p: { text: string }): boolean {
@@ -36,15 +36,9 @@ export function warningKind(done: number, total: number): WarningKind {
   return done >= total ? 'complete' : 'progress';
 }
 
-const POOLS: Record<WarningKind, readonly string[]> = {
-  fresh: GENTLE_WARNINGS,
-  progress: PROGRESS_WARNINGS,
-  complete: COMPLETE_WARNINGS,
-};
-
 /** A random warning for the kind, never the same one twice in a row. */
 export function pickWarning(kind: WarningKind, rng: () => number = Math.random, avoid?: string): string {
-  const all = POOLS[kind];
+  const all = PRIORITY_WARNINGS[kind];
   const pool = all.length > 1 && avoid ? all.filter((w) => w !== avoid) : all;
   return pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]!;
 }

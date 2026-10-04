@@ -1,5 +1,5 @@
 import type { AlarmSettings, Settings } from '../types';
-import { formatDuration, formatDurationCeil, plural } from './format';
+import { counted, formatDuration, formatDurationCeil } from './format';
 import type { TimeclockResult } from './timeclock';
 
 /** One of the timeclock card's tiles: the number, the line under it, and its colour class. */
@@ -107,7 +107,7 @@ export function timeclockTiles(tc: TimeclockResult, o: TileOptions): { lunch: Ti
 export function focusTile(focus: { seconds: number; count: number }, isToday: boolean): TileView {
   return {
     value: formatDuration(focus.seconds),
-    sub: focus.count > 0 ? `${focus.count} ${plural(focus.count, 'session')}` : isToday ? 'No sessions yet' : 'No sessions',
+    sub: focus.count > 0 ? counted(focus.count, 'session') : isToday ? 'No sessions yet' : 'No sessions',
     tone: '',
   };
 }

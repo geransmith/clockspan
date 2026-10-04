@@ -3,16 +3,15 @@ import {
   BANNERS_MORE,
   BREAK,
   BREAK_SUGGESTION,
+  CELEBRATION_EMOJI,
   CELEBRATION_PHRASES,
-  COMPLETE_WARNINGS,
   CONFIRM,
-  DELETE_DAYS,
+  DAYS_DELETED,
   FINISH_CHOICE,
-  GENTLE_WARNINGS,
   LEFT_OPEN,
   LOAD_FAILED,
   PLAN_NEXT,
-  PROGRESS_WARNINGS,
+  PRIORITY_WARNINGS,
   REQUEST_FAILED,
   SAVE_FAILED,
   SECOND_MEAL_NOTE,
@@ -33,7 +32,7 @@ describe('copy builders', () => {
   });
 
   it('describes a finished timer with or without a label', () => {
-    expect(TIMER_DONE.body('Write the report', '25m')).toBe('Write the report · 25m');
+    expect(TIMER_DONE.body('Write the report', '25m')).toBe('Write the report · 25m logged.');
     expect(TIMER_DONE.body('', '25m')).toBe('25m logged.');
   });
 
@@ -86,7 +85,7 @@ describe('copy builders', () => {
   });
 
   it('names what went wrong when the server does not answer', () => {
-    expect(SERVER_UNREACHABLE.body('Request failed (502)')).toBe('Can’t reach the server: Request failed (502)');
+    expect(SERVER_UNREACHABLE.body('Request failed (502)')).toBe("Can't reach the server: Request failed (502)");
   });
 
   it('names the status of a refusal with no message of its own, or an answer that is not JSON', () => {
@@ -103,10 +102,10 @@ describe('copy builders', () => {
   });
 
   it('counts days in the delete-old-days confirm and result', () => {
-    expect(DELETE_DAYS.confirm(1, 'Monday, June 1, 2026')).toBe('Delete 1 day before Monday, June 1, 2026? This cannot be undone.');
-    expect(DELETE_DAYS.confirm(12, 'Monday, June 1, 2026')).toMatch(/^Delete 12 days before /);
-    expect(DELETE_DAYS.done(0)).toBe('Deleted 0 days.');
-    expect(DELETE_DAYS.done(1)).toBe('Deleted 1 day.');
+    expect(CONFIRM.deleteDays(1, 'Monday, June 1, 2026')).toBe('Delete 1 day before Monday, June 1, 2026? This cannot be undone.');
+    expect(CONFIRM.deleteDays(12, 'Monday, June 1, 2026')).toMatch(/^Delete 12 days before /);
+    expect(DAYS_DELETED(0)).toBe('Deleted 0 days.');
+    expect(DAYS_DELETED(1)).toBe('Deleted 1 day.');
   });
 
   it('counts the alerts the banner stack leaves out', () => {
@@ -117,13 +116,13 @@ describe('copy builders', () => {
 
 describe('copy pools', () => {
   it('has no line twice in a pool', () => {
-    for (const pool of [CELEBRATION_PHRASES, GENTLE_WARNINGS, PROGRESS_WARNINGS, COMPLETE_WARNINGS]) {
+    for (const pool of [CELEBRATION_EMOJI, CELEBRATION_PHRASES, ...Object.values(PRIORITY_WARNINGS)]) {
       expect(new Set(pool).size).toBe(pool.length);
     }
   });
 
   it('names no row count in a priority warning: the list starts at priorityCount rows, whatever that is set to', () => {
     const counted = /\b(\d+|two|three|four|five|six|seven|eight|nine|ten|twenty)\b/i;
-    for (const line of [...GENTLE_WARNINGS, ...PROGRESS_WARNINGS, ...COMPLETE_WARNINGS]) expect(line).not.toMatch(counted);
+    for (const line of Object.values(PRIORITY_WARNINGS).flat()) expect(line).not.toMatch(counted);
   });
 });
