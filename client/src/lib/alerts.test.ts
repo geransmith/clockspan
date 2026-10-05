@@ -368,10 +368,13 @@ describe('banners', () => {
   });
 
   it('warnQuietly raises a non-sticky danger banner with no sound and no notification', () => {
+    vi.useFakeTimers();
     alerts.warnQuietly({ title: 'Change not saved', body: 'The server did not answer.', tag: 'save-failed' });
     expect(FakeAudioContext.instances).toHaveLength(0);
     expect(FakeNotification.created).toHaveLength(0);
     expect(alerts.getBanners()[0]).toMatchObject({ title: 'Change not saved', tone: 'danger' });
+    vi.advanceTimersByTime(8_000);
+    expect(alerts.getBanners()).toEqual([]);
   });
 
   it('an alert carries its action to the banner', () => {
