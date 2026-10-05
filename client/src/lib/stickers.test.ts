@@ -1,20 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { atTime } from '../../../shared/dates.js';
+import { addDays, atTime } from '../../../shared/dates.js';
 import { completedSession, makeDay, makeSession, makeSummary, punchesAt, TEST_SETTINGS } from '../test/fixtures';
 import type { Punch } from '../types';
 import { STICKER_EMOJI } from './copy';
 import { calendarMonth } from './calendar';
-import {
-  countStickers,
-  daySummaryOf,
-  STICKER_LABELS,
-  STICKER_REASONS,
-  stickerEmoji,
-  stickerReasons,
-  stickersForDay,
-  type DaySummary,
-  type StickerSettings,
-} from './stickers';
+import { countStickers, daySummaryOf, STICKER_REASONS, stickerEmoji, stickerReasons, stickersForDay, type DaySummary, type StickerSettings } from './stickers';
 import { dayTimeclock } from './timeclock';
 
 const settings = TEST_SETTINGS;
@@ -35,10 +25,6 @@ function punches(date: string, times: (string | null)[]): Punch[] {
 const earned = (d: DaySummary, s: StickerSettings = settings) => stickersForDay(d, dayTimeclock(d, s, TODAY, NOW), stickerReasons(s));
 
 describe('stickersForDay', () => {
-  it("maps each reason's id to its label", () => {
-    expect(STICKER_LABELS.lunch).toBe('Lunch taken');
-  });
-
   it('earns nothing for an empty day', () => {
     expect(earned(makeSummary('2026-09-14'))).toEqual([]);
   });
@@ -116,7 +102,7 @@ describe('stickerEmoji', () => {
     expect(stickerEmoji('2026-09-14', 'lunch')).toBe(a);
     expect(STICKER_EMOJI).toContain(a);
     for (let d = 1; d <= 30; d++) {
-      const date = `2026-09-${String(d).padStart(2, '0')}`;
+      const date = addDays('2026-09-01', d - 1);
       expect(new Set(STICKER_REASONS.map((r) => stickerEmoji(date, r.id))).size).toBe(STICKER_REASONS.length);
     }
     const picks = new Set(STICKER_REASONS.flatMap((r) => ['2026-09-14', '2026-09-15', '2026-09-16'].map((d) => stickerEmoji(d, r.id))));

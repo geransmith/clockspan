@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { BREAK_SECONDS } from '../../../shared/timer.js';
-import { completedSession, makeSession, T0, type EndPatch } from '../test/fixtures';
-import type { Break } from '../types';
+import { breakAt, completedSession, makeSession, T0, type EndPatch } from '../test/fixtures';
 import { breakSeconds, endBreaksAt, MAX_BREAK_MINUTES, MIN_FOCUS_SECONDS, runningBreak, SET_GAP_MINUTES, SET_SIZE, suggestBreak } from './breaks';
 
 const session = (id: number, startedAt: number, minutes: number, extra: EndPatch = {}) => completedSession(id, startedAt, minutes * 60, extra);
@@ -87,25 +86,17 @@ describe('suggestBreak', () => {
 });
 
 describe('logged breaks', () => {
-  const rest = (id: number, at: number, minutes: number, endedAt = T0 + (at + minutes) * MINUTE_MS): Break => ({
-    id,
-    date: '2026-09-28',
-    plannedSeconds: minutes * 60,
-    startedAt: T0 + at * MINUTE_MS,
-    endedAt,
-  });
-
   it('counts the rest so far while a break runs, and its whole length once over', () => {
-    const b = rest(1, 0, 5);
+    const b = breakAt(1, 0, 5);
     expect(breakSeconds(b, T0 - MINUTE_MS)).toBe(0);
     expect(breakSeconds(b, T0 + 2 * MINUTE_MS)).toBe(120);
     expect(breakSeconds(b, T0 + 60 * MINUTE_MS)).toBe(300);
-    expect(breakSeconds(rest(2, 0, 5, T0 + 90_000), T0 + 60 * MINUTE_MS)).toBe(90);
+    expect(breakSeconds(breakAt(2, 0, 5, { endedAt: T0 + 90_000 }), T0 + 60 * MINUTE_MS)).toBe(90);
   });
 
   it('ends the break running at a moment there, and drops it if it ran under a minute', () => {
-    const over = rest(1, 0, 5);
-    const running = rest(2, 30, 10);
+    const over = breakAt(1, 0, 5);
+    const running = breakAt(2, 30, 10);
     expect(endBreaksAt([over, running], T0 + 32 * MINUTE_MS)).toEqual([over, { ...running, endedAt: T0 + 32 * MINUTE_MS }]);
     expect(endBreaksAt([over, running], T0 + 31 * MINUTE_MS)).toEqual([over, { ...running, endedAt: T0 + 31 * MINUTE_MS }]);
     expect(endBreaksAt([over, running], T0 + 31 * MINUTE_MS - 1)).toEqual([over]);
@@ -114,7 +105,7 @@ describe('logged breaks', () => {
   });
 
   it('finds the break running now: the latest one, while its end is ahead', () => {
-    const breaks = [rest(1, 0, 5), rest(2, 30, 10)];
+    const breaks = [breakAt(1, 0, 5), breakAt(2, 30, 10)];
     expect(runningBreak([], T0)).toBeNull();
     expect(runningBreak(breaks.slice(0, 1), T0 + 2 * MINUTE_MS)).toBe(breaks[0]);
     expect(runningBreak(breaks.slice(0, 1), T0 + 5 * MINUTE_MS)).toBeNull();

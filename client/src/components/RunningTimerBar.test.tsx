@@ -5,7 +5,7 @@ import * as api from '../api';
 import { UNTITLED_SESSION } from '../lib/copy';
 import { formatCountdown } from '../lib/format';
 import { MINUTE_MS } from '../../../shared/dates.js';
-import { AllProviders, makeDay, makeSession, makeSettings, settle, T0 } from '../test/hooks';
+import { AppProviders, makeDay, makeSession, makeSettings, settle, T0 } from '../test/hooks';
 import type { Session } from '../types';
 import { RunningTimerBar } from './RunningTimerBar';
 
@@ -15,9 +15,9 @@ vi.mock('../lib/alerts');
 async function renderBar(session: Session) {
   vi.mocked(api.getRunning).mockResolvedValue({ session });
   render(
-    <AllProviders>
+    <AppProviders>
       <RunningTimerBar />
-    </AllProviders>,
+    </AppProviders>,
   );
   await settle();
 }

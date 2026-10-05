@@ -13,6 +13,7 @@ import {
   endSession,
   makeBreak,
   makeDay,
+  makePriority,
   makeSession,
   makeSettings,
   MIDNIGHT,
@@ -47,15 +48,6 @@ function renderStore(date: string | null = TODAY) {
 /** The server's answer to a list PUT: the list as sent, which is what it stores. */
 const echoPunches = (_date: string, punches: Punch[]) => Promise.resolve({ punches });
 const echoPriorities = (_date: string, priorities: Priority[]) => Promise.resolve({ priorities });
-
-const priority = (position: number, text: string, patch: Partial<Priority> = {}): Priority => ({
-  position,
-  text,
-  done: false,
-  uid: `u${position}`,
-  addedAt: T0,
-  ...patch,
-});
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
@@ -337,12 +329,12 @@ describe('load after a write', () => {
     vi.mocked(api.putPriorities).mockReturnValueOnce(rows.promise);
     const { result } = renderStore();
     await settle();
-    const listed = begin(() => result.current.setPriorities(TODAY, [priority(1, 'Still here')]));
+    const listed = begin(() => result.current.setPriorities(TODAY, [makePriority(1, 'Still here')]));
     await act(() => result.current.setPunches(TODAY, punchesAt(T0)));
     await settle();
     // The reload has the server's copy, from before the priorities PUT: the row is still shown over it.
     expect(result.current.days[TODAY]).toMatchObject({ retroNote: 'reloaded', priorities: [{ text: 'Still here' }] });
-    rows.resolve({ priorities: [priority(1, 'Still here')] });
+    rows.resolve({ priorities: [makePriority(1, 'Still here')] });
     expect(await act(() => listed)).toBe(true);
     expect(result.current.days[TODAY]?.priorities.map((p) => p.text)).toEqual(['Still here']);
   });
@@ -466,9 +458,9 @@ describe('priorities', () => {
     vi.mocked(api.putPriorities).mockImplementationOnce(echoPriorities).mockRejectedValueOnce(new Error('offline'));
     const { result } = renderStore();
     await settle();
-    await act(async () => expect(await result.current.setPriorities(TODAY, [priority(1, 'Ship it')])).toBe(true));
+    await act(async () => expect(await result.current.setPriorities(TODAY, [makePriority(1, 'Ship it')])).toBe(true));
     expect(result.current.days[TODAY]?.priorities[0]?.text).toBe('Ship it');
-    await act(async () => expect(await result.current.setPriorities(TODAY, [priority(1, 'Lost')])).toBe(false));
+    await act(async () => expect(await result.current.setPriorities(TODAY, [makePriority(1, 'Lost')])).toBe(false));
   });
 
   it('sends one list at a time, skipping to the newest, and tells every caller it was saved', async () => {
@@ -478,9 +470,9 @@ describe('priorities', () => {
     const { result } = renderStore();
     await settle();
     const saves: Promise<boolean>[] = [];
-    act(() => void saves.push(result.current.setPriorities(TODAY, [priority(1, 'One', { done: true })])));
-    act(() => void saves.push(result.current.setPriorities(TODAY, [priority(1, 'One', { done: true }), priority(2, 'Two')])));
-    act(() => void saves.push(result.current.setPriorities(TODAY, [priority(1, 'One', { done: true }), priority(2, 'Two', { done: true })])));
+    act(() => void saves.push(result.current.setPriorities(TODAY, [makePriority(1, 'One', { done: true })])));
+    act(() => void saves.push(result.current.setPriorities(TODAY, [makePriority(1, 'One', { done: true }), makePriority(2, 'Two')])));
+    act(() => void saves.push(result.current.setPriorities(TODAY, [makePriority(1, 'One', { done: true }), makePriority(2, 'Two', { done: true })])));
     expect(api.putPriorities).toHaveBeenCalledTimes(1);
     first.resolve({ priorities: vi.mocked(api.putPriorities).mock.calls[0]![1] });
     await act(async () => expect(await Promise.all(saves)).toEqual([true, true, true]));
@@ -489,7 +481,7 @@ describe('priorities', () => {
   });
 
   it('addPriority fills the first empty row and resolves to its uid', async () => {
-    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [priority(1, 'First')] }));
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [makePriority(1, 'First')] }));
     vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
     const { result } = renderStore();
     await settle();
@@ -503,7 +495,7 @@ describe('priorities', () => {
   });
 
   it('addPriority rejects when the list is full, the day is not loaded, or the save fails', async () => {
-    const full = Array.from({ length: MAX_PRIORITIES }, (_, i) => priority(i + 1, `Row ${i + 1}`));
+    const full = Array.from({ length: MAX_PRIORITIES }, (_, i) => makePriority(i + 1, `Row ${i + 1}`));
     // Every later GET is the other day's: its load, then the reload after the failed save.
     vi.mocked(api.getDay)
       .mockResolvedValue(makeDay(OTHER))
@@ -536,15 +528,15 @@ describe('priorities', () => {
     await settle();
     let saved = false;
     act(() => {
-      void result.current.setPriorities(TODAY, [priority(1, 'One')]);
-      void result.current.setPriorities(TODAY, [priority(1, 'One'), priority(2, 'Two')]);
+      void result.current.setPriorities(TODAY, [makePriority(1, 'One')]);
+      void result.current.setPriorities(TODAY, [makePriority(1, 'One'), makePriority(2, 'Two')]);
       void result.current.prioritiesSaved(TODAY).then(() => (saved = true));
     });
-    first.resolve({ priorities: [priority(1, 'One')] });
+    first.resolve({ priorities: [makePriority(1, 'One')] });
     await settle();
     expect(api.putPriorities).toHaveBeenCalledTimes(2);
     expect(saved).toBe(false);
-    second.resolve({ priorities: [priority(1, 'One'), priority(2, 'Two')] });
+    second.resolve({ priorities: [makePriority(1, 'One'), makePriority(2, 'Two')] });
     await settle();
     expect(saved).toBe(true);
   });
@@ -557,7 +549,7 @@ describe('priorities', () => {
     await settle();
     let saved!: Promise<void>;
     act(() => {
-      void result.current.setPriorities(TODAY, [priority(1, 'Lost')]);
+      void result.current.setPriorities(TODAY, [makePriority(1, 'Lost')]);
       saved = result.current.prioritiesSaved(TODAY);
     });
     refused.reject(new Error('offline'));
@@ -708,23 +700,24 @@ describe('sessions', () => {
 
   it('updateSession links a row to a priority only once that priorities save has answered', async () => {
     vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { sessions: [makeSession()] }));
+    const typed = makePriority(1, 'Just typed');
     const rows = deferred<{ priorities: Priority[] }>();
     vi.mocked(api.putPriorities).mockReturnValueOnce(rows.promise);
-    vi.mocked(api.patchSession).mockResolvedValueOnce({ session: makeSession({ priorityUid: 'u1' }) });
+    vi.mocked(api.patchSession).mockResolvedValueOnce({ session: makeSession({ priorityUid: typed.uid }) });
     const { result } = renderStore();
     await settle();
     let done!: Promise<boolean>;
     act(() => {
-      void result.current.setPriorities(TODAY, [priority(1, 'Just typed')]);
-      done = result.current.updateSession(TODAY, 1, { priorityUid: 'u1' });
+      void result.current.setPriorities(TODAY, [typed]);
+      done = result.current.updateSession(TODAY, 1, { priorityUid: typed.uid });
     });
-    expect(result.current.days[TODAY]?.sessions[0]?.priorityUid).toBe('u1');
+    expect(result.current.days[TODAY]?.sessions[0]?.priorityUid).toBe(typed.uid);
     await settle();
     // The server refuses a uid it hasn't stored.
     expect(api.patchSession).not.toHaveBeenCalled();
-    rows.resolve({ priorities: [priority(1, 'Just typed')] });
+    rows.resolve({ priorities: [typed] });
     expect(await act(() => done)).toBe(true);
-    expect(api.patchSession).toHaveBeenCalledWith(1, { priorityUid: 'u1' });
+    expect(api.patchSession).toHaveBeenCalledWith(1, { priorityUid: typed.uid });
   });
 });
 

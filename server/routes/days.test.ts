@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from '../dev/harness.js';
+import { ensureDefaultUser } from '../db.js';
 import { seedDatabase } from '../dev/seed.js';
 import { ensureDay } from './shared.js';
 import { MAX_PRIORITIES } from '../../shared/settings.js';
@@ -55,8 +56,7 @@ describe('GET /api/days/:date', () => {
   });
 
   it('answers priorities in position order, here and in a range, whatever order the rows went in', async () => {
-    const user = (app.db.prepare(`SELECT id FROM users`).get() as { id: number }).id;
-    const dayId = ensureDay(app.db, user, '2026-09-01');
+    const dayId = ensureDay(app.db, ensureDefaultUser(app.db).id, '2026-09-01');
     const insert = app.db.prepare(`INSERT INTO priorities (day_id, position, text) VALUES (?, ?, ?)`);
     insert.run(dayId, 2, 'Second');
     insert.run(dayId, 1, 'First');

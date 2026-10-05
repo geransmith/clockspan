@@ -6,7 +6,7 @@ import { alert, dismissByTag, unlockAudio, type AlertOptions } from '../lib/aler
 import { MINUTE_MS, todayKey } from '../../../shared/dates.js';
 import { BREAK, BREAK_SUGGESTION } from '../lib/copy';
 import {
-  AllProviders,
+  AppProviders,
   completedSession,
   deferred,
   endSession,
@@ -36,7 +36,7 @@ const render = () =>
       const { day, store } = useDay(TODAY);
       return { ...useBreak(), timer: useTimer(), day, store };
     },
-    { wrapper: AllProviders },
+    { wrapper: AppProviders },
   );
 
 beforeEach(() => {
@@ -232,7 +232,7 @@ it('waits for the settings before announcing, so the chosen sound plays', async 
 describe('across midnight', () => {
   /** The sheet as App shows it: today's, moving to the new day at midnight, while the store keeps the old one. */
   const renderSheet = () =>
-    renderHook(() => ({ ...useBreak(), timer: useTimer(), sheet: useDay(todayKey(useClock())).day, days: useDays().days }), { wrapper: AllProviders });
+    renderHook(() => ({ ...useBreak(), timer: useTimer(), sheet: useDay(todayKey(useClock())).day, days: useDays().days }), { wrapper: AppProviders });
 
   /** A ten-minute break started at 23:55 on yesterday's sheet. */
   async function breakBeforeMidnight() {

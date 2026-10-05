@@ -1,23 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { emptyDay } from '../../../shared/api.js';
 import { atTime } from '../../../shared/dates.js';
-import { completedSession, TEST_SETTINGS, type EndPatch } from '../test/fixtures';
-import type { Day, Priority } from '../types';
+import { completedSession, makeDay, makePriority, punchesAt, TEST_SETTINGS, type EndPatch } from '../test/fixtures';
 import { periodOffset, periodRange, reviewRange } from './review';
+
+const FIRST_UID = makePriority(1, '').uid;
+const SECOND_UID = makePriority(2, '').uid;
 
 const settings = TEST_SETTINGS;
 const at = (key: string, h: number, m = 0) => atTime(key, h, m);
-const row = (position: number, text: string, extra: Partial<Priority> = {}): Priority => ({
-  position,
-  text,
-  done: false,
-  uid: `uid${position}00000000`,
-  addedAt: 0,
-  ...extra,
-});
+// makePriority stamps a row at T0, after these days' sessions, so a row that must not read as added mid-day passes this.
+const BEFORE_WORK = { addedAt: 0 };
 const session = (id: number, date: string, startedAt: number, seconds: number, extra: EndPatch = {}) =>
   completedSession(id, startedAt, seconds, { date, ...extra });
-const day = (date: string, extra: Partial<Day> = {}): Day => ({ ...emptyDay(date), ...extra });
 
 describe('periodRange', () => {
   it('steps weeks, months and quarters back from today', () => {
@@ -56,29 +50,24 @@ describe('periodOffset', () => {
 
 describe('reviewRange', () => {
   const now = at('2026-09-16', 17);
-  const d1 = day('2026-09-14', {
-    punches: [
-      { position: 0, kind: 'in', at: at('2026-09-14', 8) },
-      { position: 1, kind: 'out', at: at('2026-09-14', 12) },
-      { position: 2, kind: 'in', at: at('2026-09-14', 12, 30) },
-      { position: 3, kind: 'out', at: at('2026-09-14', 16, 30) },
-    ],
-    priorities: [row(1, 'Ship it', { done: true }), row(2, 'Write the proposal')],
+  const d1 = makeDay('2026-09-14', {
+    punches: punchesAt(at('2026-09-14', 8), at('2026-09-14', 12), at('2026-09-14', 12, 30), at('2026-09-14', 16, 30)),
+    priorities: [makePriority(1, 'Ship it', { done: true }), makePriority(2, 'Write the proposal', BEFORE_WORK)],
     sessions: [
-      session(1, '2026-09-14', at('2026-09-14', 9), 3000, { priorityUid: 'uid100000000' }),
+      session(1, '2026-09-14', at('2026-09-14', 9), 3000, { priorityUid: FIRST_UID }),
       session(2, '2026-09-14', at('2026-09-14', 14), 1200, { label: 'Fire drill' }),
     ],
     retroNote: '\nSlack ate the afternoon.\n\n',
     retroAt: at('2026-09-14', 16),
   });
-  const d2 = day('2026-09-15', {
-    priorities: [row(1, 'Call the bank', { done: true })],
+  const d2 = makeDay('2026-09-15', {
+    priorities: [makePriority(1, 'Call the bank', { done: true })],
     sessions: [
-      session(3, '2026-09-15', at('2026-09-15', 9), 600, { priorityUid: 'uid100000000' }),
+      session(3, '2026-09-15', at('2026-09-15', 9), 600, { priorityUid: FIRST_UID }),
       session(4, '2026-09-15', at('2026-09-15', 10), 2400, { label: 'Help Sam' }),
     ],
   });
-  const empty = day('2026-09-16');
+  const empty = makeDay('2026-09-16');
 
   it('rolls days up and lists where the time went instead', () => {
     const r = reviewRange([d2, empty, d1], settings, '2026-09-16', now);
@@ -101,8 +90,8 @@ describe('reviewRange', () => {
   });
 
   it('leaves out a day after today, such as the next day planned tonight', () => {
-    const tomorrow = day('2026-09-17', {
-      priorities: [row(1, 'Write the proposal'), row(2, 'Plan ahead')],
+    const tomorrow = makeDay('2026-09-17', {
+      priorities: [makePriority(1, 'Write the proposal'), makePriority(2, 'Plan ahead')],
       sessions: [session(9, '2026-09-17', at('2026-09-17', 9), 600, { label: 'Early' })],
       retroNote: 'x',
     });
@@ -111,30 +100,30 @@ describe('reviewRange', () => {
   });
 
   it('counts a day that was only marked reviewed', () => {
-    const reviewed = day('2026-09-16', { retroAt: at('2026-09-16', 16) });
+    const reviewed = makeDay('2026-09-16', { retroAt: at('2026-09-16', 16) });
     expect(reviewRange([reviewed], settings, '2026-09-16', now)).toMatchObject({ days: 1, retrosDone: 1, workedSeconds: 0, notes: [] });
   });
 
   it('settles a priority ticked on a later day', () => {
-    const mon = day('2026-09-14', {
-      priorities: [row(1, 'Write the proposal')],
-      sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600, { priorityUid: 'uid100000000' })],
+    const mon = makeDay('2026-09-14', {
+      priorities: [makePriority(1, 'Write the proposal')],
+      sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600, { priorityUid: FIRST_UID })],
     });
-    const tue = day('2026-09-15', { priorities: [row(1, 'write the proposal ', { done: true })] });
+    const tue = makeDay('2026-09-15', { priorities: [makePriority(1, 'write the proposal ', { done: true })] });
     const r = reviewRange([tue, mon], settings, '2026-09-16', now);
     // The tile still counts each day's rows; the list is what the range never finished.
     expect(r).toMatchObject({ prioritiesDone: 1, prioritiesTotal: 2, notDone: [] });
     // Left open again after the tick: only the days since, and only their time.
-    const wed = day('2026-09-16', { priorities: [row(1, 'Write the proposal')] });
+    const wed = makeDay('2026-09-16', { priorities: [makePriority(1, 'Write the proposal')] });
     expect(reviewRange([mon, tue, wed], settings, '2026-09-16', now).notDone).toEqual([
       { key: 'write the proposal', text: 'Write the proposal', dates: ['2026-09-16'], focusedSeconds: 0, addedMidDay: false },
     ]);
     // Ticked and left open on one day, in either order: the tick wins.
     for (const priorities of [
-      [row(1, 'Email', { done: true }), row(2, 'email ')],
-      [row(1, 'email '), row(2, 'Email', { done: true })],
+      [makePriority(1, 'Email', { done: true }), makePriority(2, 'email ')],
+      [makePriority(1, 'email '), makePriority(2, 'Email', { done: true })],
     ]) {
-      expect(reviewRange([day('2026-09-14', { priorities })], settings, '2026-09-16', now).notDone).toEqual([]);
+      expect(reviewRange([makeDay('2026-09-14', { priorities })], settings, '2026-09-16', now).notDone).toEqual([]);
     }
   });
 
@@ -156,12 +145,12 @@ describe('reviewRange', () => {
   });
 
   it('rounds the on-plan share to a whole percent, and has none without focus logged', () => {
-    const third = day('2026-09-14', {
-      priorities: [row(1, 'Ship it')],
-      sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600, { priorityUid: 'uid100000000' }), session(2, '2026-09-14', at('2026-09-14', 10), 1200)],
+    const third = makeDay('2026-09-14', {
+      priorities: [makePriority(1, 'Ship it')],
+      sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600, { priorityUid: FIRST_UID }), session(2, '2026-09-14', at('2026-09-14', 10), 1200)],
     });
     expect(reviewRange([third], settings, '2026-09-16', now).onPlanPercent).toBe(33);
-    const twoThirds = { ...third, sessions: third.sessions.map((s) => ({ ...s, priorityUid: s.priorityUid ? null : 'uid100000000' })) };
+    const twoThirds = { ...third, sessions: third.sessions.map((s) => ({ ...s, priorityUid: s.priorityUid ? null : FIRST_UID })) };
     expect(reviewRange([twoThirds], settings, '2026-09-16', now).onPlanPercent).toBe(67);
     // All of it off the plan is none on it, which is not the same as nothing logged.
     const offPlan = { ...third, sessions: third.sessions.map((s) => ({ ...s, priorityUid: null })) };
@@ -173,8 +162,8 @@ describe('reviewRange', () => {
   });
 
   it('orders equally long unplanned work by date', () => {
-    const later = day('2026-09-15', { sessions: [session(3, '2026-09-15', at('2026-09-15', 9), 600)] });
-    const earlier = day('2026-09-14', { sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600)] });
+    const later = makeDay('2026-09-15', { sessions: [session(3, '2026-09-15', at('2026-09-15', 9), 600)] });
+    const earlier = makeDay('2026-09-14', { sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600)] });
     const r = reviewRange([later, earlier], settings, '2026-09-16', now);
     expect(r.unplanned.map((u) => [u.label, u.seconds])).toEqual([
       ['s1', 600],
@@ -184,20 +173,20 @@ describe('reviewRange', () => {
   });
 
   it('merges repeats by label or text, whatever the case and spacing', () => {
-    const mon = day('2026-09-14', {
-      priorities: [row(1, 'Review the PR'), row(2, 'Ship it', { done: true }), row(3, 'Plan next sprint')],
+    const mon = makeDay('2026-09-14', {
+      priorities: [makePriority(1, 'Review the PR', BEFORE_WORK), makePriority(2, 'Ship it', { done: true }), makePriority(3, 'Plan next sprint', BEFORE_WORK)],
       sessions: [
         session(1, '2026-09-14', at('2026-09-14', 9), 600, { label: 'Expense receipts' }),
         session(2, '2026-09-14', at('2026-09-14', 11), 300, { label: 'expense  receipts ' }),
         session(3, '2026-09-14', at('2026-09-14', 13), 1500, { label: '' }),
-        session(4, '2026-09-14', at('2026-09-14', 14), 900, { priorityUid: 'uid100000000' }),
+        session(4, '2026-09-14', at('2026-09-14', 14), 900, { priorityUid: FIRST_UID }),
       ],
     });
-    const tue = day('2026-09-15', {
-      priorities: [row(1, 'Call the bank'), row(2, 'review the PR ', { addedAt: at('2026-09-15', 12) })],
+    const tue = makeDay('2026-09-15', {
+      priorities: [makePriority(1, 'Call the bank', BEFORE_WORK), makePriority(2, 'review the PR ', { addedAt: at('2026-09-15', 12) })],
       sessions: [
         session(5, '2026-09-15', at('2026-09-15', 9), 600, { label: 'Expense Receipts' }),
-        session(6, '2026-09-15', at('2026-09-15', 10), 1200, { priorityUid: 'uid200000000' }),
+        session(6, '2026-09-15', at('2026-09-15', 10), 1200, { priorityUid: SECOND_UID }),
       ],
     });
     const r = reviewRange([tue, mon], settings, '2026-09-16', now);

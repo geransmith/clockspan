@@ -7,10 +7,10 @@ import { SettingsProvider } from '../hooks/useSettings';
 import type { Day } from '../types';
 
 export * from './fixtures';
-export { AppProviders as AllProviders } from '../hooks/AppProviders';
+export { AppProviders } from '../hooks/AppProviders';
 
 /**
- * The app's provider stack (AllProviders, re-exported from hooks/AppProviders.tsx),
+ * The app's provider stack (AppProviders, re-exported from hooks/AppProviders.tsx),
  * SettingsAndDays, serveRange and the act() helpers for the hook and component tests, which run
  * under happy-dom with fake timers. The plain factories and TEST_SETTINGS live in `fixtures.ts`,
  * with no React; this module re-exports them, so a happy-dom test imports one module, while a

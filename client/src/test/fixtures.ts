@@ -6,7 +6,7 @@ import { ApiError } from '../lib/apiError';
 import { REQUEST_FAILED } from '../lib/copy';
 import type { DaySummary } from '../lib/stickers';
 import { normalizePunches } from '../lib/timeclock';
-import type { Break, CancelledSession, CompletedSession, Day, Punch, RunningSession, Settings } from '../types';
+import type { AuthInfo, Break, CancelledSession, CompletedSession, Day, Priority, PublicUser, Punch, RunningSession, Settings } from '../types';
 
 /**
  * The plain test factories, with no React and no providers, so a lib test (which runs under
@@ -81,6 +81,11 @@ export function makeDay(date = TODAY, patch: Partial<Day> = {}): Day {
   return { ...emptyDay(date), punches: punchesAt(), ...patch };
 }
 
+/** A priority row with text, as the card saves it once typed: not done, with a uid and added at T0. */
+export function makePriority(position: number, text: string, patch: Partial<Priority> = {}): Priority {
+  return { position, text, done: false, uid: `uid${position}`.padEnd(12, 'x'), addedAt: T0, ...patch };
+}
+
 export function makeSession(patch: Partial<RunningSession> = {}): RunningSession {
   return {
     id: 1,
@@ -114,6 +119,25 @@ export function completedSession(id: number, startedAt: number, seconds: number,
 /** A five-minute break from T0 that ran its full length. */
 export function makeBreak(patch: Partial<Break> = {}): Break {
   return { id: 1, date: TODAY, plannedSeconds: 5 * 60, startedAt: T0, endedAt: T0 + 5 * MINUTE_MS, ...patch };
+}
+
+/** A break `minutes` long that started `atMinutes` after T0 and ran its full length. */
+export function breakAt(id: number, atMinutes: number, minutes: number, patch: Partial<Break> = {}): Break {
+  const startedAt = T0 + atMinutes * MINUTE_MS;
+  return makeBreak({ id, plannedSeconds: minutes * 60, startedAt, endedAt: startedAt + minutes * MINUTE_MS, ...patch });
+}
+
+/** A signed-in user: the local non-admin `sam`, unless `patch` says otherwise. */
+export function makeUser(patch: Partial<PublicUser> = {}): PublicUser {
+  return { id: 2, name: 'sam', username: 'sam', isAdmin: false, kind: 'local', mustChangePassword: false, ...patch };
+}
+
+/** What the server sends under AUTH_MODE=none: the default user, who is an admin. */
+export const DEFAULT_USER = makeUser({ id: 1, name: 'You', username: null, kind: 'default', isAdmin: true });
+
+/** A `GET /auth/me` answer: local sign-in, set up, and no one signed in, unless `patch` says otherwise. */
+export function makeAuth(patch: Partial<AuthInfo> = {}): AuthInfo {
+  return { mode: 'local', setupRequired: false, user: null, cookieSecure: false, ...patch };
 }
 
 /** A day as the History calendar holds it (`daySummaryOf`): no punch set and nothing done. */

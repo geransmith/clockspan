@@ -16,6 +16,9 @@
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+// Plain node loads this TypeScript file by stripping its types, which works only while
+// dates.ts imports nothing.
+import { addDays, atTime, isWeekend, todayKey } from '../shared/dates.ts';
 import { openBrowser, openTab } from './browser.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -34,18 +37,14 @@ const log = (msg) => console.log(`[screenshots] ${msg}`);
 
 // ----- dates -----
 
-const todayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 function lastWeekday() {
-  const d = new Date();
-  do d.setDate(d.getDate() - 1);
-  while (d.getDay() === 0 || d.getDay() === 6);
-  return todayKey(d);
+  let key = addDays(todayKey(), -1);
+  while (isWeekend(key)) key = addDays(key, -1);
+  return key;
 }
 function clockMs() {
   const [h, m] = CLOCK.split(':').map(Number);
-  const d = new Date();
-  d.setHours(h, m, 0, 0);
-  return d.getTime();
+  return atTime(todayKey(), h, m);
 }
 
 // ----- dev server -----

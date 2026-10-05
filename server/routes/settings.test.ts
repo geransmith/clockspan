@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { ensureDefaultUser } from '../db.js';
 import { startTestApp, type TestApp } from '../dev/harness.js';
 import { CARD_DEFAULT_VISIBLE, CARD_IDS, DEFAULT_SETTINGS } from '../../shared/settings.js';
 
@@ -78,7 +79,7 @@ describe('/api/settings', () => {
 
   it('carries a 0.2 layout with the sticker card shown over to the stickers setting', async () => {
     // A row saved by 0.2: the card id is no longer a layout entry, but the choice it recorded survives.
-    const userId = (app.db.prepare(`SELECT id FROM users WHERE kind = 'default'`).get() as { id: number }).id;
+    const userId = ensureDefaultUser(app.db).id;
     app.db.prepare(`INSERT INTO settings (user_id, json) VALUES (?, ?)`).run(
       userId,
       JSON.stringify({
@@ -104,8 +105,7 @@ describe('/api/settings', () => {
   });
 
   it('serves the defaults when the stored row is not JSON', async () => {
-    const user = (app.db.prepare(`SELECT id FROM users`).get() as { id: number }).id;
-    app.db.prepare(`INSERT INTO settings (user_id, json) VALUES (?, ?)`).run(user, '{not json');
+    app.db.prepare(`INSERT INTO settings (user_id, json) VALUES (?, ?)`).run(ensureDefaultUser(app.db).id, '{not json');
     expect((await app.api.get('/api/settings')).body).toEqual(DEFAULT_SETTINGS);
     // The next save writes a clean row over it.
     expect((await app.api.put('/api/settings', { workMinutes: 1 })).body.workMinutes).toBe(1);

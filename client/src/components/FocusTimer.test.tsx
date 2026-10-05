@@ -5,7 +5,7 @@ import * as api from '../api';
 import { useDay } from '../hooks/useDay';
 import { unlockAudio } from '../lib/alerts';
 import { BREAK } from '../lib/copy';
-import { AllProviders, deferred, makeBreak, makeDay, makeSession, makeSettings, settle, T0, TODAY } from '../test/hooks';
+import { AppProviders, deferred, makeBreak, makeDay, makePriority, makeSession, makeSettings, settle, T0, TODAY } from '../test/hooks';
 import type { Break, Priority, SessionResponse } from '../types';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { FocusTimer } from './FocusTimer';
@@ -20,12 +20,15 @@ function Card() {
   return <FocusTimer date={TODAY} isToday priorities={day.priorities} onAddPriority={(text) => store.addPriority(TODAY, text)} />;
 }
 
+/** `n` priority rows, all ticked. */
+const ticked = (n: number) => Array.from({ length: n }, (_, i) => makePriority(i + 1, `Row ${i + 1}`, { done: true }));
+
 async function renderCard(priorities: Priority[] = [], breaks: Break[] = []) {
   vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities, breaks }));
   render(
-    <AllProviders>
+    <AppProviders>
       <Card />
-    </AllProviders>,
+    </AppProviders>,
   );
   await settle();
 }
@@ -83,7 +86,7 @@ describe('FocusTimer', () => {
 
   it('links a session to the chip that was picked', async () => {
     vi.mocked(api.startSession).mockResolvedValue(started());
-    await renderCard([{ position: 1, text: 'Ship the fix', done: false, uid: 'abcdef123456', addedAt: T0 }]);
+    await renderCard([makePriority(1, 'Ship the fix', { uid: 'abcdef123456' })]);
     fireEvent.click(screen.getByRole('button', { name: /Ship the fix/ }));
     // A picked row needs no "also add": it is on the plan already.
     expect(alsoAdd()).toBeNull();
@@ -105,15 +108,13 @@ describe('FocusTimer', () => {
   });
 
   it('does not offer to add typed work to a full list', async () => {
-    const full = Array.from({ length: MAX_PRIORITIES }, (_, i) => ({ position: i + 1, text: `Row ${i + 1}`, done: true, uid: `uid${i}`, addedAt: T0 }));
-    await renderCard(full);
+    await renderCard(ticked(MAX_PRIORITIES));
     typeLabel('Call the vendor');
     expect(alsoAdd()).toBeNull();
   });
 
   it('offers it while one row is still free', async () => {
-    const almost = Array.from({ length: MAX_PRIORITIES - 1 }, (_, i) => ({ position: i + 1, text: `Row ${i + 1}`, done: true, uid: `uid${i}`, addedAt: T0 }));
-    await renderCard(almost);
+    await renderCard(ticked(MAX_PRIORITIES - 1));
     typeLabel('Call the vendor');
     expect(alsoAdd()).toBeTruthy();
   });
