@@ -4,7 +4,7 @@ import { runningBreak, SET_SIZE, suggestBreak } from '../lib/breaks';
 import { BREAK, BREAK_SUGGESTION } from '../lib/copy';
 import { addDays, MINUTE_MS, todayKey } from '../../../shared/dates.js';
 import { formatDuration } from '../lib/format';
-import { readStored, writeStored } from '../lib/storage';
+import { readStored, USER_KEYS, writeStored } from '../lib/storage';
 import { useDays, useDayStore } from './useDay';
 import { useLatest } from './useLatest';
 import { useClock } from './useClock';
@@ -34,7 +34,7 @@ const Ctx = createContext<BreakCtx | null>(null);
  * break the id of a deleted newest one, and a user's breaks never overlap, so one that started
  * later is new and one that started earlier (last again after a later one was deleted) is done.
  */
-const OVER_KEY = 'focus:break-over';
+const OVER_KEY = USER_KEYS.breakOver;
 
 /** An end older than this is from another sitting (the tab was closed): it is dropped, not announced. */
 const STALE_MS = 10 * MINUTE_MS;
@@ -60,8 +60,8 @@ export function BreakProvider({ children }: { children: ReactNode }) {
   // was today's sheet), so it keeps counting down, can be ended and rings after midnight. Only
   // until something starts today: the server ended it then, and `applySession` ends it in the
   // store too, so a session cancelled afterwards doesn't bring it back.
-  const breaks = today?.breaks.length || today?.sessions.length ? today.breaks : (days[addDays(date, -1)] ?? today)?.breaks;
-  const current = breaks ? runningBreak(breaks, now) : null;
+  const breaks = (today?.breaks.length || today?.sessions.length ? today : days[addDays(date, -1)])?.breaks ?? [];
+  const current = runningBreak(breaks, now);
   // The start of the last break dealt with here (see OVER_KEY).
   const dealtWith = useRef(0);
 
@@ -93,8 +93,7 @@ export function BreakProvider({ children }: { children: ReactNode }) {
 
   const todaySessions = today?.sessions;
   const suggestion = useMemo(() => (settings.suggestBreaks && todaySessions ? suggestBreak(todaySessions) : null), [settings.suggestBreaks, todaySessions]);
-  const breakMinutes = settings.breakMinutes;
-  const next = useMemo(() => suggestion ?? { minutes: breakMinutes, long: false }, [suggestion, breakMinutes]);
+  const next = useMemo(() => suggestion ?? { minutes: settings.breakMinutes, long: false }, [suggestion, settings.breakMinutes]);
 
   // Read once a session is finished by hand: applySession put the row on today's sheet in the
   // same render, so today's suggestion is the one it earned, and the banner and the Break button
@@ -123,7 +122,7 @@ export function BreakProvider({ children }: { children: ReactNode }) {
   // Dealt with once per break, when it ends: a break that ran its full length is announced
   // (also on a load inside STALE_MS of the end, the page having been closed then). One that
   // ended early was ended by hand or by a focus timer starting, so there is nothing to say.
-  const last = breaks?.at(-1);
+  const last = breaks.at(-1);
   useEffect(() => {
     if (!last || !loaded || now < last.endedAt || last.startedAt <= dealtWith.current) return;
     dealtWith.current = last.startedAt;

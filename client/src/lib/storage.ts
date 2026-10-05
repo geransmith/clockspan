@@ -5,8 +5,8 @@
  * Most of it belongs to the device: the theme, the settings tab last picked, which timer end
  * already chimed. `USER_KEYS` hold the state of the user the app is open for, and `adoptUser`
  * drops them when the user changes (a sign-out, or someone else signing in on this browser): an
- * alarm key names a date and a minute and Start fresh names a date, so another user's would
- * silence this one's.
+ * alarm key names a date and a minute, Start fresh names a date and the break-over mark names a
+ * break's start, so another user's would silence this one's.
  */
 export function readStored(key: string): string | null {
   try {
@@ -52,7 +52,7 @@ export function pruneStored(prefix: string, keep: string): void {
 export const AUTH_USER_KEY = 'focus:auth-user';
 
 /** The stored values (a key, or a prefix) that hold one user's state. A new one joins this list. */
-export const USER_KEYS = { alarms: 'focus:alarms:', leftOpenDismissed: 'focus:left-open-dismissed' } as const;
+export const USER_KEYS = { alarms: 'focus:alarms:', leftOpenDismissed: 'focus:left-open-dismissed', breakOver: 'focus:break-over' } as const;
 
 /**
  * Records who the app is open for (null: no one) and drops the last user's `USER_KEYS` when it
