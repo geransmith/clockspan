@@ -6,11 +6,6 @@ import { isWholeNumber } from '../validate.js';
 import type { Break, Punch, Session, SessionStatus } from '../../shared/api.js';
 import { activeMs, MIN_BREAK_MS } from '../../shared/timer.js';
 
-/** The `:date` param, which the days router's param handler has checked; typed so handlers don't repeat the cast. */
-export function dateParam(req: { params: Record<string, string | string[] | undefined> }): string {
-  return req.params.date as string;
-}
-
 export interface DayRow {
   id: number;
   date: string;
@@ -40,7 +35,7 @@ export function ensureDay(db: DB, userId: number, date: string): number {
 /** A whole number of seconds within `bounds` for a `plannedSeconds` field, or the message to send back. */
 export function parsePlannedSeconds(raw: unknown, bounds: { min: number; max: number }): { seconds: number } | { error: string } {
   if (isWholeNumber(raw, bounds)) return { seconds: raw };
-  return { error: `plannedSeconds must be between ${bounds.min} and ${bounds.max}.` };
+  return { error: `plannedSeconds must be a whole number from ${bounds.min} to ${bounds.max}.` };
 }
 
 export interface PunchRow {

@@ -10,7 +10,6 @@ import { DAY_MS, daysBetween, isValidDateKey, punchWindow } from '../../shared/d
 import {
   breakRowToJson,
   DAY_COLUMNS,
-  dateParam,
   ensureDay,
   findDay,
   sessionRowToJson,
@@ -56,12 +55,12 @@ function parseInstant(raw: unknown, from: number, to: number): number | null {
 }
 
 /**
- * One row of a list the client replaces whole: an object, or null for an empty row. Anything
+ * One row of a list the client replaces whole: a plain object. Anything
  * else is a client bug, and reading fields off it would store an empty row in its place
  * (`(5).at` is undefined), or trip over a method of the same name (`'x'.at`).
  */
-function isRow(raw: unknown): raw is Record<string, unknown> | null {
-  return raw === null || (typeof raw === 'object' && !Array.isArray(raw));
+function isRow(raw: unknown): raw is Record<string, unknown> {
+  return typeof raw === 'object' && raw !== null && !Array.isArray(raw);
 }
 
 function punchesJson(rows: PunchRow[]): Punch[] {
@@ -148,8 +147,8 @@ export function daysRouter(db: DB, config: Config): Router {
     const user = currentUser(req);
     const { from, to } = req.query;
     if (!isValidDateKey(from) || !isValidDateKey(to) || from > to) return refuse(res, 400, 'from and to must be dates (YYYY-MM-DD) with from <= to.');
-    const span = daysBetween(from, to);
-    if (span > MAX_RANGE_DAYS) return refuse(res, 400, `Range is limited to ${MAX_RANGE_DAYS} days.`);
+    // Both ends are included, so a span of MAX_RANGE_DAYS is one day too many.
+    if (daysBetween(from, to) >= MAX_RANGE_DAYS) return refuse(res, 400, `Range is limited to ${MAX_RANGE_DAYS} days.`);
     res.json({ days: daysInRange(db, user.id, from, to) } satisfies RangeResponse);
   });
 
@@ -170,14 +169,14 @@ export function daysRouter(db: DB, config: Config): Router {
   });
 
   r.get('/:date', (req, res) => {
-    const date = dateParam(req);
+    const { date } = req.params;
     res.json((daysInRange(db, currentUser(req).id, date, date)[0] ?? emptyDay(date)) satisfies Day);
   });
 
   // Full replace. Position parity defines kind: even = in, odd = out.
   r.put('/:date/punches', (req, res) => {
     const user = currentUser(req);
-    const date = dateParam(req);
+    const { date } = req.params;
     const input = (req.body as { punches?: unknown }).punches;
     if (!Array.isArray(input)) return refuse(res, 400, 'punches must be an array.');
     if (input.length > MAX_PUNCHES) return refuse(res, 400, `punches is limited to ${MAX_PUNCHES} rows.`);
@@ -186,8 +185,8 @@ export function daysRouter(db: DB, config: Config): Router {
     const punches: Punch[] = [];
     for (let i = 0; i < input.length; i++) {
       const item: unknown = input[i];
-      if (!isRow(item)) return refuse(res, 400, `Punch ${i} must be an object or null.`);
-      const raw = item?.at;
+      if (!isRow(item)) return refuse(res, 400, `Punch ${i} must be an object.`);
+      const raw = item.at;
       const at = raw == null ? null : parseInstant(raw, window.from, window.to);
       if (raw != null && at == null) return refuse(res, 400, `Punch ${i} has an invalid time.`);
       punches.push({ position: i, kind: kindForPosition(i), at });
@@ -205,7 +204,7 @@ export function daysRouter(db: DB, config: Config): Router {
   // sending the list without it. An empty row can never be "done".
   r.put('/:date/priorities', (req, res) => {
     const user = currentUser(req);
-    const date = dateParam(req);
+    const { date } = req.params;
     const input = (req.body as { priorities?: unknown }).priorities;
     if (!Array.isArray(input) || input.length > MAX_PRIORITIES) return refuse(res, 400, `priorities must be an array of at most ${MAX_PRIORITIES}.`);
     // The web app mints a uid and stamps addedAt the first time a row gets text, and always sends
@@ -214,9 +213,8 @@ export function daysRouter(db: DB, config: Config): Router {
     const rows: Priority[] = [];
     const seen = new Set<string>();
     for (let i = 0; i < input.length; i++) {
-      const row: unknown = input[i];
-      if (!isRow(row)) return refuse(res, 400, `Priority ${i + 1} must be an object or null.`);
-      const item: Record<string, unknown> = row ?? {};
+      const item: unknown = input[i];
+      if (!isRow(item)) return refuse(res, 400, `Priority ${i + 1} must be an object.`);
       // Checked like every other field: a value of the wrong kind is a client bug, not a row to guess at.
       if (item.text != null && typeof item.text !== 'string') return refuse(res, 400, `Priority ${i + 1} has invalid text.`);
       if (item.uid != null && !(typeof item.uid === 'string' && UID_RE.test(item.uid))) return refuse(res, 400, `Priority ${i + 1} has an invalid uid.`);
@@ -245,7 +243,7 @@ export function daysRouter(db: DB, config: Config): Router {
 
   r.put('/:date/overtime', (req, res) => {
     const user = currentUser(req);
-    const date = dateParam(req);
+    const { date } = req.params;
     const approved = (req.body as { approved?: unknown }).approved;
     if (typeof approved !== 'boolean') return refuse(res, 400, 'approved must be a boolean.');
     const dayId = ensureDay(db, user.id, date);
@@ -257,7 +255,7 @@ export function daysRouter(db: DB, config: Config): Router {
   // Same bounds as the setting, so every timeclock can take it in its place.
   r.put('/:date/target', (req, res) => {
     const user = currentUser(req);
-    const date = dateParam(req);
+    const { date } = req.params;
     const minutes = (req.body as { workMinutes?: unknown }).workMinutes;
     const bounds = SETTING_LIMITS.workMinutes;
     if (minutes !== null && !isWholeNumber(minutes, bounds))
@@ -271,7 +269,7 @@ export function daysRouter(db: DB, config: Config): Router {
   // reviewed keeps the first reviewed-at; un-marking clears it.
   r.put('/:date/retro', (req, res) => {
     const user = currentUser(req);
-    const date = dateParam(req);
+    const { date } = req.params;
     const { note, done } = req.body as { note?: unknown; done?: unknown };
     if (note !== undefined && typeof note !== 'string') return refuse(res, 400, 'note must be a string.');
     if (done !== undefined && typeof done !== 'boolean') return refuse(res, 400, 'done must be a boolean.');

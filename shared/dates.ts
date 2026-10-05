@@ -45,8 +45,8 @@ export function isValidDateKey(s: unknown): s is string {
  * Computed in UTC like `isValidDateKey`, so the server never needs a zone.
  */
 export function punchWindow(key: string): { from: number; to: number } {
-  const [y, m, d] = key.split('-').map(Number) as [number, number, number];
-  const midnightUtc = Date.UTC(y, m - 1, d);
+  // A date-only key parses as UTC midnight (see daysBetween).
+  const midnightUtc = Date.parse(key);
   return { from: midnightUtc - 36 * HOUR_MS, to: midnightUtc + 60 * HOUR_MS };
 }
 

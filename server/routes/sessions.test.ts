@@ -190,11 +190,14 @@ describe('sessions', () => {
     expect(r.body.session).toMatchObject({ status: 'completed', durationSeconds: 600, pausedAt: null, startedAt: SEED_NOW, endedAt: SEED_NOW + 720_000 });
   });
 
-  it('cancels a paused timer and clears the pause', async () => {
+  it('cancels a paused timer where the pause began, and clears the pause', async () => {
     const { id } = (await start()).body.session;
+    at(10 * 60_000);
     await app.api.post(`/api/sessions/${id}/pause`);
+    // Forty minutes paused before the cancel: none of it is focus time.
+    at(50 * 60_000);
     const r = await app.api.post(`/api/sessions/${id}/cancel`);
-    expect(r.body.session).toMatchObject({ status: 'cancelled', pausedAt: null });
+    expect(r.body.session).toMatchObject({ status: 'cancelled', pausedAt: null, endedAt: SEED_NOW + 10 * 60_000, durationSeconds: 600 });
   });
 
   it('logs the time past the planned end only when asked to', async () => {
