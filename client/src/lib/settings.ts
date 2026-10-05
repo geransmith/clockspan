@@ -1,3 +1,4 @@
+import { ALARM_IDS } from '../../../shared/settings.js';
 import type { SettingsPatch } from '../api';
 import type { Settings } from '../types';
 
@@ -7,15 +8,12 @@ import type { Settings } from '../types';
  * validation, since the server's answer replaces this copy.
  */
 export function applySettingsPatch(s: Settings, { alarms, sounds, retention, ...flat }: SettingsPatch): Settings {
+  const merged = { ...s.alarms };
+  for (const id of ALARM_IDS) merged[id] = { ...s.alarms[id], ...alarms?.[id] };
   return {
     ...s,
     ...flat,
-    alarms: {
-      lunchBy: { ...s.alarms.lunchBy, ...alarms?.lunchBy },
-      clockOut: { ...s.alarms.clockOut, ...alarms?.clockOut },
-      secondMeal: { ...s.alarms.secondMeal, ...alarms?.secondMeal },
-      retro: { ...s.alarms.retro, ...alarms?.retro },
-    },
+    alarms: merged,
     sounds: { ...s.sounds, ...sounds },
     retention: { ...s.retention, ...retention },
   };

@@ -86,7 +86,7 @@ export function SheetTab({ settings, set }: { settings: Settings; set: (patch: P
         />
         <Toggle
           label="Show weekends"
-          hint="Off hides Saturday and Sunday from the calendar and its sticker counts."
+          hint="Off hides Saturday and Sunday from the calendar and its sticker counts, and Plan tomorrow on a Friday plans Monday."
           checked={settings.showWeekends}
           onChange={(v) => set({ showWeekends: v })}
         />

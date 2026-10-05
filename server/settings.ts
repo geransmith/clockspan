@@ -6,6 +6,7 @@
  */
 import type { DB } from './db.js';
 import {
+  ALARM_IDS,
   ALARM_LIMITS,
   DEFAULT_SETTINGS,
   normalizeLayout,
@@ -21,22 +22,31 @@ import {
 import { SOUND_EVENTS, SOUND_IDS, type SoundEvent, type SoundId } from '../shared/sounds.js';
 import { isWholeNumber } from './validate.js';
 
-const isBool = (v: unknown): v is boolean => typeof v === 'boolean';
 const record = (v: unknown): Record<string, unknown> | null => (v && typeof v === 'object' ? (v as Record<string, unknown>) : null);
 const oneOf = <T extends string>(list: readonly T[], v: unknown, fallback: T): T => (list.includes(v as T) ? (v as T) : fallback);
+const bool = (v: unknown, fallback: boolean): boolean => (typeof v === 'boolean' ? v : fallback);
+const whole = (v: unknown, bounds: { readonly min: number; readonly max: number }, fallback: number): number => (isWholeNumber(v, bounds) ? v : fallback);
 type SwitchKey = { [K in keyof Settings]: Settings[K] extends boolean ? K : never }[keyof Settings];
 
 function mergeAlarm(base: AlarmSettings, patch: unknown): AlarmSettings {
   const p = record(patch);
   if (!p) return base;
   return {
-    enabled: isBool(p.enabled) ? p.enabled : base.enabled,
+    enabled: bool(p.enabled, base.enabled),
     leadMinutes: Array.isArray(p.leadMinutes)
       ? [...new Set(p.leadMinutes.filter((n): n is number => isWholeNumber(n, ALARM_LIMITS.leadMinutes)))].sort((a, b) => b - a)
       : base.leadMinutes,
-    onDue: isBool(p.onDue) ? p.onDue : base.onDue,
-    overdueEveryMinutes: isWholeNumber(p.overdueEveryMinutes, ALARM_LIMITS.overdueEveryMinutes) ? p.overdueEveryMinutes : base.overdueEveryMinutes,
+    onDue: bool(p.onDue, base.onDue),
+    overdueEveryMinutes: whole(p.overdueEveryMinutes, ALARM_LIMITS.overdueEveryMinutes, base.overdueEveryMinutes),
   };
+}
+
+function mergeAlarms(base: Settings['alarms'], patch: unknown): Settings['alarms'] {
+  const p = record(patch);
+  if (!p) return base;
+  const next = { ...base };
+  for (const id of ALARM_IDS) next[id] = mergeAlarm(base[id], p[id]);
+  return next;
 }
 
 function mergeSounds(base: Record<SoundEvent, SoundId>, patch: unknown): Record<SoundEvent, SoundId> {
@@ -51,8 +61,8 @@ function mergeRetention(base: RetentionSettings, patch: unknown): RetentionSetti
   const p = record(patch);
   if (!p) return base;
   return {
-    enabled: isBool(p.enabled) ? p.enabled : base.enabled,
-    days: isWholeNumber(p.days, RETENTION_LIMITS) ? p.days : base.days,
+    enabled: bool(p.enabled, base.enabled),
+    days: whole(p.days, RETENTION_LIMITS, base.days),
   };
 }
 
@@ -60,10 +70,7 @@ function mergeRetention(base: RetentionSettings, patch: unknown): RetentionSetti
 function mergeTimerMinutes(base: number[], patch: unknown): number[] {
   if (!Array.isArray(patch)) return base;
   const next: unknown[] = patch;
-  return base.map((m, i) => {
-    const v = next[i];
-    return isWholeNumber(v, TIMER_MINUTES) ? v : m;
-  });
+  return base.map((m, i) => whole(next[i], TIMER_MINUTES, m));
 }
 
 /**
@@ -74,15 +81,8 @@ function mergeTimerMinutes(base: number[], patch: unknown): number[] {
 export function mergeSettings(base: Settings, patch: unknown): Settings {
   const p = record(patch);
   if (!p) return base;
-  const alarms = record(p.alarms) ?? {};
-  const limited = (key: keyof typeof SETTING_LIMITS): number => {
-    const v = p[key];
-    return isWholeNumber(v, SETTING_LIMITS[key]) ? v : base[key];
-  };
-  const flag = (key: SwitchKey): boolean => {
-    const v = p[key];
-    return isBool(v) ? v : base[key];
-  };
+  const limited = (key: keyof typeof SETTING_LIMITS): number => whole(p[key], SETTING_LIMITS[key], base[key]);
+  const flag = (key: SwitchKey): boolean => bool(p[key], base[key]);
 
   const layout = Array.isArray(p.layout) ? normalizeLayout(p.layout) : base.layout;
   // Until 0.3 the sticker chart was a sheet card; a row saved then carries its choice in the
@@ -116,14 +116,9 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     trackHours: flag('trackHours'),
     sounds: mergeSounds(base.sounds, p.sounds),
     celebrations: flag('celebrations'),
-    stickers: isBool(p.stickers) ? p.stickers : stickerCard || base.stickers,
+    stickers: bool(p.stickers, stickerCard || base.stickers),
     showWeekends: flag('showWeekends'),
-    alarms: {
-      lunchBy: mergeAlarm(base.alarms.lunchBy, alarms.lunchBy),
-      clockOut: mergeAlarm(base.alarms.clockOut, alarms.clockOut),
-      secondMeal: mergeAlarm(base.alarms.secondMeal, alarms.secondMeal),
-      retro: mergeAlarm(base.alarms.retro, alarms.retro),
-    },
+    alarms: mergeAlarms(base.alarms, p.alarms),
     layout,
     retention: mergeRetention(base.retention, p.retention),
   };

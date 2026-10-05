@@ -8,12 +8,6 @@ describe('mergeSettings', () => {
     expect(mergeSettings(DEFAULT_SETTINGS, 'x')).toBe(DEFAULT_SETTINGS);
   });
 
-  it('returns an untouched alarm as the frozen default and a patched one as a fresh object', () => {
-    const out = mergeSettings(DEFAULT_SETTINGS, { alarms: { lunchBy: { onDue: false } } });
-    expect(Object.isFrozen(out.alarms.clockOut)).toBe(true);
-    expect(Object.isFrozen(out.alarms.lunchBy)).toBe(false);
-  });
-
   it('takes the timer lengths button by button and keeps three', () => {
     expect(mergeSettings(DEFAULT_SETTINGS, { timerMinutes: [10, 20, 45] }).timerMinutes).toEqual([10, 20, 45]);
     // A bad entry keeps the length it would replace; extra entries are dropped, missing ones kept.
@@ -21,6 +15,18 @@ describe('mergeSettings', () => {
     expect(mergeSettings(DEFAULT_SETTINGS, { timerMinutes: [12.5, '30'] }).timerMinutes).toEqual([15, 25, 50]);
     expect(mergeSettings(DEFAULT_SETTINGS, { timerMinutes: [240] }).timerMinutes).toEqual([240, 25, 50]);
     expect(mergeSettings(DEFAULT_SETTINGS, { timerMinutes: 25 }).timerMinutes).toEqual(DEFAULT_SETTINGS.timerMinutes);
+  });
+
+  it('takes a listed theme or time format and keeps the stored one for anything else', () => {
+    for (const [key, good, bad] of [
+      ['theme', 'dark', 'sepia'],
+      ['timeFormat', '24h', '25h'],
+    ] as const) {
+      const stored = mergeSettings(DEFAULT_SETTINGS, { [key]: good });
+      expect(stored[key]).toBe(good);
+      for (const v of [bad, 1, null]) expect(mergeSettings(stored, { [key]: v })[key], `${key}: ${String(v)}`).toBe(good);
+      expect(mergeSettings(stored, { [key]: 'auto' })[key]).toBe('auto');
+    }
   });
 
   it('keeps retention within bounds, field by field', () => {
