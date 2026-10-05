@@ -6,12 +6,12 @@ import { useSubmit } from '../../hooks/useSubmit';
 import { CONFIRM, DAYS_DELETED } from '../../lib/copy';
 import { addDays, todayKey } from '../../../../shared/dates.js';
 import { counted, formatDateFull } from '../../lib/format';
-import type { PruneInfo, Settings } from '../../types';
+import type { PruneInfo } from '../../types';
 import { Toggle } from '../Toggle';
-import { NumberField, Section } from './controls';
+import { NumberField, Section, type TabProps } from './controls';
 import { ErrorLine } from '../ErrorLine';
 
-export function DataTab({ settings, set, onReset }: { settings: Settings; set: (patch: api.SettingsPatch) => void; onReset: () => void }) {
+export function DataTab({ settings, set, onReset }: TabProps & { onReset: () => void }) {
   return (
     <>
       <Section

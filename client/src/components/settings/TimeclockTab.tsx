@@ -1,12 +1,11 @@
 import { SETTING_LIMITS, TIME_FORMATS, type TimeFormat } from '../../../../shared/settings.js';
-import type { Settings } from '../../types';
 import { DurationField } from '../DurationField';
 import { Toggle } from '../Toggle';
-import { NumberField, Section } from './controls';
+import { NumberField, Section, SelectField, type TabProps } from './controls';
 
 const TIME_FORMAT_LABELS: Record<TimeFormat, string> = { auto: 'Automatic', '12h': '12-hour', '24h': '24-hour' };
 
-export function TimeclockTab({ settings, set }: { settings: Settings; set: (patch: Partial<Settings>) => void }) {
+export function TimeclockTab({ settings, set }: TabProps) {
   return (
     <Section title="Timeclock" hint="Used to work out your clock-out time, and the meal periods when they apply.">
       <DurationField label="Work day" minutes={settings.workMinutes} {...SETTING_LIMITS.workMinutes} onCommit={(m) => set({ workMinutes: m })} />
@@ -59,21 +58,13 @@ export function TimeclockTab({ settings, set }: { settings: Settings; set: (patc
           <p className="muted small">The timeclock counts the week so far against this. 0 hides that line.</p>
         </>
       )}
-      <div className="setting-row">
-        <span>Time format</span>
-        <select
-          className="input select"
-          value={settings.timeFormat}
-          onChange={(e) => set({ timeFormat: e.target.value as TimeFormat })}
-          aria-label="Time format"
-        >
-          {TIME_FORMATS.map((f) => (
-            <option key={f} value={f}>
-              {TIME_FORMAT_LABELS[f]}
-            </option>
-          ))}
-        </select>
-      </div>
+      <SelectField
+        label="Time format"
+        value={settings.timeFormat}
+        options={TIME_FORMATS}
+        labels={TIME_FORMAT_LABELS}
+        onChange={(timeFormat) => set({ timeFormat })}
+      />
     </Section>
   );
 }

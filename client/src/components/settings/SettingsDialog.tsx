@@ -1,10 +1,10 @@
-import type { KeyboardEvent } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import { useAuth } from '../../auth/AuthGate';
-import { useLastTab } from '../../hooks/useLastTab';
 import { useModalDialog } from '../../hooks/useModalDialog';
 import { useSaveStatus, type SaveState } from '../../hooks/useSaveStatus';
 import { useSettings } from '../../hooks/useSettings';
 import { CONFIRM, SAVE_STATUS } from '../../lib/copy';
+import { readStored, writeStored } from '../../lib/storage';
 import type { SettingsPatch } from '../../api';
 import { Check, X } from '../Icons';
 import { AccountTab } from './AccountTab';
@@ -29,7 +29,14 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const { saveState, save } = useSaveStatus();
   // Account holds password + users, which only exist with local accounts.
   const tabs = TABS.filter((t) => t.id !== 'account' || auth.mode === 'local');
-  const [tab, setTab] = useLastTab(TAB_STORAGE_KEY, tabs, 'timeclock');
+  // The tab picked last time, so reopening to tweak the same thing doesn't start over. It is saved
+  // when picked, never on open, so a stored tab not offered now (Account once local accounts are
+  // gone) opens Timeclock and stays stored until another tab is picked.
+  const [tab, setTabState] = useState<TabId>(() => tabs.find((t) => t.id === readStored(TAB_STORAGE_KEY))?.id ?? 'timeclock');
+  const setTab = (next: TabId) => {
+    writeStored(TAB_STORAGE_KEY, next);
+    setTabState(next);
+  };
 
   // Focus lands on the dialog, not on the Close button, where Enter would shut what was just opened.
   const dialog = useModalDialog(onClose);
@@ -107,7 +114,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 function SaveStatus({ state }: { state: SaveState }) {
   const pill = state === 'saved' ? ' pill pill--ok' : state === 'failed' ? ' pill pill--danger' : state === 'saving' ? ' pill' : '';
   return (
-    <span className={`save-status${pill}`} role="status" aria-live="polite">
+    <span className={`save-status${pill}`} role="status">
       {state === 'saving' && SAVE_STATUS.saving}
       {state === 'saved' && (
         <>

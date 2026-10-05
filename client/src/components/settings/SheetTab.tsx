@@ -1,26 +1,16 @@
 import { DEFAULT_SETTINGS, SETTING_LIMITS, THEMES, TIMER_MINUTES, type Theme } from '../../../../shared/settings.js';
 import { stickerReasons } from '../../lib/stickers';
-import type { Settings } from '../../types';
 import { Toggle } from '../Toggle';
-import { NumberField, NumberInput, Section } from './controls';
+import { NumberField, NumberInput, Section, SelectField, type TabProps } from './controls';
 
 const THEME_LABELS: Record<Theme, string> = { auto: 'Automatic', light: 'Light', dark: 'Dark' };
 
-export function SheetTab({ settings, set }: { settings: Settings; set: (patch: Partial<Settings>) => void }) {
+export function SheetTab({ settings, set }: TabProps) {
   const reasons = stickerReasons(settings).map((r) => r.label.toLowerCase());
   return (
     <>
       <Section title="Appearance">
-        <div className="setting-row">
-          <span>Theme</span>
-          <select className="input select" value={settings.theme} onChange={(e) => set({ theme: e.target.value as Theme })} aria-label="Theme">
-            {THEMES.map((t) => (
-              <option key={t} value={t}>
-                {THEME_LABELS[t]}
-              </option>
-            ))}
-          </select>
-        </div>
+        <SelectField label="Theme" value={settings.theme} options={THEMES} labels={THEME_LABELS} onChange={(theme) => set({ theme })} />
         <p className="muted small">Automatic follows your device.</p>
       </Section>
       <Section title="Priorities">

@@ -1,5 +1,13 @@
-/** The settings tabs' building blocks: a titled section and its number rows (the switch is `../Toggle`). */
+/** The settings tabs' building blocks: their props, a titled section and its number and select rows (the switch is `../Toggle`). */
 import { useState, type ReactNode } from 'react';
+import type { SettingsPatch } from '../../api';
+import type { Settings } from '../../types';
+
+/** What the dialog hands every tab: the settings and a setter that takes only what changed. */
+export interface TabProps {
+  settings: Settings;
+  set: (patch: SettingsPatch) => void;
+}
 
 export function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
@@ -8,6 +16,34 @@ export function Section({ title, hint, children }: { title: string; hint?: strin
       {hint && <p className="muted small">{hint}</p>}
       <div className="settings-fields">{children}</div>
     </section>
+  );
+}
+
+/** One choice from a fixed list of values, each shown by its label. */
+export function SelectField<T extends string>({
+  label,
+  value,
+  options,
+  labels,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: readonly T[];
+  labels: Record<T, string>;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="setting-row">
+      <span>{label}</span>
+      <select className="input select" value={value} onChange={(e) => onChange(e.target.value as T)} aria-label={label}>
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {labels[o]}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 
