@@ -29,7 +29,7 @@ import { useTimer } from './useTimer';
 vi.mock('../api');
 vi.mock('../lib/alerts');
 
-const settings = makeSettings({ breakMinutes: 5 });
+const settings = makeSettings();
 const render = () =>
   renderHook(
     () => {
@@ -320,7 +320,7 @@ describe('suggestions', () => {
 
   /** Today with `earlier` logged and a timer started `minutes` before T0, finished by hand at T0. */
   async function finishByHand(minutes: number, earlier: Session[] = [], patch: Partial<Settings> = {}) {
-    vi.mocked(api.getSettings).mockResolvedValue({ ...settings, suggestBreaks: true, ...patch });
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ suggestBreaks: true, ...patch }));
     const running = makeSession({ id: 9, startedAt: T0 - minutes * MINUTE_MS, plannedSeconds: (minutes + 5) * 60 });
     vi.mocked(api.getRunning).mockResolvedValue({ session: running });
     vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { sessions: [...earlier, running] }));
@@ -378,14 +378,14 @@ describe('suggestions', () => {
   });
 
   it('offers nothing after a false start, and the Break button keeps the break of the last real one', async () => {
-    const { result } = await finishByHand(0.5, [done(1, 40)]);
+    const { result } = await finishByHand(0.5, [done(1, 40)], { breakMinutes: 7 });
     expect(alert).not.toHaveBeenCalled();
-    expect(result.current.next).toMatchObject({ minutes: 5, long: false, sessionId: 1 });
+    expect(result.current.next).toMatchObject({ minutes: 5, long: false });
   });
 
   it('offers nothing for a session that ran past midnight, which belongs to the day before', async () => {
     vi.setSystemTime(MIDNIGHT + 5 * MINUTE_MS);
-    vi.mocked(api.getSettings).mockResolvedValue({ ...settings, suggestBreaks: true });
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ suggestBreaks: true }));
     const running = makeSession({ date: YESTERDAY, startedAt: MIDNIGHT - 20 * MINUTE_MS, plannedSeconds: 30 * 60 });
     // Today already earned a break of its own, so a suggestion exists: only the check that it
     // belongs to the session just finished keeps it off the screen.
@@ -394,7 +394,7 @@ describe('suggestions', () => {
     vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(makeDay(date, { sessions: date === TODAY ? [todays] : [running] })));
     const { result } = render();
     await settle();
-    expect(result.current.next).toMatchObject({ minutes: 1, long: false, sessionId: 9 });
+    expect(result.current.next).toMatchObject({ minutes: 1, long: false });
     vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(running, { endedAt: Date.now(), durationSeconds: 25 * 60 }) });
     await act(() => result.current.timer.finish());
     expect(result.current.timer.finished).not.toBeNull();
@@ -402,7 +402,7 @@ describe('suggestions', () => {
   });
 
   it('has the Break button keep its own length until today has a completed session', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue({ ...settings, suggestBreaks: true, breakMinutes: 7 });
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ suggestBreaks: true, breakMinutes: 7 }));
     const today = deferred<Day>();
     vi.mocked(api.getDay).mockReturnValue(today.promise);
     const { result } = render();

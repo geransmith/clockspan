@@ -1,5 +1,5 @@
 import { MINUTE_MS } from '../../../shared/dates.js';
-import { MIN_BREAK_MS } from '../../../shared/timer.js';
+import { BREAK_SECONDS, MIN_BREAK_MS } from '../../../shared/timer.js';
 import type { Break, CompletedSession, Session } from '../types';
 
 /**
@@ -10,7 +10,7 @@ import type { Break, CompletedSession, Session } from '../types';
  */
 
 /** A break is a fifth of the focus it follows (25 → 5). */
-export const BREAK_RATIO = 5;
+const BREAK_RATIO = 5;
 
 /** Sessions to a set; the set's last one earns the long break. */
 export const SET_SIZE = 4;
@@ -60,7 +60,7 @@ export function runningBreak(breaks: readonly Break[], now: number): Break | nul
 }
 
 function breakMinutes(focusSeconds: number): number {
-  return Math.min(MAX_BREAK_MINUTES, Math.max(1, Math.round(focusSeconds / 60 / BREAK_RATIO)));
+  return Math.min(MAX_BREAK_MINUTES, Math.max(BREAK_SECONDS.min / 60, Math.round(focusSeconds / 60 / BREAK_RATIO)));
 }
 
 /**

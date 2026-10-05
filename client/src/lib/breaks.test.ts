@@ -51,7 +51,6 @@ describe('suggestBreak', () => {
   });
 
   it('only suggests a length the server takes', () => {
-    expect(BREAK_SECONDS.min).toBeLessThanOrEqual(60);
     expect(BREAK_SECONDS.max).toBeGreaterThanOrEqual(MAX_BREAK_MINUTES * 60);
   });
 

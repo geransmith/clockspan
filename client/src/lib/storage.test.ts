@@ -63,7 +63,7 @@ describe('stored values', () => {
 
 describe('adoptUser', () => {
   const DEVICE = { 'focus:theme': 'dark', 'focus:settingsTab': 'data', 'focus:timer-due': '7:1790000000000' };
-  const USERS = { 'focus:alarms:2026-09-30': '["x"]', 'focus:left-open-dismissed': '2026-09-30' };
+  const USERS = { 'focus:alarms:2026-09-30': '["x"]', 'focus:left-open-dismissed': '2026-09-30', 'focus:break-over': '1790000000000' };
 
   /** A localStorage over a Map, holding the device's keys, one user's, and `focus:auth-user` when given. */
   function stored(user?: string): Map<string, string> {
