@@ -11,7 +11,7 @@ describe('hashPassword / verifyPassword', () => {
   });
 
   it('verifies hashes written at another cost, so LOG2_N can be raised without invalidating rows', async () => {
-    // 2^18 needs 268 MB, which a fixed 256 MB maxmem used to reject with an exception.
+    // 2^18 needs 268 MB of scrypt memory: maxmem must follow N, or verifying a costlier hash throws.
     for (const log2N of [12, 18]) {
       const stored = await hashPassword('pw-at-other-cost', log2N);
       expect(stored.startsWith(`scrypt$${log2N}$`)).toBe(true);

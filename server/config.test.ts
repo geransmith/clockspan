@@ -18,7 +18,7 @@ describe('TRUST_PROXY', () => {
     expect(load({ TRUST_PROXY: '2' }).trustProxy).toBe(2);
   });
 
-  it('ignores spaces around the value, which started the server before values were checked', () => {
+  it('ignores spaces around the value', () => {
     expect(load({ TRUST_PROXY: '1 ' }).trustProxy).toBe(1);
     expect(load({ TRUST_PROXY: ' 1' }).trustProxy).toBe(1);
     expect(load({ TRUST_PROXY: '2 ' }).trustProxy).toBe(2);
@@ -39,7 +39,7 @@ describe('TRUST_PROXY', () => {
     for (const value of ['1.5', '-1', 'yes', 'on', 'TRUE', 'loopback,', '10.0.0.0/33', 'fd00::/129', '10.0.0.0/8/8', '10.0.0.0/fd00::', 'proxy.lan']) {
       expect(() => load({ TRUST_PROXY: value }), value).toThrow(/^TRUST_PROXY must be the number of proxies/);
     }
-    // 1.0 started the server before values were checked, but a hop count is a whole number, spaces or not.
+    // A hop count is a whole number, spaces or not.
     for (const value of ['1.0', ' 1.5 ']) expect(() => load({ TRUST_PROXY: value }), value).toThrow(/^TRUST_PROXY must be the number of proxies/);
   });
 });
@@ -167,8 +167,8 @@ describe('APP_URL and OIDC_ISSUER', () => {
       ...env,
     });
 
-  it('refuse a value that is not an http(s) URL, naming the variable', () => {
-    // Without a scheme this used to pass, then crash createApp with a bare "Invalid URL".
+  it('refuses a value that is not an http(s) URL, naming the variable', () => {
+    // A value without a scheme would crash createApp with a bare "Invalid URL".
     expect(() => load({ APP_URL: 'focus.example.com' })).toThrow(
       /^APP_URL must be the scheme and host the app is served at, starting with https:\/\/ or http:\/\/ \(got "focus.example.com"\)$/,
     );

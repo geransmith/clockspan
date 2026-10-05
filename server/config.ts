@@ -45,9 +45,8 @@ function isProxyEntry(entry: string): boolean {
  * a string, so those pass through untouched: turning an unknown string into `true` would
  * trust whatever X-Forwarded-For a client sends, which is exactly what the docs warn against.
  * Anything else is refused here. Express would take `1.5` as two hops and fail to start on
- * `yes` with a message that never names the variable. Spaces around the value are dropped:
- * `1 ` (a hand-edited .env line, a pasted template field) started the server back when this
- * was `Number(raw)`, and refusing it now would stop an install that ran.
+ * `yes` with a message that never names the variable. Spaces around the value are dropped,
+ * so a hand-edited .env line or a pasted template field (`1 `) keeps working.
  */
 function parseTrustProxy(raw: string | undefined): boolean | number | string {
   const value = raw?.trim();
@@ -64,8 +63,8 @@ const TRUE_WORDS = new Set(['true', '1', 'yes', 'on']);
 const FALSE_WORDS = new Set(['false', '0', 'no', 'off']);
 
 /**
- * An on/off variable, however it is spelled. Only `true` used to count as on, so
- * `COOKIE_SECURE=TRUE` quietly turned the Secure flag off. A value that is neither is not
+ * An on/off variable, in any of the usual spellings and any case, so `COOKIE_SECURE=TRUE`
+ * turns the Secure flag on rather than off. A value that is neither is not
  * worth refusing to start over: it is logged and the default stands.
  */
 function parseSwitch(name: string, raw: string | undefined): boolean | undefined {
@@ -152,12 +151,11 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env): Config {
   }
   const authMode = authModeRaw as AuthMode;
 
-  // The scheme and host are case-insensitive, but the value is used as a string: `HTTPS://…`
-  // failed a startsWith('https://') here and dropped Secure and HSTS, and the OIDC redirect URI
-  // is compared exactly. So it is kept in the form a browser uses, lowercase. Only the origin is
+  // The scheme and host are case-insensitive, but the OIDC redirect URI is compared exactly as
+  // a string, so the value is kept in the form a browser uses, lowercase. Only the origin is
   // kept, because the app runs at the root of its host: the client is built for it (no Vite
   // `base`), and the OIDC callback rebuilds its URL on APP_URL's origin, so a path in the
-  // redirect URI never matched the one the callback sent.
+  // redirect URI would never match the one the callback sends.
   const publicUrl = env.APP_URL ? parseHttpUrl('APP_URL', 'the scheme and host the app is served at', env.APP_URL) : null;
   const appUrl = publicUrl?.origin ?? null;
   if (publicUrl && publicUrl.href !== `${appUrl}/`) {
@@ -178,8 +176,8 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env): Config {
       );
     }
     // Checked, not rewritten: the issuer is an identifier the provider's tokens must match as written.
-    // https only: openid-client refuses every plain-http request, so an http issuer booted and
-    // then failed each discovery, logging a provider that looked down when it was never asked.
+    // https only: openid-client refuses every plain-http request, so an http issuer would boot and
+    // then fail each discovery, logging a provider that looked down when it was never asked.
     parseHttpUrl('OIDC_ISSUER', "your provider's issuer URL", env.OIDC_ISSUER!, ['https:']);
     oidc = {
       issuer: env.OIDC_ISSUER!,

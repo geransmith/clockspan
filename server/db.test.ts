@@ -89,7 +89,7 @@ describe("the README's script for switching from none to local", () => {
   // README.md → "Switching modes later": run by hand to give the implicit user's data to the new
   // account. A table that gains a user_id column has to join it, or its rows stay with the old
   // user: still listed on the moved days, which find them by day_id, but refused by every
-  // ownership check. Breaks were left behind that way.
+  // ownership check.
   const readme = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8');
   // `.bail on` is the sqlite3 shell's; exec() stops at the first error by itself.
   const sql = (/<<'SQL'\n([\s\S]*?)\nSQL\n/.exec(readme)?.[1] ?? '').replace(/^\..*\n/gm, '');

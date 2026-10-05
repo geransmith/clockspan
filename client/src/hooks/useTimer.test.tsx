@@ -114,12 +114,12 @@ describe('sync with the server', () => {
   });
 
   it('writes each count to the tab once, with no plain title between two ticks, before the end and past it', async () => {
-    // Two seconds left on the 25 min plan, so the ticks run on into the overrun, where it was seen.
+    // Two seconds left on the 25 min plan, so the ticks run on into the overrun.
     const { result, unmount } = await renderRunning(makeSession({ startedAt: T0 - 25 * MINUTE_MS + 2000 }));
     const titleAt = (seconds: number) => `${formatCountdown(seconds)} · Write the report — Clockspan`;
     expect(document.title).toBe(titleAt(2));
-    // A host that shows every title change (the desktop app's browser pane) flashed "Clockspan"
-    // once a second while each tick put the plain title back before writing the new count.
+    // No plain title between two counts: a host that paints every title change (the desktop
+    // app's browser pane) would flash "Clockspan" once a second.
     const writes = vi.spyOn(document, 'title', 'set');
     // One settle per tick: ticks inside one act render once.
     for (let tick = 0; tick < 4; tick++) await settle(1000);

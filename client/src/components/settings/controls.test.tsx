@@ -18,7 +18,7 @@ const typeAndLeave = (input: HTMLInputElement, value: string) => {
 
 describe('NumberField', () => {
   it('puts the stored value back for a blank or non-numeric box', () => {
-    // A cleared "Keep the last" used to save the minimum, 30 days, and the next cleanup deleted the rest.
+    // Saving the minimum for a cleared "Keep the last" would let the next cleanup delete all but 30 days.
     const { input, onCommit } = renderField();
     typeAndLeave(input, '');
     expect(input.value).toBe('365');

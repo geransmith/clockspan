@@ -33,7 +33,7 @@ function parsePriorityUid(db: DB, dayId: number | undefined, raw: unknown): { ui
 
 /**
  * A session's label: undefined = not mentioned, a string cut to `LIMITS.sessionLabel`. Anything
- * else is refused, on start as on PATCH, rather than quietly stored as ''.
+ * else is refused, on start as on PATCH.
  */
 function parseLabel(raw: unknown): { label: string | undefined } | { error: string } {
   if (raw === undefined) return { label: undefined };
