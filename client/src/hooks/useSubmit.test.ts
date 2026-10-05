@@ -46,3 +46,16 @@ it('shows what a send throws, and clears it when the next one starts', async () 
   act(() => result.current.setError('Could not load the users.'));
   expect(result.current.error).toBe('Could not load the users.');
 });
+
+it("runs a button's send with no form, under the same one-at-a-time rule", async () => {
+  const { result } = renderHook(() => useSubmit());
+  const answer = deferred<void>();
+  const send = vi.fn(() => answer.promise);
+  act(() => result.current.run(send));
+  expect(result.current.busy).toBe(true);
+  act(() => result.current.onSubmit(send)(event()));
+  expect(send).toHaveBeenCalledTimes(1);
+  answer.resolve();
+  await settle();
+  expect(result.current.busy).toBe(false);
+});

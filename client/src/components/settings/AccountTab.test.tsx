@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import { ApiError } from '../../lib/apiError';
+import { PASSWORD_CHANGED } from '../../lib/copy';
 import { apiError, makeUser, settle } from '../../test/hooks';
 import { AccountTab } from './AccountTab';
 
@@ -52,6 +53,20 @@ describe('AccountTab', () => {
     expect(screen.getByRole('alert').textContent).toBe('Request failed (502)');
     await deleteSam();
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('says the password changed in a live region that was there before the text', async () => {
+    vi.mocked(api.listUsers).mockResolvedValue({ users: [admin] });
+    vi.mocked(api.changePassword).mockResolvedValue({ ok: true });
+    await renderTab();
+    const status = screen.getByRole('status');
+    expect(status.textContent).toBe('');
+    fireEvent.change(screen.getByLabelText('Current password'), { target: { value: 'old-password' } });
+    fireEvent.submit(status.closest('form')!);
+    await settle();
+    expect(api.changePassword).toHaveBeenCalledWith('old-password', '');
+    expect(screen.getByRole('status')).toBe(status);
+    expect(status.textContent).toBe(PASSWORD_CHANGED);
   });
 
   it('names the account on the change-password form for password managers', async () => {

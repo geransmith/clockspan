@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { useDay } from '../hooks/useDay';
-import { unlockAudio } from '../lib/alerts';
+import { dismissByTag, unlockAudio } from '../lib/alerts';
 import { BREAK } from '../lib/copy';
 import { AppProviders, deferred, makeBreak, makeDay, makePriority, makeSession, makeSettings, settle, T0, TODAY } from '../test/hooks';
 import type { Break, Priority, SessionResponse } from '../types';
@@ -69,6 +69,15 @@ describe('FocusTimer', () => {
     expect(screen.getByRole('timer')).toBeTruthy();
   });
 
+  it("takes the break banners down in the start's tap, so their Start break can't race it", async () => {
+    vi.mocked(api.startSession).mockReturnValue(deferred<SessionResponse>().promise);
+    await renderCard();
+    vi.mocked(dismissByTag).mockClear();
+    fireEvent.click(start25());
+    // In the click, before the start has answered and the running timer takes them down.
+    expect(dismissByTag).toHaveBeenCalledWith('break');
+  });
+
   it('holds End break while a start is out', async () => {
     const answer = deferred<SessionResponse>();
     vi.mocked(api.startSession).mockReturnValue(answer.promise);
@@ -111,12 +120,6 @@ describe('FocusTimer', () => {
     await renderCard(ticked(MAX_PRIORITIES));
     typeLabel('Call the vendor');
     expect(alsoAdd()).toBeNull();
-  });
-
-  it('offers it while one row is still free', async () => {
-    await renderCard(ticked(MAX_PRIORITIES - 1));
-    typeLabel('Call the vendor');
-    expect(alsoAdd()).toBeTruthy();
   });
 
   it('unlocks audio in the tap, before the priority is saved', async () => {

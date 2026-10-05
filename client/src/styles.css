@@ -182,6 +182,13 @@ button {
   color: var(--ok-ink);
   font-size: 0.92rem;
 }
+/* A settings result's live region is always there; empty, it gives back the gap before it. */
+.stack > .success:empty {
+  margin-top: -12px;
+}
+.settings-fields > .success:empty {
+  margin-top: -10px;
+}
 .stack {
   display: flex;
   flex-direction: column;

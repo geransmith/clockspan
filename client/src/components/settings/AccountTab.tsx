@@ -52,11 +52,10 @@ function ChangePassword({ username }: { username: string }) {
       </label>
       <NewPasswordFields value={next} confirm={confirm} onValue={setNext} onConfirm={setConfirm} />
       <ErrorLine error={error} />
-      {done && (
-        <p className="success" role="status">
-          {PASSWORD_CHANGED}
-        </p>
-      )}
+      {/* Always there, so a screen reader hears the line arrive. */}
+      <p className="success" role="status">
+        {done && PASSWORD_CHANGED}
+      </p>
       <div>
         <button className="btn btn-primary" type="submit" disabled={busy}>
           Change password
@@ -71,7 +70,7 @@ function Users({ me }: { me: PublicUser }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   // The list's load and delete share the add form's error line.
-  const { busy, error, setError, onSubmit } = useSubmit();
+  const { busy, error, setError, run, onSubmit } = useSubmit();
   const load = useCallback(
     () =>
       api
@@ -88,16 +87,16 @@ function Users({ me }: { me: PublicUser }) {
     setPassword('');
     await load();
   });
-  const remove = async (u: PublicUser) => {
+  const remove = (u: PublicUser) => {
     if (!window.confirm(CONFIRM.deleteUser(u.name))) return;
-    setError(null);
-    try {
-      await api.deleteUser(u.id);
-    } catch (err) {
-      setError((err as Error).message);
-    }
-    // Reload either way: a 404 means another device already deleted the user, and the list should show it gone.
-    await load();
+    run(async () => {
+      try {
+        await api.deleteUser(u.id);
+      } finally {
+        // Reload either way: a 404 means another device already deleted the user, and the list should show it gone.
+        await load();
+      }
+    });
   };
 
   return (
@@ -113,7 +112,7 @@ function Users({ me }: { me: PublicUser }) {
               {u.id === me.id && <span className="muted small"> (you)</span>}
             </span>
             {u.id !== me.id && (
-              <button className="btn btn-ghost btn-danger-text" onClick={() => void remove(u)} aria-label={`Delete ${u.name}`}>
+              <button className="btn btn-ghost btn-danger-text" onClick={() => remove(u)} aria-label={`Delete ${u.name}`}>
                 Delete
               </button>
             )}

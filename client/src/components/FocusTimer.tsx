@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useBreak } from '../hooks/useBreak';
 import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
+import { useSubmit } from '../hooks/useSubmit';
 import { useTimer } from '../hooks/useTimer';
-import { unlockAudio } from '../lib/alerts';
+import { dismissByTag, unlockAudio } from '../lib/alerts';
 import { BREAK, TIMER_DUE } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
 import { hasRoom, hasText } from '../lib/priorities';
@@ -29,13 +30,13 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
   const [label, setLabel] = useState('');
   const [linked, setLinked] = useState<string | null>(null);
   const [addAsPriority, setAddAsPriority] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   // A start is out: the start and break buttons are disabled until it answers. A second start
   // would add the priority twice and meet the first timer as a 409, which reads as one started
   // on another device. A break tap goes out on the day store's queue, not the timer's, so it
   // could reach the server after the start: a new break would meet the running timer (409,
-  // "Change not saved"), and an end would find the break the start already ended.
-  const [starting, setStarting] = useState(false);
+  // "Change not saved"), and an end would find the break the start already ended. The break
+  // banners, whose Start break the disabled buttons don't reach, go in the start's tap.
+  const { busy: starting, error, run } = useSubmit();
 
   if (timer.running) return <Running session={timer.running} />;
 
@@ -60,32 +61,26 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
     setAddAsPriority(false);
   };
 
-  const start = async (minutes: number) => {
+  const start = (minutes: number) => {
     // Here, in the tap and before any await: iOS counts only the tap as the gesture, and with
     // "Also add to today's priorities" ticked the new row is saved before the timer starts, so
     // the completion chime would stay silent otherwise.
     unlockAudio();
-    setStarting(true);
-    setError(null);
-    try {
+    dismissByTag('break');
+    run(async () => {
       let uid = linkedStillOpen ? linked : null;
-      if (!uid && offerAdd && addAsPriority) {
+      if (offerAdd && addAsPriority) {
         uid = await onAddPriority(trimmed);
         // Linked from here on, so a retry after a failed start uses this row instead of adding another.
         setLinked(uid);
         setAddAsPriority(false);
       }
-      // Back to work: the server ends a running break as the session starts (useBreak takes
-      // its banners down), so nothing to send here.
+      // Back to work: the server ends a running break as the session starts, so nothing to send here.
       await timer.start(date, minutes * 60, trimmed, uid);
       setLabel('');
       setLinked(null);
       setAddAsPriority(false);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setStarting(false);
-    }
+    });
   };
 
   return (
@@ -138,7 +133,7 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
       )}
       <div className="timer-quick">
         {lengths.map((m) => (
-          <button key={m} className="btn btn-quick" onClick={() => void start(m)} disabled={!isToday || starting}>
+          <button key={m} className="btn btn-quick" onClick={() => start(m)} disabled={!isToday || starting}>
             <span className="timer-quick-num">{m}</span>
             <span className="timer-quick-unit">min</span>
           </button>

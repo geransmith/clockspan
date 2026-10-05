@@ -67,11 +67,15 @@ describe('DataTab', () => {
     const { date, button } = await renderTab();
     fireEvent.change(date, { target: { value: '2026-06-01' } });
     await settle();
+    // The live region is there before its text, or a screen reader may not read the text out.
+    const status = screen.getByRole('status');
+    expect(status.textContent).toBe('');
     fireEvent.click(button);
     await settle();
     expect(confirm).toHaveBeenCalledWith(CONFIRM.deleteDays(2, formatDateFull('2026-06-01')));
     expect(api.pruneDays).toHaveBeenCalledWith('2026-06-01');
-    expect(screen.getByRole('status').textContent).toBe(DAYS_DELETED(2));
+    expect(screen.getByRole('status')).toBe(status);
+    expect(status.textContent).toBe(DAYS_DELETED(2));
   });
 
   it("shows the new date's count when the date changes during a delete", async () => {
