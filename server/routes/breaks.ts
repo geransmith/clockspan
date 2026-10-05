@@ -2,7 +2,7 @@ import type { RequestHandler, Router } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { refuse } from '../refuse.js';
-import { breakRowToJson, dateParam, endRunningBreak, ensureDay, getOwned, ownedRouter, parsePlannedSeconds, runningSession } from './shared.js';
+import { breakRowToJson, endRunningBreak, ensureDay, getOwned, ownedRouter, parsePlannedSeconds, runningSession } from './shared.js';
 import type { BreakEndResponse, BreakResponse, OkResponse } from '../../shared/api.js';
 import { BREAK_SECONDS } from '../../shared/timer.js';
 
@@ -11,7 +11,7 @@ import { BREAK_SECONDS } from '../../shared/timer.js';
  * A break starts now and runs for `plannedSeconds`. One that was still running ends here; a
  * focus timer running refuses it, since a break is the time between sessions.
  */
-export function startBreak(db: DB): RequestHandler {
+export function startBreak(db: DB): RequestHandler<{ date: string }> {
   return (req, res) => {
     const user = currentUser(req);
     const { plannedSeconds } = req.body as { plannedSeconds?: unknown };
@@ -21,7 +21,7 @@ export function startBreak(db: DB): RequestHandler {
     const id = db.transaction(() => {
       const now = Date.now();
       endRunningBreak(db, user.id, now);
-      const dayId = ensureDay(db, user.id, dateParam(req));
+      const dayId = ensureDay(db, user.id, req.params.date);
       const info = db
         .prepare(`INSERT INTO breaks (day_id, user_id, planned_seconds, started_at, ended_at) VALUES (?, ?, ?, ?, ?)`)
         .run(dayId, user.id, planned.seconds, now, now + planned.seconds * 1000);

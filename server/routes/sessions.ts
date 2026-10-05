@@ -2,18 +2,7 @@ import type { RequestHandler, Response, Router } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { refuse } from '../refuse.js';
-import {
-  dateParam,
-  endRunningBreak,
-  ensureDay,
-  findDay,
-  getOwned,
-  ownedRouter,
-  parsePlannedSeconds,
-  runningSession,
-  sessionRowToJson,
-  UID_RE,
-} from './shared.js';
+import { endRunningBreak, ensureDay, findDay, getOwned, ownedRouter, parsePlannedSeconds, runningSession, sessionRowToJson, UID_RE } from './shared.js';
 import { LIMITS, type OkResponse, type RunningResponse, type SessionConflict, type SessionResponse } from '../../shared/api.js';
 import { pausedSecondsAfter, PLANNED_SECONDS, plannedEndAt } from '../../shared/timer.js';
 
@@ -42,10 +31,10 @@ function parseLabel(raw: unknown): { label: string | undefined } | { error: stri
 }
 
 /** `POST /days/:date/sessions`, registered on the days router, whose date check has already run. */
-export function startSession(db: DB): RequestHandler {
+export function startSession(db: DB): RequestHandler<{ date: string }> {
   return (req, res) => {
     const user = currentUser(req);
-    const date = dateParam(req);
+    const date = req.params.date;
     const { label, plannedSeconds, priorityUid } = req.body as { label?: unknown; plannedSeconds?: unknown; priorityUid?: unknown };
     const planned = parsePlannedSeconds(plannedSeconds, PLANNED_SECONDS);
     if ('error' in planned) return refuse(res, 400, planned.error);
@@ -90,25 +79,24 @@ export function sessionsRouter(db: DB): Router {
 
   r.patch('/:id', (req, res) => {
     const s = owned(res);
-    const { plannedSeconds, label, priorityUid } = req.body as Record<string, unknown>;
-    const next = {
-      planned: s.planned_seconds,
-      label: s.label,
-      priorityUid: s.priority_uid,
-    };
+    const { plannedSeconds, label, priorityUid } = req.body as { plannedSeconds?: unknown; label?: unknown; priorityUid?: unknown };
     const link = parsePriorityUid(db, s.day_id, priorityUid);
     if ('error' in link) return refuse(res, 400, link.error);
-    if (link.uid !== undefined) next.priorityUid = link.uid;
+    let planned = s.planned_seconds;
     if (plannedSeconds !== undefined) {
-      const planned = parsePlannedSeconds(plannedSeconds, PLANNED_SECONDS);
-      if ('error' in planned) return refuse(res, 400, planned.error);
+      const parsed = parsePlannedSeconds(plannedSeconds, PLANNED_SECONDS);
+      if ('error' in parsed) return refuse(res, 400, parsed.error);
       if (s.status !== 'running') return refuse(res, 409, 'Only a running timer can be adjusted.');
-      next.planned = planned.seconds;
+      planned = parsed.seconds;
     }
     const name = parseLabel(label);
     if ('error' in name) return refuse(res, 400, name.error);
-    if (name.label !== undefined) next.label = name.label;
-    db.prepare(`UPDATE sessions SET planned_seconds = ?, label = ?, priority_uid = ? WHERE id = ?`).run(next.planned, next.label, next.priorityUid, s.id);
+    db.prepare(`UPDATE sessions SET planned_seconds = ?, label = ?, priority_uid = ? WHERE id = ?`).run(
+      planned,
+      name.label ?? s.label,
+      link.uid === undefined ? s.priority_uid : link.uid,
+      s.id,
+    );
     reply(res, s.user_id, s.id);
   });
 
@@ -154,7 +142,8 @@ export function sessionsRouter(db: DB): Router {
   r.post('/:id/cancel', (_req, res) => {
     const s = owned(res);
     if (s.status === 'running') {
-      db.prepare(`UPDATE sessions SET ended_at = ?, paused_at = NULL, status = 'cancelled' WHERE id = ?`).run(Date.now(), s.id);
+      // A paused session ends where its pause began, as on finish, so the pause isn't counted.
+      db.prepare(`UPDATE sessions SET ended_at = COALESCE(paused_at, ?), paused_at = NULL, status = 'cancelled' WHERE id = ?`).run(Date.now(), s.id);
     }
     reply(res, s.user_id, s.id);
   });

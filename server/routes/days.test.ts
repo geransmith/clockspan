@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from '../dev/harness.js';
 import { ensureDefaultUser } from '../db.js';
-import { seedDatabase } from '../dev/seed.js';
+import { seedDatabase, type DayKind } from '../dev/seed.js';
 import { ensureDay } from './shared.js';
 import { MAX_PRIORITIES } from '../../shared/settings.js';
 import { MAX_PUNCHES } from '../../shared/punches.js';
@@ -17,7 +17,7 @@ beforeEach(async () => {
 });
 afterEach(() => app.close());
 
-const seededDay = (kind: string) => app.seeded!.days.find((d) => d.kind === kind)!;
+const seededDay = (kind: DayKind) => app.seeded!.days.find((d) => d.kind === kind)!;
 
 describe('GET /api/days/:date', () => {
   it('returns an empty day for a date with no rows', async () => {
@@ -104,19 +104,12 @@ describe('PUT /api/days/:date/punches', () => {
   });
 
   it('refuses a row that is not an object, and stores nothing', async () => {
-    // Every row must be an object or null, whatever a string's or an array's `at` would read as.
-    for (const row of [5, true, 'x', [1], [{ at: T0 + 8 * HOUR_MS }]]) {
+    // Every row must be an object, whatever a string's or an array's `at` would read as.
+    for (const row of [null, 5, true, 'x', [1], [{ at: T0 + 8 * HOUR_MS }]]) {
       const r = await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: T0 + 8 * HOUR_MS }, row] });
-      expect([r.status, r.body.error], JSON.stringify(row)).toEqual([400, 'Punch 1 must be an object or null.']);
+      expect([r.status, r.body.error], JSON.stringify(row)).toEqual([400, 'Punch 1 must be an object.']);
     }
     expect((await app.api.get('/api/days/2026-09-01')).body.punches).toEqual([]);
-  });
-
-  it("takes the web app's rows, and a null row as an empty one", async () => {
-    // The client sends `{ at }` for every row, `at: null` for an empty one (putPunches in client/src/api.ts); a null row reads the same.
-    const r = await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: T0 + 8 * HOUR_MS }, { at: null }, null, { at: T0 + 17 * HOUR_MS }] });
-    expect(r.status).toBe(200);
-    expect(r.body.punches.map((p: { at: number | null }) => p.at)).toEqual([T0 + 8 * HOUR_MS, null, null, T0 + 17 * HOUR_MS]);
   });
 });
 
@@ -201,17 +194,10 @@ describe('PUT /api/days/:date/priorities', () => {
     expect((await put({ text: null, uid: null })).status).toBe(200);
   });
 
-  it('reads a null row as an empty one', async () => {
-    const r = await app.api.put('/api/days/2026-09-01/priorities', { priorities: [null, { text: 'b' }] });
-    expect(r.status).toBe(200);
-    expect(r.body.priorities[0]).toEqual({ position: 1, text: '', done: false, uid: null, addedAt: null });
-    expect(r.body.priorities[1]).toMatchObject({ position: 2, text: 'b' });
-  });
-
   it('refuses a row that is not an object, and stores nothing', async () => {
-    for (const row of ['x', 5, true, [1], [{ text: 'a' }]]) {
+    for (const row of [null, 'x', 5, true, [1], [{ text: 'a' }]]) {
       const r = await app.api.put('/api/days/2026-09-01/priorities', { priorities: [{ text: 'ok' }, row] });
-      expect([r.status, r.body.error], JSON.stringify(row)).toEqual([400, 'Priority 2 must be an object or null.']);
+      expect([r.status, r.body.error], JSON.stringify(row)).toEqual([400, 'Priority 2 must be an object.']);
     }
     expect((await app.api.get('/api/days/2026-09-01')).body.priorities).toEqual([]);
   });
@@ -362,6 +348,10 @@ describe('GET /api/days/range', () => {
   it('validates the range', async () => {
     expect((await app.api.get('/api/days/range?from=2026-09-16&to=2026-09-15')).status).toBe(400);
     expect((await app.api.get('/api/days/range?from=2025-01-01&to=2026-09-16')).status).toBe(400);
+    // Both ends count: 400 days is the limit, 401 is refused.
+    expect((await app.api.get('/api/days/range?from=2025-01-01&to=2026-02-04')).status).toBe(200);
+    const over = await app.api.get('/api/days/range?from=2025-01-01&to=2026-02-05');
+    expect([over.status, over.body.error]).toEqual([400, 'Range is limited to 400 days.']);
     expect((await app.api.get('/api/days/range?from=x&to=2026-09-16')).status).toBe(400);
     expect((await app.api.get('/api/days/range')).status).toBe(400);
   });

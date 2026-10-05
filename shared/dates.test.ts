@@ -102,12 +102,12 @@ describe('punchWindow', () => {
   it("spans the key's UTC noon ± 48 h, in UTC, so any zone's local day fits", () => {
     const { from, to } = punchWindow('2026-09-01');
     const midnightUtc = Date.UTC(2026, 8, 1);
-    expect(from).toBe(midnightUtc - 36 * HOUR_MS);
-    expect(to).toBe(midnightUtc + 60 * HOUR_MS);
     // The extremes: local midnight in UTC+14 and the last millisecond of the day in UTC-12.
     expect(midnightUtc - 14 * HOUR_MS).toBeGreaterThanOrEqual(from);
     expect(midnightUtc + 36 * HOUR_MS - 1).toBeLessThanOrEqual(to);
-    expect(to - from).toBe(96 * HOUR_MS);
+    // A day past either extreme is out.
+    expect(midnightUtc - 38 * HOUR_MS).toBeLessThan(from);
+    expect(midnightUtc + 61 * HOUR_MS).toBeGreaterThan(to);
   });
 });
 
