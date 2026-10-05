@@ -25,7 +25,7 @@ export const History = memo(function History({ today, now, date, review, onOpen 
     setTab('review');
   };
   return (
-    <div className="history-view">
+    <div className="history-view stack">
       {/* A switch between two views, not ARIA tabs: there are no tab panels or arrow keys to go with them. */}
       <div className="segmented" role="group" aria-label="History view">
         <button className="segment" aria-pressed={tab === 'days'} onClick={() => setTab('days')}>

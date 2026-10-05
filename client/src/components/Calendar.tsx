@@ -75,7 +75,7 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
   };
 
   return (
-    <section className="card calendar">
+    <section className="card">
       <header className="card-head">
         <h2 className="card-title">Days</h2>
         <PeriodReset kind="month" offset={offset} onOffset={step} />
