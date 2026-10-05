@@ -45,7 +45,6 @@ export type SeededDay = Omit<Day, 'priorities' | 'sessions' | 'breaks'> & {
 };
 
 export interface SeedManifest {
-  today: string;
   /** Ascending by date; the last entry is `today`. */
   days: SeededDay[];
 }
@@ -157,16 +156,10 @@ function uidFor(dayIndex: number, position: number): string {
   return `${dayIndex.toString(16).padStart(4, '0')}${position.toString(16).padStart(2, '0')}`.padEnd(12, 'a');
 }
 
-interface Insert {
-  db: DB;
-  userId: number;
-}
-
 /** A day as the templates build it, before the inserts give its sessions and breaks ids. */
 type DayDraft = Omit<SeededDay, 'sessions' | 'breaks'> & { sessions: Omit<SeededSession, 'id'>[]; breaks: Omit<SeededBreak, 'id'>[] };
 
-function insertDay(ctx: Insert, day: DayDraft): SeededDay {
-  const { db, userId } = ctx;
+function insertDay(db: DB, userId: number, day: DayDraft): SeededDay {
   const info = db
     .prepare(`INSERT INTO days (user_id, date, created_at, overtime_approved, retro_note, retro_at, work_minutes) VALUES (?, ?, ?, ?, ?, ?, ?)`)
     .run(userId, day.date, day.createdAt, day.overtimeApproved ? 1 : 0, day.retroNote, day.retroAt, day.workMinutes);
@@ -196,19 +189,20 @@ function punchRows(times: (number | null)[]): Punch[] {
 }
 
 /**
- * A finished session planned for `minutes`. Worked shorter, it was finished early; paused, its
- * end moves out by the pause, which the log leaves out, the way the finish route records it.
- * The cancelled and running rows are this shape with `status` set over it, and for a running
- * row `endedAt: null`.
+ * A finished session planned for `minutes`: for a priority row, which gives its label and uid,
+ * or unplanned under a label. Worked shorter, it was finished early; paused, its end moves out
+ * by the pause, which the log leaves out, the way the finish route records it. The cancelled
+ * and running rows are this shape with `status` set over it, and for a running row
+ * `endedAt: null`.
  */
-function completed(label: string, startedAt: number, minutes: number, priorityUid: string | null, worked = minutes, paused = 0): Omit<SeededSession, 'id'> {
+function completed(work: SeededPriority | string, startedAt: number, minutes: number, worked = minutes, paused = 0): Omit<SeededSession, 'id'> {
   return {
-    label,
+    label: typeof work === 'string' ? work : work.text,
     plannedSeconds: minutes * 60,
     startedAt,
     endedAt: startedAt + (worked + paused) * MINUTE_MS,
     status: 'completed',
-    priorityUid,
+    priorityUid: typeof work === 'string' ? null : work.uid,
     pausedSeconds: paused * 60,
   };
 }
@@ -253,10 +247,10 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
       punches: punchRows([clockIn, lunchOut, lunchIn, extraOut, extraIn, clockOut + 10 * MINUTE_MS]),
       priorities,
       sessions: [
-        completed(texts[0]!, firstStart, 25, priorities[0]!.uid),
-        completed(texts[1]!, firstStart + 45 * MINUTE_MS, 50, priorities[1]!.uid),
-        completed('Reply to the recruiter', lunchIn + 20 * MINUTE_MS, 25, priorities[3]!.uid),
-        completed(pick(UNPLANNED_LABELS), extraIn + 15 * MINUTE_MS, 25, null),
+        completed(priorities[0]!, firstStart, 25),
+        completed(priorities[1]!, firstStart + 45 * MINUTE_MS, 50),
+        completed(priorities[3]!, lunchIn + 20 * MINUTE_MS, 25),
+        completed(pick(UNPLANNED_LABELS), extraIn + 15 * MINUTE_MS, 25),
       ],
       breaks: [rested(firstStart + 25 * MINUTE_MS, 5)],
       retroNote: note(NOTES.extraPair),
@@ -269,22 +263,19 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
     // pair after lunch, well before the tenth hour ends.
     const earlyIn = atTime(date, 8, 15);
     const lateOut = atTime(date, 19, 30);
-    const priorities = [
-      priority(1, texts[0]!, true, earlyIn - 4 * MINUTE_MS),
-      priority(2, texts[1]!, true, earlyIn - 4 * MINUTE_MS),
-      priority(3, texts[2]!, true, earlyIn - 4 * MINUTE_MS),
-    ];
+    const planned = earlyIn - 4 * MINUTE_MS;
+    const priorities = [priority(1, texts[0]!, true, planned), priority(2, texts[1]!, true, planned), priority(3, texts[2]!, true, planned)];
     return {
       ...base,
-      createdAt: earlyIn - 4 * MINUTE_MS,
+      createdAt: planned,
       overtimeApproved: true,
       punches: punchRows([earlyIn, atTime(date, 12, 0), atTime(date, 12, 30), atTime(date, 17, 15), atTime(date, 17, 45), lateOut]),
       priorities,
       sessions: [
-        completed(texts[0]!, atTime(date, 8, 30), 50, priorities[0]!.uid),
-        completed(texts[1]!, atTime(date, 10, 0), 50, priorities[1]!.uid),
-        completed(texts[2]!, atTime(date, 14, 0), 50, priorities[2]!.uid),
-        completed(texts[2]!, atTime(date, 18, 0), 50, priorities[2]!.uid),
+        completed(priorities[0]!, atTime(date, 8, 30), 50),
+        completed(priorities[1]!, atTime(date, 10, 0), 50),
+        completed(priorities[2]!, atTime(date, 14, 0), 50),
+        completed(priorities[2]!, atTime(date, 18, 0), 50),
       ],
       breaks: [],
       retroNote: note(NOTES.overtime),
@@ -299,10 +290,10 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
       punches: punchRows([clockIn, lunchOut, lunchIn, clockOut]),
       priorities,
       sessions: [
-        completed(texts[0]!, clockIn + 20 * MINUTE_MS, 25, priorities[0]!.uid),
+        completed(priorities[0]!, clockIn + 20 * MINUTE_MS, 25),
         // Cancelled a few minutes in: must not count anywhere.
-        { ...completed(texts[1]!, clockIn + 60 * MINUTE_MS, 25, priorities[1]!.uid, 5), status: 'cancelled' },
-        completed(pick(UNPLANNED_LABELS), lunchIn + 30 * MINUTE_MS, 25, null),
+        { ...completed(priorities[1]!, clockIn + 60 * MINUTE_MS, 25, 5), status: 'cancelled' },
+        completed(pick(UNPLANNED_LABELS), lunchIn + 30 * MINUTE_MS, 25),
       ],
       breaks: [],
       // Written, but the day was never marked reviewed.
@@ -315,14 +306,15 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
     // A half day: its own 4.5 h work day, so it ends on target, and lunch rows never punched.
     const halfIn = atTime(date, 9, 0);
     const halfOut = atTime(date, 13, 30);
-    const priorities = [priority(1, texts[0]!, true, halfIn - 4 * MINUTE_MS), priority(2, texts[1]!, false, halfIn - 4 * MINUTE_MS)];
+    const planned = halfIn - 4 * MINUTE_MS;
+    const priorities = [priority(1, texts[0]!, true, planned), priority(2, texts[1]!, false, planned)];
     return {
       ...base,
-      createdAt: halfIn - 4 * MINUTE_MS,
+      createdAt: planned,
       workMinutes: 270,
       punches: punchRows([halfIn, null, null, halfOut]),
       priorities,
-      sessions: [completed(texts[0]!, halfIn + 10 * MINUTE_MS, 50, priorities[0]!.uid), completed(texts[0]!, halfIn + 70 * MINUTE_MS, 50, priorities[0]!.uid)],
+      sessions: [completed(priorities[0]!, halfIn + 10 * MINUTE_MS, 50), completed(priorities[0]!, halfIn + 70 * MINUTE_MS, 50)],
       breaks: [rested(halfIn + 60 * MINUTE_MS, 10)],
       retroNote: note(NOTES.noLunch),
       retroAt: halfOut + 2 * MINUTE_MS,
@@ -336,9 +328,9 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
     punches: punchRows([clockIn, lunchOut, lunchIn, clockOut]),
     priorities,
     sessions: [
-      completed(texts[0]!, clockIn + 15 * MINUTE_MS, 25, priorities[0]!.uid),
-      completed(texts[1]!, clockIn + 60 * MINUTE_MS, 50, priorities[1]!.uid),
-      completed(pick(UNPLANNED_LABELS), lunchIn + 30 * MINUTE_MS, 25, null),
+      completed(priorities[0]!, clockIn + 15 * MINUTE_MS, 25),
+      completed(priorities[1]!, clockIn + 60 * MINUTE_MS, 50),
+      completed(pick(UNPLANNED_LABELS), lunchIn + 30 * MINUTE_MS, 25),
     ],
     // A fifth of each session before it, the way Suggest breaks sizes them.
     breaks: [rested(clockIn + 40 * MINUTE_MS, 5), rested(clockIn + 110 * MINUTE_MS, 10)],
@@ -380,11 +372,11 @@ function buildToday(today: string, now: number, index: number, running: boolean,
   // still running beside it, which the server would refuse.
   const until = running ? runningFrom : now;
   const sessions = [
-    completed('Ship the timeclock fix', clockIn + 10 * MINUTE_MS, 50, priorities[1]!.uid),
+    completed(priorities[1]!, clockIn + 10 * MINUTE_MS, 50),
     // Paused eight minutes for a question, then finished three minutes short of the plan.
-    completed('Inbox', clockIn + 70 * MINUTE_MS, 25, null, 22, 8),
+    completed('Inbox', clockIn + 70 * MINUTE_MS, 25, 22, 8),
   ].filter((s) => s.endedAt! <= until);
-  if (running) sessions.push({ ...completed('Answer the two open support threads', runningFrom, 25, priorities[2]!.uid), endedAt: null, status: 'running' });
+  if (running) sessions.push({ ...completed(priorities[2]!, runningFrom, 25), endedAt: null, status: 'running' });
   return {
     date: today,
     kind: 'today',
@@ -417,10 +409,9 @@ export function seedDatabase(db: DB, opts: SeedOptions): SeedManifest {
       db.prepare(`DELETE FROM settings WHERE user_id = ?`).run(opts.userId);
       revokeSessions(db, opts.userId);
     }
-    const ctx = { db, userId: opts.userId };
-    const days = dates.map((date, i) => insertDay(ctx, buildPastDay(date, i, kindForDistance(dates.length - 1 - i), rand, note)));
-    days.push(insertDay(ctx, buildToday(opts.today, opts.now, dates.length, Boolean(opts.running), days.at(-1))));
-    return { today: opts.today, days };
+    const days = dates.map((date, i) => insertDay(db, opts.userId, buildPastDay(date, i, kindForDistance(dates.length - 1 - i), rand, note)));
+    days.push(insertDay(db, opts.userId, buildToday(opts.today, opts.now, dates.length, Boolean(opts.running), days.at(-1))));
+    return { days };
   })();
 }
 

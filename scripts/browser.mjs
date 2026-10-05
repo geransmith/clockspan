@@ -91,6 +91,7 @@ function launchBrowser(bin, profileDir) {
       if (m) resolve(m[1]);
     });
     child.on('exit', (code) => reject(new Error(`Browser exited (${code}) before DevTools was ready:\n${err}`)));
+    child.on('error', (e) => reject(new Error(`Could not start ${bin}: ${e.message}`)));
     setTimeout(() => reject(new Error(`Browser did not start within 30 s:\n${err}`)), 30_000).unref();
   });
   return { child, ready };

@@ -10,6 +10,7 @@ import { loadConfig, type Config } from '../config.js';
 import { ensureDefaultUser, openDatabase, type DB, type UserRow } from '../db.js';
 import { ensureLocalUsers, LOCAL_USERS, seedDatabase, type SeedManifest, type SeedOptions } from './seed.js';
 import type { AuthMode } from '../../shared/api.js';
+import { atTime } from '../../shared/dates.js';
 
 /**
  * Boots the real Express app on an in-memory SQLite DB and talks to it over HTTP with
@@ -84,7 +85,7 @@ export const FIRST_RUN = { username: 'geran', password: 'correct horse', setupCo
 
 /** A Wednesday, so "this week" in a review holds seeded days on both sides. */
 export const SEED_TODAY = '2026-09-16';
-export const SEED_NOW = new Date(2026, 8, 16, 14, 0).getTime();
+export const SEED_NOW = atTime(SEED_TODAY, 14, 0);
 
 /** Rows in `table`, or those matching `where` (SQL, with `?` for each of `params`). */
 export function countRows(db: DB, table: string, where?: string, ...params: unknown[]): number {
