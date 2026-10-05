@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useTimer } from '../hooks/useTimer';
-import { LIMITS } from '../../../shared/api.js';
 import { formatCountdown } from '../lib/format';
-import { SessionLabel } from './SessionLabel';
+import { LabelInput, SessionLabel } from './SessionLabel';
 import { TimerControls } from './TimerControls';
 
 /** Fixed to the top of the viewport whenever a timer is running, on every view. */
@@ -10,6 +9,8 @@ export function RunningTimerBar() {
   const { running, countdownSeconds, progress, paused, due, edit } = useTimer();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  // Set when Enter or Escape ends the edit, so focus goes back to the label; a blur leaves focus where it went.
+  const [returnFocus, setReturnFocus] = useState(false);
   if (!running) return null;
 
   const commitLabel = () => {
@@ -22,27 +23,28 @@ export function RunningTimerBar() {
       <div className="running-bar-inner">
         <span className="running-dot" aria-hidden="true" />
         {editing ? (
-          <input
-            className="input running-label-input"
+          <LabelInput
+            className="running-label-input"
             value={draft}
-            autoFocus
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={setDraft}
             onBlur={commitLabel}
-            onKeyDown={(e) => {
-              // An input method's Enter picks a candidate and its Escape drops one: neither ends the edit.
-              if (e.nativeEvent.isComposing) return;
-              if (e.key === 'Enter') commitLabel();
-              if (e.key === 'Escape') setEditing(false);
+            onSave={() => {
+              setReturnFocus(true);
+              commitLabel();
+            }}
+            onDrop={() => {
+              setReturnFocus(true);
+              setEditing(false);
             }}
             placeholder="What are you working on?"
-            maxLength={LIMITS.sessionLabel}
-            aria-label="Session label"
           />
         ) : (
           <button
             className="running-label"
+            autoFocus={returnFocus}
             onClick={() => {
               setDraft(running.label);
+              setReturnFocus(false);
               setEditing(true);
             }}
             title="Edit label"

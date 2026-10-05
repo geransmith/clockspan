@@ -29,6 +29,8 @@ export function PlanNext({ date, today, priorities }: Props) {
   const { settings } = useSettings();
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  // Cancel and Save take the planner away with focus inside it: focus goes back to the button that returns.
+  const [returnFocus, setReturnFocus] = useState(false);
   // Rows put on the next day's list: a small burst from the line that says so.
   const [planned, setPlanned] = useState<Moment | null>(null);
   const { anchor, burst } = useCelebration<HTMLDivElement>(planned, 'planDone');
@@ -42,12 +44,16 @@ export function PlanNext({ date, today, priorities }: Props) {
           date={next}
           name={name}
           candidates={priorities.filter((p) => hasText(p) && !p.done)}
-          onDone={(message, added) => {
+          onDone={(added) => {
             setOpen(false);
-            setResult(message);
-            if (added > 0) setPlanned({});
+            setReturnFocus(true);
+            setResult(added ? PLAN_NEXT.done(added, name) : PLAN_NEXT.nothing);
+            if (added) setPlanned({});
           }}
-          onCancel={() => setOpen(false)}
+          onCancel={() => {
+            setOpen(false);
+            setReturnFocus(true);
+          }}
         />
       )}
       {/* Mounted while the planner is open too, so its status line exists before the result arrives. */}
@@ -55,6 +61,7 @@ export function PlanNext({ date, today, priorities }: Props) {
         {!open && (
           <button
             className="btn btn-ghost"
+            autoFocus={returnFocus}
             onClick={() => {
               setResult(null);
               setOpen(true);
@@ -82,7 +89,7 @@ function Planner({
   date: string;
   name: string;
   candidates: Priority[];
-  onDone: (message: string, added: number) => void;
+  onDone: (added: number) => void;
   onCancel: () => void;
 }) {
   const { day, failed, store } = useDay(date);
@@ -112,17 +119,17 @@ function Planner({
     if (!day) return;
     // The tap is the gesture iOS needs: the "next day planned" sound plays after the save answers.
     unlockAudio();
-    const texts = [...offered.filter((p) => picked.has(p.uid)).map((p) => p.text), ...extra, ...(draft.trim() ? [draft] : [])];
+    const texts = [...offered.filter((p) => picked.has(p.uid)).map((p) => p.text), ...extra, draft];
     const { rows, added } = planNext(day.priorities, texts);
     if (added === 0) {
-      onDone(PLAN_NEXT.nothing, 0);
+      onDone(0);
       return;
     }
     setBusy(true);
     // A failed save raises the store's banner and puts the stored list back.
     const ok = await store.setPriorities(date, rows);
     setBusy(false);
-    if (ok) onDone(PLAN_NEXT.done(added, name), added);
+    if (ok) onDone(added);
   };
 
   return (
@@ -163,6 +170,7 @@ function Planner({
       <input
         className="input"
         value={draft}
+        autoFocus
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={onKey}
         placeholder={PLAN_NEXT.placeholder}

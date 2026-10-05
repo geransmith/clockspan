@@ -68,6 +68,7 @@ describe('RunningTimerBar', () => {
       // Shown at once, before the server answers.
       expect(screen.queryByRole('textbox')).toBeNull();
       expect(label().textContent).toBe('Draft the summary');
+      expect(document.activeElement).toBe(label());
       await settle();
       expect(api.patchSession).toHaveBeenCalledExactlyOnceWith(1, { label: 'Draft the summary' });
     });
@@ -77,6 +78,8 @@ describe('RunningTimerBar', () => {
       fireEvent.blur(input());
       await settle();
       expect(screen.queryByRole('textbox')).toBeNull();
+      // A blur leaves focus wherever it went.
+      expect(document.activeElement).not.toBe(label());
       expect(api.patchSession).toHaveBeenCalledExactlyOnceWith(1, { label: 'Renamed' });
     });
 
@@ -84,6 +87,7 @@ describe('RunningTimerBar', () => {
       await edit('Not this', 'Escape');
       expect(screen.queryByRole('textbox')).toBeNull();
       expect(label().textContent).toBe('Write the report');
+      expect(document.activeElement).toBe(label());
       expect(api.patchSession).not.toHaveBeenCalled();
     });
 

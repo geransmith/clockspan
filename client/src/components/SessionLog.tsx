@@ -9,10 +9,9 @@ import { counted, formatDuration } from '../lib/format';
 import { hasText } from '../lib/priorities';
 import { focusOf } from '../lib/retro';
 import { timerView } from '../lib/timer';
-import { LIMITS } from '../../../shared/api.js';
 import type { Break, Priority, Session } from '../types';
 import { Trash } from './Icons';
-import { SessionLabel } from './SessionLabel';
+import { LabelInput, SessionLabel } from './SessionLabel';
 
 interface Props {
   date: string;
@@ -82,6 +81,22 @@ export function SessionLog({ date, isToday, sessions, breaks, priorities, now }:
   );
 }
 
+function DeleteButton({ label, question, disabled, onDelete }: { label: string; question: string; disabled: boolean; onDelete: () => void }) {
+  return (
+    <button
+      className="btn btn-icon log-delete"
+      onClick={() => {
+        if (window.confirm(question)) onDelete();
+      }}
+      aria-label={label}
+      title="Delete"
+      disabled={disabled}
+    >
+      <Trash />
+    </button>
+  );
+}
+
 /** A break in the log: when, how long, and a delete. Nothing to edit; it has no label or priority. */
 function BreakRow({ brk: b, now, onDelete }: { brk: Break; now: number; onDelete: () => void }) {
   const { formatTime } = useTimeFormat();
@@ -96,17 +111,7 @@ function BreakRow({ brk: b, now, onDelete }: { brk: Break; now: number; onDelete
       <span className="log-duration">
         {running && <span className="pill pill--ok">on break</span>} {formatDuration(breakSeconds(b, now))}
       </span>
-      <button
-        className="btn btn-icon log-delete"
-        onClick={() => {
-          if (window.confirm(CONFIRM.deleteBreak)) onDelete();
-        }}
-        aria-label="Delete break"
-        title="Delete"
-        disabled={running}
-      >
-        <Trash />
-      </button>
+      <DeleteButton label="Delete break" question={CONFIRM.deleteBreak} disabled={running} onDelete={onDelete} />
     </li>
   );
 }
@@ -126,7 +131,9 @@ function Row({
 }) {
   const { formatTime } = useTimeFormat();
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(s.label);
+  const [draft, setDraft] = useState('');
+  // Set when a key or the select ends the edit, so focus goes back to the label; a blur leaves focus where it went.
+  const [returnFocus, setReturnFocus] = useState(false);
   const editBox = useRef<HTMLSpanElement>(null);
   const running = s.status === 'running';
   const paused = running && s.pausedAt != null;
@@ -154,25 +161,27 @@ function Row({
       </span>
       {editing ? (
         <span className="log-edit" ref={editBox} onBlur={onBlur}>
-          <input
-            className="input log-label-input"
+          <LabelInput
+            className="log-label-input"
             value={draft}
-            autoFocus
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              // An input method's Enter picks a candidate and its Escape drops one: neither ends the edit.
-              if (e.nativeEvent.isComposing) return;
-              if (e.key === 'Enter') commit();
-              if (e.key === 'Escape') setEditing(false);
+            onChange={setDraft}
+            onSave={() => {
+              setReturnFocus(true);
+              commit();
             }}
-            maxLength={LIMITS.sessionLabel}
-            aria-label="Session label"
+            onDrop={() => {
+              setReturnFocus(true);
+              setEditing(false);
+            }}
           />
           {planned.length > 0 && (
             <select
               className="input select log-plan-select"
               value={linked?.uid ?? ''}
-              onChange={(e) => commit({ priorityUid: e.target.value || null })}
+              onChange={(e) => {
+                setReturnFocus(true);
+                commit({ priorityUid: e.target.value || null });
+              }}
               aria-label="Priority this session was for"
             >
               <option value="">Unplanned</option>
@@ -187,8 +196,10 @@ function Row({
       ) : (
         <button
           className="log-label"
+          autoFocus={returnFocus}
           onClick={() => {
             setDraft(s.label);
+            setReturnFocus(false);
             setEditing(true);
           }}
           title={linked ? `Priority ${linked.position}: ${linked.text}. Click to edit` : 'Edit label or link to a priority'}
@@ -204,17 +215,7 @@ function Row({
       <span className="log-duration">
         {running && <span className={`pill ${paused ? 'pill--warn' : 'pill--ok'}`}>{paused ? 'paused' : 'running'}</span>} {formatDuration(seconds)}
       </span>
-      <button
-        className="btn btn-icon log-delete"
-        onClick={() => {
-          if (window.confirm(CONFIRM.deleteSession)) onDelete();
-        }}
-        aria-label="Delete session"
-        title="Delete"
-        disabled={running}
-      >
-        <Trash />
-      </button>
+      <DeleteButton label="Delete session" question={CONFIRM.deleteSession} disabled={running} onDelete={onDelete} />
     </li>
   );
 }
