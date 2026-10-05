@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { deferred } from '../test/fixtures';
 import { addPending, confirm, fetched, serial, settle, settleWith, shown, untracked, type Tracked } from './optimistic';
 
 type Row = { text: string; n: number };
@@ -106,12 +107,12 @@ describe('fetched', () => {
 describe('serial', () => {
   /** A job that waits for the test to answer it, and says when it starts. */
   function job(name: string, started: string[]) {
-    let answer!: { resolve: (v: string) => void; reject: (e: Error) => void };
+    const d = deferred<string>();
     const run = () => {
       started.push(name);
-      return new Promise<string>((resolve, reject) => (answer = { resolve, reject }));
+      return d.promise;
     };
-    return { run, answer: () => answer };
+    return { run, answer: () => d };
   }
   const flush = () => new Promise((r) => setTimeout(r, 0));
 
