@@ -2407,7 +2407,7 @@ dialog.dialog::backdrop {
     color: inherit !important;
   }
   [aria-pressed='true'] .chip-num {
-    background: HighlightText;
+    background: HighlightText !important;
     color: Highlight !important;
   }
 }
