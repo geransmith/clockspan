@@ -22,11 +22,11 @@ const TODAYS: Priority[] = [
   makePriority(4, '', { uid: null, addedAt: null }),
 ];
 
-async function renderPlan({ date = TODAY, next = makeDay(NEXT) as Day | Promise<Day> } = {}) {
+async function renderPlan({ next = makeDay(NEXT) as Day | Promise<Day> } = {}) {
   vi.mocked(api.getDay).mockImplementation((d) => (d === NEXT ? Promise.resolve(next) : Promise.resolve(makeDay(d))));
   const card = (rows: Priority[]) => (
     <SettingsAndDays>
-      <PlanNext date={date} today={TODAY} priorities={rows} />
+      <PlanNext today={TODAY} priorities={rows} />
     </SettingsAndDays>
   );
   const view = render(card(TODAYS));
@@ -63,10 +63,7 @@ afterEach(() => {
 });
 
 describe('PlanNext', () => {
-  it("offers a plan on today's retrospective only, and loads the next day once it opens", async () => {
-    const { container } = await renderPlan({ date: '2026-09-25' });
-    expect(container.textContent).toBe('');
-    cleanup();
+  it('loads the next day once the planner opens', async () => {
     await renderPlan();
     expect(api.getDay).not.toHaveBeenCalled();
     await open();

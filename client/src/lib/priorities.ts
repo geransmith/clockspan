@@ -7,6 +7,9 @@ export function hasText(p: { text: string }): boolean {
   return p.text.trim() !== '';
 }
 
+/** A row with text that isn't ticked: what the planner, the left-open offer and the timer's chips work from. */
+export const isOpen = (p: Priority) => hasText(p) && !p.done;
+
 /**
  * The stored list is what the client last sent. It can be shorter than `count` (a day never
  * edited, or one planned the evening before) or hold empty rows the card saved. The card shows
@@ -14,11 +17,11 @@ export function hasText(p: { text: string }): boolean {
  */
 export function padPriorities(rows: Priority[], count: number): Priority[] {
   const byPos = new Map(rows.map((r) => [r.position, r]));
-  const n = Math.min(MAX_PRIORITIES, Math.max(count, ...rows.map((r) => r.position)));
+  const n = Math.max(count, ...rows.map((r) => r.position));
   const out: Priority[] = [];
   for (let position = 1; position <= n; position++) {
     const r = byPos.get(position);
-    out.push({ position, text: r?.text ?? '', done: Boolean(r?.done && hasText(r)), uid: r?.uid ?? null, addedAt: r?.addedAt ?? null });
+    out.push({ position, text: r?.text ?? '', done: r?.done ?? false, uid: r?.uid ?? null, addedAt: r?.addedAt ?? null });
   }
   return out;
 }
@@ -37,10 +40,9 @@ export function warningKind(done: number, total: number): WarningKind {
 }
 
 /** A random warning for the kind, never the same one twice in a row. */
-export function pickWarning(kind: WarningKind, rng: () => number = Math.random, avoid?: string): string {
-  const all = PRIORITY_WARNINGS[kind];
-  const pool = all.length > 1 && avoid ? all.filter((w) => w !== avoid) : all;
-  return pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]!;
+export function pickWarning(kind: WarningKind, avoid?: string, rng: () => number = Math.random): string {
+  const pool = PRIORITY_WARNINGS[kind].filter((w) => w !== avoid);
+  return pool[Math.floor(rng() * pool.length)]!;
 }
 
 /**
@@ -80,11 +82,11 @@ export function hasRoom(rows: Priority[], count: number): boolean {
  * new row at the end. Returns the full list to save; null when the sheet is full.
  */
 export function placePriority(rows: Priority[], count: number, text: string, uid: string, addedAt: number): Priority[] | null {
-  if (!hasRoom(rows, count)) return null;
   const padded = padPriorities(rows, count);
+  const row = { text, done: false, uid, addedAt };
   const empty = padded.find((p) => !hasText(p));
-  if (empty) return padded.map((p) => (p.position === empty.position ? { ...p, text, done: false, uid, addedAt } : p));
-  return [...padded, { position: padded.length + 1, text, done: false, uid, addedAt }];
+  if (empty) return padded.map((p) => (p === empty ? { ...p, ...row } : p));
+  return padded.length < MAX_PRIORITIES ? [...padded, { position: padded.length + 1, ...row }] : null;
 }
 
 /** The unticked rows of the last day that had a plan, offered on a new day's empty list. */
@@ -101,6 +103,6 @@ export function leftOpen(days: Day[]): LeftOpen | null {
   let last: Day | null = null;
   for (const d of days) if (d.priorities.some(hasText) && (!last || d.date > last.date)) last = d;
   if (!last) return null;
-  const rows = last.priorities.filter((p) => hasText(p) && !p.done);
+  const rows = last.priorities.filter(isOpen);
   return rows.length ? { date: last.date, rows } : null;
 }

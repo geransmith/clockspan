@@ -66,7 +66,7 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
     if (local.length >= MAX_PRIORITIES) return;
     if (!force && local.length >= warnThreshold(count)) {
       const kind = warningKind(done, total);
-      const w = pickWarning(kind, Math.random, lastWarning.current);
+      const w = pickWarning(kind, lastWarning.current);
       lastWarning.current = w;
       setWarning({ kind, text: w });
       return;
@@ -201,7 +201,7 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
           </div>
         )}
       </div>
-      {burst && <Burst key={burst.seed} seed={burst.seed} anchor={burst.anchor} />}
+      <Burst at={burst} />
       <div className="priorities-foot">
         {local.length < MAX_PRIORITIES ? (
           <button className="btn btn-ghost priority-add" onClick={() => addRow()}>

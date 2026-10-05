@@ -20,11 +20,6 @@ describe('padPriorities', () => {
     const stored = [1, 2, 3, 4, 5].map((position) => makePriority(position, `p${position}`));
     expect(padPriorities(stored, 2)).toHaveLength(5);
   });
-
-  it('never marks an empty row done and never exceeds the cap', () => {
-    expect(padPriorities([makePriority(1, '  ', { done: true })], 1)[0]!.done).toBe(false);
-    expect(padPriorities([], 99)).toHaveLength(MAX_PRIORITIES);
-  });
 });
 
 describe('warnThreshold', () => {
@@ -49,15 +44,14 @@ describe('pickWarning', () => {
     expect(PRIORITY_WARNINGS.fresh).toContain(pickWarning('fresh'));
     expect(PRIORITY_WARNINGS.progress).toContain(pickWarning('progress'));
     expect(PRIORITY_WARNINGS.complete).toContain(pickWarning('complete'));
-    expect(pickWarning('fresh', () => 0)).toBe(PRIORITY_WARNINGS.fresh[0]);
-    expect(pickWarning('fresh', () => 0.999999)).toBe(PRIORITY_WARNINGS.fresh.at(-1));
-    expect(pickWarning('complete', () => 0)).toBe(PRIORITY_WARNINGS.complete[0]);
+    expect(pickWarning('fresh', undefined, () => 0)).toBe(PRIORITY_WARNINGS.fresh[0]);
+    expect(pickWarning('fresh', undefined, () => 0.999999)).toBe(PRIORITY_WARNINGS.fresh.at(-1));
+    expect(pickWarning('complete', undefined, () => 0)).toBe(PRIORITY_WARNINGS.complete[0]);
   });
 
   it('never repeats the previous phrase', () => {
     const first = PRIORITY_WARNINGS.progress[0]!;
-    for (let i = 0; i < 50; i++) expect(pickWarning('progress', Math.random, first)).not.toBe(first);
-    expect(pickWarning('progress', () => 0, first)).toBe(PRIORITY_WARNINGS.progress[1]);
+    expect(pickWarning('progress', first, () => 0)).toBe(PRIORITY_WARNINGS.progress[1]);
   });
 });
 

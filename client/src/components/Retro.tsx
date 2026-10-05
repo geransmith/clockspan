@@ -147,7 +147,8 @@ export function Retro({ date, today, priorities, sessions, note, reviewedAt, onC
         )}
       </div>
 
-      <PlanNext date={date} today={today} priorities={priorities} />
+      {/* Only today's card offers a plan, since the next day is ahead. */}
+      {date === today && <PlanNext today={today} priorities={priorities} />}
     </div>
   );
 }

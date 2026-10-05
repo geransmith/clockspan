@@ -17,7 +17,8 @@ export function nextWorkDay(date: string, showWeekends: boolean): string {
 /**
  * That day's list with `texts` added after what it already holds. Rows already there by text
  * aren't added twice, and nothing goes past the list's limit. Each new row gets its own uid and
- * `addedAt` now, the evening before, so the next day's retrospective counts it as planned.
+ * `addedAt` now, so it counts as planned on its day unless a completed session there started
+ * before it (`reviewDay`).
  */
 export function planNext(existing: Priority[], texts: string[], now = Date.now()): { rows: Priority[]; added: number } {
   const kept = existing.filter(hasText);

@@ -209,7 +209,7 @@ export function Timeclock({
         )}
       </div>
 
-      {dayBurst && <Burst key={dayBurst.seed} seed={dayBurst.seed} anchor={dayBurst.anchor} big />}
+      <Burst at={dayBurst} big />
 
       {secondMeal != null && (
         <p className={`timeclock-note${tc.secondMealStatus === 'overdue' ? ' timeclock-note--danger' : ''}`}>
@@ -226,7 +226,7 @@ export function Timeclock({
               {formatDuration(week.overSeconds)} {otFeature ? 'over' : 'past'}
             </>
           )}
-          {weekBurst && <Burst key={weekBurst.seed} seed={weekBurst.seed} anchor={weekBurst.anchor} />}
+          <Burst at={weekBurst} />
         </p>
       )}
 
