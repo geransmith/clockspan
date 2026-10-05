@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { dismissByTag, warnQuietly } from '../lib/alerts';
 import { ADD_PRIORITY_FAILED, SAVE_FAILED } from '../lib/copy';
+import { normalizePunches } from '../lib/timeclock';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import {
@@ -918,7 +919,8 @@ describe('readRange', () => {
     expect(result.current.days[TODAY]?.retroNote).toBe('');
     expect(result.current.days[tue]).toBeUndefined();
     // The answer comes back with the punch rows the store keeps, and the same answer again changes nothing.
-    expect(days[1]?.punches).toEqual(result.current.days[OTHER]?.punches);
+    expect(days[0]?.punches).toEqual(result.current.days[OTHER]?.punches);
+    expect(days[1]?.punches).toEqual(normalizePunches(makeDay(tue).punches));
     const held = result.current.days;
     await act(() => result.current.readRange(OTHER, tue));
     expect(result.current.days).toBe(held);

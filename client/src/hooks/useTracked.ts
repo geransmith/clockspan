@@ -3,8 +3,8 @@ import { serial } from '../lib/optimistic';
 
 /**
  * What each store (`useDay`, `useSettings`, `useTimer`) is built on: its state (a `Tracked`
- * value from `lib/optimistic.ts`, or the day store's one per date), ids for its pending changes,
- * and the `serial()` queue its writes go out on. `tracked` is for rendering. `current()` is the
+ * value from `lib/optimistic.ts`, or, in the day store, one per date plus the dates whose first
+ * load failed), ids for its pending changes, and the `serial()` queue its writes go out on. `tracked` is for rendering. `current()` is the
  * same state as of the last `change`, for callbacks, which can't wait for a render: rapid presses
  * (−5m, −5m) build on each other, `addPriority` reads the list a blur-flush just set, and a read
  * deciding whether its answer lands must see every change made so far.
