@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { atTime } from '../../../shared/dates.js';
+import { atTime, pad2 } from '../../../shared/dates.js';
 import { punchesAt, TEST_SETTINGS } from '../test/fixtures';
 import type { Punch, Settings } from '../types';
 import { addPunchPair, clampToDay, computeTimeclock, timeclockForDate } from './timeclock';
@@ -9,7 +9,7 @@ const DAY = '2026-09-28';
 const at = (h: number, m = 0) => atTime(DAY, h, m);
 const hhmm = (ms: number) => {
   const d = new Date(ms);
-  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return `${d.getHours()}:${pad2(d.getMinutes())}`;
 };
 
 function tiles(rows: Punch[], now: number, patch: Partial<TileOptions> = {}, settings: Partial<Settings> = {}) {

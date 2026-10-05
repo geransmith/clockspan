@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
 import { RETRO_PROMPT } from '../lib/copy';
-import { deferred, makeSettings, settle, T0 } from '../test/hooks';
+import { deferred, makeSettings, settle, T0, TODAY } from '../test/hooks';
 import type { Priority } from '../types';
 import { Retro } from './Retro';
 
@@ -13,7 +13,6 @@ vi.mock('../lib/alerts');
 
 // A past day, so the "Plan tomorrow" part (today's card only) stays out of these tests.
 const DATE = '2026-09-25';
-const TODAY = '2026-09-28';
 const PRIORITIES: Priority[] = [{ position: 1, text: 'Report', done: false, uid: 'abcdef123456', addedAt: T0 }];
 
 async function renderCard(note = '', reviewedAt: number | null = null, priorities = PRIORITIES) {

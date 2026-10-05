@@ -5,15 +5,14 @@ import * as api from '../api';
 import { dismissByTag, getBanners } from '../lib/alerts';
 import { HTTPS_ONLY, NEW_PASSWORD, PASSWORD_MISMATCH, SIGN_OUT_FAILED } from '../lib/copy';
 import { AUTH_USER_KEY } from '../lib/storage';
-import { setVisibility, settle } from '../test/hooks';
-import type { AuthInfo, PublicUser } from '../types';
+import { DEFAULT_USER, makeAuth, makeUser, setVisibility, settle } from '../test/hooks';
+import type { AuthInfo } from '../types';
 import { AuthGate, useAuth } from './AuthGate';
 
 vi.mock('../api');
 
-const USER: PublicUser = { id: 2, name: 'sam', username: 'sam', isAdmin: false, kind: 'local', mustChangePassword: false };
-const TEMPORARY: PublicUser = { ...USER, mustChangePassword: true };
-const info = (patch: Partial<AuthInfo>): AuthInfo => ({ mode: 'local', setupRequired: false, user: null, cookieSecure: false, ...patch });
+const USER = makeUser();
+const TEMPORARY = makeUser({ mustChangePassword: true });
 
 /** What the app's sign-out resolved with. */
 const signedOut = vi.fn();
@@ -88,31 +87,31 @@ afterEach(() => {
 
 describe('AuthGate', () => {
   it('opens the app with no sign-in under AUTH_MODE=none, and for a signed-in user', async () => {
-    await renderGate(info({ mode: 'none', user: { ...USER, id: 1, name: 'You', kind: 'default', username: null } }));
+    await renderGate(makeAuth({ mode: 'none', user: DEFAULT_USER }));
     expect(screen.getByText('Sheet for You')).toBeTruthy();
     cleanup();
-    await renderGate(info({ user: USER }));
+    await renderGate(makeAuth({ user: USER }));
     expect(screen.getByText('Sheet for sam')).toBeTruthy();
     expect(localStorage.getItem(AUTH_USER_KEY)).toBe('2');
   });
 
   it('shows the setup page until the first account exists, then the sign-in page', async () => {
-    await renderGate(info({ setupRequired: true }));
+    await renderGate(makeAuth({ setupRequired: true }));
     expect(screen.getByPlaceholderText('XXXX-XXXX-XXXX')).toBeTruthy();
     cleanup();
-    await renderGate(info({}));
+    await renderGate(makeAuth());
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
     expect(screen.queryByPlaceholderText('XXXX-XXXX-XXXX')).toBeNull();
     expect(localStorage.getItem(AUTH_USER_KEY)).toBe('');
   });
 
   it('sends OIDC sign-ins to the provider', async () => {
-    await renderGate(info({ mode: 'oidc' }));
+    await renderGate(makeAuth({ mode: 'oidc' }));
     expect(screen.getByRole('link', { name: 'Sign in' }).getAttribute('href')).toBe('/auth/login');
   });
 
   it('asks for a new password before anything else on a temporary one', async () => {
-    await renderGate(info({ user: TEMPORARY }));
+    await renderGate(makeAuth({ user: TEMPORARY }));
     expect(screen.getByText(NEW_PASSWORD.title)).toBeTruthy();
     expect(screen.queryByText(/Sheet for/)).toBeNull();
   });
@@ -121,7 +120,7 @@ describe('AuthGate', () => {
   const setPassword = () => fireEvent.submit(screen.getByRole('button', { name: 'Set password' }).closest('form')!);
 
   it('checks the new password was typed the same twice before sending it', async () => {
-    await renderGate(info({ user: TEMPORARY }));
+    await renderGate(makeAuth({ user: TEMPORARY }));
     type('Temporary password', 'temp-pass-1');
     type('New password', 'my own pass');
     type('Confirm new password', 'my own pas');
@@ -132,7 +131,7 @@ describe('AuthGate', () => {
 
     type('Confirm new password', 'my own pass');
     vi.mocked(api.changePassword).mockResolvedValue({ ok: true });
-    vi.mocked(api.getAuth).mockResolvedValue(info({ user: USER }));
+    vi.mocked(api.getAuth).mockResolvedValue(makeAuth({ user: USER }));
     setPassword();
     await settle();
     expect(api.changePassword).toHaveBeenCalledWith('temp-pass-1', 'my own pass');
@@ -141,14 +140,14 @@ describe('AuthGate', () => {
   });
 
   it('offers a retry, not the form again, when the read after a saved new password fails', async () => {
-    await renderGate(info({ user: TEMPORARY }));
+    await renderGate(makeAuth({ user: TEMPORARY }));
     type('Temporary password', 'temp-pass-1');
     type('New password', 'my own pass');
     type('Confirm new password', 'my own pass');
     vi.mocked(api.changePassword).mockResolvedValue({ ok: true });
     vi.mocked(api.getAuth)
       .mockRejectedValueOnce(new Error('Request failed (502)'))
-      .mockResolvedValue(info({ user: USER }));
+      .mockResolvedValue(makeAuth({ user: USER }));
     setPassword();
     await settle();
     expect(screen.getByText(/Request failed \(502\)/)).toBeTruthy();
@@ -162,16 +161,16 @@ describe('AuthGate', () => {
 
   it('warns over plain http when the session cookie is https-only', async () => {
     setUrl('http://clockspan.lan/');
-    await renderGate(info({ cookieSecure: true }));
+    await renderGate(makeAuth({ cookieSecure: true }));
     expect(screen.getByText(HTTPS_ONLY.hint)).toBeTruthy();
     cleanup();
-    await renderGate(info({ cookieSecure: false }));
+    await renderGate(makeAuth({ cookieSecure: false }));
     expect(screen.queryByText(HTTPS_ONLY.hint)).toBeNull();
   });
 
   it('offers a retry when the server does not answer', async () => {
     vi.mocked(api.getAuth).mockRejectedValueOnce(new Error('Request failed (502)'));
-    await renderGate(info({ user: USER }));
+    await renderGate(makeAuth({ user: USER }));
     // renderGate's answer is queued behind the failure, so the first read fails.
     expect(screen.getByText(/Request failed \(502\)/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
@@ -181,8 +180,8 @@ describe('AuthGate', () => {
 
   describe('once the app is open', () => {
     it('asks the server again when a request finds the session gone, and reloads the page when it is', async () => {
-      await renderGate(info({ user: USER }));
-      vi.mocked(api.getAuth).mockResolvedValue(info({}));
+      await renderGate(makeAuth({ user: USER }));
+      vi.mocked(api.getAuth).mockResolvedValue(makeAuth());
       await lostSession();
       expect(api.getAuth).toHaveBeenCalledTimes(2);
       expect(reload).toHaveBeenCalledTimes(1);
@@ -195,10 +194,10 @@ describe('AuthGate', () => {
     });
 
     it.each([
-      ['another user', info({ user: { ...USER, id: 3, name: 'alex' } })],
-      ['the same user on a temporary password', info({ user: TEMPORARY })],
+      ['another user', makeAuth({ user: { ...USER, id: 3, name: 'alex' } })],
+      ['the same user on a temporary password', makeAuth({ user: TEMPORARY })],
     ])('reloads once when /me names %s', async (_, answer) => {
-      await renderGate(info({ user: USER }));
+      await renderGate(makeAuth({ user: USER }));
       vi.mocked(api.getAuth).mockResolvedValue(answer);
       window.dispatchEvent(new Event(api.UNAUTHENTICATED_EVENT));
       await lostSession();
@@ -209,7 +208,7 @@ describe('AuthGate', () => {
     });
 
     it('keeps the app when /me still names the same user, or does not answer', async () => {
-      await renderGate(info({ user: USER }));
+      await renderGate(makeAuth({ user: USER }));
       await lostSession();
       vi.mocked(api.getAuth).mockRejectedValueOnce(new Error('Request failed (502)'));
       await lostSession();
@@ -221,7 +220,7 @@ describe('AuthGate', () => {
 
   describe('sign-out', () => {
     it('goes to the start page, tells the other tabs, and asks nothing more', async () => {
-      await renderGate(info({ user: USER }));
+      await renderGate(makeAuth({ user: USER }));
       vi.mocked(api.logout).mockResolvedValue({ ok: true });
       await signOut();
       expect(assign).toHaveBeenCalledWith('/');
@@ -235,7 +234,7 @@ describe('AuthGate', () => {
     });
 
     it("follows the provider's end-session redirect under OIDC", async () => {
-      await renderGate(info({ mode: 'oidc', user: { ...USER, kind: 'oidc', username: null } }));
+      await renderGate(makeAuth({ mode: 'oidc', user: { ...USER, kind: 'oidc', username: null } }));
       vi.mocked(api.logout).mockResolvedValue({ ok: true, redirect: 'https://idp.example/end' });
       await signOut();
       expect(assign).toHaveBeenCalledWith('https://idp.example/end');
@@ -243,19 +242,19 @@ describe('AuthGate', () => {
     });
 
     it('records nothing from a /me answer that lands after it', async () => {
-      await renderGate(info({ user: USER }));
+      await renderGate(makeAuth({ user: USER }));
       const answer = holdAnswer();
       await lostSession();
       vi.mocked(api.logout).mockResolvedValue({ ok: true });
       await signOut();
-      answer(info({ user: USER }));
+      answer(makeAuth({ user: USER }));
       await settle();
       expect(localStorage.getItem(AUTH_USER_KEY)).toBe('');
       expect(reload).not.toHaveBeenCalled();
     });
 
     it('says so and keeps the app when the logout is refused and /me still names the user', async () => {
-      await renderGate(info({ user: USER }));
+      await renderGate(makeAuth({ user: USER }));
       vi.mocked(api.logout).mockRejectedValue(new Error('Request failed (502)'));
       await signOut();
       expect(screen.getByText('Sheet for sam')).toBeTruthy();
@@ -267,7 +266,7 @@ describe('AuthGate', () => {
     });
 
     it('says so when the logout and the read after it both fail', async () => {
-      await renderGate(info({ user: USER }));
+      await renderGate(makeAuth({ user: USER }));
       vi.mocked(api.logout).mockRejectedValue(new Error('Request failed (502)'));
       vi.mocked(api.getAuth).mockRejectedValue(new Error('Request failed (502)'));
       await signOut();
@@ -277,9 +276,9 @@ describe('AuthGate', () => {
     });
 
     it('reloads when the logout got no answer but went through', async () => {
-      await renderGate(info({ user: USER }));
+      await renderGate(makeAuth({ user: USER }));
       vi.mocked(api.logout).mockRejectedValue(new Error('The server did not answer in time.'));
-      vi.mocked(api.getAuth).mockResolvedValue(info({}));
+      vi.mocked(api.getAuth).mockResolvedValue(makeAuth());
       await signOut();
       expect(reload).toHaveBeenCalledTimes(1);
       expect(signOutBanners()).toEqual([]);
@@ -287,14 +286,14 @@ describe('AuthGate', () => {
     });
 
     it('shows a refused logout on the new-password page, and the sign-in page for one that went through', async () => {
-      await renderGate(info({ user: TEMPORARY }));
+      await renderGate(makeAuth({ user: TEMPORARY }));
       vi.mocked(api.logout).mockRejectedValue(new Error('Request failed (502)'));
       await signOut();
       expect(screen.getByText(SIGN_OUT_FAILED)).toBeTruthy();
       expect(screen.getByText(NEW_PASSWORD.title)).toBeTruthy();
       expect(signOutBanners()).toEqual([]);
 
-      vi.mocked(api.getAuth).mockResolvedValue(info({}));
+      vi.mocked(api.getAuth).mockResolvedValue(makeAuth());
       await signOut();
       expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
       expect(reload).not.toHaveBeenCalled();
@@ -312,7 +311,7 @@ describe('AuthGate', () => {
       );
       await settle();
       setVisibility('visible');
-      answer(info({ user: USER }));
+      answer(makeAuth({ user: USER }));
       await settle();
       setVisibility('visible');
       expect(reload).not.toHaveBeenCalled();
@@ -320,7 +319,7 @@ describe('AuthGate', () => {
     });
 
     it('reloads when another tab stores another user, and not for the same one or another key', async () => {
-      await renderGate(info({ user: USER }));
+      await renderGate(makeAuth({ user: USER }));
       otherTabSignsIn('2');
       localStorage.setItem(AUTH_USER_KEY, '3');
       window.dispatchEvent(new StorageEvent('storage', { key: 'focus:theme', newValue: 'dark' }));
@@ -336,7 +335,7 @@ describe('AuthGate', () => {
       ['a page brought back from the bfcache', (persisted: boolean) => pageShow(persisted)],
       ['a tab shown again', (shown: boolean) => setVisibility(shown ? 'visible' : 'hidden')],
     ])('checks the stored user on %s', async (_, show) => {
-      await renderGate(info({ user: USER }));
+      await renderGate(makeAuth({ user: USER }));
       show(true);
       localStorage.setItem(AUTH_USER_KEY, '');
       show(false);
@@ -346,7 +345,7 @@ describe('AuthGate', () => {
     });
 
     it('reloads a page brought back from the bfcache after its own sign-out', async () => {
-      await renderGate(info({ user: USER }));
+      await renderGate(makeAuth({ user: USER }));
       vi.mocked(api.logout).mockResolvedValue({ ok: true });
       await signOut();
       pageShow(true);
@@ -354,7 +353,7 @@ describe('AuthGate', () => {
     });
 
     it('leaves a gate page alone until another tab signs someone in', async () => {
-      await renderGate(info({ user: TEMPORARY }));
+      await renderGate(makeAuth({ user: TEMPORARY }));
       setVisibility('visible');
       expect(reload).not.toHaveBeenCalled();
       localStorage.setItem(AUTH_USER_KEY, '3');
@@ -364,7 +363,7 @@ describe('AuthGate', () => {
 
     it('never reloads under AUTH_MODE=none', async () => {
       localStorage.setItem(AUTH_USER_KEY, '');
-      await renderGate(info({ mode: 'none', user: { ...USER, id: 1, name: 'You', kind: 'default', username: null } }));
+      await renderGate(makeAuth({ mode: 'none', user: DEFAULT_USER }));
       setVisibility('visible');
       pageShow(true);
       expect(reload).not.toHaveBeenCalled();

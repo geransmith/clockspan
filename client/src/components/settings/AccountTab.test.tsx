@@ -3,14 +3,13 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import { ApiError } from '../../lib/apiError';
-import { apiError, settle } from '../../test/hooks';
-import type { PublicUser } from '../../types';
+import { apiError, makeUser, settle } from '../../test/hooks';
 import { AccountTab } from './AccountTab';
 
 vi.mock('../../api');
 
-const admin: PublicUser = { id: 1, name: 'admin', username: 'admin', isAdmin: true, kind: 'local', mustChangePassword: false };
-const sam: PublicUser = { id: 2, name: 'sam', username: 'sam', isAdmin: false, kind: 'local', mustChangePassword: false };
+const admin = makeUser({ id: 1, name: 'admin', username: 'admin', isAdmin: true });
+const sam = makeUser();
 
 async function renderTab() {
   const view = render(<AccountTab user={admin} />);

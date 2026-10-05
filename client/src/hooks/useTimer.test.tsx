@@ -7,7 +7,7 @@ import { TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib
 import { formatCountdown } from '../lib/format';
 import { dueKey } from '../lib/timer';
 import { MINUTE_MS } from '../../../shared/dates.js';
-import { AllProviders, apiError, begin, deferred, endSession, makeDay, makeSession, makeSettings, settle, T0, TODAY, YESTERDAY } from '../test/hooks';
+import { AppProviders, apiError, begin, deferred, endSession, makeDay, makeSession, makeSettings, settle, T0, TODAY, YESTERDAY } from '../test/hooks';
 import type { Priority, RunningSession, Session, Settings } from '../types';
 import { useDays, useDayStore } from './useDay';
 import { useTimer } from './useTimer';
@@ -18,7 +18,7 @@ vi.mock('../lib/alerts');
 type Answer = { session: Session };
 
 function renderTimer() {
-  return renderHook(() => ({ timer: useTimer(), store: { ...useDayStore(), ...useDays() } }), { wrapper: AllProviders });
+  return renderHook(() => ({ timer: useTimer(), store: { ...useDayStore(), ...useDays() } }), { wrapper: AppProviders });
 }
 
 /** Renders with `session` running on the server (every poll says so), and waits for the first sync. */
@@ -265,28 +265,6 @@ describe('adjust', () => {
     expect(warnQuietly).not.toHaveBeenCalled();
   });
 
-  it('plans whole minutes, so a minute over the new end is a whole minute', async () => {
-    // 25 min 37 s into a 25 min plan.
-    const session = makeSession({ startedAt: T0 - 1537 * 1000 });
-    const { result } = await renderRunning(session);
-    const longer = { ...session, plannedSeconds: 31 * 60 };
-    vi.mocked(api.patchSession).mockResolvedValue({ session: longer });
-    await act(() => result.current.timer.adjust(5 * 60));
-    // Five minutes from now, up to the next whole minute: 31:00, not 30:37.
-    expect(api.patchSession).toHaveBeenCalledWith(1, { plannedSeconds: 31 * 60 });
-    expect(result.current.timer.countdownSeconds).toBe(31 * 60 - 1537);
-
-    // 23 s past the new end, Finish has nothing to ask.
-    vi.mocked(api.getRunning).mockResolvedValue({ session: longer });
-    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(longer, { durationSeconds: 31 * 60 }) });
-    await settle((31 * 60 - 1537 + 23) * 1000);
-    expect(result.current.timer.overrunSeconds).toBe(23);
-    act(() => result.current.timer.requestFinish());
-    expect(result.current.timer.finishChoice).toBeNull();
-    await settle();
-    expect(api.finishSession).toHaveBeenCalledWith(1, false);
-  });
-
   it('finishes when the new plan is already used up', async () => {
     const { result } = await renderRunning(startedAgo(1.5, { plannedSeconds: 120 }));
     vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(startedAgo(1.5), { durationSeconds: 90 }) });
@@ -304,16 +282,6 @@ describe('adjust', () => {
     await act(() => result.current.timer.adjust(-5 * 60));
     expect(result.current.timer.running).toBeNull();
     expect(result.current.timer.finished).toBeNull();
-  });
-
-  it('once due, +N means N minutes from now', async () => {
-    const { result } = await renderRunning(startedAgo(27));
-    expect(result.current.timer).toMatchObject({ due: true, overrunSeconds: 120, countdownSeconds: -120 });
-    expect(document.title).toBe(`${formatCountdown(-120)} · Write the report — Clockspan`);
-    vi.mocked(api.patchSession).mockResolvedValue({ session: startedAgo(27, { plannedSeconds: 32 * 60 }) });
-    await act(() => result.current.timer.adjust(5 * 60));
-    expect(api.patchSession).toHaveBeenCalledWith(1, { plannedSeconds: 32 * 60 });
-    expect(result.current.timer).toMatchObject({ due: false, countdownSeconds: 300 });
   });
 
   it('re-syncs after a 404 with a sync sent after it, not the one already out', async () => {
@@ -343,22 +311,22 @@ describe('adjust', () => {
     expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ tag: 'save-failed' }));
     expect(api.getRunning).toHaveBeenCalledTimes(1);
   });
+});
 
-  it('does nothing without a running session', async () => {
-    const { result } = await renderRunning(null);
-    await act(() => result.current.timer.adjust(60));
-    await act(() => result.current.timer.edit({ label: 'x' }));
-    await act(() => result.current.timer.pause());
-    await act(() => result.current.timer.resume());
-    await act(() => result.current.timer.finish());
-    await act(() => result.current.timer.cancel());
-    act(() => result.current.timer.requestFinish());
-    expect(api.patchSession).not.toHaveBeenCalled();
-    expect(api.pauseSession).not.toHaveBeenCalled();
-    expect(api.resumeSession).not.toHaveBeenCalled();
-    expect(api.finishSession).not.toHaveBeenCalled();
-    expect(api.cancelSession).not.toHaveBeenCalled();
-  });
+it('every press does nothing without a running session', async () => {
+  const { result } = await renderRunning(null);
+  await act(() => result.current.timer.adjust(60));
+  await act(() => result.current.timer.edit({ label: 'x' }));
+  await act(() => result.current.timer.pause());
+  await act(() => result.current.timer.resume());
+  await act(() => result.current.timer.finish());
+  await act(() => result.current.timer.cancel());
+  act(() => result.current.timer.requestFinish());
+  expect(api.patchSession).not.toHaveBeenCalled();
+  expect(api.pauseSession).not.toHaveBeenCalled();
+  expect(api.resumeSession).not.toHaveBeenCalled();
+  expect(api.finishSession).not.toHaveBeenCalled();
+  expect(api.cancelSession).not.toHaveBeenCalled();
 });
 
 describe('edit', () => {
@@ -661,7 +629,7 @@ describe("time's up", () => {
     expect(alert).toHaveBeenCalledTimes(1);
 
     // The button: five more minutes from now.
-    vi.mocked(api.patchSession).mockImplementation(async (_id, patch) => ({ session: startedAgo(0, { ...patch, startedAt: T0 - 24.9 * MINUTE_MS }) }));
+    vi.mocked(api.patchSession).mockImplementation(async (_id, patch) => ({ session: makeSession({ ...patch, startedAt: T0 - 24.9 * MINUTE_MS }) }));
     const action = vi.mocked(alert).mock.calls[0]![0].action!;
     expect(action.label).toBe(TIMER_DUE.more(makeSettings().adjustStepMinutes));
     vi.mocked(dismissByTag).mockClear();

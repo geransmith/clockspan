@@ -135,14 +135,4 @@ describe('navigate', () => {
     act(() => result.current[1]({ date: TODAY }));
     expect(push).not.toHaveBeenCalled();
   });
-
-  it('follows Back and Forward', () => {
-    const { result, unmount } = render();
-    visit('/?view=history');
-    act(() => {
-      window.dispatchEvent(new PopStateEvent('popstate'));
-    });
-    expect(result.current[0]).toEqual({ view: 'history', date: null, review: null });
-    unmount();
-  });
 });

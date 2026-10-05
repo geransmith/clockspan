@@ -6,14 +6,12 @@ import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
 import { playSound, unlockAudio } from '../lib/alerts';
 import { LEFT_OPEN, PRIORITY_WARNINGS, WARNING_ACTIONS } from '../lib/copy';
-import { makeSettings, settle, T0 } from '../test/hooks';
+import { makePriority, makeSettings, settle, T0 } from '../test/hooks';
 import type { Priority } from '../types';
 import { Priorities } from './Priorities';
 
 vi.mock('../api');
 vi.mock('../lib/alerts');
-
-const row = (position: number, text: string, done = false): Priority => ({ position, text, done, uid: `uid${position}abcdef`, addedAt: T0 });
 
 async function renderCard(priorities: Priority[] = [], leftOpen?: Parameters<typeof Priorities>[0]['leftOpen']) {
   const onChange = vi.fn<(p: Priority[]) => void>();
@@ -74,7 +72,7 @@ describe('Priorities', () => {
   });
 
   it('only ticks a row with text, and saves the tick straight away', async () => {
-    const { onChange, saved } = await renderCard([row(1, 'Report')]);
+    const { onChange, saved } = await renderCard([makePriority(1, 'Report')]);
     expect(tick(2).disabled).toBe(true);
     fireEvent.click(tick(1));
     expect(onChange).toHaveBeenCalledTimes(1);
@@ -83,7 +81,7 @@ describe('Priorities', () => {
 
   it('celebrates a tick from its box with the priority sound, and not an untick', async () => {
     vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ sounds: { ...makeSettings().sounds, priorityDone: 'pop' } }));
-    await renderCard([row(1, 'Report'), row(2, 'Invoices', true)]);
+    await renderCard([makePriority(1, 'Report'), makePriority(2, 'Invoices', { done: true })]);
     fireEvent.click(tick(1));
     // The sound plays after the render, so the tap unlocks audio for iOS first.
     expect(unlockAudio).toHaveBeenCalled();
@@ -103,14 +101,14 @@ describe('Priorities', () => {
   });
 
   it('finds an empty row between written ones', async () => {
-    await renderCard([row(1, 'A'), row(3, 'C')]);
+    await renderCard([makePriority(1, 'A'), makePriority(3, 'C')]);
     fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
     expect(document.activeElement).toBe(textbox(2));
     expect(screen.getByRole('status').textContent).toBe('');
   });
 
   it('asks before a row past the usual count, then adds it; the extra row can be removed', async () => {
-    const { onChange, saved } = await renderCard([row(1, 'Report'), row(2, 'Invoices'), row(3, 'Email')]);
+    const { onChange, saved } = await renderCard([makePriority(1, 'Report'), makePriority(2, 'Invoices'), makePriority(3, 'Email')]);
     expect(screen.getByRole('status').textContent).toBe('');
     fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
     expect(onChange).not.toHaveBeenCalled();
@@ -135,7 +133,7 @@ describe('Priorities', () => {
   });
 
   it('with every row ticked, warns from the "complete" set and lists what is done', async () => {
-    await renderCard([row(1, 'Report', true), row(2, 'Invoices', true), row(3, 'Email', true)]);
+    await renderCard([makePriority(1, 'Report', { done: true }), makePriority(2, 'Invoices', { done: true }), makePriority(3, 'Email', { done: true })]);
     fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
     const status = screen.getByRole('status');
     expect(PRIORITY_WARNINGS.complete.some((w) => status.textContent!.includes(w))).toBe(true);
@@ -146,7 +144,7 @@ describe('Priorities', () => {
   it("offers the last plan's open rows on an empty list, as new rows for today", async () => {
     const dismiss = vi.fn();
     // The same row written twice on the last plan, both added the day before.
-    const yesterdays = [row(2, 'Invoices'), row(3, 'invoices ')].map((p) => ({ ...p, addedAt: T0 - DAY_MS }));
+    const yesterdays = [makePriority(2, 'Invoices', { addedAt: T0 - DAY_MS }), makePriority(3, 'invoices ', { addedAt: T0 - DAY_MS })];
     const { saved } = await renderCard([], { from: 'yesterday', rows: yesterdays, dismiss });
     expect(screen.getByText(LEFT_OPEN.title('yesterday'))).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.dismiss }));
@@ -154,6 +152,6 @@ describe('Priorities', () => {
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
     expect(saved().map((p) => p.text)).toEqual(['Invoices', '', '']);
     expect(saved()[0]).toMatchObject({ position: 1, text: 'Invoices', done: false, addedAt: T0 });
-    expect(saved()[0]!.uid).not.toBe('uid2abcdef');
+    expect(saved()[0]!.uid).not.toBe(yesterdays[0]!.uid);
   });
 });

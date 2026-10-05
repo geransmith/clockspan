@@ -1,19 +1,16 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { addDays } from '../../../shared/dates.js';
 import * as api from '../api';
 import { AuthGate } from '../auth/AuthGate';
-import { settle, TODAY } from '../test/hooks';
+import { DEFAULT_USER, makeAuth, settle, TODAY, YESTERDAY } from '../test/hooks';
 import { Header } from './Header';
 
 vi.mock('../api');
 
 async function renderHeader(date: string) {
   const onNavigate = vi.fn();
-  // What the server sends under AUTH_MODE=none: the default user.
-  const user = { id: 1, name: 'You', username: null, isAdmin: false, kind: 'default', mustChangePassword: false } as const;
-  vi.mocked(api.getAuth).mockResolvedValue({ mode: 'none', setupRequired: false, user, cookieSecure: false });
+  vi.mocked(api.getAuth).mockResolvedValue(makeAuth({ mode: 'none', user: DEFAULT_USER }));
   render(
     <AuthGate>
       <Header view="sheet" date={date} today={TODAY} customize={false} onNavigate={onNavigate} onToggleCustomize={vi.fn()} onOpenSettings={vi.fn()} />
@@ -47,7 +44,7 @@ describe('Header', () => {
   });
 
   it('sends Today to the null route', async () => {
-    const onNavigate = await renderHeader(addDays(TODAY, -1));
+    const onNavigate = await renderHeader(YESTERDAY);
     fireEvent.click(screen.getByRole('button', { name: 'Today' }));
     expect(onNavigate).toHaveBeenCalledWith({ date: null });
   });

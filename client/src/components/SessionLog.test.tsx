@@ -5,25 +5,16 @@ import * as api from '../api';
 import { CONFIRM } from '../lib/copy';
 import { useTimer } from '../hooks/useTimer';
 import { MINUTE_MS } from '../../../shared/dates.js';
-import { AllProviders, deferred, endSession, makeDay, makeSession, makeSettings, settle, T0, TODAY } from '../test/hooks';
-import type { Break, Priority, Session, SessionResponse } from '../types';
+import { AppProviders, breakAt, deferred, endSession, makeDay, makePriority, makeSession, makeSettings, settle, T0, TODAY } from '../test/hooks';
+import type { Break, Session, SessionResponse } from '../types';
 import { SessionLog } from './SessionLog';
 
 vi.mock('../api');
 vi.mock('../lib/alerts');
 
-const PLANNED: Priority[] = [{ position: 1, text: 'Ship the fix', done: false, uid: 'abcdef123456', addedAt: T0 }];
+const PLANNED = [makePriority(1, 'Ship the fix', { uid: 'abcdef123456' })];
 const DONE = endSession(makeSession(), { endedAt: T0 + 25 * MINUTE_MS, durationSeconds: 25 * 60 });
 const RUNNING = makeSession({ id: 2, label: 'Still going', startedAt: T0 + 26 * MINUTE_MS });
-
-/** A break of `minutes` that started `at` minutes after T0 and ran its length. */
-const rest = (id: number, at: number, minutes: number): Break => ({
-  id,
-  date: TODAY,
-  plannedSeconds: minutes * 60,
-  startedAt: T0 + at * MINUTE_MS,
-  endedAt: T0 + (at + minutes) * MINUTE_MS,
-});
 
 /** The running timer's label, as the bar at the top shows it. */
 function BarLabel() {
@@ -32,10 +23,10 @@ function BarLabel() {
 
 async function renderLog(sessions: Session[] = [DONE], breaks: Break[] = [], date = TODAY) {
   render(
-    <AllProviders>
+    <AppProviders>
       <BarLabel />
       <SessionLog date={date} isToday={date === TODAY} sessions={sessions} breaks={breaks} priorities={PLANNED} now={T0 + 30 * MINUTE_MS} />
-    </AllProviders>,
+    </AppProviders>,
   );
   await settle();
 }
@@ -177,7 +168,7 @@ describe('SessionLog', () => {
       durationSeconds: 600,
     });
     // A break still running at `now` counts what it has so far.
-    await renderLog([later, DONE], [rest(1, 25, 5), rest(2, 28, 5)]);
+    await renderLog([later, DONE], [breakAt(1, 25, 5), breakAt(2, 28, 5)]);
     const rows = screen.getAllByRole('listitem').map((li) => li.textContent);
     expect(rows).toHaveLength(4);
     expect(rows[0]).toMatch(/Write the report/);
@@ -188,7 +179,7 @@ describe('SessionLog', () => {
   });
 
   it('shows breaks alone, and no break total without any', async () => {
-    await renderLog([], [rest(1, 0, 5)]);
+    await renderLog([], [breakAt(1, 0, 5)]);
     expect(screen.getByText('On breaks').parentElement!.textContent).toBe('On breaks5m· 1 break');
     cleanup();
     await renderLog();
@@ -207,7 +198,7 @@ describe('SessionLog', () => {
   it('deletes a break once the confirm says yes, and never one still running', async () => {
     const confirm = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
     vi.stubGlobal('confirm', confirm);
-    await renderLog([DONE], [rest(7, 25, 3), rest(8, 29, 5)]);
+    await renderLog([DONE], [breakAt(7, 25, 3), breakAt(8, 29, 5)]);
     const [over, running] = screen.getAllByRole('button', { name: 'Delete break' }) as HTMLButtonElement[];
     expect(running!.disabled).toBe(true);
     fireEvent.click(over!);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
+import { atTime, HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import { makeDay, punchesAt, TEST_SETTINGS } from '../test/fixtures';
 import type { Day } from '../types';
 import { weekHours } from './week';
@@ -10,7 +10,7 @@ const NOW = new Date(2026, 8, 30, 12, 0).getTime();
 
 /** A day clocked in at 8:00 and out `hours` later, or still in when `hours` is null. */
 function day(date: string, hours: number | null, patch: Partial<Day> = {}): Day {
-  const start = new Date(`${date}T08:00:00`).getTime();
+  const start = atTime(date, 8, 0);
   return makeDay(date, { punches: punchesAt(start, null, null, hours == null ? null : start + hours * HOUR_MS), ...patch });
 }
 

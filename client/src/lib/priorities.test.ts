@@ -1,30 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import { PRIORITY_WARNINGS } from './copy';
 import { editPriority, hasRoom, leftOpen, newUid, padPriorities, pickWarning, placePriority, removePriority, warnThreshold, warningKind } from './priorities';
-import { emptyDay } from '../../../shared/api.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
-import type { Day, Priority } from '../types';
-
-const row = (position: number, text: string, extra: Partial<Priority> = {}): Priority => ({ position, text, done: false, uid: null, addedAt: null, ...extra });
+import { makeDay, makePriority } from '../test/fixtures';
+import type { Priority } from '../types';
 
 describe('padPriorities', () => {
   it('fills a fresh day up to the configured count', () => {
-    expect(padPriorities([], 3)).toEqual([row(1, ''), row(2, ''), row(3, '')]);
+    expect(padPriorities([], 3)).toEqual([1, 2, 3].map((position) => makePriority(position, '', { uid: null, addedAt: null })));
   });
 
   it('keeps stored rows in place and pads the rest', () => {
-    const rows = padPriorities([row(2, 'Call the bank', { done: true, uid: 'abcdef123456', addedAt: 5 })], 3);
+    const rows = padPriorities([makePriority(2, 'Call the bank', { done: true, uid: 'abcdef123456', addedAt: 5 })], 3);
     expect(rows.map((r) => r.text)).toEqual(['', 'Call the bank', '']);
     expect(rows[1]).toMatchObject({ done: true, uid: 'abcdef123456', addedAt: 5 });
   });
 
   it('shows every stored row even when the count was lowered', () => {
-    const stored = [1, 2, 3, 4, 5].map((position) => row(position, `p${position}`));
+    const stored = [1, 2, 3, 4, 5].map((position) => makePriority(position, `p${position}`));
     expect(padPriorities(stored, 2)).toHaveLength(5);
   });
 
   it('never marks an empty row done and never exceeds the cap', () => {
-    expect(padPriorities([row(1, '  ', { done: true })], 1)[0]!.done).toBe(false);
+    expect(padPriorities([makePriority(1, '  ', { done: true })], 1)[0]!.done).toBe(false);
     expect(padPriorities([], 99)).toHaveLength(MAX_PRIORITIES);
   });
 });
@@ -96,7 +94,7 @@ describe('editPriority', () => {
 
 describe('removePriority', () => {
   it('drops the row and renumbers the rest from 1', () => {
-    const next = removePriority([row(1, 'A'), row(2, 'B'), row(3, 'C')], 2);
+    const next = removePriority([makePriority(1, 'A'), makePriority(2, 'B'), makePriority(3, 'C')], 2);
     expect(next.map((p) => [p.position, p.text])).toEqual([
       [1, 'A'],
       [2, 'C'],
@@ -106,26 +104,26 @@ describe('removePriority', () => {
 
 describe('placePriority', () => {
   it('fills the first empty row, padding first', () => {
-    const next = placePriority([row(1, 'A')], 3, 'New task', 'abcdef123456', 100)!;
+    const next = placePriority([makePriority(1, 'A')], 3, 'New task', 'abcdef123456', 100)!;
     expect(next.map((p) => p.text)).toEqual(['A', 'New task', '']);
     expect(next[1]).toMatchObject({ uid: 'abcdef123456', addedAt: 100, done: false });
   });
 
   it('appends when every row has text', () => {
-    const rows = [row(1, 'A'), row(2, 'B'), row(3, 'C')];
+    const rows = [makePriority(1, 'A'), makePriority(2, 'B'), makePriority(3, 'C')];
     const next = placePriority(rows, 3, 'D', 'abcdef123456', 100)!;
     expect(next).toHaveLength(4);
     expect(next[3]).toMatchObject({ position: 4, text: 'D' });
   });
 
   it('refuses when the sheet is full', () => {
-    const rows = Array.from({ length: MAX_PRIORITIES }, (_, i) => row(i + 1, `p${i + 1}`));
+    const rows = Array.from({ length: MAX_PRIORITIES }, (_, i) => makePriority(i + 1, `p${i + 1}`));
     expect(placePriority(rows, 3, 'One more', 'abcdef123456', 100)).toBeNull();
   });
 });
 
 describe('hasRoom', () => {
-  const full = Array.from({ length: MAX_PRIORITIES }, (_, i) => row(i + 1, `p${i + 1}`));
+  const full = Array.from({ length: MAX_PRIORITIES }, (_, i) => makePriority(i + 1, `p${i + 1}`));
 
   it('is false only when every row up to the cap has text', () => {
     const oneCleared = full.map((p) => (p.position === 7 ? { ...p, text: '  ' } : p));
@@ -136,26 +134,33 @@ describe('hasRoom', () => {
   });
 });
 
-const day = (date: string, priorities: Priority[]): Day => ({ ...emptyDay(date), priorities });
-
 describe('leftOpen', () => {
   it('takes the latest day that had a plan and returns its unticked rows in order', () => {
     const days = [
-      day('2026-09-24', [row(1, 'Old thing')]),
-      day('2026-09-25', [row(1, 'Ship it', { done: true }), row(2, 'Review the PR'), row(3, 'Call the bank'), row(4, '  ')]),
+      makeDay('2026-09-24', { priorities: [makePriority(1, 'Old thing')] }),
+      makeDay('2026-09-25', {
+        priorities: [makePriority(1, 'Ship it', { done: true }), makePriority(2, 'Review the PR'), makePriority(3, 'Call the bank'), makePriority(4, '  ')],
+      }),
       // A later day with nothing written doesn't count as a plan.
-      day('2026-09-26', [row(1, '')]),
+      makeDay('2026-09-26', { priorities: [makePriority(1, '')] }),
     ];
-    expect(leftOpen(days)).toEqual({ date: '2026-09-25', rows: [row(2, 'Review the PR'), row(3, 'Call the bank')] });
+    expect(leftOpen(days)).toEqual({ date: '2026-09-25', rows: [makePriority(2, 'Review the PR'), makePriority(3, 'Call the bank')] });
   });
 
   it('finds the latest day whatever order the days come in', () => {
-    expect(leftOpen([day('2026-09-25', [row(1, 'Newer')]), day('2026-09-24', [row(1, 'Older')])])?.date).toBe('2026-09-25');
+    expect(
+      leftOpen([makeDay('2026-09-25', { priorities: [makePriority(1, 'Newer')] }), makeDay('2026-09-24', { priorities: [makePriority(1, 'Older')] })])?.date,
+    ).toBe('2026-09-25');
   });
 
   it('is null when no day had a plan or the last plan was finished', () => {
     expect(leftOpen([])).toBeNull();
-    expect(leftOpen([day('2026-09-25', [])])).toBeNull();
-    expect(leftOpen([day('2026-09-24', [row(1, 'Open')]), day('2026-09-25', [row(1, 'Done', { done: true })])])).toBeNull();
+    expect(leftOpen([makeDay('2026-09-25', { priorities: [] })])).toBeNull();
+    expect(
+      leftOpen([
+        makeDay('2026-09-24', { priorities: [makePriority(1, 'Open')] }),
+        makeDay('2026-09-25', { priorities: [makePriority(1, 'Done', { done: true })] }),
+      ]),
+    ).toBeNull();
   });
 });

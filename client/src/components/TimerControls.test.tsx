@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
-import { AllProviders, endSession, makeDay, makeSession, makeSettings, settle, T0 } from '../test/hooks';
+import { AppProviders, endSession, makeDay, makeSession, makeSettings, settle, T0 } from '../test/hooks';
 import type { Session } from '../types';
 import { TimerControls } from './TimerControls';
 
@@ -13,9 +13,9 @@ vi.mock('../lib/alerts');
 async function renderControls(compact: boolean, session: Session = makeSession()) {
   vi.mocked(api.getRunning).mockResolvedValue({ session });
   render(
-    <AllProviders>
+    <AppProviders>
       <TimerControls compact={compact} />
-    </AllProviders>,
+    </AppProviders>,
   );
   await settle();
 }

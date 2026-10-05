@@ -6,21 +6,16 @@ import { AuthGate } from '../../auth/AuthGate';
 import { PASSWORD_CHANGED, SAVE_STATUS } from '../../lib/copy';
 import { applySettingsPatch } from '../../lib/settings';
 import { SOUND_EVENT_LABELS } from '../../lib/sounds';
-import { makeSettings, settle, SettingsAndDays } from '../../test/hooks';
+import { DEFAULT_USER, makeAuth, makeSettings, makeUser, settle, SettingsAndDays } from '../../test/hooks';
 import type { AuthInfo } from '../../types';
 import { SettingsDialog } from './SettingsDialog';
 
 vi.mock('../../api');
 vi.mock('../../lib/alerts');
 
-const LOCAL_ADMIN: AuthInfo = {
-  mode: 'local',
-  setupRequired: false,
-  cookieSecure: false,
-  user: { id: 1, name: 'admin', username: 'admin', isAdmin: true, kind: 'local', mustChangePassword: false },
-};
+const ADMIN = makeUser({ id: 1, name: 'admin', username: 'admin', isAdmin: true });
 
-async function renderDialog(auth: AuthInfo = LOCAL_ADMIN) {
+async function renderDialog(auth: AuthInfo = makeAuth({ user: ADMIN })) {
   vi.mocked(api.getAuth).mockResolvedValue(auth);
   const onClose = vi.fn();
   render(
@@ -48,7 +43,7 @@ beforeEach(() => {
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
   vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(applySettingsPatch(makeSettings(), patch)));
   vi.mocked(api.getPruneInfo).mockImplementation((before) => Promise.resolve({ before, matching: 0, total: 4, oldest: '2026-09-01', serverMaxDays: null }));
-  vi.mocked(api.listUsers).mockResolvedValue({ users: [LOCAL_ADMIN.user!] });
+  vi.mocked(api.listUsers).mockResolvedValue({ users: [ADMIN] });
 });
 afterEach(() => {
   cleanup();
@@ -60,7 +55,7 @@ describe('SettingsDialog', () => {
     await renderDialog();
     expect(tabNames()).toEqual(['Timeclock', 'Alarms', 'Sheet', 'Data', 'Account']);
     cleanup();
-    await renderDialog({ ...LOCAL_ADMIN, mode: 'none', user: { ...LOCAL_ADMIN.user!, kind: 'default', username: null } });
+    await renderDialog(makeAuth({ mode: 'none', user: DEFAULT_USER }));
     expect(tabNames()).toEqual(['Timeclock', 'Alarms', 'Sheet', 'Data']);
   });
 

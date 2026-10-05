@@ -2,15 +2,14 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import * as api from '../api';
-import { deferred, makeDay, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
-import type { Day, Priority } from '../types';
+import { deferred, makeDay, makePriority, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
+import type { Day } from '../types';
 import { useDayStore } from './useDay';
 import { useLeftOpen } from './useLeftOpen';
 
 vi.mock('../api');
 
-const row = (position: number, text: string, done = false): Priority => ({ position, text, done, uid: `uid${position}`.padEnd(12, '0'), addedAt: null });
-const friday = makeDay('2026-09-25', { priorities: [row(1, 'Ship it', true), row(2, 'Review the PR')] });
+const friday = makeDay('2026-09-25', { priorities: [makePriority(1, 'Ship it', { done: true }), makePriority(2, 'Review the PR')] });
 
 const render = (today = TODAY, wanted = true) =>
   renderHook((p: { today: string; wanted: boolean }) => ({ ...useLeftOpen(p.today, p.wanted), store: useDayStore() }), {
@@ -34,7 +33,7 @@ it("offers the last planned day's unticked rows from the two weeks before today"
   expect(result.current.leftOpen).toBeNull();
   await settle();
   expect(api.getRange).toHaveBeenCalledWith('2026-09-14', '2026-09-27');
-  expect(result.current.leftOpen).toEqual({ date: '2026-09-25', rows: [row(2, 'Review the PR')] });
+  expect(result.current.leftOpen).toEqual({ date: '2026-09-25', rows: [makePriority(2, 'Review the PR')] });
 });
 
 it('asks nothing while not wanted, and only once a day once it is', async () => {
@@ -101,9 +100,11 @@ it("follows a row ticked on that day's sheet since, with no second fetch", async
   vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve({ priorities }));
   const { result } = render();
   await settle();
-  expect(result.current.leftOpen?.rows).toEqual([row(2, 'Review the PR')]);
+  expect(result.current.leftOpen?.rows).toEqual([makePriority(2, 'Review the PR')]);
   await act(() => result.current.store.load('2026-09-25'));
-  await act(() => result.current.store.setPriorities('2026-09-25', [row(1, 'Ship it', true), row(2, 'Review the PR', true)]));
+  await act(() =>
+    result.current.store.setPriorities('2026-09-25', [makePriority(1, 'Ship it', { done: true }), makePriority(2, 'Review the PR', { done: true })]),
+  );
   expect(result.current.leftOpen).toBeNull();
   expect(api.getRange).toHaveBeenCalledTimes(1);
 });

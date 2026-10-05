@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { HOUR_MS } from '../../../shared/dates.js';
 import * as api from '../api';
 import { playSound, unlockAudio } from '../lib/alerts';
 import { LOAD_FAILED, PLAN_NEXT } from '../lib/copy';
-import { deferred, makeDay, makeSettings, SettingsAndDays, settle, T0, TODAY } from '../test/hooks';
+import { deferred, makeDay, makePriority, makeSettings, SettingsAndDays, settle, T0, TODAY } from '../test/hooks';
 import type { Day, Priority } from '../types';
 import { PlanNext } from './PlanNext';
 
@@ -13,16 +14,13 @@ vi.mock('../lib/alerts');
 
 // TODAY is a Monday, so the plan is for the Tuesday.
 const NEXT = '2026-09-29';
-const row = (position: number, text: string, extra: Partial<Priority> = {}): Priority => ({
-  position,
-  text,
-  done: false,
-  uid: `uid${position}`.padEnd(12, '0'),
-  addedAt: T0 - 60 * 60_000,
-  ...extra,
-});
 // The day's rows as stored, which can include an empty one.
-const TODAYS: Priority[] = [row(1, 'Ship it', { done: true }), row(2, 'Review the PR'), row(3, 'Call the bank'), { ...row(4, ''), uid: null, addedAt: null }];
+const TODAYS: Priority[] = [
+  makePriority(1, 'Ship it', { done: true }),
+  makePriority(2, 'Review the PR'),
+  makePriority(3, 'Call the bank'),
+  makePriority(4, '', { uid: null, addedAt: null }),
+];
 
 async function renderPlan({ date = TODAY, next = makeDay(NEXT) as Day | Promise<Day> } = {}) {
   vi.mocked(api.getDay).mockImplementation((d) => (d === NEXT ? Promise.resolve(next) : Promise.resolve(makeDay(d))));
@@ -55,7 +53,7 @@ const status = () => screen.getByRole('status').textContent;
 const sent = () => vi.mocked(api.putPriorities).mock.calls[0]![1];
 
 beforeEach(() => {
-  vi.useFakeTimers({ now: T0 + 8 * 60 * 60_000 });
+  vi.useFakeTimers({ now: T0 + 8 * HOUR_MS });
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ sounds: { ...makeSettings().sounds, planDone: 'triad' } }));
   vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve({ priorities }));
 });
@@ -153,7 +151,7 @@ describe('PlanNext', () => {
   });
 
   it("doesn't offer a row already on the next day's list, whatever the case and spacing", async () => {
-    const kept = row(1, 'review the  pr', { addedAt: T0 });
+    const kept = makePriority(1, 'review the  pr');
     await renderPlan({ next: makeDay(NEXT, { priorities: [kept] }) });
     await open();
     expect(screen.getByRole('heading').textContent).toBe(`${PLAN_NEXT.title('tomorrow')} ${PLAN_NEXT.already(1)}`);
@@ -164,7 +162,7 @@ describe('PlanNext', () => {
   });
 
   it('saves nothing when nothing is new, and says so without a celebration', async () => {
-    await renderPlan({ next: makeDay(NEXT, { priorities: [row(1, 'Review the PR'), row(2, 'Call the bank')] }) });
+    await renderPlan({ next: makeDay(NEXT, { priorities: [makePriority(1, 'Review the PR'), makePriority(2, 'Call the bank')] }) });
     await open();
     expect(screen.queryByRole('list')).toBeNull();
     // A blank line isn't added.
