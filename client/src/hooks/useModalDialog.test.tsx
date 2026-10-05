@@ -50,11 +50,10 @@ it('closes on the browser cancel gesture, on Escape outside an input method, and
 // and modal; happy-dom doesn't move focus, so the test checks that close() comes in time.
 it('closes the dialog while it is still in the page, so the browser returns focus to the opener', () => {
   const connected: boolean[] = [];
-  const close = vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function (this: HTMLDialogElement) {
+  vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function (this: HTMLDialogElement) {
     connected.push(this.isConnected);
   });
   const { unmount } = render(<Dialog onClose={vi.fn()} />);
   unmount();
-  close.mockRestore();
   expect(connected).toEqual([true]);
 });

@@ -105,9 +105,8 @@ describe('punchWindow', () => {
     // The extremes: local midnight in UTC+14 and the last millisecond of the day in UTC-12.
     expect(midnightUtc - 14 * HOUR_MS).toBeGreaterThanOrEqual(from);
     expect(midnightUtc + 36 * HOUR_MS - 1).toBeLessThanOrEqual(to);
-    // A day past either extreme is out.
-    expect(midnightUtc - 38 * HOUR_MS).toBeLessThan(from);
-    expect(midnightUtc + 61 * HOUR_MS).toBeGreaterThan(to);
+    // The window is the key's UTC noon ± 48 h: 22 h to spare before the early extreme, 24 h after the late one.
+    expect({ from, to }).toEqual({ from: midnightUtc - 36 * HOUR_MS, to: midnightUtc + 60 * HOUR_MS });
   });
 });
 
