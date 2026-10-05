@@ -24,7 +24,7 @@ export interface AppOptions {
   clientDir?: string;
   /** AUTH_MODE=local's first-run setup code. Only tests fix it; a server makes its own. */
   setupCode?: string;
-  /** AUTH_MODE=oidc's provider lookup, shared with `startBackgroundJobs`, which warms it. Tests leave it out. */
+  /** AUTH_MODE=oidc's provider lookup, shared with `startBackgroundJobs`, which warms it. Without one, the OIDC router makes its own. */
   discovery?: Discovery;
 }
 
@@ -110,7 +110,7 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
       res.setHeader('Cache-Control', 'no-cache');
       // `root`, not an absolute path: send's dotfile rule checks every segment of an absolute
       // path, so an install under any folder starting with a dot (~/.local/share/…, a
-      // .claude/worktrees checkout) answered every page with a 404. With a root it checks only
+      // .claude/worktrees checkout) would answer every page with a 404. With a root it checks only
       // the part inside it, as express.static does.
       res.sendFile('index.html', { root: clientDir });
     });

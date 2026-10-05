@@ -56,7 +56,7 @@ describe('loading', () => {
     expect(result.current.settings.lunchDeadlineMinutes).toBe(60);
   });
 
-  it('drops the answer or the retry of a fetch whose effect was cleaned up (StrictMode, sign-out)', async () => {
+  it('drops the answer or the retry of a fetch whose effect was cleaned up (StrictMode, unmount)', async () => {
     // StrictMode runs the effect twice, cleaning up the first run the way an unmount would. Its
     // answer lands after the second run's and is older, so it must not show.
     const late = deferred<Settings>();
@@ -71,7 +71,7 @@ describe('loading', () => {
     expect(strict.result.current.settings.workMinutes).toBe(540);
     strict.unmount();
 
-    // Signed out with the fetch still out: its failure schedules no retry.
+    // Unmounted with the fetch still out (the root ErrorBoundary taking the app down, a test): its failure schedules no retry.
     const failing = deferred<Settings>();
     vi.mocked(api.getSettings).mockReset().mockReturnValue(failing.promise);
     const second = render();

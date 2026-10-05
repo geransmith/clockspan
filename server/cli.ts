@@ -2,9 +2,7 @@ import { loadConfig } from './config.js';
 import { openDatabase } from './db.js';
 import { resetPassword } from './auth/reset.js';
 
-// Usage: node dist/server/cli.js reset-password <username> [new-password]
-// Without a password argument, a random one is generated and printed; it is temporary, and
-// the user chooses their own at the next sign-in.
+// Usage: node dist/server/cli.js reset-password <username> [new-password] (see auth/reset.ts)
 const [cmd, username, passwordArg] = process.argv.slice(2);
 
 if (cmd !== 'reset-password' || !username) {

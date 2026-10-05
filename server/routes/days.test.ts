@@ -7,7 +7,7 @@ import { MAX_PUNCHES } from '../../shared/punches.js';
 import { HOUR_MS, punchWindow } from '../../shared/dates.js';
 import { LIMITS } from '../../shared/api.js';
 
-/** An instant on 2026-09-01 in any zone: its UTC midnight plus a few hours. */
+/** 2026-09-01's UTC midnight; the tests add hours to it, which keeps each time inside punchWindow('2026-09-01'). */
 const T0 = Date.UTC(2026, 8, 1);
 
 let app: TestApp;
@@ -104,7 +104,7 @@ describe('PUT /api/days/:date/punches', () => {
   });
 
   it('refuses a row that is not an object, and stores nothing', async () => {
-    // A number or true used to be stored as an empty punch; 'x' and [1] were refused only because strings and arrays have an `at` method.
+    // Every row must be an object or null, whatever a string's or an array's `at` would read as.
     for (const row of [5, true, 'x', [1], [{ at: T0 + 8 * HOUR_MS }]]) {
       const r = await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: T0 + 8 * HOUR_MS }, row] });
       expect([r.status, r.body.error], JSON.stringify(row)).toEqual([400, 'Punch 1 must be an object or null.']);
@@ -197,7 +197,7 @@ describe('PUT /api/days/:date/priorities', () => {
       expect([r.status, r.body.error], JSON.stringify(text)).toEqual([400, 'Priority 2 has invalid text.']);
     }
     expect((await app.api.get('/api/days/2026-09-01')).body.priorities).toEqual([]);
-    // Absent or null is an empty row, as before.
+    // Absent or null is an empty row.
     expect((await put({ text: null, uid: null })).status).toBe(200);
   });
 
@@ -209,7 +209,6 @@ describe('PUT /api/days/:date/priorities', () => {
   });
 
   it('refuses a row that is not an object, and stores nothing', async () => {
-    // Each of these used to be stored as an empty row.
     for (const row of ['x', 5, true, [1], [{ text: 'a' }]]) {
       const r = await app.api.put('/api/days/2026-09-01/priorities', { priorities: [{ text: 'ok' }, row] });
       expect([r.status, r.body.error], JSON.stringify(row)).toEqual([400, 'Priority 2 must be an object or null.']);

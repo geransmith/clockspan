@@ -107,7 +107,7 @@ describe('sessions', () => {
     expect([elsewhere.status, elsewhere.body.error]).toEqual([400, 'That priority is not on this day.']);
     expect((await app.api.get(`/api/days/${DATE}`)).body.sessions[0].priorityUid).toBe(uid);
     expect((await app.api.patch(`/api/sessions/${id}`, { plannedSeconds: 10 })).status).toBe(400);
-    // A wrong type is a 400 like everywhere else, not silently kept.
+    // A label of the wrong type is a 400.
     const badLabel = await app.api.patch(`/api/sessions/${id}`, { label: 42 });
     expect(badLabel.status).toBe(400);
     expect(badLabel.body.error).toMatch(/label must be a string/);

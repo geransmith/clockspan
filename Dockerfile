@@ -15,7 +15,7 @@ COPY package.json package-lock.json ./
 # --ignore-scripts: better-sqlite3 ships prebuilds (including linux-musl) and loads them when
 # no build/ dir exists, but its binding.gyp makes npm run `node-gyp rebuild` by default, and
 # whether the allowScripts policy blocks that differs between npm 11 and 12 (npm 12 in this
-# image ran it and failed for lack of python). esbuild's postinstall is only an optimisation.
+# image runs it, and the image has no python). esbuild's postinstall is only an optimisation.
 RUN npm ci --ignore-scripts
 COPY tsconfig.json tsconfig.server.json vite.config.ts ./
 COPY client ./client

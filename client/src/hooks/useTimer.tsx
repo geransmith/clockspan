@@ -207,9 +207,9 @@ export function TimerProvider({ children }: { children: ReactNode }) {
 
   useWakeLock(running != null && !paused && !due && settings.keepScreenAwake);
 
-  // Written only when its text changes. A reset in this effect's cleanup put "Clockspan" up
-  // between every two ticks, which a host that shows each title change (the desktop app's
-  // browser pane) painted as a flicker.
+  // Written only when its text changes, never reset between ticks: a reset in this effect's
+  // cleanup would put "Clockspan" up between every two ticks, which a host that shows each
+  // title change (the desktop app's browser pane) paints as a flicker.
   const tabTitle = running
     ? `${paused ? 'Paused ' : ''}${formatCountdown(countdownSeconds)}${running.label ? ` · ${running.label}` : ''} — ${BASE_TITLE}`
     : BASE_TITLE;

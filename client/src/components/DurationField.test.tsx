@@ -62,7 +62,7 @@ describe('DurationField', () => {
   });
 
   it('puts the stored value back for a blank or non-numeric box', () => {
-    // A cleared Work day used to save as 0, clamped to 1 minute, and rang the clock-out alarm.
+    // Saving a cleared Work day as 0 would clamp it to 1 minute and ring the clock-out alarm.
     const { hours, mins, onCommit } = renderField();
     fireEvent.change(hours, { target: { value: '' } });
     fireEvent.blur(hours);
