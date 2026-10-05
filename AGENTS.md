@@ -205,8 +205,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (`sessionRowToJson(): Session`, `dayJson(): Day`, …) and each route's answer names its
   envelope with `satisfies` (`res.json({ deleted } satisfies PruneResult)`), while
   `client/src/api.ts` reads the same types, so a field renamed on one side fails `typecheck`
-  on the other. Server-only row types (`UserRow` in `db.ts`, a day's rows in
-  `routes/shared.ts`) take their unions from there too (`PunchRow.kind` is `Punch['kind']`).
+  on the other. Server-only row types (a day's rows in `routes/shared.ts`) take their unions
+  from there too (`PunchRow.kind` is `Punch['kind']`); `UserRow.kind` follows the users
+  table's CHECK, since no wire type carries it.
 - **Security headers are set only in `server/security.ts`** (applied first in `createApp`):
   the CSP, `nosniff`, framing, referrer, HSTS and the API's `no-store`. The CSP is same-origin
   with no `unsafe-inline`, so no inline `<script>`/`<style>` in `index.html` and no third-party

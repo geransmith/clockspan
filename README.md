@@ -242,21 +242,20 @@ The app refuses to start if `APP_URL`, `OIDC_ISSUER`, `OIDC_CLIENT_ID` or `OIDC_
 sqlite3 /path/on/host/focus.db <<'SQL'
 .bail on
 BEGIN;
-UPDATE days     SET user_id = (SELECT id FROM users WHERE kind = 'local' ORDER BY id LIMIT 1)
-                WHERE user_id = (SELECT id FROM users WHERE kind = 'default');
-UPDATE sessions SET user_id = (SELECT id FROM users WHERE kind = 'local' ORDER BY id LIMIT 1)
-                WHERE user_id = (SELECT id FROM users WHERE kind = 'default');
-UPDATE breaks   SET user_id = (SELECT id FROM users WHERE kind = 'local' ORDER BY id LIMIT 1)
-                WHERE user_id = (SELECT id FROM users WHERE kind = 'default');
-DELETE FROM settings WHERE user_id = (SELECT id FROM users WHERE kind = 'local' ORDER BY id LIMIT 1)
-                AND EXISTS (SELECT 1 FROM settings WHERE user_id = (SELECT id FROM users WHERE kind = 'default'));
-UPDATE settings SET user_id = (SELECT id FROM users WHERE kind = 'local' ORDER BY id LIMIT 1)
-                WHERE user_id = (SELECT id FROM users WHERE kind = 'default');
+CREATE TEMP TABLE handover AS SELECT
+  (SELECT id FROM users WHERE kind = 'default') AS from_id,
+  (SELECT id FROM users WHERE kind = 'local' ORDER BY id LIMIT 1) AS to_id;
+UPDATE days     SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
+UPDATE sessions SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
+UPDATE breaks   SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
+DELETE FROM settings WHERE user_id = (SELECT to_id FROM handover)
+                AND EXISTS (SELECT 1 FROM settings WHERE user_id = (SELECT from_id FROM handover));
+UPDATE settings SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
 COMMIT;
 SQL
 ```
 
-Going from `none` to `oidc` works the same way. Sign in through your provider once first, since that creates your account, then run the script with `kind = 'oidc'` in place of each `kind = 'local'` (five places).
+Going from `none` to `oidc` works the same way. Sign in through your provider once first, since that creates your account, then run the script with `kind = 'oidc'` in place of `kind = 'local'`.
 
 ---
 

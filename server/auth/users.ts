@@ -8,7 +8,6 @@ export function publicUser(u: UserRow): PublicUser {
     name: u.display_name,
     username: u.username,
     isAdmin: Boolean(u.is_admin),
-    kind: u.kind,
     mustChangePassword: Boolean(u.must_change_password),
   };
 }

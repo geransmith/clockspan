@@ -1,6 +1,7 @@
 import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { PASSWORD_LENGTH, USERNAME } from '../../shared/api.js';
+import { isWholeNumber } from '../validate.js';
 
 // Format: scrypt$<log2 N>$<salt b64>$<hash b64>. N is stored so it can be raised later
 // without invalidating existing hashes.
@@ -29,7 +30,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
   const log2N = Number(parts[1]);
   const salt = Buffer.from(parts[2]!, 'base64');
   const expected = Buffer.from(parts[3]!, 'base64');
-  if (!Number.isInteger(log2N) || log2N < 10 || log2N > 20 || salt.length === 0 || expected.length === 0) return false;
+  if (!isWholeNumber(log2N, { min: 10, max: 20 }) || salt.length === 0 || expected.length === 0) return false;
   const actual = await scryptAsync(password, salt, expected.length, SCRYPT_OPTS(log2N));
   return timingSafeEqual(actual, expected);
 }
@@ -64,7 +65,7 @@ export function parseUsername(raw: unknown): { username: string } | { error: str
 
 /** `{ username, password }` for a new account (first-run setup, an admin adding a user). */
 export function parseCredentials(body: unknown): { username: string; password: string } | { error: string } {
-  const { username, password } = (body ?? {}) as { username?: unknown; password?: unknown };
+  const { username, password } = body as { username?: unknown; password?: unknown };
   const u = parseUsername(username);
   if ('error' in u) return u;
   const p = parsePassword(password);

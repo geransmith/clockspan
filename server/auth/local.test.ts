@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SETUP_CODE, startTestApp, type Client, type TestApp } from '../dev/harness.js';
+import { FIRST_RUN, SETUP_CODE, startTestApp, type Client, type TestApp } from '../dev/harness.js';
 import { SESSION_COOKIE } from './session.js';
 import { MAX_ACCOUNT_FAILURES } from './limiter.js';
 import { newSetupCode, setupCodeMatches } from './local.js';
@@ -10,8 +10,7 @@ import { createApp } from '../app.js';
 import { loadConfig } from '../config.js';
 import { openDatabase } from '../db.js';
 
-const ADMIN = { username: 'geran', password: 'correct horse' };
-const FIRST_RUN = { ...ADMIN, setupCode: SETUP_CODE };
+const { setupCode: _, ...ADMIN } = FIRST_RUN;
 
 describe('AUTH_MODE=local', () => {
   let app: TestApp;
@@ -28,7 +27,7 @@ describe('AUTH_MODE=local', () => {
   });
 
   const setup = (client: Client = app.api) => client.post('/api/auth/setup', FIRST_RUN);
-  // A sign-in the proxy says came from `ip`; the app must be started with TRUST_PROXY.
+  // A sign-in that says, through X-Forwarded-For, it came from `ip`; it counts as that address only when the app trusts the proxy (TRUST_PROXY).
   const loginFrom = (ip: string, username = ADMIN.username, password = 'wrong') =>
     fetch(`${app.url}/api/auth/login`, {
       method: 'POST',
@@ -42,7 +41,7 @@ describe('AUTH_MODE=local', () => {
 
     const r = await setup();
     expect(r.status).toBe(201);
-    expect(r.body.user).toMatchObject({ username: 'geran', isAdmin: true, kind: 'local' });
+    expect(r.body.user).toMatchObject({ username: 'geran', isAdmin: true });
     expect(app.api.cookies()).toHaveProperty(SESSION_COOKIE);
     expect((await app.api.get('/api/auth/me')).body).toMatchObject({ setupRequired: false, user: { username: 'geran' } });
     expect((await app.api.get('/api/settings')).status).toBe(200);
@@ -183,6 +182,38 @@ describe('AUTH_MODE=local', () => {
     expect((await loginFrom('198.51.100.1', 'nobody')).status).toBe(401);
   });
 
+  it('keys the login limiter on the forwarded address only when told to trust the proxy', async () => {
+    await setup();
+    for (let i = 0; i < 5; i++) expect((await loginFrom('203.0.113.1')).status).toBe(401);
+    // Not trusted: every request is the loopback, so a new forwarded address changes nothing.
+    expect((await loginFrom('203.0.113.2')).status).toBe(429);
+    await app.close();
+
+    app = await startTestApp({ authMode: 'local', env: { TRUST_PROXY: '1' } });
+    await setup();
+    for (let i = 0; i < 5; i++) expect((await loginFrom('203.0.113.1')).status).toBe(401);
+    expect((await loginFrom('203.0.113.1')).status).toBe(429);
+    expect((await loginFrom('203.0.113.2')).status).toBe(401);
+  });
+
+  it('says once in the log when a proxy forwards sign-ins that TRUST_PROXY does not trust', async () => {
+    const me = (headers: Record<string, string> = {}) => fetch(`${app.url}/api/auth/me`, { headers });
+    await me();
+    expect(warn).not.toHaveBeenCalled();
+    await me({ 'x-forwarded-for': '203.0.113.1' });
+    await me({ 'x-forwarded-for': '203.0.113.2' });
+    expect(warn).toHaveBeenCalledOnce();
+    expect(String(warn.mock.calls[0]![0])).toMatch(
+      /^\[proxy\] A request came in with X-Forwarded-For but TRUST_PROXY is not set\. If a reverse proxy sent it, every sign-in counts as coming from the proxy \(127\.0\.0\.1\), so 5 failed sign-ins from anyone block new sign-ins for everyone for up to 15 minutes: /,
+    );
+    await app.close();
+
+    warn.mockClear();
+    app = await startTestApp({ authMode: 'local', env: { TRUST_PROXY: '1' } });
+    await me({ 'x-forwarded-for': '203.0.113.1' });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it('cuts a long or odd username short in the log', async () => {
     await setup();
     const c = app.client();
@@ -309,6 +340,10 @@ describe('AUTH_MODE=local', () => {
     expect((await sam.put('/api/days/2026-09-01/retro', { note: 'note only sam wrote' })).status).toBe(200);
     expect(app.count('days')).toBe(1);
 
+    // Only plain digits name a user: Number() would read each of these as the id.
+    for (const odd of [`0x${created.body.user.id.toString(16)}`, `${created.body.user.id}e0`, `+${created.body.user.id}`, `%20${created.body.user.id}`]) {
+      expect(await app.api.del(`/api/auth/users/${odd}`)).toMatchObject({ status: 404, body: { error: 'User not found.' } });
+    }
     expect((await app.api.del(`/api/auth/users/${created.body.user.id}`)).body).toEqual({ ok: true });
     expect((await app.api.del(`/api/auth/users/${created.body.user.id}`)).status).toBe(404);
     expect(app.count('days')).toBe(0);
@@ -407,7 +442,7 @@ describe('AUTH_MODE=none', () => {
     const app = await startTestApp();
     try {
       const r = await app.api.get('/api/auth/me');
-      expect(r.body).toMatchObject({ mode: 'none', setupRequired: false, user: { kind: 'default', isAdmin: true }, cookieSecure: false });
+      expect(r.body).toMatchObject({ mode: 'none', setupRequired: false, user: { name: 'You', username: null, isAdmin: true }, cookieSecure: false });
       expect((await app.api.get('/api/health')).body).toEqual({ ok: true });
       expect((await app.api.post('/api/auth/login', {})).status).toBe(404);
       expect((await app.api.get('/api/nope')).body).toEqual({ error: 'Not found.' });

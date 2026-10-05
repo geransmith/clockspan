@@ -72,7 +72,7 @@ describe('validation', () => {
 
   it('reads a new account from a request body, username first', () => {
     expect(parseCredentials({ username: ' sam ', password: 'long enough' })).toEqual({ username: 'sam', password: 'long enough' });
-    expect(parseCredentials(undefined)).toEqual({ error: 'Username is required.' });
+    expect(parseCredentials({})).toEqual({ error: 'Username is required.' });
     expect(parseCredentials({ username: 'x', password: 'short' })).toEqual({ error: expect.stringMatching(/at least 2/) });
     expect(parseCredentials({ username: 'sam', password: 5 })).toEqual({ error: 'Password is required.' });
   });

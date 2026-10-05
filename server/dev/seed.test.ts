@@ -329,8 +329,9 @@ describe('--sessions', () => {
     try {
       const user = ensureOidcDevUser(app.db, app.config);
       expect(ensureOidcDevUser(app.db, app.config).id).toBe(user.id);
+      expect(user).toMatchObject({ kind: 'oidc' });
       expect(user.oidc_sub).toBe(`${app.config.oidc!.issuer}|${OIDC_DEV_USER.sub}`);
-      expect((await me(app, insertSession(app.db, app.config, user.id))).user).toMatchObject({ name: OIDC_DEV_USER.name, kind: 'oidc' });
+      expect((await me(app, insertSession(app.db, app.config, user.id))).user).toMatchObject({ name: OIDC_DEV_USER.name });
     } finally {
       await app.close();
     }

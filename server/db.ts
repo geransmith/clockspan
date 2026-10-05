@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import type { PublicUser } from '../shared/api.js';
 
 export type DB = Database.Database;
 
@@ -142,7 +141,8 @@ export function migrate(db: DB, upTo: number = MIGRATIONS.length): void {
 
 export interface UserRow {
   id: number;
-  kind: PublicUser['kind'];
+  /** The users table's CHECK. */
+  kind: 'default' | 'local' | 'oidc';
   username: string | null;
   password_hash: string | null;
   oidc_sub: string | null;
@@ -162,14 +162,37 @@ export function findLocalUser(db: DB, username: string): UserRow | undefined {
     .get(username, username) as UserRow | undefined;
 }
 
-export function findUserById(db: DB, id: number | bigint): UserRow | undefined {
-  return db.prepare(`SELECT * FROM users WHERE id = ?`).get(id) as UserRow | undefined;
+/** Whether a local account exists; none yet means the first visit is setup. */
+export function hasLocalUser(db: DB): boolean {
+  return (db.prepare(`SELECT EXISTS(SELECT 1 FROM users WHERE kind = 'local') AS found`).get() as { found: number }).found === 1;
+}
+
+/**
+ * A new local account, or undefined when the name is taken. The check is part of the insert, so
+ * two creates for one name can't both pass it, and it ignores case as sign-in does: "Sam" can't
+ * be added beside "sam".
+ */
+export function insertLocalUser(
+  db: DB,
+  username: string,
+  passwordHash: string,
+  { isAdmin, mustChangePassword }: { isAdmin: boolean; mustChangePassword: boolean },
+): UserRow | undefined {
+  return db
+    .prepare(
+      `INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at, must_change_password)
+       SELECT 'local', @username, @passwordHash, @username, @isAdmin, @now, @mustChangePassword
+       WHERE NOT EXISTS (SELECT 1 FROM users WHERE username = @username COLLATE NOCASE)
+       RETURNING *`,
+    )
+    .get({ username, passwordHash, isAdmin: Number(isAdmin), mustChangePassword: Number(mustChangePassword), now: Date.now() }) as UserRow | undefined;
 }
 
 /** In AUTH_MODE=none every request acts as this single user. */
 export function ensureDefaultUser(db: DB): UserRow {
   const existing = db.prepare(`SELECT * FROM users WHERE kind = 'default'`).get() as UserRow | undefined;
-  if (existing) return existing;
-  const info = db.prepare(`INSERT INTO users (kind, display_name, is_admin, created_at) VALUES ('default', 'You', 1, ?)`).run(Date.now());
-  return findUserById(db, info.lastInsertRowid)!;
+  return (
+    existing ??
+    (db.prepare(`INSERT INTO users (kind, display_name, is_admin, created_at) VALUES ('default', 'You', 1, ?) RETURNING *`).get(Date.now()) as UserRow)
+  );
 }

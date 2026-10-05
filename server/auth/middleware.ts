@@ -1,7 +1,6 @@
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
-import type { DB, UserRow } from '../db.js';
 import type { Config } from '../config.js';
-import { ensureDefaultUser } from '../db.js';
+import { ensureDefaultUser, type DB, type UserRow } from '../db.js';
 import { refuse } from '../refuse.js';
 import { resolveSession } from './session.js';
 

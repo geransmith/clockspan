@@ -1,11 +1,10 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import express, { type Express } from 'express';
 import type { Config } from './config.js';
-import type { DB } from './db.js';
+import { hasLocalUser, type DB } from './db.js';
 import { requireAuth, requireOwnPassword, resolveUser } from './auth/middleware.js';
-import { localAuthRouter, userCount } from './auth/local.js';
+import { localAuthRouter } from './auth/local.js';
 import { publicUser } from './auth/users.js';
 import { oidcAuthRouter, type Discovery } from './auth/oidc.js';
 import { purgeExpiredSessions } from './auth/session.js';
@@ -31,7 +30,7 @@ export interface AppOptions {
 export function createApp(db: DB, config: Config, opts: AppOptions = {}): Express {
   const app = express();
   app.disable('x-powered-by');
-  if (config.trustProxy !== false) app.set('trust proxy', config.trustProxy);
+  app.set('trust proxy', config.trustProxy);
   app.use(securityHeaders(config));
   app.use(express.json({ limit: '256kb' }));
   // Express 5 leaves req.body undefined when nothing was parsed (no body, or not JSON), and
@@ -64,7 +63,7 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
   app.get('/api/auth/me', (req, res) => {
     res.json({
       mode: config.authMode,
-      setupRequired: config.authMode === 'local' && userCount(db) === 0,
+      setupRequired: config.authMode === 'local' && !hasLocalUser(db),
       user: req.user ? publicUser(req.user) : null,
       cookieSecure: config.cookieSecure,
     } satisfies AuthInfo);
@@ -83,7 +82,7 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
   app.use('/api', notFound);
 
   // ----- static SPA (production build) -----
-  const clientDir = opts.clientDir ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../client');
+  const clientDir = opts.clientDir ?? path.resolve(import.meta.dirname, '../client');
   if (fs.existsSync(path.join(clientDir, 'index.html'))) {
     // Vite fingerprints everything under /assets, so those can be cached for good. The shell
     // is no-cache however it is asked for: kept after an upgrade, it would name the old build's

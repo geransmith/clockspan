@@ -202,7 +202,6 @@ export interface PublicUser {
   name: string;
   username: string | null;
   isAdmin: boolean;
-  kind: 'default' | 'local' | 'oidc';
   /** Signed in with a temporary password (an admin's, or one the CLI generated): the app asks for their own before anything else. */
   mustChangePassword: boolean;
 }

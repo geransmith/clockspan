@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, startBackgroundJobs } from './app.js';
 import { loadConfig } from './config.js';
 import { ensureDefaultUser, openDatabase } from './db.js';
-import { countRows, SETUP_CODE, startTestApp, tempClientBuild, writeClientBuild, type TestApp } from './dev/harness.js';
+import { countRows, startTestApp, tempClientBuild, writeClientBuild, type TestApp } from './dev/harness.js';
 import { Discovery } from './auth/oidc.js';
 
 describe('response headers', () => {
@@ -248,59 +248,6 @@ describe('bad request bodies', () => {
     const res = await send('workMinutes=1', 'application/x-www-form-urlencoded');
     expect(res.status).toBe(200);
     expect(((await res.json()) as { workMinutes: number }).workMinutes).not.toBe(1);
-  });
-});
-
-describe('TRUST_PROXY', () => {
-  let app: TestApp;
-  afterEach(async () => {
-    await app.close();
-  });
-
-  const USER = { username: 'geran', password: 'correct horse', setupCode: SETUP_CODE };
-  const loginFrom = (forwardedFor: string) =>
-    fetch(`${app.url}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-forwarded-for': forwardedFor },
-      body: JSON.stringify({ username: USER.username, password: 'wrong' }),
-    });
-  const exhaust = async () => {
-    for (let i = 0; i < 5; i++) expect((await loginFrom('203.0.113.1')).status).toBe(401);
-  };
-
-  it('keys the login limiter on the forwarded address only when told to trust the proxy', async () => {
-    app = await startTestApp({ authMode: 'local' });
-    await app.api.post('/api/auth/setup', USER);
-    await exhaust();
-    // Not trusted: every request is the loopback, so a new forwarded address changes nothing.
-    expect((await loginFrom('203.0.113.2')).status).toBe(429);
-    await app.close();
-
-    app = await startTestApp({ authMode: 'local', env: { TRUST_PROXY: '1' } });
-    await app.api.post('/api/auth/setup', USER);
-    await exhaust();
-    expect((await loginFrom('203.0.113.1')).status).toBe(429);
-    expect((await loginFrom('203.0.113.2')).status).toBe(401);
-  });
-
-  it('says once in the log when a proxy forwards sign-ins that TRUST_PROXY does not trust', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const me = (headers: Record<string, string> = {}) => fetch(`${app.url}/api/auth/me`, { headers });
-    app = await startTestApp({ authMode: 'local' });
-    await me();
-    expect(warn).not.toHaveBeenCalled();
-    await me({ 'x-forwarded-for': '203.0.113.1' });
-    await me({ 'x-forwarded-for': '203.0.113.2' });
-    expect(warn).toHaveBeenCalledOnce();
-    expect(String(warn.mock.calls[0]![0])).toMatch(
-      /^\[proxy\] A request came in with X-Forwarded-For but TRUST_PROXY is not set\. If a reverse proxy sent it, every sign-in counts as coming from the proxy \(127\.0\.0\.1\), so 5 failed sign-ins from anyone block new sign-ins for everyone for up to 15 minutes: /,
-    );
-    await app.close();
-
-    warn.mockClear();
-    app = await startTestApp({ authMode: 'local', env: { TRUST_PROXY: '1' } });
-    await me({ 'x-forwarded-for': '203.0.113.1' });
-    expect(warn).not.toHaveBeenCalled();
   });
 });
 

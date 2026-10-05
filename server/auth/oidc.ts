@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import * as oidc from 'openid-client';
-import { findUserById, type DB, type UserRow } from '../db.js';
+import type { DB, UserRow } from '../db.js';
 import type { Config } from '../config.js';
 import { cookieHeader, createSession, destroySession, readCookie } from './session.js';
 import { logName } from './users.js';
@@ -19,6 +19,7 @@ const MAX_DISPLAY_NAME = 100;
 const RETRY = '<a href="/auth/login">Try again</a>.';
 const PROVIDER_DOWN = `Identity provider is unreachable. ${RETRY}`;
 const SIGN_IN_FAILED = `Sign-in failed. ${RETRY}`;
+const FLOW_EXPIRED = `Sign-in session expired. ${RETRY}`;
 
 /** The first value that is a string with something in it, trimmed: which name claims a provider fills, and with what, varies. */
 function firstNonBlank(...values: unknown[]): string | undefined {
@@ -113,16 +114,13 @@ export function upsertOidcUser(db: DB, issuer: string, sub: string, rawName: str
   // Stored in users.oidc_sub: changing its form orphans every OIDC account without a migration.
   const key = `${issuer}|${sub}`;
   const displayName = rawName.slice(0, MAX_DISPLAY_NAME);
-  const existing = db.prepare(`SELECT * FROM users WHERE oidc_sub = ?`).get(key) as UserRow | undefined;
-  if (existing) {
-    if (existing.display_name !== displayName) {
-      db.prepare(`UPDATE users SET display_name = ? WHERE id = ?`).run(displayName, existing.id);
-      existing.display_name = displayName;
-    }
-    return existing;
-  }
-  const info = db.prepare(`INSERT INTO users (kind, oidc_sub, display_name, created_at) VALUES ('oidc', ?, ?, ?)`).run(key, displayName, Date.now());
-  return findUserById(db, info.lastInsertRowid)!;
+  return db
+    .prepare(
+      `INSERT INTO users (kind, oidc_sub, display_name, created_at) VALUES ('oidc', ?, ?, ?)
+       ON CONFLICT(oidc_sub) DO UPDATE SET display_name = excluded.display_name
+       RETURNING *`,
+    )
+    .get(key, displayName, Date.now()) as UserRow;
 }
 
 /** `given` is the Discovery the entrypoint warms in `startBackgroundJobs`; without one, the routes look the provider up on the first sign-in. */
@@ -176,7 +174,7 @@ export function oidcAuthRouter(db: DB, config: Config, given?: Discovery): { api
   web.get('/callback', async (req, res) => {
     const raw = readCookie(req, FLOW_COOKIE);
     if (!raw) {
-      res.status(400).send(`Sign-in session expired. ${RETRY}`);
+      res.status(400).send(FLOW_EXPIRED);
       return;
     }
     const clearFlow = cookieHeader(config, FLOW_COOKIE, '', 0, '/auth');

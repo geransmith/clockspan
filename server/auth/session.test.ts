@@ -1,10 +1,8 @@
 import fs from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { HOUR_MS } from '../../shared/dates.js';
-import { SETUP_CODE, startTestApp, tempClientBuild, type TestApp } from '../dev/harness.js';
+import { FIRST_RUN, startTestApp, tempClientBuild, type TestApp } from '../dev/harness.js';
 import { purgeExpiredSessions, SESSION_COOKIE } from './session.js';
-
-const USER = { username: 'geran', password: 'correct horse', setupCode: SETUP_CODE };
 
 type SessionRow = { id: number; expires_at: number; last_seen_at: number };
 
@@ -24,7 +22,7 @@ describe('cookie sessions', () => {
   const setCookie = (r: { headers: Headers }) => r.headers.getSetCookie().find((c) => c.startsWith(`${SESSION_COOKIE}=`)) ?? '';
 
   it('sets a cookie the browser keeps to itself and only sends over https when the app is https', async () => {
-    const plain = setCookie(await app.api.post('/api/auth/setup', USER));
+    const plain = setCookie(await app.api.post('/api/auth/setup', FIRST_RUN));
     expect(plain).toMatch(/; HttpOnly/i);
     expect(plain).toMatch(/; SameSite=Lax/i);
     expect(plain).toMatch(/; Path=\//i);
@@ -33,11 +31,11 @@ describe('cookie sessions', () => {
 
     await app.close();
     app = await startTestApp({ authMode: 'local', env: { APP_URL: 'https://focus.example.com' } });
-    expect(setCookie(await app.api.post('/api/auth/setup', USER))).toMatch(/; Secure/i);
+    expect(setCookie(await app.api.post('/api/auth/setup', FIRST_RUN))).toMatch(/; Secure/i);
   });
 
   it('answers 401 for a cookie that matches nothing, without touching the table', async () => {
-    await app.api.post('/api/auth/setup', USER);
+    await app.api.post('/api/auth/setup', FIRST_RUN);
     const stranger = app.client();
     const r = await fetch(`${app.url}/api/settings`, { headers: { cookie: `${SESSION_COOKIE}=${'x'.repeat(43)}` } });
     expect(r.status).toBe(401);
@@ -48,7 +46,7 @@ describe('cookie sessions', () => {
   });
 
   it('expires: the row goes on the first request after expires_at and the client is signed out', async () => {
-    await app.api.post('/api/auth/setup', USER);
+    await app.api.post('/api/auth/setup', FIRST_RUN);
     const s = only();
     expect(s.expires_at - s.last_seen_at).toBe(app.config.sessionTtlMs);
     app.db.prepare(`UPDATE auth_sessions SET expires_at = ? WHERE id = ?`).run(Date.now() - 1, s.id);
@@ -58,17 +56,17 @@ describe('cookie sessions', () => {
   });
 
   it('never resolves a session whose user belongs to another AUTH_MODE, so an OIDC admin is no local admin', async () => {
-    await app.api.post('/api/auth/setup', USER);
+    await app.api.post('/api/auth/setup', FIRST_RUN);
     // The row an OIDC install made for its first user, still holding the cookie it was signed in with.
     app.db.prepare(`UPDATE users SET kind = 'oidc', oidc_sub = 'issuer|1', username = NULL, password_hash = NULL, is_admin = 1`).run();
     expect((await app.api.get('/api/settings')).status).toBe(401);
     expect((await app.api.get('/api/auth/users')).status).toBe(401);
     expect((await app.api.get('/api/auth/me')).body).toMatchObject({ user: null, setupRequired: true });
-    expect((await app.api.post('/api/auth/setup', USER)).status).toBe(201);
+    expect((await app.api.post('/api/auth/setup', FIRST_RUN)).status).toBe(201);
   });
 
   it('slides the expiry once an hour, not on every request, and hands the browser the cookie again', async () => {
-    const issued = setCookie(await app.api.post('/api/auth/setup', USER));
+    const issued = setCookie(await app.api.post('/api/auth/setup', FIRST_RUN));
     const first = only();
     // Within the hour: nothing written, nothing re-sent.
     const quiet = await app.api.get('/api/settings');
@@ -94,7 +92,7 @@ describe('cookie sessions', () => {
     await app.close();
     app = await startTestApp({ authMode: 'local', clientDir: dir });
     try {
-      const issued = setCookie(await app.api.post('/api/auth/setup', USER));
+      const issued = setCookie(await app.api.post('/api/auth/setup', FIRST_RUN));
       const first = only();
       app.db
         .prepare(`UPDATE auth_sessions SET last_seen_at = ?, expires_at = ? WHERE id = ?`)
@@ -116,9 +114,9 @@ describe('cookie sessions', () => {
   });
 
   it('logout drops only the calling session', async () => {
-    await app.api.post('/api/auth/setup', USER);
+    await app.api.post('/api/auth/setup', FIRST_RUN);
     const phone = app.client();
-    expect((await phone.post('/api/auth/login', USER)).status).toBe(200);
+    expect((await phone.post('/api/auth/login', FIRST_RUN)).status).toBe(200);
     expect(rows()).toHaveLength(2);
     expect((await phone.post('/api/auth/logout')).body).toEqual({ ok: true });
     expect(rows()).toHaveLength(1);
@@ -127,9 +125,9 @@ describe('cookie sessions', () => {
   });
 
   it('purgeExpiredSessions removes exactly the expired rows', async () => {
-    await app.api.post('/api/auth/setup', USER);
+    await app.api.post('/api/auth/setup', FIRST_RUN);
     const phone = app.client();
-    await phone.post('/api/auth/login', USER);
+    await phone.post('/api/auth/login', FIRST_RUN);
     const [mine, theirs] = rows();
     app.db.prepare(`UPDATE auth_sessions SET expires_at = ? WHERE id = ?`).run(Date.now() - 1, theirs!.id);
     purgeExpiredSessions(app.db);
