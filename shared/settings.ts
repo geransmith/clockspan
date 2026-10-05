@@ -11,9 +11,9 @@ export type CardId = (typeof CARD_IDS)[number];
 /**
  * A layout made whole, from a saved or sent list: the cards in their order, unknown and
  * repeated ids dropped, a `visible` that isn't a boolean read as shown, and every card the
- * layout misses (one added in a later release) appended, shown. The server
- * runs it on every settings read and write (`mergeSettings`) and the client on every answer, so
- * a new card reaches existing users on both sides.
+ * layout misses (one added in a later release) appended, shown. The server runs it on every
+ * settings read and write (`mergeSettings`) and the client on every answer, so a new card
+ * reaches existing users on both sides.
  */
 export function normalizeLayout(raw: readonly unknown[]): Settings['layout'] {
   const seen = new Set<CardId>();
@@ -100,7 +100,10 @@ export interface Settings {
   celebrations: boolean;
   /** Stickers on the History calendar: one per thing a day did. */
   stickers: boolean;
-  /** Saturday and Sunday columns on the History calendar; off drops them and their stickers from the counts, and Plan tomorrow then lands on the next weekday. */
+  /**
+   * Saturday and Sunday columns on the History calendar. Off drops them and their stickers from
+   * the counts, and Plan tomorrow then lands on the next weekday.
+   */
   showWeekends: boolean;
   alarms: Record<AlarmId, AlarmSettings>;
   layout: { id: CardId; visible: boolean }[];
