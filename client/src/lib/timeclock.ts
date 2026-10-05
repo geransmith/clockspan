@@ -4,9 +4,9 @@ import type { Punch, Settings } from '../types';
 
 export type TimeclockState = 'not-started' | 'working' | 'at-lunch' | 'on-break' | 'done';
 /** `not-needed`: the day's work fits inside the lunch window, so no lunch is planned or alarmed. */
-export type LunchStatus = 'none' | 'upcoming' | 'overdue' | 'taken' | 'not-needed';
-export type ClockOutStatus = 'none' | 'upcoming' | 'over' | 'done';
-export type SecondMealStatus = 'none' | 'upcoming' | 'overdue' | 'taken';
+type LunchStatus = 'none' | 'upcoming' | 'overdue' | 'taken' | 'not-needed';
+type ClockOutStatus = 'none' | 'upcoming' | 'over' | 'done';
+type SecondMealStatus = 'none' | 'upcoming' | 'overdue' | 'taken';
 
 export type TimeclockSettings = Pick<Settings, 'workMinutes' | 'lunchDeadlineMinutes' | 'lunchMinutes' | 'secondMealAfterMinutes' | 'mealRules'>;
 
@@ -56,7 +56,7 @@ export function clockOutPosition(punches: Punch[]): number | null {
   return last >= CLOCK_OUT_MIN_POSITION && last % 2 === 1 ? last : null;
 }
 
-export interface TimeclockOptions {
+interface TimeclockOptions {
   /** A past day: once off the clock it is done, whatever the target was. */
   frozen?: boolean;
 }
@@ -100,12 +100,9 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
   };
   if (clockIn == null) return empty;
 
-  const typed = punches
-    .filter((p): p is Punch & { at: number } => p.at != null)
-    .map((p) => ({ position: p.position, kind: kindForPosition(p.position), at: p.at }))
-    .sort((a, b) => a.at - b.at || a.position - b.position);
+  const typed = punches.filter((p): p is Punch & { at: number } => p.at != null).sort((a, b) => a.at - b.at || a.position - b.position);
   // Order is checked over every time typed, so a slip in one still ahead shows as it is typed.
-  const outOfOrder = !typed.every((p, i) => p.kind === (i % 2 === 0 ? 'in' : 'out'));
+  const outOfOrder = !typed.every((p, i) => p.kind === kindForPosition(i));
   const set = typed.filter((p) => p.at <= upTo);
 
   // Never let a future clock-in produce negative time.
@@ -114,18 +111,16 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
   let workedMs = 0;
   let openIn: number | null = null;
   let lastOut: number | null = null;
-  let expect: 'in' | 'out' = 'in';
+  // `set` is sorted by time, so an out never comes before the in it closes.
   for (const p of set) {
-    if (p.kind !== expect) break;
     if (p.kind === 'in') {
+      if (openIn != null) break;
       openIn = p.at;
-      expect = 'out';
     } else {
-      // `expect` only reaches 'out' after an 'in' set `openIn`.
-      workedMs += Math.max(0, p.at - openIn!);
+      if (openIn == null) break;
+      workedMs += p.at - openIn;
       openIn = null;
       lastOut = p.at;
-      expect = 'in';
     }
   }
 
@@ -211,8 +206,8 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
  * half day), the usual one otherwise. The sheet, the alarms, the calendar and the review all
  * go through this, so they agree on what a day's target was.
  */
-export function daySettings<T extends TimeclockSettings>(settings: T, day: { workMinutes: number | null } | undefined): T {
-  return day?.workMinutes == null ? settings : { ...settings, workMinutes: day.workMinutes };
+export function daySettings<T extends TimeclockSettings>(settings: T, day: { workMinutes: number | null }): T {
+  return day.workMinutes == null ? settings : { ...settings, workMinutes: day.workMinutes };
 }
 
 /** "Now" as a day sees it: live today, never past the end of an earlier day. */
@@ -226,21 +221,16 @@ export function targetFraction(tc: TimeclockResult): number {
 }
 
 /**
- * The timeclock for the sheet or a history row: today runs live; a past day is frozen at its
- * end so an unclosed clock-in doesn't count forever.
+ * A stored day's timeclock: on its own work-day length (daySettings), live today; a past day is
+ * frozen at its end so an unclosed clock-in doesn't count forever.
  */
-export function timeclockForDate(punches: Punch[], settings: TimeclockSettings, date: string, today: string, now: number): TimeclockResult {
-  return computeTimeclock(punches, settings, clampToDay(date, today, now), { frozen: date !== today });
-}
-
-/** A stored day's timeclock: on its own work-day length (daySettings), live today, frozen once past. */
 export function dayTimeclock(
   day: { date: string; punches: Punch[]; workMinutes: number | null },
   settings: TimeclockSettings,
   today: string,
   now: number,
 ): TimeclockResult {
-  return timeclockForDate(day.punches, daySettings(settings, day), day.date, today, now);
+  return computeTimeclock(day.punches, daySettings(settings, day), clampToDay(day.date, today, now), { frozen: day.date !== today });
 }
 
 /**
@@ -274,9 +264,9 @@ export interface ExtraPair {
 }
 
 /**
- * Extra out/in pairs (positions 3..clockOut-1) with their display placement. A pair added
- * while lunch isn't punched yet is assumed to be before lunch; once its out has a time, time
- * decides.
+ * Extra out/in pairs (positions 3..clockOut-1) with their display placement. Until Lunch out has
+ * a time every pair sits before lunch; after that only a pair whose Out is earlier than Lunch out
+ * does, so one left empty moves below it.
  */
 export function extraPairs(punches: Punch[]): ExtraPair[] {
   const byPos = new Map(punches.map((p) => [p.position, p]));

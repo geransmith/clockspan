@@ -18,7 +18,6 @@ import {
   removePunchPair,
   secondMealApplies,
   targetFraction,
-  timeclockForDate,
   type TimeclockSettings,
 } from './timeclock';
 import type { Punch } from '../types';
@@ -248,7 +247,6 @@ describe('daySettings', () => {
   it("puts a day's own work-day length in place of the usual one, and nothing else", () => {
     expect(daySettings(settings, { workMinutes: 240 })).toEqual({ ...settings, workMinutes: 240 });
     expect(daySettings(settings, { workMinutes: null })).toBe(settings);
-    expect(daySettings(settings, undefined)).toBe(settings);
   });
 });
 
@@ -446,19 +444,19 @@ describe('frozen (past day)', () => {
   });
 });
 
-describe('timeclockForDate', () => {
+describe('dayTimeclock', () => {
   const today = '2026-09-17';
   const yesterday = '2026-09-16';
   const nowToday = new Date(2026, 8, 17, 10, 0).getTime();
 
   it('runs today live', () => {
     expect(clampToDay(today, today, nowToday)).toBe(nowToday);
-    const r = timeclockForDate(punches([T0 + 24 * HOUR_MS, null, null]), settings, today, today, nowToday);
+    const r = dayTimeclock({ date: today, punches: punches([T0 + 24 * HOUR_MS, null, null]), workMinutes: null }, settings, today, nowToday);
     expect(r.state).toBe('working');
     expect(r.workedSeconds).toBe(2 * 3600);
   });
 
-  it('runs a stored day on its own work-day length (dayTimeclock)', () => {
+  it('runs a stored day on its own work-day length', () => {
     const p = punches([T0 + 24 * HOUR_MS, null, null, null]);
     expect(dayTimeclock({ date: today, punches: p, workMinutes: null }, settings, today, nowToday).clockOutAt).toBe(T0 + 32.5 * HOUR_MS);
     // A 4 h day needs no lunch, so none is added to its end.
@@ -467,7 +465,7 @@ describe('timeclockForDate', () => {
 
   it('stops a past day with an unclosed clock-in at the end of that day', () => {
     expect(clampToDay(yesterday, today, nowToday)).toBe(new Date(2026, 8, 17, 0, 0).getTime() - 1);
-    const r = timeclockForDate(punches([T0, null, null]), settings, yesterday, today, nowToday);
+    const r = dayTimeclock({ date: yesterday, punches: punches([T0, null, null]), workMinutes: null }, settings, today, nowToday);
     expect(r.state).toBe('working');
     expect(r.workedSeconds).toBe(16 * 3600 - 1);
   });
@@ -475,7 +473,7 @@ describe('timeclockForDate', () => {
   it('marks a past day done once it is off the clock, target or not', () => {
     // Out for lunch and never back: the same punches read as at lunch on a day still running.
     const p = punches([T0, T0 + 4 * HOUR_MS, null, null]);
-    const r = timeclockForDate(p, settings, yesterday, today, nowToday);
+    const r = dayTimeclock({ date: yesterday, punches: p, workMinutes: null }, settings, today, nowToday);
     expect(r.state).toBe('done');
     expect(r.clockOutAt).toBe(T0 + 4 * HOUR_MS);
     expect(computeTimeclock(p, settings, T0 + 16 * HOUR_MS).state).toBe('at-lunch');

@@ -75,6 +75,16 @@ describe('TimeField', () => {
     expect(onCommit).toHaveBeenLastCalledWith(at(14, 15));
   });
 
+  it('keeps the stored period when the minute of a saved time is cleared and typed again', () => {
+    // 8:05 PM after a 7:30 AM clock-in: a new 8 would read as the morning, but this one is saved.
+    const { onCommit } = renderField({ hour12: true, value: at(20, 5), anchorAt: at(7, 30) });
+    focus(segment('minute'));
+    fireEvent.keyDown(segment('minute'), { key: 'Backspace' });
+    expect(segment('minute').hasAttribute('data-placeholder')).toBe(true);
+    for (const key of ['1', '0']) typeInto(segment('minute'), key);
+    expect(onCommit).toHaveBeenLastCalledWith(at(20, 10));
+  });
+
   it('keeps a period set by hand while the time is typed', () => {
     const { onCommit } = renderField({ hour12: true });
     focus(segment('AM/PM'));

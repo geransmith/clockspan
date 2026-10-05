@@ -103,7 +103,6 @@ export function Timeclock({
   const tiles = timeclockTiles(tc, {
     now,
     isToday,
-    workMinutes: daySet.workMinutes,
     alarms: settings.alarms,
     overtimeApproval: otFeature,
     overtimeApproved: otOn,
@@ -135,8 +134,6 @@ export function Timeclock({
   const after = pairs.filter((p) => !p.beforeLunch);
   const clockOutPos = clockOutPosition(punches);
 
-  // A punch after the clock-in is expected to come after it; the time field's AM/PM guess uses that.
-  const clockInAt = byPos.get(0)?.at ?? null;
   const lunchRows = lunchRowsShown(punches, settings);
   // Today, until the day is done, the next empty row's Now is the filled button: one obvious tap.
   const nextPos = isToday && tc.state !== 'done' ? nextPunchPosition(punches, lunchInPunchOrder(punches, tc, settings)) : null;
@@ -148,7 +145,8 @@ export function Timeclock({
       date={date}
       isToday={isToday}
       hour12={hour12}
-      anchorAt={punch.position === 0 ? null : clockInAt}
+      // A punch after the clock-in is expected to come after it; the time field's AM/PM guess uses that.
+      anchorAt={punch.position === 0 ? null : tc.clockIn}
       next={punch.position === nextPos}
       // Only a time field on today's sheet holds today's alarms: Now, × and the pair buttons
       // save at once.

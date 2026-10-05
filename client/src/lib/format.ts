@@ -2,7 +2,9 @@ import { addDays, MINUTE_MS, pad2, parseDateKey } from '../../../shared/dates.js
 import type { TimeFormat } from '../../../shared/settings.js';
 
 // One formatter per clock; the locale decides everything else (separators, AM/PM spelling).
-const timeFmts = new Map<boolean, Intl.DateTimeFormat>();
+const timeFmt = (hourCycle: 'h12' | 'h23') => new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', hourCycle });
+const time12Fmt = timeFmt('h12');
+const time24Fmt = timeFmt('h23');
 const dateLongFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 const dateFullFmt = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 const monthFmt = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' });
@@ -11,12 +13,7 @@ const weekdayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
 
 /** "8:32 AM" or "08:32", by the user's time format (`resolveHour12`). */
 export function formatTime(ms: number, hour12: boolean): string {
-  let fmt = timeFmts.get(hour12);
-  if (!fmt) {
-    fmt = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', hourCycle: hour12 ? 'h12' : 'h23' });
-    timeFmts.set(hour12, fmt);
-  }
-  return fmt.format(new Date(ms));
+  return (hour12 ? time12Fmt : time24Fmt).format(new Date(ms));
 }
 
 export function formatDateLong(key: string): string {

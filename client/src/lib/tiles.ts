@@ -14,8 +14,6 @@ export interface TileOptions {
   /** The day's clock (`clampToDay`): live today, the end of an earlier day. */
   now: number;
   isToday: boolean;
-  /** The work-day length this day runs on (`daySettings`). */
-  workMinutes: number;
   alarms: Pick<Settings['alarms'], 'lunchBy' | 'clockOut'>;
   /** Settings → Timeclock → Overtime: time past the day is overtime, and can be approved. */
   overtimeApproval: boolean;
@@ -39,7 +37,7 @@ export function timeclockTiles(tc: TimeclockResult, o: TileOptions): { lunch: Ti
       lunch.tone = 'tile--ok';
       lunch.sub = `Taken at ${o.formatTime(tc.lunchOut!)}`;
     } else if (tc.lunchStatus === 'not-needed') {
-      lunch.sub = 'Not needed today';
+      lunch.sub = o.isToday ? 'Not needed today' : 'Not needed';
     } else if (tc.state === 'done' || !o.isToday) {
       // A past day is judged at its end: a lunch not punched by then wasn't taken.
       lunch.sub = 'Not taken';
@@ -88,16 +86,16 @@ export function timeclockTiles(tc: TimeclockResult, o: TileOptions): { lunch: Ti
     // it, "over" would read "0m over target".
     sub:
       tc.clockIn == null
-        ? `${formatDuration(o.workMinutes * 60)} day`
+        ? `${formatDuration(tc.remainingSeconds)} day`
         : tc.overSeconds >= 60
           ? `${formatDuration(tc.overSeconds)} over target`
           : tc.remainingSeconds === 0
             ? 'On target'
-            : tc.state === 'done'
+            : tc.state === 'done' || !o.isToday
               ? `${formatDurationCeil(tc.remainingSeconds)} under target`
               : `${formatDurationCeil(tc.remainingSeconds)} to go`,
     // A past day left clocked in is judged at its end: nothing about it is live.
-    tone: o.isToday && tc.clockIn != null && tc.state === 'working' ? 'tile--live' : '',
+    tone: o.isToday && tc.state === 'working' ? 'tile--live' : '',
   };
 
   return { lunch, worked, clockOut };
