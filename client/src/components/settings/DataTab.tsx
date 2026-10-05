@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { RETENTION_LIMITS } from '../../../../shared/settings.js';
 import * as api from '../../api';
 import { useDays, useDayStore } from '../../hooks/useDay';
+import { useSubmit } from '../../hooks/useSubmit';
 import { CONFIRM, DAYS_DELETED } from '../../lib/copy';
 import { addDays, todayKey } from '../../../../shared/dates.js';
 import { counted, formatDateFull } from '../../lib/format';
@@ -57,9 +58,8 @@ function DeleteOldDays() {
   const { generation } = useDays();
   const [before, setBefore] = useState(() => addDays(today, -365));
   const [loaded, setLoaded] = useState<PruneInfo | null>(null);
-  const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, setError, run } = useSubmit();
   // The server says which cutoff each count is for: one for another date, or cleared by a
   // delete, is not shown, so Delete waits for the count that matches.
   const info = loaded?.before === before ? loaded : null;
@@ -74,29 +74,23 @@ function DeleteOldDays() {
     return () => {
       cancelled = true;
     };
-  }, [before, generation]);
+  }, [before, generation, setError]);
 
-  const remove = async () => {
+  const remove = () => {
     if (!info || !window.confirm(CONFIRM.deleteDays(info.matching, formatDateFull(before)))) return;
-    setBusy(true);
     setDone(null);
-    setError(null);
-    try {
+    run(async () => {
       const { deleted } = await pruneBefore(before);
       setDone(DAYS_DELETED(deleted));
       setLoaded(null);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
+    });
   };
 
   const stored = !info
     ? null
-    : info.total === 0
+    : info.oldest === null
       ? 'No days stored.'
-      : `${counted(info.total, 'day')} stored, oldest ${formatDateFull(info.oldest!)}. ${info.matching} before this date.`;
+      : `${counted(info.total, 'day')} stored, oldest ${formatDateFull(info.oldest)}. ${info.matching} before this date.`;
 
   return (
     <Section
@@ -120,18 +114,17 @@ function DeleteOldDays() {
             }}
             aria-label="Delete days before"
           />
-          <button className="btn btn-ghost btn-danger-text" onClick={() => void remove()} disabled={busy || !info || info.matching === 0}>
+          <button className="btn btn-ghost btn-danger-text" onClick={remove} disabled={busy || !info || info.matching === 0}>
             Delete…
           </button>
         </span>
       </div>
       {stored && <p className="muted small">{stored}</p>}
       {info?.serverMaxDays != null && <p className="muted small">This server keeps at most {info.serverMaxDays} days for every user.</p>}
-      {done && (
-        <p className="success" role="status">
-          {done}
-        </p>
-      )}
+      {/* Always there, so a screen reader hears the line arrive. */}
+      <p className="success" role="status">
+        {done}
+      </p>
       <ErrorLine error={error} />
     </Section>
   );
