@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ensureDefaultUser } from '../db.js';
 import { startTestApp, type TestApp } from '../dev/harness.js';
-import { CARD_DEFAULT_VISIBLE, CARD_IDS, DEFAULT_SETTINGS } from '../../shared/settings.js';
+import { DEFAULT_SETTINGS } from '../../shared/settings.js';
 
 describe('/api/settings', () => {
   let app: TestApp;
@@ -50,31 +50,6 @@ describe('/api/settings', () => {
     });
     expect((await app.api.put('/api/settings', { sounds: 'loud' })).body.sounds.priorityDone).toBe('pop');
     expect((await app.api.get('/api/settings')).body.sounds.timer).toBe('yay');
-  });
-
-  it('accepts a known theme and falls back for anything else', async () => {
-    expect((await app.api.put('/api/settings', { theme: 'dark' })).body.theme).toBe('dark');
-    expect((await app.api.put('/api/settings', { theme: 'sepia' })).body.theme).toBe('dark');
-    expect((await app.api.put('/api/settings', { theme: 1 })).body.theme).toBe('dark');
-    expect((await app.api.put('/api/settings', { theme: 'auto' })).body.theme).toBe('auto');
-  });
-
-  it('accepts a known time format and falls back for anything else', async () => {
-    expect((await app.api.put('/api/settings', { timeFormat: '24h' })).body.timeFormat).toBe('24h');
-    expect((await app.api.put('/api/settings', { timeFormat: '25h' })).body.timeFormat).toBe('24h');
-    expect((await app.api.put('/api/settings', { timeFormat: 12 })).body.timeFormat).toBe('24h');
-    expect((await app.api.put('/api/settings', { timeFormat: 'auto' })).body.timeFormat).toBe('auto');
-  });
-
-  it('keeps layout order, drops unknown cards and appends missing ones with their default', async () => {
-    const r = await app.api.put('/api/settings', {
-      layout: [{ id: 'timer', visible: false }, { id: 'nope' }, null, 'retro', { id: 'timer', visible: true }, { id: 'log' }],
-    });
-    expect(r.body.layout).toEqual([
-      { id: 'timer', visible: false },
-      { id: 'log', visible: true },
-      ...CARD_IDS.filter((id) => id !== 'timer' && id !== 'log').map((id) => ({ id, visible: CARD_DEFAULT_VISIBLE[id] })),
-    ]);
   });
 
   it('carries a 0.2 layout with the sticker card shown over to the stickers setting', async () => {

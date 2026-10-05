@@ -1,46 +1,37 @@
 /**
- * Per-user settings: the shape, the defaults, the bounds and the layout merge. Imported by the
- * server (`mergeSettings` validates against these) and the client (first render before the real
- * settings arrive). No side effects and no runtime imports (the one import is the sound
- * catalog's types), so either side can pull it in.
+ * Per-user settings: the shape, the defaults, the bounds and the layout merge. Imported by both
+ * sides; no side effects and no runtime imports (the one import is the sound catalog's types),
+ * so either side can pull it in.
  */
 import type { SoundEvent, SoundId } from './sounds.js';
 
 export const CARD_IDS = ['timeclock', 'priorities', 'timer', 'log', 'retro'] as const;
 export type CardId = (typeof CARD_IDS)[number];
 
-/** Whether a card shows until the user says otherwise; a card missing from a saved layout gets this. */
-export const CARD_DEFAULT_VISIBLE: Record<CardId, boolean> = {
-  timeclock: true,
-  priorities: true,
-  timer: true,
-  log: true,
-  retro: true,
-};
-
 /**
  * A layout made whole, from a saved or sent list: the cards in their order, unknown and
- * repeated ids dropped, a `visible` that isn't a boolean read as the card's default, and every
- * card the layout misses (one added in a later release) appended with its default. The server
- * runs it on every settings read and write (`mergeSettings`) and the client on every answer, so
- * a new card reaches existing users on both sides.
+ * repeated ids dropped, a `visible` that isn't a boolean read as shown, and every card the
+ * layout misses (one added in a later release) appended, shown. The server runs it on every
+ * settings read and write (`mergeSettings`) and the client on every answer, so a new card
+ * reaches existing users on both sides.
  */
-export function normalizeLayout(raw: readonly unknown[]): { id: CardId; visible: boolean }[] {
+export function normalizeLayout(raw: readonly unknown[]): Settings['layout'] {
   const seen = new Set<CardId>();
-  const out: { id: CardId; visible: boolean }[] = [];
+  const out: Settings['layout'] = [];
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
     const { id, visible } = item as { id?: unknown; visible?: unknown };
-    if (!CARD_IDS.includes(id as CardId) || seen.has(id as CardId)) continue;
-    const card = id as CardId;
+    const card = CARD_IDS.find((c) => c === id);
+    if (!card || seen.has(card)) continue;
     seen.add(card);
-    out.push({ id: card, visible: typeof visible === 'boolean' ? visible : CARD_DEFAULT_VISIBLE[card] });
+    out.push({ id: card, visible: typeof visible === 'boolean' ? visible : true });
   }
-  for (const id of CARD_IDS) if (!seen.has(id)) out.push({ id, visible: CARD_DEFAULT_VISIBLE[id] });
+  for (const id of CARD_IDS) if (!seen.has(id)) out.push({ id, visible: true });
   return out;
 }
 
-export type AlarmId = 'lunchBy' | 'clockOut' | 'secondMeal' | 'retro';
+export const ALARM_IDS = ['lunchBy', 'clockOut', 'secondMeal', 'retro'] as const;
+export type AlarmId = (typeof ALARM_IDS)[number];
 
 /** How times are written: the browser locale's way, or 12-hour / 24-hour regardless. */
 export const TIME_FORMATS = ['auto', '12h', '24h'] as const;
@@ -66,7 +57,7 @@ export interface Settings {
   workMinutes: number;
   lunchDeadlineMinutes: number;
   lunchMinutes: number;
-  /** Hours *worked* after which a second meal period is due (California: 10 h). */
+  /** Minutes *worked* after which a second meal period is due (California: 10 h). */
   secondMealAfterMinutes: number;
   /** Hours a week the sheet counts the days toward, in minutes; 0 hides the week line. */
   weekMinutes: number;
@@ -78,7 +69,7 @@ export interface Settings {
   /**
    * After a session finished by hand, a banner offers a break sized to it on the Pomodoro
    * technique's numbers (`client/src/lib/breaks.ts`), and the Break button offers the same
-   * length. Off by default.
+   * length.
    */
   suggestBreaks: boolean;
   /** The focus timer's start buttons, in minutes; always three. */
@@ -107,13 +98,16 @@ export interface Settings {
   sounds: Record<SoundEvent, SoundId>;
   /** Emoji bursts when a priority is ticked, the day ends, the work week is reached or the next day is planned. */
   celebrations: boolean;
-  /** Stickers on the History calendar: one per thing a day did. Off by default. */
+  /** Stickers on the History calendar: one per thing a day did. */
   stickers: boolean;
-  /** Saturday and Sunday columns on the History calendar; off drops them and their stickers from the counts. */
+  /**
+   * Saturday and Sunday columns on the History calendar. Off drops them and their stickers from
+   * the counts, and Plan tomorrow then lands on the next weekday.
+   */
   showWeekends: boolean;
   alarms: Record<AlarmId, AlarmSettings>;
   layout: { id: CardId; visible: boolean }[];
-  /** Automatic prune of this user's days older than `days`; off by default. */
+  /** Automatic prune of this user's days older than `days`. */
   retention: RetentionSettings;
 }
 
@@ -192,6 +186,6 @@ export const DEFAULT_SETTINGS: Settings = deepFreeze({
   stickers: false,
   showWeekends: true,
   alarms: { lunchBy: { ...DEFAULT_ALARM }, clockOut: { ...DEFAULT_ALARM }, secondMeal: { ...DEFAULT_ALARM }, retro: { ...DEFAULT_RETRO_ALARM } },
-  layout: CARD_IDS.map((id) => ({ id, visible: CARD_DEFAULT_VISIBLE[id] })),
+  layout: normalizeLayout([]),
   retention: { enabled: false, days: 365 },
 });
