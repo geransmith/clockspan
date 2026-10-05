@@ -14,7 +14,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
-  vi.restoreAllMocks();
 });
 
 describe('reading the URL', () => {

@@ -26,7 +26,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
-  vi.resetAllMocks();
 });
 
 it("offers the last planned day's unticked rows from the two weeks before today", async () => {

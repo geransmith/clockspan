@@ -207,7 +207,6 @@ describe('APP_URL and OIDC_ISSUER', () => {
     // A port is part of the host the app is served at (Unraid's usual form).
     expect(load({ APP_URL: 'http://tower:8080' }).appUrl).toBe('http://tower:8080');
     expect(warn).toHaveBeenCalledTimes(2);
-    warn.mockRestore();
   });
 });
 
@@ -235,7 +234,6 @@ describe('COOKIE_SECURE', () => {
     expect(load({ APP_URL: 'https://focus.example.com', COOKIE_SECURE: 'secure' }).cookieSecure).toBe(true);
     expect(load({ APP_URL: 'http://focus.lan', COOKIE_SECURE: 'maybe' }).cookieSecure).toBe(false);
     expect(warn).toHaveBeenCalledWith('[config] COOKIE_SECURE should be true or false; "secure" is neither, so the default applies');
-    warn.mockRestore();
   });
 });
 

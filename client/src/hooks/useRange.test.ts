@@ -19,7 +19,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
-  vi.resetAllMocks();
 });
 
 it('loads the days of a range', async () => {

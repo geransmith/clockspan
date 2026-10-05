@@ -30,8 +30,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
-  vi.unstubAllGlobals();
-  vi.resetAllMocks();
 });
 
 describe('AccountTab', () => {

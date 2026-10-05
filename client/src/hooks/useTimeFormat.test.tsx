@@ -14,7 +14,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
-  vi.resetAllMocks();
 });
 
 it('follows the time format setting', async () => {

@@ -54,7 +54,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
-  vi.resetAllMocks();
 });
 
 it("starts a break on today's sheet, counts it down and announces its end once, with the Break over sound", async () => {

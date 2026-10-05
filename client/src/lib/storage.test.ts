@@ -1,9 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AUTH_USER_KEY, adoptUser, pruneStored, readStored, readStoredJson, writeStored } from './storage';
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 describe('stored values', () => {
   it('reads and writes through localStorage', () => {

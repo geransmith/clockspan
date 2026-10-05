@@ -120,21 +120,18 @@ beforeEach(async () => {
   FakeAudioContext.instances = [];
   FakeAudioContext.failConstructor = false;
   FakeAudioContext.failDecode = false;
-  fetchMock.mockReset();
   fetchMock.mockImplementation(() => fileResponse());
   vi.stubGlobal('fetch', fetchMock);
   FakeNotification.created = [];
   FakeNotification.failConstructor = false;
   FakeNotification.permission = 'granted';
   FakeNotification.requestPermission = () => Promise.resolve('granted');
-  focus.mockReset();
   vi.stubGlobal('AudioContext', FakeAudioContext);
   vi.stubGlobal('Notification', FakeNotification);
   vi.stubGlobal('window', { focus });
   alerts = await import('./alerts');
 });
 afterEach(() => {
-  vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 

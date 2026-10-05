@@ -25,7 +25,6 @@ describe('AUTH_MODE=local', () => {
   });
   afterEach(async () => {
     await app.close();
-    vi.restoreAllMocks();
   });
 
   const setup = (client: Client = app.api) => client.post('/api/auth/setup', FIRST_RUN);

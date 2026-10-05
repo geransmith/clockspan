@@ -7,7 +7,7 @@ import { TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib
 import { formatCountdown } from '../lib/format';
 import { dueKey } from '../lib/timer';
 import { MINUTE_MS } from '../../../shared/dates.js';
-import { AllProviders, apiError, deferred, endSession, makeDay, makeSession, makeSettings, settle, T0, TODAY, YESTERDAY } from '../test/hooks';
+import { AllProviders, apiError, begin, deferred, endSession, makeDay, makeSession, makeSettings, settle, T0, TODAY, YESTERDAY } from '../test/hooks';
 import type { Priority, RunningSession, Session, Settings } from '../types';
 import { useDays, useDayStore } from './useDay';
 import { useTimer } from './useTimer';
@@ -47,8 +47,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
-  vi.unstubAllGlobals();
-  vi.resetAllMocks();
   document.title = '';
 });
 
@@ -123,16 +121,11 @@ describe('sync with the server', () => {
     // A host that shows every title change (the desktop app's browser pane) flashed "Clockspan"
     // once a second while each tick put the plain title back before writing the new count.
     const writes = vi.spyOn(document, 'title', 'set');
-    try {
-      // One settle per tick: ticks inside one act render once.
-      for (let tick = 0; tick < 4; tick++) await settle(1000);
-      expect(result.current.timer).toMatchObject({ due: true, countdownSeconds: -2 });
-      unmount();
-      expect(writes.mock.calls.flat()).toEqual([...[1, 0, -1, -2].map(titleAt), 'Clockspan']);
-    } finally {
-      // afterEach's resetAllMocks would leave the spy on document.
-      writes.mockRestore();
-    }
+    // One settle per tick: ticks inside one act render once.
+    for (let tick = 0; tick < 4; tick++) await settle(1000);
+    expect(result.current.timer).toMatchObject({ due: true, countdownSeconds: -2 });
+    unmount();
+    expect(writes.mock.calls.flat()).toEqual([...[1, 0, -1, -2].map(titleAt), 'Clockspan']);
   });
 });
 
@@ -399,10 +392,7 @@ describe('edit', () => {
     // the rename answered: the answer only says what became of the renamed row.
     const rename = deferred<Answer>();
     vi.mocked(api.patchSession).mockReturnValueOnce(rename.promise);
-    let a!: Promise<void>;
-    act(() => {
-      a = result.current.timer.edit({ label: 'Renamed' });
-    });
+    const a = begin(() => result.current.timer.edit({ label: 'Renamed' }));
     vi.mocked(api.getRunning).mockResolvedValue({ session: makeSession({ id: 3, label: 'Third' }) });
     await settle(MINUTE_MS);
     expect(result.current.timer.running).toMatchObject({ id: 3, label: 'Third' });
@@ -414,10 +404,7 @@ describe('edit', () => {
     // Ended on the phone with nothing after it: an answer from before that doesn't bring it back.
     const late = deferred<Answer>();
     vi.mocked(api.patchSession).mockReturnValueOnce(late.promise);
-    let b!: Promise<void>;
-    act(() => {
-      b = result.current.timer.edit({ label: 'Third, renamed' });
-    });
+    const b = begin(() => result.current.timer.edit({ label: 'Third, renamed' }));
     vi.mocked(api.getRunning).mockResolvedValue({ session: null });
     await settle(MINUTE_MS);
     late.resolve({ session: makeSession({ id: 3, label: 'Third, renamed' }) });
@@ -436,10 +423,7 @@ describe("the day's log", () => {
     expect(row()).toMatchObject({ label: 'Renamed in the bar', status: 'running' });
     await act(() => result.current.timer.adjust(5 * 60));
     expect(row()?.plannedSeconds).toBe(1800);
-    let e!: Promise<void>;
-    act(() => {
-      e = result.current.timer.edit({ label: 'Linked', priorityUid: 'u1' });
-    });
+    const e = begin(() => result.current.timer.edit({ label: 'Linked', priorityUid: 'u1' }));
     // The timer shows it at once; the log once the server has it.
     expect(result.current.timer.running).toMatchObject({ label: 'Linked', priorityUid: 'u1' });
     await act(() => e);
@@ -463,10 +447,7 @@ describe('a press the server answers differently', () => {
     const { result } = await renderRunning(startedAgo(5));
     const pausing = deferred<Answer>();
     vi.mocked(api.pauseSession).mockReturnValueOnce(pausing.promise);
-    let p!: Promise<void>;
-    act(() => {
-      p = result.current.timer.pause();
-    });
+    const p = begin(() => result.current.timer.pause());
     const elsewhere = startedAgo(5, { pausedAt: T0 - 2 * MINUTE_MS });
     vi.mocked(api.getRunning).mockResolvedValue({ session: elsewhere });
     await settle(MINUTE_MS);
@@ -480,10 +461,7 @@ describe('a press the server answers differently', () => {
     const { result } = await renderRunning(startedAgo(15, { pausedAt: T0 - 10 * MINUTE_MS }));
     const resuming = deferred<Answer>();
     vi.mocked(api.resumeSession).mockReturnValueOnce(resuming.promise);
-    let r!: Promise<void>;
-    act(() => {
-      r = result.current.timer.resume();
-    });
+    const r = begin(() => result.current.timer.resume());
     // The phone resumed it first, and banked a shorter pause.
     const elsewhere = startedAgo(15, { pausedSeconds: 300 });
     vi.mocked(api.getRunning).mockResolvedValue({ session: elsewhere });
@@ -500,10 +478,7 @@ describe('pause and resume', () => {
     const { result } = await renderRunning(startedAgo(5));
     const pausing = deferred<Answer>();
     vi.mocked(api.pauseSession).mockReturnValueOnce(pausing.promise);
-    let p!: Promise<void>;
-    act(() => {
-      p = result.current.timer.pause();
-    });
+    const p = begin(() => result.current.timer.pause());
     expect(result.current.timer).toMatchObject({ paused: true, countdownSeconds: 1200 });
     pausing.resolve({ session: startedAgo(5, { pausedAt: T0 }) });
     await act(() => p);
@@ -520,10 +495,7 @@ describe('pause and resume', () => {
   it('resumes with the pause counted, and a second resume is a no-op', async () => {
     const { result } = await renderRunning(startedAgo(15, { pausedAt: T0 - 10 * MINUTE_MS }));
     vi.mocked(api.resumeSession).mockResolvedValue({ session: startedAgo(15, { pausedSeconds: 600 }) });
-    let done!: Promise<void>;
-    act(() => {
-      done = result.current.timer.resume();
-    });
+    const done = begin(() => result.current.timer.resume());
     expect(result.current.timer.running).toMatchObject({ pausedAt: null, pausedSeconds: 600 });
     await act(() => done);
     expect(result.current.timer).toMatchObject({ paused: false, countdownSeconds: 1200 });
@@ -537,14 +509,8 @@ describe('pause and resume', () => {
     const resumed = deferred<Answer>();
     vi.mocked(api.pauseSession).mockReturnValueOnce(paused.promise);
     vi.mocked(api.resumeSession).mockReturnValueOnce(resumed.promise);
-    let p!: Promise<void>;
-    let r!: Promise<void>;
-    act(() => {
-      p = result.current.timer.pause();
-    });
-    act(() => {
-      r = result.current.timer.resume();
-    });
+    const p = begin(() => result.current.timer.pause());
+    const r = begin(() => result.current.timer.resume());
     paused.resolve({ session: startedAgo(5, { pausedAt: T0 }) });
     await act(() => p);
     expect(result.current.timer.paused).toBe(false);
@@ -650,10 +616,7 @@ describe('finish and cancel', () => {
     act(() => result.current.timer.requestFinish());
     const finishing = deferred<Answer>();
     vi.mocked(api.finishSession).mockReturnValueOnce(finishing.promise);
-    let f!: Promise<void>;
-    act(() => {
-      f = result.current.timer.finish(true);
-    });
+    const f = begin(() => result.current.timer.finish(true));
     // The sheet closes on the press, while the session is still shown.
     expect(result.current.timer.running?.id).toBe(1);
     expect(result.current.timer.finishChoice).toBeNull();

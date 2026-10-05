@@ -18,7 +18,6 @@ describe('AUTH_MODE=oidc', () => {
   });
   afterEach(async () => {
     await app.close();
-    vi.restoreAllMocks();
   });
 
   const raw = (path: string, cookie?: string) => fetch(app.url + path, { redirect: 'manual', headers: cookie ? { cookie } : {} });

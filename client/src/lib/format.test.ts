@@ -110,17 +110,13 @@ describe('formatTime', () => {
     expect(resolveHour12('24h')).toBe(false);
     const real = new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions();
     const spy = vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions');
-    try {
-      spy.mockReturnValue({ ...real, hour12: false });
-      expect(resolveHour12('auto')).toBe(false);
-      spy.mockReturnValue({ ...real, hour12: true });
-      expect(resolveHour12('auto')).toBe(true);
-      // A locale that names no cycle reads as 12-hour.
-      spy.mockReturnValue({ ...real, hour12: undefined });
-      expect(resolveHour12('auto')).toBe(true);
-    } finally {
-      spy.mockRestore();
-    }
+    spy.mockReturnValue({ ...real, hour12: false });
+    expect(resolveHour12('auto')).toBe(false);
+    spy.mockReturnValue({ ...real, hour12: true });
+    expect(resolveHour12('auto')).toBe(true);
+    // A locale that names no cycle reads as 12-hour.
+    spy.mockReturnValue({ ...real, hour12: undefined });
+    expect(resolveHour12('auto')).toBe(true);
   });
 });
 
