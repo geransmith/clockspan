@@ -1,7 +1,7 @@
 import { Time } from '@internationalized/date';
 import { atTime } from '../../../shared/dates.js';
 
-export type Period = 'AM' | 'PM';
+type Period = 'AM' | 'PM';
 
 /** The local wall-clock hour and minute of an instant, as the time field edits them. */
 export function msToTime(ms: number | null): Time | null {
@@ -27,11 +27,6 @@ export function timeToMs(t: Time, dateKey: string): number {
 export function guessPeriod(hour12: number, dateKey: string, anchorAt: number | null): Period {
   const base: Period = hour12 >= 5 && hour12 <= 11 ? 'AM' : 'PM';
   if (anchorAt == null) return base;
-  const at = (p: Period) => timeToMs(new Time(hour24(hour12, p), 59), dateKey);
+  const at = (p: Period) => atTime(dateKey, (hour12 % 12) + (p === 'PM' ? 12 : 0), 59);
   return base === 'AM' && at('AM') < anchorAt && at('PM') >= anchorAt ? 'PM' : base;
-}
-
-function hour24(hour12: number, period: Period): number {
-  const h = hour12 % 12;
-  return period === 'PM' ? h + 12 : h;
 }

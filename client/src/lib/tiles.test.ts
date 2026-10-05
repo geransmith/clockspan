@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { atTime, pad2 } from '../../../shared/dates.js';
 import { punchesAt, TEST_SETTINGS } from '../test/fixtures';
 import type { Punch, Settings } from '../types';
-import { addPunchPair, clampToDay, computeTimeclock, timeclockForDate } from './timeclock';
+import { addPunchPair, clampToDay, computeTimeclock, dayTimeclock } from './timeclock';
 import { focusTile, timeclockTiles, type TileOptions } from './tiles';
 
 const DAY = '2026-09-28';
@@ -18,7 +18,6 @@ function tiles(rows: Punch[], now: number, patch: Partial<TileOptions> = {}, set
   return timeclockTiles(tc, {
     now,
     isToday: true,
-    workMinutes: s.workMinutes,
     alarms: s.alarms,
     overtimeApproval: true,
     overtimeApproved: false,
@@ -28,13 +27,12 @@ function tiles(rows: Punch[], now: number, patch: Partial<TileOptions> = {}, set
 }
 
 /** A past day's tiles as the sheet builds them: frozen at the day's end, seen from the next morning. */
-function pastTiles(rows: Punch[]) {
+function pastTiles(rows: Punch[], workMinutes: number | null = null) {
   const s = TEST_SETTINGS;
   const next = new Date(2026, 8, 29, 9).getTime();
-  return timeclockTiles(timeclockForDate(rows, s, DAY, '2026-09-29', next), {
+  return timeclockTiles(dayTimeclock({ date: DAY, punches: rows, workMinutes }, s, '2026-09-29', next), {
     now: clampToDay(DAY, '2026-09-29', next),
     isToday: false,
-    workMinutes: s.workMinutes,
     alarms: s.alarms,
     overtimeApproval: true,
     overtimeApproved: false,
@@ -53,7 +51,7 @@ describe('before clock-in', () => {
       worked: { value: '0m', sub: '8h 00m day', tone: '' },
       clockOut: { value: '—', sub: 'Clock in to see your end time', tone: '' },
     });
-    expect(tiles(empty, at(7), { workMinutes: 240 }).worked.sub).toBe('4h 00m day');
+    expect(tiles(empty, at(7), {}, { workMinutes: 240 }).worked.sub).toBe('4h 00m day');
   });
 });
 
@@ -146,6 +144,9 @@ describe('a past day', () => {
     const late = pastTiles(punchesAt(at(20)));
     expect(late.clockOut).toEqual({ value: '—', sub: 'No clock-out recorded', tone: 'tile--warn' });
     expect(late.lunch.sub).toBe('Not taken');
+    expect(late.worked.sub).toBe('4h 01m under target');
+    // A half day needs no lunch; the sheet of a past one doesn't say "today".
+    expect(pastTiles(punchesAt(at(8), null, null, at(12, 30)), 270).lunch.sub).toBe('Not needed');
   });
 
   it('keeps a lunch it took', () => {

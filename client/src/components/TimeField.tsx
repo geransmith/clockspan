@@ -95,8 +95,9 @@ function Field({
   }, [focused, onFocusChange]);
 
   // React Stately fills the period from its placeholder (AM) as soon as an hour is typed.
-  // Replace that with the guess while the hour is still being typed: once the minute is in,
-  // the value is complete and saved, and a change to the hour then is a deliberate edit. A
+  // Replace that with the guess while the hour of a new entry is still being typed: once the
+  // minute is in, the value is complete and saved, and a change to the hour (or a minute cleared
+  // to retype it) then is a deliberate edit that keeps the stored period. A
   // layout effect so the correction lands in the same commit, before the next keystroke can
   // build on the uncorrected state.
   const hourSeg = state.segments.find((s) => s.type === 'hour');
@@ -105,11 +106,11 @@ function Field({
   // `state` is a new object every render; the effect only has to run when the hour changes.
   const latest = useLatest(state);
   useLayoutEffect(() => {
-    if (!hour12 || hourValue == null || !minuteEmpty || periodTouched.current) return;
+    if (!hour12 || value != null || hourValue == null || !minuteEmpty || periodTouched.current) return;
     const wanted = guessPeriod(hourValue, date, anchorAt) === 'AM' ? 0 : 1;
     const period = latest.current.segments.find((s) => s.type === 'dayPeriod');
     if (period && period.value !== wanted) latest.current.setSegment('dayPeriod', wanted);
-  }, [hour12, hourValue, minuteEmpty, date, anchorAt, latest]);
+  }, [hour12, value, hourValue, minuteEmpty, date, anchorAt, latest]);
 
   return (
     <div {...groupProps} ref={ref} className={`input timefield${partial ? ' is-partial' : ''}`}>
@@ -124,14 +125,7 @@ function Segment({ segment, state, onTouch }: { segment: DateSegment; state: Dat
   const ref = useRef<HTMLDivElement>(null);
   const { segmentProps } = useDateSegment(segment, state, ref);
   return (
-    <div
-      {...segmentProps}
-      ref={ref}
-      className={`timefield-seg timefield-seg--${segment.type}`}
-      data-placeholder={segment.isPlaceholder || undefined}
-      onKeyDownCapture={onTouch}
-      onPointerDownCapture={onTouch}
-    >
+    <div {...segmentProps} ref={ref} className={`timefield-seg timefield-seg--${segment.type}`} onKeyDownCapture={onTouch} onPointerDownCapture={onTouch}>
       {segment.text}
     </div>
   );

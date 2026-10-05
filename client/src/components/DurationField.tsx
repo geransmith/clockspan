@@ -1,5 +1,8 @@
 import { useState, type FocusEvent, type KeyboardEvent } from 'react';
 
+/** A length in minutes as the hours and minutes boxes show it. */
+const split = (minutes: number) => [String(Math.floor(minutes / 60)), String(minutes % 60)] as const;
+
 /**
  * Hours + minutes inputs that commit when focus leaves the pair or on Enter, so half-typed values
  * never save; a blank or non-numeric box puts the stored value back (type 0 for zero). `min` and
@@ -18,28 +21,30 @@ export function DurationField({
   max: number;
   onCommit: (m: number) => void;
 }) {
-  const [h, setH] = useState(String(Math.floor(minutes / 60)));
-  const [m, setM] = useState(String(minutes % 60));
+  const [h, setH] = useState(split(minutes)[0]);
+  const [m, setM] = useState(split(minutes)[1]);
   // A new value from outside (save confirmed, reset) replaces the draft; React's
   // "adjust state while rendering" form, so it lands in the same render.
   const [seen, setSeen] = useState(minutes);
   if (minutes !== seen) {
     setSeen(minutes);
-    setH(String(Math.floor(minutes / 60)));
-    setM(String(minutes % 60));
+    const [hh, mm] = split(minutes);
+    setH(hh);
+    setM(mm);
   }
   // Moving from hours to minutes is still typing: saving there would store the new hours with
   // the old minutes (5h 0m → 4h 30m passes through 4h 0m), which can move an alarm's deadline
   // into the past for a moment and fire it.
   const onBlur = (e: FocusEvent<HTMLSpanElement>) => {
-    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+    if (e.currentTarget.contains(e.relatedTarget)) return;
     const hh = h.trim() === '' ? NaN : Number(h);
     const mm = m.trim() === '' ? NaN : Number(m);
     const total = Number.isFinite(hh) && Number.isFinite(mm) ? Math.max(min, Math.min(max, Math.round(hh * 60 + mm))) : minutes;
     if (total !== minutes) onCommit(total);
     else {
-      setH(String(Math.floor(minutes / 60)));
-      setM(String(minutes % 60));
+      const [sh, sm] = split(minutes);
+      setH(sh);
+      setM(sm);
     }
   };
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && e.currentTarget.blur();

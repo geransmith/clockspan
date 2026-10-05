@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
 import { unlockAudio } from '../lib/alerts';
-import { addPunchPair, removePunchPair, timeclockForDate } from '../lib/timeclock';
+import { addPunchPair, dayTimeclock, removePunchPair } from '../lib/timeclock';
 import { makeSettings, punchesAt, settle, T0, TODAY, YESTERDAY } from '../test/hooks';
 import { HOUR_MS } from '../../../shared/dates.js';
 import { MAX_PUNCHES } from '../../../shared/punches.js';
@@ -24,7 +24,7 @@ async function renderCard(date = TODAY, punches: Punch[] = punchesAt()) {
         isToday={date === TODAY}
         now={T0}
         punches={p}
-        tc={timeclockForDate(p, makeSettings(), date, TODAY, T0)}
+        tc={dayTimeclock({ date, punches: p, workMinutes: null }, makeSettings(), TODAY, T0)}
         overtimeApproved={false}
         workMinutes={null}
         week={null}
