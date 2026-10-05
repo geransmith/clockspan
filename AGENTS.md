@@ -542,8 +542,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   because every layout goes through `normalizeLayout` (`shared/settings.ts`; `mergeSettings`
   runs it on the server, `useSettings` on the client), which appends a missing card, shown.
   Removing a card is the reverse (drop the id everywhere; the merge discards it from saved
-  layouts), and if the card recorded a choice worth keeping, `mergeSettings` can read it off the old layout entry the
-  way the sticker chart's `stickers` setting does.
+  layouts), and if the card recorded a choice worth keeping, `mergeSettings` can read it off the
+  old layout entry the way the sticker chart's `stickers` setting does.
 - **A per-user setting**: add it to the `Settings` type and `DEFAULT_SETTINGS` in
   `shared/settings.ts`, and a number's bounds to `SETTING_LIMITS` there → validate it in
   `mergeSettings()` (`server/settings.ts`; `flag(key)` takes a switch, `limited(key)` checks a
@@ -553,10 +553,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   minutes or a `NumberField` (`settings/controls.tsx`) for one number, whose `unit` suffix is
   "min" unless given, each with `{...SETTING_LIMITS.<key>}` for `min` and `max`; a `SelectField`
   (`settings/controls.tsx`) for one choice from a fixed list; a `Toggle` for a switch.
-  `NumberInput` on its own puts several numbers on one row, like the timer's start buttons. The new setting also goes in `TEST_SETTINGS` (`client/src/test/fixtures.ts`), and
-  the type makes a missing one an error. A setting that is an object edited a field at a time
-  is merged field by field in `mergeSettings` (as `mergeRetention` does), and gets a partial
-  entry in `SettingsPatch` (`client/src/api.ts`) and a merge in `applySettingsPatch`
+  `NumberInput` on its own puts several numbers on one row, like the timer's start buttons. The
+  new setting also goes in `TEST_SETTINGS` (`client/src/test/fixtures.ts`), and the type makes a
+  missing one an error. A setting that is an object edited a field at a time is merged field by
+  field in `mergeSettings` (as `mergeRetention` does), and gets a partial entry in
+  `SettingsPatch` (`client/src/api.ts`) and a merge in `applySettingsPatch`
   (`client/src/lib/settings.ts`). Nothing else to mirror.
 - **A sound**: drop the clip in as `client/src/sounds/<id>.mp3` (CC0 only, MP3 so Safari can
   decode it, a couple of seconds at most) → add `{ id, label, kind: 'clip' }` to `SOUNDS` in
@@ -579,16 +580,16 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `secondMealApplies`) → add its id to `ALARM_IDS` and its default under `alarms` in
   `shared/settings.ts` (`mergeSettings` and `applySettingsPatch` loop over `ALARM_IDS`, so
   neither needs a line); its settings also go in `TEST_SETTINGS.alarms`
-  (`client/src/test/fixtures.ts`), and the type makes a missing one an error → add an `AlarmEditor` in `settings/AlarmsTab.tsx` → its name in `ALARM_NAMES` and a
-  `case` in `describeEvent()`'s `switch (e.id)` (both in `lib/alarms.ts`; the type makes a
-  missing name an error, and typecheck and the `switch-exhaustiveness-check` lint refuse a
-  missing case): the kicker ("X alarm · 15 min warning") is built from the name above the
-  switch, and the case gives a title and a body for each kind (lead, due, overdue) that say
-  where the deadline came from (it gets an `EventContext`, a `Pick` of the timeclock settings
-  plus the clock-in, `hour12` and `now`; widen the `Pick` if the new target needs another
-  setting). A banner can carry one `action` button (see the clock-out alarm's "Overtime
-  approved" and the retro alarm's "Open retrospective", chosen in `useAlarms` from the
-  `AlarmDayState` callbacks).
+  (`client/src/test/fixtures.ts`), and the type makes a missing one an error → add an
+  `AlarmEditor` in `settings/AlarmsTab.tsx` → its name in `ALARM_NAMES` and a `case` in
+  `describeEvent()`'s `switch (e.id)` (both in `lib/alarms.ts`; the type makes a missing name an
+  error, and typecheck and the `switch-exhaustiveness-check` lint refuse a missing case): the
+  kicker ("X alarm · 15 min warning") is built from the name above the switch, and the case
+  gives a title and a body for each kind (lead, due, overdue) that say where the deadline came
+  from (it gets an `EventContext`, a `Pick` of the timeclock settings plus the clock-in,
+  `hour12` and `now`; widen the `Pick` if the new target needs another setting). A banner can
+  carry one `action` button (see the clock-out alarm's "Overtime approved" and the retro alarm's
+  "Open retrospective", chosen in `useAlarms` from the `AlarmDayState` callbacks).
 - **A per-day field** (like `overtimeApproved`, `retroNote`/`retroAt`): append a migration
   adding the column to `days` → add the column to `DAY_COLUMNS` and to the `DayRow` interface
   beside it (`routes/shared.ts`; `findDay` and `daysInRange` in `routes/days.ts` both read
@@ -603,9 +604,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   not saved" banner and reloads the day, so the setter resolves false and never rejects) → pass
   it from `Sheet.tsx` to the card, and from `useTodayAlarms` into `useAlarms` if alarms depend
   on it. The seed's manifest types (`SeededDay` and the aliases beside it in
-  `server/dev/seed.ts`) are built from `Day`, `Session`, `Priority` and `Break`, so `typecheck` fails there on a new field until the
-  templates set it, or it is added to the type's `Omit` list if the server derives it (like
-  `durationSeconds`). Write its column in `insertDay` too; typecheck does not check that.
+  `server/dev/seed.ts`) are built from `Day`, `Session`, `Priority` and `Break`, so `typecheck`
+  fails there on a new field until the templates set it, or it is added to the type's `Omit`
+  list if the server derives it (like `durationSeconds`). Write its column in `insertDay` too;
+  typecheck does not check that.
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
   `currentUser(req).id` (a `/:date` route goes on the days router, whose param handler checks
   the date; a `/:id` route on the sessions or breaks router is checked by the router itself and
@@ -822,7 +824,7 @@ The browser pass for each surface (the logic under it is already tested):
 - The Node floor (`engines` and `devEngines` in `package.json`) has no upper bound, and `.npmrc`
   has no `engine-strict`, on purpose: Dependabot's updater reads both files and runs its own
   Node. A cap it outgrows, or a package whose `engines` leaves its Node out under
-  `engine-strict`, stops its npm updates without failing any check: the PRs just stop coming. A new Node major moves `.nvmrc`, both fields,
-  the Dockerfile's two `FROM` lines and the `@types/node` major together (Dependabot skips the
-  majors of the last two), plus the docs that name the version; CI and `.claude/launch.json`
-  read `.nvmrc`.
+  `engine-strict`, stops its npm updates without failing any check: the PRs just stop coming. A
+  new Node major moves `.nvmrc`, both fields, the Dockerfile's two `FROM` lines and the
+  `@types/node` major together (Dependabot skips the majors of the last two), plus the docs that
+  name the version; CI and `.claude/launch.json` read `.nvmrc`.
