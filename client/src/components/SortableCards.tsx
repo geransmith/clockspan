@@ -55,6 +55,6 @@ export function SortableCards({ cards, onReorder }: { cards: SheetCard[]; onReor
 
 function SortableCard({ card }: { card: SheetCard }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.id, disabled: !card.customize });
-  const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 2 : undefined, opacity: isDragging ? 0.85 : undefined };
+  const style = { transform: CSS.Translate.toString(transform), transition, zIndex: isDragging ? 2 : undefined, opacity: isDragging ? 0.85 : undefined };
   return <CardFrame card={card} nodeRef={setNodeRef} style={style} handleProps={{ ...attributes, ...listeners }} />;
 }

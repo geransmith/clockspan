@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { isValidDateKey, todayKey } from '../../../shared/dates.js';
 import { PERIOD_KINDS, periodRange, type ReviewPeriod } from '../lib/review';
-import { useLatest } from './useLatest';
 
 export interface Route {
   view: 'sheet' | 'history';
@@ -56,28 +55,26 @@ function toUrl(route: Route): string {
  */
 export function useRoute(): [Route, (next: Partial<Route>, opts?: { replace?: boolean }) => void] {
   const [route, setRoute] = useState<Route>(read);
-  // Read through a ref rather than inside the updater: React runs updaters twice under
-  // StrictMode, and a pushState in there would push two history entries per navigation.
-  const current = useLatest(route);
   useEffect(() => {
     const onPop = () => setRoute(read());
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
-  const navigate = useCallback(
-    (next: Partial<Route>, opts?: { replace?: boolean }) => {
-      const merged = { ...current.current, ...next };
-      if (merged.date != null && merged.date >= todayKey()) merged.date = null;
-      if (merged.view === 'sheet') merged.review = null;
-      const url = toUrl(merged);
-      // Already there (the brand button on today's sheet): a push would add an entry Back
-      // has to step through without anything changing.
-      if (url === toUrl(current.current)) return;
-      if (opts?.replace) history.replaceState(null, '', url);
-      else history.pushState(null, '', url);
-      setRoute(merged);
-    },
-    [current],
-  );
+  // The route is always what the URL says, and each call writes the URL before it returns, so
+  // merging onto the URL lets a second call in the same handler build on the first. Not inside
+  // a setRoute updater: React runs those twice under StrictMode, which would push two entries.
+  const navigate = useCallback((next: Partial<Route>, opts?: { replace?: boolean }) => {
+    const here = read();
+    const merged = { ...here, ...next };
+    if (merged.date != null && merged.date >= todayKey()) merged.date = null;
+    if (merged.view === 'sheet') merged.review = null;
+    const url = toUrl(merged);
+    // Already there (the brand button on today's sheet): a push would add an entry Back
+    // has to step through without anything changing.
+    if (url === toUrl(here)) return;
+    if (opts?.replace) history.replaceState(null, '', url);
+    else history.pushState(null, '', url);
+    setRoute(merged);
+  }, []);
   return [route, navigate];
 }

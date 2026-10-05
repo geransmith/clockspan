@@ -49,6 +49,29 @@ describe('Header', () => {
     expect(onNavigate).toHaveBeenCalledWith({ date: null });
   });
 
+  it('adds one history entry per visit to or click on the date field, and skips a part-typed year', async () => {
+    const onNavigate = await renderHeader(TODAY);
+    const field = screen.getByLabelText('Pick a date');
+    fireEvent.focus(field);
+    fireEvent.change(field, { target: { value: '0002-08-28' } });
+    fireEvent.change(field, { target: { value: '0202-08-28' } });
+    expect(onNavigate).not.toHaveBeenCalled();
+    fireEvent.change(field, { target: { value: '2026-08-28' } });
+    fireEvent.change(field, { target: { value: '2026-01-28' } });
+    fireEvent.change(field, { target: { value: '' } });
+    expect(onNavigate.mock.calls).toEqual([
+      [{ date: '2026-08-28' }, { replace: false }],
+      [{ date: '2026-01-28' }, { replace: true }],
+    ]);
+    fireEvent.blur(field);
+    fireEvent.focus(field);
+    fireEvent.change(field, { target: { value: '2026-02-28' } });
+    expect(onNavigate).toHaveBeenLastCalledWith({ date: '2026-02-28' }, { replace: false });
+    fireEvent.click(field);
+    fireEvent.change(field, { target: { value: '2026-03-28' } });
+    expect(onNavigate).toHaveBeenLastCalledWith({ date: '2026-03-28' }, { replace: false });
+  });
+
   it('opens the date picker once from a click on the label', async () => {
     const showPicker = vi.fn();
     setShowPicker(showPicker);

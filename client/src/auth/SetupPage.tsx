@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import * as api from '../api';
 import { NewPasswordFields } from '../components/NewPasswordFields';
 import { useSubmit } from '../hooks/useSubmit';
@@ -13,6 +13,7 @@ export function SetupPage({ onDone, hint }: GateProps) {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const { busy, error, onSubmit } = useSubmit();
+  const id = useId();
 
   const submit = onSubmit(async () => {
     if (password !== confirm) throw new Error(PASSWORD_MISMATCH);
@@ -26,10 +27,13 @@ export function SetupPage({ onDone, hint }: GateProps) {
         <h1>Welcome to Clockspan</h1>
         {hint && <p className="error">{hint}</p>}
         <p className="muted">Create the first account. This account is the admin and can add others later.</p>
+        {/* The label wraps the hint too, which would make it part of the field's name: the title names it and the hint describes it. */}
         <label className="field">
-          <span>Setup code</span>
+          <span id={`${id}-label`}>Setup code</span>
           <input
             className="input"
+            aria-labelledby={`${id}-label`}
+            aria-describedby={`${id}-hint`}
             autoComplete="off"
             autoCapitalize="characters"
             spellCheck={false}
@@ -39,7 +43,7 @@ export function SetupPage({ onDone, hint }: GateProps) {
             required
             autoFocus
           />
-          <span className="muted small">
+          <span id={`${id}-hint`} className="muted small">
             The server prints it in its log when it starts: <code>docker logs clockspan</code>, or the container&apos;s log in Unraid.
           </span>
         </label>

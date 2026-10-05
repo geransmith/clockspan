@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AUTH_USER_KEY, adoptUser, pruneStored, readStored, readStoredJson, writeStored } from './storage';
+import { AUTH_USER_KEY, adoptUser, otherUserStored, pruneStored, readStored, readStoredJson, writeStored } from './storage';
 
 describe('stored values', () => {
   it('reads and writes through localStorage', () => {
@@ -61,7 +61,7 @@ describe('stored values', () => {
   });
 });
 
-describe('adoptUser', () => {
+describe('adoptUser and otherUserStored', () => {
   const DEVICE = { 'focus:theme': 'dark', 'focus:settingsTab': 'data', 'focus:timer-due': '7:1790000000000' };
   const USERS = { 'focus:alarms:2026-09-30': '["x"]', 'focus:left-open-dismissed': '2026-09-30', 'focus:break-over': '1790000000000' };
 
@@ -113,5 +113,17 @@ describe('adoptUser', () => {
     expect(() => adoptUser(3)).not.toThrow();
     vi.stubGlobal('localStorage', undefined);
     expect(() => adoptUser(3)).not.toThrow();
+  });
+
+  it('tells whether the stored user is someone other than the one given, in the form adoptUser writes', () => {
+    stored();
+    expect(otherUserStored(2)).toBe(false);
+    adoptUser(2);
+    expect(otherUserStored(2)).toBe(false);
+    expect(otherUserStored(3)).toBe(true);
+    expect(otherUserStored(null)).toBe(true);
+    adoptUser(null);
+    expect(otherUserStored(null)).toBe(false);
+    expect(otherUserStored(2)).toBe(true);
   });
 });

@@ -36,7 +36,7 @@ export const UNAUTHENTICATED_EVENT = 'focus:unauthenticated';
  */
 export const REQUEST_TIMEOUT_MS = 30_000;
 
-const timedOut = (err: unknown): boolean => (err as { name?: unknown } | null)?.name === 'TimeoutError';
+const timedOut = (err: unknown): boolean => err instanceof DOMException && err.name === 'TimeoutError';
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   let res: Response;
@@ -122,7 +122,7 @@ export const pruneDays = (before: string) => request<PruneResult>('POST', '/api/
 export type SessionEdit = { label?: string; priorityUid?: string | null };
 
 export const getRunning = () => request<RunningResponse>('GET', '/api/sessions/running');
-export const startSession = (date: string, plannedSeconds: number, label: string, priorityUid: string | null = null) =>
+export const startSession = (date: string, plannedSeconds: number, label: string, priorityUid: string | null) =>
   request<SessionResponse>('POST', `/api/days/${date}/sessions`, { plannedSeconds, label, priorityUid });
 export const patchSession = (id: number, patch: SessionEdit & { plannedSeconds?: number }) => request<SessionResponse>('PATCH', `/api/sessions/${id}`, patch);
 export const pauseSession = (id: number) => request<SessionResponse>('POST', `/api/sessions/${id}/pause`);

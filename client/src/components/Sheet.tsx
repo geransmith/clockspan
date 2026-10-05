@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useDay } from '../hooks/useDay';
 import { useLeftOpen } from '../hooks/useLeftOpen';
 import { useRange } from '../hooks/useRange';
@@ -39,11 +39,11 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
   const { settings, update } = useSettings();
   const { day, failed, store } = useDay(date);
   const isToday = date === today;
-  const tc = useMemo(() => (day ? dayTimeclock(day, settings, today, now) : null), [day, settings, today, now]);
+  const tc = day ? dayTimeclock(day, settings, today, now) : null;
   // The week so far, up to this sheet's day, for the timeclock's week line.
   const { days: weekDays } = useRange(startOfWeek(date), date);
-  const week = useMemo(() => (weekDays ? weekHours(weekDays, settings, today, now) : null), [weekDays, settings, today, now]);
-  const focus = useMemo(() => focusOf(day?.sessions ?? []), [day]);
+  const week = weekDays ? weekHours(weekDays, settings, today, now) : null;
+  const focus = focusOf(day?.sessions ?? []);
   // Today's list with nothing written yet offers what the last planned day left unticked.
   const { leftOpen, dismiss: dismissLeftOpen } = useLeftOpen(today, isToday && day != null && !day.priorities.some(hasText));
 
@@ -66,7 +66,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
   };
   const setVisible = (id: CardId, v: boolean) => void saveLayout(setCardVisible(layout, id, v));
 
-  const ready = Boolean(day && tc);
+  const ready = day != null;
   useEffect(() => {
     if (!jumpTo || !ready) return;
     document
