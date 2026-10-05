@@ -77,12 +77,14 @@ describe('PlanNext', () => {
     const next = deferred<Day>();
     await renderPlan({ next: next.promise });
     await open();
+    expect(document.activeElement).toBe(draft());
     expect(saveButton().disabled).toBe(true);
     next.resolve(makeDay(NEXT));
     await settle();
     expect(saveButton().disabled).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('button', { name: PLAN_NEXT.save('tomorrow') })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: PLAN_NEXT.open('tomorrow') }));
     expect(api.putPriorities).not.toHaveBeenCalled();
     expect(status()).toBe('');
   });
@@ -130,7 +132,7 @@ describe('PlanNext', () => {
     expect(new Set(sent().map((p) => p.uid)).size).toBe(3);
     expect(status()).toBe(PLAN_NEXT.done(3, 'tomorrow'));
     expect(screen.queryByRole('textbox')).toBeNull();
-    expect(screen.getByRole('button', { name: PLAN_NEXT.open('tomorrow') })).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: PLAN_NEXT.open('tomorrow') }));
     expect(playSound).toHaveBeenCalledExactlyOnceWith('triad');
     expect(document.querySelector('.burst')).not.toBeNull();
   });
@@ -168,6 +170,8 @@ describe('PlanNext', () => {
     // A blank line isn't added.
     type('   ');
     expect(screen.queryByRole('list')).toBeNull();
+    // Nor is one left in the box at Save.
+    type('  ', false);
     await save();
     expect(api.putPriorities).not.toHaveBeenCalled();
     expect(status()).toBe(PLAN_NEXT.nothing);

@@ -57,6 +57,7 @@ describe('SessionLog', () => {
     fireEvent.change(labelInput(), { target: { value: 'Fix the login bug' } });
     fireEvent.change(planSelect(), { target: { value: 'abcdef123456' } });
     await settle();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: /Write the report/ }));
     expect(api.patchSession).toHaveBeenCalledTimes(1);
     expect(api.patchSession).toHaveBeenCalledWith(1, { priorityUid: 'abcdef123456', label: 'Fix the login bug' });
   });
@@ -72,6 +73,7 @@ describe('SessionLog', () => {
     fireEvent.change(labelInput(), { target: { value: '  Renamed  ' } });
     fireEvent.keyDown(labelInput(), { key: 'Enter' });
     await settle();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: /Write the report/ }));
     expect(api.patchSession).toHaveBeenCalledWith(1, { label: 'Renamed' });
   });
 
@@ -98,7 +100,7 @@ describe('SessionLog', () => {
     fireEvent.keyDown(labelInput(), { key: 'Escape' });
     await settle();
     expect(screen.queryByRole('textbox', { name: 'Session label' })).toBeNull();
-    expect(screen.getByRole('button', { name: /Write the report/ })).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: /Write the report/ }));
     expect(api.patchSession).not.toHaveBeenCalled();
   });
 
@@ -114,6 +116,7 @@ describe('SessionLog', () => {
     act(() => planSelect().blur());
     await settle();
     expect(screen.queryByRole('textbox', { name: 'Session label' })).toBeNull();
+    expect(document.activeElement).not.toBe(screen.getByRole('button', { name: /Write the report/ }));
     expect(api.patchSession).toHaveBeenCalledWith(1, { label: 'Relabeled' });
   });
 
