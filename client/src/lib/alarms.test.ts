@@ -272,7 +272,7 @@ describe('describeEvent', () => {
     );
   });
 
-  it('gives a warning seen after its deadline the due copy, and keeps the rule in the kicker', () => {
+  it('gives a warning seen after its deadline the due copy, with the retro kicker in its due form too', () => {
     // The clock-in was typed in after the end of the day, or the phone slept through it, with the
     // due event and repeats off: the latest warning is what fires.
     const late = { ...ctx, now: T + 45 * MINUTE_MS };
@@ -281,6 +281,7 @@ describe('describeEvent', () => {
     expect(clockOut.title).toBe('Time to clock out');
     expect(clockOut.body).toBe(`You reached your 8h for today at ${formatTime(T, true)}. Punch out now.`);
     const retro = describeEvent(ev('retro', 'lead', 30, T), late);
+    expect(retro.kicker).toBe('Retrospective · clock-out');
     expect(retro.title).toBe('Clocking out? Do the retrospective first.');
     expect(retro.body).toBe(`You reached your 8h at ${formatTime(T, true)}. Two minutes on what went to plan and what didn't.`);
     expect(describeEvent(ev('lunchBy', 'lead', 5, T), { ...ctx, now: T }).title).toBe('Take lunch now');

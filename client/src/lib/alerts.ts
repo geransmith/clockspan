@@ -130,7 +130,7 @@ export function playSound(id: SoundId): void {
   // Outside a tap a suspended context stays suspended and its clock stands still, so what is
   // scheduled now would play at the next tap's unlock, several chimes at once. Skip it: the
   // banner and the notification still show. Inside a tap the resume is still on its way, so the
-  // sound is scheduled; a browser without `userActivation` can't tell, and plays it as before.
+  // sound is scheduled; a browser without `userActivation` can't tell, so it schedules the sound anyway.
   if (!ctx || (ctx.state !== 'running' && navigator.userActivation?.isActive === false)) return;
   if (isSynth(id)) SYNTH[id](ctx, ctx.currentTime + 0.02);
   else playClip(ctx, id);
