@@ -64,10 +64,19 @@ describe('Review', () => {
     expect(fromMonth).toHaveBeenCalledWith({ kind: 'week', from: '2026-09-28' });
   });
 
-  it('steps back a period from the one on screen', async () => {
-    // A past week, so counting the offset from it rather than from today would land in April.
+  it('steps from the period on screen and resets to the current one', async () => {
     const onPeriod = await review({ kind: 'week', from: '2026-07-13' });
     fireEvent.click(screen.getByRole('button', { name: 'Previous week' }));
-    expect(onPeriod).toHaveBeenCalledWith({ kind: 'week', from: '2026-07-06' });
+    expect(onPeriod).toHaveBeenLastCalledWith({ kind: 'week', from: '2026-07-06' });
+    fireEvent.click(screen.getByRole('button', { name: 'Next week' }));
+    expect(onPeriod).toHaveBeenLastCalledWith({ kind: 'week', from: '2026-07-20' });
+    fireEvent.click(screen.getByRole('button', { name: 'This week' }));
+    expect(onPeriod).toHaveBeenLastCalledWith({ kind: 'week', from: '2026-09-28' });
+    cleanup();
+
+    // The current period has no next and no reset.
+    await review({ kind: 'quarter', from: '2026-07-01' });
+    expect((screen.getByRole('button', { name: 'Next quarter' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'This quarter' })).toBeNull();
   });
 });

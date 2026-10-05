@@ -36,15 +36,10 @@ export function allPrioritiesDone(d: Pick<DaySummary, 'prioritiesDone' | 'priori
   return d.prioritiesTotal > 0 && d.prioritiesDone === d.prioritiesTotal;
 }
 
-/** A day that earned every sticker this user can earn (`reasons` from `stickerReasons`). */
-export function isFullDay(stickers: StickerId[], reasons: { id: StickerId }[]): boolean {
-  return stickers.length === reasons.length;
-}
-
 /**
  * The stickers one day earned out of `reasons` (from `stickerReasons`), in their order, judged
  * on its timeclock (`dayTimeclock`) worked out once by the caller. A day never wears one the
- * legend leaves out, which `isFullDay`'s count relies on.
+ * legend leaves out, which `calendarMonth`'s `full` relies on.
  */
 export function stickersForDay(d: DaySummary, tc: TimeclockResult, reasons: { id: StickerId }[]): StickerId[] {
   const earned: Record<StickerId, boolean> = {
@@ -113,15 +108,15 @@ export interface StickerCount {
   byReason: Record<StickerId, number>;
 }
 
-/** Stickers on the calendar's month (filler cells carry none); `reasons` is what a full day needs. */
-export function countStickers(weeks: { stickers: StickerId[] }[][], reasons: { id: StickerId }[]): StickerCount {
+/** Stickers on the calendar's month (filler cells carry none). */
+export function countStickers(weeks: { stickers: StickerId[]; full: boolean }[][]): StickerCount {
   const byReason = Object.fromEntries(STICKER_REASONS.map((r) => [r.id, 0])) as Record<StickerId, number>;
   let total = 0;
   let full = 0;
   for (const row of weeks) {
     for (const d of row) {
       total += d.stickers.length;
-      if (isFullDay(d.stickers, reasons)) full++;
+      if (d.full) full++;
       for (const id of d.stickers) byReason[id]++;
     }
   }

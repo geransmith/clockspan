@@ -82,4 +82,23 @@ describe('Calendar', () => {
     expect(screen.getByText('Nothing recorded.')).toBeTruthy();
     expect(screen.queryByText('Worked')).toBeNull();
   });
+
+  it('drops a sticker filter whose reason leaves the legend', async () => {
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ stickers: true }));
+    const at = (h: number, m = 0) => new Date(2026, 8, 29, h, m).getTime();
+    serveRange([makeDay('2026-09-29', { punches: punchesAt(at(8), at(12), at(12, 30), at(16, 30)) })]);
+    const view = render(calendar(LAST, LAST_EVENING));
+    await settle();
+    const cell = () => view.container.querySelector('[data-date="2026-09-29"]')!.getAttribute('aria-label');
+    expect(cell()).toMatch(/, Clocked out, Lunch taken$/);
+    fireEvent.click(screen.getByRole('button', { name: /^Clocked out/ }));
+    expect(cell()).toMatch(/, Clocked out$/);
+
+    // Show hours turned off elsewhere: the next settings refresh takes the Clocked out chip away.
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ stickers: true, trackHours: false }));
+    await settle(60_000);
+    expect(screen.queryByRole('button', { name: /^Clocked out/ })).toBeNull();
+    expect(cell()).toMatch(/, Lunch taken$/);
+    expect(screen.getByRole('button', { name: /^Lunch taken/ }).getAttribute('aria-pressed')).toBe('false');
+  });
 });

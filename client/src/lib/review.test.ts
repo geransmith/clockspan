@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { atTime } from '../../../shared/dates.js';
 import { completedSession, makeDay, makePriority, punchesAt, TEST_SETTINGS, type EndPatch } from '../test/fixtures';
-import { periodOffset, periodRange, reviewRange } from './review';
+import { periodRange, reviewRange } from './review';
 
 const FIRST_UID = makePriority(1, '').uid;
 const SECOND_UID = makePriority(2, '').uid;
@@ -21,30 +21,6 @@ describe('periodRange', () => {
     expect(periodRange('month', '2026-03-16', 1)).toMatchObject({ from: '2026-02-01', to: '2026-02-28' });
     expect(periodRange('quarter', '2026-09-16', 0)).toMatchObject({ from: '2026-07-01', to: '2026-09-30', label: 'Q3 2026' });
     expect(periodRange('quarter', '2026-02-01', 1)).toMatchObject({ from: '2025-10-01', to: '2025-12-31', label: 'Q4 2025' });
-  });
-});
-
-describe('periodOffset', () => {
-  it('counts periods back from today, never forward', () => {
-    expect(periodOffset('week', '2026-09-16', '2026-09-14')).toBe(0);
-    expect(periodOffset('week', '2026-09-16', '2026-09-13')).toBe(1); // the Sunday before
-    expect(periodOffset('week', '2026-09-16', '2026-01-02')).toBe(37); // across the year and a DST change
-    // A week with a 23-hour day (spring forward) and one with a 25-hour day (fall back) are still one week.
-    expect(periodOffset('week', '2026-03-09', '2026-03-02')).toBe(1);
-    expect(periodOffset('week', '2026-11-02', '2026-10-26')).toBe(1);
-    expect(periodOffset('month', '2026-09-16', '2026-09-01')).toBe(0);
-    expect(periodOffset('month', '2026-03-16', '2025-11-30')).toBe(4);
-    expect(periodOffset('quarter', '2026-09-16', '2026-07-01')).toBe(0);
-    expect(periodOffset('quarter', '2026-02-01', '2025-06-30')).toBe(3);
-    expect(periodOffset('week', '2026-09-16', '2026-09-21')).toBe(0);
-    expect(periodOffset('month', '2026-09-16', '2026-10-01')).toBe(0);
-    // Round trip: the offset always lands periodRange on the period holding the date.
-    for (const kind of ['week', 'month', 'quarter'] as const) {
-      for (const date of ['2025-12-30', '2026-01-01', '2026-09-15']) {
-        const range = periodRange(kind, '2026-09-16', periodOffset(kind, '2026-09-16', date));
-        expect(range.from <= date && date <= range.to, `${kind} ${date}`).toBe(true);
-      }
-    }
   });
 });
 
@@ -74,7 +50,6 @@ describe('reviewRange', () => {
     expect(r.days).toBe(2);
     expect(r.workedSeconds).toBe(8 * 3600);
     expect(r.focusedSeconds).toBe(7200);
-    expect(r.onPlanSeconds).toBe(3600);
     expect(r.offPlanSeconds).toBe(3600);
     expect(r.onPlanPercent).toBe(50);
     expect(r.prioritiesDone).toBe(2);
@@ -132,7 +107,6 @@ describe('reviewRange', () => {
       days: 0,
       workedSeconds: 0,
       focusedSeconds: 0,
-      onPlanSeconds: 0,
       offPlanSeconds: 0,
       onPlanPercent: null,
       prioritiesDone: 0,

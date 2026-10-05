@@ -11,6 +11,8 @@ export interface CalendarDay {
   hasData: boolean;
   /** What the day earned (see `stickersForDay`); empty for a filler. */
   stickers: StickerId[];
+  /** It earned every sticker this user can earn (`stickerReasons`); false for a filler. */
+  full: boolean;
   /** The day's timeclock, worked out once for its stickers and its cell; null without data. */
   timeclock: TimeclockResult | null;
 }
@@ -41,16 +43,18 @@ export function calendarMonth(
       const outside = date < monthStart || date > monthEnd;
       const d = outside ? undefined : byDate.get(date);
       const timeclock = d ? dayTimeclock(d, settings, today, now) : null;
+      const stickers = d && timeclock ? stickersForDay(d, timeclock, reasons) : [];
       row.push({
         date,
         outside,
         isFuture: date > today,
         hasData: d != null,
-        stickers: d && timeclock ? stickersForDay(d, timeclock, reasons) : [],
+        stickers,
+        full: stickers.length === reasons.length,
         timeclock,
       });
     }
-    // A month that starts on a Saturday would otherwise open with a row of nothing but filler.
+    // With weekends off, a month that starts on a Saturday or Sunday would otherwise open with a row of nothing but filler.
     if (row.some((d) => !d.outside)) out.push(row);
   }
   return out;

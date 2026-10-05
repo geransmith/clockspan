@@ -1,5 +1,6 @@
 import { memo, useState } from 'react';
-import { periodRange, type ReviewPeriod } from '../lib/review';
+import { startOfWeek } from '../../../shared/dates.js';
+import type { ReviewPeriod } from '../lib/review';
 import { Calendar } from './Calendar';
 import { Review } from './Review';
 
@@ -19,9 +20,9 @@ type Tab = 'days' | 'review';
 /** Memoized: App re-renders every second, and nothing here needs more than the minute it is handed. */
 export const History = memo(function History({ today, now, date, review, onOpen }: Props) {
   const [tab, setTab] = useState<Tab>(review ? 'review' : 'days');
-  const [period, setPeriod] = useState<ReviewPeriod>(() => review ?? { kind: 'week', from: periodRange('week', today, 0).from });
+  const [period, setPeriod] = useState<ReviewPeriod>(() => review ?? { kind: 'week', from: startOfWeek(today) });
   const reviewWeek = (d: string) => {
-    setPeriod({ kind: 'week', from: periodRange('week', d, 0).from });
+    setPeriod({ kind: 'week', from: startOfWeek(d) });
     setTab('review');
   };
   return (
