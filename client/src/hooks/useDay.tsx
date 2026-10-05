@@ -108,10 +108,16 @@ function replaceById<T extends { id: number; startedAt: number }>(list: readonly
 
 /** The day as the server now has it after confirming `session`: the row inserted, replaced or (cancelled) dropped. */
 function withSession(d: Day, session: Session): Day {
-  const sessions = replaceById(d.sessions, session.id, session.status === 'cancelled' ? null : session);
-  // A session starting ended the running break on the server; the same here.
-  const breaks = session.status === 'running' ? endBreaksAt(d.breaks, session.startedAt) : d.breaks;
-  return { ...d, sessions, breaks };
+  return { ...d, sessions: replaceById(d.sessions, session.id, session.status === 'cancelled' ? null : session) };
+}
+
+/** The lists a save replaces whole. */
+type ListField = 'punches' | 'priorities';
+
+/** What the store keeps: each day it holds, and the dates whose first fetch failed. */
+interface Held {
+  days: Record<string, Tracked<Day>>;
+  failed: ReadonlySet<string>;
 }
 
 /**
@@ -137,19 +143,24 @@ function shownDay(t: Tracked<Day> | undefined): Day | undefined {
 }
 
 export function DayProvider({ children }: { children: ReactNode }) {
-  const { tracked, current, change, nextId, queue } = useTracked<Record<string, Tracked<Day>>>({});
-  const [failed, setFailed] = useState<ReadonlySet<string>>(() => new Set());
-  const latestFailed = useLatest(failed);
+  const { tracked, current, change, nextId, queue } = useTracked<Held>(() => ({ days: {}, failed: new Set() }));
   const { settings } = useSettings();
   const priorityCount = useLatest(settings.priorityCount);
   const inflight = useRef(new Map<string, Promise<void>>());
   // The date whose failed load raised the banner (one at a time: a newer one replaces it).
   const bannerFor = useRef<string | null>(null);
-  const listQueues = useRef(new Map<string, { latest: unknown; ids: number[]; drained: Promise<boolean> }>());
+  const listQueues = useRef(new Map<string, { run: () => Promise<Commit>; ids: number[]; drained: Promise<boolean> }>());
   const [generation, setGeneration] = useState(0);
 
+  // The same state back when `fn` changes nothing (an answer the same as the stored copy), so a
+  // read that changed nothing renders nothing.
   const update = useCallback(
-    (date: string, fn: (t: Tracked<Day>) => Tracked<Day>) => change((all) => ({ ...all, [date]: fn(all[date] ?? untracked<Day>()) })),
+    (date: string, fn: (t: Tracked<Day>) => Tracked<Day>) =>
+      change((s) => {
+        const t = s.days[date];
+        const next = fn(t ?? untracked<Day>());
+        return next === t ? s : { ...s, days: { ...s.days, [date]: next } };
+      }),
     [change],
   );
 
@@ -162,7 +173,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
     function fetchDay(date: string, quiet = false): Promise<void> {
       const out = inflight.current.get(date);
       if (out) return out;
-      const sentAt = (current()[date] ?? untracked<Day>()).version;
+      const sentAt = (current().days[date] ?? untracked<Day>()).version;
       let stale = false;
       const p = api
         .getDay(date)
@@ -173,11 +184,11 @@ export function DayProvider({ children }: { children: ReactNode }) {
             stale = answer.stale;
             return answer.next;
           });
-          setFailed((prev) => {
-            if (!prev.has(date)) return prev;
-            const next = new Set(prev);
-            next.delete(date);
-            return next;
+          change((s) => {
+            if (!s.failed.has(date)) return s;
+            const failed = new Set(s.failed);
+            failed.delete(date);
+            return { ...s, failed };
           });
           if (bannerFor.current === date) {
             bannerFor.current = null;
@@ -185,8 +196,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
           }
         })
         .catch(() => {
-          if (shownDay(current()[date])) return;
-          setFailed((prev) => (prev.has(date) ? prev : new Set(prev).add(date)));
+          if (shownDay(current().days[date])) return;
+          change((s) => (s.failed.has(date) ? s : { ...s, failed: new Set(s.failed).add(date) }));
           if (!quiet) {
             bannerFor.current = date;
             warnQuietly({ title: LOAD_FAILED.title, body: LOAD_FAILED.body, tag: 'load-failed' });
@@ -203,7 +214,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       inflight.current.set(date, p);
       return p;
     },
-    [current, update],
+    [current, change, update],
   );
   const load = useCallback((date: string) => fetchDay(date), [fetchDay]);
 
@@ -211,10 +222,11 @@ export function DayProvider({ children }: { children: ReactNode }) {
     async (date: string) => {
       // Not loaded yet: useDay's first fetch owns that. If it failed, asking again here brings
       // today's alarms back once the server answers, without anyone pressing Try again.
-      if (!shownDay(current()[date]) && !latestFailed.current.has(date)) return;
+      const { days, failed } = current();
+      if (!shownDay(days[date]) && !failed.has(date)) return;
       await fetchDay(date, true);
     },
-    [current, latestFailed, fetchDay],
+    [current, fetchDay],
   );
 
   // Every write ends here. Saved: the changes `ids` leave the pending list and the server's
@@ -240,28 +252,33 @@ export function DayProvider({ children }: { children: ReactNode }) {
   );
 
   // A PUT that replaces a whole list (punches, priorities) could land after a newer one if two
-  // were in flight. One goes out per key; the lists set meanwhile are skipped for the newest,
-  // which goes out next. A failed save takes the waiting lists with it: they were built on the
-  // one refused. Resolves to whether the newest list was saved.
+  // were in flight. One goes out per list and day; the lists set meanwhile are skipped for the
+  // newest, which goes out next. A failed save takes the waiting lists with it: they were built
+  // on the one refused. `send` answers with the list as the server stored it. Resolves to
+  // whether the newest list was saved.
   const sendLatest = useCallback(
-    <T,>(key: string, date: string, value: T, apply: (d: Day) => Day, send: (value: T) => Promise<Commit>): Promise<boolean> => {
+    <F extends ListField>(field: F, date: string, list: Day[F], send: (list: Day[F]) => Promise<Day[F]>): Promise<boolean> => {
+      const key = `${field}:${date}`;
       const id = nextId();
-      update(date, (t) => addPending(t, id, apply));
+      update(date, (t) => addPending(t, id, (d) => ({ ...d, [field]: list })));
+      const run = async (): Promise<Commit> => {
+        const saved = await send(list);
+        return (d) => ({ ...d, [field]: saved });
+      };
       const waiting = listQueues.current.get(key);
       if (waiting) {
-        waiting.latest = value;
+        waiting.run = run;
         waiting.ids.push(id);
         return waiting.drained;
       }
-      const q = { latest: value as unknown, ids: [id] };
+      const q = { run, ids: [id] };
       const drained = (async () => {
         try {
           // Each set adds its id: any past the ones sent means a newer list is waiting.
           let sent = 0;
           while (sent < q.ids.length) {
             sent = q.ids.length;
-            const batch = q.latest as T;
-            if (!(await persist(date, [...q.ids], () => send(batch)))) {
+            if (!(await persist(date, [...q.ids], q.run))) {
               update(date, (t) => settle(t, q.ids));
               return false;
             }
@@ -301,40 +318,19 @@ export function DayProvider({ children }: { children: ReactNode }) {
   );
 
   const setPunches = useCallback(
-    (date: string, punches: Punch[]) => {
-      const normalized = normalizePunches(punches);
-      return sendLatest(
-        `punches:${date}`,
-        date,
-        normalized,
-        (d) => ({ ...d, punches: normalized }),
-        async (p) => {
-          const { punches: saved } = await api.putPunches(date, p);
-          return (d) => ({ ...d, punches: normalizePunches(saved) });
-        },
-      );
-    },
+    (date: string, punches: Punch[]) =>
+      sendLatest('punches', date, normalizePunches(punches), async (p) => normalizePunches((await api.putPunches(date, p)).punches)),
     [sendLatest],
   );
 
   const setPriorities = useCallback(
-    (date: string, priorities: Priority[]) =>
-      sendLatest(
-        `priorities:${date}`,
-        date,
-        priorities,
-        (d) => ({ ...d, priorities }),
-        async (p) => {
-          const { priorities: saved } = await api.putPriorities(date, p);
-          return (d) => ({ ...d, priorities: saved });
-        },
-      ),
+    (date: string, priorities: Priority[]) => sendLatest('priorities', date, priorities, async (p) => (await api.putPriorities(date, p)).priorities),
     [sendLatest],
   );
 
   const addPriority = useCallback(
     async (date: string, text: string) => {
-      const day = shownDay(current()[date]);
+      const day = shownDay(current().days[date]);
       // Only onto a list the store holds: one made up empty would replace the stored rows.
       if (!day) throw new Error(ADD_PRIORITY_FAILED.notLoaded);
       const uid = newUid();
@@ -391,12 +387,12 @@ export function DayProvider({ children }: { children: ReactNode }) {
   // out predates it, so its answer is taken and the day asked for again (`fetchDay`). A session
   // starting ended the user's running break on the server whatever its day (one started before
   // midnight sits on the day before), so a loaded day still showing one running past the start
-  // takes the same end; the session's own day no longer does after `withSession`.
+  // takes the same end.
   const applySession = useCallback(
     (session: Session) => {
       update(session.date, (t) => confirm(t, (d) => withSession(d, session)));
       if (session.status !== 'running') return;
-      for (const [date, t] of Object.entries(current())) {
+      for (const [date, t] of Object.entries(current().days)) {
         if (t.confirmed?.breaks.some((b) => b.endedAt > session.startedAt)) {
           update(date, (u) => confirm(u, (d) => ({ ...d, breaks: endBreaksAt(d.breaks, session.startedAt) })));
         }
@@ -474,20 +470,16 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const readRange = useCallback(
     async (from: string, to: string) => {
       // Only the days held when it went out: one loaded since has a newer answer of its own.
-      const sent = Object.entries(current())
+      const sent = Object.entries(current().days)
         .filter(([date, t]) => date >= from && date <= to && t.confirmed !== undefined)
         .map(([date, t]) => [date, t.version] as const);
-      const { days } = await api.getRange(from, to);
+      const days = (await api.getRange(from, to)).days.map(normalizeDay);
       const byDate = new Map(days.map((d) => [d.date, d]));
-      change((all) => {
-        const next = { ...all };
-        // A day the answer leaves out has no row on the server: `GET /days/:date` answers it as empty.
-        for (const [date, sentAt] of sent) next[date] = fetched(all[date]!, sentAt, normalizeDay(byDate.get(date) ?? emptyDay(date))).next;
-        return next;
-      });
+      // A day the answer leaves out has no row on the server: `GET /days/:date` answers it as empty.
+      for (const [date, sentAt] of sent) update(date, (t) => fetched(t, sentAt, byDate.get(date) ?? normalizeDay(emptyDay(date))).next);
       return days;
     },
-    [current, change],
+    [current, update],
   );
 
   // Sent at once, on no queue: each queue carries one day's, one session's or the breaks'
@@ -497,7 +489,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const pruneBefore = useCallback(
     async (before: string) => {
       const result = await api.pruneDays(before);
-      for (const date of Object.keys(current())) {
+      for (const date of Object.keys(current().days)) {
         if (date >= before) continue;
         // Counted as a change the server confirmed: a read already out predates the prune, so
         // its answer is dropped (or, on a day never loaded, taken) and the day asked for again.
@@ -512,14 +504,14 @@ export function DayProvider({ children }: { children: ReactNode }) {
 
   const days = useMemo(() => {
     const out: Record<string, Day> = {};
-    for (const [date, t] of Object.entries(tracked)) {
+    for (const [date, t] of Object.entries(tracked.days)) {
       const day = shownDay(t);
       if (day) out[date] = day;
     }
     return out;
-  }, [tracked]);
+  }, [tracked.days]);
 
-  const state = useMemo(() => ({ days, failed, generation }), [days, failed, generation]);
+  const state = useMemo(() => ({ days, failed: tracked.failed, generation }), [days, tracked.failed, generation]);
   const store = useMemo(
     () => ({
       load,

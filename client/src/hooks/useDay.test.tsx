@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { dismissByTag, warnQuietly } from '../lib/alerts';
 import { ADD_PRIORITY_FAILED, SAVE_FAILED } from '../lib/copy';
+import { normalizePunches } from '../lib/timeclock';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import {
@@ -351,14 +352,14 @@ describe('refresh', () => {
     expect(result.current.days[TODAY]?.retroNote).toBe('from the phone');
   });
 
-  it('keeps a day a refresh brings back unchanged', async () => {
+  it('keeps a day a refresh brings back unchanged, and the state with it', async () => {
     vi.mocked(api.getDay).mockImplementation(() => Promise.resolve(makeDay(TODAY, { punches: punchesAt(T0) })));
     const { result } = renderStore();
     await settle();
-    const before = result.current.days[TODAY];
+    const before = result.current.days;
     await act(() => result.current.refresh(TODAY));
     expect(api.getDay).toHaveBeenCalledTimes(2);
-    expect(result.current.days[TODAY]).toBe(before);
+    expect(result.current.days).toBe(before);
   });
 
   it('sends nothing for a day not loaded yet, and a change still out stays on top of the answer', async () => {
@@ -403,6 +404,20 @@ describe('refresh after a failed first load', () => {
     expect(result.current.failed.size).toBe(0);
     expect(result.current.days[TODAY]?.retroNote).toBe('back');
     expect(dismissByTag).toHaveBeenCalledWith('load-failed');
+  });
+
+  it('asks again when the refresh comes before the failure has rendered', async () => {
+    vi.mocked(api.getDay)
+      .mockRejectedValueOnce(new Error('Request failed (502)'))
+      .mockResolvedValueOnce(makeDay(TODAY, { retroNote: 'back' }));
+    const { result } = renderStore(null);
+    await act(async () => {
+      const { load, refresh } = result.current;
+      await load(TODAY);
+      await refresh(TODAY);
+    });
+    expect(api.getDay).toHaveBeenCalledTimes(2);
+    expect(result.current.days[TODAY]?.retroNote).toBe('back');
   });
 });
 
@@ -903,6 +918,12 @@ describe('readRange', () => {
     expect(result.current.days[OTHER]?.retroNote).toBe('range');
     expect(result.current.days[TODAY]?.retroNote).toBe('');
     expect(result.current.days[tue]).toBeUndefined();
+    // The answer comes back with the punch rows the store keeps, and the same answer again changes nothing.
+    expect(days[0]?.punches).toEqual(result.current.days[OTHER]?.punches);
+    expect(days[1]?.punches).toEqual(normalizePunches(makeDay(tue).punches));
+    const held = result.current.days;
+    await act(() => result.current.readRange(OTHER, tue));
+    expect(result.current.days).toBe(held);
 
     vi.mocked(api.getRange).mockRejectedValueOnce(new Error('Request failed (500)'));
     await expect(act(() => result.current.readRange(OTHER, tue))).rejects.toThrow('Request failed (500)');
