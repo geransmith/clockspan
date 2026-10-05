@@ -17,9 +17,9 @@ describe('calendarMonth', () => {
     );
     expect(weeks).toHaveLength(5);
     expect(weeks.map((w) => w.length)).toEqual([7, 7, 7, 7, 7]);
-    expect(weeks[0]![0]).toEqual({ date: '2026-08-31', outside: true, isFuture: false, hasData: false, stickers: [], timeclock: null }); // a filler never shows data
-    expect(weeks[0]![1]).toEqual({ date: '2026-09-01', outside: false, isFuture: false, hasData: false, stickers: [], timeclock: null });
-    expect(weeks[2]![0]).toMatchObject({ date: '2026-09-14', outside: false, isFuture: false, hasData: true, stickers: ['reviewed'] });
+    expect(weeks[0]![0]).toEqual({ date: '2026-08-31', outside: true, isFuture: false, hasData: false, stickers: [], full: false, timeclock: null }); // a filler never shows data
+    expect(weeks[0]![1]).toEqual({ date: '2026-09-01', outside: false, isFuture: false, hasData: false, stickers: [], full: false, timeclock: null });
+    expect(weeks[2]![0]).toMatchObject({ date: '2026-09-14', outside: false, isFuture: false, hasData: true, stickers: ['reviewed'], full: false });
     // The day's timeclock comes along, worked out once for the stickers and the cell.
     expect(weeks[2]![0]!.timeclock).toMatchObject({ state: 'not-started', clockIn: null });
     expect(weeks[2]![3]!.isFuture).toBe(false); // today

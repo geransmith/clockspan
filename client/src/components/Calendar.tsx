@@ -6,18 +6,8 @@ import { calendarMonth, type CalendarDay } from '../lib/calendar';
 import { LOAD_FAILED } from '../lib/copy';
 import { counted, dayName, formatDateLong, formatDuration, formatHours, formatWeekday, plural } from '../lib/format';
 import { hasContent } from '../lib/retro';
-import { periodOffset, periodRange } from '../lib/review';
-import {
-  allPrioritiesDone,
-  countStickers,
-  daySummaryOf,
-  isFullDay,
-  STICKER_LABELS,
-  stickerEmoji,
-  stickerReasons,
-  type DaySummary,
-  type StickerId,
-} from '../lib/stickers';
+import { periodRange } from '../lib/review';
+import { allPrioritiesDone, countStickers, daySummaryOf, STICKER_LABELS, stickerEmoji, stickerReasons, type DaySummary, type StickerId } from '../lib/stickers';
 import { dayTimeclock, targetFraction, type TimeclockResult } from '../lib/timeclock';
 import { Check } from './Icons';
 import { LoadFailed } from './LoadFailed';
@@ -42,12 +32,11 @@ interface Props {
 export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
   const { settings } = useSettings();
   // Held by its first day, so the grid and the picked day stay put when the clock passes
-  // midnight into the next month; the offset from today only drives ◀ ▶ and "This month".
+  // midnight into the next month; ◀ ▶ step from it and "This month" goes back to today's.
   const [month, setMonth] = useState(() => startOfMonth(date));
   const [selected, setSelected] = useState<string | null>(date);
   const [filter, setFilter] = useState<StickerId | null>(null);
   const period = periodRange('month', month, 0);
-  const offset = periodOffset('month', today, month);
   const { days: list, failed, retry } = useRange(period.from, period.to);
   // The range lays the store's days over the answer, and one can be empty (today before a
   // punch): only a day with something on it counts, as in the review.
@@ -56,20 +45,18 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
     () => (kept ? calendarMonth(kept.map(daySummaryOf), settings, today, now, period.from) : null),
     [kept, settings, today, now, period.from],
   );
-  const stickers = settings.stickers;
-  // Hours not tracked, or lunch not tracked (meal periods and lunch punches both off): no Clocked
-  // out or Lunch taken sticker, so the legend and a full day go without them.
-  const reasons = useMemo(() => stickerReasons(settings), [settings]);
-  const { trackHours } = settings;
-  const count = useMemo(() => (weeks && stickers ? countStickers(weeks, reasons) : null), [weeks, stickers, reasons]);
+  const reasons = stickerReasons(settings);
+  const count = weeks && settings.stickers ? countStickers(weeks) : null;
+  // A filter whose reason has left the legend (a setting changed since) would empty every cell.
+  const only = filter && reasons.some((r) => r.id === filter) ? filter : null;
   // Worked out from the day rather than read off its cell: with weekends off, a Saturday opened
   // from its sheet is picked but has no cell.
   const picked = kept?.find((d) => d.date === selected);
   const summary = picked && daySummaryOf(picked);
   const stats = summary && { summary, tc: dayTimeclock(summary, settings, today, now) };
 
-  const step = (o: number) => {
-    setMonth(periodRange('month', today, o).from);
+  const step = (from: string) => {
+    setMonth(from);
     // The panel only ever shows a day of the month on screen.
     setSelected(null);
   };
@@ -78,9 +65,9 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
     <section className="card">
       <header className="card-head">
         <h2 className="card-title">Days</h2>
-        <PeriodReset kind="month" offset={offset} onOffset={step} />
+        <PeriodReset kind="month" from={month} today={today} onFrom={step} />
       </header>
-      <PeriodNav kind="month" label={period.label} offset={offset} onOffset={step} noReset />
+      <PeriodNav kind="month" label={period.label} from={month} today={today} onFrom={step} noReset />
       {failed ? <LoadFailed title={LOAD_FAILED.range} onRetry={retry} /> : !weeks && <div className="sheet-loading" aria-busy="true" />}
       {weeks && (
         <>
@@ -111,9 +98,9 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
                       day={d}
                       today={today}
                       selected={d.date === selected}
-                      full={stickers && isFullDay(d.stickers, reasons)}
-                      shown={stickers ? (filter ? d.stickers.filter((id) => id === filter) : d.stickers) : null}
-                      trackHours={trackHours}
+                      full={settings.stickers && d.full}
+                      shown={settings.stickers ? (only ? d.stickers.filter((id) => id === only) : d.stickers) : null}
+                      trackHours={settings.trackHours}
                       onSelect={setSelected}
                     />
                   ),
@@ -127,7 +114,7 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
             ) : (
               <div className="chips calendar-legend" role="group" aria-label="Show only">
                 {reasons.map((r) => (
-                  <button key={r.id} type="button" className="chip" aria-pressed={filter === r.id} onClick={() => setFilter((f) => (f === r.id ? null : r.id))}>
+                  <button key={r.id} className="chip" aria-pressed={only === r.id} onClick={() => setFilter(only === r.id ? null : r.id)}>
                     {r.label} <span className="chip-num">{count.byReason[r.id]}</span>
                   </button>
                 ))}
@@ -142,7 +129,7 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
                 today={today}
                 stats={stats}
                 note={picked?.retroNote.trim() ?? ''}
-                trackHours={trackHours}
+                trackHours={settings.trackHours}
                 onOpen={onOpen}
                 onReviewWeek={onReviewWeek}
               />
@@ -212,7 +199,6 @@ function DayCell({
   }
   return (
     <button
-      type="button"
       className={cls.join(' ')}
       aria-pressed={selected}
       aria-current={d.date === today ? 'date' : undefined}

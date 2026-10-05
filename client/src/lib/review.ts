@@ -1,5 +1,5 @@
 import type { Day } from '../types';
-import { addDays, addMonths, daysBetween, startOfQuarter, startOfWeek } from '../../../shared/dates.js';
+import { addDays, addMonths, startOfQuarter, startOfWeek } from '../../../shared/dates.js';
 import { formatDateSpan, formatMonth, sameText } from './format';
 import { hasContent, reviewDay } from './retro';
 import { dayTimeclock, type TimeclockSettings } from './timeclock';
@@ -42,20 +42,6 @@ export function periodRange(kind: PeriodKind, date: string, offset: number): Per
 }
 
 /**
- * How many periods back from today's the period holding `date` is: what PeriodNav steps and
- * resets a held period by. 0 for the current period and for any future date (the review never
- * steps forward).
- */
-export function periodOffset(kind: PeriodKind, today: string, date: string): number {
-  if (date >= today) return 0;
-  if (kind === 'week') return daysBetween(startOfWeek(date), startOfWeek(today)) / 7;
-  const [ty, tm] = today.split('-').map(Number) as [number, number];
-  const [dy, dm] = date.split('-').map(Number) as [number, number];
-  if (kind === 'month') return (ty - dy) * 12 + (tm - dm);
-  return (ty - dy) * 4 + Math.floor((tm - 1) / 3) - Math.floor((dm - 1) / 3);
-}
-
-/**
  * Sessions that weren't for a priority, merged by label (ignoring case and spacing) so a
  * chore that keeps coming back reads as one row with its total. `label` is the latest
  * spelling, '' for untitled sessions.
@@ -84,7 +70,6 @@ export interface RangeReview {
   days: number;
   workedSeconds: number;
   focusedSeconds: number;
-  onPlanSeconds: number;
   offPlanSeconds: number;
   /** The focused time that went to a priority, as a whole percent; null with no focus logged. */
   onPlanPercent: number | null;
@@ -110,7 +95,6 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
     days: 0,
     workedSeconds: 0,
     focusedSeconds: 0,
-    onPlanSeconds: 0,
     offPlanSeconds: 0,
     onPlanPercent: null,
     prioritiesDone: 0,
@@ -122,6 +106,7 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
   };
   const unplanned = new Map<string, UnplannedWork>();
   const notDone = new Map<string, OpenPriority>();
+  let onPlan = 0;
   for (const day of days.filter((d) => d.date <= today).sort((a, b) => a.date.localeCompare(b.date))) {
     if (!hasContent(day)) continue;
     const tc = dayTimeclock(day, settings, today, now);
@@ -129,7 +114,7 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
     out.days++;
     out.workedSeconds += tc.workedSeconds;
     out.focusedSeconds += r.onPlanSeconds + r.offPlanSeconds;
-    out.onPlanSeconds += r.onPlanSeconds;
+    onPlan += r.onPlanSeconds;
     out.offPlanSeconds += r.offPlanSeconds;
     out.prioritiesDone += r.done;
     out.prioritiesTotal += r.total;
@@ -158,7 +143,7 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
     const note = day.retroNote.trim();
     if (note) out.notes.push({ date: day.date, note, reviewedAt: day.retroAt });
   }
-  if (out.focusedSeconds > 0) out.onPlanPercent = Math.round((out.onPlanSeconds / out.focusedSeconds) * 100);
+  if (out.focusedSeconds > 0) out.onPlanPercent = Math.round((onPlan / out.focusedSeconds) * 100);
   out.unplanned = [...unplanned.values()].sort((a, b) => b.seconds - a.seconds || a.dates[0]!.localeCompare(b.dates[0]!));
   out.notDone = [...notDone.values()].sort((a, b) => b.dates.length - a.dates.length || a.dates[0]!.localeCompare(b.dates[0]!));
   return out;
