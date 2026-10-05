@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { warnQuietly } from '../lib/alerts';
+import { SAVE_FAILED } from '../lib/copy';
 
 export type SaveState = 'idle' | 'saving' | 'saved' | 'failed';
 
@@ -10,17 +12,26 @@ const SAVED_MS = 2500;
  * has confirmed, or "Not saved" when the save failed and the provider dropped the change, so the
  * stored value shows again. In-flight saves are counted so a burst of chip clicks reads as one
  * save instead of flickering between states. `run` is any provider call that settles when the
- * server has answered (update or reset).
+ * server has answered (update or reset). A save that fails after the dialog has closed raises the
+ * quiet "Change not saved" banner instead, as the other stores do, since no header is left to say so.
  */
 export function useSaveStatus(): { saveState: SaveState; save: (run: () => Promise<void>) => Promise<void> } {
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const pending = useRef(0);
   const failed = useRef(false);
   const timer = useRef<number | undefined>(undefined);
+  const open = useRef(false);
 
-  useEffect(() => () => window.clearTimeout(timer.current), []);
+  // Set in the body, not at creation: StrictMode runs this cleanup once on mount.
+  useEffect(() => {
+    open.current = true;
+    return () => {
+      open.current = false;
+      window.clearTimeout(timer.current);
+    };
+  }, []);
 
-  const save = useCallback(async (run: () => Promise<void>) => {
+  const save = async (run: () => Promise<void>) => {
     if (pending.current === 0) failed.current = false;
     pending.current++;
     window.clearTimeout(timer.current);
@@ -32,7 +43,9 @@ export function useSaveStatus(): { saveState: SaveState; save: (run: () => Promi
       failed.current = true;
     } finally {
       pending.current--;
-      if (pending.current === 0) {
+      if (!open.current) {
+        if (failed.current) warnQuietly({ ...SAVE_FAILED, tag: 'save-failed' });
+      } else if (pending.current === 0) {
         if (failed.current) setSaveState('failed');
         else {
           setSaveState('saved');
@@ -40,7 +53,7 @@ export function useSaveStatus(): { saveState: SaveState; save: (run: () => Promi
         }
       }
     }
-  }, []);
+  };
 
   return { saveState, save };
 }

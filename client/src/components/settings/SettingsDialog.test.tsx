@@ -55,8 +55,12 @@ describe('SettingsDialog', () => {
     await renderDialog();
     expect(tabNames()).toEqual(['Timeclock', 'Alarms', 'Sheet', 'Data', 'Account']);
     cleanup();
+    // Account was used last, but isn't offered now: Timeclock opens, and Account stays stored.
+    localStorage.setItem('focus:settingsTab', 'account');
     await renderDialog(makeAuth({ mode: 'none', user: DEFAULT_USER }));
     expect(tabNames()).toEqual(['Timeclock', 'Alarms', 'Sheet', 'Data']);
+    expect(screen.getByRole('tab', { name: 'Timeclock', hidden: true }).getAttribute('aria-selected')).toBe('true');
+    expect(localStorage.getItem('focus:settingsTab')).toBe('account');
   });
 
   it('shows each tab its own panel, and opens on the tab used last', async () => {
@@ -105,7 +109,7 @@ describe('SettingsDialog', () => {
     await settle();
     expect(screen.getByRole('status', { hidden: true }).textContent).toBe(SAVE_STATUS.failed);
     expect(screen.getByText(SAVE_STATUS.failedDetail)).toBeTruthy();
-    expect(toggle('Show hours').getAttribute('aria-checked')).toBe('true');
+    expect((toggle('Show hours') as HTMLInputElement).checked).toBe(true);
     // The next save that goes through clears both.
     fireEvent.click(toggle('Show hours'));
     await settle();

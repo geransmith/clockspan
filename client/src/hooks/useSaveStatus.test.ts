@@ -1,14 +1,19 @@
 // @vitest-environment happy-dom
 import { cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { warnQuietly } from '../lib/alerts';
+import { SAVE_FAILED } from '../lib/copy';
 import { begin, deferred, settle } from '../test/hooks';
 import { useSaveStatus } from './useSaveStatus';
+
+vi.mock('../lib/alerts');
 
 beforeEach(() => {
   vi.useFakeTimers();
 });
 afterEach(() => {
   cleanup();
+  vi.clearAllMocks();
   vi.useRealTimers();
 });
 
@@ -90,5 +95,25 @@ it('leaves no "saved" timer behind when it unmounts', async () => {
   await settle();
   expect(vi.getTimerCount()).toBe(1);
   unmount();
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it('raises the quiet banner for a save that fails after the dialog has closed, and arms no timer', async () => {
+  const { result, unmount } = renderHook(() => useSaveStatus());
+  const { answer } = start(result.current.save);
+  unmount();
+  answer.reject(new Error('Request failed (500)'));
+  await settle();
+  expect(warnQuietly).toHaveBeenCalledExactlyOnceWith({ ...SAVE_FAILED, tag: 'save-failed' });
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it('says nothing for a save that succeeds after the dialog has closed', async () => {
+  const { result, unmount } = renderHook(() => useSaveStatus());
+  const { answer } = start(result.current.save);
+  unmount();
+  answer.resolve();
+  await settle();
+  expect(warnQuietly).not.toHaveBeenCalled();
   expect(vi.getTimerCount()).toBe(0);
 });
