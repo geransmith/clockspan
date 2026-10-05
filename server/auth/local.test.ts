@@ -27,7 +27,7 @@ describe('AUTH_MODE=local', () => {
   });
 
   const setup = (client: Client = app.api) => client.post('/api/auth/setup', FIRST_RUN);
-  // A sign-in the proxy says came from `ip`; the app must be started with TRUST_PROXY.
+  // A sign-in that says, through X-Forwarded-For, it came from `ip`; it counts as that address only when the app trusts the proxy (TRUST_PROXY).
   const loginFrom = (ip: string, username = ADMIN.username, password = 'wrong') =>
     fetch(`${app.url}/api/auth/login`, {
       method: 'POST',
