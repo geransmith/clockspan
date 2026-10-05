@@ -49,7 +49,7 @@ export function SessionLog({ date, isToday, sessions, breaks, priorities, now }:
   }
 
   return (
-    <div className="log">
+    <div>
       <div className="log-total">
         <span className="muted">Total focused</span>
         <strong>{formatDuration(focus.seconds)}</strong>
@@ -92,7 +92,7 @@ function BreakRow({ brk: b, now, onDelete }: { brk: Break; now: number; onDelete
         {formatTime(b.startedAt)}
         {!running && <> – {formatTime(b.endedAt)}</>}
       </span>
-      <span className="log-label log-label--break">Break</span>
+      <span className="log-break-label">Break</span>
       <span className="log-duration">
         {running && <span className="pill pill--ok">on break</span>} {formatDuration(breakSeconds(b, now))}
       </span>

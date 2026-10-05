@@ -89,7 +89,7 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
   };
 
   return (
-    <div className="timer timer--idle">
+    <div className="stack">
       <input
         className="input"
         value={label}
@@ -163,7 +163,7 @@ function Running({ session }: { session: Session }) {
   const subline = due ? TIMER_DUE.title : paused ? 'Paused' : `of ${formatDuration(session.plannedSeconds)}`;
 
   return (
-    <div className={`timer timer--running${paused ? ' is-paused' : ''}${due ? ' is-due' : ''}`}>
+    <div className={`timer--running${paused ? ' is-paused' : ''}${due ? ' is-due' : ''}`}>
       <div className="ring-wrap">
         <svg className="ring" viewBox="0 0 120 120" aria-hidden="true">
           <circle className="ring-track" cx="60" cy="60" r={r} />

@@ -249,10 +249,12 @@ button {
   padding: 0 10px;
   min-width: 44px;
 }
-/* The pressed tint holds under the pointer, and after a tap on a phone, where :hover stays on
-   the tapped button. This :hover ties with .btn:hover and comes after it. */
+/* The pressed tint. The header buttons' :hover entry holds it under the pointer, and after a
+   tap on a phone, where :hover stays on the tapped button; it ties with .btn:hover and comes
+   after it. */
 .btn-icon[aria-pressed='true'],
-.btn-icon[aria-pressed='true']:hover {
+.btn-icon[aria-pressed='true']:hover,
+.chip[aria-pressed='true'] {
   background: var(--accent-soft);
   border-color: transparent;
   color: var(--accent-ink);
@@ -405,11 +407,6 @@ button {
   background: var(--surface);
   font-size: 0.88rem;
   font-weight: 550;
-}
-.chip[aria-pressed='true'] {
-  background: var(--accent-soft);
-  border-color: transparent;
-  color: var(--accent-ink);
 }
 .chip:disabled {
   opacity: 0.45;
@@ -1099,11 +1096,6 @@ button {
 }
 
 /* ---------- focus timer ---------- */
-.timer--idle {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
 /* Open priorities as chips under the label: tap one to link the next session to it. */
 .timer-priorities {
   display: flex;
@@ -1112,7 +1104,6 @@ button {
 }
 .timer-priorities .chip {
   max-width: 100%;
-  text-align: left;
 }
 .chip-num,
 .log-plan {
@@ -1288,11 +1279,11 @@ button {
   animation: pulse 2s infinite;
   flex: none;
 }
-.running-dot.is-paused {
+.running-bar.is-paused .running-dot {
   background: var(--text-3);
   animation: none;
 }
-.running-dot.is-due {
+.running-bar.is-due .running-dot {
   background: var(--warn);
 }
 .running-bar.is-due .running-time {
@@ -1464,7 +1455,7 @@ button {
 }
 .banner-close {
   min-height: 32px;
-  min-width: 32px;
+  min-width: 0;
   border: 0;
   background: none;
   color: var(--text-3);
@@ -1518,8 +1509,8 @@ button {
   text-align: left;
   border: 0;
   background: none;
-  padding: 6px 6px;
-  margin: -6px -6px;
+  padding: 6px;
+  margin: -6px;
   border-radius: 6px;
   font-weight: 600;
   min-width: 0;
@@ -1556,12 +1547,12 @@ button {
   white-space: nowrap;
 }
 /* A break row reads quieter than a session: no label to edit, just the rest taken. */
-.log-label--break {
+.log-break-label {
+  grid-area: label;
   font-weight: 500;
   color: var(--text-2);
-}
-.log-label--break:hover {
-  background: none;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .log-row--break .log-duration {
   font-weight: 500;
@@ -1571,9 +1562,11 @@ button {
   grid-area: delete;
   color: var(--text-3);
   min-height: 36px;
-  min-width: 36px;
+  min-width: 0;
 }
-/* Wider than a phone: each row on one line, the time first. */
+/* Each row on one line, the time first. This starts below the sheet's 640 px breakpoint
+   because the row needs less: from 481 px the time, a label of a few words, the length and the
+   delete button fit side by side. */
 @media (min-width: 481px) {
   .log-row {
     grid-template-columns: auto 1fr auto auto;
@@ -1581,6 +1574,7 @@ button {
   }
   .log-time,
   .log-label,
+  .log-break-label,
   .log-edit,
   .log-duration,
   .log-delete {
@@ -1748,11 +1742,6 @@ button {
 }
 
 /* ---------- history ---------- */
-.history-view {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
 /* Days | Review switch. */
 .segmented {
   display: inline-flex;
@@ -1926,7 +1915,7 @@ button {
 .calendar-legend {
   margin: 12px 16px 0;
 }
-/* A day with something on it but no clock-in. */
+/* A day with something on it and no hours on its cell: no clock-in, or Show hours off. */
 .calendar-dot {
   width: 6px;
   height: 6px;
@@ -2098,7 +2087,6 @@ dialog.dialog::backdrop {
 .dialog-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 14px 12px 10px 20px;
   border-bottom: 1px solid var(--border);
 }
@@ -2283,7 +2271,8 @@ dialog.dialog::backdrop {
   .timer-add-priority,
   .about-link,
   .priority-tick,
-  .brand {
+  .brand,
+  .calendar-day {
     position: relative;
   }
   .chip::after,
@@ -2296,7 +2285,8 @@ dialog.dialog::backdrop {
   .timer-add-priority::after,
   .about-link::after,
   .priority-tick::after,
-  .brand::after {
+  .brand::after,
+  .calendar-day::after {
     content: '';
     position: absolute;
     inset: var(--hit-inset);
@@ -2349,6 +2339,10 @@ dialog.dialog::backdrop {
   .brand {
     --hit-inset: -2px 0;
   }
+  /* About 41 px wide on a 375 px phone with weekends shown, 4 px from the next day: 45 px. */
+  .calendar-day {
+    --hit-inset: 0 -3px;
+  }
   /* A check with its words, and a list row, draw nothing around themselves: on a touch screen
      they take a whole 44 px instead, which only adds air. The Review rows touch each other, so
      an ::after has nowhere to go; the planner's rows and "When reached" are too close to theirs. */
@@ -2384,5 +2378,36 @@ dialog.dialog::backdrop {
   *::after {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+/* ---------- forced colors ---------- */
+/* The switch and the pressed and selected states are drawn only with backgrounds and shadows,
+   which forced-colors mode repaints or drops. The !important outranks each control's own, more
+   specific, state rule and the tints on what is inside it. */
+@media (forced-colors: active) {
+  .switch {
+    border: 1px solid ButtonText;
+  }
+  .switch::after {
+    forced-color-adjust: none;
+    background: ButtonText;
+  }
+  .switch:checked::after {
+    background: Highlight;
+  }
+  [aria-pressed='true'],
+  [aria-selected='true'] {
+    forced-color-adjust: none;
+    background: Highlight !important;
+    color: HighlightText !important;
+  }
+  [aria-pressed='true'] *,
+  [aria-selected='true'] * {
+    color: inherit !important;
+  }
+  [aria-pressed='true'] .chip-num {
+    background: HighlightText;
+    color: Highlight !important;
   }
 }

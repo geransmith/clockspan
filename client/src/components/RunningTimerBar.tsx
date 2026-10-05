@@ -18,9 +18,9 @@ export function RunningTimerBar() {
   };
 
   return (
-    <div className={`running-bar${due ? ' is-due' : ''}`}>
+    <div className={`running-bar${paused ? ' is-paused' : ''}${due ? ' is-due' : ''}`}>
       <div className="running-bar-inner">
-        <span className={`running-dot${paused ? ' is-paused' : ''}${due ? ' is-due' : ''}`} aria-hidden="true" />
+        <span className="running-dot" aria-hidden="true" />
         {editing ? (
           <input
             className="input running-label-input"

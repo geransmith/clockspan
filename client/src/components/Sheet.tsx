@@ -69,7 +69,9 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
   const ready = Boolean(day && tc);
   useEffect(() => {
     if (!jumpTo || !ready) return;
-    document.getElementById(`card-${jumpTo}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document
+      .getElementById(`card-${jumpTo}`)
+      ?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
     onJumped();
   }, [jumpTo, ready, onJumped]);
 
