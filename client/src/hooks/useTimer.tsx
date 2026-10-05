@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as api from '../api';
 import { nextBackoff } from '../../../shared/backoff.js';
 import { pausedSecondsAfter } from '../../../shared/timer.js';
-import type { Session, SessionConflict } from '../types';
+import type { Session, SessionConflict, SessionResponse } from '../types';
 import { alert, dismissByTag, warnQuietly } from '../lib/alerts';
 import { ApiError } from '../lib/apiError';
 import { SAVE_FAILED, TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
@@ -17,23 +17,12 @@ import { useSettings } from './useSettings';
 import { useTracked } from './useTracked';
 import { useWakeLock } from './useWakeLock';
 
-interface TimerCtx {
+interface TimerCtx extends Pick<TimerView, 'countdownSeconds' | 'elapsedSeconds' | 'progress' | 'paused' | 'due' | 'overrunSeconds' | 'canAdd'> {
   running: Session | null;
-  /** Seconds left; below zero once due. Derived from the server's startedAt and pauses every tick. */
-  countdownSeconds: number;
-  elapsedSeconds: number;
-  /** 0..1 */
-  progress: number;
-  paused: boolean;
-  /** The planned time is used up; the session waits for more time or a finish. */
-  due: boolean;
-  overrunSeconds: number;
   /** Leaves `unlockAudio()` to the caller, in its tap: the timer card may await a new priority's save before it starts. */
   start: (date: string, plannedSeconds: number, label: string, priorityUid?: string | null) => Promise<void>;
   /** Mid-session, ± the planned length; once due, +N is N more minutes from now. Plans are whole minutes. */
   adjust: (deltaSeconds: number) => Promise<void>;
-  /** + has something to add: false once the plan (or the time worked) is at the longest the server takes. */
-  canAdd: boolean;
   /**
    * Renames the running session or links it to another priority. The bar and the log's running
    * row both edit through here, so the session's writes share one queue and both show the edit.
@@ -75,10 +64,15 @@ const IDLE: TimerView = {
   asksLength: false,
 };
 
-// The last planned end that was announced, kept across reloads so the chime plays once per
-// end. The page also remembers it (`announcedEnd`), so with storage blocked or full only a
-// reload can chime a second time.
+// The last planned end (its `dueKey`) that was announced, kept across reloads so the chime
+// plays once per end. The page also remembers it (`chimedEnd`), so with storage blocked or full
+// only a reload can chime a second time.
 const DUE_STORAGE_KEY = 'focus:timer-due';
+
+/** Whether the chime already played for this planned end, on this page or before a reload. */
+function chimedFor(chimedEnd: string | null, key: string): boolean {
+  return chimedEnd === key || readStored(DUE_STORAGE_KEY) === key;
+}
 
 export function TimerProvider({ children }: { children: ReactNode }) {
   // The running session as the server confirmed it, plus the presses (adjust, rename, pause,
@@ -87,9 +81,10 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // answered, so the server ends where the screen does: two +5s in flight could land swapped.
   const { tracked, current, change, nextId, queue } = useTracked<Tracked<Session | null>>(untracked);
   const running = useMemo(() => shown(tracked) ?? null, [tracked]);
-  // The session "How much to log?" was asked for: once it ends, however it ends, the question
-  // goes with it and never opens over the next one.
-  const [finishChoiceFor, setFinishChoiceFor] = useState<number | null>(null);
+  // The planned end "How much to log?" was asked for (its `dueKey`). The question holds only
+  // while the running session is due at that end: once the session ends, however it ends, or
+  // its end moves (time added, a pause), it closes and never opens over the next one.
+  const [finishChoiceFor, setFinishChoiceFor] = useState<string | null>(null);
   const [finished, setFinished] = useState<Session | null>(null);
   const now = useClock();
   // `loaded` gates the two effects that alert: on a fresh load the running session can answer
@@ -97,14 +92,14 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // (`settings.sounds`, `settings.sound`).
   const { settings, loaded } = useSettings();
   const { refresh, applySession, prioritiesSaved } = useDayStore();
+  // An end (a finish or a cancel, by hand or not) is out: the auto-finish waits for its answer.
   const completing = useRef(false);
   // After a failed finish (server unreachable) wait before trying again (`nextBackoff`). The
   // server clamps ended_at to the planned end, so a late finish still logs the planned
   // duration; all a wait costs is the chime's promptness.
   const retry = useRef({ at: 0, delay: 0 });
-  // The planned end this page last announced (its `dueKey`). DUE_STORAGE_KEY carries it across
-  // a reload; this covers the page itself when storage keeps nothing.
-  const announcedEnd = useRef<string | null>(null);
+  // The planned end this page last chimed for (`chimedFor`).
+  const chimedEnd = useRef<string | null>(null);
 
   // Re-sync with the server on load, when the tab comes back, and every minute
   // (`useRefreshLoop`), and at once when a press finds the session gone (`syncNow`: a sync sent
@@ -136,11 +131,16 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // the day's log takes the row. Unless a sync has meanwhile shown a session another device
   // started: the answer is about the one before it, and the new one keeps running.
   const end = useCallback(
-    async (send: () => Promise<{ session: Session }>) => {
-      const { session } = await queue(send);
-      change((t) => (t.confirmed && t.confirmed.id !== session.id ? t : settleWith(t, [], null)));
-      applySession(session);
-      return session;
+    async (send: () => Promise<SessionResponse>) => {
+      completing.current = true;
+      try {
+        const { session } = await queue(send);
+        change((t) => (t.confirmed && t.confirmed.id !== session.id ? t : settleWith(t, [], null)));
+        applySession(session);
+        return session;
+      } finally {
+        completing.current = false;
+      }
     },
     [change, queue, applySession],
   );
@@ -157,6 +157,10 @@ export function TimerProvider({ children }: { children: ReactNode }) {
 
   const { elapsedSeconds, countdownSeconds, progress, endAt, paused, pausedForSeconds, due, overrunSeconds, canAdd } = running ? timerView(running, now) : IDLE;
 
+  const choiceKey = running && due ? dueKey(running.id, endAt) : null;
+  if (finishChoiceFor !== null && finishChoiceFor !== choiceKey) setFinishChoiceFor(null);
+  const choiceOpen = choiceKey !== null && finishChoiceFor === choiceKey;
+
   // Completion without the user: a timer that ran out and waited DUE_GRACE_SECONDS for an
   // answer (or expired while the page was closed — the server clamps ended_at to the planned
   // end either way), or a pause left for an hour (the server ends the session where the pause
@@ -165,7 +169,6 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     if (!running || !loaded || completing.current || now < retry.current.at) return;
     const forgotten = pausedForSeconds >= PAUSE_LIMIT_SECONDS;
     if (!(due && overrunSeconds >= DUE_GRACE_SECONDS) && !forgotten) return;
-    completing.current = true;
     const session = running;
     end(() => api.finishSession(session.id))
       .then((done) => {
@@ -184,8 +187,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
           return;
         }
         // The chime played when the end came, unless the page was closed then.
-        const key = dueKey(session.id, endAt);
-        const chimed = announcedEnd.current === key || readStored(DUE_STORAGE_KEY) === key;
+        const chimed = chimedFor(chimedEnd.current, dueKey(session.id, endAt));
         alert({
           title: TIMER_DONE.title,
           body: TIMER_DONE.body(session.label, formatDuration(done.durationSeconds)),
@@ -199,9 +201,6 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       .catch(() => {
         const delay = nextBackoff(retry.current.delay);
         retry.current = { at: Date.now() + delay, delay };
-      })
-      .finally(() => {
-        completing.current = false;
       });
   }, [running, loaded, now, endAt, due, overrunSeconds, pausedForSeconds, end, settings.sound, settings.sounds.timer, settings.notifications]);
 
@@ -275,7 +274,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // while the press waited, the answer only says what became of this row: the timer keeps what
   // the sync showed, and a running answer is older than the sync, so the log doesn't take it.
   const press = useCallback(
-    async (cur: Session, apply: (s: Session) => Session, send: () => Promise<{ session: Session }>) => {
+    async (cur: Session, apply: (s: Session) => Session, send: () => Promise<SessionResponse>) => {
       const id = nextId();
       change((t) => addPending(t, id, (s) => (s && s.id === cur.id ? apply(s) : s)));
       try {
@@ -350,7 +349,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   const requestFinish = useCallback(() => {
     const cur = shown(current());
     if (!cur) return;
-    if (timerView(cur, Date.now()).asksLength) setFinishChoiceFor(cur.id);
+    const view = timerView(cur, Date.now());
+    if (view.asksLength) setFinishChoiceFor(dueKey(cur.id, view.endAt));
     else void finish();
   }, [current, finish]);
   const dismissFinishChoice = useCallback(() => setFinishChoiceFor(null), []);
@@ -363,18 +363,17 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     [attempt, end],
   );
 
-  // Time's up: announce once per (session, planned end) and leave the session open for an
-  // answer. The chime plays once per end (`announcedEnd`, and DUE_STORAGE_KEY across a reload,
-  // which shows the banner again without it); adding time moves the end and re-arms. The
-  // banner goes while the timer is not due: finished, given time, cancelled, ended on another
-  // device, or a press still on its way. A press that fails brings the same end back, and with
-  // it the banner, quietly.
-  const announced = useRef<string | null>(null);
+  // Time's up: raise the banner once per (session, planned end) and leave the session open for
+  // an answer; a reload shows it again without the chime, and adding time moves the end and
+  // re-arms. The banner goes while the timer is not due: finished, given time, cancelled, ended
+  // on another device, or a press still on its way. A press that fails brings the same end
+  // back, and with it the banner, quietly.
+  const raisedBanner = useRef<string | null>(null);
   const step = settings.adjustStepMinutes;
   useEffect(() => {
     if (!running || !due) {
       dismissByTag('timer-due');
-      announced.current = null;
+      raisedBanner.current = null;
       return;
     }
     if (!loaded || overrunSeconds >= DUE_GRACE_SECONDS) return;
@@ -382,10 +381,10 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     // Raised again, quietly, when the time worked reaches the longest plan: + has nothing left
     // to add, and a button that does nothing must not stay up.
     const raised = `${key}:${canAdd}`;
-    if (announced.current === raised) return;
-    announced.current = raised;
-    const fresh = announcedEnd.current !== key && readStored(DUE_STORAGE_KEY) !== key;
-    announcedEnd.current = key;
+    if (raisedBanner.current === raised) return;
+    raisedBanner.current = raised;
+    const fresh = !chimedFor(chimedEnd.current, key);
+    chimedEnd.current = key;
     writeStored(DUE_STORAGE_KEY, key);
     alert({
       title: TIMER_DUE.title,
@@ -417,7 +416,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       resume,
       finish,
       requestFinish,
-      finishChoice: running != null && finishChoiceFor === running.id ? running : null,
+      finishChoice: choiceOpen ? running : null,
       dismissFinishChoice,
       cancel,
       finished,
@@ -438,7 +437,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       resume,
       finish,
       requestFinish,
-      finishChoiceFor,
+      choiceOpen,
       dismissFinishChoice,
       cancel,
       finished,
