@@ -6,7 +6,7 @@ import { unlockAudio } from '../lib/alerts';
 import { LOAD_FAILED, PLAN_NEXT } from '../lib/copy';
 import { dayName, sameText } from '../lib/format';
 import { nextWorkDay, planNext } from '../lib/plan';
-import { hasText } from '../lib/priorities';
+import { hasText, isOpen } from '../lib/priorities';
 import { LIMITS } from '../../../shared/api.js';
 import type { Priority } from '../types';
 import { Burst } from './Burst';
@@ -14,8 +14,6 @@ import { Plus } from './Icons';
 import { LoadFailed } from './LoadFailed';
 
 interface Props {
-  /** The day the retrospective is for; only today's offers a plan, since the next day is ahead. */
-  date: string;
   today: string;
   /** That day's priorities: the unticked ones are offered for the next day. */
   priorities: Priority[];
@@ -25,7 +23,7 @@ interface Props {
  * The end of the retrospective: put what's left, and anything new, on the next work day's
  * list tonight, while it's fresh. The day only loads once the planner opens.
  */
-export function PlanNext({ date, today, priorities }: Props) {
+export function PlanNext({ today, priorities }: Props) {
   const { settings } = useSettings();
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -34,8 +32,7 @@ export function PlanNext({ date, today, priorities }: Props) {
   // Rows put on the next day's list: a small burst from the line that says so.
   const [planned, setPlanned] = useState<Moment | null>(null);
   const { anchor, burst } = useCelebration<HTMLDivElement>(planned, 'planDone');
-  const next = nextWorkDay(date, settings.showWeekends);
-  if (date !== today) return null;
+  const next = nextWorkDay(today, settings.showWeekends);
   const name = dayName(next, today, true);
   return (
     <div className="plan-next">
@@ -43,7 +40,7 @@ export function PlanNext({ date, today, priorities }: Props) {
         <Planner
           date={next}
           name={name}
-          candidates={priorities.filter((p) => hasText(p) && !p.done)}
+          candidates={priorities.filter(isOpen)}
           onDone={(added) => {
             setOpen(false);
             setReturnFocus(true);
@@ -74,7 +71,7 @@ export function PlanNext({ date, today, priorities }: Props) {
           {result}
         </span>
       </div>
-      {burst && <Burst key={burst.seed} seed={burst.seed} anchor={burst.anchor} />}
+      <Burst at={burst} />
     </div>
   );
 }

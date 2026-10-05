@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
-import { RETRO_PROMPT } from '../lib/copy';
+import { PLAN_NEXT, RETRO_PROMPT } from '../lib/copy';
 import { deferred, makeSettings, settle, T0, TODAY } from '../test/hooks';
 import type { Priority } from '../types';
 import { Retro } from './Retro';
@@ -15,11 +15,11 @@ vi.mock('../lib/alerts');
 const DATE = '2026-09-25';
 const PRIORITIES: Priority[] = [{ position: 1, text: 'Report', done: false, uid: 'abcdef123456', addedAt: T0 }];
 
-async function renderCard(note = '', reviewedAt: number | null = null, priorities = PRIORITIES) {
+async function renderCard(note = '', reviewedAt: number | null = null, priorities = PRIORITIES, date = DATE) {
   const onChange = vi.fn<(patch: api.RetroPatch) => Promise<boolean>>(() => Promise.resolve(true));
   const card = (n: string, r: number | null) => (
     <SettingsProvider>
-      <Retro date={DATE} today={TODAY} priorities={priorities} sessions={[]} note={n} reviewedAt={r} onChange={onChange} />
+      <Retro date={date} today={TODAY} priorities={priorities} sessions={[]} note={n} reviewedAt={r} onChange={onChange} />
     </SettingsProvider>
   );
   const view = render(card(note, reviewedAt));
@@ -44,6 +44,14 @@ afterEach(() => {
 });
 
 describe('Retro', () => {
+  it("offers the next day's plan on today's card only", async () => {
+    await renderCard();
+    expect(screen.queryByRole('button', { name: PLAN_NEXT.open('tomorrow') })).toBeNull();
+    cleanup();
+    await renderCard('', null, PRIORITIES, TODAY);
+    expect(screen.getByRole('button', { name: PLAN_NEXT.open('tomorrow') })).toBeTruthy();
+  });
+
   it('saves the note 800 ms after typing stops, once', async () => {
     const { box, onChange } = await renderCard();
     fireEvent.change(box, { target: { value: 'Meetings' } });

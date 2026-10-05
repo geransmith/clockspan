@@ -6,14 +6,14 @@ export interface PriorityReview {
   /** Completed session time linked to this row. */
   focusedSeconds: number;
   sessions: number;
-  /** Written after the day's first session started: it arrived mid-day, not in the plan. */
+  /** Written after the day's first completed session started: it arrived mid-day, not in the plan. */
   addedMidDay: boolean;
 }
 
 export interface DayReview {
   /** Rows with text, in position order. */
   planned: PriorityReview[];
-  /** Completed sessions not linked to a row (or linked to one that was removed). */
+  /** Completed sessions not linked to a row with text (unlinked, or linked to a row since removed or emptied). */
   unplanned: CompletedSession[];
   onPlanSeconds: number;
   offPlanSeconds: number;

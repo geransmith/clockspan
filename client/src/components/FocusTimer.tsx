@@ -7,7 +7,7 @@ import { useTimer } from '../hooks/useTimer';
 import { dismissByTag, unlockAudio } from '../lib/alerts';
 import { BREAK, TIMER_DUE } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
-import { hasRoom, hasText } from '../lib/priorities';
+import { hasRoom, isOpen } from '../lib/priorities';
 import { LIMITS } from '../../../shared/api.js';
 import type { Priority, Session } from '../types';
 import { SessionLabel } from './SessionLabel';
@@ -44,7 +44,7 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
   const lengths = [...new Set(settings.timerMinutes)].sort((a, b) => a - b);
 
   // Open rows only: a done priority isn't something to start a session for.
-  const open = priorities.filter((p) => p.uid && hasText(p) && !p.done);
+  const open = priorities.filter((p) => p.uid && isOpen(p));
   const linkedStillOpen = linked != null && open.some((p) => p.uid === linked);
   const trimmed = label.trim();
   // New work typed in, not tied to a row: offer to put it on the plan as well, while the plan

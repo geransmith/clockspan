@@ -1,26 +1,26 @@
-import { useMemo, type CSSProperties } from 'react';
+import type { CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
+import type { BurstAt } from '../hooks/useCelebration';
 import { pickBurst } from '../lib/celebrate';
 
 interface Props {
-  /** Picks the emoji and their flight; the parent keys the burst by it. */
-  seed: number;
-  /** Where it starts: the element that was ticked or the notice that appeared. */
-  anchor: DOMRect;
+  /** `useCelebration`'s burst: the seed picks the emoji and their flight, the anchor is where they start. Null draws nothing. */
+  at: BurstAt | null;
   big?: boolean;
 }
 
 /**
- * A handful of emoji flying up from `anchor` and fading out. Rendered on `document.body`
- * because cards clip their overflow.
+ * A handful of emoji flying up from the anchor and fading out. Rendered on `document.body`
+ * because cards clip their overflow. Keyed by the seed, so a new burst restarts the animation.
  */
-export function Burst({ seed, anchor, big = false }: Props) {
-  const pieces = useMemo(() => pickBurst(seed, big ? 14 : 8), [seed, big]);
+export function Burst({ at, big = false }: Props) {
+  if (!at) return null;
   const reach = big ? 140 : 90;
+  const { anchor } = at;
   const style: CSSProperties = { left: anchor.left + anchor.width / 2, top: anchor.top + anchor.height / 2 };
   return createPortal(
-    <span className={`burst${big ? ' burst--big' : ''}`} style={style} aria-hidden="true">
-      {pieces.map((p, i) => (
+    <span key={at.seed} className={`burst${big ? ' burst--big' : ''}`} style={style} aria-hidden="true">
+      {pickBurst(at.seed, big ? 14 : 8).map((p, i) => (
         <span
           key={i}
           className="burst-emoji"
