@@ -31,14 +31,11 @@ const grant = (claims: Record<string, unknown> | undefined): Grant => ({ access_
 describe('OIDC code grant', () => {
   let app: TestApp;
   beforeEach(async () => {
-    vi.mocked(oidc.discovery).mockReset().mockResolvedValue(configuration());
-    vi.mocked(oidc.authorizationCodeGrant).mockReset();
-    vi.mocked(oidc.fetchUserInfo).mockReset();
+    vi.mocked(oidc.discovery).mockResolvedValue(configuration());
     app = await startTestApp({ authMode: 'oidc', env: { OIDC_ISSUER: ISSUER } });
   });
   afterEach(async () => {
     await app.close();
-    vi.restoreAllMocks();
   });
 
   const raw = (path: string, cookie?: string) => fetch(app.url + path, { redirect: 'manual', headers: cookie ? { cookie } : {} });
@@ -196,7 +193,6 @@ describe('OIDC code grant', () => {
 describe('Discovery', () => {
   afterEach(() => {
     vi.useRealTimers();
-    vi.restoreAllMocks();
   });
 
   it('retries with backoff until the provider answers, then remembers the answer', async () => {

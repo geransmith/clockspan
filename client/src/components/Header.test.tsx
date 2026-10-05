@@ -34,7 +34,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
-  vi.resetAllMocks();
   Reflect.deleteProperty(HTMLInputElement.prototype, 'showPicker');
 });
 

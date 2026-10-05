@@ -39,7 +39,6 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
-  vi.resetAllMocks();
 });
 
 describe('firing', () => {

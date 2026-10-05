@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from './api';
 import { REQUEST_TIMEOUT_MS, UNAUTHENTICATED_EVENT } from './api';
 import { ApiError } from './lib/apiError';
@@ -23,10 +23,6 @@ function lastCall(): { path: string; init: RequestInit } {
 
 beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock);
-});
-afterEach(() => {
-  vi.unstubAllGlobals();
-  fetchMock.mockReset();
 });
 
 const DATE = '2026-09-28';

@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MINUTE_MS } from '../../../shared/dates.js';
-import { deferred, settle, setVisibility, T0 } from '../test/hooks';
+import { begin, deferred, settle, setVisibility, T0 } from '../test/hooks';
 import { useRefreshLoop } from './useRefreshLoop';
 
 beforeEach(() => {
@@ -105,10 +105,7 @@ describe('useRefreshLoop', () => {
     const out = deferred<void>();
     const run = vi.fn().mockReturnValueOnce(out.promise).mockResolvedValue(undefined);
     const { result } = renderHook(() => useRefreshLoop(run, true));
-    let forced!: Promise<unknown>;
-    act(() => {
-      forced = result.current.runNow();
-    });
+    const forced = begin(() => result.current.runNow());
     expect(run).toHaveBeenCalledTimes(1);
     // The tab coming back now waits on the fresh run and sends nothing.
     act(() => setVisibility('visible'));

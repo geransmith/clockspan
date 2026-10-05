@@ -45,6 +45,12 @@ export default defineConfig({
     // The CI runner is UTC, which has no DST, so a DST case would prove nothing there. Los
     // Angeles is the owner's zone and the one the meal rules follow.
     env: { TZ: 'America/Los_Angeles' },
+    // Before each test: every mock's calls and queued answers go, spies come off what they
+    // wrapped, and stubbed globals are put back, so no test file writes its own teardown for
+    // them and a failing test can't leave a spy on console for the rest of its file.
+    mockReset: true,
+    restoreMocks: true,
+    unstubGlobals: true,
     // `npm run test:coverage` is the gate: every file below must be fully covered on all four
     // metrics or the run fails. The set is what the suite is meant to prove: the server, shared,
     // the client's API calls, the pure client libs and the hooks (their tests run under

@@ -84,8 +84,6 @@ afterEach(() => {
   cleanup();
   dismissByTag('sign-out-failed');
   vi.useRealTimers();
-  vi.resetAllMocks();
-  vi.restoreAllMocks();
 });
 
 describe('AuthGate', () => {

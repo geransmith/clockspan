@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-import { act, cleanup, renderHook } from '@testing-library/react';
+import { cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { deferred, settle } from '../test/hooks';
+import { begin, deferred, settle } from '../test/hooks';
 import { useSaveStatus } from './useSaveStatus';
 
 beforeEach(() => {
@@ -15,10 +15,7 @@ afterEach(() => {
 /** Starts a save whose answer the test gives by hand. */
 function start(save: ReturnType<typeof useSaveStatus>['save']) {
   const answer = deferred<void>();
-  let done!: Promise<void>;
-  act(() => {
-    done = save(() => answer.promise);
-  });
+  const done = begin(() => save(() => answer.promise));
   return { answer, done };
 }
 

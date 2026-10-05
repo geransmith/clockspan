@@ -5,8 +5,10 @@ import * as api from '../api';
 import { dismissByTag, warnQuietly } from '../lib/alerts';
 import { ADD_PRIORITY_FAILED, SAVE_FAILED } from '../lib/copy';
 import { MINUTE_MS } from '../../../shared/dates.js';
+import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import {
   apiError,
+  begin,
   deferred,
   endSession,
   makeBreak,
@@ -62,7 +64,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
-  vi.resetAllMocks();
 });
 
 describe('load', () => {
@@ -136,7 +137,7 @@ describe('load', () => {
     expect(result.current.days[TODAY]).toBeDefined();
   });
 
-  it('keeps showing a loaded day when a reload fails, without a second banner', async () => {
+  it('keeps showing a loaded day when a reload fails, without a banner', async () => {
     vi.mocked(api.getDay).mockResolvedValueOnce(makeDay(TODAY, { retroNote: 'kept' }));
     const { result } = renderStore();
     await settle();
@@ -196,10 +197,7 @@ describe('load after a write', () => {
       .mockReturnValueOnce(stale.promise)
       .mockResolvedValueOnce(makeDay(TODAY, { punches: punchesAt(T0) }));
     vi.mocked(api.putPunches).mockImplementation(echoPunches);
-    let loaded!: Promise<void>;
-    act(() => {
-      loaded = result.current.refresh(TODAY);
-    });
+    const loaded = begin(() => result.current.refresh(TODAY));
     await act(() => result.current.setPunches(TODAY, punchesAt(T0)));
     stale.resolve(makeDay());
     await act(() => loaded);
@@ -262,10 +260,7 @@ describe('load after a write', () => {
       void result.current.setPunches(TODAY, punchesAt(T0));
       saved = result.current.setPunches(TODAY, punchesAt(T0, T0 + 240 * MINUTE_MS));
     });
-    let loaded!: Promise<void>;
-    act(() => {
-      loaded = result.current.refresh(TODAY);
-    });
+    const loaded = begin(() => result.current.refresh(TODAY));
     // The server has only the clock-in so far.
     stale.resolve(makeDay(TODAY, { punches: punchesAt(T0) }));
     await act(() => loaded);
@@ -283,10 +278,7 @@ describe('load after a write', () => {
     const out = deferred<Day>();
     vi.mocked(api.getDay).mockReturnValueOnce(out.promise);
     vi.mocked(api.putOvertime).mockRejectedValueOnce(new Error('offline'));
-    let loaded!: Promise<void>;
-    act(() => {
-      loaded = result.current.load(TODAY);
-    });
+    const loaded = begin(() => result.current.load(TODAY));
     await act(() => result.current.setOvertimeApproved(TODAY, true));
     // No answer from anywhere yet, and the sheet already shows what the server has.
     expect(result.current.days[TODAY]?.overtimeApproved).toBe(false);
@@ -309,10 +301,7 @@ describe('load after a write', () => {
       .mockResolvedValueOnce(makeDay(TODAY, { overtimeApproved: true, retroNote: 'from the phone', breaks: [stored] }));
     vi.mocked(api.putOvertime).mockResolvedValueOnce({ overtimeApproved: true });
     vi.mocked(api.deleteBreak).mockRejectedValueOnce(new Error('offline'));
-    let refreshed!: Promise<void>;
-    act(() => {
-      refreshed = result.current.refresh(TODAY);
-    });
+    const refreshed = begin(() => result.current.refresh(TODAY));
     await act(() => result.current.setOvertimeApproved(TODAY, true));
     await act(() => result.current.removeBreak(TODAY, 1));
     expect(result.current.days[TODAY]?.breaks).toEqual([stored]);
@@ -348,10 +337,7 @@ describe('load after a write', () => {
     vi.mocked(api.putPriorities).mockReturnValueOnce(rows.promise);
     const { result } = renderStore();
     await settle();
-    let listed!: Promise<boolean>;
-    act(() => {
-      listed = result.current.setPriorities(TODAY, [priority(1, 'Still here')]);
-    });
+    const listed = begin(() => result.current.setPriorities(TODAY, [priority(1, 'Still here')]));
     await act(() => result.current.setPunches(TODAY, punchesAt(T0)));
     await settle();
     // The reload has the server's copy, from before the priorities PUT: the row is still shown over it.
@@ -435,10 +421,7 @@ describe('setPunches', () => {
     vi.mocked(api.putPunches).mockReturnValueOnce(first.promise).mockImplementation(echoPunches);
     const { result } = renderStore();
     await settle();
-    let done!: Promise<boolean>;
-    act(() => {
-      done = result.current.setPunches(TODAY, punchesAt(T0));
-    });
+    const done = begin(() => result.current.setPunches(TODAY, punchesAt(T0)));
     expect(result.current.days[TODAY]?.punches[0]?.at).toBe(T0);
     // Two more edits while the first PUT is out: only the last one is sent after it.
     act(() => void result.current.setPunches(TODAY, punchesAt(T0 + MINUTE_MS)));
@@ -458,10 +441,7 @@ describe('setPunches', () => {
     vi.mocked(api.putPunches).mockReturnValueOnce(first.promise);
     const { result } = renderStore();
     await settle();
-    let done!: Promise<boolean>;
-    act(() => {
-      done = result.current.setPunches(TODAY, punchesAt(T0));
-    });
+    const done = begin(() => result.current.setPunches(TODAY, punchesAt(T0)));
     act(() => void result.current.setPunches(TODAY, punchesAt(T0 + MINUTE_MS)));
     first.reject(new Error('offline'));
     await act(() => done);
@@ -523,7 +503,7 @@ describe('priorities', () => {
   });
 
   it('addPriority rejects when the list is full, the day is not loaded, or the save fails', async () => {
-    const full = Array.from({ length: 20 }, (_, i) => priority(i + 1, `Row ${i + 1}`));
+    const full = Array.from({ length: MAX_PRIORITIES }, (_, i) => priority(i + 1, `Row ${i + 1}`));
     // Every later GET is the other day's: its load, then the reload after the failed save.
     vi.mocked(api.getDay)
       .mockResolvedValue(makeDay(OTHER))
@@ -603,10 +583,7 @@ describe('per-day fields', () => {
     const { result } = renderStore();
     await settle();
 
-    let done!: Promise<boolean>;
-    act(() => {
-      done = result.current.setRetro(TODAY, { done: true });
-    });
+    const done = begin(() => result.current.setRetro(TODAY, { done: true }));
     expect(result.current.days[TODAY]).toMatchObject({ retroNote: 'why', retroAt: T0 });
     saved.resolve({ retroNote: 'why', retroAt: T0 - 5 });
     await act(() => done);
@@ -641,10 +618,7 @@ describe('per-day fields', () => {
     const reload = deferred<Day>();
     vi.mocked(api.getDay).mockReturnValueOnce(reload.promise);
     vi.mocked(api.putTarget).mockRejectedValueOnce(new Error('offline'));
-    let done!: Promise<boolean>;
-    act(() => {
-      done = result.current.setWorkMinutes(TODAY, 300);
-    });
+    const done = begin(() => result.current.setWorkMinutes(TODAY, 300));
     expect(result.current.days[TODAY]?.workMinutes).toBe(300);
     await act(() => done);
     // The reload is still out: the sheet shows the length the server stored.
@@ -662,12 +636,9 @@ describe('per-day fields', () => {
     vi.mocked(api.putTarget).mockResolvedValueOnce({ workMinutes: 240 });
     const { result } = renderStore();
     await settle();
-    let done!: Promise<boolean>;
     act(() => void result.current.setOvertimeApproved(TODAY, true));
     act(() => void result.current.setOvertimeApproved(TODAY, false));
-    act(() => {
-      done = result.current.setWorkMinutes(TODAY, 240);
-    });
+    const done = begin(() => result.current.setWorkMinutes(TODAY, 240));
     await settle();
     expect(api.putOvertime).toHaveBeenCalledTimes(1);
     expect(api.putTarget).not.toHaveBeenCalled();
@@ -701,10 +672,7 @@ describe('sessions', () => {
     vi.mocked(api.deleteSession).mockReturnValue(answer.promise);
     const { result } = renderStore();
     await settle();
-    let done!: Promise<boolean>;
-    act(() => {
-      done = result.current.removeSession(TODAY, 1);
-    });
+    const done = begin(() => result.current.removeSession(TODAY, 1));
     expect(result.current.days[TODAY]?.sessions).toEqual([]);
     answer.resolve({ ok: true });
     await act(() => done);
@@ -731,10 +699,7 @@ describe('sessions', () => {
     vi.mocked(api.patchSession).mockReturnValueOnce(answer.promise);
     const { result } = renderStore();
     await settle();
-    let done!: Promise<boolean>;
-    act(() => {
-      done = result.current.updateSession(TODAY, 1, { label: 'Renamed' });
-    });
+    const done = begin(() => result.current.updateSession(TODAY, 1, { label: 'Renamed' }));
     expect(result.current.days[TODAY]?.sessions.map((x) => x.label)).toEqual(['Renamed', 'Other']);
     answer.resolve({ session: makeSession({ label: 'Renamed (stored)' }) });
     await act(() => done);
@@ -773,10 +738,7 @@ describe('breaks', () => {
     vi.mocked(api.startBreak).mockReturnValue(answer.promise);
     const { result } = renderStore();
     await settle();
-    let done!: Promise<boolean>;
-    act(() => {
-      done = result.current.startBreak(TODAY, 600);
-    });
+    const done = begin(() => result.current.startBreak(TODAY, 600));
     await settle();
     expect(api.startBreak).toHaveBeenCalledWith(TODAY, 600);
     expect(result.current.days[TODAY]?.breaks).toEqual([over, running]);
@@ -815,10 +777,7 @@ describe('breaks', () => {
     vi.mocked(api.endBreak).mockReturnValue(answer.promise);
     const { result } = renderStore();
     await settle();
-    let done!: Promise<boolean>;
-    act(() => {
-      done = result.current.endBreak(TODAY, 2);
-    });
+    const done = begin(() => result.current.endBreak(TODAY, 2));
     expect(result.current.days[TODAY]?.breaks).toEqual([over, { ...running, endedAt: T0 }]);
     expect(api.endBreak).not.toHaveBeenCalled();
     await settle();
@@ -836,10 +795,7 @@ describe('breaks', () => {
     vi.mocked(api.endBreak).mockReturnValueOnce(answer.promise);
     const { result } = renderStore();
     await settle();
-    let done!: Promise<boolean>;
-    act(() => {
-      done = result.current.endBreak(TODAY, 2);
-    });
+    const done = begin(() => result.current.endBreak(TODAY, 2));
     expect(result.current.days[TODAY]?.breaks).toEqual([over]);
     answer.resolve({ break: null });
     await act(() => done);
@@ -854,15 +810,13 @@ describe('breaks', () => {
     await act(() => result.current.load(TODAY));
     const stored = deferred<BreakEndResponse>();
     vi.mocked(api.endBreak).mockReturnValueOnce(stored.promise);
-    act(() => {
-      done = result.current.endBreak(TODAY, 2);
-    });
+    const ended = begin(() => result.current.endBreak(TODAY, 2));
     await settle();
     vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { breaks: [over, kept, phone] }));
     await act(() => result.current.load(TODAY));
     expect(result.current.days[TODAY]?.breaks).toEqual([over, phone]);
     stored.resolve({ break: kept });
-    await act(() => done);
+    await act(() => ended);
     expect(result.current.days[TODAY]?.breaks).toEqual([over, kept, phone]);
   });
 
@@ -910,10 +864,7 @@ describe('breaks', () => {
     vi.mocked(api.deleteBreak).mockReturnValue(answer.promise);
     const { result } = renderStore();
     await settle();
-    let done!: Promise<boolean>;
-    act(() => {
-      done = result.current.removeBreak(TODAY, 1);
-    });
+    const done = begin(() => result.current.removeBreak(TODAY, 1));
     expect(result.current.days[TODAY]?.breaks).toEqual([running]);
     answer.resolve({ ok: true });
     await act(() => done);
@@ -996,10 +947,7 @@ describe('pruneBefore', () => {
     const out = deferred<Day>();
     const again = deferred<Day>();
     vi.mocked(api.getDay).mockReturnValueOnce(out.promise).mockReturnValueOnce(again.promise);
-    let refreshed!: Promise<void>;
-    act(() => {
-      refreshed = result.current.refresh(OTHER);
-    });
+    const refreshed = begin(() => result.current.refresh(OTHER));
     await act(() => result.current.pruneBefore(TODAY));
     // The read after the prune shares the one already out.
     expect(api.getDay).toHaveBeenCalledTimes(2);

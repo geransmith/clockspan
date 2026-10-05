@@ -110,7 +110,6 @@ describe('cross-site writes', () => {
 describe('host names under AUTH_MODE=none', () => {
   let app: TestApp;
   afterEach(async () => {
-    vi.restoreAllMocks();
     await app.close();
   });
 
@@ -241,7 +240,6 @@ describe('bad request bodies', () => {
     expect(res.body).toEqual({ error: 'Internal error.' });
     expect(logged).toHaveBeenCalledOnce();
     expect(String(logged.mock.calls[0]![0])).toMatch(/not open/);
-    logged.mockRestore();
   });
 
   it('ignores a body that is not JSON instead of parsing it', async () => {
@@ -256,7 +254,6 @@ describe('bad request bodies', () => {
 describe('TRUST_PROXY', () => {
   let app: TestApp;
   afterEach(async () => {
-    vi.restoreAllMocks();
     await app.close();
   });
 
@@ -411,7 +408,6 @@ describe('static client', () => {
     expect(text).not.toContain(dir);
     expect(logged).toHaveBeenCalledOnce();
     expect(logged).toHaveBeenCalledWith(expect.objectContaining({ code: 'ENOENT' }));
-    logged.mockRestore();
   });
 });
 
@@ -434,7 +430,6 @@ describe('createApp', () => {
 describe('startBackgroundJobs', () => {
   afterEach(() => {
     vi.useRealTimers();
-    vi.restoreAllMocks();
   });
 
   it('purges expired logins every six hours and schedules the old-day prune; building an app starts neither', () => {

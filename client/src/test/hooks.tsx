@@ -25,6 +25,15 @@ export async function settle(ms = 0): Promise<void> {
   });
 }
 
+/** Starts one call inside act() and hands back its promise, for a test that awaits it later. */
+export function begin<T>(fn: () => Promise<T>): Promise<T> {
+  let p!: Promise<T>;
+  act(() => {
+    p = fn();
+  });
+  return p;
+}
+
 /** The server answers a range with the days it holds in it; the calling test mocks '../api'. */
 export function serveRange(days: Day[]): void {
   vi.mocked(api.getRange).mockImplementation((from, to) => Promise.resolve({ days: days.filter((d) => d.date >= from && d.date <= to) }));
