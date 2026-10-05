@@ -21,7 +21,7 @@ gh pr merge <number> --squash --delete-branch   # for each one that passed
 ```
 
 Read a major version bump like an outside PR first: what could it break that the tests don't
-reach (most components have no automated tests, and none test how they look)? Dependencies are pinned, so a fix only reaches
+reach (component tests cover their logic only, and none test how they look)? Dependencies are pinned, so a fix only reaches
 users in a release: cut a patch release after merging a security update (or one that fixes a
 Dependabot alert) or a new Docker base image. Other bumps can wait for the next release.
 
@@ -140,14 +140,9 @@ gh run rerun <run-id> --failed
 | --- | --- | --- |
 | Pull request | `check`, `image-smoke` (both required) | install without dependency scripts and check registry signatures; `npm audit --audit-level=high` (a new advisory can turn an unchanged PR red: merge the fix first); typecheck, lint, format:check, test:coverage, build; a changed version must be a higher `X.Y.Z` with no tag yet. The image is built for amd64 and for arm64 (under QEMU) and each is booted by `scripts/smoke-image.sh` (health, SPA shell, `/data` owner, root dropped, no npm, npx, corepack or yarn, the healthcheck command); nothing is pushed |
 | Push to `main` | `check`, `image` | both platforms are built and booted by the same script, and only then pushed as one multi-platform `ghcr.io/geransmith/clockspan:edge` |
-| Push to `main` that changes the version | `check`, `image`, `release` | `:edge` and the release image tags (see "Image tags" below), the git tag `vX.Y.Z` and the GitHub Release |
+| Push to `main` that changes the version | `check`, `image`, `release` | `:edge` and the release image tags (see [README → Docker](README.md#docker)), the git tag `vX.Y.Z` and the GitHub Release |
 | Pull request, push to `main`, weekly | `CodeQL` (not required) | static security analysis of the TypeScript (`security-extended`); alerts land in code scanning, and GitHub fails the PR's CodeQL check on a new high or critical one |
 | Pull request or push that touches `.github/` | `zizmor` (not required) | a security audit of the workflows and `dependabot.yml`; findings fail the job |
 
 A newer push to a pull request cancels that PR's older run; runs on `main` are never cancelled.
 Actions are pinned to commit SHAs; Dependabot bumps them (SHA and version comment together).
-
-Image tags: `latest` is the newest release; `X` follows a major version through its minor and
-patch releases, never across a breaking change; `X.Y` follows a minor version's patches;
-`X.Y.Z` is one release; `edge` is built from `main` and has only passed CI (two merges close
-together build side by side, so for a few minutes it can be the one before the latest).
