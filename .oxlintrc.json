@@ -8,7 +8,6 @@
   "categories": { "correctness": "error" },
   "env": { "browser": true, "node": true },
   "options": { "typeAware": true },
-  "ignorePatterns": ["dist/", "node_modules/", "data/", "docs/", "coverage/"],
   "rules": {
     // `_`-prefixed names are the convention for "deliberately unused" (rest-destructuring a
     // row to drop columns, unused handler params).
@@ -18,9 +17,9 @@
     // "[object Object]". The imported alert is a module binding, which this rule leaves alone.
     // no-alert would also refuse the window.confirm calls the app makes on purpose.
     "no-restricted-globals": ["error", { "name": "alert", "message": "Import alert from client/src/lib/alerts; the browser's alert() is never used." }],
-    // The automatic JSX runtime needs no React import.
-    "react/react-in-jsx-scope": "off",
-    // eslint-plugin-react-hooks' recommended set, including the React Compiler rules.
+    // The hooks rules the app relies on, the React Compiler ones included, listed so an oxlint
+    // upgrade that moves a rule out of the correctness category can't drop it. correctness also
+    // brings the rest (incompatible-library). The typescript/* list below is kept for the same reason.
     "react-hooks/rules-of-hooks": "error",
     "react-hooks/exhaustive-deps": "error",
     "react-hooks/refs": "error",

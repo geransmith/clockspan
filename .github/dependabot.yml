@@ -1,5 +1,5 @@
-# Weekly dependency updates. Every PR is labelled skip-changelog (the release notes exclude
-# the dependabot author anyway) and is merged by hand, like any other PR (CONTRIBUTING.md).
+# Weekly dependency updates. Every PR is labelled skip-changelog and is merged by hand, like
+# any other PR (CONTRIBUTING.md).
 #
 # Every ecosystem waits 7 days after a release before proposing it (GitHub's default is 3):
 # that week is the margin for a hijacked release to be caught and pulled first. Security
