@@ -119,6 +119,8 @@ describe('Priorities', () => {
     fireEvent.click(screen.getByRole('button', { name: WARNING_ACTIONS.fresh.keep }));
     expect(screen.getByRole('status')).toBe(status);
     expect(status.textContent).toBe('');
+    // The notice took its buttons with it, so focus goes to Add priority rather than the page.
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add priority' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
     fireEvent.click(screen.getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
@@ -128,8 +130,19 @@ describe('Priorities', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove priority 4' }));
     expect(saved()).toHaveLength(3);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add priority' }));
     // Rows inside the usual count have no remove button.
     expect(screen.queryByRole('button', { name: /Remove priority/ })).toBeNull();
+  });
+
+  it('keeps focus on a remove button when a row before the last is removed', async () => {
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ priorityCount: 1 }));
+    const { saved } = await renderCard([makePriority(1, 'A'), makePriority(2, 'B'), makePriority(3, 'C')]);
+    const remove2 = screen.getByRole('button', { name: 'Remove priority 2' });
+    remove2.focus();
+    fireEvent.click(remove2);
+    expect(saved().map((p) => p.text)).toEqual(['A', 'C']);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove priority 2' }));
   });
 
   it('with every row ticked, warns from the "complete" set and lists what is done', async () => {
@@ -149,8 +162,12 @@ describe('Priorities', () => {
     expect(screen.getByText(LEFT_OPEN.title('yesterday'))).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.dismiss }));
     expect(dismiss).toHaveBeenCalled();
+    expect(document.activeElement).toBe(textbox(1));
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
     expect(saved().map((p) => p.text)).toEqual(['Invoices', '', '']);
+    // The offer is gone with its buttons; focus lands on the row it filled.
+    expect(screen.queryByRole('button', { name: LEFT_OPEN.add })).toBeNull();
+    expect(document.activeElement).toBe(textbox(1));
     expect(saved()[0]).toMatchObject({ position: 1, text: 'Invoices', done: false, addedAt: T0 });
     expect(saved()[0]!.uid).not.toBe(yesterdays[0]!.uid);
   });

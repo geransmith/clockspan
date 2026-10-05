@@ -112,7 +112,7 @@ function Users({ me }: { me: PublicUser }) {
               {u.id === me.id && <span className="muted small"> (you)</span>}
             </span>
             {u.id !== me.id && (
-              <button className="btn btn-ghost btn-danger-text" onClick={() => remove(u)} aria-label={`Delete ${u.name}`}>
+              <button className="btn btn-ghost btn-danger-text" onClick={() => remove(u)} disabled={busy} aria-label={`Delete ${u.name}`}>
                 Delete
               </button>
             )}

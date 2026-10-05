@@ -40,6 +40,8 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
   const [warning, setWarning] = useState<{ kind: WarningKind; text: string } | null>(null);
   const lastWarning = useRef<string | undefined>(undefined);
   const inputs = useRef(new Map<number, HTMLTextAreaElement>());
+  // Where focus goes when the button that had it is taken away, so a keyboard user isn't sent back to the page's top.
+  const addButton = useRef<HTMLButtonElement>(null);
   // A tick gets a burst from its checkbox.
   const [ticked, setTicked] = useState<Moment | null>(null);
   const { anchor, burst } = useCelebration<HTMLInputElement>(ticked, 'priorityDone');
@@ -81,9 +83,22 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
   // unless a session ran first. A text that appears twice comes over once.
   const bringOver = (rows: Priority[]) => {
     const texts = rows.map((p) => p.text);
-    editList(padPriorities(planNext([], texts).rows, count), true);
+    flushSync(() => editList(padPriorities(planNext([], texts).rows, count), true));
+    inputs.current.get(1)?.focus();
   };
-  const removeRow = (position: number) => editList(removePriority(local, position), true);
+  const dismissLeftOpen = (dismiss: () => void) => {
+    dismiss();
+    inputs.current.get(1)?.focus();
+  };
+  const removeRow = (position: number) => {
+    // Removing a row before the last moves the next row's X under focus; the last row takes its X with it.
+    flushSync(() => editList(removePriority(local, position), true));
+    if (position === local.length) addButton.current?.focus();
+  };
+  const keepList = () => {
+    setWarning(null);
+    addButton.current?.focus();
+  };
 
   return (
     <div className="priorities">
@@ -101,7 +116,7 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
             <button className="btn" onClick={() => bringOver(leftOpen.rows)}>
               {LEFT_OPEN.add}
             </button>
-            <button className="btn btn-ghost" onClick={leftOpen.dismiss}>
+            <button className="btn btn-ghost" onClick={() => dismissLeftOpen(leftOpen.dismiss)}>
               {LEFT_OPEN.dismiss}
             </button>
           </span>
@@ -194,7 +209,7 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
               <button className="btn btn-ghost" onClick={() => addRow(true)}>
                 {WARNING_ACTIONS[warning.kind].add}
               </button>
-              <button className="btn btn-ghost" onClick={() => setWarning(null)}>
+              <button className="btn btn-ghost" onClick={keepList}>
                 {WARNING_ACTIONS[warning.kind].keep}
               </button>
             </span>
@@ -204,7 +219,7 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
       <Burst at={burst} />
       <div className="priorities-foot">
         {local.length < MAX_PRIORITIES ? (
-          <button className="btn btn-ghost priority-add" onClick={() => addRow()}>
+          <button ref={addButton} className="btn btn-ghost priority-add" onClick={() => addRow()}>
             <Plus />
             Add priority
           </button>
