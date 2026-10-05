@@ -63,12 +63,11 @@ function Shell() {
   // The calendar's month and picked day are its own state and don't survive the unmount, so
   // the opened day is written onto the History entry first and Back reopens the calendar on
   // it. A day opened from Review records the period with it, so Back reopens the review
-  // there. The second call names both fields: navigate reads the route through useLatest,
-  // which isn't updated between two calls in one handler.
+  // there.
   const openDay = useCallback(
     (d: string, review: ReviewPeriod | null) => {
       navigate({ date: d, review }, { replace: true });
-      navigate({ view: 'sheet', date: d });
+      navigate({ view: 'sheet' });
     },
     [navigate],
   );
@@ -76,7 +75,8 @@ function Shell() {
 
   return (
     <div className={`app${running ? ' app--has-bar' : ''}`}>
-      {running && <RunningTimerBar />}
+      {/* Keyed by session: one another device swapped in must not inherit an open label draft. */}
+      {running && <RunningTimerBar key={running.id} />}
       <Banners />
       <Header
         view={route.view}

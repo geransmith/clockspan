@@ -81,7 +81,7 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
   ['getRunning', () => api.getRunning(), 'GET', '/api/sessions/running', undefined],
   [
     'startSession',
-    () => api.startSession(DATE, 1500, 'Report'),
+    () => api.startSession(DATE, 1500, 'Report', null),
     'POST',
     `/api/days/${DATE}/sessions`,
     { plannedSeconds: 1500, label: 'Report', priorityUid: null },
@@ -122,7 +122,7 @@ describe('failures', () => {
   it("throws an ApiError with the server's message, status and body", async () => {
     const body = { error: 'A timer is already running.', session: { id: 9 } };
     answer(409, body);
-    const err = await api.startSession(DATE, 1500, '').catch((e: unknown) => e);
+    const err = await api.startSession(DATE, 1500, '', null).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect(err).toMatchObject({ status: 409, message: 'A timer is already running.', body });
   });

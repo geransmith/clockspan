@@ -1,25 +1,28 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
-import type { AuthInfo } from '../types';
+import type { AuthInfo, PublicUser } from '../types';
 import { warnQuietly } from '../lib/alerts';
 import { HTTPS_ONLY, SERVER_UNREACHABLE, SIGN_OUT_FAILED } from '../lib/copy';
-import { adoptUser, AUTH_USER_KEY, readStored } from '../lib/storage';
+import { adoptUser, AUTH_USER_KEY, otherUserStored } from '../lib/storage';
 import { LoginPage, OidcLoginPage } from './LoginPage';
 import { NewPasswordPage } from './NewPasswordPage';
 import { SetupPage } from './SetupPage';
 import { ErrorLine } from '../components/ErrorLine';
 
+/** An answer that opens the app: it always names a user. */
+type AppAuth = AuthInfo & { user: PublicUser };
+
 interface AuthCtx {
-  auth: AuthInfo;
+  auth: AppAuth;
   /** Resolves true when this device is signed out or on its way out, false when the session is still here (a banner says so). */
   signOut: () => Promise<boolean>;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
 
-/** Who an answer opens the app for: a user on their own password (under AUTH_MODE=none, /me always names the default user), or null for a gate page. */
-function appUser(a: AuthInfo): number | null {
-  return a.user && !a.user.mustChangePassword ? a.user.id : null;
+/** Whether an answer opens the app: a user on their own password (under AUTH_MODE=none, /me always names the default user), or else a gate page. */
+function opensApp(a: AuthInfo): a is AppAuth {
+  return a.user !== null && !a.user.mustChangePassword;
 }
 
 export function AuthGate({ children }: { children: ReactNode }) {
@@ -42,7 +45,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       (next) => {
         // An answer that lands once the page is leaving would only undo what the sign-out recorded.
         if (leaving.current) return next;
-        const key = appUser(next);
+        const key = opensApp(next) ? next.user.id : null;
         if (openFor.current !== null && key !== openFor.current) {
           // A page load ends the old user's write queues, drafts, banners and tab title. Taking
           // the app down in place would flush them (a draft saves on unmount) under the new cookie.
@@ -78,8 +81,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!answered) return;
     const check = () => {
-      const stored = readStored(AUTH_USER_KEY);
-      if (stored !== null && stored !== String(openFor.current ?? '')) leave(() => window.location.reload());
+      if (otherUserStored(openFor.current)) leave(() => window.location.reload());
     };
     const onStorage = (e: StorageEvent) => {
       if (e.key === AUTH_USER_KEY) check();
@@ -120,11 +122,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
     return false;
   }, [leave, refresh]);
 
-  const value = useMemo(() => (auth ? { auth, signOut } : null), [auth, signOut]);
+  const value = useMemo(() => (auth && opensApp(auth) ? { auth, signOut } : null), [auth, signOut]);
   const retry = () => void refresh();
 
   if (!auth) return error ? <Unreachable error={error} onRetry={retry} /> : <div className="gate" aria-busy="true" />;
-  if (appUser(auth) !== null) return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  if (opensApp(auth)) return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
   // A gate page whose write went through (a new password, setup, a sign-in) but whose re-read
   // failed. Sending the form again would be refused (the temporary password is gone, setup is
   // done), so Retry reads /me again instead.

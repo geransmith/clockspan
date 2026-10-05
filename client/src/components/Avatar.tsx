@@ -1,8 +1,9 @@
 export function Avatar({ name }: { name: string }) {
-  // The first code point, not the first UTF-16 unit, so an initial that is an emoji is never half a surrogate pair.
+  // The first grapheme, so a flag, a skin-toned or a joined emoji keeps its whole glyph.
+  const [first] = new Intl.Segmenter().segment(name);
   return (
     <span className="avatar" aria-hidden="true">
-      {(Array.from(name)[0] ?? '').toUpperCase()}
+      {(first?.segment ?? '').toUpperCase()}
     </span>
   );
 }

@@ -10,13 +10,13 @@ import { Section } from './controls';
 import { ErrorLine } from '../ErrorLine';
 import { Avatar } from '../Avatar';
 
-export function AccountTab({ user }: { user: PublicUser | null }) {
+export function AccountTab({ user }: { user: PublicUser }) {
   return (
     <>
       <Section title="Password">
-        <ChangePassword username={user?.username ?? ''} />
+        <ChangePassword username={user.username ?? ''} />
       </Section>
-      {user?.isAdmin && (
+      {user.isAdmin && (
         <Section
           title="Users"
           hint="Each user has their own sheet, history and settings. A new user signs in with the temporary password you give them, then chooses their own."

@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent, type MouseEvent, type SyntheticEvent } from 'react';
+import { useLayoutEffect, useRef, type KeyboardEvent, type MouseEvent, type SyntheticEvent } from 'react';
 
 /**
  * A native modal `<dialog>`, opened on mount and closed on unmount. The browser traps focus
@@ -6,7 +6,9 @@ import { useEffect, useRef, type KeyboardEvent, type MouseEvent, type SyntheticE
  * then opened here, so nothing flashes. Focus lands on the dialog itself (its title is read
  * out; Tab reaches the controls) rather than on the first button showModal() would pick, where
  * Enter would act before the question was seen. The page behind still needs the scroll lock
- * on iOS.
+ * on iOS. A layout effect, so the close on unmount runs while the dialog is still in the page,
+ * modal, and the browser puts focus back where it was before the dialog opened; a passive
+ * cleanup runs after React has removed the node, and focus would fall to the page.
  *
  * Spread the result on the `<dialog>`. It closes three ways: `cancel` (the browser's own
  * gestures: Escape, Android back); an Escape keydown, where a browser routes the key
@@ -19,7 +21,7 @@ import { useEffect, useRef, type KeyboardEvent, type MouseEvent, type SyntheticE
  */
 export function useModalDialog(onClose: () => void) {
   const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = ref.current!;
     el.showModal();
     el.focus();
@@ -37,7 +39,8 @@ export function useModalDialog(onClose: () => void) {
       onClose();
     },
     onKeyDown: (e: KeyboardEvent<HTMLDialogElement>) => {
-      if (e.key === 'Escape') onClose();
+      // An input method's Escape drops a candidate inside a field: it doesn't close the dialog.
+      if (e.key === 'Escape' && !e.nativeEvent.isComposing) onClose();
     },
     onMouseDown: (e: MouseEvent<HTMLDialogElement>) => {
       if (e.target === e.currentTarget) onClose();

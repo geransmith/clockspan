@@ -25,7 +25,7 @@ it('opens as a modal with focus on itself, and locks the page scroll until unmou
   expect(document.body.classList.contains('no-scroll')).toBe(false);
 });
 
-it('closes on the browser cancel gesture, on Escape and on a press on the backdrop only', () => {
+it('closes on the browser cancel gesture, on Escape outside an input method, and on a press on the backdrop only', () => {
   const onClose = vi.fn();
   render(<Dialog onClose={onClose} />);
   const dialog = screen.getByRole('dialog', { hidden: true });
@@ -37,10 +37,24 @@ it('closes on the browser cancel gesture, on Escape and on a press on the backdr
 
   fireEvent.keyDown(dialog, { key: 'Escape' });
   fireEvent.keyDown(dialog, { key: 'Enter' });
+  fireEvent.keyDown(dialog, { key: 'Escape', isComposing: true });
   expect(onClose).toHaveBeenCalledTimes(2);
 
   fireEvent.mouseDown(screen.getByText('Inside'));
   expect(onClose).toHaveBeenCalledTimes(2);
   fireEvent.mouseDown(dialog);
   expect(onClose).toHaveBeenCalledTimes(3);
+});
+
+// The browser puts focus back on the opener only when close() finds the dialog still in the page
+// and modal; happy-dom doesn't move focus, so the test checks that close() comes in time.
+it('closes the dialog while it is still in the page, so the browser returns focus to the opener', () => {
+  const connected: boolean[] = [];
+  const close = vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function (this: HTMLDialogElement) {
+    connected.push(this.isConnected);
+  });
+  const { unmount } = render(<Dialog onClose={vi.fn()} />);
+  unmount();
+  close.mockRestore();
+  expect(connected).toEqual([true]);
 });

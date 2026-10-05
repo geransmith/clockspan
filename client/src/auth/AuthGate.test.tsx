@@ -21,7 +21,7 @@ function App() {
   const { auth, signOut } = useAuth();
   return (
     <>
-      <p>Sheet for {auth.user?.name ?? 'you'}</p>
+      <p>Sheet for {auth.user.name}</p>
       <button onClick={() => void signOut().then(signedOut)}>Sign out</button>
     </>
   );
