@@ -217,10 +217,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   under `AUTH_MODE=none` only, on `/api` after `/api/health`, and reads the raw `Host` header,
   never `req.hostname`. Headers that describe one answer stay with the code that sends it: the
   static files' `Cache-Control` in `app.ts`, `Retry-After` in `refuseTooMany`
-  (`auth/limiter.ts`), and `Set-Cookie` only through `cookieHeader()` (`auth/session.ts`). A
-  request's cookies are read only through `readCookie()` there; outside `server/dev/` (the test
-  harness's cookie jar) no other module imports `cookie`. The session is resolved under `/api`
-  only, so a static answer, which is publicly cacheable, never carries a cookie. The HTML the
+  (`auth/limiter.ts`), and `Set-Cookie` only through `cookieHeader()` (`auth/session.ts`).
+- **Cookies, sessions and passwords stay in `server/auth/`.** A request's cookies are read only
+  through `readCookie()` (`auth/session.ts`) and written only through `cookieHeader()` there;
+  outside `server/dev/` (the test harness's cookie jar) no other module imports `cookie`. The
+  session is resolved under `/api` only, so a static answer, which is publicly cacheable, never
+  carries a cookie. The HTML the
   server writes itself (the OIDC error pages in `auth/oidc.ts`) is fixed text: no request data
   or error message goes into it, and the cause goes to the log. Password hashing is async
   (`scrypt`, never `scryptSync`); login verifies against `DUMMY_HASH` when the user is unknown.
@@ -256,7 +258,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   is the single `kind='default'` user. Never add a data route outside the `requireAuth` router
   in `app.ts`. Every `/:date` route sits on the days router (`routes/days.ts`), whose `date`
   param handler (`router.param`) answers 400 for anything but a real `YYYY-MM-DD`, so a route
-  added there is checked with nothing to list; the session and break starts are registered
+  added there is checked with nothing to list. Register a literal path under `/days` (like
+  `/range`, `/prune`) before `/:date`. The session and break starts are registered
   there with handlers from their own files. The `/sessions/:id` and `/breaks/:id` routes
   sit on a router made by `ownedRouter()` in `routes/shared.ts`, which is where the ownership
   check lives: it is that router's `id` param handler (`router.param`), so every route on it
@@ -278,7 +281,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **Timeclock math lives only in `client/src/lib/timeclock.ts`; alarm scheduling only in
   `client/src/lib/alarms.ts`.** Both are pure functions of `(inputs, settings, now)` with tests.
   Components and hooks never re-derive these. A stored day goes through `dayTimeclock`: its own
-  length through `daySettings`, then `timeclockForDate`'s clamp (`now = min(now, endOfDay)`) and
+  length through `daySettings`, then `clampToDay` (`now = min(now, endOfDay)`) and
   `{ frozen: true }` once past.
 - **Times are written through `useTimeFormat()`** (components) or `formatTime(ms, hour12)` with
   an explicit `hour12` (pure libs: `describeEvent` takes it on `EventContext`). The setting is
@@ -306,28 +309,29 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `pausedSeconds` holds the pauses that have ended, and the planned end moves forward while
   paused. A finish while paused ends the session where the pause began, and a pause left for
   `PAUSE_LIMIT_SECONDS` (an hour) is finished by the client with a quiet banner. **A timer that
-  runs out is not finished by the client**: it is `due`, announced once per (session, planned
-  end) — `dueKey`, kept in the page and in `localStorage['focus:timer-due']` so a reload shows
-  the banner again without a second chime — and waits `DUE_GRACE_SECONDS` (10 min) for an
-  answer before the auto-finish (which chimes only if nothing has for that end). The banner
-  goes while a press that took it away is on its way, and comes back, quietly, if that press
-  fails. While due the countdown shows the overrun as a negative number, +N minutes
-  (`adjust(N * 60)`; it takes seconds) is N minutes from now, `finish()` logs the planned
-  length (the server's clamp) and `finish(true)` sends `countOverrun` so the time past the end
-  is logged too. Plans are whole minutes: `adjust` rounds the new plan up to one and stops at
-  `PLANNED_SECONDS.max` (8 h), where `canAdd` turns false, + is disabled and the "Time's up"
-  banner drops its Add button. The Finish buttons call `requestFinish()`: it finishes unless
-  the timer is due and the planned and worked lengths differ in their whole minutes (a minute
-  or more over), where `finishChoice` opens the `FinishChoice` sheet
-  (Planned · Nm / Worked · Mm / Back). `lib/timer.ts` holds these rules beside `timerView`:
-  `countdownSeconds`, `adjustedPlan` (the new plan, `'finish'`, or nothing for + at the
-  longest plan), `canAdd` and `asksLength`. A finish goes out behind any press still on its
-  way. The choice belongs to the session it was asked for (`finishChoiceFor`): once that
-  session ends, however it ends, the sheet goes with it. The bar and the log's running row edit
-  the session through `useTimer().edit`, so their writes share its queue and both show the
-  edit. `useTimer` keeps the running session the way the day store keeps a day: a press
-  (adjust, edit, pause, resume) shows at once, a failure drops only that press, and a sync's
-  answer never hides a press still on its way. Keep that pattern for new mutations.
+  runs out is not finished at once**: it is `due`, announced once per (session, planned end) —
+  `dueKey`, kept in the page and in `localStorage['focus:timer-due']` so a reload shows the
+  banner again without a second chime — and waits `DUE_GRACE_SECONDS` (10 min) for an answer
+  before the auto-finish (which chimes only if nothing has for that end). The banner goes while
+  a press that took it away is on its way, and comes back, quietly, if that press fails. While
+  due the countdown shows the overrun as a negative number, +N minutes (`adjust(N * 60)`; it
+  takes seconds) is N minutes from now, `finish()` logs the planned length (the server's clamp)
+  and `finish(true)` sends `countOverrun` so the time past the end is logged too. Plans are
+  whole minutes: `adjust` rounds the new plan up to one and stops at `PLANNED_SECONDS.max`
+  (8 h), where `canAdd` turns false, + is disabled and the "Time's up" banner drops its Add button.
+  The Finish buttons call `requestFinish()`: it finishes unless the timer is due and the planned
+  and worked lengths differ in their whole minutes (a minute or more over), where `finishChoice`
+  opens the `FinishChoice` sheet (Planned · Nm / Worked · Mm / Back). `lib/timer.ts` holds these
+  rules: `timerView` (which derives `countdownSeconds`, `canAdd` and `asksLength`) and
+  `adjustedPlan` (the new plan, `'finish'`, or nothing for + at the longest plan). A finish goes
+  out behind any press still on its way. The choice belongs to the due end it was asked for
+  (`finishChoiceFor`, a `dueKey`): once the timer is no longer due at that end (time added or a
+  pause, here or on another device, or the session ending however it ends), the sheet goes and
+  stays gone. The bar and the log's running row edit the session through `useTimer().edit`, so
+  their writes share its queue and both show the edit. `useTimer` keeps the running session the
+  way the day store keeps a day: a press (adjust, edit, pause, resume) shows at once, a failure
+  drops only that press, and a sync's answer never hides a press still on its way. Keep that
+  pattern for new mutations.
 - **One running session per user is a schema invariant** (a unique partial index), and another
   device may own it: a 409 on start is adopted with a banner, a sync whose answer differs from
   the session shown refreshes that day if the store holds it so the log catches up (a day it
@@ -343,14 +347,14 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   failed `GET /settings` is retried (`nextBackoff` in `shared/backoff.ts`: 2 s doubling to a
   minute), never settled with the defaults. After the first answer the settings are fetched
   again on `useRefreshLoop`, like today's day, since another device may change them.
-- **Today's day is kept in step with the server** (`useRefreshDay` in `useDay.tsx`, on the same
-  hook as the timer's sync and the settings' refresh, `useRefreshLoop`: every minute and when
-  the tab comes back, throttled to 5 s per caller), so the alarms in `useTodayAlarms` judge the
-  server's copy of the punches, not one from hours ago; they wait while a come-back refresh is
-  out. A today whose first load failed is loaded again on the same ticks (no second banner), so
-  its alarms come back with the server. Any day the store holds is also read again each time a
-  view shows it (`useDay`; one whose first load failed is asked for again then, quietly), and a
-  range read (`store.readRange`) lands on the held days in it under the same `version` rule.
+- **Today's day is kept in step with the server** (`useRefreshDay` in `useDay.tsx`, on
+  `useRefreshLoop`: every minute and when the tab comes back, throttled to 5 s per caller), so
+  the alarms in `useTodayAlarms` judge the server's copy of the punches, not one from hours ago;
+  they wait while a come-back refresh is out. A today whose first load failed is loaded again on
+  the same ticks (no second banner), so its alarms come back with the server. Any day the store
+  holds is also read again each time a view shows it (`useDay`; one whose first load failed is
+  asked for again then, quietly), and a range read (`store.readRange`) lands on the held days in
+  it under the same `version` rule.
 - **The day store keeps the server's copy and this device's changes apart**
   (`lib/optimistic.ts`): each day is its confirmed copy plus the changes not confirmed yet, and
   the sheet shows the one laid over the other. The confirmed copy is the server's answers in the
@@ -367,13 +371,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   changes until the server's copy arrives, so nothing made up stands in for it. `pruneBefore` is
   the one store write sent on no queue (the queues are keyed by day, session and breaks), so a
   change still on its way for a day before the cutoff can land after the prune and re-create
-  that day, which the re-read after the prune shows. The day store,
-  `useSettings` and `useTimer` are all built on `useTracked` (`hooks/useTracked.ts`): the
-  state, a `current()` that callbacks read before the next render, ids for the changes, and the
-  store's write queue. `apply` and commit functions are pure: read the clock outside them.
-- **Break lengths come only from `client/src/lib/breaks.ts`** (`suggestBreak`, pure, over a
-  day's sessions: a fifth of the session, a long break for the fourth in a row, a 15-minute gap
-  restarts the count). With `suggestBreaks` on, `useBreak` offers today's suggestion on the
+  that day, which the re-read after the prune shows. The day store, `useSettings` and
+  `useTimer` are all built on `useTracked` (`hooks/useTracked.ts`). `apply` and commit
+  functions are pure: read the clock outside them.
+- **Suggested break lengths come only from `client/src/lib/breaks.ts`** (`suggestBreak`,
+  pure, over a day's sessions: a fifth of the session, a long break for the fourth in a row, a
+  15-minute gap restarts the count); with Suggest breaks off the Break button runs
+  `settings.breakMinutes`. With `suggestBreaks` on, `useBreak` offers today's suggestion on the
   Break button and as a quiet banner off `useTimer().finished`, which only a finish by hand
   sets (Finish, the finish choice, − past the time worked), never the auto-finish or another
   device.
@@ -391,10 +395,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   has one copy of that rule. The client mirrors both rules with `endBreaksAt` (in `useDay`'s
   break writes and `applySession`, which ends a running break on any loaded day, since one
   started before midnight sits on the day before), so it never sends an end after a session
-  start: the break may already be gone. An end the server answers 404 for (the break was
-  deleted elsewhere) counts as done. The timer card disables its break buttons while a start
+  start: the break may already be gone. The timer card disables its break buttons while a start
   is out, since a break write goes out on the day store's queue, not the timer's, and could
-  reach the server after the start.
+  reach the server after the start; for the same reason a session start takes the break
+  banners down in its tap (`dismissByTag('break')`), whose Start break those buttons don't
+  cover.
 - **Saves reach the server in the order they were made**, each store's on its own queue
   (`serial()` in `lib/optimistic.ts`, made by `useTracked`). In the day store, `setPunches` and
   `setPriorities` replace a whole list, so one PUT per list and day is in flight and only the
@@ -408,9 +413,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   or edit that names a priority's uid first waits, inside its own queue's job, for that day's
   priorities save still out (`prioritiesSaved`), since the server refuses a uid it hasn't
   stored. `useSettings` sends its PUTs and resets one at a time. A new edit of a day's rows, the
-  settings or the timer goes through one of these, never straight to `api`; the day store's
-  `pruneBefore` is the one store write sent on no queue, as the day store's rule explains. Reads
-  are not queued, and in all three stores a read's answer never replaces a change still on its
+  settings or the timer goes through one of these, never straight to `api`. Reads are not
+  queued, and in all three stores a read's answer never replaces a change still on its
   way.
 - **Punch positions are fixed**: 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in
   pairs, and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches`
@@ -471,40 +475,29 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started —
   one rule, no clock-in fallback. `GET /days/range` returns full days and the client does the
-  rollup (the review, the History calendar and the week line all fetch it through `useRange`,
-  one period at a time: it reads through `store.readRange`, lays the store's copies over the
-  answer so an edit shows at once (`useHeldOver`), and is asked again after a prune, or on Try
-  again (`retry`) after a failed read; the left-open offer, `useLeftOpen`, reads the same way
-  once a day and offers nothing when the read fails); register any new literal path under
-  `/days` before `/:date`.
-- **History → Days opens on the route's date.** `App.tsx` passes `route.date ?? today` to `History`;
-  the calendar starts on that month with that day picked, and only "Open day" navigates. So
-  the header's History button lands on the month of the day being viewed. The calendar holds
-  that month by its first day (`startOfMonth(date)`), so a month left open over midnight stays
-  on screen with its day picked; ◀ ▶ and "This month" count from today (`periodOffset`). The
-  review's period is held the same way, and switching Week / Month / Quarter keeps the time on
-  screen (the current period stays current). "Open day" first records the picked day on the
-  History entry (`navigate(…, { replace: true })`) and then pushes the sheet, so browser Back
-  from that day reopens the calendar on its month with the day picked. A day opened from Review
-  records the period with it (`route.review`), so Back reopens Review there. The calendar stays
-  mounted while Review shows, so a tab switch keeps its month and pick. The month grid is
-  `calendarMonth()` (pure) over the days `hasContent` (`lib/retro.ts`) keeps, the rule the
-  review counts days by; the panel's numbers come from `dayTimeclock` + `daySummaryOf`, the
-  same math as the sheet.
+  rollup (through `useRange`).
+- **History opens on the route's date** (`route.date ?? today`), with that day picked. The
+  calendar holds its month by its first day (`startOfMonth`) and Review its period by `from`,
+  so neither moves at midnight. "Open day" first records the picked day (and the Review period,
+  `route.review`) on the History entry with `replace` and then pushes the sheet, so Back
+  reopens it there (`openDay` in `App.tsx`). Its cells count days by `hasContent` and its panel
+  uses `dayTimeclock`, the sheet's math.
 - **The `retro` alarm target is the clock-out instant** ("warn before" = minutes before the
   end of the day) and is **not** silenced by overtime approval; marking the day reviewed
   (`days.retro_at`), or hiding the retrospective card under Customize (`alarmTargets` reads
   `settings.layout`), disarms it. Its banner button jumps to the card (`jumpTo` in `App.tsx`).
 - **Alarm event keys embed the target minute** (`eventKey`), so a moved target re-arms and a
   reload never re-fires. Fired keys live in `localStorage` under `focus:alarms:<date>` and are
-  pruned to today. Today's punches are held while a punch time field on today's sheet has focus
-  (`Timeclock`'s `onEditingChange`; Now, × and the pair buttons save at once and never hold),
-  for at most five minutes after the last change or move to another time field, and settle for
-  3 s after (`useSettled(value, ms)`, wired in `useTodayAlarms` on `punchesKey`) before
-  evaluation. The hold ends when focus leaves a time field or the field goes with focus inside
-  (the card unmounts, its pair is removed or moves across lunch): `TimeField` reports both,
-  since a removed field gets no blur. The punches are compared by their times, so a refresh
-  with the same times neither stops the alarms nor restarts the wait.
+  pruned to today.
+- **Today's alarms wait while a punch is being typed.** Today's punches are held while a punch
+  time field on today's sheet has focus (`Timeclock`'s `onEditingChange`; Now, × and the pair
+  buttons save at once and never hold), for at most five minutes after the last change or move
+  to another time field, and settle for 3 s after (`useSettled(value, ms)`, wired in
+  `useTodayAlarms` on `punchesKey`) before evaluation. The hold ends when focus leaves a time
+  field or the field goes with focus inside (the card unmounts, its pair is removed or moves
+  across lunch): `TimeField` reports both, since a removed field gets no blur. The punches are
+  compared by their times, so a refresh with the same times neither stops the alarms nor
+  restarts the wait.
 - **Per-date card drafts reset by remounting**: `Sheet.tsx` keys `Timeclock`, `Priorities` and
   `Retro` by date, so none needs a "date changed" effect. For `Timeclock` the remount is also
   what keeps a day already done from reading as one becoming done: `useBecameTrue` compares
