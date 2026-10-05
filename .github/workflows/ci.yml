@@ -35,7 +35,7 @@ jobs:
         with:
           fetch-depth: 2 # HEAD~1, for the version comparison below
           # Nothing here pushes with git, so the token isn't left in .git/config for later
-          # steps. The repository is public: the fetch and ls-remote below need no token.
+          # steps. The repository is public: the ls-remote below needs no token.
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -43,24 +43,16 @@ jobs:
           cache: npm
       # A commit that changes package.json's version is a release: the merge of the bump PR
       # publishes the versioned image and the GitHub Release (no tag is pushed by hand). On a
-      # PR the same comparison, against the base branch, refuses what CONTRIBUTING.md rules
-      # out: a version that isn't plain X.Y.Z (no pre-releases), one lower than before, or one
-      # that already has a tag. It needs only git and node, so it runs first: a bad version
-      # fails in seconds, not after the install, the tests and the build.
+      # PR the same comparison, against the base branch (the first parent of GitHub's merge
+      # commit), refuses what CONTRIBUTING.md rules out: a version that isn't plain X.Y.Z (no
+      # pre-releases), one lower than before, or one that already has a tag. It needs only git
+      # and node, so it runs first: a bad version fails in seconds, not after the install, the
+      # tests and the build.
       - name: Detect a version bump
         id: version
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           pkg="$(node -p "require('./package.json').version")"
-          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
-            base="$BASE_SHA"
-            git fetch --depth=1 origin "$base"
-          else
-            base="$(git rev-parse HEAD~1)"
-          fi
-          git show "$base:package.json" > /tmp/prev-package.json
-          prev="$(node -p "require('/tmp/prev-package.json').version")"
+          prev="$(git show HEAD~1:package.json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")"
           changed=false
           [ "$pkg" != "$prev" ] && changed=true
           if ! printf '%s' "$pkg" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'; then
@@ -166,15 +158,14 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.IMAGE }}
-          # Every push to main is `edge`; a version bump is also X.Y.Z, X.Y, X (from 1.0: a 0.x
-          # line promises nothing across minors) and latest. The org.opencontainers.image.version
-          # label is the highest-priority tag, and edge (700) outranks raw (200), so without the
-          # priority below a release would be labelled edge.
+          # Every push to main is `edge`; a version bump is also X.Y.Z, X.Y, X and latest. The
+          # org.opencontainers.image.version label is the highest-priority tag, and edge (700)
+          # outranks raw (200), so without the priority below a release would be labelled edge.
           tags: |
             type=edge,branch=main
             type=raw,value=${{ needs.check.outputs.version }},priority=900,enable=${{ needs.check.outputs.release == 'true' }}
             type=raw,value=${{ needs.check.outputs.minor }},enable=${{ needs.check.outputs.release == 'true' }}
-            type=raw,value=${{ needs.check.outputs.major }},enable=${{ needs.check.outputs.release == 'true' && needs.check.outputs.major != '0' }}
+            type=raw,value=${{ needs.check.outputs.major }},enable=${{ needs.check.outputs.release == 'true' }}
             type=raw,value=latest,enable=${{ needs.check.outputs.release == 'true' }}
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
         with:
@@ -191,7 +182,6 @@ jobs:
           platforms: linux/amd64
           load: true
           tags: clockspan:smoke
-          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           provenance: false
       - name: Boot the amd64 image and check it serves
@@ -203,7 +193,6 @@ jobs:
           platforms: linux/arm64
           load: true
           tags: clockspan:smoke-arm64
-          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           provenance: false
       - name: Boot the arm64 image and check it serves
@@ -224,7 +213,7 @@ jobs:
           provenance: false
 
   release:
-    if: github.event_name == 'push' && needs.check.outputs.release == 'true'
+    if: needs.check.outputs.release == 'true'
     needs: [check, image]
     runs-on: ubuntu-latest
     timeout-minutes: 10

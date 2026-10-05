@@ -1,7 +1,6 @@
 changelog:
   exclude:
     labels: [skip-changelog]
-    authors: [dependabot, github-actions]
   categories:
     # A `breaking` PR needs a major release (CONTRIBUTING.md) and goes first, where upgraders look.
     - title: Breaking changes

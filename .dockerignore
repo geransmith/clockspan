@@ -1,16 +1,11 @@
-node_modules
-dist
-data
-.git
-.env
-*.log
-.DS_Store
-README.md
-SECURITY.md
-AGENTS.md
-CLAUDE.md
-docs
-scripts
-.github
-.claude
-coverage
+# Only what the Dockerfile copies.
+*
+!package.json
+!package-lock.json
+!tsconfig.json
+!tsconfig.server.json
+!vite.config.ts
+!client
+!server
+!shared
+!docker
