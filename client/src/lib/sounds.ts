@@ -20,7 +20,7 @@ export function bundledClipIds(): string[] {
 
 /** A row per event in Settings → Alarms → Sounds; a new event without a label is a type error. */
 export const SOUND_EVENT_LABELS: Record<SoundEvent, string> = {
-  timer: 'Timer finished',
+  timer: "Time's up",
   breakDone: 'Break over',
   lead: 'Alarm warning',
   due: 'Alarm reached',

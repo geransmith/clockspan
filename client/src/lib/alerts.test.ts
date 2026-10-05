@@ -51,6 +51,8 @@ class FakeAudioContext {
   static instances: FakeAudioContext[] = [];
   static failConstructor = false;
   static failDecode = false;
+  /** Off: a resume outside a tap, which the browser leaves suspended. */
+  static resumeRuns = true;
   state: 'suspended' | 'running' = 'running';
   currentTime = 10;
   destination = {};
@@ -85,7 +87,7 @@ class FakeAudioContext {
   }
   resume() {
     this.resumed++;
-    this.state = 'running';
+    if (FakeAudioContext.resumeRuns) this.state = 'running';
     return Promise.resolve();
   }
 }
@@ -120,6 +122,7 @@ beforeEach(async () => {
   FakeAudioContext.instances = [];
   FakeAudioContext.failConstructor = false;
   FakeAudioContext.failDecode = false;
+  FakeAudioContext.resumeRuns = true;
   fetchMock.mockImplementation(() => fileResponse());
   vi.stubGlobal('fetch', fetchMock);
   FakeNotification.created = [];
@@ -177,6 +180,23 @@ describe('audio', () => {
     ctx.state = 'suspended';
     alerts.playSound('taps');
     expect(ctx.resumed).toBe(1);
+  });
+
+  it('schedules nothing on a context left suspended outside a tap, so no chime waits for the next one', () => {
+    alerts.unlockAudio();
+    const ctx = FakeAudioContext.instances[0]!;
+    ctx.state = 'suspended';
+    FakeAudioContext.resumeRuns = false;
+    vi.stubGlobal('navigator', { userActivation: { isActive: false } });
+    alerts.playSound('triad');
+    alerts.playSound('yay');
+    expect(ctx.resumed).toBe(2);
+    expect(ctx.oscillators).toHaveLength(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+    // In a tap the resume is still on its way: the sound is scheduled for when it lands.
+    vi.stubGlobal('navigator', { userActivation: { isActive: true } });
+    alerts.playSound('triad');
+    expect(ctx.oscillators).toHaveLength(3);
   });
 
   it('fetches and decodes a clip once, then plays it from the decoded buffer', async () => {
@@ -298,7 +318,7 @@ describe('banners', () => {
     expect(seen).toHaveBeenCalledTimes(3);
     expect(alerts.getBanners().map((b) => b.title)).toEqual(['in 5', 'Take lunch']);
     expect(alerts.getBanners()[0]!.id).not.toBe(alerts.getBanners()[1]!.id);
-    expect(alerts.getBanners()[1]).toMatchObject({ kicker: 'Lunch', sticky: true, at: expect.any(Number) });
+    expect(alerts.getBanners()[1]).toMatchObject({ kicker: 'Lunch', at: expect.any(Number) });
 
     alerts.dismissByTag('alarm:nothing');
     expect(seen).toHaveBeenCalledTimes(3);
@@ -351,7 +371,7 @@ describe('banners', () => {
     alerts.warnQuietly({ title: 'Change not saved', body: 'The server did not answer.', tag: 'save-failed' });
     expect(FakeAudioContext.instances).toHaveLength(0);
     expect(FakeNotification.created).toHaveLength(0);
-    expect(alerts.getBanners()[0]).toMatchObject({ title: 'Change not saved', tone: 'danger', sticky: false });
+    expect(alerts.getBanners()[0]).toMatchObject({ title: 'Change not saved', tone: 'danger' });
   });
 
   it('an alert carries its action to the banner', () => {

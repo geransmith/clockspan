@@ -89,41 +89,21 @@ export function dueEvents(
     const cfg = alarms[target.id];
     if (!cfg.enabled) continue;
 
-    const candidates: AlarmEvent[] = [];
-    for (const lead of cfg.leadMinutes) {
-      candidates.push({
-        key: eventKey(dateKey, target.id, 'lead', lead, target.at),
-        id: target.id,
-        kind: 'lead',
-        minutes: lead,
-        at: target.at - lead * MINUTE_MS,
-        target: target.at,
-      });
-    }
-    if (cfg.onDue) {
-      candidates.push({
-        key: eventKey(dateKey, target.id, 'due', 0, target.at),
-        id: target.id,
-        kind: 'due',
-        minutes: 0,
-        at: target.at,
-        target: target.at,
-      });
-    }
+    const event = (kind: AlarmKind, minutes: number, at: number): AlarmEvent => ({
+      key: eventKey(dateKey, target.id, kind, minutes, target.at),
+      id: target.id,
+      kind,
+      minutes,
+      at,
+      target: target.at,
+    });
+    const candidates = cfg.leadMinutes.map((lead) => event('lead', lead, target.at - lead * MINUTE_MS));
+    if (cfg.onDue) candidates.push(event('due', 0, target.at));
     if (cfg.overdueEveryMinutes > 0) {
       const every = cfg.overdueEveryMinutes;
       // Only the latest repeat: for a fixed target k only grows, so an earlier one never comes round again.
       const k = Math.floor((now - target.at) / (every * MINUTE_MS));
-      if (k > 0) {
-        candidates.push({
-          key: eventKey(dateKey, target.id, 'overdue', k * every, target.at),
-          id: target.id,
-          kind: 'overdue',
-          minutes: k * every,
-          at: target.at + k * every * MINUTE_MS,
-          target: target.at,
-        });
-      }
+      if (k > 0) candidates.push(event('overdue', k * every, target.at + k * every * MINUTE_MS));
     }
 
     const pending = candidates.filter((c) => c.at <= now && !fired.has(c.key)).sort((a, b) => a.at - b.at);
@@ -135,21 +115,16 @@ export function dueEvents(
   return { fire, crossed };
 }
 
-/** What the copy needs beyond the event itself: how the deadline was derived. */
-export interface EventContext {
-  /** Clock-in instant, for "clocked in at 8:32 AM". */
+/**
+ * What the copy needs beyond the event itself: how the deadline was derived, the clock-in
+ * ("clocked in at 8:32 AM"), whether times carry AM/PM (see `resolveHour12`), and when the event
+ * is shown, since a warning seen late (the phone was asleep) says the time actually left.
+ */
+export type EventContext = Pick<TimeclockSettings, 'workMinutes' | 'lunchDeadlineMinutes' | 'secondMealAfterMinutes'> & {
   clockIn: number;
-  /** Write times with AM/PM (see `resolveHour12`). */
   hour12: boolean;
-  /** Work-day target in minutes (settings.workMinutes). */
-  workMinutes: number;
-  /** Lunch deadline window in minutes (settings.lunchDeadlineMinutes). */
-  lunchDeadlineMinutes: number;
-  /** Minutes worked after which the second meal period is due (settings.secondMealAfterMinutes). */
-  secondMealAfterMinutes: number;
-  /** When the event is shown: a warning seen late (the phone was asleep) says the time actually left. */
   now: number;
-}
+};
 
 export interface EventCopy {
   /** Which alarm and which rule fired, e.g. "Clock-out alarm · 15 min warning". */
@@ -159,6 +134,9 @@ export interface EventCopy {
   body: string;
   tone: 'warn' | 'danger';
 }
+
+/** Starts the tag of every alarm banner, one per target (`ALARM_TAG + id`): a newer banner replaces its target's last one. */
+export const ALARM_TAG = 'alarm:';
 
 /** The kicker's first words, naming the alarm; a new `AlarmId` without one is a type error. */
 const ALARM_NAMES: Record<AlarmId, string> = {
@@ -178,19 +156,21 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
   const day = formatMinutes(ctx.workMinutes);
   const alarm = ALARM_NAMES[e.id];
   const mealHours = formatMinutes(ctx.secondMealAfterMinutes);
-  // The kicker names the rule that fired; a warning's title says how long is left now, which is
-  // less when the check came late.
-  const left = formatMinutes(Math.min(e.minutes, Math.max(1, Math.ceil((e.target - ctx.now) / MINUTE_MS))));
+  // The kicker names the rule that fired. A warning seen after its deadline (the phone was asleep,
+  // or the clock-in was typed in late) has no time left to give, so it takes the due copy; one seen
+  // late but before the deadline says how long is left now.
+  const kind = e.kind === 'lead' && ctx.now >= e.target ? 'due' : e.kind;
+  const left = formatMinutes(Math.min(e.minutes, Math.ceil((e.target - ctx.now) / MINUTE_MS)));
   const rule = e.kind === 'lead' ? `${formatMinutes(e.minutes)} warning` : e.kind === 'due' ? "time's up" : `${formatMinutes(e.minutes)} overdue`;
   const kicker = `${alarm} · ${rule}`;
 
-  // A due event can be seen late (the app opened after the target, with repeats off), so a due
-  // body gives the target's time and never says that it is that time now.
+  // A due event can be seen late too (the app opened after the target, with repeats off), so a
+  // due body gives the target's time and never says that it is that time now.
   switch (e.id) {
     case 'retro':
       // The retrospective isn't a deadline: its target is the clock-out instant and the copy
       // stays at "warn" throughout.
-      if (e.kind === 'lead') {
+      if (kind === 'lead') {
         return {
           kicker: `${alarm} · ${formatMinutes(e.minutes)} before clock-out`,
           title: 'Look back before you clock out',
@@ -198,7 +178,7 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
           tone: 'warn',
         };
       }
-      if (e.kind === 'due') {
+      if (kind === 'due') {
         return {
           kicker: `${alarm} · clock-out`,
           title: 'Clocking out? Do the retrospective first.',
@@ -213,7 +193,7 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
         tone: 'warn',
       };
     case 'lunchBy':
-      if (e.kind === 'lead') {
+      if (kind === 'lead') {
         return {
           kicker,
           title: `Lunch in ${left}`,
@@ -221,7 +201,7 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
           tone: 'warn',
         };
       }
-      if (e.kind === 'due') return { kicker, title: 'Take lunch now', body: `Your lunch deadline is ${target}. Start your break.`, tone: 'danger' };
+      if (kind === 'due') return { kicker, title: 'Take lunch now', body: `Your lunch deadline is ${target}. Start your break.`, tone: 'danger' };
       return {
         kicker,
         title: `Lunch is ${formatMinutes(e.minutes)} overdue`,
@@ -229,7 +209,7 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
         tone: 'danger',
       };
     case 'secondMeal':
-      if (e.kind === 'lead') {
+      if (kind === 'lead') {
         return {
           kicker,
           title: `Second meal break in ${left}`,
@@ -237,7 +217,7 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
           tone: 'warn',
         };
       }
-      if (e.kind === 'due') {
+      if (kind === 'due') {
         return {
           kicker,
           title: 'Take your second meal break',
@@ -252,7 +232,7 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
         tone: 'danger',
       };
     case 'clockOut':
-      if (e.kind === 'lead') {
+      if (kind === 'lead') {
         return {
           kicker,
           title: `Clock out in ${left}`,
@@ -260,7 +240,7 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
           tone: 'warn',
         };
       }
-      if (e.kind === 'due') {
+      if (kind === 'due') {
         return { kicker, title: 'Time to clock out', body: `You reached your ${day} for today at ${target}. Punch out now.`, tone: 'danger' };
       }
       return {
