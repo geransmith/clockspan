@@ -68,7 +68,7 @@ export function adoptUser(id: number | null): void {
   writeStored(AUTH_USER_KEY, next);
 }
 
-/** True when `AUTH_USER_KEY` names someone other than `id` (null: no one). Nothing stored names no one in particular. */
+/** True when `AUTH_USER_KEY` names someone other than `id` (null: no one). A key never written counts as no one else. */
 export function otherUserStored(id: number | null): boolean {
   const stored = readStored(AUTH_USER_KEY);
   return stored !== null && stored !== storedUser(id);

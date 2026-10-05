@@ -90,6 +90,8 @@ export function Header({ view, date, today, customize, onNavigate, onToggleCusto
                 typed.current = true;
               }}
               onClick={(e) => {
+                // A click starts a new choice: after a pick, desktop Chromium leaves focus here, so onFocus doesn't run again.
+                typed.current = false;
                 // The input is invisible over the label, and desktop Chromium opens its picker only from
                 // the calendar icon at the input's right end, so a click anywhere on the label asks for it.
                 try {

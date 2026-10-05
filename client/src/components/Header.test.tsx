@@ -49,7 +49,7 @@ describe('Header', () => {
     expect(onNavigate).toHaveBeenCalledWith({ date: null });
   });
 
-  it('adds one history entry per visit to the date field, and skips a part-typed year', async () => {
+  it('adds one history entry per visit to or click on the date field, and skips a part-typed year', async () => {
     const onNavigate = await renderHeader(TODAY);
     const field = screen.getByLabelText('Pick a date');
     fireEvent.focus(field);
@@ -67,6 +67,9 @@ describe('Header', () => {
     fireEvent.focus(field);
     fireEvent.change(field, { target: { value: '2026-02-28' } });
     expect(onNavigate).toHaveBeenLastCalledWith({ date: '2026-02-28' }, { replace: false });
+    fireEvent.click(field);
+    fireEvent.change(field, { target: { value: '2026-03-28' } });
+    expect(onNavigate).toHaveBeenLastCalledWith({ date: '2026-03-28' }, { replace: false });
   });
 
   it('opens the date picker once from a click on the label', async () => {
