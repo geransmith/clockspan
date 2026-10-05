@@ -3,6 +3,8 @@ import { completedSession, makeDay, makePriority, makeSession, punchesAt } from 
 import type { Day } from '../types';
 import { focusOf, hasContent, reviewDay } from './retro';
 
+const FIRST_UID = makePriority(1, '').uid;
+
 describe('focusOf', () => {
   it('counts completed sessions only', () => {
     const sessions = [
@@ -40,8 +42,8 @@ describe('reviewDay', () => {
   it('splits time into on-plan and off-plan by uid', () => {
     const priorities = [makePriority(1, 'Ship the report', { done: true }), makePriority(2, 'Call the bank'), makePriority(3, '')];
     const sessions = [
-      completedSession(1, 10_000, 1500, { priorityUid: 'uid100000000' }),
-      completedSession(2, 20_000, 900, { priorityUid: 'uid100000000' }),
+      completedSession(1, 10_000, 1500, { priorityUid: FIRST_UID }),
+      completedSession(2, 20_000, 900, { priorityUid: FIRST_UID }),
       completedSession(3, 30_000, 600),
       completedSession(4, 40_000, 300, { priorityUid: 'gone00000000' }),
     ];
@@ -61,8 +63,8 @@ describe('reviewDay', () => {
     const r = reviewDay(
       [makePriority(1, 'A')],
       [
-        makeSession({ startedAt: 10_000, plannedSeconds: 600, priorityUid: 'uid100000000' }),
-        completedSession(2, 20_000, 600, { status: 'cancelled', priorityUid: 'uid100000000' }),
+        makeSession({ startedAt: 10_000, plannedSeconds: 600, priorityUid: FIRST_UID }),
+        completedSession(2, 20_000, 600, { status: 'cancelled', priorityUid: FIRST_UID }),
       ],
     );
     expect(r.onPlanSeconds).toBe(0);

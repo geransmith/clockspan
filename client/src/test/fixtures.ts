@@ -83,7 +83,7 @@ export function makeDay(date = TODAY, patch: Partial<Day> = {}): Day {
 
 /** A priority row with text, as the card saves it once typed: not done, with a uid and added at T0. */
 export function makePriority(position: number, text: string, patch: Partial<Priority> = {}): Priority {
-  return { position, text, done: false, uid: `uid${position}`.padEnd(12, '0'), addedAt: T0, ...patch };
+  return { position, text, done: false, uid: `uid${position}`.padEnd(12, 'x'), addedAt: T0, ...patch };
 }
 
 export function makeSession(patch: Partial<RunningSession> = {}): RunningSession {

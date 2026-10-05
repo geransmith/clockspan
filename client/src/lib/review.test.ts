@@ -3,6 +3,9 @@ import { atTime } from '../../../shared/dates.js';
 import { completedSession, makeDay, makePriority, punchesAt, TEST_SETTINGS, type EndPatch } from '../test/fixtures';
 import { periodOffset, periodRange, reviewRange } from './review';
 
+const FIRST_UID = makePriority(1, '').uid;
+const SECOND_UID = makePriority(2, '').uid;
+
 const settings = TEST_SETTINGS;
 const at = (key: string, h: number, m = 0) => atTime(key, h, m);
 // makePriority stamps a row at T0, after these days' sessions, so a row that must not read as added mid-day passes this.
@@ -51,7 +54,7 @@ describe('reviewRange', () => {
     punches: punchesAt(at('2026-09-14', 8), at('2026-09-14', 12), at('2026-09-14', 12, 30), at('2026-09-14', 16, 30)),
     priorities: [makePriority(1, 'Ship it', { done: true }), makePriority(2, 'Write the proposal', BEFORE_WORK)],
     sessions: [
-      session(1, '2026-09-14', at('2026-09-14', 9), 3000, { priorityUid: 'uid100000000' }),
+      session(1, '2026-09-14', at('2026-09-14', 9), 3000, { priorityUid: FIRST_UID }),
       session(2, '2026-09-14', at('2026-09-14', 14), 1200, { label: 'Fire drill' }),
     ],
     retroNote: '\nSlack ate the afternoon.\n\n',
@@ -60,7 +63,7 @@ describe('reviewRange', () => {
   const d2 = makeDay('2026-09-15', {
     priorities: [makePriority(1, 'Call the bank', { done: true })],
     sessions: [
-      session(3, '2026-09-15', at('2026-09-15', 9), 600, { priorityUid: 'uid100000000' }),
+      session(3, '2026-09-15', at('2026-09-15', 9), 600, { priorityUid: FIRST_UID }),
       session(4, '2026-09-15', at('2026-09-15', 10), 2400, { label: 'Help Sam' }),
     ],
   });
@@ -104,7 +107,7 @@ describe('reviewRange', () => {
   it('settles a priority ticked on a later day', () => {
     const mon = makeDay('2026-09-14', {
       priorities: [makePriority(1, 'Write the proposal')],
-      sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600, { priorityUid: 'uid100000000' })],
+      sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600, { priorityUid: FIRST_UID })],
     });
     const tue = makeDay('2026-09-15', { priorities: [makePriority(1, 'write the proposal ', { done: true })] });
     const r = reviewRange([tue, mon], settings, '2026-09-16', now);
@@ -144,10 +147,10 @@ describe('reviewRange', () => {
   it('rounds the on-plan share to a whole percent, and has none without focus logged', () => {
     const third = makeDay('2026-09-14', {
       priorities: [makePriority(1, 'Ship it')],
-      sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600, { priorityUid: 'uid100000000' }), session(2, '2026-09-14', at('2026-09-14', 10), 1200)],
+      sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600, { priorityUid: FIRST_UID }), session(2, '2026-09-14', at('2026-09-14', 10), 1200)],
     });
     expect(reviewRange([third], settings, '2026-09-16', now).onPlanPercent).toBe(33);
-    const twoThirds = { ...third, sessions: third.sessions.map((s) => ({ ...s, priorityUid: s.priorityUid ? null : 'uid100000000' })) };
+    const twoThirds = { ...third, sessions: third.sessions.map((s) => ({ ...s, priorityUid: s.priorityUid ? null : FIRST_UID })) };
     expect(reviewRange([twoThirds], settings, '2026-09-16', now).onPlanPercent).toBe(67);
     // All of it off the plan is none on it, which is not the same as nothing logged.
     const offPlan = { ...third, sessions: third.sessions.map((s) => ({ ...s, priorityUid: null })) };
@@ -176,14 +179,14 @@ describe('reviewRange', () => {
         session(1, '2026-09-14', at('2026-09-14', 9), 600, { label: 'Expense receipts' }),
         session(2, '2026-09-14', at('2026-09-14', 11), 300, { label: 'expense  receipts ' }),
         session(3, '2026-09-14', at('2026-09-14', 13), 1500, { label: '' }),
-        session(4, '2026-09-14', at('2026-09-14', 14), 900, { priorityUid: 'uid100000000' }),
+        session(4, '2026-09-14', at('2026-09-14', 14), 900, { priorityUid: FIRST_UID }),
       ],
     });
     const tue = makeDay('2026-09-15', {
       priorities: [makePriority(1, 'Call the bank', BEFORE_WORK), makePriority(2, 'review the PR ', { addedAt: at('2026-09-15', 12) })],
       sessions: [
         session(5, '2026-09-15', at('2026-09-15', 9), 600, { label: 'Expense Receipts' }),
-        session(6, '2026-09-15', at('2026-09-15', 10), 1200, { priorityUid: 'uid200000000' }),
+        session(6, '2026-09-15', at('2026-09-15', 10), 1200, { priorityUid: SECOND_UID }),
       ],
     });
     const r = reviewRange([tue, mon], settings, '2026-09-16', now);
