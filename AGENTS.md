@@ -17,7 +17,9 @@ work. The README has the user-facing description.
 
 - Node **24** (`.nvmrc`, so a bare `nvm use`; `node:24-alpine` in Docker). `devEngines` in
   `package.json` makes npm refuse `install`, `ci` and `run` on an older Node.
-- Client: React 19, TypeScript 7 (the native `tsc`), Vite 8. `@dnd-kit/sortable` for drag/drop (loaded on the first Customize);
+- Client: React 19, TypeScript 7 (the native `tsc`: the `typescript` package has no `tsserver` or
+  JS API, so editors need the native TypeScript extension, and `npm run typecheck` is the source
+  of truth), Vite 8. `@dnd-kit/sortable` for drag/drop (loaded on the first Customize);
   `react-aria` + `react-stately` + `@internationalized/date` for the punch time field. No router
   (the date, the view and the review period a day was opened from live in the URL query,
   `hooks/useRoute.ts`; today is `date: null`, so a sheet left open over midnight moves to the
@@ -40,7 +42,8 @@ File names say most of it. This lists where things live and the files a rule is 
 shared/                 imported by both sides, always with a `.js` suffix
   settings.ts           Settings, DEFAULT_SETTINGS, CARD_IDS, normalizeLayout, MAX_PRIORITIES, SETTING_LIMITS,
                         RETENTION_LIMITS
-  api.ts                every wire type and `emptyDay`; the server's JSON builders and client/src/api.ts both use them
+  api.ts                every wire type and `emptyDay`; the server's JSON builders and client/src/api.ts both use them,
+                        and the input limits both sides check (LIMITS, USERNAME, PASSWORD_LENGTH)
   sounds.ts             the sound catalog (SOUNDS, SOUND_EVENTS)
   dates.ts, timer.ts    date keys; pause-aware session timing (activeMs, plannedEndAt, pausedSecondsAfter,
                         PLANNED_SECONDS)
@@ -75,23 +78,24 @@ client/                 Vite root → dist/client
   src/api.ts            fetch wrapper (30 s timeout; UNAUTHENTICATED_EVENT on a 401 from anything but login and
                         /me; throws lib/apiError.ts's ApiError, which a caller checks with instanceof);
                         src/types.ts re-exports the shared types (types only)
-  src/lib/              pure logic with a test beside each file (apiError is covered through api.test)
+  src/lib/              logic with no React, a test beside each file (the browser-facing ones stub the
+                        globals, as alerts.ts does; apiError is covered through api.test)
     optimistic.ts       a server copy plus pending changes, which the stores are built on, and `serial()`,
                         their write queue
     alerts.ts           the one place that plays sound, shows notifications and pushes banners
     copy.ts             every line the app raises at the user; no logic
     storage.ts          localStorage that never throws (private mode, quota); the per-user keys (USER_KEYS:
-                        fired alarms, Start fresh) and adoptUser, which records who the app is open for
-                        under AUTH_USER_KEY and drops the last user's keys
+                        fired alarms, Start fresh, the break-over mark) and adoptUser, which records
+                        who the app is open for under AUTH_USER_KEY and drops the last user's keys
   src/hooks/            state and effects (useDay, useTimer, useSettings, useAlarms, …), each with a
                         happy-dom test beside it (useLatest is covered through the hooks that use it, and
-                        AppProviders through the tests that render it as AllProviders).
+                        AppProviders through the tests that render it).
                         useClock is the app's one 1-second clock; useSaveStatus
-                        (Saving… / Saved / Not saved) and useLastTab (the tab it reopens on) serve the
-                        settings dialog. src/test/fixtures.ts has the plain factories and
-                        TEST_SETTINGS (no React); src/test/hooks.tsx re-exports fixtures.ts and
-                        AppProviders (as AllProviders) and has SettingsAndDays, serveRange (a mocked
-                        getRange that answers from a list of days) and the act() helpers
+                        (Saving… / Saved / Not saved) serves the settings dialog.
+                        src/test/fixtures.ts has the plain factories and TEST_SETTINGS (no React);
+                        src/test/hooks.tsx re-exports fixtures.ts and AppProviders and has
+                        SettingsAndDays, serveRange (a mocked getRange that answers from a list of
+                        days) and the act() helpers
   src/components/       the cards, History (Calendar + Review), Banners, FinishChoice, and the pieces
                         several of them share; settings/ holds SettingsDialog (the shell and tabs), a
                         file per tab, and controls.tsx
@@ -99,7 +103,8 @@ client/                 Vite root → dist/client
   src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
   src/styles.css        design tokens and all component CSS
 scripts/                screenshots.mjs and icons.mjs (headless Chromium via browser.mjs), smoke-image.sh
-docs/screenshots/       the PNGs the README embeds
+docs/screenshots/       the PNGs the README and the Unraid template embed (sheet-desktop.png is the
+                        template's alone)
 Dockerfile, docker/     the image; entrypoint.sh owns /data as PUID:PGID and drops root
 unraid/clockspan.xml    the Unraid template, a field per .env.example variable (config.test.ts checks);
                         Unraid reads it from main, so an edit reaches users when it merges
@@ -178,9 +183,8 @@ YYYY-MM-DD` moves the whole sample to that date at the current time of day (or `
 User". `--sessions` signs every seeded user in and prints a `document.cookie = 'fs_session=…'`
 line per user: run it in the page and reload to be that user, with no password typed and no
 provider. A run never deletes users and is safe while `npm run dev` is up (reload the page).
-`npm run screenshots` seeds the dev DB the same way (`--running --quarter --now 10:30 --fresh`),
-so it also replaces the default user's days and resets its settings, and it leaves the sticker
-chart on (`stickers: true`).
+`npm run screenshots` reseeds the dev DB and resets the default user's settings (see the
+script's header).
 
 The seed and the server migrate the file when they open it, so a new migration needs nothing
 done by hand. To look at or change the dev DB directly: `curl` against
@@ -532,16 +536,14 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 
 ## How to add…
 
-- **A card**: add the id to `CARD_IDS` and its default under `CARD_DEFAULT_VISIBLE` in
-  `shared/settings.ts`, and its title to `CARD_TITLES` in `client/src/lib/layout.ts` (the
-  types make a missing entry an error) → write the component → add a `case` in `Sheet.tsx`'s
-  `render()`. Existing users get it automatically because every layout goes through
-  `normalizeLayout` (`shared/settings.ts`; `mergeSettings` runs it on the server, `useSettings`
-  on the client), which appends a missing card with that default; a card whose default is
-  hidden shows up under Customize → Hidden → Show. Removing a card is the reverse (drop the
-  id everywhere; the merge discards it from saved layouts), and if the card
-  recorded a choice worth keeping, `mergeSettings` can read it off the old layout entry the
-  way the sticker chart's `stickers` setting does.
+- **A card**: add the id to `CARD_IDS` in `shared/settings.ts`, and its title to `CARD_TITLES`
+  in `client/src/lib/layout.ts` (the types make a missing entry an error) → write the
+  component → add a `case` in `Sheet.tsx`'s `render()`. Existing users get it automatically
+  because every layout goes through `normalizeLayout` (`shared/settings.ts`; `mergeSettings`
+  runs it on the server, `useSettings` on the client), which appends a missing card, shown.
+  Removing a card is the reverse (drop the id everywhere; the merge discards it from saved
+  layouts), and if the card recorded a choice worth keeping, `mergeSettings` can read it off the
+  old layout entry the way the sticker chart's `stickers` setting does.
 - **A per-user setting**: add it to the `Settings` type and `DEFAULT_SETTINGS` in
   `shared/settings.ts`, and a number's bounds to `SETTING_LIMITS` there → validate it in
   `mergeSettings()` (`server/settings.ts`; `flag(key)` takes a switch, `limited(key)` checks a
@@ -549,12 +551,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (`TimeclockTab`, `AlarmsTab`, `SheetTab`, `DataTab`; the Sheet tab's "History" section holds
   the calendar's switches): a `DurationField` (`components/DurationField.tsx`) for hours and
   minutes or a `NumberField` (`settings/controls.tsx`) for one number, whose `unit` suffix is
-  "min" unless given, each with `{...SETTING_LIMITS.<key>}` for `min` and `max`; a `Toggle` for
-  a switch. `NumberInput` on its own puts several numbers on one row, like the timer's start
-  buttons. The new setting also goes in `TEST_SETTINGS` (`client/src/test/fixtures.ts`), and
-  the type makes a missing one an error. A setting that is an object edited a field at a time
-  is merged field by field in `mergeSettings` (as `mergeRetention` does), and gets a partial
-  entry in `SettingsPatch` (`client/src/api.ts`) and a merge in `applySettingsPatch`
+  "min" unless given, each with `{...SETTING_LIMITS.<key>}` for `min` and `max`; a `SelectField`
+  (`settings/controls.tsx`) for one choice from a fixed list; a `Toggle` for a switch.
+  `NumberInput` on its own puts several numbers on one row, like the timer's start buttons. The
+  new setting also goes in `TEST_SETTINGS` (`client/src/test/fixtures.ts`), and the type makes a
+  missing one an error. A setting that is an object edited a field at a time is merged field by
+  field in `mergeSettings` (as `mergeRetention` does), and gets a partial entry in
+  `SettingsPatch` (`client/src/api.ts`) and a merge in `applySettingsPatch`
   (`client/src/lib/settings.ts`). Nothing else to mirror.
 - **A sound**: drop the clip in as `client/src/sounds/<id>.mp3` (CC0 only, MP3 so Safari can
   decode it, a couple of seconds at most) → add `{ id, label, kind: 'clip' }` to `SOUNDS` in
@@ -574,21 +577,19 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **An alarm target** (existing: `lunchBy`, `clockOut`, `secondMeal`, `retro`): expose the
   instant from `computeTimeclock` → add a target to `alarmTargets()` in `lib/alarms.ts`, with
   an `armed` rule and a test case (a rule the card also needs goes in a pure helper like
-  `secondMealApplies`) → add its default under `alarms` in `shared/settings.ts` and the
-  `AlarmId` union there, and its `mergeAlarm(…)` line in `mergeSettings`'s `alarms` block
-  (`server/settings.ts`; the type makes a missing one an error) and its line in
-  `applySettingsPatch`'s `alarms` block (`client/src/lib/settings.ts`; the type makes a missing
-  one an error); its settings also go in
-  `TEST_SETTINGS.alarms` (`client/src/test/fixtures.ts`), and the type makes a missing one an
-  error → add an `AlarmEditor` in `settings/AlarmsTab.tsx` → its name in `ALARM_NAMES` and a
-  `case` in `describeEvent()`'s `switch (e.id)` (both in `lib/alarms.ts`; the type makes a
-  missing name an error, and typecheck and the `switch-exhaustiveness-check` lint refuse a
-  missing case): the kicker ("X alarm · 15 min warning") is built from the name above the
-  switch, and the case gives a title and a body for each kind (lead, due, overdue) that say
-  where the deadline came from (it gets an `EventContext`; extend that if the new target needs
-  more inputs). A banner can carry one `action` button (see the clock-out alarm's "Overtime
-  approved" and the retro alarm's "Open retrospective", chosen in `useAlarms` from the
-  `AlarmDayState` callbacks).
+  `secondMealApplies`) → add its id to `ALARM_IDS` and its default under `alarms` in
+  `shared/settings.ts` (`mergeSettings` and `applySettingsPatch` loop over `ALARM_IDS`, so
+  neither needs a line); its settings also go in `TEST_SETTINGS.alarms`
+  (`client/src/test/fixtures.ts`), and the type makes a missing one an error → add an
+  `AlarmEditor` in `settings/AlarmsTab.tsx` → its name in `ALARM_NAMES` and a `case` in
+  `describeEvent()`'s `switch (e.id)` (both in `lib/alarms.ts`; the type makes a missing name an
+  error, and typecheck and the `switch-exhaustiveness-check` lint refuse a missing case): the
+  kicker ("X alarm · 15 min warning") is built from the name above the switch, and the case
+  gives a title and a body for each kind (lead, due, overdue) that say where the deadline came
+  from (it gets an `EventContext`, a `Pick` of the timeclock settings plus the clock-in,
+  `hour12` and `now`; widen the `Pick` if the new target needs another setting). A banner can
+  carry one `action` button (see the clock-out alarm's "Overtime approved" and the retro alarm's
+  "Open retrospective", chosen in `useAlarms` from the `AlarmDayState` callbacks).
 - **A per-day field** (like `overtimeApproved`, `retroNote`/`retroAt`): append a migration
   adding the column to `days` → add the column to `DAY_COLUMNS` and to the `DayRow` interface
   beside it (`routes/shared.ts`; `findDay` and `daysInRange` in `routes/days.ts` both read
@@ -602,7 +603,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   the stored copy (mirror `setOvertimeApproved`; a failure drops the change, raises the "Change
   not saved" banner and reloads the day, so the setter resolves false and never rejects) → pass
   it from `Sheet.tsx` to the card, and from `useTodayAlarms` into `useAlarms` if alarms depend
-  on it.
+  on it. The seed's manifest types (`SeededDay` and the aliases beside it in
+  `server/dev/seed.ts`) are built from `Day`, `Session`, `Priority` and `Break`, so `typecheck`
+  fails there on a new field until the templates set it, or it is added to the type's `Omit`
+  list if the server derives it (like `durationSeconds`). Write its column in `insertDay` too;
+  typecheck does not check that.
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
   `currentUser(req).id` (a `/:date` route goes on the days router, whose param handler checks
   the date; a `/:id` route on the sessions or breaks router is checked by the router itself and
@@ -619,20 +624,18 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `res.json(… satisfies <Type>)` and the client's `request<Type>` both name it) → cover it in
   that router's `*.test.ts`: happy path, each 400, and that another user gets a 404/empty
   result (the scoping test is not optional). A new `/:date` route also gets a row in the
-  bad-date table at the end of `server/routes/days.test.ts`. The seed's manifest types
-  (`SeededDay` and the aliases beside it in `server/dev/seed.ts`) are built from `Day`,
-  `Session`, `Priority` and `Break`, so `typecheck` fails there on a new field until the
-  templates set it, or it is added to the type's `Omit` list if the server derives it (like
-  `durationSeconds`). Write its column in `insertDay` too; typecheck does not check that.
+  bad-date table at the end of `server/routes/days.test.ts`.
 - **A schema change**: append a migration string to `MIGRATIONS` in `db.ts`. Never edit an
   existing entry. A new table with a `user_id` also joins the README's script under "Switching
-  modes later" (and its count of places); `server/db.test.ts` fails until it does.
+  modes later"; `server/db.test.ts` fails until it does. A new column on a day, session,
+  priority or break also needs the seed note under "A per-day field".
 - **A security header, CSP source or request guard**: `server/security.ts` only (tests in
   `server/app.test.ts`), then the `prod` config check.
 - **A config env var**: parse and validate it in `server/config.ts` (throw with a clear
   message on a bad value; an on/off variable goes through `parseSwitch`, which logs and keeps
   the default instead) → cover it in `server/config.test.ts` → document it in
-  `.env.example` (commented out, with its default) and the README's variables table → add a
+  `.env.example` (commented out with a typical value, the comment saying what unset means;
+  `AUTH_MODE` is the one line left on) and the README's variables table → add a
   `Config` field for it to `unraid/clockspan.xml` (`config.test.ts` fails otherwise).
   `.env.example` is the only place the container is configured; `docker-compose.yml` never
   lists variables, it only passes `.env` through (`env_file`). `loadConfig` drops empty values
@@ -641,8 +644,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 
 ## Conventions
 
-- TypeScript `strict` + `noUncheckedIndexedAccess`. Named exports. Server and shared imports
-  end in `.js`. `npm run lint` and `npm run format:check` must pass; `_`-prefixed names are the
+- TypeScript `strict` + `noUncheckedIndexedAccess`. Named exports. `_`-prefixed names are the
   only allowed unused vars.
 - CSS: tokens on `:root` in `client/src/styles.css`, dark mode via `prefers-color-scheme`
   unless the `theme` setting forces one (`data-theme` on `<html>`, set by `lib/theme.ts`; the
@@ -667,12 +669,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   hours to minutes saves nothing. A blank or non-numeric box puts the stored value back and
   saves nothing; zero is typed as 0. Priorities debounce 400 ms; punches and checkboxes save
   immediately.
-- A form that sends a request submits through `useSubmit()` (`hooks/useSubmit.ts`): one send at
-  a time with the button disabled, and one error line (`ErrorLine`), cleared when a send starts
-  and filled with what it throws (a mismatched confirmation throws too).
+- A form that sends a request submits through `useSubmit()` (`hooks/useSubmit.ts`), and a
+  button that sends one calls its `run`: one send at a time with the button disabled, and one
+  error line (`ErrorLine`), cleared when a send starts and filled with what it throws (a
+  mismatched confirmation throws too).
 - Comments explain *why* (browser quirks, math), not what.
 - No new dependency (a server one or a client library the bundle carries) without stating the
-  reason in the commit message.
+  reason in the PR body, which becomes the squash commit's message on `main`.
 - **Copy**: what the app raises at the user (celebrations, the priority warnings, confirms,
   alerts and banners, the sheet's notices) lives in `client/src/lib/copy.ts`, never inline;
   alarm lines are built in `describeEvent()`. Labels, settings hints and empty-state lines sit
@@ -687,7 +690,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 
 Prove a change at the cheapest level that can show it, and stop there:
 
-1. Pure functions (`shared/`, `client/src/lib`): a unit test beside the file (a lib test takes
+1. Logic (`shared/`, `client/src/lib`): a unit test beside the file (a lib test takes
    its fixtures from `client/src/test/fixtures.ts`). A hook (`client/src/hooks`): a test beside
    it with the API mocked (`vi.mock('../api')`), fake timers for polls, retries and races, and
    the fixtures and provider stack from `client/src/test/hooks.tsx`. `client/src/api.ts`:
@@ -785,21 +788,13 @@ The browser pass for each surface (the logic under it is already tested):
 - **Auth**: no browser pass; the tests in `server/auth/` (`*.test.ts`) cover local and OIDC
   sign-in, cookie sessions, passwords, the limiter, user management and the reset-password
   command.
-- **Anything a README screenshot shows** (sheet, retro, history, review, settings):
-  `npm run screenshots`, then commit only the shots of the surface you changed and
-  `git restore` the others; the script pins the time of day, not the date, so a run on another
-  day changes most of them.
+- **Anything a README screenshot or the Unraid listing shows** (sheet, retro, history, review,
+  settings): `npm run screenshots`, then CONTRIBUTING's screenshot step.
 
 ## Gotchas
 
-- `better-sqlite3` is native but ships N-API prebuilds for every platform the image runs on
-  (linux-musl x64 and arm64 included) and picks one at run time, so `node_modules` is the same on
-  every platform: the Dockerfile's build stage runs on the builder's platform and only the
-  runtime stage is emulated for arm64. Its `binding.gyp` still makes npm try
-  `node-gyp rebuild`, so the Dockerfile and CI run `npm ci --ignore-scripts`, which also keeps
-  every dependency's install script from running; only CI's `check` job then runs
-  `npm audit signatures` to check registry signatures. There is no Docker on the dev machine:
-  `image-smoke` (`scripts/smoke-image.sh`) on each PR is the first run of the image.
+- `npm ci --ignore-scripts` is deliberate (the Dockerfile says why). There is no Docker on the
+  dev machine, so `image-smoke` (`scripts/smoke-image.sh`) on each PR is the image's first run.
 - The preview harness exports `PORT=5173`, which is why `dev:server` pins `PORT=3000` and the
   `prod` config `PORT=8090`.
 - `client/public/sw.js` caches nothing, on purpose. It holds the `notificationclick` handler
@@ -807,7 +802,6 @@ The browser pass for each surface (the logic under it is already tested):
   `new Notification()`). It has no fetch handler, because Chrome needs none to offer Install
   and warns that an empty one is a no-op. It is registered only in a production build. No
   caching without a versioning strategy, or users see stale assets.
-- `vite.config.ts` imports `defineConfig` from `vitest/config` so the `test` block type-checks.
 - OIDC: `loadConfig` normalizes `APP_URL` (only its scheme and host are kept, lowercased; a
   path is dropped with a warning), and `${APP_URL}/auth/callback` in that form must match the
   redirect URI registered with the provider exactly. The callback builds its URL from
@@ -819,32 +813,18 @@ The browser pass for each surface (the logic under it is already tested):
   unset behind a proxy, every sign-in is the proxy's address; under `AUTH_MODE=local`,
   `warnUntrustedProxy` (`auth/limiter.ts`) logs that once, the first time `X-Forwarded-For`
   reaches `/api/auth`.
-- scrypt at N=2^15 needs `maxmem` above Node's 32 MB default (set in `password.ts`).
-  `DUMMY_HASH` is computed with a top-level `await`, so `password.ts` is ESM-only.
 - `window` `focus` events fire on ordinary clicks in some embedded browsers, so the periodic
   and come-back refreshes (today's day, the settings, the timer's sync) go through
   `useRefreshLoop`, which listens for `visibilitychange` and never `focus`; a new one goes
   through it too, and nothing in the app listens for the window's `focus`. Reads tied to what
   is shown (a held day read again when a view shows it, a range asked again after a prune,
   `AuthGate`'s `/me` after a 401) are not refreshes and stay outside the loop.
-- `npm version` without `--no-git-tag-version` tags the branch commit, which is not the squash
-  commit that lands on `main`. CI creates the `vX.Y.Z` tag on the merge.
-- Prettier (`.prettierrc`): single quotes, trailing commas, 160 columns. Markdown is left alone
-  (`.prettierignore`): the docs have hand-laid tables and wrapping.
-- oxlint ignores a misspelled rule name without a word. After editing `.oxlintrc.json`, check
-  that `npx oxlint --print-config` lists what you meant and that a deliberately bad snippet is
-  caught. A promise deliberately not awaited is written `void p`, and an async handler passed to
-  JSX or a timer is wrapped: `onSubmit={(e) => void submit(e)}`.
-- A push, merge, tag or release a workflow makes with `GITHUB_TOKEN` starts no other workflow
-  (`workflow_dispatch` and `repository_dispatch` aside), which is why the release job's tag
-  starts no second run. A step that must trigger CI needs a GitHub App or personal token.
-- TypeScript 7 is the native compiler: the `typescript` package has no `tsserver` or JS API.
-  Editors need the native TypeScript extension; `npm run typecheck` is the source of truth.
+- Prettier leaves `*.md` alone: wrap docs by hand.
+- A workflow step that must trigger CI needs a GitHub App or personal token.
 - The Node floor (`engines` and `devEngines` in `package.json`) has no upper bound, and `.npmrc`
   has no `engine-strict`, on purpose: Dependabot's updater reads both files and runs its own
-  Node (24 at the time of writing; it follows the active LTS). A cap it outgrows, or a package
-  whose `engines` leaves its Node out under `engine-strict`, stops its npm updates without
-  failing any check: the PRs just stop coming. A new Node major moves `.nvmrc`, both fields,
-  the Dockerfile's two `FROM` lines and the `@types/node` major together (Dependabot skips the
-  majors of the last two), plus the docs that name the version; CI and `.claude/launch.json`
-  read `.nvmrc`.
+  Node. A cap it outgrows, or a package whose `engines` leaves its Node out under
+  `engine-strict`, stops its npm updates without failing any check: the PRs just stop coming. A
+  new Node major moves `.nvmrc`, both fields, the Dockerfile's two `FROM` lines and the
+  `@types/node` major together (Dependabot skips the majors of the last two), plus the docs that
+  name the version; CI and `.claude/launch.json` read `.nvmrc`.
