@@ -25,9 +25,7 @@ export function useWakeLock(active: boolean): void {
         // Denied (low battery, not allowed) — nothing to do.
       }
     };
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void acquire();
-    };
+    const onVisible = () => void acquire();
 
     void acquire();
     document.addEventListener('visibilitychange', onVisible);
