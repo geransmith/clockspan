@@ -234,7 +234,7 @@ describe('AuthGate', () => {
     });
 
     it("follows the provider's end-session redirect under OIDC", async () => {
-      await renderGate(makeAuth({ mode: 'oidc', user: { ...USER, kind: 'oidc', username: null } }));
+      await renderGate(makeAuth({ mode: 'oidc', user: { ...USER, username: null } }));
       vi.mocked(api.logout).mockResolvedValue({ ok: true, redirect: 'https://idp.example/end' });
       await signOut();
       expect(assign).toHaveBeenCalledWith('https://idp.example/end');

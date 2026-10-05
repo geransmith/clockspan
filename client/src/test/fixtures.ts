@@ -129,11 +129,11 @@ export function breakAt(id: number, atMinutes: number, minutes: number, patch: P
 
 /** A signed-in user: the local non-admin `sam`, unless `patch` says otherwise. */
 export function makeUser(patch: Partial<PublicUser> = {}): PublicUser {
-  return { id: 2, name: 'sam', username: 'sam', isAdmin: false, kind: 'local', mustChangePassword: false, ...patch };
+  return { id: 2, name: 'sam', username: 'sam', isAdmin: false, mustChangePassword: false, ...patch };
 }
 
 /** What the server sends under AUTH_MODE=none: the default user, who is an admin. */
-export const DEFAULT_USER = makeUser({ id: 1, name: 'You', username: null, kind: 'default', isAdmin: true });
+export const DEFAULT_USER = makeUser({ id: 1, name: 'You', username: null, isAdmin: true });
 
 /** A `GET /auth/me` answer: local sign-in, set up, and no one signed in, unless `patch` says otherwise. */
 export function makeAuth(patch: Partial<AuthInfo> = {}): AuthInfo {

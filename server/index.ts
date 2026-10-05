@@ -28,7 +28,13 @@ const discovery = config.oidc ? new Discovery(config.oidc.issuer, config.oidc.cl
 const app = createApp(db, config, { discovery });
 startBackgroundJobs(db, config, discovery);
 
-const server = app.listen(config.port, () => {
+// Express 5 hands a failed listen (the port taken, or below 1024 without root) to this callback
+// instead of throwing.
+const server = app.listen(config.port, (err) => {
+  if (err) {
+    console.error(`[server] cannot listen on :${config.port}: ${err.message}`);
+    process.exit(1);
+  }
   console.log(`Clockspan listening on :${config.port} (auth: ${config.authMode}, db: ${config.dbPath})`);
 });
 

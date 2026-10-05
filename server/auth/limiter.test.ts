@@ -8,34 +8,34 @@ describe('LoginLimiter', () => {
     vi.useFakeTimers();
     const limiter = new LoginLimiter();
     for (let i = 0; i < 4; i++) limiter.fail('a');
-    expect(limiter.check('a')).toEqual({ ok: true, retryAfterSec: 0 });
+    expect(limiter.retryAfter('a')).toBe(0);
     limiter.fail('a');
-    expect(limiter.check('a')).toEqual({ ok: false, retryAfterSec: 15 * 60 });
+    expect(limiter.retryAfter('a')).toBe(15 * 60);
     vi.advanceTimersByTime(14 * 60_000);
-    expect(limiter.check('a')).toEqual({ ok: false, retryAfterSec: 60 });
+    expect(limiter.retryAfter('a')).toBe(60);
     vi.advanceTimersByTime(60_000);
-    expect(limiter.check('a')).toEqual({ ok: true, retryAfterSec: 0 });
+    expect(limiter.retryAfter('a')).toBe(0);
     // A failure after the window starts a fresh count rather than adding to the stale one.
     limiter.fail('a');
-    expect(limiter.check('a').ok).toBe(true);
+    expect(limiter.retryAfter('a')).toBe(0);
     // Three more failures, then the right password: counted like any attempt, then taken back.
     for (let i = 0; i < 3; i++) limiter.fail('a');
     limiter.fail('a');
     limiter.succeed('a');
-    expect(limiter.check('a').ok).toBe(true);
+    expect(limiter.retryAfter('a')).toBe(0);
     limiter.fail('a');
-    expect(limiter.check('a').ok).toBe(false);
+    expect(limiter.retryAfter('a')).toBeGreaterThan(0);
     // An address the limiter never saw, or has swept, has nothing to take back.
     limiter.succeed('b');
-    expect(limiter.check('b')).toEqual({ ok: true, retryAfterSec: 0 });
+    expect(limiter.retryAfter('b')).toBe(0);
   });
 
   it('takes its own limit, as the per-account one does', () => {
     const limiter = new LoginLimiter(MAX_ACCOUNT_FAILURES);
     for (let i = 0; i < MAX_ACCOUNT_FAILURES - 1; i++) limiter.fail('sam');
-    expect(limiter.check('sam').ok).toBe(true);
+    expect(limiter.retryAfter('sam')).toBe(0);
     limiter.fail('sam');
-    expect(limiter.check('sam').ok).toBe(false);
+    expect(limiter.retryAfter('sam')).toBeGreaterThan(0);
   });
 
   it('sweeps expired entries once the map grows past a thousand addresses', () => {

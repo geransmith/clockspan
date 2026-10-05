@@ -24,19 +24,17 @@ const WINDOW_MS = 15 * MINUTE_MS;
 // make it grow without bound.
 const SWEEP_ABOVE = 1000;
 
-/** Simple login limiter: failures per key (an address, an account name or a user). In-memory is fine for a single-process self-hosted app. */
+/** In-memory is fine for a single-process self-hosted app. */
 export class LoginLimiter {
   private attempts = new Map<string, { count: number; resetAt: number }>();
 
   constructor(private readonly maxAttempts = MAX_ATTEMPTS) {}
 
-  check(key: string): { ok: boolean; retryAfterSec: number } {
+  /** The seconds until `key` may try again; 0 lets it try now. */
+  retryAfter(key: string): number {
     const entry = this.attempts.get(key);
-    if (!entry || entry.resetAt <= Date.now()) return { ok: true, retryAfterSec: 0 };
-    if (entry.count >= this.maxAttempts) {
-      return { ok: false, retryAfterSec: Math.ceil((entry.resetAt - Date.now()) / 1000) };
-    }
-    return { ok: true, retryAfterSec: 0 };
+    const left = entry && entry.count >= this.maxAttempts ? entry.resetAt - Date.now() : 0;
+    return left > 0 ? Math.ceil(left / 1000) : 0;
   }
 
   fail(key: string): void {

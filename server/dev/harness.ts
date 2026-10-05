@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { once } from 'node:events';
 import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
@@ -78,6 +79,9 @@ export interface StartOptions {
 /** Every test app's first-run setup code (AUTH_MODE=local), so a test can post it with the form. */
 export const SETUP_CODE = 'TEST-SETU-PCOD';
 
+/** The first local account's setup form, which makes it the admin. */
+export const FIRST_RUN = { username: 'geran', password: 'correct horse', setupCode: SETUP_CODE };
+
 /** A Wednesday, so "this week" in a review holds seeded days on both sides. */
 export const SEED_TODAY = '2026-09-16';
 export const SEED_NOW = new Date(2026, 8, 16, 14, 0).getTime();
@@ -151,9 +155,9 @@ export async function startTestApp(opts: StartOptions = {}): Promise<TestApp> {
     setupCode: SETUP_CODE,
     discovery: opts.discovery,
   });
-  const server = await new Promise<import('node:http').Server>((resolve) => {
-    const s = app.listen(0, '127.0.0.1', () => resolve(s));
-  });
+  const server = app.listen(0, '127.0.0.1');
+  // Rejects on 'error': Express 5 hands a failed listen to the callback instead of throwing.
+  await once(server, 'listening');
   const { port } = server.address() as AddressInfo;
   const url = `http://127.0.0.1:${port}`;
 

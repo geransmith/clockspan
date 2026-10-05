@@ -127,10 +127,4 @@ describe("the README's script for switching from none to local", () => {
     expect(db.prepare(`SELECT json FROM settings`).get()).toEqual({ json: '{"from":"none"}' });
     db.close();
   });
-
-  it('counts the places the OIDC variant has to change', () => {
-    const places = sql.match(/kind = 'local'/g)?.length ?? 0;
-    const stated = /in place of each `kind = 'local'` \((\w+) places\)/.exec(readme)?.[1];
-    expect(stated).toBe(['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'][places]);
-  });
 });

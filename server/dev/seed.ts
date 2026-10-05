@@ -1,5 +1,5 @@
 import type { Config } from '../config.js';
-import { findLocalUser, findUserById, type DB, type UserRow } from '../db.js';
+import { findLocalUser, insertLocalUser, type DB, type UserRow } from '../db.js';
 import { upsertOidcUser } from '../auth/oidc.js';
 import { hashPassword } from '../auth/password.js';
 import { revokeSessions } from '../auth/session.js';
@@ -431,11 +431,7 @@ export function seedDatabase(db: DB, opts: SeedOptions): SeedManifest {
 export async function ensureLocalUsers(db: DB): Promise<{ admin: UserRow; member: UserRow }> {
   const create = async (username: string, isAdmin: boolean): Promise<UserRow> => {
     const existing = findLocalUser(db, username);
-    if (existing) return existing;
-    const info = db
-      .prepare(`INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at) VALUES ('local', ?, ?, ?, ?, ?)`)
-      .run(username, await hashPassword(LOCAL_USERS.password), username, isAdmin ? 1 : 0, Date.now());
-    return findUserById(db, info.lastInsertRowid)!;
+    return existing ?? insertLocalUser(db, username, await hashPassword(LOCAL_USERS.password), { isAdmin, mustChangePassword: false })!;
   };
   return { admin: await create(LOCAL_USERS.admin, true), member: await create(LOCAL_USERS.member, false) };
 }
