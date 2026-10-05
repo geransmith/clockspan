@@ -44,10 +44,10 @@ jobs:
       # A commit that changes package.json's version is a release: the merge of the bump PR
       # publishes the versioned image and the GitHub Release (no tag is pushed by hand). On a
       # PR the same comparison, against the base branch (the first parent of GitHub's merge
-      # commit), refuses what CONTRIBUTING.md rules
-      # out: a version that isn't plain X.Y.Z (no pre-releases), one lower than before, or one
-      # that already has a tag. It needs only git and node, so it runs first: a bad version
-      # fails in seconds, not after the install, the tests and the build.
+      # commit), refuses what CONTRIBUTING.md rules out: a version that isn't plain X.Y.Z (no
+      # pre-releases), one lower than before, or one that already has a tag. It needs only git
+      # and node, so it runs first: a bad version fails in seconds, not after the install, the
+      # tests and the build.
       - name: Detect a version bump
         id: version
         run: |
