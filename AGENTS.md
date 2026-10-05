@@ -216,16 +216,16 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   before `resolveUser`, so keep write routes under `/api`; `rejectUnknownHosts` is mounted
   under `AUTH_MODE=none` only, on `/api` after `/api/health`, and reads the raw `Host` header,
   never `req.hostname`. Headers that describe one answer stay with the code that sends it: the
-  static files' `Cache-Control` in `app.ts`, `Retry-After` in `refuseTooMany`
-  (`auth/limiter.ts`), and `Set-Cookie` only through `cookieHeader()` (`auth/session.ts`).
+  static files' `Cache-Control` in `app.ts` and `Retry-After` in `refuseTooMany`
+  (`auth/limiter.ts`).
 - **Cookies, sessions and passwords stay in `server/auth/`.** A request's cookies are read only
-  through `readCookie()` (`auth/session.ts`) and written only through `cookieHeader()` there;
-  outside `server/dev/` (the test harness's cookie jar) no other module imports `cookie`. The
-  session is resolved under `/api` only, so a static answer, which is publicly cacheable, never
-  carries a cookie. The HTML the
-  server writes itself (the OIDC error pages in `auth/oidc.ts`) is fixed text: no request data
-  or error message goes into it, and the cause goes to the log. Password hashing is async
-  (`scrypt`, never `scryptSync`); login verifies against `DUMMY_HASH` when the user is unknown.
+  through `readCookie()` (`auth/session.ts`), and `Set-Cookie` is written only through
+  `cookieHeader()` there; outside `server/dev/` (the test harness's cookie jar) no other module
+  imports `cookie`. The session is resolved under `/api` only, so a static answer, which is
+  publicly cacheable, never carries a cookie. The HTML the server writes itself (the OIDC error
+  pages in `auth/oidc.ts`) is fixed text: no request data or error message goes into it, and the
+  cause goes to the log. Password hashing is async (`scrypt`, never `scryptSync`); login
+  verifies against `DUMMY_HASH` when the user is unknown.
 - **Another user means another page.** Once `AuthGate` has opened the app for a user, it never
   swaps a gate page in over it: the stores' write queues, the drafts (which save on unmount),
   the banners and the tab title would carry on under the next session's cookie. Sign-out
