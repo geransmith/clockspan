@@ -86,6 +86,9 @@ export function Header({ view, date, today, customize, onNavigate, onToggleCusto
                 const v = e.target.value;
                 // A year below 1000 is a part-typed one, and shared/dates can't read it.
                 if (v < '1000') return;
+                // A change that leaves the sheet where it is (a future date shows today) adds nothing, so it
+                // mustn't turn on replace: the next change would overwrite the entry the user came from.
+                if ((v >= today ? today : v) === date) return;
                 onNavigate({ date: v }, { replace: typed.current });
                 typed.current = true;
               }}

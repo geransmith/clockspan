@@ -72,6 +72,18 @@ describe('Header', () => {
     expect(onNavigate).toHaveBeenLastCalledWith({ date: '2026-03-28' }, { replace: false });
   });
 
+  // A future date shows today and the date already shown moves nothing: neither added an entry, so the next change must.
+  it('adds the entry on the first change that moves the sheet', async () => {
+    const onNavigate = await renderHeader(TODAY);
+    const field = screen.getByLabelText('Pick a date');
+    fireEvent.focus(field);
+    fireEvent.change(field, { target: { value: '2999-01-01' } });
+    fireEvent.change(field, { target: { value: TODAY } });
+    expect(onNavigate).not.toHaveBeenCalled();
+    fireEvent.change(field, { target: { value: YESTERDAY } });
+    expect(onNavigate.mock.calls).toEqual([[{ date: YESTERDAY }, { replace: false }]]);
+  });
+
   it('opens the date picker once from a click on the label', async () => {
     const showPicker = vi.fn();
     setShowPicker(showPicker);
