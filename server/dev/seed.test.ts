@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { ensureDefaultUser, openDatabase } from '../db.js';
+import { ensureDefaultUser, openDatabase, type DB } from '../db.js';
 import { insertSession, SESSION_COOKIE } from '../auth/session.js';
 import { countRows, SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from './harness.js';
-import { addMonths, DAY_MS, isWeekend, MINUTE_MS, punchWindow, startOfQuarter, todayKey } from '../../shared/dates.js';
-import { LIMITS } from '../../shared/api.js';
+import { addMonths, atTime, DAY_MS, isWeekend, MINUTE_MS, punchWindow, startOfQuarter, todayKey } from '../../shared/dates.js';
+import { LIMITS, type Day } from '../../shared/api.js';
 import { DEFAULT_SETTINGS, SETTING_LIMITS } from '../../shared/settings.js';
 import { BREAK_SECONDS, MIN_BREAK_MS, PLANNED_SECONDS } from '../../shared/timer.js';
 import {
@@ -20,7 +20,7 @@ import {
   type SeedManifest,
 } from './seed.js';
 
-const counts = (db: ReturnType<typeof openDatabase>) =>
+const counts = (db: DB) =>
   Object.fromEntries(['days', 'punches', 'priorities', 'sessions', 'breaks', 'settings', 'auth_sessions'].map((t) => [t, countRows(db, t)]));
 
 /** The clocked-in stretches of a day: its set punches in order, in → out, today's last one open until `now`. */
@@ -180,9 +180,7 @@ describe('seedDatabase', () => {
         expect(target).toMatchObject({ status: 200, body: { workMinutes: day.workMinutes } });
       }
       // The log's time for the paused session leaves the pause out.
-      const today = (await app.api.get(`/api/days/${SEED_TODAY}`)).body as {
-        sessions: { pausedSeconds: number; durationSeconds: number; plannedSeconds: number }[];
-      };
+      const today = (await app.api.get<Day>(`/api/days/${SEED_TODAY}`)).body;
       const paused = today.sessions.find((s) => s.pausedSeconds > 0)!;
       expect(paused).toMatchObject({ durationSeconds: 22 * 60, plannedSeconds: 25 * 60 });
     } finally {
@@ -266,7 +264,7 @@ describe('seedDatabase', () => {
     ] as const) {
       const db = openDatabase(':memory:');
       const user = ensureDefaultUser(db);
-      const now = new Date(2026, 8, 16, hour, minute).getTime();
+      const now = atTime(SEED_TODAY, hour, minute);
       const m = seedDatabase(db, { userId: user.id, today: SEED_TODAY, now, running: true });
       expectConsistent(m, now);
       expect(m.days.at(-1)!.sessions.filter((s) => s.status === 'running')).toHaveLength(1);
@@ -297,7 +295,7 @@ describe('calendar helpers', () => {
   it('counts the weekdays since a date', () => {
     expect(weekdaysSince('2026-09-14', '2026-09-16')).toBe(2);
     expect(weekdaysSince('2026-09-11', '2026-09-14')).toBe(1);
-    // Two full quarters back to April land at the quarter start on the first weekday.
+    // Last quarter and this one so far start on April 1, a weekday.
     const n = weekdaysSince(addMonths(startOfQuarter('2026-09-16'), -3), '2026-09-16');
     expect(weekdaysBefore('2026-09-16', n)[0]).toBe('2026-04-01');
   });

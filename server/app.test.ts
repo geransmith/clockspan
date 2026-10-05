@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, startBackgroundJobs } from './app.js';
 import { loadConfig } from './config.js';
 import { ensureDefaultUser, openDatabase } from './db.js';
-import { countRows, startTestApp, tempClientBuild, writeClientBuild, type TestApp } from './dev/harness.js';
+import { countRows, SEED_TODAY, startTestApp, tempClientBuild, writeClientBuild, type TestApp } from './dev/harness.js';
 import { Discovery } from './auth/oidc.js';
 
 describe('response headers', () => {
@@ -130,7 +130,7 @@ describe('host names under AUTH_MODE=none', () => {
     app = await startTestApp({ seed: true });
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     // A rebinding page: its own name, pointed at this server, so the browser calls it same-origin.
-    const read = await as('rebind.example:8080', `/api/days/${app.seeded!.today}`);
+    const read = await as('rebind.example:8080', `/api/days/${SEED_TODAY}`);
     expect(read).toEqual({ status: 403, body: { error: 'This server does not answer to rebind.example. Add it to ALLOWED_HOSTS.' } });
     expect((await as('rebind.example:8080', '/api/settings', 'PUT')).status).toBe(403);
     expect((await as('rebind.example', '/api/auth/me')).status).toBe(403);

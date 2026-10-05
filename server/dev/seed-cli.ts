@@ -4,8 +4,17 @@ import { ensureDefaultUser, openDatabase } from '../db.js';
 import { isWholeNumber } from '../validate.js';
 import { insertSession, SESSION_COOKIE } from '../auth/session.js';
 import { AUTH_MODES, type AuthMode } from '../../shared/api.js';
-import { addMonths, isValidDateKey, startOfQuarter, todayKey } from '../../shared/dates.js';
-import { DEFAULT_HISTORY_DAYS, LOCAL_USERS, ensureLocalUsers, ensureOidcDevUser, seedDatabase, weekdaysSince, type SeedManifest } from './seed.js';
+import { addMonths, atTime, isValidDateKey, startOfQuarter, todayKey } from '../../shared/dates.js';
+import {
+  DEFAULT_HISTORY_DAYS,
+  LOCAL_USERS,
+  ensureLocalUsers,
+  ensureOidcDevUser,
+  seedDatabase,
+  weekdaysSince,
+  type SeedManifest,
+  type SeedOptions,
+} from './seed.js';
 
 // Usage: npm run seed [-- --fresh] [--running] [--days N | --quarter] [--today YYYY-MM-DD] [--now HH:MM]
 //                     [--auth none|local|oidc] [--sessions]
@@ -19,10 +28,12 @@ import { DEFAULT_HISTORY_DAYS, LOCAL_USERS, ensureLocalUsers, ensureOidcDevUser,
 // stands in for AUTH_MODE (and fills placeholder OIDC_* values, since the seed never contacts
 // a provider). Safe to run while `npm run dev` is up; reload the page afterwards.
 
-if (process.env.NODE_ENV === 'production') {
-  console.error('Refusing to seed with NODE_ENV=production. This is dev data.');
+function fail(message: string): never {
+  console.error(message);
   process.exit(2);
 }
+
+if (process.env.NODE_ENV === 'production') fail('Refusing to seed with NODE_ENV=production. This is dev data.');
 
 const USAGE = 'Options: --fresh --running --days N --quarter --today YYYY-MM-DD --now HH:MM --auth MODE --sessions';
 function readOptions() {
@@ -41,53 +52,37 @@ function readOptions() {
     }).values;
   } catch (err) {
     // parseArgs refuses an unknown option, a missing value, a value on a switch (--fresh=yes) and an option where a value belongs (--days --quarter).
-    console.error(`${(err as Error).message}\n${USAGE}`);
-    process.exit(2);
+    fail(`${(err as Error).message}\n${USAGE}`);
   }
 }
 const opts = readOptions();
 
 const clock = new Date();
 const today = opts.today ?? todayKey(clock.getTime());
-if (!isValidDateKey(today)) {
-  // Only a value typed after --today can fail the check.
-  console.error(`--today must be a date, YYYY-MM-DD (got "${opts.today ?? ''}").`);
-  process.exit(2);
-}
+// Only a value typed after --today can fail the check.
+if (!isValidDateKey(today)) fail(`--today must be a date, YYYY-MM-DD (got "${opts.today}").`);
 // Today's rows are built around `now`, so it has to fall on `today`: the current time of day
 // there, or --now's. A --today with the real clock would put its clock-in on the real date,
 // outside the punch window the API allows for that day.
-const [y, mo, d] = today.split('-').map(Number) as [number, number, number];
-clock.setFullYear(y, mo - 1, d);
+let hour = clock.getHours();
+let minute = clock.getMinutes();
 if (opts.now !== undefined) {
   const m = /^(\d{1,2}):(\d{2})$/.exec(opts.now);
-  if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) {
-    console.error(`--now must be HH:MM (got "${opts.now}").`);
-    process.exit(2);
-  }
-  clock.setHours(Number(m[1]), Number(m[2]), 0, 0);
+  if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) fail(`--now must be HH:MM (got "${opts.now}").`);
+  hour = Number(m[1]);
+  minute = Number(m[2]);
 }
-const now = clock.getTime();
-if (opts.quarter && opts.days !== undefined) {
-  console.error('Pass --days or --quarter, not both.');
-  process.exit(2);
-}
-const daysRaw = opts.days;
+const now = atTime(today, hour, minute);
+if (opts.quarter && opts.days !== undefined) fail('Pass --days or --quarter, not both.');
 // --quarter covers the previous calendar quarter too, so Review → Quarter has a step back.
-const days = opts.quarter ? weekdaysSince(addMonths(startOfQuarter(today), -3), today) : daysRaw === undefined ? DEFAULT_HISTORY_DAYS : Number(daysRaw);
+const days = opts.quarter ? weekdaysSince(addMonths(startOfQuarter(today), -3), today) : opts.days === undefined ? DEFAULT_HISTORY_DAYS : Number(opts.days);
 // Number('') is 0, which the range check would pass, so an empty --days= is checked for first.
-if (daysRaw === '' || !isWholeNumber(days, { min: 0, max: 400 })) {
-  console.error(`--days must be a whole number from 0 to 400 (got "${daysRaw}").`);
-  process.exit(2);
-}
+if (opts.days === '' || !isWholeNumber(days, { min: 0, max: 400 })) fail(`--days must be a whole number from 0 to 400 (got "${opts.days}").`);
 const { fresh, running } = opts;
 
 // Checked here as well as in loadConfig: `--auth=` would be dropped below, and a mixed-case
 // mode, which loadConfig accepts, would skip the OIDC placeholders.
-if (opts.auth !== undefined && !AUTH_MODES.includes(opts.auth as AuthMode)) {
-  console.error(`--auth must be one of ${AUTH_MODES.join('|')} (got "${opts.auth}").`);
-  process.exit(2);
-}
+if (opts.auth !== undefined && !AUTH_MODES.includes(opts.auth as AuthMode)) fail(`--auth must be one of ${AUTH_MODES.join('|')} (got "${opts.auth}").`);
 const env: NodeJS.ProcessEnv = { ...process.env, ...(opts.auth ? { AUTH_MODE: opts.auth } : {}) };
 if (env.AUTH_MODE === 'oidc') {
   // https, as the config will require; port 2 because fetch refuses 1 and 9 outright.
@@ -100,18 +95,19 @@ const config = loadConfig(env);
 const db = openDatabase(config.dbPath);
 
 const seeded: { name: string; userId: number; manifest: SeedManifest }[] = [];
+const seed = (name: string, userId: number, o: Partial<SeedOptions> = {}) =>
+  seeded.push({ name, userId, manifest: seedDatabase(db, { userId, today, now, days, running, fresh, ...o }) });
 if (config.authMode === 'local') {
   const { admin, member } = await ensureLocalUsers(db);
-  seeded.push({ name: admin.username!, userId: admin.id, manifest: seedDatabase(db, { userId: admin.id, today, now, days, running, fresh }) });
+  seed(admin.username!, admin.id);
   // Fewer days and no timer, so the two accounts are easy to tell apart.
-  seeded.push({ name: member.username!, userId: member.id, manifest: seedDatabase(db, { userId: member.id, today, now, days: Math.min(days, 3), fresh }) });
+  seed(member.username!, member.id, { days: Math.min(days, 3), running: false });
 } else if (config.authMode === 'oidc') {
   // The default user is never signed in under OIDC; seed an account this mode can show.
   const user = ensureOidcDevUser(db, config);
-  seeded.push({ name: user.display_name, userId: user.id, manifest: seedDatabase(db, { userId: user.id, today, now, days, running, fresh }) });
+  seed(user.display_name, user.id);
 } else {
-  const user = ensureDefaultUser(db);
-  seeded.push({ name: 'default user', userId: user.id, manifest: seedDatabase(db, { userId: user.id, today, now, days, running, fresh }) });
+  seed('default user', ensureDefaultUser(db).id);
 }
 // After the seed, which drops logins under --fresh.
 const cookies = opts.sessions && config.authMode !== 'none' ? seeded.map((s) => ({ name: s.name, token: insertSession(db, config, s.userId) })) : [];
@@ -124,7 +120,7 @@ for (const { name, manifest } of seeded) {
   const last = past[past.length - 1]?.date;
   const span = past.length === 0 ? 'no history' : `${past.length} past weekday${past.length === 1 ? '' : 's'} (${first} to ${last})`;
   const timer = manifest.days.at(-1)!.sessions.some((s) => s.status === 'running') ? ', timer running' : '';
-  console.log(`  ${name}: ${span}, today ${manifest.today} clocked in${timer}`);
+  console.log(`  ${name}: ${span}, today ${today} clocked in${timer}`);
 }
 if (config.authMode === 'local') {
   console.log(`  Log in as ${LOCAL_USERS.admin} (admin) or ${LOCAL_USERS.member}, password "${LOCAL_USERS.password}".`);
