@@ -17,8 +17,6 @@ export interface Banner {
   tone: Tone;
   /** When it was raised, so a sticky banner seen later still says when it fired. */
   at: number;
-  /** Sticky banners stay until dismissed; others auto-dismiss. */
-  sticky: boolean;
   /** Groups banners so a newer one replaces an older one of the same tag. */
   tag: string;
   /** One optional button, e.g. "Overtime approved" on the clock-out alarm. */
@@ -129,7 +127,11 @@ function playClip(ctx: AudioContext, id: ClipId): void {
 export function playSound(id: SoundId): void {
   if (id === 'none') return;
   unlockAudio();
-  if (!ctx) return;
+  // Outside a tap a suspended context stays suspended and its clock stands still, so what is
+  // scheduled now would play at the next tap's unlock, several chimes at once. Skip it: the
+  // banner and the notification still show. Inside a tap the resume is still on its way, so the
+  // sound is scheduled; a browser without `userActivation` can't tell, and plays it as before.
+  if (!ctx || (ctx.state !== 'running' && navigator.userActivation?.isActive === false)) return;
   if (isSynth(id)) SYNTH[id](ctx, ctx.currentTime + 0.02);
   else playClip(ctx, id);
 }
@@ -212,34 +214,24 @@ export function dismissByTag(tag: string): void {
   emit();
 }
 
-function pushBanner(b: Omit<Banner, 'id' | 'at'>): void {
-  // One banner per tag so "clock out in 5" replaces "clock out in 15".
-  const banner: Banner = { ...b, id: nextId++, at: Date.now() };
-  banners = [...banners.filter((x) => x.tag !== b.tag), banner];
-  emit();
-  if (!b.sticky) setTimeout(() => dismissBanner(banner.id), 8000);
-}
-
 // ----- the one entry point -----
-export interface AlertOptions {
-  kicker?: string;
-  title: string;
-  body?: string;
-  tone: Tone;
+export interface AlertOptions extends Omit<Banner, 'id' | 'at'> {
+  /** Sticky banners stay until dismissed; others go after 8 s. */
   sticky?: boolean;
   /** What to play, gated by `sound`; `none` (or nothing) is silent. */
   chime?: SoundId;
-  /** Groups banners so a newer one replaces an older one of the same tag. */
-  tag: string;
-  action?: BannerAction;
   sound: boolean;
   notifications: boolean;
 }
 
-export function alert(o: AlertOptions): void {
-  if (o.sound && o.chime) playSound(o.chime);
-  if (o.notifications) notify(o.title, o.body, o.tag);
-  pushBanner({ kicker: o.kicker, title: o.title, body: o.body, tone: o.tone, sticky: o.sticky ?? false, tag: o.tag, action: o.action });
+export function alert({ chime, sound, notifications, sticky, ...fields }: AlertOptions): void {
+  if (sound && chime) playSound(chime);
+  if (notifications) notify(fields.title, fields.body, fields.tag);
+  // One banner per tag so "clock out in 5" replaces "clock out in 15".
+  const banner: Banner = { ...fields, id: nextId++, at: Date.now() };
+  banners = [...banners.filter((b) => b.tag !== banner.tag), banner];
+  emit();
+  if (!sticky) setTimeout(() => dismissBanner(banner.id), 8000);
 }
 
 /** A request failed: a danger banner with no chime and no notification, one per tag. */

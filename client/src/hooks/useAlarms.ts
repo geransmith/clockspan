@@ -2,17 +2,15 @@ import { useEffect, useRef } from 'react';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import type { Settings } from '../types';
 import type { TimeclockResult } from '../lib/timeclock';
-import { alarmTargets, describeEvent, dueEvents, type TargetDay } from '../lib/alarms';
+import { ALARM_TAG, alarmTargets, describeEvent, dueEvents, type TargetDay } from '../lib/alarms';
 import { alert, dismissByTag } from '../lib/alerts';
 import { ALARM_ACTIONS } from '../lib/copy';
 import { resolveHour12 } from '../lib/format';
 import { pruneStored, readStoredJson, USER_KEYS, writeStored } from '../lib/storage';
 
-const STORAGE_PREFIX = USER_KEYS.alarms;
-
 /** The keys stored for a day: what this tab, or another one open on the same device, already fired. */
 function storedFired(dateKey: string): string[] {
-  const stored = readStoredJson(STORAGE_PREFIX + dateKey);
+  const stored = readStoredJson(USER_KEYS.alarms + dateKey);
   return Array.isArray(stored) ? stored.filter((k): k is string => typeof k === 'string') : [];
 }
 
@@ -39,13 +37,13 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     // Every alarm banner belongs to one day's clock-in. A new day, or a clock-in cleared, takes
     // them down: their buttons would act on a day that is no longer the one being judged.
     const clearBanners = () => {
-      for (const id of Object.keys(lastTargets.current)) dismissByTag(`alarm:${id}`);
+      for (const id of Object.keys(lastTargets.current)) dismissByTag(ALARM_TAG + id);
       lastTargets.current = {};
     };
     if (fired.current?.date !== dateKey) {
       if (fired.current) clearBanners();
       // Other days' keys are dropped so the store never grows.
-      pruneStored(STORAGE_PREFIX, STORAGE_PREFIX + dateKey);
+      pruneStored(USER_KEYS.alarms, USER_KEYS.alarms + dateKey);
       fired.current = { date: dateKey, set: new Set() };
     }
     if (tc.clockIn == null) {
@@ -62,7 +60,7 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     // pushed later) is stale; clear it before evaluating the new state.
     for (const t of targets) {
       const prev = lastTargets.current[t.id];
-      if (prev && (prev.armed !== t.armed || Math.abs(prev.at - t.at) >= MINUTE_MS)) dismissByTag(`alarm:${t.id}`);
+      if (prev && (prev.armed !== t.armed || Math.abs(prev.at - t.at) >= MINUTE_MS)) dismissByTag(ALARM_TAG + t.id);
       lastTargets.current[t.id] = { at: t.at, armed: t.armed };
     }
 
@@ -70,19 +68,12 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     if (crossed.length === 0) return;
     for (const k of crossed) fired.current.set.add(k);
     // With storage blocked (private mode, quota) alarms may repeat after a reload, which is acceptable.
-    writeStored(STORAGE_PREFIX + dateKey, JSON.stringify([...fired.current.set]));
+    writeStored(USER_KEYS.alarms + dateKey, JSON.stringify([...fired.current.set]));
 
     // Every alarm banner is sticky: the chime is what grabs attention, and the banner has to
     // still be there — saying which alarm and why — when the user looks up. The next
     // threshold replaces it (same tag) and a moved/disarmed target clears it (above).
-    const ctx = {
-      clockIn: tc.clockIn,
-      hour12: resolveHour12(settings.timeFormat),
-      workMinutes: settings.workMinutes,
-      lunchDeadlineMinutes: settings.lunchDeadlineMinutes,
-      secondMealAfterMinutes: settings.secondMealAfterMinutes,
-      now,
-    };
+    const ctx = { ...settings, clockIn: tc.clockIn, hour12: resolveHour12(settings.timeFormat), now };
     for (const e of fire) {
       const { kicker, title, body, tone } = describeEvent(e, ctx);
       const action =
@@ -98,7 +89,7 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
         tone,
         sticky: true,
         chime: settings.sounds[e.kind],
-        tag: `alarm:${e.id}`,
+        tag: ALARM_TAG + e.id,
         action,
         sound: settings.sound,
         notifications: settings.notifications,

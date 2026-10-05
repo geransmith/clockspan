@@ -8,7 +8,7 @@
 
 import { counted } from './format';
 
-/** Shown once the day is done. One is picked per clock-out. */
+/** The day-complete notice picks one per clock-out (pickCelebration); every celebration burst draws its pieces from here (pickBurst). */
 export const CELEBRATION_EMOJI = ['🎉', '🥳', '🌟', '✨', '🙌', '💪', '🏆', '🎈', '🚀', '🌈', '🍀', '🎊', '👏', '😎', '🔥', '🥇', '🌻', '🫶', '🏁', '🧠'];
 
 /** The sticker chart's stickers: one per thing a day did, drawn at random from here. */
@@ -76,7 +76,6 @@ export const PRIORITY_WARNINGS = {
     'Fine, but if you could only do one today, which one?',
     'Carrying a few plates is one thing. Juggling them is another.',
     "The list doesn't get shorter by getting longer.",
-    'Bold move. Today thing or someday thing?',
     'Done beats listed.',
     'Sure? Tomorrow has room too.',
     "That's another promise to yourself. Still want it?",
@@ -93,7 +92,7 @@ export const PRIORITY_WARNINGS = {
     'Some of this is already done. Are you adding, or avoiding what is left?',
     'You have cleared part of the list. The open rows still need the rest of the day.',
     'A few are ticked. Do the open ones fit before this new one?',
-    'There is still an open row. Is this more important than it?',
+    'There is still an open row. Does this come before it?',
     'You have done real work already. A new row does not count more than that.',
     'Adding now, with rows still open, means one of them slips. Which one?',
     'Part of the plan is done. Is this the rest of it, or a new plan?',
@@ -129,7 +128,7 @@ export const LEFT_OPEN = {
   dismiss: 'Start fresh',
 };
 
-/** Confirm dialogs. Each names what it does; the ones that cannot be undone say so. */
+/** Confirm dialogs. Each names what it does; the two that delete a user or many days say it cannot be undone. */
 export const CONFIRM = {
   cancelSession: 'Cancel this session? It will not be logged.',
   deleteSession: 'Delete this session from the log?',
@@ -176,7 +175,7 @@ export const TIMER_PAUSED_OUT = {
 
 /** The focus timer's break: the button, the line while it runs, and the banner when it's over. */
 export const BREAK = {
-  start: (minutes: number, long = false) => `${long ? 'Long break' : 'Break'} · ${minutes} min`,
+  start: (minutes: number, long: boolean) => `${long ? 'Long break' : 'Break'} · ${minutes} min`,
   running: (until: string) => `Break until ${until}`,
   end: 'End break',
   over: "Break's over",
@@ -309,7 +308,7 @@ export const RENDER_FAILED = {
   reload: 'Reload',
 } as const;
 
-/** Settings dialog save indicator, shown in the dialog header. */
+/** The settings dialog's save indicator in its header, and the line at the top of the dialog body when a save fails. */
 export const SAVE_STATUS = {
   saving: 'Saving…',
   saved: 'Saved',

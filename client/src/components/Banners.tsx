@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { ALARM_TAG } from '../lib/alarms';
 import { dismissBanner, getBanners, subscribeBanners } from '../lib/alerts';
 import { BANNERS_MORE } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
@@ -28,7 +29,7 @@ export function Banners() {
         const { action } = b;
         return (
           <div key={b.id} className={`banner banner--${b.tone}`}>
-            {b.tag.startsWith('alarm:') && (
+            {b.tag.startsWith(ALARM_TAG) && (
               <span className="banner-icon" aria-hidden="true">
                 <Bell />
               </span>
@@ -56,7 +57,7 @@ export function Banners() {
                 </button>
               )}
             </div>
-            <button className="btn btn-icon banner-close" onClick={() => dismissBanner(b.id)} aria-label="Dismiss">
+            <button className="btn btn-icon banner-close" onClick={() => dismissBanner(b.id)} aria-label={`Dismiss: ${b.title}`}>
               <X />
             </button>
           </div>

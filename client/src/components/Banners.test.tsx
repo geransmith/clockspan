@@ -48,7 +48,7 @@ describe('Banners', () => {
   it('brings the oldest back when one is closed, with no count left', async () => {
     for (const title of titles) raise(title);
     await renderBanners();
-    fireEvent.click(banner('Clock out').getByRole('button', { name: 'Dismiss' }));
+    fireEvent.click(banner('Clock out').getByRole('button', { name: /^Dismiss/ }));
     expect(screen.queryByText('Clock out')).toBeNull();
     for (const title of ['Lunch', 'Second meal', 'Retrospective']) expect(screen.getByText(title)).toBeTruthy();
     expect(screen.queryByText(/more alert/)).toBeNull();

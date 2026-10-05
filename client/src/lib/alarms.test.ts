@@ -9,19 +9,7 @@ import type { AlarmId, AlarmSettings } from '../types';
 
 const T = new Date(2026, 8, 16, 13, 0).getTime();
 const D = '2026-09-16';
-const cfg = (over: Partial<AlarmSettings> = {}): AlarmSettings => ({
-  enabled: true,
-  leadMinutes: [15, 5, 1],
-  onDue: true,
-  overdueEveryMinutes: 5,
-  ...over,
-});
-const alarms = (lunch = cfg(), clock = cfg(), meal = cfg(), retro = cfg({ leadMinutes: [30], onDue: false, overdueEveryMinutes: 0 })) => ({
-  lunchBy: lunch,
-  clockOut: clock,
-  secondMeal: meal,
-  retro,
-});
+const alarms = (clock: Partial<AlarmSettings> = {}) => ({ ...TEST_SETTINGS.alarms, clockOut: { ...TEST_SETTINGS.alarms.clockOut, ...clock } });
 const target = (at: number, id: AlarmId = 'clockOut', armed = true): AlarmTarget => ({ id, at, armed });
 
 describe('dueEvents', () => {
@@ -67,7 +55,7 @@ describe('dueEvents', () => {
   });
 
   it('keeps repeating every minute however long the day runs over', () => {
-    const a = alarms(cfg(), cfg({ overdueEveryMinutes: 1 }));
+    const a = alarms({ overdueEveryMinutes: 1 });
     const r = dueEvents(D, [target(T)], a, new Set(), T + 300 * MINUTE_MS);
     expect(r.fire.map((e) => [e.kind, e.minutes])).toEqual([['overdue', 300]]);
     const fired = new Set(r.crossed);
@@ -87,22 +75,16 @@ describe('dueEvents', () => {
 
   it('ignores disarmed targets and disabled alarms', () => {
     expect(dueEvents(D, [target(T, 'clockOut', false)], alarms(), new Set(), T).fire).toEqual([]);
-    expect(dueEvents(D, [target(T)], alarms(cfg(), cfg({ enabled: false })), new Set(), T).fire).toEqual([]);
+    expect(dueEvents(D, [target(T)], alarms({ enabled: false }), new Set(), T).fire).toEqual([]);
   });
 
   it('honours onDue=false and overdueEveryMinutes=0', () => {
-    const a = alarms(cfg(), cfg({ leadMinutes: [], onDue: false, overdueEveryMinutes: 0 }));
+    const a = alarms({ leadMinutes: [], onDue: false, overdueEveryMinutes: 0 });
     expect(dueEvents(D, [target(T)], a, new Set(), T + 60 * MINUTE_MS).fire).toEqual([]);
   });
 
   it('handles each target independently', () => {
-    const r = dueEvents(
-      D,
-      [target(T, 'lunchBy'), target(T + 3 * 60 * MINUTE_MS, 'clockOut'), target(T + 15 * MINUTE_MS, 'secondMeal')],
-      alarms(),
-      new Set(),
-      T,
-    );
+    const r = dueEvents(D, [target(T, 'lunchBy'), target(T + 3 * HOUR_MS, 'clockOut'), target(T + 15 * MINUTE_MS, 'secondMeal')], alarms(), new Set(), T);
     expect(r.fire.map((e) => [e.id, e.kind])).toEqual([
       ['lunchBy', 'due'],
       ['secondMeal', 'lead'],
@@ -288,6 +270,20 @@ describe('describeEvent', () => {
     expect(describeEvent(ev('secondMeal', 'due', 0, T), late).body).toBe(
       `You reached 10h of work at ${formatTime(T, true)}. A second meal period was due by then.`,
     );
+  });
+
+  it('gives a warning seen after its deadline the due copy, and keeps the rule in the kicker', () => {
+    // The clock-in was typed in after the end of the day, or the phone slept through it, with the
+    // due event and repeats off: the latest warning is what fires.
+    const late = { ...ctx, now: T + 45 * MINUTE_MS };
+    const clockOut = describeEvent(ev('clockOut', 'lead', 15, T), late);
+    expect(clockOut.kicker).toBe('Clock-out alarm · 15 min warning');
+    expect(clockOut.title).toBe('Time to clock out');
+    expect(clockOut.body).toBe(`You reached your 8h for today at ${formatTime(T, true)}. Punch out now.`);
+    const retro = describeEvent(ev('retro', 'lead', 30, T), late);
+    expect(retro.title).toBe('Clocking out? Do the retrospective first.');
+    expect(retro.body).toBe(`You reached your 8h at ${formatTime(T, true)}. Two minutes on what went to plan and what didn't.`);
+    expect(describeEvent(ev('lunchBy', 'lead', 5, T), { ...ctx, now: T }).title).toBe('Take lunch now');
   });
 
   it('formats a non-round work day', () => {

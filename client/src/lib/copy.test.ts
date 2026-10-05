@@ -16,6 +16,7 @@ import {
   SAVE_FAILED,
   SECOND_MEAL_NOTE,
   SERVER_UNREACHABLE,
+  STICKER_EMOJI,
   TIMER_DONE,
   TIMER_DUE,
   TIMER_PAUSED_OUT,
@@ -57,7 +58,7 @@ describe('copy builders', () => {
   });
 
   it('names the break length and when it ends', () => {
-    expect(BREAK.start(5)).toBe('Break · 5 min');
+    expect(BREAK.start(5, false)).toBe('Break · 5 min');
     expect(BREAK.start(20, true)).toBe('Long break · 20 min');
     expect(BREAK.running('10:35 AM')).toBe('Break until 10:35 AM');
   });
@@ -116,7 +117,7 @@ describe('copy builders', () => {
 
 describe('copy pools', () => {
   it('has no line twice in a pool', () => {
-    for (const pool of [CELEBRATION_EMOJI, CELEBRATION_PHRASES, ...Object.values(PRIORITY_WARNINGS)]) {
+    for (const pool of [CELEBRATION_EMOJI, CELEBRATION_PHRASES, STICKER_EMOJI, ...Object.values(PRIORITY_WARNINGS)]) {
       expect(new Set(pool).size).toBe(pool.length);
     }
   });
