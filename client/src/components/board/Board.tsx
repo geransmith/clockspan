@@ -19,7 +19,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { addDays, parseDateKey, startOfWeek } from '../../../../shared/dates.js';
-import { useBoardState, useBoardStore } from '../../hooks/useBoard';
+import { useBoardState, useBoardStore, useCategoryPick } from '../../hooks/useBoard';
 import { useCelebration, type Moment } from '../../hooks/useCelebration';
 import { useDay } from '../../hooks/useDay';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
@@ -30,6 +30,7 @@ import {
   boardColumns,
   boardFull,
   cardUidOf,
+  categoryOf,
   columnDropId,
   COLUMNS,
   dropTarget,
@@ -50,8 +51,9 @@ import {
 import { BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, SAVE_FAILED, WARNING_ACTIONS } from '../../lib/copy';
 import { dayName } from '../../lib/format';
 import { newUid, nudgeFor, pickWarning, type WarningKind } from '../../lib/priorities';
-import type { OpenLane } from '../../types';
+import type { Category, OpenLane } from '../../types';
 import { Burst } from '../Burst';
+import { CategoryDot } from '../CategoryDot';
 import { Folded } from '../Folded';
 import { Grip } from '../Icons';
 import { LoadFailed } from '../LoadFailed';
@@ -96,6 +98,7 @@ export const Board = memo(function Board({ today }: { today: string }) {
   const weekStart = startOfWeek(today);
   // Done holds the week: the days before today (none on a Monday) give the rows ticked on them.
   const { days: earlierDays } = useRange(weekStart, addDays(today, -1), today !== weekStart);
+  const pick = useCategoryPick(report);
   useEffect(() => void store.load(), [store]);
 
   const [moving, setMoving] = useState<ReadonlyMap<string, ColumnId>>(() => new Map());
@@ -343,9 +346,19 @@ export const Board = memo(function Board({ today }: { today: string }) {
         onMove={(to, el) => run(item, to, to === 'later' || to === 'next' ? laneStart(columns, to) : null, el.getBoundingClientRect())}
         onRename={
           onToday
-            ? (text) => report(store.renameRow(item.row!.uid!, text, item.row!.cardUid))
+            ? (text) => report(store.editRow(item.row!.uid!, { text }, item.row!.cardUid))
             : cardOnly
               ? (title) => report(store.editCard(item.card!.uid, { title }))
+              : undefined
+        }
+        category={pick ? categoryOf(pick.categories, item.categoryUid) : undefined}
+        pick={pick}
+        // As the title: through today's row (its card follows), else on the card.
+        onCategory={
+          onToday
+            ? (categoryUid) => report(store.editRow(item.row!.uid!, { categoryUid }, item.row!.cardUid))
+            : cardOnly
+              ? (categoryUid) => report(store.editCard(item.card!.uid, { categoryUid }))
               : undefined
         }
         // Not on a Done card off today's list: Done is the week's record, and deleting the card would
@@ -385,7 +398,8 @@ export const Board = memo(function Board({ today }: { today: string }) {
     <div className="board">
       <Capture
         full={boardFull(board)}
-        onAdd={(title, lane) => report(store.addCard({ uid: newUid(), title, categoryUid: null, lane, before: laneStart(columns, lane) }))}
+        pick={pick}
+        onAdd={(title, lane, categoryUid) => report(store.addCard({ uid: newUid(), title, categoryUid, lane, before: laneStart(columns, lane) }))}
       />
       {/* Always there, so what arrives is heard (see styles.css for its gap). */}
       <div className="board-notice" role="status" ref={noticeBox}>
@@ -481,7 +495,12 @@ export const Board = memo(function Board({ today }: { today: string }) {
           </Column>
         </div>
         {/* On the page's body, so no column clips it; without the glide back when motion is reduced. */}
-        {createPortal(<DragOverlay dropAnimation={reduceMotion ? null : undefined}>{lifted && <Lifted item={lifted} />}</DragOverlay>, document.body)}
+        {createPortal(
+          <DragOverlay dropAnimation={reduceMotion ? null : undefined}>
+            {lifted && <Lifted item={lifted} category={pick ? categoryOf(pick.categories, lifted.categoryUid) : undefined} />}
+          </DragOverlay>,
+          document.body,
+        )}
       </DndContext>
       <Burst at={burst} />
     </div>
@@ -542,8 +561,8 @@ function DraggableEntry({ id, column, held, render }: { id: string; column: Colu
   return render({ nodeRef: setNodeRef, style: { opacity: isDragging ? DRAGGED_OPACITY : undefined }, handleProps: { ...attributes, ...listeners } });
 }
 
-/** The card under the pointer as it is dragged: its title, with the grip it was picked up by. */
-function Lifted({ item }: { item: BoardItem }) {
+/** The card under the pointer as it is dragged: its title and category, with the grip it was picked up by. */
+function Lifted({ item, category }: { item: BoardItem; category?: Category }) {
   return (
     <div className={`board-card board-card--lifted${item.column === 'done' ? ' is-done' : ''}`}>
       <div className="board-card-row">
@@ -552,6 +571,14 @@ function Lifted({ item }: { item: BoardItem }) {
         </span>
         <span className="board-card-title">{item.title}</span>
       </div>
+      {category && (
+        <p className="board-card-meta muted small">
+          <span className="board-card-category">
+            <CategoryDot color={category.color} />
+            {category.name}
+          </span>
+        </p>
+      )}
     </div>
   );
 }

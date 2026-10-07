@@ -1,7 +1,10 @@
 import { useRef, useState, type CSSProperties } from 'react';
 import { LIMITS } from '../../../../shared/api.js';
-import { moveTargets, type BoardItem, type ColumnId } from '../../lib/board';
+import { moveTargets, type BoardItem, type CategoryPick, type ColumnId } from '../../lib/board';
 import { dayName } from '../../lib/format';
+import type { Category } from '../../types';
+import { CategoryChip } from '../CategoryChip';
+import { CategoryDot } from '../CategoryDot';
 import { Grip } from '../Icons';
 
 export const COLUMN_NAMES: Record<ColumnId, string> = { later: 'Later', next: 'Next', progress: 'In progress', done: 'Done' };
@@ -20,6 +23,12 @@ interface Props {
   onMove: (to: ColumnId, el: HTMLElement) => void;
   /** Renames it; without one the title shows as text (an earlier day's row). */
   onRename?: (title: string) => void;
+  /** Its category, when the board holds it: the meta line shows its dot and name. */
+  category?: Category;
+  /** The category chip's data; with `onCategory`, the editor offers the chip. */
+  pick: CategoryPick | null;
+  /** Sets its category; none where the board can't (an earlier day's row). */
+  onCategory?: (uid: string | null) => void;
   onDelete?: () => void;
   /** A recurring row's way off today's list. */
   onRemove?: () => void;
@@ -36,11 +45,28 @@ export interface ItemDrag {
 
 /**
  * A card or a row on the board: its tick, its number on today's list, its title (a button that
- * opens the editor) and a line saying when a later day's list holds it. The editor renames it,
- * moves it to another column (Move to, the way to move without dragging), and deletes it; a
- * planned item's offers Delete only, since that day's list decides it.
+ * opens the editor), and a line with its category and when a later day's list holds it. The
+ * editor renames it, sets its category, moves it to another column (Move to, the way to move
+ * without dragging), and deletes it; a planned item's offers Delete only, since that day's list
+ * decides it.
  */
-export function BoardCardView({ item, today, open, onToggle, onClose, titleRef, tick, onMove, onRename, onDelete, onRemove, drag }: Props) {
+export function BoardCardView({
+  item,
+  today,
+  open,
+  onToggle,
+  onClose,
+  titleRef,
+  tick,
+  onMove,
+  onRename,
+  category,
+  pick,
+  onCategory,
+  onDelete,
+  onRemove,
+  drag,
+}: Props) {
   const targets = moveTargets(item);
   const editorId = `editor-${item.id}`;
   return (
@@ -73,13 +99,28 @@ export function BoardCardView({ item, today, open, onToggle, onClose, titleRef, 
           <span className="board-card-title">{item.title}</span>
         </button>
       </div>
-      {item.planned && <p className="board-card-meta muted small">Planned for {dayName(item.planned, today, true)}</p>}
+      {(category ?? item.planned) && (
+        <p className="board-card-meta muted small">
+          {category && (
+            <span className="board-card-category">
+              <CategoryDot color={category.color} />
+              {category.name}
+            </span>
+          )}
+          {item.planned && <span>Planned for {dayName(item.planned, today, true)}</span>}
+        </p>
+      )}
       {open && (
         <div className="board-editor" id={editorId}>
           {onRename && !item.planned ? (
             <TitleField title={item.title} onRename={onRename} onClose={onClose} />
           ) : (
             <p className="board-editor-title">{item.title}</p>
+          )}
+          {pick && onCategory && !item.planned && (
+            <div className="board-editor-category">
+              <CategoryChip value={item.categoryUid} onChange={onCategory} pick={pick} label={`Category for ${item.title}`} />
+            </div>
           )}
           {item.planned ? (
             <p className="muted small">Change it on that day's sheet.</p>

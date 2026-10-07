@@ -84,7 +84,7 @@ export function SheetTab({ settings, set }: TabProps) {
       <Section title="Board">
         <Toggle
           label="Board page"
-          hint="Adds a Board button: a page for tasks that aren't for today."
+          hint="Adds a Board button (a page for tasks that aren't for today) and categories, set up in the Board tab."
           checked={settings.board}
           onChange={(v) => set({ board: v })}
         />

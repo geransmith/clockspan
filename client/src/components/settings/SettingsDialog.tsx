@@ -9,15 +9,17 @@ import type { SettingsPatch } from '../../api';
 import { Check, X } from '../Icons';
 import { AccountTab } from './AccountTab';
 import { AlarmsTab } from './AlarmsTab';
+import { BoardTab } from './BoardTab';
 import { DataTab } from './DataTab';
 import { SheetTab } from './SheetTab';
 import { TimeclockTab } from './TimeclockTab';
 
-type TabId = 'timeclock' | 'alarms' | 'sheet' | 'data' | 'account';
+type TabId = 'timeclock' | 'alarms' | 'sheet' | 'board' | 'data' | 'account';
 const TABS: { id: TabId; label: string }[] = [
   { id: 'timeclock', label: 'Timeclock' },
   { id: 'alarms', label: 'Alarms' },
   { id: 'sheet', label: 'Sheet' },
+  { id: 'board', label: 'Board' },
   { id: 'data', label: 'Data' },
   { id: 'account', label: 'Account' },
 ];
@@ -27,12 +29,15 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const { settings, update, reset } = useSettings();
   const { auth } = useAuth();
   const { saveState, save } = useSaveStatus();
-  // Account holds password + users, which only exist with local accounts.
-  const tabs = TABS.filter((t) => t.id !== 'account' || auth.mode === 'local');
+  // Account holds password + users, which only exist with local accounts; Board, the board's
+  // categories, only while the board is on.
+  const tabs = TABS.filter((t) => (t.id !== 'account' || auth.mode === 'local') && (t.id !== 'board' || settings.board));
   // The tab picked last time, so reopening to tweak the same thing doesn't start over. It is saved
   // when picked, never on open, so a stored tab not offered now (Account once local accounts are
   // gone) opens Timeclock and stays stored until another tab is picked.
   const [tab, setTabState] = useState<TabId>(() => tabs.find((t) => t.id === readStored(TAB_STORAGE_KEY))?.id ?? 'timeclock');
+  // A tab can go while it shows (the board switched off on another device): Timeclock then.
+  const shown = tabs.some((t) => t.id === tab) ? tab : 'timeclock';
   const setTab = (next: TabId) => {
     writeStored(TAB_STORAGE_KEY, next);
     setTabState(next);
@@ -51,20 +56,22 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const onTabKey = (e: KeyboardEvent<HTMLButtonElement>) => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
-    const i = tabs.findIndex((t) => t.id === tab);
+    const i = tabs.findIndex((t) => t.id === shown);
     const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length]!;
     setTab(next.id);
     document.getElementById(`tab-${next.id}`)?.focus();
   };
 
   const panel = () => {
-    switch (tab) {
+    switch (shown) {
       case 'timeclock':
         return <TimeclockTab settings={settings} set={set} />;
       case 'alarms':
         return <AlarmsTab settings={settings} set={set} />;
       case 'sheet':
         return <SheetTab settings={settings} set={set} />;
+      case 'board':
+        return <BoardTab save={save} />;
       case 'data':
         return <DataTab settings={settings} set={set} onReset={onReset} />;
       case 'account':
@@ -89,9 +96,9 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               type="button"
               role="tab"
               id={`tab-${t.id}`}
-              aria-selected={tab === t.id}
+              aria-selected={shown === t.id}
               aria-controls={`panel-${t.id}`}
-              tabIndex={tab === t.id ? 0 : -1}
+              tabIndex={shown === t.id ? 0 : -1}
               className="tab"
               onClick={() => setTab(t.id)}
               onKeyDown={onTabKey}
@@ -101,7 +108,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           ))}
         </div>
         {/* Keyed so switching tabs starts each panel at the top instead of mid-scroll. */}
-        <div key={tab} className="dialog-body" role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
+        <div key={shown} className="dialog-body" role="tabpanel" id={`panel-${shown}`} aria-labelledby={`tab-${shown}`}>
           {saveState === 'failed' && <p className="notice notice--danger">{SAVE_STATUS.failedDetail}</p>}
           {panel()}
         </div>

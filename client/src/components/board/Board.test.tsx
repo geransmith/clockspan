@@ -3,9 +3,21 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import { unlockAudio, warnQuietly } from '../../lib/alerts';
-import { withCard, withoutCard, withPatch } from '../../lib/board';
+import { withCard, withCategory, withoutCard, withPatch } from '../../lib/board';
 import { BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, PRIORITY_WARNINGS, WARNING_ACTIONS } from '../../lib/copy';
-import { apiError, deferred, makeBoard, makeCard, makeDay, makePriority, makeSettings, serveRange, settle, SettingsAndDays } from '../../test/hooks';
+import {
+  apiError,
+  deferred,
+  makeBoard,
+  makeCard,
+  makeCategory,
+  makeDay,
+  makePriority,
+  makeSettings,
+  serveRange,
+  settle,
+  SettingsAndDays,
+} from '../../test/hooks';
 import type { Board as BoardData, Priority } from '../../types';
 import { Board } from './Board';
 
@@ -672,5 +684,126 @@ describe('dragging', () => {
     expect(screen.queryByRole('button', { name: 'Drag to move Monitor the queue' })).toBeNull();
     expect(grip('Follow up')).toBeTruthy();
     expect(grip('Report')).toBeTruthy();
+  });
+});
+
+describe('categories', () => {
+  const TICKETS = makeCategory('cat000000001', 'Tickets');
+  const ADMIN = makeCategory('cat000000002', 'Admin', { color: 'teal' });
+  const OLD = makeCategory('cat000000003', 'Old work', { color: 'gold', archived: true });
+  const captureChip = () => screen.getByRole('button', { name: /^Category for new cards: / });
+  const pickOption = (name: string) => fireEvent.click(screen.getByRole('option', { name }));
+  const capture = (title: string) => {
+    const box = screen.getByRole('textbox', { name: 'Add a card' });
+    fireEvent.change(box, { target: { value: title } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+  };
+  const sentCategories = () => vi.mocked(api.addCard).mock.calls.map(([c]) => c.categoryUid);
+
+  beforeEach(() => {
+    localStorage.clear();
+    onServer = {
+      ...makeBoard(makeCard('later0000001', 'Write a KB', { categoryUid: TICKETS.uid }), makeCard('planned00001', 'Plan B', { lane: 'next', listDate: THU })),
+      categories: [TICKETS, ADMIN, OLD],
+    };
+    lists[WED] = [row(1, 'Report', { cardUid: 'card00000001', categoryUid: OLD.uid })];
+    vi.mocked(api.addCategory).mockImplementation((c) => Promise.resolve((onServer = withCategory(onServer, c))));
+  });
+
+  it("shows each item's category on its meta line, a removed one included", async () => {
+    await renderBoard();
+    const meta = (name: string) => [...column(name).querySelectorAll('.board-card-meta')];
+    expect(meta('Later').map((m) => m.textContent)).toEqual(['Tickets']);
+    expect(meta('Later')[0]!.querySelector('.cat-dot')?.getAttribute('data-color')).toBe('blue');
+    expect(meta('In progress').map((m) => m.textContent)).toEqual(['Old work']);
+    // A card with none has no meta line, and a planned one says when.
+    expect(meta('Next').map((m) => m.textContent)).toEqual(['Planned for tomorrow']);
+  });
+
+  it("sends a new card in the capture box's category, remembered on this device", async () => {
+    await renderBoard();
+    expect(captureChip().textContent).toBe('Category');
+    fireEvent.click(captureChip());
+    pickOption('Admin');
+    expect(localStorage.getItem('focus:capture-category')).toBe(ADMIN.uid);
+    capture('Call the vendor');
+    capture('Order cables');
+    await settle();
+    expect(sentCategories()).toEqual([ADMIN.uid, ADMIN.uid]);
+
+    cleanup();
+    await renderBoard();
+    expect(captureChip().getAttribute('aria-label')).toBe('Category for new cards: Admin');
+    fireEvent.click(captureChip());
+    pickOption('No category');
+    expect(localStorage.getItem('focus:capture-category')).toBe('');
+    capture('No category this time');
+    await settle();
+    expect(sentCategories()).toEqual([ADMIN.uid, ADMIN.uid, null]);
+  });
+
+  it('reads a remembered category that was removed, or that the board lacks, as none', async () => {
+    localStorage.setItem('focus:capture-category', OLD.uid);
+    await renderBoard();
+    expect(captureChip().getAttribute('aria-label')).toBe('Category for new cards: none');
+    capture('A card');
+    await settle();
+    expect(sentCategories()).toEqual([null]);
+  });
+
+  it("makes a category from the capture chip's New category, in the next colour, and uses it at once", async () => {
+    await renderBoard();
+    fireEvent.click(captureChip());
+    const box = screen.getByRole('textbox', { name: 'New category' });
+    fireEvent.change(box, { target: { value: 'Calls' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(captureChip().getAttribute('aria-label')).toBe('Category for new cards: Calls');
+    capture('Call the vendor');
+    await settle();
+    const [made] = vi.mocked(api.addCategory).mock.calls[0]!;
+    // Blue and teal are in use; the removed category's gold doesn't count.
+    expect(made).toMatchObject({ name: 'Calls', color: 'green' });
+    expect(sentCategories()).toEqual([made.uid]);
+    expect(api.addCategory).toHaveBeenCalledTimes(1);
+  });
+
+  it("says in the banner when a category made from the chip isn't saved, and the chip reads none again", async () => {
+    await renderBoard();
+    vi.mocked(api.addCategory).mockRejectedValueOnce(new Error('offline'));
+    fireEvent.click(captureChip());
+    const box = screen.getByRole('textbox', { name: 'New category' });
+    fireEvent.change(box, { target: { value: 'Calls' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await settle();
+    expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ tag: 'save-failed' }));
+    expect(captureChip().getAttribute('aria-label')).toBe('Category for new cards: none');
+  });
+
+  it("sets a row of today's category through the row, with its card as touched, and a card's on the card", async () => {
+    await renderBoard();
+    openEditor('Report');
+    fireEvent.click(screen.getByRole('button', { name: 'Category for Report: Old work' }));
+    pickOption('Tickets');
+    await settle();
+    expect(putLists()).toEqual([{ date: WED, texts: ['Report', '', ''], touched: ['card00000001'] }]);
+    expect(lists[WED]![0]!.categoryUid).toBe(TICKETS.uid);
+
+    openEditor('Write a KB');
+    fireEvent.click(screen.getByRole('button', { name: 'Category for Write a KB: Tickets' }));
+    pickOption('Admin');
+    await settle();
+    expect(api.patchCard).toHaveBeenCalledExactlyOnceWith('later0000001', { today: WED, categoryUid: ADMIN.uid });
+    expect(column('Later').querySelector('.board-card-meta')?.textContent).toBe('Admin');
+    // The editor stays open, its chip on the new category.
+    expect(screen.getByRole('button', { name: 'Category for Write a KB: Admin' })).toBe(document.activeElement);
+  });
+
+  it("offers no chip for a planned card or an earlier day's row", async () => {
+    await renderBoard();
+    openEditor('Plan B');
+    expect(screen.queryByRole('button', { name: /^Category for Plan B/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 1' }));
+    openEditor('Tuesday row');
+    expect(screen.queryByRole('button', { name: /^Category for Tuesday row/ })).toBeNull();
   });
 });

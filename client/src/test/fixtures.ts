@@ -1,8 +1,10 @@
+import { vi } from 'vitest';
 import { emptyDay } from '../../../shared/api.js';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { kindForPosition } from '../../../shared/punches.js';
 import { CARD_IDS } from '../../../shared/settings.js';
 import { ApiError } from '../lib/apiError';
+import type { CategoryPick } from '../lib/board';
 import { REQUEST_FAILED } from '../lib/copy';
 import type { DaySummary } from '../lib/stickers';
 import { normalizePunches } from '../lib/timeclock';
@@ -139,6 +141,20 @@ export function makeSession(patch: Partial<RunningSession> = {}): RunningSession
 export function makeCategory(uid: string, name: string, patch: Partial<Category> = {}): Category {
   return { uid, name, color: 'blue', archived: false, ...patch };
 }
+
+/**
+ * The category chip's data over these categories, with `create` and `refresh` mocked: `create`
+ * gives `NEW_CATEGORY` for a name that isn't blank, and null for a blank one.
+ */
+export function makePick(categories: Category[] = []) {
+  return {
+    categories,
+    create: vi.fn((name: string): string | null => (name.trim() ? NEW_CATEGORY : null)),
+    refresh: vi.fn(),
+  } satisfies CategoryPick;
+}
+/** The uid `makePick`'s `create` gives. */
+export const NEW_CATEGORY = 'new000000001';
 
 /** A recurring priority with no category, every weekday Monday to Friday unless `patch` says otherwise. */
 export function makeRecurring(uid: string, title: string, patch: Partial<Recurring> = {}): Recurring {

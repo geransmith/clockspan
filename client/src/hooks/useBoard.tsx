@@ -1,14 +1,27 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
-import type { CardPatch, NewCard } from '../api';
+import type { CardPatch, CategoryPatch, NewCard, NewCategory } from '../api';
 import { todayKey } from '../../../shared/dates.js';
 import { hasText } from '../../../shared/priorities.js';
 import type { Board, Priority } from '../types';
 import { ApiError } from '../lib/apiError';
-import { MoveRefused, needsCard, withCard, withoutCard, withPatch, type StoreMove } from '../lib/board';
+import { warnQuietly } from '../lib/alerts';
+import {
+  categoryForName,
+  MoveRefused,
+  needsCard,
+  withCard,
+  withCategory,
+  withCategoryPatch,
+  withoutCard,
+  withoutCategory,
+  withPatch,
+  type CategoryPick,
+  type StoreMove,
+} from '../lib/board';
 import { ADD_PRIORITY_FAILED, BOARD, SAVE_FAILED } from '../lib/copy';
 import { addPending, fetched, settle, settleWith, shown, untracked, type Tracked } from '../lib/optimistic';
-import { editPriority, placePriority } from '../lib/priorities';
+import { editPriority, newUid, placePriority } from '../lib/priorities';
 import { useDayStore, type PrioritiesEdit } from './useDay';
 import { useLatest } from './useLatest';
 import { useRefreshLoop } from './useRefreshLoop';
@@ -54,10 +67,16 @@ export interface BoardStore {
    * how a recurring row, which has no card, comes off today's list.
    */
   deleteCard(uid: string | null, rowUid: string | null, laterDate: string | null): Promise<void>;
-  /** A row of today's list renamed on the board, sent with its card as touched. */
-  renameRow(rowUid: string, text: string, cardUid: string | null): Promise<void>;
+  /** A row of today's list renamed or given a category on the board, sent with its card as touched. */
+  editRow(rowUid: string, patch: Partial<Pick<Priority, 'text' | 'categoryUid'>>, cardUid: string | null): Promise<void>;
   /** A move `planMove` gave, as one job; a step that changes today's list sends the item's card as touched. */
   move(move: StoreMove): Promise<void>;
+  /** A new category, or a removed one brought back under its uid (`categoryForName` says which). */
+  addCategory(category: NewCategory): Promise<void>;
+  /** A category renamed or recoloured in Settings → Board. */
+  editCategory(uid: string, patch: CategoryPatch): Promise<void>;
+  /** A category removed in Settings → Board: archived, so past time keeps its name. */
+  removeCategory(uid: string): Promise<void>;
 }
 
 const StateCtx = createContext<BoardState | null>(null);
@@ -216,7 +235,7 @@ export function BoardProvider({ children }: { children: ReactNode }) {
   // A row of today's list changed through the day store, with its card as touched. A row gone
   // from the list meanwhile is left alone.
   const setRow = useCallback(
-    async (rowUid: string, patch: Partial<Pick<Priority, 'text' | 'done'>>, cardUid: string | null) => {
+    async (rowUid: string, patch: Partial<Pick<Priority, 'text' | 'done' | 'categoryUid'>>, cardUid: string | null) => {
       const now = Date.now();
       const edit = await dayStore.editPriorities(
         todayKey(),
@@ -229,8 +248,8 @@ export function BoardProvider({ children }: { children: ReactNode }) {
     [dayStore],
   );
 
-  const renameRow = useCallback(
-    (rowUid: string, text: string, cardUid: string | null) => queue(() => setRow(rowUid, { text }, cardUid), 'board'),
+  const editRow = useCallback(
+    (rowUid: string, patch: Partial<Pick<Priority, 'text' | 'categoryUid'>>, cardUid: string | null) => queue(() => setRow(rowUid, patch, cardUid), 'board'),
     [queue, setRow],
   );
 
@@ -308,9 +327,39 @@ export function BoardProvider({ children }: { children: ReactNode }) {
     [write, dayStore],
   );
 
+  const addCategory = useCallback(
+    (category: NewCategory) =>
+      write(
+        (b) => withCategory(b, category),
+        () => api.addCategory(category),
+      ),
+    [write],
+  );
+
+  const editCategory = useCallback(
+    (uid: string, patch: CategoryPatch) =>
+      write(
+        (b) => withCategoryPatch(b, uid, patch),
+        () => api.patchCategory(uid, patch),
+      ),
+    [write],
+  );
+
+  const removeCategory = useCallback(
+    (uid: string) =>
+      write(
+        (b) => withoutCategory(b, uid),
+        () => api.deleteCategory(uid),
+      ),
+    [write],
+  );
+
   const board = useMemo(() => shown(tracked), [tracked]);
   const state = useMemo(() => ({ board, failed, on }), [board, failed, on]);
-  const store = useMemo(() => ({ load, addCard, editCard, deleteCard, renameRow, move }), [load, addCard, editCard, deleteCard, renameRow, move]);
+  const store = useMemo(
+    () => ({ load, addCard, editCard, deleteCard, editRow, move, addCategory, editCategory, removeCategory }),
+    [load, addCard, editCard, deleteCard, editRow, move, addCategory, editCategory, removeCategory],
+  );
   return (
     <StateCtx.Provider value={state}>
       <StoreCtx.Provider value={store}>
@@ -341,4 +390,36 @@ export function useBoardStore(): BoardStore {
   const v = useContext(StoreCtx);
   if (!v) throw new Error('useBoardStore outside BoardProvider');
   return v;
+}
+
+/** A failed category create, said where the view has no other way: the "Change not saved" banner. */
+function bannerOnFailure(saved: Promise<void>): void {
+  void saved.catch(() => warnQuietly({ ...SAVE_FAILED, tag: 'save-failed' }));
+}
+
+/**
+ * The category chip's data, for a view that offers the chip and passes it down (the board page);
+ * null while the board is off or before its first read. `create` gives the uid to set at once
+ * (`categoryForName`): a category is a soft link, so the row or card that takes it needs no wait.
+ * A new or removed category goes out as an optimistic `addCategory`, and its failure (a stale
+ * copy whose name another device took, or a server cap) takes it off, reads the board again and
+ * goes to `report`, the banner by default; what picked it then reads as no category. `refresh`
+ * reads the board, as the chip's list does when it opens.
+ */
+export function useCategoryPick(report: (saved: Promise<void>) => void = bannerOnFailure): CategoryPick | null {
+  const { board, on } = useBoardState();
+  const store = useBoardStore();
+  return useMemo(() => {
+    if (!on || !board) return null;
+    const { categories } = board;
+    return {
+      categories,
+      create: (name: string) => {
+        const made = categoryForName(categories, name, newUid());
+        if (made?.send) report(store.addCategory(made.send));
+        return made?.uid ?? null;
+      },
+      refresh: () => void store.load(),
+    };
+  }, [on, board, store, report]);
 }

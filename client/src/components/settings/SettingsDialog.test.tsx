@@ -6,7 +6,7 @@ import { AuthGate } from '../../auth/AuthGate';
 import { PASSWORD_CHANGED, SAVE_STATUS } from '../../lib/copy';
 import { applySettingsPatch } from '../../lib/settings';
 import { SOUND_EVENT_LABELS } from '../../lib/sounds';
-import { DEFAULT_USER, makeAuth, makeBoard, makeSettings, makeUser, settle, SettingsAndDays } from '../../test/hooks';
+import { DEFAULT_USER, makeAuth, makeBoard, makeCategory, makeSettings, makeUser, settle, SettingsAndDays } from '../../test/hooks';
 import type { AuthInfo } from '../../types';
 import { SettingsDialog } from './SettingsDialog';
 
@@ -148,11 +148,39 @@ describe('SettingsDialog', () => {
     vi.mocked(api.getBoard).mockResolvedValue(makeBoard());
     await renderDialog();
     await openTab('Sheet');
-    expect(hint('Board page')).toBe("Adds a Board button: a page for tasks that aren't for today.");
+    expect(hint('Board page')).toBe("Adds a Board button (a page for tasks that aren't for today) and categories, set up in the Board tab.");
+    expect(tabNames()).toEqual(['Timeclock', 'Alarms', 'Sheet', 'Data', 'Account']);
     fireEvent.click(toggle('Board page'));
     await settle();
     expect(api.putSettings).toHaveBeenCalledWith({ board: true });
     expect((toggle('Board page') as HTMLInputElement).checked).toBe(true);
+    expect(tabNames()).toEqual(['Timeclock', 'Alarms', 'Sheet', 'Board', 'Data', 'Account']);
+  });
+
+  it('saves a category change on the Board tab through the header, and shows Timeclock once the board is switched off', async () => {
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ board: true }));
+    vi.mocked(api.getBoard).mockResolvedValue({ ...makeBoard(), categories: [makeCategory('cat000000001', 'Tickets')] });
+    vi.mocked(api.patchCategory).mockResolvedValue({ ...makeBoard(), categories: [makeCategory('cat000000001', 'Tickets', { color: 'pink' })] });
+    await renderDialog();
+    await openTab('Board');
+    fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Colour of Tickets', hidden: true })).getByRole('radio', { name: 'Pink', hidden: true }));
+    await settle();
+    expect(api.patchCategory).toHaveBeenCalledWith('cat000000001', { color: 'pink' });
+    expect(screen.getByRole('status', { hidden: true }).textContent).toContain(SAVE_STATUS.saved);
+
+    vi.mocked(api.patchCategory).mockRejectedValueOnce(new Error('Request failed (500)'));
+    fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Colour of Tickets', hidden: true })).getByRole('radio', { name: 'Teal', hidden: true }));
+    await settle();
+    expect(screen.getByRole('status', { hidden: true }).textContent).toBe(SAVE_STATUS.failed);
+
+    // Another device switches the board off: the settings' next read takes the tab away.
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
+    await settle(60_000);
+    expect(tabNames()).toEqual(['Timeclock', 'Alarms', 'Sheet', 'Data', 'Account']);
+    expect(screen.getByRole('tab', { name: 'Timeclock', hidden: true }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByLabelText('Work day hours')).toBeTruthy();
+    // Board stays the tab picked last, for when the board is back.
+    expect(localStorage.getItem('focus:settingsTab')).toBe('board');
   });
 
   it('drops the overtime clause from the retrospective hint when Overtime is off', async () => {
