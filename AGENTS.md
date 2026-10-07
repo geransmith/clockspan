@@ -104,14 +104,15 @@ client/                 Vite root → dist/client
   src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
   src/styles.css        design tokens and all component CSS
 scripts/                screenshots.mjs and icons.mjs (headless Chromium via browser.mjs), smoke-image.sh
-docs/screenshots/       the PNGs the README and the Unraid template embed (sheet-desktop.png is the
-                        template's alone)
+docs/screenshots/       the PNGs the README and the Unraid template embed, dark theme only (the
+                        light one is checked in the browser pass, not pictured; sheet-desktop.png
+                        is the template's alone)
 Dockerfile, docker/     the image; entrypoint.sh owns /data as PUID:PGID and drops root
 unraid/clockspan.xml    the Unraid template, a field per .env.example variable (config.test.ts checks);
                         Unraid reads it from main, so an edit reaches users when it merges
 ca_profile.xml          the Community Apps profile. Both XML files link client/public/icons/icon-512.png
                         by raw URL on main; the template also links its own path (TemplateURL) and
-                        three shots (sheet-phone-light, sheet-desktop, history). Moving or renaming
+                        three shots (sheet-phone-dark, sheet-desktop, history). Moving or renaming
                         any of those breaks the listing
 .github/workflows/      ci.yml (check, image-smoke, image, release), codeql.yml, workflow-lint.yml (zizmor)
 ```

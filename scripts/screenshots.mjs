@@ -217,20 +217,20 @@ const openSettings = (tab) => async (page) => {
   await page.click(`#tab-${tab}`);
 };
 
+// The README shows the dark theme only; the light one is checked in the browser pass, not pictured.
 const SHOTS = [
-  { name: 'sheet-phone-light', url: '/', device: PHONE_TALL, scheme: 'light', ready: READY_SHEET },
   { name: 'sheet-phone-dark', url: '/', device: PHONE_TALL, scheme: 'dark', ready: READY_SHEET },
   { name: 'sheet-desktop', url: '/', device: DESKTOP, scheme: 'dark', ready: READY_SHEET, fullPage: true },
   // The seed makes the last weekday the one with a priority added mid-day.
-  { name: 'retro', url: `/?date=${lastWeekday()}`, device: PHONE, scheme: 'light', ready: '#card-retro', clip: '#card-retro' },
+  { name: 'retro', url: `/?date=${lastWeekday()}`, device: PHONE, scheme: 'dark', ready: '#card-retro', clip: '#card-retro' },
   // The route's date picks the day, so the panel is filled before the first paint settles.
-  { name: 'history', url: `/?view=history&date=${lastWeekday()}`, device: PHONE, scheme: 'light', ready: '.calendar-detail .tile', fullPage: true },
+  { name: 'history', url: `/?view=history&date=${lastWeekday()}`, device: PHONE, scheme: 'dark', ready: '.calendar-detail .tile', fullPage: true },
   {
     // The whole page, so the days' notes at the end are in the picture.
     name: 'review',
     url: '/?view=history',
     device: PHONE,
-    scheme: 'light',
+    scheme: 'dark',
     ready: READY_HISTORY,
     fullPage: true,
     steps: async (page) => {
@@ -242,8 +242,8 @@ const SHOTS = [
       await sleep(600);
     },
   },
-  { name: 'settings-alarms', url: '/', device: PHONE, scheme: 'light', ready: READY_SHEET, steps: openSettings('alarms') },
-  { name: 'settings-data', url: '/', device: PHONE, scheme: 'light', ready: READY_SHEET, steps: openSettings('data') },
+  { name: 'settings-alarms', url: '/', device: PHONE, scheme: 'dark', ready: READY_SHEET, steps: openSettings('alarms') },
+  { name: 'settings-data', url: '/', device: PHONE, scheme: 'dark', ready: READY_SHEET, steps: openSettings('data') },
 ];
 
 async function main() {
