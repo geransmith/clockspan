@@ -9,9 +9,10 @@ retrospective card (plan vs. log, a "why" note, a nudge before clock-out), a wee
 quarter review, and alarms for lunch, clock-out and the second meal period. "Overtime
 approved" silences the clock-out alarm only. Every day is persisted; old days can be pruned.
 Data is **per user**; auth is optional (`AUTH_MODE=none | local | oidc`). One Docker container,
-SQLite on `/data`. Mobile-first PWA. Meal-period defaults follow California rules; three
-switches (meal periods, overtime, hours) turn off what doesn't apply to exempt or salaried
-work. The README has the user-facing description.
+SQLite on `/data`. A PWA used mostly on a laptop or desktop and laid out for phones too.
+Meal-period defaults follow California rules; three switches (meal periods, overtime, hours)
+turn off what doesn't apply to exempt or salaried work. The README has the user-facing
+description.
 
 ## Stack & versions
 
@@ -650,13 +651,15 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   unless the `theme` setting forces one (`data-theme` on `<html>`, set by `lib/theme.ts`; the
   two dark token blocks must match, `index.html`'s theme-color metas repeat `--bg` for each
   scheme and the manifest's `background_color` the light one: `theme-css.test.ts` checks all
-  three), **mobile-first** (base = phone; `@media (min-width: 640px)` enhances). Tap targets are
-  44 px on a touch screen: `.btn` and `.input` set `min-height: 44px`, and a compact control
-  (chip, segment, running-bar button, banner close/action, log delete) keeps its drawn size
-  and gets the rest from the `@media (pointer: coarse)` block at the end of `styles.css`, an
-  empty `::after` reaching past its edge (a control that clips its overflow grows its padding
-  instead). Where two controls sit closer than that, each reaches half the gap. A new compact
-  control joins that block. A toggle's on state is styled from its ARIA attribute
+  three), built **phone-base** (the base rules are the phone; `@media (min-width: 640px)`
+  and wider queries enhance; that is how the stylesheet is built, not who it is for). Tap
+  targets are 44 px on a touch screen: `.btn` and `.input` set `min-height: 44px`, and a
+  compact control (chip, segment, running-bar button, banner close/action, log delete) keeps
+  its drawn size and gets the rest from the `@media (pointer: coarse)` block at the end of
+  `styles.css`, an empty `::after` reaching past its edge (a control that clips its overflow
+  grows its padding instead). Where two controls sit closer than that, each reaches half the
+  gap. A new compact control joins that block.
+  A toggle's on state is styled from its ARIA attribute
   (`[aria-pressed='true']`, `[aria-selected='true']`), never a parallel `is-on` / `is-active`
   class. Inputs are 16 px so iOS doesn't zoom. No external
   fonts or assets (the CSP would block them anyway). Safe-area insets via `--safe-top`,
@@ -727,9 +730,9 @@ Prove a change at the cheapest level that can show it, and stop there:
      stand-in `dist/client` with `tempClientBuild()` and remove it afterwards.
 3. One-off looks at live data: `curl` against the seeded dev DB (see "Dev data is disposable").
 4. The browser, only for what tests cannot show: how a card renders, drag/drop, banners, the
-   timer bar, light/dark, the 375 px pass. Seed first (`--running` for timer work), scope it to
-   the surface you touched, and make one pass at the mobile preset unless the change is
-   desktop-only layout. Do not re-walk flows a test already covers.
+   timer bar, light/dark, the desktop and phone widths. Seed first (`--running` for timer work),
+   scope it to the surface you touched, and make one pass at desktop width, then one at the
+   375 px mobile preset, each in light and dark. Do not re-walk flows a test already covers.
 
 The gate, which a change passes before it is reported done or a PR is opened:
 `npm run test:coverage` green and `typecheck`, `lint` and `format:check` clean. Every file under
@@ -741,8 +744,8 @@ browser-only module is tested (stub the globals).
 
 The browser pass for each surface (the logic under it is already tested):
 
-- **CSS or a component**: the touched surface at the 375 px mobile preset (and desktop width
-  if the change has a desktop-only branch), in light and dark.
+- **CSS or a component**: the touched surface at desktop width, then at the 375 px mobile
+  preset, each in light and dark.
 - **`security.ts`, `index.html` or how assets load**: the `prod` config, with the console free
   of CSP violations; `curl -sI localhost:8090/api/health` shows the headers.
 - **The timer**: make the seeded session run out (PATCH `plannedSeconds` to
