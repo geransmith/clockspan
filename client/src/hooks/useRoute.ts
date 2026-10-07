@@ -2,8 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { isValidDateKey, todayKey } from '../../../shared/dates.js';
 import { PERIOD_KINDS, periodRange, type ReviewPeriod } from '../lib/review';
 
+/**
+ * The pages the app can show. The sheet is the default, and the one view the URL leaves out;
+ * a name the list doesn't hold reads as the sheet.
+ */
+export const VIEWS = ['sheet', 'history'] as const;
+
 export interface Route {
-  view: 'sheet' | 'history';
+  view: (typeof VIEWS)[number];
   /**
    * The date on screen, or null for today. Today is kept as null rather than as its key so a
    * sheet left open past midnight moves to the new day, the way a reload of the same URL does.
@@ -13,14 +19,14 @@ export interface Route {
   date: string | null;
   /**
    * The period a day was opened from in History → Review, recorded on the History entry so Back
-   * reopens the review there. Null on the sheet and for a day opened from Days.
+   * reopens the review there. Null on every other view and for a day opened from Days.
    */
   review: ReviewPeriod | null;
 }
 
 function read(): Route {
   const params = new URLSearchParams(window.location.search);
-  const view = params.get('view') === 'history' ? 'history' : 'sheet';
+  const view = VIEWS.find((v) => v === params.get('view')) ?? 'sheet';
   const date = params.get('date');
   return {
     view,
@@ -38,7 +44,7 @@ function readReview(params: URLSearchParams): ReviewPeriod | null {
 
 function toUrl(route: Route): string {
   const params = new URLSearchParams();
-  if (route.view === 'history') params.set('view', 'history');
+  if (route.view !== 'sheet') params.set('view', route.view);
   if (route.date != null) params.set('date', route.date);
   if (route.review) {
     params.set('review', route.review.kind);
@@ -67,7 +73,7 @@ export function useRoute(): [Route, (next: Partial<Route>, opts?: { replace?: bo
     const here = read();
     const merged = { ...here, ...next };
     if (merged.date != null && merged.date >= todayKey()) merged.date = null;
-    if (merged.view === 'sheet') merged.review = null;
+    if (merged.view !== 'history') merged.review = null;
     const url = toUrl(merged);
     // Already there (the brand button on today's sheet): a push would add an entry Back
     // has to step through without anything changing.

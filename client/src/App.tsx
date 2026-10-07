@@ -73,6 +73,19 @@ function Shell() {
   );
   const { setEditingPunches } = useTodayAlarms(today, now, openRetro);
 
+  const page = () => {
+    switch (route.view) {
+      case 'sheet':
+        return <Sheet date={date} today={today} now={now} customize={customize} jumpTo={jumpTo} onJumped={onJumped} onPunchEditing={setEditingPunches} />;
+      case 'history':
+        return (
+          <Suspense fallback={<div className="sheet-loading" aria-busy="true" />}>
+            <History today={today} now={minute} date={date} review={route.review} onOpen={openDay} />
+          </Suspense>
+        );
+    }
+  };
+
   return (
     <div className={`app${running ? ' app--has-bar' : ''}`}>
       {/* Keyed by session: one another device swapped in must not inherit an open label draft. */}
@@ -87,15 +100,7 @@ function Shell() {
         onToggleCustomize={() => setCustomize((c) => !c)}
         onOpenSettings={() => setSettingsOpen(true)}
       />
-      <main>
-        {route.view === 'sheet' ? (
-          <Sheet date={date} today={today} now={now} customize={customize} jumpTo={jumpTo} onJumped={onJumped} onPunchEditing={setEditingPunches} />
-        ) : (
-          <Suspense fallback={<div className="sheet-loading" aria-busy="true" />}>
-            <History today={today} now={minute} date={date} review={route.review} onOpen={openDay} />
-          </Suspense>
-        )}
-      </main>
+      <main>{page()}</main>
       {settingsOpen && (
         <Suspense fallback={null}>
           <SettingsDialog onClose={() => setSettingsOpen(false)} />
