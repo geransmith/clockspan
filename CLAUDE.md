@@ -4,8 +4,9 @@
 ## Claude Code notes
 
 - Verify UI changes in the built-in browser: `preview_start` the `web` config from
-  `.claude/launch.json` (AGENTS.md's Commands section lists the others), then `resize_window`
-  to the `mobile` preset for the phone pass and `colorScheme: light` for the light check.
+  `.claude/launch.json` (AGENTS.md's Commands section lists the others), look at desktop width
+  first (`resize_window` preset `desktop`), then the `mobile` preset for the phone pass, and
+  `colorScheme: light` / `dark` for each theme.
 - A step behind `window.confirm`: stub it in the page (`window.confirm = () => true`) or send
   the request with curl.
 - Never type a password into the pane, not even the dev one. For a signed-in check under
