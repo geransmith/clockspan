@@ -79,6 +79,17 @@ describe('/api/settings', () => {
     expect((await app.api.put('/api/settings', { stickers: 'yes' })).body.stickers).toBe(false);
   });
 
+  it("reads a layout stored before the sheet had columns in the default columns, and stores a card's move", async () => {
+    const userId = ensureDefaultUser(app.db).id;
+    app.db.prepare(`INSERT INTO settings (user_id, json) VALUES (?, ?)`).run(userId, JSON.stringify({ layout: [{ id: 'retro', visible: true }] }));
+    const sides = (body: { layout: { id: string; side: string }[] }) => Object.fromEntries(body.layout.map((l) => [l.id, l.side]));
+    expect(sides((await app.api.get('/api/settings')).body)).toEqual({ retro: 'right', timeclock: 'left', priorities: 'left', timer: 'right', log: 'right' });
+
+    const layout = DEFAULT_SETTINGS.layout.map((l) => (l.id === 'timer' ? { ...l, side: 'left' } : l));
+    await app.api.put('/api/settings', { layout });
+    expect((await app.api.get('/api/settings')).body.layout).toEqual(layout);
+  });
+
   it('serves the defaults when the stored row is not JSON', async () => {
     app.db.prepare(`INSERT INTO settings (user_id, json) VALUES (?, ?)`).run(ensureDefaultUser(app.db).id, '{not json');
     expect((await app.api.get('/api/settings')).body).toEqual(DEFAULT_SETTINGS);

@@ -81,7 +81,7 @@ export function SheetTab({ settings, set }: TabProps) {
           onChange={(v) => set({ showWeekends: v })}
         />
       </Section>
-      <Section title="Layout" hint="Use Customize on the sheet to drag cards or hide them.">
+      <Section title="Layout" hint="Use Customize on the sheet to drag cards, hide them or move them to the other column on a wide screen.">
         <div className="setting-row">
           <span className="muted">
             {settings.layout.filter((l) => l.visible).length} of {settings.layout.length} cards visible

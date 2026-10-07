@@ -592,6 +592,35 @@ button {
   flex-direction: column;
   gap: 16px;
 }
+/* One of the sheet's two columns (Sheet.tsx). Below the split's width, which a window narrowed
+   after the sheet mounted can reach, they stack, left over right. */
+.sheet-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+/* SPLIT_QUERY in lib/layout.ts, which the sheet asks when it mounts; theme-css.test.ts checks
+   the two agree. The page widens for the two columns, and the header (inside .app) and the
+   running bar's contents (which read --page-w) with it. The punch-order notice and the
+   hidden-cards strip span both. */
+@media (min-width: 1100px) {
+  .app:has(.sheet--split) {
+    --page-w: 1240px;
+  }
+  .sheet--split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+  .sheet--split > :not(.sheet-col) {
+    grid-column: 1 / -1;
+  }
+  /* A column is narrower than the one-column card at 760 px, too narrow for four tiles. */
+  .sheet--split .tiles--four {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 .sheet-loading {
   min-height: 200px;
 }
