@@ -1,21 +1,25 @@
-import { useMemo, useRef, useState } from 'react';
+import { Fragment, useId, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { useCelebration, type Moment } from '../hooks/useCelebration';
 import { useDebouncedDraft } from '../hooks/useDebouncedDraft';
 import { useSettings } from '../hooks/useSettings';
 import { unlockAudio } from '../lib/alerts';
-import { LEFT_OPEN, WARNING_ACTIONS } from '../lib/copy';
+import { EMPTIED_ROW, LEFT_OPEN, WARNING_ACTIONS } from '../lib/copy';
+import { formatDuration } from '../lib/format';
 import { planNext } from '../lib/plan';
-import { editPriority, padPriorities, pickWarning, removePriority, warnThreshold, warningKind, type WarningKind } from '../lib/priorities';
-import { hasText } from '../../../shared/priorities.js';
+import { editPriority, nudgeFor, padPriorities, pickWarning, removePriority, type WarningKind } from '../lib/priorities';
+import { loggedByUid } from '../lib/retro';
+import { hasText, isFree } from '../../../shared/priorities.js';
 import { LIMITS } from '../../../shared/api.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
-import type { Priority } from '../types';
+import type { Priority, Session } from '../types';
 import { Burst } from './Burst';
 import { Check, Plus, X } from './Icons';
 
 interface Props {
   priorities: Priority[];
+  /** The day's sessions: a cleared row with focus logged on it says the time stays with it. */
+  sessions: Session[];
   /** `base`: the rows the edits were made on, the list the card last sent or last took up from `priorities`. */
   onChange: (priorities: Priority[], base: Priority[]) => void;
   /** What the last planned day left unticked (`from` names that day), offered while the list is empty. */
@@ -27,7 +31,7 @@ interface Props {
  * keystroke; checkboxes, add and remove save immediately. Keyed by date in the sheet, so a
  * new day mounts fresh instead of carrying drafts over.
  */
-export function Priorities({ priorities, onChange, leftOpen }: Props) {
+export function Priorities({ priorities, sessions, onChange, leftOpen }: Props) {
   const { settings } = useSettings();
   const count = settings.priorityCount;
   const stored = useMemo(() => padPriorities(priorities, count), [priorities, count]);
@@ -48,6 +52,8 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
   // A tick gets a burst from its checkbox.
   const [ticked, setTicked] = useState<Moment | null>(null);
   const { anchor, burst } = useCelebration<HTMLInputElement>(ticked, 'priorityDone');
+  const logged = useMemo(() => loggedByUid(sessions), [sessions]);
+  const noteId = useId();
 
   const edit = (position: number, patch: Partial<Priority>, now = false) => {
     editList(
@@ -60,17 +66,18 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
   const total = local.filter(hasText).length;
 
   const addRow = (force = false) => {
-    // The nudge is about a written list, so an empty row is where a new priority goes. Focusing
-    // it inside the tap is what lets iOS raise the keyboard.
-    const empty = local.find((p) => !hasText(p));
-    if (empty) {
+    // A row never written in is where a new priority goes, with no nudge: the nudge is about a
+    // written list. A cleared row is passed, since it keeps its uid and the time logged on it.
+    // Focusing the row inside the tap is what lets iOS raise the keyboard.
+    const free = local.find(isFree);
+    if (free) {
       setWarning(null);
-      inputs.current.get(empty.position)?.focus();
+      inputs.current.get(free.position)?.focus();
       return;
     }
     if (local.length >= MAX_PRIORITIES) return;
-    if (!force && local.length >= warnThreshold(count)) {
-      const kind = warningKind(done, total);
+    const kind = force ? null : nudgeFor(local, count);
+    if (kind) {
       const w = pickWarning(kind, lastWarning.current);
       lastWarning.current = w;
       setWarning({ kind, text: w });
@@ -83,15 +90,20 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
     inputs.current.get(next.length)?.focus();
   };
   // The rows are new to today (fresh uids, `addedAt` now), so the retro counts them as planned
-  // unless a session ran first. A text that appears twice comes over once.
+  // unless a session ran first. A text that appears twice comes over once. A cleared row stays,
+  // ahead of them, with the time logged on it; focus goes to the first row the offer filled.
   const bringOver = (rows: Priority[]) => {
     const texts = rows.map((p) => p.text);
-    flushSync(() => editList(padPriorities(planNext([], texts).rows, count), true));
-    inputs.current.get(1)?.focus();
+    const { rows: next, added } = planNext(local, texts);
+    flushSync(() => editList(padPriorities(next, count), true));
+    inputs.current.get(next.length - added + 1)?.focus();
   };
+  // Focus goes where Add priority would put a new priority, never into a cleared row, which is still its old item.
   const dismissLeftOpen = (dismiss: () => void) => {
     dismiss();
-    inputs.current.get(1)?.focus();
+    const free = local.find(isFree);
+    if (free) inputs.current.get(free.position)?.focus();
+    else addButton.current?.focus();
   };
   const removeRow = (position: number) => {
     // Removing a row before the last moves the next row's X under focus; the last row takes its X with it.
@@ -129,63 +141,76 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
         const empty = !hasText(p);
         const removable = p.position > count;
         const placeholder = p.position === 1 ? 'The one thing to get done' : `Priority ${p.position}`;
+        // A cleared row is still the same item: the focus logged on it stays, and a new priority
+        // goes past it. The draft's row decides, so the first key typed takes the note away.
+        const held = empty && p.uid != null ? (logged.get(p.uid) ?? 0) : 0;
+        const heldId = `${noteId}-held-${p.position}`;
         return (
-          <div key={p.position} className={`priority-row${p.done ? ' is-done' : ''}${removable ? ' priority-row--removable' : ''}`}>
-            <span className="priority-num" aria-hidden="true">
-              {p.position}
-            </span>
-            {/* The label is the tick's touch area (styles.css); the box itself is 22 px. */}
-            <label className="priority-tick">
-              <input
-                type="checkbox"
-                className="checkbox"
-                checked={p.done}
-                disabled={empty}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    // The sound plays once the tick has rendered; iOS only allows that after a tap unlocked it.
-                    unlockAudio();
-                    anchor.current = e.target;
-                    setTicked({});
-                  }
-                  edit(p.position, { done: e.target.checked }, true);
-                }}
-                aria-label={`Priority ${p.position} done`}
-                title={empty ? 'Write the priority first' : undefined}
-              />
-            </label>
-            {/* A textarea so a long priority wraps on a phone; the wrapper's copy of the text sets its height. */}
-            <span className="grow-field" data-value={p.text || placeholder}>
-              <textarea
-                ref={(el) => {
-                  if (el) inputs.current.set(p.position, el);
-                  else inputs.current.delete(p.position);
-                }}
-                className="input priority-input"
-                rows={1}
-                value={p.text}
-                placeholder={placeholder}
-                aria-label={`Priority ${p.position}`}
-                // One line of text: Enter adds no line break, and a pasted one becomes a space.
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.preventDefault();
-                }}
-                onChange={(e) => edit(p.position, { text: e.target.value.replace(/[\r\n]+/g, ' ') })}
-                onBlur={() => void flush()}
-                maxLength={LIMITS.priorityText}
-              />
-            </span>
-            {removable && (
-              <button
-                className="btn btn-icon priority-remove"
-                onClick={() => removeRow(p.position)}
-                aria-label={`Remove priority ${p.position}`}
-                title="Remove"
-              >
-                <X />
-              </button>
+          <Fragment key={p.position}>
+            <div className={`priority-row${p.done ? ' is-done' : ''}${removable ? ' priority-row--removable' : ''}`}>
+              <span className="priority-num" aria-hidden="true">
+                {p.position}
+              </span>
+              {/* The label is the tick's touch area (styles.css); the box itself is 22 px. */}
+              <label className="priority-tick">
+                <input
+                  type="checkbox"
+                  className="checkbox"
+                  checked={p.done}
+                  disabled={empty}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      // The sound plays once the tick has rendered; iOS only allows that after a tap unlocked it.
+                      unlockAudio();
+                      anchor.current = e.target;
+                      setTicked({});
+                    }
+                    edit(p.position, { done: e.target.checked }, true);
+                  }}
+                  aria-label={`Priority ${p.position} done`}
+                  title={empty ? 'Write the priority first' : undefined}
+                />
+              </label>
+              {/* A textarea so a long priority wraps on a phone; the wrapper's copy of the text sets its height. */}
+              <span className="grow-field" data-value={p.text || placeholder}>
+                <textarea
+                  ref={(el) => {
+                    if (el) inputs.current.set(p.position, el);
+                    else inputs.current.delete(p.position);
+                  }}
+                  className="input priority-input"
+                  rows={1}
+                  value={p.text}
+                  placeholder={placeholder}
+                  aria-label={`Priority ${p.position}`}
+                  aria-describedby={held > 0 ? heldId : undefined}
+                  // One line of text: Enter adds no line break, and a pasted one becomes a space.
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.preventDefault();
+                  }}
+                  onChange={(e) => edit(p.position, { text: e.target.value.replace(/[\r\n]+/g, ' ') })}
+                  onBlur={() => void flush()}
+                  maxLength={LIMITS.priorityText}
+                />
+              </span>
+              {removable && (
+                <button
+                  className="btn btn-icon priority-remove"
+                  onClick={() => removeRow(p.position)}
+                  aria-label={`Remove priority ${p.position}`}
+                  title="Remove"
+                >
+                  <X />
+                </button>
+              )}
+            </div>
+            {held > 0 && (
+              <p className="muted small priority-held" id={heldId}>
+                {/* Whole minutes round down, so under one the line names no amount rather than "0m". */}
+                {EMPTIED_ROW(held >= 60 ? formatDuration(held) : null)}
+              </p>
             )}
-          </div>
+          </Fragment>
         );
       })}
       {/* Always there, so the warning is heard when it arrives (see styles.css for its gap). */}

@@ -1089,6 +1089,12 @@ button {
   text-decoration: line-through;
   color: var(--text-3);
 }
+/* Under a cleared row with focus logged on it: closer to its row than the gap to the next one,
+   and lined up with the field (the number and tick columns and their two gaps). */
+.priority-held {
+  margin-top: -4px;
+  padding-left: calc(24px + 22px + 2 * 10px);
+}
 .priorities-foot {
   display: flex;
   align-items: center;

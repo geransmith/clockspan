@@ -37,6 +37,19 @@ export function focusOf(sessions: Session[]): { seconds: number; count: number }
 }
 
 /**
+ * Completed focus by the row it was logged against: seconds per `priorityUid`. A running or
+ * cancelled session, or one on no row, adds nothing.
+ */
+export function loggedByUid(sessions: Session[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const s of sessions) {
+    if (s.status !== 'completed' || s.priorityUid == null) continue;
+    out.set(s.priorityUid, (out.get(s.priorityUid) ?? 0) + s.durationSeconds);
+  }
+  return out;
+}
+
+/**
  * Whether a day has anything on it: a punch, a row with text, a completed session, a note or a
  * review. The calendar's cells and the review's day count both go by it; a padded empty row, a
  * running session and a day's own work-day length don't count.

@@ -7,6 +7,7 @@ import {
   CELEBRATION_PHRASES,
   CONFIRM,
   DAYS_DELETED,
+  EMPTIED_ROW,
   FINISH_CHOICE,
   LEFT_OPEN,
   LOAD_FAILED,
@@ -26,6 +27,11 @@ import {
 describe('copy builders', () => {
   it('names the user in the delete confirm', () => {
     expect(CONFIRM.deleteUser('sam')).toBe('Delete sam and ALL of their data? This cannot be undone.');
+  });
+
+  it('says how much time a cleared row keeps', () => {
+    expect(EMPTIED_ROW('25m')).toBe('The 25m logged on this row stays with it. Use Add priority for something new.');
+    expect(EMPTIED_ROW(null)).toBe('The time logged on this row stays with it. Use Add priority for something new.');
   });
 
   it('names the day the offered priorities were left open on', () => {

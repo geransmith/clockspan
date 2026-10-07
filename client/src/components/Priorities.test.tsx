@@ -7,19 +7,19 @@ import * as api from '../api';
 import { useDay } from '../hooks/useDay';
 import { SettingsProvider } from '../hooks/useSettings';
 import { playSound, unlockAudio } from '../lib/alerts';
-import { LEFT_OPEN, PRIORITY_WARNINGS, WARNING_ACTIONS } from '../lib/copy';
-import { deferred, makeDay, makePriority, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
-import type { Priority } from '../types';
+import { EMPTIED_ROW, LEFT_OPEN, PRIORITY_WARNINGS, WARNING_ACTIONS } from '../lib/copy';
+import { completedSession, deferred, makeDay, makePriority, makeSession, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
+import type { Priority, Session } from '../types';
 import { Priorities } from './Priorities';
 
 vi.mock('../api');
 vi.mock('../lib/alerts');
 
-async function renderCard(priorities: Priority[] = [], leftOpen?: Parameters<typeof Priorities>[0]['leftOpen']) {
+async function renderCard(priorities: Priority[] = [], leftOpen?: Parameters<typeof Priorities>[0]['leftOpen'], sessions: Session[] = []) {
   const onChange = vi.fn<(p: Priority[], base: Priority[]) => void>();
   const card = (rows: Priority[]) => (
     <SettingsProvider>
-      <Priorities priorities={rows} onChange={onChange} leftOpen={leftOpen} />
+      <Priorities priorities={rows} sessions={sessions} onChange={onChange} leftOpen={leftOpen} />
     </SettingsProvider>
   );
   const view = render(card(priorities));
@@ -33,7 +33,7 @@ const blank = (position: number) => makePriority(position, '', { uid: null, adde
 /** Today's card on the day store, wired as the sheet wires it. */
 function OnTheStore() {
   const { day, store } = useDay(TODAY);
-  return day ? <Priorities priorities={day.priorities} onChange={(p, base) => void store.setPriorities(TODAY, p, base)} /> : null;
+  return day ? <Priorities priorities={day.priorities} sessions={day.sessions} onChange={(p, base) => void store.setPriorities(TODAY, p, base)} /> : null;
 }
 
 /**
@@ -225,6 +225,88 @@ describe('Priorities', () => {
     expect(document.activeElement).toBe(textbox(1));
     expect(saved()[0]).toMatchObject({ position: 1, text: 'Invoices', done: false, addedAt: T0 });
     expect(saved()[0]!.uid).not.toBe(yesterdays[0]!.uid);
+  });
+});
+
+describe('Priorities: a cleared row', () => {
+  const written = () => [makePriority(1, 'Report'), makePriority(2, 'Invoices'), makePriority(3, 'Email')];
+  /** 25 minutes logged on row 2. */
+  const logged = (patch: Parameters<typeof completedSession>[3] = {}) => completedSession(1, T0, 25 * 60, { priorityUid: makePriority(2, '').uid, ...patch });
+  const note = () => screen.queryByText(EMPTIED_ROW('25m'));
+
+  it("says the time logged on it stays with it, as the field's description, until a key is typed", async () => {
+    await renderCard(written(), undefined, [logged()]);
+    expect(note()).toBeNull();
+    fireEvent.change(textbox(2), { target: { value: '' } });
+    expect(note()).not.toBeNull();
+    expect(textbox(2).getAttribute('aria-describedby')).toBe(note()!.id);
+    // The same item, renamed: the first key takes the note and the field's description away.
+    fireEvent.change(textbox(2), { target: { value: 'C' } });
+    expect(note()).toBeNull();
+    expect(textbox(2).hasAttribute('aria-describedby')).toBe(false);
+  });
+
+  it('shows on a row stored empty, and adds up every completed session on it', async () => {
+    const uid = makePriority(2, '').uid;
+    const sessions = [completedSession(1, T0, 10 * 60, { priorityUid: uid }), completedSession(2, T0 + 1, 15 * 60, { priorityUid: uid })];
+    await renderCard([makePriority(1, 'Report'), makePriority(2, ''), makePriority(3, 'Email')], undefined, sessions);
+    expect(note()).not.toBeNull();
+  });
+
+  it('names no amount for less than a minute, rather than 0m', async () => {
+    // Finish pressed 30 s in logs the 30 s.
+    const early = logged({ endedAt: T0 + 30 * 1000, durationSeconds: 30 });
+    await renderCard([makePriority(1, 'Report'), makePriority(2, ''), makePriority(3, 'Email')], undefined, [early]);
+    expect(screen.queryByText(EMPTIED_ROW(null))).not.toBeNull();
+    expect(screen.queryByText(EMPTIED_ROW('0m'))).toBeNull();
+  });
+
+  it('says nothing for a row with no time logged on it, only a running or cancelled session, or one never written in', async () => {
+    const uid = makePriority(2, '').uid;
+    const sessions: Session[] = [
+      makeSession({ id: 1, priorityUid: uid }),
+      logged({ id: 2, status: 'cancelled' }),
+      completedSession(3, T0, 25 * 60, { priorityUid: makePriority(1, '').uid }),
+      completedSession(4, T0, 25 * 60),
+    ];
+    await renderCard([makePriority(1, 'Report'), makePriority(2, ''), makePriority(3, '', { uid: null, addedAt: null })], undefined, sessions);
+    expect(document.querySelector('.priority-held')).toBeNull();
+    expect(textbox(2).hasAttribute('aria-describedby')).toBe(false);
+  });
+
+  it('is passed by Add priority, which adds a row past it with no nudge while two rows have text', async () => {
+    const cleared = makePriority(2, '');
+    const { saved } = await renderCard([makePriority(1, 'Report'), cleared, makePriority(3, 'Email')], undefined, [logged()]);
+    fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
+    expect(screen.getByRole('status').textContent).toBe('');
+    expect(saved()).toHaveLength(4);
+    expect(saved()[1]).toEqual(cleared);
+    expect(document.activeElement).toBe(textbox(4));
+    expect(note()).not.toBeNull();
+  });
+
+  it('is passed by Start fresh, which focuses the first row never written in, else Add priority', async () => {
+    const offer = { from: 'yesterday', rows: [makePriority(2, 'Invoices', { addedAt: T0 - DAY_MS })], dismiss: vi.fn() };
+    const { again } = await renderCard([makePriority(1, '')], offer, [logged()]);
+    fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.dismiss }));
+    expect(offer.dismiss).toHaveBeenCalled();
+    expect(document.activeElement).toBe(textbox(2));
+    // Every row cleared: the next row is one Add priority makes.
+    again([makePriority(1, ''), makePriority(2, ''), makePriority(3, '')]);
+    fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.dismiss }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add priority' }));
+  });
+
+  it("stays when the last plan's open rows are added after it", async () => {
+    const cleared = makePriority(1, '');
+    const offer = { from: 'yesterday', rows: [makePriority(2, 'Invoices', { addedAt: T0 - DAY_MS })], dismiss: vi.fn() };
+    const { saved } = await renderCard([cleared], offer);
+    fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
+    expect(saved().map((p) => p.text)).toEqual(['', 'Invoices', '']);
+    expect(saved()[0]).toEqual(cleared);
+    expect(saved()[1]!.uid).not.toBe(cleared.uid);
+    // Focus lands on the row the offer filled.
+    expect(document.activeElement).toBe(textbox(2));
   });
 });
 
