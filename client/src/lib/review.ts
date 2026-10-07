@@ -1,8 +1,9 @@
 import type { Day } from '../types';
 import { addDays, addMonths, startOfQuarter, startOfWeek } from '../../../shared/dates.js';
+import { breakSeconds } from './breaks';
 import { formatDateSpan, formatMonth, sameText } from './format';
-import { hasContent, reviewDay } from './retro';
-import { dayTimeclock, type TimeclockSettings } from './timeclock';
+import { focusOf, hasContent, reviewDay } from './retro';
+import { dayTimeclock, daySettings, type TimeclockSettings } from './timeclock';
 
 export const PERIOD_KINDS = ['week', 'month', 'quarter'] as const;
 export type PeriodKind = (typeof PERIOD_KINDS)[number];
@@ -76,6 +77,20 @@ export interface RangeReview {
   prioritiesDone: number;
   prioritiesTotal: number;
   retrosDone: number;
+  /** Completed focus sessions. */
+  sessions: number;
+  /** The clocked-in days' own work-day lengths added up (`daySettings`): a month's or a quarter's target (`periodTarget`). */
+  targetSeconds: number;
+  /** Timer breaks, a running one so far. */
+  breaks: { count: number; seconds: number };
+  /** Rows added mid-day (`PriorityReview.addedMidDay`) and how many of them got ticked. */
+  midDay: { added: number; done: number };
+  /**
+   * A typical day's rows written and ticked: the medians, each rounded half up, of the days
+   * before today with a row written. Today is left out because it is still going; null with
+   * fewer than two such days.
+   */
+  typicalDay: { planned: number; done: number } | null;
   /** Off-plan work by label, most time first: where the time went instead. */
   unplanned: UnplannedWork[];
   /** Priorities not ticked by the end of the range, the ones left open on the most days first, then by date. */
@@ -86,9 +101,11 @@ export interface RangeReview {
 
 /**
  * Roll a range of full days up into one review. Worked time comes from the same timeclock
- * math as the sheet, frozen for past days; everything else reuses `reviewDay`. A day after
- * today is left out: all it can hold is a plan made the evening before (Plan tomorrow), and
- * none of it has happened yet.
+ * math as the sheet, frozen for past days, and break time by the day log's math
+ * (`breakSeconds`, a running break up to now); the plan and the focus reuse `reviewDay`. A day
+ * after today is left out: all it can hold is a plan made the evening before (Plan tomorrow),
+ * and none of it has happened yet. A day with nothing on it (`hasContent`) is left out too,
+ * even with a break logged.
  */
 export function reviewRange(days: Day[], settings: TimeclockSettings, today: string, now: number): RangeReview {
   const out: RangeReview = {
@@ -100,12 +117,20 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
     prioritiesDone: 0,
     prioritiesTotal: 0,
     retrosDone: 0,
+    sessions: 0,
+    targetSeconds: 0,
+    breaks: { count: 0, seconds: 0 },
+    midDay: { added: 0, done: 0 },
+    typicalDay: null,
     unplanned: [],
     notDone: [],
     notes: [],
   };
   const unplanned = new Map<string, UnplannedWork>();
   const notDone = new Map<string, OpenPriority>();
+  // Rows written and ticked on each finished day with a plan, for the typical day.
+  const plannedRows: number[] = [];
+  const doneRows: number[] = [];
   let onPlan = 0;
   for (const day of days.filter((d) => d.date <= today).sort((a, b) => a.date.localeCompare(b.date))) {
     if (!hasContent(day)) continue;
@@ -113,12 +138,25 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
     const r = reviewDay(day.priorities, day.sessions);
     out.days++;
     out.workedSeconds += tc.workedSeconds;
+    if (tc.clockIn != null) out.targetSeconds += daySettings(settings, day).workMinutes * 60;
     out.focusedSeconds += r.onPlanSeconds + r.offPlanSeconds;
+    out.sessions += focusOf(day.sessions).count;
     onPlan += r.onPlanSeconds;
     out.offPlanSeconds += r.offPlanSeconds;
     out.prioritiesDone += r.done;
     out.prioritiesTotal += r.total;
     if (day.retroAt != null) out.retrosDone++;
+    out.breaks.count += day.breaks.length;
+    for (const b of day.breaks) out.breaks.seconds += breakSeconds(b, now);
+    for (const p of r.planned) {
+      if (!p.addedMidDay) continue;
+      out.midDay.added++;
+      if (p.priority.done) out.midDay.done++;
+    }
+    if (day.date < today && r.total > 0) {
+      plannedRows.push(r.total);
+      doneRows.push(r.done);
+    }
     for (const session of r.unplanned) {
       const key = sameText(session.label);
       let g = unplanned.get(key);
@@ -144,9 +182,30 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
     if (note) out.notes.push({ date: day.date, note, reviewedAt: day.retroAt });
   }
   if (out.focusedSeconds > 0) out.onPlanPercent = Math.round((onPlan / out.focusedSeconds) * 100);
+  // One planned day is that day, not a typical one.
+  if (plannedRows.length > 1) out.typicalDay = { planned: median(plannedRows), done: median(doneRows) };
   out.unplanned = [...unplanned.values()].sort((a, b) => b.seconds - a.seconds || a.dates[0]!.localeCompare(b.dates[0]!));
   out.notDone = [...notDone.values()].sort((a, b) => b.dates.length - a.dates.length || a.dates[0]!.localeCompare(b.dates[0]!));
   return out;
+}
+
+/**
+ * The hours a period is held to. A week takes the Work week setting, as the timeclock's week
+ * line does; a month or a quarter, which no setting covers, adds up its clocked-in days' own
+ * lengths (`RangeReview.targetSeconds`). 0 is no target.
+ */
+export function periodTarget(kind: PeriodKind, r: Pick<RangeReview, 'targetSeconds'>, weekMinutes: number): number {
+  return kind === 'week' ? weekMinutes * 60 : r.targetSeconds;
+}
+
+/**
+ * The middle of `values`, or halfway between the middle two rounded half up, so a typical day
+ * is whole rows. With an odd count both indexes are the middle one.
+ */
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const n = sorted.length;
+  return Math.round((sorted[Math.floor((n - 1) / 2)]! + sorted[Math.floor(n / 2)]!) / 2);
 }
 
 /** Days are walked oldest first, so a new day is always the last one. */

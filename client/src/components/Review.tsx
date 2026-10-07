@@ -2,8 +2,8 @@ import { useState, type ReactNode } from 'react';
 import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
 import { LOAD_FAILED } from '../lib/copy';
-import { formatDateLong, formatDuration, formatWeekday } from '../lib/format';
-import { PERIOD_KINDS, periodRange, reviewRange, type PeriodKind, type ReviewPeriod } from '../lib/review';
+import { counted, formatDateLong, formatDuration, formatWeekday } from '../lib/format';
+import { PERIOD_KINDS, periodRange, periodTarget, reviewRange, type PeriodKind, type ReviewPeriod } from '../lib/review';
 import type { Day } from '../types';
 import { Check } from './Icons';
 import { LoadFailed } from './LoadFailed';
@@ -69,11 +69,23 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
   };
   const latest = (dates: string[]) => dates[dates.length - 1]!;
 
+  const target = periodTarget(kind, r, settings.weekMinutes);
+  // A third of a phone fits a few words a line: keep each duration whole ("40h 00m", not "40h / 00m").
+  const whole = (seconds: number) => formatDuration(seconds).replaceAll(' ', '\u00a0');
+  const worked = `worked ${whole(r.workedSeconds)}${target > 0 ? ` of ${whole(target)}` : ''}`;
+  // A session finished within its first second logs no time, so there can be sessions and no share.
+  const sessions = counted(r.sessions, 'session') + (r.onPlanPercent == null ? '' : ` · ${r.onPlanPercent}% on plan`);
+  const typical = kind === 'quarter' ? null : r.typicalDay;
+  const facts: { label: string; value: string }[] = [];
+  if (r.midDay.added > 0) facts.push({ label: 'Added mid-day', value: `${r.midDay.added} · ${r.midDay.done} done` });
+  if (r.breaks.count > 0) facts.push({ label: 'Breaks', value: `${r.breaks.count} · ${formatDuration(r.breaks.seconds)}` });
+  if (typical) facts.push({ label: 'Typical day', value: `${typical.planned} planned · ${typical.done} done` });
+
   return (
     <div className="review-body">
       <div className="tiles">
-        <Tile label="Days" value={String(r.days)} sub={settings.trackHours ? `worked ${formatDuration(r.workedSeconds)}` : ''} />
-        <Tile label="Focused" value={formatDuration(r.focusedSeconds)} sub={r.onPlanPercent == null ? 'no sessions' : `${r.onPlanPercent}% on plan`} />
+        <Tile label="Days" value={String(r.days)} sub={settings.trackHours ? worked : ''} />
+        <Tile label="Focused" value={formatDuration(r.focusedSeconds)} sub={r.sessions === 0 ? 'no sessions' : sessions} />
         <Tile
           label="Priorities"
           value={r.prioritiesTotal > 0 ? `${r.prioritiesDone}/${r.prioritiesTotal}` : '—'}
@@ -81,12 +93,22 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
         />
       </div>
 
+      {facts.length > 0 && (
+        <ul className="review-facts">
+          {facts.map((f) => (
+            <li key={f.label}>
+              <span className="muted">{f.label}:</span> <strong>{f.value}</strong>
+            </li>
+          ))}
+        </ul>
+      )}
+
       <section className="review-section">
         <h3 className="section-heading">
           Off the plan <span className="muted">{formatDuration(r.offPlanSeconds)}</span>
         </h3>
         {r.unplanned.length === 0 ? (
-          <p className="muted small">{r.onPlanPercent == null ? 'No sessions logged.' : 'Every logged session was for a priority.'}</p>
+          <p className="muted small">{r.sessions === 0 ? 'No sessions logged.' : 'Every logged session was for a priority.'}</p>
         ) : (
           <Folded
             items={r.unplanned.map((g) => (

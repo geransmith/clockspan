@@ -481,7 +481,15 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started —
   one rule, no clock-in fallback. `GET /days/range` returns full days and the client does the
-  rollup (through `useRange`).
+  rollup (through `useRange`). `reviewRange` walks the period's days up to today that have
+  content (`hasContent`, so a day with only a break is left out) and also gives `sessions`
+  (completed ones, `focusOf`), `breaks` (count and time, a running one so far, `breakSeconds`),
+  `midDay` (rows added mid-day and how many got ticked) and `typicalDay`: the medians, rounded
+  half up, of the rows written and ticked on the days before today with a row written. Today
+  is left out because it is still going, and it is null under two such days; Review shows it
+  for a Week or a Month. The Days tile's target is `periodTarget`: a Week's is the Work week
+  setting, as on the timeclock's week line, and a Month's or a Quarter's is `targetSeconds`,
+  the clocked-in days' own lengths added up through `daySettings`.
 - **History opens on the route's date** (`route.date ?? today`), with that day picked. The
   calendar holds its month by its first day (`startOfMonth`) and Review its period by `from`,
   so neither moves at midnight. "Open day" first records the picked day (and the Review period,
