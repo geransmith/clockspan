@@ -4,6 +4,7 @@ import type {
   BoardCard,
   BreakEndResponse,
   BreakResponse,
+  Category,
   Day,
   ErrorResponse,
   LogoutResponse,
@@ -132,8 +133,11 @@ export const getPruneInfo = (before: string) => request<PruneInfo>('GET', `/api/
 export const pruneDays = (before: string) => request<PruneResult>('POST', '/api/days/prune', { before });
 
 // ----- sessions -----
-/** What the log and the timer bar change on a session (PATCH /sessions/:id also takes plannedSeconds). */
-export type SessionEdit = { label?: string; priorityUid?: string | null };
+/**
+ * What the log and the timer bar change on a session (PATCH /sessions/:id also takes
+ * plannedSeconds). `categoryUid` is the one picked in the log, for a session not on a written row.
+ */
+export type SessionEdit = { label?: string; priorityUid?: string | null; categoryUid?: string | null };
 
 export const getRunning = () => request<RunningResponse>('GET', '/api/sessions/running');
 export const startSession = (date: string, plannedSeconds: number, label: string, priorityUid: string | null) =>
@@ -152,16 +156,27 @@ export const endBreak = (id: number) => request<BreakEndResponse>('POST', `/api/
 export const deleteBreak = (id: number) => request<OkResponse>('DELETE', `/api/breaks/${id}`);
 
 // ----- board -----
-/** POST /board/cards: a new card, or where an existing one goes (a park). The uid is one the board minted, or the parked row's cardUid. */
-export type NewCard = Pick<BoardCard, 'uid' | 'title'> & { lane: OpenLane; before: string | null };
+/**
+ * POST /board/cards: a new card, or where an existing one goes (a park), with its title and
+ * category. The uid is one the board minted, or the parked row's cardUid.
+ */
+export type NewCard = Pick<BoardCard, 'uid' | 'title' | 'categoryUid'> & { lane: OpenLane; before: string | null };
 /**
  * PATCH /board/cards/:uid: a field left out keeps its value; `before` alone reorders the card's
  * lane. `today` is the client's date key: while a row on that day's list or a later one is
  * linked to the card, the server refuses the edit (409).
  */
-export type CardPatch = { today: string; title?: string; lane?: OpenLane; before?: string | null };
+export type CardPatch = { today: string; title?: string; categoryUid?: string | null; lane?: OpenLane; before?: string | null };
+/** POST /board/categories: a new category, or a removed one brought back under its own uid. */
+export type NewCategory = Pick<Category, 'uid' | 'name' | 'color'>;
+/** PATCH /board/categories/:uid: a field left out keeps its value. */
+export type CategoryPatch = Partial<Pick<Category, 'name' | 'color'>>;
 
 export const getBoard = () => request<Board>('GET', '/api/board');
 export const addCard = (card: NewCard) => request<Board>('POST', '/api/board/cards', card);
 export const patchCard = (uid: string, patch: CardPatch) => request<Board>('PATCH', `/api/board/cards/${uid}`, patch);
 export const deleteCard = (uid: string) => request<Board>('DELETE', `/api/board/cards/${uid}`);
+export const addCategory = (category: NewCategory) => request<Board>('POST', '/api/board/categories', category);
+export const patchCategory = (uid: string, patch: CategoryPatch) => request<Board>('PATCH', `/api/board/categories/${uid}`, patch);
+/** Removes it from use: the server keeps it, archived, so past time keeps its name. */
+export const deleteCategory = (uid: string) => request<Board>('DELETE', `/api/board/categories/${uid}`);

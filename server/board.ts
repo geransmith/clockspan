@@ -1,17 +1,18 @@
 /**
  * The board's cards as stored: what the board routes (`routes/board.ts`), a priorities save
- * (`mirrorCards`) and the prune (`retention.ts`) write, and the board the API answers with. A
- * card belongs to its user, and rows point at it by its uid (`priorities.card_uid`, a soft
- * link). In progress is never stored: it is today's open rows, which the client matches to
- * cards by `cardUid`. A card's latest linked day is the latest day whose list holds a row
- * linked to it, with text or emptied; only a save of that day's list changes the card.
+ * (`mirrorCards`) and the prune (`retention.ts`) write, and the board the API answers with, its
+ * categories included. A card belongs to its user, and rows point at it by its uid
+ * (`priorities.card_uid`, a soft link). In progress is never stored: it is today's open rows,
+ * which the client matches to cards by `cardUid`. A card's latest linked day is the latest day
+ * whose list holds a row linked to it, with text or emptied; only a save of that day's list
+ * changes the card.
  */
 import { randomBytes } from 'node:crypto';
 import type { DB } from './db.js';
-import { getOwnedByUid, type CardRow } from './routes/shared.js';
+import { getOwnedByUid, type CardRow, type CategoryRow } from './routes/shared.js';
 import { hasText } from '../shared/priorities.js';
 import { addDays, DAY_MS } from '../shared/dates.js';
-import { BOARD_LIMITS, type Board, type BoardCard, type OpenLane, type Priority } from '../shared/api.js';
+import { BOARD_LIMITS, type Board, type BoardCard, type Category, type OpenLane, type Priority } from '../shared/api.js';
 
 /** The uids of a lane's cards in their order. */
 function laneOrder(db: DB, userId: number, lane: OpenLane): string[] {
@@ -59,11 +60,20 @@ export function placeCard(db: DB, userId: number, card: CardRow, lane: OpenLane,
 }
 
 /** A card the board made (capture, or a new card for a done item), handled from the start, placed in `lane` before `before`. */
-export function createCard(db: DB, userId: number, uid: string, title: string, lane: OpenLane, before: string | null, now: number): void {
-  db.prepare(`INSERT INTO board_cards (user_id, uid, title, lane, position, created_at, untouched) VALUES (?, ?, ?, ?, 0, ?, 0)`).run(
+export function createCard(
+  db: DB,
+  userId: number,
+  card: Pick<BoardCard, 'uid' | 'title' | 'categoryUid'>,
+  lane: OpenLane,
+  before: string | null,
+  now: number,
+): void {
+  const { uid, title, categoryUid } = card;
+  db.prepare(`INSERT INTO board_cards (user_id, uid, title, category_uid, lane, position, created_at, untouched) VALUES (?, ?, ?, ?, ?, 0, ?, 0)`).run(
     userId,
     uid,
     title,
+    categoryUid,
     lane,
     now,
   );
@@ -91,10 +101,16 @@ function latestLinks(db: DB, userId: number): Map<string, { date: string; text: 
   return links;
 }
 
+/** The user's categories in the order they were made, removed ones included: past time keeps its name. */
+function categoriesJson(db: DB, userId: number): Category[] {
+  const rows = db.prepare(`SELECT * FROM categories WHERE user_id = ? ORDER BY id`).all(userId) as CategoryRow[];
+  return rows.map((c) => ({ uid: c.uid, name: c.name, color: c.color, archived: c.archived_at != null }));
+}
+
 /**
  * The user's board: Later and Next in order, then the cards done in the last
- * `doneWindowDays`, newest first. `listDate` and `held` are read from the rows on every call,
- * so neither can drift from the lists.
+ * `doneWindowDays`, newest first, and the categories. `listDate` and `held` are read from the
+ * rows on every call, so neither can drift from the lists.
  */
 export function boardJson(db: DB, userId: number, now: number = Date.now()): Board {
   const rows = db
@@ -109,6 +125,7 @@ export function boardJson(db: DB, userId: number, now: number = Date.now()): Boa
     return {
       uid: c.uid,
       title: c.title,
+      categoryUid: c.category_uid,
       lane: c.lane,
       position: c.position,
       createdAt: c.created_at,
@@ -117,7 +134,7 @@ export function boardJson(db: DB, userId: number, now: number = Date.now()): Boa
       held: c.untouched === 1 && link?.text === false,
     };
   });
-  return { cards };
+  return { cards, categories: categoriesJson(db, userId) };
 }
 
 export interface MirrorOptions {
@@ -132,12 +149,13 @@ export interface MirrorOptions {
  * transaction, before `list` (the merged list) replaces `stored`. First, every card `touched`
  * names is marked handled (untouched = 0). With `makeCards`, a non-recurring text row with no
  * card gets a new one, whose uid is written onto the row, and a row gaining text whose cardUid
- * names no card gets it back under that uid, under the cap on Later and Next. Whatever
- * `makeCards` is, only what this save changed is copied onto a card, and only from its latest
- * linked day: a row gaining text (new to the list, or typed into again after it was emptied)
- * gives its title, and its lane by the tick (open goes to Next, at the top unless it was in Next
- * already); new text gives the title; a tick moves it to Done, an untick to the top of Next. An
- * emptied row changes nothing: an untouched card reads as `held` meanwhile. A card whose row
+ * names no card gets it back under that uid, under the cap on Later and Next; either takes the
+ * row's title and category. Whatever `makeCards` is, only what this save changed is copied onto
+ * a card, and only from its latest linked day: a row gaining text (new to the list, or typed
+ * into again after it was emptied) gives its title and category, and its lane by the tick (open
+ * goes to Next, at the top unless it was in Next already); new text gives the title, a new
+ * category the category; a tick moves it to Done, an untick to the top of Next. An emptied
+ * row changes nothing: an untouched card reads as `held` meanwhile. A card whose row
  * went from the list is deleted while untouched, unless `touched` names it; a handled one stays,
  * and goes back to Done if it was taken out of it for this row (open, in Next) and its latest
  * remaining row with text is ticked. Recurring rows never have a card. Returns the list to store.
@@ -147,6 +165,7 @@ export function mirrorCards(db: DB, userId: number, date: string, stored: Priori
   for (const uid of opts.touched) handled.run(userId, uid);
   const isLatest = (uid: string) => !linkedFrom(db, userId, uid, addDays(date, 1));
   const update = db.prepare(`UPDATE board_cards SET title = ?, lane = ?, position = ?, done_at = ? WHERE id = ?`);
+  const recategorise = db.prepare(`UPDATE board_cards SET category_uid = ? WHERE id = ?`);
   const storedText = new Map(stored.filter(hasText).map((p) => [p.uid, p]));
   // Cards that went to Next, in row order: a save puts them at the top.
   const top: string[] = [];
@@ -156,15 +175,9 @@ export function mirrorCards(db: DB, userId: number, date: string, stored: Priori
   /** A card for `row` under `uid`, in Done or at the top of Next by its tick; false when Later and Next are full. */
   const make = (row: Priority, uid: string, untouched: boolean): boolean => {
     if (open >= BOARD_LIMITS.openCards) return false;
-    db.prepare(`INSERT INTO board_cards (user_id, uid, title, lane, position, created_at, done_at, untouched) VALUES (?, ?, ?, ?, 0, ?, ?, ?)`).run(
-      userId,
-      uid,
-      row.text.trim(),
-      row.done ? 'done' : 'next',
-      now,
-      row.done ? now : null,
-      untouched ? 1 : 0,
-    );
+    db.prepare(
+      `INSERT INTO board_cards (user_id, uid, title, category_uid, lane, position, created_at, done_at, untouched) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+    ).run(userId, uid, row.text.trim(), row.categoryUid, row.done ? 'done' : 'next', now, row.done ? now : null, untouched ? 1 : 0);
     if (!row.done) {
       top.push(uid);
       open++;
@@ -203,11 +216,14 @@ export function mirrorCards(db: DB, userId: number, date: string, stored: Priori
     const before = storedText.get(row.uid);
     if (!before) {
       // Gains text: new to this list, or typed into again after it was emptied.
-      if (card) follow(card, row, true);
-      else if (opts.makeCards) make(row, row.cardUid, !opts.touched.has(row.cardUid));
+      if (card) {
+        follow(card, row, true);
+        recategorise.run(row.categoryUid, card.id);
+      } else if (opts.makeCards) make(row, row.cardUid, !opts.touched.has(row.cardUid));
     } else if (card) {
       if (row.done !== before.done) follow(card, row, false);
       else if (row.text !== before.text) db.prepare(`UPDATE board_cards SET title = ? WHERE id = ?`).run(row.text.trim(), card.id);
+      if (row.categoryUid !== before.categoryUid) recategorise.run(row.categoryUid, card.id);
     }
     return row;
   });

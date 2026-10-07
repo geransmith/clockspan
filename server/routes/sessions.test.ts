@@ -35,6 +35,7 @@ describe('sessions', () => {
       priorityUid: null,
       pausedSeconds: 0,
       pausedAt: null,
+      categoryUid: null,
     });
     const running = await app.api.get('/api/sessions/running');
     expect(running.body.session.id).toBe(r.body.session.id);
@@ -119,6 +120,22 @@ describe('sessions', () => {
     expect((await app.api.patch(`/api/sessions/${id}`, { plannedSeconds: 900 })).status).toBe(409);
     expect((await app.api.patch(`/api/sessions/${id}`, { label: 'after' })).status).toBe(200);
     expect((await app.api.patch('/api/sessions/999', { label: 'x' })).status).toBe(404);
+  });
+
+  it('takes a category picked in the log, keeps it when left out, and clears it on null', async () => {
+    const { id } = (await start({ categoryUid: 'cat000000001' })).body.session;
+    // A start takes none: the log sets it.
+    expect((await app.api.get('/api/sessions/running')).body.session.categoryUid).toBeNull();
+    await app.api.post(`/api/sessions/${id}/finish`);
+    const picked = await app.api.patch(`/api/sessions/${id}`, { categoryUid: 'CAT000000001' });
+    expect(picked.body.session).toMatchObject({ categoryUid: 'cat000000001', status: 'completed' });
+    expect((await app.api.patch(`/api/sessions/${id}`, { label: 'Inbox' })).body.session.categoryUid).toBe('cat000000001');
+    for (const bad of ['nope', 5, ['cat000000002']]) {
+      const r = await app.api.patch(`/api/sessions/${id}`, { label: 'Changed', categoryUid: bad });
+      expect([r.status, r.body.error]).toEqual([400, "categoryUid must be a category's id or null."]);
+    }
+    expect((await app.api.get(`/api/days/${DATE}`)).body.sessions[0]).toMatchObject({ label: 'Inbox', categoryUid: 'cat000000001' });
+    expect((await app.api.patch(`/api/sessions/${id}`, { categoryUid: null })).body.session.categoryUid).toBeNull();
   });
 
   it('finishes at the planned end when the timer expired unattended', async () => {
@@ -280,6 +297,8 @@ describe('sessions are scoped to the signed-in user', () => {
     const id = started.body.session.id;
     expect((await b.get('/api/sessions/running')).body.session).toBeNull();
     expect(await b.patch(`/api/sessions/${id}`, { label: 'mine now' })).toMatchObject({ status: 404, body: { error: 'Session not found.' } });
+    expect((await b.patch(`/api/sessions/${id}`, { categoryUid: 'cat000000001' })).status).toBe(404);
+    expect((await a.get('/api/sessions/running')).body.session.categoryUid).toBeNull();
     expect((await b.post(`/api/sessions/${id}/pause`)).status).toBe(404);
     expect((await b.post(`/api/sessions/${id}/resume`)).status).toBe(404);
     expect((await b.post(`/api/sessions/${id}/finish`)).status).toBe(404);

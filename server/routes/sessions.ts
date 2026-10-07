@@ -2,7 +2,18 @@ import type { RequestHandler, Response, Router } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { refuse } from '../refuse.js';
-import { endRunningBreak, ensureDay, findDay, getOwned, ownedRouter, parsePlannedSeconds, runningSession, sessionRowToJson, UID_RE } from './shared.js';
+import {
+  endRunningBreak,
+  ensureDay,
+  findDay,
+  getOwned,
+  ownedRouter,
+  parseCategoryUid,
+  parsePlannedSeconds,
+  runningSession,
+  sessionRowToJson,
+  UID_RE,
+} from './shared.js';
 import { LIMITS, type OkResponse, type RunningResponse, type SessionConflict, type SessionResponse } from '../../shared/api.js';
 import { pausedSecondsAfter, PLANNED_SECONDS, plannedEndAt } from '../../shared/timer.js';
 
@@ -77,11 +88,20 @@ export function sessionsRouter(db: DB): Router {
   const reply = (res: Response, userId: number, id: number) =>
     res.json({ session: sessionRowToJson(getOwned(db, 'sessions', userId, id)!) } satisfies SessionResponse);
 
+  // The category is the one picked in the log; null takes it off. A session on a written row
+  // counts under that row's category whatever this holds.
   r.patch('/:id', (req, res) => {
     const s = owned(res);
-    const { plannedSeconds, label, priorityUid } = req.body as { plannedSeconds?: unknown; label?: unknown; priorityUid?: unknown };
+    const { plannedSeconds, label, priorityUid, categoryUid } = req.body as {
+      plannedSeconds?: unknown;
+      label?: unknown;
+      priorityUid?: unknown;
+      categoryUid?: unknown;
+    };
     const link = parsePriorityUid(db, s.day_id, priorityUid);
     if ('error' in link) return refuse(res, 400, link.error);
+    const category = parseCategoryUid(categoryUid);
+    if ('error' in category) return refuse(res, 400, category.error);
     let planned = s.planned_seconds;
     if (plannedSeconds !== undefined) {
       const parsed = parsePlannedSeconds(plannedSeconds, PLANNED_SECONDS);
@@ -91,10 +111,11 @@ export function sessionsRouter(db: DB): Router {
     }
     const name = parseLabel(label);
     if ('error' in name) return refuse(res, 400, name.error);
-    db.prepare(`UPDATE sessions SET planned_seconds = ?, label = ?, priority_uid = ? WHERE id = ?`).run(
+    db.prepare(`UPDATE sessions SET planned_seconds = ?, label = ?, priority_uid = ?, category_uid = ? WHERE id = ?`).run(
       planned,
       name.label ?? s.label,
       link.uid === undefined ? s.priority_uid : link.uid,
+      category.categoryUid === undefined ? s.category_uid : category.categoryUid,
       s.id,
     );
     reply(res, s.user_id, s.id);

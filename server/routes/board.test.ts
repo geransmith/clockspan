@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from '../dev/harness.js';
 import { ensureDefaultUser } from '../db.js';
 import { addDays, DAY_MS } from '../../shared/dates.js';
-import { BOARD_LIMITS, LIMITS, type BoardCard } from '../../shared/api.js';
+import { BOARD_LIMITS, LIMITS, type BoardCard, type Category } from '../../shared/api.js';
 
 const TODAY = SEED_TODAY;
 const YESTERDAY = addDays(TODAY, -1);
@@ -32,11 +32,21 @@ const untouched = (uid: string) => (app.db.prepare(`SELECT untouched FROM board_
 
 describe('GET /api/board and POST /api/board/cards', () => {
   it('starts empty, and keeps each new card where it was put', async () => {
-    expect((await app.api.get('/api/board')).body).toEqual({ cards: [] });
+    expect((await app.api.get('/api/board')).body).toEqual({ cards: [], categories: [] });
     const first = await capture('CARD0000000A', '  Write the KB  ', 'later');
     expect(first.status).toBe(201);
     expect(first.body.cards).toEqual([
-      { uid: 'card0000000a', title: 'Write the KB', lane: 'later', position: 1, createdAt: SEED_NOW, doneAt: null, listDate: null, held: false },
+      {
+        uid: 'card0000000a',
+        title: 'Write the KB',
+        categoryUid: null,
+        lane: 'later',
+        position: 1,
+        createdAt: SEED_NOW,
+        doneAt: null,
+        listDate: null,
+        held: false,
+      },
     ]);
     // Before the first card, at the end (null, or a card of another lane or none), and in Next.
     await capture('card0000000b', 'Review canned replies', 'later', 'CARD0000000A');
@@ -71,6 +81,8 @@ describe('GET /api/board and POST /api/board/cards', () => {
       [{ lane: 'progress' }, 'lane must be later or next.'],
       [{ before: 'x' }, 'before must be a card id or null.'],
       [{ before: 5 }, 'before must be a card id or null.'],
+      [{ categoryUid: 'not a uid' }, "categoryUid must be a category's id or null."],
+      [{ categoryUid: 7 }, "categoryUid must be a category's id or null."],
     ];
     for (const [change, error] of refusals) {
       const r = await app.api.post('/api/board/cards', { ...ok, ...change });
@@ -119,6 +131,19 @@ describe('GET /api/board and POST /api/board/cards', () => {
     ]);
   });
 
+  it('takes a category with a new card, and a placed one takes the one sent or keeps its own', async () => {
+    const made = await app.api.post('/api/board/cards', { uid: 'card00000001', title: 'Report', categoryUid: 'CAT000000001', lane: 'later', before: null });
+    expect(made.body.cards[0]).toMatchObject({ uid: 'card00000001', categoryUid: 'cat000000001' });
+    // Moved to Next with the category left out: the card keeps its own.
+    await capture('card00000001', 'Report', 'next');
+    expect(await cardOf('card00000001')).toMatchObject({ lane: 'next', categoryUid: 'cat000000001' });
+    // A park sends the row's category, or none.
+    await app.api.post('/api/board/cards', { uid: 'card00000001', title: 'Report', categoryUid: 'cat000000002', lane: 'later', before: null });
+    expect((await cardOf('card00000001'))!.categoryUid).toBe('cat000000002');
+    await app.api.post('/api/board/cards', { uid: 'card00000001', title: 'Report', categoryUid: null, lane: 'later', before: null });
+    expect((await cardOf('card00000001'))!.categoryUid).toBeNull();
+  });
+
   it('caps Later and Next, counting only a card new to them', async () => {
     const userId = ensureDefaultUser(app.db).id;
     const insert = app.db.prepare(`INSERT INTO board_cards (user_id, uid, title, lane, position, created_at, done_at) VALUES (?, ?, 'Card', ?, ?, 0, ?)`);
@@ -144,6 +169,15 @@ describe('PATCH /api/board/cards/:uid', () => {
     await capture('card00000001', 'Write the KB', 'later');
     await capture('card00000002', 'Review canned replies', 'later');
     await capture('card00000003', 'Follow up on the SLA', 'next');
+  });
+
+  it('sets and clears the category, and keeps it when the field is left out', async () => {
+    expect((await patch('card00000001', { categoryUid: 'CAT000000001' })).status).toBe(200);
+    expect((await cardOf('card00000001'))!.categoryUid).toBe('cat000000001');
+    await patch('card00000001', { title: 'Write the KB article' });
+    expect(await cardOf('card00000001')).toMatchObject({ title: 'Write the KB article', categoryUid: 'cat000000001' });
+    await patch('card00000001', { categoryUid: null });
+    expect((await cardOf('card00000001'))!.categoryUid).toBeNull();
   });
 
   it('renames, reorders, and moves a card between Later and Next', async () => {
@@ -187,6 +221,8 @@ describe('PATCH /api/board/cards/:uid', () => {
       [{ lane: 'done' }, 'lane must be later or next.'],
       [{ lane: null }, 'lane must be later or next.'],
       [{ before: ['card00000001'] }, 'before must be a card id or null.'],
+      [{ categoryUid: 'x' }, "categoryUid must be a category's id or null."],
+      [{ categoryUid: true }, "categoryUid must be a category's id or null."],
     ];
     const before = await board();
     for (const [change, error] of refusals) {
@@ -291,6 +327,161 @@ describe('the seeded board', () => {
   });
 });
 
+describe('/api/board/categories', () => {
+  const categories = async () => (await app.api.get('/api/board')).body.categories as Category[];
+  const add = (uid: string, name: unknown, color: unknown = 'blue') => app.api.post('/api/board/categories', { uid, name, color });
+  const edit = (uid: string, body: Record<string, unknown>) => app.api.patch(`/api/board/categories/${uid}`, body);
+  const remove = (uid: string) => app.api.del(`/api/board/categories/${uid}`);
+  const userId = () => ensureDefaultUser(app.db).id;
+  /** `n` categories stored straight in the table, named Bulk 1..n, removed when `archived`. */
+  const fill = (n: number, archived = false) => {
+    const insert = app.db.prepare(`INSERT INTO categories (user_id, uid, name, color, archived_at) VALUES (?, ?, ?, 'grey', ?)`);
+    const from = app.count('categories');
+    for (let i = from + 1; i <= from + n; i++) insert.run(userId(), `bulk${String(i).padStart(8, '0')}`, `Bulk ${i}`, archived ? 1 : null);
+  };
+
+  it('makes categories in the order sent, with the name tidied, and answers the board', async () => {
+    const r = await add('CAT000000001', '  Support   tickets ', 'teal');
+    expect(r.status).toBe(201);
+    expect(r.body).toEqual({ cards: [], categories: [{ uid: 'cat000000001', name: 'Support tickets', color: 'teal', archived: false }] });
+    await add('cat000000002', 'Admin', 'grey');
+    // A long name is cut, and a space the cut leaves at the end goes.
+    await add('cat000000003', `${'k'.repeat(LIMITS.categoryName - 1)} more`);
+    expect((await categories()).map((c) => c.name)).toEqual(['Support tickets', 'Admin', 'k'.repeat(LIMITS.categoryName - 1)]);
+  });
+
+  it('answers the board as it is when the uid is in use already, whatever else is sent', async () => {
+    await add('cat000000001', 'Tickets');
+    const again = await add('cat000000001', 'Something else', 'pink');
+    expect(again.status).toBe(200);
+    expect(again.body.categories).toEqual([{ uid: 'cat000000001', name: 'Tickets', color: 'blue', archived: false }]);
+  });
+
+  it('refuses a category it could not store, and stores nothing', async () => {
+    const ok = { uid: 'cat000000001', name: 'Tickets', color: 'blue' };
+    const colors = 'color must be one of blue, teal, green, gold, orange, pink, purple, grey.';
+    const refusals: [Record<string, unknown>, string][] = [
+      [{ uid: undefined }, 'uid must be a category id.'],
+      [{ uid: 'cat' }, 'uid must be a category id.'],
+      [{ uid: 'not-a-uid!' }, 'uid must be a category id.'],
+      [{ name: undefined }, 'A category needs a name.'],
+      [{ name: '   ' }, 'A category needs a name.'],
+      [{ name: 5 }, 'A category needs a name.'],
+      [{ color: undefined }, colors],
+      [{ color: 'red' }, colors],
+      [{ color: 'Blue' }, colors],
+    ];
+    for (const [change, error] of refusals) {
+      const r = await app.api.post('/api/board/categories', { ...ok, ...change });
+      expect([r.status, r.body.error], JSON.stringify(change)).toEqual([400, error]);
+    }
+    expect(app.count('categories')).toBe(0);
+  });
+
+  it("refuses a new category with another one's name, in use or removed, whatever its case or spacing", async () => {
+    await add('cat000000001', 'Follow-ups');
+    await add('cat000000002', 'Knowledge base');
+    await remove('cat000000002');
+    const taken = await add('cat000000003', ' FOLLOW-UPS ');
+    expect([taken.status, taken.body.error]).toEqual([400, 'There is already a category with that name.']);
+    const removed = await add('cat000000003', 'knowledge  base');
+    expect([removed.status, removed.body.error]).toEqual([400, 'A removed category has that name. Restore it by its id.']);
+    expect(app.count('categories')).toBe(2);
+  });
+
+  it('removes a category by archiving it, and brings it back under its uid with the name and colour sent', async () => {
+    await add('cat000000001', 'Tickets');
+    const removed = await remove('CAT000000001');
+    expect(removed.status).toBe(200);
+    expect(removed.body.categories).toEqual([{ uid: 'cat000000001', name: 'Tickets', color: 'blue', archived: true }]);
+    const at = (app.db.prepare(`SELECT archived_at FROM categories`).get() as { archived_at: number }).archived_at;
+    expect(at).toBe(SEED_NOW);
+    // Removing it again keeps the first time.
+    vi.setSystemTime(SEED_NOW + DAY_MS);
+    await remove('cat000000001');
+    expect(app.db.prepare(`SELECT archived_at FROM categories`).get()).toEqual({ archived_at: SEED_NOW });
+    const back = await add('cat000000001', 'Support tickets', 'teal');
+    expect(back.status).toBe(200);
+    expect(back.body.categories).toEqual([{ uid: 'cat000000001', name: 'Support tickets', color: 'teal', archived: false }]);
+    expect(app.count('categories')).toBe(1);
+  });
+
+  it('brings a removed category back past a removed one of the same name, but not past one in use', async () => {
+    await add('cat000000001', 'Tickets');
+    await remove('cat000000001');
+    // Renamed while removed, so a second Tickets could be made, then removed too.
+    await edit('cat000000001', { name: 'Old tickets' });
+    await add('cat000000002', 'Tickets');
+    await remove('cat000000002');
+    expect((await add('cat000000001', 'Tickets')).status).toBe(200);
+    await add('cat000000003', 'Admin');
+    await remove('cat000000003');
+    await add('cat000000004', 'Admin, again');
+    await edit('cat000000004', { name: 'admin' });
+    const refused = await add('cat000000003', 'Admin');
+    expect([refused.status, refused.body.error]).toEqual([400, 'There is already a category with that name.']);
+    expect((await categories()).find((c) => c.uid === 'cat000000003')!.archived).toBe(true);
+  });
+
+  it('renames and recolours, a field left out keeping its value, against the other categories in use', async () => {
+    await add('cat000000001', 'Tickets');
+    await add('cat000000002', 'Admin', 'grey');
+    await add('cat000000003', 'Old', 'gold');
+    await remove('cat000000003');
+    expect((await edit('CAT000000001', { name: '  Support  tickets' })).status).toBe(200);
+    await edit('cat000000002', { color: 'pink' });
+    // Its own name in another case, and a removed category's name, are free.
+    await edit('cat000000002', { name: 'ADMIN' });
+    await edit('cat000000001', { name: 'old' });
+    expect(await categories()).toEqual([
+      { uid: 'cat000000001', name: 'old', color: 'blue', archived: false },
+      { uid: 'cat000000002', name: 'ADMIN', color: 'pink', archived: false },
+      { uid: 'cat000000003', name: 'Old', color: 'gold', archived: true },
+    ]);
+    const before = await categories();
+    const refusals: [Record<string, unknown>, string][] = [
+      [{ name: 'admin' }, 'There is already a category with that name.'],
+      [{ name: '' }, 'A category needs a name.'],
+      [{ name: null }, 'A category needs a name.'],
+      [{ color: 'red' }, 'color must be one of blue, teal, green, gold, orange, pink, purple, grey.'],
+      [{ color: null }, 'color must be one of blue, teal, green, gold, orange, pink, purple, grey.'],
+    ];
+    for (const [change, error] of refusals) {
+      const r = await edit('cat000000001', change);
+      expect([r.status, r.body.error], JSON.stringify(change)).toEqual([400, error]);
+    }
+    expect(await categories()).toEqual(before);
+    // An empty patch changes nothing.
+    expect((await edit('cat000000001', {})).body.categories).toEqual(before);
+    expect((await edit('cat000000009', { name: 'x' })).body).toEqual({ error: 'Category not found.' });
+    expect((await remove('cat000000009')).status).toBe(404);
+  });
+
+  it('keeps at most 100 in use, a removed one brought back included, and 1000 stored', async () => {
+    fill(BOARD_LIMITS.categories - 1);
+    await add('cat000000001', 'Tickets');
+    const full = [400, `The board keeps at most ${BOARD_LIMITS.categories} categories.`];
+    const over = await add('cat000000002', 'One more');
+    expect([over.status, over.body.error]).toEqual(full);
+    // A removed one doesn't count, and can't come back while 100 are in use.
+    await remove('cat000000001');
+    expect((await add('cat000000002', 'One more')).status).toBe(201);
+    const back = await add('cat000000001', 'Tickets');
+    expect([back.status, back.body.error]).toEqual(full);
+    await remove('cat000000002');
+    expect((await add('cat000000001', 'Tickets')).status).toBe(200);
+
+    // Removed ones fill the table up to 1000 stored: no new one, but one brought back is fine.
+    fill(BOARD_LIMITS.categoriesStored - app.count('categories'), true);
+    await remove('cat000000001');
+    expect(app.count('categories')).toBe(BOARD_LIMITS.categoriesStored);
+    const stored = await add('cat000000003', 'Brand new');
+    expect([stored.status, stored.body.error]).toEqual([400, `The board keeps at most ${BOARD_LIMITS.categoriesStored} categories, removed ones included.`]);
+    expect((await add('cat000000001', 'Tickets')).status).toBe(200);
+    expect(app.count('categories')).toBe(BOARD_LIMITS.categoriesStored);
+  });
+});
+
 describe('the board is scoped to the signed-in user', () => {
   beforeEach(async () => {
     await app.close();
@@ -304,7 +495,7 @@ describe('the board is scoped to the signed-in user', () => {
     const mine = (await a.get('/api/board')).body.cards as BoardCard[];
     expect(mine.map((c) => c.uid)).toEqual(['card00000001', made]);
 
-    expect((await b.get('/api/board')).body).toEqual({ cards: [] });
+    expect((await b.get('/api/board')).body).toEqual({ cards: [], categories: [] });
     for (const r of [
       await b.patch('/api/board/cards/card00000001', { today: YESTERDAY, title: 'Mine' }),
       await b.del('/api/board/cards/card00000001'),
@@ -341,5 +532,33 @@ describe('the board is scoped to the signed-in user', () => {
     await a.put(`/api/days/${TODAY}/priorities`, { priorities: [report, { text: 'Write the KB', cardUid: 'card00000001' }] });
     await a.put(`/api/days/${TODAY}/priorities`, { priorities: [report] });
     expect(((await a.get('/api/board')).body.cards as BoardCard[]).find((c) => c.uid === 'card00000001')).toMatchObject({ lane: 'next' });
+  });
+
+  it("never shows or changes another user's categories, and checks names against the caller's own", async () => {
+    const { a, b } = await app.twoUsers();
+    await a.post('/api/board/categories', { uid: 'cat000000001', name: 'Tickets', color: 'blue' });
+    await a.post('/api/board/categories', { uid: 'cat000000002', name: 'Admin', color: 'grey' });
+    await a.del('/api/board/categories/cat000000002');
+    const mine = (await a.get('/api/board')).body.categories as Category[];
+
+    expect((await b.get('/api/board')).body.categories).toEqual([]);
+    for (const r of [
+      await b.patch('/api/board/categories/cat000000001', { name: 'Mine' }),
+      await b.del('/api/board/categories/cat000000001'),
+      await b.patch('/api/board/categories/cat000000002', { color: 'pink' }),
+      await b.del('/api/board/categories/cat000000002'),
+    ]) {
+      expect([r.status, r.body]).toEqual([404, { error: 'Category not found.' }]);
+    }
+    // A's names are free for B, in use or removed, and A's uids are B's own: B's POST of A's
+    // removed one makes B a category rather than bringing A's back.
+    expect((await b.post('/api/board/categories', { uid: 'cat000000003', name: 'Tickets', color: 'teal' })).status).toBe(201);
+    expect((await b.post('/api/board/categories', { uid: 'cat000000002', name: 'Admin', color: 'gold' })).status).toBe(201);
+    expect((await b.patch('/api/board/categories/cat000000003', { name: 'Ticket queue' })).status).toBe(200);
+    expect((await a.get('/api/board')).body.categories).toEqual(mine);
+    expect((await b.get('/api/board')).body.categories).toEqual([
+      { uid: 'cat000000003', name: 'Ticket queue', color: 'teal', archived: false },
+      { uid: 'cat000000002', name: 'Admin', color: 'gold', archived: false },
+    ]);
   });
 });

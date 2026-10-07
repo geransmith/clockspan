@@ -112,6 +112,7 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
     { plannedSeconds: 1500, label: 'Report', priorityUid: null },
   ],
   ['patchSession', () => api.patchSession(3, { label: 'Renamed' }), 'PATCH', '/api/sessions/3', { label: 'Renamed' }],
+  ['patchSession, picking a category', () => api.patchSession(3, { categoryUid: 'cat000000001' }), 'PATCH', '/api/sessions/3', { categoryUid: 'cat000000001' }],
   ['pauseSession', () => api.pauseSession(3), 'POST', '/api/sessions/3/pause', undefined],
   ['resumeSession', () => api.resumeSession(3), 'POST', '/api/sessions/3/resume', undefined],
   // A plain finish has no body, so the server clamps to the planned end.
@@ -125,19 +126,34 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
   ['getBoard', () => api.getBoard(), 'GET', '/api/board', undefined],
   [
     'addCard',
-    () => api.addCard({ uid: 'card00000002', title: 'Write the KB', lane: 'later', before: 'card00000001' }),
+    () => api.addCard({ uid: 'card00000002', title: 'Write the KB', categoryUid: 'cat000000001', lane: 'later', before: 'card00000001' }),
     'POST',
     '/api/board/cards',
-    { uid: 'card00000002', title: 'Write the KB', lane: 'later', before: 'card00000001' },
+    { uid: 'card00000002', title: 'Write the KB', categoryUid: 'cat000000001', lane: 'later', before: 'card00000001' },
   ],
   [
     'patchCard',
-    () => api.patchCard('card00000002', { today: DATE, lane: 'next', before: null }),
+    () => api.patchCard('card00000002', { today: DATE, categoryUid: null, lane: 'next', before: null }),
     'PATCH',
     '/api/board/cards/card00000002',
-    { today: DATE, lane: 'next', before: null },
+    { today: DATE, categoryUid: null, lane: 'next', before: null },
   ],
   ['deleteCard', () => api.deleteCard('card00000002'), 'DELETE', '/api/board/cards/card00000002', undefined],
+  [
+    'addCategory',
+    () => api.addCategory({ uid: 'cat000000001', name: 'Tickets', color: 'blue' }),
+    'POST',
+    '/api/board/categories',
+    { uid: 'cat000000001', name: 'Tickets', color: 'blue' },
+  ],
+  [
+    'patchCategory',
+    () => api.patchCategory('cat000000001', { name: 'Support tickets', color: 'teal' }),
+    'PATCH',
+    '/api/board/categories/cat000000001',
+    { name: 'Support tickets', color: 'teal' },
+  ],
+  ['deleteCategory', () => api.deleteCategory('cat000000001'), 'DELETE', '/api/board/categories/cat000000001', undefined],
 ];
 
 describe('routes', () => {

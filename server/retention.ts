@@ -13,7 +13,7 @@ import { DAY_MS } from '../shared/dates.js';
  * `pruneDays` so the rules are in one place. Deleting a `days` row cascades to its punches,
  * priorities, sessions and breaks. The same prune takes the board cards done before the cutoff,
  * and the cards a priorities save made, never handled on the board, whose rows are all gone
- * now; settings, logins and the other cards are never touched.
+ * now; settings, logins, categories and the other cards are never touched.
  */
 
 /**

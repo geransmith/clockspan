@@ -4,7 +4,7 @@ import { insertSession, SESSION_COOKIE } from '../auth/session.js';
 import { countRows, SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from './harness.js';
 import { addMonths, atTime, DAY_MS, isWeekend, MINUTE_MS, punchWindow, startOfQuarter, todayKey } from '../../shared/dates.js';
 import { hasText } from '../../shared/priorities.js';
-import { LIMITS, type BoardCard, type Day } from '../../shared/api.js';
+import { LIMITS, type Board, type BoardCard, type Day } from '../../shared/api.js';
 import { DEFAULT_SETTINGS, SETTING_LIMITS } from '../../shared/settings.js';
 import { BREAK_SECONDS, MIN_BREAK_MS, PLANNED_SECONDS } from '../../shared/timer.js';
 import {
@@ -14,6 +14,7 @@ import {
   kindForDistance,
   LOCAL_USERS,
   OIDC_DEV_USER,
+  SEEDED_CATEGORIES,
   seedDatabase,
   weekdaysBefore,
   weekdaysSince,
@@ -22,21 +23,29 @@ import {
 } from './seed.js';
 
 const counts = (db: DB) =>
-  Object.fromEntries(['days', 'punches', 'priorities', 'sessions', 'breaks', 'board_cards', 'settings', 'auth_sessions'].map((t) => [t, countRows(db, t)]));
+  Object.fromEntries(
+    ['days', 'punches', 'priorities', 'sessions', 'breaks', 'board_cards', 'categories', 'settings', 'auth_sessions'].map((t) => [t, countRows(db, t)]),
+  );
 
 /**
  * The board a seed wrote, against its days: each card a save made is in step with its latest
- * linked row, the rows the board saw (the last weekday's and today's) each have a card, and
- * no list links two text rows to one card.
+ * linked row, the rows the board saw (the last weekday's and today's) each have a card, no
+ * list links two text rows to one card, and every category named is one of the board's.
  */
 function expectBoardInStep(m: SeedManifest) {
   const cards = new Map(m.board.cards.map((c) => [c.uid, c]));
   const [last, today] = [m.days.at(-2), m.days.at(-1)!];
+  expect(m.board.categories).toEqual(SEEDED_CATEGORIES);
+  const categories = new Set(m.board.categories.map((c) => c.uid));
+  const resolves = (uid: string | null) => uid === null || categories.has(uid);
+  expect(m.board.cards.every((c) => resolves(c.categoryUid))).toBe(true);
   for (const day of m.days) {
     const linked = day.priorities.filter((p) => hasText(p) && p.cardUid != null).map((p) => p.cardUid);
     expect(new Set(linked).size).toBe(linked.length);
+    expect(day.sessions.every((s) => resolves(s.categoryUid))).toBe(true);
     for (const p of day.priorities) {
-      expect(p).toMatchObject({ recurringUid: null, categoryUid: null });
+      expect(p.recurringUid).toBeNull();
+      expect(resolves(p.categoryUid), `${day.date} ${p.text}`).toBe(true);
       // Only the days the board was on for have cards.
       if (day === last || day === today) expect(cards.has(p.cardUid!), `${day.date} ${p.text}`).toBe(true);
       else expect(p.cardUid).toBeNull();
@@ -47,17 +56,17 @@ function expectBoardInStep(m: SeedManifest) {
     const latest = rows.at(-1);
     expect(card.listDate).toBe(latest?.date ?? null);
     expect(card.held).toBe(false);
-    if (latest) expect([card.title, card.lane], card.title).toEqual([latest.text, latest.done ? 'done' : 'next']);
+    if (latest) expect([card.title, card.categoryUid, card.lane], card.title).toEqual([latest.text, latest.categoryUid, latest.done ? 'done' : 'next']);
   }
   // Positions run 1..n in Later and in Next.
   for (const lane of ['later', 'next'] as const) {
     const positions = m.board.cards.filter((c) => c.lane === lane).map((c) => c.position);
     expect(positions).toEqual(positions.map((_, i) => i + 1));
   }
-  // Today's carried row is a row of its own on the same card.
+  // Today's carried row is a row of its own on the same card, in the same category.
   if (last) {
     const source = last.priorities.find((p) => !p.done)!;
-    expect(today.priorities[0]).toMatchObject({ text: source.text, cardUid: source.cardUid });
+    expect(today.priorities[0]).toMatchObject({ text: source.text, cardUid: source.cardUid, categoryUid: source.categoryUid });
     expect(today.priorities[0]!.uid).not.toBe(source.uid);
   }
 }
@@ -166,12 +175,20 @@ describe('seedDatabase', () => {
     expectBoardInStep(m);
     // Captured on the board: three in Later and one in Next, below the cards today's and the last
     // weekday's saves made, on no list.
-    expect(m.board.cards.filter((c) => c.listDate == null).map((c) => [c.lane, c.position, c.title])).toEqual([
-      ['later', 1, 'Write a KB for the SSO reset'],
-      ['later', 2, 'Review canned replies'],
-      ['later', 3, 'Look into the export timeout'],
-      ['next', 3, 'Follow up on the Acme SLA'],
+    const named = (uid: string | null) => m.board.categories.find((c) => c.uid === uid)?.name;
+    expect(m.board.cards.filter((c) => c.listDate == null).map((c) => [c.lane, c.position, c.title, named(c.categoryUid)])).toEqual([
+      ['later', 1, 'Write a KB for the SSO reset', 'Knowledge base'],
+      ['later', 2, 'Review canned replies', 'Knowledge base'],
+      ['later', 3, 'Look into the export timeout', 'Tickets'],
+      ['next', 3, 'Follow up on the Acme SLA', 'Follow-ups'],
     ]);
+    // Most rows have a category, and so does each unplanned Inbox session; the sessions on rows
+    // count under their rows'.
+    const rows = m.days.flatMap((d) => d.priorities);
+    expect(rows.filter((p) => p.categoryUid != null).length).toBeGreaterThan(rows.length / 2);
+    const sessions = m.days.flatMap((d) => d.sessions);
+    expect(sessions.filter((s) => s.categoryUid != null).every((s) => s.priorityUid == null && named(s.categoryUid) === 'Tickets')).toBe(true);
+    expect(sessions.filter((s) => s.label === 'Inbox').every((s) => named(s.categoryUid) === 'Tickets')).toBe(true);
     // A card a save made is untouched until the board handles it; one the board made never is.
     for (const card of m.board.cards) expect(countRows(db, 'board_cards', 'uid = ? AND untouched = ?', card.uid, card.listDate == null ? 0 : 1)).toBe(1);
     expect(countRows(db, 'board_cards')).toBe(m.board.cards.length);
@@ -232,10 +249,12 @@ describe('seedDatabase', () => {
         const target = await app.api.put(`/api/days/${day.date}/target`, { workMinutes: day.workMinutes });
         expect(target).toMatchObject({ status: 200, body: { workMinutes: day.workMinutes } });
       }
-      // The log's time for the paused session leaves the pause out.
+      // The log's time for the paused session leaves the pause out; it is the unplanned Inbox
+      // session, with its category.
       const today = (await app.api.get<Day>(`/api/days/${SEED_TODAY}`)).body;
       const paused = today.sessions.find((s) => s.pausedSeconds > 0)!;
-      expect(paused).toMatchObject({ durationSeconds: 22 * 60, plannedSeconds: 25 * 60 });
+      expect(paused).toMatchObject({ label: 'Inbox', durationSeconds: 22 * 60, plannedSeconds: 25 * 60, priorityUid: null, categoryUid: 'cat000000001' });
+      expect(today.sessions).toEqual(app.seeded!.days.at(-1)!.sessions.map((s) => expect.objectContaining({ id: s.id, categoryUid: s.categoryUid })));
     } finally {
       await app.close();
     }
@@ -249,11 +268,16 @@ describe('seedDatabase', () => {
       const { admin, a, b } = await app.twoUsers();
       const m = seedDatabase(app.db, { userId: admin.id, today: SEED_TODAY, now: SEED_NOW });
       expect((await a.get('/api/board')).body).toEqual(m.board);
-      // As another user: every open card posts as it is, and lands in the same order.
+      // As another user: every category and every open card posts as it is, and lands in the same order.
+      for (const c of m.board.categories) expect((await b.post('/api/board/categories', { uid: c.uid, name: c.name, color: c.color })).status).toBe(201);
       const open = m.board.cards.filter((c) => c.lane !== 'done');
-      for (const c of open) expect((await b.post('/api/board/cards', { uid: c.uid, title: c.title, lane: c.lane, before: null })).status).toBe(201);
-      const theirs = (await b.get('/api/board')).body.cards as BoardCard[];
-      expect(theirs.map((c) => [c.uid, c.title, c.lane, c.position])).toEqual(open.map((c) => [c.uid, c.title, c.lane, c.position]));
+      for (const c of open) {
+        expect((await b.post('/api/board/cards', { uid: c.uid, title: c.title, categoryUid: c.categoryUid, lane: c.lane, before: null })).status).toBe(201);
+      }
+      const theirs = (await b.get('/api/board')).body as Board;
+      expect(theirs.categories).toEqual(m.board.categories);
+      const fields = (c: BoardCard) => [c.uid, c.title, c.categoryUid, c.lane, c.position];
+      expect(theirs.cards.map(fields)).toEqual(open.map(fields));
       // Today's list saved back with the board on: every row keeps its card, and the board stays as it was.
       const today = m.days.at(-1)!;
       const saved = await a.put(`/api/days/${SEED_TODAY}/priorities`, { priorities: today.priorities, base: today.priorities, cards: true });

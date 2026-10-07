@@ -143,6 +143,24 @@ export const MIGRATIONS: string[] = [
     UNIQUE (user_id, uid)
   );
   `,
+  // Categories. A removed one is archived, never deleted, so past time keeps its name. Rows,
+  // cards and sessions point at one by its uid, a soft link like the others. Names are unique
+  // among a user's categories in the route, not here: a UNIQUE on the name would stop the
+  // README's handover script on a name both accounts used. A session's own category is one
+  // picked in the log, or its removed row's, which a priorities save copies onto it.
+  `
+  CREATE TABLE categories (
+    id          INTEGER PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    uid         TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    color       TEXT NOT NULL,
+    archived_at INTEGER,
+    UNIQUE (user_id, uid)
+  );
+  ALTER TABLE sessions    ADD COLUMN category_uid TEXT;
+  ALTER TABLE board_cards ADD COLUMN category_uid TEXT;
+  `,
 ];
 
 export function openDatabase(dbPath: string): DB {
