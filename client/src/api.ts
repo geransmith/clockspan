@@ -1,11 +1,14 @@
 import type {
   AuthInfo,
+  Board,
+  BoardCard,
   BreakEndResponse,
   BreakResponse,
   Day,
   ErrorResponse,
   LogoutResponse,
   OkResponse,
+  OpenLane,
   OvertimeResponse,
   PrioritiesResponse,
   Priority,
@@ -109,9 +112,12 @@ export type RetroPatch = { note?: string; done?: boolean };
 /**
  * What PUT /days/:date/priorities takes beside the list. `base`: the list this one was built on,
  * so the server keeps what another device changed since (`mergePriorities`); without it the list
- * replaces the stored one.
+ * replaces the stored one. `cards`: make a board card for each text row that has none, sent
+ * while the board is on and the list's day is today or later (the server never decides what
+ * today is). `touched`: the cards a board action handled through their rows, which the server
+ * then leaves where the board put them.
  */
-export type PrioritiesPut = { base?: Priority[] };
+export type PrioritiesPut = { base?: Priority[]; cards?: boolean; touched?: string[] };
 
 export const getDay = (date: string) => request<Day>('GET', `/api/days/${date}`);
 export const putPunches = (date: string, punches: Punch[]) =>
@@ -144,3 +150,18 @@ export const deleteSession = (id: number) => request<OkResponse>('DELETE', `/api
 export const startBreak = (date: string, plannedSeconds: number) => request<BreakResponse>('POST', `/api/days/${date}/breaks`, { plannedSeconds });
 export const endBreak = (id: number) => request<BreakEndResponse>('POST', `/api/breaks/${id}/end`);
 export const deleteBreak = (id: number) => request<OkResponse>('DELETE', `/api/breaks/${id}`);
+
+// ----- board -----
+/** POST /board/cards: a new card, or where an existing one goes (a park). The uid is one the board minted, or the parked row's cardUid. */
+export type NewCard = Pick<BoardCard, 'uid' | 'title'> & { lane: OpenLane; before: string | null };
+/**
+ * PATCH /board/cards/:uid: a field left out keeps its value; `before` alone reorders the card's
+ * lane. `today` is the client's date key: while a row on that day's list or a later one is
+ * linked to the card, the server refuses the edit (409).
+ */
+export type CardPatch = { today: string; title?: string; lane?: OpenLane; before?: string | null };
+
+export const getBoard = () => request<Board>('GET', '/api/board');
+export const addCard = (card: NewCard) => request<Board>('POST', '/api/board/cards', card);
+export const patchCard = (uid: string, patch: CardPatch) => request<Board>('PATCH', `/api/board/cards/${uid}`, patch);
+export const deleteCard = (uid: string) => request<Board>('DELETE', `/api/board/cards/${uid}`);

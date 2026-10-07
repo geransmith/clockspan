@@ -53,13 +53,52 @@ export interface Priority {
   done: boolean;
   uid: string | null;
   addedAt: number | null;
-  /** The board card this row is on its day. Set when the row arrives on a list; fixed once stored. */
+  /** The board card this row is on its day. Set when the row arrives on a list, or by the server when a save makes the row's card; fixed once stored. */
   cardUid: string | null;
   /** The recurring priority this row was added from; fixed once stored. Never set together with `cardUid`. */
   recurringUid: string | null;
   /** The category it counts under. Kept when the row's text is cleared. */
   categoryUid: string | null;
 }
+
+/** A board card's column while no row of today's list is linked to it. In progress is never stored: it is today's open rows. */
+export const LANES = ['later', 'next', 'done'] as const;
+export type Lane = (typeof LANES)[number];
+/** The lanes the board can put a card in: Done is reached only through a ticked row. */
+export type OpenLane = Exclude<Lane, 'done'>;
+
+/**
+ * A board card. While a row of today's list is linked to it (its `cardUid`), that row decides
+ * where it shows: open in In progress, ticked in Done, emptied nowhere. Otherwise `held`, then
+ * `listDate`, then its `lane`. A priorities save keeps its title and lane in step with its
+ * latest linked row.
+ */
+export interface BoardCard {
+  uid: string;
+  title: string;
+  lane: Lane;
+  /** 1..n within Later or Next; 0 in Done, which goes by `doneAt`. */
+  position: number;
+  createdAt: number;
+  doneAt: number | null;
+  /** The latest day whose list holds a row linked to this card, with text or emptied; null with none. After the client's today, the card is planned. */
+  listDate: string | null;
+  /** Made by a priorities save and never handled on the board, with its row on `listDate` emptied: shown nowhere until that row has text again or is removed. */
+  held: boolean;
+}
+
+/** `GET /board`, and the answer to every board write: Later and Next in order, then the cards done in the last `BOARD_LIMITS.doneWindowDays`. */
+export interface Board {
+  cards: BoardCard[];
+}
+
+/** The server's caps on the board: sanity limits for an internet-exposed install, not product limits. */
+export const BOARD_LIMITS = {
+  /** Cards in Later and Next together. */
+  openCards: 300,
+  /** How far back `GET /board` sends Done cards: a week, and a day of slack for the client's zone. */
+  doneWindowDays: 8,
+} as const;
 
 /** What a session has whatever its status. */
 interface SessionFields {
@@ -156,7 +195,8 @@ export interface PunchesResponse {
 
 /**
  * `PUT /days/:date/priorities`: the rows as stored once the save is merged with the day's list
- * (`mergePriorities`), uids and addedAt filled in, and each stored row's links as stored.
+ * (`mergePriorities`), uids and addedAt filled in, and each stored row's links as stored,
+ * with the `cardUid` of each card the save made.
  */
 export interface PrioritiesResponse {
   priorities: Priority[];

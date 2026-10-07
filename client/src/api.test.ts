@@ -81,6 +81,22 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
       base: [{ position: 1, text: '', done: false, uid: null, addedAt: null, ...NO_LINKS }],
     },
   ],
+  // The board's flags: make cards for rows without one, and the cards a board action handled.
+  [
+    'putPriorities, from the board',
+    () =>
+      api.putPriorities(DATE, [{ position: 1, text: 'Report', done: true, uid: 'abcdef123456', addedAt: 1, ...REPORT_LINKS }], {
+        cards: true,
+        touched: ['card00000001'],
+      }),
+    'PUT',
+    `/api/days/${DATE}/priorities`,
+    {
+      priorities: [{ position: 1, text: 'Report', done: true, uid: 'abcdef123456', addedAt: 1, ...REPORT_LINKS }],
+      cards: true,
+      touched: ['card00000001'],
+    },
+  ],
   ['putOvertime', () => api.putOvertime(DATE, true), 'PUT', `/api/days/${DATE}/overtime`, { approved: true }],
   ['putTarget', () => api.putTarget(DATE, null), 'PUT', `/api/days/${DATE}/target`, { workMinutes: null }],
   ['putRetro', () => api.putRetro(DATE, { note: 'why', done: true }), 'PUT', `/api/days/${DATE}/retro`, { note: 'why', done: true }],
@@ -106,6 +122,22 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
   ['startBreak', () => api.startBreak(DATE, 300), 'POST', `/api/days/${DATE}/breaks`, { plannedSeconds: 300 }],
   ['endBreak', () => api.endBreak(4), 'POST', '/api/breaks/4/end', undefined],
   ['deleteBreak', () => api.deleteBreak(4), 'DELETE', '/api/breaks/4', undefined],
+  ['getBoard', () => api.getBoard(), 'GET', '/api/board', undefined],
+  [
+    'addCard',
+    () => api.addCard({ uid: 'card00000002', title: 'Write the KB', lane: 'later', before: 'card00000001' }),
+    'POST',
+    '/api/board/cards',
+    { uid: 'card00000002', title: 'Write the KB', lane: 'later', before: 'card00000001' },
+  ],
+  [
+    'patchCard',
+    () => api.patchCard('card00000002', { today: DATE, lane: 'next', before: null }),
+    'PATCH',
+    '/api/board/cards/card00000002',
+    { today: DATE, lane: 'next', before: null },
+  ],
+  ['deleteCard', () => api.deleteCard('card00000002'), 'DELETE', '/api/board/cards/card00000002', undefined],
 ];
 
 describe('routes', () => {

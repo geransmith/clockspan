@@ -3,6 +3,7 @@ import type { DB } from './db.js';
 import type { PruneInfo } from '../shared/api.js';
 import type { Settings } from '../shared/settings.js';
 import { loadSettings } from './settings.js';
+import { renumber } from './board.js';
 import { DAY_MS } from '../shared/dates.js';
 
 /**
@@ -10,7 +11,9 @@ import { DAY_MS } from '../shared/dates.js';
  * prune (per-user setting, plus an optional server-wide ceiling from RETENTION_DAYS), which
  * `startBackgroundJobs` in app.ts runs through `runRetention` on a timer. Both go through
  * `pruneDays` so the rules are in one place. Deleting a `days` row cascades to its punches,
- * priorities, sessions and breaks; settings and logins are never touched.
+ * priorities, sessions and breaks. The same prune takes the board cards done before the cutoff,
+ * and the cards a priorities save made, never handled on the board, whose rows are all gone
+ * now; settings, logins and the other cards are never touched.
  */
 
 /**
@@ -43,9 +46,33 @@ export function countDays(db: DB, userId: number, before: string): PruneCounts {
     .get(before, userId) as PruneCounts;
 }
 
-/** Deletes the user's days before `before` (YYYY-MM-DD, exclusive) and returns how many. */
-export function pruneDays(db: DB, userId: number, before: string): number {
-  return db.prepare(`DELETE FROM days WHERE user_id = ? AND date < ? AND ${NO_RUNNING_TIMER}`).run(userId, before).changes;
+/** What one prune deleted: days, and board cards. */
+export interface Pruned {
+  days: number;
+  cards: number;
+}
+
+/**
+ * Deletes the user's days before `before` (YYYY-MM-DD, exclusive), the cards done before it
+ * (UTC midnight, like `cutoffKey`), and the untouched cards no row is linked to any more: such a
+ * card held nothing made on the board, and with its emptied row's day gone it would show again.
+ */
+export function pruneDays(db: DB, userId: number, before: string): Pruned {
+  return db.transaction((): Pruned => {
+    const days = db.prepare(`DELETE FROM days WHERE user_id = ? AND date < ? AND ${NO_RUNNING_TIMER}`).run(userId, before).changes;
+    const done = db
+      .prepare(`DELETE FROM board_cards WHERE user_id = ? AND lane = 'done' AND done_at < ?`)
+      .run(userId, Date.parse(`${before}T00:00:00Z`)).changes;
+    const unlinked = db
+      .prepare(
+        `DELETE FROM board_cards WHERE user_id = ? AND untouched = 1 AND NOT EXISTS (
+           SELECT 1 FROM priorities p JOIN days d ON d.id = p.day_id WHERE d.user_id = board_cards.user_id AND p.card_uid = board_cards.uid)`,
+      )
+      .run(userId).changes;
+    // An untouched card is in Next or Done: only a priorities save puts one anywhere.
+    if (unlinked > 0) renumber(db, userId, 'next');
+    return { days, cards: done + unlinked };
+  })();
 }
 
 /**
@@ -70,15 +97,17 @@ export function effectiveKeepDays(settings: Settings, config: Config): number | 
 /** One pass over every user. Returns the number of days deleted. */
 export function runRetention(db: DB, config: Config, now: number = Date.now()): number {
   const users = db.prepare(`SELECT id FROM users`).all() as { id: number }[];
-  let deleted = 0;
+  const deleted: Pruned = { days: 0, cards: 0 };
   for (const { id } of users) {
     const keep = effectiveKeepDays(loadSettings(db, id), config);
     if (keep == null) continue;
-    deleted += pruneDays(db, id, cutoffKey(now, keep));
+    const pruned = pruneDays(db, id, cutoffKey(now, keep));
+    deleted.days += pruned.days;
+    deleted.cards += pruned.cards;
   }
-  if (deleted > 0) {
-    reclaimSpace(db);
-    console.log(`[retention] deleted ${deleted} day${deleted === 1 ? '' : 's'}`);
-  }
-  return deleted;
+  const { days, cards } = deleted;
+  if (days > 0 || cards > 0) reclaimSpace(db);
+  if (days > 0) console.log(`[retention] deleted ${days} day${days === 1 ? '' : 's'}`);
+  if (cards > 0) console.log(`[retention] deleted ${cards} board card${cards === 1 ? '' : 's'}`);
+  return days;
 }

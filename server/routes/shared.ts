@@ -3,7 +3,7 @@ import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { refuse } from '../refuse.js';
 import { isWholeNumber } from '../validate.js';
-import type { Break, Punch, Session, SessionStatus } from '../../shared/api.js';
+import type { Break, Lane, Punch, Session, SessionStatus } from '../../shared/api.js';
 import { activeMs, MIN_BREAK_MS } from '../../shared/timer.js';
 
 export interface DayRow {
@@ -82,6 +82,20 @@ export interface BreakRow {
   ended_at: number;
 }
 
+/** A board card as stored. `untouched` is the server's alone: the wire carries what it implies (`BoardCard.held`). */
+export interface CardRow {
+  id: number;
+  user_id: number;
+  uid: string;
+  title: string;
+  lane: Lane;
+  position: number;
+  created_at: number;
+  done_at: number | null;
+  /** 1 for a card a priorities save made and the board has not handled since. */
+  untouched: number;
+}
+
 /** A session or break row with its day's date, which every answer about it carries. */
 export type Dated<Row> = Row & { date: string };
 
@@ -116,6 +130,36 @@ export function ownedRouter<T extends OwnedTable>(db: DB, table: T): { router: R
     next();
   });
   return { router, owned: (res) => res.locals.owned as Dated<OwnedRows[T]> };
+}
+
+/** The tables a `/:uid` route works on: each row belongs to one user, and to no day, and is named by its uid. */
+interface UidRows {
+  board_cards: CardRow;
+}
+type UidTable = keyof UidRows;
+const UID_NOT_FOUND: Record<UidTable, string> = { board_cards: 'Card not found.' };
+
+/** The user's own row of `table` with this uid (lowercase); undefined for anyone else's, or none. */
+export function getOwnedByUid<T extends UidTable>(db: DB, table: T, userId: number, uid: string): UidRows[T] | undefined {
+  return db.prepare(`SELECT * FROM ${table} WHERE user_id = ? AND uid = ?`).get(userId, uid) as UidRows[T] | undefined;
+}
+
+/**
+ * `ownedRouter` for a table whose rows hang off the user rather than a day: the router for
+ * `table`'s `/:uid` routes, where the ownership check lives as the router's `uid` param handler,
+ * so every route on it with a `:uid` in its path gets it, one added later included. It answers
+ * 404 for anyone else's row, or none (a uid of the wrong shape finds none), and hands the
+ * caller's own on to the handler, which reads it with `owned(res)`.
+ */
+export function uidRouter<T extends UidTable>(db: DB, table: T): { router: Router; owned: (res: Response) => UidRows[T] } {
+  const router = Router();
+  router.param('uid', (req, res, next, uid: string) => {
+    const row = UID_RE.test(uid) ? getOwnedByUid(db, table, currentUser(req).id, uid.toLowerCase()) : undefined;
+    if (!row) return refuse(res, 404, UID_NOT_FOUND[table]);
+    res.locals.owned = row;
+    next();
+  });
+  return { router, owned: (res) => res.locals.owned as UidRows[T] };
 }
 
 /** The user's running session, if any: there is at most one (a unique partial index). */

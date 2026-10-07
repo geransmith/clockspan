@@ -90,10 +90,10 @@ today, clocked in two hours ago. [AGENTS.md](AGENTS.md#dev-data-is-disposable) l
 day holds.
 
 Dates are relative to the day you run it, so the sample always lands in the current week.
-Each run first deletes every day of the user it seeds, including days you entered by hand;
-settings stay unless you pass `--fresh`. It only writes to the local database (`DATA_DIR`,
-default `./data`); it never touches a Docker `/data` volume. Safe to run while `npm run dev`
-is up; reload the page.
+Each run first deletes every day and board card of the user it seeds, including ones you
+entered by hand; settings stay unless you pass `--fresh`. It only writes to the local database
+(`DATA_DIR`, default `./data`); it never touches a Docker `/data` volume. Safe to run while
+`npm run dev` is up; reload the page.
 
 ```bash
 npm run seed                      # the default set above
@@ -234,7 +234,7 @@ Login is rate-limited to 5 failed attempts per 15 minutes per IP, counting an IP
 
 The app refuses to start if `APP_URL`, `OIDC_ISSUER`, `OIDC_CLIENT_ID` or `OIDC_CLIENT_SECRET` is missing, or if `OIDC_ISSUER` isn't an `https://` URL (the sign-in library never contacts a provider over plain http). If Authentik is briefly unreachable at startup the app still boots and retries discovery in the background. Sign out also ends the Authentik session when the provider advertises an end-session endpoint.
 
-**Switching modes later.** Data is keyed by user. A sign-in belongs to the mode it was made in, so after a switch everyone signs in again (under `local` with no account yet, the first visit shows the create-account page). Going from `none` to `local` creates a fresh admin; the old implicit user's data stays in the database. To hand it to the new account, stop the container and run the script below before the new account records a day of its own (a user has one row per date, so a date both accounts used stops the script and nothing moves). Days move together with their sessions and breaks, which belong to a user as well as a day. The last two statements bring the old settings along, replacing any the admin saved; leave them out to keep the admin's.
+**Switching modes later.** Data is keyed by user. A sign-in belongs to the mode it was made in, so after a switch everyone signs in again (under `local` with no account yet, the first visit shows the create-account page). Going from `none` to `local` creates a fresh admin; the old implicit user's data stays in the database. To hand it to the new account, stop the container and run the script below before the new account records a day of its own (a user has one row per date, so a date both accounts used stops the script and nothing moves). Days move together with their sessions and breaks, which belong to a user as well as a day. Board cards move too; their ids are random, so the two accounts never clash on them. The last two statements bring the old settings along, replacing any the admin saved; leave them out to keep the admin's.
 
 ```bash
 sqlite3 /path/on/host/focus.db <<'SQL'
@@ -243,9 +243,10 @@ BEGIN;
 CREATE TEMP TABLE handover AS SELECT
   (SELECT id FROM users WHERE kind = 'default') AS from_id,
   (SELECT id FROM users WHERE kind = 'local' ORDER BY id LIMIT 1) AS to_id;
-UPDATE days     SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
-UPDATE sessions SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
-UPDATE breaks   SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
+UPDATE days        SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
+UPDATE sessions    SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
+UPDATE breaks      SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
+UPDATE board_cards SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
 DELETE FROM settings WHERE user_id = (SELECT to_id FROM handover)
                 AND EXISTS (SELECT 1 FROM settings WHERE user_id = (SELECT from_id FROM handover));
 UPDATE settings SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
@@ -279,7 +280,7 @@ Going from `none` to `oidc` works the same way. Sign in through your provider on
 - **Sticker chart.** Off by default: turn it on under *Settings → Sheet → History*. Every day on the History calendar then wears a sticker for each thing it did instead of its hours, with the month's count on top and a day that earned every one picked out. The legend chips count each kind; tap one to show only that sticker, tap again for all of them. Today updates as you go. Hover a sticker for what it was for.
 - **Layout.** In a window 1100 px wide or more, the sheet has two columns: by default the timeclock and priorities on the left, the timer, day log and retrospective on the right. Narrower windows and phones show one column. Tap **Customize** to drag a card by its grip, use ↑/↓, or hide a card; with two columns, dragging and ↑/↓ stay within a column, and ← or → moves a card to the other one (on a phone or a narrow window its place doesn't change). Hidden cards appear in a strip at the bottom while customizing. A window resized across 1100 px keeps its layout until you reload or come back from History. *Settings → Sheet → Layout → Reset to default* restores everything, columns included.
 - **Settings.** Five tabs: *Timeclock*, *Alarms*, *Sheet*, *Data* and *Account* (local accounts only). **Reset all settings**, at the bottom of *Data*, puts every setting back to its default; days, punches and sessions are untouched.
-- **Data.** Settings → Data. *Delete old days automatically* keeps the last N days (30 to 3650) and drops the rest, with their punches, priorities, sessions, breaks and notes; the server checks every few hours. *Delete days before* a date does the same once, after showing how many days it will remove. Today and a day with a running timer are never deleted; settings are kept. If the admin set `RETENTION_DAYS`, the tab says so and that ceiling applies whatever you choose.
+- **Data.** Settings → Data. *Delete old days automatically* keeps the last N days (30 to 3650) and drops the rest, with their punches, priorities, sessions, breaks and notes, and the board cards finished before then; the server checks every few hours. *Delete days before* a date does the same once, after showing how many days it will remove. Today and a day with a running timer are never deleted; settings are kept. If the admin set `RETENTION_DAYS`, the tab says so and that ceiling applies whatever you choose.
 - **Past days.** Use ◀ ▶ or the date picker on the sheet, or **History** → **Days**. Work weekdays only? *Settings → Sheet → History → Show weekends* off drops Saturday and Sunday from the calendar (and from the sticker counts); a weekend day is still reachable from the sheet's date picker. Past days are editable; timers can only start on today.
 - **Phone.** Add to Home Screen (Android: *Install app*; iOS: Share → *Add to Home Screen*). Browser notifications on iOS only work from the installed app. *Settings → Sheet → Focus timer → Keep screen awake* keeps the screen on while a focus timer counts down (not while it is paused or has run out); if the phone sleeps anyway, the alert fires when you come back.
 

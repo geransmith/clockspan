@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from '../dev/harness.js';
 import { ensureDefaultUser } from '../db.js';
 import { seedDatabase, type DayKind } from '../dev/seed.js';
@@ -6,7 +6,7 @@ import { ensureDay } from './shared.js';
 import { MAX_PRIORITIES } from '../../shared/settings.js';
 import { MAX_PUNCHES } from '../../shared/punches.js';
 import { HOUR_MS, punchWindow } from '../../shared/dates.js';
-import { LIMITS } from '../../shared/api.js';
+import { BOARD_LIMITS, LIMITS, type BoardCard, type Priority } from '../../shared/api.js';
 
 /** 2026-09-01's UTC midnight; the tests add hours to it, which keeps each time inside punchWindow('2026-09-01'). */
 const T0 = Date.UTC(2026, 8, 1);
@@ -499,6 +499,396 @@ describe('PUT /api/days/:date/priorities: links', () => {
   });
 });
 
+// A board card follows the rows linked to it, saved in the same transaction (`mirrorCards`,
+// server/board.ts). `cards` is what the web app sends for today or a later day with the board on.
+describe('PUT /api/days/:date/priorities: board cards', () => {
+  const MON = '2026-08-03';
+  const TUE = '2026-08-04';
+  beforeEach(async () => {
+    // Only Date, so doneAt can be compared: HTTP keeps its real timers.
+    vi.useFakeTimers({ now: SEED_NOW, toFake: ['Date'] });
+    await app.close();
+    app = await startTestApp();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const save = (date: string, priorities: Record<string, unknown>[], extra: Record<string, unknown> = {}) =>
+    app.api.put(`/api/days/${date}/priorities`, { priorities, ...extra });
+  /** A save of a list whose day is today or later, with the board on. */
+  const saveOn = (date: string, priorities: Record<string, unknown>[], extra: Record<string, unknown> = {}) =>
+    save(date, priorities, { cards: true, ...extra });
+  const cards = async () => (await app.api.get('/api/board')).body.cards as BoardCard[];
+  const card = async (uid: string) => (await cards()).find((c) => c.uid === uid);
+  /** Each card as [lane, position, title], in the board's order. */
+  const lanes = async () => (await cards()).map((c) => [c.lane, c.position, c.title]);
+  const untouched = (uid: string) => app.count('board_cards', 'uid = ? AND untouched = 1', uid) === 1;
+  const capture = (uid: string, title: string, lane: string) => app.api.post('/api/board/cards', { uid, title, lane, before: null });
+  const REPORT = { text: 'Report', uid: 'aaaaaaaaaaa1' };
+  /** The card a save with the board on made for `row`, the list's one row. */
+  const madeFor = async (date: string, row: Record<string, unknown> = REPORT) => (await saveOn(date, [row])).body.priorities[0].cardUid as string;
+  const rowOn = async (date: string) => (await app.api.get(`/api/days/${date}`)).body.priorities[0] as Record<string, unknown>;
+
+  it('makes a card for each text row without one and writes its uid onto the row, open ones at the top of Next', async () => {
+    await capture('card00000001', 'Follow up on the SLA', 'next');
+    const r = await saveOn(MON, [
+      { text: 'Report' },
+      { text: 'Email the team', done: true },
+      { text: '' },
+      { text: 'Invoices' },
+      { text: 'Monitor the queue', recurringUid: 'rcur00000001' },
+    ]);
+    expect(r.status).toBe(200);
+    const [report, email, empty, invoices, queue] = r.body.priorities;
+    for (const p of [report, email, invoices]) expect(p.cardUid).toMatch(/^[0-9a-f]{12}$/);
+    // A row never written in, and a recurring one, get none.
+    expect([empty.cardUid, queue.cardUid]).toEqual([null, null]);
+    expect((await app.api.get(`/api/days/${MON}`)).body.priorities).toEqual(r.body.priorities);
+    expect(await lanes()).toEqual([
+      ['next', 1, 'Report'],
+      ['next', 2, 'Invoices'],
+      ['next', 3, 'Follow up on the SLA'],
+      ['done', 0, 'Email the team'],
+    ]);
+    expect(await card(report.cardUid)).toEqual({
+      uid: report.cardUid,
+      title: 'Report',
+      lane: 'next',
+      position: 1,
+      createdAt: SEED_NOW,
+      doneAt: null,
+      listDate: MON,
+      held: false,
+    });
+    expect(await card(email.cardUid)).toMatchObject({ doneAt: SEED_NOW, listDate: MON });
+    expect(untouched(report.cardUid)).toBe(true);
+    // Saved again, every row keeps its card and nothing changes.
+    const board = await cards();
+    const again = await saveOn(MON, r.body.priorities, { base: r.body.priorities });
+    expect(again.body.priorities).toEqual(r.body.priorities);
+    expect(await cards()).toEqual(board);
+  });
+
+  it('makes none without cards, nor once Later and Next are full, and tries again on the next save', async () => {
+    expect((await save(MON, [{ text: 'Report' }])).body.priorities[0].cardUid).toBeNull();
+    expect((await save(MON, [{ text: 'Report' }], { cards: false })).body.priorities[0].cardUid).toBeNull();
+    const userId = ensureDefaultUser(app.db).id;
+    const insert = app.db.prepare(`INSERT INTO board_cards (user_id, uid, title, lane, position, created_at) VALUES (?, ?, 'Card', 'later', ?, 0)`);
+    for (let i = 1; i <= BOARD_LIMITS.openCards; i++) insert.run(userId, `card${String(i).padStart(8, '0')}`, i);
+    // The save itself never fails because of the board.
+    const full = await saveOn(MON, [{ text: 'Report' }, { text: 'Email', done: true }]);
+    expect(full.status).toBe(200);
+    expect(full.body.priorities.map((p: Priority) => p.cardUid)).toEqual([null, null]);
+    await app.api.del('/api/board/cards/card00000001');
+    // The first row's card fills Later and Next again, so the second waits for another save.
+    const next = await saveOn(MON, full.body.priorities);
+    expect(next.body.priorities.map((p: Priority) => p.cardUid)).toEqual([expect.stringMatching(/^[0-9a-f]{12}$/), null]);
+  });
+
+  it('counts the cards a save takes out of Done or puts there before it makes another under the cap', async () => {
+    const [report, email] = (
+      await saveOn(MON, [
+        { ...REPORT, done: true },
+        { text: 'Email', uid: 'aaaaaaaaaaa2' },
+      ])
+    ).body.priorities;
+    const userId = ensureDefaultUser(app.db).id;
+    const insert = app.db.prepare(`INSERT INTO board_cards (user_id, uid, title, lane, position, created_at) VALUES (?, ?, 'Card', 'later', ?, 0)`);
+    // With Email's card in Next, Later and Next are one short of full.
+    for (let i = 1; i <= BOARD_LIMITS.openCards - 2; i++) insert.run(userId, `card${String(i).padStart(8, '0')}`, i);
+    const openCards = () => app.count('board_cards', "lane <> 'done'");
+    const invoices = { text: 'Invoices', uid: 'aaaaaaaaaaa3' };
+    // Unticked, Report's card takes the last place, so Invoices waits.
+    const untick = await saveOn(MON, [{ ...report, done: false }, email, invoices]);
+    expect(untick.body.priorities[2].cardUid).toBeNull();
+    expect(openCards()).toBe(BOARD_LIMITS.openCards);
+    // Ticking Email frees a place, which Invoices takes in the same save.
+    const [kept, , waiting] = untick.body.priorities;
+    const tick = await saveOn(MON, [kept, { ...email, done: true }, waiting]);
+    expect(tick.body.priorities[2].cardUid).toMatch(/^[0-9a-f]{12}$/);
+    expect(openCards()).toBe(BOARD_LIMITS.openCards);
+  });
+
+  it('stores one set, and a card for each row, when two devices take the same left-open rows', async () => {
+    const first = await saveOn(
+      TUE,
+      [
+        { text: 'Invoices', uid: 'aaaaaaaaaaa1' },
+        { text: 'Call the bank', uid: 'aaaaaaaaaaa2' },
+      ],
+      { base: [] },
+    );
+    // The second device's rows are its own, with no card: the first save made the cards.
+    const second = await saveOn(
+      TUE,
+      [
+        { text: 'Invoices', uid: 'bbbbbbbbbbb1' },
+        { text: 'Call the bank', uid: 'bbbbbbbbbbb2' },
+      ],
+      { base: [] },
+    );
+    expect(second.body.priorities).toEqual(first.body.priorities);
+    expect(await lanes()).toEqual([
+      ['next', 1, 'Invoices'],
+      ['next', 2, 'Call the bank'],
+    ]);
+  });
+
+  it('brings a card a list takes to Next with its title, at the top unless it was in Next, or to Done ticked', async () => {
+    await capture('card00000001', 'Write the KB', 'later');
+    await capture('card00000004', 'Update the macros', 'later');
+    await capture('card00000002', 'Review canned replies', 'next');
+    await capture('card00000003', 'Follow up', 'next');
+    // A pull from Later: the board places a row linked to the card, and names it as handled.
+    // Later closes the gap it left.
+    const kb = { text: 'Write the KB article', uid: 'aaaaaaaaaaa1', cardUid: 'card00000001' };
+    await saveOn(TUE, [kb], { touched: ['card00000001'] });
+    expect(await lanes()).toEqual([
+      ['later', 1, 'Update the macros'],
+      ['next', 1, 'Write the KB article'],
+      ['next', 2, 'Review canned replies'],
+      ['next', 3, 'Follow up'],
+    ]);
+    // One in Next already stays where it is; a ticked one goes to Done.
+    await saveOn(TUE, [kb, { text: 'Follow up', uid: 'aaaaaaaaaaa2', cardUid: 'card00000003' }]);
+    await saveOn(TUE, [
+      kb,
+      { text: 'Follow up', uid: 'aaaaaaaaaaa2', cardUid: 'card00000003' },
+      { text: 'Canned replies', done: true, cardUid: 'card00000002' },
+    ]);
+    expect(await lanes()).toEqual([
+      ['later', 1, 'Update the macros'],
+      ['next', 1, 'Write the KB article'],
+      ['next', 2, 'Follow up'],
+      ['done', 0, 'Canned replies'],
+    ]);
+    expect(await card('card00000002')).toMatchObject({ doneAt: SEED_NOW, listDate: TUE });
+  });
+
+  it("keeps a Done card's doneAt when its row arrives ticked on a later day", async () => {
+    const uid = await madeFor(MON, { ...REPORT, done: true });
+    vi.setSystemTime(SEED_NOW + HOUR_MS);
+    await saveOn(TUE, [{ text: 'Report', done: true, cardUid: uid }]);
+    expect(await card(uid)).toMatchObject({ lane: 'done', doneAt: SEED_NOW, listDate: TUE });
+  });
+
+  it('copies only what a save changed: new text renames the card, a tick moves it to Done and an untick to the top of Next', async () => {
+    const uid = await madeFor(MON);
+    await capture('card00000001', 'Follow up', 'next');
+    // Moved to Later on the board the day after, which a rename leaves alone.
+    await app.api.patch(`/api/board/cards/${uid}`, { today: TUE, lane: 'later' });
+    await save(MON, [{ ...REPORT, text: 'Quarterly report' }]);
+    expect(await card(uid)).toMatchObject({ title: 'Quarterly report', lane: 'later' });
+    vi.setSystemTime(SEED_NOW + HOUR_MS);
+    await save(MON, [{ ...REPORT, text: 'Quarterly report', done: true }]);
+    expect(await card(uid)).toMatchObject({ lane: 'done', position: 0, doneAt: SEED_NOW + HOUR_MS });
+    await save(MON, [{ ...REPORT, text: 'Quarterly report' }]);
+    expect(await lanes()).toEqual([
+      ['next', 1, 'Quarterly report'],
+      ['next', 2, 'Follow up'],
+    ]);
+    expect((await card(uid))!.doneAt).toBeNull();
+  });
+
+  it('puts the card at the top of Next on an untick, even when the board had moved it back to Next', async () => {
+    await capture('card00000001', 'Follow up', 'next');
+    const uid = await madeFor(MON, { ...REPORT, done: true });
+    await app.api.patch(`/api/board/cards/${uid}`, { today: TUE, lane: 'next' });
+    expect(await card(uid)).toMatchObject({ lane: 'next', position: 2 });
+    await save(MON, [REPORT]);
+    expect(await lanes()).toEqual([
+      ['next', 1, 'Report'],
+      ['next', 2, 'Follow up'],
+    ]);
+  });
+
+  it('holds a card a save made while its row is emptied, and deletes it when the row goes, text or emptied', async () => {
+    const uid = await madeFor(TUE);
+    await saveOn(TUE, [{ ...REPORT, text: '' }]);
+    expect(await card(uid)).toMatchObject({ title: 'Report', lane: 'next', listDate: TUE, held: true });
+    expect((await rowOn(TUE)).cardUid).toBe(uid);
+    await saveOn(TUE, []);
+    expect(await card(uid)).toBeUndefined();
+    const email = await madeFor(TUE, { text: 'Email', uid: 'aaaaaaaaaaa2' });
+    await saveOn(TUE, []);
+    expect(await card(email)).toBeUndefined();
+    expect(app.count('board_cards')).toBe(0);
+  });
+
+  it('renames the card when its emptied row is typed in again, on a past day and with the board off', async () => {
+    // A past day's list is saved without cards.
+    const past = await madeFor(MON);
+    await save(MON, [{ ...REPORT, text: '' }]);
+    await save(MON, [{ ...REPORT, text: 'Quarterly report' }]);
+    expect(await card(past)).toMatchObject({ title: 'Quarterly report', lane: 'next', held: false });
+    // Today's, with the board switched off since.
+    const today = await madeFor(TUE);
+    await save(TUE, [{ ...REPORT, text: '' }], { cards: false });
+    await save(TUE, [{ ...REPORT, text: 'Invoices', done: true }], { cards: false });
+    expect(await card(today)).toMatchObject({ title: 'Invoices', lane: 'done', held: false });
+    expect((await rowOn(TUE)).cardUid).toBe(today);
+  });
+
+  it('keeps a card the save names as touched, and one a later day links, when its row goes', async () => {
+    // A park: the save that takes the row off names the card the board placed.
+    const parked = await madeFor(MON);
+    await saveOn(MON, [], { touched: [parked] });
+    expect(await card(parked)).toMatchObject({ lane: 'next', listDate: null, held: false });
+    expect(untouched(parked)).toBe(false);
+    // Carried to Tuesday: Monday's row is no longer the latest.
+    const carried = await madeFor(MON, { text: 'Email', uid: 'aaaaaaaaaaa2' });
+    await saveOn(TUE, [{ text: 'Email', cardUid: carried }]);
+    await save(MON, []);
+    expect(await card(carried)).toMatchObject({ listDate: TUE });
+    expect(untouched(carried)).toBe(true);
+  });
+
+  it('deletes an untouched card carried to Tuesday and taken off there; Monday keeps its row', async () => {
+    const uid = await madeFor(MON);
+    await saveOn(TUE, [{ text: 'Report', uid: 'bbbbbbbbbbb1', cardUid: uid }]);
+    await saveOn(TUE, []);
+    expect(await card(uid)).toBeUndefined();
+    expect(await rowOn(MON)).toMatchObject({ text: 'Report', cardUid: uid });
+  });
+
+  it('marks the cards touched names as handled, whatever the case of their uid', async () => {
+    const uid = await madeFor(TUE);
+    // A tick made on the board.
+    await saveOn(TUE, [{ ...REPORT, done: true }], { touched: [uid.toUpperCase()] });
+    expect(untouched(uid)).toBe(false);
+    await saveOn(TUE, [{ ...REPORT, text: '' }]);
+    expect(await card(uid)).toMatchObject({ lane: 'done', held: false });
+    await saveOn(TUE, []);
+    expect(await card(uid)).toMatchObject({ lane: 'done', listDate: null });
+  });
+
+  it('puts a handled card back in Done when the open row that took it out of Done goes, and leaves it otherwise', async () => {
+    // Ticked on Monday, pulled out of Done into Tuesday's list, then taken off again.
+    const done = await madeFor(MON, { ...REPORT, done: true });
+    await saveOn(TUE, [{ text: 'Report', uid: 'bbbbbbbbbbb1', cardUid: done }], { touched: [done] });
+    expect(await card(done)).toMatchObject({ lane: 'next', doneAt: null });
+    vi.setSystemTime(SEED_NOW + HOUR_MS);
+    await saveOn(TUE, []);
+    expect(await card(done)).toMatchObject({ lane: 'done', doneAt: SEED_NOW + HOUR_MS, listDate: MON });
+
+    // Left open on its first day: it stays in Next.
+    const open = await madeFor('2026-08-10', { text: 'Email', uid: 'aaaaaaaaaaa2' });
+    await saveOn('2026-08-11', [{ text: 'Email', uid: 'bbbbbbbbbbb2', cardUid: open }], { touched: [open] });
+    await saveOn('2026-08-11', []);
+    expect(await card(open)).toMatchObject({ lane: 'next' });
+    // Ticked on the day it was taken off: it stays in Done, where the tick put it.
+    await saveOn('2026-08-11', [{ text: 'Email', uid: 'bbbbbbbbbbb2', cardUid: open, done: true }], { touched: [open] });
+    await saveOn('2026-08-11', []);
+    expect(await card(open)).toMatchObject({ lane: 'done' });
+    // In Later, where the board put it: it stays there.
+    const later = await madeFor('2026-08-17', { text: 'Invoices', uid: 'aaaaaaaaaaa3' });
+    await app.api.patch(`/api/board/cards/${later}`, { today: '2026-08-18', lane: 'later' });
+    await save('2026-08-17', []);
+    expect(await card(later)).toMatchObject({ lane: 'later' });
+    // Captured on the board, on no list before: it stays in Next.
+    await capture('card00000001', 'Write the KB', 'next');
+    await saveOn('2026-08-24', [{ text: 'Write the KB', uid: 'bbbbbbbbbbb3', cardUid: 'card00000001' }]);
+    await saveOn('2026-08-24', []);
+    expect(await card('card00000001')).toMatchObject({ lane: 'next' });
+  });
+
+  it('leaves a handled card where it is when the row taken off was parked, emptied or ticked, and reads past an emptied row for the tick', async () => {
+    /** A card ticked on `mon` and pulled out of Done into `tue`'s list as `row`, which the save returns. */
+    const pulled = async (mon: string, tue: string, text: string, n: number) => {
+      const uid = await madeFor(mon, { text, uid: `aaaaaaaaaaa${n}`, done: true });
+      const row = { text, uid: `bbbbbbbbbbb${n}`, cardUid: uid };
+      await saveOn(tue, [row], { touched: [uid] });
+      return { uid, row };
+    };
+    // A park: the board put the card in Next, and the removal names it.
+    const parked = await pulled('2026-08-03', '2026-08-04', 'Report', 1);
+    await capture(parked.uid, 'Report', 'next');
+    await saveOn('2026-08-04', [], { touched: [parked.uid] });
+    expect(await card(parked.uid)).toMatchObject({ lane: 'next' });
+    // Emptied before it went.
+    const emptied = await pulled('2026-08-10', '2026-08-11', 'Email', 2);
+    await saveOn('2026-08-11', [{ ...emptied.row, text: '' }]);
+    await saveOn('2026-08-11', []);
+    expect(await card(emptied.uid)).toMatchObject({ lane: 'next' });
+    // Ticked, then moved back to Next on the board the day after, before it went.
+    const ticked = await pulled('2026-08-17', '2026-08-18', 'Invoices', 3);
+    await saveOn('2026-08-18', [{ ...ticked.row, done: true }]);
+    await app.api.patch(`/api/board/cards/${ticked.uid}`, { today: '2026-08-19', lane: 'next' });
+    await saveOn('2026-08-18', []);
+    expect(await card(ticked.uid)).toMatchObject({ lane: 'next' });
+    // Pulled again past a day whose row was emptied: the latest row with text is the ticked one.
+    const skipped = await pulled('2026-08-24', '2026-08-25', 'Call the bank', 4);
+    await saveOn('2026-08-25', [{ ...skipped.row, text: '' }]);
+    await saveOn('2026-08-26', [{ text: 'Call the bank', uid: 'ccccccccccc4', cardUid: skipped.uid }], { touched: [skipped.uid] });
+    await saveOn('2026-08-26', []);
+    expect(await card(skipped.uid)).toMatchObject({ lane: 'done', listDate: '2026-08-25' });
+  });
+
+  it("leaves the card alone when an older day's list is saved", async () => {
+    const uid = await madeFor(MON);
+    await saveOn(TUE, [{ text: 'Report', uid: 'bbbbbbbbbbb1', cardUid: uid }]);
+    const before = await card(uid);
+    await save(MON, [{ ...REPORT, text: 'Report, old copy', done: true }]);
+    await save(MON, []);
+    expect(await card(uid)).toEqual(before);
+  });
+
+  it("gives a deleted card's row nothing, unless the row gains text in a save with cards", async () => {
+    const uid = await madeFor(MON);
+    expect((await app.api.del(`/api/board/cards/${uid}`)).status).toBe(200);
+    await save(MON, [{ ...REPORT, text: 'Report v2', done: true }]);
+    await save(MON, [{ ...REPORT, text: '' }]);
+    await save(MON, [{ ...REPORT, text: 'Report v3' }]);
+    await saveOn(MON, [{ ...REPORT, text: 'Report v4' }]);
+    expect(await cards()).toEqual([]);
+    expect((await rowOn(MON)).cardUid).toBe(uid);
+    // Typed in again with the board on: the card comes back under the row's link, handled if the save says so.
+    await saveOn(MON, [{ ...REPORT, text: '' }]);
+    await saveOn(MON, [{ ...REPORT, text: 'Report v5' }], { touched: [uid] });
+    expect(await card(uid)).toMatchObject({ title: 'Report v5', lane: 'next', held: false });
+    expect(untouched(uid)).toBe(false);
+    const email = await madeFor(TUE, { text: 'Email', uid: 'aaaaaaaaaaa2' });
+    await app.api.del(`/api/board/cards/${email}`);
+    // Removed with its card gone: nothing to delete.
+    await saveOn(TUE, []);
+    await saveOn(TUE, [{ text: 'Email', uid: 'aaaaaaaaaaa2', cardUid: email, done: true }]);
+    expect(await card(email)).toMatchObject({ lane: 'done', doneAt: SEED_NOW });
+    expect(untouched(email)).toBe(true);
+  });
+
+  it("brings a deleted card back only from its latest linked day's row", async () => {
+    const uid = await madeFor(MON);
+    await saveOn(TUE, [{ text: 'Report', uid: 'bbbbbbbbbbb1', cardUid: uid }]);
+    await app.api.del(`/api/board/cards/${uid}`);
+    // Monday's row is typed in again, but Tuesday's still links the card.
+    await saveOn(MON, [{ ...REPORT, text: '' }]);
+    await saveOn(MON, [{ ...REPORT, text: 'Report v2' }]);
+    expect(await cards()).toEqual([]);
+    expect((await rowOn(MON)).cardUid).toBe(uid);
+  });
+
+  it('refuses a cards flag that is not a boolean and a touched that is not a short list of card ids, and stores nothing', async () => {
+    const list = `touched must be a list of at most ${MAX_PRIORITIES} card ids.`;
+    const refusals: [Record<string, unknown>, string][] = [
+      [{ cards: 'yes' }, 'cards must be a boolean.'],
+      [{ cards: null }, 'cards must be a boolean.'],
+      [{ cards: 1 }, 'cards must be a boolean.'],
+      [{ touched: 'card00000001' }, list],
+      [{ touched: null }, list],
+      [{ touched: [5] }, list],
+      [{ touched: ['not-a-uid!'] }, list],
+      [{ touched: Array(MAX_PRIORITIES + 1).fill('card00000001') }, list],
+    ];
+    for (const [extra, error] of refusals) {
+      const r = await save(MON, [{ text: 'Report' }], extra);
+      expect([r.status, r.body.error], JSON.stringify(extra)).toEqual([400, error]);
+    }
+    expect(app.count('days')).toBe(0);
+    expect((await save(MON, [{ text: 'Report' }], { touched: Array(MAX_PRIORITIES).fill('CARD00000001') })).status).toBe(200);
+  });
+});
+
 describe('PUT /api/days/:date/overtime', () => {
   it('sets and clears the flag', async () => {
     expect((await app.api.put('/api/days/2026-09-01/overtime', { approved: true })).body).toEqual({ overtimeApproved: true });
@@ -668,10 +1058,18 @@ describe('days are scoped to the signed-in user', () => {
     expect(bDay.workMinutes).toBe(240);
     expect(app.db.prepare(`SELECT user_id FROM days WHERE date = ? ORDER BY user_id`).all(date)).toEqual([{ user_id: admin.id }, { user_id: member.id }]);
 
-    // A prune by B deletes only B's days.
+    // A prune by B deletes only B's days, and none of A's cards: not the ones done before the
+    // cutoff, nor an untouched one no row links to, which a prune of A's own would take.
+    app.db
+      .prepare(`INSERT INTO board_cards (user_id, uid, title, lane, position, created_at, untouched) VALUES (?, 'card000000aa', 'Loose', 'next', 99, 0, 1)`)
+      .run(admin.id);
+    const cardsOf = (userId: number) => app.db.prepare(`SELECT * FROM board_cards WHERE user_id = ? ORDER BY id`).all(userId) as { lane: string }[];
+    const aCards = cardsOf(admin.id);
+    expect(aCards.some((c) => c.lane === 'done')).toBe(true);
     expect((await b.post('/api/days/prune', { before: '2099-01-01' })).body).toEqual({ deleted: 1 });
     expect((await a.get(`/api/days/range?from=${date}&to=${SEED_TODAY}`)).body.days).toHaveLength(seeded.days.length);
     expect((await a.get(`/api/days/${date}`)).body).toEqual(before);
+    expect(cardsOf(admin.id)).toEqual(aCards);
   });
 });
 

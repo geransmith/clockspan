@@ -11,6 +11,7 @@ import { purgeExpiredSessions } from './auth/session.js';
 import { runRetention } from './retention.js';
 import { refuse } from './refuse.js';
 import { rejectCrossSiteWrites, rejectUnknownHosts, securityHeaders } from './security.js';
+import { boardRouter } from './routes/board.js';
 import { breaksRouter } from './routes/breaks.js';
 import { daysRouter } from './routes/days.js';
 import { sessionsRouter } from './routes/sessions.js';
@@ -76,6 +77,7 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
   api.use('/days', daysRouter(db, config));
   api.use('/sessions', sessionsRouter(db));
   api.use('/breaks', breaksRouter(db));
+  api.use('/board', boardRouter(db));
   app.use('/api', api);
 
   const notFound: express.RequestHandler = (_req, res) => refuse(res, 404, 'Not found.');

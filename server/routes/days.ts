@@ -5,6 +5,7 @@ import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { refuse } from '../refuse.js';
 import { countDays, pruneDays, reclaimSpace } from '../retention.js';
+import { mirrorCards } from '../board.js';
 import { isWholeNumber } from '../validate.js';
 import { DAY_MS, daysBetween, isValidDateKey, punchWindow } from '../../shared/dates.js';
 import {
@@ -172,6 +173,18 @@ function withCategories(rows: SentPriority[], ...sources: Priority[][]): Priorit
 }
 
 /**
+ * `touched` from a priorities save: the cards a board action handled through their rows,
+ * lowercased. None when left out; null when it isn't a list of at most one id per row.
+ */
+function parseTouched(raw: unknown): Set<string> | null {
+  if (raw === undefined) return new Set();
+  if (!Array.isArray(raw) || raw.length > MAX_PRIORITIES) return null;
+  const ids: unknown[] = raw;
+  if (!ids.every((id): id is string => typeof id === 'string' && UID_RE.test(id))) return null;
+  return new Set(ids.map((id) => id.toLowerCase()));
+}
+
+/**
  * Rows by their day's id, each list in the rows' order. Not `Map.groupBy`: it is ES2024, and
  * oxlint's type-aware rules check server files without that lib, whatever the tsconfigs say.
  */
@@ -263,9 +276,9 @@ export function daysRouter(db: DB, config: Config): Router {
   r.post('/prune', (req, res) => {
     const before = (req.body as { before?: unknown }).before;
     if (!isValidDateKey(before)) return refuse(res, 400, 'before must be a date (YYYY-MM-DD).');
-    const deleted = pruneDays(db, currentUser(req).id, before);
-    if (deleted > 0) reclaimSpace(db);
-    res.json({ deleted } satisfies PruneResult);
+    const pruned = pruneDays(db, currentUser(req).id, before);
+    if (pruned.days > 0 || pruned.cards > 0) reclaimSpace(db);
+    res.json({ deleted: pruned.days } satisfies PruneResult);
   });
 
   r.get('/:date', (req, res) => {
@@ -307,16 +320,22 @@ export function daysRouter(db: DB, config: Config): Router {
   // like punches, but for a stored row's card and recurring priority, which never change. An
   // empty row can never be "done". A list that links two text rows to one card or one recurring
   // priority is refused when one of the two is new here (`repeatedLink`); of two the server
-  // already holds, the merge keeps one.
+  // already holds, the merge keeps one. The board's cards follow the list in the same
+  // transaction (`mirrorCards`): `cards` (the board is on and the day is today or later, which
+  // only the client knows) makes a card for each text row without one, and `touched` names the
+  // cards a board action handled through their rows.
   r.put('/:date/priorities', (req, res) => {
     const user = currentUser(req);
     const { date } = req.params;
-    const body = req.body as { priorities?: unknown; base?: unknown };
+    const body = req.body as { priorities?: unknown; base?: unknown; cards?: unknown; touched?: unknown };
     const now = Date.now();
     const sent = parsePriorityRows(body.priorities, SENT_ROWS, now);
     if (typeof sent === 'string') return refuse(res, 400, sent);
     const sentBase = body.base == null ? null : parsePriorityRows(body.base, BASE_ROWS, now);
     if (typeof sentBase === 'string') return refuse(res, 400, sentBase);
+    if (body.cards !== undefined && typeof body.cards !== 'boolean') return refuse(res, 400, 'cards must be a boolean.');
+    const touched = parseTouched(body.touched);
+    if (!touched) return refuse(res, 400, `touched must be a list of at most ${MAX_PRIORITIES} card ids.`);
     const saved = db.transaction((): Priority[] | string => {
       const day = findDay(db, user.id, date);
       const stored = day ? storedPriorities(db, day.id) : [];
@@ -327,12 +346,13 @@ export function daysRouter(db: DB, config: Config): Router {
       if (repeat) return `Priority ${repeat.position} repeats another row's ${LINK_NAMES[repeat.field]}.`;
       const dayId = day?.id ?? ensureDay(db, user.id, date);
       const merged = mergePriorities(stored, base, mine);
+      const list = mirrorCards(db, user.id, date, stored, merged, now, { makeCards: body.cards === true, touched });
       db.prepare(`DELETE FROM priorities WHERE day_id = ?`).run(dayId);
       const ins = db.prepare(
         `INSERT INTO priorities (day_id, position, text, done, uid, added_at, card_uid, recurring_uid, category_uid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
-      for (const p of merged) ins.run(dayId, p.position, p.text, p.done ? 1 : 0, p.uid, p.addedAt, p.cardUid, p.recurringUid, p.categoryUid);
-      return merged;
+      for (const p of list) ins.run(dayId, p.position, p.text, p.done ? 1 : 0, p.uid, p.addedAt, p.cardUid, p.recurringUid, p.categoryUid);
+      return list;
     })();
     if (typeof saved === 'string') return refuse(res, 400, saved);
     res.json({ priorities: saved } satisfies PrioritiesResponse);

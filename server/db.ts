@@ -124,6 +124,25 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE priorities ADD COLUMN category_uid TEXT;
   CREATE INDEX priorities_card ON priorities(card_uid) WHERE card_uid IS NOT NULL;
   `,
+  // Board cards. Rows point at a card by its uid (priorities.card_uid); a card never shares a uid
+  // with a row. In progress is never stored: it is today's open rows. Position is 1..n within
+  // Later or Next, 0 in Done. untouched marks a card a priorities save made that the board has
+  // not handled since, which goes when its row is removed. UNIQUE (user_id, uid) is the index
+  // every lookup by user goes through.
+  `
+  CREATE TABLE board_cards (
+    id         INTEGER PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    uid        TEXT NOT NULL,
+    title      TEXT NOT NULL,
+    lane       TEXT NOT NULL CHECK (lane IN ('later','next','done')),
+    position   INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    done_at    INTEGER,
+    untouched  INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (user_id, uid)
+  );
+  `,
 ];
 
 export function openDatabase(dbPath: string): DB {
