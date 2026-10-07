@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { atTime } from '../../../shared/dates.js';
-import { completedSession, makeDay, makePriority, punchesAt, TEST_SETTINGS, type EndPatch } from '../test/fixtures';
-import { periodRange, reviewRange } from './review';
+import { atTime, MINUTE_MS } from '../../../shared/dates.js';
+import { completedSession, makeBreak, makeDay, makePriority, makeSession, punchesAt, TEST_SETTINGS, type EndPatch } from '../test/fixtures';
+import { periodRange, periodTarget, reviewRange } from './review';
 
 const FIRST_UID = makePriority(1, '').uid;
 const SECOND_UID = makePriority(2, '').uid;
@@ -12,6 +12,12 @@ const at = (key: string, h: number, m = 0) => atTime(key, h, m);
 const BEFORE_WORK = { addedAt: 0 };
 const session = (id: number, date: string, startedAt: number, seconds: number, extra: EndPatch = {}) =>
   completedSession(id, startedAt, seconds, { date, ...extra });
+/** A break planned for `minutes` from `startedAt`, ended at `endedAt`: its planned end unless cut short. */
+const brk = (id: number, date: string, startedAt: number, minutes: number, endedAt = startedAt + minutes * MINUTE_MS) =>
+  makeBreak({ id, date, plannedSeconds: minutes * 60, startedAt, endedAt });
+/** A day with `total` written rows, the first `done` of them ticked. */
+const planned = (date: string, total: number, done: number) =>
+  makeDay(date, { priorities: Array.from({ length: total }, (_, i) => makePriority(i + 1, `Row ${i + 1}`, { done: i < done })) });
 
 describe('periodRange', () => {
   it('steps weeks, months and quarters back from today', () => {
@@ -49,7 +55,10 @@ describe('reviewRange', () => {
     const r = reviewRange([d2, empty, d1], settings, '2026-09-16', now);
     expect(r.days).toBe(2);
     expect(r.workedSeconds).toBe(8 * 3600);
+    // Only the Monday was clocked in, on the usual 8 h day.
+    expect(r.targetSeconds).toBe(8 * 3600);
     expect(r.focusedSeconds).toBe(7200);
+    expect(r.sessions).toBe(4);
     expect(r.offPlanSeconds).toBe(3600);
     expect(r.onPlanPercent).toBe(50);
     expect(r.prioritiesDone).toBe(2);
@@ -112,10 +121,91 @@ describe('reviewRange', () => {
       prioritiesDone: 0,
       prioritiesTotal: 0,
       retrosDone: 0,
+      sessions: 0,
+      targetSeconds: 0,
+      breaks: { count: 0, seconds: 0 },
+      midDay: { added: 0, done: 0 },
+      typicalDay: null,
       unplanned: [],
       notDone: [],
       notes: [],
     });
+  });
+
+  it('counts completed sessions, not a running or a cancelled one', () => {
+    const day = makeDay('2026-09-16', {
+      sessions: [
+        session(1, '2026-09-16', at('2026-09-16', 9), 600),
+        session(2, '2026-09-16', at('2026-09-16', 10), 300, { status: 'cancelled' }),
+        makeSession({ id: 3, date: '2026-09-16', startedAt: at('2026-09-16', 16, 50) }),
+      ],
+    });
+    expect(reviewRange([day], settings, '2026-09-16', now)).toMatchObject({ sessions: 1, focusedSeconds: 600 });
+  });
+
+  it("adds up the clocked-in days' own lengths as the target, and holds a week to the Work week", () => {
+    // Clocked out an hour short of an 8 h day: the target is the day's length, not the time worked.
+    const full = makeDay('2026-09-14', { punches: punchesAt(at('2026-09-14', 8), null, null, at('2026-09-14', 15)) });
+    const half = makeDay('2026-09-15', { workMinutes: 270, punches: punchesAt(at('2026-09-15', 8), null, null, at('2026-09-15', 12, 30)) });
+    // A plan with no clock-in had no work day.
+    const unpunched = planned('2026-09-16', 1, 0);
+    const r = reviewRange([full, half, unpunched], settings, '2026-09-16', now);
+    expect(r).toMatchObject({ days: 3, workedSeconds: (420 + 270) * 60, targetSeconds: (480 + 270) * 60 });
+    expect(periodTarget('month', r, settings.weekMinutes)).toBe(r.targetSeconds);
+    expect(periodTarget('quarter', r, settings.weekMinutes)).toBe(r.targetSeconds);
+    // A week is held to the Work week setting, half day or not, and 0 sets no target.
+    expect(periodTarget('week', r, settings.weekMinutes)).toBe(40 * 3600);
+    expect(periodTarget('week', r, 0)).toBe(0);
+  });
+
+  it('counts the breaks on days with something on them, a running one so far', () => {
+    const mon = makeDay('2026-09-14', {
+      sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 1500)],
+      // A full five minutes, and a ten cut short at four.
+      breaks: [brk(1, '2026-09-14', at('2026-09-14', 9, 25), 5), brk(2, '2026-09-14', at('2026-09-14', 11), 10, at('2026-09-14', 11, 4))],
+    });
+    // A break with nothing else on its day: the day isn't counted, so neither is the break.
+    const breakOnly = makeDay('2026-09-15', { breaks: [brk(3, '2026-09-15', at('2026-09-15', 9), 15)] });
+    // Six minutes into a fifteen at 17:00.
+    const today = makeDay('2026-09-16', {
+      sessions: [session(4, '2026-09-16', at('2026-09-16', 16), 3000)],
+      breaks: [brk(5, '2026-09-16', at('2026-09-16', 16, 54), 15)],
+    });
+    expect(reviewRange([today, breakOnly, mon], settings, '2026-09-16', now).breaks).toEqual({ count: 3, seconds: (5 + 4 + 6) * 60 });
+  });
+
+  it('counts the rows added mid-day and how many of those got ticked', () => {
+    const mon = makeDay('2026-09-14', {
+      priorities: [
+        makePriority(1, 'Plan the week', BEFORE_WORK),
+        makePriority(2, 'Fire drill', { addedAt: at('2026-09-14', 11), done: true }),
+        makePriority(3, 'Call Sam back', { addedAt: at('2026-09-14', 12) }),
+        // Emptied since: no longer one of the day's rows.
+        makePriority(4, '', { addedAt: at('2026-09-14', 13) }),
+      ],
+      sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600)],
+    });
+    // With no session logged, a row written late is still the plan.
+    const tue = makeDay('2026-09-15', { priorities: [makePriority(1, 'Late start', { addedAt: at('2026-09-15', 15) })] });
+    const wed = makeDay('2026-09-16', {
+      priorities: [makePriority(1, 'Reply to Kim', { addedAt: at('2026-09-16', 10), done: true })],
+      sessions: [session(2, '2026-09-16', at('2026-09-16', 9), 600)],
+    });
+    expect(reviewRange([mon, tue, wed], settings, '2026-09-16', now).midDay).toEqual({ added: 3, done: 2 });
+  });
+
+  it("takes a typical day's plan from the medians of the planned days before today", () => {
+    // Today is still going, so its nine rows are left out: with them, planned would be 3.
+    const r = reviewRange([planned('2026-09-14', 1, 0), planned('2026-09-15', 3, 1), planned('2026-09-16', 9, 9)], settings, '2026-09-16', now);
+    // An even count is halfway between the middle two, rounded half up: 2 planned, and 0.5 → 1 done.
+    expect(r.typicalDay).toEqual({ planned: 2, done: 1 });
+    // An odd count takes each list's middle on its own: 1 done, not the 5-row day's 0. A clocked-in
+    // day with nothing written isn't a planned day: counted, planned would be 4.
+    const clockedOnly = makeDay('2026-09-11', { punches: punchesAt(at('2026-09-11', 8)) });
+    const odd = [planned('2026-09-08', 3, 1), planned('2026-09-09', 5, 0), planned('2026-09-10', 6, 2), clockedOnly];
+    expect(reviewRange(odd, settings, '2026-09-16', now).typicalDay).toEqual({ planned: 5, done: 1 });
+    // One planned day before today isn't a typical one.
+    expect(reviewRange([planned('2026-09-15', 3, 2), planned('2026-09-16', 3, 3)], settings, '2026-09-16', now).typicalDay).toBeNull();
   });
 
   it('rounds the on-plan share to a whole percent, and has none without focus logged', () => {

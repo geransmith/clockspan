@@ -55,7 +55,7 @@ export function TimeclockTab({ settings, set }: TabProps) {
       {settings.trackHours && (
         <>
           <DurationField label="Work week" minutes={settings.weekMinutes} {...SETTING_LIMITS.weekMinutes} onCommit={(m) => set({ weekMinutes: m })} />
-          <p className="muted small">The timeclock counts the week so far against this. 0 hides that line.</p>
+          <p className="muted small">The timeclock's week line and a week's review count hours against this. 0 hides the week line and the review's target.</p>
         </>
       )}
       <SelectField

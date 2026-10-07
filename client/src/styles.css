@@ -1673,7 +1673,9 @@ button {
   font-size: 0.9rem;
   color: var(--text-2);
 }
-.retro-summary {
+/* The retrospective's totals line, and the review's facts under its tiles. */
+.retro-summary,
+.review-facts {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 18px;
@@ -1682,7 +1684,8 @@ button {
   background: var(--surface-2);
   font-size: 0.92rem;
 }
-.retro-summary strong {
+.retro-summary strong,
+.review-facts strong {
   font-variant-numeric: tabular-nums;
 }
 .retro-textarea {
