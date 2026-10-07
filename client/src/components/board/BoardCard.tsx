@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type CSSProperties } from 'react';
 import { LIMITS } from '../../../../shared/api.js';
 import { moveTargets, type BoardItem, type ColumnId } from '../../lib/board';
 import { dayName } from '../../lib/format';
+import { Grip } from '../Icons';
 
 export const COLUMN_NAMES: Record<ColumnId, string> = { later: 'Later', next: 'Next', progress: 'In progress', done: 'Done' };
 
@@ -22,6 +23,15 @@ interface Props {
   onDelete?: () => void;
   /** A recurring row's way off today's list. */
   onRemove?: () => void;
+  /** Drag and drop; an item without it has no grip. */
+  drag?: ItemDrag;
+}
+
+/** What drag and drop (`Board`) gives an item: its node ref and transform, and its grip's listeners and attributes. */
+export interface ItemDrag {
+  nodeRef: (el: HTMLElement | null) => void;
+  style: CSSProperties;
+  handleProps: Record<string, unknown>;
 }
 
 /**
@@ -30,12 +40,18 @@ interface Props {
  * moves it to another column (Move to, the way to move without dragging), and deletes it; a
  * planned item's offers Delete only, since that day's list decides it.
  */
-export function BoardCardView({ item, today, open, onToggle, onClose, titleRef, tick, onMove, onRename, onDelete, onRemove }: Props) {
+export function BoardCardView({ item, today, open, onToggle, onClose, titleRef, tick, onMove, onRename, onDelete, onRemove, drag }: Props) {
   const targets = moveTargets(item);
   const editorId = `editor-${item.id}`;
   return (
-    <li className={`board-card${item.column === 'done' ? ' is-done' : ''}`}>
+    <li ref={drag?.nodeRef} style={drag?.style} className={`board-card${item.column === 'done' ? ' is-done' : ''}`}>
       <div className="board-card-row">
+        {drag && (
+          // The drag handle, and with Space the keyboard's: dnd-kit's attributes give its role and instructions.
+          <button className="board-grip" {...drag.handleProps} aria-label={`Drag to move ${item.title}`} title="Drag to move">
+            <Grip />
+          </button>
+        )}
         {tick && (
           // The label is the tick's touch area (styles.css); the box itself is 22 px.
           <label className="board-tick">

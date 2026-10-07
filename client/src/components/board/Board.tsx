@@ -1,8 +1,28 @@
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type Announcements,
+  type DragCancelEvent,
+  type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
+  type UniqueIdentifier,
+} from '@dnd-kit/core';
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { addDays, parseDateKey, startOfWeek } from '../../../../shared/dates.js';
 import { useBoardState, useBoardStore } from '../../hooks/useBoard';
 import { useCelebration, type Moment } from '../../hooks/useCelebration';
 import { useDay } from '../../hooks/useDay';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useRange } from '../../hooks/useRange';
 import { useSettings } from '../../hooks/useSettings';
 import { unlockAudio, warnQuietly } from '../../lib/alerts';
@@ -10,25 +30,34 @@ import {
   boardColumns,
   boardFull,
   cardUidOf,
+  columnDropId,
+  COLUMNS,
+  dropTarget,
+  findItem,
+  isLane,
   laneStart,
   MoveRefused,
+  moveAnnouncement,
+  overAnnouncement,
   planMove,
   plannedFor,
+  withDrag,
   type BoardItem,
   type ColumnId,
+  type DropTarget,
   type StoreMove,
 } from '../../lib/board';
-import { BOARD, CONFIRM, DONE_STAYS, LOAD_FAILED, SAVE_FAILED, WARNING_ACTIONS } from '../../lib/copy';
+import { BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, SAVE_FAILED, WARNING_ACTIONS } from '../../lib/copy';
 import { dayName } from '../../lib/format';
 import { newUid, nudgeFor, pickWarning, type WarningKind } from '../../lib/priorities';
 import type { OpenLane } from '../../types';
 import { Burst } from '../Burst';
 import { Folded } from '../Folded';
+import { Grip } from '../Icons';
 import { LoadFailed } from '../LoadFailed';
-import { BoardCardView, COLUMN_NAMES } from './BoardCard';
+import { BoardCardView, COLUMN_NAMES, type ItemDrag } from './BoardCard';
 import { Capture } from './Capture';
-
-const COLUMN_IDS: ColumnId[] = ['later', 'next', 'progress', 'done'];
+import { boardCollision, boardKeyboardCoordinates } from './dnd';
 
 /** What the board notice holds: one at a time, the newest move's. */
 type Notice =
@@ -39,6 +68,9 @@ type Notice =
   /** A move refused before anything was sent. */
   | { kind: 'refuse'; item: BoardItem; message: string };
 
+/** The dragged item's place in its list while the copy under the pointer moves. */
+const DRAGGED_OPACITY = 0.4;
+
 /** A board write's failure as a banner: a refusal's own line, else the save one. */
 function report(write: Promise<void>): void {
   void write.catch((err: unknown) =>
@@ -46,11 +78,15 @@ function report(write: Promise<void>): void {
   );
 }
 
+/** Planned items (their day's list decides them) and recurring rows (they stay on today's list) have no grip. */
+const canDrag = (item: BoardItem) => !item.planned && !item.recurring;
+
 /**
  * The Board page: Later, Next, In progress and Done. In progress is today's list, the sheet's
- * Top priorities, and Done holds this week. Each item moves through its editor's Move to; a move
- * the board can't make shows in the notice under the capture box. Memoized: App re-renders every
- * second, and nothing here reads the clock.
+ * Top priorities, and Done holds this week. An item moves by its grip (a mouse, a finger or the
+ * keyboard) or its editor's Move to, and both go through `planMove`; a move the board can't make
+ * shows in the notice under the capture box. Memoized: App re-renders every second, and nothing
+ * here reads the clock.
  */
 export const Board = memo(function Board({ today }: { today: string }) {
   const { board, failed } = useBoardState();
@@ -73,8 +109,25 @@ export const Board = memo(function Board({ today }: { today: string }) {
   const lastWarning = useRef<string | undefined>(undefined);
   const titles = useRef(new Map<string, HTMLButtonElement>());
   const noticeBox = useRef<HTMLDivElement>(null);
-  // The item a sent move left focus for: its title once it shows under that id.
+  // The item a sent move left focus for: its title once it shows under that id, or its grip after
+  // a keyboard drag, so Space picks it up again.
   const focusTo = useRef<string | null>(null);
+  const focusGrip = useRef(false);
+
+  // The item being dragged and, while it is over another column, where it would land there.
+  const [dragged, setDragged] = useState<string | null>(null);
+  const [preview, setPreview] = useState<DropTarget | null>(null);
+  // What the drag says as it ends: worked out by the drop, which dnd-kit asks for once its handler has run.
+  const dropLine = useRef<string | undefined>(undefined);
+  // Whether the drag has said what it is over yet: the first time, it is where it was picked up.
+  const overSaid = useRef(false);
+  // The page's own reduced-motion rule stops the transitions; the drop's glide runs in script.
+  const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+  const sensors = useSensors(
+    // Covers touch too (see SortableCards); the grip's touch-action: none keeps a finger on it from scrolling the page.
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: boardKeyboardCoordinates }),
+  );
 
   const columns = useMemo(
     () =>
@@ -91,16 +144,27 @@ export const Board = memo(function Board({ today }: { today: string }) {
         : null,
     [board, day, earlierDays, today, weekStart, moving],
   );
+  // The columns as the drag shows them.
+  const shown = useMemo(() => (columns && dragged && preview ? withDrag(columns, dragged, preview) : columns), [columns, dragged, preview]);
 
+  // The focus on an item: on its grip when asked and it has one that takes the focus (none on a
+  // planned card or a recurring row; hidden on a phone in In progress and Done), else its title.
+  const focusItem = (title: HTMLButtonElement, toGrip: boolean) => {
+    const grip = toGrip ? title.closest('li')?.querySelector<HTMLElement>('.board-grip') : null;
+    grip?.focus();
+    if (!grip || document.activeElement !== grip) title.focus();
+  };
   useEffect(() => {
     const id = focusTo.current;
     const title = id ? titles.current.get(id) : undefined;
     if (!title) return;
     focusTo.current = null;
+    const toGrip = focusGrip.current;
+    focusGrip.current = false;
     // Only when the move left the focus nowhere (its control went with the editor or the item): a
     // move that lands late finds the user typing elsewhere, and leaves them there.
     const at = document.activeElement;
-    if (at === null || at === document.body) title.focus();
+    if (at === null || at === document.body) focusItem(title, toGrip);
   });
   // A notice brought by a move takes the focus, so a keyboard user reaches its buttons.
   useEffect(() => {
@@ -119,18 +183,18 @@ export const Board = memo(function Board({ today }: { today: string }) {
         <LoadFailed title={LOAD_FAILED.title} onRetry={() => void dayStore.load(today)} />
       </div>
     );
-  if (!board || !day || !columns) return <div className="board sheet-loading" aria-busy="true" />;
+  if (!board || !day || !columns || !shown) return <div className="board sheet-loading" aria-busy="true" />;
 
   const todayRows = day.priorities;
 
   // The move goes to the store; the item shows in its new column meanwhile. A tick celebrates
-  // from where it was made, measured now: the control goes with the item to Done in this render
-  // (hidden there on a phone). The sound is unlocked in the tap that made it (iOS).
-  const send = (item: BoardItem, to: ColumnId, move: StoreMove, from?: HTMLElement) => {
+  // from where it was made (`at`, measured by the caller before the control goes with the item to
+  // Done in this render, hidden there on a phone). The sound is unlocked in the tap that made it (iOS).
+  const send = (item: BoardItem, to: ColumnId, move: StoreMove, at?: DOMRect) => {
     const ticks = (move.kind === 'tick' && move.done) || (move.kind === 'place' && move.row.done);
     if (ticks) {
       unlockAudio();
-      setTicked({ at: from?.getBoundingClientRect() });
+      setTicked({ at });
     }
     setOpen(null);
     // Where the item will be once the move lands: a pulled card is a row of today's, a parked row its card.
@@ -151,26 +215,32 @@ export const Board = memo(function Board({ today }: { today: string }) {
     });
   };
 
-  // Every Move to goes through here: the newest one takes the notice's place.
-  const run = (item: BoardItem, to: ColumnId, before: string | null, from?: HTMLElement) => {
+  // Every move, dragged or picked in Move to, goes through here: the newest one takes the notice's
+  // place. It answers with what a drag says as it ends.
+  const run = (item: BoardItem, to: ColumnId, before: string | null, at?: DOMRect): string => {
     const move = planMove(item, to, before, { today });
     setNotice(null);
-    if (!move) return;
-    if (move.kind === 'refuse') return setNotice({ kind: 'refuse', item, message: move.message });
-    if (move.kind === 'doneStays')
-      return setNotice({ kind: 'doneStays', item, title: move.title, categoryUid: move.categoryUid, lane: move.lane, before: move.before });
-    const warning = move.kind === 'place' && move.nudge ? nudgeFor(todayRows, settings.priorityCount) : null;
-    if (warning) {
-      const text = pickWarning(warning, lastWarning.current);
-      lastWarning.current = text;
-      return setNotice({ kind: 'nudge', warning, text, item, to, move });
+    focusGrip.current = false;
+    if (move?.kind === 'refuse') setNotice({ kind: 'refuse', item, message: move.message });
+    else if (move?.kind === 'doneStays')
+      setNotice({ kind: 'doneStays', item, title: move.title, categoryUid: move.categoryUid, lane: move.lane, before: move.before });
+    else if (move) {
+      const warning = move.kind === 'place' && move.nudge ? nudgeFor(todayRows, settings.priorityCount) : null;
+      if (!warning) send(item, to, move, at);
+      else {
+        const text = pickWarning(warning, lastWarning.current);
+        lastWarning.current = text;
+        setNotice({ kind: 'nudge', warning, text, item, to, move });
+        return text;
+      }
     }
-    send(item, to, move, from);
+    return moveAnnouncement(move, item, to, COLUMN_NAMES);
   };
 
-  // Closing the notice puts the focus back on the item it was about.
+  // Closing the notice puts the focus back on the item it was about, on its grip where it has one.
   const closeNotice = () => {
-    if (notice) titles.current.get(notice.item.id)?.focus();
+    const title = notice && titles.current.get(notice.item.id);
+    if (title) focusItem(title, true);
     setNotice(null);
   };
 
@@ -183,11 +253,75 @@ export const Board = memo(function Board({ today }: { today: string }) {
     report(store.deleteCard(cardUidOf(item), onToday ? item.row!.uid : null, later));
   };
 
-  const card = (item: BoardItem) => {
+  const find = (id: UniqueIdentifier) => findItem(shown, String(id));
+  const onDragStart = ({ active }: DragStartEvent) => {
+    setDragged(String(active.id));
+    setPreview(null);
+    dropLine.current = undefined;
+    overSaid.current = false;
+  };
+  // Over another column the item shows there, where it would land; back over its own column, where
+  // it started. Its place among the cards of the column it shows in is the sortable list's to show.
+  const onDragOver = ({ active, over }: DragOverEvent) => {
+    const found = find(active.id);
+    if (!found || !over) return;
+    const target = dropTarget(String(over.id), found.item.id, shown);
+    const to = target?.to ?? found.item.column;
+    if (to !== found.column) setPreview(target && to !== found.item.column ? target : null);
+  };
+  // dnd-kit's own focus return is off (it would take the focus from the notice a drop brings), so
+  // a keyboard drag gets it back here: on the item's grip, where the move sends the item or where
+  // it stays.
+  const endDrag = (item: BoardItem | undefined, activatorEvent: Event | null) => {
+    setDragged(null);
+    setPreview(null);
+    if (!item || !(activatorEvent instanceof globalThis.KeyboardEvent)) return;
+    focusTo.current ??= item.id;
+    focusGrip.current = true;
+  };
+  const onDragEnd = ({ active, over, activatorEvent }: DragEndEvent) => {
+    const item = find(active.id)?.item;
+    focusTo.current = null;
+    if (item) {
+      // The tick's burst starts where the card was let go.
+      const r = active.rect.current.translated;
+      const at = r ? new DOMRect(r.left, r.top, r.width, r.height) : undefined;
+      const target = dropTarget(over ? String(over.id) : null, item.id, shown);
+      dropLine.current = target ? run(item, target.to, target.before, at) : moveAnnouncement(null, item, item.column, COLUMN_NAMES);
+    }
+    endDrag(item, activatorEvent);
+  };
+  const onDragCancel = ({ active, activatorEvent }: DragCancelEvent) => {
+    focusTo.current = null;
+    endDrag(find(active.id)?.item, activatorEvent);
+  };
+  // What a screen reader hears: dnd-kit's own lines read the raw ids.
+  const announcements: Announcements = {
+    onDragStart: ({ active }) => {
+      const item = find(active.id)?.item;
+      return item && BOARD_DRAG.pickedUp(item.title, COLUMN_NAMES[item.column]);
+    },
+    // Back where it started, it says so, but not the first time: "Picked up" has said where it is.
+    onDragOver: ({ active, over }) => {
+      const item = find(active.id)?.item;
+      const first = !overSaid.current;
+      overSaid.current = true;
+      if (!item || !over) return undefined;
+      const target = dropTarget(String(over.id), item.id, shown);
+      return target || !first ? overAnnouncement(target, item, shown, COLUMN_NAMES) : undefined;
+    },
+    onDragEnd: () => dropLine.current,
+    onDragCancel: ({ active }) => {
+      const item = find(active.id)?.item;
+      return item && BOARD_DRAG.cancelled(item.title, COLUMN_NAMES[item.column]);
+    },
+  };
+
+  const card = (item: BoardItem, drag?: ItemDrag) => {
     const onToday = item.row != null && item.date === today;
     const cardOnly = item.card != null && item.row == null;
     let tick: Parameters<typeof BoardCardView>[0]['tick'];
-    if (onToday) tick = { checked: item.row!.done, onChange: (checked, el) => run(item, checked ? 'done' : 'progress', null, el) };
+    if (onToday) tick = { checked: item.row!.done, onChange: (checked, el) => run(item, checked ? 'done' : 'progress', null, el.getBoundingClientRect()) };
     // A Done card off today's list: unticking is the correction for a mistaken tick, back to Next.
     else if (cardOnly && item.column === 'done') tick = { checked: true, onChange: () => report(store.editCard(item.card!.uid, { lane: 'next' })) };
     return (
@@ -206,7 +340,7 @@ export const Board = memo(function Board({ today }: { today: string }) {
           else titles.current.delete(item.id);
         }}
         tick={tick}
-        onMove={(to, el) => run(item, to, to === 'later' || to === 'next' ? laneStart(columns, to) : null, el)}
+        onMove={(to, el) => run(item, to, to === 'later' || to === 'next' ? laneStart(columns, to) : null, el.getBoundingClientRect())}
         onRename={
           onToday
             ? (text) => report(store.renameRow(item.row!.uid!, text, item.row!.cardUid))
@@ -218,12 +352,34 @@ export const Board = memo(function Board({ today }: { today: string }) {
         // only bring back its ticked row from an earlier day. The untick is the correction.
         onDelete={!item.recurring && (onToday || (cardOnly && item.column !== 'done')) ? () => remove(item) : undefined}
         onRemove={item.recurring && onToday ? () => report(store.deleteCard(null, item.row!.uid, null)) : undefined}
+        drag={drag}
       />
     );
   };
 
-  const list = (items: BoardItem[]) => <ul className="board-list">{items.map(card)}</ul>;
-  const done = columns.doneToday.length + columns.doneEarlier.length;
+  // A card of Later or Next sorts among its lane's cards; an item of In progress or Done drags whole.
+  // An item whose move is on its way keeps its grip but isn't picked up until the move lands: it
+  // shows where the move takes it as the item it was (a parked row in Later, a pulled card in In
+  // progress), and a move planned from that would be wrong.
+  const entry = (item: BoardItem, column: ColumnId) => {
+    if (!canDrag(item)) return card(item);
+    const render = (drag: ItemDrag) => card(item, drag);
+    const held = moving.has(item.id);
+    return isLane(column) ? (
+      <SortableEntry key={item.id} id={item.id} held={held} render={render} />
+    ) : (
+      <DraggableEntry key={item.id} id={item.id} column={column} held={held} render={render} />
+    );
+  };
+  const list = (items: BoardItem[], column: ColumnId) => <ul className="board-list">{items.map((i) => entry(i, column))}</ul>;
+  // A lane lists the cards it shows that drag (Later folds past eight), in order.
+  const sorted = (lane: OpenLane, items: BoardItem[], children: ReactNode) => (
+    <SortableContext id={lane} items={items.filter(canDrag).map((i) => i.id)} strategy={verticalListSortingStrategy}>
+      {children}
+    </SortableContext>
+  );
+  const done = shown.doneToday.length + shown.doneEarlier.length;
+  const lifted = dragged ? find(dragged)?.item : undefined;
 
   return (
     <div className="board">
@@ -241,7 +397,9 @@ export const Board = memo(function Board({ today }: { today: string }) {
                 label: WARNING_ACTIONS[notice.warning].add,
                 run: (el) => {
                   setNotice(null);
-                  send(notice.item, notice.to, notice.move, el);
+                  send(notice.item, notice.to, notice.move, el.getBoundingClientRect());
+                  // The button goes with the notice: the focus goes to the item's grip once it lands.
+                  focusGrip.current = true;
                 },
               },
               { label: WARNING_ACTIONS[notice.warning].keep, run: closeNotice },
@@ -275,44 +433,89 @@ export const Board = memo(function Board({ today }: { today: string }) {
       </div>
       {/* One column at a time on a phone: a switch between views, not ARIA tabs (no tab panels or arrow keys). */}
       <div className="segmented board-switch" role="group" aria-label="Board column">
-        {COLUMN_IDS.map((id) => (
+        {COLUMNS.map((id) => (
           <button key={id} className="segment" aria-pressed={shownColumn === id} onClick={() => setShownColumn(id)}>
             {COLUMN_NAMES[id]}
           </button>
         ))}
       </div>
-      <div className="board-cols">
-        <Column id="later" shown={shownColumn} count={columns.later.length}>
-          {columns.later.length > 0 ? <Folded className="board-list" items={columns.later.map(card)} /> : <Empty>Nothing parked.</Empty>}
-        </Column>
-        <Column id="next" shown={shownColumn} count={columns.next.length}>
-          {columns.next.length > 0 ? list(columns.next) : <Empty>Nothing lined up.</Empty>}
-        </Column>
-        <Column id="progress" shown={shownColumn} count={columns.progress.length} sub="Today's top priorities">
-          {columns.progress.length > 0 ? list(columns.progress) : <Empty>Nothing open on today's list.</Empty>}
-        </Column>
-        <Column id="done" shown={shownColumn} count={done}>
-          {done === 0 && <Empty>Nothing done this week.</Empty>}
-          {columns.doneToday.length > 0 && list(columns.doneToday)}
-          {columns.doneEarlier.length > 0 && (
-            <>
-              <button className="btn btn-ghost board-earlier" aria-expanded={earlierOpen} onClick={() => setEarlierOpen((o) => !o)}>
-                Earlier this week · {columns.doneEarlier.length}
-              </button>
-              {earlierOpen && list(columns.doneEarlier)}
-            </>
-          )}
-        </Column>
-      </div>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={boardCollision}
+        accessibility={{ announcements, restoreFocus: false }}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragEnd={onDragEnd}
+        onDragCancel={onDragCancel}
+      >
+        <div className="board-cols">
+          <Column id="later" shown={shownColumn} over={preview?.to} count={shown.later.length}>
+            {shown.later.length > 0 ? (
+              <Folded
+                className="board-list"
+                items={shown.later.map((i) => entry(i, 'later'))}
+                count={columns.later.length}
+                wrap={(n, ul) => sorted('later', shown.later.slice(0, n), ul)}
+              />
+            ) : (
+              <Empty>Nothing parked.</Empty>
+            )}
+          </Column>
+          <Column id="next" shown={shownColumn} over={preview?.to} count={shown.next.length}>
+            {shown.next.length > 0 ? sorted('next', shown.next, list(shown.next, 'next')) : <Empty>Nothing lined up.</Empty>}
+          </Column>
+          <Column id="progress" shown={shownColumn} over={preview?.to} count={shown.progress.length} sub="Today's top priorities">
+            {shown.progress.length > 0 ? list(shown.progress, 'progress') : <Empty>Nothing open on today's list.</Empty>}
+          </Column>
+          <Column id="done" shown={shownColumn} over={preview?.to} count={done}>
+            {done === 0 && <Empty>Nothing done this week.</Empty>}
+            {shown.doneToday.length > 0 && list(shown.doneToday, 'done')}
+            {shown.doneEarlier.length > 0 && (
+              <>
+                <button className="btn btn-ghost board-earlier" aria-expanded={earlierOpen} onClick={() => setEarlierOpen((o) => !o)}>
+                  Earlier this week · {shown.doneEarlier.length}
+                </button>
+                {earlierOpen && list(shown.doneEarlier, 'done')}
+              </>
+            )}
+          </Column>
+        </div>
+        {/* On the page's body, so no column clips it; without the glide back when motion is reduced. */}
+        {createPortal(<DragOverlay dropAnimation={reduceMotion ? null : undefined}>{lifted && <Lifted item={lifted} />}</DragOverlay>, document.body)}
+      </DndContext>
       <Burst at={burst} />
     </div>
   );
 });
 
-function Column({ id, shown, count, sub, children }: { id: ColumnId; shown: ColumnId; count: number; sub?: string; children: ReactNode }) {
+/** A column, and where a dragged item lands as a whole (In progress, Done, and an empty lane). */
+function Column({
+  id,
+  shown,
+  over,
+  count,
+  sub,
+  children,
+}: {
+  id: ColumnId;
+  shown: ColumnId;
+  over?: ColumnId;
+  count: number;
+  sub?: string;
+  children: ReactNode;
+}) {
   const head = `board-col-${id}`;
+  const { setNodeRef } = useDroppable({ id: columnDropId(id) });
   return (
-    <section className="board-col" data-shown={shown === id || undefined} aria-labelledby={head}>
+    <section
+      ref={setNodeRef}
+      className="board-col"
+      data-shown={shown === id || undefined}
+      // A lane sorts its cards; the dragged item shows in the column it is over.
+      data-lane={isLane(id) || undefined}
+      data-over={over === id || undefined}
+      aria-labelledby={head}
+    >
       <header className="board-col-head">
         <h2 id={head}>{COLUMN_NAMES[id]}</h2>
         <span className="muted">{count}</span>
@@ -320,6 +523,36 @@ function Column({ id, shown, count, sub, children }: { id: ColumnId; shown: Colu
       {sub && <p className="muted small board-col-sub">{sub}</p>}
       {children}
     </section>
+  );
+}
+
+/** A card of Later or Next: the others in its lane make room as it is dragged among them. `held`: not picked up meanwhile (`entry`). */
+function SortableEntry({ id, held, render }: { id: string; held: boolean; render: (drag: ItemDrag) => ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: { draggable: held, droppable: false } });
+  return render({
+    nodeRef: setNodeRef,
+    style: { transform: CSS.Translate.toString(transform), transition, opacity: isDragging ? DRAGGED_OPACITY : undefined },
+    handleProps: { ...attributes, ...listeners },
+  });
+}
+
+/** A row or card of In progress or Done, which neither sorts: `column` tells the keyboard where it shows (`boardKeyboardCoordinates`); `held` as above. */
+function DraggableEntry({ id, column, held, render }: { id: string; column: ColumnId; held: boolean; render: (drag: ItemDrag) => ReactNode }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id, data: { column }, disabled: held });
+  return render({ nodeRef: setNodeRef, style: { opacity: isDragging ? DRAGGED_OPACITY : undefined }, handleProps: { ...attributes, ...listeners } });
+}
+
+/** The card under the pointer as it is dragged: its title, with the grip it was picked up by. */
+function Lifted({ item }: { item: BoardItem }) {
+  return (
+    <div className={`board-card board-card--lifted${item.column === 'done' ? ' is-done' : ''}`}>
+      <div className="board-card-row">
+        <span className="board-grip" aria-hidden="true">
+          <Grip />
+        </span>
+        <span className="board-card-title">{item.title}</span>
+      </div>
+    </div>
   );
 }
 

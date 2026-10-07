@@ -272,12 +272,32 @@ export const BOARD = {
   close: 'Close',
 } as const;
 
-/** The board notice when a done item is moved into Later or Next: it stays done, and more work goes on a new card. */
+/**
+ * The board notice when a done item is moved into Later or Next: it stays done, and more work goes
+ * on a new card. `announce` is what a screen reader hears as such a drag ends.
+ */
 export const DONE_STAYS = {
   title: (title: string) => `${title} is done.`,
   body: 'More work on it goes on a new card.',
   add: (lane: string) => `Add a new card to ${lane}`,
   leave: 'Leave it',
+  announce: (title: string, lane: string) => `${title} stays in Done. The notice can add a new card to ${lane}.`,
+} as const;
+
+/**
+ * What a screen reader hears while a card is dragged on the board: picked up, where it would land
+ * (in Later or Next, before which card, or back where it started), and how it ended. A drop that changes something, or is
+ * turned down, says so through `moveAnnouncement` (`lib/board.ts`).
+ */
+export const BOARD_DRAG = {
+  pickedUp: (title: string, column: string) => `Picked up ${title}, in ${column}.`,
+  over: (title: string, column: string) => `${title} is over ${column}.`,
+  overBefore: (title: string, column: string, next: string) => `${title} is over ${column}, before ${next}.`,
+  overEnd: (title: string, column: string) => `${title} is over ${column}, at the end.`,
+  overStart: (title: string, column: string) => `${title} is over ${column}, where it started.`,
+  moved: (title: string, column: string) => `${title} moved to ${column}.`,
+  stays: (title: string, column: string) => `${title} stays in ${column}.`,
+  cancelled: (title: string, column: string) => `Move cancelled. ${title} is back in ${column}.`,
 } as const;
 
 /** A request that got no answer within `REQUEST_TIMEOUT_MS` (`api.ts`), where a form shows its error. */

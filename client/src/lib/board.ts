@@ -1,8 +1,9 @@
 /**
  * The board's logic, with no React and no dnd-kit: which column each card and each of today's
- * rows shows in (`boardColumns`), what a move does and which store it writes (`planMove`), the
- * cards the left-open offer may bring back (`offeredLeftovers`), and the board as a write shows
- * it before the server answers (`withCard`, `withPatch`, `withoutCard`).
+ * rows shows in (`boardColumns`), what a move does and which store it writes (`planMove`), where a
+ * drop lands and what a drag says (`dropTarget`, `withDrag`, `moveAnnouncement`), the cards the
+ * left-open offer may bring back (`offeredLeftovers`), and the board as a write shows it before
+ * the server answers (`withCard`, `withPatch`, `withoutCard`).
  *
  * In progress is never stored: it is today's open rows, matched to their cards by `cardUid`, so
  * the board and the sheet show one list. A card linked to a row of today's list shows where that
@@ -14,7 +15,7 @@ import { BOARD_LIMITS } from '../../../shared/api.js';
 import { todayKey } from '../../../shared/dates.js';
 import { hasText } from '../../../shared/priorities.js';
 import type { Board, BoardCard, Day, OpenLane, Priority } from '../types';
-import { BOARD } from './copy';
+import { BOARD, BOARD_DRAG, DONE_STAYS } from './copy';
 import { dayName } from './format';
 import type { PrioritySeed } from './plan';
 import { isOpen, isRecurring, newUid } from './priorities';
@@ -236,10 +237,11 @@ const refuse = (message: string): Move => ({ kind: 'refuse', message });
 export function planMove(item: BoardItem, to: ColumnId, before: string | null, ctx: MoveContext): Move | null {
   if (item.planned) return refuse(BOARD.planned(item.title, dayName(item.planned, ctx.today, true)));
   if (to === item.column) {
-    // The board keeps an order only in Later and Next, whose items are cards; today's list keeps the sheet's.
-    return to === 'later' || to === 'next' ? { kind: 'patch', uid: item.card!.uid, patch: { before } } : null;
+    // The board keeps an order only in Later and Next, whose items are cards; today's list keeps
+    // the sheet's. A row shows in a lane only while its park is on its way, with nothing to sort yet.
+    return isLane(to) && item.card && !item.row ? { kind: 'patch', uid: item.card.uid, patch: { before } } : null;
   }
-  return to === 'later' || to === 'next' ? toLane(item, to, before, ctx) : toToday(item, to === 'done', ctx);
+  return isLane(to) ? toLane(item, to, before, ctx) : toToday(item, to === 'done', ctx);
 }
 
 function toLane(item: BoardItem, lane: OpenLane, before: string | null, ctx: MoveContext): Move {
@@ -268,7 +270,8 @@ function toToday(item: BoardItem, done: boolean, ctx: MoveContext): Move {
   return { kind: 'place', row, nudge: !done };
 }
 
-const COLUMNS: ColumnId[] = ['later', 'next', 'progress', 'done'];
+/** The columns in the order the board shows them. */
+export const COLUMNS: ColumnId[] = ['later', 'next', 'progress', 'done'];
 
 /**
  * The columns Move to offers: every other one, none for a planned item, and no Later or Next for
@@ -282,6 +285,102 @@ export function moveTargets(item: BoardItem): ColumnId[] {
 
 /** A board move the store turned down before it changed anything; its message is the line to show. */
 export class MoveRefused extends Error {}
+
+/** The drop id of a column, which `dropTarget` looks up; an item's drop id is its own id. */
+export const columnDropId = (column: ColumnId): string => `col:${column}`;
+
+/** Where a drop lands: the column, and in Later or Next the card it goes before (null: the end). */
+export interface DropTarget {
+  to: ColumnId;
+  before: string | null;
+}
+
+/** Later and Next: the lanes, which hold cards and keep their order. */
+export function isLane(column: ColumnId): column is OpenLane {
+  return column === 'later' || column === 'next';
+}
+
+/** A column's items in the order shown: Done is today's, then the rest of the week. */
+function itemsIn(columns: BoardColumns, column: ColumnId): BoardItem[] {
+  return column === 'done' ? [...columns.doneToday, ...columns.doneEarlier] : columns[column];
+}
+
+/** The item with this id and the column showing it, or null when no column does. */
+export function findItem(columns: BoardColumns, id: string): { item: BoardItem; column: ColumnId } | null {
+  for (const column of COLUMNS) {
+    const item = itemsIn(columns, column).find((i) => i.id === id);
+    if (item) return { item, column };
+  }
+  return null;
+}
+
+/**
+ * The columns as a drag shows them: the item taken out of the column showing it and shown in
+ * `to`, before the card named in Later or Next (null: the end), at the end of In progress or the
+ * top of Done. It keeps its `column`, the one the drag started in.
+ */
+export function withDrag(columns: BoardColumns, id: string, { to, before }: DropTarget): BoardColumns {
+  const found = findItem(columns, id);
+  if (!found) return columns;
+  const without = (items: BoardItem[]) => items.filter((i) => i.id !== id);
+  const out: BoardColumns = {
+    later: without(columns.later),
+    next: without(columns.next),
+    progress: without(columns.progress),
+    doneToday: without(columns.doneToday),
+    doneEarlier: without(columns.doneEarlier),
+  };
+  if (to === 'done') out.doneToday.unshift(found.item);
+  else if (to === 'progress') out.progress.push(found.item);
+  else {
+    const lane = out[to];
+    const at = lane.findIndex((i) => cardUidOf(i) === before);
+    lane.splice(at === -1 ? lane.length : at, 0, found.item);
+  }
+  return out;
+}
+
+/**
+ * Where a drop lands: the column, and in Later or Next the card uid it goes before (null: the
+ * end). `over` is `col:<column>` (`columnDropId`) or an item id, looked up in `columns`, which are
+ * as the drag shows them (`withDrag`). In a lane that shows the item, it takes the place of the
+ * card it is over, as the list showed it sorting: past it going down, before it going up; in a
+ * lane that doesn't, it goes before that card, and over the column itself, at the end. Null when
+ * it lands nowhere or where it started: in its own column (`item.column`), at its place there.
+ */
+export function dropTarget(over: string | null, active: string, columns: BoardColumns): DropTarget | null {
+  const from = findItem(columns, active);
+  if (!from || over == null) return null;
+  const to = COLUMNS.find((c) => columnDropId(c) === over) ?? findItem(columns, over)?.column;
+  if (!to) return null;
+  if (!isLane(to)) return to === from.item.column ? null : { to, before: null };
+  const lane = columns[to];
+  const shownAt = lane.findIndex((i) => i.id === active);
+  const overAt = lane.findIndex((i) => i.id === over);
+  // Its index in the lane once it lands: over the column itself it stays where it shows, or goes at the end.
+  const at = overAt === -1 ? (shownAt === -1 ? lane.length : shownAt) : overAt;
+  const rest = lane.filter((i) => i.id !== active);
+  const before = cardUidOf(rest[at]);
+  const started = to === from.item.column && shownAt !== -1 && before === cardUidOf(lane[shownAt + 1]);
+  return started ? null : { to, before };
+}
+
+/** The drag's closing line for the move `planMove` gave: it stayed, it moved, it was refused (the notice's line), or it stays done. */
+export function moveAnnouncement(move: Move | null, item: BoardItem, to: ColumnId, names: Record<ColumnId, string>): string {
+  if (!move) return BOARD_DRAG.stays(item.title, names[item.column]);
+  if (move.kind === 'refuse') return move.message;
+  if (move.kind === 'doneStays') return DONE_STAYS.announce(item.title, names[move.lane]);
+  return BOARD_DRAG.moved(item.title, names[to]);
+}
+
+/** What a drag says as it goes over a column: where the item would land, in Later or Next before which card, or that it is back where it started (a null target). */
+export function overAnnouncement(target: DropTarget | null, item: BoardItem, columns: BoardColumns, names: Record<ColumnId, string>): string {
+  if (!target) return BOARD_DRAG.overStart(item.title, names[item.column]);
+  const name = names[target.to];
+  if (!isLane(target.to)) return BOARD_DRAG.over(item.title, name);
+  const next = target.before == null ? undefined : columns[target.to].find((i) => cardUidOf(i) === target.before);
+  return next ? BOARD_DRAG.overBefore(item.title, name, next.title) : BOARD_DRAG.overEnd(item.title, name);
+}
 
 /**
  * The left-open rows the offer brings back while the board is on, as seeds for today's list: a
