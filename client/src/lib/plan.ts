@@ -1,8 +1,9 @@
 import type { Priority } from '../types';
 import { addDays, isWeekend } from '../../../shared/dates.js';
+import { hasText } from '../../../shared/priorities.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
-import { sameText } from './format';
-import { hasText, newUid } from './priorities';
+import { sameText } from '../../../shared/text.js';
+import { newUid } from './priorities';
 
 /**
  * The day a plan made on `date` is for: the next one, or with weekends off the calendar (not

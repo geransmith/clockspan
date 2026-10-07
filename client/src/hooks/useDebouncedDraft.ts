@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useLatest } from './useLatest';
 
 /**
@@ -14,13 +14,21 @@ import { useLatest } from './useLatest';
  * follow `stored`, until its save answers true; one that answers false stays in the box and
  * goes again on the next edit, flush or unmount. A flush while a save is out sends nothing
  * more. `flush()` resolves to whether the draft is saved.
+ *
+ * `save` also gets the base, which every edit since was made on: the `stored` value the draft
+ * last took up, or the value it last saved, whichever came later. A store that merges a save
+ * with changes made elsewhere (the priorities list) needs it to tell this device's changes from
+ * those.
  */
 export function useDebouncedDraft<T>(
   stored: T,
-  save: (value: T) => boolean | Promise<boolean>,
+  save: (value: T, base: T) => boolean | Promise<boolean>,
   ms: number,
 ): { draft: T; edit: (value: T, now?: boolean) => void; flush: () => Promise<boolean> } {
   const [draft, setDraft] = useState(stored);
+  const base = useRef(stored);
+  // The `stored` value last taken up.
+  const adopted = useRef(stored);
   // The edit waiting to be saved, boxed so any value (an empty string) counts as one, with its
   // save while that is out.
   const unsaved = useRef<{ value: T; sent?: Promise<boolean> } | null>(null);
@@ -29,14 +37,26 @@ export function useDebouncedDraft<T>(
 
   // A ref can't be read during render, so this is the effect form of adopting the prop.
   useEffect(() => {
-    if (!unsaved.current) setDraft(stored);
+    if (unsaved.current) return;
+    adopted.current = stored;
+    setDraft(stored);
   }, [stored]);
+
+  // A value taken up becomes the base once the draft holding it has rendered, not before: until
+  // then a handler still builds on the draft before it. An edit made in that gap sets the draft
+  // too, so the value taken up never renders and never becomes the base.
+  useLayoutEffect(() => {
+    if (draft === adopted.current) base.current = draft;
+  }, [draft]);
 
   const flush = useCallback(() => {
     window.clearTimeout(timer.current);
     const box = unsaved.current;
     if (!box) return Promise.resolve(true);
-    box.sent ??= Promise.resolve(latestSave.current(box.value)).then((ok) => {
+    box.sent ??= Promise.resolve(latestSave.current(box.value, base.current)).then((ok) => {
+      // Any edit after the save was made on the value saved, so that is the base from now on,
+      // before the store's copy of it comes back as `stored`.
+      if (ok) base.current = box.value;
       // An edit made since has a box of its own, which this answer says nothing about.
       if (unsaved.current === box) {
         if (ok) unsaved.current = null;

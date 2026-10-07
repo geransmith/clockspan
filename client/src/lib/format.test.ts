@@ -15,7 +15,6 @@ import {
   resolveHour12,
   floorToMinute,
   plural,
-  sameText,
 } from './format';
 
 describe('dayName', () => {
@@ -127,10 +126,5 @@ describe('words', () => {
     expect(counted(1, 'day')).toBe('1 day');
     expect(counted(0, 'day')).toBe('0 days');
     expect(counted(2, 'more alert')).toBe('2 more alerts');
-  });
-
-  it('keys text by its words, whatever the case or spacing', () => {
-    expect(sameText('  Call   the\tBank ')).toBe('call the bank');
-    expect(sameText('Call the bank')).toBe(sameText('call THE bank'));
   });
 });

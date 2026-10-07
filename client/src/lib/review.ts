@@ -1,7 +1,8 @@
 import type { Day } from '../types';
 import { addDays, addMonths, startOfQuarter, startOfWeek } from '../../../shared/dates.js';
 import { breakSeconds } from './breaks';
-import { formatDateSpan, formatMonth, sameText } from './format';
+import { formatDateSpan, formatMonth } from './format';
+import { sameText } from '../../../shared/text.js';
 import { focusOf, hasContent, reviewDay } from './retro';
 import { dayTimeclock, daySettings, type TimeclockSettings } from './timeclock';
 

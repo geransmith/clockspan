@@ -51,6 +51,9 @@ shared/                 imported by both sides, always with a `.js` suffix
   punches.ts            kindForPosition: a punch row's kind is its position's parity; punchesKey: a list's
                         rows and times as one string; samePunches compares two lists by it;
                         MAX_PUNCHES (the server's row cap; the card hides Add extra out / in at it)
+  priorities.ts         hasText; mergePriorities: a priorities save laid onto the stored list as the changes
+                        made since its base, field by field as MERGED lists
+  text.ts               sameText: the key the same text typed twice is matched by
   backoff.ts            nextBackoff: the wait between retries of a request that must answer
 server/                 Express API → dist/server
   app.ts                createApp(): headers, /api/health, /api/auth/me for every mode, auth routers,
@@ -408,9 +411,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   cover.
 - **Saves reach the server in the order they were made**, each store's on its own queue
   (`serial()` in `lib/optimistic.ts`, made by `useTracked`). In the day store, `setPunches` and
-  `setPriorities` replace a whole list, so one PUT per list and day is in flight and only the
+  `setPriorities` send a whole list, so one PUT per list and day is in flight and only the
   newest waiting list follows it (`sendLatest` in `useDay.tsx`); a failed list save also drops
-  the lists waiting behind it, which were built on the one refused. The day's other fields
+  the lists waiting behind it, which were built on the one refused. The newest priorities list
+  goes with the base of the oldest list not sent yet, so it carries every change since. That
+  needs every list that takes a waiting one's place to be built on `current()`: the Priorities
+  card flushes its draft on blur, before any other sheet control acts, and `addPriority` builds
+  on `current()` (a `useDay.test.tsx` case pins it). The day's other fields
   (`day:<date>`), each session (`session:<id>`) and the breaks (`breaks`) queue their writes
   one after another (`inOrder`). `useTimer` sends the running session's writes one at a time on
   its own queue: start, adjust, edit, pause, resume, finish and cancel, the log's edits of the
@@ -467,13 +474,23 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   needs no lunch with the meal periods on, and past the target with no lunch taken.
   `trackHours: false` only hides hours outside the day's own tiles (the week line, History's
   hours, the Clocked out sticker via `stickerReasons`); the timeclock still runs.
-- **Priorities are stored as the client last sent them** (positions 1..n, contiguous, ≤
-  `MAX_PRIORITIES`; no `done` on an empty row). A day never edited has none. The card saves
-  the rows it shows, its padded empty ones included, so a cleared row keeps its `uid` and the
-  sessions that point at it; `PlanNext` saves only rows with text. The server never pads: the
-  client pads to `settings.priorityCount` with `padPriorities()`, and every reader of a list
-  skips empty rows with `hasText`. `PUT /days/:date/priorities` is a full replace, so removing
-  a row is sending the list without it.
+- **Priorities are stored as the client sends them, merged with what other devices saved**
+  (positions 1..n, contiguous, ≤ `MAX_PRIORITIES`; no `done` on an empty row). A day never
+  edited has none. The card saves the rows it shows, its padded empty ones included, so a
+  cleared row keeps its `uid` and the sessions that point at it; `PlanNext` saves only rows with
+  text. The server never pads: the client pads to `settings.priorityCount` with
+  `padPriorities()`, and every reader of a list skips empty rows with `hasText`
+  (`shared/priorities.ts`). `PUT /days/:date/priorities` takes the list and its `base`, the list
+  it was built on (the card's draft sends what its edits were made on, `PlanNext` and
+  `addPriority` the day's shown copy), and stores `mergePriorities(stored, base, list)`, which
+  the day store also shows while the save is out. Rows match by uid. Each field in `MERGED`
+  takes this device's value where it differs from `base`, else the stored one. A row this
+  device removed goes; one another device removed stays gone unless this device changed it.
+  A row another device added since `base` stays, in this device's first row never written in
+  (never an emptied one, which still stands for its item) or at the end, and a row added on
+  both with the same text (`sameText`) is one row, the stored one. Order is this device's.
+  Removing a row is sending the list without it. With no base (curl, a tab from before the
+  merge) the list replaces the stored one.
 - **A priority's identity is its `uid`, never its position.** The client mints it
   (`newUid()`) the first time a row gets text and stamps `addedAt`; both survive a text clear
   and a renumber. `sessions.priority_uid` points at it (null or a removed row = unplanned).
@@ -522,12 +539,15 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   one the react-hooks rules allow. A typed draft that saves on a timer is
   `useDebouncedDraft(stored, save, ms)` (`Priorities`, `Retro`): it saves after the wait, at
   once on `flush()` or an edit made now, and on unmount, so a day left mid-sentence still
-  saves. `save` says whether the draft can be let go: `Retro` passes the store's answer, so a
-  note whose save fails stays in its box, unsaved, though the store has dropped the change,
-  and goes again on the next edit, blur or unmount; `Priorities` lets its list go once sent,
-  because a list held after a failure would replace rows added meanwhile. Callbacks that must
-  read the latest value use `useLatest()`, never a ref written in render (the react-hooks lint
-  enforces both).
+  saves. `save(value, base)` gets as `base` what the edits were made on: the value it last
+  saved, or the `stored` value the draft last took up once that has rendered, whichever came
+  later. `Priorities` hands it to the store for the merge, and `Retro` ignores it. `save` says
+  whether the draft can be let go: `Retro` passes the store's answer, so a note whose save
+  fails stays in its box, unsaved, though the store has dropped the change, and goes again on
+  the next edit, blur or unmount; `Priorities` lets its list go once sent, because a list held
+  after a failure would stop the card following the stored list (rows and ticks saved
+  elsewhere) until a save went through. Callbacks that must read the latest value use
+  `useLatest()`, never a ref written in render (the react-hooks lint enforces both).
 - Static assets are public; **all data is behind `/api/*`**. `/assets/*` is fingerprinted and
   cached immutable. The SPA fallback serves `index.html` for any other non-API path; a miss
   under `/assets` is a 404 (a page from before an upgrade asking for an old chunk).
@@ -649,7 +669,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **A schema change**: append a migration string to `MIGRATIONS` in `db.ts`. Never edit an
   existing entry. A new table with a `user_id` also joins the README's script under "Switching
   modes later"; `server/db.test.ts` fails until it does. A new column on a day, session,
-  priority or break also needs the seed note under "A per-day field".
+  priority or break also needs the seed note under "A per-day field". A new `Priority` field
+  also gets its entry in `MERGED` (`shared/priorities.ts`, which typecheck asks for), so a save
+  merges it with another device's change.
 - **A security header, CSP source or request guard**: `server/security.ts` only (tests in
   `server/app.test.ts`), then the `prod` config check.
 - **A config env var**: parse and validate it in `server/config.ts` (throw with a clear

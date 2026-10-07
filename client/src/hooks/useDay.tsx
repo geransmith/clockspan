@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import { emptyDay } from '../../../shared/api.js';
+import { mergePriorities } from '../../../shared/priorities.js';
+import { sameText } from '../../../shared/text.js';
 import type { Day, Priority, PruneResult, Punch, Session } from '../types';
 import { dismissByTag, warnQuietly } from '../lib/alerts';
 import { ApiError } from '../lib/apiError';
@@ -34,11 +36,11 @@ interface DayState {
  * `addPriority` resolves to whether the server saved it and never rejects, so `void store.x()`
  * is a complete call site; a caller that chains on a save reads the answer. `addPriority`
  * resolves to the new row's uid and rejects when it can't be saved. Saves reach the server in
- * the order they were made: punches and priorities replace the whole list, so one PUT per list
- * and day is out and only the newest waiting list follows it; the day's other fields, each
- * session, and the breaks queue their writes one after another. `pruneBefore` alone goes out on
- * no queue. The object and its functions keep their identity for the provider's life, so effects
- * and callbacks may depend on it.
+ * the order they were made: punches and priorities go as whole lists, so one PUT per list and
+ * day is out and only the newest waiting list follows it; the day's other fields, each session,
+ * and the breaks queue their writes one after another. `pruneBefore` alone goes out on no queue.
+ * The object and its functions keep their identity for the provider's life, so effects and
+ * callbacks may depend on it.
  */
 interface DayStore {
   /**
@@ -65,8 +67,16 @@ interface DayStore {
    */
   pruneBefore: (before: string) => Promise<PruneResult>;
   setPunches: (date: string, punches: Punch[]) => Promise<boolean>;
-  setPriorities: (date: string, priorities: Priority[]) => Promise<boolean>;
-  /** Add a priority from outside the card (the timer). Resolves to its uid; rejects if it could not be saved. */
+  /**
+   * A day's priorities, built on `base` (the list the caller read). The server lays the changes
+   * made since `base` onto what it holds, so a row or a tick another device saved meanwhile
+   * stays, and until it answers the day shows the same merge (`mergePriorities`).
+   */
+  setPriorities: (date: string, priorities: Priority[], base: Priority[]) => Promise<boolean>;
+  /**
+   * Add a priority from outside the card (the timer). Resolves to the uid of the row as stored,
+   * which is another device's when it added the same text first; rejects if it could not be saved.
+   */
   addPriority: (date: string, text: string) => Promise<string>;
   /**
    * Resolves once no priorities save for that date is out or waiting, saved or not, and never
@@ -111,8 +121,23 @@ function withSession(d: Day, session: Session): Day {
   return { ...d, sessions: replaceById(d.sessions, session.id, session.status === 'cancelled' ? null : session) };
 }
 
-/** The lists a save replaces whole. */
+/** The lists a save sends whole. */
 type ListField = 'punches' | 'priorities';
+
+/** A list's save on its way (`sendLatest`): one per list and day. */
+interface ListSave<T> {
+  /** The newest list set: out now, or the next to go. */
+  list: T;
+  /** What the oldest list set and not sent yet was built on; it goes with `list`. */
+  base: T | undefined;
+  /** The pending change of each list set, sent or waiting. */
+  ids: number[];
+  /** How many of `ids` were set when the last PUT went out. */
+  sent: number;
+  /** Whether the newest list was saved, once none is out or waiting. */
+  drained: Promise<boolean>;
+}
+type ListSaves = { [F in ListField]: Map<string, ListSave<Day[F]>> };
 
 /** What the store keeps: each day it holds, and the dates whose first fetch failed. */
 interface Held {
@@ -149,7 +174,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const inflight = useRef(new Map<string, Promise<void>>());
   // The date whose failed load raised the banner (one at a time: a newer one replaces it).
   const bannerFor = useRef<string | null>(null);
-  const listQueues = useRef(new Map<string, { run: () => Promise<Commit>; ids: number[]; drained: Promise<boolean> }>());
+  // Each list's save on its way, by date.
+  const listSaves = useRef<ListSaves>({ punches: new Map(), priorities: new Map() });
   const [generation, setGeneration] = useState(0);
 
   // The same state back when `fn` changes nothing (an answer the same as the stored copy), so a
@@ -251,44 +277,58 @@ export function DayProvider({ children }: { children: ReactNode }) {
     [update, fetchDay],
   );
 
-  // A PUT that replaces a whole list (punches, priorities) could land after a newer one if two
-  // were in flight. One goes out per list and day; the lists set meanwhile are skipped for the
-  // newest, which goes out next. A failed save takes the waiting lists with it: they were built
-  // on the one refused. `send` answers with the list as the server stored it. Resolves to
-  // whether the newest list was saved.
+  // A PUT of a whole list (punches, priorities) could land after a newer one if two were in
+  // flight. One goes out per list and day; the lists set meanwhile are skipped for the newest,
+  // which goes out next. A failed save takes the waiting lists with it: they were built on the
+  // one refused. `send` gets the list and its base and answers with the list as the server
+  // stored it; `show` lays the list on the day's copy while it is on its way (the list as it is
+  // without one). Resolves to whether the newest list was saved.
+  //
+  // The newest list goes with the base of the oldest list not sent yet, so it carries every
+  // change made since. That needs every list that takes a waiting one's place to be built on
+  // `current()`, the copy that shows the one it replaces: the Priorities card flushes its draft
+  // on blur, before any other control on the sheet acts, and `addPriority` builds on `current()`.
   const sendLatest = useCallback(
-    <F extends ListField>(field: F, date: string, list: Day[F], send: (list: Day[F]) => Promise<Day[F]>): Promise<boolean> => {
-      const key = `${field}:${date}`;
+    <F extends ListField>(
+      field: F,
+      date: string,
+      list: Day[F],
+      send: (list: Day[F], base: Day[F] | undefined) => Promise<Day[F]>,
+      { base, show }: { base?: Day[F]; show?: (rows: Day[F]) => Day[F] } = {},
+    ): Promise<boolean> => {
+      const saves = listSaves.current[field];
       const id = nextId();
-      update(date, (t) => addPending(t, id, (d) => ({ ...d, [field]: list })));
-      const run = async (): Promise<Commit> => {
-        const saved = await send(list);
-        return (d) => ({ ...d, [field]: saved });
-      };
-      const waiting = listQueues.current.get(key);
+      update(date, (t) => addPending(t, id, (d) => ({ ...d, [field]: show ? show(d[field]) : list })));
+      const waiting = saves.get(date);
       if (waiting) {
-        waiting.run = run;
+        // None waits unsent behind the one out, so this list is the oldest not sent yet.
+        if (waiting.sent === waiting.ids.length) waiting.base = base;
+        waiting.list = list;
         waiting.ids.push(id);
         return waiting.drained;
       }
-      const q = { run, ids: [id] };
+      const q = { list, base, ids: [id], sent: 0 };
       const drained = (async () => {
         try {
           // Each set adds its id: any past the ones sent means a newer list is waiting.
-          let sent = 0;
-          while (sent < q.ids.length) {
-            sent = q.ids.length;
-            if (!(await persist(date, [...q.ids], q.run))) {
+          while (q.sent < q.ids.length) {
+            q.sent = q.ids.length;
+            const { list: sending, base: builtOn } = q;
+            const run = async (): Promise<Commit> => {
+              const saved = await send(sending, builtOn);
+              return (d) => ({ ...d, [field]: saved });
+            };
+            if (!(await persist(date, [...q.ids], run))) {
               update(date, (t) => settle(t, q.ids));
               return false;
             }
           }
           return true;
         } finally {
-          listQueues.current.delete(key);
+          saves.delete(date);
         }
       })();
-      listQueues.current.set(key, Object.assign(q, { drained }));
+      saves.set(date, Object.assign(q, { drained }));
       return drained;
     },
     [nextId, update, persist],
@@ -324,27 +364,36 @@ export function DayProvider({ children }: { children: ReactNode }) {
   );
 
   const setPriorities = useCallback(
-    (date: string, priorities: Priority[]) => sendLatest('priorities', date, priorities, async (p) => (await api.putPriorities(date, p)).priorities),
+    (date: string, priorities: Priority[], base: Priority[]) =>
+      sendLatest('priorities', date, priorities, async (p, b) => (await api.putPriorities(date, p, { base: b })).priorities, {
+        base,
+        show: (rows) => mergePriorities(rows, base, priorities),
+      }),
     [sendLatest],
   );
 
   const addPriority = useCallback(
     async (date: string, text: string) => {
       const day = shownDay(current().days[date]);
-      // Only onto a list the store holds: one made up empty would replace the stored rows.
+      // Only onto a list the store holds: where the row goes depends on the rows already there.
       if (!day) throw new Error(ADD_PRIORITY_FAILED.notLoaded);
       const uid = newUid();
       const next = placePriority(day.priorities, priorityCount.current, text, uid, Date.now());
       if (!next) throw new Error(ADD_PRIORITY_FAILED.full);
       // A timer must not start against a uid the server never stored.
-      if (!(await setPriorities(date, next))) throw new Error(SAVE_FAILED.title);
-      return uid;
+      if (!(await setPriorities(date, next, day.priorities))) throw new Error(SAVE_FAILED.title);
+      // A row another device added with this text since is stored in this one's place
+      // (`mergePriorities`), and it is the one the timer must point at.
+      const rows = shownDay(current().days[date])!.priorities;
+      const listed = new Set(next.map((p) => p.uid));
+      const kept = rows.find((p) => p.uid === uid) ?? rows.find((p) => !listed.has(p.uid) && sameText(p.text) === sameText(text));
+      return kept?.uid ?? uid;
     },
     [current, setPriorities, priorityCount],
   );
 
   const prioritiesSaved = useCallback(async (date: string) => {
-    await listQueues.current.get(`priorities:${date}`)?.drained;
+    await listSaves.current.priorities.get(date)?.drained;
   }, []);
 
   const setRetro = useCallback(

@@ -133,12 +133,15 @@ describe('PUT /api/days/:date/priorities', () => {
     expect(r.body.priorities[0].text).toHaveLength(LIMITS.priorityText);
   });
 
-  it('is a full replace: omitting a row removes it', async () => {
+  it('is a full replace without a base: omitting a row removes it', async () => {
     await app.api.put('/api/days/2026-09-01/priorities', { priorities: [{ text: 'One' }, { text: 'Two' }, { text: 'Three' }] });
     const r = await app.api.put('/api/days/2026-09-01/priorities', { priorities: [{ text: 'Three' }] });
     expect(r.body.priorities).toHaveLength(1);
     const day = await app.api.get('/api/days/2026-09-01');
     expect(day.body.priorities.map((p: { text: string; position: number }) => [p.position, p.text])).toEqual([[1, 'Three']]);
+    // A null base is no base, like the rows' null fields.
+    const again = await app.api.put('/api/days/2026-09-01/priorities', { priorities: [{ text: 'Four' }], base: null });
+    expect(again.body.priorities.map((p: { text: string }) => p.text)).toEqual(['Four']);
   });
 
   it('rejects an addedAt it could not have stamped', async () => {
@@ -223,6 +226,69 @@ describe('PUT /api/days/:date/priorities', () => {
     const r = await app.api.put('/api/days/2026-09-01/priorities', { priorities });
     expect(r.status).toBe(200);
     expect(r.body.priorities).toEqual(priorities);
+  });
+});
+
+// Two devices, each saving the list it built on its last copy of the day (`base`): the server
+// lays each one's changes onto what it holds (`mergePriorities`, shared/priorities.ts).
+describe('PUT /api/days/:date/priorities with a base', () => {
+  const PATH = '/api/days/2026-09-01/priorities';
+  /** A row as the web app sends it: written rows carry their uid and addedAt. */
+  const row = (text: string, uid: string | null = null, patch: Record<string, unknown> = {}) => ({
+    position: 0,
+    text,
+    done: false,
+    uid,
+    addedAt: uid ? T0 : null,
+    ...patch,
+  });
+  const EMPTY = [row(''), row(''), row('')];
+  const texts = (priorities: { text: string }[]) => priorities.map((p) => p.text);
+
+  it("keeps both devices' new rows when each saves on a copy from before the other's", async () => {
+    expect((await app.api.put(PATH, { priorities: [row('Report', 'aaaaaaaaaaaa'), row(''), row('')], base: EMPTY })).status).toBe(200);
+    const r = await app.api.put(PATH, { priorities: [row('Email', 'bbbbbbbbbbbb'), row(''), row('')], base: EMPTY });
+    expect(r.status).toBe(200);
+    expect(texts(r.body.priorities)).toEqual(['Email', 'Report', '']);
+    expect((await app.api.get('/api/days/2026-09-01')).body.priorities).toEqual(r.body.priorities);
+  });
+
+  it('keeps a tick made on another device when this one renames another row', async () => {
+    const base = [row('Report', 'aaaaaaaaaaaa'), row('Email', 'bbbbbbbbbbbb')];
+    await app.api.put(PATH, { priorities: base });
+    await app.api.put(PATH, { priorities: [row('Report', 'aaaaaaaaaaaa', { done: true }), base[1]], base });
+    const r = await app.api.put(PATH, { priorities: [base[0], row('Email the team', 'bbbbbbbbbbbb')], base });
+    expect(r.body.priorities.map((p: { text: string; done: boolean }) => [p.text, p.done])).toEqual([
+      ['Report', true],
+      ['Email the team', false],
+    ]);
+  });
+
+  it('stores one set when two devices take the same left-open rows, the first one saved', async () => {
+    await app.api.put(PATH, { priorities: [row('Invoices', 'aaaaaaaaaaa1'), row('Call the bank', 'aaaaaaaaaaa2'), row('')], base: EMPTY });
+    const r = await app.api.put(PATH, { priorities: [row('Invoices', 'bbbbbbbbbbb1'), row('Call the bank', 'bbbbbbbbbbb2'), row('')], base: EMPTY });
+    expect(r.body.priorities.map((p: { text: string; uid: string | null }) => [p.text, p.uid])).toEqual([
+      ['Invoices', 'aaaaaaaaaaa1'],
+      ['Call the bank', 'aaaaaaaaaaa2'],
+      ['', null],
+    ]);
+  });
+
+  it('refuses a base that is not a list of rows like the ones sent, and stores nothing', async () => {
+    const put = (base: unknown) => app.api.put(PATH, { priorities: [row('Kept out', 'aaaaaaaaaaaa')], base });
+    const refusals: [unknown, string][] = [
+      ['x', `base must be an array of at most ${MAX_PRIORITIES}.`],
+      [Array(MAX_PRIORITIES + 1).fill(row('')), `base must be an array of at most ${MAX_PRIORITIES}.`],
+      [[row('Report'), 5], 'Base row 2 must be an object.'],
+      [[row('Report', 'not-a-uid!')], 'Base row 1 has an invalid uid.'],
+      [[row('Report', 'aaaaaaaaaaaa'), row('Email', 'AAAAAAAAAAAA')], "Base row 2 repeats another row's uid."],
+      [[row('Report', 'aaaaaaaaaaaa', { done: 'yes' })], 'Base row 1 has an invalid done flag.'],
+    ];
+    for (const [base, error] of refusals) {
+      const r = await put(base);
+      expect([r.status, r.body.error], JSON.stringify(base)).toEqual([400, error]);
+    }
+    expect((await app.api.get('/api/days/2026-09-01')).body.priorities).toEqual([]);
   });
 });
 
@@ -382,7 +448,8 @@ describe('days are scoped to the signed-in user', () => {
     expect(
       (await b.put(`/api/days/${date}/punches`, { punches: [{ at: Date.parse(date) + 8 * HOUR_MS }, { at: null }, { at: null }, { at: null }] })).status,
     ).toBe(200);
-    expect((await b.put(`/api/days/${date}/priorities`, { priorities: [{ text: 'Mine' }] })).status).toBe(200);
+    // With a base, the save is merged onto B's own stored rows: none of A's come in as another device's.
+    expect((await b.put(`/api/days/${date}/priorities`, { priorities: [{ text: 'Mine' }], base: [] })).status).toBe(200);
     expect((await b.put(`/api/days/${date}/overtime`, { approved: true })).status).toBe(200);
     expect((await b.put(`/api/days/${date}/retro`, { note: 'b', done: true })).status).toBe(200);
     expect((await b.put(`/api/days/${date}/target`, { workMinutes: 240 })).status).toBe(200);

@@ -2,11 +2,13 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DAY_MS } from '../../../shared/dates.js';
+import { mergePriorities } from '../../../shared/priorities.js';
 import * as api from '../api';
+import { useDay } from '../hooks/useDay';
 import { SettingsProvider } from '../hooks/useSettings';
 import { playSound, unlockAudio } from '../lib/alerts';
 import { LEFT_OPEN, PRIORITY_WARNINGS, WARNING_ACTIONS } from '../lib/copy';
-import { makePriority, makeSettings, settle, T0 } from '../test/hooks';
+import { deferred, makeDay, makePriority, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
 import type { Priority } from '../types';
 import { Priorities } from './Priorities';
 
@@ -14,14 +16,53 @@ vi.mock('../api');
 vi.mock('../lib/alerts');
 
 async function renderCard(priorities: Priority[] = [], leftOpen?: Parameters<typeof Priorities>[0]['leftOpen']) {
-  const onChange = vi.fn<(p: Priority[]) => void>();
-  const view = render(
+  const onChange = vi.fn<(p: Priority[], base: Priority[]) => void>();
+  const card = (rows: Priority[]) => (
     <SettingsProvider>
-      <Priorities priorities={priorities} onChange={onChange} leftOpen={leftOpen} />
-    </SettingsProvider>,
+      <Priorities priorities={rows} onChange={onChange} leftOpen={leftOpen} />
+    </SettingsProvider>
+  );
+  const view = render(card(priorities));
+  await settle();
+  return { ...view, onChange, saved: () => onChange.mock.lastCall![0], again: (rows: Priority[]) => view.rerender(card(rows)) };
+}
+
+/** A row the card pads the list with: nothing ever written in it. */
+const blank = (position: number) => makePriority(position, '', { uid: null, addedAt: null });
+
+/** Today's card on the day store, wired as the sheet wires it. */
+function OnTheStore() {
+  const { day, store } = useDay(TODAY);
+  return day ? <Priorities priorities={day.priorities} onChange={(p, base) => void store.setPriorities(TODAY, p, base)} /> : null;
+}
+
+/**
+ * Renders `OnTheStore` against a server that stores each save as the route does (merged with
+ * `mergePriorities`) the moment it arrives, and answers it once `answer()` is called.
+ */
+async function renderOnStore(rows: Priority[]) {
+  let onServer = rows;
+  const gate = deferred<void>();
+  vi.mocked(api.getDay).mockImplementation(() => Promise.resolve(makeDay(TODAY, { priorities: onServer })));
+  vi.mocked(api.putPriorities).mockImplementation(async (_date, list, { base }) => {
+    onServer = mergePriorities(onServer, base ?? onServer, list);
+    const priorities = onServer;
+    await gate.promise;
+    return { priorities };
+  });
+  render(
+    <SettingsAndDays>
+      <OnTheStore />
+    </SettingsAndDays>,
   );
   await settle();
-  return { ...view, onChange, saved: () => onChange.mock.lastCall![0] };
+  return {
+    stored: () => onServer,
+    answer: async () => {
+      gate.resolve();
+      await settle();
+    },
+  };
 }
 
 const textbox = (n: number) => screen.getByLabelText(`Priority ${n}`) as HTMLTextAreaElement;
@@ -77,6 +118,20 @@ describe('Priorities', () => {
     fireEvent.click(tick(1));
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(saved()[0]).toMatchObject({ text: 'Report', done: true });
+  });
+
+  it('sends each list with the rows it was made on, and the stored rows once it takes them up', async () => {
+    const report = makePriority(1, 'Report');
+    const { onChange, saved, again } = await renderCard([report]);
+    fireEvent.click(tick(1));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith([{ ...report, done: true }, blank(2), blank(3)], [report, blank(2), blank(3)]);
+    // The store's copy now shows the save, with a row from another device: the card takes it up.
+    await settle();
+    const stored = [...saved(), makePriority(4, 'From the phone', { uid: 'phone0000000' })];
+    again(stored);
+    fireEvent.change(textbox(2), { target: { value: 'Email' } });
+    fireEvent.blur(textbox(2));
+    expect(onChange.mock.lastCall![1]).toEqual(stored);
   });
 
   it('celebrates a tick from its box with the priority sound, and not an untick', async () => {
@@ -170,5 +225,34 @@ describe('Priorities', () => {
     expect(document.activeElement).toBe(textbox(1));
     expect(saved()[0]).toMatchObject({ position: 1, text: 'Invoices', done: false, addedAt: T0 });
     expect(saved()[0]!.uid).not.toBe(yesterdays[0]!.uid);
+  });
+});
+
+describe('Priorities on the day store', () => {
+  it('sends an untick made before the tick is answered as a change from the tick', async () => {
+    const { stored, answer } = await renderOnStore([makePriority(1, 'Report')]);
+    fireEvent.click(tick(1));
+    await settle();
+    fireEvent.click(tick(1));
+    await answer();
+    const sent = vi.mocked(api.putPriorities).mock.calls.map(([, list, { base }]) => [list[0]!.done, base![0]!.done]);
+    expect(sent).toEqual([
+      [true, false],
+      [false, true],
+    ]);
+    expect(stored()[0]!.done).toBe(false);
+    expect(tick(1).checked).toBe(false);
+  });
+
+  it('keeps a row removed when its text was saved on the way out of it and not answered yet', async () => {
+    const rows = [makePriority(1, 'Report'), makePriority(2, 'Invoices'), makePriority(3, 'Email'), blank(4)];
+    const { stored, answer } = await renderOnStore(rows);
+    fireEvent.change(textbox(4), { target: { value: 'Call the bank' } });
+    fireEvent.blur(textbox(4));
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove priority 4' }));
+    await answer();
+    expect(stored().map((p) => p.text)).toEqual(['Report', 'Invoices', 'Email']);
+    expect(screen.queryByLabelText('Priority 4')).toBeNull();
   });
 });

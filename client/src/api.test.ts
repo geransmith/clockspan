@@ -65,12 +65,19 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
     `/api/days/${DATE}/punches`,
     { punches: [{ at: 5 }, { at: null }] },
   ],
+  // With the list it was built on, so the server can keep another device's changes.
   [
     'putPriorities',
-    () => api.putPriorities(DATE, [{ position: 1, text: 'Report', done: false, uid: 'abcdef123456', addedAt: 1 }]),
+    () =>
+      api.putPriorities(DATE, [{ position: 1, text: 'Report', done: false, uid: 'abcdef123456', addedAt: 1 }], {
+        base: [{ position: 1, text: '', done: false, uid: null, addedAt: null }],
+      }),
     'PUT',
     `/api/days/${DATE}/priorities`,
-    { priorities: [{ position: 1, text: 'Report', done: false, uid: 'abcdef123456', addedAt: 1 }] },
+    {
+      priorities: [{ position: 1, text: 'Report', done: false, uid: 'abcdef123456', addedAt: 1 }],
+      base: [{ position: 1, text: '', done: false, uid: null, addedAt: null }],
+    },
   ],
   ['putOvertime', () => api.putOvertime(DATE, true), 'PUT', `/api/days/${DATE}/overtime`, { approved: true }],
   ['putTarget', () => api.putTarget(DATE, null), 'PUT', `/api/days/${DATE}/target`, { workMinutes: null }],

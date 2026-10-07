@@ -8,7 +8,7 @@ import { LOAD_FAILED, PUNCH_ORDER, SAVE_FAILED } from '../lib/copy';
 import { startOfWeek } from '../../../shared/dates.js';
 import { dayName } from '../lib/format';
 import { CARD_TITLES, moveCard, setCardVisible } from '../lib/layout';
-import { hasText } from '../lib/priorities';
+import { hasText } from '../../../shared/priorities.js';
 import { focusOf } from '../lib/retro';
 import { clampToDay, dayTimeclock, type TimeclockState } from '../lib/timeclock';
 import { weekHours } from '../lib/week';
@@ -104,7 +104,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
           <Priorities
             key={date}
             priorities={day.priorities}
-            onChange={(p) => void store.setPriorities(date, p)}
+            onChange={(p, base) => void store.setPriorities(date, p, base)}
             leftOpen={
               leftOpen && {
                 from: dayName(leftOpen.date, today, true),

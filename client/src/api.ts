@@ -106,10 +106,18 @@ export const resetSettings = () => request<Settings>('DELETE', '/api/settings');
 /** The body of PUT /days/:date/retro: a field left out keeps its stored value. */
 export type RetroPatch = { note?: string; done?: boolean };
 
+/**
+ * What PUT /days/:date/priorities takes beside the list. `base`: the list this one was built on,
+ * so the server keeps what another device changed since (`mergePriorities`); without it the list
+ * replaces the stored one.
+ */
+export type PrioritiesPut = { base?: Priority[] };
+
 export const getDay = (date: string) => request<Day>('GET', `/api/days/${date}`);
 export const putPunches = (date: string, punches: Punch[]) =>
   request<PunchesResponse>('PUT', `/api/days/${date}/punches`, { punches: punches.map((p) => ({ at: p.at })) });
-export const putPriorities = (date: string, priorities: Priority[]) => request<PrioritiesResponse>('PUT', `/api/days/${date}/priorities`, { priorities });
+export const putPriorities = (date: string, priorities: Priority[], put: PrioritiesPut) =>
+  request<PrioritiesResponse>('PUT', `/api/days/${date}/priorities`, { priorities, ...put });
 export const putOvertime = (date: string, approved: boolean) => request<OvertimeResponse>('PUT', `/api/days/${date}/overtime`, { approved });
 export const putTarget = (date: string, workMinutes: number | null) => request<TargetResponse>('PUT', `/api/days/${date}/target`, { workMinutes });
 export const putRetro = (date: string, patch: RetroPatch) => request<RetroResponse>('PUT', `/api/days/${date}/retro`, patch);
