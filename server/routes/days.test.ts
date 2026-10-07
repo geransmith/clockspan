@@ -41,7 +41,14 @@ describe('GET /api/days/:date', () => {
     const r = await app.api.get(`/api/days/${day.date}`);
     expect(r.status).toBe(200);
     expect(r.body.punches).toEqual(day.punches);
-    expect(r.body.priorities.map((p: { position: number }) => p.position)).toEqual([1, 2, 3]);
+    // Three one-offs, then the routines due on its weekday (a Wednesday: both).
+    expect(r.body.priorities.map((p: { position: number; recurringUid: string | null }) => [p.position, p.recurringUid])).toEqual([
+      [1, null],
+      [2, null],
+      [3, null],
+      [4, 'rcur00000001'],
+      [5, 'rcur00000002'],
+    ]);
     expect(r.body.retroAt).toBeNull();
     expect(r.body.sessions.map((s: { status: string }) => s.status)).toEqual(['completed', 'completed']);
     expect(day.sessions.some((s) => s.status === 'cancelled')).toBe(true);

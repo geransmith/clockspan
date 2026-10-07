@@ -27,7 +27,8 @@ interface Props {
 
 /**
  * The daily retrospectives rolled up: how the period's time split between the plan and
- * everything else, which priorities never got done, and each day's note on why.
+ * everything else, how often each routine got done, which one-offs never did, and each day's
+ * note on why.
  */
 export function Review({ today, now, period: { kind, from }, onPeriod, onOpen }: Props) {
   const period = periodRange(kind, from, 0);
@@ -129,12 +130,42 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
         )}
       </section>
 
+      {r.routines.length > 0 && (
+        <section className="review-section">
+          <h3 className="section-heading">
+            Routines <span className="muted">{r.routines.length}</span>
+          </h3>
+          <Folded
+            className="review-list"
+            items={r.routines.map((g) => (
+              <li key={g.recurringUid}>
+                <button className="review-row" onClick={() => onOpen(latest(g.dates))}>
+                  <span className="review-text">{g.title}</span>
+                  <span className="review-meta">
+                    <span className="muted small">
+                      {g.done} of {counted(g.dates.length, 'day')}
+                    </span>
+                    <span className="review-time">{g.focusedSeconds > 0 ? formatDuration(g.focusedSeconds) : <span className="muted">no time</span>}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          />
+        </section>
+      )}
+
       <section className="review-section">
         <h3 className="section-heading">
           Not done <span className="muted">{r.notDone.length}</span>
         </h3>
         {r.notDone.length === 0 ? (
-          <p className="muted small">{r.prioritiesTotal > 0 ? 'Every priority got ticked.' : 'No priorities were written.'}</p>
+          <p className="muted small">
+            {r.routines.length > 0
+              ? 'Nothing outside the routines was left open.'
+              : r.prioritiesTotal > 0
+                ? 'Every priority got ticked.'
+                : 'No priorities were written.'}
+          </p>
         ) : (
           <Folded
             className="review-list"

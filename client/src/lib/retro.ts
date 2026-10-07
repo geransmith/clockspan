@@ -19,6 +19,8 @@ export interface DayReview {
   offPlanSeconds: number;
   done: number;
   total: number;
+  /** The rows added from a recurring priority (`recurringUid`), which `done` and `total` count too. */
+  routines: { done: number; total: number };
 }
 
 /**
@@ -100,6 +102,7 @@ export function reviewDay(priorities: Priority[], sessions: Session[]): DayRevie
     };
   });
 
+  const routines = rows.filter((p) => p.recurringUid != null);
   return {
     planned,
     unplanned,
@@ -107,5 +110,6 @@ export function reviewDay(priorities: Priority[], sessions: Session[]): DayRevie
     offPlanSeconds,
     done: rows.filter((p) => p.done).length,
     total: rows.length,
+    routines: { done: routines.filter((p) => p.done).length, total: routines.length },
   };
 }

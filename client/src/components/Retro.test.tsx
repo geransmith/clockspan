@@ -52,6 +52,19 @@ describe('Retro', () => {
     expect(screen.getByRole('button', { name: PLAN_NEXT.open('tomorrow') })).toBeTruthy();
   });
 
+  it("counts the routines among the day's rows and on their own, and leaves them out of a day with none", async () => {
+    await renderCard('', null, [
+      makePriority(1, 'Report', { done: true }),
+      makePriority(2, 'Invoices'),
+      makePriority(3, 'Monitor the queue', { recurringUid: 'rcur00000001', done: true }),
+      makePriority(4, 'Follow-ups', { recurringUid: 'rcur00000002' }),
+    ]);
+    expect(screen.getByText('Planned').querySelector('.muted')?.textContent).toBe('2 of 4 done · routines 1 of 2');
+    cleanup();
+    await renderCard();
+    expect(screen.getByText('Planned').querySelector('.muted')?.textContent).toBe('0 of 1 done');
+  });
+
   it('saves the note 800 ms after typing stops, once', async () => {
     const { box, onChange } = await renderCard();
     fireEvent.change(box, { target: { value: 'Meetings' } });

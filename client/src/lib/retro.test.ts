@@ -103,7 +103,21 @@ describe('reviewDay', () => {
     expect(reviewDay(priorities, []).planned.every((p) => !p.addedMidDay)).toBe(true);
   });
 
+  it('counts the routines among the rows, and on their own', () => {
+    const priorities = [
+      makePriority(1, 'Ship the report', { done: true }),
+      makePriority(2, 'Call the bank'),
+      makePriority(3, 'Monitor the queue', { recurringUid: 'rcur00000001', done: true }),
+      makePriority(4, 'Follow-ups', { recurringUid: 'rcur00000002' }),
+      // Emptied: no longer one of the day's rows, routine or not.
+      makePriority(5, '', { recurringUid: 'rcur00000003' }),
+    ];
+    const r = reviewDay(priorities, [completedSession(1, 10_000, 600, { priorityUid: makePriority(3, '').uid })]);
+    expect(r).toMatchObject({ done: 2, total: 4, routines: { done: 1, total: 2 }, onPlanSeconds: 600 });
+    expect(reviewDay(priorities.slice(0, 2), []).routines).toEqual({ done: 0, total: 0 });
+  });
+
   it('is empty for an empty day', () => {
-    expect(reviewDay([], [])).toEqual({ planned: [], unplanned: [], onPlanSeconds: 0, offPlanSeconds: 0, done: 0, total: 0 });
+    expect(reviewDay([], [])).toEqual({ planned: [], unplanned: [], onPlanSeconds: 0, offPlanSeconds: 0, done: 0, total: 0, routines: { done: 0, total: 0 } });
   });
 });

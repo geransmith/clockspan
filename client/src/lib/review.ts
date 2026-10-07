@@ -56,7 +56,23 @@ export interface UnplannedWork {
   dates: string[];
 }
 
-/** A task not ticked by the end of the range: its rows left open across days, grouped by card, else by text (`addToNotDone`). */
+/**
+ * A recurring priority's rows across the range, linked by `recurringUid`, whatever their text:
+ * the days it was on the list and how many of them it got ticked. Each day stands on its own, so
+ * a tick doesn't settle an earlier miss, and none of its rows is a task left open in Not done.
+ */
+export interface RoutineReview {
+  recurringUid: string;
+  /** The item's current title (`recurringTitles`); else the latest row's text: the item was deleted, or the board is off. */
+  title: string;
+  /** The days a row linked to it had text, oldest first; the row opens the latest. */
+  dates: string[];
+  /** The days it was ticked on. */
+  done: number;
+  focusedSeconds: number;
+}
+
+/** A task not ticked by the end of the range: a one-off's rows left open across days, grouped by card, else by text (`addToNotDone`). */
 export interface OpenPriority {
   /** `card:<cardUid>` or `text:<sameText>`. */
   key: string;
@@ -95,7 +111,9 @@ export interface RangeReview {
   typicalDay: { planned: number; done: number } | null;
   /** Off-plan work by label, most time first: where the time went instead. */
   unplanned: UnplannedWork[];
-  /** Priorities not ticked by the end of the range, the ones left open on the most days first, then by date. */
+  /** The recurring priorities on the range's lists: on the most days first, then the most focus, then by title. */
+  routines: RoutineReview[];
+  /** One-offs not ticked by the end of the range, the ones left open on the most days first, then by date. A routine's rows are in `routines`. */
   notDone: OpenPriority[];
   /** Each day's "why", in date order. */
   notes: { date: string; note: string; reviewedAt: number | null }[];
@@ -107,9 +125,16 @@ export interface RangeReview {
  * (`breakSeconds`, a running break up to now); the plan and the focus reuse `reviewDay`. A day
  * after today is left out: all it can hold is a plan made the evening before (Plan tomorrow),
  * and none of it has happened yet. A day with nothing on it (`hasContent`) is left out too,
- * even with a break logged.
+ * even with a break logged. A recurring priority's rows count as priorities in every total and
+ * go to `routines` rather than Not done; `recurringTitles` (the board's items by uid) names them.
  */
-export function reviewRange(days: Day[], settings: TimeclockSettings, today: string, now: number): RangeReview {
+export function reviewRange(
+  days: Day[],
+  settings: TimeclockSettings,
+  today: string,
+  now: number,
+  recurringTitles: ReadonlyMap<string, string> = new Map(),
+): RangeReview {
   const out: RangeReview = {
     days: 0,
     workedSeconds: 0,
@@ -125,10 +150,12 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
     midDay: { added: 0, done: 0 },
     typicalDay: null,
     unplanned: [],
+    routines: [],
     notDone: [],
     notes: [],
   };
   const unplanned = new Map<string, UnplannedWork>();
+  const routines = new Map<string, RoutineReview>();
   const notDone = new Map<string, OpenPriority>();
   // Rows written and ticked on each finished day with a plan, for the typical day.
   const plannedRows: number[] = [];
@@ -150,10 +177,23 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
     if (day.retroAt != null) out.retrosDone++;
     out.breaks.count += day.breaks.length;
     for (const b of day.breaks) out.breaks.seconds += breakSeconds(b, now);
+    const oneOffs: PriorityReview[] = [];
     for (const p of r.planned) {
-      if (!p.addedMidDay) continue;
-      out.midDay.added++;
-      if (p.priority.done) out.midDay.done++;
+      if (p.addedMidDay) {
+        out.midDay.added++;
+        if (p.priority.done) out.midDay.done++;
+      }
+      const uid = p.priority.recurringUid;
+      if (uid == null) {
+        oneOffs.push(p);
+        continue;
+      }
+      let g = routines.get(uid);
+      if (!g) routines.set(uid, (g = { recurringUid: uid, title: '', dates: [], done: 0, focusedSeconds: 0 }));
+      g.title = p.priority.text.trim();
+      addDate(g.dates, day.date);
+      if (p.priority.done) g.done++;
+      g.focusedSeconds += p.focusedSeconds;
     }
     if (day.date < today && r.total > 0) {
       plannedRows.push(r.total);
@@ -167,7 +207,7 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
       g.seconds += session.durationSeconds;
       addDate(g.dates, day.date);
     }
-    addToNotDone(notDone, r.planned, day.date);
+    addToNotDone(notDone, oneOffs, day.date);
     const note = day.retroNote.trim();
     if (note) out.notes.push({ date: day.date, note, reviewedAt: day.retroAt });
   }
@@ -175,6 +215,10 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
   // One planned day is that day, not a typical one.
   if (plannedRows.length > 1) out.typicalDay = { planned: median(plannedRows), done: median(doneRows) };
   out.unplanned = [...unplanned.values()].sort((a, b) => b.seconds - a.seconds || a.dates[0]!.localeCompare(b.dates[0]!));
+  for (const g of routines.values()) g.title = recurringTitles.get(g.recurringUid) ?? g.title;
+  out.routines = [...routines.values()].sort(
+    (a, b) => b.dates.length - a.dates.length || b.focusedSeconds - a.focusedSeconds || a.title.localeCompare(b.title),
+  );
   out.notDone = [...notDone.values()].sort((a, b) => b.dates.length - a.dates.length || a.dates[0]!.localeCompare(b.dates[0]!));
   return out;
 }
