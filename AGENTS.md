@@ -194,15 +194,16 @@ added mid-day (the README's retro shot), then come a normal day, an overtime day
 (a note written but never marked reviewed, and a cancelled session) and a half day with its own
 4 h 30 m work day and no lunch punched. Further back the templates recur at fixed intervals, so
 the default 10 are three normal days, two each of the extra pair, overtime and unreviewed (two
-cancelled sessions in all) and one half day. Every past day has two to four priorities and a
-note. Today is clocked in two hours before *now*. Its three priorities were planned two minutes
-after the last weekday's review, with that day's first open row carried to position 1 (a row of
-its own, with its own uid) and the second row ticked; its log has a 50-minute session for the
+cancelled sessions in all) and one half day. Every past day has two to four one-off priorities,
+then a row for each recurring priority due on its weekday (below), and a note. Today is clocked
+in two hours before *now*. Its three priorities were planned two minutes after the last
+weekday's review, with that day's first open one-off row carried to position 1 (a row of its
+own, with its own uid) and the second row ticked; its log has a 50-minute session for the
 ticked row, an unplanned one paused for eight minutes and finished three minutes short of its
 25, a full break and one cut short. The board holds what saves with the board on would have made
-of the last weekday's and today's rows (`insertBoard`), each row linked by its `cardUid`: open
-rows in Next, ticked ones in Done, all untouched, and today's carried row on the same card, in
-the same category, as its source row. Four cards were captured on the board: three in Later
+of the last weekday's and today's one-off rows (`insertBoard`), each row linked by its `cardUid`:
+open rows in Next, ticked ones in Done, all untouched, and today's carried row on the same card,
+in the same category, as its source row. Four cards were captured on the board: three in Later
 ("Write a KB for the SSO reset", "Review canned replies", "Look into the export timeout") and
 one at the end of Next ("Follow up on the Acme SLA"). The board has four categories
 (`SEEDED_CATEGORIES`: Tickets, Follow-ups, Knowledge base, Admin), and each sample text counts
@@ -210,9 +211,13 @@ under the same one on every day (`CATEGORY_OF`): most rows and their cards have 
 to the bank, a colleague's pull request) have none, the captured cards have one, and so do the
 unplanned "Inbox" sessions (Tickets), the only sessions with a category of their own. The board
 has two recurring priorities (`SEEDED_RECURRING`): "Monitor the queue" Monday to Friday, under
-Tickets, and "Follow-ups" on Monday, Wednesday and Friday, under Follow-ups. No seeded row links
-to one. The seed writes no settings, so the board is off on a new dev DB or after `--fresh`;
-this turns it on:
+Tickets, and "Follow-ups" on Monday, Wednesday and Friday, under Follow-ups. Each past weekday
+lists the ones due on it after its one-off rows, written with the list (`routineRows`), linked by
+`recurringUid`, in the item's category and on no card: the queue is ticked, with a 25-minute
+session, on every template's day but the unreviewed one; the follow-ups are ticked, with a
+25-minute session, on normal and overtime days and left open on the rest. Today lists none, and
+a routine left open is never the row carried over to it. The seed writes no settings, so the
+board is off on a new dev DB or after `--fresh`; this turns it on:
 `curl -X PUT localhost:3000/api/settings -H 'content-type: application/json' -d '{"board":true}'`.
 
 `--running` leaves a 25-minute timer running, started ten minutes before *now*, for timer work;
@@ -676,14 +681,22 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   is left out because it is still going, and it is null under two such days; Review shows it
   for a Week or a Month. The Days tile's target is `periodTarget`: a Week's is the Work week
   setting, as on the timeclock's week line, and a Month's or a Quarter's is `targetSeconds`,
-  the clocked-in days' own lengths added up through `daySettings`. Not done groups the rows
-  left open into tasks across days (`addToNotDone`): rows linked to one card are one task
+  the clocked-in days' own lengths added up through `daySettings`. Not done groups the one-off
+  rows left open into tasks across days (`addToNotDone`): rows linked to one card are one task
   (`card:<cardUid>`), whatever their text; a row with no card joins the latest task of its
   text, else starts one (`text:<sameText>`); a carded row whose card has no task yet takes over
   the cardless task of its text, in its place in the order. A carded row's tick settles its
   card's task and the cardless task of its text, a cardless tick every task of its text, and a
   tick on a day settles the same task left open beside it. Two cards with one title stay two
-  tasks.
+  tasks. A recurring priority's rows (`recurringUid`) are priorities in every count (the tiles,
+  `midDay`, `typicalDay`, the retro card, the calendar and its stickers) but never a task in Not
+  done, which lists one-offs only: `reviewRange` groups them by `recurringUid` into `routines`
+  (the days a row had text, how many of them it was ticked, its focus; most days first, then most
+  focus, then by title), each day on its own, so a tick never settles another day's miss and a
+  same-text one-off stays a task of its own. A routine is titled by its item through
+  `recurringTitles` (uid → title; Review passes none yet) while the item exists, else by its
+  latest row's text, so a retyped row or a deleted item stays one entry. `reviewDay`'s
+  `routines` (`{ done, total }`) is the retro card's "routines 3 of 4".
 - **History opens on the route's date** (`route.date ?? today`), with that day picked. The
   calendar holds its month by its first day (`startOfMonth`) and Review its period by `from`,
   so neither moves at midnight. "Open day" first records the picked day (and the Review period,

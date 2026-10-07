@@ -4,7 +4,7 @@ import { upsertOidcUser } from '../auth/oidc.js';
 import { hashPassword } from '../auth/password.js';
 import { revokeSessions } from '../auth/session.js';
 import { boardJson, weekdayMask } from '../board.js';
-import { addDays, atTime, HOUR_MS, isWeekend, MINUTE_MS } from '../../shared/dates.js';
+import { addDays, atTime, daysBetween, HOUR_MS, isWeekend, MINUTE_MS, startOfWeek } from '../../shared/dates.js';
 import { kindForPosition } from '../../shared/punches.js';
 import type { Board, Break, Category, Day, Lane, OpenLane, Priority, Punch, Recurring, Session } from '../../shared/api.js';
 
@@ -14,8 +14,9 @@ import type { Board, Break, Category, Day, Lane, OpenLane, Priority, Punch, Recu
  * past. Everything here must satisfy the same invariants the routes enforce (see AGENTS.md):
  * punch positions 0..n with the last one odd, priority positions 1..n, `uid`/`added_at` only
  * on rows with text, every `priority_uid` resolving on its own day, no two sessions or
- * breaks of a day overlapping, each board card in step with its latest linked row, and every
- * `categoryUid` naming a seeded category.
+ * breaks of a day overlapping, each board card in step with its latest linked row, no list
+ * linking two text rows to one card or one recurring priority, a recurring row only on its
+ * item's weekdays and never with a card, and every `categoryUid` naming a seeded category.
  */
 
 export interface SeedOptions {
@@ -35,7 +36,7 @@ export interface SeedOptions {
 /** A priority row with text, so it always has its uid and addedAt. */
 type SeededPriority = Priority & { uid: string; addedAt: number };
 
-/** A row as a template writes it: no card (`withCards` links the last weekday's and today's rows to the cards `insertBoard` writes) and no recurring priority. */
+/** A one-off row as a template writes it: no card (`withCards` links the last weekday's and today's rows to the cards `insertBoard` writes) and no recurring priority (`routineRows` writes those). */
 const NO_LINKS = { cardUid: null, recurringUid: null } satisfies Pick<Priority, 'cardUid' | 'recurringUid'>;
 type SeededSession = Omit<Session, 'date' | 'pausedAt' | 'durationSeconds'>;
 type SeededBreak = Omit<Break, 'date'>;
@@ -160,16 +161,52 @@ function categoryFor(text: string): string | null {
   return SEEDED_CATEGORIES.find((c) => c.name === CATEGORY_OF[text])?.uid ?? null;
 }
 
-/** The board's recurring priorities, in the order they were made: routine support work, each in its category. No seeded row links to one. */
+/**
+ * The board's recurring priorities, in the order they were made: routine support work, each in
+ * its category. Every past weekday lists the ones due on it (`routineRows`); today lists none.
+ */
 export const SEEDED_RECURRING: readonly Recurring[] = [
   { uid: 'rcur00000001', title: 'Monitor the queue', categoryUid: categoryFor('Monitor the queue'), weekdays: [1, 2, 3, 4, 5] },
   { uid: 'rcur00000002', title: 'Follow-ups', categoryUid: categoryFor('Follow-ups'), weekdays: [1, 3, 5] },
 ];
 
 /**
+ * The routines each template's day ticked, of the ones due on it: the queue gets watched every
+ * day but the one a call took over, and the follow-ups get done on normal and overtime days and
+ * missed on the rest.
+ */
+const ROUTINES_DONE: Readonly<Record<Exclude<DayKind, 'today'>, readonly string[]>> = {
+  normal: ['Monitor the queue', 'Follow-ups'],
+  extraPair: ['Monitor the queue'],
+  overtime: ['Monitor the queue', 'Follow-ups'],
+  unreviewed: [],
+  noLunch: ['Monitor the queue'],
+};
+
+/**
+ * A row for each recurring priority due on `date`'s weekday, after the day's `after` one-off
+ * rows: written with the list, in the item's category, ticked as `ROUTINES_DONE` says.
+ */
+function routineRows(date: string, index: number, kind: Exclude<DayKind, 'today'>, after: number, addedAt: number): SeededPriority[] {
+  // ISO: Monday 1 to Sunday 7.
+  const weekday = daysBetween(startOfWeek(date), date) + 1;
+  return SEEDED_RECURRING.filter((r) => r.weekdays.includes(weekday)).map((r, i) => ({
+    position: after + i + 1,
+    text: r.title,
+    done: ROUTINES_DONE[kind].includes(r.title),
+    uid: uidFor(index, after + i + 1),
+    addedAt,
+    cardUid: null,
+    recurringUid: r.uid,
+    categoryUid: r.categoryUid,
+  }));
+}
+
+/**
  * Retrospective notes, a few per template so they say what that template's day did. A normal
  * day always ticks its first priority, sometimes its second, never its third, and logs one
- * session after lunch that was not on the list, so it takes from one of the first two.
+ * session after lunch that was not on the list, so it takes from one of the first two. The
+ * notes speak of the one-off rows: the routines come after them on the list.
  */
 const NOTES = {
   twoDone: [
@@ -304,6 +341,13 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
     ...NO_LINKS,
     categoryUid: categoryFor(text),
   });
+  // The routines due on the day, after its `after` one-off rows, written with them.
+  const routines = (after: number, addedAt = createdAt) => routineRows(date, index, kind, after, addedAt);
+  // A 25-minute session on the routine titled so, in a gap the template leaves; none when it isn't due that day.
+  const onRoutine = (rows: SeededPriority[], title: string, startedAt: number) => {
+    const row = rows.find((p) => p.text === title);
+    return row ? [completed(row, startedAt, 25)] : [];
+  };
 
   const base = { date, kind, createdAt, overtimeApproved: false, workMinutes: null };
 
@@ -315,14 +359,16 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
     const firstStart = clockIn + 15 * MINUTE_MS;
     // Written after work started: the retrospective flags it as added mid-day.
     priorities.push(priority(4, 'Reply to the recruiter', true, firstStart + 90 * MINUTE_MS));
+    const routine = routines(priorities.length);
     return {
       ...base,
       punches: punchRows([clockIn, lunchOut, lunchIn, extraOut, extraIn, clockOut + 10 * MINUTE_MS]),
-      priorities,
+      priorities: [...priorities, ...routine],
       sessions: [
         completed(priorities[0]!, firstStart, 25),
         completed(priorities[1]!, firstStart + 45 * MINUTE_MS, 50),
         completed(priorities[3]!, lunchIn + 20 * MINUTE_MS, 25),
+        ...onRoutine(routine, 'Monitor the queue', lunchIn + 50 * MINUTE_MS),
         completed(pick(UNPLANNED_LABELS), extraIn + 15 * MINUTE_MS, 25),
       ],
       breaks: [rested(firstStart + 25 * MINUTE_MS, 5)],
@@ -338,16 +384,19 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
     const lateOut = atTime(date, 19, 30);
     const planned = earlyIn - 4 * MINUTE_MS;
     const priorities = [priority(1, texts[0]!, true, planned), priority(2, texts[1]!, true, planned), priority(3, texts[2]!, true, planned)];
+    const routine = routines(priorities.length, planned);
     return {
       ...base,
       createdAt: planned,
       overtimeApproved: true,
       punches: punchRows([earlyIn, atTime(date, 12, 0), atTime(date, 12, 30), atTime(date, 17, 15), atTime(date, 17, 45), lateOut]),
-      priorities,
+      priorities: [...priorities, ...routine],
       sessions: [
         completed(priorities[0]!, atTime(date, 8, 30), 50),
         completed(priorities[1]!, atTime(date, 10, 0), 50),
+        ...onRoutine(routine, 'Monitor the queue', atTime(date, 11, 0)),
         completed(priorities[2]!, atTime(date, 14, 0), 50),
+        ...onRoutine(routine, 'Follow-ups', atTime(date, 15, 0)),
         completed(priorities[2]!, atTime(date, 18, 0), 50),
       ],
       breaks: [],
@@ -361,7 +410,8 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
     return {
       ...base,
       punches: punchRows([clockIn, lunchOut, lunchIn, clockOut]),
-      priorities,
+      // The call took the routines too: on the list, no time, not ticked.
+      priorities: [...priorities, ...routines(priorities.length)],
       sessions: [
         completed(priorities[0]!, clockIn + 20 * MINUTE_MS, 25),
         // Cancelled a few minutes in: must not count anywhere.
@@ -381,13 +431,18 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
     const halfOut = atTime(date, 13, 30);
     const planned = halfIn - 4 * MINUTE_MS;
     const priorities = [priority(1, texts[0]!, true, planned), priority(2, texts[1]!, false, planned)];
+    const routine = routines(priorities.length, planned);
     return {
       ...base,
       createdAt: planned,
       workMinutes: 270,
       punches: punchRows([halfIn, null, null, halfOut]),
-      priorities,
-      sessions: [completed(priorities[0]!, halfIn + 10 * MINUTE_MS, 50), completed(priorities[0]!, halfIn + 70 * MINUTE_MS, 50)],
+      priorities: [...priorities, ...routine],
+      sessions: [
+        completed(priorities[0]!, halfIn + 10 * MINUTE_MS, 50),
+        completed(priorities[0]!, halfIn + 70 * MINUTE_MS, 50),
+        ...onRoutine(routine, 'Monitor the queue', halfIn + 130 * MINUTE_MS),
+      ],
       breaks: [rested(halfIn + 60 * MINUTE_MS, 10)],
       retroNote: note(NOTES.noLunch),
       retroAt: halfOut + 2 * MINUTE_MS,
@@ -396,14 +451,17 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
 
   const twoDone = rand() > 0.4;
   const priorities = [priority(1, texts[0]!, true), priority(2, texts[1]!, twoDone), priority(3, texts[2]!, false)];
+  const routine = routines(priorities.length);
   return {
     ...base,
     punches: punchRows([clockIn, lunchOut, lunchIn, clockOut]),
-    priorities,
+    priorities: [...priorities, ...routine],
     sessions: [
       completed(priorities[0]!, clockIn + 15 * MINUTE_MS, 25),
       completed(priorities[1]!, clockIn + 60 * MINUTE_MS, 50),
       completed(pick(UNPLANNED_LABELS), lunchIn + 30 * MINUTE_MS, 25),
+      ...onRoutine(routine, 'Monitor the queue', lunchIn + 60 * MINUTE_MS),
+      ...onRoutine(routine, 'Follow-ups', lunchIn + 100 * MINUTE_MS),
     ],
     // A fifth of each session before it, the way Suggest breaks sizes them.
     breaks: [rested(clockIn + 40 * MINUTE_MS, 5), rested(clockIn + 110 * MINUTE_MS, 10)],
@@ -435,8 +493,9 @@ function buildToday(today: string, now: number, index: number, running: boolean,
   // Planned the evening before with Plan next, which carries over what that day left open; the
   // planner's save is what stored today's row. With no history, written on arrival.
   const plannedAt = last?.retroAt != null ? last.retroAt + 2 * MINUTE_MS : clockIn - 3 * MINUTE_MS;
-  // A row of its own on the new day, linked to the same card, in the same category.
-  const carried = last?.priorities.find((p) => !p.done);
+  // A row of its own on the new day, linked to the same card, in the same category. A routine
+  // left open isn't carried over: it comes back on its own weekdays.
+  const carried = last?.priorities.find((p) => !p.done && p.recurringUid == null);
   const row = (position: number, text: string, done: boolean): SeededPriority => ({
     position,
     text,
@@ -479,18 +538,24 @@ function buildToday(today: string, now: number, index: number, running: boolean,
   };
 }
 
-/** Every text row of `day` linked to the card a save made for it (`cardFor`), unless it carries one already. */
+/**
+ * Every one-off text row of `day` linked to the card a save made for it (`cardFor`), unless it
+ * carries one already. A routine's row never gets a card.
+ */
 function withCards(day: DayDraft, dayIndex: number): DayDraft {
-  return { ...day, priorities: day.priorities.map((p) => ({ ...p, cardUid: p.cardUid ?? cardFor(dayIndex, p.position) })) };
+  return {
+    ...day,
+    priorities: day.priorities.map((p) => (p.recurringUid != null ? p : { ...p, cardUid: p.cardUid ?? cardFor(dayIndex, p.position) })),
+  };
 }
 
 /**
  * The board: the categories, the recurring priorities, the captured cards, handled on the board,
- * and a card for every row of the last weekday and of today, as their saves with the board on
- * made them (untouched), each in step with its latest linked row: its title and category, open in
- * Next, ticked in Done when that day's review was written (today's, an hour after clock-in). New
- * cards went to the top of Next, so today's are above the last weekday's, and both above the
- * captured one.
+ * and a card for every one-off row of the last weekday and of today, as their saves with the
+ * board on made them (untouched), each in step with its latest linked row: its title and
+ * category, open in Next, ticked in Done when that day's review was written (today's, an hour
+ * after clock-in). New cards went to the top of Next, so today's are above the last weekday's,
+ * and both above the captured one.
  */
 function insertBoard(db: DB, userId: number, last: SeededDay | undefined, today: SeededDay, now: number): void {
   const category = db.prepare(`INSERT INTO categories (user_id, uid, name, color) VALUES (?, ?, ?, ?)`);
@@ -504,7 +569,8 @@ function insertBoard(db: DB, userId: number, last: SeededDay | undefined, today:
     const doneAt = day.retroAt ?? Math.min(now, day.punches[0]!.at! + HOUR_MS);
     const fresh: string[] = [];
     for (const p of day.priorities) {
-      const uid = p.cardUid!;
+      const uid = p.cardUid;
+      if (uid == null) continue;
       if (!made.has(uid) && !p.done) fresh.push(uid);
       made.set(uid, {
         title: p.text,

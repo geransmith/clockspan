@@ -48,6 +48,7 @@ export function Retro({ date, today, priorities, sessions, note, reviewedAt, onC
             Planned{' '}
             <span className="muted">
               {review.done} of {review.total} done
+              {review.routines.total > 0 && ` · routines ${review.routines.done} of ${review.routines.total}`}
             </span>
           </h3>
           <ul>

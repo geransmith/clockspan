@@ -41,12 +41,24 @@ const tue = makeDay(TUE, {
 
 /** The facts strip's lines, in order. */
 const facts = () => [...document.querySelectorAll('.review-facts li')].map((li) => li.textContent);
+/** The sections under the tiles, by their headings' own text (without the muted count). */
+const sections = () => [...document.querySelectorAll('.review-section .section-heading')].map((h) => h.firstChild?.textContent?.trim());
+/** A section's rows: each one's text, then its meta's parts. */
+const rows = (heading: string) => {
+  const section = [...document.querySelectorAll('.review-section')].find(
+    (s) => s.querySelector('.section-heading')?.firstChild?.textContent?.trim() === heading,
+  );
+  return [...(section?.querySelectorAll('.review-row') ?? [])].map((row) => [
+    row.querySelector('.review-text')?.textContent,
+    ...[...row.querySelectorAll('.review-meta > *')].map((m) => m.textContent),
+  ]);
+};
 
-async function review(period: ReviewPeriod) {
+async function review(period: ReviewPeriod, onOpen = vi.fn()) {
   const onPeriod = vi.fn();
   render(
     <SettingsAndDays>
-      <Review today={TODAY} now={NOW} period={period} onPeriod={onPeriod} onOpen={vi.fn()} />
+      <Review today={TODAY} now={NOW} period={period} onPeriod={onPeriod} onOpen={onOpen} />
     </SettingsAndDays>,
   );
   await settle();
@@ -119,6 +131,54 @@ describe('Review', () => {
     expect(facts()).toEqual(['Added mid-day: 1 · 0 done', 'Breaks: 1 · 10m', 'Typical day: 3 planned · 1 done']);
     // Straight after the tiles, before Off the plan.
     expect(document.querySelector('.tiles + .review-facts + .review-section')).not.toBeNull();
+    // No routine on the lists, so no Routines section.
+    expect(sections()).toEqual(['Off the plan', 'Not done', 'Why']);
+  });
+
+  it('lists the routines between Off the plan and Not done, each as the days ticked of the days on the list', async () => {
+    const QUEUE = 'rcur00000001';
+    const routineMon = makeDay(MON, {
+      priorities: [
+        makePriority(1, 'Ship it', { done: true, addedAt: 0 }),
+        makePriority(2, 'Monitor the queue', { recurringUid: QUEUE, done: true, addedAt: 0 }),
+        makePriority(3, 'Follow-ups', { recurringUid: 'rcur00000002', addedAt: 0 }),
+      ],
+      sessions: [completedSession(1, atTime(MON, 9, 0), 3000, { date: MON, priorityUid: makePriority(2, '').uid })],
+    });
+    const routineTue = makeDay(TUE, {
+      priorities: [makePriority(1, 'Write the report', { addedAt: 0 }), makePriority(2, 'Monitor the queue', { recurringUid: QUEUE, addedAt: 0 })],
+    });
+    serveRange([routineMon, routineTue]);
+    const onOpen = vi.fn();
+    await review({ kind: 'week', from: MON }, onOpen);
+    expect(sections()).toEqual(['Off the plan', 'Routines', 'Not done', 'Why']);
+    expect(screen.getByText('Routines').querySelector('.muted')?.textContent).toBe('2');
+    expect(rows('Routines')).toEqual([
+      ['Monitor the queue', '1 of 2 days', '50m'],
+      ['Follow-ups', '0 of 1 day', 'no time'],
+    ]);
+    // The routines missed are not left open; the one-off is. The tile counts them all.
+    expect(rows('Not done')).toEqual([['Write the report', 'Tue', 'no time']]);
+    expect(screen.getByText('2/5')).toBeTruthy();
+    // A routine opens its latest day.
+    fireEvent.click(screen.getByRole('button', { name: /Monitor the queue/ }));
+    expect(onOpen).toHaveBeenCalledWith(TUE);
+  });
+
+  it('says nothing outside the routines was left open once every one-off is ticked', async () => {
+    serveRange([
+      makeDay(MON, {
+        priorities: [makePriority(1, 'Ship it', { done: true }), makePriority(2, 'Monitor the queue', { recurringUid: 'rcur00000001' })],
+      }),
+    ]);
+    await review({ kind: 'week', from: MON });
+    expect(screen.getByText('Nothing outside the routines was left open.')).toBeTruthy();
+    expect(screen.queryByText('Every priority got ticked.')).toBeNull();
+    cleanup();
+
+    serveRange([makeDay(MON, { priorities: [makePriority(1, 'Ship it', { done: true })] })]);
+    await review({ kind: 'week', from: MON });
+    expect(screen.getByText('Every priority got ticked.')).toBeTruthy();
   });
 
   it("holds a month or a quarter to its days' own lengths, and leaves the typical day out of a quarter", async () => {

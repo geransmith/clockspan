@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ensureDefaultUser, openDatabase, type DB } from '../db.js';
 import { insertSession, SESSION_COOKIE } from '../auth/session.js';
 import { countRows, SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from './harness.js';
-import { addMonths, atTime, DAY_MS, isWeekend, MINUTE_MS, punchWindow, startOfQuarter, todayKey } from '../../shared/dates.js';
+import { addMonths, atTime, DAY_MS, daysBetween, isWeekend, MINUTE_MS, punchWindow, startOfQuarter, startOfWeek, todayKey } from '../../shared/dates.js';
 import { hasText } from '../../shared/priorities.js';
 import { LIMITS, type Board, type BoardCard, type Day } from '../../shared/api.js';
 import { DEFAULT_SETTINGS, SETTING_LIMITS } from '../../shared/settings.js';
@@ -31,14 +31,18 @@ const counts = (db: DB) =>
     ]),
   );
 
+/** ISO weekday, Monday 1 to Sunday 7, as recurring priorities store their schedule. */
+const isoWeekday = (date: string) => daysBetween(startOfWeek(date), date) + 1;
+
 /**
  * The board a seed wrote, against its days: each card a save made is in step with its latest
- * linked row, the rows the board saw (the last weekday's and today's) each have a card, no
- * list links two text rows to one card, no row links to a recurring priority yet, and every
- * category named is one of the board's.
+ * linked row, the one-off rows the board saw (the last weekday's and today's) each have a card,
+ * no list links two text rows to one card or one recurring priority, a routine's rows fall only
+ * on its weekdays and never have a card, and every category named is one of the board's.
  */
 function expectBoardInStep(m: SeedManifest) {
   const cards = new Map(m.board.cards.map((c) => [c.uid, c]));
+  const items = new Map(m.board.recurring.map((r) => [r.uid, r]));
   const [last, today] = [m.days.at(-2), m.days.at(-1)!];
   expect(m.board.categories).toEqual(SEEDED_CATEGORIES);
   expect(m.board.recurring).toEqual(SEEDED_RECURRING);
@@ -47,15 +51,24 @@ function expectBoardInStep(m: SeedManifest) {
   expect(m.board.cards.every((c) => resolves(c.categoryUid))).toBe(true);
   expect(m.board.recurring.every((r) => r.categoryUid != null && resolves(r.categoryUid))).toBe(true);
   for (const day of m.days) {
-    const linked = day.priorities.filter((p) => hasText(p) && p.cardUid != null).map((p) => p.cardUid);
-    expect(new Set(linked).size).toBe(linked.length);
+    for (const link of ['cardUid', 'recurringUid'] as const) {
+      const linked = day.priorities.filter((p) => hasText(p) && p[link] != null).map((p) => p[link]);
+      expect(new Set(linked).size, `${day.date} ${link}`).toBe(linked.length);
+    }
     expect(day.sessions.every((s) => resolves(s.categoryUid))).toBe(true);
     for (const p of day.priorities) {
-      expect(p.recurringUid).toBeNull();
       expect(resolves(p.categoryUid), `${day.date} ${p.text}`).toBe(true);
-      // Only the days the board was on for have cards.
-      if (day === last || day === today) expect(cards.has(p.cardUid!), `${day.date} ${p.text}`).toBe(true);
-      else expect(p.cardUid).toBeNull();
+      if (p.recurringUid != null) {
+        // A routine's row: on one of its weekdays, under its title and category, on no card.
+        const item = items.get(p.recurringUid)!;
+        expect(item.weekdays, `${day.date} ${p.text}`).toContain(isoWeekday(day.date));
+        expect([p.text, p.categoryUid, p.cardUid]).toEqual([item.title, item.categoryUid, null]);
+      } else if (day === last || day === today) {
+        // Only the days the board was on for have cards.
+        expect(cards.has(p.cardUid!), `${day.date} ${p.text}`).toBe(true);
+      } else {
+        expect(p.cardUid).toBeNull();
+      }
     }
   }
   for (const card of m.board.cards) {
@@ -72,7 +85,7 @@ function expectBoardInStep(m: SeedManifest) {
   }
   // Today's carried row is a row of its own on the same card, in the same category.
   if (last) {
-    const source = last.priorities.find((p) => !p.done)!;
+    const source = last.priorities.find((p) => !p.done && p.recurringUid == null)!;
     expect(today.priorities[0]).toMatchObject({ text: source.text, cardUid: source.cardUid, categoryUid: source.categoryUid });
     expect(today.priorities[0]!.uid).not.toBe(source.uid);
   }
@@ -199,12 +212,28 @@ describe('seedDatabase', () => {
     // A card a save made is untouched until the board handles it; one the board made never is.
     for (const card of m.board.cards) expect(countRows(db, 'board_cards', 'uid = ? AND untouched = ?', card.uid, card.listDate == null ? 0 : 1)).toBe(1);
     expect(countRows(db, 'board_cards')).toBe(m.board.cards.length);
-    // Two recurring priorities for support work, each in its category; no row is added from them yet.
+    // Two recurring priorities for support work, each in its category.
     expect(m.board.recurring.map((r) => [r.title, r.weekdays, named(r.categoryUid)])).toEqual([
       ['Monitor the queue', [1, 2, 3, 4, 5], 'Tickets'],
       ['Follow-ups', [1, 3, 5], 'Follow-ups'],
     ]);
     expect(countRows(db, 'recurring')).toBe(m.board.recurring.length);
+    // Each past weekday lists the routines due on it, after its one-off rows and written with them.
+    for (const day of m.days.slice(0, -1)) {
+      const due = SEEDED_RECURRING.filter((r) => r.weekdays.includes(isoWeekday(day.date))).map((r) => r.uid);
+      const routines = day.priorities.filter((p) => p.recurringUid != null);
+      expect(
+        routines.map((p) => p.recurringUid),
+        day.date,
+      ).toEqual(due);
+      expect(routines.map((p) => p.position)).toEqual(due.map((_, i) => day.priorities.length - due.length + i + 1));
+      expect(routines.every((p) => p.addedAt === day.createdAt)).toBe(true);
+    }
+    // Some ticked, some missed, some with focus logged; none on today.
+    const routineRows = m.days.flatMap((d) => d.priorities.filter((p) => p.recurringUid != null).map((p) => ({ ...p, day: d })));
+    expect(routineRows.some((p) => p.done) && routineRows.some((p) => !p.done)).toBe(true);
+    expect(routineRows.some((p) => p.day.sessions.some((s) => s.priorityUid === p.uid))).toBe(true);
+    expect(m.days.at(-1)!.priorities.some((p) => p.recurringUid != null)).toBe(false);
 
     // Every template shows up in the last week, and today has the one running timer.
     expect(new Set(m.days.map((d) => d.kind))).toEqual(new Set(['normal', 'extraPair', 'overtime', 'unreviewed', 'noLunch', 'today']));
@@ -233,7 +262,7 @@ describe('seedDatabase', () => {
     // Today's list was planned at the end of that day's retrospective, carrying its open row.
     const today = m.days.at(-1)!;
     expect(today.priorities.every((p) => p.addedAt > extra.retroAt! && p.addedAt < today.punches[0]!.at!)).toBe(true);
-    expect(today.priorities[0]!.text).toBe(extra.priorities.find((p) => !p.done)!.text);
+    expect(today.priorities[0]!.text).toBe(extra.priorities.find((p) => !p.done && p.recurringUid == null)!.text);
     // A session paused and finished short of its plan, and a break ended early.
     const paused = today.sessions.find((s) => s.pausedSeconds > 0)!;
     expect(paused.endedAt! - paused.startedAt - paused.pausedSeconds * 1000).toBeLessThan(paused.plannedSeconds * 1000);
@@ -309,13 +338,15 @@ describe('seedDatabase', () => {
     const db = openDatabase(':memory:');
     const user = ensureDefaultUser(db);
     const m = seedDatabase(db, { userId: user.id, today: SEED_TODAY, now: SEED_NOW, days: 60 });
-    const done = (d: SeededDay) => d.priorities.filter((p) => p.done).length;
+    // The notes speak of the day's one-off rows: its routines come after them on the list.
+    const oneOffs = (d: SeededDay) => d.priorities.filter((p) => p.recurringUid == null);
+    const done = (d: SeededDay) => oneOffs(d).filter((p) => p.done).length;
     const claims: [RegExp, (d: SeededDay) => boolean][] = [
       [/^One done/, (d) => done(d) === 1],
-      [/^Two of three done/, (d) => done(d) === 2 && d.priorities.length === 3],
-      [/^(Finished everything|All three done)/, (d) => done(d) === d.priorities.length && d.overtimeApproved],
+      [/^Two of three done/, (d) => done(d) === 2 && oneOffs(d).length === 3],
+      [/^(Finished everything|All three done)/, (d) => done(d) === oneOffs(d).length && d.overtimeApproved],
       [/^Half day/, (d) => d.workMinutes != null && d.punches[1]!.at == null],
-      [/one of the two done/, (d) => done(d) === 1 && d.priorities.length === 2],
+      [/one of the two done/, (d) => done(d) === 1 && oneOffs(d).length === 2],
       [/recruiter/, (d) => d.priorities.some((p) => p.text === 'Reply to the recruiter')],
       [/Out for twenty minutes at three/, (d) => workedSpans(d, 0).some(([, to]) => new Date(to).getHours() === 15)],
     ];

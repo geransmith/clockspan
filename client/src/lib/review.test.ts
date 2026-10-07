@@ -128,6 +128,7 @@ describe('reviewRange', () => {
       midDay: { added: 0, done: 0 },
       typicalDay: null,
       unplanned: [],
+      routines: [],
       notDone: [],
       notes: [],
     });
@@ -338,5 +339,104 @@ describe('reviewRange: Not done', () => {
     const withoutKeys = (ds: Day[]) => reviewRange(ds, settings, '2026-09-18', now).notDone.map(({ key: _key, ...g }) => g);
     expect(withoutKeys(days)).toEqual(withoutKeys(stripped));
     expect(notDone(...days).map(([key]) => key)).toEqual([`card:${A}`, 'text:email', 'text:call the bank']);
+  });
+});
+
+// A routine's rows (`recurringUid`) are one entry across days, counted day by day, never a task left open.
+describe('reviewRange: Routines', () => {
+  const now = at('2026-09-18', 17);
+  const MON = '2026-09-14';
+  const TUE = '2026-09-15';
+  const WED = '2026-09-16';
+  const QUEUE = 'rcur00000001';
+  const FOLLOW = 'rcur00000002';
+  type Row = [text: string, recurringUid?: string | null, done?: boolean];
+  /** A day whose rows were all written before work, with a 25-minute session on the row at position `focusOn`. */
+  const day = (date: string, rows: Row[], focusOn?: number) =>
+    makeDay(date, {
+      priorities: rows.map(([text, recurringUid = null, done = false], i) => makePriority(i + 1, text, { recurringUid, done, ...BEFORE_WORK })),
+      sessions: focusOn == null ? [] : [session(1, date, at(date, 9), 25 * 60, { priorityUid: makePriority(focusOn, '').uid })],
+    });
+  const review = (days: Day[], titles?: ReadonlyMap<string, string>) => reviewRange(days, settings, '2026-09-18', now, titles);
+
+  it('counts the days a routine was ticked of the days it was on the list, and keeps its misses out of Not done', () => {
+    const r = review([
+      day(MON, [['Monitor the queue', QUEUE]], 1),
+      day(TUE, [['Monitor the queue', QUEUE, true]], 1),
+      day(WED, [['Monitor the queue', QUEUE]]),
+    ]);
+    expect(r.routines).toEqual([{ recurringUid: QUEUE, title: 'Monitor the queue', dates: [MON, TUE, WED], done: 1, focusedSeconds: 50 * 60 }]);
+    // Tuesday's tick doesn't settle Monday's miss, and neither miss is a task left open.
+    expect(r.notDone).toEqual([]);
+  });
+
+  it('counts the routines as priorities in the tiles and the facts', () => {
+    const mon = makeDay(MON, {
+      priorities: [
+        makePriority(1, 'Ship it', { done: true, ...BEFORE_WORK }),
+        makePriority(2, 'Monitor the queue', { recurringUid: QUEUE, done: true, ...BEFORE_WORK }),
+        makePriority(3, 'Follow-ups', { recurringUid: FOLLOW, addedAt: at(MON, 11) }),
+      ],
+      sessions: [session(1, MON, at(MON, 9), 600, { priorityUid: makePriority(2, '').uid })],
+    });
+    const r = review([
+      mon,
+      day(TUE, [
+        ['Ship it', null, true],
+        ['Monitor the queue', QUEUE],
+      ]),
+    ]);
+    expect(r).toMatchObject({
+      prioritiesDone: 3,
+      prioritiesTotal: 5,
+      onPlanPercent: 100,
+      midDay: { added: 1, done: 0 },
+      typicalDay: { planned: 3, done: 2 },
+      notDone: [],
+    });
+    expect(r.routines.map((g) => [g.title, g.dates.length, g.done, g.focusedSeconds])).toEqual([
+      ['Monitor the queue', 2, 1, 600],
+      ['Follow-ups', 1, 0, 0],
+    ]);
+  });
+
+  it('leaves a one-off of the same text in Not done, unsettled by the routine', () => {
+    const r = review([day(MON, [['Monitor the queue']]), day(TUE, [['monitor the queue', QUEUE, true]])]);
+    expect(r.notDone.map((g) => [g.key, g.dates])).toEqual([['text:monitor the queue', [MON]]]);
+    expect(r.routines.map((g) => [g.recurringUid, g.dates, g.done])).toEqual([[QUEUE, [TUE], 1]]);
+  });
+
+  it("keeps a routine whose row was retyped one entry, under the item's title while it exists, else the latest text", () => {
+    const days = [day(MON, [['Monitor the queue', QUEUE, true]]), day(TUE, [['Watch the queue', QUEUE]])];
+    expect(review(days).routines.map((g) => [g.title, g.dates])).toEqual([['Watch the queue', [MON, TUE]]]);
+    expect(review(days, new Map([[QUEUE, 'Check the queue']])).routines.map((g) => g.title)).toEqual(['Check the queue']);
+    // Deleted since: the board names other items but not this one.
+    expect(review(days, new Map([[FOLLOW, 'Follow-ups']])).routines.map((g) => g.title)).toEqual(['Watch the queue']);
+  });
+
+  it('leaves out a day whose routine row was emptied', () => {
+    const r = review([day(MON, [['Monitor the queue', QUEUE, true]]), day(TUE, [['', QUEUE]])]);
+    expect(r.routines.map((g) => [g.dates, g.done])).toEqual([[[MON], 1]]);
+    expect(r.prioritiesTotal).toBe(1);
+  });
+
+  it('lists the routines on the most days first, then the most focus, then by title', () => {
+    const days = [
+      day(
+        MON,
+        [
+          ['Tickets', 'rcur0000000a'],
+          ['Monitor the queue', QUEUE],
+          ['Follow-ups', FOLLOW],
+          ['Inbox', 'rcur0000000b'],
+        ],
+        // The one focused, last of the one-day routines by title.
+        2,
+      ),
+      day(TUE, [['Tickets', 'rcur0000000a']]),
+    ];
+    expect(review(days).routines.map((g) => g.title)).toEqual(['Tickets', 'Monitor the queue', 'Follow-ups', 'Inbox']);
+    // Sorted by the item's title, not the row's.
+    expect(review(days, new Map([['rcur0000000b', 'Alerts']])).routines.map((g) => g.title)).toEqual(['Tickets', 'Monitor the queue', 'Alerts', 'Follow-ups']);
   });
 });
