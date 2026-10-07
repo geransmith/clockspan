@@ -1,19 +1,15 @@
 import type { Day, Priority } from '../types';
+import { hasText } from '../../../shared/priorities.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { PRIORITY_WARNINGS } from './copy';
-
-/** A row with something written in it; the others are the card's empty slots. */
-export function hasText(p: { text: string }): boolean {
-  return p.text.trim() !== '';
-}
 
 /** A row with text that isn't ticked: what the planner, the left-open offer and the timer's chips work from. */
 export const isOpen = (p: Priority) => hasText(p) && !p.done;
 
 /**
- * The stored list is what the client last sent. It can be shorter than `count` (a day never
- * edited, or one planned the evening before) or hold empty rows the card saved. The card shows
- * at least `count` rows and every stored row beyond that.
+ * The stored list can be shorter than `count` (a day never edited, or one planned the evening
+ * before) or hold empty rows the card saved. The card shows at least `count` rows and every
+ * stored row beyond that.
  */
 export function padPriorities(rows: Priority[], count: number): Priority[] {
   const byPos = new Map(rows.map((r) => [r.position, r]));

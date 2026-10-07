@@ -39,10 +39,10 @@ export interface Punch {
 }
 
 /**
- * A day's stored list is the one the client last sent, in position order (1-based and
- * contiguous): the card saves the rows it shows, empty ones included, and a day never edited
- * has none. `uid` is the stable id sessions point at (null until the row has text); `addedAt`
- * is when it got text.
+ * A day's stored list is the one a client last sent, merged with what other devices saved since
+ * the copy it was built on (`mergePriorities`), in position order (1-based and contiguous): the
+ * card saves the rows it shows, empty ones included, and a day never edited has none. `uid` is
+ * the stable id sessions point at (null until the row has text); `addedAt` is when it got text.
  */
 export interface Priority {
   position: number;
@@ -145,7 +145,10 @@ export interface PunchesResponse {
   punches: Punch[];
 }
 
-/** `PUT /days/:date/priorities`: the rows as stored, uids and addedAt filled in. */
+/**
+ * `PUT /days/:date/priorities`: the rows as stored once the save is merged with the day's list
+ * (`mergePriorities`), uids and addedAt filled in.
+ */
 export interface PrioritiesResponse {
   priorities: Priority[];
 }

@@ -6,7 +6,8 @@ import { useSettings } from '../hooks/useSettings';
 import { unlockAudio } from '../lib/alerts';
 import { LEFT_OPEN, WARNING_ACTIONS } from '../lib/copy';
 import { planNext } from '../lib/plan';
-import { editPriority, hasText, padPriorities, pickWarning, removePriority, warnThreshold, warningKind, type WarningKind } from '../lib/priorities';
+import { editPriority, padPriorities, pickWarning, removePriority, warnThreshold, warningKind, type WarningKind } from '../lib/priorities';
+import { hasText } from '../../../shared/priorities.js';
 import { LIMITS } from '../../../shared/api.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import type { Priority } from '../types';
@@ -15,7 +16,8 @@ import { Check, Plus, X } from './Icons';
 
 interface Props {
   priorities: Priority[];
-  onChange: (priorities: Priority[]) => void;
+  /** `base`: the rows the edits were made on, the list the card last sent or last took up from `priorities`. */
+  onChange: (priorities: Priority[], base: Priority[]) => void;
   /** What the last planned day left unticked (`from` names that day), offered while the list is empty. */
   leftOpen?: { from: string; rows: Priority[]; dismiss: () => void } | null;
 }
@@ -29,11 +31,12 @@ export function Priorities({ priorities, onChange, leftOpen }: Props) {
   const { settings } = useSettings();
   const count = settings.priorityCount;
   const stored = useMemo(() => padPriorities(priorities, count), [priorities, count]);
-  // Let go once sent: the PUT replaces the whole list, so a list held after a failed save would
-  // drop a row that the timer's "Also add to today's priorities" or another device added
-  // meanwhile. A failed row goes back to the stored copy, with the banner.
-  const sendList = (list: Priority[]) => {
-    onChange(list);
+  // Let go once sent: a list held after a failed save would stop the card following the stored
+  // list (a row the timer's "Also add to today's priorities" or another device added, a tick
+  // made elsewhere) until a later save went through. A failed row goes back to the stored copy,
+  // with the banner.
+  const sendList = (list: Priority[], base: Priority[]) => {
+    onChange(list, base);
     return true;
   };
   const { draft: local, edit: editList, flush } = useDebouncedDraft(stored, sendList, 400);

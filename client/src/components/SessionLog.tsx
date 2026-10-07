@@ -6,7 +6,7 @@ import { CONFIRM } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { breakSeconds } from '../lib/breaks';
 import { counted, formatDuration } from '../lib/format';
-import { hasText } from '../lib/priorities';
+import { hasText } from '../../../shared/priorities.js';
 import { focusOf } from '../lib/retro';
 import { timerView } from '../lib/timer';
 import type { Break, Priority, Session } from '../types';

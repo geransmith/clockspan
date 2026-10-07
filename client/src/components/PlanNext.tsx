@@ -4,9 +4,11 @@ import { useDay } from '../hooks/useDay';
 import { useSettings } from '../hooks/useSettings';
 import { unlockAudio } from '../lib/alerts';
 import { LOAD_FAILED, PLAN_NEXT } from '../lib/copy';
-import { dayName, sameText } from '../lib/format';
+import { dayName } from '../lib/format';
 import { nextWorkDay, planNext } from '../lib/plan';
-import { hasText, isOpen } from '../lib/priorities';
+import { isOpen } from '../lib/priorities';
+import { hasText } from '../../../shared/priorities.js';
+import { sameText } from '../../../shared/text.js';
 import { LIMITS } from '../../../shared/api.js';
 import type { Priority } from '../types';
 import { Burst } from './Burst';
@@ -124,7 +126,7 @@ function Planner({
     }
     setBusy(true);
     // A failed save raises the store's banner and puts the stored list back.
-    const ok = await store.setPriorities(date, rows);
+    const ok = await store.setPriorities(date, rows, day.priorities);
     setBusy(false);
     if (ok) onDone(added);
   };

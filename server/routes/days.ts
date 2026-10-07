@@ -23,6 +23,7 @@ import {
 } from './shared.js';
 import { startBreak } from './breaks.js';
 import { startSession } from './sessions.js';
+import { hasText, mergePriorities } from '../../shared/priorities.js';
 import { kindForPosition, MAX_PUNCHES } from '../../shared/punches.js';
 import { MAX_PRIORITIES, SETTING_LIMITS } from '../../shared/settings.js';
 import {
@@ -67,9 +68,53 @@ function punchesJson(rows: PunchRow[]): Punch[] {
   return rows.map((p) => ({ position: p.position, kind: p.kind, at: p.at }));
 }
 
-// The rows as last saved, empty ones included; the client pads to the user's `priorityCount`.
-function prioritiesJson(rows: PriorityRow[]): Priority[] {
-  return rows.map((r) => ({ position: r.position, text: r.text, done: Boolean(r.done), uid: r.uid, addedAt: r.added_at }));
+/** A stored row as the API sends it, for a day's answer and for the merge a priorities save goes through. */
+function priorityJson(r: PriorityRow): Priority {
+  return { position: r.position, text: r.text, done: Boolean(r.done), uid: r.uid, addedAt: r.added_at };
+}
+
+/** What a list of priority rows is called in the errors: the list sent, or the base it was built on. */
+interface RowsLabel {
+  list: string;
+  row: string;
+}
+const SENT_ROWS: RowsLabel = { list: 'priorities', row: 'Priority' };
+const BASE_ROWS: RowsLabel = { list: 'base', row: 'Base row' };
+
+/**
+ * A list of priority rows from a request, numbered from 1, or the message to refuse it with.
+ * The web app mints a uid and stamps addedAt the first time a row gets text, and always sends
+ * both. The server fills them in for a text row that arrives without (curl, the route tests), so
+ * every row with text has a uid a session can point at and an addedAt the retro can judge. A
+ * list and its base are read with one `now`, so a row the merge compares across them isn't
+ * changed by two stamps a millisecond apart.
+ */
+function parsePriorityRows(input: unknown, label: RowsLabel, now: number): Priority[] | string {
+  if (!Array.isArray(input) || input.length > MAX_PRIORITIES) return `${label.list} must be an array of at most ${MAX_PRIORITIES}.`;
+  const rows: Priority[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < input.length; i++) {
+    const item: unknown = input[i];
+    const name = `${label.row} ${i + 1}`;
+    if (!isRow(item)) return `${name} must be an object.`;
+    // Checked like every other field: a value of the wrong kind is a client bug, not a row to guess at.
+    if (item.text != null && typeof item.text !== 'string') return `${name} has invalid text.`;
+    if (item.uid != null && !(typeof item.uid === 'string' && UID_RE.test(item.uid))) return `${name} has an invalid uid.`;
+    const text = typeof item.text === 'string' ? item.text.slice(0, LIMITS.priorityText) : '';
+    const written = hasText({ text });
+    let uid = typeof item.uid === 'string' ? item.uid.toLowerCase() : null;
+    if (uid && seen.has(uid)) return `${name} repeats another row's uid.`;
+    if (!uid && written) uid = randomBytes(6).toString('hex');
+    if (uid) seen.add(uid);
+    // Stamped by the client when the row first got text; at most a day ahead, for a device clock running fast.
+    let addedAt = item.addedAt == null ? null : parseInstant(item.addedAt, 0, now + DAY_MS);
+    if (item.addedAt != null && addedAt == null) return `${name} has an invalid addedAt.`;
+    if (addedAt == null && written) addedAt = now;
+    // Checked like every other flag: `Boolean("false")` would tick the row. Null is absent, as for the other fields.
+    if (item.done != null && typeof item.done !== 'boolean') return `${name} has an invalid done flag.`;
+    rows.push({ position: i + 1, text, done: written && item.done === true, uid, addedAt });
+  }
+  return rows;
 }
 
 /**
@@ -110,7 +155,8 @@ function dayJson(day: DayRow, rows: ChildRows): Day {
   return {
     date: day.date,
     punches: punchesJson(of(rows.punches)),
-    priorities: prioritiesJson(of(rows.priorities)),
+    // The rows as stored, empty ones included; the client pads to the user's `priorityCount`.
+    priorities: of(rows.priorities).map(priorityJson),
     overtimeApproved: Boolean(day.overtime_approved),
     retroNote: day.retro_note,
     retroAt: day.retro_at,
@@ -200,45 +246,30 @@ export function daysRouter(db: DB, config: Config): Router {
     res.json({ punches } satisfies PunchesResponse);
   });
 
-  // Full replace, like punches: array order is the position, so removing a row is just
-  // sending the list without it. An empty row can never be "done".
+  // Array order is the position, so removing a row is sending the list without it. `base` is
+  // the list the client built this one on: the server lays the changes made since onto what it
+  // holds (`mergePriorities`), so a device saving on an old copy keeps what another device did
+  // meanwhile. With no base (curl, a tab from before merging) the list replaces the stored one,
+  // like punches. An empty row can never be "done".
   r.put('/:date/priorities', (req, res) => {
     const user = currentUser(req);
     const { date } = req.params;
-    const input = (req.body as { priorities?: unknown }).priorities;
-    if (!Array.isArray(input) || input.length > MAX_PRIORITIES) return refuse(res, 400, `priorities must be an array of at most ${MAX_PRIORITIES}.`);
-    // The web app mints a uid and stamps addedAt the first time a row gets text, and always sends
-    // both. The server fills them in for a text row that arrives without (curl, the route tests),
-    // so every row with text has a uid a session can point at and an addedAt the retro can judge.
-    const rows: Priority[] = [];
-    const seen = new Set<string>();
-    for (let i = 0; i < input.length; i++) {
-      const item: unknown = input[i];
-      if (!isRow(item)) return refuse(res, 400, `Priority ${i + 1} must be an object.`);
-      // Checked like every other field: a value of the wrong kind is a client bug, not a row to guess at.
-      if (item.text != null && typeof item.text !== 'string') return refuse(res, 400, `Priority ${i + 1} has invalid text.`);
-      if (item.uid != null && !(typeof item.uid === 'string' && UID_RE.test(item.uid))) return refuse(res, 400, `Priority ${i + 1} has an invalid uid.`);
-      const text = typeof item.text === 'string' ? item.text.slice(0, LIMITS.priorityText) : '';
-      const hasText = text.trim() !== '';
-      let uid = typeof item.uid === 'string' ? item.uid.toLowerCase() : null;
-      if (uid && seen.has(uid)) return refuse(res, 400, `Priority ${i + 1} repeats another row's uid.`);
-      if (!uid && hasText) uid = randomBytes(6).toString('hex');
-      if (uid) seen.add(uid);
-      // Stamped by the client when the row first got text; at most a day ahead, for a device clock running fast.
-      let addedAt = item.addedAt == null ? null : parseInstant(item.addedAt, 0, Date.now() + DAY_MS);
-      if (item.addedAt != null && addedAt == null) return refuse(res, 400, `Priority ${i + 1} has an invalid addedAt.`);
-      if (addedAt == null && hasText) addedAt = Date.now();
-      // Checked like every other flag: `Boolean("false")` would tick the row. Null is absent, as for the other fields.
-      if (item.done != null && typeof item.done !== 'boolean') return refuse(res, 400, `Priority ${i + 1} has an invalid done flag.`);
-      rows.push({ position: i + 1, text, done: hasText && item.done === true, uid, addedAt });
-    }
-    db.transaction(() => {
+    const body = req.body as { priorities?: unknown; base?: unknown };
+    const now = Date.now();
+    const mine = parsePriorityRows(body.priorities, SENT_ROWS, now);
+    if (typeof mine === 'string') return refuse(res, 400, mine);
+    const base = body.base == null ? null : parsePriorityRows(body.base, BASE_ROWS, now);
+    if (typeof base === 'string') return refuse(res, 400, base);
+    const list = db.transaction(() => {
       const dayId = ensureDay(db, user.id, date);
+      const stored = (db.prepare(`SELECT * FROM priorities WHERE day_id = ? ORDER BY position`).all(dayId) as PriorityRow[]).map(priorityJson);
+      const merged = mergePriorities(stored, base ?? stored, mine);
       db.prepare(`DELETE FROM priorities WHERE day_id = ?`).run(dayId);
       const ins = db.prepare(`INSERT INTO priorities (day_id, position, text, done, uid, added_at) VALUES (?, ?, ?, ?, ?, ?)`);
-      for (const p of rows) ins.run(dayId, p.position, p.text, p.done ? 1 : 0, p.uid, p.addedAt);
+      for (const p of merged) ins.run(dayId, p.position, p.text, p.done ? 1 : 0, p.uid, p.addedAt);
+      return merged;
     })();
-    res.json({ priorities: rows } satisfies PrioritiesResponse);
+    res.json({ priorities: list } satisfies PrioritiesResponse);
   });
 
   r.put('/:date/overtime', (req, res) => {

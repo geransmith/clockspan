@@ -1,5 +1,5 @@
 import type { CompletedSession, Day, Priority, Session } from '../types';
-import { hasText } from './priorities';
+import { hasText } from '../../../shared/priorities.js';
 
 export interface PriorityReview {
   priority: Priority;

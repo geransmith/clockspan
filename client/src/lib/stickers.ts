@@ -1,7 +1,7 @@
 import type { Day, Punch, Settings } from '../types';
 import { hash } from './celebrate';
 import { STICKER_EMOJI } from './copy';
-import { hasText } from './priorities';
+import { hasText } from '../../../shared/priorities.js';
 import { focusOf } from './retro';
 import { lunchTracked, type TimeclockResult, type TimeclockSettings } from './timeclock';
 

@@ -163,7 +163,7 @@ describe('start', () => {
     vi.mocked(api.startSession).mockResolvedValue({ session: makeSession({ priorityUid: 'u1' }) });
     let started!: Promise<void>;
     act(() => {
-      void result.current.store.setPriorities(TODAY, [justTyped]);
+      void result.current.store.setPriorities(TODAY, [justTyped], []);
       started = result.current.timer.start(TODAY, 1500, 'Write the report', 'u1');
     });
     await settle();
@@ -337,7 +337,7 @@ describe('edit', () => {
     let linked!: Promise<void>;
     let paused!: Promise<void>;
     act(() => {
-      void result.current.store.setPriorities(TODAY, [justTyped]);
+      void result.current.store.setPriorities(TODAY, [justTyped], []);
       linked = result.current.timer.edit({ priorityUid: 'u1' });
       paused = result.current.timer.pause();
     });

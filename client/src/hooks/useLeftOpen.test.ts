@@ -103,7 +103,11 @@ it("follows a row ticked on that day's sheet since, with no second fetch", async
   expect(result.current.leftOpen?.rows).toEqual([makePriority(2, 'Review the PR')]);
   await act(() => result.current.store.load('2026-09-25'));
   await act(() =>
-    result.current.store.setPriorities('2026-09-25', [makePriority(1, 'Ship it', { done: true }), makePriority(2, 'Review the PR', { done: true })]),
+    result.current.store.setPriorities(
+      '2026-09-25',
+      [makePriority(1, 'Ship it', { done: true }), makePriority(2, 'Review the PR', { done: true })],
+      friday.priorities,
+    ),
   );
   expect(result.current.leftOpen).toBeNull();
   expect(api.getRange).toHaveBeenCalledTimes(1);
