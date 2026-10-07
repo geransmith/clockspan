@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { PRIORITY_WARNINGS } from './copy';
-import { editPriority, hasRoom, leftOpen, newUid, padPriorities, pickWarning, placePriority, removePriority, warnThreshold, warningKind } from './priorities';
+import {
+  editPriority,
+  hasRoom,
+  leftOpen,
+  newUid,
+  nudgeFor,
+  padPriorities,
+  pickWarning,
+  placePriority,
+  removePriority,
+  warnThreshold,
+  warningKind,
+} from './priorities';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { makeDay, makePriority } from '../test/fixtures';
 import type { Priority } from '../types';
@@ -36,6 +48,26 @@ describe('warningKind', () => {
     expect(warningKind(0, 3)).toBe('fresh');
     expect(warningKind(1, 3)).toBe('progress');
     expect(warningKind(3, 3)).toBe('complete');
+  });
+});
+
+describe('nudgeFor', () => {
+  it('stays quiet until the rows with text reach the threshold', () => {
+    expect(nudgeFor([makePriority(1, 'A'), makePriority(2, 'B')], 3)).toBeNull();
+    expect(nudgeFor([makePriority(1, 'A'), makePriority(2, 'B'), makePriority(3, 'C')], 3)).toBe('fresh');
+    // A higher Rows per day raises the threshold.
+    expect(nudgeFor([makePriority(1, 'A'), makePriority(2, 'B'), makePriority(3, 'C')], 4)).toBeNull();
+  });
+
+  it('counts only rows with text: an emptied row and a row never written in add nothing', () => {
+    const rows = [makePriority(1, 'A'), makePriority(2, ''), makePriority(3, 'C'), makePriority(4, ' ', { uid: null, addedAt: null })];
+    expect(nudgeFor(rows, 3)).toBeNull();
+  });
+
+  it('picks the kind from how many rows with text are ticked', () => {
+    const rows = [makePriority(1, 'A', { done: true }), makePriority(2, 'B'), makePriority(3, 'C')];
+    expect(nudgeFor(rows, 3)).toBe('progress');
+    expect(nudgeFor([...rows.map((p) => ({ ...p, done: true })), makePriority(4, '')], 3)).toBe('complete');
   });
 });
 
@@ -97,7 +129,7 @@ describe('removePriority', () => {
 });
 
 describe('placePriority', () => {
-  it('fills the first empty row, padding first', () => {
+  it('fills the first row never written in, padding first', () => {
     const next = placePriority([makePriority(1, 'A')], 3, 'New task', 'abcdef123456', 100)!;
     expect(next.map((p) => p.text)).toEqual(['A', 'New task', '']);
     expect(next[1]).toMatchObject({ uid: 'abcdef123456', addedAt: 100, done: false });
@@ -110,21 +142,48 @@ describe('placePriority', () => {
     expect(next[3]).toMatchObject({ position: 4, text: 'D' });
   });
 
+  it('passes a cleared row, which keeps its uid and the sessions on it, for one never written in', () => {
+    const cleared = makePriority(2, '', { uid: 'cleared00000' });
+    const next = placePriority([makePriority(1, 'A'), cleared], 3, 'New task', 'abcdef123456', 100)!;
+    expect(next.map((p) => [p.text, p.uid])).toEqual([
+      ['A', makePriority(1, 'A').uid],
+      ['', 'cleared00000'],
+      ['New task', 'abcdef123456'],
+    ]);
+  });
+
+  it('appends rather than take a cleared row when the list has no free row', () => {
+    const rows = [makePriority(1, 'A'), makePriority(2, '  ', { uid: 'cleared00000' }), makePriority(3, 'C')];
+    const next = placePriority(rows, 3, 'D', 'abcdef123456', 100)!;
+    expect(next.map((p) => [p.position, p.text, p.uid])).toEqual([
+      [1, 'A', rows[0]!.uid],
+      [2, '  ', 'cleared00000'],
+      [3, 'C', rows[2]!.uid],
+      [4, 'D', 'abcdef123456'],
+    ]);
+  });
+
   it('refuses when the sheet is full', () => {
     const rows = Array.from({ length: MAX_PRIORITIES }, (_, i) => makePriority(i + 1, `p${i + 1}`));
     expect(placePriority(rows, 3, 'One more', 'abcdef123456', 100)).toBeNull();
+    // A cleared row still stands for its item, so a full list with one is full.
+    const oneCleared = rows.map((p) => (p.position === 7 ? { ...p, text: '' } : p));
+    expect(placePriority(oneCleared, 3, 'One more', 'abcdef123456', 100)).toBeNull();
   });
 });
 
 describe('hasRoom', () => {
   const full = Array.from({ length: MAX_PRIORITIES }, (_, i) => makePriority(i + 1, `p${i + 1}`));
 
-  it('is false only when every row up to the cap has text', () => {
+  it('is false only when the list is at the cap with no row never written in', () => {
+    const oneFree = full.map((p) => (p.position === 7 ? { ...p, text: '  ', uid: null, addedAt: null } : p));
     const oneCleared = full.map((p) => (p.position === 7 ? { ...p, text: '  ' } : p));
     expect(hasRoom([], 3)).toBe(true);
     expect(hasRoom(full, 3)).toBe(false);
     expect(hasRoom(full.slice(0, -1), 3)).toBe(true);
-    expect(hasRoom(oneCleared, 3)).toBe(true);
+    expect(hasRoom(oneFree, 3)).toBe(true);
+    // A cleared row keeps its uid and is not somewhere to put a new priority.
+    expect(hasRoom(oneCleared, 3)).toBe(false);
   });
 });
 

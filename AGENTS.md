@@ -51,8 +51,9 @@ shared/                 imported by both sides, always with a `.js` suffix
   punches.ts            kindForPosition: a punch row's kind is its position's parity; punchesKey: a list's
                         rows and times as one string; samePunches compares two lists by it;
                         MAX_PUNCHES (the server's row cap; the card hides Add extra out / in at it)
-  priorities.ts         hasText; mergePriorities: a priorities save laid onto the stored list as the changes
-                        made since its base, field by field as MERGED lists
+  priorities.ts         hasText; isFree (a row never written in, where a new priority may go); mergePriorities:
+                        a priorities save laid onto the stored list as the changes made since its base,
+                        field by field as MERGED lists
   text.ts               sameText: the key the same text typed twice is matched by
   backoff.ts            nextBackoff: the wait between retries of a request that must answer
 server/                 Express API → dist/server
@@ -477,20 +478,24 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **Priorities are stored as the client sends them, merged with what other devices saved**
   (positions 1..n, contiguous, ≤ `MAX_PRIORITIES`; no `done` on an empty row). A day never
   edited has none. The card saves the rows it shows, its padded empty ones included, so a
-  cleared row keeps its `uid` and the sessions that point at it; `PlanNext` saves only rows with
-  text. The server never pads: the client pads to `settings.priorityCount` with
-  `padPriorities()`, and every reader of a list skips empty rows with `hasText`
-  (`shared/priorities.ts`). `PUT /days/:date/priorities` takes the list and its `base`, the list
-  it was built on (the card's draft sends what its edits were made on, `PlanNext` and
-  `addPriority` the day's shown copy), and stores `mergePriorities(stored, base, list)`, which
-  the day store also shows while the save is out. Rows match by uid. Each field in `MERGED`
-  takes this device's value where it differs from `base`, else the stored one. A row this
-  device removed goes; one another device removed stays gone unless this device changed it.
-  A row another device added since `base` stays, in this device's first row never written in
-  (never an emptied one, which still stands for its item) or at the end, and a row added on
-  both with the same text (`sameText`) is one row, the stored one. Order is this device's.
-  Removing a row is sending the list without it. With no base (curl, a tab from before the
-  merge) the list replaces the stored one.
+  cleared row keeps its `uid`, its `addedAt` and the sessions that point at it: it is the same
+  item, and typing in it again renames it (with focus logged on it, the card says under it that
+  the time stays). A new priority never lands on a cleared row: Add priority and the timer's
+  Also add (`placePriority`, `hasRoom`) use a row never written in (`isFree`: empty, no uid) or
+  a new one at the end, and `planNext` (Plan tomorrow, the left-open Add) drops only rows never
+  written in. The nudge (`nudgeFor`) counts the rows with text. The server never pads: the
+  client pads to `settings.priorityCount` with `padPriorities()`, and every reader of a list
+  skips empty rows with `hasText` (`shared/priorities.ts`). `PUT /days/:date/priorities` takes
+  the list and its `base`, the list it was built on (the card's draft sends what its edits were
+  made on, `PlanNext` and `addPriority` the day's shown copy), and stores
+  `mergePriorities(stored, base, list)`, which the day store also shows while the save is out.
+  Rows match by uid. Each field in `MERGED` takes this device's value where it differs from
+  `base`, else the stored one. A row this device removed goes; one another device removed stays
+  gone unless this device changed it. A row another device added since `base` stays, in this
+  device's first row never written in (never a cleared one, which still stands for its item) or
+  at the end, and a row added on both with the same text (`sameText`) is one row, the stored
+  one. Order is this device's. Removing a row is sending the list without it. With no base
+  (curl, a tab from before the merge) the list replaces the stored one.
 - **A priority's identity is its `uid`, never its position.** The client mints it
   (`newUid()`) the first time a row gets text and stamps `addedAt`; both survive a text clear
   and a renumber. `sessions.priority_uid` points at it (null or a removed row = unplanned).
@@ -819,7 +824,9 @@ The browser pass for each surface (the logic under it is already tested):
   segment.
 - **Priorities or the timer card**: tick one row and press Add priority (the notice lists the
   ticked row); tap a chip, start, and the log row shows the number; "Also add to today's
-  priorities" fills the first empty row; a log row's select reassigns it.
+  priorities" fills the first row never written in, never a cleared one; a log row's select
+  reassigns it. Clear a row with focus logged on it: the note under it says the time stays, and
+  Add priority goes past it.
 - **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
   Month / Quarter).
 - **The History calendar**: one month at the mobile preset: ◀ to a seeded month, tap a day,

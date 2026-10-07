@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { completedSession, makeDay, makePriority, makeSession, punchesAt } from '../test/fixtures';
 import type { Day } from '../types';
-import { focusOf, hasContent, reviewDay } from './retro';
+import { focusOf, hasContent, loggedByUid, reviewDay } from './retro';
 
 const FIRST_UID = makePriority(1, '').uid;
 
@@ -15,6 +15,26 @@ describe('focusOf', () => {
     ];
     expect(focusOf(sessions)).toEqual({ seconds: 900, count: 2 });
     expect(focusOf([])).toEqual({ seconds: 0, count: 0 });
+  });
+});
+
+describe('loggedByUid', () => {
+  it("adds up each row's completed sessions by uid, and nothing else", () => {
+    const sessions = [
+      completedSession(1, 0, 600, { priorityUid: 'aaaaaaaaaaaa' }),
+      completedSession(2, 1, 300, { priorityUid: 'aaaaaaaaaaaa' }),
+      completedSession(3, 2, 120, { priorityUid: 'bbbbbbbbbbbb' }),
+      completedSession(4, 3, 900),
+      completedSession(5, 4, 100, { priorityUid: 'bbbbbbbbbbbb', status: 'cancelled' }),
+      makeSession({ id: 6, startedAt: 5, plannedSeconds: 900, priorityUid: 'cccccccccccc' }),
+    ];
+    expect(loggedByUid(sessions)).toEqual(
+      new Map([
+        ['aaaaaaaaaaaa', 900],
+        ['bbbbbbbbbbbb', 120],
+      ]),
+    );
+    expect(loggedByUid([]).size).toBe(0);
   });
 });
 

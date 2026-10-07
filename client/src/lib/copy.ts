@@ -121,6 +121,9 @@ export const WARNING_ACTIONS = {
   complete: { add: 'Add a bonus', keep: 'Stop here' },
 } as const;
 
+/** Under a Top priorities row that was cleared after focus was logged on it: the time stays with the row. Null: under a minute. */
+export const EMPTIED_ROW = (time: string | null) => `The ${time ?? 'time'} logged on this row stays with it. Use Add priority for something new.`;
+
 /** On today's empty priorities, when the last day with a plan left rows unticked. */
 export const LEFT_OPEN = {
   title: (from: string) => `Still open from ${from}`,

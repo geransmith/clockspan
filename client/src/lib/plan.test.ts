@@ -14,8 +14,8 @@ describe('nextWorkDay', () => {
 });
 
 describe('planNext', () => {
-  it('adds after what the day holds, skipping text already there and empty rows', () => {
-    const existing = [makePriority(1, ''), makePriority(2, 'Call the bank'), makePriority(3, 'Ship it')];
+  it('adds after what the day holds, skipping text already there and rows never written in', () => {
+    const existing = [makePriority(1, '', { uid: null, addedAt: null }), makePriority(2, 'Call the bank'), makePriority(3, 'Ship it')];
     const { rows, added } = planNext(existing, ['ship  IT', 'Write the report', ' ', 'write the report'], 99);
     expect(added).toBe(1);
     expect(rows.map((p) => [p.position, p.text])).toEqual([
@@ -27,6 +27,19 @@ describe('planNext', () => {
     expect(rows[0]!.uid).toBe(existing[1]!.uid);
     expect(rows[2]).toMatchObject({ done: false, addedAt: 99 });
     expect(rows[2]!.uid).toMatch(/^[0-9a-f]{12}$/);
+  });
+
+  it('keeps a cleared row, which still stands for its item, and adds after it', () => {
+    const cleared = makePriority(2, ' ', { uid: 'cleared00000' });
+    const existing = [makePriority(1, '', { uid: null, addedAt: null }), cleared, makePriority(3, 'Ship it')];
+    const { rows, added } = planNext(existing, ['Write the report'], 99);
+    expect(added).toBe(1);
+    expect(rows.map((p) => [p.position, p.text, p.uid])).toEqual([
+      [1, ' ', 'cleared00000'],
+      [2, 'Ship it', existing[2]!.uid],
+      [3, 'Write the report', rows[2]!.uid],
+    ]);
+    expect(rows[2]!.uid).not.toBe('cleared00000');
   });
 
   it('stops at the limit of rows a day can hold', () => {

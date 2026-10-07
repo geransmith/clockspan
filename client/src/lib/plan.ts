@@ -1,6 +1,6 @@
 import type { Priority } from '../types';
 import { addDays, isWeekend } from '../../../shared/dates.js';
-import { hasText } from '../../../shared/priorities.js';
+import { isFree } from '../../../shared/priorities.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { sameText } from '../../../shared/text.js';
 import { newUid } from './priorities';
@@ -17,12 +17,13 @@ export function nextWorkDay(date: string, showWeekends: boolean): string {
 
 /**
  * That day's list with `texts` added after what it already holds. Rows already there by text
- * aren't added twice, and nothing goes past the list's limit. Each new row gets its own uid and
+ * aren't added twice, and nothing goes past the list's limit. Only rows never written in are
+ * dropped: a cleared row keeps its uid and the sessions on it. Each new row gets its own uid and
  * `addedAt` now, so it counts as planned on its day unless a completed session there started
  * before it (`reviewDay`).
  */
 export function planNext(existing: Priority[], texts: string[], now = Date.now()): { rows: Priority[]; added: number } {
-  const kept = existing.filter(hasText);
+  const kept = existing.filter((p) => !isFree(p));
   const seen = new Set(kept.map((p) => sameText(p.text)));
   const rows = [...kept];
   for (const text of texts) {

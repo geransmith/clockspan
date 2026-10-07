@@ -604,6 +604,24 @@ describe('priorities', () => {
     expect(rows[1]).toMatchObject({ uid, addedAt: T0 });
   });
 
+  it('addPriority passes a cleared row, which keeps its uid and the sessions on it, for one never written in', async () => {
+    const cleared = makePriority(2, '', { uid: 'cleared00000' });
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [makePriority(1, 'First'), cleared] }));
+    vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
+    const { result } = renderStore();
+    await settle();
+    let uid = '';
+    await act(async () => {
+      uid = await result.current.addPriority(TODAY, 'From the timer');
+    });
+    expect(result.current.days[TODAY]!.priorities.map((p) => [p.text, p.uid])).toEqual([
+      ['First', makePriority(1, 'First').uid],
+      ['', 'cleared00000'],
+      ['From the timer', uid],
+    ]);
+    expect(uid).not.toBe('cleared00000');
+  });
+
   it("addPriority resolves to the uid of another device's row of the same text, which the server stores in its place", async () => {
     const report = makePriority(1, 'Report');
     vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [report] }));

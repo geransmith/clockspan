@@ -1,5 +1,5 @@
 import type { Day, Priority } from '../types';
-import { hasText } from '../../../shared/priorities.js';
+import { hasText, isFree } from '../../../shared/priorities.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { PRIORITY_WARNINGS } from './copy';
 
@@ -35,6 +35,17 @@ export function warningKind(done: number, total: number): WarningKind {
   return done >= total ? 'complete' : 'progress';
 }
 
+/**
+ * Whether adding a row to `rows` asks first, and with which kind of warning: null below
+ * `warnThreshold(count)`. Only rows with text count, so a cleared row, which a new priority
+ * goes past, doesn't bring the warning on sooner.
+ */
+export function nudgeFor(rows: Priority[], count: number): WarningKind | null {
+  const written = rows.filter(hasText);
+  if (written.length < warnThreshold(count)) return null;
+  return warningKind(written.filter((p) => p.done).length, written.length);
+}
+
 /** A random warning for the kind, never the same one twice in a row. */
 export function pickWarning(kind: WarningKind, avoid?: string, rng: () => number = Math.random): string {
   const pool = PRIORITY_WARNINGS[kind].filter((w) => w !== avoid);
@@ -67,21 +78,22 @@ export function removePriority(rows: Priority[], position: number): Priority[] {
   return rows.filter((p) => p.position !== position).map((p, i) => ({ ...p, position: i + 1 }));
 }
 
-/** Whether `placePriority` has somewhere to put a row: an empty one, or space for one more. */
+/** Whether `placePriority` has somewhere to put a row: one never written in, or space for one more. */
 export function hasRoom(rows: Priority[], count: number): boolean {
   const padded = padPriorities(rows, count);
-  return padded.length < MAX_PRIORITIES || padded.some((p) => !hasText(p));
+  return padded.length < MAX_PRIORITIES || padded.some(isFree);
 }
 
 /**
- * Where a priority added from the timer goes: the first empty row if there is one, else a
- * new row at the end. Returns the full list to save; null when the sheet is full.
+ * Where a priority added from the timer goes: the first row never written in (`isFree`), else a
+ * new row at the end. Never a cleared row: it keeps its uid, so writing over it would move its
+ * sessions onto the new priority. Returns the full list to save; null when the sheet is full.
  */
 export function placePriority(rows: Priority[], count: number, text: string, uid: string, addedAt: number): Priority[] | null {
   const padded = padPriorities(rows, count);
   const row = { text, done: false, uid, addedAt };
-  const empty = padded.find((p) => !hasText(p));
-  if (empty) return padded.map((p) => (p === empty ? { ...p, ...row } : p));
+  const free = padded.find(isFree);
+  if (free) return padded.map((p) => (p === free ? { ...p, ...row } : p));
   return padded.length < MAX_PRIORITIES ? [...padded, { position: padded.length + 1, ...row }] : null;
 }
 

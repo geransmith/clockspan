@@ -7,8 +7,12 @@ export function hasText(p: { text: string }): boolean {
   return p.text.trim() !== '';
 }
 
-/** A row nothing was ever written in: empty, with no uid. A row emptied later keeps its uid and still stands for its item. */
-function isFree(p: Priority): boolean {
+/**
+ * A row nothing was ever written in: empty, with no uid. A row emptied later keeps its uid and
+ * still stands for its item (its sessions point at it), so a new priority goes only into a free
+ * row, or a new one.
+ */
+export function isFree(p: Priority): boolean {
   return p.uid == null && !hasText(p);
 }
 

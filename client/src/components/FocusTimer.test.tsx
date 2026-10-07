@@ -122,6 +122,27 @@ describe('FocusTimer', () => {
     expect(alsoAdd()).toBeNull();
   });
 
+  it('adds typed work past a cleared row, so the sessions logged on that row stay on it', async () => {
+    vi.mocked(api.startSession).mockResolvedValue(started());
+    const cleared = makePriority(2, '');
+    await renderCard([makePriority(1, 'Report'), cleared, makePriority(3, 'Email')]);
+    typeLabel('Call the vendor');
+    fireEvent.click(alsoAdd()!);
+    fireEvent.click(start25());
+    await settle();
+    const rows = vi.mocked(api.putPriorities).mock.lastCall![1];
+    expect(rows.map((p) => p.text)).toEqual(['Report', '', 'Email', 'Call the vendor']);
+    expect(rows[1]).toEqual(cleared);
+    expect(rows[3]!.uid).not.toBe(cleared.uid);
+    expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Call the vendor', rows[3]!.uid);
+  });
+
+  it('does not offer to add typed work to a full list whose only empty row was cleared', async () => {
+    await renderCard(ticked(MAX_PRIORITIES).map((p) => (p.position === 2 ? { ...p, text: '', done: false } : p)));
+    typeLabel('Call the vendor');
+    expect(alsoAdd()).toBeNull();
+  });
+
   it('unlocks audio in the tap, before the priority is saved', async () => {
     vi.mocked(api.startSession).mockResolvedValue(started());
     await renderCard();

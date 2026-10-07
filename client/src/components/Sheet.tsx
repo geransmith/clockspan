@@ -104,6 +104,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
           <Priorities
             key={date}
             priorities={day.priorities}
+            sessions={day.sessions}
             onChange={(p, base) => void store.setPriorities(date, p, base)}
             leftOpen={
               leftOpen && {
