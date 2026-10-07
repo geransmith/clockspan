@@ -128,6 +128,35 @@ describe('migration 10: board cards', () => {
   });
 });
 
+describe('migration 11: categories', () => {
+  it('keeps one category per uid for each user, goes with its user, and gives sessions and cards none', () => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    migrate(db, 10);
+    const user = ensureDefaultUser(db);
+    const day = db.prepare(`INSERT INTO days (user_id, date, created_at) VALUES (?, '2026-09-01', 1000)`).run(user.id).lastInsertRowid;
+    db.prepare(
+      `INSERT INTO sessions (day_id, user_id, label, planned_seconds, started_at, ended_at, status) VALUES (?, ?, 'x', 600, 500, 1100, 'completed')`,
+    ).run(day, user.id);
+    db.prepare(`INSERT INTO board_cards (user_id, uid, title, lane, position, created_at) VALUES (?, 'card00000001', 'Report', 'later', 1, 1000)`).run(user.id);
+
+    migrate(db);
+    expect(db.prepare(`SELECT category_uid FROM sessions`).all()).toEqual([{ category_uid: null }]);
+    expect(db.prepare(`SELECT category_uid FROM board_cards`).all()).toEqual([{ category_uid: null }]);
+    const other = Number(db.prepare(`INSERT INTO users (kind, username, display_name, created_at) VALUES ('local', 'sam', 'Sam', 1)`).run().lastInsertRowid);
+    const insert = db.prepare(`INSERT INTO categories (user_id, uid, name, color) VALUES (?, ?, 'Tickets', 'blue')`);
+    insert.run(user.id, 'cat000000001');
+    expect(db.prepare(`SELECT archived_at FROM categories`).get()).toEqual({ archived_at: null });
+    expect(() => insert.run(user.id, 'cat000000001')).toThrow(/UNIQUE/);
+    // Uids are only unique per user, and names aren't unique in the table at all.
+    insert.run(other, 'cat000000001');
+    insert.run(user.id, 'cat000000002');
+    db.prepare(`DELETE FROM users WHERE id = ?`).run(other);
+    expect(countRows(db, 'categories')).toBe(2);
+    db.close();
+  });
+});
+
 describe("the README's script for switching from none to local", () => {
   // README.md → "Switching modes later": run by hand to give the implicit user's data to the new
   // account. A table that gains a user_id column has to join it, or its rows stay with the old
@@ -159,13 +188,14 @@ describe("the README's script for switching from none to local", () => {
     ).run(day, old.id);
     db.prepare(`INSERT INTO breaks (day_id, user_id, planned_seconds, started_at, ended_at) VALUES (?, ?, 300, 1600, 1900)`).run(day, old.id);
     db.prepare(`INSERT INTO board_cards (user_id, uid, title, lane, position, created_at) VALUES (?, 'card00000001', 'Report', 'later', 1, 1000)`).run(old.id);
+    db.prepare(`INSERT INTO categories (user_id, uid, name, color) VALUES (?, 'cat000000001', 'Tickets', 'blue')`).run(old.id);
     const settings = db.prepare(`INSERT INTO settings (user_id, json) VALUES (?, ?)`);
     settings.run(old.id, '{"from":"none"}');
     settings.run(admin, '{"from":"admin"}');
 
     db.exec(sql);
 
-    for (const table of ['days', 'sessions', 'breaks', 'board_cards', 'settings']) {
+    for (const table of ['days', 'sessions', 'breaks', 'board_cards', 'categories', 'settings']) {
       expect(db.prepare(`SELECT user_id FROM ${table}`).all(), table).toEqual([{ user_id: admin }]);
     }
     expect(db.prepare(`SELECT json FROM settings`).get()).toEqual({ json: '{"from":"none"}' });

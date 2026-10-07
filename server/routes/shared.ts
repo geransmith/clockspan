@@ -3,7 +3,7 @@ import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { refuse } from '../refuse.js';
 import { isWholeNumber } from '../validate.js';
-import type { Break, Lane, Punch, Session, SessionStatus } from '../../shared/api.js';
+import type { Break, CategoryColor, Lane, Punch, Session, SessionStatus } from '../../shared/api.js';
 import { activeMs, MIN_BREAK_MS } from '../../shared/timer.js';
 
 export interface DayRow {
@@ -30,6 +30,17 @@ export function ensureDay(db: DB, userId: number, date: string): number {
   if (existing) return existing.id;
   const info = db.prepare(`INSERT INTO days (user_id, date, created_at) VALUES (?, ?, ?)`).run(userId, date, Date.now());
   return Number(info.lastInsertRowid);
+}
+
+/**
+ * A `categoryUid` field (a card's, a session's): undefined = not mentioned, null = none, or a
+ * uid, lowercased. Only the shape is checked: a category is a soft link, and one made on this
+ * device may reach the server after the row, card or session that names it.
+ */
+export function parseCategoryUid(raw: unknown): { categoryUid: string | null | undefined } | { error: string } {
+  if (raw == null) return { categoryUid: raw };
+  if (typeof raw === 'string' && UID_RE.test(raw)) return { categoryUid: raw.toLowerCase() };
+  return { error: "categoryUid must be a category's id or null." };
 }
 
 /** A whole number of seconds within `bounds` for a `plannedSeconds` field, or the message to send back. */
@@ -69,6 +80,7 @@ interface SessionRowFields {
   priority_uid: string | null;
   paused_seconds: number;
   paused_at: number | null;
+  category_uid: string | null;
 }
 
 export type SessionRow = SessionRowFields & ({ status: 'running'; ended_at: null } | { status: Exclude<SessionStatus, 'running'>; ended_at: number });
@@ -94,6 +106,18 @@ export interface CardRow {
   done_at: number | null;
   /** 1 for a card a priorities save made and the board has not handled since. */
   untouched: number;
+  category_uid: string | null;
+}
+
+/** A category as stored; one removed in Settings has `archived_at` set and is never deleted. */
+export interface CategoryRow {
+  id: number;
+  user_id: number;
+  uid: string;
+  name: string;
+  /** Checked by the routes (`CATEGORY_COLORS`); the table has no CHECK. */
+  color: CategoryColor;
+  archived_at: number | null;
 }
 
 /** A session or break row with its day's date, which every answer about it carries. */
@@ -135,9 +159,10 @@ export function ownedRouter<T extends OwnedTable>(db: DB, table: T): { router: R
 /** The tables a `/:uid` route works on: each row belongs to one user, and to no day, and is named by its uid. */
 interface UidRows {
   board_cards: CardRow;
+  categories: CategoryRow;
 }
 type UidTable = keyof UidRows;
-const UID_NOT_FOUND: Record<UidTable, string> = { board_cards: 'Card not found.' };
+const UID_NOT_FOUND: Record<UidTable, string> = { board_cards: 'Card not found.', categories: 'Category not found.' };
 
 /** The user's own row of `table` with this uid (lowercase); undefined for anyone else's, or none. */
 export function getOwnedByUid<T extends UidTable>(db: DB, table: T, userId: number, uid: string): UidRows[T] | undefined {
@@ -193,6 +218,7 @@ export function sessionRowToJson(s: Dated<SessionRow>): Session {
     pausedSeconds: s.paused_seconds,
     pausedAt: s.paused_at,
     priorityUid: s.priority_uid,
+    categoryUid: s.category_uid,
   };
   if (s.status === 'running') return { ...fields, status: 'running', endedAt: null, durationSeconds: null };
   return { ...fields, status: s.status, endedAt: s.ended_at, durationSeconds: Math.round(activeMs(fields, s.ended_at) / 1000) };

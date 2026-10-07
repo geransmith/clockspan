@@ -339,6 +339,7 @@ describe('AUTH_MODE=local', () => {
     await sam.put('/api/days/2026-09-01/punches', { punches: [{ at: Date.UTC(2026, 8, 1, 8) }, { at: null }, { at: null }, { at: null }] });
     expect((await sam.put('/api/days/2026-09-01/retro', { note: 'note only sam wrote' })).status).toBe(200);
     expect((await sam.post('/api/board/cards', { uid: 'card00000001', title: 'card only sam wrote', lane: 'later', before: null })).status).toBe(201);
+    expect((await sam.post('/api/board/categories', { uid: 'cat000000001', name: 'category only sam named', color: 'blue' })).status).toBe(201);
     expect(app.count('days')).toBe(1);
 
     // Only plain digits name a user: Number() would read each of these as the id.
@@ -349,9 +350,11 @@ describe('AUTH_MODE=local', () => {
     expect((await app.api.del(`/api/auth/users/${created.body.user.id}`)).status).toBe(404);
     expect(app.count('days')).toBe(0);
     expect(app.count('board_cards')).toBe(0);
+    expect(app.count('categories')).toBe(0);
     // Compacted: the deleted text is not left behind in a free page.
     expect(app.db.serialize().includes('note only sam wrote')).toBe(false);
     expect(app.db.serialize().includes('card only sam wrote')).toBe(false);
+    expect(app.db.serialize().includes('category only sam named')).toBe(false);
     expect((await sam.get('/api/settings')).status).toBe(401);
 
     expect((await app.api.del(`/api/auth/users/${adminId}`)).status).toBe(400);

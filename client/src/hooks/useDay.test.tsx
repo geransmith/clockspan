@@ -706,6 +706,84 @@ describe('priorities', () => {
     expect(api.putPriorities).toHaveBeenCalledTimes(1);
   });
 
+  it('reads the day again after a save that removes a row with a category that a session was logged on, to show the category the server gave it', async () => {
+    const report = makePriority(1, 'Report', { categoryUid: 'cat000000001' });
+    const email = makePriority(2, 'Email');
+    const onReport = endSession(makeSession({ id: 4, priorityUid: report.uid }));
+    vi.mocked(api.getDay)
+      .mockResolvedValueOnce(makeDay(TODAY, { priorities: [report, email], sessions: [onReport] }))
+      .mockResolvedValueOnce(makeDay(TODAY, { priorities: [{ ...email, position: 1 }], sessions: [{ ...onReport, categoryUid: 'cat000000001' }] }));
+    vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
+    const { result } = renderStore();
+    await settle();
+    await act(() => result.current.setPriorities(TODAY, [{ ...email, position: 1 }], [report, email]));
+    await settle();
+    expect(api.getDay).toHaveBeenCalledTimes(2);
+    expect(result.current.days[TODAY]!.sessions).toEqual([{ ...onReport, categoryUid: 'cat000000001' }]);
+  });
+
+  it('reads the day again when a row is removed while the save that gave it a category is still out', async () => {
+    const report = makePriority(1, 'Report');
+    const email = makePriority(2, 'Email');
+    const onReport = endSession(makeSession({ id: 4, priorityUid: report.uid }));
+    const after = makeDay(TODAY, { priorities: [{ ...email, position: 1 }], sessions: [{ ...onReport, categoryUid: 'cat000000001' }] });
+    vi.mocked(api.getDay)
+      .mockResolvedValueOnce(makeDay(TODAY, { priorities: [report, email], sessions: [onReport] }))
+      .mockResolvedValueOnce(after);
+    const picked = deferred<{ priorities: Priority[] }>();
+    vi.mocked(api.putPriorities).mockReturnValueOnce(picked.promise).mockImplementation(echoPriorities);
+    const { result } = renderStore();
+    await settle();
+    const stored = [report, email];
+    // The pick is out; the removal is built on the list from before it, as the card's draft is.
+    const withCategory = [{ ...report, categoryUid: 'cat000000001' }, email];
+    const pick = begin(() => result.current.setPriorities(TODAY, withCategory, stored));
+    const removal = begin(() => result.current.setPriorities(TODAY, [{ ...email, position: 1 }], stored));
+    picked.resolve({ priorities: withCategory });
+    await act(() => Promise.all([pick, removal]));
+    await settle();
+    expect(api.getDay).toHaveBeenCalledTimes(2);
+    expect(result.current.days[TODAY]!.sessions).toEqual(after.sessions);
+  });
+
+  it('reads the day once, for the failure, when a save that removes a row with a category fails', async () => {
+    const report = makePriority(1, 'Report', { categoryUid: 'cat000000001' });
+    const onReport = endSession(makeSession({ id: 4, priorityUid: report.uid }));
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [report], sessions: [onReport] }));
+    vi.mocked(api.putPriorities).mockRejectedValue(new Error('offline'));
+    const { result } = renderStore();
+    await settle();
+    await act(() => result.current.setPriorities(TODAY, [], [report]));
+    await settle();
+    expect(api.getDay).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads nothing again when no session was logged on a removed row with a category and none of its own', async () => {
+    const report = makePriority(1, 'Report', { categoryUid: 'cat000000001' });
+    const plain = makePriority(2, 'Plain');
+    const picked = makePriority(3, 'Picked', { categoryUid: 'cat000000002' });
+    const unlogged = makePriority(4, 'Unlogged', { categoryUid: 'cat000000003' });
+    const sessions = [
+      endSession(makeSession({ id: 1, priorityUid: report.uid })),
+      endSession(makeSession({ id: 2, priorityUid: plain.uid })),
+      endSession(makeSession({ id: 3, priorityUid: picked.uid, categoryUid: 'cat000000009' })),
+    ];
+    const stored = [report, plain, picked, unlogged];
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: stored, sessions }));
+    vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
+    const { result } = renderStore();
+    await settle();
+    // Emptied, the row stays on the list with its category; the others go.
+    const emptied = [{ ...report, text: '' }];
+    await act(() => result.current.setPriorities(TODAY, emptied, stored));
+    await settle();
+    expect(api.getDay).toHaveBeenCalledTimes(1);
+    // A day the store doesn't hold has no sessions to read again.
+    await act(() => result.current.setPriorities(OTHER, [], [report]));
+    await settle();
+    expect(api.getDay).toHaveBeenCalledTimes(1);
+  });
+
   it('prioritiesSaved resolves at once with no priorities save out', async () => {
     const { result } = renderStore(null);
     await expect(result.current.prioritiesSaved(TODAY)).resolves.toBeUndefined();

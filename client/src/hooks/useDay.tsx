@@ -70,7 +70,9 @@ interface DayStore {
   /**
    * A day's priorities, built on `base` (the list the caller read). The server lays the changes
    * made since `base` onto what it holds, so a row or a tick another device saved meanwhile
-   * stays, and until it answers the day shows the same merge (`mergePriorities`).
+   * stays, and until it answers the day shows the same merge (`mergePriorities`). Once saved, a
+   * day whose list lost a row with a category that a session was logged on is read again: the
+   * server gave the session that category (`leavesCategory`).
    */
   setPriorities: (date: string, priorities: Priority[], base: Priority[]) => Promise<boolean>;
   /**
@@ -119,6 +121,18 @@ function replaceById<T extends { id: number; startedAt: number }>(list: readonly
 /** The day as the server now has it after confirming `session`: the row inserted, replaced or (cancelled) dropped. */
 function withSession(d: Day, session: Session): Day {
   return { ...d, sessions: replaceById(d.sessions, session.id, session.status === 'cancelled' ? null : session) };
+}
+
+/**
+ * Whether `rows`, a day's list once a priorities save is in, lost a row of `before` (the rows
+ * the save was built on or shown over) with a category that a session of the day was logged on
+ * with none of its own. The server then gave that session the row's category
+ * (`keepSessionCategories`), which only a read of the day shows.
+ */
+function leavesCategory(before: Priority[], rows: Priority[], sessions: Session[]): boolean {
+  const listed = new Set(rows.map((p) => p.uid));
+  const gone = new Set(before.filter((p) => p.categoryUid != null && !listed.has(p.uid)).map((p) => p.uid));
+  return sessions.some((s) => s.categoryUid == null && gone.has(s.priorityUid));
 }
 
 /** The lists a save sends whole. */
@@ -364,12 +378,19 @@ export function DayProvider({ children }: { children: ReactNode }) {
   );
 
   const setPriorities = useCallback(
-    (date: string, priorities: Priority[], base: Priority[]) =>
-      sendLatest('priorities', date, priorities, async (p, b) => (await api.putPriorities(date, p, { base: b })).priorities, {
+    async (date: string, priorities: Priority[], base: Priority[]) => {
+      // The rows shown now carry a category picked a moment ago whose save is still out, which
+      // `base` may not have yet: removing that row takes the category off too.
+      const shown = shownDay(current().days[date])?.priorities ?? [];
+      const saved = await sendLatest('priorities', date, priorities, async (p, b) => (await api.putPriorities(date, p, { base: b })).priorities, {
         base,
         show: (rows) => mergePriorities(rows, base, priorities),
-      }),
-    [sendLatest],
+      });
+      const day = shownDay(current().days[date]);
+      if (saved && day && leavesCategory([...base, ...shown], day.priorities, day.sessions)) void refresh(date);
+      return saved;
+    },
+    [sendLatest, current, refresh],
   );
 
   const addPriority = useCallback(

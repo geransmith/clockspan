@@ -90,10 +90,10 @@ today, clocked in two hours ago. [AGENTS.md](AGENTS.md#dev-data-is-disposable) l
 day holds.
 
 Dates are relative to the day you run it, so the sample always lands in the current week.
-Each run first deletes every day and board card of the user it seeds, including ones you
-entered by hand; settings stay unless you pass `--fresh`. It only writes to the local database
-(`DATA_DIR`, default `./data`); it never touches a Docker `/data` volume. Safe to run while
-`npm run dev` is up; reload the page.
+Each run first deletes every day, board card and category of the user it seeds, including
+ones you entered by hand; settings stay unless you pass `--fresh`. It only writes to the local
+database (`DATA_DIR`, default `./data`); it never touches a Docker `/data` volume. Safe to run
+while `npm run dev` is up; reload the page.
 
 ```bash
 npm run seed                      # the default set above
@@ -234,7 +234,7 @@ Login is rate-limited to 5 failed attempts per 15 minutes per IP, counting an IP
 
 The app refuses to start if `APP_URL`, `OIDC_ISSUER`, `OIDC_CLIENT_ID` or `OIDC_CLIENT_SECRET` is missing, or if `OIDC_ISSUER` isn't an `https://` URL (the sign-in library never contacts a provider over plain http). If Authentik is briefly unreachable at startup the app still boots and retries discovery in the background. Sign out also ends the Authentik session when the provider advertises an end-session endpoint.
 
-**Switching modes later.** Data is keyed by user. A sign-in belongs to the mode it was made in, so after a switch everyone signs in again (under `local` with no account yet, the first visit shows the create-account page). Going from `none` to `local` creates a fresh admin; the old implicit user's data stays in the database. To hand it to the new account, stop the container and run the script below before the new account records a day of its own (a user has one row per date, so a date both accounts used stops the script and nothing moves). Days move together with their sessions and breaks, which belong to a user as well as a day. Board cards move too; their ids are random, so the two accounts never clash on them. The last two statements bring the old settings along, replacing any the admin saved; leave them out to keep the admin's.
+**Switching modes later.** Data is keyed by user. A sign-in belongs to the mode it was made in, so after a switch everyone signs in again (under `local` with no account yet, the first visit shows the create-account page). Going from `none` to `local` creates a fresh admin; the old implicit user's data stays in the database. To hand it to the new account, stop the container and run the script below before the new account records a day of its own (a user has one row per date, so a date both accounts used stops the script and nothing moves). Days move together with their sessions and breaks, which belong to a user as well as a day. Board cards and categories move too; their ids are random, so the two accounts never clash on them. The last two statements bring the old settings along, replacing any the admin saved; leave them out to keep the admin's.
 
 ```bash
 sqlite3 /path/on/host/focus.db <<'SQL'
@@ -247,6 +247,7 @@ UPDATE days        SET user_id = (SELECT to_id FROM handover) WHERE user_id = (S
 UPDATE sessions    SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
 UPDATE breaks      SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
 UPDATE board_cards SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
+UPDATE categories  SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
 DELETE FROM settings WHERE user_id = (SELECT to_id FROM handover)
                 AND EXISTS (SELECT 1 FROM settings WHERE user_id = (SELECT from_id FROM handover));
 UPDATE settings SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);

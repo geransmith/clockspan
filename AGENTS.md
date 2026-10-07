@@ -45,7 +45,8 @@ shared/                 imported by both sides, always with a `.js` suffix
                         MAX_PRIORITIES, SETTING_LIMITS, RETENTION_LIMITS
   api.ts                every wire type and `emptyDay`; the server's JSON builders and client/src/api.ts both use them,
                         the input limits both sides check (LIMITS, USERNAME, PASSWORD_LENGTH), the board's
-                        lanes (LANES) and the server's caps on it (BOARD_LIMITS)
+                        lanes (LANES), the server's caps on it (BOARD_LIMITS) and the category colours
+                        (CATEGORY_COLORS)
   sounds.ts             the sound catalog (SOUNDS, SOUND_EVENTS)
   dates.ts, timer.ts    date keys; pause-aware session timing (activeMs, plannedEndAt, pausedSecondsAfter,
                         PLANNED_SECONDS)
@@ -58,7 +59,8 @@ shared/                 imported by both sides, always with a `.js` suffix
                         card or recurring priority); repeatedLink (what the PUT refuses); the merge's
                         clean-up, dedupeLinks (one text row per link) and dropShadowedLinks (an emptied
                         row loses a link a text row holds)
-  text.ts               sameText: the key the same text typed twice is matched by
+  text.ts               sameText: the key the same text typed twice is matched by, and category names are
+                        compared by
   backoff.ts            nextBackoff: the wait between retries of a request that must answer
 server/                 Express API → dist/server
   app.ts                createApp(): headers, /api/health, /api/auth/me for every mode, auth routers,
@@ -68,10 +70,12 @@ server/                 Express API → dist/server
   security.ts           every security header, rejectCrossSiteWrites and rejectUnknownHosts
   config.ts, db.ts      env parsing (throws on bad config); pragmas, MIGRATIONS, the default user
   settings.ts           mergeSettings (defaults + validation on every read and write), loadSettings
-  board.ts              the board's cards as stored: boardJson (listDate and held read from the rows),
-                        placing and renumbering, and mirrorCards (the cards following a priorities save)
+  board.ts              the board's cards as stored: boardJson (listDate and held read from the rows,
+                        and the categories), placing and renumbering, and mirrorCards (the cards
+                        following a priorities save)
   retention.ts          old-day pruning (pruneDays, runRetention, the RETENTION_DAYS cap)
-  validate.ts           isWholeNumber: the one check for every bounded whole number the server takes
+  validate.ts           isWholeNumber: the one check for every bounded whole number the server takes;
+                        isOneOf: a value from a fixed list (a setting's choices, a category's colour)
   refuse.ts             refuse(): sends an ErrorResponse; every API refusal but the timer-start 409 goes through it
   auth/                 session cookie, scrypt passwords, the login limiter, publicUser/logName (users.ts),
                         middleware (currentUser), local + OIDC routes, resetPassword (reset.ts: what the
@@ -171,26 +175,30 @@ to start over, with no confirmation. Production data lives only on the Docker `/
 which the dev machine cannot reach. Run the destructive paths for real: delete a session or
 user, cancel a timer, `DELETE /api/settings`.
 
-Start from `npm run seed`, not an empty DB (`server/dev/seed.ts`). A run deletes every day and
-every board card of the user it seeds, hand-made ones included, then writes the last 10 weekdays
-and today. Each past weekday takes a template by its distance back (`kindForDistance`): the last
-weekday has an extra out/in pair in the afternoon and a priority added mid-day (the README's
-retro shot), then come a normal day, an overtime day (approved, 10 h 15 m worked, with the
-second meal taken as an out/in pair after lunch), an unreviewed day (a note written but never
-marked reviewed, and a cancelled session) and a half day with its own 4 h 30 m work day and no
-lunch punched. Further back the templates recur at fixed intervals, so the default 10 are three
-normal days, two each of the extra pair, overtime and unreviewed (two cancelled sessions in all)
-and one half day. Every past day has two to four priorities and a note. Today is clocked in two
-hours before *now*. Its three priorities were planned two minutes after the last weekday's
-review, with that day's first open row carried to position 1 (a row of its own, with its own
-uid) and the second row ticked; its log has a 50-minute session for the ticked row, an unplanned
-one paused for eight minutes and finished three minutes short of its 25, a full break and one
-cut short. The board holds what saves with the board on would have made of the last weekday's
-and today's rows (`insertBoard`), each row linked by its `cardUid`: open rows in Next, ticked
-ones in Done, all untouched, and today's carried row on the same card as its source row. Four
-cards were captured on the board: three in Later ("Write a KB for the SSO reset", "Review canned
-replies", "Look into the export timeout") and one at the end of Next ("Follow up on the Acme
-SLA"). No seeded row links to a recurring priority or a category.
+Start from `npm run seed`, not an empty DB (`server/dev/seed.ts`). A run deletes every day,
+board card and category of the user it seeds, hand-made ones included, then writes the last 10
+weekdays and today. Each past weekday takes a template by its distance back (`kindForDistance`):
+the last weekday has an extra out/in pair in the afternoon and a priority added mid-day (the
+README's retro shot), then come a normal day, an overtime day (approved, 10 h 15 m worked, with
+the second meal taken as an out/in pair after lunch), an unreviewed day (a note written but
+never marked reviewed, and a cancelled session) and a half day with its own 4 h 30 m work day
+and no lunch punched. Further back the templates recur at fixed intervals, so the default 10 are
+three normal days, two each of the extra pair, overtime and unreviewed (two cancelled sessions
+in all) and one half day. Every past day has two to four priorities and a note. Today is clocked
+in two hours before *now*. Its three priorities were planned two minutes after the last
+weekday's review, with that day's first open row carried to position 1 (a row of its own, with
+its own uid) and the second row ticked; its log has a 50-minute session for the ticked row, an
+unplanned one paused for eight minutes and finished three minutes short of its 25, a full break
+and one cut short. The board holds what saves with the board on would have made of the last
+weekday's and today's rows (`insertBoard`), each row linked by its `cardUid`: open rows in Next,
+ticked ones in Done, all untouched, and today's carried row on the same card, in the same
+category, as its source row. Four cards were captured on the board: three in Later ("Write a KB
+for the SSO reset", "Review canned replies", "Look into the export timeout") and one at the end
+of Next ("Follow up on the Acme SLA"). The board has four categories (`SEEDED_CATEGORIES`:
+Tickets, Follow-ups, Knowledge base, Admin), and each sample text counts under the same one on
+every day (`CATEGORY_OF`): most rows and their cards have one, two (a call to the bank, a
+colleague's pull request) have none, the captured cards have one, and so do the unplanned
+"Inbox" sessions (Tickets), the only sessions with a category of their own. No seeded row links to a recurring priority.
 
 `--running` leaves a 25-minute timer running, started ten minutes before *now*, for timer work;
 `--quarter` seeds every weekday since the start of last quarter, for Month / Quarter review
@@ -269,7 +277,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **Old-day deletion goes through `pruneDays` (`server/retention.ts`)**, whether from the
   Data tab's button (`POST /days/prune`) or the scheduled `runRetention`. It deletes `days`
   rows before a date key (cascades take punches, priorities, sessions, breaks), never a day with a
-  running session, and never settings. The Data tab sends it through the day store's
+  running session, and never settings or categories. The Data tab sends it through the day store's
   `pruneBefore`, which reads the held days before the cutoff again and moves `generation`, so
   the ranges on screen ask again. The per-user setting `retention { enabled, days }` is
   capped by `RETENTION_DAYS` (`config.retentionDays`) via `effectiveKeepDays`; a user with no
@@ -292,9 +300,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   with an `:id` is checked, one added later included, with nothing to list on the route. It
   answers 404 for another user's row or none, and the handler reads the row with `owned(res)`.
   A table whose rows hang off the user rather than a day and are named by a uid (the board's
-  cards, `/board/cards/:uid`) gets the same from `uidRouter()` beside it, as the router's `uid`
-  param handler: the uid's shape is checked, it is matched lowercased, and anyone else's or
-  none is a 404.
+  cards, `/board/cards/:uid`, and categories, `/board/categories/:uid`) gets the same from
+  `uidRouter()` beside it, as the router's `uid` param handler: the uid's shape is checked, it is
+  matched lowercased, and anyone else's or none is a 404.
 - **Settings go through `mergeSettings()` on every read and write** (`server/settings.ts`):
   the stored JSON is merged onto `DEFAULT_SETTINGS`, unknown keys are dropped, invalid values
   fall back, and a PUT stores the whole merged object, so a key added since a user's last save
@@ -554,8 +562,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   cap the row waits for a later save, and the save never fails for it); `touched` names the
   cards a board action handled through their rows. Whatever `cards` is, only what the save
   changed is copied, and only from the card's latest linked day: a row gaining text (new to the
-  list, or typed into again) gives the title and the lane by its tick, new text the title, a
-  tick Done and an untick the top of Next. Done is reached only through a ticked row. A card a
+  list, or typed into again) gives the title, the category and the lane by its tick, new text
+  the title, a new category the category, a tick Done and an untick the top of Next; a card a
+  save makes takes its row's title and category. Done is reached only through a ticked row. A card a
   save made stays `untouched` until a board POST or PATCH, or a save whose `touched` names it:
   while its row there is emptied it is held (shown nowhere until the row has text again), and
   when that row is removed it is deleted, so a row typed and then removed leaves no card behind.
@@ -566,6 +575,23 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `POST` of a uid that exists places that card (a park) instead of making one. A board write
   that adds a card to Later and Next (a new one, or one taken out of Done) is refused at the
   cap. Recurring rows never get a card.
+- **A category is a row of its own, named by its uid** (`categories`, routes in
+  `routes/board.ts`, answered in `Board.categories`). Rows, cards and sessions point at one by
+  `categoryUid`, a soft link checked for shape only, so a category made on this device can reach
+  the server after the row that names it. Removing one archives it (`archived_at`), never deletes
+  it, so the time logged under it keeps its name; a `POST` of its uid brings it back with the name
+  and colour sent. Names are unique among a user's categories in use, whatever their case or
+  spacing (`sameText`), checked by the routes (the table has no UNIQUE on the name, which would
+  stop the README's handover script), and a new uid can't take a removed one's name either: the
+  client brings that one back. The server caps them at 100 in use and 1000 stored
+  (`BOARD_LIMITS`), sanity caps with no product limit behind them; colours (`CATEGORY_COLORS`,
+  checked with `isOneOf`) repeat. A session counts under the category of the written row it was
+  logged on; its own `categoryUid` is one picked in the log, or the category of its row once a
+  priorities save removes that row: the PUT copies it onto the day's sessions on that row that
+  have none (`keepSessionCategories`, in the same transaction), and the day store, seeing that
+  save take a row with a category off a list a session points at (`leavesCategory`), reads the
+  day again. An emptied row stays on its list with its category, so its sessions keep counting
+  under it and nothing is copied.
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started —
   one rule, no clock-in fallback. `GET /days/range` returns full days and the client does the
@@ -754,20 +780,26 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   in `addPriority`'s row (`useDay.tsx`) → if carry-over keeps it, `PrioritySeed`, `textSeed`
   and `planNext`'s row (`lib/plan.ts`) → if it is a link a list holds once, `LINKS`
   (`shared/priorities.ts`), which `repeatedLink`, `dedupeLinks`, `dropShadowedLinks` and
-  `sharesLink` read (`placePriority` and `planNext` match through `sharesLink`) → the seed
-  (`server/dev/seed.ts`: its rows, typecheck asks; `insertDay`'s INSERT, it doesn't) →
-  `makePriority` (`client/src/test/fixtures.ts`) → the padded-rows case in
-  `server/routes/days.test.ts` ("takes the web app's rows as it pads and sends them").
+  `sharesLink` read (`placePriority` and `planNext` match through `sharesLink`) → if the row's
+  card carries it too (as it does `categoryUid`), a `board_cards` column, the field on
+  `BoardCard` (`shared/api.ts`) and `CardRow` (`routes/shared.ts`), `boardJson`, and the copy in
+  `mirrorCards` (`server/board.ts`): a card the save makes, or whose row gains text, takes the
+  row's value, and otherwise only a change the save made is copied; the column also goes in the
+  card INSERTs of `createCard` and `mirrorCards`' `make` and in the seed's `insertBoard`, which
+  typecheck doesn't check → the seed (`server/dev/seed.ts`: its rows, typecheck asks;
+  `insertDay`'s INSERT, it doesn't) → `makePriority` (`client/src/test/fixtures.ts`) → the
+  padded-rows case in `server/routes/days.test.ts` ("takes the web app's rows as it pads and
+  sends them").
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
   `currentUser(req).id` (a `/:date` route goes on the days router, whose param handler checks
   the date; a `/:id` route on the sessions or breaks router, or a `/:uid` route on the board's
-  cards router, is checked by the router itself and reads its row with `owned(res)`; a new
-  table addressed by id gets its entry in `OwnedRows` and `NOT_FOUND` and a router from
-  `ownedRouter()`, and a new table of the user's addressed by uid its entry in `UidRows` and
-  `UID_NOT_FOUND` and a router from `uidRouter()`, all in `routes/shared.ts`), validate input
-  (`app.ts` makes a missing or non-JSON body `{}`, so a route reads fields straight off
-  `req.body as { field?: unknown }`, with no `?? {}` or `?.`, and checks each one; the
-  `no-unsafe-*` lint refuses reading it as `any`), refuse with
+  cards or categories router, is checked by the router itself and reads its row with
+  `owned(res)`; a new table addressed by id gets its entry in `OwnedRows` and `NOT_FOUND` and a
+  router from `ownedRouter()`, and a new table of the user's addressed by uid its entry in
+  `UidRows` and `UID_NOT_FOUND` and a router from `uidRouter()`, all in `routes/shared.ts`),
+  validate input (`app.ts` makes a missing or non-JSON body `{}`, so a route reads fields
+  straight off `req.body as { field?: unknown }`, with no `?? {}` or `?.`, and checks each one;
+  the `no-unsafe-*` lint refuses reading it as `any`), refuse with
   `return refuse(res, status, message)` → add the call to `client/src/api.ts` (a request
   body the client builds in more than one place gets its type there, at the head of the section
   whose calls send it, as `RetroPatch` and `SessionEdit` do: the server reads every body as `unknown`), with a

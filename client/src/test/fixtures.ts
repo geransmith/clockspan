@@ -12,6 +12,7 @@ import type {
   CancelledSession,
   CardId,
   CardSide,
+  Category,
   CompletedSession,
   Day,
   Priority,
@@ -115,8 +116,14 @@ export function makeSession(patch: Partial<RunningSession> = {}): RunningSession
     pausedAt: null,
     durationSeconds: null,
     priorityUid: null,
+    categoryUid: null,
     ...patch,
   };
+}
+
+/** A category in use, blue unless `patch` says otherwise. */
+export function makeCategory(uid: string, name: string, patch: Partial<Category> = {}): Category {
+  return { uid, name, color: 'blue', archived: false, ...patch };
 }
 
 /** What `endSession` may set on the ended session. */

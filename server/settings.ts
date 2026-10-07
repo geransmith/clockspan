@@ -20,10 +20,10 @@ import {
   type Settings,
 } from '../shared/settings.js';
 import { SOUND_EVENTS, SOUND_IDS, type SoundEvent, type SoundId } from '../shared/sounds.js';
-import { isWholeNumber } from './validate.js';
+import { isOneOf, isWholeNumber } from './validate.js';
 
 const record = (v: unknown): Record<string, unknown> | null => (v && typeof v === 'object' ? (v as Record<string, unknown>) : null);
-const oneOf = <T extends string>(list: readonly T[], v: unknown, fallback: T): T => (list.includes(v as T) ? (v as T) : fallback);
+const oneOf = <T extends string>(list: readonly T[], v: unknown, fallback: T): T => (isOneOf(list, v) ? v : fallback);
 const bool = (v: unknown, fallback: boolean): boolean => (typeof v === 'boolean' ? v : fallback);
 const whole = (v: unknown, bounds: { readonly min: number; readonly max: number }, fallback: number): number => (isWholeNumber(v, bounds) ? v : fallback);
 type SwitchKey = { [K in keyof Settings]: Settings[K] extends boolean ? K : never }[keyof Settings];

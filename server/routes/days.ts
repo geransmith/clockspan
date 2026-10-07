@@ -185,6 +185,17 @@ function parseTouched(raw: unknown): Set<string> | null {
 }
 
 /**
+ * The sessions logged on a row this save removed take the row's category, unless they have one
+ * of their own: the row is gone, so nothing else says what that time was for. An emptied row
+ * stays on the list and keeps its category, which its sessions count under through it.
+ */
+function keepSessionCategories(db: DB, dayId: number, stored: Priority[], list: Priority[]): void {
+  const listed = new Set(list.map((p) => p.uid));
+  const keep = db.prepare(`UPDATE sessions SET category_uid = ? WHERE day_id = ? AND priority_uid = ? AND category_uid IS NULL`);
+  for (const row of stored) if (row.categoryUid != null && !listed.has(row.uid)) keep.run(row.categoryUid, dayId, row.uid);
+}
+
+/**
  * Rows by their day's id, each list in the rows' order. Not `Map.groupBy`: it is ES2024, and
  * oxlint's type-aware rules check server files without that lib, whatever the tsconfigs say.
  */
@@ -323,7 +334,8 @@ export function daysRouter(db: DB, config: Config): Router {
   // already holds, the merge keeps one. The board's cards follow the list in the same
   // transaction (`mirrorCards`): `cards` (the board is on and the day is today or later, which
   // only the client knows) makes a card for each text row without one, and `touched` names the
-  // cards a board action handled through their rows.
+  // cards a board action handled through their rows. So do the sessions logged on a removed row,
+  // which take its category (`keepSessionCategories`).
   r.put('/:date/priorities', (req, res) => {
     const user = currentUser(req);
     const { date } = req.params;
@@ -352,6 +364,7 @@ export function daysRouter(db: DB, config: Config): Router {
         `INSERT INTO priorities (day_id, position, text, done, uid, added_at, card_uid, recurring_uid, category_uid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       for (const p of list) ins.run(dayId, p.position, p.text, p.done ? 1 : 0, p.uid, p.addedAt, p.cardUid, p.recurringUid, p.categoryUid);
+      keepSessionCategories(db, dayId, stored, list);
       return list;
     })();
     if (typeof saved === 'string') return refuse(res, 400, saved);

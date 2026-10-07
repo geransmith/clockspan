@@ -6,7 +6,7 @@ import { ensureDay } from './shared.js';
 import { MAX_PRIORITIES } from '../../shared/settings.js';
 import { MAX_PUNCHES } from '../../shared/punches.js';
 import { HOUR_MS, punchWindow } from '../../shared/dates.js';
-import { BOARD_LIMITS, LIMITS, type BoardCard, type Priority } from '../../shared/api.js';
+import { BOARD_LIMITS, LIMITS, type BoardCard, type Day, type Priority } from '../../shared/api.js';
 
 /** 2026-09-01's UTC midnight; the tests add hours to it, which keeps each time inside punchWindow('2026-09-01'). */
 const T0 = Date.UTC(2026, 8, 1);
@@ -554,6 +554,7 @@ describe('PUT /api/days/:date/priorities: board cards', () => {
     expect(await card(report.cardUid)).toEqual({
       uid: report.cardUid,
       title: 'Report',
+      categoryUid: null,
       lane: 'next',
       position: 1,
       createdAt: SEED_NOW,
@@ -868,6 +869,43 @@ describe('PUT /api/days/:date/priorities: board cards', () => {
     expect((await rowOn(MON)).cardUid).toBe(uid);
   });
 
+  it("gives a card its row's category when a save makes it, or makes it again", async () => {
+    const r = await saveOn(MON, [
+      { text: 'Report', categoryUid: 'cat000000001' },
+      { text: 'Email', done: true },
+    ]);
+    const [report, email] = r.body.priorities;
+    expect(await card(report.cardUid)).toMatchObject({ categoryUid: 'cat000000001' });
+    expect(await card(email.cardUid)).toMatchObject({ categoryUid: null });
+    // Deleted on another device while the row was emptied: typed in again, it comes back with the row's category.
+    await saveOn(MON, [{ ...report, text: '' }, email]);
+    await app.api.del(`/api/board/cards/${report.cardUid}`);
+    await saveOn(MON, [{ ...report, text: 'Report v2', categoryUid: 'cat000000002' }, email]);
+    expect(await card(report.cardUid)).toMatchObject({ title: 'Report v2', categoryUid: 'cat000000002' });
+  });
+
+  it("copies a row's new category onto its card from the card's latest linked day only, and nothing else's", async () => {
+    const uid = await madeFor(MON, { ...REPORT, categoryUid: 'cat000000001' });
+    await save(MON, [{ ...REPORT, categoryUid: 'cat000000002' }]);
+    expect(await card(uid)).toMatchObject({ title: 'Report', categoryUid: 'cat000000002', lane: 'next' });
+    await save(MON, [{ ...REPORT, categoryUid: null }]);
+    expect((await card(uid))!.categoryUid).toBeNull();
+    // Set on the board once the day has passed: a tick on that day copies the tick, not the category it didn't change.
+    await app.api.patch(`/api/board/cards/${uid}`, { today: TUE, categoryUid: 'cat000000003' });
+    await save(MON, [{ ...REPORT, categoryUid: null, done: true }]);
+    expect(await card(uid)).toMatchObject({ lane: 'done', categoryUid: 'cat000000003' });
+    // Emptied and typed in again: the row's category, whatever it was.
+    await save(MON, [{ ...REPORT, text: '', categoryUid: null }]);
+    expect((await card(uid))!.categoryUid).toBe('cat000000003');
+    await save(MON, [{ ...REPORT, text: 'Report', categoryUid: null }]);
+    expect((await card(uid))!.categoryUid).toBeNull();
+    // Carried to Tuesday: Monday's row no longer speaks for the card.
+    await save(TUE, [{ text: 'Report', uid: 'bbbbbbbbbbb1', cardUid: uid, categoryUid: 'cat000000001' }]);
+    expect((await card(uid))!.categoryUid).toBe('cat000000001');
+    await save(MON, [{ ...REPORT, categoryUid: 'cat000000004' }]);
+    expect((await card(uid))!.categoryUid).toBe('cat000000001');
+  });
+
   it('refuses a cards flag that is not a boolean and a touched that is not a short list of card ids, and stores nothing', async () => {
     const list = `touched must be a list of at most ${MAX_PRIORITIES} card ids.`;
     const refusals: [Record<string, unknown>, string][] = [
@@ -886,6 +924,68 @@ describe('PUT /api/days/:date/priorities: board cards', () => {
     }
     expect(app.count('days')).toBe(0);
     expect((await save(MON, [{ text: 'Report' }], { touched: Array(MAX_PRIORITIES).fill('CARD00000001') })).status).toBe(200);
+  });
+});
+
+describe('PUT /api/days/:date/priorities: the categories of sessions', () => {
+  // Before the seeded weeks, so the days hold only what the tests log.
+  const DATE = '2026-08-03';
+  const row = (uid: string, text: string, categoryUid: string | null = null) => ({ uid, text, categoryUid });
+  const save = (priorities: Record<string, unknown>[]) => app.api.put(`/api/days/${DATE}/priorities`, { priorities });
+  /** A finished session on the row with this uid, or unplanned. */
+  const logged = async (priorityUid: string | null, date = DATE) => {
+    const { id } = (await app.api.post(`/api/days/${date}/sessions`, { plannedSeconds: 600, priorityUid })).body.session as { id: number };
+    await app.api.post(`/api/sessions/${id}/finish`);
+    return id;
+  };
+  const categoryOf = async (id: number) => {
+    const day = (await app.api.get(`/api/days/${DATE}`)).body as { sessions: { id: number; categoryUid: string | null }[] };
+    return day.sessions.find((s) => s.id === id)!.categoryUid;
+  };
+
+  it("gives the sessions on a removed row the row's category, and not those on an emptied one, which keeps it", async () => {
+    const report = row('aaaaaaaaaaa1', 'Report', 'cat000000001');
+    const email = row('aaaaaaaaaaa2', 'Email', 'cat000000002');
+    const plain = row('aaaaaaaaaaa3', 'Plain');
+    await save([report, email, plain]);
+    const onReport = await logged(report.uid);
+    const onEmail = await logged(email.uid);
+    const onPlain = await logged(plain.uid);
+    const picked = await logged(email.uid);
+    await app.api.patch(`/api/sessions/${picked}`, { categoryUid: 'cat000000009' });
+    const unplanned = await logged(null);
+
+    // Emptied: the row stays and keeps its category, which its sessions count under.
+    await save([{ ...report, text: '' }, email, plain]);
+    expect(await categoryOf(onReport)).toBeNull();
+    // Removed: the sessions on it take its category, unless they have one of their own.
+    await save([{ ...report, text: '' }]);
+    expect([await categoryOf(onEmail), await categoryOf(picked), await categoryOf(onPlain), await categoryOf(unplanned)]).toEqual([
+      'cat000000002',
+      'cat000000009',
+      null,
+      null,
+    ]);
+    await save([]);
+    expect(await categoryOf(onReport)).toBe('cat000000001');
+    // The sessions still name the rows they were logged on.
+    expect((await app.api.get(`/api/days/${DATE}`)).body.sessions.map((s: { priorityUid: string }) => s.priorityUid)).toEqual([
+      report.uid,
+      email.uid,
+      plain.uid,
+      email.uid,
+      null,
+    ]);
+  });
+
+  it("leaves another day's sessions alone, though a row there has the removed row's uid", async () => {
+    const other = '2026-08-04';
+    await app.api.put(`/api/days/${other}/priorities`, { priorities: [row('aaaaaaaaaaa1', 'Report')] });
+    const there = await logged('aaaaaaaaaaa1', other);
+    await save([row('aaaaaaaaaaa1', 'Report', 'cat000000001')]);
+    await save([]);
+    const day = (await app.api.get(`/api/days/${other}`)).body as { sessions: { id: number; categoryUid: string | null }[] };
+    expect(day.sessions).toMatchObject([{ id: there, categoryUid: null }]);
   });
 });
 
@@ -982,6 +1082,8 @@ describe('/api/days/prune', () => {
     expect(count('priorities')).toBe(0);
     expect(count('sessions')).toBe(0);
     expect(count('breaks')).toBe(0);
+    // Categories are never pruned: the days left still name them.
+    expect(app.count('categories')).toBe(app.seeded!.board.categories.length);
     expect((await app.api.post('/api/days/prune', { before })).body).toEqual({ deleted: 0 });
     expect((await app.api.post('/api/days/prune', { before: 'soon' })).status).toBe(400);
     expect((await app.api.post('/api/days/prune', {})).status).toBe(400);
@@ -1057,6 +1159,11 @@ describe('days are scoped to the signed-in user', () => {
     expect(bDay.retroNote).toBe('b');
     expect(bDay.workMinutes).toBe(240);
     expect(app.db.prepare(`SELECT user_id FROM days WHERE date = ? ORDER BY user_id`).all(date)).toEqual([{ user_id: admin.id }, { user_id: member.id }]);
+    // B removing a row of the same uid as one A logged time on gives A's sessions no category.
+    const logged = (before as Day).sessions.find((s) => s.priorityUid != null)!.priorityUid!;
+    await b.put(`/api/days/${date}/priorities`, { priorities: [{ text: 'Mine', uid: logged, categoryUid: 'cat000000001' }] });
+    expect((await b.put(`/api/days/${date}/priorities`, { priorities: [] })).status).toBe(200);
+    expect((await a.get(`/api/days/${date}`)).body).toEqual(before);
 
     // A prune by B deletes only B's days, and none of A's cards: not the ones done before the
     // cutoff, nor an untouched one no row links to, which a prune of A's own would take.

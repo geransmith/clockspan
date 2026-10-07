@@ -12,6 +12,7 @@ export const LIMITS = {
   sessionLabel: 200,
   priorityText: 500,
   retroNote: 4000,
+  categoryName: 40,
 } as const;
 
 /** A password's length: the server refuses one outside it, and the new-password inputs take `minLength` and `maxLength` from it. */
@@ -76,6 +77,8 @@ export type OpenLane = Exclude<Lane, 'done'>;
 export interface BoardCard {
   uid: string;
   title: string;
+  /** The category it counts under; a priorities save copies its row's when it changes there. */
+  categoryUid: string | null;
   lane: Lane;
   /** 1..n within Later or Next; 0 in Done, which goes by `doneAt`. */
   position: number;
@@ -87,15 +90,40 @@ export interface BoardCard {
   held: boolean;
 }
 
-/** `GET /board`, and the answer to every board write: Later and Next in order, then the cards done in the last `BOARD_LIMITS.doneWindowDays`. */
+/** The colours a category can take. There are fewer than categories can be, so they repeat. */
+export const CATEGORY_COLORS = ['blue', 'teal', 'green', 'gold', 'orange', 'pink', 'purple', 'grey'] as const;
+export type CategoryColor = (typeof CATEGORY_COLORS)[number];
+
+/**
+ * What a row, a card or a session counts under (their `categoryUid`). Names are unique among a
+ * user's categories in use, whatever their case or spacing (`sameText`).
+ */
+export interface Category {
+  uid: string;
+  name: string;
+  color: CategoryColor;
+  /** Removed in Settings: kept so past time keeps its name, and never offered. */
+  archived: boolean;
+}
+
+/**
+ * `GET /board`, and the answer to every board write: Later and Next in order, then the cards
+ * done in the last `BOARD_LIMITS.doneWindowDays`; and every category, removed ones included,
+ * in the order they were made.
+ */
 export interface Board {
   cards: BoardCard[];
+  categories: Category[];
 }
 
 /** The server's caps on the board: sanity limits for an internet-exposed install, not product limits. */
 export const BOARD_LIMITS = {
   /** Cards in Later and Next together. */
   openCards: 300,
+  /** Categories not removed. */
+  categories: 100,
+  /** Categories stored, removed ones included, so making and removing them can't grow the table for ever. */
+  categoriesStored: 1000,
   /** How far back `GET /board` sends Done cards: a week, and a day of slack for the client's zone. */
   doneWindowDays: 8,
 } as const;
@@ -113,6 +141,12 @@ interface SessionFields {
   pausedAt: number | null;
   /** The priority this session was for; null (or a removed row's uid) means unplanned. */
   priorityUid: string | null;
+  /**
+   * Picked in the log for a session not on a written row, or the category of the row it was on,
+   * which the server copies here when a priorities save removes that row. A session on a written
+   * row counts under that row's category instead.
+   */
+  categoryUid: string | null;
 }
 
 /** A session still going, paused or not: it has no end and no focus time yet. */
