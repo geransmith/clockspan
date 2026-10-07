@@ -24,6 +24,7 @@ export function Header({ view, date, today, customize, onNavigate, onToggleCusto
   // so only the first change in a visit to the field adds a history entry and the rest replace it.
   const typed = useRef(false);
   const onSheet = view === 'sheet';
+  const onHistory = view === 'history';
   const isToday = date === today;
   // "Yesterday" gets the date underneath; any other day's name already is the date (the sheet never shows a future day).
   const name = dayName(date, today);
@@ -43,7 +44,7 @@ export function Header({ view, date, today, customize, onNavigate, onToggleCusto
               <span className="btn-text">{customize ? 'Done' : 'Customize'}</span>
             </button>
           )}
-          <button className="btn btn-icon" onClick={() => onNavigate({ view: onSheet ? 'history' : 'sheet' })} aria-pressed={!onSheet} title="History">
+          <button className="btn btn-icon" onClick={() => onNavigate({ view: onHistory ? 'sheet' : 'history' })} aria-pressed={onHistory} title="History">
             <List />
             <span className="btn-text">History</span>
           </button>

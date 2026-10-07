@@ -3,17 +3,18 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { AuthGate } from '../auth/AuthGate';
+import { VIEWS, type Route } from '../hooks/useRoute';
 import { DEFAULT_USER, makeAuth, settle, TODAY, YESTERDAY } from '../test/hooks';
 import { Header } from './Header';
 
 vi.mock('../api');
 
-async function renderHeader(date: string) {
+async function renderHeader(date: string, view: Route['view'] = 'sheet') {
   const onNavigate = vi.fn();
   vi.mocked(api.getAuth).mockResolvedValue(makeAuth({ mode: 'none', user: DEFAULT_USER }));
   render(
     <AuthGate>
-      <Header view="sheet" date={date} today={TODAY} customize={false} onNavigate={onNavigate} onToggleCustomize={vi.fn()} onOpenSettings={vi.fn()} />
+      <Header view={view} date={date} today={TODAY} customize={false} onNavigate={onNavigate} onToggleCustomize={vi.fn()} onOpenSettings={vi.fn()} />
     </AuthGate>,
   );
   await settle();
@@ -41,6 +42,18 @@ describe('Header', () => {
     const onNavigate = await renderHeader(TODAY);
     fireEvent.click(screen.getByRole('button', { name: 'Clockspan' }));
     expect(onNavigate).toHaveBeenCalledWith({ view: 'sheet', date: null });
+  });
+
+  // Keyed to the sheet instead, History would read as pressed on a third view and send its click to the sheet.
+  it('presses History on History only, and goes there from every other view and back to the sheet from it', async () => {
+    for (const view of VIEWS) {
+      const onNavigate = await renderHeader(TODAY, view);
+      const button = screen.getByRole('button', { name: 'History' });
+      expect(button.getAttribute('aria-pressed'), view).toBe(String(view === 'history'));
+      fireEvent.click(button);
+      expect(onNavigate, view).toHaveBeenCalledWith({ view: view === 'history' ? 'sheet' : 'history' });
+      cleanup();
+    }
   });
 
   it('sends Today to the null route', async () => {

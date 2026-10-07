@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { T0, TODAY } from '../test/hooks';
-import { useRoute } from './useRoute';
+import { useRoute, VIEWS } from './useRoute';
 
 const visit = (url: string) => history.replaceState(null, '', url);
 const render = () => renderHook(() => useRoute());
@@ -33,6 +33,14 @@ describe('reading the URL', () => {
     expect(render().result.current[0]).toEqual({ view: 'sheet', date: null, review: null });
   });
 
+  it('reads each view by its name', () => {
+    for (const view of VIEWS) {
+      visit(`/?view=${view}`);
+      expect(render().result.current[0].view, view).toBe(view);
+      cleanup();
+    }
+  });
+
   it('opens today for a date that has not come yet', () => {
     visit('/?view=history&date=2030-01-01');
     expect(render().result.current[0]).toEqual({ view: 'history', date: null, review: null });
@@ -47,9 +55,10 @@ describe('reading the URL', () => {
     expect(render().result.current[0].review).toEqual({ kind: 'week', from: TODAY });
   });
 
-  it('ignores the review period on the sheet, and one with an unknown kind or a missing, bad or future start', () => {
+  it('ignores the review period off History, and one with an unknown kind or a missing, bad or future start', () => {
     for (const url of [
       '/?review=month&from=2026-07-01',
+      ...VIEWS.filter((v) => v !== 'history').map((v) => `/?view=${v}&review=month&from=2026-07-01`),
       '/?view=history&review=year&from=2026-07-01',
       '/?view=history&review=month',
       '/?view=history&review=month&from=2026-02-30',
@@ -127,6 +136,33 @@ describe('navigate', () => {
     act(() => result.current[1]({ review: { kind: 'week', from: '2026-07-13' } }, { replace: true }));
     expect(replace).toHaveBeenCalledWith(null, '', '/?view=history&date=2026-07-14&review=week&from=2026-07-13');
     expect(result.current[0].review).toEqual({ kind: 'week', from: '2026-07-13' });
+  });
+
+  it('writes every view but the sheet into the URL', () => {
+    for (const view of VIEWS) {
+      // Each step starts on another view, so the move is made and its URL written.
+      visit(view === 'sheet' ? '/?view=history' : '/');
+      const { result } = render();
+      act(() => result.current[1]({ view }));
+      expect(result.current[0].view, view).toBe(view);
+      expect(window.location.search, view).toBe(view === 'sheet' ? '' : `?view=${view}`);
+      cleanup();
+    }
+  });
+
+  it('drops the review period on every view but History', () => {
+    for (const view of VIEWS.filter((v) => v !== 'history')) {
+      visit('/?view=history&date=2026-07-14&review=month&from=2026-07-01');
+      const { result } = render();
+      act(() => result.current[1]({ view }));
+      expect(result.current[0].review, view).toBeNull();
+      expect(window.location.search, view).not.toContain('review');
+      // Named with the move, it goes too.
+      act(() => result.current[1]({ view: 'history' }));
+      act(() => result.current[1]({ view, review: { kind: 'week', from: '2026-07-13' } }));
+      expect(result.current[0].review, view).toBeNull();
+      cleanup();
+    }
   });
 
   it('pushes nothing when already there', () => {

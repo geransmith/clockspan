@@ -545,6 +545,17 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   Removing a card is the reverse (drop the id everywhere; the merge discards it from saved
   layouts), and if the card recorded a choice worth keeping, `mergeSettings` can read it off the
   old layout entry the way the sticker chart's `stickers` setting does.
+- **A view** (a page shown in place of the sheet, like History): add its id to `VIEWS` in
+  `hooks/useRoute.ts`, which reads it from `?view=` and writes it back (the sheet is the
+  default and the one view the URL leaves out; `review` is kept on History only) → a `case` in
+  the `switch (route.view)` in `App.tsx`'s `Shell` (the `switch-exhaustiveness-check` lint
+  refuses a missing one) that renders the page through `lazy()` inside a `Suspense`, as History
+  is, with the page named in the lazy-chunk rule under "Architecture rules" and in the comment
+  above `App.tsx`'s `lazy` consts → a toggle in
+  `Header.tsx` that goes to the view, and back to the sheet from it, pressed only there
+  (`aria-pressed={view === '<id>'}`). `useRoute.test.ts` reads and writes every id in `VIEWS`,
+  and `Header.test.tsx` checks History's toggle on each view; the new toggle gets its own case
+  there.
 - **A per-user setting**: add it to the `Settings` type and `DEFAULT_SETTINGS` in
   `shared/settings.ts`, and a number's bounds to `SETTING_LIMITS` there → validate it in
   `mergeSettings()` (`server/settings.ts`; `flag(key)` takes a switch, `limited(key)` checks a
