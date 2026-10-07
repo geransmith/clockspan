@@ -115,6 +115,15 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX breaks_day ON breaks(day_id);
   CREATE INDEX breaks_user_end ON breaks(user_id, ended_at);
   `,
+  // Each day's row keeps its own uid; these tie the rows of one task across days: the board card
+  // it is on, the recurring priority it was added from, the category it counts under. Soft links,
+  // checked for shape only, like sessions.priority_uid. A card's rows are looked up by card.
+  `
+  ALTER TABLE priorities ADD COLUMN card_uid TEXT;
+  ALTER TABLE priorities ADD COLUMN recurring_uid TEXT;
+  ALTER TABLE priorities ADD COLUMN category_uid TEXT;
+  CREATE INDEX priorities_card ON priorities(card_uid) WHERE card_uid IS NOT NULL;
+  `,
 ];
 
 export function openDatabase(dbPath: string): DB {

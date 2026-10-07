@@ -22,7 +22,7 @@ export function findDay(db: DB, userId: number, date: string): DayRow | undefine
   return db.prepare(`SELECT ${DAY_COLUMNS} FROM days WHERE user_id = ? AND date = ?`).get(userId, date) as DayRow | undefined;
 }
 
-/** Priority ids: the client mints 12 hex chars (`newUid`); the server only checks the shape, loosely. */
+/** Ids the client or the server mints (a priority's, and those of the cards, categories and recurring priorities it links to): 12 hex chars (`newUid`); only the shape is checked, loosely. */
 export const UID_RE = /^[a-z0-9]{8,32}$/i;
 
 export function ensureDay(db: DB, userId: number, date: string): number {
@@ -54,6 +54,9 @@ export interface PriorityRow {
   done: number;
   uid: string | null;
   added_at: number | null;
+  card_uid: string | null;
+  recurring_uid: string | null;
+  category_uid: string | null;
 }
 
 interface SessionRowFields {

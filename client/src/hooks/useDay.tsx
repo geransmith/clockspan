@@ -378,7 +378,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
       // Only onto a list the store holds: where the row goes depends on the rows already there.
       if (!day) throw new Error(ADD_PRIORITY_FAILED.notLoaded);
       const uid = newUid();
-      const next = placePriority(day.priorities, priorityCount.current, text, uid, Date.now());
+      const row = { text, done: false, uid, addedAt: Date.now(), cardUid: null, recurringUid: null, categoryUid: null };
+      const next = placePriority(day.priorities, priorityCount.current, row);
       if (!next) throw new Error(ADD_PRIORITY_FAILED.full);
       // A timer must not start against a uid the server never stored.
       if (!(await setPriorities(date, next, day.priorities))) throw new Error(SAVE_FAILED.title);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addDays, atTime } from '../../../shared/dates.js';
-import { completedSession, makeDay, makeSession, makeSummary, punchesAt, TEST_SETTINGS } from '../test/fixtures';
+import { completedSession, makeDay, makePriority, makeSession, makeSummary, punchesAt, TEST_SETTINGS } from '../test/fixtures';
 import type { Punch } from '../types';
 import { STICKER_EMOJI } from './copy';
 import { calendarMonth } from './calendar';
@@ -110,9 +110,9 @@ describe('daySummaryOf', () => {
   it('counts completed sessions and rows with text', () => {
     const day = makeDay(TODAY, {
       priorities: [
-        { position: 1, text: 'a', done: true, uid: 'u1', addedAt: 1 },
-        { position: 2, text: '  ', done: false, uid: null, addedAt: null },
-        { position: 3, text: 'b', done: false, uid: 'u3', addedAt: 1 },
+        makePriority(1, 'a', { done: true, uid: 'u1', addedAt: 1 }),
+        makePriority(2, '  ', { uid: null, addedAt: null }),
+        makePriority(3, 'b', { uid: 'u3', addedAt: 1 }),
       ],
       retroAt: 5,
       sessions: [

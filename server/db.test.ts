@@ -85,6 +85,30 @@ describe('migration 4: one running session per user', () => {
   });
 });
 
+describe('migration 9: priority links', () => {
+  it("adds each row's card, recurring priority and category, none on the rows already there, and indexes the cards", () => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    migrate(db, 8);
+    const user = ensureDefaultUser(db);
+    const day = db.prepare(`INSERT INTO days (user_id, date, created_at) VALUES (?, '2026-09-01', 1000)`).run(user.id).lastInsertRowid;
+    db.prepare(`INSERT INTO priorities (day_id, position, text, done, uid, added_at) VALUES (?, 1, 'Report', 0, 'abcdef123456', 1000)`).run(day);
+
+    migrate(db);
+    expect(db.prepare(`SELECT text, card_uid, recurring_uid, category_uid FROM priorities`).all()).toEqual([
+      { text: 'Report', card_uid: null, recurring_uid: null, category_uid: null },
+    ]);
+    // A card's rows across days are looked up by card; rows with none stay out of the index.
+    const index = db.prepare(`SELECT tbl_name, sql FROM sqlite_master WHERE type = 'index' AND name = 'priorities_card'`).get() as {
+      tbl_name: string;
+      sql: string;
+    };
+    expect(index.tbl_name).toBe('priorities');
+    expect(index.sql).toMatch(/\(card_uid\) WHERE card_uid IS NOT NULL$/);
+    db.close();
+  });
+});
+
 describe("the README's script for switching from none to local", () => {
   // README.md → "Switching modes later": run by hand to give the implicit user's data to the new
   // account. A table that gains a user_id column has to join it, or its rows stay with the old

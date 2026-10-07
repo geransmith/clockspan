@@ -1,15 +1,20 @@
 import type { Day, Priority } from '../types';
-import { hasText, isFree } from '../../../shared/priorities.js';
+import { hasText, isFree, sharesLink } from '../../../shared/priorities.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { PRIORITY_WARNINGS } from './copy';
 
 /** A row with text that isn't ticked: what the planner, the left-open offer and the timer's chips work from. */
 export const isOpen = (p: Priority) => hasText(p) && !p.done;
 
+/** A row nothing was ever written in (`isFree`), linked to nothing: what the card pads a list with. */
+export function emptyRow(position: number): Priority {
+  return { position, text: '', done: false, uid: null, addedAt: null, cardUid: null, recurringUid: null, categoryUid: null };
+}
+
 /**
  * The stored list can be shorter than `count` (a day never edited, or one planned the evening
  * before) or hold empty rows the card saved. The card shows at least `count` rows and every
- * stored row beyond that.
+ * stored row beyond that, each with every field it was stored with.
  */
 export function padPriorities(rows: Priority[], count: number): Priority[] {
   const byPos = new Map(rows.map((r) => [r.position, r]));
@@ -17,7 +22,7 @@ export function padPriorities(rows: Priority[], count: number): Priority[] {
   const out: Priority[] = [];
   for (let position = 1; position <= n; position++) {
     const r = byPos.get(position);
-    out.push({ position, text: r?.text ?? '', done: r?.done ?? false, uid: r?.uid ?? null, addedAt: r?.addedAt ?? null });
+    out.push(r ? { ...r, position } : emptyRow(position));
   }
   return out;
 }
@@ -65,7 +70,8 @@ export function newUid(): string {
 /**
  * A row after an edit. An empty row can't be done, so clearing the text clears the tick. The
  * uid is minted (and `addedAt` stamped) the first time a row gets text and survives a clear,
- * so a session that pointed at the row still does.
+ * so a session that pointed at the row still does; its links stay too. A cleared row is the
+ * same item, and typing in it renames it.
  */
 export function editPriority(row: Priority, patch: Partial<Priority>, now: number): Priority {
   const merged = { ...row, ...patch };
@@ -85,16 +91,30 @@ export function hasRoom(rows: Priority[], count: number): boolean {
 }
 
 /**
- * Where a priority added from the timer goes: the first row never written in (`isFree`), else a
- * new row at the end. Never a cleared row: it keeps its uid, so writing over it would move its
- * sessions onto the new priority. Returns the full list to save; null when the sheet is full.
+ * `row` written into the cleared row that holds its card or recurring priority: the cleared
+ * row's place, uid and `addedAt`, so the time logged on it counts again, and its category
+ * unless `row` brings one (a cleared row keeps its category).
  */
-export function placePriority(rows: Priority[], count: number, text: string, uid: string, addedAt: number): Priority[] | null {
+export function takeBack(cleared: Priority, row: Omit<Priority, 'position'>): Priority {
+  return { ...row, position: cleared.position, uid: cleared.uid, addedAt: cleared.addedAt, categoryUid: row.categoryUid ?? cleared.categoryUid };
+}
+
+/**
+ * Where a row placed from outside the card goes (the timer's Also add): the list as it is when a
+ * row with text already holds its non-null `cardUid` or `recurringUid` (a repeat is a no-op);
+ * the cleared row that holds it (`takeBack`); else the first row never written in (`isFree`),
+ * as `row` is; else a new row at the end. Never another cleared row: it keeps its uid, so
+ * writing over it would move its sessions onto the new priority. A null link matches nothing.
+ * Returns the full list to save; null when the sheet is full.
+ */
+export function placePriority(rows: Priority[], count: number, row: Omit<Priority, 'position'>): Priority[] | null {
   const padded = padPriorities(rows, count);
-  const row = { text, done: false, uid, addedAt };
+  if (padded.some((p) => hasText(p) && sharesLink(p, row))) return padded;
+  const cleared = padded.find((p) => !hasText(p) && sharesLink(p, row));
+  if (cleared) return padded.map((p) => (p === cleared ? takeBack(p, row) : p));
   const free = padded.find(isFree);
-  if (free) return padded.map((p) => (p === free ? { ...p, ...row } : p));
-  return padded.length < MAX_PRIORITIES ? [...padded, { position: padded.length + 1, ...row }] : null;
+  if (free) return padded.map((p) => (p === free ? { ...row, position: p.position } : p));
+  return padded.length < MAX_PRIORITIES ? [...padded, { ...row, position: padded.length + 1 }] : null;
 }
 
 /** The unticked rows of the last day that had a plan, offered on a new day's empty list. */

@@ -3,7 +3,7 @@ import { addDays, addMonths, startOfQuarter, startOfWeek } from '../../../shared
 import { breakSeconds } from './breaks';
 import { formatDateSpan, formatMonth } from './format';
 import { sameText } from '../../../shared/text.js';
-import { focusOf, hasContent, reviewDay } from './retro';
+import { focusOf, hasContent, reviewDay, type PriorityReview } from './retro';
 import { dayTimeclock, daySettings, type TimeclockSettings } from './timeclock';
 
 export const PERIOD_KINDS = ['week', 'month', 'quarter'] as const;
@@ -56,8 +56,9 @@ export interface UnplannedWork {
   dates: string[];
 }
 
-/** A priority not ticked by the end of the range, merged across the days it was left open the same way. */
+/** A task not ticked by the end of the range: its rows left open across days, grouped by card, else by text (`addToNotDone`). */
 export interface OpenPriority {
+  /** `card:<cardUid>` or `text:<sameText>`. */
   key: string;
   text: string;
   /** The distinct days it was left open on since it was last ticked, oldest first. */
@@ -166,19 +167,7 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
       g.seconds += session.durationSeconds;
       addDate(g.dates, day.date);
     }
-    // A tick settles the priority: the same text left open on an earlier day is done now.
-    const ticked = new Set(r.planned.filter((p) => p.priority.done).map((p) => sameText(p.priority.text)));
-    for (const key of ticked) notDone.delete(key);
-    for (const p of r.planned) {
-      const key = sameText(p.priority.text);
-      if (ticked.has(key)) continue;
-      let g = notDone.get(key);
-      if (!g) notDone.set(key, (g = { key, text: '', dates: [], focusedSeconds: 0, addedMidDay: false }));
-      g.text = p.priority.text.trim();
-      g.focusedSeconds += p.focusedSeconds;
-      g.addedMidDay ||= p.addedMidDay;
-      addDate(g.dates, day.date);
-    }
+    addToNotDone(notDone, r.planned, day.date);
     const note = day.retroNote.trim();
     if (note) out.notes.push({ date: day.date, note, reviewedAt: day.retroAt });
   }
@@ -188,6 +177,71 @@ export function reviewRange(days: Day[], settings: TimeclockSettings, today: str
   out.unplanned = [...unplanned.values()].sort((a, b) => b.seconds - a.seconds || a.dates[0]!.localeCompare(b.dates[0]!));
   out.notDone = [...notDone.values()].sort((a, b) => b.dates.length - a.dates.length || a.dates[0]!.localeCompare(b.dates[0]!));
   return out;
+}
+
+const CARD_KEY = 'card:';
+const TEXT_KEY = 'text:';
+
+/**
+ * One day's rows laid onto Not done, the tasks left open on the days before it, walked oldest
+ * first. Rows linked to one card are one task, whatever their text. A row with no card joins
+ * the latest task of its text (`sameText`), else starts a task of its own; a carded row whose
+ * card has no task yet takes over the cardless task of its text, so a row that got its card
+ * since stays one task. A tick settles: a carded row's, its card's task and the cardless task
+ * of its text; a cardless row's, every task of its text. The same task left open beside a tick
+ * on one day is settled too. Two cards with one title stay two tasks.
+ */
+function addToNotDone(notDone: Map<string, OpenPriority>, rows: PriorityReview[], date: string): void {
+  const ticked = rows.filter((p) => p.priority.done).map((p) => p.priority);
+  const tickedCards = new Set(ticked.map((p) => p.cardUid));
+  const tickedTexts = new Set(ticked.map((p) => sameText(p.text)));
+  const cardlessTicks = new Set(ticked.filter((p) => p.cardUid == null).map((p) => sameText(p.text)));
+  for (const [key, g] of notDone) {
+    const text = sameText(g.text);
+    const settled = key.startsWith(CARD_KEY) ? tickedCards.has(key.slice(CARD_KEY.length)) : tickedTexts.has(text);
+    if (settled || cardlessTicks.has(text)) notDone.delete(key);
+  }
+  for (const { priority: p, focusedSeconds, addedMidDay } of rows) {
+    const text = sameText(p.text);
+    if (p.done || (p.cardUid != null ? tickedCards.has(p.cardUid) || cardlessTicks.has(text) : tickedTexts.has(text))) continue;
+    const g = p.cardUid != null ? cardTask(notDone, p.cardUid, text) : textTask(notDone, text);
+    g.text = p.text.trim();
+    g.focusedSeconds += focusedSeconds;
+    g.addedMidDay ||= addedMidDay;
+    addDate(g.dates, date);
+  }
+}
+
+/**
+ * The card's task, taking over the cardless task of `text` when the card has none yet. The task
+ * taken over keeps its place in `notDone`, whose order breaks ties in the sort, so a task that
+ * got its card sorts where it did before.
+ */
+function cardTask(notDone: Map<string, OpenPriority>, cardUid: string, text: string): OpenPriority {
+  const key = CARD_KEY + cardUid;
+  const existing = notDone.get(key);
+  if (existing) return existing;
+  const cardless = notDone.get(TEXT_KEY + text);
+  if (!cardless) {
+    const g: OpenPriority = { key, text: '', dates: [], focusedSeconds: 0, addedMidDay: false };
+    notDone.set(key, g);
+    return g;
+  }
+  const entries = [...notDone];
+  notDone.clear();
+  for (const [k, v] of entries) notDone.set(v === cardless ? key : k, v);
+  cardless.key = key;
+  return cardless;
+}
+
+/** The latest task of `text`, carded or not, else a new cardless one. */
+function textTask(notDone: Map<string, OpenPriority>, text: string): OpenPriority {
+  let latest: OpenPriority | undefined;
+  for (const g of notDone.values()) if (sameText(g.text) === text && (!latest || g.dates.at(-1)! >= latest.dates.at(-1)!)) latest = g;
+  if (latest) return latest;
+  const g: OpenPriority = { key: TEXT_KEY + text, text: '', dates: [], focusedSeconds: 0, addedMidDay: false };
+  notDone.set(g.key, g);
+  return g;
 }
 
 /**

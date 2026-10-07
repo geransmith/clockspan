@@ -97,9 +97,9 @@ export function makeDay(date = TODAY, patch: Partial<Day> = {}): Day {
   return { ...emptyDay(date), punches: punchesAt(), ...patch };
 }
 
-/** A priority row with text, as the card saves it once typed: not done, with a uid and added at T0. */
+/** A priority row with text, as the card saves it once typed: not done, with a uid and added at T0, linked to nothing. */
 export function makePriority(position: number, text: string, patch: Partial<Priority> = {}): Priority {
-  return { position, text, done: false, uid: `uid${position}`.padEnd(12, 'x'), addedAt: T0, ...patch };
+  return { position, text, done: false, uid: `uid${position}`.padEnd(12, 'x'), addedAt: T0, cardUid: null, recurringUid: null, categoryUid: null, ...patch };
 }
 
 export function makeSession(patch: Partial<RunningSession> = {}): RunningSession {

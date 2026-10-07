@@ -22,14 +22,14 @@ const TODAYS: Priority[] = [
   makePriority(4, '', { uid: null, addedAt: null }),
 ];
 
-async function renderPlan({ next = makeDay(NEXT) as Day | Promise<Day> } = {}) {
+async function renderPlan({ next = makeDay(NEXT) as Day | Promise<Day>, todays = TODAYS } = {}) {
   vi.mocked(api.getDay).mockImplementation((d) => (d === NEXT ? Promise.resolve(next) : Promise.resolve(makeDay(d))));
   const card = (rows: Priority[]) => (
     <SettingsAndDays>
       <PlanNext today={TODAY} priorities={rows} />
     </SettingsAndDays>
   );
-  const view = render(card(TODAYS));
+  const view = render(card(todays));
   await settle();
   return { ...view, again: (rows: Priority[]) => view.rerender(card(rows)) };
 }
@@ -160,6 +160,33 @@ describe('PlanNext', () => {
     // With the list it was built on, so a row another device put there meanwhile stays.
     expect(vi.mocked(api.putPriorities).mock.calls[0]![2]).toEqual({ base: [kept] });
     expect(status()).toBe(PLAN_NEXT.done(1, 'tomorrow'));
+  });
+
+  it('carries each row it brings over as the same task, with its card and category, and a typed row as linked to nothing', async () => {
+    const linked = makePriority(1, 'Review the PR', { cardUid: 'card00000001', categoryUid: 'cafe00000001' });
+    await renderPlan({ todays: [linked, makePriority(2, 'Call the bank')] });
+    await open();
+    type('Book flights');
+    await save();
+    expect(sent().map((p) => [p.text, p.cardUid, p.recurringUid, p.categoryUid])).toEqual([
+      ['Review the PR', 'card00000001', null, 'cafe00000001'],
+      ['Call the bank', null, null, null],
+      ['Book flights', null, null, null],
+    ]);
+    // Tomorrow's row is its own: a fresh uid.
+    expect(sent()[0]!.uid).not.toBe(linked.uid);
+  });
+
+  it("doesn't offer a row whose card is on the next day's list already, under any text", async () => {
+    const kept = makePriority(1, 'Review the pull request', { cardUid: 'card00000001' });
+    await renderPlan({
+      next: makeDay(NEXT, { priorities: [kept] }),
+      todays: [makePriority(1, 'Review the PR', { cardUid: 'card00000001' }), makePriority(2, 'Call the bank')],
+    });
+    await open();
+    expect(screen.getAllByRole('checkbox').map((c) => c.closest('label')!.textContent)).toEqual(['Call the bank']);
+    await save();
+    expect(sent().map((p) => p.text)).toEqual(['Review the pull request', 'Call the bank']);
   });
 
   it('saves nothing when nothing is new, and says so without a celebration', async () => {

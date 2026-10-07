@@ -551,6 +551,34 @@ describe('priorities', () => {
     ]);
   });
 
+  it("shows a stored row's card while a save that left it off is out, as the server will store it", async () => {
+    const card = { cardUid: 'card00000001' };
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [makePriority(1, 'Report', card)] }));
+    vi.mocked(api.putPriorities).mockReturnValueOnce(deferred<{ priorities: Priority[] }>().promise);
+    const { result } = renderStore();
+    await settle();
+    // A draft made before the server linked the row.
+    act(() => void result.current.setPriorities(TODAY, [makePriority(1, 'Report v2')], [makePriority(1, 'Report')]));
+    expect(result.current.days[TODAY]?.priorities).toEqual([makePriority(1, 'Report v2', card)]);
+  });
+
+  it('shows one row while a save is out where the stored list and the list sent each hold one for the same card: the stored one', async () => {
+    const card = { cardUid: 'card00000001' };
+    const theirs = makePriority(1, 'Invoices', { uid: 'phone0000000', ...card });
+    vi.mocked(api.getDay)
+      .mockResolvedValueOnce(makeDay(TODAY))
+      .mockResolvedValueOnce(makeDay(TODAY, { priorities: [theirs] }));
+    vi.mocked(api.putPriorities).mockReturnValueOnce(deferred<{ priorities: Priority[] }>().promise);
+    const { result } = renderStore();
+    await settle();
+    act(() => void result.current.setPriorities(TODAY, [makePriority(1, 'Invoices', card), makePriority(2, 'Email')], []));
+    await act(() => result.current.refresh(TODAY));
+    expect(result.current.days[TODAY]?.priorities.map((p) => [p.position, p.text, p.uid])).toEqual([
+      [1, 'Invoices', 'phone0000000'],
+      [2, 'Email', makePriority(2, '').uid],
+    ]);
+  });
+
   it("keeps every change when lists built on the shown copy take each other's place, and another device writes meanwhile", async () => {
     // The server, merging as the route does, with the phone writing to it while the first save is out.
     let onServer = [makePriority(1, 'Report')];

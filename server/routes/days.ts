@@ -23,7 +23,7 @@ import {
 } from './shared.js';
 import { startBreak } from './breaks.js';
 import { startSession } from './sessions.js';
-import { hasText, mergePriorities } from '../../shared/priorities.js';
+import { hasText, mergePriorities, repeatedLink } from '../../shared/priorities.js';
 import { kindForPosition, MAX_PUNCHES } from '../../shared/punches.js';
 import { MAX_PRIORITIES, SETTING_LIMITS } from '../../shared/settings.js';
 import {
@@ -70,7 +70,21 @@ function punchesJson(rows: PunchRow[]): Punch[] {
 
 /** A stored row as the API sends it, for a day's answer and for the merge a priorities save goes through. */
 function priorityJson(r: PriorityRow): Priority {
-  return { position: r.position, text: r.text, done: Boolean(r.done), uid: r.uid, addedAt: r.added_at };
+  return {
+    position: r.position,
+    text: r.text,
+    done: Boolean(r.done),
+    uid: r.uid,
+    addedAt: r.added_at,
+    cardUid: r.card_uid,
+    recurringUid: r.recurring_uid,
+    categoryUid: r.category_uid,
+  };
+}
+
+/** A day's priority rows as stored, in order. */
+function storedPriorities(db: DB, dayId: number): Priority[] {
+  return (db.prepare(`SELECT * FROM priorities WHERE day_id = ? ORDER BY position`).all(dayId) as PriorityRow[]).map(priorityJson);
 }
 
 /** What a list of priority rows is called in the errors: the list sent, or the base it was built on. */
@@ -81,17 +95,27 @@ interface RowsLabel {
 const SENT_ROWS: RowsLabel = { list: 'priorities', row: 'Priority' };
 const BASE_ROWS: RowsLabel = { list: 'base', row: 'Base row' };
 
+/** A row's links to its task, as the errors name them. */
+const LINK_NAMES = { cardUid: 'card', recurringUid: 'recurring priority', categoryUid: 'category' } as const;
+type LinkField = keyof typeof LINK_NAMES;
+const LINK_FIELDS = Object.keys(LINK_NAMES) as LinkField[];
+
+/** A row as a request sent it: `categoryUid` is undefined where the field was left out (`withCategories` fills it in). */
+type SentPriority = Omit<Priority, 'categoryUid'> & { categoryUid: string | null | undefined };
+
 /**
  * A list of priority rows from a request, numbered from 1, or the message to refuse it with.
  * The web app mints a uid and stamps addedAt the first time a row gets text, and always sends
  * both. The server fills them in for a text row that arrives without (curl, the route tests), so
  * every row with text has a uid a session can point at and an addedAt the retro can judge. A
  * list and its base are read with one `now`, so a row the merge compares across them isn't
- * changed by two stamps a millisecond apart.
+ * changed by two stamps a millisecond apart. A card or recurring priority left out is none (a
+ * stored row keeps its own anyway: `MERGED`); a category left out is filled in once the stored
+ * rows are read. A row never written in (no uid) is a free slot and holds no links.
  */
-function parsePriorityRows(input: unknown, label: RowsLabel, now: number): Priority[] | string {
+function parsePriorityRows(input: unknown, label: RowsLabel, now: number): SentPriority[] | string {
   if (!Array.isArray(input) || input.length > MAX_PRIORITIES) return `${label.list} must be an array of at most ${MAX_PRIORITIES}.`;
-  const rows: Priority[] = [];
+  const rows: SentPriority[] = [];
   const seen = new Set<string>();
   for (let i = 0; i < input.length; i++) {
     const item: unknown = input[i];
@@ -112,9 +136,39 @@ function parsePriorityRows(input: unknown, label: RowsLabel, now: number): Prior
     if (addedAt == null && written) addedAt = now;
     // Checked like every other flag: `Boolean("false")` would tick the row. Null is absent, as for the other fields.
     if (item.done != null && typeof item.done !== 'boolean') return `${name} has an invalid done flag.`;
-    rows.push({ position: i + 1, text, done: written && item.done === true, uid, addedAt });
+    const links: Partial<Record<LinkField, string | null>> = {};
+    for (const field of LINK_FIELDS) {
+      const raw = item[field];
+      if (raw != null && !(typeof raw === 'string' && UID_RE.test(raw))) return `${name} has an invalid ${LINK_NAMES[field]}.`;
+      if (raw !== undefined) links[field] = typeof raw === 'string' ? raw.toLowerCase() : null;
+    }
+    if (links.cardUid != null && links.recurringUid != null) return `${name} can't be both a card and a recurring priority.`;
+    const free = uid == null;
+    rows.push({
+      position: i + 1,
+      text,
+      done: written && item.done === true,
+      uid,
+      addedAt,
+      cardUid: free ? null : (links.cardUid ?? null),
+      recurringUid: free ? null : (links.recurringUid ?? null),
+      categoryUid: free ? null : links.categoryUid,
+    });
   }
   return rows;
+}
+
+/**
+ * Each row's category where the request left the field out: that of the same uid's row in the
+ * first of `sources` that holds it, else none. A field a client didn't send is one it didn't
+ * change (a tab from before links), so the merge keeps the stored value.
+ */
+function withCategories(rows: SentPriority[], ...sources: Priority[][]): Priority[] {
+  return rows.map(({ categoryUid, ...p }) => {
+    if (categoryUid !== undefined) return { ...p, categoryUid };
+    const from = sources.map((list) => list.find((s) => s.uid === p.uid)).find((s) => s != null);
+    return { ...p, categoryUid: from?.categoryUid ?? null };
+  });
 }
 
 /**
@@ -250,26 +304,38 @@ export function daysRouter(db: DB, config: Config): Router {
   // the list the client built this one on: the server lays the changes made since onto what it
   // holds (`mergePriorities`), so a device saving on an old copy keeps what another device did
   // meanwhile. With no base (curl, a tab from before merging) the list replaces the stored one,
-  // like punches. An empty row can never be "done".
+  // like punches, but for a stored row's card and recurring priority, which never change. An
+  // empty row can never be "done". A list that links two text rows to one card or one recurring
+  // priority is refused when one of the two is new here (`repeatedLink`); of two the server
+  // already holds, the merge keeps one.
   r.put('/:date/priorities', (req, res) => {
     const user = currentUser(req);
     const { date } = req.params;
     const body = req.body as { priorities?: unknown; base?: unknown };
     const now = Date.now();
-    const mine = parsePriorityRows(body.priorities, SENT_ROWS, now);
-    if (typeof mine === 'string') return refuse(res, 400, mine);
-    const base = body.base == null ? null : parsePriorityRows(body.base, BASE_ROWS, now);
-    if (typeof base === 'string') return refuse(res, 400, base);
-    const list = db.transaction(() => {
-      const dayId = ensureDay(db, user.id, date);
-      const stored = (db.prepare(`SELECT * FROM priorities WHERE day_id = ? ORDER BY position`).all(dayId) as PriorityRow[]).map(priorityJson);
-      const merged = mergePriorities(stored, base ?? stored, mine);
+    const sent = parsePriorityRows(body.priorities, SENT_ROWS, now);
+    if (typeof sent === 'string') return refuse(res, 400, sent);
+    const sentBase = body.base == null ? null : parsePriorityRows(body.base, BASE_ROWS, now);
+    if (typeof sentBase === 'string') return refuse(res, 400, sentBase);
+    const saved = db.transaction((): Priority[] | string => {
+      const day = findDay(db, user.id, date);
+      const stored = day ? storedPriorities(db, day.id) : [];
+      const base = sentBase ? withCategories(sentBase, stored) : stored;
+      const mine = withCategories(sent, base, stored);
+      const repeat = repeatedLink(mine, new Set(stored.map((p) => p.uid)));
+      // Refused before the day is made, so a refusal stores nothing.
+      if (repeat) return `Priority ${repeat.position} repeats another row's ${LINK_NAMES[repeat.field]}.`;
+      const dayId = day?.id ?? ensureDay(db, user.id, date);
+      const merged = mergePriorities(stored, base, mine);
       db.prepare(`DELETE FROM priorities WHERE day_id = ?`).run(dayId);
-      const ins = db.prepare(`INSERT INTO priorities (day_id, position, text, done, uid, added_at) VALUES (?, ?, ?, ?, ?, ?)`);
-      for (const p of merged) ins.run(dayId, p.position, p.text, p.done ? 1 : 0, p.uid, p.addedAt);
+      const ins = db.prepare(
+        `INSERT INTO priorities (day_id, position, text, done, uid, added_at, card_uid, recurring_uid, category_uid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const p of merged) ins.run(dayId, p.position, p.text, p.done ? 1 : 0, p.uid, p.addedAt, p.cardUid, p.recurringUid, p.categoryUid);
       return merged;
     })();
-    res.json({ priorities: list } satisfies PrioritiesResponse);
+    if (typeof saved === 'string') return refuse(res, 400, saved);
+    res.json({ priorities: saved } satisfies PrioritiesResponse);
   });
 
   r.put('/:date/overtime', (req, res) => {

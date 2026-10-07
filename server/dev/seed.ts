@@ -32,6 +32,9 @@ export interface SeedOptions {
 
 /** A priority row with text, so it always has its uid and addedAt. */
 type SeededPriority = Priority & { uid: string; addedAt: number };
+
+/** The seed makes no cards, recurring priorities or categories, so its rows link to none. */
+const NO_LINKS = { cardUid: null, recurringUid: null, categoryUid: null } satisfies Pick<Priority, 'cardUid' | 'recurringUid' | 'categoryUid'>;
 type SeededSession = Omit<Session, 'date' | 'pausedAt' | 'durationSeconds'>;
 type SeededBreak = Omit<Break, 'date'>;
 
@@ -166,8 +169,10 @@ function insertDay(db: DB, userId: number, day: DayDraft): SeededDay {
   const dayId = Number(info.lastInsertRowid);
   const punch = db.prepare(`INSERT INTO punches (day_id, position, kind, at) VALUES (?, ?, ?, ?)`);
   for (const p of day.punches) punch.run(dayId, p.position, p.kind, p.at);
-  const prio = db.prepare(`INSERT INTO priorities (day_id, position, text, done, uid, added_at) VALUES (?, ?, ?, ?, ?, ?)`);
-  for (const p of day.priorities) prio.run(dayId, p.position, p.text, p.done ? 1 : 0, p.uid, p.addedAt);
+  const prio = db.prepare(
+    `INSERT INTO priorities (day_id, position, text, done, uid, added_at, card_uid, recurring_uid, category_uid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  for (const p of day.priorities) prio.run(dayId, p.position, p.text, p.done ? 1 : 0, p.uid, p.addedAt, p.cardUid, p.recurringUid, p.categoryUid);
   const sess = db.prepare(
     `INSERT INTO sessions (day_id, user_id, label, planned_seconds, started_at, ended_at, status, priority_uid, paused_seconds)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -230,6 +235,7 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
     done,
     uid: uidFor(index, position),
     addedAt,
+    ...NO_LINKS,
   });
 
   const base = { date, kind, createdAt, overtimeApproved: false, workMinutes: null };
@@ -363,7 +369,14 @@ function buildToday(today: string, now: number, index: number, running: boolean,
   // planner's save is what stored today's row. With no history, written on arrival.
   const plannedAt = last?.retroAt != null ? last.retroAt + 2 * MINUTE_MS : clockIn - 3 * MINUTE_MS;
   const carried = last?.priorities.find((p) => !p.done)?.text ?? 'Update the onboarding doc';
-  const row = (position: number, text: string, done: boolean): SeededPriority => ({ position, text, done, uid: uidFor(index, position), addedAt: plannedAt });
+  const row = (position: number, text: string, done: boolean): SeededPriority => ({
+    position,
+    text,
+    done,
+    uid: uidFor(index, position),
+    addedAt: plannedAt,
+    ...NO_LINKS,
+  });
   const priorities = [row(1, carried, false), row(2, 'Ship the timeclock fix', true), row(3, 'Answer the two open support threads', false)];
 
   const runningFrom = Math.max(clockIn, now - 10 * MINUTE_MS);

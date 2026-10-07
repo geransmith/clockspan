@@ -26,6 +26,8 @@ beforeEach(() => {
 });
 
 const DATE = '2026-09-28';
+const NO_LINKS = { cardUid: null, recurringUid: null, categoryUid: null };
+const REPORT_LINKS = { cardUid: 'card00000001', recurringUid: null, categoryUid: 'cafe00000001' };
 
 // Every call the client makes: the method, the path and the JSON it sends (none for a GET).
 const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
@@ -65,18 +67,18 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
     `/api/days/${DATE}/punches`,
     { punches: [{ at: 5 }, { at: null }] },
   ],
-  // With the list it was built on, so the server can keep another device's changes.
+  // With the list it was built on, so the server can keep another device's changes, and every row's links.
   [
     'putPriorities',
     () =>
-      api.putPriorities(DATE, [{ position: 1, text: 'Report', done: false, uid: 'abcdef123456', addedAt: 1 }], {
-        base: [{ position: 1, text: '', done: false, uid: null, addedAt: null }],
+      api.putPriorities(DATE, [{ position: 1, text: 'Report', done: false, uid: 'abcdef123456', addedAt: 1, ...REPORT_LINKS }], {
+        base: [{ position: 1, text: '', done: false, uid: null, addedAt: null, ...NO_LINKS }],
       }),
     'PUT',
     `/api/days/${DATE}/priorities`,
     {
-      priorities: [{ position: 1, text: 'Report', done: false, uid: 'abcdef123456', addedAt: 1 }],
-      base: [{ position: 1, text: '', done: false, uid: null, addedAt: null }],
+      priorities: [{ position: 1, text: 'Report', done: false, uid: 'abcdef123456', addedAt: 1, ...REPORT_LINKS }],
+      base: [{ position: 1, text: '', done: false, uid: null, addedAt: null, ...NO_LINKS }],
     },
   ],
   ['putOvertime', () => api.putOvertime(DATE, true), 'PUT', `/api/days/${DATE}/overtime`, { approved: true }],

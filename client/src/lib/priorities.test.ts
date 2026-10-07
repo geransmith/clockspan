@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PRIORITY_WARNINGS } from './copy';
 import {
   editPriority,
+  emptyRow,
   hasRoom,
   leftOpen,
   newUid,
@@ -17,15 +18,25 @@ import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { makeDay, makePriority } from '../test/fixtures';
 import type { Priority } from '../types';
 
+const CARD = { cardUid: 'card00000001' };
+const ROUTINE = { recurringUid: 'rcur00000001' };
+
+describe('emptyRow', () => {
+  it('is a row never written in, linked to nothing', () => {
+    expect(emptyRow(4)).toEqual(makePriority(4, '', { uid: null, addedAt: null }));
+  });
+});
+
 describe('padPriorities', () => {
   it('fills a fresh day up to the configured count', () => {
-    expect(padPriorities([], 3)).toEqual([1, 2, 3].map((position) => makePriority(position, '', { uid: null, addedAt: null })));
+    expect(padPriorities([], 3)).toEqual([1, 2, 3].map(emptyRow));
   });
 
-  it('keeps stored rows in place and pads the rest', () => {
-    const rows = padPriorities([makePriority(2, 'Call the bank', { done: true, uid: 'abcdef123456', addedAt: 5 })], 3);
+  it('keeps stored rows in place, every field of them, and pads the rest', () => {
+    const stored = makePriority(2, 'Call the bank', { done: true, uid: 'abcdef123456', addedAt: 5, ...CARD, categoryUid: 'cafe00000001' });
+    const rows = padPriorities([stored], 3);
     expect(rows.map((r) => r.text)).toEqual(['', 'Call the bank', '']);
-    expect(rows[1]).toMatchObject({ done: true, uid: 'abcdef123456', addedAt: 5 });
+    expect(rows[1]).toEqual(stored);
   });
 
   it('shows every stored row even when the count was lowered', () => {
@@ -96,7 +107,7 @@ describe('newUid', () => {
 });
 
 describe('editPriority', () => {
-  const blank: Priority = { position: 2, text: '', done: false, uid: null, addedAt: null };
+  const blank: Priority = emptyRow(2);
 
   it('mints a uid and stamps addedAt the first time a row gets text', () => {
     const next = editPriority(blank, { text: 'Ship it' }, 100);
@@ -104,10 +115,11 @@ describe('editPriority', () => {
     expect(next.uid).toMatch(/^[0-9a-f]{12}$/);
   });
 
-  it('keeps the uid and addedAt through later edits and a clear', () => {
-    const named = { ...blank, text: 'Ship it', uid: 'abcdef123456', addedAt: 100 };
-    expect(editPriority(named, { text: 'Ship it today' }, 200)).toMatchObject({ uid: 'abcdef123456', addedAt: 100 });
-    expect(editPriority(named, { text: '  ' }, 200)).toMatchObject({ text: '  ', uid: 'abcdef123456', addedAt: 100 });
+  it('keeps the uid, addedAt and links through later edits and a clear: a cleared row is the same item', () => {
+    const named = { ...blank, text: 'Ship it', uid: 'abcdef123456', addedAt: 100, ...CARD, categoryUid: 'cafe00000001' };
+    const kept = { uid: 'abcdef123456', addedAt: 100, ...CARD, categoryUid: 'cafe00000001' };
+    expect(editPriority(named, { text: 'Ship it today' }, 200)).toMatchObject(kept);
+    expect(editPriority(named, { text: '  ' }, 200)).toMatchObject({ text: '  ', ...kept });
   });
 
   it('ticks a row with text and clears the tick along with the text', () => {
@@ -129,22 +141,31 @@ describe('removePriority', () => {
 });
 
 describe('placePriority', () => {
+  /** The row placed, as the timer's Also add builds it: a fresh uid, stamped now, linked to nothing unless patched. */
+  const placed = (text: string, patch: Partial<Priority> = {}) => makePriority(0, text, { uid: 'abcdef123456', addedAt: 100, ...patch });
+
   it('fills the first row never written in, padding first', () => {
-    const next = placePriority([makePriority(1, 'A')], 3, 'New task', 'abcdef123456', 100)!;
+    const next = placePriority([makePriority(1, 'A')], 3, placed('New task', { categoryUid: 'cafe00000001' }))!;
     expect(next.map((p) => p.text)).toEqual(['A', 'New task', '']);
-    expect(next[1]).toMatchObject({ uid: 'abcdef123456', addedAt: 100, done: false });
+    expect(next[1]).toEqual(placed('New task', { position: 2, categoryUid: 'cafe00000001' }));
   });
 
-  it('appends when every row has text', () => {
+  it('stamps the row placed in a free row with its own addedAt, never one the free row was stored with', () => {
+    // A free row a save sent with an addedAt (curl) is stored with it.
+    const next = placePriority([makePriority(1, 'A'), { ...emptyRow(2), addedAt: 7 }], 3, placed('New task'))!;
+    expect(next[1]).toEqual(placed('New task', { position: 2 }));
+  });
+
+  it('appends when every row has text, none of them linked: a null link matches nothing', () => {
     const rows = [makePriority(1, 'A'), makePriority(2, 'B'), makePriority(3, 'C')];
-    const next = placePriority(rows, 3, 'D', 'abcdef123456', 100)!;
+    const next = placePriority(rows, 3, placed('D'))!;
     expect(next).toHaveLength(4);
     expect(next[3]).toMatchObject({ position: 4, text: 'D' });
   });
 
   it('passes a cleared row, which keeps its uid and the sessions on it, for one never written in', () => {
     const cleared = makePriority(2, '', { uid: 'cleared00000' });
-    const next = placePriority([makePriority(1, 'A'), cleared], 3, 'New task', 'abcdef123456', 100)!;
+    const next = placePriority([makePriority(1, 'A'), cleared], 3, placed('New task'))!;
     expect(next.map((p) => [p.text, p.uid])).toEqual([
       ['A', makePriority(1, 'A').uid],
       ['', 'cleared00000'],
@@ -154,7 +175,7 @@ describe('placePriority', () => {
 
   it('appends rather than take a cleared row when the list has no free row', () => {
     const rows = [makePriority(1, 'A'), makePriority(2, '  ', { uid: 'cleared00000' }), makePriority(3, 'C')];
-    const next = placePriority(rows, 3, 'D', 'abcdef123456', 100)!;
+    const next = placePriority(rows, 3, placed('D'))!;
     expect(next.map((p) => [p.position, p.text, p.uid])).toEqual([
       [1, 'A', rows[0]!.uid],
       [2, '  ', 'cleared00000'],
@@ -163,12 +184,35 @@ describe('placePriority', () => {
     ]);
   });
 
+  it('takes back the cleared row that holds the card or the recurring priority placed, keeping its uid and addedAt', () => {
+    const cleared = makePriority(2, '', { uid: 'cleared00000', addedAt: 50, ...CARD });
+    const next = placePriority([makePriority(1, 'A'), cleared], 3, placed('Invoices', { ...CARD, categoryUid: 'cafe00000001' }))!;
+    expect(next).toEqual([
+      makePriority(1, 'A'),
+      { ...placed('Invoices', { ...CARD, categoryUid: 'cafe00000001' }), position: 2, uid: 'cleared00000', addedAt: 50 },
+      emptyRow(3),
+    ]);
+    const routine = makePriority(1, '', { uid: 'cleared00000', addedAt: 50, ...ROUTINE });
+    expect(placePriority([routine], 1, placed('Queue', ROUTINE))).toEqual([{ ...placed('Queue', ROUTINE), position: 1, uid: 'cleared00000', addedAt: 50 }]);
+  });
+
+  it('keeps the category of the cleared row it takes back when the row placed brings none', () => {
+    const cleared = makePriority(1, '', { uid: 'cleared00000', addedAt: 50, ...CARD, categoryUid: 'cafe00000002' });
+    expect(placePriority([cleared], 1, placed('Invoices', CARD))![0]).toMatchObject({ text: 'Invoices', uid: 'cleared00000', categoryUid: 'cafe00000002' });
+  });
+
+  it('changes nothing when a row with text already holds the card or the recurring priority', () => {
+    const rows = [makePriority(1, 'Invoices', CARD), makePriority(2, 'Queue', ROUTINE)];
+    expect(placePriority(rows, 3, placed('Invoices again', CARD))).toEqual([...rows, emptyRow(3)]);
+    expect(placePriority(rows, 2, placed('Queue', ROUTINE))).toEqual(rows);
+  });
+
   it('refuses when the sheet is full', () => {
     const rows = Array.from({ length: MAX_PRIORITIES }, (_, i) => makePriority(i + 1, `p${i + 1}`));
-    expect(placePriority(rows, 3, 'One more', 'abcdef123456', 100)).toBeNull();
+    expect(placePriority(rows, 3, placed('One more'))).toBeNull();
     // A cleared row still stands for its item, so a full list with one is full.
     const oneCleared = rows.map((p) => (p.position === 7 ? { ...p, text: '' } : p));
-    expect(placePriority(oneCleared, 3, 'One more', 'abcdef123456', 100)).toBeNull();
+    expect(placePriority(oneCleared, 3, placed('One more'))).toBeNull();
   });
 });
 
