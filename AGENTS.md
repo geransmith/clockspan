@@ -53,7 +53,10 @@ shared/                 imported by both sides, always with a `.js` suffix
                         MAX_PUNCHES (the server's row cap; the card hides Add extra out / in at it)
   priorities.ts         hasText; isFree (a row never written in, where a new priority may go); mergePriorities:
                         a priorities save laid onto the stored list as the changes made since its base,
-                        field by field as MERGED lists
+                        field by field as MERGED lists ('merge' or 'fixed'); sharesLink (two rows on one
+                        card or recurring priority); repeatedLink (what the PUT refuses); the merge's
+                        clean-up, dedupeLinks (one text row per link) and dropShadowedLinks (an emptied
+                        row loses a link a text row holds)
   text.ts               sameText: the key the same text typed twice is matched by
   backoff.ts            nextBackoff: the wait between retries of a request that must answer
 server/                 Express API → dist/server
@@ -175,9 +178,10 @@ back the templates recur at fixed intervals, so the default 10 are three normal 
 of the extra pair, overtime and unreviewed (two cancelled sessions in all) and one half day.
 Every past day has two to four priorities and a note. Today is clocked in two hours before
 *now*. Its three priorities were planned two minutes after the last weekday's review, with that
-day's first open row carried to position 1 and the second row ticked; its log has a 50-minute
-session for the ticked row, an unplanned one paused for eight minutes and finished three
-minutes short of its 25, a full break and one cut short.
+day's first open row carried to position 1 (a row of its own, with its own uid) and the second
+row ticked; its log has a 50-minute session for the ticked row, an unplanned one paused for
+eight minutes and finished three minutes short of its 25, a full break and one cut short. No
+seeded row links to a card, a recurring priority or a category: all three links are null.
 
 `--running` leaves a 25-minute timer running, started ten minutes before *now*, for timer work;
 `--quarter` seeds every weekday since the start of last quarter, for Month / Quarter review
@@ -490,17 +494,36 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   the list and its `base`, the list it was built on (the card's draft sends what its edits were
   made on, `PlanNext` and `addPriority` the day's shown copy), and stores
   `mergePriorities(stored, base, list)`, which the day store also shows while the save is out.
-  Rows match by uid. Each field in `MERGED` takes this device's value where it differs from
-  `base`, else the stored one. A row this device removed goes; one another device removed stays
-  gone unless this device changed it. A row another device added since `base` stays, in this
-  device's first row never written in (never a cleared one, which still stands for its item) or
-  at the end, and a row added on both with the same text (`sameText`) is one row, the stored
-  one. Order is this device's. Removing a row is sending the list without it. With no base
-  (curl, a tab from before the merge) the list replaces the stored one.
+  Rows match by uid. Each `'merge'` field in `MERGED` takes this device's value where it
+  differs from `base`, else the stored one; a `'fixed'` field (`cardUid`, `recurringUid`) keeps
+  the stored row's value whatever arrives. A link a save leaves out keeps its value: a missing
+  `categoryUid` is read as the base row's, else the stored row's, and a missing card or
+  recurring priority is none on a new row. A row this device removed goes; one another device
+  removed stays gone unless this device changed it. A row another device added since `base`
+  stays, in this device's first row never written in (never a cleared one, which still stands
+  for its item) or at the end, and a row added on both with the same text (`sameText`) and no
+  card or recurring priority on either is one row, the stored one. Order is this device's.
+  Removing a row is sending the list without it. With no base (curl, a tab from before the
+  merge) the list replaces the stored one, the fixed fields aside.
 - **A priority's identity is its `uid`, never its position.** The client mints it
   (`newUid()`) the first time a row gets text and stamps `addedAt`; both survive a text clear
   and a renumber. `sessions.priority_uid` points at it (null or a removed row = unplanned).
-  `POST/PATCH` sessions check the uid exists on that day.
+  `POST/PATCH` sessions check the uid exists on that day. Each day's row has its own uid, and
+  three soft links tie it to its task across days: `cardUid` (the board card), `recurringUid`
+  (the recurring priority it was added from) and `categoryUid`. They are checked for shape only
+  (`UID_RE`; a row never written in holds none, and one row is never both a card and a
+  recurring priority), and a null link matches nothing (`sharesLink`). Carry-over (the
+  left-open Add and Plan tomorrow, through `planNext`'s seeds) gives the new day's row a fresh
+  uid and `addedAt` and carries all three. `cardUid` and `recurringUid` are fixed once stored;
+  `categoryUid` changes like the text. A cleared row keeps all three. A stored list never holds
+  two text rows with one card or one recurring priority: a sent list that repeats one is
+  refused (400) when one of the two rows is new to the server (`repeatedLink`), and the merge
+  keeps the stored row of a repeat, else the first, at the first of their places
+  (`dedupeLinks`). A cleared row loses a card or recurring priority a text row of its list holds
+  (`dropShadowedLinks`). `placePriority` and `planNext` never make a repeat: a row placed or
+  planned whose link a text row holds is skipped, and a cleared row that holds it takes it back
+  with its uid and `addedAt`, so the time logged on it counts again, and its category unless the
+  row placed brings one (`takeBack`).
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started —
   one rule, no clock-in fallback. `GET /days/range` returns full days and the client does the
@@ -512,7 +535,14 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   is left out because it is still going, and it is null under two such days; Review shows it
   for a Week or a Month. The Days tile's target is `periodTarget`: a Week's is the Work week
   setting, as on the timeclock's week line, and a Month's or a Quarter's is `targetSeconds`,
-  the clocked-in days' own lengths added up through `daySettings`.
+  the clocked-in days' own lengths added up through `daySettings`. Not done groups the rows
+  left open into tasks across days (`addToNotDone`): rows linked to one card are one task
+  (`card:<cardUid>`), whatever their text; a row with no card joins the latest task of its
+  text, else starts one (`text:<sameText>`); a carded row whose card has no task yet takes over
+  the cardless task of its text, in its place in the order. A carded row's tick settles its
+  card's task and the cardless task of its text, a cardless tick every task of its text, and a
+  tick on a day settles the same task left open beside it. Two cards with one title stay two
+  tasks.
 - **History opens on the route's date** (`route.date ?? today`), with that day picked. The
   calendar holds its month by its first day (`startOfMonth`) and Review its period by `from`,
   so neither moves at midnight. "Open day" first records the picked day (and the Review period,
@@ -671,6 +701,21 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   fails there on a new field until the templates set it, or it is added to the type's `Omit`
   list if the server derives it (like `durationSeconds`). Write its column in `insertDay` too;
   typecheck does not check that.
+- **A priority field** (like `categoryUid`): append a migration adding the column to
+  `priorities` → the field on `Priority` (`shared/api.ts`) and the column on `PriorityRow`
+  (`routes/shared.ts`) → read it in `priorityJson` and write it in the PUT's INSERT
+  (`routes/days.ts`) → its `MERGED` entry (`shared/priorities.ts`, which typecheck asks for):
+  `'merge'` if a device may change it, `'fixed'` if the stored value stands once stored → its
+  rule in `parsePriorityRows` for a value of the wrong kind and for one left out (a missing
+  `'merge'` field must read as unchanged, as `withCategories` does for the category, or an old
+  tab's save would clear it) → its default in `emptyRow` (`client/src/lib/priorities.ts`) and
+  in `addPriority`'s row (`useDay.tsx`) → if carry-over keeps it, `PrioritySeed`, `textSeed`
+  and `planNext`'s row (`lib/plan.ts`) → if it is a link a list holds once, `LINKS`
+  (`shared/priorities.ts`), which `repeatedLink`, `dedupeLinks`, `dropShadowedLinks` and
+  `sharesLink` read (`placePriority` and `planNext` match through `sharesLink`) → the seed
+  (`server/dev/seed.ts`: its rows, typecheck asks; `insertDay`'s INSERT, it doesn't) →
+  `makePriority` (`client/src/test/fixtures.ts`) → the padded-rows case in
+  `server/routes/days.test.ts` ("takes the web app's rows as it pads and sends them").
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
   `currentUser(req).id` (a `/:date` route goes on the days router, whose param handler checks
   the date; a `/:id` route on the sessions or breaks router is checked by the router itself and
@@ -692,8 +737,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   existing entry. A new table with a `user_id` also joins the README's script under "Switching
   modes later"; `server/db.test.ts` fails until it does. A new column on a day, session,
   priority or break also needs the seed note under "A per-day field". A new `Priority` field
-  also gets its entry in `MERGED` (`shared/priorities.ts`, which typecheck asks for), so a save
-  merges it with another device's change.
+  follows "A priority field".
 - **A security header, CSP source or request guard**: `server/security.ts` only (tests in
   `server/app.test.ts`), then the `prod` config check.
 - **A config env var**: parse and validate it in `server/config.ts` (throw with a clear

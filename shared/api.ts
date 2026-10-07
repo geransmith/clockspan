@@ -43,6 +43,9 @@ export interface Punch {
  * the copy it was built on (`mergePriorities`), in position order (1-based and contiguous): the
  * card saves the rows it shows, empty ones included, and a day never edited has none. `uid` is
  * the stable id sessions point at (null until the row has text); `addedAt` is when it got text.
+ * Each day's row has its own uid; the links below tie the rows of one task across days. They are
+ * soft links, checked for shape only: a uid with nothing behind it reads as none, and a null link
+ * matches nothing. A row carried to another day gets a fresh uid and keeps its links.
  */
 export interface Priority {
   position: number;
@@ -50,6 +53,12 @@ export interface Priority {
   done: boolean;
   uid: string | null;
   addedAt: number | null;
+  /** The board card this row is on its day. Set when the row arrives on a list; fixed once stored. */
+  cardUid: string | null;
+  /** The recurring priority this row was added from; fixed once stored. Never set together with `cardUid`. */
+  recurringUid: string | null;
+  /** The category it counts under. Kept when the row's text is cleared. */
+  categoryUid: string | null;
 }
 
 /** What a session has whatever its status. */
@@ -147,7 +156,7 @@ export interface PunchesResponse {
 
 /**
  * `PUT /days/:date/priorities`: the rows as stored once the save is merged with the day's list
- * (`mergePriorities`), uids and addedAt filled in.
+ * (`mergePriorities`), uids and addedAt filled in, and each stored row's links as stored.
  */
 export interface PrioritiesResponse {
   priorities: Priority[];

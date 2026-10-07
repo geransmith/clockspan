@@ -7,7 +7,21 @@ import { TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib
 import { formatCountdown } from '../lib/format';
 import { dueKey } from '../lib/timer';
 import { MINUTE_MS } from '../../../shared/dates.js';
-import { AppProviders, apiError, begin, deferred, endSession, makeDay, makeSession, makeSettings, settle, T0, TODAY, YESTERDAY } from '../test/hooks';
+import {
+  AppProviders,
+  apiError,
+  begin,
+  deferred,
+  endSession,
+  makeDay,
+  makePriority,
+  makeSession,
+  makeSettings,
+  settle,
+  T0,
+  TODAY,
+  YESTERDAY,
+} from '../test/hooks';
 import type { Priority, RunningResponse, RunningSession, Session, SessionResponse, Settings } from '../types';
 import { useDays, useDayStore } from './useDay';
 import { useTimer } from './useTimer';
@@ -30,7 +44,7 @@ async function renderRunning(session: Session | null = makeSession()) {
 }
 
 /** A row just given text on today's list, whose save the tests hold back. */
-const justTyped: Priority = { position: 1, text: 'Just typed', done: false, uid: 'u1', addedAt: T0 };
+const justTyped: Priority = makePriority(1, 'Just typed', { uid: 'u1' });
 
 /** A session that started `minutes` ago with the default 25 min plan. */
 const startedAgo = (minutes: number, patch: Partial<RunningSession> = {}) => makeSession({ startedAt: Date.now() - minutes * MINUTE_MS, ...patch });

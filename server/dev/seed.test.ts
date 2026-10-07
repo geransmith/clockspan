@@ -110,6 +110,8 @@ describe('seedDatabase', () => {
         expect(p.text).not.toBe('');
         expect(p.uid).toMatch(/^[a-z0-9]{12}$/);
         expect(p.addedAt).toBeGreaterThan(0);
+        // No card, recurring priority or category is seeded for a row to link to.
+        expect(p).toMatchObject({ cardUid: null, recurringUid: null, categoryUid: null });
       }
       expect(new Set(day.priorities.map((p) => p.uid)).size).toBe(day.priorities.length);
 
@@ -172,6 +174,8 @@ describe('seedDatabase', () => {
     const app = await startTestApp({ seed: { running: true } });
     try {
       for (const day of app.seeded!.days) {
+        // What the inserts wrote reads back as the manifest has it, every field of every row.
+        expect((await app.api.get<Day>(`/api/days/${day.date}`)).body.priorities).toEqual(day.priorities);
         const punches = await app.api.put(`/api/days/${day.date}/punches`, { punches: day.punches.map((p) => ({ at: p.at })) });
         expect(punches).toMatchObject({ status: 200, body: { punches: day.punches } });
         const priorities = await app.api.put(`/api/days/${day.date}/priorities`, { priorities: day.priorities });

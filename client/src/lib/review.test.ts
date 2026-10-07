@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { atTime, MINUTE_MS } from '../../../shared/dates.js';
 import { completedSession, makeBreak, makeDay, makePriority, makeSession, punchesAt, TEST_SETTINGS, type EndPatch } from '../test/fixtures';
 import { periodRange, periodTarget, reviewRange } from './review';
+import type { Day } from '../types';
 
 const FIRST_UID = makePriority(1, '').uid;
 const SECOND_UID = makePriority(2, '').uid;
@@ -68,7 +69,7 @@ describe('reviewRange', () => {
       ['Help Sam', ['2026-09-15']],
       ['Fire drill', ['2026-09-14']],
     ]);
-    expect(r.notDone).toEqual([{ key: 'write the proposal', text: 'Write the proposal', dates: ['2026-09-14'], focusedSeconds: 0, addedMidDay: false }]);
+    expect(r.notDone).toEqual([{ key: 'text:write the proposal', text: 'Write the proposal', dates: ['2026-09-14'], focusedSeconds: 0, addedMidDay: false }]);
     // The note as typed, without the blank lines around it.
     expect(r.notes).toEqual([{ date: '2026-09-14', note: 'Slack ate the afternoon.', reviewedAt: d1.retroAt }]);
   });
@@ -100,7 +101,7 @@ describe('reviewRange', () => {
     // Left open again after the tick: only the days since, and only their time.
     const wed = makeDay('2026-09-16', { priorities: [makePriority(1, 'Write the proposal')] });
     expect(reviewRange([mon, tue, wed], settings, '2026-09-16', now).notDone).toEqual([
-      { key: 'write the proposal', text: 'Write the proposal', dates: ['2026-09-16'], focusedSeconds: 0, addedMidDay: false },
+      { key: 'text:write the proposal', text: 'Write the proposal', dates: ['2026-09-16'], focusedSeconds: 0, addedMidDay: false },
     ]);
     // Ticked and left open on one day, in either order: the tick wins.
     for (const priorities of [
@@ -260,9 +261,82 @@ describe('reviewRange', () => {
     ]);
     // Left open on two days comes first, then by date; the latest spelling wins; mid-day on either day counts.
     expect(r.notDone).toEqual([
-      { key: 'review the pr', text: 'review the PR', dates: ['2026-09-14', '2026-09-15'], focusedSeconds: 2100, addedMidDay: true },
-      { key: 'plan next sprint', text: 'Plan next sprint', dates: ['2026-09-14'], focusedSeconds: 0, addedMidDay: false },
-      { key: 'call the bank', text: 'Call the bank', dates: ['2026-09-15'], focusedSeconds: 0, addedMidDay: false },
+      { key: 'text:review the pr', text: 'review the PR', dates: ['2026-09-14', '2026-09-15'], focusedSeconds: 2100, addedMidDay: true },
+      { key: 'text:plan next sprint', text: 'Plan next sprint', dates: ['2026-09-14'], focusedSeconds: 0, addedMidDay: false },
+      { key: 'text:call the bank', text: 'Call the bank', dates: ['2026-09-15'], focusedSeconds: 0, addedMidDay: false },
     ]);
+  });
+});
+
+// One-offs left open are grouped into tasks across days: by card, else by text.
+describe('reviewRange: Not done', () => {
+  const now = at('2026-09-18', 17);
+  const MON = '2026-09-14';
+  const TUE = '2026-09-15';
+  const WED = '2026-09-16';
+  const A = 'carda0000001';
+  const B = 'cardb0000001';
+  type Row = [text: string, cardUid?: string | null, done?: boolean];
+  /** A day whose rows were all written before work: none reads as added mid-day. */
+  const day = (date: string, ...rows: Row[]) =>
+    makeDay(date, { priorities: rows.map(([text, cardUid = null, done = false], i) => makePriority(i + 1, text, { cardUid, done, ...BEFORE_WORK })) });
+  const notDone = (...days: Day[]) => reviewRange(days, settings, '2026-09-18', now).notDone.map((g) => [g.key, g.text, g.dates]);
+
+  it('settles a cardless row by a later tick of a carded row of its text, and the other way round', () => {
+    expect(notDone(day(MON, ['Report']), day(TUE, ['report', A, true]))).toEqual([]);
+    expect(notDone(day(MON, ['Report', A]), day(TUE, ['report', null, true]))).toEqual([]);
+  });
+
+  it("makes a cardless task the card's once a row of its text gets a card, and a cardless row joins the latest task of its text", () => {
+    expect(notDone(day(MON, ['Report']), day(TUE, ['Report', A]))).toEqual([[`card:${A}`, 'Report', [MON, TUE]]]);
+    expect(notDone(day(MON, ['Report', A]), day(TUE, ['report ']))).toEqual([[`card:${A}`, 'report', [MON, TUE]]]);
+  });
+
+  it('keeps a task where it sorted when a row of it gets its card partway through', () => {
+    const days = [day(MON, ['Invoices'], ['Report'], ['Email']), day(TUE, ['Invoices'], ['Report', A], ['Email'])];
+    expect(notDone(...days)).toEqual([
+      ['text:invoices', 'Invoices', [MON, TUE]],
+      [`card:${A}`, 'Report', [MON, TUE]],
+      ['text:email', 'Email', [MON, TUE]],
+    ]);
+  });
+
+  it("keeps a card's rows one task when it is renamed, under its latest text, and a tick of the card settles every day of it", () => {
+    expect(notDone(day(MON, ['Report', A]), day(TUE, ['Write the report', A]))).toEqual([[`card:${A}`, 'Write the report', [MON, TUE]]]);
+    expect(notDone(day(MON, ['Report', A]), day(TUE, ['Write the report', A]), day(WED, ['Send the report', A, true]))).toEqual([]);
+  });
+
+  it('keeps two cards with one title two tasks, and a tick of one leaves the other open', () => {
+    expect(notDone(day(MON, ['Email', A], ['Email', B]))).toEqual([
+      [`card:${A}`, 'Email', [MON]],
+      [`card:${B}`, 'Email', [MON]],
+    ]);
+    expect(notDone(day(MON, ['Email', A], ['Email', B]), day(TUE, ['Email', A, true]))).toEqual([[`card:${B}`, 'Email', [MON]]]);
+    // A tick with no card settles every task of its text.
+    expect(notDone(day(MON, ['Email', A], ['Email', B]), day(TUE, ['email', null, true]))).toEqual([]);
+    // A row with no card left open joins one of them: the one seen last.
+    expect(notDone(day(MON, ['Email', A], ['Email', B]), day(TUE, ['email']), day(WED, ['Email', A]))).toEqual([
+      [`card:${A}`, 'Email', [MON, WED]],
+      [`card:${B}`, 'email', [MON, TUE]],
+    ]);
+  });
+
+  it('lets a tick win over the same task left open on its day', () => {
+    expect(notDone(day(MON, ['Report', A, true], ['report']))).toEqual([]);
+    expect(notDone(day(MON, ['Report', null, true], ['report', A]))).toEqual([]);
+    // A card ticked doesn't settle another card of its title left open beside it.
+    expect(notDone(day(MON, ['Email', A, true], ['Email', B]))).toEqual([[`card:${B}`, 'Email', [MON]]]);
+  });
+
+  it('groups and settles rows that share a card the way the same rows with no card group by text', () => {
+    const days = [
+      day(MON, ['Report', A], ['Invoices', B], ['Email']),
+      day(TUE, ['Report', A], ['Invoices', B, true]),
+      day(WED, ['Report', A], ['Call the bank']),
+    ];
+    const stripped = days.map((d) => ({ ...d, priorities: d.priorities.map((p) => ({ ...p, cardUid: null })) }));
+    const withoutKeys = (ds: Day[]) => reviewRange(ds, settings, '2026-09-18', now).notDone.map(({ key: _key, ...g }) => g);
+    expect(withoutKeys(days)).toEqual(withoutKeys(stripped));
+    expect(notDone(...days).map(([key]) => key)).toEqual([`card:${A}`, 'text:email', 'text:call the bank']);
   });
 });

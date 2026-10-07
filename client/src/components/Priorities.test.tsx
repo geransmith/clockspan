@@ -226,6 +226,14 @@ describe('Priorities', () => {
     expect(saved()[0]).toMatchObject({ position: 1, text: 'Invoices', done: false, addedAt: T0 });
     expect(saved()[0]!.uid).not.toBe(yesterdays[0]!.uid);
   });
+
+  it("brings each left-open row over as the same task: today's own row, with its card and category", async () => {
+    const yesterdays = [makePriority(2, 'Invoices', { addedAt: T0 - DAY_MS, cardUid: 'card00000001', categoryUid: 'cafe00000001' })];
+    const { saved } = await renderCard([], { from: 'yesterday', rows: yesterdays, dismiss: vi.fn() });
+    fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
+    expect(saved()[0]).toMatchObject({ position: 1, text: 'Invoices', addedAt: T0, cardUid: 'card00000001', recurringUid: null, categoryUid: 'cafe00000001' });
+    expect(saved()[0]!.uid).not.toBe(yesterdays[0]!.uid);
+  });
 });
 
 describe('Priorities: a cleared row', () => {
@@ -307,6 +315,25 @@ describe('Priorities: a cleared row', () => {
     expect(saved()[1]!.uid).not.toBe(cleared.uid);
     // Focus lands on the row the offer filled.
     expect(document.activeElement).toBe(textbox(2));
+  });
+
+  it('is taken back by the left-open row whose card it holds, with its uid and the time logged on it', async () => {
+    const cleared = makePriority(2, '', { cardUid: 'card00000001' });
+    const rows = [
+      makePriority(1, 'Invoices', { uid: 'monday000001', addedAt: T0 - DAY_MS, cardUid: 'card00000001' }),
+      makePriority(2, 'Email', { uid: 'monday000002', addedAt: T0 - DAY_MS }),
+    ];
+    const { saved } = await renderCard([makePriority(1, '', { uid: null, addedAt: null }), cleared], { from: 'yesterday', rows, dismiss: vi.fn() }, [logged()]);
+    expect(note()).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
+    expect(saved().map((p) => [p.position, p.text, p.uid, p.cardUid])).toEqual([
+      [1, 'Invoices', cleared.uid, 'card00000001'],
+      [2, 'Email', saved()[1]!.uid, null],
+      [3, '', null, null],
+    ]);
+    expect(saved()[1]!.uid).not.toBe('monday000002');
+    expect(note()).toBeNull();
+    expect(document.activeElement).toBe(textbox(1));
   });
 });
 

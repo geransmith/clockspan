@@ -7,7 +7,7 @@ import { unlockAudio } from '../lib/alerts';
 import { EMPTIED_ROW, LEFT_OPEN, WARNING_ACTIONS } from '../lib/copy';
 import { formatDuration } from '../lib/format';
 import { planNext } from '../lib/plan';
-import { editPriority, nudgeFor, padPriorities, pickWarning, removePriority, type WarningKind } from '../lib/priorities';
+import { editPriority, emptyRow, nudgeFor, padPriorities, pickWarning, removePriority, type WarningKind } from '../lib/priorities';
 import { loggedByUid } from '../lib/retro';
 import { hasText, isFree } from '../../../shared/priorities.js';
 import { LIMITS } from '../../../shared/api.js';
@@ -84,19 +84,23 @@ export function Priorities({ priorities, sessions, onChange, leftOpen }: Props) 
       return;
     }
     setWarning(null);
-    const next = [...local, { position: local.length + 1, text: '', done: false, uid: null, addedAt: null }];
+    const next = [...local, emptyRow(local.length + 1)];
     // Rendered at once, so the new row is there to take focus inside the same tap.
     flushSync(() => editList(next, true));
     inputs.current.get(next.length)?.focus();
   };
   // The rows are new to today (fresh uids, `addedAt` now), so the retro counts them as planned
-  // unless a session ran first. A text that appears twice comes over once. A cleared row stays,
-  // ahead of them, with the time logged on it; focus goes to the first row the offer filled.
+  // unless a session ran first; each carries its card, recurring priority and category, so it
+  // is the same task. A text that appears twice comes over once. A cleared row stays, ahead of
+  // them, with the time logged on it, unless it holds the card or recurring priority of a row
+  // brought over: that row takes it back, keeping its uid and addedAt. The offer shows only
+  // while no row has text, so the first row with text is the first it filled, and focus goes
+  // there.
   const bringOver = (rows: Priority[]) => {
-    const texts = rows.map((p) => p.text);
-    const { rows: next, added } = planNext(local, texts);
+    const { rows: next } = planNext(local, rows);
     flushSync(() => editList(padPriorities(next, count), true));
-    inputs.current.get(next.length - added + 1)?.focus();
+    const first = next.find(hasText);
+    if (first) inputs.current.get(first.position)?.focus();
   };
   // Focus goes where Add priority would put a new priority, never into a cleared row, which is still its old item.
   const dismissLeftOpen = (dismiss: () => void) => {

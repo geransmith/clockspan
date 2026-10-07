@@ -120,9 +120,10 @@ describe('PUT /api/days/:date/priorities', () => {
     });
     expect(r.status).toBe(200);
     const [a, b, c] = r.body.priorities;
-    expect(a).toEqual({ position: 1, text: 'Kept', done: true, uid: 'abcdef123456', addedAt: 100 });
+    const unlinked = { cardUid: null, recurringUid: null, categoryUid: null };
+    expect(a).toEqual({ position: 1, text: 'Kept', done: true, uid: 'abcdef123456', addedAt: 100, ...unlinked });
     // An empty row is never done and never gets an id.
-    expect(b).toEqual({ position: 2, text: '', done: false, uid: null, addedAt: null });
+    expect(b).toEqual({ position: 2, text: '', done: false, uid: null, addedAt: null, ...unlinked });
     expect(c.position).toBe(3);
     expect(c.uid).toMatch(/^[a-f0-9]{12}$/);
     expect(typeof c.addedAt).toBe('number');
@@ -218,10 +219,20 @@ describe('PUT /api/days/:date/priorities', () => {
 
   it("takes the web app's rows as it pads and sends them", async () => {
     // padPriorities (client/src/lib/priorities.ts) sends every field of every row, empty rows included.
+    // Row 3 was written in and cleared: it is still its item, card and category included.
     const priorities = [
-      { position: 1, text: 'Write the report', done: true, uid: 'abcdef123456', addedAt: T0 },
-      { position: 2, text: '', done: false, uid: null, addedAt: null },
-      { position: 3, text: '', done: false, uid: '0123456789ab', addedAt: T0 + HOUR_MS },
+      { position: 1, text: 'Write the report', done: true, uid: 'abcdef123456', addedAt: T0, cardUid: null, recurringUid: null, categoryUid: 'cafe00000001' },
+      { position: 2, text: '', done: false, uid: null, addedAt: null, cardUid: null, recurringUid: null, categoryUid: null },
+      {
+        position: 3,
+        text: '',
+        done: false,
+        uid: '0123456789ab',
+        addedAt: T0 + HOUR_MS,
+        cardUid: 'card00000001',
+        recurringUid: null,
+        categoryUid: 'cafe00000002',
+      },
     ];
     const r = await app.api.put('/api/days/2026-09-01/priorities', { priorities });
     expect(r.status).toBe(200);
@@ -289,6 +300,202 @@ describe('PUT /api/days/:date/priorities with a base', () => {
       expect([r.status, r.body.error], JSON.stringify(base)).toEqual([400, error]);
     }
     expect((await app.api.get('/api/days/2026-09-01')).body.priorities).toEqual([]);
+  });
+});
+
+// Each row's soft links to its task: the board card, the recurring priority, the category.
+describe('PUT /api/days/:date/priorities: links', () => {
+  const PATH = '/api/days/2026-09-01/priorities';
+  const CARD = 'card00000001';
+  const ROUTINE = 'rcur00000001';
+  const CAT = 'cafe00000001';
+  /** A row as the web app sends it, linked to nothing unless patched. */
+  const row = (text: string, uid: string | null = null, patch: Record<string, unknown> = {}) => ({
+    position: 0,
+    text,
+    done: false,
+    uid,
+    addedAt: uid ? T0 : null,
+    cardUid: null,
+    recurringUid: null,
+    categoryUid: null,
+    ...patch,
+  });
+  const stored = async () => (await app.api.get('/api/days/2026-09-01')).body.priorities as Record<string, unknown>[];
+  const links = (priorities: Record<string, unknown>[]) => priorities.map((p) => [p.uid, p.text, p.cardUid, p.recurringUid, p.categoryUid]);
+
+  it('stores the links each row carries, lowercased, and answers them here, on a read and in a range', async () => {
+    const sent = [
+      row('Report', 'aaaaaaaaaaa1', { cardUid: 'CARD00000001', categoryUid: CAT }),
+      row('Monitor the queue', 'aaaaaaaaaaa2', { recurringUid: ROUTINE }),
+    ];
+    const r = await app.api.put(PATH, { priorities: sent });
+    expect(r.status).toBe(200);
+    const expected = [
+      ['aaaaaaaaaaa1', 'Report', CARD, null, CAT],
+      ['aaaaaaaaaaa2', 'Monitor the queue', null, ROUTINE, null],
+    ];
+    expect(links(r.body.priorities)).toEqual(expected);
+    expect(links(await stored())).toEqual(expected);
+    expect(links((await app.api.get('/api/days/range?from=2026-09-01&to=2026-09-01')).body.days[0].priorities)).toEqual(expected);
+  });
+
+  it("keeps a row's category where a save leaves the field out: the base's, else the stored one", async () => {
+    await app.api.put(PATH, { priorities: [row('Report', 'aaaaaaaaaaa1', { categoryUid: CAT })] });
+    // Another device recategorised the row since this one's base; leaving the field out changes nothing.
+    await app.api.put(PATH, { priorities: [row('Report', 'aaaaaaaaaaa1', { categoryUid: 'cafe00000002' })] });
+    const { categoryUid: _left, ...noCategory } = row('Report v2', 'aaaaaaaaaaa1');
+    const r = await app.api.put(PATH, { priorities: [noCategory], base: [row('Report', 'aaaaaaaaaaa1', { categoryUid: CAT })] });
+    expect(links(r.body.priorities)).toEqual([['aaaaaaaaaaa1', 'Report v2', null, null, 'cafe00000002']]);
+    // With no base, or a base that leaves it out too, the stored value stands.
+    const again = await app.api.put(PATH, { priorities: [{ ...noCategory, text: 'Report v3' }] });
+    expect(links(again.body.priorities)).toEqual([['aaaaaaaaaaa1', 'Report v3', null, null, 'cafe00000002']]);
+    const fromStored = await app.api.put(PATH, { priorities: [noCategory], base: [{ ...noCategory, text: 'Report v3' }] });
+    expect(links(fromStored.body.priorities)).toEqual([['aaaaaaaaaaa1', 'Report v2', null, null, 'cafe00000002']]);
+    // A new row that leaves it out has none.
+    const added = await app.api.put(PATH, { priorities: [noCategory, { text: 'Email' }] });
+    expect(added.body.priorities[1].categoryUid).toBeNull();
+  });
+
+  it('reads a category left out from the stored row when the base lacks the row, and from the base when the server has lost it', async () => {
+    await app.api.put(PATH, { priorities: [row('Report', 'aaaaaaaaaaa1', { categoryUid: CAT })] });
+    const { categoryUid: _left, ...noCategory } = row('Report', 'aaaaaaaaaaa1');
+    // A list built on an empty day: the server's row keeps its category.
+    const kept = await app.api.put(PATH, { priorities: [noCategory], base: [] });
+    expect(links(kept.body.priorities)).toEqual([['aaaaaaaaaaa1', 'Report', null, null, CAT]]);
+    // Another device removed the row; this one sends it as its base had it, so it stays gone.
+    const email = row('Email', 'aaaaaaaaaaa2');
+    await app.api.put(PATH, { priorities: [email] });
+    const gone = await app.api.put(PATH, { priorities: [noCategory, email], base: [row('Report', 'aaaaaaaaaaa1', { categoryUid: CAT }), email] });
+    expect(links(gone.body.priorities)).toEqual([['aaaaaaaaaaa2', 'Email', null, null, null]]);
+  });
+
+  it("keeps a stored row's card and recurring priority whatever a save sends, with links left out or changed", async () => {
+    await app.api.put(PATH, { priorities: [row('Report', 'aaaaaaaaaaa1', { cardUid: CARD }), row('Queue', 'aaaaaaaaaaa2', { recurringUid: ROUTINE })] });
+    // A tab from before links sends none.
+    const old = await app.api.put(PATH, {
+      priorities: [
+        { text: 'Report', uid: 'aaaaaaaaaaa1' },
+        { text: 'Queue', uid: 'aaaaaaaaaaa2' },
+      ],
+    });
+    expect(links(old.body.priorities)).toEqual([
+      ['aaaaaaaaaaa1', 'Report', CARD, null, null],
+      ['aaaaaaaaaaa2', 'Queue', null, ROUTINE, null],
+    ]);
+    const changed = await app.api.put(PATH, {
+      priorities: [row('Report', 'aaaaaaaaaaa1', { cardUid: 'card00000002' }), row('Queue', 'aaaaaaaaaaa2', { recurringUid: null })],
+    });
+    expect(links(changed.body.priorities)).toEqual(links(old.body.priorities));
+  });
+
+  it('keeps the card and the category of an emptied row, which is still its item', async () => {
+    const written = row('Report', 'aaaaaaaaaaa1', { cardUid: CARD, categoryUid: CAT });
+    await app.api.put(PATH, { priorities: [written] });
+    const r = await app.api.put(PATH, { priorities: [{ ...written, text: '', done: true }], base: [written] });
+    expect(r.body.priorities).toEqual([{ ...written, position: 1, text: '', done: false }]);
+  });
+
+  it('drops the links a row never written in sends', async () => {
+    const r = await app.api.put(PATH, { priorities: [row('', null, { cardUid: CARD, categoryUid: CAT }), row('', null, { recurringUid: ROUTINE })] });
+    expect(links(r.body.priorities)).toEqual([
+      [null, '', null, null, null],
+      [null, '', null, null, null],
+    ]);
+  });
+
+  it('takes the card off an emptied row whose card a text row holds', async () => {
+    const first = row('Report', 'aaaaaaaaaaa1', { cardUid: CARD });
+    await app.api.put(PATH, { priorities: [first] });
+    const emptied = { ...first, text: '' };
+    await app.api.put(PATH, { priorities: [emptied], base: [first] });
+    const r = await app.api.put(PATH, { priorities: [emptied, row('Report again', 'aaaaaaaaaaa2', { cardUid: CARD })], base: [emptied] });
+    expect(links(r.body.priorities)).toEqual([
+      ['aaaaaaaaaaa1', '', null, null, null],
+      ['aaaaaaaaaaa2', 'Report again', CARD, null, null],
+    ]);
+  });
+
+  it('refuses a row that is both a card and a recurring priority, and stores nothing', async () => {
+    const r = await app.api.put(PATH, { priorities: [row('Report'), row('Queue', null, { cardUid: CARD, recurringUid: ROUTINE })] });
+    expect([r.status, r.body.error]).toEqual([400, "Priority 2 can't be both a card and a recurring priority."]);
+    expect(app.count('days', 'date = ?', '2026-09-01')).toBe(0);
+  });
+
+  it('refuses a list that repeats a card or a recurring priority on a row new to the server, and stores nothing', async () => {
+    const twoCards = await app.api.put(PATH, { priorities: [row('Report', null, { cardUid: CARD }), row('Report again', null, { cardUid: CARD })] });
+    expect([twoCards.status, twoCards.body.error]).toEqual([400, "Priority 2 repeats another row's card."]);
+    const twoRoutines = await app.api.put(PATH, {
+      priorities: [row('Queue', null, { recurringUid: ROUTINE }), row('Email'), row('Queue', null, { recurringUid: ROUTINE })],
+    });
+    expect([twoRoutines.status, twoRoutines.body.error]).toEqual([400, "Priority 3 repeats another row's recurring priority."]);
+    // A day the refusal would have made isn't stored either.
+    expect(app.count('days', 'date = ?', '2026-09-01')).toBe(0);
+    const first = row('Report', 'aaaaaaaaaaa1', { cardUid: CARD });
+    await app.api.put(PATH, { priorities: [first] });
+    const r = await app.api.put(PATH, { priorities: [first, row('Report again', 'aaaaaaaaaaa2', { cardUid: CARD })], base: [first] });
+    expect([r.status, r.body.error]).toEqual([400, "Priority 2 repeats another row's card."]);
+    expect(links(await stored())).toEqual([['aaaaaaaaaaa1', 'Report', CARD, null, null]]);
+  });
+
+  it('accepts a list it already holds that repeats a card, and stores one row for it', async () => {
+    const dayId = ensureDay(app.db, ensureDefaultUser(app.db).id, '2026-09-01');
+    const insert = app.db.prepare(`INSERT INTO priorities (day_id, position, text, uid, added_at, card_uid) VALUES (?, ?, ?, ?, ?, ?)`);
+    insert.run(dayId, 1, 'Report', 'aaaaaaaaaaa1', T0, CARD);
+    insert.run(dayId, 2, 'Report again', 'aaaaaaaaaaa2', T0, CARD);
+    const held = await stored();
+    const r = await app.api.put(PATH, { priorities: held, base: held });
+    expect(r.status).toBe(200);
+    expect(links(r.body.priorities)).toEqual([['aaaaaaaaaaa1', 'Report', CARD, null, null]]);
+  });
+
+  it('stores one row where two devices placed the same card: the first one saved', async () => {
+    const EMPTY = [row(''), row(''), row('')];
+    expect((await app.api.put(PATH, { priorities: [row('Invoices', 'aaaaaaaaaaa1', { cardUid: CARD }), row(''), row('')], base: EMPTY })).status).toBe(200);
+    const r = await app.api.put(PATH, { priorities: [row('Invoices', 'bbbbbbbbbbb1', { cardUid: CARD }), row(''), row('')], base: EMPTY });
+    expect(r.status).toBe(200);
+    expect(links(r.body.priorities.filter((p: { text: string }) => p.text))).toEqual([['aaaaaaaaaaa1', 'Invoices', CARD, null, null]]);
+  });
+
+  it("stores one row where a stale edit brings back a row another device removed and placed again: the stored one, in the edit's place", async () => {
+    const base = [row('Report', 'aaaaaaaaaaa1', { cardUid: CARD }), row('Email', 'aaaaaaaaaaa2')];
+    await app.api.put(PATH, { priorities: base });
+    // The other device took the card off the list and placed it back as a new row.
+    await app.api.put(PATH, { priorities: [base[1], row('Report', 'bbbbbbbbbbb1', { cardUid: CARD })], base });
+    const r = await app.api.put(PATH, { priorities: [row('Report v2', 'aaaaaaaaaaa1', { cardUid: CARD }), base[1]], base });
+    expect(links(r.body.priorities)).toEqual([
+      ['bbbbbbbbbbb1', 'Report', CARD, null, null],
+      ['aaaaaaaaaaa2', 'Email', null, null, null],
+    ]);
+  });
+
+  it('stores one row where a draft still holds a row another device replaced', async () => {
+    const base = [row('Report', 'aaaaaaaaaaa1', { cardUid: CARD }), row('Email', 'aaaaaaaaaaa2')];
+    await app.api.put(PATH, { priorities: base });
+    await app.api.put(PATH, { priorities: [base[1], row('Report', 'bbbbbbbbbbb1', { cardUid: CARD })], base });
+    // The draft edited another row and still has the replaced one as it was.
+    const r = await app.api.put(PATH, { priorities: [base[0], row('Email the team', 'aaaaaaaaaaa2')], base });
+    expect(links(r.body.priorities)).toEqual([
+      ['aaaaaaaaaaa2', 'Email the team', null, null, null],
+      ['bbbbbbbbbbb1', 'Report', CARD, null, null],
+    ]);
+  });
+
+  it('refuses a link that is not a uid, in the list or its base, and stores nothing', async () => {
+    const fields: [string, string][] = [
+      ['cardUid', 'card'],
+      ['recurringUid', 'recurring priority'],
+      ['categoryUid', 'category'],
+    ];
+    for (const [field, name] of fields) {
+      for (const value of ['not-a-uid!', 'ab', 12345678, true, { uid: CARD }]) {
+        const r = await app.api.put(PATH, { priorities: [row('Report'), row('Email', null, { [field]: value })] });
+        expect([r.status, r.body.error], `${field} ${JSON.stringify(value)}`).toEqual([400, `Priority 2 has an invalid ${name}.`]);
+      }
+      const base = await app.api.put(PATH, { priorities: [row('Report')], base: [row('Report', null, { [field]: 'x' })] });
+      expect([base.status, base.body.error]).toEqual([400, `Base row 1 has an invalid ${name}.`]);
+    }
+    expect(app.count('days', 'date = ?', '2026-09-01')).toBe(0);
   });
 });
 
