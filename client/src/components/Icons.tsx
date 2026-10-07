@@ -75,6 +75,16 @@ export const ArrowDown = () => (
     <path d="M12 5v14M19 12l-7 7-7-7" />
   </svg>
 );
+export const ArrowLeft = () => (
+  <svg {...base}>
+    <path d="M19 12H5M12 19l-7-7 7-7" />
+  </svg>
+);
+export const ArrowRight = () => (
+  <svg {...base}>
+    <path d="M5 12h14M12 5l7 7-7 7" />
+  </svg>
+);
 export const Trash = () => (
   <svg {...base}>
     <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />

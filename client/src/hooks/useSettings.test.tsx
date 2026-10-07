@@ -27,13 +27,13 @@ describe('loading', () => {
     const { result } = render();
     expect(result.current.loaded).toBe(false);
     expect(result.current.settings.workMinutes).toBe(DEFAULT_SETTINGS.workMinutes);
-    answer.resolve(makeSettings({ workMinutes: 600, layout: [{ id: 'retro', visible: false }] }));
+    answer.resolve(makeSettings({ workMinutes: 600, layout: [{ id: 'retro', visible: false, side: 'left' }] }));
     await settle();
     expect(result.current.loaded).toBe(true);
     expect(result.current.settings.workMinutes).toBe(600);
     // The saved layout is merged with the card registry: every card, the saved one first.
     expect(result.current.settings.layout.map((c) => c.id)).toEqual(['retro', ...CARD_IDS.filter((id) => id !== 'retro')]);
-    expect(result.current.settings.layout[0]).toEqual({ id: 'retro', visible: false });
+    expect(result.current.settings.layout[0]).toEqual({ id: 'retro', visible: false, side: 'left' });
   });
 
   it('asks again after a failure, 2 s doubling up to a minute, and never settles on the defaults', async () => {

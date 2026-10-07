@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { SPLIT_QUERY } from './layout';
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const css = read('../styles.css');
@@ -42,5 +43,11 @@ describe('styles.css', () => {
 
     const manifest = JSON.parse(read('../../public/manifest.webmanifest')) as { background_color?: unknown };
     expect(manifest.background_color).toBe(light);
+  });
+
+  // The sheet picks two columns with matchMedia(SPLIT_QUERY), and the stylesheet lays them out
+  // under the same query; a width changed on one side only would leave a split laid out as one list.
+  it('lays the two-column sheet out under the query the sheet picks it with', () => {
+    expect(css).toContain(`@media ${SPLIT_QUERY} {`);
   });
 });

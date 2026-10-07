@@ -41,8 +41,8 @@ File names say most of it. This lists where things live and the files a rule is 
 
 ```
 shared/                 imported by both sides, always with a `.js` suffix
-  settings.ts           Settings, DEFAULT_SETTINGS, CARD_IDS, normalizeLayout, MAX_PRIORITIES, SETTING_LIMITS,
-                        RETENTION_LIMITS
+  settings.ts           Settings, DEFAULT_SETTINGS, CARD_IDS, DEFAULT_SIDE (each card's column), normalizeLayout,
+                        MAX_PRIORITIES, SETTING_LIMITS, RETENTION_LIMITS
   api.ts                every wire type and `emptyDay`; the server's JSON builders and client/src/api.ts both use them,
                         and the input limits both sides check (LIMITS, USERNAME, PASSWORD_LENGTH)
   sounds.ts             the sound catalog (SOUNDS, SOUND_EVENTS)
@@ -441,7 +441,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   becomes the new pair's Out. Removing the pair an Add just made, before any punch changes,
   undoes the Add and gives the Clock out its time back (`Timeclock` keeps the rows from before
   it in its state, so the undo ends when the card remounts: a reload, another date, the first
-  Customize); removing any other pair drops its two rows (`removePunchPair`). Lunch semantics
+  Customize, a move to the other column, or the sheet switching between one list and two);
+  removing any other pair drops its two rows (`removePunchPair`). Lunch semantics
   come only from positions 1 and 2.
 - **A punch row saves only complete times.** `TimeField` (React Aria segments) commits the
   moment hour, minute and period are all filled, and throws a half-typed draft away when
@@ -564,6 +565,20 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   load (an upgrade while the page was open) reloads the page once a minute at most
   (`vite:preloadError` in `main.tsx`, `lib/reload.ts`); the `ErrorBoundary` card shows until
   the reload lands, and stays when no reload is made.
+- **A wide window shows the sheet in two columns, chosen when the sheet mounts.** Each layout
+  entry has a `side` (`'left' | 'right'`), which `normalizeLayout` keeps or sets to the card's
+  `DEFAULT_SIDE` (`shared/settings.ts`), so a layout saved before the columns needs no
+  migration. `Sheet.tsx` asks `matchMedia(SPLIT_QUERY)` (`lib/layout.ts`) once, in its first
+  render, and keeps the answer until it mounts again (another view, a reload): switching
+  between one list and two remounts every card, like the lazy-chunk swap above, so it never
+  follows a resize. A split renders `.sheet--split` with one `.sheet-col` per side
+  (`splitColumns`, null while a side has no visible card, which keeps one list), so the tab
+  order is the order seen. One column shows the whole layout in its order, which a move to the
+  other column (`setCardSide`) leaves alone. ↑/↓ and drag and drop stay inside a column
+  (`moveCard(…, side)`); moving across is Customize's arrow button, offered while the sheet
+  was mounted wide. The moved card mounts again in its new column (and every card does when
+  the move empties a side or fills an empty one), so the sheet puts the focus on its arrow
+  there.
 - **Migrations are append-only** in `server/db.ts` (`MIGRATIONS[]`, `PRAGMA user_version`).
   Every FK to `users` or `days` is `ON DELETE CASCADE`. A column nothing uses stays in the
   table rather than a migration dropping it: `sessions.notes` is one (never shown or edited;
@@ -571,11 +586,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 
 ## How to add…
 
-- **A card**: add the id to `CARD_IDS` in `shared/settings.ts`, and its title to `CARD_TITLES`
-  in `client/src/lib/layout.ts` (the types make a missing entry an error) → write the
-  component → add a `case` in `Sheet.tsx`'s `render()`. Existing users get it automatically
+- **A card**: add the id to `CARD_IDS` in `shared/settings.ts`, its column on a wide screen to
+  `DEFAULT_SIDE` there and to `TEST_SIDES` in `client/src/test/fixtures.ts`, and its title to
+  `CARD_TITLES` in `client/src/lib/layout.ts` (the types make a missing entry an error) → write
+  the component → add a `case` in `Sheet.tsx`'s `render()`. Existing users get it automatically
   because every layout goes through `normalizeLayout` (`shared/settings.ts`; `mergeSettings`
-  runs it on the server, `useSettings` on the client), which appends a missing card, shown.
+  runs it on the server, `useSettings` on the client), which appends a missing card, shown, in
+  its default column.
   Removing a card is the reverse (drop the id everywhere; the merge discards it from saved
   layouts), and if the card recorded a choice worth keeping, `mergeSettings` can read it off the
   old layout entry the way the sticker chart's `stickers` setting does.
@@ -699,7 +716,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   two dark token blocks must match, `index.html`'s theme-color metas repeat `--bg` for each
   scheme and the manifest's `background_color` the light one: `theme-css.test.ts` checks all
   three), built **phone-base** (the base rules are the phone; `@media (min-width: 640px)`
-  and wider queries enhance; that is how the stylesheet is built, not who it is for). Tap
+  and wider queries enhance; that is how the stylesheet is built, not who it is for). The
+  sheet's two columns start at `SPLIT_QUERY` (`lib/layout.ts`), which `styles.css` writes out
+  as its `@media` line (`theme-css.test.ts` checks it is there). Every width rule is a window
+  query, so a card in a column gets the wide-window rules at about half the width: a rule
+  that needs the room (the timeclock's four tiles in a row) is undone under `.sheet--split`. Tap
   targets are 44 px on a touch screen: `.btn` and `.input` set `min-height: 44px`, and a
   compact control (chip, segment, running-bar button, banner close/action, log delete) keeps
   its drawn size and gets the rest from the `@media (pointer: coarse)` block at the end of
@@ -792,7 +813,13 @@ browser-only module is tested (stub the globals).
 The browser pass for each surface (the logic under it is already tested):
 
 - **CSS or a component**: the touched surface at desktop width, then at the 375 px mobile
-  preset, each in light and dark.
+  preset, each in light and dark. A sheet card's desktop pass is two widths, since the split
+  starts at 1100 px: 1280 (the card in its column) and 1000 (one column, the widest a card
+  gets). Resize, then reload: the sheet picks its columns when it mounts.
+- **The sheet's columns** (the layout, `Sheet.tsx`, `CardFrame`): at 1280, Customize moves a
+  card to the other column and back, ↑/↓ and the grip stay inside a column, and with a timer
+  running (`--running`) the bar's contents line up with the wider page; at 1000 and at the
+  375 px preset, one column in the layout's order and no column buttons.
 - **`security.ts`, `index.html` or how assets load**: the `prod` config, with the console free
   of CSP violations; `curl -sI localhost:8090/api/health` shows the headers.
 - **The timer**: make the seeded session run out (PATCH `plannedSeconds` to

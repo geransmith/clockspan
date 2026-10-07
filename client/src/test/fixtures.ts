@@ -6,7 +6,20 @@ import { ApiError } from '../lib/apiError';
 import { REQUEST_FAILED } from '../lib/copy';
 import type { DaySummary } from '../lib/stickers';
 import { normalizePunches } from '../lib/timeclock';
-import type { AuthInfo, Break, CancelledSession, CompletedSession, Day, Priority, PublicUser, Punch, RunningSession, Settings } from '../types';
+import type {
+  AuthInfo,
+  Break,
+  CancelledSession,
+  CardId,
+  CardSide,
+  CompletedSession,
+  Day,
+  Priority,
+  PublicUser,
+  Punch,
+  RunningSession,
+  Settings,
+} from '../types';
 
 /**
  * The plain test factories, with no React and no providers, so a lib test (which runs under
@@ -20,6 +33,9 @@ export const TODAY = '2026-09-28';
 export const YESTERDAY = '2026-09-27';
 /** The midnight that starts TODAY. */
 export const MIDNIGHT = new Date(2026, 8, 28).getTime();
+
+/** Each card's column in TEST_SETTINGS, written out like the rest; the type makes a missing card an error. */
+const TEST_SIDES: Record<CardId, CardSide> = { timeclock: 'left', priorities: 'left', timer: 'right', log: 'right', retro: 'right' };
 
 /**
  * The settings every test starts from. Written out rather than taken from `DEFAULT_SETTINGS`,
@@ -65,7 +81,7 @@ export const TEST_SETTINGS: Settings = {
     secondMeal: { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 },
     retro: { enabled: true, leadMinutes: [30], onDue: false, overdueEveryMinutes: 0 },
   },
-  layout: CARD_IDS.map((id) => ({ id, visible: true })),
+  layout: CARD_IDS.map((id) => ({ id, visible: true, side: TEST_SIDES[id] })),
   retention: { enabled: false, days: 365 },
 };
 

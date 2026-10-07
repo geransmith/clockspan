@@ -29,6 +29,28 @@ describe('mergeSettings', () => {
     }
   });
 
+  it("keeps each card's column and gives a layout saved without one the default columns", () => {
+    const sent = [
+      { id: 'timer', visible: true, side: 'left' },
+      { id: 'timeclock', visible: false, side: 'right' },
+      { id: 'log', visible: true, side: 'top' },
+    ];
+    const merged = mergeSettings(DEFAULT_SETTINGS, { layout: sent }).layout;
+    expect(merged.map((l) => [l.id, l.visible, l.side])).toEqual([
+      ['timer', true, 'left'],
+      ['timeclock', false, 'right'],
+      ['log', true, 'right'],
+      ['priorities', true, 'left'],
+      ['retro', true, 'right'],
+    ]);
+    // A row stored before the columns: every card takes its default, with no migration.
+    const old = mergeSettings(DEFAULT_SETTINGS, { layout: [{ id: 'retro', visible: false }] }).layout;
+    expect(old.map((l) => l.side)).toEqual(['right', 'left', 'left', 'right', 'right']);
+    // A save that leaves the layout out keeps the stored columns.
+    const stored = { ...DEFAULT_SETTINGS, layout: merged };
+    expect(mergeSettings(stored, { sound: false }).layout).toBe(merged);
+  });
+
   it('keeps retention within bounds, field by field', () => {
     expect(mergeSettings(DEFAULT_SETTINGS, { retention: { enabled: true, days: 90 } }).retention).toEqual({ enabled: true, days: 90 });
     expect(mergeSettings(DEFAULT_SETTINGS, { retention: { enabled: 'yes', days: 7 } }).retention).toEqual(DEFAULT_SETTINGS.retention);

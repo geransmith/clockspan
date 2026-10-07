@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { CARD_TITLES } from '../lib/layout';
-import type { CardId } from '../types';
-import { ArrowDown, ArrowUp, EyeOff, Grip } from './Icons';
+import type { CardId, CardSide } from '../types';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, EyeOff, Grip } from './Icons';
 
 /** One card on the sheet, as both the plain list and the drag-and-drop one render it. */
 export interface SheetCard {
@@ -9,8 +9,18 @@ export interface SheetCard {
   body: ReactNode;
   /** Extra content on the right of the title (the timeclock's state pill). */
   aside?: ReactNode;
-  /** Set while customizing: the card's move and hide buttons. */
-  customize?: { onHide: () => void; onMove: (dir: -1 | 1) => void; canUp: boolean; canDown: boolean };
+  /**
+   * Set while customizing: the card's move and hide buttons. ↑/↓ step within the card's
+   * column; `swap`, set in a sheet mounted wide (also while it shows one list because a column
+   * is empty, so a card can be moved back), moves it to the other column.
+   */
+  customize?: {
+    onHide: () => void;
+    onMove: (dir: -1 | 1) => void;
+    canUp: boolean;
+    canDown: boolean;
+    swap?: { to: CardSide; onSwap: () => void };
+  };
 }
 
 /**
@@ -49,6 +59,17 @@ export function CardFrame({
             <button className="btn btn-icon" onClick={() => customize.onMove(1)} disabled={!customize.canDown} aria-label={`Move ${title} down`}>
               <ArrowDown />
             </button>
+            {customize.swap && (
+              <button
+                className="btn btn-icon"
+                onClick={customize.swap.onSwap}
+                data-swap={customize.swap.to}
+                aria-label={`Move ${title} to the ${customize.swap.to} column`}
+                title={`Move to the ${customize.swap.to} column`}
+              >
+                {customize.swap.to === 'left' ? <ArrowLeft /> : <ArrowRight />}
+              </button>
+            )}
             <button className="btn btn-icon" onClick={customize.onHide} aria-label={`Hide ${title}`} title="Hide">
               <EyeOff />
             </button>

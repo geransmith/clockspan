@@ -8,25 +8,42 @@ import type { SoundEvent, SoundId } from './sounds.js';
 export const CARD_IDS = ['timeclock', 'priorities', 'timer', 'log', 'retro'] as const;
 export type CardId = (typeof CARD_IDS)[number];
 
+/** The sheet's two columns on a wide screen. */
+export const CARD_SIDES = ['left', 'right'] as const;
+export type CardSide = (typeof CARD_SIDES)[number];
+
+/**
+ * The column each card starts in: the day's plan on the left, the work and the look back on
+ * the right. A card added to CARD_IDS without one is a type error.
+ */
+export const DEFAULT_SIDE: Readonly<Record<CardId, CardSide>> = Object.freeze({
+  timeclock: 'left',
+  priorities: 'left',
+  timer: 'right',
+  log: 'right',
+  retro: 'right',
+});
+
 /**
  * A layout made whole, from a saved or sent list: the cards in their order, unknown and
- * repeated ids dropped, a `visible` that isn't a boolean read as shown, and every card the
- * layout misses (one added in a later release) appended, shown. The server runs it on every
- * settings read and write (`mergeSettings`) and the client on every answer, so a new card
- * reaches existing users on both sides.
+ * repeated ids dropped, a `visible` that isn't a boolean read as shown, a `side` that isn't a
+ * column read as the card's default (a layout saved before the columns has none), and every card
+ * the layout misses (one added in a later release) appended, shown, in its default column. The
+ * server runs it on every settings read and write (`mergeSettings`) and the client on every
+ * answer, so a new card or field reaches existing users on both sides.
  */
 export function normalizeLayout(raw: readonly unknown[]): Settings['layout'] {
   const seen = new Set<CardId>();
   const out: Settings['layout'] = [];
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
-    const { id, visible } = item as { id?: unknown; visible?: unknown };
+    const { id, visible, side } = item as { id?: unknown; visible?: unknown; side?: unknown };
     const card = CARD_IDS.find((c) => c === id);
     if (!card || seen.has(card)) continue;
     seen.add(card);
-    out.push({ id: card, visible: typeof visible === 'boolean' ? visible : true });
+    out.push({ id: card, visible: typeof visible === 'boolean' ? visible : true, side: CARD_SIDES.find((s) => s === side) ?? DEFAULT_SIDE[card] });
   }
-  for (const id of CARD_IDS) if (!seen.has(id)) out.push({ id, visible: true });
+  for (const id of CARD_IDS) if (!seen.has(id)) out.push({ id, visible: true, side: DEFAULT_SIDE[id] });
   return out;
 }
 
@@ -106,7 +123,11 @@ export interface Settings {
    */
   showWeekends: boolean;
   alarms: Record<AlarmId, AlarmSettings>;
-  layout: { id: CardId; visible: boolean }[];
+  /**
+   * The sheet's cards in order. `side` is the card's column while the sheet has two (a wide
+   * screen); one column shows them all in this order.
+   */
+  layout: { id: CardId; visible: boolean; side: CardSide }[];
   /** Automatic prune of this user's days older than `days`. */
   retention: RetentionSettings;
 }
