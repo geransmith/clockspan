@@ -4,6 +4,7 @@ import {
   editPriority,
   emptyRow,
   hasRoom,
+  isRecurring,
   leftOpen,
   newUid,
   nudgeFor,
@@ -24,6 +25,14 @@ const ROUTINE = { recurringUid: 'rcur00000001' };
 describe('emptyRow', () => {
   it('is a row never written in, linked to nothing', () => {
     expect(emptyRow(4)).toEqual(makePriority(4, '', { uid: null, addedAt: null }));
+  });
+});
+
+describe('isRecurring', () => {
+  it('is a row the morning offer added from a recurring priority, whatever its text', () => {
+    expect(isRecurring(makePriority(1, 'Monitor the queue', { recurringUid: 'rec000000001' }))).toBe(true);
+    expect(isRecurring(makePriority(1, '', { recurringUid: 'rec000000001' }))).toBe(true);
+    expect(isRecurring(makePriority(1, 'Report', { cardUid: 'card00000001' }))).toBe(false);
   });
 });
 

@@ -6,8 +6,10 @@ A self-hosted, single-day **focus sheet** for working through a workday with ADH
 timeclock (lunch deadline, end of day, celebration), top priorities (default three, with a
 nudge when the list grows), a focus timer that logs what was done and for which priority, a
 retrospective card (plan vs. log, a "why" note, a nudge before clock-out), a week / month /
-quarter review, and alarms for lunch, clock-out and the second meal period. "Overtime
-approved" silences the clock-out alarm only. Every day is persisted; old days can be pruned.
+quarter review, alarms for lunch, clock-out and the second meal period, and an optional Board
+page for tasks that aren't for today (off by default; its In progress column is today's Top
+priorities). "Overtime approved" silences the clock-out alarm only. Every day is persisted; old
+days can be pruned.
 Data is **per user**; auth is optional (`AUTH_MODE=none | local | oidc`). One Docker container,
 SQLite on `/data`. A PWA used mostly on a laptop or desktop and laid out for phones too.
 Meal-period defaults follow California rules; three switches (meal periods, overtime, hours)
@@ -22,9 +24,9 @@ description.
   JS API, so editors need the native TypeScript extension, and `npm run typecheck` is the source
   of truth), Vite 8. `@dnd-kit/sortable` for drag/drop (loaded on the first Customize);
   `react-aria` + `react-stately` + `@internationalized/date` for the punch time field. No router
-  (the date, the view and the review period a day was opened from live in the URL query,
-  `hooks/useRoute.ts`; today is `date: null`, so a sheet left open over midnight moves to the
-  new day) and no CSS framework.
+  (the date, the view (the sheet, History or the board) and the review period a day was opened
+  from live in the URL query, `hooks/useRoute.ts`; today is `date: null`, so a sheet left open
+  over midnight moves to the new day) and no CSS framework.
 - Server: Express 5 (ESM, `NodeNext`, imports end in `.js`), `better-sqlite3`, `openid-client`
   v6, `cookie`. Passwords: `node:crypto` scrypt (async).
 - Tests: Vitest 5; hook tests run under happy-dom with `@testing-library/react`. Lint: oxlint
@@ -104,18 +106,25 @@ client/                 Vite root → dist/client
     storage.ts          localStorage that never throws (private mode, quota); the per-user keys (USER_KEYS:
                         fired alarms, Start fresh, the break-over mark) and adoptUser, which records
                         who the app is open for under AUTH_USER_KEY and drops the last user's keys
-  src/hooks/            state and effects (useDay, useTimer, useSettings, useAlarms, …), each with a
-                        happy-dom test beside it (useLatest is covered through the hooks that use it, and
-                        AppProviders through the tests that render it).
+    board.ts            the board's columns from the cards and today's rows (boardColumns), what a move
+                        does and which store it writes (planMove, moveTargets, MoveRefused), the cards the
+                        left-open offer may bring back (offeredLeftovers), and the board as a write shows
+                        it (withCard, withPatch, withoutCard)
+  src/hooks/            state and effects (useDay, useTimer, useSettings, useBoard, useAlarms, …), each
+                        with a happy-dom test beside it (useLatest is covered through the hooks that use
+                        it, and AppProviders through the tests that render it).
                         useClock is the app's one 1-second clock; useSaveStatus
-                        (Saving… / Saved / Not saved) serves the settings dialog.
+                        (Saving… / Saved / Not saved) serves the settings dialog; useBoard is the
+                        board's store (BoardProvider, its refresh and the daily sweep); useMediaQuery
+                        follows a media query for behaviour (the capture box's autofocus).
                         src/test/fixtures.ts has the plain factories and TEST_SETTINGS (no React);
                         src/test/hooks.tsx re-exports fixtures.ts and AppProviders and has
                         SettingsAndDays, serveRange (a mocked getRange that answers from a list of
                         days) and the act() helpers
   src/components/       the cards, History (Calendar + Review), Banners, FinishChoice, and the pieces
-                        several of them share; settings/ holds SettingsDialog (the shell and tabs), a
-                        file per tab, and controls.tsx
+                        several of them share (Folded: a long list's Show all); settings/ holds
+                        SettingsDialog (the shell and tabs), a file per tab, and controls.tsx;
+                        board/ holds the Board page (Board, BoardCard, Capture), its own lazy chunk
   src/auth/             AuthGate and the setup / login / new-password pages
   src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
   src/styles.css        design tokens and all component CSS
@@ -202,7 +211,9 @@ to the bank, a colleague's pull request) have none, the captured cards have one,
 unplanned "Inbox" sessions (Tickets), the only sessions with a category of their own. The board
 has two recurring priorities (`SEEDED_RECURRING`): "Monitor the queue" Monday to Friday, under
 Tickets, and "Follow-ups" on Monday, Wednesday and Friday, under Follow-ups. No seeded row links
-to one.
+to one. The seed writes no settings, so the board is off on a new dev DB or after `--fresh`;
+this turns it on:
+`curl -X PUT localhost:3000/api/settings -H 'content-type: application/json' -d '{"board":true}'`.
 
 `--running` leaves a 25-minute timer running, started ten minutes before *now*, for timer work;
 `--quarter` seeds every weekday since the start of last quarter, for Month / Quarter review
@@ -289,9 +300,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   board cards done before the cutoff and the untouched cards (made by a priorities save, never
   handled on the board) that no row is linked to any more, which would otherwise show again once
   their emptied row's day was gone; it answers both counts (`Pruned`), and `POST /days/prune`
-  reports the days. `reclaimSpace` (VACUUM + WAL checkpoint) runs after a prune that deleted a
-  day or a card and after an admin deletes a user (`DELETE /api/auth/users/:id`), so the file
-  shrinks and deleted text does not stay in free pages; it must not run inside a transaction.
+  reports the days; the Data tab reads the board again after its delete while the board is on.
+  `reclaimSpace` (VACUUM + WAL checkpoint) runs after a prune that deleted a day or a card and
+  after an admin deletes a user (`DELETE /api/auth/users/:id`), so the file shrinks and deleted
+  text does not stay in free pages; it must not run inside a transaction.
 - **Every data query is scoped by `req.user.id`** (`currentUser(req)`). In `AUTH_MODE=none` that
   is the single `kind='default'` user. Never add a data route outside the `requireAuth` router
   in `app.ts`. Every `/:date` route sits on the days router (`routes/days.ts`), whose `date`
@@ -338,8 +350,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `settings.sounds[event]`, an id from the catalog in `shared/sounds.ts`;
   `settings.sound` is the master switch over all of them, and
   `none` is the per-event off. A celebration (day complete and work week reached in
-  `Timeclock.tsx`, a priority ticked in `Priorities.tsx`, the next day planned in
-  `PlanNext.tsx`) is a `useCelebration(moment, event)` (`hooks/useCelebration.ts`): the sound
+  `Timeclock.tsx`, a priority ticked in `Priorities.tsx` or on the board (its checkbox, or Move to
+  Done), the next day planned in `PlanNext.tsx`) is a `useCelebration(moment, event)`
+  (`hooks/useCelebration.ts`): the sound
   under `settings.sound`, the burst under `settings.celebrations`. A state's moment comes from
   `useBecameTrue`, so it is the day *becoming* done while the card is mounted, never a done day
   opening. The work-week moment is null until `loaded`, because its target is a setting; the day
@@ -404,19 +417,29 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   order they arrived (a read's copy with each save's answer laid on it), so it is not always
   what the server holds now: a save's answer can be older than a read that landed first. A
   failed write just drops its change, so the screen is back on the confirmed copy at once (with
-  the "Change not saved" banner), and the day is asked for again. A delete or a break's end the
-  server answers 404 for counts as done: another device removed the row already. A read's
-  answer replaces the confirmed copy and never a change still on its way. It is stale when the
-  server confirmed a change after the read went out (`version`): a day read then drops it (a day
-  never loaded takes it anyway) and asks for the day again, whoever sent the read, while a range
-  read's stale day is left to the next read. An answer the same as the confirmed copy changes
-  nothing, so a day that didn't change keeps its identity. A day not loaded yet keeps its
-  changes until the server's copy arrives, so nothing made up stands in for it. `pruneBefore` is
-  the one store write sent on no queue (the queues are keyed by day, session and breaks), so a
-  change still on its way for a day before the cutoff can land after the prune and re-create
-  that day, which the re-read after the prune shows. The day store, `useSettings` and
-  `useTimer` are all built on `useTracked` (`hooks/useTracked.ts`). `apply` and commit
-  functions are pure: read the clock outside them.
+  the "Change not saved" banner), and the day is asked for again. A writer off the Priorities
+  card (the board) changes a list through `editPriorities(date, fn, touched)`: `fn` gets the
+  rows the store shows now (`current()`), padded, and it answers `'saved'`, `'notLoaded'`,
+  `'skipped'` (`fn` gave null) or `'failed'`, never rejecting. It saves through the same send as
+  `setPriorities` and `addPriority`, so a save that takes off a row with a category a session
+  was logged on reads the day again whichever of them sent it (`leavesCategory`). `shown(date)`
+  is the day as it shows now, for a board job reading the list again after an await. A delete or
+  a break's end the server answers 404 for counts as done: another device removed the row
+  already. A read's answer replaces the confirmed copy and never a change still on its way. It
+  is stale when the server confirmed a change after the read went out (`version`): a day read
+  then drops it (a day never loaded takes it anyway) and asks for the day again, whoever sent
+  the read, while a range read's stale day is left to the next read. An answer the same as the
+  confirmed copy changes nothing, so a day that didn't change keeps its identity. A day not
+  loaded yet keeps its changes until the server's copy arrives, so nothing made up stands in for
+  it. `pruneBefore` is the one store write sent on no queue (the queues are keyed by day,
+  session and breaks), so a change still on its way for a day before the cutoff can land after
+  the prune and re-create that day, which the re-read after the prune shows. The day store,
+  `useSettings`, `useTimer` and `useBoard` are all built on `useTracked`
+  (`hooks/useTracked.ts`); a board write rejects when it fails, like a settings save, and the
+  board is read again. `apply` and commit functions are pure: read the clock outside them. The
+  board's move handlers are built in its render and passed down to its cards, where the React
+  Compiler's purity lint refuses `Date.now()`, so a row the board places on today's list is
+  stamped `addedAt` by the store as it goes out.
 - **Suggested break lengths come only from `client/src/lib/breaks.ts`** (`suggestBreak`,
   pure, over a day's sessions: a fifth of the session, a long break for the fourth in a row, a
   15-minute gap restarts the count); with Suggest breaks off the Break button runs
@@ -451,18 +474,24 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   goes with the base of the oldest list not sent yet, so it carries every change since. That
   needs every list that takes a waiting one's place to be built on `current()`: the Priorities
   card flushes its draft on blur, before any other sheet control acts, and `addPriority` builds
-  on `current()` (a `useDay.test.tsx` case pins it). The day's other fields
-  (`day:<date>`), each session (`session:<id>`) and the breaks (`breaks`) queue their writes
-  one after another (`inOrder`). `useTimer` sends the running session's writes one at a time on
-  its own queue: start, adjust, edit, pause, resume, finish and cancel, the log's edits of the
-  running row included. That queue is not ordered against the day store's `session:<id>` queue,
-  which carries the other rows' edits and deletes. The one wait across queues: a session start
-  or edit that names a priority's uid first waits, inside its own queue's job, for that day's
+  on `current()` (a `useDay.test.tsx` case pins it). The day's other fields (`day:<date>`), each
+  session (`session:<id>`) and the breaks (`breaks`) queue their writes one after another
+  (`inOrder`). `useTimer` sends the running session's writes one at a time on its own queue:
+  start, adjust, edit, pause, resume, finish and cancel, the log's edits of the running row
+  included. That queue is not ordered against the day store's `session:<id>` queue, which
+  carries the other rows' edits and deletes. Two jobs wait across queues: a session start or
+  edit that names a priority's uid first waits, inside its own queue's job, for that day's
   priorities save still out (`prioritiesSaved`), since the server refuses a uid it hasn't
-  stored. `useSettings` sends its PUTs and resets one at a time. A new edit of a day's rows, the
-  settings or the timer goes through one of these, never straight to `api`. Reads are not
-  queued, and in all three stores a read's answer never replaces a change still on its
-  way.
+  stored; and a board job that changes a day's list waits for that save (below). `useSettings`
+  sends its PUTs and resets one at a time. The board (`useBoard`) sends each write as one job on
+  its `'board'` queue, its change to the cards shown from the moment it is made; a job that
+  changes a day's list (a pull, a park, a tick, a rename, a Delete, the sweep) awaits that save
+  inside the job, through `editPriorities` and so on the day store's list sends. A pull, a
+  park's removal, a tick and a rename send the item's card as `touched`; a Delete and the sweep
+  send none. A list that takes a waiting one's place goes with the `touched` of every list it
+  replaced, as it goes with the oldest base. A new edit of a day's rows, the settings, the timer
+  or the board goes through one of these, never straight to `api`. Reads are not queued, and in
+  every store a read's answer never replaces a change still on its way.
 - **Punch positions are fixed**: 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in
   pairs, and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches`
   enforces it). Kind is parity (`kindForPosition`, `shared/punches.ts`). The math evaluates *set* punches
@@ -604,6 +633,38 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   point at it by `recurringUid`. Deleting one deletes it for good; those rows keep the link, now
   to nothing, and their own category. The server caps them at 100 (`BOARD_LIMITS`), a sanity cap
   with no product limit behind it, and never prunes them.
+- **In progress is today's list** (`client/src/lib/board.ts`, `hooks/useBoard.tsx`). The board
+  (on with the `board` setting, off by default) shows the cards and today's rows from the day
+  store, matched by `cardUid` (`boardColumns`); nothing about In progress is stored, so the
+  board and the sheet show one list. A card linked to a row of today's list shows only as that
+  row: open in In progress, ticked in Done, emptied nowhere. A `held` card shows nowhere. A card
+  a later day's list holds (`listDate` after today) is planned: shown in Next whatever its lane,
+  and read-only but for Delete; planned applies only off today's list, so a row carried to today
+  stays tickable. Done holds this week (`startOfWeek`): today's ticked rows and cards done
+  today, then the rest of the week folded, with an earlier ticked row shown only where no card
+  in the copy stands for it. Every Move to goes through `planMove`, which says what it writes: a
+  card's lane or place (`editCard`, a PATCH with today's date), or today's list through the day
+  store's `editPriorities` with the card as `touched` (a pull of a card or an earlier row onto
+  the list, in the item's category, a tick, a park of a row to Later or Next), or nothing: a
+  done item moved to Later or Next stays done and the notice offers a new card in its place,
+  with its title and category, and a recurring row, a planned card and a park to Later of a row
+  planned later are refused. A Done card's untick off today's list is a PATCH to Next, the
+  correction for a mistaken tick, and such a card offers no Delete: an earlier day's ticked row
+  would show in its place. The day store sends `cards` on every priorities PUT while the board
+  is on and the list's day is today or later, read as the PUT goes out, so a row typed on the
+  sheet gets its card. After a board read, once per page load and day, the board sends today's
+  list asking for cards when a row has none (the sweep, on its queue), so rows typed while it
+  was off have cards before Plan tomorrow carries them. A park places the row's card
+  (`POST /board/cards` with the row's `cardUid`, and its title and category as the list shows
+  them when the job runs, since the POST writes both onto the card) before it takes the row off
+  the list, and a row with no card yet first goes out in a save that asks for one, so a retry
+  after a failed removal places the same card. Delete takes the card's row off today's list and
+  off its later day's list (loaded first), then deletes the card. One `role="status"` slot under
+  the capture box holds the board notice: the pull nudge (`nudgeFor`, as Add priority asks), the
+  done-item notice or a refusal; what the store refuses once a move is under way (`MoveRefused`:
+  a full list, a stale card, a list not loaded) is a banner. With the board on, the left-open
+  offer brings back a row whose card is in Next under the card's title, and leaves one whose
+  card the board moved to Later, finished or deleted (`offeredLeftovers`).
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started —
   one rule, no clock-in fallback. `GET /days/range` returns full days and the client does the
@@ -667,10 +728,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - Static assets are public; **all data is behind `/api/*`**. `/assets/*` is fingerprinted and
   cached immutable. The SPA fallback serves `index.html` for any other non-API path; a miss
   under `/assets` is a 404 (a page from before an upgrade asking for an old chunk).
-- **History, the settings dialog and drag and drop are lazy chunks** (`lazy()` in `App.tsx`
-  for `History` and `SettingsDialog`, in `Sheet.tsx` for `SortableCards`, which holds every
-  `@dnd-kit` import). A static import of one of them from the first screen folds it back into
-  the main chunk. The sheet renders plain `CardFrame`s until the first Customize and stays on
+- **History, the board, the settings dialog and drag and drop are lazy chunks** (`lazy()` in
+  `App.tsx` for `History`, `Board` and `SettingsDialog`, in `Sheet.tsx` for `SortableCards`,
+  which holds every `@dnd-kit` import). A static import of one of them from the first screen
+  folds it back into the main chunk. Everything under `components/board/` loads only through
+  `Board`'s chunk; what the sheet shares with it (`lib/board.ts`, `hooks/useBoard.tsx`) stays out
+  of that folder. The sheet renders plain `CardFrame`s until the first Customize and stays on
   `SortableCards` after it, since swapping lists remounts the cards. A chunk that fails to
   load (an upgrade while the page was open) reloads the page once a minute at most
   (`vite:preloadError` in `main.tsx`, `lib/reload.ts`); the `ErrorBoundary` card shows until
@@ -709,22 +772,26 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **A view** (a page shown in place of the sheet, like History): add its id to `VIEWS` in
   `hooks/useRoute.ts`, which reads it from `?view=` and writes it back (the sheet is the
   default and the one view the URL leaves out; `review` is kept on History only) → a `case` in
-  the `switch (route.view)` in `App.tsx`'s `Shell` (the `switch-exhaustiveness-check` lint
-  refuses a missing one) that renders the page through `lazy()` inside a `Suspense`, as History
-  is, with the page named in the lazy-chunk rule under "Architecture rules" and in the comment
-  above `App.tsx`'s `lazy` consts → a toggle in
-  `Header.tsx` that goes to the view, and back to the sheet from it, pressed only there
-  (`aria-pressed={view === '<id>'}`). `useRoute.test.ts` reads and writes every id in `VIEWS`,
-  and `Header.test.tsx` checks History's toggle on each view; the new toggle gets its own case
-  there.
+  the `switch (view)` in `App.tsx`'s `Shell` (the `switch-exhaustiveness-check` lint refuses a
+  missing one) that renders the page through `lazy()` inside a `Suspense`, as History is, with
+  the page named in the lazy-chunk rule under "Architecture rules" and in the comment above
+  `App.tsx`'s `lazy` consts → a toggle in `Header.tsx` that goes to the view, and back to the
+  sheet from it, pressed only there (`aria-pressed={view === '<id>'}`). A view behind a setting,
+  as the board is, also needs: the `view` const in `Shell` showing the sheet while the setting
+  is off (a link opened then, or the setting switched off on another device), its `case`
+  showing the loading block until the settings have loaded, and its Header toggle rendered only
+  with the setting on (a prop, as `board` is). `useRoute.test.ts` reads and writes every id in
+  `VIEWS`, and `Header.test.tsx` checks History's toggle on each view; the new toggle gets its
+  own case there.
 - **A per-user setting**: add it to the `Settings` type and `DEFAULT_SETTINGS` in
   `shared/settings.ts`, and a number's bounds to `SETTING_LIMITS` there → validate it in
   `mergeSettings()` (`server/settings.ts`; `flag(key)` takes a switch, `limited(key)` checks a
   number against its bounds) → add the control to its tab in `client/src/components/settings/`
   (`TimeclockTab`, `AlarmsTab`, `SheetTab`, `DataTab`; the Sheet tab's "History" section holds
-  the calendar's switches): a `DurationField` (`components/DurationField.tsx`) for hours and
-  minutes or a `NumberField` (`settings/controls.tsx`) for one number, whose `unit` suffix is
-  "min" unless given, each with `{...SETTING_LIMITS.<key>}` for `min` and `max`; a `SelectField`
+  the calendar's switches, and its "Board" section the board's): a `DurationField`
+  (`components/DurationField.tsx`) for hours and minutes or a `NumberField`
+  (`settings/controls.tsx`) for one number, whose `unit` suffix is "min" unless given, each
+  with `{...SETTING_LIMITS.<key>}` for `min` and `max`; a `SelectField`
   (`settings/controls.tsx`) for one choice from a fixed list; a `Toggle` for a switch.
   `NumberInput` on its own puts several numbers on one row, like the timer's start buttons. The
   new setting also goes in `TEST_SETTINGS` (`client/src/test/fixtures.ts`), and the type makes a
@@ -875,7 +942,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - A form that sends a request submits through `useSubmit()` (`hooks/useSubmit.ts`), and a
   button that sends one calls its `run`: one send at a time with the button disabled, and one
   error line (`ErrorLine`), cleared when a send starts and filled with what it throws (a
-  mismatched confirmation throws too).
+  mismatched confirmation throws too). A store write that shows at once (the board's capture
+  box, a card's Move to) is not a form send: it goes through its store, and a failure is the
+  banner.
 - Comments explain *why* (browser quirks, math), not what.
 - No new dependency (a server one or a client library the bundle carries) without stating the
   reason in the PR body, which becomes the squash commit's message on `main`.
@@ -988,6 +1057,13 @@ The browser pass for each surface (the logic under it is already tested):
   Add priority goes past it.
 - **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
   Month / Quarter).
+- **The board**: after `npm run seed`, turn it on (`PUT /api/settings {"board":true}`, see "Dev
+  data is disposable") and press Board. At 1440: the four columns, capture with Enter and
+  Shift+Enter, Move to from each column (a done item to Next shows the notice, and Add a new card
+  lands in Next), a pull past three rows asks first, Delete's confirm names the days. At 1000,
+  where the columns are narrowest: titles clamp to two lines, meta lines wrap, the Move to select
+  fits. At 375: the switch shows one column, the notice wraps, and with sign-in on
+  (`web-local`) the sheet's five header buttons fit with the brand's name gone. Light and dark.
 - **The History calendar**: one month at the mobile preset: ◀ to a seeded month, tap a day,
   **Open day**, browser Back lands on that month with the day picked, and back through the
   header, **Review this week** lands on that week. Review → Month → ◀ → a row → Back lands on
@@ -1000,7 +1076,8 @@ The browser pass for each surface (the logic under it is already tested):
   sign-in, cookie sessions, passwords, the limiter, user management and the reset-password
   command.
 - **Anything a README screenshot or the Unraid listing shows** (sheet, retro, history, review,
-  settings): `npm run screenshots`, then CONTRIBUTING's screenshot step.
+  settings, the board): `npm run screenshots`, then CONTRIBUTING's screenshot step. The board's
+  shot comes last and turns the board on first, so every other shot is taken with it off.
 
 ## Gotchas
 
@@ -1025,11 +1102,17 @@ The browser pass for each surface (the logic under it is already tested):
   `warnUntrustedProxy` (`auth/limiter.ts`) logs that once, the first time `X-Forwarded-For`
   reaches `/api/auth`.
 - `window` `focus` events fire on ordinary clicks in some embedded browsers, so the periodic
-  and come-back refreshes (today's day, the settings, the timer's sync) go through
+  and come-back refreshes (today's day, the settings, the timer's sync, the board) go through
   `useRefreshLoop`, which listens for `visibilitychange` and never `focus`; a new one goes
   through it too, and nothing in the app listens for the window's `focus`. Reads tied to what
   is shown (a held day read again when a view shows it, a range asked again after a prune,
-  `AuthGate`'s `/me` after a 401) are not refreshes and stay outside the loop.
+  `AuthGate`'s `/me` after a 401, the board read as its page opens and after a prune) are not
+  refreshes and stay outside the loop.
+- The board's refresh lives in `BoardRefresh` (`hooks/useBoard.tsx`), a child the provider
+  mounts only while the board is on: switching it on reads at once (StrictMode's second mount
+  lands inside the loop's throttle), and nothing ticks while it is off. So the test files that
+  render `AppProviders` with `api` automocked need nothing for the board: `TEST_SETTINGS.board`
+  is false, and the provider sends nothing.
 - Prettier leaves `*.md` alone: wrap docs by hand.
 - A workflow step that must trigger CI needs a GitHub App or personal token.
 - The Node floor (`engines` and `devEngines` in `package.json`) has no upper bound, and `.npmrc`

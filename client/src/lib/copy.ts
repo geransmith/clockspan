@@ -6,6 +6,7 @@
  * convention in AGENTS.md.
  */
 
+import { BOARD_LIMITS } from '../../../shared/api.js';
 import { counted } from './format';
 
 /** The day-complete notice picks one per clock-out (pickCelebration); every celebration burst draws its pieces from here (pickBurst). */
@@ -140,6 +141,8 @@ export const CONFIRM = {
   signOut: 'Sign out of Clockspan on this device?',
   resetSettings: 'Reset every setting to its default? Days, punches and sessions are kept.',
   deleteDays: (n: number, before: string) => `Delete ${counted(n, 'day')} before ${before}? This cannot be undone.`,
+  /** `off` names the days whose list the card is taken off too ("today", "tomorrow"). */
+  deleteCard: (off: string[]) => (off.length ? `Delete this card and take it off the list for ${off.join(' and ')}?` : 'Delete this card?'),
 } as const;
 
 /** A timer line, with the session's label in front when it has one. */
@@ -247,10 +250,34 @@ export const SAVE_FAILED = {
   body: 'The server refused it or did not answer.',
 } as const;
 
-/** Under the timer's Start buttons when "Also add to today's priorities" can't add the row. */
+/**
+ * Under the timer's Start buttons when "Also add to today's priorities" can't add the row, and the
+ * board's banner when the store refuses a move onto today's list (`MoveRefused`).
+ */
 export const ADD_PRIORITY_FAILED = {
   full: 'The priorities list is full.',
   notLoaded: "This day's priorities have not loaded yet.",
+} as const;
+
+/**
+ * The board's refusals: a banner when the store turns a move down (`full`, `stale`), and the
+ * board notice's lines for a move refused before anything is sent (`recurringStays`, `planned`),
+ * with `close` its button. `full` is also the capture box's line while it is shut at the cap.
+ */
+export const BOARD = {
+  full: `Later and Next hold ${BOARD_LIMITS.openCards} cards at most.`,
+  stale: 'That card changed on another device.',
+  recurringStays: (title: string) => `${title} stays on today's list. Use Remove from today.`,
+  planned: (title: string, when: string) => `${title} is planned for ${when}. Change it on that day's sheet.`,
+  close: 'Close',
+} as const;
+
+/** The board notice when a done item is moved into Later or Next: it stays done, and more work goes on a new card. */
+export const DONE_STAYS = {
+  title: (title: string) => `${title} is done.`,
+  body: 'More work on it goes on a new card.',
+  add: (lane: string) => `Add a new card to ${lane}`,
+  leave: 'Leave it',
 } as const;
 
 /** A request that got no answer within `REQUEST_TIMEOUT_MS` (`api.ts`), where a form shows its error. */
@@ -270,6 +297,7 @@ export const UNREADABLE_ANSWER = (status: number) => `Unreadable answer (${statu
 export const LOAD_FAILED = {
   title: 'Could not load this day',
   range: 'Could not load these days',
+  board: 'Could not load the board',
   body: 'The server refused the request or did not answer.',
   retry: 'Try again',
 } as const;

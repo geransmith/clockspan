@@ -158,7 +158,7 @@ describe('PlanNext', () => {
     await save();
     expect(sent()).toEqual([kept, expect.objectContaining({ position: 2, text: 'Call the bank' })]);
     // With the list it was built on, so a row another device put there meanwhile stays.
-    expect(vi.mocked(api.putPriorities).mock.calls[0]![2]).toEqual({ base: [kept] });
+    expect(vi.mocked(api.putPriorities).mock.calls[0]![2]).toEqual({ base: [kept], cards: false });
     expect(status()).toBe(PLAN_NEXT.done(1, 'tomorrow'));
   });
 

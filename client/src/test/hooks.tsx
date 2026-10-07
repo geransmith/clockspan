@@ -2,6 +2,7 @@ import { act } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { vi } from 'vitest';
 import * as api from '../api';
+import { BoardProvider } from '../hooks/useBoard';
 import { DayProvider } from '../hooks/useDay';
 import { SettingsProvider } from '../hooks/useSettings';
 import type { Day } from '../types';
@@ -45,10 +46,13 @@ export function setVisibility(state: DocumentVisibilityState): void {
   document.dispatchEvent(new Event('visibilitychange'));
 }
 
+/** The settings, the day store and the board: the stores a card or a settings tab reads, without the clock and the timer. */
 export function SettingsAndDays({ children }: { children: ReactNode }) {
   return (
     <SettingsProvider>
-      <DayProvider>{children}</DayProvider>
+      <DayProvider>
+        <BoardProvider>{children}</BoardProvider>
+      </DayProvider>
     </SettingsProvider>
   );
 }

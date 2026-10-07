@@ -4,9 +4,10 @@ import { PERIOD_KINDS, periodRange, type ReviewPeriod } from '../lib/review';
 
 /**
  * The pages the app can show. The sheet is the default, and the one view the URL leaves out;
- * a name the list doesn't hold reads as the sheet.
+ * a name the list doesn't hold reads as the sheet. The board is a view whatever the setting
+ * says: App shows the sheet in its place while the board is off.
  */
-export const VIEWS = ['sheet', 'history'] as const;
+export const VIEWS = ['sheet', 'history', 'board'] as const;
 
 export interface Route {
   view: (typeof VIEWS)[number];

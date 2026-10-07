@@ -9,12 +9,21 @@ import { Header } from './Header';
 
 vi.mock('../api');
 
-async function renderHeader(date: string, view: Route['view'] = 'sheet') {
+async function renderHeader(date: string, view: Route['view'] = 'sheet', { board = false, auth = makeAuth({ mode: 'none', user: DEFAULT_USER }) } = {}) {
   const onNavigate = vi.fn();
-  vi.mocked(api.getAuth).mockResolvedValue(makeAuth({ mode: 'none', user: DEFAULT_USER }));
+  vi.mocked(api.getAuth).mockResolvedValue(auth);
   render(
     <AuthGate>
-      <Header view={view} date={date} today={TODAY} customize={false} onNavigate={onNavigate} onToggleCustomize={vi.fn()} onOpenSettings={vi.fn()} />
+      <Header
+        view={view}
+        date={date}
+        today={TODAY}
+        board={board}
+        customize={false}
+        onNavigate={onNavigate}
+        onToggleCustomize={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />
     </AuthGate>,
   );
   await settle();
@@ -52,6 +61,39 @@ describe('Header', () => {
       expect(button.getAttribute('aria-pressed'), view).toBe(String(view === 'history'));
       fireEvent.click(button);
       expect(onNavigate, view).toHaveBeenCalledWith({ view: view === 'history' ? 'sheet' : 'history' });
+      cleanup();
+    }
+  });
+
+  it('shows the Board button only with the board on, pressed on the board, going there from every other view and back to the sheet', async () => {
+    await renderHeader(TODAY);
+    expect(screen.queryByRole('button', { name: 'Board' })).toBeNull();
+    cleanup();
+    for (const view of VIEWS) {
+      const onNavigate = await renderHeader(TODAY, view, { board: true });
+      const button = screen.getByRole('button', { name: 'Board' });
+      expect(button.getAttribute('aria-pressed'), view).toBe(String(view === 'board'));
+      fireEvent.click(button);
+      expect(onNavigate, view).toHaveBeenCalledWith({ view: view === 'board' ? 'sheet' : 'board' });
+      cleanup();
+    }
+  });
+
+  // Customize, Board, History, Settings and Sign out leave no room on a phone for the brand's name.
+  it('marks the row crowded only with five buttons: the sheet, the board on and someone signed in; the brand keeps its name', async () => {
+    const signedIn = makeAuth({ user: DEFAULT_USER });
+    const crowded = () => document.querySelector('.topbar-row--crowded') !== null;
+    await renderHeader(TODAY, 'sheet', { board: true, auth: signedIn });
+    expect(crowded()).toBe(true);
+    expect(screen.getByRole('button', { name: 'Clockspan' })).toBeTruthy();
+    cleanup();
+    for (const [view, board, auth] of [
+      ['board', true, signedIn],
+      ['sheet', false, signedIn],
+      ['sheet', true, makeAuth({ mode: 'none', user: DEFAULT_USER })],
+    ] as const) {
+      await renderHeader(TODAY, view, { board, auth });
+      expect(crowded(), `${view} ${String(board)} ${auth.mode}`).toBe(false);
       cleanup();
     }
   });

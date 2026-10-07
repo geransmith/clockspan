@@ -6,7 +6,7 @@ import { AuthGate } from '../../auth/AuthGate';
 import { PASSWORD_CHANGED, SAVE_STATUS } from '../../lib/copy';
 import { applySettingsPatch } from '../../lib/settings';
 import { SOUND_EVENT_LABELS } from '../../lib/sounds';
-import { DEFAULT_USER, makeAuth, makeSettings, makeUser, settle, SettingsAndDays } from '../../test/hooks';
+import { DEFAULT_USER, makeAuth, makeBoard, makeSettings, makeUser, settle, SettingsAndDays } from '../../test/hooks';
 import type { AuthInfo } from '../../types';
 import { SettingsDialog } from './SettingsDialog';
 
@@ -142,6 +142,17 @@ describe('SettingsDialog', () => {
     await openTab('Sheet');
     expect(hint('Sticker chart')).toMatch(/: lunch taken, all priorities done, focus session logged, retrospective reviewed\.$/);
     expect(hint('Sticker chart')).not.toContain('clocked out');
+  });
+
+  it('switches the board on from the Sheet tab, and says what it adds', async () => {
+    vi.mocked(api.getBoard).mockResolvedValue(makeBoard());
+    await renderDialog();
+    await openTab('Sheet');
+    expect(hint('Board page')).toBe("Adds a Board button: a page for tasks that aren't for today.");
+    fireEvent.click(toggle('Board page'));
+    await settle();
+    expect(api.putSettings).toHaveBeenCalledWith({ board: true });
+    expect((toggle('Board page') as HTMLInputElement).checked).toBe(true);
   });
 
   it('drops the overtime clause from the retrospective hint when Overtime is off', async () => {

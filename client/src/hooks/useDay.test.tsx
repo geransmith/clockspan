@@ -29,6 +29,7 @@ import {
 } from '../test/hooks';
 import type { BreakEndResponse, BreakResponse, Day, OkResponse, OvertimeResponse, Priority, PruneResult, Punch, PunchesResponse, Session } from '../types';
 import { useDay, useDays, useDayStore, useRefreshDay } from './useDay';
+import { useSettings } from './useSettings';
 
 vi.mock('../api');
 vi.mock('../lib/alerts');
@@ -506,7 +507,7 @@ describe('priorities', () => {
     await settle();
     const ticked = [makePriority(1, 'Report', { done: true })];
     await act(() => result.current.setPriorities(TODAY, ticked, stored));
-    expect(api.putPriorities).toHaveBeenCalledExactlyOnceWith(TODAY, ticked, { base: stored });
+    expect(api.putPriorities).toHaveBeenCalledExactlyOnceWith(TODAY, ticked, { base: stored, cards: false });
   });
 
   it("sends a list that took a waiting one's place with the base of the oldest list not sent yet", async () => {
@@ -825,6 +826,144 @@ describe('priorities', () => {
     });
     refused.reject(new Error('offline'));
     await act(() => expect(saved).resolves.toBeUndefined());
+  });
+});
+
+describe('the board through the priorities', () => {
+  const TOMORROW = '2026-09-29';
+  const cardsSent = () => vi.mocked(api.putPriorities).mock.calls.map(([date, , put]) => [date, put.cards]);
+
+  /** The store, today's day loaded as the sheet loads it, and the settings' update to switch the board. */
+  function renderBoardStore() {
+    return renderHook(
+      () => {
+        useDay(TODAY);
+        return { ...useDayStore(), ...useDays(), updateSettings: useSettings().update };
+      },
+      { wrapper: SettingsAndDays },
+    );
+  }
+
+  beforeEach(() => {
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ board: true }));
+    // The board's own read never answers, so its sweep of today's list sends nothing here.
+    vi.mocked(api.getBoard).mockReturnValue(new Promise(() => {}));
+    vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(makeSettings(patch as Parameters<typeof makeSettings>[0])));
+    vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(makeDay(date)));
+    vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
+  });
+
+  it('asks for cards on a list for today or later with the board on, never for a past day', async () => {
+    const { result } = renderBoardStore();
+    await settle();
+    for (const date of [YESTERDAY, TOMORROW]) await act(() => result.current.load(date));
+    for (const date of [YESTERDAY, TODAY, TOMORROW]) await act(() => result.current.setPriorities(date, [makePriority(1, 'Report')], []));
+    expect(cardsSent()).toEqual([
+      [YESTERDAY, false],
+      [TODAY, true],
+      [TOMORROW, true],
+    ]);
+  });
+
+  it('decides cards as each PUT goes out: off once the board is switched off, or once midnight makes the day a past one', async () => {
+    const first = deferred<{ priorities: Priority[] }>();
+    vi.mocked(api.putPriorities).mockReturnValueOnce(first.promise).mockImplementation(echoPriorities);
+    const { result } = renderBoardStore();
+    await settle();
+    const one = [makePriority(1, 'One')];
+    act(() => void result.current.setPriorities(TODAY, one, []));
+    act(() => void result.current.setPriorities(TODAY, [...one, makePriority(2, 'Two')], one));
+    await act(() => result.current.updateSettings({ board: false }));
+    first.resolve({ priorities: one });
+    await settle();
+    expect(cardsSent()).toEqual([
+      [TODAY, true],
+      [TODAY, false],
+    ]);
+
+    // On again, and a list for today saved just after midnight: its day is yesterday now.
+    await act(() => result.current.updateSettings({ board: true }));
+    vi.setSystemTime(MIDNIGHT + 24 * 60 * MINUTE_MS + MINUTE_MS);
+    await act(() => result.current.setPriorities(TODAY, one, one));
+    expect(cardsSent().at(-1)).toEqual([TODAY, false]);
+  });
+
+  it("sends the card a board edit touched, and every card of the lists a newer one took the place of; the card's own saves send none", async () => {
+    const first = deferred<{ priorities: Priority[] }>();
+    vi.mocked(api.putPriorities).mockReturnValueOnce(first.promise).mockImplementation(echoPriorities);
+    const { result } = renderBoardStore();
+    await settle();
+    const touched = () => vi.mocked(api.putPriorities).mock.calls.map(([, , put]) => put.touched);
+    act(() => void result.current.editPriorities(TODAY, (rows) => rows, 'card00000001'));
+    // Four lists wait behind it, three from the board and one from the card: the newest goes with
+    // all their changes, and with every card the board's lists were touched for, each once.
+    act(() => void result.current.editPriorities(TODAY, (rows) => rows, 'card00000002'));
+    act(() => void result.current.editPriorities(TODAY, (rows) => rows, 'card00000004'));
+    act(() => void result.current.editPriorities(TODAY, (rows) => rows, 'card00000002'));
+    act(() => void result.current.setPriorities(TODAY, [makePriority(1, 'Typed')], []));
+    first.resolve({ priorities: [] });
+    await settle();
+    // Nothing waits behind the second now, so the next list starts its own set.
+    await act(() => result.current.editPriorities(TODAY, (rows) => rows, 'card00000003'));
+    await act(() => result.current.setPriorities(TODAY, [makePriority(1, 'Typed again')], []));
+    await act(() => result.current.editPriorities(TODAY, (rows) => rows));
+    expect(touched()).toEqual([['card00000001'], ['card00000002', 'card00000004'], ['card00000003'], undefined, undefined]);
+  });
+
+  it('edits the list shown now, padded to the rows a day starts with: one a blur just set and not yet sent', async () => {
+    const first = deferred<{ priorities: Priority[] }>();
+    vi.mocked(api.putPriorities).mockReturnValueOnce(first.promise).mockImplementation(echoPriorities);
+    const { result } = renderBoardStore();
+    await settle();
+    act(() => void result.current.setPriorities(TODAY, [makePriority(1, 'Report')], []));
+    const typed = [makePriority(1, 'Report'), makePriority(2, 'Email')];
+    act(() => void result.current.setPriorities(TODAY, typed, [makePriority(1, 'Report')]));
+    const seen = vi.fn((rows: Priority[]) => rows.map((p) => (p.uid === typed[1]!.uid ? { ...p, done: true } : p)));
+    let edited!: Promise<string>;
+    act(() => {
+      edited = result.current.editPriorities(TODAY, seen);
+    });
+    expect(seen.mock.calls[0]![0].map((p) => p.text)).toEqual(['Report', 'Email', '']);
+    first.resolve({ priorities: [makePriority(1, 'Report')] });
+    await act(async () => expect(await edited).toBe('saved'));
+    expect(vi.mocked(api.putPriorities).mock.lastCall![1].map((p) => [p.text, p.done])).toEqual([
+      ['Report', false],
+      ['Email', true],
+      ['', false],
+    ]);
+  });
+
+  it('reads the day again after an edit that takes off a row with a category a session was logged on, as a sheet save does', async () => {
+    const report = makePriority(1, 'Report', { categoryUid: 'cat000000001', cardUid: 'card00000001' });
+    const onReport = endSession(makeSession({ id: 4, priorityUid: report.uid }));
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [report], sessions: [onReport] }));
+    const { result } = renderBoardStore();
+    await settle();
+    expect(api.getDay).toHaveBeenCalledTimes(1);
+    await act(() => result.current.editPriorities(TODAY, (rows) => rows.filter((p) => p.uid !== report.uid), 'card00000001'));
+    await settle();
+    expect(api.getDay).toHaveBeenCalledTimes(2);
+  });
+
+  it('says why an edit sent nothing, or that its save failed', async () => {
+    const { result } = renderBoardStore();
+    await settle();
+    expect(await result.current.editPriorities(OTHER, (rows) => rows)).toBe('notLoaded');
+    expect(await result.current.editPriorities(TODAY, () => null)).toBe('skipped');
+    expect(api.putPriorities).not.toHaveBeenCalled();
+    vi.mocked(api.putPriorities).mockRejectedValueOnce(new Error('offline'));
+    await act(async () => expect(await result.current.editPriorities(TODAY, (rows) => rows)).toBe('failed'));
+    expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ title: SAVE_FAILED.title }));
+  });
+
+  it('shown gives the day with the changes on their way, and nothing for a day not held', async () => {
+    vi.mocked(api.putPriorities).mockReturnValueOnce(deferred<{ priorities: Priority[] }>().promise);
+    const { result } = renderBoardStore();
+    await settle();
+    act(() => void result.current.setPriorities(TODAY, [makePriority(1, 'On its way')], []));
+    expect(result.current.shown(TODAY)?.priorities.map((p) => p.text)).toEqual(['On its way']);
+    expect(result.current.shown(TODAY)).toBe(result.current.days[TODAY]);
+    expect(result.current.shown(OTHER)).toBeUndefined();
   });
 });
 

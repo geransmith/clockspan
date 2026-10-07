@@ -6,7 +6,13 @@ import { useLatest } from './useLatest';
 import { useSettings } from './useSettings';
 
 /** A moment to celebrate; a fresh object each time, so the same thing happening again counts. */
-export type Moment = object;
+export interface Moment {
+  /**
+   * Where it was made, measured then: the burst starts there instead of at the anchor. For a
+   * control that is gone by the time the moment renders (a board tick moves its card to Done).
+   */
+  at?: DOMRect;
+}
 
 export interface BurstAt {
   seed: number;
@@ -32,10 +38,11 @@ export function useBecameTrue(value: boolean | null): Moment | null {
 
 /**
  * Plays `sound`'s pick under the master sound switch and, with Celebrations on, returns an
- * emoji burst from the element holding `anchor` for as long as one lives. The anchor is
- * measured once the moment has rendered, so it can be the notice that appears with it. The
- * settings are read through a ref instead of listed as a dependency, so a later settings change
- * doesn't rerun the effect for the last moment and play its sound or burst again.
+ * emoji burst from the element holding `anchor` (or the moment's own `at`) for as long as one
+ * lives. The anchor is measured once the moment has rendered, so it can be the notice that
+ * appears with it. The settings are read through a ref instead of listed as a dependency, so a
+ * later settings change doesn't rerun the effect for the last moment and play its sound or burst
+ * again.
  */
 export function useCelebration<T extends HTMLElement>(moment: Moment | null, sound: SoundEvent): { anchor: RefObject<T | null>; burst: BurstAt | null } {
   const { settings } = useSettings();
@@ -47,7 +54,7 @@ export function useCelebration<T extends HTMLElement>(moment: Moment | null, sou
     if (!moment) return;
     const s = latest.current;
     if (s.sound) playSound(s.sounds[sound]);
-    const rect = s.celebrations ? anchor.current?.getBoundingClientRect() : undefined;
+    const rect = s.celebrations ? (moment.at ?? anchor.current?.getBoundingClientRect()) : undefined;
     if (!rect) return;
     setBurst({ moment, at: { seed: Date.now(), anchor: rect } });
     const id = window.setTimeout(() => setBurst(null), BURST_MS);

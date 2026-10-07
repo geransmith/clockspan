@@ -2,9 +2,10 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
+import { LEFT_OPEN } from '../lib/copy';
 import { SPLIT_QUERY } from '../lib/layout';
-import { AppProviders, makeDay, makeSettings, serveRange, settle, T0, TODAY } from '../test/hooks';
-import type { Settings } from '../types';
+import { AppProviders, deferred, makeBoard, makeCard, makeDay, makePriority, makeSettings, serveRange, settle, T0, TODAY, YESTERDAY } from '../test/hooks';
+import type { Board, Settings } from '../types';
 import { Sheet } from './Sheet';
 import { SortableCards } from './SortableCards';
 
@@ -153,5 +154,36 @@ describe('Sheet', () => {
     fireEvent.click(button('Move Retrospective to the right column'));
     await settle();
     expect(columns()).toEqual([['Timeclock', 'Top priorities', 'Focus timer', 'Day log'], ['Retrospective']]);
+  });
+});
+
+describe('Sheet: what the last day left open, with the board on', () => {
+  it("offers a row whose card is in Next under the card's title, leaves one parked in Later where it is, and waits for the board", async () => {
+    stored = makeSettings({ board: true });
+    serveRange([
+      makeDay(YESTERDAY, {
+        priorities: [
+          makePriority(1, 'Old title', { cardUid: 'next00000001' }),
+          makePriority(2, 'Parked since', { cardUid: 'later0000001' }),
+          makePriority(3, 'No card'),
+        ],
+      }),
+    ]);
+    const board = deferred<Board>();
+    vi.mocked(api.getBoard).mockReturnValue(board.promise);
+    await renderSheet();
+    expect(screen.queryByText(LEFT_OPEN.title('yesterday'))).toBeNull();
+    board.resolve(makeBoard(makeCard('next00000001', 'New title', { lane: 'next' }), makeCard('later0000001', 'Parked since')));
+    await settle();
+    const offer = screen.getByText(LEFT_OPEN.title('yesterday')).closest('.left-open')!;
+    expect([...offer.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['New title', 'No card']);
+  });
+
+  it('offers nothing when every row it would bring back was moved off Next', async () => {
+    stored = makeSettings({ board: true });
+    serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Parked', { cardUid: 'later0000001' })] })]);
+    vi.mocked(api.getBoard).mockResolvedValue(makeBoard(makeCard('later0000001', 'Parked')));
+    await renderSheet();
+    expect(screen.queryByText(LEFT_OPEN.title('yesterday'))).toBeNull();
   });
 });

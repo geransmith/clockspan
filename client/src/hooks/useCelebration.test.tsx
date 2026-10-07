@@ -80,6 +80,17 @@ describe('useCelebration', () => {
     expect(result.current.c.burst).toBeNull();
   });
 
+  it("bursts from the moment's own rect, measured where it was made, before the anchor", async () => {
+    const { result, rerender } = await render({});
+    const at = { left: 1, top: 2, width: 3, height: 4 } as DOMRect;
+    rerender({ moment: { at } });
+    expect(result.current.c.burst).toEqual({ seed: T0, anchor: at });
+    cleanup();
+    const bare = await render({}, false);
+    bare.rerender({ moment: { at } });
+    expect(bare.result.current.c.burst).toEqual({ seed: T0, anchor: at });
+  });
+
   it('stays quiet with sound off and still bursts', async () => {
     const { result, rerender } = await render({ sound: false });
     rerender({ moment: {} });

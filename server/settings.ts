@@ -118,6 +118,7 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     celebrations: flag('celebrations'),
     stickers: bool(p.stickers, stickerCard || base.stickers),
     showWeekends: flag('showWeekends'),
+    board: flag('board'),
     alarms: mergeAlarms(base.alarms, p.alarms),
     layout,
     retention: mergeRetention(base.retention, p.retention),

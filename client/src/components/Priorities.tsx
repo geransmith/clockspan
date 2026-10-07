@@ -6,7 +6,7 @@ import { useSettings } from '../hooks/useSettings';
 import { unlockAudio } from '../lib/alerts';
 import { EMPTIED_ROW, LEFT_OPEN, WARNING_ACTIONS } from '../lib/copy';
 import { formatDuration } from '../lib/format';
-import { planNext } from '../lib/plan';
+import { planNext, type PrioritySeed } from '../lib/plan';
 import { editPriority, emptyRow, nudgeFor, padPriorities, pickWarning, removePriority, type WarningKind } from '../lib/priorities';
 import { loggedByUid } from '../lib/retro';
 import { hasText, isFree } from '../../../shared/priorities.js';
@@ -22,8 +22,11 @@ interface Props {
   sessions: Session[];
   /** `base`: the rows the edits were made on, the list the card last sent or last took up from `priorities`. */
   onChange: (priorities: Priority[], base: Priority[]) => void;
-  /** What the last planned day left unticked (`from` names that day), offered while the list is empty. */
-  leftOpen?: { from: string; rows: Priority[]; dismiss: () => void } | null;
+  /**
+   * What the last planned day left unticked (`from` names that day), offered while the list is
+   * empty: its rows as seeds, which the board may have retitled from their cards.
+   */
+  leftOpen?: { from: string; rows: PrioritySeed[]; dismiss: () => void } | null;
 }
 
 /**
@@ -96,7 +99,7 @@ export function Priorities({ priorities, sessions, onChange, leftOpen }: Props) 
   // brought over: that row takes it back, keeping its uid and addedAt. The offer shows only
   // while no row has text, so the first row with text is the first it filled, and focus goes
   // there.
-  const bringOver = (rows: Priority[]) => {
+  const bringOver = (rows: PrioritySeed[]) => {
     const { rows: next } = planNext(local, rows);
     flushSync(() => editList(padPriorities(next, count), true));
     const first = next.find(hasText);
@@ -126,8 +129,8 @@ export function Priorities({ priorities, sessions, onChange, leftOpen }: Props) 
           <div className="left-open-list">
             <strong>{LEFT_OPEN.title(leftOpen.from)}</strong>
             <ul>
-              {leftOpen.rows.map((p) => (
-                <li key={p.position}>{p.text}</li>
+              {leftOpen.rows.map((p, i) => (
+                <li key={i}>{p.text}</li>
               ))}
             </ul>
           </div>
