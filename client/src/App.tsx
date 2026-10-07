@@ -17,10 +17,11 @@ import type { ReviewPeriod } from './lib/review';
 import { applyTheme } from './lib/theme';
 import type { CardId } from './types';
 
-// History and the settings dialog load when first opened, so the sheet's first load goes
-// without them. A chunk that fails to load (a deploy while the page was open) reloads the
+// History, the board and the settings dialog load when first opened, so the sheet's first load
+// goes without them. A chunk that fails to load (a deploy while the page was open) reloads the
 // page from main.tsx.
 const History = lazy(() => import('./components/History').then((m) => ({ default: m.History })));
+const Board = lazy(() => import('./components/board/Board').then((m) => ({ default: m.Board })));
 const SettingsDialog = lazy(() => import('./components/settings/SettingsDialog').then((m) => ({ default: m.SettingsDialog })));
 
 export function App() {
@@ -72,16 +73,30 @@ function Shell() {
     [navigate],
   );
   const { setEditingPunches } = useTodayAlarms(today, now, openRetro);
+  // A board link opened with the board off (switched off here or on another device) shows the sheet.
+  const view = route.view === 'board' && loaded && !settings.board ? 'sheet' : route.view;
+  const loading = <div className="sheet-loading" aria-busy="true" />;
+  // With the board's class, so the page takes the board's width while its chunk and data load.
+  const boardLoading = <div className="board sheet-loading" aria-busy="true" />;
 
   const page = () => {
-    switch (route.view) {
+    switch (view) {
       case 'sheet':
         return <Sheet date={date} today={today} now={now} customize={customize} jumpTo={jumpTo} onJumped={onJumped} onPunchEditing={setEditingPunches} />;
       case 'history':
         return (
-          <Suspense fallback={<div className="sheet-loading" aria-busy="true" />}>
+          <Suspense fallback={loading}>
             <History today={today} now={minute} date={date} review={route.review} onOpen={openDay} />
           </Suspense>
+        );
+      case 'board':
+        // Until the settings answer, whether the board is on isn't known.
+        return loaded ? (
+          <Suspense fallback={boardLoading}>
+            <Board today={today} />
+          </Suspense>
+        ) : (
+          boardLoading
         );
     }
   };
@@ -92,9 +107,10 @@ function Shell() {
       {running && <RunningTimerBar key={running.id} />}
       <Banners />
       <Header
-        view={route.view}
+        view={view}
         date={date}
         today={today}
+        board={settings.board}
         customize={customize}
         onNavigate={navigate}
         onToggleCustomize={() => setCustomize((c) => !c)}

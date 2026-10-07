@@ -4,7 +4,7 @@ import type { Route } from '../hooks/useRoute';
 import { CONFIRM } from '../lib/copy';
 import { addDays } from '../../../shared/dates.js';
 import { dayName, formatDateLong } from '../lib/format';
-import { ChevronLeft, ChevronRight, Gear, Layout, List } from './Icons';
+import { ChevronLeft, ChevronRight, Columns, Gear, Layout, List } from './Icons';
 import { Avatar } from './Avatar';
 
 interface Props {
@@ -12,36 +12,48 @@ interface Props {
   /** The date on screen (today when the route holds none). */
   date: string;
   today: string;
+  /** The board is switched on: its button joins the header. */
+  board: boolean;
   customize: boolean;
   onNavigate: (next: Partial<Route>, opts?: { replace?: boolean }) => void;
   onToggleCustomize: () => void;
   onOpenSettings: () => void;
 }
 
-export function Header({ view, date, today, customize, onNavigate, onToggleCustomize, onOpenSettings }: Props) {
+export function Header({ view, date, today, board, customize, onNavigate, onToggleCustomize, onOpenSettings }: Props) {
   const { auth, signOut } = useAuth();
   // Typing a date fires a change with a whole date per digit (a year goes 0002, 0020, 0202, 2026),
   // so only the first change in a visit to the field adds a history entry and the rest replace it.
   const typed = useRef(false);
   const onSheet = view === 'sheet';
   const onHistory = view === 'history';
+  const onBoard = view === 'board';
   const isToday = date === today;
   // "Yesterday" gets the date underneath; any other day's name already is the date (the sheet never shows a future day).
   const name = dayName(date, today);
   const long = formatDateLong(date);
+  // Customize, Board, History, Settings and the user: five buttons and the brand's name don't fit
+  // a 375 px phone, so the name goes there (styles.css) and the logo stays.
+  const crowded = onSheet && board && auth.mode !== 'none';
 
   return (
     <header className="topbar">
-      <div className="topbar-row">
+      <div className={crowded ? 'topbar-row topbar-row--crowded' : 'topbar-row'}>
         <button className="brand" onClick={() => onNavigate({ view: 'sheet', date: null })} title="Go to today">
           <img src="/icons/icon.svg" alt="" width={28} height={28} />
-          Clockspan
+          <span className="brand-name">Clockspan</span>
         </button>
         <div className="topbar-actions">
           {onSheet && (
             <button className="btn btn-icon" onClick={onToggleCustomize} aria-pressed={customize} title={customize ? 'Done customizing' : 'Customize layout'}>
               <Layout />
               <span className="btn-text">{customize ? 'Done' : 'Customize'}</span>
+            </button>
+          )}
+          {board && (
+            <button className="btn btn-icon" onClick={() => onNavigate({ view: onBoard ? 'sheet' : 'board' })} aria-pressed={onBoard} title="Board">
+              <Columns />
+              <span className="btn-text">Board</span>
             </button>
           )}
           <button className="btn btn-icon" onClick={() => onNavigate({ view: onHistory ? 'sheet' : 'history' })} aria-pressed={onHistory} title="History">

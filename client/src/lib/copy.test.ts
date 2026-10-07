@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   BANNERS_MORE,
+  BOARD,
   BREAK,
   BREAK_SUGGESTION,
   CELEBRATION_EMOJI,
   CELEBRATION_PHRASES,
   CONFIRM,
   DAYS_DELETED,
+  DONE_STAYS,
   EMPTIED_ROW,
   FINISH_CHOICE,
   LEFT_OPEN,
@@ -113,6 +115,23 @@ describe('copy builders', () => {
     expect(CONFIRM.deleteDays(12, 'Monday, June 1, 2026')).toMatch(/^Delete 12 days before /);
     expect(DAYS_DELETED(0)).toBe('Deleted 0 days.');
     expect(DAYS_DELETED(1)).toBe('Deleted 1 day.');
+  });
+
+  it('names the days a deleted card is taken off, and none when it is on no list', () => {
+    expect(CONFIRM.deleteCard([])).toBe('Delete this card?');
+    expect(CONFIRM.deleteCard(['today'])).toBe('Delete this card and take it off the list for today?');
+    expect(CONFIRM.deleteCard(['today', 'tomorrow'])).toBe('Delete this card and take it off the list for today and tomorrow?');
+  });
+
+  it('names the card and the day in the board refusals, and the cap in the full line', () => {
+    expect(BOARD.full).toBe('Later and Next hold 300 cards at most.');
+    expect(BOARD.recurringStays('Monitor the queue')).toBe("Monitor the queue stays on today's list. Use Remove from today.");
+    expect(BOARD.planned('Write a KB', 'tomorrow')).toBe("Write a KB is planned for tomorrow. Change it on that day's sheet.");
+  });
+
+  it('says a done item stays done and offers a new card in the lane it was moved to', () => {
+    expect(DONE_STAYS.title('Ship the fix')).toBe('Ship the fix is done.');
+    expect(DONE_STAYS.add('Next')).toBe('Add a new card to Next');
   });
 
   it('counts the alerts the banner stack leaves out', () => {

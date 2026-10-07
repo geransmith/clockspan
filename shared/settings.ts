@@ -122,6 +122,12 @@ export interface Settings {
    * the counts, and Plan tomorrow then lands on the next weekday.
    */
   showWeekends: boolean;
+  /**
+   * The Board page, for tasks that aren't for today, and its button in the header. With it on,
+   * a priorities save on today's or a later list makes a board card for each written row that
+   * has none (recurring rows excepted).
+   */
+  board: boolean;
   alarms: Record<AlarmId, AlarmSettings>;
   /**
    * The sheet's cards in order. `side` is the card's column while the sheet has two (a wide
@@ -206,6 +212,7 @@ export const DEFAULT_SETTINGS: Settings = deepFreeze({
   celebrations: true,
   stickers: false,
   showWeekends: true,
+  board: false,
   alarms: { lunchBy: { ...DEFAULT_ALARM }, clockOut: { ...DEFAULT_ALARM }, secondMeal: { ...DEFAULT_ALARM }, retro: { ...DEFAULT_RETRO_ALARM } },
   layout: normalizeLayout([]),
   retention: { enabled: false, days: 365 },

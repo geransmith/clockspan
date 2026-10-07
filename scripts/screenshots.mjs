@@ -7,8 +7,9 @@
  * It reuses a running `npm run dev` (BASE_URL, default http://localhost:5173) or starts one,
  * seeds the dev DB (`--running --quarter`, with the clock pinned to 10:30) and resets the
  * default user's settings (`--fresh`), then turns the sticker chart on for the history shot,
- * drives a local Chromium over the DevTools protocol, and stops whatever it started. The time
- * of day is pinned but the date is not, so shots that show a date change from day to day.
+ * drives a local Chromium over the DevTools protocol (turning the board on for the last shot),
+ * and stops whatever it started. The time of day is pinned but the date is not, so shots that
+ * show a date change from day to day.
  * scripts/browser.mjs picks the browser (CHROME_BIN, an installed one, or a Chrome for Testing
  * build it fetches once). The dev server has to be in AUTH_MODE=none (the default): the
  * script does not sign in.
@@ -31,6 +32,8 @@ const PHONE = { width: 375, height: 812, deviceScaleFactor: 2, mobile: true };
 /** Taller than a phone so the sheet shots reach the priorities card. */
 const PHONE_TALL = { ...PHONE, height: 1000 };
 const DESKTOP = { width: 1280, height: 900, deviceScaleFactor: 2, mobile: false };
+/** The board's page at its full width (1440 px). */
+const WIDE = { ...DESKTOP, width: 1440 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (msg) => console.log(`[screenshots] ${msg}`);
@@ -101,11 +104,16 @@ function seed() {
   if (r.status !== 0) throw new Error('npm run seed failed');
 }
 
-/** The sticker chart is off by default; the history shot shows it on. No other shot reads it. */
-async function enableStickers() {
-  const res = await fetch(`${BASE}/api/settings`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ stickers: true }) });
+async function putSettings(patch) {
+  const res = await fetch(`${BASE}/api/settings`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch) });
   if (!res.ok) throw new Error(`PUT /api/settings failed (${res.status})`);
 }
+
+/** The sticker chart is off by default; the history shot shows it on. No other shot reads it. */
+const enableStickers = () => putSettings({ stickers: true });
+
+/** The board is off by default, and on it adds a header button to every page: its shot is the last. */
+const enableBoard = () => putSettings({ board: true });
 
 // ----- page -----
 
@@ -244,6 +252,8 @@ const SHOTS = [
   },
   { name: 'settings-alarms', url: '/', device: PHONE, scheme: 'dark', ready: READY_SHEET, steps: openSettings('alarms') },
   { name: 'settings-data', url: '/', device: PHONE, scheme: 'dark', ready: READY_SHEET, steps: openSettings('data') },
+  // Last, with its own setup: every shot above is taken with the board off, as it is by default.
+  { name: 'board-desktop', url: '/?view=board', device: WIDE, scheme: 'dark', ready: '.board-col .board-card', setup: enableBoard, fullPage: true },
 ];
 
 async function main() {
@@ -274,6 +284,7 @@ async function main() {
 
     fs.mkdirSync(OUT, { recursive: true });
     for (const shot of SHOTS) {
+      if (shot.setup) await shot.setup();
       const page = await Page.open(cdp);
       await page.setDevice(shot.device, shot.scheme);
       await page.goto(`${BASE}${shot.url}`, shot.ready);

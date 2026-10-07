@@ -1,10 +1,10 @@
-import { useState, type ReactNode } from 'react';
 import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
 import { LOAD_FAILED } from '../lib/copy';
 import { counted, formatDateLong, formatDuration, formatWeekday } from '../lib/format';
 import { PERIOD_KINDS, periodRange, periodTarget, reviewRange, type PeriodKind, type ReviewPeriod } from '../lib/review';
 import type { Day } from '../types';
+import { Folded } from './Folded';
 import { Check } from './Icons';
 import { LoadFailed } from './LoadFailed';
 import { PeriodNav } from './PeriodNav';
@@ -111,6 +111,7 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
           <p className="muted small">{r.sessions === 0 ? 'No sessions logged.' : 'Every logged session was for a priority.'}</p>
         ) : (
           <Folded
+            className="review-list"
             items={r.unplanned.map((g) => (
               <li key={g.key}>
                 <button className="review-row" onClick={() => onOpen(latest(g.dates))}>
@@ -136,6 +137,7 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
           <p className="muted small">{r.prioritiesTotal > 0 ? 'Every priority got ticked.' : 'No priorities were written.'}</p>
         ) : (
           <Folded
+            className="review-list"
             items={r.notDone.map((g) => (
               <li key={g.key}>
                 <button className="review-row" onClick={() => onOpen(latest(g.dates))}>
@@ -160,6 +162,7 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
           <p className="muted small">No retrospective notes yet. Each day's retrospective card is where they go.</p>
         ) : (
           <Folded
+            className="review-list"
             items={r.notes.map((n) => (
               <li key={n.date}>
                 <button className="review-row review-row--note" onClick={() => onOpen(n.date)}>
@@ -179,26 +182,5 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
         )}
       </section>
     </div>
-  );
-}
-
-/**
- * A list longer than FOLD_AT + 1 rows shows its first FOLD_AT and a Show all button. One row
- * over shows in full, since the button would take the space of the one row it hides.
- */
-const FOLD_AT = 8;
-
-function Folded({ items }: { items: ReactNode[] }) {
-  const [open, setOpen] = useState(false);
-  const folded = !open && items.length > FOLD_AT + 1;
-  return (
-    <>
-      <ul className="review-list">{folded ? items.slice(0, FOLD_AT) : items}</ul>
-      {folded && (
-        <button className="btn btn-ghost review-more" onClick={() => setOpen(true)}>
-          Show all {items.length}
-        </button>
-      )}
-    </>
   );
 }

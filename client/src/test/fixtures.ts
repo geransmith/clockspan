@@ -8,6 +8,8 @@ import type { DaySummary } from '../lib/stickers';
 import { normalizePunches } from '../lib/timeclock';
 import type {
   AuthInfo,
+  Board,
+  BoardCard,
   Break,
   CancelledSession,
   CardId,
@@ -77,6 +79,7 @@ export const TEST_SETTINGS: Settings = {
   celebrations: true,
   stickers: false,
   showWeekends: true,
+  board: false,
   alarms: {
     lunchBy: { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 },
     clockOut: { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 },
@@ -102,6 +105,16 @@ export function makeDay(date = TODAY, patch: Partial<Day> = {}): Day {
 /** A priority row with text, as the card saves it once typed: not done, with a uid and added at T0, linked to nothing. */
 export function makePriority(position: number, text: string, patch: Partial<Priority> = {}): Priority {
   return { position, text, done: false, uid: `uid${position}`.padEnd(12, 'x'), addedAt: T0, cardUid: null, recurringUid: null, categoryUid: null, ...patch };
+}
+
+/** A card in Later at position 1, made at T0, with no category and linked to no row, unless `patch` says otherwise. */
+export function makeCard(uid: string, title: string, patch: Partial<BoardCard> = {}): BoardCard {
+  return { uid, title, categoryUid: null, lane: 'later', position: 1, createdAt: T0, doneAt: null, listDate: null, held: false, ...patch };
+}
+
+/** The board `GET /board` answers with these cards, and no categories or recurring priorities. */
+export function makeBoard(...cards: BoardCard[]): Board {
+  return { cards, categories: [], recurring: [] };
 }
 
 export function makeSession(patch: Partial<RunningSession> = {}): RunningSession {

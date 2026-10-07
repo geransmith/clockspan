@@ -316,7 +316,9 @@ button {
 /* The edit-in-place inputs, back at 44 px on a touch screen (the pointer: coarse block). */
 .running-label-input,
 .log-label-input,
-.log-plan-select {
+.log-plan-select,
+.board-title-input,
+.board-move-select {
   min-height: 38px;
 }
 .checkbox {
@@ -448,7 +450,8 @@ button {
   background: var(--danger-soft);
   color: var(--danger-ink);
 }
-/* Priorities nudge: warm but not alarming, with its two buttons on the next line on phones. */
+/* The Priorities nudge and the board notice: warm but not alarming, with the buttons on the
+   next line on phones. */
 .notice--gentle {
   background: var(--warn-soft);
   display: flex;
@@ -664,6 +667,26 @@ button {
 .topbar-actions {
   display: flex;
   gap: 6px;
+}
+/* Five buttons (Customize, Board, History, Settings, the user) and the brand's name don't fit a
+   375 px phone: the name goes from sight there, still the button's name, and the logo stays. */
+.topbar-row--crowded .brand-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@media (min-width: 420px) {
+  .topbar-row--crowded .brand-name {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+  }
 }
 .user-chip {
   padding-left: 6px;
@@ -2062,7 +2085,7 @@ button {
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
-.review-more {
+.fold-more {
   align-self: flex-start;
 }
 .review-row--note {
@@ -2079,6 +2102,170 @@ button {
   color: var(--text-2);
   font-size: 0.92rem;
   line-height: 1.4;
+}
+
+/* ---------- board ---------- */
+/* Built for a desktop window: from 900 px the four columns sit side by side on a page wider than
+   the sheet's, which the header and the running bar's contents follow (they read --page-w). The
+   base rules are the phone's, one column at a time behind the switch (Board.tsx). The columns
+   are not .card, whose overflow: hidden would clip a dragged card. */
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.board-capture {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.board-capture-row {
+  display: flex;
+  gap: 8px;
+}
+.board-capture-row .input {
+  flex: 1;
+  min-width: 0;
+}
+/* The notice's live region is always there; empty, it gives back the gap before it. */
+.board-notice:empty {
+  margin-top: -12px;
+}
+.board-switch .segment {
+  padding: 0 12px;
+}
+.board-cols {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.board-col {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.board-col[data-shown] {
+  display: flex;
+}
+.board-col-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.board-col-sub {
+  margin-top: -6px;
+}
+.board-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.board-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.board-card-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+/* The tick's label is its touch area (the coarse block); the box sits on the title's first line. */
+.board-tick {
+  display: flex;
+  padding-top: 1px;
+}
+.board-tick .checkbox {
+  margin: 0;
+}
+.board-card-num {
+  min-width: 1ch;
+  font-weight: 700;
+  color: var(--text-2);
+  line-height: 24px;
+}
+.board-card-open {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-weight: 550;
+  line-height: 24px;
+}
+/* Two lines at most in a narrow column; the editor shows the whole title. */
+.board-card-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.board-card.is-done .board-card-title {
+  text-decoration: line-through;
+  color: var(--text-3);
+}
+.board-card-meta {
+  overflow-wrap: anywhere;
+}
+.board-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.board-editor-title {
+  overflow-wrap: anywhere;
+}
+.board-move {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+}
+.board-move-select {
+  max-width: 100%;
+}
+.board-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.board-earlier {
+  align-self: flex-start;
+  padding: 0 4px;
+  color: var(--text-2);
+}
+@media (min-width: 900px) {
+  .app:has(.board) {
+    --page-w: 1440px;
+  }
+  .board-switch {
+    display: none;
+  }
+  .board-cols {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: start;
+  }
+  .board-cols .board-col {
+    display: flex;
+  }
 }
 
 /* ---------- settings dialog ---------- */
@@ -2316,6 +2503,7 @@ dialog.dialog::backdrop {
   .timer-add-priority,
   .about-link,
   .priority-tick,
+  .board-tick,
   .brand,
   .calendar-day {
     position: relative;
@@ -2330,6 +2518,7 @@ dialog.dialog::backdrop {
   .timer-add-priority::after,
   .about-link::after,
   .priority-tick::after,
+  .board-tick::after,
   .brand::after,
   .calendar-day::after {
     content: '';
@@ -2380,6 +2569,11 @@ dialog.dialog::backdrop {
   .priority-tick {
     --hit-inset: -11px -5px -11px -17px;
   }
+  /* 22 px square 10 px in from a card's left edge, 8 px from the title (or the row's number, which
+     takes no taps) on its right, with cards 8 px apart: 44 × 40 px, 3 px into the gap. */
+  .board-tick {
+    --hit-inset: -11px -8px -11px -10px;
+  }
   /* 40 px at the top of the page with nothing above it: 44 px. */
   .brand {
     --hit-inset: -2px 0;
@@ -2399,7 +2593,9 @@ dialog.dialog::backdrop {
   /* The edit-in-place inputs are drawn at 38 px to sit in their rows with a mouse. */
   .log-label-input,
   .log-plan-select,
-  .running-label-input {
+  .running-label-input,
+  .board-title-input,
+  .board-move-select {
     min-height: 44px;
   }
   /* The running label clips its overflow (a long label ends in an ellipsis), which would cut
@@ -2413,6 +2609,12 @@ dialog.dialog::backdrop {
   .log-label {
     padding-block: 11px;
     margin-block: -11px;
+  }
+  /* A board card's title button grows the same way: a 24 px line becomes 44 px, through the card's
+     8 px padding and 2 px into the 8 px gap to the next card. */
+  .board-card-open {
+    padding-block: 10px;
+    margin-block: -10px;
   }
 }
 

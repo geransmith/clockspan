@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { RETENTION_LIMITS } from '../../../../shared/settings.js';
 import * as api from '../../api';
+import { useBoardStore } from '../../hooks/useBoard';
 import { useDays, useDayStore } from '../../hooks/useDay';
 import { useSubmit } from '../../hooks/useSubmit';
 import { CONFIRM, DAYS_DELETED } from '../../lib/copy';
@@ -49,13 +50,15 @@ export function DataTab({ settings, set, onReset }: TabProps & { onReset: () => 
 /**
  * Settings → Data → "Delete old days now". The count line is the server's answer for the
  * chosen cutoff, so the confirm names exactly what will go. The delete goes through the day
- * store (`pruneBefore`), so the days on screen follow it. Not a settings save: nothing here goes
- * through the header's Saving/Saved pill.
+ * store (`pruneBefore`), so the days on screen follow it, and the board is read again while it is
+ * on, since the prune takes the cards done before the cutoff. Not a settings save: nothing here
+ * goes through the header's Saving/Saved pill.
  */
 function DeleteOldDays() {
   const today = todayKey();
   const { pruneBefore } = useDayStore();
   const { generation } = useDays();
+  const board = useBoardStore();
   const [before, setBefore] = useState(() => addDays(today, -365));
   const [loaded, setLoaded] = useState<PruneInfo | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -81,6 +84,8 @@ function DeleteOldDays() {
     setDone(null);
     run(async () => {
       const { deleted } = await pruneBefore(before);
+      // Fresh: a read already out may have left before the prune. Nothing while the board is off.
+      void board.load({ fresh: true });
       setDone(DAYS_DELETED(deleted));
       setLoaded(null);
     });

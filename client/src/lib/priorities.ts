@@ -6,6 +6,9 @@ import { PRIORITY_WARNINGS } from './copy';
 /** A row with text that isn't ticked: what the planner, the left-open offer and the timer's chips work from. */
 export const isOpen = (p: Priority) => hasText(p) && !p.done;
 
+/** A row the morning offer added from a recurring priority: it stays on today's list and never gets a board card. */
+export const isRecurring = (p: Pick<Priority, 'recurringUid'>) => p.recurringUid != null;
+
 /** A row nothing was ever written in (`isFree`), linked to nothing: what the card pads a list with. */
 export function emptyRow(position: number): Priority {
   return { position, text: '', done: false, uid: null, addedAt: null, cardUid: null, recurringUid: null, categoryUid: null };

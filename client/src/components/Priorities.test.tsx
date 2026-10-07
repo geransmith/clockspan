@@ -236,6 +236,23 @@ describe('Priorities', () => {
   });
 });
 
+describe('Priorities: the left-open offer from the board', () => {
+  it('lists the seeds it is given and brings them over as written: a card under its title, the same card', async () => {
+    const seeds = [
+      { text: 'Retitled on the board', cardUid: 'card00000001', recurringUid: null, categoryUid: null },
+      { text: 'No card', cardUid: null, recurringUid: null, categoryUid: 'cafe00000001' },
+    ];
+    const { saved } = await renderCard([], { from: 'yesterday', rows: seeds, dismiss: vi.fn() });
+    expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Retitled on the board', 'No card']);
+    fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
+    expect(saved().map((p) => [p.text, p.cardUid, p.categoryUid])).toEqual([
+      ['Retitled on the board', 'card00000001', null],
+      ['No card', null, 'cafe00000001'],
+      ['', null, null],
+    ]);
+  });
+});
+
 describe('Priorities: a cleared row', () => {
   const written = () => [makePriority(1, 'Report'), makePriority(2, 'Invoices'), makePriority(3, 'Email')];
   /** 25 minutes logged on row 2. */

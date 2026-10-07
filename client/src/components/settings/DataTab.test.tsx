@@ -4,8 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import { CONFIRM, DAYS_DELETED } from '../../lib/copy';
 import { formatDateFull } from '../../lib/format';
-import { deferred, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../../test/hooks';
-import type { PruneResult } from '../../types';
+import { deferred, makeBoard, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../../test/hooks';
+import type { Board, PruneResult } from '../../types';
 import { DataTab } from './DataTab';
 
 vi.mock('../../api');
@@ -96,6 +96,24 @@ describe('DataTab', () => {
     expect(screen.getByText(/5 before this date/)).toBeTruthy();
     expect(screen.getByRole('status').textContent).toBe(DAYS_DELETED(2));
     expect(button.disabled).toBe(false);
+  });
+
+  it('reads the board again after a delete, once a read still out has answered', async () => {
+    vi.mocked(api.pruneDays).mockResolvedValue({ deleted: 2 });
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ board: true }));
+    // The read the board sent as it came on is still out when the delete lands, and may be older.
+    const first = deferred<Board>();
+    vi.mocked(api.getBoard).mockReturnValueOnce(first.promise).mockResolvedValue(makeBoard());
+    vi.stubGlobal('confirm', () => true);
+    const { button } = await renderTab();
+    expect(api.getBoard).toHaveBeenCalledTimes(1);
+    fireEvent.click(button);
+    await settle();
+    expect(api.pruneDays).toHaveBeenCalledTimes(1);
+    expect(api.getBoard).toHaveBeenCalledTimes(1);
+    first.resolve(makeBoard());
+    await settle();
+    expect(api.getBoard).toHaveBeenCalledTimes(2);
   });
 
   it('keeps the result when the count after a delete fails, with Delete off', async () => {

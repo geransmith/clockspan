@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
+import { useBoardState } from '../hooks/useBoard';
 import { useDay } from '../hooks/useDay';
 import { useLeftOpen } from '../hooks/useLeftOpen';
 import { useRange } from '../hooks/useRange';
@@ -7,6 +8,7 @@ import { warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED, PUNCH_ORDER, SAVE_FAILED } from '../lib/copy';
 import { startOfWeek } from '../../../shared/dates.js';
 import { dayName } from '../lib/format';
+import { offeredLeftovers } from '../lib/board';
 import { CARD_TITLES, moveCard, setCardSide, setCardVisible, SPLIT_QUERY, splitColumns } from '../lib/layout';
 import { hasText } from '../../../shared/priorities.js';
 import { CARD_SIDES } from '../../../shared/settings.js';
@@ -47,8 +49,12 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
   const { days: weekDays } = useRange(startOfWeek(date), date);
   const week = weekDays ? weekHours(weekDays, settings, today, now) : null;
   const focus = focusOf(day?.sessions ?? []);
-  // Today's list with nothing written yet offers what the last planned day left unticked.
+  // Today's list with nothing written yet offers what the last planned day left unticked. With the
+  // board on, a row whose card was moved off Next on the board stays there, and one in Next comes
+  // back under the card's title; until the board has loaded, nothing is offered.
   const { leftOpen, dismiss: dismissLeftOpen } = useLeftOpen(today, isToday && day != null && !day.priorities.some(hasText));
+  const { board, on: boardOn } = useBoardState();
+  const leftovers = leftOpen && (boardOn ? offeredLeftovers(leftOpen.rows, board?.cards) : leftOpen.rows);
 
   const layout = settings.layout;
   const visible = layout.filter((l) => l.visible);
@@ -135,11 +141,13 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
             sessions={day.sessions}
             onChange={(p, base) => void store.setPriorities(date, p, base)}
             leftOpen={
-              leftOpen && {
-                from: dayName(leftOpen.date, today, true),
-                rows: leftOpen.rows,
-                dismiss: dismissLeftOpen,
-              }
+              leftOpen && leftovers?.length
+                ? {
+                    from: dayName(leftOpen.date, today, true),
+                    rows: leftovers,
+                    dismiss: dismissLeftOpen,
+                  }
+                : null
             }
           />
         );

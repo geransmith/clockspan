@@ -33,6 +33,13 @@ export const List = () => (
     <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
   </svg>
 );
+/** The board's header button: four columns side by side. */
+export const Columns = () => (
+  <svg {...base}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M7.5 4v16M12 4v16M16.5 4v16" />
+  </svg>
+);
 export const Layout = () => (
   <svg {...base}>
     <rect x="3" y="3" width="18" height="18" rx="2" />
