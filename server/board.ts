@@ -1,18 +1,18 @@
 /**
  * The board's cards as stored: what the board routes (`routes/board.ts`), a priorities save
  * (`mirrorCards`) and the prune (`retention.ts`) write, and the board the API answers with, its
- * categories included. A card belongs to its user, and rows point at it by its uid
- * (`priorities.card_uid`, a soft link). In progress is never stored: it is today's open rows,
- * which the client matches to cards by `cardUid`. A card's latest linked day is the latest day
- * whose list holds a row linked to it, with text or emptied; only a save of that day's list
- * changes the card.
+ * categories and recurring priorities included. A card belongs to its user, and rows point at
+ * it by its uid (`priorities.card_uid`, a soft link). In progress is never stored: it is today's
+ * open rows, which the client matches to cards by `cardUid`. A card's latest linked day is the
+ * latest day whose list holds a row linked to it, with text or emptied; only a save of that
+ * day's list changes the card.
  */
 import { randomBytes } from 'node:crypto';
 import type { DB } from './db.js';
-import { getOwnedByUid, type CardRow, type CategoryRow } from './routes/shared.js';
+import { getOwnedByUid, type CardRow, type CategoryRow, type RecurringRow } from './routes/shared.js';
 import { hasText } from '../shared/priorities.js';
 import { addDays, DAY_MS } from '../shared/dates.js';
-import { BOARD_LIMITS, type Board, type BoardCard, type Category, type OpenLane, type Priority } from '../shared/api.js';
+import { BOARD_LIMITS, type Board, type BoardCard, type Category, type OpenLane, type Priority, type Recurring } from '../shared/api.js';
 
 /** The uids of a lane's cards in their order. */
 function laneOrder(db: DB, userId: number, lane: OpenLane): string[] {
@@ -107,10 +107,26 @@ function categoriesJson(db: DB, userId: number): Category[] {
   return rows.map((c) => ({ uid: c.uid, name: c.name, color: c.color, archived: c.archived_at != null }));
 }
 
+/** ISO weekdays (Monday 1 to Sunday 7) as the `recurring` table stores them: bit 0 for Monday. */
+export function weekdayMask(weekdays: readonly number[]): number {
+  return weekdays.reduce((mask, day) => mask | (1 << (day - 1)), 0);
+}
+
+/** The ISO weekdays in a `recurring` mask, ascending. */
+export function weekdaysOf(mask: number): number[] {
+  return [1, 2, 3, 4, 5, 6, 7].filter((day) => mask & (1 << (day - 1)));
+}
+
+/** The user's recurring priorities in the order they were made, the order the offer lists them in. */
+function recurringJson(db: DB, userId: number): Recurring[] {
+  const rows = db.prepare(`SELECT * FROM recurring WHERE user_id = ? ORDER BY id`).all(userId) as RecurringRow[];
+  return rows.map((r) => ({ uid: r.uid, title: r.title, categoryUid: r.category_uid, weekdays: weekdaysOf(r.weekdays) }));
+}
+
 /**
  * The user's board: Later and Next in order, then the cards done in the last
- * `doneWindowDays`, newest first, and the categories. `listDate` and `held` are read from the
- * rows on every call, so neither can drift from the lists.
+ * `doneWindowDays`, newest first, the categories and the recurring priorities. `listDate` and
+ * `held` are read from the rows on every call, so neither can drift from the lists.
  */
 export function boardJson(db: DB, userId: number, now: number = Date.now()): Board {
   const rows = db
@@ -134,7 +150,7 @@ export function boardJson(db: DB, userId: number, now: number = Date.now()): Boa
       held: c.untouched === 1 && link?.text === false,
     };
   });
-  return { cards, categories: categoriesJson(db, userId) };
+  return { cards, categories: categoriesJson(db, userId), recurring: recurringJson(db, userId) };
 }
 
 export interface MirrorOptions {

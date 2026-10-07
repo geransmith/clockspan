@@ -1082,8 +1082,9 @@ describe('/api/days/prune', () => {
     expect(count('priorities')).toBe(0);
     expect(count('sessions')).toBe(0);
     expect(count('breaks')).toBe(0);
-    // Categories are never pruned: the days left still name them.
+    // Categories and recurring priorities are never pruned: the days left still name them.
     expect(app.count('categories')).toBe(app.seeded!.board.categories.length);
+    expect(app.count('recurring')).toBe(app.seeded!.board.recurring.length);
     expect((await app.api.post('/api/days/prune', { before })).body).toEqual({ deleted: 0 });
     expect((await app.api.post('/api/days/prune', { before: 'soon' })).status).toBe(400);
     expect((await app.api.post('/api/days/prune', {})).status).toBe(400);

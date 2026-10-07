@@ -3,10 +3,10 @@ import { findLocalUser, insertLocalUser, type DB, type UserRow } from '../db.js'
 import { upsertOidcUser } from '../auth/oidc.js';
 import { hashPassword } from '../auth/password.js';
 import { revokeSessions } from '../auth/session.js';
-import { boardJson } from '../board.js';
+import { boardJson, weekdayMask } from '../board.js';
 import { addDays, atTime, HOUR_MS, isWeekend, MINUTE_MS } from '../../shared/dates.js';
 import { kindForPosition } from '../../shared/punches.js';
-import type { Board, Break, Category, Day, Lane, OpenLane, Priority, Punch, Session } from '../../shared/api.js';
+import type { Board, Break, Category, Day, Lane, OpenLane, Priority, Punch, Recurring, Session } from '../../shared/api.js';
 
 /**
  * Deterministic sample data for the dev DB and for API tests. Rows are written with plain
@@ -150,6 +150,8 @@ const CATEGORY_OF: Readonly<Record<string, CategoryName>> = {
   'Review canned replies': 'Knowledge base',
   'Look into the export timeout': 'Tickets',
   'Follow up on the Acme SLA': 'Follow-ups',
+  'Monitor the queue': 'Tickets',
+  'Follow-ups': 'Follow-ups',
   Inbox: 'Tickets',
 };
 
@@ -157,6 +159,12 @@ const CATEGORY_OF: Readonly<Record<string, CategoryName>> = {
 function categoryFor(text: string): string | null {
   return SEEDED_CATEGORIES.find((c) => c.name === CATEGORY_OF[text])?.uid ?? null;
 }
+
+/** The board's recurring priorities, in the order they were made: routine support work, each in its category. No seeded row links to one. */
+export const SEEDED_RECURRING: readonly Recurring[] = [
+  { uid: 'rcur00000001', title: 'Monitor the queue', categoryUid: categoryFor('Monitor the queue'), weekdays: [1, 2, 3, 4, 5] },
+  { uid: 'rcur00000002', title: 'Follow-ups', categoryUid: categoryFor('Follow-ups'), weekdays: [1, 3, 5] },
+];
 
 /**
  * Retrospective notes, a few per template so they say what that template's day did. A normal
@@ -477,15 +485,18 @@ function withCards(day: DayDraft, dayIndex: number): DayDraft {
 }
 
 /**
- * The board: the categories, the captured cards, handled on the board, and a card for every row
- * of the last weekday and of today, as their saves with the board on made them (untouched), each
- * in step with its latest linked row: its title and category, open in Next, ticked in Done when
- * that day's review was written (today's, an hour after clock-in). New cards went to the top of
- * Next, so today's are above the last weekday's, and both above the captured one.
+ * The board: the categories, the recurring priorities, the captured cards, handled on the board,
+ * and a card for every row of the last weekday and of today, as their saves with the board on
+ * made them (untouched), each in step with its latest linked row: its title and category, open in
+ * Next, ticked in Done when that day's review was written (today's, an hour after clock-in). New
+ * cards went to the top of Next, so today's are above the last weekday's, and both above the
+ * captured one.
  */
 function insertBoard(db: DB, userId: number, last: SeededDay | undefined, today: SeededDay, now: number): void {
   const category = db.prepare(`INSERT INTO categories (user_id, uid, name, color) VALUES (?, ?, ?, ?)`);
   for (const c of SEEDED_CATEGORIES) category.run(userId, c.uid, c.name, c.color);
+  const recurring = db.prepare(`INSERT INTO recurring (user_id, uid, title, category_uid, weekdays) VALUES (?, ?, ?, ?, ?)`);
+  for (const r of SEEDED_RECURRING) recurring.run(userId, r.uid, r.title, r.categoryUid, weekdayMask(r.weekdays));
   const made = new Map<string, { title: string; categoryUid: string | null; lane: Lane; createdAt: number; doneAt: number | null }>();
   let next: string[] = [];
   for (const day of [last, today]) {
@@ -523,9 +534,9 @@ function insertBoard(db: DB, userId: number, last: SeededDay | undefined, today:
 }
 
 /**
- * Replaces the user's days, board and categories with the sample set. Users are never deleted: in
- * AUTH_MODE=none the running server holds the default user's row for its lifetime, so
- * recreating it would leave the server pointing at a dead id.
+ * Replaces the user's days and board (cards, categories, recurring priorities) with the sample
+ * set. Users are never deleted: in AUTH_MODE=none the running server holds the default user's
+ * row for its lifetime, so recreating it would leave the server pointing at a dead id.
  */
 export function seedDatabase(db: DB, opts: SeedOptions): SeedManifest {
   const history = opts.days ?? DEFAULT_HISTORY_DAYS;
@@ -536,6 +547,7 @@ export function seedDatabase(db: DB, opts: SeedOptions): SeedManifest {
     db.prepare(`DELETE FROM days WHERE user_id = ?`).run(opts.userId);
     db.prepare(`DELETE FROM board_cards WHERE user_id = ?`).run(opts.userId);
     db.prepare(`DELETE FROM categories WHERE user_id = ?`).run(opts.userId);
+    db.prepare(`DELETE FROM recurring WHERE user_id = ?`).run(opts.userId);
     if (opts.fresh) {
       db.prepare(`DELETE FROM settings WHERE user_id = ?`).run(opts.userId);
       revokeSessions(db, opts.userId);

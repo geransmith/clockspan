@@ -154,6 +154,21 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
     { name: 'Support tickets', color: 'teal' },
   ],
   ['deleteCategory', () => api.deleteCategory('cat000000001'), 'DELETE', '/api/board/categories/cat000000001', undefined],
+  [
+    'addRecurring',
+    () => api.addRecurring({ uid: 'rcur00000001', title: 'Monitor the queue', categoryUid: 'cat000000001', weekdays: [1, 2, 3, 4, 5] }),
+    'POST',
+    '/api/board/recurring',
+    { uid: 'rcur00000001', title: 'Monitor the queue', categoryUid: 'cat000000001', weekdays: [1, 2, 3, 4, 5] },
+  ],
+  [
+    'patchRecurring',
+    () => api.patchRecurring('rcur00000001', { title: 'Watch the queue', categoryUid: null, weekdays: [1, 3, 5] }),
+    'PATCH',
+    '/api/board/recurring/rcur00000001',
+    { title: 'Watch the queue', categoryUid: null, weekdays: [1, 3, 5] },
+  ],
+  ['deleteRecurring', () => api.deleteRecurring('rcur00000001'), 'DELETE', '/api/board/recurring/rcur00000001', undefined],
 ];
 
 describe('routes', () => {

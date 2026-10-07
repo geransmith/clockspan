@@ -107,13 +107,28 @@ export interface Category {
 }
 
 /**
+ * A recurring priority, offered on today's list on its weekdays (the client decides which day
+ * is today). The rows it adds carry its uid as `recurringUid`, and keep it after it is deleted.
+ */
+export interface Recurring {
+  uid: string;
+  /** The text of the rows it adds. */
+  title: string;
+  /** The category the rows it adds count under. */
+  categoryUid: string | null;
+  /** ISO weekdays, Monday 1 to Sunday 7, ascending, at least one. */
+  weekdays: number[];
+}
+
+/**
  * `GET /board`, and the answer to every board write: Later and Next in order, then the cards
- * done in the last `BOARD_LIMITS.doneWindowDays`; and every category, removed ones included,
- * in the order they were made.
+ * done in the last `BOARD_LIMITS.doneWindowDays`; every category, removed ones included, in the
+ * order they were made; and the recurring priorities in the order they were made.
  */
 export interface Board {
   cards: BoardCard[];
   categories: Category[];
+  recurring: Recurring[];
 }
 
 /** The server's caps on the board: sanity limits for an internet-exposed install, not product limits. */
@@ -124,6 +139,8 @@ export const BOARD_LIMITS = {
   categories: 100,
   /** Categories stored, removed ones included, so making and removing them can't grow the table for ever. */
   categoriesStored: 1000,
+  /** Recurring priorities. */
+  recurring: 100,
   /** How far back `GET /board` sends Done cards: a week, and a day of slack for the client's zone. */
   doneWindowDays: 8,
 } as const;

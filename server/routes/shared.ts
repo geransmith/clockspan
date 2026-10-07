@@ -120,6 +120,17 @@ export interface CategoryRow {
   archived_at: number | null;
 }
 
+/** A recurring priority as stored. The API speaks `weekdays` as a list of ISO weekdays (`weekdaysOf`, `server/board.ts`). */
+export interface RecurringRow {
+  id: number;
+  user_id: number;
+  uid: string;
+  title: string;
+  category_uid: string | null;
+  /** A mask: bit 0 for Monday to bit 6 for Sunday, at least one set (the table's CHECK). */
+  weekdays: number;
+}
+
 /** A session or break row with its day's date, which every answer about it carries. */
 export type Dated<Row> = Row & { date: string };
 
@@ -160,9 +171,14 @@ export function ownedRouter<T extends OwnedTable>(db: DB, table: T): { router: R
 interface UidRows {
   board_cards: CardRow;
   categories: CategoryRow;
+  recurring: RecurringRow;
 }
 type UidTable = keyof UidRows;
-const UID_NOT_FOUND: Record<UidTable, string> = { board_cards: 'Card not found.', categories: 'Category not found.' };
+const UID_NOT_FOUND: Record<UidTable, string> = {
+  board_cards: 'Card not found.',
+  categories: 'Category not found.',
+  recurring: 'Recurring priority not found.',
+};
 
 /** The user's own row of `table` with this uid (lowercase); undefined for anyone else's, or none. */
 export function getOwnedByUid<T extends UidTable>(db: DB, table: T, userId: number, uid: string): UidRows[T] | undefined {

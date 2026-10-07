@@ -18,6 +18,7 @@ import type {
   Punch,
   PunchesResponse,
   RangeResponse,
+  Recurring,
   RetroResponse,
   RunningResponse,
   SessionResponse,
@@ -171,6 +172,8 @@ export type CardPatch = { today: string; title?: string; categoryUid?: string | 
 export type NewCategory = Pick<Category, 'uid' | 'name' | 'color'>;
 /** PATCH /board/categories/:uid: a field left out keeps its value. */
 export type CategoryPatch = Partial<Pick<Category, 'name' | 'color'>>;
+/** PATCH /board/recurring/:uid: a field left out keeps its value. Rows it already added keep their own text and category. */
+export type RecurringPatch = Partial<Pick<Recurring, 'title' | 'categoryUid' | 'weekdays'>>;
 
 export const getBoard = () => request<Board>('GET', '/api/board');
 export const addCard = (card: NewCard) => request<Board>('POST', '/api/board/cards', card);
@@ -180,3 +183,8 @@ export const addCategory = (category: NewCategory) => request<Board>('POST', '/a
 export const patchCategory = (uid: string, patch: CategoryPatch) => request<Board>('PATCH', `/api/board/categories/${uid}`, patch);
 /** Removes it from use: the server keeps it, archived, so past time keeps its name. */
 export const deleteCategory = (uid: string) => request<Board>('DELETE', `/api/board/categories/${uid}`);
+/** A uid the server already holds answers the board as it is, so a retry adds nothing. */
+export const addRecurring = (item: Recurring) => request<Board>('POST', '/api/board/recurring', item);
+export const patchRecurring = (uid: string, patch: RecurringPatch) => request<Board>('PATCH', `/api/board/recurring/${uid}`, patch);
+/** Deletes it for good: the rows it added keep their `recurringUid`, linked to nothing. */
+export const deleteRecurring = (uid: string) => request<Board>('DELETE', `/api/board/recurring/${uid}`);
