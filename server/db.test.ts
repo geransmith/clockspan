@@ -109,6 +109,25 @@ describe('migration 9: priority links', () => {
   });
 });
 
+describe('migration 10: board cards', () => {
+  it('keeps one card per uid for each user, in Later, Next or Done, and goes with its user', () => {
+    const db = openDatabase(':memory:');
+    const user = ensureDefaultUser(db);
+    const other = Number(db.prepare(`INSERT INTO users (kind, username, display_name, created_at) VALUES ('local', 'sam', 'Sam', 1)`).run().lastInsertRowid);
+    const insert = db.prepare(`INSERT INTO board_cards (user_id, uid, title, lane, position, created_at) VALUES (?, ?, 'Report', ?, 1, 1000)`);
+    insert.run(user.id, 'card00000001', 'later');
+    expect(db.prepare(`SELECT untouched, done_at FROM board_cards`).get()).toEqual({ untouched: 0, done_at: null });
+    expect(() => insert.run(user.id, 'card00000001', 'next')).toThrow(/UNIQUE/);
+    // In progress is today's rows, never a lane.
+    expect(() => insert.run(user.id, 'card00000002', 'progress')).toThrow(/CHECK/);
+    // Uids are only unique per user.
+    insert.run(other, 'card00000001', 'done');
+    db.prepare(`DELETE FROM users WHERE id = ?`).run(other);
+    expect(countRows(db, 'board_cards')).toBe(1);
+    db.close();
+  });
+});
+
 describe("the README's script for switching from none to local", () => {
   // README.md → "Switching modes later": run by hand to give the implicit user's data to the new
   // account. A table that gains a user_id column has to join it, or its rows stay with the old
@@ -139,13 +158,14 @@ describe("the README's script for switching from none to local", () => {
       `INSERT INTO sessions (day_id, user_id, label, planned_seconds, started_at, ended_at, status) VALUES (?, ?, '', 600, 1000, 1600, 'completed')`,
     ).run(day, old.id);
     db.prepare(`INSERT INTO breaks (day_id, user_id, planned_seconds, started_at, ended_at) VALUES (?, ?, 300, 1600, 1900)`).run(day, old.id);
+    db.prepare(`INSERT INTO board_cards (user_id, uid, title, lane, position, created_at) VALUES (?, 'card00000001', 'Report', 'later', 1, 1000)`).run(old.id);
     const settings = db.prepare(`INSERT INTO settings (user_id, json) VALUES (?, ?)`);
     settings.run(old.id, '{"from":"none"}');
     settings.run(admin, '{"from":"admin"}');
 
     db.exec(sql);
 
-    for (const table of ['days', 'sessions', 'breaks', 'settings']) {
+    for (const table of ['days', 'sessions', 'breaks', 'board_cards', 'settings']) {
       expect(db.prepare(`SELECT user_id FROM ${table}`).all(), table).toEqual([{ user_id: admin }]);
     }
     expect(db.prepare(`SELECT json FROM settings`).get()).toEqual({ json: '{"from":"none"}' });

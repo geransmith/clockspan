@@ -135,8 +135,9 @@ function mergeRow(stored: Priority, base: Priority, mine: Priority): Priority {
  * - A row this device removed (in `base`, not in `mine`) goes. One another device removed (in
  *   `base`, not in `stored`) stays gone, unless this device changed it.
  * - A row added here (in neither) stays. So does one another device added since `base` (only in
- *   `stored`): where a row added here has its text (`sameText`) and neither holds a card or a
- *   recurring priority, the stored row takes that row's place and the one added here goes, so
+ *   `stored`): where a row added here has its text (`sameText`) and links to nothing, and the
+ *   stored row has no recurring priority (a card it may hold, since the server makes one on a
+ *   save with `cards`), the stored row takes that row's place and the one added here goes, so
  *   two devices that both took the left-open offer store one set. Two rows of one text on one
  *   device's list stay two. Another device's other new rows take this device's first rows never
  *   written in (an emptied row still stands for its item), else go at the end.
@@ -163,7 +164,9 @@ export function mergePriorities(stored: Priority[], base: Priority[], mine: Prio
     else if (b) {
       if (changed(b, m)) out.push(m);
     } else {
-      const pairs = (t: Priority) => !placed.has(t) && !hasLink(t) && sameText(t.text) === sameText(m.text);
+      // The server may have made a card for the other device's row when it stored it (`cards`), so
+      // a card there doesn't keep the two apart; a recurring priority, which only a client sets, does.
+      const pairs = (t: Priority) => !placed.has(t) && t.recurringUid == null && sameText(t.text) === sameText(m.text);
       const twin = hasText(m) && !hasLink(m) ? theirs.find(pairs) : undefined;
       if (twin) placed.add(twin);
       out.push(twin ?? m);

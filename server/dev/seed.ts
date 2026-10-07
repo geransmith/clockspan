@@ -3,17 +3,18 @@ import { findLocalUser, insertLocalUser, type DB, type UserRow } from '../db.js'
 import { upsertOidcUser } from '../auth/oidc.js';
 import { hashPassword } from '../auth/password.js';
 import { revokeSessions } from '../auth/session.js';
+import { boardJson } from '../board.js';
 import { addDays, atTime, HOUR_MS, isWeekend, MINUTE_MS } from '../../shared/dates.js';
 import { kindForPosition } from '../../shared/punches.js';
-import type { Break, Day, Priority, Punch, Session } from '../../shared/api.js';
+import type { Board, Break, Day, Lane, OpenLane, Priority, Punch, Session } from '../../shared/api.js';
 
 /**
  * Deterministic sample data for the dev DB and for API tests. Rows are written with plain
  * SQL because the API can only start a session "now"; past days need `started_at` in the
  * past. Everything here must satisfy the same invariants the routes enforce (see AGENTS.md):
  * punch positions 0..n with the last one odd, priority positions 1..n, `uid`/`added_at` only
- * on rows with text, every `priority_uid` resolving on its own day, and no two sessions or
- * breaks of a day overlapping.
+ * on rows with text, every `priority_uid` resolving on its own day, no two sessions or
+ * breaks of a day overlapping, and each board card in step with its latest linked row.
  */
 
 export interface SeedOptions {
@@ -33,7 +34,7 @@ export interface SeedOptions {
 /** A priority row with text, so it always has its uid and addedAt. */
 type SeededPriority = Priority & { uid: string; addedAt: number };
 
-/** The seed makes no cards, recurring priorities or categories, so its rows link to none. */
+/** A row as a template writes it: no card (`withCards` links the last weekday's and today's rows to the cards `insertBoard` writes), recurring priority or category. */
 const NO_LINKS = { cardUid: null, recurringUid: null, categoryUid: null } satisfies Pick<Priority, 'cardUid' | 'recurringUid' | 'categoryUid'>;
 type SeededSession = Omit<Session, 'date' | 'pausedAt' | 'durationSeconds'>;
 type SeededBreak = Omit<Break, 'date'>;
@@ -50,6 +51,8 @@ export type SeededDay = Omit<Day, 'priorities' | 'sessions' | 'breaks'> & {
 export interface SeedManifest {
   /** Ascending by date; the last entry is `today`. */
   days: SeededDay[];
+  /** The board as `GET /board` answers it at `now`. */
+  board: Board;
 }
 
 export type DayKind = 'normal' | 'extraPair' | 'overtime' | 'unreviewed' | 'noLunch' | 'today';
@@ -158,6 +161,19 @@ function uidFor(dayIndex: number, position: number): string {
   // but distinct values keep review rollups easy to read).
   return `${dayIndex.toString(16).padStart(4, '0')}${position.toString(16).padStart(2, '0')}`.padEnd(12, 'a');
 }
+
+/** The card a priorities save made for the row at `uidFor(dayIndex, position)`: its uid with a `c` tail, so the two never meet. */
+function cardFor(dayIndex: number, position: number): string {
+  return `${dayIndex.toString(16).padStart(4, '0')}${position.toString(16).padStart(2, '0')}`.padEnd(12, 'c');
+}
+
+/** Captured on the board, never on a list: the parking lot and one queued for next. */
+const CAPTURED: readonly [title: string, lane: OpenLane][] = [
+  ['Write a KB for the SSO reset', 'later'],
+  ['Review canned replies', 'later'],
+  ['Look into the export timeout', 'later'],
+  ['Follow up on the Acme SLA', 'next'],
+];
 
 /** A day as the templates build it, before the inserts give its sessions and breaks ids. */
 type DayDraft = Omit<SeededDay, 'sessions' | 'breaks'> & { sessions: Omit<SeededSession, 'id'>[]; breaks: Omit<SeededBreak, 'id'>[] };
@@ -368,7 +384,8 @@ function buildToday(today: string, now: number, index: number, running: boolean,
   // Planned the evening before with Plan next, which carries over what that day left open; the
   // planner's save is what stored today's row. With no history, written on arrival.
   const plannedAt = last?.retroAt != null ? last.retroAt + 2 * MINUTE_MS : clockIn - 3 * MINUTE_MS;
-  const carried = last?.priorities.find((p) => !p.done)?.text ?? 'Update the onboarding doc';
+  // A row of its own on the new day, linked to the same card.
+  const carried = last?.priorities.find((p) => !p.done);
   const row = (position: number, text: string, done: boolean): SeededPriority => ({
     position,
     text,
@@ -377,7 +394,11 @@ function buildToday(today: string, now: number, index: number, running: boolean,
     addedAt: plannedAt,
     ...NO_LINKS,
   });
-  const priorities = [row(1, carried, false), row(2, 'Ship the timeclock fix', true), row(3, 'Answer the two open support threads', false)];
+  const priorities = [
+    { ...row(1, carried?.text ?? 'Update the onboarding doc', false), cardUid: carried?.cardUid ?? null },
+    row(2, 'Ship the timeclock fix', true),
+    row(3, 'Answer the two open support threads', false),
+  ];
 
   const runningFrom = Math.max(clockIn, now - 10 * MINUTE_MS);
   // A run soon after midnight has less than two hours for these, so keep only what ended
@@ -406,10 +427,49 @@ function buildToday(today: string, now: number, index: number, running: boolean,
   };
 }
 
+/** Every text row of `day` linked to the card a save made for it (`cardFor`), unless it carries one already. */
+function withCards(day: DayDraft, dayIndex: number): DayDraft {
+  return { ...day, priorities: day.priorities.map((p) => ({ ...p, cardUid: p.cardUid ?? cardFor(dayIndex, p.position) })) };
+}
+
 /**
- * Replaces the user's days with the sample set. Users are never deleted: in AUTH_MODE=none the
- * running server holds the default user's row for its lifetime, so recreating it would leave
- * the server pointing at a dead id.
+ * The board: the captured cards, handled on the board, and a card for every row of the last
+ * weekday and of today, as their saves with the board on made them (untouched), each in step
+ * with its latest linked row: open in Next, ticked in Done when that day's review was written
+ * (today's, an hour after clock-in). New cards went to the top of Next, so today's are above the
+ * last weekday's, and both above the captured one.
+ */
+function insertBoard(db: DB, userId: number, last: SeededDay | undefined, today: SeededDay, now: number): void {
+  const made = new Map<string, { title: string; lane: Lane; createdAt: number; doneAt: number | null }>();
+  let next: string[] = [];
+  for (const day of [last, today]) {
+    if (!day) continue;
+    const doneAt = day.retroAt ?? Math.min(now, day.punches[0]!.at! + HOUR_MS);
+    const fresh: string[] = [];
+    for (const p of day.priorities) {
+      const uid = p.cardUid!;
+      if (!made.has(uid) && !p.done) fresh.push(uid);
+      made.set(uid, { title: p.text, lane: p.done ? 'done' : 'next', createdAt: made.get(uid)?.createdAt ?? p.addedAt, doneAt: p.done ? doneAt : null });
+    }
+    next = [...fresh, ...next];
+  }
+  const captured = CAPTURED.map(([title, lane], i) => ({ uid: `card${String(i + 1).padStart(8, '0')}`, title, lane }));
+  const order = {
+    later: captured.filter((c) => c.lane === 'later').map((c) => c.uid),
+    next: [...next, ...captured.filter((c) => c.lane === 'next').map((c) => c.uid)],
+  };
+  const position = (uid: string, lane: Lane) => (lane === 'done' ? 0 : order[lane].indexOf(uid) + 1);
+  const insert = db.prepare(`INSERT INTO board_cards (user_id, uid, title, lane, position, created_at, done_at, untouched) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+  for (const [uid, card] of made) insert.run(userId, uid, card.title, card.lane, position(uid, card.lane), card.createdAt, card.doneAt, 1);
+  // Captured a few minutes apart, just before the last weekday's list was written.
+  const capturedAt = (last ?? today).createdAt;
+  captured.forEach((c, i) => insert.run(userId, c.uid, c.title, c.lane, position(c.uid, c.lane), capturedAt - (captured.length - i) * 5 * MINUTE_MS, null, 0));
+}
+
+/**
+ * Replaces the user's days and board with the sample set. Users are never deleted: in
+ * AUTH_MODE=none the running server holds the default user's row for its lifetime, so
+ * recreating it would leave the server pointing at a dead id.
  */
 export function seedDatabase(db: DB, opts: SeedOptions): SeedManifest {
   const history = opts.days ?? DEFAULT_HISTORY_DAYS;
@@ -418,13 +478,20 @@ export function seedDatabase(db: DB, opts: SeedOptions): SeedManifest {
   const dates = weekdaysBefore(opts.today, history);
   return db.transaction((): SeedManifest => {
     db.prepare(`DELETE FROM days WHERE user_id = ?`).run(opts.userId);
+    db.prepare(`DELETE FROM board_cards WHERE user_id = ?`).run(opts.userId);
     if (opts.fresh) {
       db.prepare(`DELETE FROM settings WHERE user_id = ?`).run(opts.userId);
       revokeSessions(db, opts.userId);
     }
-    const days = dates.map((date, i) => insertDay(db, opts.userId, buildPastDay(date, i, kindForDistance(dates.length - 1 - i), rand, note)));
-    days.push(insertDay(db, opts.userId, buildToday(opts.today, opts.now, dates.length, Boolean(opts.running), days.at(-1))));
-    return { days };
+    const drafts = dates.map((date, i) => buildPastDay(date, i, kindForDistance(dates.length - 1 - i), rand, note));
+    // The last weekday's rows got their cards when it was saved with the board on.
+    const lastIndex = drafts.length - 1;
+    if (lastIndex >= 0) drafts[lastIndex] = withCards(drafts[lastIndex]!, lastIndex);
+    const days = drafts.map((draft) => insertDay(db, opts.userId, draft));
+    const today = insertDay(db, opts.userId, withCards(buildToday(opts.today, opts.now, dates.length, Boolean(opts.running), days.at(-1)), dates.length));
+    insertBoard(db, opts.userId, days.at(-1), today, opts.now);
+    days.push(today);
+    return { days, board: boardJson(db, opts.userId, opts.now) };
   })();
 }
 

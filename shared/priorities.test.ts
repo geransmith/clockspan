@@ -170,10 +170,15 @@ describe('mergePriorities: links', () => {
     expect(mergePriorities(stored, base, mine)).toEqual(list(['x', 'Invoices', CARD], ['a', 'Report']));
   });
 
-  it("pairs only rows with no link by text: another device's linked row of the same text stays beside this one's", () => {
-    const stored = list(['x', 'Invoices', CARD]);
-    expect(mergePriorities(stored, [], list(['m', 'Invoices']))).toEqual(list(['m', 'Invoices'], ['x', 'Invoices', CARD]));
+  it("pairs a row added here that links to nothing with another device's of its text, even one the server gave a card", () => {
+    // The other device saved first, with the board on, so the server made its row's card.
+    expect(mergePriorities(list(['x', 'Invoices', CARD]), [], list(['m', 'Invoices']))).toEqual(list(['x', 'Invoices', CARD]));
+  });
+
+  it("pairs no row that holds a recurring priority, nor one added here with a link: another device's row of the same text stays beside it", () => {
+    expect(mergePriorities(list(['x', 'Invoices', ROUTINE]), [], list(['m', 'Invoices']))).toEqual(list(['m', 'Invoices'], ['x', 'Invoices', ROUTINE]));
     expect(mergePriorities(list(['x', 'Invoices']), [], list(['m', 'Invoices', ROUTINE]))).toEqual(list(['m', 'Invoices', ROUTINE], ['x', 'Invoices']));
+    expect(mergePriorities(list(['x', 'Invoices']), [], list(['m', 'Invoices', CARD]))).toEqual(list(['m', 'Invoices', CARD], ['x', 'Invoices']));
   });
 
   it('keeps the stored row, at the first place, when a stale edit brings back a row whose card another row now holds', () => {

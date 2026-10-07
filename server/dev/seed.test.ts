@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ensureDefaultUser, openDatabase, type DB } from '../db.js';
 import { insertSession, SESSION_COOKIE } from '../auth/session.js';
 import { countRows, SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from './harness.js';
 import { addMonths, atTime, DAY_MS, isWeekend, MINUTE_MS, punchWindow, startOfQuarter, todayKey } from '../../shared/dates.js';
-import { LIMITS, type Day } from '../../shared/api.js';
+import { hasText } from '../../shared/priorities.js';
+import { LIMITS, type BoardCard, type Day } from '../../shared/api.js';
 import { DEFAULT_SETTINGS, SETTING_LIMITS } from '../../shared/settings.js';
 import { BREAK_SECONDS, MIN_BREAK_MS, PLANNED_SECONDS } from '../../shared/timer.js';
 import {
@@ -21,7 +22,45 @@ import {
 } from './seed.js';
 
 const counts = (db: DB) =>
-  Object.fromEntries(['days', 'punches', 'priorities', 'sessions', 'breaks', 'settings', 'auth_sessions'].map((t) => [t, countRows(db, t)]));
+  Object.fromEntries(['days', 'punches', 'priorities', 'sessions', 'breaks', 'board_cards', 'settings', 'auth_sessions'].map((t) => [t, countRows(db, t)]));
+
+/**
+ * The board a seed wrote, against its days: each card a save made is in step with its latest
+ * linked row, the rows the board saw (the last weekday's and today's) each have a card, and
+ * no list links two text rows to one card.
+ */
+function expectBoardInStep(m: SeedManifest) {
+  const cards = new Map(m.board.cards.map((c) => [c.uid, c]));
+  const [last, today] = [m.days.at(-2), m.days.at(-1)!];
+  for (const day of m.days) {
+    const linked = day.priorities.filter((p) => hasText(p) && p.cardUid != null).map((p) => p.cardUid);
+    expect(new Set(linked).size).toBe(linked.length);
+    for (const p of day.priorities) {
+      expect(p).toMatchObject({ recurringUid: null, categoryUid: null });
+      // Only the days the board was on for have cards.
+      if (day === last || day === today) expect(cards.has(p.cardUid!), `${day.date} ${p.text}`).toBe(true);
+      else expect(p.cardUid).toBeNull();
+    }
+  }
+  for (const card of m.board.cards) {
+    const rows = m.days.flatMap((d) => d.priorities.filter((p) => p.cardUid === card.uid).map((p) => ({ date: d.date, ...p })));
+    const latest = rows.at(-1);
+    expect(card.listDate).toBe(latest?.date ?? null);
+    expect(card.held).toBe(false);
+    if (latest) expect([card.title, card.lane], card.title).toEqual([latest.text, latest.done ? 'done' : 'next']);
+  }
+  // Positions run 1..n in Later and in Next.
+  for (const lane of ['later', 'next'] as const) {
+    const positions = m.board.cards.filter((c) => c.lane === lane).map((c) => c.position);
+    expect(positions).toEqual(positions.map((_, i) => i + 1));
+  }
+  // Today's carried row is a row of its own on the same card.
+  if (last) {
+    const source = last.priorities.find((p) => !p.done)!;
+    expect(today.priorities[0]).toMatchObject({ text: source.text, cardUid: source.cardUid });
+    expect(today.priorities[0]!.uid).not.toBe(source.uid);
+  }
+}
 
 /** The clocked-in stretches of a day: its set punches in order, in → out, today's last one open until `now`. */
 function workedSpans(day: SeededDay, now: number): [number, number][] {
@@ -110,8 +149,6 @@ describe('seedDatabase', () => {
         expect(p.text).not.toBe('');
         expect(p.uid).toMatch(/^[a-z0-9]{12}$/);
         expect(p.addedAt).toBeGreaterThan(0);
-        // No card, recurring priority or category is seeded for a row to link to.
-        expect(p).toMatchObject({ cardUid: null, recurringUid: null, categoryUid: null });
       }
       expect(new Set(day.priorities.map((p) => p.uid)).size).toBe(day.priorities.length);
 
@@ -126,6 +163,18 @@ describe('seedDatabase', () => {
     }
 
     expectConsistent(m, SEED_NOW);
+    expectBoardInStep(m);
+    // Captured on the board: three in Later and one in Next, below the cards today's and the last
+    // weekday's saves made, on no list.
+    expect(m.board.cards.filter((c) => c.listDate == null).map((c) => [c.lane, c.position, c.title])).toEqual([
+      ['later', 1, 'Write a KB for the SSO reset'],
+      ['later', 2, 'Review canned replies'],
+      ['later', 3, 'Look into the export timeout'],
+      ['next', 3, 'Follow up on the Acme SLA'],
+    ]);
+    // A card a save made is untouched until the board handles it; one the board made never is.
+    for (const card of m.board.cards) expect(countRows(db, 'board_cards', 'uid = ? AND untouched = ?', card.uid, card.listDate == null ? 0 : 1)).toBe(1);
+    expect(countRows(db, 'board_cards')).toBe(m.board.cards.length);
 
     // Every template shows up in the last week, and today has the one running timer.
     expect(new Set(m.days.map((d) => d.kind))).toEqual(new Set(['normal', 'extraPair', 'overtime', 'unreviewed', 'noLunch', 'today']));
@@ -189,6 +238,30 @@ describe('seedDatabase', () => {
       expect(paused).toMatchObject({ durationSeconds: 22 * 60, plannedSeconds: 25 * 60 });
     } finally {
       await app.close();
+    }
+  });
+
+  it('writes a board the API would take back, and reads it back at the seed time', async () => {
+    // Only Date: the board's Done lane is read against the clock, and HTTP keeps its real timers.
+    vi.useFakeTimers({ now: SEED_NOW, toFake: ['Date'] });
+    const app = await startTestApp({ authMode: 'local' });
+    try {
+      const { admin, a, b } = await app.twoUsers();
+      const m = seedDatabase(app.db, { userId: admin.id, today: SEED_TODAY, now: SEED_NOW });
+      expect((await a.get('/api/board')).body).toEqual(m.board);
+      // As another user: every open card posts as it is, and lands in the same order.
+      const open = m.board.cards.filter((c) => c.lane !== 'done');
+      for (const c of open) expect((await b.post('/api/board/cards', { uid: c.uid, title: c.title, lane: c.lane, before: null })).status).toBe(201);
+      const theirs = (await b.get('/api/board')).body.cards as BoardCard[];
+      expect(theirs.map((c) => [c.uid, c.title, c.lane, c.position])).toEqual(open.map((c) => [c.uid, c.title, c.lane, c.position]));
+      // Today's list saved back with the board on: every row keeps its card, and the board stays as it was.
+      const today = m.days.at(-1)!;
+      const saved = await a.put(`/api/days/${SEED_TODAY}/priorities`, { priorities: today.priorities, base: today.priorities, cards: true });
+      expect(saved).toMatchObject({ status: 200, body: { priorities: today.priorities } });
+      expect((await a.get('/api/board')).body).toEqual(m.board);
+    } finally {
+      await app.close();
+      vi.useRealTimers();
     }
   });
 
@@ -271,6 +344,8 @@ describe('seedDatabase', () => {
       const now = atTime(SEED_TODAY, hour, minute);
       const m = seedDatabase(db, { userId: user.id, today: SEED_TODAY, now, running: true });
       expectConsistent(m, now);
+      expectBoardInStep(m);
+      expect(m.board.cards.every((c) => c.createdAt <= now && (c.doneAt ?? 0) <= now)).toBe(true);
       expect(m.days.at(-1)!.sessions.filter((s) => s.status === 'running')).toHaveLength(1);
       db.close();
     }
@@ -282,6 +357,7 @@ describe('seedDatabase', () => {
     const m = seedDatabase(db, { userId: user.id, today: SEED_TODAY, now: SEED_NOW, days: 0 });
     expect(m.days).toHaveLength(1);
     expectConsistent(m, SEED_NOW);
+    expectBoardInStep(m);
     const today = m.days[0]!;
     expect(today.priorities.every((p) => p.addedAt === today.createdAt && p.addedAt < today.punches[0]!.at!)).toBe(true);
     db.close();
