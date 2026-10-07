@@ -119,13 +119,16 @@ describe('Board', () => {
 
   it('leaves the focus alone and the keys unsaid on a touch screen, and stops capture at the cap', async () => {
     finePointer = false;
-    onServer = makeBoard(...Array.from({ length: 300 }, (_, i) => makeCard(`c${i}`.padEnd(12, '0'), `Card ${i}`, { position: i + 1 })));
+    onServer = makeBoard(...Array.from({ length: 300 }, (_, i) => makeCard(`c${String(i).padStart(11, '0')}`, `Card ${i}`, { position: i + 1 })));
     await renderBoard();
     const box = screen.getByRole('textbox', { name: 'Add a card' });
     expect(document.activeElement).not.toBe(box);
     expect(screen.queryByText('Enter adds to Later, Shift+Enter to Next')).toBeNull();
     expect((box as HTMLInputElement).disabled).toBe(true);
     expect(screen.getByText(BOARD.full)).toBeTruthy();
+    // Each of the 300 is a card of its own: the column holds them all once its fold opens.
+    fireEvent.click(screen.getByRole('button', { name: 'Show all 300' }));
+    expect(titlesIn('Later')).toHaveLength(300);
   });
 
   it('moves a card between Later and Next with Move to', async () => {

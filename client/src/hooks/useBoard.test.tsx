@@ -342,9 +342,11 @@ describe('moves', () => {
   });
 
   it('refuse a pull onto a full list or one not loaded, and say when the save failed', async () => {
-    lists[TODAY] = Array.from({ length: MAX_PRIORITIES }, (_, i) => makePriority(i + 1, `Row ${i + 1}`, { cardUid: `card${i}`.padEnd(12, '0') }));
+    lists[TODAY] = Array.from({ length: MAX_PRIORITIES }, (_, i) => makePriority(i + 1, `Row ${i + 1}`, { cardUid: `card${String(i).padStart(8, '0')}` }));
     const { result } = renderBoard();
     await settle();
+    // A full list of rows, each on a card of its own.
+    expect(new Set(result.current.days.shown(TODAY)!.priorities.map((p) => p.cardUid)).size).toBe(MAX_PRIORITIES);
     const place = (cardUid: string): StoreMove => ({
       kind: 'place',
       row: { uid: 'x00000000001', addedAt: T0, text: 'X', done: false, cardUid, recurringUid: null, categoryUid: null },
