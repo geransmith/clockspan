@@ -15,6 +15,7 @@ import {
   LOCAL_USERS,
   OIDC_DEV_USER,
   SEEDED_CATEGORIES,
+  SEEDED_RECURRING,
   seedDatabase,
   weekdaysBefore,
   weekdaysSince,
@@ -24,21 +25,27 @@ import {
 
 const counts = (db: DB) =>
   Object.fromEntries(
-    ['days', 'punches', 'priorities', 'sessions', 'breaks', 'board_cards', 'categories', 'settings', 'auth_sessions'].map((t) => [t, countRows(db, t)]),
+    ['days', 'punches', 'priorities', 'sessions', 'breaks', 'board_cards', 'categories', 'recurring', 'settings', 'auth_sessions'].map((t) => [
+      t,
+      countRows(db, t),
+    ]),
   );
 
 /**
  * The board a seed wrote, against its days: each card a save made is in step with its latest
  * linked row, the rows the board saw (the last weekday's and today's) each have a card, no
- * list links two text rows to one card, and every category named is one of the board's.
+ * list links two text rows to one card, no row links to a recurring priority yet, and every
+ * category named is one of the board's.
  */
 function expectBoardInStep(m: SeedManifest) {
   const cards = new Map(m.board.cards.map((c) => [c.uid, c]));
   const [last, today] = [m.days.at(-2), m.days.at(-1)!];
   expect(m.board.categories).toEqual(SEEDED_CATEGORIES);
+  expect(m.board.recurring).toEqual(SEEDED_RECURRING);
   const categories = new Set(m.board.categories.map((c) => c.uid));
   const resolves = (uid: string | null) => uid === null || categories.has(uid);
   expect(m.board.cards.every((c) => resolves(c.categoryUid))).toBe(true);
+  expect(m.board.recurring.every((r) => r.categoryUid != null && resolves(r.categoryUid))).toBe(true);
   for (const day of m.days) {
     const linked = day.priorities.filter((p) => hasText(p) && p.cardUid != null).map((p) => p.cardUid);
     expect(new Set(linked).size).toBe(linked.length);
@@ -192,6 +199,12 @@ describe('seedDatabase', () => {
     // A card a save made is untouched until the board handles it; one the board made never is.
     for (const card of m.board.cards) expect(countRows(db, 'board_cards', 'uid = ? AND untouched = ?', card.uid, card.listDate == null ? 0 : 1)).toBe(1);
     expect(countRows(db, 'board_cards')).toBe(m.board.cards.length);
+    // Two recurring priorities for support work, each in its category; no row is added from them yet.
+    expect(m.board.recurring.map((r) => [r.title, r.weekdays, named(r.categoryUid)])).toEqual([
+      ['Monitor the queue', [1, 2, 3, 4, 5], 'Tickets'],
+      ['Follow-ups', [1, 3, 5], 'Follow-ups'],
+    ]);
+    expect(countRows(db, 'recurring')).toBe(m.board.recurring.length);
 
     // Every template shows up in the last week, and today has the one running timer.
     expect(new Set(m.days.map((d) => d.kind))).toEqual(new Set(['normal', 'extraPair', 'overtime', 'unreviewed', 'noLunch', 'today']));
@@ -268,14 +281,17 @@ describe('seedDatabase', () => {
       const { admin, a, b } = await app.twoUsers();
       const m = seedDatabase(app.db, { userId: admin.id, today: SEED_TODAY, now: SEED_NOW });
       expect((await a.get('/api/board')).body).toEqual(m.board);
-      // As another user: every category and every open card posts as it is, and lands in the same order.
+      // As another user: every category, recurring priority and open card posts as it is, and
+      // lands in the same order.
       for (const c of m.board.categories) expect((await b.post('/api/board/categories', { uid: c.uid, name: c.name, color: c.color })).status).toBe(201);
+      for (const r of m.board.recurring) expect((await b.post('/api/board/recurring', r)).status).toBe(201);
       const open = m.board.cards.filter((c) => c.lane !== 'done');
       for (const c of open) {
         expect((await b.post('/api/board/cards', { uid: c.uid, title: c.title, categoryUid: c.categoryUid, lane: c.lane, before: null })).status).toBe(201);
       }
       const theirs = (await b.get('/api/board')).body as Board;
       expect(theirs.categories).toEqual(m.board.categories);
+      expect(theirs.recurring).toEqual(m.board.recurring);
       const fields = (c: BoardCard) => [c.uid, c.title, c.categoryUid, c.lane, c.position];
       expect(theirs.cards.map(fields)).toEqual(open.map(fields));
       // Today's list saved back with the board on: every row keeps its card, and the board stays as it was.

@@ -70,9 +70,10 @@ server/                 Express API → dist/server
   security.ts           every security header, rejectCrossSiteWrites and rejectUnknownHosts
   config.ts, db.ts      env parsing (throws on bad config); pragmas, MIGRATIONS, the default user
   settings.ts           mergeSettings (defaults + validation on every read and write), loadSettings
-  board.ts              the board's cards as stored: boardJson (listDate and held read from the rows,
-                        and the categories), placing and renumbering, and mirrorCards (the cards
-                        following a priorities save)
+  board.ts              the board's cards as stored: boardJson (listDate and held read from the rows;
+                        the categories and the recurring priorities), weekdayMask / weekdaysOf (a
+                        recurring priority's weekdays to the table's mask and back), placing and
+                        renumbering, and mirrorCards (the cards following a priorities save)
   retention.ts          old-day pruning (pruneDays, runRetention, the RETENTION_DAYS cap)
   validate.ts           isWholeNumber: the one check for every bounded whole number the server takes;
                         isOneOf: a value from a fixed list (a setting's choices, a category's colour)
@@ -176,29 +177,32 @@ which the dev machine cannot reach. Run the destructive paths for real: delete a
 user, cancel a timer, `DELETE /api/settings`.
 
 Start from `npm run seed`, not an empty DB (`server/dev/seed.ts`). A run deletes every day,
-board card and category of the user it seeds, hand-made ones included, then writes the last 10
-weekdays and today. Each past weekday takes a template by its distance back (`kindForDistance`):
-the last weekday has an extra out/in pair in the afternoon and a priority added mid-day (the
-README's retro shot), then come a normal day, an overtime day (approved, 10 h 15 m worked, with
-the second meal taken as an out/in pair after lunch), an unreviewed day (a note written but
-never marked reviewed, and a cancelled session) and a half day with its own 4 h 30 m work day
-and no lunch punched. Further back the templates recur at fixed intervals, so the default 10 are
-three normal days, two each of the extra pair, overtime and unreviewed (two cancelled sessions
-in all) and one half day. Every past day has two to four priorities and a note. Today is clocked
-in two hours before *now*. Its three priorities were planned two minutes after the last
-weekday's review, with that day's first open row carried to position 1 (a row of its own, with
-its own uid) and the second row ticked; its log has a 50-minute session for the ticked row, an
-unplanned one paused for eight minutes and finished three minutes short of its 25, a full break
-and one cut short. The board holds what saves with the board on would have made of the last
-weekday's and today's rows (`insertBoard`), each row linked by its `cardUid`: open rows in Next,
-ticked ones in Done, all untouched, and today's carried row on the same card, in the same
-category, as its source row. Four cards were captured on the board: three in Later ("Write a KB
-for the SSO reset", "Review canned replies", "Look into the export timeout") and one at the end
-of Next ("Follow up on the Acme SLA"). The board has four categories (`SEEDED_CATEGORIES`:
-Tickets, Follow-ups, Knowledge base, Admin), and each sample text counts under the same one on
-every day (`CATEGORY_OF`): most rows and their cards have one, two (a call to the bank, a
-colleague's pull request) have none, the captured cards have one, and so do the unplanned
-"Inbox" sessions (Tickets), the only sessions with a category of their own. No seeded row links to a recurring priority.
+board card, category and recurring priority of the user it seeds, hand-made ones included, then
+writes the last 10 weekdays and today. Each past weekday takes a template by its distance back
+(`kindForDistance`): the last weekday has an extra out/in pair in the afternoon and a priority
+added mid-day (the README's retro shot), then come a normal day, an overtime day (approved,
+10 h 15 m worked, with the second meal taken as an out/in pair after lunch), an unreviewed day
+(a note written but never marked reviewed, and a cancelled session) and a half day with its own
+4 h 30 m work day and no lunch punched. Further back the templates recur at fixed intervals, so
+the default 10 are three normal days, two each of the extra pair, overtime and unreviewed (two
+cancelled sessions in all) and one half day. Every past day has two to four priorities and a
+note. Today is clocked in two hours before *now*. Its three priorities were planned two minutes
+after the last weekday's review, with that day's first open row carried to position 1 (a row of
+its own, with its own uid) and the second row ticked; its log has a 50-minute session for the
+ticked row, an unplanned one paused for eight minutes and finished three minutes short of its
+25, a full break and one cut short. The board holds what saves with the board on would have made
+of the last weekday's and today's rows (`insertBoard`), each row linked by its `cardUid`: open
+rows in Next, ticked ones in Done, all untouched, and today's carried row on the same card, in
+the same category, as its source row. Four cards were captured on the board: three in Later
+("Write a KB for the SSO reset", "Review canned replies", "Look into the export timeout") and
+one at the end of Next ("Follow up on the Acme SLA"). The board has four categories
+(`SEEDED_CATEGORIES`: Tickets, Follow-ups, Knowledge base, Admin), and each sample text counts
+under the same one on every day (`CATEGORY_OF`): most rows and their cards have one, two (a call
+to the bank, a colleague's pull request) have none, the captured cards have one, and so do the
+unplanned "Inbox" sessions (Tickets), the only sessions with a category of their own. The board
+has two recurring priorities (`SEEDED_RECURRING`): "Monitor the queue" Monday to Friday, under
+Tickets, and "Follow-ups" on Monday, Wednesday and Friday, under Follow-ups. No seeded row links
+to one.
 
 `--running` leaves a 25-minute timer running, started ten minutes before *now*, for timer work;
 `--quarter` seeds every weekday since the start of last quarter, for Month / Quarter review
@@ -277,17 +281,17 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **Old-day deletion goes through `pruneDays` (`server/retention.ts`)**, whether from the
   Data tab's button (`POST /days/prune`) or the scheduled `runRetention`. It deletes `days`
   rows before a date key (cascades take punches, priorities, sessions, breaks), never a day with a
-  running session, and never settings or categories. The Data tab sends it through the day store's
-  `pruneBefore`, which reads the held days before the cutoff again and moves `generation`, so
-  the ranges on screen ask again. The per-user setting `retention { enabled, days }` is
-  capped by `RETENTION_DAYS` (`config.retentionDays`) via `effectiveKeepDays`; a user with no
-  settings row still gets the cap. The same prune takes the board cards done before the cutoff
-  and the untouched cards (made by a priorities save, never handled on the board) that no row is
-  linked to any more, which would otherwise show again once their emptied row's day was gone;
-  it answers both counts (`Pruned`), and `POST /days/prune` reports the days. `reclaimSpace`
-  (VACUUM + WAL checkpoint) runs after a prune that deleted a day or a card and after an admin
-  deletes a user (`DELETE /api/auth/users/:id`), so the file shrinks and deleted text does not
-  stay in free pages; it must not run inside a transaction.
+  running session, and never settings, categories or recurring priorities. The Data tab sends it
+  through the day store's `pruneBefore`, which reads the held days before the cutoff again and
+  moves `generation`, so the ranges on screen ask again. The per-user setting
+  `retention { enabled, days }` is capped by `RETENTION_DAYS` (`config.retentionDays`) via
+  `effectiveKeepDays`; a user with no settings row still gets the cap. The same prune takes the
+  board cards done before the cutoff and the untouched cards (made by a priorities save, never
+  handled on the board) that no row is linked to any more, which would otherwise show again once
+  their emptied row's day was gone; it answers both counts (`Pruned`), and `POST /days/prune`
+  reports the days. `reclaimSpace` (VACUUM + WAL checkpoint) runs after a prune that deleted a
+  day or a card and after an admin deletes a user (`DELETE /api/auth/users/:id`), so the file
+  shrinks and deleted text does not stay in free pages; it must not run inside a transaction.
 - **Every data query is scoped by `req.user.id`** (`currentUser(req)`). In `AUTH_MODE=none` that
   is the single `kind='default'` user. Never add a data route outside the `requireAuth` router
   in `app.ts`. Every `/:date` route sits on the days router (`routes/days.ts`), whose `date`
@@ -300,9 +304,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   with an `:id` is checked, one added later included, with nothing to list on the route. It
   answers 404 for another user's row or none, and the handler reads the row with `owned(res)`.
   A table whose rows hang off the user rather than a day and are named by a uid (the board's
-  cards, `/board/cards/:uid`, and categories, `/board/categories/:uid`) gets the same from
-  `uidRouter()` beside it, as the router's `uid` param handler: the uid's shape is checked, it is
-  matched lowercased, and anyone else's or none is a 404.
+  cards, `/board/cards/:uid`, categories, `/board/categories/:uid`, and recurring priorities,
+  `/board/recurring/:uid`) gets the same from `uidRouter()` beside it, as the router's `uid`
+  param handler: the uid's shape is checked, it is matched lowercased, and anyone else's or none
+  is a 404.
 - **Settings go through `mergeSettings()` on every read and write** (`server/settings.ts`):
   the stored JSON is merged onto `DEFAULT_SETTINGS`, unknown keys are dropped, invalid values
   fall back, and a PUT stores the whole merged object, so a key added since a user's last save
@@ -592,6 +597,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   save take a row with a category off a list a session points at (`leavesCategory`), reads the
   day again. An emptied row stays on its list with its category, so its sessions keep counting
   under it and nothing is copied.
+- **A recurring priority is a row of its own, named by its uid** (`recurring`, routes in
+  `routes/board.ts`, answered in `Board.recurring` in the order they were made): a title, a
+  category and the weekdays it is offered on, ISO 1 (Monday) to 7 on the wire and a mask in the
+  table (bit 0 for Monday; `weekdayMask`, `weekdaysOf` in `server/board.ts`). The rows it adds
+  point at it by `recurringUid`. Deleting one deletes it for good; those rows keep the link, now
+  to nothing, and their own category. The server caps them at 100 (`BOARD_LIMITS`), a sanity cap
+  with no product limit behind it, and never prunes them.
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started —
   one rule, no clock-in fallback. `GET /days/range` returns full days and the client does the
@@ -793,7 +805,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
   `currentUser(req).id` (a `/:date` route goes on the days router, whose param handler checks
   the date; a `/:id` route on the sessions or breaks router, or a `/:uid` route on the board's
-  cards or categories router, is checked by the router itself and reads its row with
+  cards, categories or recurring router, is checked by the router itself and reads its row with
   `owned(res)`; a new table addressed by id gets its entry in `OwnedRows` and `NOT_FOUND` and a
   router from `ownedRouter()`, and a new table of the user's addressed by uid its entry in
   `UidRows` and `UID_NOT_FOUND` and a router from `uidRouter()`, all in `routes/shared.ts`),

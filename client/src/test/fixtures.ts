@@ -18,6 +18,7 @@ import type {
   Priority,
   PublicUser,
   Punch,
+  Recurring,
   RunningSession,
   Settings,
 } from '../types';
@@ -124,6 +125,11 @@ export function makeSession(patch: Partial<RunningSession> = {}): RunningSession
 /** A category in use, blue unless `patch` says otherwise. */
 export function makeCategory(uid: string, name: string, patch: Partial<Category> = {}): Category {
   return { uid, name, color: 'blue', archived: false, ...patch };
+}
+
+/** A recurring priority with no category, every weekday Monday to Friday unless `patch` says otherwise. */
+export function makeRecurring(uid: string, title: string, patch: Partial<Recurring> = {}): Recurring {
+  return { uid, title, categoryUid: null, weekdays: [1, 2, 3, 4, 5], ...patch };
 }
 
 /** What `endSession` may set on the ended session. */

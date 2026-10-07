@@ -161,6 +161,22 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE sessions    ADD COLUMN category_uid TEXT;
   ALTER TABLE board_cards ADD COLUMN category_uid TEXT;
   `,
+  // Recurring priorities. The rows one adds point at it by its uid (priorities.recurring_uid),
+  // a soft link that outlives it: deleting one deletes the row here only. weekdays is a mask of
+  // ISO weekdays, bit 0 for Monday to bit 6 for Sunday; the API speaks lists of 1..7. Nothing on
+  // the server looks rows up by recurring_uid (the client works out the offer and the review),
+  // so it has no index.
+  `
+  CREATE TABLE recurring (
+    id           INTEGER PRIMARY KEY,
+    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    uid          TEXT NOT NULL,
+    title        TEXT NOT NULL,
+    category_uid TEXT,
+    weekdays     INTEGER NOT NULL CHECK (weekdays BETWEEN 1 AND 127),
+    UNIQUE (user_id, uid)
+  );
+  `,
 ];
 
 export function openDatabase(dbPath: string): DB {

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from '../dev/harness.js';
 import { ensureDefaultUser } from '../db.js';
 import { addDays, DAY_MS } from '../../shared/dates.js';
-import { BOARD_LIMITS, LIMITS, type BoardCard, type Category } from '../../shared/api.js';
+import { BOARD_LIMITS, LIMITS, type BoardCard, type Category, type Recurring } from '../../shared/api.js';
 
 const TODAY = SEED_TODAY;
 const YESTERDAY = addDays(TODAY, -1);
@@ -32,7 +32,7 @@ const untouched = (uid: string) => (app.db.prepare(`SELECT untouched FROM board_
 
 describe('GET /api/board and POST /api/board/cards', () => {
   it('starts empty, and keeps each new card where it was put', async () => {
-    expect((await app.api.get('/api/board')).body).toEqual({ cards: [], categories: [] });
+    expect((await app.api.get('/api/board')).body).toEqual({ cards: [], categories: [], recurring: [] });
     const first = await capture('CARD0000000A', '  Write the KB  ', 'later');
     expect(first.status).toBe(201);
     expect(first.body.cards).toEqual([
@@ -343,7 +343,7 @@ describe('/api/board/categories', () => {
   it('makes categories in the order sent, with the name tidied, and answers the board', async () => {
     const r = await add('CAT000000001', '  Support   tickets ', 'teal');
     expect(r.status).toBe(201);
-    expect(r.body).toEqual({ cards: [], categories: [{ uid: 'cat000000001', name: 'Support tickets', color: 'teal', archived: false }] });
+    expect(r.body).toEqual({ cards: [], categories: [{ uid: 'cat000000001', name: 'Support tickets', color: 'teal', archived: false }], recurring: [] });
     await add('cat000000002', 'Admin', 'grey');
     // A long name is cut, and a space the cut leaves at the end goes.
     await add('cat000000003', `${'k'.repeat(LIMITS.categoryName - 1)} more`);
@@ -482,6 +482,144 @@ describe('/api/board/categories', () => {
   });
 });
 
+describe('/api/board/recurring', () => {
+  const QUEUE: Recurring = { uid: 'rcur00000001', title: 'Monitor the queue', categoryUid: 'cat000000001', weekdays: [1, 2, 3, 4, 5] };
+  const FOLLOW_UPS: Recurring = { uid: 'rcur00000002', title: 'Follow-ups', categoryUid: null, weekdays: [1, 3, 5] };
+  const items = async () => (await app.api.get('/api/board')).body.recurring as Recurring[];
+  const add = (item: object) => app.api.post('/api/board/recurring', item);
+  const edit = (uid: string, body: Record<string, unknown>) => app.api.patch(`/api/board/recurring/${uid}`, body);
+  const remove = (uid: string) => app.api.del(`/api/board/recurring/${uid}`);
+  /** Each item's weekdays as the table holds them: a mask, bit 0 for Monday. */
+  const masks = () => app.db.prepare(`SELECT uid, weekdays FROM recurring ORDER BY id`).all();
+  const WEEKDAYS = 'weekdays must be one or more days from 1 to 7.';
+
+  it('makes recurring priorities in the order sent, with the title tidied and the weekdays in order, and answers the board', async () => {
+    const r = await add({ ...QUEUE, uid: 'RCUR00000001', title: '  Monitor the queue ', categoryUid: 'CAT000000001' });
+    expect(r.status).toBe(201);
+    expect(r.body).toEqual({ cards: [], categories: [], recurring: [QUEUE] });
+    // Weekdays in any order come back in order; a category left out is none.
+    await add({ ...FOLLOW_UPS, weekdays: [5, 1, 3], categoryUid: undefined });
+    // A long title is cut like a priority's text: it becomes one when the offer adds it.
+    await add({ uid: 'rcur00000003', title: 'k'.repeat(LIMITS.priorityText + 20), categoryUid: null, weekdays: [7, 6] });
+    expect(await items()).toEqual([QUEUE, FOLLOW_UPS, { uid: 'rcur00000003', title: 'k'.repeat(LIMITS.priorityText), categoryUid: null, weekdays: [6, 7] }]);
+    expect(masks()).toEqual([
+      { uid: 'rcur00000001', weekdays: 0b0011111 },
+      { uid: 'rcur00000002', weekdays: 0b0010101 },
+      { uid: 'rcur00000003', weekdays: 0b1100000 },
+    ]);
+  });
+
+  it('answers the board as it is when the uid is in use already, whatever else is sent', async () => {
+    await add(QUEUE);
+    const again = await add({ ...QUEUE, title: 'Something else', categoryUid: null, weekdays: [6] });
+    expect(again.status).toBe(200);
+    expect(again.body.recurring).toEqual([QUEUE]);
+    expect(app.count('recurring')).toBe(1);
+  });
+
+  it('refuses an item it could not store, and stores nothing', async () => {
+    const refusals: [Record<string, unknown>, string][] = [
+      [{ uid: undefined }, 'uid must be a recurring priority id.'],
+      [{ uid: 'rcur' }, 'uid must be a recurring priority id.'],
+      [{ uid: 'not-a-uid!' }, 'uid must be a recurring priority id.'],
+      [{ uid: 12345678 }, 'uid must be a recurring priority id.'],
+      [{ title: undefined }, 'A recurring priority needs a title.'],
+      [{ title: '   ' }, 'A recurring priority needs a title.'],
+      [{ title: 5 }, 'A recurring priority needs a title.'],
+      [{ categoryUid: 'not a uid' }, "categoryUid must be a category's id or null."],
+      [{ categoryUid: 7 }, "categoryUid must be a category's id or null."],
+      [{ weekdays: undefined }, WEEKDAYS],
+      [{ weekdays: null }, WEEKDAYS],
+      [{ weekdays: 31 }, WEEKDAYS],
+      [{ weekdays: [] }, WEEKDAYS],
+      [{ weekdays: [0] }, WEEKDAYS],
+      [{ weekdays: [1, 8] }, WEEKDAYS],
+      [{ weekdays: [1.5] }, WEEKDAYS],
+      [{ weekdays: ['1'] }, WEEKDAYS],
+      [{ weekdays: [1, 3, 1] }, WEEKDAYS],
+      [{ weekdays: [1, 2, 3, 4, 5, 6, 7, 1] }, WEEKDAYS],
+    ];
+    for (const [change, error] of refusals) {
+      const r = await add({ ...QUEUE, ...change });
+      expect([r.status, r.body.error], JSON.stringify(change)).toEqual([400, error]);
+    }
+    expect(app.count('recurring')).toBe(0);
+  });
+
+  it('changes the title, the category and the weekdays, a field left out keeping its value', async () => {
+    await add(QUEUE);
+    await add(FOLLOW_UPS);
+    const renamed = await edit('RCUR00000001', { title: '  Watch the queue ' });
+    expect(renamed.status).toBe(200);
+    expect(renamed.body.recurring).toEqual([{ ...QUEUE, title: 'Watch the queue' }, FOLLOW_UPS]);
+    await edit('rcur00000001', { categoryUid: null });
+    await edit('rcur00000002', { categoryUid: 'CAT000000002', weekdays: [3, 1] });
+    expect(await items()).toEqual([
+      { ...QUEUE, title: 'Watch the queue', categoryUid: null },
+      { ...FOLLOW_UPS, categoryUid: 'cat000000002', weekdays: [1, 3] },
+    ]);
+    expect(masks()).toEqual([
+      { uid: 'rcur00000001', weekdays: 0b0011111 },
+      { uid: 'rcur00000002', weekdays: 0b0000101 },
+    ]);
+    // An empty patch changes nothing.
+    const before = await items();
+    expect((await edit('rcur00000001', {})).body.recurring).toEqual(before);
+  });
+
+  it('refuses an edit it could not store, and changes nothing', async () => {
+    await add(QUEUE);
+    const refusals: [Record<string, unknown>, string][] = [
+      [{ title: '' }, 'A recurring priority needs a title.'],
+      [{ title: null }, 'A recurring priority needs a title.'],
+      [{ categoryUid: 'not a uid' }, "categoryUid must be a category's id or null."],
+      [{ weekdays: null }, WEEKDAYS],
+      [{ weekdays: [] }, WEEKDAYS],
+      [{ weekdays: [7, 7] }, WEEKDAYS],
+      // One bad field refuses the others sent with it.
+      [{ title: 'Watch the queue', weekdays: [9] }, WEEKDAYS],
+    ];
+    for (const [change, error] of refusals) {
+      const r = await edit('rcur00000001', change);
+      expect([r.status, r.body.error], JSON.stringify(change)).toEqual([400, error]);
+    }
+    expect(await items()).toEqual([QUEUE]);
+    for (const r of [await edit('rcur00000009', { title: 'x' }), await remove('rcur00000009'), await edit('rcur', { title: 'x' })]) {
+      expect([r.status, r.body]).toEqual([404, { error: 'Recurring priority not found.' }]);
+    }
+  });
+
+  it('deletes an item for good; the rows added from it keep their link and their own category', async () => {
+    await add(QUEUE);
+    await add(FOLLOW_UPS);
+    const row = { text: 'Monitor the queue', recurringUid: QUEUE.uid, categoryUid: 'cat000000003' };
+    const uid = (await save(TODAY, [row])).body.priorities[0].uid as string;
+    const r = await remove('RCUR00000001');
+    expect(r.status).toBe(200);
+    expect(r.body.recurring).toEqual([FOLLOW_UPS]);
+    expect(app.count('recurring')).toBe(1);
+    expect((await app.api.get(`/api/days/${TODAY}`)).body.priorities[0]).toMatchObject({ ...row, uid, cardUid: null });
+    expect((await remove('rcur00000001')).status).toBe(404);
+    // Its uid is free again: a POST makes a new item, listed after the older one, as it was made last.
+    expect((await add(QUEUE)).status).toBe(201);
+    expect(await items()).toEqual([FOLLOW_UPS, QUEUE]);
+  });
+
+  it('keeps at most 100, and answers a retry of one of them at the cap', async () => {
+    const userId = ensureDefaultUser(app.db).id;
+    const insert = app.db.prepare(`INSERT INTO recurring (user_id, uid, title, weekdays) VALUES (?, ?, ?, 31)`);
+    for (let i = 1; i < BOARD_LIMITS.recurring; i++) insert.run(userId, `bulk${String(i).padStart(8, '0')}`, `Routine ${i}`);
+    expect((await add(QUEUE)).status).toBe(201);
+    const over = await add(FOLLOW_UPS);
+    expect([over.status, over.body.error]).toEqual([400, `The board keeps at most ${BOARD_LIMITS.recurring} recurring priorities.`]);
+    expect((await add(QUEUE)).status).toBe(200);
+    expect(app.count('recurring')).toBe(BOARD_LIMITS.recurring);
+    // A deleted one makes room.
+    await remove(QUEUE.uid);
+    expect((await add(FOLLOW_UPS)).status).toBe(201);
+  });
+});
+
 describe('the board is scoped to the signed-in user', () => {
   beforeEach(async () => {
     await app.close();
@@ -495,7 +633,7 @@ describe('the board is scoped to the signed-in user', () => {
     const mine = (await a.get('/api/board')).body.cards as BoardCard[];
     expect(mine.map((c) => c.uid)).toEqual(['card00000001', made]);
 
-    expect((await b.get('/api/board')).body).toEqual({ cards: [], categories: [] });
+    expect((await b.get('/api/board')).body).toEqual({ cards: [], categories: [], recurring: [] });
     for (const r of [
       await b.patch('/api/board/cards/card00000001', { today: YESTERDAY, title: 'Mine' }),
       await b.del('/api/board/cards/card00000001'),
@@ -560,5 +698,30 @@ describe('the board is scoped to the signed-in user', () => {
       { uid: 'cat000000003', name: 'Ticket queue', color: 'teal', archived: false },
       { uid: 'cat000000002', name: 'Admin', color: 'gold', archived: false },
     ]);
+  });
+
+  it("never shows or changes another user's recurring priorities, and caps each user's own", async () => {
+    const { admin, a, b } = await app.twoUsers();
+    const queue = { uid: 'rcur00000001', title: 'Monitor the queue', categoryUid: null, weekdays: [1, 2, 3, 4, 5] };
+    await a.post('/api/board/recurring', queue);
+    expect((await b.get('/api/board')).body.recurring).toEqual([]);
+    for (const r of [
+      await b.patch('/api/board/recurring/rcur00000001', { title: 'Mine' }),
+      await b.patch('/api/board/recurring/rcur00000001', { weekdays: [6] }),
+      await b.del('/api/board/recurring/rcur00000001'),
+    ]) {
+      expect([r.status, r.body]).toEqual([404, { error: 'Recurring priority not found.' }]);
+    }
+    // A's uid is B's own: B's POST of it makes B an item rather than answering A's.
+    const theirs = await b.post('/api/board/recurring', { ...queue, title: 'Watch my queue', weekdays: [6, 7] });
+    expect([theirs.status, theirs.body.recurring]).toEqual([201, [{ ...queue, title: 'Watch my queue', weekdays: [6, 7] }]]);
+    expect((await b.del('/api/board/recurring/rcur00000001')).status).toBe(200);
+    expect((await a.get('/api/board')).body.recurring).toEqual([queue]);
+
+    // A's items count toward A's cap only.
+    const insert = app.db.prepare(`INSERT INTO recurring (user_id, uid, title, weekdays) VALUES (?, ?, 'Routine', 1)`);
+    for (let i = 2; i <= BOARD_LIMITS.recurring; i++) insert.run(admin.id, `bulk${String(i).padStart(8, '0')}`);
+    expect((await a.post('/api/board/recurring', { ...queue, uid: 'rcur00000002' })).status).toBe(400);
+    expect((await b.post('/api/board/recurring', { ...queue, uid: 'rcur00000002' })).status).toBe(201);
   });
 });

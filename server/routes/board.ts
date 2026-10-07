@@ -2,8 +2,8 @@ import { Router } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { refuse } from '../refuse.js';
-import { boardJson, createCard, linkedFrom, openCount, placeCard, removeCard } from '../board.js';
-import { isOneOf } from '../validate.js';
+import { boardJson, createCard, linkedFrom, openCount, placeCard, removeCard, weekdayMask } from '../board.js';
+import { isOneOf, isWholeNumber } from '../validate.js';
 import { getOwnedByUid, parseCategoryUid, uidRouter, UID_RE, type CategoryRow } from './shared.js';
 import { hasText } from '../../shared/priorities.js';
 import { sameText } from '../../shared/text.js';
@@ -19,8 +19,11 @@ const NAME_TAKEN = 'There is already a category with that name.';
 const NAME_REMOVED = 'A removed category has that name. Restore it by its id.';
 const CATEGORIES_FULL = `The board keeps at most ${BOARD_LIMITS.categories} categories.`;
 const CATEGORIES_STORED = `The board keeps at most ${BOARD_LIMITS.categoriesStored} categories, removed ones included.`;
+const NO_RECURRING_TITLE = 'A recurring priority needs a title.';
+const BAD_WEEKDAYS = 'weekdays must be one or more days from 1 to 7.';
+const RECURRING_FULL = `The board keeps at most ${BOARD_LIMITS.recurring} recurring priorities.`;
 
-/** A card's title: trimmed and cut to a priority's length; null for anything but text. */
+/** A card's or a recurring priority's title, which becomes a row's text: trimmed and cut to a priority's length; null for anything but text. */
 function parseTitle(raw: unknown): string | null {
   return typeof raw === 'string' && hasText({ text: raw }) ? raw.trim().slice(0, LIMITS.priorityText) : null;
 }
@@ -42,6 +45,15 @@ function parseName(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
   const name = raw.trim().replace(/\s+/g, ' ').slice(0, LIMITS.categoryName).trim();
   return name === '' ? null : name;
+}
+
+/** A recurring priority's weekdays as the table's mask: one or more distinct ISO weekdays (1..7) in any order; null for anything else. */
+function parseWeekdays(raw: unknown): number | null {
+  if (!Array.isArray(raw)) return null;
+  const sent: unknown[] = raw;
+  const days = sent.filter((day): day is number => isWholeNumber(day, { min: 1, max: 7 }));
+  if (days.length === 0 || days.length !== sent.length || new Set(days).size !== days.length) return null;
+  return weekdayMask(days);
 }
 
 /** The user's categories, removed ones included. */
@@ -117,10 +129,74 @@ function categoriesRouter(db: DB): Router {
 }
 
 /**
- * The board: `GET /board`, the cards' own routes under `/board/cards` and the categories' under
- * `/board/categories`, where every `/:uid` route works on the caller's own row or answers 404
- * (`uidRouter`). Every write answers the whole board. Rows reach a card only through a
- * priorities save (`mirrorCards`), and a card reaches Done only through a ticked row.
+ * The recurring priorities' routes under `/board/recurring`. The client offers each on its
+ * weekdays, and the rows it adds carry its uid (`recurringUid`); deleting one deletes it for
+ * good, and those rows keep the link, now to nothing, and their own category. There is no limit
+ * in the product: the 100 is a sanity cap.
+ */
+function recurringRouter(db: DB): Router {
+  const { router: r, owned } = uidRouter(db, 'recurring');
+  const count = (userId: number) => (db.prepare(`SELECT COUNT(*) AS n FROM recurring WHERE user_id = ?`).get(userId) as { n: number }).n;
+
+  // A new recurring priority; a uid in use already answers the board as it is (a retry), even at the cap.
+  r.post('/', (req, res) => {
+    const userId = currentUser(req).id;
+    const body = req.body as { uid?: unknown; title?: unknown; categoryUid?: unknown; weekdays?: unknown };
+    if (typeof body.uid !== 'string' || !UID_RE.test(body.uid)) return refuse(res, 400, 'uid must be a recurring priority id.');
+    const title = parseTitle(body.title);
+    if (title === null) return refuse(res, 400, NO_RECURRING_TITLE);
+    const category = parseCategoryUid(body.categoryUid);
+    if ('error' in category) return refuse(res, 400, category.error);
+    const weekdays = parseWeekdays(body.weekdays);
+    if (weekdays === null) return refuse(res, 400, BAD_WEEKDAYS);
+    const uid = body.uid.toLowerCase();
+    const outcome = db.transaction((): 'kept' | 'created' | 'full' => {
+      if (getOwnedByUid(db, 'recurring', userId, uid)) return 'kept';
+      if (count(userId) >= BOARD_LIMITS.recurring) return 'full';
+      db.prepare(`INSERT INTO recurring (user_id, uid, title, category_uid, weekdays) VALUES (?, ?, ?, ?, ?)`).run(
+        userId,
+        uid,
+        title,
+        category.categoryUid ?? null,
+        weekdays,
+      );
+      return 'created';
+    })();
+    if (outcome === 'full') return refuse(res, 400, RECURRING_FULL);
+    res.status(outcome === 'created' ? 201 : 200).json(boardJson(db, userId) satisfies Board);
+  });
+
+  // A new title, category or weekdays; a field left out keeps its value. The rows already added
+  // keep their own text and category.
+  r.patch('/:uid', (req, res) => {
+    const item = owned(res);
+    const body = req.body as { title?: unknown; categoryUid?: unknown; weekdays?: unknown };
+    const title = body.title === undefined ? item.title : parseTitle(body.title);
+    if (title === null) return refuse(res, 400, NO_RECURRING_TITLE);
+    const category = parseCategoryUid(body.categoryUid);
+    if ('error' in category) return refuse(res, 400, category.error);
+    const weekdays = body.weekdays === undefined ? item.weekdays : parseWeekdays(body.weekdays);
+    if (weekdays === null) return refuse(res, 400, BAD_WEEKDAYS);
+    const categoryUid = category.categoryUid === undefined ? item.category_uid : category.categoryUid;
+    db.prepare(`UPDATE recurring SET title = ?, category_uid = ?, weekdays = ? WHERE id = ?`).run(title, categoryUid, weekdays, item.id);
+    res.json(boardJson(db, item.user_id) satisfies Board);
+  });
+
+  r.delete('/:uid', (_req, res) => {
+    const item = owned(res);
+    db.prepare(`DELETE FROM recurring WHERE id = ?`).run(item.id);
+    res.json(boardJson(db, item.user_id) satisfies Board);
+  });
+
+  return r;
+}
+
+/**
+ * The board: `GET /board`, the cards' own routes under `/board/cards`, the categories' under
+ * `/board/categories` and the recurring priorities' under `/board/recurring`, where every
+ * `/:uid` route works on the caller's own row or answers 404 (`uidRouter`). Every write answers
+ * the whole board. Rows reach a card only through a priorities save (`mirrorCards`), and a card
+ * reaches Done only through a ticked row.
  */
 export function boardRouter(db: DB): Router {
   const r = Router();
@@ -205,5 +281,6 @@ export function boardRouter(db: DB): Router {
 
   r.use('/cards', cards);
   r.use('/categories', categoriesRouter(db));
+  r.use('/recurring', recurringRouter(db));
   return r;
 }
