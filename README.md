@@ -8,9 +8,7 @@
 **Clockspan** is a self-hosted, single-day focus sheet for getting through a workday with ADHD. One page: a punch-style timeclock that works out when lunch is due and when the day ends, a short list of the day's priorities, a focus timer that logs what you did, and a retrospective that puts the plan next to what happened. Every day is saved; alarms fire as deadlines approach. Runs as one Docker container with a SQLite file; works on phones and installs to the Home Screen.
 
 <p align="center">
-  <img src="docs/screenshots/sheet-phone-light.png" width="300" alt="The sheet on a phone, light mode: running timer bar, timeclock with the lunch-by, worked, clock-out and focused tiles, and today's priorities">
-  &nbsp;&nbsp;
-  <img src="docs/screenshots/sheet-phone-dark.png" width="300" alt="The same sheet in dark mode">
+  <img src="docs/screenshots/sheet-phone-dark.png" width="300" alt="The sheet on a phone, dark mode: running timer bar, timeclock with the lunch-by, worked, clock-out and focused tiles, and today's priorities">
 </p>
 
 ## Features

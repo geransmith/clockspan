@@ -18,7 +18,7 @@ The default sign-in mode, none, has no login: anyone who can reach the port can 
   <TemplateURL>https://raw.githubusercontent.com/geransmith/clockspan/main/unraid/clockspan.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/geransmith/clockspan/main/client/public/icons/icon-512.png</Icon>
   <License>MIT</License>
-  <Screenshot>https://raw.githubusercontent.com/geransmith/clockspan/main/docs/screenshots/sheet-phone-light.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/geransmith/clockspan/main/docs/screenshots/sheet-phone-dark.png</Screenshot>
   <Screenshot>https://raw.githubusercontent.com/geransmith/clockspan/main/docs/screenshots/sheet-desktop.png</Screenshot>
   <Screenshot>https://raw.githubusercontent.com/geransmith/clockspan/main/docs/screenshots/history.png</Screenshot>
   <Config Name="Web UI port" Target="8080" Default="8080" Mode="tcp" Description="Port for the web UI." Type="Port" Display="always" Required="true" Mask="false">8080</Config>
