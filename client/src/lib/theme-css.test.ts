@@ -61,8 +61,8 @@ describe('styles.css', () => {
     expect(manifest.background_color).toBe(light);
   });
 
-  // A dot is the only place a category's colour shows, so it has to stand out from the cards and
-  // columns it sits on, in both themes (WCAG's 3:1 for graphics).
+  // A dot and Review's By category bars are the only places a category's colour shows, so it has
+  // to stand out from the cards and columns they sit on, in both themes (WCAG's 3:1 for graphics).
   it('gives every category colour a token in each theme, at 3:1 or more on both surfaces', () => {
     for (const theme of [':root', ":root[data-theme='dark']"]) {
       for (const color of CATEGORY_COLORS) {

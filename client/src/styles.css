@@ -30,9 +30,9 @@
   --danger: #d12f2f;
   --danger-soft: #fde7e7;
   --danger-ink: #bd2a2a;
-  /* A category's colour (CategoryDot, the swatches): a fill only, 3:1 and up on --surface and
-     --surface-2 in both themes (theme-css.test.ts checks). A category's name is never drawn in
-     it, so these have no -ink. */
+  /* A category's colour (CategoryDot, the swatches, Review's By category bars): a fill only, 3:1
+     and up on --surface and --surface-2 in both themes (theme-css.test.ts checks). A category's
+     name is never drawn in it, so these have no -ink. */
   --cat-blue: #2563eb;
   --cat-teal: #0d9488;
   --cat-green: #15803d;
@@ -457,9 +457,10 @@ button {
 }
 
 /* ---------- categories ---------- */
-/* A category's colour is picked by its data-color (CategoryDot, the swatches), never an inline
-   colour; it fills a dot that sits beside the category's name, but for the day log's, which is
-   named for a screen reader and on hover. */
+/* A category's colour is picked by its data-color (CategoryDot, the swatches, Review's By
+   category bars), never an inline colour. It fills a dot that sits beside the category's name,
+   but for the day log's, which is named for a screen reader and on hover; a By category bar
+   sits in the row that names its category. */
 [data-color='blue'] {
   --cat: var(--cat-blue);
 }
@@ -2327,6 +2328,82 @@ button {
   color: var(--text-2);
   font-size: 0.92rem;
   line-height: 1.4;
+}
+/* By category: a row is the dot, the name, the parts (off the plan, done) and the time, with the
+   bar under them. On a phone the parts take a line of their own under the name, so a long name
+   keeps its room. The row isn't a button, so it pads 8px 0 where .review-row pads 8px 6px inside
+   a -6px margin, and the row starts where the other rows' text does. No category has no dot; its
+   name stays in the names' column. */
+.review-category {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  grid-template-areas:
+    'dot name time'
+    '. parts parts'
+    '. bar bar';
+  align-items: center;
+  column-gap: 8px;
+  padding: 8px 0;
+}
+.review-category > .cat-dot {
+  grid-area: dot;
+}
+.review-category > .review-text {
+  grid-area: name;
+}
+.review-category > .review-time {
+  grid-area: time;
+}
+.review-category-parts {
+  grid-area: parts;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  margin-top: 2px;
+}
+/* The category's focus, its length against the period's largest category's (a style width; a
+   transform would stretch the stripes): the part on a priority solid, the part off the plan
+   striped in the same colour inside an outline of it. */
+.category-bar {
+  grid-area: bar;
+  display: flex;
+  height: 8px;
+  min-width: 3px; /* a minute among hours still shows */
+  margin-top: 6px;
+  border-radius: 4px;
+  overflow: hidden;
+  /* Forced colours would drop the fill, the stripes and the outline (as for .cat-dot). */
+  forced-color-adjust: none;
+}
+.category-bar-on {
+  background: var(--cat);
+}
+.category-bar-off {
+  background: repeating-linear-gradient(135deg, var(--cat) 0 3px, transparent 3px 6px);
+  box-shadow: inset 0 0 0 1px var(--cat);
+  /* Its own round end, so the outline follows the bar's curve rather than being cut by its clip. */
+  border-radius: 0 4px 4px 0;
+}
+.category-bar-off:only-child {
+  border-radius: 4px;
+}
+/* No category's bar, which has no data-color: a neutral at 3:1 and up on the surfaces in both
+   themes. Not set on .category-bar, which comes after the [data-color] rules at the same
+   specificity and would override every category's colour. */
+.category-bar--none {
+  --cat: var(--text-2);
+}
+@media (min-width: 640px) {
+  /* The parts move up between the name and the time, as the other rows' meta sits. */
+  .review-category {
+    grid-template-columns: 10px minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'dot name parts time'
+      '. bar bar bar';
+  }
+  .review-category-parts {
+    margin-top: 0;
+  }
 }
 
 /* ---------- board ---------- */

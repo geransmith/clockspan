@@ -730,8 +730,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   rollup (through `useRange`). `reviewRange` walks the period's days up to today that have
   content (`hasContent`, so a day with only a break is left out) and also gives `sessions`
   (completed ones, `focusOf`), `breaks` (count and time, a running one so far, `breakSeconds`),
-  `midDay` (rows added mid-day and how many got ticked) and `typicalDay`: the medians, rounded
-  half up, of the rows written and ticked on the days before today with a row written. Today
+  `midDay` (rows added mid-day, how many got ticked, and `categoryUid`: the category more than
+  half of them had, else null) and `typicalDay`: the medians, rounded half up, of the rows
+  written and ticked on the days before today with a row written. Today
   is left out because it is still going, and it is null under two such days; Review shows it
   for a Week or a Month. The Days tile's target is `periodTarget`: a Week's is the Work week
   setting, as on the timeclock's week line, and a Month's or a Quarter's is `targetSeconds`,
@@ -748,8 +749,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (the days a row had text, how many of them it was ticked, its focus; most days first, then most
   focus, then by title), each day on its own, so a tick never settles another day's miss and a
   same-text one-off stays a task of its own. A routine is titled by its item through
-  `recurringTitles` (uid → title; Review passes none yet) while the item exists, else by its
-  latest row's text, so a retyped row or a deleted item stays one entry. `reviewDay`'s
+  `recurringTitles` (uid → title) while the item exists, else by its latest row's text, so a
+  retyped row or a deleted item stays one entry. `reviewDay`'s
   `routines` (`{ done, total }`) is the retro card's "routines 3 of 4". A session's category is
   `sessionCategory(s, rows)`: the category of the written row its `priorityUid` names on its
   day (none included), else its own `categoryUid` (picked in the day log, or copied by the
@@ -760,7 +761,15 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   category also takes a session off an emptied row that has a category (`priorityUid: null`), since
   none of its own goes by the row's. Linking a session to a written row with the log's select drops
   a category of its own (`sessionLinkEdit`): the row decides from then on, and the server copies a
-  removed row's category only onto sessions with none.
+  removed row's category only onto sessions with none. `byCategory` (`CategoryTime`) is the
+  focus and the ticks by category: each written row's focus (`seconds`) and tick (`done`) under
+  the row's category, and each session off a written row under `sessionCategory`, in `seconds`
+  and in its `offPlanSeconds` part, so an emptied row's sessions count off the plan under its
+  category. A uid outside `known` (the board's categories, removed ones included) counts as
+  none, there and in `midDay`. Most time first, then most ticks, none last; a category with
+  neither is left out. Review passes `known` and `recurringTitles` from `useBoardState()` while
+  the board is on and has loaded, and empty ones otherwise, so with the board off nothing is
+  grouped by category and a routine keeps its latest row's text.
 - **History opens on the route's date** (`route.date ?? today`), with that day picked. The
   calendar holds its month by its first day (`startOfMonth`) and Review its period by `from`,
   so neither moves at midnight. "Open day" first records the picked day (and the Review period,
@@ -810,8 +819,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `SortableCards` and `components/board/` hold every `@dnd-kit` import). A static import of one
   of them from the first screen folds it back into the main chunk. Everything under
   `components/board/` loads only through `Board`'s chunk; what other views share with it
-  (`lib/board.ts` and `hooks/useBoard.tsx` with the sheet and the settings, `Folded` with
-  History's Review, and the category pieces, `CategoryChip`, `CategoryDot` and
+  (`lib/board.ts` and `hooks/useBoard.tsx` with the sheet, the settings and History's Review,
+  `Folded` with Review, and the category pieces, `CategoryChip`, `CategoryDot` (Review's too) and
   `lib/popover.ts`) stays out of that folder and imports no dnd-kit. The sheet renders plain
   `CardFrame`s until the first Customize and stays on `SortableCards` after it, since swapping
   lists remounts the cards. A chunk that fails to load (an upgrade while the page was open)
@@ -1022,7 +1031,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `--warn-ink`, `--danger-ink`), which keeps light-mode text at 4.5:1 and up; the tone itself is
   for fills, borders, icons and bars. A category's colour (`--cat-<id>`, picked by `data-color`)
   is a fill only, in all three token blocks at 3:1 and up on both surfaces (`theme-css.test.ts`
-  checks); a category's name is never drawn in it, and its dot always sits beside the name, since
+  checks): a dot, and Review's By category bars, solid for the time on a priority and striped in
+  the same colour for the time off the plan (No category's bar is `--text-2`, not in the test). A
+  category's name is never drawn in it, and its dot always sits beside the name, since
   the eight colours repeat (`nextColor`); the one exception is the day log's dot, named by its
   `label`. `CategoryChip` is the one category picker: its list is `position: fixed` inside the
   chip's wrapper, placed by `placePopover` (`lib/popover.ts`) and scrolling inside, so no card or
@@ -1157,7 +1168,10 @@ The browser pass for each surface (the logic under it is already tested):
   under it at 375), give an unplanned log session one (its dot before the label) and a Plan
   tomorrow row one, then the same at 1280 in the split's columns.
 - **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
-  Month / Quarter).
+  Month / Quarter). With the board on (`PUT /api/settings {"board":true}`), By category in
+  Review → Week and Month (solid and striped bars, No category last), and Added mid-day's
+  "mostly …" once the last weekday's "Reply to the recruiter" row has a category (the seed gives
+  it none), in light and dark.
 - **The board**: after `npm run seed`, turn it on (`PUT /api/settings {"board":true}`, see "Dev
   data is disposable") and press Board. At 1440: the four columns, capture with Enter and
   Shift+Enter, Move to from each column (a done item to Next shows the notice, and Add a new card
