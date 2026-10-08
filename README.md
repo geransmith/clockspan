@@ -163,7 +163,7 @@ To update:
 docker compose pull && docker compose up -d
 ```
 
-The database stays in the mounted volume. A new release migrates it forward when it starts, and going back to an older release after that isn't supported, so take a backup first (see [Backups](#backups)). To build from source instead, `docker build -t ghcr.io/geransmith/clockspan:latest .` and then `docker compose up -d`; the local image wins over the registry.
+The database stays in the mounted volume. A new release migrates it forward when it starts, and going back to an older release after that isn't supported, so take a backup first (see [Backups](#backups)). A page left open during the update shows *Clockspan was updated* with a **Reload** button the next time it hears from the server; reload it so your changes keep saving. A page opened before v2.4.0 has no such notice, so reload it by hand. To build from source instead, `docker build -t ghcr.io/geransmith/clockspan:latest .` and then `docker compose up -d`; the local image wins over the registry.
 
 ### Unraid
 

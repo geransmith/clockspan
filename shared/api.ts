@@ -297,6 +297,12 @@ export interface OkResponse {
   ok: true;
 }
 
+/**
+ * The header on every signed-in data answer that names the server's version. The web app
+ * compares it with its own build's and asks for a reload when they differ.
+ */
+export const VERSION_HEADER = 'Clockspan-Version';
+
 export const AUTH_MODES = ['none', 'local', 'oidc'] as const;
 export type AuthMode = (typeof AUTH_MODES)[number];
 

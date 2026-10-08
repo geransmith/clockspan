@@ -1,18 +1,29 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from './api';
 import { REQUEST_TIMEOUT_MS, UNAUTHENTICATED_EVENT } from './api';
 import { ApiError } from './lib/apiError';
-import { REQUEST_TIMEOUT } from './lib/copy';
+import { alert, dismissByTag, getBanners, subscribeBanners } from './lib/alerts';
+import { REQUEST_TIMEOUT, UPDATED } from './lib/copy';
+import { VERSION_HEADER } from '../../shared/api.js';
+
+// The real alerts, watched, so a test can see what a banner was raised with as well as the banner.
+vi.mock('./lib/alerts', { spy: true });
 
 /**
  * `request()` is plain `fetch`. The stub records each call and answers with whatever the test
- * queued: JSON by default, or a text body the way a proxy's error page arrives.
+ * queued: JSON by default, or a text body the way a proxy's error page arrives, with the
+ * headers given.
  */
 const fetchMock = vi.fn<typeof fetch>();
 
-function answer(status: number, body: unknown = {}, json = true): void {
-  fetchMock.mockResolvedValueOnce(new Response(json ? JSON.stringify(body) : String(body), { status }));
+function answer(status: number, body: unknown = {}, json = true, headers?: HeadersInit): void {
+  fetchMock.mockResolvedValueOnce(new Response(json ? JSON.stringify(body) : String(body), { status, headers }));
+}
+
+/** A data answer from a server on `version`. */
+function answerFrom(version: string, status = 200, body: unknown = {}): void {
+  answer(status, body, true, { [VERSION_HEADER]: version });
 }
 
 function lastCall(): { path: string; init: RequestInit } {
@@ -239,7 +250,7 @@ describe('failures', () => {
     expect(err).toMatchObject({ message: REQUEST_TIMEOUT });
 
     // The headers came, the body didn't.
-    const stalled = { ok: true, status: 200, json: () => Promise.reject(new DOMException('signal timed out', 'TimeoutError')) };
+    const stalled = { ok: true, status: 200, headers: new Headers(), json: () => Promise.reject(new DOMException('signal timed out', 'TimeoutError')) };
     fetchMock.mockResolvedValueOnce(stalled as unknown as Response);
     await expect(api.putOvertime(DATE, true)).rejects.toThrow(REQUEST_TIMEOUT);
   });
@@ -247,5 +258,76 @@ describe('failures', () => {
   it('leaves a network failure as the error fetch threw', async () => {
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     await expect(api.getRunning()).rejects.toThrow('Failed to fetch');
+  });
+});
+
+describe('an update while the page is open', () => {
+  // The banner is raised once per version the server names, for the life of the page, so each
+  // case names a version of its own.
+  const updated = () => getBanners().filter((b) => b.tag === 'updated');
+  afterEach(() => dismissByTag('updated'));
+
+  it('says nothing while the server names this build, or names nothing: the auth routes, the health check, a page from a proxy', async () => {
+    const raised = vi.fn();
+    const off = subscribeBanners(raised);
+    try {
+      answerFrom(__APP_VERSION__);
+      await api.getSettings();
+      answer(200, { mode: 'none' });
+      await api.getAuth();
+      expect(raised).not.toHaveBeenCalled();
+    } finally {
+      off();
+    }
+  });
+
+  it('raises one quiet banner that stays, and not again for that version once closed', async () => {
+    vi.useFakeTimers();
+    const raised = vi.fn();
+    const off = subscribeBanners(raised);
+    try {
+      answerFrom('9.0.0');
+      await api.getSettings();
+      answerFrom('9.0.0');
+      await api.getDay(DATE);
+      expect(raised).toHaveBeenCalledTimes(1);
+      expect(updated()).toEqual([
+        expect.objectContaining({ title: UPDATED.title, body: UPDATED.body, tone: 'info', action: { label: UPDATED.reload, run: expect.any(Function) } }),
+      ]);
+      // Quiet: no chime, no notification, and kept until closed.
+      expect(alert).toHaveBeenCalledTimes(1);
+      const [raisedWith] = vi.mocked(alert).mock.calls[0]!;
+      expect(raisedWith).toMatchObject({ sound: false, notifications: false, sticky: true });
+      expect(raisedWith).not.toHaveProperty('chime');
+      vi.advanceTimersByTime(60_000);
+      expect(updated()).toHaveLength(1);
+
+      dismissByTag('updated');
+      answerFrom('9.0.0');
+      await api.getSettings();
+      expect(updated()).toEqual([]);
+
+      // The server moved again: that is news.
+      answerFrom('9.0.1');
+      await api.getSettings();
+      expect(updated()).toHaveLength(1);
+    } finally {
+      off();
+      vi.useRealTimers();
+    }
+  });
+
+  it('raises it on a refusal too: a save the new server turns down may be the first answer to bring the news', async () => {
+    answerFrom('9.1.0', 409, { error: 'Refused.' });
+    await expect(api.putSettings({ sound: false })).rejects.toMatchObject({ status: 409 });
+    expect(updated()).toHaveLength(1);
+  });
+
+  it('reloads the page from its button', async () => {
+    const reload = vi.spyOn(window.location, 'reload').mockImplementation(() => {});
+    answerFrom('9.2.0');
+    await api.getRunning();
+    updated()[0]!.action!.run();
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 });

@@ -10,8 +10,10 @@ import pkg from './package.json' with { type: 'json' };
 export default defineConfig({
   root: 'client',
   plugins: [react()],
-  // Shown in Settings → Data. The bundle and the server ship in one image, so this is the running
-  // version; an `edge` build carries the last release's number until the next bump.
+  // Shown in Settings → Data. The bundle and the server ship in one image, so a page loaded now
+  // has the running version; client/src/api.ts compares it with the one the server names on each
+  // data answer, so a page loaded before an update asks for a reload. An `edge` build carries the
+  // last release's number until the next bump.
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   build: {
     outDir: '../dist/client',
