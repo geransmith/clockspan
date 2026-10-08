@@ -235,6 +235,49 @@ describe('FocusTimer', () => {
       expect(chip()!.getAttribute('aria-label')).toBe('Category for the new priority: none');
     });
 
+    it('starts the next session with no category after a start linked to an open row, which adds none', async () => {
+      const row = makePriority(1, 'Ship the fix');
+      vi.mocked(api.startSession).mockResolvedValue(started(makeSession({ label: 'Ship the fix', priorityUid: row.uid })));
+      vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(makeSession({ label: 'Ship the fix', priorityUid: row.uid })) });
+      await renderCard([row], [], makePick([TICKETS]));
+      typeLabel('Call the vendor');
+      fireEvent.click(alsoAdd()!);
+      fireEvent.click(chip()!);
+      fireEvent.click(screen.getByRole('option', { name: 'Tickets' }));
+      // The row's link chip takes the label and the Also add offer with it.
+      fireEvent.click(screen.getByRole('button', { name: /Ship the fix/ }));
+      expect(alsoAdd()).toBeNull();
+      fireEvent.click(start25());
+      await settle();
+      expect(api.putPriorities).not.toHaveBeenCalled();
+      expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Ship the fix', row.uid);
+      fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+      await settle();
+      typeLabel('Email the vendor');
+      fireEvent.click(alsoAdd()!);
+      expect(chip()!.getAttribute('aria-label')).toBe('Category for the new priority: none');
+    });
+
+    it('starts the next session with no category after a start with Also add unticked', async () => {
+      vi.mocked(api.startSession).mockResolvedValue(started());
+      vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(makeSession({ label: 'Call the vendor' })) });
+      await renderCard([], [], makePick([TICKETS]));
+      typeLabel('Call the vendor');
+      fireEvent.click(alsoAdd()!);
+      fireEvent.click(chip()!);
+      fireEvent.click(screen.getByRole('option', { name: 'Tickets' }));
+      fireEvent.click(alsoAdd()!);
+      fireEvent.click(start25());
+      await settle();
+      expect(api.putPriorities).not.toHaveBeenCalled();
+      expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Call the vendor', null);
+      fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+      await settle();
+      typeLabel('Email the vendor');
+      fireEvent.click(alsoAdd()!);
+      expect(chip()!.getAttribute('aria-label')).toBe('Category for the new priority: none');
+    });
+
     it('offers no category again once the row is added, a failed start included', async () => {
       vi.mocked(api.startSession).mockRejectedValueOnce(new Error('The server did not answer in time.'));
       await renderCard([], [], makePick([TICKETS]));
