@@ -6,19 +6,20 @@ import { mergePriorities } from '../../../shared/priorities.js';
 import * as api from '../api';
 import { useDay } from '../hooks/useDay';
 import { SettingsProvider } from '../hooks/useSettings';
-import { playSound, unlockAudio } from '../lib/alerts';
-import { EMPTIED_RECURRING, EMPTIED_ROW, LEFT_OPEN, PRIORITY_WARNINGS, TODAY_OFFER, WARNING_ACTIONS } from '../lib/copy';
+import { useBoardStore } from '../hooks/useBoard';
+import { playSound, unlockAudio, warnQuietly } from '../lib/alerts';
+import { BLANK_NOTE, LEFT_OPEN, PRIORITY_WARNINGS, REMOVE_TASK, RENAME_NOTE, SAVE_FAILED, TODAY_OFFER, WARNING_ACTIONS } from '../lib/copy';
 import type { PrioritySeed } from '../lib/plan';
 import type { CategoryPick } from '../lib/board';
 import {
   completedSession,
   deferred,
+  makeBoard,
   makeCategory,
   makeDay,
   makePick,
   makePriority,
   makeRecurring,
-  makeSession,
   makeSettings,
   NEW_CATEGORY,
   settle,
@@ -41,9 +42,10 @@ async function renderCard(
   offer: MorningOffer | null = null,
 ) {
   const onChange = vi.fn<(p: Priority[], base: Priority[]) => void>();
+  const onDeleteTask = vi.fn<(uid: string) => Promise<void>>(() => Promise.resolve());
   const card = (rows: Priority[], o: MorningOffer | null) => (
     <SettingsProvider>
-      <Priorities priorities={rows} sessions={sessions} onChange={onChange} pick={pick} leftOpen={leftOpen} offer={o} />
+      <Priorities priorities={rows} sessions={sessions} onChange={onChange} onDeleteTask={onDeleteTask} pick={pick} leftOpen={leftOpen} offer={o} />
     </SettingsProvider>
   );
   const view = render(card(priorities, offer));
@@ -51,6 +53,7 @@ async function renderCard(
   return {
     ...view,
     onChange,
+    onDeleteTask,
     saved: () => onChange.mock.lastCall![0],
     /** The card again with these rows, and this offer (the one it had unless given). */
     again: (rows: Priority[], o: MorningOffer | null = offer) => view.rerender(card(rows, o)),
@@ -58,13 +61,20 @@ async function renderCard(
 }
 
 /** A row the card pads the list with: nothing ever written in it. */
-const blank = (position: number) => makePriority(position, '', { uid: null, addedAt: null });
+const blank = (position: number) => makePriority(position, '', { uid: null, addedAt: null, listed: 0 });
 
-/** Today's card on the day store, wired as the sheet wires it. */
+/** Today's card on the day store and the board store, wired as the sheet wires it. */
 function OnTheStore({ pick = null }: { pick?: CategoryPick | null }) {
   const { day, store } = useDay(TODAY);
+  const boardStore = useBoardStore();
   return day ? (
-    <Priorities priorities={day.priorities} sessions={day.sessions} pick={pick} onChange={(p, base) => void store.setPriorities(TODAY, p, base)} />
+    <Priorities
+      priorities={day.priorities}
+      sessions={day.sessions}
+      pick={pick}
+      onChange={(p, base) => void store.setPriorities(TODAY, p, base)}
+      onDeleteTask={(uid) => boardStore.deleteItem(uid)}
+    />
   ) : null;
 }
 
@@ -76,7 +86,7 @@ async function renderOnStore(rows: Priority[], pick: CategoryPick | null = null)
   let onServer = rows;
   const gate = deferred<void>();
   vi.mocked(api.getDay).mockImplementation(() => Promise.resolve(makeDay(TODAY, { priorities: onServer })));
-  vi.mocked(api.putPriorities).mockImplementation(async (_date, list, { base }) => {
+  vi.mocked(api.putPriorities).mockImplementation(async (_date, list, base) => {
     onServer = mergePriorities(onServer, base ?? onServer, list);
     const priorities = onServer;
     await gate.promise;
@@ -218,8 +228,6 @@ describe('Priorities', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove priority 4' }));
     expect(saved()).toHaveLength(3);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add priority' }));
-    // Rows inside the usual count have no remove button.
-    expect(screen.queryByRole('button', { name: /Remove priority/ })).toBeNull();
   });
 
   it('keeps focus on a remove button when a row before the last is removed', async () => {
@@ -241,10 +249,9 @@ describe('Priorities', () => {
     expect(screen.getByRole('button', { name: WARNING_ACTIONS.complete.add })).toBeTruthy();
   });
 
-  it("offers the last plan's open rows on an empty list, as new rows for today", async () => {
+  it("offers the last plan's open rows on an empty list, each its own task, added to today now", async () => {
     const dismiss = vi.fn();
-    // The same row written twice on the last plan, both added the day before.
-    const yesterdays = [makePriority(2, 'Invoices', { addedAt: T0 - DAY_MS }), makePriority(3, 'invoices ', { addedAt: T0 - DAY_MS })];
+    const yesterdays = [makePriority(2, 'Invoices', { addedAt: T0 - DAY_MS, listed: 1, logged: 600 })];
     const { saved } = await renderCard([], { from: 'yesterday', rows: yesterdays, dismiss });
     expect(screen.getByText(LEFT_OPEN.title('yesterday'))).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.dismiss }));
@@ -255,16 +262,7 @@ describe('Priorities', () => {
     // The offer is gone with its buttons; focus lands on the row it filled.
     expect(screen.queryByRole('button', { name: LEFT_OPEN.add })).toBeNull();
     expect(document.activeElement).toBe(textbox(1));
-    expect(saved()[0]).toMatchObject({ position: 1, text: 'Invoices', done: false, addedAt: T0 });
-    expect(saved()[0]!.uid).not.toBe(yesterdays[0]!.uid);
-  });
-
-  it("brings each left-open row over as the same task: today's own row, with its card and category", async () => {
-    const yesterdays = [makePriority(2, 'Invoices', { addedAt: T0 - DAY_MS, cardUid: 'card00000001', categoryUid: 'cafe00000001' })];
-    const { saved } = await renderCard([], { from: 'yesterday', rows: yesterdays, dismiss: vi.fn() });
-    fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
-    expect(saved()[0]).toMatchObject({ position: 1, text: 'Invoices', addedAt: T0, cardUid: 'card00000001', recurringUid: null, categoryUid: 'cafe00000001' });
-    expect(saved()[0]!.uid).not.toBe(yesterdays[0]!.uid);
+    expect(saved()[0]).toMatchObject({ position: 1, text: 'Invoices', done: false, addedAt: T0, uid: yesterdays[0]!.uid, listed: 1, logged: 600 });
   });
 });
 
@@ -282,11 +280,12 @@ describe("Priorities: a row's category", () => {
     expect(chip(2)!.getAttribute('aria-label')).toBe('Category for priority 2: none');
     expect(chip(3)).toBeNull();
     const rows = [...document.querySelectorAll('.priority-row')];
-    // Tick, text, then chip.
+    // Tick, text, chip, then ×.
     expect([...rows[0]!.querySelectorAll('input, textarea, button')].map((el) => el.getAttribute('aria-label'))).toEqual([
       'Priority 1 done',
       'Priority 1',
       'Category for priority 1: Tickets',
+      'Remove priority 1',
     ]);
   });
 
@@ -298,7 +297,6 @@ describe("Priorities: a row's category", () => {
     // The empty row past the usual count: the column, its ×, and no chip.
     expect(chip(4)).toBeNull();
     expect(shown[3]!.querySelector('.priority-end')).toBeNull();
-    expect(shown[3]!.className).toContain('priority-row--removable');
     expect(screen.getByRole('button', { name: 'Remove priority 4' })).toBeTruthy();
   });
 
@@ -314,7 +312,6 @@ describe("Priorities: a row's category", () => {
     await withPick(rows);
     const row = document.querySelectorAll('.priority-row')[3]!;
     expect(row.className).toContain('priority-row--end');
-    expect(row.className).toContain('priority-row--removable');
     expect([...row.querySelectorAll('textarea, button')].map((el) => el.getAttribute('aria-label'))).toEqual([
       'Priority 4',
       'Category for priority 4: none',
@@ -383,7 +380,7 @@ describe("Priorities: a row's category", () => {
     fireEvent.click(chip(1)!);
     fireEvent.click(option('Tickets'));
     expect(api.putPriorities).toHaveBeenCalledTimes(1);
-    const [, list, { base }] = vi.mocked(api.putPriorities).mock.lastCall!;
+    const [, list, base] = vi.mocked(api.putPriorities).mock.lastCall!;
     expect(list[0]).toMatchObject({ uid: report.uid, categoryUid: TICKETS.uid });
     expect(base?.[0]).toMatchObject({ uid: report.uid, categoryUid: null });
     await answer();
@@ -391,45 +388,41 @@ describe("Priorities: a row's category", () => {
     expect(chip(1)!.getAttribute('aria-label')).toBe('Category for priority 1: Tickets');
   });
 
-  it('keeps the category on a cleared row, which shows it again once written in', async () => {
-    const { saved } = await withPick([makePriority(1, 'Report', { categoryUid: TICKETS.uid })]);
+  it('hides the chip while the box is blank, and shows the category again with the name', async () => {
+    await withPick([makePriority(1, 'Report', { categoryUid: TICKETS.uid })]);
+    act(() => textbox(1).focus());
     fireEvent.change(textbox(1), { target: { value: '' } });
-    fireEvent.blur(textbox(1));
-    expect(saved()[0]).toMatchObject({ text: '', uid: makePriority(1, '').uid, categoryUid: TICKETS.uid });
     expect(chip(1)).toBeNull();
-    fireEvent.change(textbox(1), { target: { value: 'Report, take two' } });
+    fireEvent.blur(textbox(1));
     expect(chip(1)!.getAttribute('aria-label')).toBe('Category for priority 1: Tickets');
   });
 });
 
-/** A row carried from the last plan, linked to nothing unless patched. */
-const seed = (text: string, patch: Partial<PrioritySeed> = {}): PrioritySeed => ({ text, cardUid: null, recurringUid: null, categoryUid: null, ...patch });
+/** A row left open on the last plan: its own task, named by its text, in no category unless patched. */
+const seed = (text: string, patch: Partial<PrioritySeed> = {}): PrioritySeed => ({ uid: `left:${text}`, text, categoryUid: null, ...patch });
 
 const QUEUE = makeRecurring('rcur00000001', 'Monitor the queue', { categoryUid: 'cafe00000001' });
 const FOLLOW_UPS = makeRecurring('rcur00000002', 'Follow-ups');
 const STANDUP = makeRecurring('rcur00000003', 'Standup notes');
-/** A row of today's list added from `item`, with text unless given ''. */
-const routineRow = (position: number, item: Recurring, text = item.title, patch: Partial<Priority> = {}) =>
-  makePriority(position, text, { recurringUid: item.uid, categoryUid: item.categoryUid, ...patch });
+/** A row of today's list that is `item`. */
+const routineRow = (position: number, item: Recurring, patch: Partial<Priority> = {}) =>
+  makePriority(position, item.title, { uid: item.uid, recurring: true, categoryUid: item.categoryUid, ...patch });
 
 describe('Priorities: the left-open block, with the board off', () => {
-  it('lists the seeds it is given and brings them over as written: a card under its title, the same card', async () => {
-    const seeds = [
-      { text: 'Retitled on the board', cardUid: 'card00000001', recurringUid: null, categoryUid: null },
-      { text: 'No card', cardUid: null, recurringUid: null, categoryUid: 'cafe00000001' },
-    ];
+  it('lists the seeds it is given and brings each over as its own task, in its category', async () => {
+    const seeds = [seed('Invoices'), seed('Call the bank', { categoryUid: 'cafe00000001' })];
     const { saved } = await renderCard([], { from: 'yesterday', rows: seeds, dismiss: vi.fn() });
-    expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Retitled on the board', 'No card']);
+    expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Invoices', 'Call the bank']);
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
-    expect(saved().map((p) => [p.text, p.cardUid, p.categoryUid])).toEqual([
-      ['Retitled on the board', 'card00000001', null],
-      ['No card', null, 'cafe00000001'],
+    expect(saved().map((p) => [p.text, p.uid, p.categoryUid])).toEqual([
+      ['Invoices', 'left:Invoices', null],
+      ['Call the bank', 'left:Call the bank', 'cafe00000001'],
       ['', null, null],
     ]);
   });
 
   it('shows while the list holds only routines, and goes once a one-off is written', async () => {
-    const rows = [makePriority(1, 'Monitor the queue', { recurringUid: 'rcur00000001', done: true })];
+    const rows = [routineRow(1, QUEUE, { done: true })];
     await renderCard(rows, { from: 'yesterday', rows: [seed('Invoices')], dismiss: vi.fn() });
     expect(screen.getByText(LEFT_OPEN.title('yesterday'))).toBeTruthy();
     expect(document.querySelector('.today-offer')).toBeNull();
@@ -437,17 +430,8 @@ describe('Priorities: the left-open block, with the board off', () => {
     expect(screen.queryByText(LEFT_OPEN.title('yesterday'))).toBeNull();
   });
 
-  it('puts the focus on the first row left free when it fills none, as the rows stand after the save', async () => {
-    // The routine's text: the leftover comes over once, and the routine moves up to row 1.
-    const routine = makePriority(2, 'Invoices', { recurringUid: 'rcur00000001' });
-    const { saved } = await renderCard([blank(1), routine], { from: 'yesterday', rows: [seed('Invoices')], dismiss: vi.fn() });
-    fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
-    expect(saved().map((p) => p.text)).toEqual(['Invoices', '', '']);
-    expect(document.activeElement).toBe(textbox(2));
-  });
-
   it('puts the focus on the row it filled, past a routine kept ahead of it', async () => {
-    const routine = makePriority(1, 'Monitor the queue', { recurringUid: 'rcur00000001' });
+    const routine = routineRow(1, QUEUE);
     const { saved } = await renderCard([routine], { from: 'yesterday', rows: [seed('Invoices')], dismiss: vi.fn() });
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
     expect(saved().map((p) => p.text)).toEqual(['Monitor the queue', 'Invoices', '']);
@@ -478,12 +462,10 @@ describe('Priorities: the morning offer, with the board on', () => {
     expect(screen.queryByRole('button', { name: LEFT_OPEN.dismiss })).toBeNull();
   });
 
-  it('ticks fewer routines for those already on the list, and drops a leftover that comes twice', async () => {
+  it('ticks fewer routines for those already on the list', async () => {
     perDay(2);
     const onList = routineRow(1, makeRecurring('rcur00000009', 'Weekly report'));
-    const leftovers = [seed('Invoices', { cardUid: 'card00000001' }), seed('Invoices, again', { cardUid: 'card00000001' }), seed('Email'), seed('Email')];
-    // An emptied routine row isn't on the list: it doesn't count.
-    await withOffer([onList, routineRow(2, STANDUP, '')], offerOf({ leftovers: left(leftovers), recurring: [QUEUE, FOLLOW_UPS] }));
+    await withOffer([onList], offerOf({ leftovers: left([seed('Invoices'), seed('Email')]), recurring: [QUEUE, FOLLOW_UPS] }));
     expect(ticks('Monitor the queue', 'Follow-ups')).toEqual([true, false]);
     expect(shown()).toEqual(['Invoices', 'Email', 'Monitor the queue', 'Follow-ups']);
   });
@@ -501,7 +483,12 @@ describe('Priorities: the morning offer, with the board on', () => {
     // The same live region all along, so the line is heard when it comes.
     expect(document.querySelector('.today-offer [role="status"]')).toBe(line);
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
-    expect(saved().map((p) => p.recurringUid)).toEqual([null, null, null, QUEUE.uid, FOLLOW_UPS.uid, STANDUP.uid]);
+    expect(saved().map((p) => p.recurring)).toEqual([false, false, false, true, true, true]);
+    expect(
+      saved()
+        .slice(3)
+        .map((p) => p.uid),
+    ).toEqual([QUEUE.uid, FOLLOW_UPS.uid, STANDUP.uid]);
   });
 
   it('counts the routines on the list toward the line', async () => {
@@ -513,11 +500,12 @@ describe('Priorities: the morning offer, with the board on', () => {
     expect(over()).toBe(TODAY_OFFER.over(1));
   });
 
-  it('counts a routine row typed into on the draft at once, before it saves, toward the ticks and the line', async () => {
+  it("counts a routine's row toward the ticks and the line while its box is blank", async () => {
     perDay(1);
-    await withOffer([routineRow(1, STANDUP, '')], offerOf({ recurring: [QUEUE] }));
-    expect(ticks('Monitor the queue')).toEqual([true]);
-    fireEvent.change(textbox(1), { target: { value: 'Standup' } });
+    await withOffer([routineRow(1, STANDUP)], offerOf({ recurring: [QUEUE, STANDUP] }));
+    fireEvent.change(textbox(1), { target: { value: '' } });
+    // Still the routine's row: it isn't offered again, and it takes the day's one routine.
+    expect(shown()).toEqual(['Monitor the queue']);
     expect(ticks('Monitor the queue')).toEqual([false]);
     fireEvent.click(box('Monitor the queue'));
     expect(over()).toBe(TODAY_OFFER.over(1));
@@ -526,17 +514,17 @@ describe('Priorities: the morning offer, with the board on', () => {
   it('adds what is ticked in one save, the leftovers first and the routines after the padded rows, and answers every item shown', async () => {
     perDay(2);
     const answer = vi.fn();
-    const leftovers = [seed('Invoices', { cardUid: 'card00000001' }), seed('Email')];
+    const leftovers = [seed('Invoices'), seed('Email')];
     const { onChange, saved } = await withOffer([], offerOf({ leftovers: left(leftovers), recurring: [QUEUE, FOLLOW_UPS, STANDUP], answer }));
     fireEvent.click(box('Email'));
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
     expect(onChange).toHaveBeenCalledTimes(1);
-    expect(saved().map((p) => [p.position, p.text, p.cardUid, p.recurringUid])).toEqual([
-      [1, 'Invoices', 'card00000001', null],
-      [2, '', null, null],
-      [3, '', null, null],
-      [4, 'Monitor the queue', null, QUEUE.uid],
-      [5, 'Follow-ups', null, FOLLOW_UPS.uid],
+    expect(saved().map((p) => [p.position, p.text, p.uid, p.recurring])).toEqual([
+      [1, 'Invoices', 'left:Invoices', false],
+      [2, '', null, false],
+      [3, '', null, false],
+      [4, 'Monitor the queue', QUEUE.uid, true],
+      [5, 'Follow-ups', FOLLOW_UPS.uid, true],
     ]);
     expect(saved()[3]).toMatchObject({ addedAt: T0, categoryUid: QUEUE.categoryUid });
     // Standup notes was shown and left unticked: answered all the same.
@@ -547,19 +535,6 @@ describe('Priorities: the morning offer, with the board on', () => {
     expect(shown()).toEqual(['Standup notes']);
   });
 
-  it('puts the focus on the first row Add filled: an emptied routine row taken back', async () => {
-    const emptied = routineRow(2, QUEUE, '', { uid: 'emptied00001', addedAt: 50 });
-    const { saved } = await withOffer([makePriority(1, 'Report'), emptied], offerOf({ recurring: [QUEUE, FOLLOW_UPS] }));
-    fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
-    expect(saved().map((p) => [p.text, p.uid])).toEqual([
-      ['Report', makePriority(1, '').uid],
-      ['Monitor the queue', 'emptied00001'],
-      ['', null],
-      ['Follow-ups', saved()[3]!.uid],
-    ]);
-    expect(document.activeElement).toBe(textbox(2));
-  });
-
   it('puts the focus on a routine Add put after the padded rows, a row the card had not drawn yet', async () => {
     await withOffer([], offerOf({ recurring: [QUEUE] }));
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
@@ -568,33 +543,30 @@ describe('Priorities: the morning offer, with the board on', () => {
 
   it('with nothing ticked, adds no row, answers every item shown and puts the focus where a new priority goes', async () => {
     const answer = vi.fn();
-    const { saved } = await withOffer(
-      [makePriority(1, ''), blank(2), makePriority(3, 'Monitor the queue', { recurringUid: 'rcur00000009' })],
-      offerOf({ recurring: [QUEUE], answer }),
-    );
+    const { saved } = await withOffer([blank(1), routineRow(2, makeRecurring('rcur00000009', 'Weekly report'))], offerOf({ recurring: [QUEUE], answer }));
     fireEvent.click(box('Monitor the queue'));
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
-    expect(saved().map((p) => p.text)).toEqual(['', '', 'Monitor the queue']);
+    expect(saved().map((p) => p.text)).toEqual(['', 'Weekly report', '']);
     expect(answer).toHaveBeenCalledExactlyOnceWith([QUEUE.uid], false);
-    expect(document.activeElement).toBe(textbox(2));
+    expect(document.activeElement).toBe(textbox(1));
   });
 
   it('answers every item shown with Not today, saving nothing, and puts the focus where a new priority goes', async () => {
     const answer = vi.fn();
     const leftovers = [seed('Invoices')];
-    const { onChange } = await withOffer([makePriority(1, '')], offerOf({ leftovers: left(leftovers), recurring: [QUEUE, FOLLOW_UPS], answer }));
+    const { onChange } = await withOffer([routineRow(1, STANDUP)], offerOf({ leftovers: left(leftovers), recurring: [QUEUE, FOLLOW_UPS], answer }));
     fireEvent.click(box('Follow-ups'));
     fireEvent.click(screen.getByRole('button', { name: TODAY_OFFER.notToday }));
     expect(answer).toHaveBeenCalledExactlyOnceWith([QUEUE.uid, FOLLOW_UPS.uid], true);
     expect(onChange).not.toHaveBeenCalled();
-    // Past the cleared row, which is still its old item.
     expect(document.activeElement).toBe(textbox(2));
   });
 
   it('is Start fresh with only leftovers shown, and answers no routine', async () => {
     const answer = vi.fn();
-    const cleared = [1, 2, 3].map((n) => makePriority(n, ''));
-    await withOffer(cleared, offerOf({ leftovers: left([seed('Invoices')]), answer }));
+    // Every row is a routine's: no free row, so the focus goes to Add priority.
+    const routines = [QUEUE, FOLLOW_UPS, STANDUP].map((item, i) => routineRow(i + 1, item));
+    await withOffer(routines, offerOf({ leftovers: left([seed('Invoices')]), answer }));
     expect(screen.queryByRole('button', { name: TODAY_OFFER.notToday })).toBeNull();
     expect(screen.queryByText(TODAY_OFFER.recurring)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.dismiss }));
@@ -617,7 +589,7 @@ describe('Priorities: the morning offer, with the board on', () => {
     await withOffer([routineRow(1, QUEUE)], offerOf({ leftovers: left([seed('Invoices')]), recurring: [QUEUE, FOLLOW_UPS], answer }));
     expect(screen.getByText(LEFT_OPEN.title('yesterday'))).toBeTruthy();
     expect(shown()).toEqual(['Invoices', 'Follow-ups']);
-    // The queue's row could still be emptied or removed today, and the notice offer it again.
+    // The queue's row could still be removed today, and the notice offer it again.
     fireEvent.click(screen.getByRole('button', { name: TODAY_OFFER.notToday }));
     expect(answer).toHaveBeenCalledExactlyOnceWith([FOLLOW_UPS.uid], true);
   });
@@ -641,7 +613,7 @@ describe('Priorities: routines on the list', () => {
   });
 
   it('marks a written routine row before its chip while the board is on, ticked or not, and no other row', async () => {
-    const rows = [routineRow(1, QUEUE), routineRow(2, FOLLOW_UPS, 'Follow-ups', { done: true }), makePriority(3, 'Report'), routineRow(4, STANDUP, '')];
+    const rows = [routineRow(1, QUEUE), routineRow(2, FOLLOW_UPS, { done: true }), makePriority(3, 'Report'), blank(4)];
     await renderCard(rows, undefined, [], makePick());
     const ends = [...document.querySelectorAll('.priority-row')].map((r) => [...(r.querySelector('.priority-end')?.children ?? [])].map((el) => el.className));
     expect(ends).toEqual([['repeat-mark', 'category-wrap'], ['repeat-mark', 'category-wrap'], ['category-wrap'], []]);
@@ -652,132 +624,228 @@ describe('Priorities: routines on the list', () => {
     await renderCard([routineRow(1, QUEUE)]);
     expect(screen.queryByRole('img', { name: 'Repeats' })).toBeNull();
   });
+});
 
-  describe('an emptied routine row', () => {
-    const note = () => screen.queryByText(EMPTIED_RECURRING);
+describe('Priorities: a blank name', () => {
+  const rows = () => [makePriority(1, 'Report'), makePriority(2, 'Email')];
+  const note = (name: string) => screen.queryByText(BLANK_NOTE(name));
+  const blankOut = (n: number) => {
+    act(() => textbox(n).focus());
+    fireEvent.change(textbox(n), { target: { value: '' } });
+  };
 
-    it("says it is still the routine, as the field's description, until a key is typed: with no time logged too", async () => {
-      await renderCard([routineRow(1, QUEUE), makePriority(2, 'Report')]);
-      expect(note()).toBeNull();
-      fireEvent.change(textbox(1), { target: { value: '' } });
-      expect(note()).not.toBeNull();
-      expect(textbox(1).getAttribute('aria-describedby')).toBe(note()!.id);
-      fireEvent.change(textbox(1), { target: { value: 'Q' } });
-      expect(note()).toBeNull();
-      expect(textbox(1).hasAttribute('aria-describedby')).toBe(false);
-    });
+  it("saves the name as it was, says so as the field's description, and brings the name back when the box is left", async () => {
+    const { onChange } = await renderCard(rows());
+    blankOut(1);
+    expect(textbox(1).getAttribute('aria-describedby')).toBe(note('Report')!.id);
+    await settle(400);
+    expect(textbox(1).value).toBe('');
+    fireEvent.blur(textbox(1));
+    expect(textbox(1).value).toBe('Report');
+    expect(note('Report')).toBeNull();
+    expect(textbox(1).hasAttribute('aria-describedby')).toBe(false);
+    expect(onChange).toHaveBeenCalled();
+    for (const [list] of onChange.mock.calls) expect(list.map((p) => p.text)).toEqual(['Report', 'Email', '']);
+  });
 
-    it('says it in place of the note on the time logged, with the board on or off', async () => {
-      const sessions = [completedSession(1, T0, 25 * 60, { priorityUid: makePriority(1, '').uid })];
-      for (const pick of [null, makePick()]) {
-        const { unmount } = await renderCard([routineRow(1, QUEUE, ''), makePriority(2, 'Report')], undefined, sessions, pick);
-        expect(note()).not.toBeNull();
-        expect(screen.queryByText(EMPTIED_ROW('25m'))).toBeNull();
-        expect(document.querySelectorAll('.priority-held')).toHaveLength(1);
-        unmount();
-      }
-    });
+  it('brings the name back on Escape, with the focus kept in the box', async () => {
+    await renderCard(rows());
+    blankOut(2);
+    fireEvent.keyDown(textbox(2), { key: 'Escape' });
+    expect(textbox(2).value).toBe('Email');
+    expect(document.activeElement).toBe(textbox(2));
+    // Escape on a box with text leaves it be.
+    fireEvent.change(textbox(2), { target: { value: 'Email Bob' } });
+    fireEvent.keyDown(textbox(2), { key: 'Escape' });
+    expect(textbox(2).value).toBe('Email Bob');
+  });
+
+  it("keeps the row's tick, with its box disabled, and saves no change to it", async () => {
+    const { onChange } = await renderCard(rows());
+    fireEvent.click(tick(1));
+    blankOut(1);
+    expect(tick(1).checked).toBe(true);
+    expect(tick(1).disabled).toBe(true);
+    await settle(400);
+    fireEvent.blur(textbox(1));
+    expect(tick(1).checked).toBe(true);
+    for (const [list] of onChange.mock.calls) expect([list[0]!.text, list[0]!.done]).toEqual(['Report', true]);
+  });
+
+  it("saves the other rows' changes with the name as it was, before and as the card goes away", async () => {
+    const { onChange, unmount, saved } = await renderCard(rows());
+    blankOut(1);
+    fireEvent.click(tick(2));
+    expect(saved().map((p) => [p.text, p.done])).toEqual([
+      ['Report', false],
+      ['Email', true],
+      ['', false],
+    ]);
+    fireEvent.change(textbox(2), { target: { value: 'Email Bob' } });
+    const sent = onChange.mock.calls.length;
+    unmount();
+    expect(onChange).toHaveBeenCalledTimes(sent + 1);
+    expect(saved().map((p) => p.text)).toEqual(['Report', 'Email Bob', '']);
+  });
+
+  it('keeps the box empty while it has the focus, though the stored list changes under it', async () => {
+    const { again } = await renderCard(rows());
+    blankOut(1);
+    fireEvent.click(tick(2));
+    again([makePriority(1, 'Report'), makePriority(2, 'Email', { done: true })]);
+    expect(textbox(1).value).toBe('');
+    fireEvent.blur(textbox(1));
+    expect(textbox(1).value).toBe('Report');
+  });
+
+  it('makes a row typed and emptied before it was saved a free row again, with no note and nothing sent', async () => {
+    const { onChange } = await renderCard();
+    act(() => textbox(1).focus());
+    fireEvent.change(textbox(1), { target: { value: 'Call' } });
+    fireEvent.change(textbox(1), { target: { value: '' } });
+    expect(document.querySelector('.priority-note')).toBeNull();
+    fireEvent.blur(textbox(1));
+    expect(onChange).toHaveBeenLastCalledWith([blank(1), blank(2), blank(3)], [blank(1), blank(2), blank(3)]);
+    expect(screen.queryByRole('button', { name: 'Remove priority 1' })).toBeNull();
   });
 });
 
-describe('Priorities: a cleared row', () => {
-  const written = () => [makePriority(1, 'Report'), makePriority(2, 'Invoices'), makePriority(3, 'Email')];
-  /** 25 minutes logged on row 2. */
-  const logged = (patch: Parameters<typeof completedSession>[3] = {}) => completedSession(1, T0, 25 * 60, { priorityUid: makePriority(2, '').uid, ...patch });
-  const note = () => screen.queryByText(EMPTIED_ROW('25m'));
+describe('Priorities: the rename note', () => {
+  const note = (n: number) => screen.queryByText(RENAME_NOTE(n));
 
-  it("says the time logged on it stays with it, as the field's description, until a key is typed", async () => {
-    await renderCard(written(), undefined, [logged()]);
-    expect(note()).toBeNull();
-    fireEvent.change(textbox(2), { target: { value: '' } });
-    expect(note()).not.toBeNull();
-    expect(textbox(2).getAttribute('aria-describedby')).toBe(note()!.id);
-    // The same item, renamed: the first key takes the note and the field's description away.
-    fireEvent.change(textbox(2), { target: { value: 'C' } });
-    expect(note()).toBeNull();
-    expect(textbox(2).hasAttribute('aria-describedby')).toBe(false);
+  it("shows while a name that earlier days' lists hold is retyped in the focused box, as its description", async () => {
+    await renderCard([makePriority(1, 'Report', { earlier: 3 }), makePriority(2, 'Email')]);
+    act(() => textbox(1).focus());
+    expect(note(3)).toBeNull();
+    fireEvent.change(textbox(1), { target: { value: 'Report for Acme' } });
+    expect(textbox(1).getAttribute('aria-describedby')).toBe(note(3)!.id);
+    // Typed back to the name it had: nothing renamed.
+    fireEvent.change(textbox(1), { target: { value: 'Report' } });
+    expect(note(3)).toBeNull();
+    fireEvent.change(textbox(1), { target: { value: 'Report for Acme' } });
+    fireEvent.blur(textbox(1));
+    expect(note(3)).toBeNull();
   });
 
-  it('shows on a row stored empty, and adds up every completed session on it', async () => {
-    const uid = makePriority(2, '').uid;
-    const sessions = [completedSession(1, T0, 10 * 60, { priorityUid: uid }), completedSession(2, T0 + 1, 15 * 60, { priorityUid: uid })];
-    await renderCard([makePriority(1, 'Report'), makePriority(2, ''), makePriority(3, 'Email')], undefined, sessions);
-    expect(note()).not.toBeNull();
+  it('says nothing for a task no earlier day holds', async () => {
+    await renderCard([makePriority(1, 'Report', { listed: 2 })]);
+    act(() => textbox(1).focus());
+    fireEvent.change(textbox(1), { target: { value: 'Report for Acme' } });
+    expect(document.querySelector('.priority-note')).toBeNull();
   });
+});
 
-  it('names no amount for less than a minute, rather than 0m', async () => {
-    // Finish pressed 30 s in logs the 30 s.
-    const early = logged({ endedAt: T0 + 30 * 1000, durationSeconds: 30 });
-    await renderCard([makePriority(1, 'Report'), makePriority(2, ''), makePriority(3, 'Email')], undefined, [early]);
-    expect(screen.queryByText(EMPTIED_ROW(null))).not.toBeNull();
-    expect(screen.queryByText(EMPTIED_ROW('0m'))).toBeNull();
-  });
+describe('Priorities: ×', () => {
+  const x = (n: number) => screen.getByRole('button', { name: `Remove priority ${n}` });
+  const dialog = () => screen.queryByRole('dialog');
+  const offDay = () => fireEvent.click(screen.getByRole('button', { name: REMOVE_TASK.offDay }));
+  const everywhere = () => fireEvent.click(screen.getByRole('button', { name: REMOVE_TASK.everywhere }));
 
-  it('says nothing for a row with no time logged on it, only a running or cancelled session, or one never written in', async () => {
-    const uid = makePriority(2, '').uid;
-    const sessions: Session[] = [
-      makeSession({ id: 1, priorityUid: uid }),
-      logged({ id: 2, status: 'cancelled' }),
-      completedSession(3, T0, 25 * 60, { priorityUid: makePriority(1, '').uid }),
-      completedSession(4, T0, 25 * 60),
-    ];
-    await renderCard([makePriority(1, 'Report'), makePriority(2, ''), makePriority(3, '', { uid: null, addedAt: null })], undefined, sessions);
-    expect(document.querySelector('.priority-held')).toBeNull();
-    expect(textbox(2).hasAttribute('aria-describedby')).toBe(false);
-  });
-
-  it('is passed by Add priority, which adds a row past it with no nudge while two rows have text', async () => {
-    const cleared = makePriority(2, '');
-    const { saved } = await renderCard([makePriority(1, 'Report'), cleared, makePriority(3, 'Email')], undefined, [logged()]);
-    fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
-    expect(screen.getByRole('status').textContent).toBe('');
-    expect(saved()).toHaveLength(4);
-    expect(saved()[1]).toEqual(cleared);
-    expect(document.activeElement).toBe(textbox(4));
-    expect(note()).not.toBeNull();
-  });
-
-  it('is passed by Start fresh, which focuses the first row never written in, else Add priority', async () => {
-    const offer = { from: 'yesterday', rows: [makePriority(2, 'Invoices', { addedAt: T0 - DAY_MS })], dismiss: vi.fn() };
-    const { again } = await renderCard([makePriority(1, '')], offer, [logged()]);
-    fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.dismiss }));
-    expect(offer.dismiss).toHaveBeenCalled();
-    expect(document.activeElement).toBe(textbox(2));
-    // Every row cleared: the next row is one Add priority makes.
-    again([makePriority(1, ''), makePriority(2, ''), makePriority(3, '')]);
-    fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.dismiss }));
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add priority' }));
-  });
-
-  it("stays when the last plan's open rows are added after it", async () => {
-    const cleared = makePriority(1, '');
-    const offer = { from: 'yesterday', rows: [makePriority(2, 'Invoices', { addedAt: T0 - DAY_MS })], dismiss: vi.fn() };
-    const { saved } = await renderCard([cleared], offer);
-    fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
-    expect(saved().map((p) => p.text)).toEqual(['', 'Invoices', '']);
-    expect(saved()[0]).toEqual(cleared);
-    expect(saved()[1]!.uid).not.toBe(cleared.uid);
-    // Focus lands on the row the offer filled.
-    expect(document.activeElement).toBe(textbox(2));
-  });
-
-  it('is taken back by the left-open row whose card it holds, with its uid and the time logged on it', async () => {
-    const cleared = makePriority(2, '', { cardUid: 'card00000001' });
-    const rows = [
-      makePriority(1, 'Invoices', { uid: 'monday000001', addedAt: T0 - DAY_MS, cardUid: 'card00000001' }),
-      makePriority(2, 'Email', { uid: 'monday000002', addedAt: T0 - DAY_MS }),
-    ];
-    const { saved } = await renderCard([makePriority(1, '', { uid: null, addedAt: null }), cleared], { from: 'yesterday', rows, dismiss: vi.fn() }, [logged()]);
-    expect(note()).not.toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
-    expect(saved().map((p) => [p.position, p.text, p.uid, p.cardUid])).toEqual([
-      [1, 'Invoices', cleared.uid, 'card00000001'],
-      [2, 'Email', saved()[1]!.uid, null],
-      [3, '', null, null],
+  it('is on every row with a task, and on every row past Rows per day', async () => {
+    await renderCard([makePriority(1, 'Report'), blank(2), blank(3), blank(4)]);
+    expect(screen.getAllByRole('button', { name: /^Remove priority/ }).map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Remove priority 1',
+      'Remove priority 4',
     ]);
-    expect(saved()[1]!.uid).not.toBe('monday000002');
-    expect(note()).toBeNull();
-    expect(document.activeElement).toBe(textbox(1));
+  });
+
+  it('takes a task on no other day and with no time logged off at once, leaving a free row with the focus in it', async () => {
+    const { saved, onDeleteTask } = await renderCard([makePriority(1, 'Report'), makePriority(2, 'Email'), makePriority(3, 'Invoices')]);
+    fireEvent.click(x(2));
+    expect(dialog()).toBeNull();
+    expect(saved().map((p) => [p.text, p.uid])).toEqual([
+      ['Report', makePriority(1, '').uid],
+      ['', null],
+      ['Invoices', makePriority(3, '').uid],
+    ]);
+    expect(document.activeElement).toBe(textbox(2));
+    expect(onDeleteTask).not.toHaveBeenCalled();
+  });
+
+  it("never asks on a recurring priority's row", async () => {
+    const { saved } = await renderCard([routineRow(1, QUEUE, { listed: 5, logged: 3000 })]);
+    fireEvent.click(x(1));
+    expect(dialog()).toBeNull();
+    expect(saved()[0]).toEqual(blank(1));
+  });
+
+  it('asks about a task on other days, or with time logged on it, a session logged since the day was read included', async () => {
+    const cases: [Priority, Session[], string][] = [
+      [makePriority(1, 'Email', { listed: 3 }), [], REMOVE_TASK.body(2, null)],
+      [makePriority(1, 'Email', { logged: 80 * 60 }), [], REMOVE_TASK.body(0, '1h 20m')],
+      [makePriority(1, 'Email'), [completedSession(1, T0, 30, { priorityUid: makePriority(1, '').uid })], REMOVE_TASK.body(0, '1m')],
+    ];
+    for (const [row, sessions, body] of cases) {
+      const { onChange, unmount } = await renderCard([row], undefined, sessions);
+      fireEvent.click(x(1));
+      expect(dialog()!.textContent).toContain(REMOVE_TASK.title('Email'));
+      expect(dialog()!.textContent).toContain(body);
+      expect(onChange).not.toHaveBeenCalled();
+      unmount();
+    }
+  });
+
+  it('changes nothing on Cancel, and gives the focus back to the ×', async () => {
+    const { onChange, onDeleteTask } = await renderCard([makePriority(1, 'Email', { listed: 2 })]);
+    act(() => x(1).focus());
+    fireEvent.click(x(1));
+    fireEvent.click(screen.getByRole('button', { name: REMOVE_TASK.cancel }));
+    expect(dialog()).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onDeleteTask).not.toHaveBeenCalled();
+  });
+
+  it('takes the task off this day only with Off this day', async () => {
+    const { saved, onDeleteTask } = await renderCard([makePriority(1, 'Report'), makePriority(2, 'Email', { listed: 2 })]);
+    fireEvent.click(x(2));
+    offDay();
+    expect(dialog()).toBeNull();
+    expect(saved()[1]).toEqual(blank(2));
+    expect(document.activeElement).toBe(textbox(2));
+    expect(onDeleteTask).not.toHaveBeenCalled();
+  });
+
+  it('removes a row past Rows per day with Off this day', async () => {
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ priorityCount: 1 }));
+    const { saved } = await renderCard([makePriority(1, 'Report'), makePriority(2, 'Email', { listed: 2 })]);
+    fireEvent.click(x(2));
+    offDay();
+    expect(saved().map((p) => p.text)).toEqual(['Report']);
+  });
+
+  it('takes the task off this day, then deletes it everywhere, with Delete everywhere', async () => {
+    const { onChange, saved, onDeleteTask } = await renderCard([makePriority(1, 'Email', { logged: 600 })]);
+    onDeleteTask.mockImplementation(() => {
+      expect(onChange).toHaveBeenCalledTimes(1);
+      return Promise.resolve();
+    });
+    fireEvent.click(x(1));
+    everywhere();
+    expect(saved()[0]).toEqual(blank(1));
+    expect(onDeleteTask).toHaveBeenCalledExactlyOnceWith(makePriority(1, '').uid);
+    await settle();
+    expect(warnQuietly).not.toHaveBeenCalled();
+  });
+
+  it('raises the banner when the delete fails, and leaves the task off this day', async () => {
+    const { saved, onDeleteTask } = await renderCard([makePriority(1, 'Email', { listed: 2 })]);
+    onDeleteTask.mockRejectedValue(new Error('Request failed (500)'));
+    fireEvent.click(x(1));
+    everywhere();
+    await settle();
+    expect(warnQuietly).toHaveBeenCalledExactlyOnceWith({ ...SAVE_FAILED, tag: 'save-failed' });
+    expect(saved()[0]).toEqual(blank(1));
+  });
+
+  it('still deletes everywhere when another device took the task off this list while it asked', async () => {
+    const email = makePriority(1, 'Email', { listed: 2 });
+    const { again, onChange, onDeleteTask } = await renderCard([email]);
+    fireEvent.click(x(1));
+    again([]);
+    everywhere();
+    expect(dialog()).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onDeleteTask).toHaveBeenCalledExactlyOnceWith(email.uid);
   });
 });
 
@@ -788,7 +856,7 @@ describe('Priorities on the day store', () => {
     await settle();
     fireEvent.click(tick(1));
     await answer();
-    const sent = vi.mocked(api.putPriorities).mock.calls.map(([, list, { base }]) => [list[0]!.done, base![0]!.done]);
+    const sent = vi.mocked(api.putPriorities).mock.calls.map(([, list, base]) => [list[0]!.done, base![0]!.done]);
     expect(sent).toEqual([
       [true, false],
       [false, true],
@@ -807,5 +875,23 @@ describe('Priorities on the day store', () => {
     await answer();
     expect(stored().map((p) => p.text)).toEqual(['Report', 'Invoices', 'Email']);
     expect(screen.queryByLabelText('Priority 4')).toBeNull();
+  });
+
+  it('sends the list without the row, then deletes the task everywhere, with Delete everywhere', async () => {
+    vi.mocked(api.deleteItem).mockResolvedValue(makeBoard());
+    const { stored, answer } = await renderOnStore([makePriority(1, 'Report'), makePriority(2, 'Email', { listed: 3 })]);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove priority 2' }));
+    fireEvent.click(screen.getByRole('button', { name: REMOVE_TASK.everywhere }));
+    await settle();
+    // The delete waits for today's save without the row.
+    expect(api.deleteItem).not.toHaveBeenCalled();
+    await answer();
+    expect(
+      stored()
+        .filter((p) => p.uid != null)
+        .map((p) => p.text),
+    ).toEqual(['Report']);
+    expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith(makePriority(2, '').uid);
+    expect(vi.mocked(api.putPriorities).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(api.deleteItem).mock.invocationCallOrder[0]!);
   });
 });

@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { LEFT_OPEN, TODAY_OFFER } from '../lib/copy';
-import { sameItem, type PrioritySeed } from '../lib/plan';
+import type { PrioritySeed } from '../lib/plan';
 import { offerPicks, recurringCount } from '../lib/recurring';
 import type { Priority, Recurring } from '../types';
 
@@ -43,16 +43,9 @@ interface Props {
   onSkip: () => void;
 }
 
-/** A leftover's key: its card, else its text. */
-const leftoverKey = (seed: PrioritySeed) => (seed.cardUid != null ? `card:${seed.cardUid}` : `text:${seed.text}`);
+/** A leftover's key: its task (a day's list holds a task once, so each is one box). */
+const leftoverKey = (seed: PrioritySeed) => `task:${seed.uid ?? seed.text}`;
 const recurringKey = (item: Recurring) => `rcur:${item.uid}`;
-
-/** The leftovers less those `planNext` would skip as an earlier one's item (`sameItem`), so each box is one row Add brings. */
-function distinct(rows: PrioritySeed[]): PrioritySeed[] {
-  const kept: PrioritySeed[] = [];
-  for (const seed of rows) if (!kept.some((k) => sameItem(k, seed))) kept.push(seed);
-  return kept;
-}
 
 /**
  * One calm notice with two groups, "Still open from …" and "Repeats today", each item a box to
@@ -69,7 +62,7 @@ export function TodayOffer({ leftovers, recurring, rows, perDay, onAdd, onSkip }
   // Each group is named by its heading, so a box tabbed to says which group it is in.
   const leftoversId = useId();
   const recurringId = useId();
-  const seeds = distinct(leftovers?.rows ?? []);
+  const seeds = leftovers?.rows ?? [];
   const picks = offerPicks(recurring, rows, perDay);
   const tickedSeeds = seeds.filter((seed) => ticked(leftoverKey(seed), true));
   const tickedRecurring = recurring.filter((item) => ticked(recurringKey(item), picks.has(item.uid)));

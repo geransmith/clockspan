@@ -1266,9 +1266,11 @@ button {
 .priorities-notice:empty {
   margin-top: -8px;
 }
+/* The last column is the ×'s, on every row: a written row has one, and a row keeps its width as
+   its first letter is typed. */
 .priority-row {
   display: grid;
-  grid-template-columns: 24px 22px 1fr;
+  grid-template-columns: 24px 22px 1fr minmax(44px, auto);
   align-items: center;
   gap: 10px;
 }
@@ -1279,9 +1281,6 @@ button {
 }
 .priority-tick .checkbox {
   margin: 0;
-}
-.priority-row--removable {
-  grid-template-columns: 24px 22px 1fr auto;
 }
 /* With the board on (.priority-row--end on every row), a written row's category chip sits on a
    line of its own under the field, so the field keeps the row's width beside the ×, and the chip
@@ -1302,7 +1301,7 @@ button {
 .priority-remove {
   color: var(--text-3);
 }
-/* Line 1 of the last column, beside the field. From 640 px an empty row has no chip, which would
+/* Line 1 of the last column, beside the field. From 640 px a free row has no chip, which would
    leave its × in the chip's column. */
 .priority-row--end .priority-remove {
   grid-row: 1;
@@ -1317,10 +1316,7 @@ button {
    in its ellipsis sooner. */
 @media (min-width: 640px) {
   .priority-row--end {
-    grid-template-columns: 24px 22px 1fr 10rem;
-  }
-  .priority-row--end.priority-row--removable {
-    grid-template-columns: 24px 22px 1fr 10rem auto;
+    grid-template-columns: 24px 22px 1fr 10rem minmax(44px, auto);
   }
   .priority-end {
     grid-column: 4;
@@ -1361,9 +1357,9 @@ button {
   text-decoration: line-through;
   color: var(--text-3);
 }
-/* Under a cleared row with focus logged on it: closer to its row than the gap to the next one,
-   and lined up with the field (the number and tick columns and their two gaps). */
-.priority-held {
+/* The note under a row being retyped or left blank: closer to its row than the gap to the next
+   one, and lined up with the field (the number and tick columns and their two gaps). */
+.priority-note {
   margin-top: -4px;
   padding-left: calc(24px + 22px + 2 * 10px);
 }
@@ -2786,7 +2782,8 @@ dialog.dialog::backdrop {
   border-top: 1px solid var(--border);
 }
 @media (min-width: 640px) {
-  dialog.finish-choice {
+  dialog.finish-choice,
+  dialog.remove-task {
     max-width: 440px;
   }
   .dialog-foot {

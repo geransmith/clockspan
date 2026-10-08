@@ -146,7 +146,7 @@ describe('PlanNext', () => {
   });
 
   it("doesn't carry an open routine: it comes back on its own weekdays", async () => {
-    await renderPlan({ todays: [...TODAYS, makePriority(5, 'Monitor the queue', { recurringUid: 'rcur00000001' })] });
+    await renderPlan({ todays: [...TODAYS, makePriority(5, 'Monitor the queue', { uid: 'rcur00000001', recurring: true })] });
     await open();
     expect(screen.getAllByRole('checkbox').map((c) => c.closest('label')!.textContent)).toEqual(['Review the PR', 'Call the bank']);
     await save();
@@ -168,32 +168,32 @@ describe('PlanNext', () => {
     expect(sent().map((p) => p.text)).toEqual(['Call the bank']);
   });
 
-  it("doesn't offer a row already on the next day's list, whatever the case and spacing", async () => {
-    const kept = makePriority(1, 'review the  pr');
-    await renderPlan({ next: makeDay(NEXT, { priorities: [kept] }) });
+  it("doesn't offer a task already on the next day's list, under any name, and offers another task of the same text", async () => {
+    const kept = { ...TODAYS[1]!, position: 1, text: 'Review the pull request' };
+    const twin = makePriority(2, 'call the  bank', { uid: 'twin00000001' });
+    await renderPlan({ next: makeDay(NEXT, { priorities: [kept, twin] }) });
     await open();
-    expect(screen.getByRole('heading').textContent).toBe(`${PLAN_NEXT.title('tomorrow')} ${PLAN_NEXT.already(1)}`);
-    expect(screen.queryByRole('checkbox', { name: 'Review the PR' })).toBeNull();
+    expect(screen.getByRole('heading').textContent).toBe(`${PLAN_NEXT.title('tomorrow')} ${PLAN_NEXT.already(2)}`);
+    expect(screen.getAllByRole('checkbox').map((c) => c.closest('label')!.textContent)).toEqual(['Call the bank']);
     await save();
-    expect(sent()).toEqual([kept, expect.objectContaining({ position: 2, text: 'Call the bank' })]);
+    expect(sent()).toEqual([kept, twin, expect.objectContaining({ position: 3, text: 'Call the bank', uid: TODAYS[2]!.uid })]);
     // With the list it was built on, so a row another device put there meanwhile stays.
-    expect(vi.mocked(api.putPriorities).mock.calls[0]![2]).toEqual({ base: [kept], cards: false });
+    expect(vi.mocked(api.putPriorities).mock.calls[0]![2]).toEqual([kept, twin]);
     expect(status()).toBe(PLAN_NEXT.done(1, 'tomorrow'));
   });
 
-  it('carries each row it brings over as the same task, with its card and category, and a typed row as linked to nothing', async () => {
-    const linked = makePriority(1, 'Review the PR', { cardUid: 'card00000001', categoryUid: 'cafe00000001' });
-    await renderPlan({ todays: [linked, makePriority(2, 'Call the bank')] });
+  it('carries each row it brings over as the same task, with its category and counts, and a typed row as a new task', async () => {
+    const carried = makePriority(1, 'Review the PR', { categoryUid: 'cafe00000001', listed: 2, earlier: 1, logged: 600 });
+    await renderPlan({ todays: [carried, makePriority(2, 'Call the bank')] });
     await open();
     type('Book flights');
     await save();
-    expect(sent().map((p) => [p.text, p.cardUid, p.recurringUid, p.categoryUid])).toEqual([
-      ['Review the PR', 'card00000001', null, 'cafe00000001'],
-      ['Call the bank', null, null, null],
-      ['Book flights', null, null, null],
+    expect(sent().map((p) => [p.text, p.uid, p.categoryUid, p.listed, p.earlier, p.logged])).toEqual([
+      ['Review the PR', carried.uid, 'cafe00000001', 2, 1, 600],
+      ['Call the bank', makePriority(2, '').uid, null, 1, 0, 0],
+      ['Book flights', sent()[2]!.uid, null, 0, 0, 0],
     ]);
-    // Tomorrow's row is its own: a fresh uid.
-    expect(sent()[0]!.uid).not.toBe(linked.uid);
+    expect([carried.uid, makePriority(2, '').uid]).not.toContain(sent()[2]!.uid);
   });
 
   it('offers a category for each row typed in while the board is on, and sends each row in its own', async () => {
@@ -245,20 +245,15 @@ describe('PlanNext', () => {
     expect(sent().find((p) => p.text === 'Book flights')).toMatchObject({ categoryUid: null });
   });
 
-  it("doesn't offer a row whose card is on the next day's list already, under any text", async () => {
-    const kept = makePriority(1, 'Review the pull request', { cardUid: 'card00000001' });
-    await renderPlan({
-      next: makeDay(NEXT, { priorities: [kept] }),
-      todays: [makePriority(1, 'Review the PR', { cardUid: 'card00000001' }), makePriority(2, 'Call the bank')],
-    });
-    await open();
-    expect(screen.getAllByRole('checkbox').map((c) => c.closest('label')!.textContent)).toEqual(['Call the bank']);
-    await save();
-    expect(sent().map((p) => p.text)).toEqual(['Review the pull request', 'Call the bank']);
-  });
-
   it('saves nothing when nothing is new, and says so without a celebration', async () => {
-    await renderPlan({ next: makeDay(NEXT, { priorities: [makePriority(1, 'Review the PR'), makePriority(2, 'Call the bank')] }) });
+    await renderPlan({
+      next: makeDay(NEXT, {
+        priorities: [
+          { ...TODAYS[1]!, position: 1 },
+          { ...TODAYS[2]!, position: 2 },
+        ],
+      }),
+    });
     await open();
     expect(screen.queryByRole('list')).toBeNull();
     // A blank line isn't added.

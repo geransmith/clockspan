@@ -4,7 +4,7 @@ import type { CategoryPick } from '../lib/board';
 import { RETRO_PROMPT } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { counted, formatDuration } from '../lib/format';
-import { reviewDay } from '../lib/retro';
+import { reviewDay, sessionName } from '../lib/retro';
 import { LIMITS } from '../../../shared/api.js';
 import type { Priority, Session } from '../types';
 import { Check } from './Icons';
@@ -92,7 +92,7 @@ export function Retro({ date, today, priorities, sessions, note, reviewedAt, pic
               <li key={s.id} className="retro-row retro-row--unplanned">
                 <span className="retro-tick" aria-hidden="true" />
                 <span className="retro-text">
-                  <SessionLabel label={s.label} />
+                  <SessionLabel label={sessionName(s, priorities)} />
                   <span className="muted small retro-when"> {formatTime(s.startedAt)}</span>
                 </span>
                 <span className="retro-time">{formatDuration(s.durationSeconds)}</span>

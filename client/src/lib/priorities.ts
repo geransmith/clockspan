@@ -98,6 +98,11 @@ export function editPriority(row: Priority, patch: Partial<Priority>, now: numbe
   return hasText(merged) ? { ...merged, uid: newUid(), addedAt: now } : { ...merged, done: false };
 }
 
+/** The rows with the one at `position` a free row: × on a row within Rows per day takes its task off and leaves the row. */
+export function clearRow(rows: Priority[], position: number): Priority[] {
+  return rows.map((p) => (p.position === position ? emptyRow(position) : p));
+}
+
 /** The rows without the one at `position`, renumbered from 1. */
 export function removePriority(rows: Priority[], position: number): Priority[] {
   return rows.filter((p) => p.position !== position).map((p, i) => ({ ...p, position: i + 1 }));

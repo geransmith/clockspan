@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PRIORITY_WARNINGS } from './copy';
 import {
+  clearRow,
   editPriority,
   emptyRow,
   hasRoom,
@@ -173,6 +174,13 @@ describe('editPriority', () => {
     expect(editPriority(named, { done: true }, 200).done).toBe(true);
     expect(editPriority({ ...named, done: true }, { text: '' }, 200).done).toBe(true);
     expect(editPriority(blank, { done: true }, 200)).toEqual(blank);
+  });
+});
+
+describe('clearRow', () => {
+  it('leaves a free row where the task was, and the other rows where they are', () => {
+    const rows = [makePriority(1, 'A'), makePriority(2, 'B', { done: true }), makePriority(3, 'C')];
+    expect(clearRow(rows, 2)).toEqual([rows[0], emptyRow(2), rows[2]]);
   });
 });
 

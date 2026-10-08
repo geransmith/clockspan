@@ -64,14 +64,14 @@ export function Review({ today, now, period: { kind, from }, onPeriod, onOpen }:
 function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; now: number; kind: PeriodKind; onOpen: (date: string) => void }) {
   const { settings } = useSettings();
   const { board, on } = useBoardState();
-  // With the board off, or before its first read answers, nothing is counted under a category
-  // and a routine keeps its latest row's text. A removed category stays known, so the time
-  // logged under it keeps its name.
+  // With the board off, or before its first read answers, nothing is counted under a category,
+  // and Not done knows no task's lane. A removed category stays known, so the time logged under
+  // it keeps its name.
   const shown = on ? board : undefined;
   const categories = shown?.categories ?? [];
   const known = new Set(categories.map((c) => c.uid));
-  const recurringTitles = new Map(shown?.recurring.map((i) => [i.uid, i.title] as const));
-  const r = reviewRange(days, settings, today, now, known, recurringTitles);
+  const laned = new Set(shown?.cards.filter((c) => c.lane != null).map((c) => c.uid));
+  const r = reviewRange(days, settings, today, now, known, laned);
   if (r.days === 0) return <p className="muted center review-empty">Nothing recorded.</p>;
   // A row merged across days names them in a week and counts them in a longer period; it
   // opens the latest of them.
@@ -152,7 +152,7 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
           <Folded
             className="review-list"
             items={r.routines.map((g) => (
-              <li key={g.recurringUid}>
+              <li key={g.uid}>
                 <button className="review-row" onClick={() => onOpen(latest(g.dates))}>
                   <span className="review-text">{g.title}</span>
                   <span className="review-meta">

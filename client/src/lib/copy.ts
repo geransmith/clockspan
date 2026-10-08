@@ -122,11 +122,32 @@ export const WARNING_ACTIONS = {
   complete: { add: 'Add a bonus', keep: 'Stop here' },
 } as const;
 
-/** Under a Top priorities row that was cleared after focus was logged on it: the time stays with the row. Null: under a minute. */
-export const EMPTIED_ROW = (time: string | null) => `The ${time ?? 'time'} logged on this row stays with it. Use Add priority for something new.`;
+/** Under a Top priorities row being retyped, while earlier days' lists hold its task: the name is one for every day. */
+export const RENAME_NOTE = (earlier: number) => `Also renames it on ${counted(earlier, 'earlier day')}.`;
 
-/** Under an emptied Top priorities row from a recurring priority, in place of EMPTIED_ROW, logged time or not. */
-export const EMPTIED_RECURRING = 'This row is still a recurring priority. Use Add priority for something new.';
+/** Under a Top priorities row whose box was emptied: a blank name isn't saved. */
+export const BLANK_NOTE = (name: string) => `Empty, it goes back to ${name} when you leave the box. × takes it off this day.`;
+
+/** Where a task is and the time logged on it, for a question that deletes it everywhere: "It is on 3 days, and 1h 20m is logged on it." */
+const taskFacts = (where: string, logged: string | null) => {
+  const time = logged ? `${logged} is logged on it` : '';
+  return where && time ? `${where}, and ${time}.` : `${where || time}.`;
+};
+/** After `taskFacts` once time is logged: a full delete keeps it. */
+const unplanned = (logged: string | null) => (logged ? ' The time stays in the log, unplanned.' : '');
+
+/**
+ * The question × on a Top priorities row asks when its task is on other days or has time logged
+ * on it. `logged` is null with no time; each part of the body shows only when it applies.
+ */
+export const REMOVE_TASK = {
+  title: (name: string) => `Remove ${name}`,
+  body: (otherDays: number, logged: string | null) =>
+    `${taskFacts(otherDays ? `It is on ${counted(otherDays, 'other day')}` : '', logged)} Delete everywhere takes it off every day.${unplanned(logged)}`,
+  offDay: 'Off this day',
+  everywhere: 'Delete everywhere',
+  cancel: 'Cancel',
+} as const;
 
 /** On today's empty priorities, when the last day with a plan left rows unticked. */
 export const LEFT_OPEN = {
@@ -154,9 +175,12 @@ export const CONFIRM = {
   signOut: 'Sign out of Clockspan on this device?',
   resetSettings: 'Reset every setting to its default? Days, punches and sessions are kept.',
   deleteDays: (n: number, before: string) => `Delete ${counted(n, 'day')} before ${before}? This cannot be undone.`,
-  /** `off` names the days whose list the card is taken off too ("today", "tomorrow"). */
-  deleteCard: (off: string[]) => (off.length ? `Delete this card and take it off the list for ${off.join(' and ')}?` : 'Delete this card?'),
-  deleteRecurring: (title: string) => `Delete ${title}? Rows it already added keep their text.`,
+  /** The board's Delete: how many days' lists hold the task, and the time logged on it (null with none). */
+  deleteTask: (days: number, logged: string | null) =>
+    days || logged
+      ? `Delete this task everywhere? ${taskFacts(days ? `It is on ${counted(days, 'day')}` : '', logged)}${unplanned(logged)}`
+      : 'Delete this task?',
+  deleteRecurring: (title: string) => `Remove ${title}? It stops repeating. Days it was on keep it.`,
 } as const;
 
 /** A timer line, with the session's name (`useTimer().name`) in front when it has one. */
@@ -277,7 +301,8 @@ export const ADD_PRIORITY_FAILED = {
  * The board's refusals: a banner when the store turns a move down (`full`), and the board
  * notice's lines for a move refused before anything is sent (`recurringStays`, `planned`), with
  * `close` its button. `full` is also the capture box's line while it is shut at the cap.
- * `nameTaken` is Settings → Board's line under a category named like another in use.
+ * `nameTaken` is Settings → Board's line under a category named like another in use. `doneOn` is
+ * the editor's line on a task ticked on an earlier day, which the board doesn't untick.
  */
 export const BOARD = {
   full: `Later and Next hold ${BOARD_LIMITS.openCards} cards at most.`,
@@ -285,6 +310,7 @@ export const BOARD = {
   planned: (title: string, when: string) => `${title} is planned for ${when}. Change it on that day's sheet.`,
   close: 'Close',
   nameTaken: 'There is already a category with that name.',
+  doneOn: (when: string) => `Done on ${when}. Untick it on that day's sheet.`,
 } as const;
 
 /**

@@ -3,12 +3,23 @@ import { flushSync } from 'react-dom';
 import { useCelebration, type Moment } from '../hooks/useCelebration';
 import { useDebouncedDraft } from '../hooks/useDebouncedDraft';
 import { useSettings } from '../hooks/useSettings';
-import { unlockAudio } from '../lib/alerts';
+import { unlockAudio, warnQuietly } from '../lib/alerts';
 import type { CategoryPick } from '../lib/board';
-import { EMPTIED_RECURRING, EMPTIED_ROW, LEFT_OPEN, WARNING_ACTIONS } from '../lib/copy';
-import { formatDuration } from '../lib/format';
+import { BLANK_NOTE, LEFT_OPEN, RENAME_NOTE, SAVE_FAILED, WARNING_ACTIONS } from '../lib/copy';
+import { formatDurationCeil } from '../lib/format';
 import { planNext, type PrioritySeed } from '../lib/plan';
-import { editPriority, emptyRow, isOneOff, isRecurring, nudgeFor, padPriorities, pickWarning, removePriority, type WarningKind } from '../lib/priorities';
+import {
+  clearRow,
+  editPriority,
+  emptyRow,
+  isOneOff,
+  isRecurring,
+  nudgeFor,
+  padPriorities,
+  pickWarning,
+  removePriority,
+  type WarningKind,
+} from '../lib/priorities';
 import { acceptOffer, notOnList } from '../lib/recurring';
 import { loggedByUid } from '../lib/retro';
 import { hasText, isFree } from '../../../shared/priorities.js';
@@ -18,15 +29,18 @@ import type { Priority, Recurring, Session } from '../types';
 import { Burst } from './Burst';
 import { CategoryChip } from './CategoryChip';
 import { Check, Plus, X } from './Icons';
+import { RemoveTask } from './RemoveTask';
 import { RepeatMark } from './RepeatMark';
 import { TodayOffer, type MorningOffer } from './TodayOffer';
 
 interface Props {
   priorities: Priority[];
-  /** The day's sessions: a cleared row with focus logged on it says the time stays with it. */
+  /** The day's sessions: × asks first about a task with time logged on it, one finished since the day was read included. */
   sessions: Session[];
   /** `base`: the rows the edits were made on, the list the card last sent or last took up from `priorities`. */
   onChange: (priorities: Priority[], base: Priority[]) => void;
+  /** Deletes a task everywhere (the board store's `deleteItem`), for ×'s Delete everywhere; rejects when that fails. */
+  onDeleteTask: (uid: string) => Promise<void>;
   /** The category chip's data: each row with text gets a chip. Null (the board off) shows none. */
   pick?: CategoryPick | null;
   /**
@@ -35,35 +49,56 @@ interface Props {
    */
   leftOpen?: { from: string; rows: PrioritySeed[]; dismiss: () => void } | null;
   /**
-   * With the board on, today's morning notice in place of `leftOpen`: the leftovers, which the
-   * board may have retitled from their cards, while the list has no one-off written, and the
-   * routines due today that no row with text holds yet.
+   * With the board on, today's morning notice in place of `leftOpen`: the leftovers while the list
+   * has no one-off written, and the routines due today that no row holds yet.
    */
   offer?: MorningOffer | null;
 }
 
-/** The first row of `after` the change filled: one with text whose uid had no text in `before` (a new row, or an emptied one taken back). */
-const firstFilled = (before: Priority[], after: Priority[]) => after.find((p) => hasText(p) && !before.some((q) => q.uid === p.uid && hasText(q)));
+/** The first row of `after` the change filled: one with a task that `before` didn't hold. */
+const firstFilled = (before: Priority[], after: Priority[]) => after.find((p) => p.uid != null && !before.some((q) => q.uid === p.uid));
 
-/** The time a cleared row keeps, for its note. Whole minutes round down, so under one the line names no amount rather than "0m". */
-const heldTime = (seconds: number) => (seconds >= 60 ? formatDuration(seconds) : null);
+/** A row whose box was emptied: its task's name isn't saved blank, and comes back when the box is left. */
+const isBlank = (p: Priority) => p.uid != null && !hasText(p);
+
+/**
+ * The list as it may be saved: a blank row goes with the name it was built on (`base`), or as a
+ * free row when it never had one (typed and emptied before it was saved).
+ */
+function named(list: Priority[], base: Priority[]): Priority[] {
+  return list.map((p) => {
+    if (!isBlank(p)) return p;
+    const was = base.find((b) => b.uid === p.uid);
+    return was ? { ...p, text: was.text } : emptyRow(p.position);
+  });
+}
+
+/** What ×'s question needs: the task, and how many other days and how much time it would ask about. */
+interface Asked {
+  uid: string;
+  name: string;
+  otherDays: number;
+  logged: number;
+}
 
 /**
  * Starts with `priorityCount` rows and grows on demand. Text saves 400 ms after the last
  * keystroke; checkboxes, add and remove save immediately. Keyed by date in the sheet, so a
  * new day mounts fresh instead of carrying drafts over.
  */
-export function Priorities({ priorities, sessions, onChange, pick = null, leftOpen, offer }: Props) {
+export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick = null, leftOpen, offer }: Props) {
   const { settings } = useSettings();
   const count = settings.priorityCount;
   const stored = useMemo(() => padPriorities(priorities, count), [priorities, count]);
   // Let go once sent: a list held after a failed save would stop the card following the stored
   // list (a row the timer's "Also add to today's priorities" or another device added, a tick
   // made elsewhere) until a later save went through. A failed row goes back to the stored copy,
-  // with the banner.
+  // with the banner. A blank name is the exception: the other rows' changes go, the name goes as
+  // it was, and the draft is held, so the box stays empty until it is left rather than taking the
+  // stored name back while it has the focus.
   const sendList = (list: Priority[], base: Priority[]) => {
-    onChange(list, base);
-    return true;
+    onChange(named(list, base), base);
+    return !list.some(isBlank);
   };
   const { draft: local, edit: editList, flush } = useDebouncedDraft(stored, sendList, 400);
   const [warning, setWarning] = useState<{ kind: WarningKind; text: string } | null>(null);
@@ -76,6 +111,10 @@ export function Priorities({ priorities, sessions, onChange, pick = null, leftOp
   const { anchor, burst } = useCelebration<HTMLInputElement>(ticked, 'priorityDone');
   const logged = useMemo(() => loggedByUid(sessions), [sessions]);
   const noteId = useId();
+  // The row whose box has the focus, by its task, and its text then: the rename note compares with it.
+  const [focused, setFocused] = useState<{ uid: string | null; text: string } | null>(null);
+  const [asked, setAsked] = useState<Asked | null>(null);
+  const storedName = (uid: string | null) => stored.find((q) => q.uid === uid)?.text;
 
   const edit = (position: number, patch: Partial<Priority>, now = false) => {
     editList(
@@ -94,9 +133,9 @@ export function Priorities({ priorities, sessions, onChange, pick = null, leftOp
   const offerRecurring = offer ? notOnList(offer.recurring, local) : [];
 
   const addRow = (force = false) => {
-    // A row never written in is where a new priority goes, with no nudge: the nudge is about a
-    // written list. A cleared row is passed, since it keeps its uid and the time logged on it.
-    // Focusing the row inside the tap is what lets iOS raise the keyboard.
+    // A free row is where a new priority goes, with no nudge: the nudge is about a written list.
+    // A blank box is still its task's row, and is passed. Focusing the row inside the tap is what
+    // lets iOS raise the keyboard.
     const free = local.find(isFree);
     if (free) {
       setWarning(null);
@@ -117,7 +156,7 @@ export function Priorities({ priorities, sessions, onChange, pick = null, leftOp
     flushSync(() => editList(next, true));
     inputs.current.get(next.length)?.focus();
   };
-  // Focus goes where Add priority would put a new priority, never into a cleared row, which is still its old item.
+  // Focus goes where Add priority would put a new priority.
   const focusFree = (rows = local) => {
     const free = rows.find(isFree);
     if (free) inputs.current.get(free.position)?.focus();
@@ -132,11 +171,8 @@ export function Priorities({ priorities, sessions, onChange, pick = null, leftOp
     if (first) inputs.current.get(first.position)?.focus();
     else focusFree(next);
   };
-  // The rows are new to today (fresh uids, `addedAt` now), so the retro counts them as planned
-  // unless a session ran first; each carries its card, recurring priority and category, so it
-  // is the same task. A text that appears twice comes over once. A cleared row stays, ahead of
-  // them, with the time logged on it, unless it holds the card or recurring priority of a row
-  // brought over: that row takes it back, keeping its uid and addedAt.
+  // Each row brings its own task over, added to today now, so the retro counts it as planned
+  // unless a session ran first. A task the list holds already isn't added twice.
   const bringOver = (rows: PrioritySeed[]) => fill(padPriorities(planNext(local, rows).rows, count));
   const dismissLeftOpen = (dismiss: () => void) => {
     dismiss();
@@ -162,6 +198,37 @@ export function Priorities({ priorities, sessions, onChange, pick = null, leftOp
     // Removing a row before the last moves the next row's X under focus; the last row takes its X with it.
     flushSync(() => editList(removePriority(local, position), true));
     if (position === local.length) addButton.current?.focus();
+  };
+  // Within Rows per day the row stays, free, with the focus in its box; past that it goes.
+  const takeOff = (position: number) => {
+    if (position > count) return removeRow(position);
+    flushSync(() => editList(clearRow(local, position), true));
+    inputs.current.get(position)?.focus();
+  };
+  // × asks first when the task is on other days or has time logged on it, since Delete everywhere
+  // is then a different answer; a recurring priority's row never asks (Settings removes those).
+  const remove = (p: Priority) => {
+    const time = p.uid == null ? 0 : Math.max(p.logged, logged.get(p.uid) ?? 0);
+    if (p.uid != null && !isRecurring(p) && (p.listed > 1 || time > 0)) {
+      setAsked({ uid: p.uid, name: hasText(p) ? p.text : (storedName(p.uid) ?? ''), otherDays: Math.max(0, p.listed - 1), logged: time });
+    } else takeOff(p.position);
+  };
+  // The dialog goes first, so the focus it gives back to × moves on from there.
+  const answer = (everywhere: boolean) => {
+    const ask = asked!;
+    flushSync(() => setAsked(null));
+    const row = local.find((p) => p.uid === ask.uid);
+    if (row) takeOff(row.position);
+    // The day's save without the row has gone out first; a failed delete leaves the task off this day only.
+    if (everywhere) void onDeleteTask(ask.uid).catch(() => warnQuietly({ ...SAVE_FAILED, tag: 'save-failed' }));
+  };
+  // The blank box's name back: the task's as stored, or a free row for one never saved.
+  const restore = (p: Priority) => {
+    const name = storedName(p.uid);
+    editList(
+      local.map((q) => (q.position === p.position ? (name ? { ...q, text: name } : emptyRow(q.position)) : q)),
+      true,
+    );
   };
   const keepList = () => {
     setWarning(null);
@@ -202,22 +269,22 @@ export function Priorities({ priorities, sessions, onChange, pick = null, leftOp
       )}
       {local.map((p) => {
         const empty = !hasText(p);
-        const removable = p.position > count;
+        // Every row with a task, and any row past Rows per day.
+        const removable = p.uid != null || p.position > count;
         // A written row only: an empty one has nothing to file yet. Every row takes the grid with
         // the chip's column all the same, so on a wide screen a field ends in the same place
         // written or empty, and the first letter typed doesn't narrow it.
         const chip = pick != null && !empty;
         const placeholder = p.position === 1 ? 'The one thing to get done' : `Priority ${p.position}`;
-        // A cleared row is still the same item: the focus logged on it stays, and a new priority
-        // goes past it. A routine's says so whether time was logged or not, since typing in it
-        // renames the routine's row. The draft's row decides, so the first key typed takes the
-        // note away.
-        const held = empty && p.uid != null ? (logged.get(p.uid) ?? 0) : 0;
-        const note = empty && p.uid != null && isRecurring(p) ? EMPTIED_RECURRING : held > 0 ? EMPTIED_ROW(heldTime(held)) : null;
-        const heldId = `${noteId}-held-${p.position}`;
+        // While the box has the focus: retyped, a name that earlier days' lists hold renames it there
+        // too; emptied, it says what happens to the name.
+        const inFocus = focused != null && p.uid != null && focused.uid === p.uid;
+        const blankName = inFocus && empty ? storedName(p.uid) : undefined;
+        const note = blankName ? BLANK_NOTE(blankName) : inFocus && !empty && p.text !== focused.text && p.earlier > 0 ? RENAME_NOTE(p.earlier) : null;
+        const noteFor = `${noteId}-note-${p.position}`;
         return (
           <Fragment key={p.position}>
-            <div className={`priority-row${p.done ? ' is-done' : ''}${removable ? ' priority-row--removable' : ''}${pick != null ? ' priority-row--end' : ''}`}>
+            <div className={`priority-row${p.done ? ' is-done' : ''}${pick != null ? ' priority-row--end' : ''}`}>
               <span className="priority-num" aria-hidden="true">
                 {p.position}
               </span>
@@ -253,13 +320,21 @@ export function Priorities({ priorities, sessions, onChange, pick = null, leftOp
                   value={p.text}
                   placeholder={placeholder}
                   aria-label={`Priority ${p.position}`}
-                  aria-describedby={note ? heldId : undefined}
+                  aria-describedby={note ? noteFor : undefined}
                   // One line of text: Enter adds no line break, and a pasted one becomes a space.
+                  // Escape on a blank box brings the name back, as leaving it does.
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.preventDefault();
+                    if (e.nativeEvent.isComposing) return;
+                    if (e.key === 'Enter') e.preventDefault();
+                    if (e.key === 'Escape' && isBlank(p)) restore(p);
                   }}
                   onChange={(e) => edit(p.position, { text: e.target.value.replace(/[\r\n]+/g, ' ') })}
-                  onBlur={() => void flush()}
+                  onFocus={() => setFocused({ uid: p.uid, text: p.text })}
+                  onBlur={() => {
+                    setFocused(null);
+                    if (isBlank(p)) restore(p);
+                    else void flush();
+                  }}
                   maxLength={LIMITS.priorityText}
                 />
               </span>
@@ -279,18 +354,13 @@ export function Priorities({ priorities, sessions, onChange, pick = null, leftOp
                 </span>
               )}
               {removable && (
-                <button
-                  className="btn btn-icon priority-remove"
-                  onClick={() => removeRow(p.position)}
-                  aria-label={`Remove priority ${p.position}`}
-                  title="Remove"
-                >
+                <button className="btn btn-icon priority-remove" onClick={() => remove(p)} aria-label={`Remove priority ${p.position}`} title="Remove">
                   <X />
                 </button>
               )}
             </div>
             {note && (
-              <p className="muted small priority-held" id={heldId}>
+              <p className="muted small priority-note" id={noteFor}>
                 {note}
               </p>
             )}
@@ -328,6 +398,16 @@ export function Priorities({ priorities, sessions, onChange, pick = null, leftOp
           </div>
         )}
       </div>
+      {asked && (
+        <RemoveTask
+          name={asked.name}
+          otherDays={asked.otherDays}
+          logged={asked.logged > 0 ? formatDurationCeil(asked.logged) : null}
+          onOffDay={() => answer(false)}
+          onEverywhere={() => answer(true)}
+          onCancel={() => setAsked(null)}
+        />
+      )}
       <Burst at={burst} />
       <div className="priorities-foot">
         {local.length < MAX_PRIORITIES ? (
