@@ -4,19 +4,20 @@
  * drop lands and what a drag says (`dropTarget`, `withDrag`, `moveAnnouncement`), the cards the
  * left-open offer may bring back (`offeredLeftovers`), what New category makes of a name
  * (`categoryForName`, `nextColor`), and the board as a write shows it before the server answers
- * (`withCard`, `withPatch`, `withoutCard`, `withCategory`, `withCategoryPatch`, `withoutCategory`).
+ * (`withCard`, `withPatch`, `withoutCard`, `withCategory`, `withCategoryPatch`, `withoutCategory`,
+ * `withRecurring`, `withRecurringPatch`, `withoutRecurring`).
  *
  * In progress is never stored: it is today's open rows, matched to their cards by `cardUid`, so
  * the board and the sheet show one list. A card linked to a row of today's list shows where that
  * row says (open: In progress, ticked: Done, emptied: nowhere); any other card by `held`, then
  * `listDate` (a later day's list holds it: planned, in Next), then its lane.
  */
-import type { CardPatch, CategoryPatch, NewCard, NewCategory } from '../api';
+import type { CardPatch, CategoryPatch, NewCard, NewCategory, RecurringPatch } from '../api';
 import { BOARD_LIMITS, CATEGORY_COLORS } from '../../../shared/api.js';
 import { todayKey } from '../../../shared/dates.js';
 import { hasText } from '../../../shared/priorities.js';
 import { categoryName, sameText } from '../../../shared/text.js';
-import type { Board, BoardCard, Category, CategoryColor, Day, OpenLane, Priority } from '../types';
+import type { Board, BoardCard, Category, CategoryColor, Day, OpenLane, Priority, Recurring } from '../types';
 import { BOARD, BOARD_DRAG, DONE_STAYS } from './copy';
 import { dayName } from './format';
 import type { PrioritySeed } from './plan';
@@ -528,4 +529,26 @@ export function withCategoryPatch(board: Board, uid: string, patch: CategoryPatc
 /** The board as `DELETE /board/categories/:uid` leaves it: the category kept, so past time keeps its name, and out of use. */
 export function withoutCategory(board: Board, uid: string): Board {
   return { ...board, categories: board.categories.map((c) => (c.uid === uid ? { ...c, archived: true } : c)) };
+}
+
+/** Weekdays as the server answers them: ascending. */
+const ascending = (days: number[]) => [...days].sort((a, b) => a - b);
+
+/** The board as `POST /board/recurring` leaves it: the item after the others, or as it was when its uid is held (a retry). */
+export function withRecurring(board: Board, item: Recurring): Board {
+  if (board.recurring.some((r) => r.uid === item.uid)) return board;
+  return { ...board, recurring: [...board.recurring, { ...item, weekdays: ascending(item.weekdays) }] };
+}
+
+/** The board as `PATCH /board/recurring/:uid` leaves it: the fields sent, weekdays ascending; a field left out kept. */
+export function withRecurringPatch(board: Board, uid: string, patch: RecurringPatch): Board {
+  return {
+    ...board,
+    recurring: board.recurring.map((r) => (r.uid === uid ? { ...r, ...patch, weekdays: ascending(patch.weekdays ?? r.weekdays) } : r)),
+  };
+}
+
+/** The board without the item. */
+export function withoutRecurring(board: Board, uid: string): Board {
+  return { ...board, recurring: board.recurring.filter((r) => r.uid !== uid) };
 }

@@ -119,6 +119,7 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     stickers: bool(p.stickers, stickerCard || base.stickers),
     showWeekends: flag('showWeekends'),
     board: flag('board'),
+    recurringPerDay: limited('recurringPerDay'),
     alarms: mergeAlarms(base.alarms, p.alarms),
     layout,
     retention: mergeRetention(base.retention, p.retention),

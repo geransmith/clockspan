@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { CATEGORY_COLORS, LIMITS } from '../../../../shared/api.js';
+import { SETTING_LIMITS } from '../../../../shared/settings.js';
 import { categoryName } from '../../../../shared/text.js';
-import { useBoardState, useBoardStore } from '../../hooks/useBoard';
-import { activeCategories, categoryForName, categoryNameTaken, nextColor } from '../../lib/board';
+import type { RecurringPatch } from '../../api';
+import { useBoardState, useBoardStore, useCategoryPick } from '../../hooks/useBoard';
+import { activeCategories, categoryForName, categoryNameTaken, nextColor, type CategoryPick } from '../../lib/board';
 import { BOARD, LOAD_FAILED } from '../../lib/copy';
 import { newUid } from '../../lib/priorities';
-import type { Category, CategoryColor } from '../../types';
+import type { Category, CategoryColor, Recurring } from '../../types';
+import { CategoryChip } from '../CategoryChip';
 import { CategoryDot } from '../CategoryDot';
 import { ErrorLine } from '../ErrorLine';
 import { LoadFailed } from '../LoadFailed';
-import { Section } from './controls';
+import { NumberField, Section, type TabProps } from './controls';
 
 const COLOR_NAMES: Record<CategoryColor, string> = {
   blue: 'Blue',
@@ -22,22 +25,51 @@ const COLOR_NAMES: Record<CategoryColor, string> = {
   grey: 'Grey',
 };
 
+/** A recurring priority's days as the server numbers them (ISO, Monday 1), each a one-letter chip named in full. */
+const WEEKDAYS = [
+  { day: 1, letter: 'M', name: 'Monday' },
+  { day: 2, letter: 'T', name: 'Tuesday' },
+  { day: 3, letter: 'W', name: 'Wednesday' },
+  { day: 4, letter: 'T', name: 'Thursday' },
+  { day: 5, letter: 'F', name: 'Friday' },
+  { day: 6, letter: 'S', name: 'Saturday' },
+  { day: 7, letter: 'S', name: 'Sunday' },
+] as const;
+
 /** The dialog's save: the header says Saving…, Saved or Not saved for each board write. */
 type Save = (run: () => Promise<void>) => Promise<void>;
 
 /**
  * Settings → Board, shown while the board is on: the categories, each renamed, recoloured or
- * removed in place, and Add category. Each change is a board write (`useBoard`) through the
- * dialog's `save`, so it shows at once and the header says whether it was saved. The board is
- * read as the tab opens.
+ * removed in place, and Add category; then the recurring priorities, each renamed, given a
+ * category or other days, or removed in place, Add recurring priority, and how many recurring
+ * rows the morning offer ticks. Each board change is a board write (`useBoard`) through the
+ * dialog's `save`, so it shows at once and the header says whether it was saved, a category made
+ * from a recurring priority's chip included. The board is read as the tab opens.
  */
-export function BoardTab({ save }: { save: Save }) {
+export function BoardTab({ settings, set, save }: TabProps & { save: Save }) {
   const { board, failed } = useBoardState();
   const store = useBoardStore();
+  const pick = useCategoryPick((saved) => void save(() => saved));
   useEffect(() => void store.load(), [store]);
   if (failed && !board) return <LoadFailed title={LOAD_FAILED.board} onRetry={() => void store.load()} />;
   if (!board) return <div className="sheet-loading" aria-busy="true" />;
-  return <Categories categories={board.categories} save={save} />;
+  return (
+    <>
+      <Categories categories={board.categories} save={save} />
+      <Section title="Recurring priorities" hint="Offered on Top priorities on these days. Nothing is added until you tap Add to today.">
+        <NumberField
+          label="Recurring rows per day"
+          unit="rows"
+          {...SETTING_LIMITS.recurringPerDay}
+          value={settings.recurringPerDay}
+          hint="The morning offer ticks this many. You can tick more."
+          onCommit={(n) => set({ recurringPerDay: n })}
+        />
+        <RecurringList items={board.recurring} pick={pick} save={save} />
+      </Section>
+    </>
+  );
 }
 
 function Categories({ categories, save }: { categories: Category[]; save: Save }) {
@@ -207,6 +239,166 @@ function NewCategory({ categories, save, onDone }: { categories: Category[]; sav
       />
       <CategoryDot color={nextColor(categories)} />
       <ErrorLine error={error} />
+    </div>
+  );
+}
+
+/**
+ * The recurring priorities in the order they were made, and Add recurring priority, always
+ * offered: the server's cap of 100 shows only as Not saved.
+ */
+function RecurringList({ items, pick, save }: { items: Recurring[]; pick: CategoryPick | null; save: Save }) {
+  const store = useBoardStore();
+  const [adding, setAdding] = useState(false);
+  const titleBoxes = useRef(new Map<string, HTMLInputElement>());
+  const addButton = useRef<HTMLButtonElement>(null);
+  // As with a category: the next row's title takes the focus, else the one before, else Add.
+  const remove = (uid: string) => {
+    const at = items.findIndex((r) => r.uid === uid);
+    const near = items[at + 1] ?? items[at - 1];
+    (near ? titleBoxes.current.get(near.uid) : addButton.current)?.focus();
+    void save(() => store.removeRecurring(uid));
+  };
+  return (
+    <>
+      {items.length === 0 && !adding && <p className="muted small">No recurring priorities yet.</p>}
+      {items.map((item) => (
+        <RecurringRow
+          key={item.uid}
+          item={item}
+          pick={pick}
+          save={save}
+          onRemove={() => remove(item.uid)}
+          titleRef={(box) => {
+            if (box) titleBoxes.current.set(item.uid, box);
+            else titleBoxes.current.delete(item.uid);
+          }}
+        />
+      ))}
+      {adding ? (
+        <NewRecurring save={save} onDone={() => setAdding(false)} />
+      ) : (
+        <div>
+          <button ref={addButton} className="btn btn-ghost" onClick={() => setAdding(true)}>
+            Add recurring priority
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * A recurring priority: its title (saved on blur or Enter; a blank or unchanged one is put back),
+ * its category chip, its seven days, each pressed to add or drop it, and Remove, which deletes it
+ * with no confirm: the rows it added keep their text and category. The last day on stays on, and
+ * stays focusable, so the item is always offered on some day.
+ */
+function RecurringRow({
+  item,
+  pick,
+  save,
+  onRemove,
+  titleRef,
+}: {
+  item: Recurring;
+  pick: CategoryPick | null;
+  save: Save;
+  onRemove: () => void;
+  titleRef: (box: HTMLInputElement | null) => void;
+}) {
+  const store = useBoardStore();
+  const [draft, setDraft] = useState(item.title);
+  const [seen, setSeen] = useState(item.title);
+  // A rename that landed, here or on another device, shows in the box.
+  if (item.title !== seen) {
+    setSeen(item.title);
+    setDraft(item.title);
+  }
+  const edit = (patch: RecurringPatch) => void save(() => store.editRecurring(item.uid, patch));
+  const commit = () => {
+    const title = draft.trim();
+    if (!title || title === item.title) setDraft(item.title);
+    else edit({ title });
+  };
+  const toggleDay = (day: number) => {
+    const on = item.weekdays.includes(day);
+    if (on && item.weekdays.length === 1) return;
+    edit({ weekdays: on ? item.weekdays.filter((d) => d !== day) : [...item.weekdays, day].sort((a, b) => a - b) });
+  };
+  return (
+    <div className="recurring-row">
+      <input
+        ref={titleRef}
+        className="input recurring-title"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.currentTarget.blur();
+        }}
+        maxLength={LIMITS.priorityText}
+        aria-label={`Title of ${item.title}`}
+      />
+      {pick && <CategoryChip value={item.categoryUid} onChange={(categoryUid) => edit({ categoryUid })} pick={pick} label={`Category for ${item.title}`} />}
+      <div className="weekdays" role="group" aria-label={`Days for ${item.title}`}>
+        {WEEKDAYS.map(({ day, letter, name }) => {
+          const on = item.weekdays.includes(day);
+          return (
+            <button
+              key={day}
+              type="button"
+              className="chip"
+              onClick={() => toggleDay(day)}
+              aria-pressed={on}
+              aria-disabled={on && item.weekdays.length === 1 ? true : undefined}
+              aria-label={name}
+            >
+              {letter}
+            </button>
+          );
+        })}
+      </div>
+      <button className="btn btn-ghost" onClick={onRemove} aria-label={`Remove ${item.title}`}>
+        Remove
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The row Add recurring priority opens, its title focused. Enter adds the item, on the work week
+ * with no category, and leaves an empty row for the next; the focus leaving adds what is typed and
+ * closes the row.
+ */
+function NewRecurring({ save, onDone }: { save: Save; onDone: () => void }) {
+  const store = useBoardStore();
+  const [draft, setDraft] = useState('');
+  const add = () => {
+    const title = draft.trim();
+    // On the work week, with no category: both are a tap away in the row it becomes.
+    if (title) void save(() => store.addRecurring({ uid: newUid(), title, categoryUid: null, weekdays: [1, 2, 3, 4, 5] }));
+  };
+  return (
+    <div className="recurring-row">
+      <input
+        className="input recurring-title"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          add();
+          onDone();
+        }}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' || e.nativeEvent.isComposing || !draft.trim()) return;
+          add();
+          setDraft('');
+        }}
+        maxLength={LIMITS.priorityText}
+        placeholder="Recurring priority"
+        aria-label="New recurring priority"
+        autoFocus
+      />
     </div>
   );
 }

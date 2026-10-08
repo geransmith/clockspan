@@ -45,4 +45,18 @@ describe('NumberField', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(onCommit).toHaveBeenCalledWith(60);
   });
+
+  it('shows a hint under the label that describes the box', () => {
+    render(<NumberField label="Recurring rows per day" unit="rows" value={3} min={1} max={10} hint="The morning offer ticks this many." onCommit={vi.fn()} />);
+    const input = screen.getByRole('textbox', { name: 'Recurring rows per day' });
+    const hint = screen.getByText('The morning offer ticks this many.');
+    expect(input.getAttribute('aria-describedby')).toBe(hint.id);
+    expect(hint.id).not.toBe('');
+    expect(screen.getByText('rows')).toBeTruthy();
+  });
+
+  it('describes nothing without a hint', () => {
+    const { input } = renderField();
+    expect(input.hasAttribute('aria-describedby')).toBe(false);
+  });
 });

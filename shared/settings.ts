@@ -128,6 +128,8 @@ export interface Settings {
    * has none (recurring rows excepted).
    */
   board: boolean;
+  /** Recurring rows the morning offer ticks; more can be ticked. */
+  recurringPerDay: number;
   alarms: Record<AlarmId, AlarmSettings>;
   /**
    * The sheet's cards in order. `side` is the card's column while the sheet has two (a wide
@@ -157,6 +159,7 @@ export const SETTING_LIMITS = {
   adjustStepMinutes: { min: 1, max: 60 },
   breakMinutes: { min: 1, max: 60 },
   priorityCount: { min: 1, max: 10 },
+  recurringPerDay: { min: 1, max: 10 },
 } as const satisfies Partial<Record<keyof Settings, { min: number; max: number }>>;
 
 /** An alarm's warn-before minutes and its repeat while overdue (0 = no repeat). The settings chips offer values inside these. */
@@ -213,6 +216,7 @@ export const DEFAULT_SETTINGS: Settings = deepFreeze({
   stickers: false,
   showWeekends: true,
   board: false,
+  recurringPerDay: 3,
   alarms: { lunchBy: { ...DEFAULT_ALARM }, clockOut: { ...DEFAULT_ALARM }, secondMeal: { ...DEFAULT_ALARM }, retro: { ...DEFAULT_RETRO_ALARM } },
   layout: normalizeLayout([]),
   retention: { enabled: false, days: 365 },

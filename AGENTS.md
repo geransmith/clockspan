@@ -8,7 +8,8 @@ nudge when the list grows), a focus timer that logs what was done and for which 
 retrospective card (plan vs. log, a "why" note, a nudge before clock-out), a week / month /
 quarter review, alarms for lunch, clock-out and the second meal period, and an optional Board
 page for tasks that aren't for today (off by default; its In progress column is today's Top
-priorities, and its cards carry categories, made from a card's chip or in Settings → Board).
+priorities, and its cards carry categories, made from a card's chip or in Settings → Board; the
+same switch brings recurring priorities, set up in Settings → Board).
 "Overtime approved" silences the clock-out alarm only. Every day is persisted; old days can be
 pruned. Data is **per user**; auth is optional (`AUTH_MODE=none | local | oidc`). One Docker
 container, SQLite on `/data`. A PWA used mostly on a laptop or desktop and laid out for phones
@@ -114,7 +115,8 @@ client/                 Vite root → dist/client
                         (offeredLeftovers), the category chip's data (CategoryPick) and what New
                         category makes of a name (categoryForName, nextColor, categoryNameTaken), and
                         the board as a write shows it (withCard, withPatch, withoutCard, withCategory,
-                        withCategoryPatch, withoutCategory)
+                        withCategoryPatch, withoutCategory, withRecurring, withRecurringPatch,
+                        withoutRecurring)
     popover.ts          placePopover: where the category chip's list goes on screen (under the chip or
                         above it, inside the viewport)
   src/hooks/            state and effects (useDay, useTimer, useSettings, useBoard, useAlarms, …), each
@@ -132,11 +134,12 @@ client/                 Vite root → dist/client
                         days) and the act() helpers
   src/components/       the cards, History (Calendar + Review), Banners, FinishChoice, and the pieces
                         several of them share (Folded: a long list's Show all; CategoryChip, the one
-                        category picker, and CategoryDot); settings/ holds SettingsDialog (the shell
-                        and tabs), a file per tab (BoardTab: the categories, shown while the board is
-                        on), and controls.tsx; board/ holds the Board page (Board, BoardCard, Capture,
-                        and dnd.ts: its collision and keyboard settings for dnd-kit), its own lazy
-                        chunk
+                        category picker, and CategoryDot; RepeatMark, a recurring row's mark, kept
+                        here so the sheet can show it); settings/ holds SettingsDialog (the shell
+                        and tabs), a file per tab (BoardTab: the categories and recurring
+                        priorities, shown while the board is on), and controls.tsx; board/ holds the
+                        Board page (Board, BoardCard, Capture, and dnd.ts: its collision and
+                        keyboard settings for dnd-kit), its own lazy chunk
   src/auth/             AuthGate and the setup / login / new-password pages
   src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
   src/styles.css        design tokens and all component CSS
@@ -652,23 +655,28 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   in an emptied row that a session with a category of its own points at (`regainsText`), reads
   the day again, or its copy would keep the pick the server dropped. On the client
   `CategoryChip` is the one way a category is picked, fed by `useCategoryPick` (null while the board
-  is off or before its first read, and then no chip shows), which the board page and the sheet call
-  once and pass down as `pick`: the sheet's goes to Top priorities (a written row's chip, which
-  saves at once), the timer (the row Also add makes, `addPriority(date, text, categoryUid)`), the
-  day log (a session on no written row, in the edit's one PATCH) and, through the retrospective,
-  Plan tomorrow (a row typed in). A press on the chip leaves the focus where it is until the list
-  takes it or gives it back to the chip, since Safari and Firefox on macOS don't focus a pressed
-  button and the day log's edit ends when the focus leaves it. Its New category box runs
-  `categoryForName` (`lib/board.ts`): the category in use by that name, else a removed one brought
-  back under its own uid, else a new one in `nextColor` (the colour the fewest categories in use
-  have, so the eight repeat evenly). The chip sets that uid at once and the create goes
-  out as an optimistic board write; opening the list reads the board again, and a create the
-  server refuses (another device took the name, a cap) is taken off with the "Change not saved"
-  banner, so what picked it reads as no category. The board's capture box remembers its last
-  category on the device (`USER_KEYS.captureCategory`; a removed or unknown one reads as none).
+  is off or before its first read, and then no chip shows), which the board page, the sheet and
+  Settings → Board each call once and pass down as `pick`: the sheet's goes to Top priorities (a
+  written row's chip, which saves at once), the timer (the row Also add makes,
+  `addPriority(date, text, categoryUid)`), the day log (a session on no written row, in the edit's
+  one PATCH) and, through the retrospective, Plan tomorrow (a row typed in); Settings → Board's
+  goes to its recurring priorities' rows, with `report` going to the dialog's `save`. A press on the
+  chip leaves the focus where it is until the list takes it or gives it back to the chip, since
+  Safari and Firefox on macOS don't focus a pressed button and the day log's edit ends when the
+  focus leaves it. Its New category box runs `categoryForName` (`lib/board.ts`): the category in use
+  by that name, else a removed one brought back under its own uid, else a new one in `nextColor`
+  (the colour the fewest categories in use have, so the eight repeat evenly). The chip sets that uid
+  at once and the create goes out as an optimistic board write; opening the list reads the board
+  again, and a create the server refuses (another device took the name, a cap) is taken off with the
+  "Change not saved" banner (in Settings → Board, the header's Not saved), so what picked it reads
+  as no category. The board's capture box remembers its last category on the device
+  (`USER_KEYS.captureCategory`; a removed or unknown one reads as none).
   Settings → Board (`BoardTab`, shown while the board is on) adds (`categoryForName` again),
-  renames (refusing a name in use, `categoryNameTaken`), recolours and removes, each through the
-  dialog's `save`.
+  renames (refusing a name in use, `categoryNameTaken`), recolours and removes categories, and
+  adds (on Monday to Friday, no category), renames, gives a category, sets the weekdays of (the
+  last day on stays on) and removes recurring priorities (the board store's `addRecurring`,
+  `editRecurring` and `removeRecurring`, where a 404 on the delete counts as done), each through
+  the dialog's `save`.
 - **A recurring priority is a row of its own, named by its uid** (`recurring`, routes in
   `routes/board.ts`, answered in `Board.recurring` in the order they were made): a title, a
   category and the weekdays it is offered on, ISO 1 (Monday) to 7 on the wire and a mask in the
@@ -695,12 +703,14 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   correction for a mistaken tick, and such a card offers no Delete: an earlier day's ticked row
   would show in its place. The editor's category chip goes where its title goes: a row of today's
   list changes through the row (`editRow`, the card as touched, and the save copies it onto the
-  card), any other card through a PATCH, and a planned card or an earlier day's row has none. The
-  day store sends `cards` on every priorities PUT while the board is on and the list's day is
-  today or later, read as the PUT goes out, so a row typed on the sheet gets its card. After a
-  board read, once per page load and day, the board sends today's list asking for cards when a
-  row has none (the sweep, on its queue), so rows typed while it was off have cards before Plan
-  tomorrow carries them. A park places the row's card
+  card), any other card through a PATCH, and a planned card or an earlier day's row has none. A
+  recurring row's title isn't edited on the board: its editor shows it as text, with a line
+  pointing at Settings → Board, where its recurring priority is renamed; its meta line carries
+  the Repeats mark (`RepeatMark`). The day store sends `cards` on every priorities PUT while the
+  board is on and the list's day is today or later, read as the PUT goes out, so a row typed on the
+  sheet gets its card. After a board read, once per page load and day, the board sends today's list
+  asking for cards when a row has none (the sweep, on its queue), so rows typed while it was off
+  have cards before Plan tomorrow carries them. A park places the row's card
   (`POST /board/cards` with the row's `cardUid`, and its title and category as the list shows
   them when the job runs, since the POST writes both onto the card) before it takes the row off
   the list, and a row with no card yet first goes out in a save that asks for one, so a retry
@@ -820,8 +830,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   of them from the first screen folds it back into the main chunk. Everything under
   `components/board/` loads only through `Board`'s chunk; what other views share with it
   (`lib/board.ts` and `hooks/useBoard.tsx` with the sheet, the settings and History's Review,
-  `Folded` with Review, and the category pieces, `CategoryChip`, `CategoryDot` (Review's too) and
-  `lib/popover.ts`) stays out of that folder and imports no dnd-kit. The sheet renders plain
+  `Folded` with Review, the category pieces, `CategoryChip`, `CategoryDot` (Review's too) and
+  `lib/popover.ts`, and `RepeatMark`, kept out so the sheet can show it) stays out of that
+  folder and imports no dnd-kit. The sheet renders plain
   `CardFrame`s until the first Customize and stays on `SortableCards` after it, since swapping
   lists remounts the cards. A chunk that fails to load (an upgrade while the page was open)
   reloads the page once a minute at most (`vite:preloadError` in `main.tsx`, `lib/reload.ts`);
@@ -876,12 +887,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `mergeSettings()` (`server/settings.ts`; `flag(key)` takes a switch, `limited(key)` checks a
   number against its bounds) → add the control to its tab in `client/src/components/settings/`
   (`TimeclockTab`, `AlarmsTab`, `SheetTab`, `DataTab`, and `BoardTab`, shown while the board is
-  on, which takes only the dialog's `save`, for its board writes, so a setting added there gives
-  it `TabProps` (`settings`, `set`) as well; the Sheet tab's "History" section holds the
-  calendar's switches, and its "Board" section the board's): a `DurationField`
-  (`components/DurationField.tsx`) for hours and minutes or a `NumberField`
-  (`settings/controls.tsx`) for one number, whose `unit` suffix is "min" unless given, each
-  with `{...SETTING_LIMITS.<key>}` for `min` and `max`; a `SelectField`
+  on, which takes `TabProps` and the dialog's `save`, for its board writes; the Sheet tab's
+  "History" section holds the calendar's switches, and its "Board" section the board's): a
+  `DurationField` (`components/DurationField.tsx`) for hours and minutes or a `NumberField`
+  (`settings/controls.tsx`) for one number, whose `unit` suffix is "min" unless given and whose
+  optional `hint` sits under its label and describes the box, each with
+  `{...SETTING_LIMITS.<key>}` for `min` and `max`; a `SelectField`
   (`settings/controls.tsx`) for one choice from a fixed list; a `Toggle` for a switch.
   `NumberInput` on its own puts several numbers on one row, like the timer's start buttons. The
   new setting also goes in `TEST_SETTINGS` (`client/src/test/fixtures.ts`), and the type makes a
@@ -1167,6 +1178,13 @@ The browser pass for each surface (the logic under it is already tested):
   place written or empty), tick Also add and pick one for the new row (the chip beside it wraps
   under it at 375), give an unplanned log session one (its dot before the label) and a Plan
   tomorrow row one, then the same at 1280 in the split's columns.
+- **Recurring priorities**: with the board on, Settings → Board → Recurring priorities: Recurring
+  rows per day with its hint beside the box; Add recurring priority (Enter leaves an empty box for
+  the next, the focus leaving closes it); a rename; a category from the row's chip, where Escape
+  closes only the list and the dialog stays open; the days (the last one on stays pressed, and on
+  a touch screen each day takes 44 × 44 px); Remove, with the focus on the next title. At 375 the
+  rows wrap and the seven days fit on one line. On the board, a recurring row's meta line has the
+  Repeats mark, and its editor shows the title as text with the line about Settings → Board.
 - **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
   Month / Quarter). With the board on (`PUT /api/settings {"board":true}`), By category in
   Review → Week and Month (solid and striped bars, No category last), in light and dark. For

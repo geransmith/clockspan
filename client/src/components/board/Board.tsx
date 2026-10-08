@@ -344,8 +344,9 @@ export const Board = memo(function Board({ today }: { today: string }) {
         }}
         tick={tick}
         onMove={(to, el) => run(item, to, to === 'later' || to === 'next' ? laneStart(columns, to) : null, el.getBoundingClientRect())}
+        // Not a recurring row's: its recurring priority is renamed in Settings → Board.
         onRename={
-          onToday
+          onToday && !item.recurring
             ? (text) => report(store.editRow(item.row!.uid!, { text }, item.row!.cardUid))
             : cardOnly
               ? (title) => report(store.editCard(item.card!.uid, { title }))

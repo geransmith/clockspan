@@ -1,5 +1,5 @@
 /** The settings tabs' building blocks: their props, a titled section and its number and select rows (the switch is `../Toggle`). */
-import { useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import type { SettingsPatch } from '../../api';
 import type { Settings } from '../../types';
 
@@ -47,13 +47,17 @@ export function SelectField<T extends string>({
   );
 }
 
-/** A single whole number between `min` and `max` (minutes, rows, days); `unit` is the suffix, "min" by default. */
+/**
+ * A single whole number between `min` and `max` (minutes, rows, days); `unit` is the suffix, "min"
+ * by default. A `hint` sits under the label and describes the box.
+ */
 export function NumberField({
   label,
   value,
   min,
   max,
   unit = 'min',
+  hint,
   disabled,
   onCommit,
 }: {
@@ -62,14 +66,25 @@ export function NumberField({
   min: number;
   max: number;
   unit?: string;
+  hint?: string;
   disabled?: boolean;
   onCommit: (n: number) => void;
 }) {
+  const hintId = useId();
   return (
     <div className="setting-row">
-      <span>{label}</span>
+      {hint ? (
+        <span className="toggle-text">
+          <span>{label}</span>
+          <span id={hintId} className="muted small">
+            {hint}
+          </span>
+        </span>
+      ) : (
+        <span>{label}</span>
+      )}
       <span className="inline-controls">
-        <NumberInput label={label} value={value} min={min} max={max} disabled={disabled} onCommit={onCommit} />
+        <NumberInput label={label} value={value} min={min} max={max} disabled={disabled} describedBy={hint ? hintId : undefined} onCommit={onCommit} />
         <span className="muted">{unit}</span>
       </span>
     </div>
@@ -83,6 +98,7 @@ export function NumberInput({
   min,
   max,
   disabled,
+  describedBy,
   onCommit,
 }: {
   label: string;
@@ -90,6 +106,8 @@ export function NumberInput({
   min: number;
   max: number;
   disabled?: boolean;
+  /** The id of a hint that describes the box. */
+  describedBy?: string;
   onCommit: (n: number) => void;
 }) {
   const [v, setV] = useState(String(value));
@@ -113,6 +131,7 @@ export function NumberInput({
       onBlur={commit}
       onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
       aria-label={label}
+      aria-describedby={describedBy}
       disabled={disabled}
     />
   );

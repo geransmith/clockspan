@@ -30,7 +30,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const { auth } = useAuth();
   const { saveState, save } = useSaveStatus();
   // Account holds password + users, which only exist with local accounts; Board, the board's
-  // categories, only while the board is on.
+  // categories and recurring priorities, only while the board is on.
   const tabs = TABS.filter((t) => (t.id !== 'account' || auth.mode === 'local') && (t.id !== 'board' || settings.board));
   // The tab picked last time, so reopening to tweak the same thing doesn't start over. It is saved
   // when picked, never on open, so a stored tab not offered now (Account once local accounts are
@@ -71,7 +71,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       case 'sheet':
         return <SheetTab settings={settings} set={set} />;
       case 'board':
-        return <BoardTab save={save} />;
+        return <BoardTab settings={settings} set={set} save={save} />;
       case 'data':
         return <DataTab settings={settings} set={set} onReset={onReset} />;
       case 'account':

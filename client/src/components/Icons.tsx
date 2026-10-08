@@ -122,3 +122,9 @@ export const Bell = () => (
     <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0" />
   </svg>
 );
+/** A recurring priority's mark: two arrows chasing round. */
+export const Repeat = () => (
+  <svg {...base}>
+    <path d="m17 2 4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3" />
+  </svg>
+);
