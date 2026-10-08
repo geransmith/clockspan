@@ -163,7 +163,7 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority, pick = nu
 }
 
 function Running({ session }: { session: Session }) {
-  const { countdownSeconds, progress, paused, due } = useTimer();
+  const { name, countdownSeconds, progress, paused, due } = useTimer();
   const r = 54;
   const circ = 2 * Math.PI * r;
   // Past the end the countdown goes negative; the sub-line says why.
@@ -184,7 +184,7 @@ function Running({ session }: { session: Session }) {
         </div>
       </div>
       <div className="timer-running-label">
-        <SessionLabel label={session.label} />
+        <SessionLabel label={name} />
       </div>
       <TimerControls />
     </div>

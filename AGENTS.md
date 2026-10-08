@@ -410,7 +410,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   takes seconds) is N minutes from now, `finish()` logs the planned length (the server's clamp)
   and `finish(true)` sends `countOverrun` so the time past the end is logged too. Plans are
   whole minutes: `adjust` rounds the new plan up to one and stops at `PLANNED_SECONDS.max`
-  (8 h), where `canAdd` turns false, + is disabled and the "Time's up" banner drops its Add button.
+  (8 h), where `canAdd` turns false, + is disabled and the "Time's up" banner is raised again,
+  quietly, without its Add button. The banner names the session (`useTimer().name`) as it was
+  when raised, as its notification does: a rename while it is up shows in the bar, the timer card
+  and the tab title, and never raises it again, which would bring a closed banner back.
   The Finish buttons call `requestFinish()`: it finishes unless the timer is due and the planned
   and worked lengths differ in their whole minutes (a minute or more over), where `finishChoice`
   opens the `FinishChoice` sheet (Planned · Nm / Worked · Mm / Back). `lib/timer.ts` holds these
@@ -814,7 +817,21 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   settles another day's miss and a same-text one-off stays a task of its own. A routine is titled
   by its item through `recurringTitles` (uid → title) while the item exists, else by its
   latest row's text, so a retyped row or a deleted item stays one entry. `reviewDay`'s
-  `routines` (`{ done, total }`) is the retro card's "routines 3 of 4". A session's category is
+  `routines` (`{ done, total }`) is the retro card's "routines 3 of 4". A session's name is
+  `sessionName(s, rows)`: the current text of the written row its `priorityUid` names on its
+  day, else its `label` (unplanned, its row removed or emptied, or its day not in the store), so a
+  rename on the sheet, on this device or another, renames it in the day log, the timer card, the
+  running bar, the tab title and the timer's alerts as they are raised. `useTimer().name` is the
+  running session's (a "Time's up" banner already up keeps its name: see the timer rule). The
+  retro's Not on the plan and Review's Off the plan list sessions on no written row, which go by
+  their label anyway. The label stays as it was typed or copied at the start, and isn't edited
+  while the session is on a written row: the bar shows the name as plain text
+  (`useTimer().linked`), and the log's edit shows it as text over the priority select, with no
+  label box. A session gets a name of its own only off a row: Unplanned in the log's select sends
+  the link alone, the session then reads by the label it started with (the row's old text when
+  the row was renamed since), and its box edits that as before. A link never sends a label: the
+  select linking a session drops a label typed before it, and a box opened before another device
+  linked or unlinked the session closes, unsent. A session's category is
   `sessionCategory(s, rows)`: the category of the written row its `priorityUid` names on its
   day (none included), else its own `categoryUid` (picked in the day log, or copied by the
   server when its row was removed), else that of an emptied row it still names, else none. The
@@ -1241,9 +1258,12 @@ The browser pass for each surface (the logic under it is already tested):
   browser pane send single `key` presses; the `type` action pastes the whole string into one
   segment.
 - **Priorities or the timer card**: tick one row and press Add priority (the notice lists the
-  ticked row); tap a chip, start, and the log row shows the number; "Also add to today's
-  priorities" fills the first row never written in, never a cleared one; a log row's select
-  reassigns it. Clear a row with focus logged on it: the note under it says the time stays, and
+  ticked row); tap a chip, start, and the log row shows the number; rename that row and the bar,
+  the card, the tab title and the log row take the new text, with no label box in the bar or
+  the log row's edit (the name is text there, with no hover), and clear it and they show the
+  label the session started with, which both edit again; "Also add to today's priorities" fills
+  the first row never written in, never a cleared one; a log row's select reassigns it. Clear a
+  row with focus logged on it: the note under it says the time stays, and
   Add priority goes past it. With the board on: pick a category on a row (an empty chip shows only
   on the row's hover or focus with a mouse, always on a phone; a long name ends in an ellipsis; at
   375 the chip sits under the field, nearer it than the next row's, and the field keeps the row's

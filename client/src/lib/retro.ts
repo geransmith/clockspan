@@ -57,6 +57,22 @@ function namedRow(s: Session, rows: Priority[]): Priority | undefined {
   return s.priorityUid == null ? undefined : rows.find((p) => p.uid === s.priorityUid);
 }
 
+/** The written row of its day a session is on: the one its `priorityUid` names, while it has text. */
+export function sessionRow(s: Session, rows: Priority[]): Priority | undefined {
+  const row = namedRow(s, rows);
+  return row && hasText(row) ? row : undefined;
+}
+
+/**
+ * What a session is called, given the rows of its own day: the current text of its written row
+ * (`sessionRow`), so a rename on the sheet (here or on another device) renames the session
+ * wherever it shows. Off a written row (unplanned, its row removed or emptied, or a day not
+ * read), the label it was stored with.
+ */
+export function sessionName(s: Session, rows: Priority[]): string {
+  return sessionRow(s, rows)?.text.trim() ?? s.label;
+}
+
 /**
  * The category a session counts under, given the rows of its own day. A session on a written
  * row counts under that row's category, none included, so retagging the row moves its time.

@@ -8,7 +8,7 @@ import { useTimeFormat } from '../hooks/useTimeFormat';
 import { breakSeconds } from '../lib/breaks';
 import { counted, formatDuration } from '../lib/format';
 import { hasText } from '../../../shared/priorities.js';
-import { focusOf, sessionCategory, sessionCategoryEdit } from '../lib/retro';
+import { focusOf, sessionCategory, sessionCategoryEdit, sessionName } from '../lib/retro';
 import { timerView } from '../lib/timer';
 import type { Break, Priority, Session } from '../types';
 import { CategoryChip } from './CategoryChip';
@@ -142,7 +142,9 @@ function Row({
   onDelete: () => void;
 }) {
   const { formatTime } = useTimeFormat();
-  const [editing, setEditing] = useState(false);
+  // The edit box opened: 'label' for a session off a written row (its label, the select and the
+  // chip), 'link' for one on a row, which names it (the name as text and the select).
+  const [editing, setEditing] = useState<'label' | 'link' | null>(null);
   const [draft, setDraft] = useState('');
   // Set when a key or the select ends the edit, so focus goes back to the label; a blur leaves focus where it went.
   const [returnFocus, setReturnFocus] = useState(false);
@@ -155,12 +157,19 @@ function Row({
   const seconds = running ? timerView(s, now).elapsedSeconds : s.durationSeconds;
   // A link to a row that was since removed reads as unplanned.
   const linked = s.priorityUid ? planned.find((p) => p.uid === s.priorityUid) : undefined;
+  // What it is called: the linked row's current text, else its label.
+  const name = sessionName(s, rows);
+  // A box opened for a session linked or unlinked since (on another device) closes, unsent.
+  if (editing && (editing === 'link') !== (linked != null)) setEditing(null);
   // What the session counts under, when the board holds it.
   const category = pick ? categoryOf(pick.categories, sessionCategory(s, rows)) : undefined;
   // One PATCH per edit: label, link and category together, so two responses can't land out of order.
+  // A label goes only for a session that stays off a written row: the select linking it to one
+  // drops a label typed before it, since the row names it from then on.
   const commit = (extra: Pick<SessionEdit, 'priorityUid' | 'categoryUid'> = {}) => {
-    setEditing(false);
-    const patch = { ...extra, ...(draft.trim() !== s.label ? { label: draft.trim() } : {}) };
+    setEditing(null);
+    const label = editing === 'label' && !extra.priorityUid ? draft.trim() : s.label;
+    const patch = { ...extra, ...(label !== s.label ? { label } : {}) };
     if (Object.keys(patch).length > 0) onEdit(patch);
   };
   // Moving from the label input to the priority select or the category chip (and its list)
@@ -182,22 +191,27 @@ function Row({
       </span>
       {editing ? (
         <span className="log-edit" ref={editBox} onBlur={onBlur}>
-          <LabelInput
-            className="log-label-input"
-            value={draft}
-            onChange={setDraft}
-            onSave={() => {
-              setReturnFocus(true);
-              commit();
-            }}
-            onDrop={() => {
-              setReturnFocus(true);
-              setEditing(false);
-            }}
-          />
+          {editing === 'label' ? (
+            <LabelInput
+              className="log-label-input"
+              value={draft}
+              onChange={setDraft}
+              onSave={() => {
+                setReturnFocus(true);
+                commit();
+              }}
+              onDrop={() => {
+                setReturnFocus(true);
+                setEditing(null);
+              }}
+            />
+          ) : (
+            <span className="log-label">{name}</span>
+          )}
           {planned.length > 0 && (
             <select
               className="input select log-plan-select"
+              autoFocus={editing === 'link'}
               value={linked?.uid ?? ''}
               onChange={(e) => {
                 setReturnFocus(true);
@@ -236,11 +250,11 @@ function Row({
           onClick={() => {
             setDraft(s.label);
             setReturnFocus(false);
-            setEditing(true);
+            setEditing(linked ? 'link' : 'label');
           }}
           title={
             linked
-              ? `Priority ${linked.position}: ${linked.text}. Click to edit`
+              ? `Priority ${linked.position}. Click to change the priority`
               : pick
                 ? 'Edit label, priority or category'
                 : 'Edit label or link to a priority'
@@ -253,7 +267,7 @@ function Row({
           )}
           {/* A planned row shows its priority's number instead, and the priority its category. */}
           {!linked && category && <CategoryDot color={category.color} label={category.name} />}
-          <SessionLabel label={s.label} />
+          <SessionLabel label={name} />
         </button>
       )}
       <span className="log-duration">

@@ -5,22 +5,36 @@ import * as api from '../api';
 import { UNTITLED_SESSION } from '../lib/copy';
 import { formatCountdown } from '../lib/format';
 import { MINUTE_MS } from '../../../shared/dates.js';
-import { AppProviders, makeDay, makeSession, makeSettings, settle, T0 } from '../test/hooks';
+import { useDay } from '../hooks/useDay';
+import { AppProviders, makeDay, makePriority, makeSession, makeSettings, settle, T0, TODAY } from '../test/hooks';
 import type { Session } from '../types';
 import { RunningTimerBar } from './RunningTimerBar';
 
 vi.mock('../api');
 vi.mock('../lib/alerts');
 
+/**
+ * Today's day held in the store, as the app always holds it (the sheet, the alarms), and a press
+ * that reads it again, as the refresh loop does: how another device's rename reaches this one.
+ */
+function HoldToday() {
+  const { store } = useDay(TODAY);
+  return <button onClick={() => void store.refresh(TODAY)}>Read today again</button>;
+}
+
 async function renderBar(session: Session) {
   vi.mocked(api.getRunning).mockResolvedValue({ session });
   render(
     <AppProviders>
+      <HoldToday />
       <RunningTimerBar />
     </AppProviders>,
   );
   await settle();
 }
+
+const label = () => screen.getByTitle('Edit label');
+const input = () => screen.getByRole('textbox', { name: 'Session label' }) as HTMLInputElement;
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 + 5 * MINUTE_MS });
@@ -44,8 +58,6 @@ describe('RunningTimerBar', () => {
 
   describe('the label', () => {
     const session = makeSession();
-    const label = () => screen.getByTitle('Edit label');
-    const input = () => screen.getByRole('textbox', { name: 'Session label' }) as HTMLInputElement;
     const edit = async (text: string, key?: 'Enter' | 'Escape') => {
       await renderBar(session);
       fireEvent.click(label());
@@ -115,6 +127,51 @@ describe('RunningTimerBar', () => {
       await edit('   ', 'Enter');
       expect(api.patchSession).toHaveBeenCalledExactlyOnceWith(1, { label: '' });
       expect(label().textContent).toBe(UNTITLED_SESSION);
+    });
+  });
+
+  describe('a session on a written row', () => {
+    const session = makeSession({ priorityUid: 'u1' });
+    const today = (text: string) => makeDay(TODAY, { priorities: [makePriority(1, text, { uid: 'u1' })] });
+    const readToday = async (text: string) => {
+      vi.mocked(api.getDay).mockResolvedValue(today(text));
+      fireEvent.click(screen.getByRole('button', { name: 'Read today again' }));
+      await settle();
+    };
+
+    beforeEach(() => {
+      vi.mocked(api.getDay).mockResolvedValue(today('Ship the fix'));
+      vi.mocked(api.patchSession).mockImplementation((id, patch) => Promise.resolve({ session: { ...session, id, ...patch } }));
+    });
+
+    it("shows the row's current text as plain text, with no label to edit", async () => {
+      await renderBar(session);
+      expect(screen.getByText('Ship the fix').tagName).toBe('SPAN');
+      expect(screen.queryByTitle('Edit label')).toBeNull();
+      expect(screen.queryByRole('button', { name: /Ship the fix/ })).toBeNull();
+      // Renamed on another device.
+      await readToday('Ship the hotfix');
+      expect(screen.getByText('Ship the hotfix').className).toBe('running-label');
+    });
+
+    it('closes a label box open as its emptied row is written in again, sending nothing, and edits again once the row is emptied', async () => {
+      vi.mocked(api.getDay).mockResolvedValue(today(''));
+      await renderBar(session);
+      fireEvent.click(label());
+      fireEvent.change(input(), { target: { value: 'Typed meanwhile' } });
+      await readToday('Ship the fix');
+      expect(screen.queryByRole('textbox')).toBeNull();
+      expect(screen.getByText('Ship the fix').className).toBe('running-label');
+
+      // Off the row it reads by its label again, and the box opens on that, not on the draft dropped.
+      await readToday('');
+      expect(label().textContent).toBe('Write the report');
+      fireEvent.click(label());
+      expect(input().value).toBe('Write the report');
+      fireEvent.change(input(), { target: { value: 'Draft the summary' } });
+      fireEvent.keyDown(input(), { key: 'Enter' });
+      await settle();
+      expect(api.patchSession).toHaveBeenCalledExactlyOnceWith(1, { label: 'Draft the summary' });
     });
   });
 });

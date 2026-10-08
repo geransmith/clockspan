@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { completedSession, makeDay, makePriority, makeSession, punchesAt } from '../test/fixtures';
 import type { Day } from '../types';
-import { editedSession, focusOf, hasContent, loggedByUid, reviewDay, sessionCategory, sessionCategoryEdit } from './retro';
+import { editedSession, focusOf, hasContent, loggedByUid, reviewDay, sessionCategory, sessionCategoryEdit, sessionName, sessionRow } from './retro';
 
 const FIRST_UID = makePriority(1, '').uid;
 
@@ -35,6 +35,27 @@ describe('loggedByUid', () => {
       ]),
     );
     expect(loggedByUid([]).size).toBe(0);
+  });
+});
+
+describe('sessionName and sessionRow', () => {
+  const fix = makePriority(1, '  Ship the fix ');
+  const rows = [fix, makePriority(2, '', { uid: 'emptied00000' })];
+  const on = (priorityUid: string | null, label = 'Started as this') => makeSession({ priorityUid, label });
+
+  it('is the current text of the written row the session names, trimmed, whatever label it started with', () => {
+    expect(sessionRow(on(fix.uid), rows)).toBe(fix);
+    expect(sessionName(on(fix.uid), rows)).toBe('Ship the fix');
+    expect(sessionName(on(fix.uid, ''), rows)).toBe('Ship the fix');
+  });
+
+  it('is the label off a written row: unplanned, on a row since removed or emptied, or on a day not read', () => {
+    expect(sessionName(on(null), rows)).toBe('Started as this');
+    expect(sessionName(on('removed00000'), rows)).toBe('Started as this');
+    expect(sessionName(on('emptied00000'), rows)).toBe('Started as this');
+    expect(sessionRow(on('emptied00000'), rows)).toBeUndefined();
+    expect(sessionName(on(fix.uid), [])).toBe('Started as this');
+    expect(sessionName(on(null, ''), rows)).toBe('');
   });
 });
 

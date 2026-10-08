@@ -141,6 +141,78 @@ describe('sync with the server', () => {
   });
 });
 
+describe("the running session's name", () => {
+  const row = makePriority(1, 'Ship the fix', { uid: 'u1' });
+  const renamed = { ...row, text: 'Ship the hotfix' };
+
+  /** Renders with `session` running and today's list holding `row`, whose saves the server takes as sent. */
+  async function renderOnRow(session: Session | null) {
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [row] }));
+    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve({ priorities }));
+    return renderRunning(session);
+  }
+
+  it("is its row's current text while that row is written on its day, in the tab title too, and its label off it", async () => {
+    const { result } = await renderOnRow(startedAgo(5, { priorityUid: 'u1' }));
+    expect(result.current.timer.name).toBe('Ship the fix');
+    expect(result.current.timer.linked).toBe(true);
+    expect(document.title).toBe('20:00 · Ship the fix — Clockspan');
+
+    // Renamed on the sheet: shown at once, before the save answers.
+    act(() => void result.current.store.setPriorities(TODAY, [renamed], [row]));
+    expect(result.current.timer.name).toBe('Ship the hotfix');
+    expect(document.title).toBe('20:00 · Ship the hotfix — Clockspan');
+    await settle();
+
+    // Emptied, the row names nothing: the session goes back to the label it was stored with.
+    act(() => void result.current.store.setPriorities(TODAY, [{ ...row, text: '' }], [renamed]));
+    expect(result.current.timer.name).toBe('Write the report');
+    expect(result.current.timer.linked).toBe(false);
+    expect(document.title).toBe('20:00 · Write the report — Clockspan');
+    await settle();
+  });
+
+  it('is its label while its day is not read, and empty while nothing runs', async () => {
+    const { result } = await renderOnRow(startedAgo(5, { priorityUid: 'u1', date: YESTERDAY }));
+    expect(result.current.timer.name).toBe('Write the report');
+    expect(result.current.timer.linked).toBe(false);
+    cleanup();
+    const idle = await renderOnRow(null);
+    expect(idle.result.current.timer.name).toBe('');
+    expect(idle.result.current.timer.linked).toBe(false);
+  });
+
+  it("names the time's-up banner by the row, and leaves it as it was raised when the row is renamed", async () => {
+    const { result } = await renderOnRow(startedAgo(24.9, { priorityUid: 'u1' }));
+    await settle(6000);
+    expect(alert).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ tag: 'timer-due', body: TIMER_DUE.body('Ship the fix', '25m'), sound: true }));
+    vi.mocked(dismissByTag).mockClear();
+    act(() => void result.current.store.setPriorities(TODAY, [renamed], [row]));
+    await settle();
+    expect(result.current.timer.name).toBe('Ship the hotfix');
+    // Neither raised again nor taken down: a banner closed stays closed, and a rename typed while
+    // it is up isn't announced again at each pause in the typing.
+    expect(alert).toHaveBeenCalledOnce();
+    expect(dismissByTag).not.toHaveBeenCalled();
+  });
+
+  it('names the session by its row when it finishes on its own after the grace', async () => {
+    await renderOnRow(startedAgo(34.9, { priorityUid: 'u1' }));
+    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(startedAgo(35, { priorityUid: 'u1' }), { durationSeconds: 1500 }) });
+    await settle(6000);
+    expect(alert).toHaveBeenLastCalledWith(expect.objectContaining({ title: TIMER_DONE.title, body: TIMER_DONE.body('Ship the fix', '25m') }));
+  });
+
+  it('names the session by its row when a pause left for an hour closes it', async () => {
+    await renderOnRow(startedAgo(70, { pausedAt: T0 - 59 * MINUTE_MS, priorityUid: 'u1' }));
+    vi.mocked(api.finishSession).mockResolvedValue({
+      session: endSession(startedAgo(70, { priorityUid: 'u1' }), { endedAt: T0 - 59 * MINUTE_MS, durationSeconds: 660 }),
+    });
+    await settle(MINUTE_MS);
+    expect(alert).toHaveBeenCalledWith(expect.objectContaining({ title: TIMER_PAUSED_OUT.title, body: TIMER_PAUSED_OUT.body('Ship the fix', '11m') }));
+  });
+});
+
 describe('start', () => {
   it('starts on the server and logs the row', async () => {
     vi.mocked(api.startSession).mockResolvedValue({ session: makeSession({ priorityUid: 'u1' }) });
