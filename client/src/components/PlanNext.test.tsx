@@ -145,6 +145,14 @@ describe('PlanNext', () => {
     expect(document.querySelector('.burst')).not.toBeNull();
   });
 
+  it("doesn't carry an open routine: it comes back on its own weekdays", async () => {
+    await renderPlan({ todays: [...TODAYS, makePriority(5, 'Monitor the queue', { recurringUid: 'rcur00000001' })] });
+    await open();
+    expect(screen.getAllByRole('checkbox').map((c) => c.closest('label')!.textContent)).toEqual(['Review the PR', 'Call the bank']);
+    await save();
+    expect(sent().map((p) => p.text)).toEqual(['Review the PR', 'Call the bank']);
+  });
+
   it("keeps each tick on its row when today's list is renumbered while open", async () => {
     const { again } = await renderPlan();
     await open();

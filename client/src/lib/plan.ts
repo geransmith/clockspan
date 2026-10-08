@@ -24,22 +24,29 @@ export function textSeed(text: string, categoryUid: string | null = null): Prior
 }
 
 /**
+ * Whether `seed` stands for the same item as `row` when it is planned: the same text (`sameText`),
+ * or a card or recurring priority both hold (a null link matches nothing).
+ */
+export function sameItem(row: PrioritySeed, seed: PrioritySeed): boolean {
+  return sameText(row.text) === sameText(seed.text) || sharesLink(row, seed);
+}
+
+/**
  * That day's list with `seeds` added after what it already holds. A seed is skipped when a row
- * with text there, or an earlier seed, has its text (`sameText`) or holds its non-null
- * `cardUid` or `recurringUid`; a null link matches nothing. A cleared row that holds its link
- * takes it back (`takeBack`), keeping its uid and `addedAt` so the time logged on it counts
- * again. Only rows never written in are dropped: any other cleared row keeps its uid and the
- * sessions on it. Each new row gets its own uid and `addedAt` now, so it counts as planned on
- * its day unless a completed session there started before it (`reviewDay`), and carries the
- * seed's links and category: the same task on a row of its own. Nothing goes past the list's
- * limit. `added` counts the rows filled.
+ * with text there, or an earlier seed, stands for the same item (`sameItem`). A cleared row that
+ * holds its link takes it back (`takeBack`), keeping its uid and `addedAt` so the time logged on
+ * it counts again. Only rows never written in are dropped: any other cleared row keeps its uid
+ * and the sessions on it. Each new row gets its own uid and `addedAt` now, so it counts as
+ * planned on its day unless a completed session there started before it (`reviewDay`), and
+ * carries the seed's links and category: the same task on a row of its own. Nothing goes past
+ * the list's limit. `added` counts the rows filled.
  */
 export function planNext(existing: Priority[], seeds: PrioritySeed[], now = Date.now()): { rows: Priority[]; added: number } {
   const rows = existing.filter((p) => !isFree(p));
   let added = 0;
   for (const seed of seeds) {
     const text = seed.text.trim();
-    if (!text || rows.some((p) => hasText(p) && (sameText(p.text) === sameText(text) || sharesLink(p, seed)))) continue;
+    if (!text || rows.some((p) => hasText(p) && sameItem(p, seed))) continue;
     const row: Priority = {
       position: 0,
       text,

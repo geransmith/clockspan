@@ -7,7 +7,7 @@ import type { CategoryPick } from '../lib/board';
 import { LOAD_FAILED, PLAN_NEXT } from '../lib/copy';
 import { dayName } from '../lib/format';
 import { nextWorkDay, planNext, textSeed } from '../lib/plan';
-import { isOpen } from '../lib/priorities';
+import { isOpen, isRecurring } from '../lib/priorities';
 import { hasText, sharesLink } from '../../../shared/priorities.js';
 import { sameText } from '../../../shared/text.js';
 import { LIMITS } from '../../../shared/api.js';
@@ -19,7 +19,7 @@ import { LoadFailed } from './LoadFailed';
 
 interface Props {
   today: string;
-  /** That day's priorities: the unticked ones are offered for the next day. */
+  /** That day's priorities: the unticked one-offs are offered for the next day. A routine comes back on its own weekdays. */
   priorities: Priority[];
   /** The category chip's data: each row typed in gets a chip. Null (the board off) shows none. */
   pick?: CategoryPick | null;
@@ -46,7 +46,7 @@ export function PlanNext({ today, priorities, pick = null }: Props) {
         <Planner
           date={next}
           name={name}
-          candidates={priorities.filter(isOpen)}
+          candidates={priorities.filter((p) => isOpen(p) && !isRecurring(p))}
           pick={pick}
           onDone={(added) => {
             setOpen(false);

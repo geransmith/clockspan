@@ -90,6 +90,15 @@ export function endOfDay(key: string): number {
   return parseDateKey(addDays(key, 1)).getTime() - 1;
 }
 
+/**
+ * ISO weekday of a date key, Monday 1 … Sunday 7, as a recurring priority's schedule names it.
+ * Computed in UTC from the key (a date-only key parses as UTC midnight, see daysBetween), so the
+ * zone never matters.
+ */
+export function isoWeekday(key: string): number {
+  return ((new Date(Date.parse(key)).getUTCDay() + 6) % 7) + 1;
+}
+
 /** Monday of the key's week: the review follows the work week, not the calendar one. */
 export function startOfWeek(key: string): string {
   const d = parseDateKey(key);

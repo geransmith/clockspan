@@ -9,6 +9,12 @@ export const isOpen = (p: Priority) => hasText(p) && !p.done;
 /** A row the morning offer added from a recurring priority: it stays on today's list and never gets a board card. */
 export const isRecurring = (p: Pick<Priority, 'recurringUid'>) => p.recurringUid != null;
 
+/**
+ * A one-off written on a list: a row with text and no recurring priority. A list with none has
+ * no plan yet, so the left-open offer shows on it, and only these count toward the nudge.
+ */
+export const isOneOff = (p: Pick<Priority, 'text' | 'recurringUid'>) => hasText(p) && !isRecurring(p);
+
 /** A row nothing was ever written in (`isFree`), linked to nothing: what the card pads a list with. */
 export function emptyRow(position: number): Priority {
   return { position, text: '', done: false, uid: null, addedAt: null, cardUid: null, recurringUid: null, categoryUid: null };
@@ -44,13 +50,15 @@ export function warningKind(done: number, total: number): WarningKind {
 }
 
 /**
- * Whether adding a row to `rows` asks first, and with which kind of warning: null below
- * `warnThreshold(count)`. Only rows with text count, so a cleared row, which a new priority
- * goes past, doesn't bring the warning on sooner.
+ * Whether adding a row to `rows` asks first, and with which kind of warning: null while the rows
+ * with text and no recurring priority are fewer than `warnThreshold(count)`. A cleared row, which a
+ * new priority goes past, doesn't bring the warning on sooner, and neither do the routines, which
+ * have their own number a day (`recurringPerDay`). The kind still counts every row with text, so
+ * the warning starts from all the work ticked.
  */
 export function nudgeFor(rows: Priority[], count: number): WarningKind | null {
+  if (rows.filter(isOneOff).length < warnThreshold(count)) return null;
   const written = rows.filter(hasText);
-  if (written.length < warnThreshold(count)) return null;
   return warningKind(written.filter((p) => p.done).length, written.length);
 }
 
@@ -103,37 +111,45 @@ export function takeBack(cleared: Priority, row: Omit<Priority, 'position'>): Pr
 }
 
 /**
- * Where a row placed from outside the card goes (the timer's Also add): the list as it is when a
- * row with text already holds its non-null `cardUid` or `recurringUid` (a repeat is a no-op);
- * the cleared row that holds it (`takeBack`); else the first row never written in (`isFree`),
- * as `row` is; else a new row at the end. Never another cleared row: it keeps its uid, so
- * writing over it would move its sessions onto the new priority. A null link matches nothing.
- * Returns the full list to save; null when the sheet is full.
+ * Where a row placed from outside the card goes (the timer's Also add, a board pull, the morning
+ * offer's routines): the list as it is when a row with text already holds its non-null `cardUid`
+ * or `recurringUid` (a repeat is a no-op); the cleared row that holds it (`takeBack`); else the
+ * first row never written in (`isFree`), as `row` is; else a new row at the end. With `end` (the
+ * morning offer) it goes after every row of the padded list instead, leaving the free rows for
+ * one-offs, unless the list is at `MAX_PRIORITIES`, where a free row still takes it. Never another
+ * cleared row: it keeps its uid, so writing over it would move its sessions onto the new priority.
+ * A null link matches nothing. Returns the full list to save; null when the sheet is full.
  */
-export function placePriority(rows: Priority[], count: number, row: Omit<Priority, 'position'>): Priority[] | null {
+export function placePriority(rows: Priority[], count: number, row: Omit<Priority, 'position'>, opts: { end?: boolean } = {}): Priority[] | null {
   const padded = padPriorities(rows, count);
   if (padded.some((p) => hasText(p) && sharesLink(p, row))) return padded;
   const cleared = padded.find((p) => !hasText(p) && sharesLink(p, row));
   if (cleared) return padded.map((p) => (p === cleared ? takeBack(p, row) : p));
+  if (opts.end && padded.length < MAX_PRIORITIES) return [...padded, { ...row, position: padded.length + 1 }];
   const free = padded.find(isFree);
   if (free) return padded.map((p) => (p === free ? { ...row, position: p.position } : p));
   return padded.length < MAX_PRIORITIES ? [...padded, { ...row, position: padded.length + 1 }] : null;
 }
 
-/** The unticked rows of the last day that had a plan, offered on a new day's empty list. */
+/**
+ * The unticked one-off rows of the last day that had a plan, offered on a new day's list while it
+ * has no one-off written.
+ */
 export interface LeftOpen {
   date: string;
   rows: Priority[];
 }
 
 /**
- * The latest day with a written priority, and its rows that were never ticked. Null when no
- * day had a plan, or the last one got everything done: a finished plan has nothing to carry.
+ * The latest day with a written one-off priority (no `recurringUid`), and its one-off rows that
+ * were never ticked. A routine comes back on its own weekdays, so its rows are never carried, and
+ * a day that held only routines isn't a plan. Null when no day had a plan, or the last one got
+ * every one-off done: a finished plan has nothing to carry.
  */
 export function leftOpen(days: Day[]): LeftOpen | null {
   let last: Day | null = null;
-  for (const d of days) if (d.priorities.some(hasText) && (!last || d.date > last.date)) last = d;
+  for (const d of days) if (d.priorities.some(isOneOff) && (!last || d.date > last.date)) last = d;
   if (!last) return null;
-  const rows = last.priorities.filter(isOpen);
+  const rows = last.priorities.filter((p) => isOpen(p) && isOneOff(p));
   return rows.length ? { date: last.date, rows } : null;
 }

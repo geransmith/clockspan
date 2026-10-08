@@ -9,7 +9,8 @@ retrospective card (plan vs. log, a "why" note, a nudge before clock-out), a wee
 quarter review, alarms for lunch, clock-out and the second meal period, and an optional Board
 page for tasks that aren't for today (off by default; its In progress column is today's Top
 priorities, and its cards carry categories, made from a card's chip or in Settings → Board; the
-same switch brings recurring priorities, set up in Settings → Board).
+same switch brings recurring priorities, set up in Settings → Board and offered on Top priorities
+on their weekdays).
 "Overtime approved" silences the clock-out alarm only. Every day is persisted; old days can be
 pruned. Data is **per user**; auth is optional (`AUTH_MODE=none | local | oidc`). One Docker
 container, SQLite on `/data`. A PWA used mostly on a laptop or desktop and laid out for phones
@@ -105,9 +106,9 @@ client/                 Vite root → dist/client
     alerts.ts           the one place that plays sound, shows notifications and pushes banners
     copy.ts             every line the app raises at the user; no logic
     storage.ts          localStorage that never throws (private mode, quota); the per-user keys (USER_KEYS:
-                        fired alarms, Start fresh, the break-over mark, the capture box's category) and
-                        adoptUser, which records who the app is open for under AUTH_USER_KEY and drops
-                        the last user's keys
+                        fired alarms, Start fresh, the break-over mark, the capture box's category, the
+                        morning offer's answers) and adoptUser, which records who the app is open for
+                        under AUTH_USER_KEY and drops the last user's keys
     board.ts            the board's columns from the cards and today's rows (boardColumns), what a move
                         does and which store it writes (planMove, moveTargets, MoveRefused), where a drop
                         lands and what a drag says (dropTarget, withDrag, overAnnouncement,
@@ -119,6 +120,10 @@ client/                 Vite root → dist/client
                         withoutRecurring)
     popover.ts          placePopover: where the category chip's list goes on screen (under the chip or
                         above it, inside the viewport)
+    recurring.ts        the morning offer's routines: which are due (dueRecurring, notOnList), which
+                        it ticks (offerPicks, recurringCount), the list after Add to today
+                        (acceptOffer, recurringRow) and this device's answers (readAnswered,
+                        writeAnswered)
   src/hooks/            state and effects (useDay, useTimer, useSettings, useBoard, useAlarms, …), each
                         with a happy-dom test beside it (useLatest is covered through the hooks that use
                         it, and AppProviders through the tests that render it).
@@ -127,19 +132,21 @@ client/                 Vite root → dist/client
                         board's store (BoardProvider, its refresh and the daily sweep) and
                         useCategoryPick, the category chip's data and inline create; useMediaQuery
                         follows a media query for behaviour (the capture box's autofocus, the board's
-                        drop glide under reduced motion).
+                        drop glide under reduced motion); useRecurringAnswered keeps the recurring
+                        priorities the morning offer was answered for today on this device.
                         src/test/fixtures.ts has the plain factories and TEST_SETTINGS (no React);
                         src/test/hooks.tsx re-exports fixtures.ts and AppProviders and has
                         SettingsAndDays, serveRange (a mocked getRange that answers from a list of
                         days) and the act() helpers
-  src/components/       the cards, History (Calendar + Review), Banners, FinishChoice, and the pieces
-                        several of them share (Folded: a long list's Show all; CategoryChip, the one
-                        category picker, and CategoryDot; RepeatMark, a recurring row's mark, kept
-                        here so the sheet can show it); settings/ holds SettingsDialog (the shell
-                        and tabs), a file per tab (BoardTab: the categories and recurring
-                        priorities, shown while the board is on), and controls.tsx; board/ holds the
-                        Board page (Board, BoardCard, Capture, and dnd.ts: its collision and
-                        keyboard settings for dnd-kit), its own lazy chunk
+  src/components/       the cards, History (Calendar + Review), Banners, FinishChoice, TodayOffer (Top
+                        priorities' morning notice), and the pieces several of them share (Folded: a
+                        long list's Show all; CategoryChip, the one category picker, and
+                        CategoryDot; RepeatMark, a recurring row's mark, kept here so the sheet can
+                        show it); settings/ holds SettingsDialog (the shell and tabs), a file per
+                        tab (BoardTab: the categories and recurring priorities, shown while the
+                        board is on), and controls.tsx; board/ holds the Board page (Board,
+                        BoardCard, Capture, and dnd.ts: its collision and keyboard settings for
+                        dnd-kit), its own lazy chunk
   src/auth/             AuthGate and the setup / login / new-password pages
   src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
   src/styles.css        design tokens and all component CSS
@@ -231,8 +238,14 @@ lists the ones due on it after its one-off rows, written with the list (`routine
 `recurringUid`, in the item's category and on no card: the queue is ticked, with a 25-minute
 session, on every template's day but the unreviewed one; the follow-ups are ticked, with a
 25-minute session, on normal and overtime days and left open on the rest. Today lists none, and
-a routine left open is never the row carried over to it. The seed writes no settings, so the
-board is off on a new dev DB or after `--fresh`; this turns it on:
+a routine left open is never the row carried over to it. With the board on, today's sheet then
+offers them on a weekday (`--today` a weekday if needed); today's seeded one-off rows hide "Still
+open from …", so for both groups empty those rows, keeping them on the list, and reload: clear
+them on today's sheet, or
+`curl -s localhost:3000/api/days/<today> | jq '{priorities: [.priorities[] | .text = "" | .done = false]}' | curl -X PUT localhost:3000/api/days/<today>/priorities -H 'content-type: application/json' -d @-`.
+Removing them instead (a PUT of `[]`) deletes the untouched card of the row carried to today, and
+the board's offer then leaves that leftover out. The seed writes no settings, so the board is off
+on a new dev DB or after `--fresh`; this turns it on:
 `curl -X PUT localhost:3000/api/settings -H 'content-type: application/json' -d '{"board":true}'`.
 
 `--running` leaves a 25-minute timer running, started ten minutes before *now*, for timer work;
@@ -566,7 +579,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   the time stays). A new priority never lands on a cleared row: Add priority and the timer's
   Also add (`placePriority`, `hasRoom`) use a row never written in (`isFree`: empty, no uid) or
   a new one at the end, and `planNext` (Plan tomorrow, the left-open Add) drops only rows never
-  written in. The nudge (`nudgeFor`) counts the rows with text. The server never pads: the
+  written in. The nudge (`nudgeFor`) counts the rows with text and no `recurringUid`, while the
+  warning's kind still counts every written row. The server never pads: the
   client pads to `settings.priorityCount` with `padPriorities()`, and every reader of a list
   skips empty rows with `hasText` (`shared/priorities.ts`). `PUT /days/:date/priorities` takes
   the list and its `base`, the list it was built on (the card's draft sends what its edits were
@@ -595,7 +609,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (`UID_RE`; a row never written in holds none, and one row is never both a card and a recurring
   priority), and a null link matches nothing (`sharesLink`). Carry-over (the left-open Add and
   Plan tomorrow, through `planNext`'s seeds) gives the new day's row a fresh uid and `addedAt`
-  and carries all three, but with the board on a left-open row whose card is in Next takes the
+  and carries its card and category (a recurring row is never carried: `leftOpen` and Plan
+  tomorrow skip it), but with the board on a left-open row whose card is in Next takes the
   card's title and category (`offeredLeftovers`, below), which the board may have changed since
   that row's day. `cardUid` and `recurringUid` are fixed once stored (no client changes them; the
   server fills a null `cardUid` when a save makes the row's card, see the board rule below);
@@ -687,6 +702,37 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   point at it by `recurringUid`. Deleting one deletes it for good; those rows keep the link, now
   to nothing, and their own category. The server caps them at 100 (`BOARD_LIMITS`), a sanity cap
   with no product limit behind it, and never prunes them.
+- **Recurring priorities are offered on today's sheet** (`client/src/lib/recurring.ts`,
+  `components/TodayOffer.tsx`), worked out on the client while the board is on and read. Today's
+  Top priorities shows one morning notice: "Still open from …" (the leftovers, which the board may
+  retitle, `offeredLeftovers`) while no one-off row has text, and "Repeats today", the items due
+  (`dueRecurring`: the date's ISO weekday, `isoWeekday` in `shared/dates.ts`, computed in UTC from
+  the key; no row with text holding the item's uid, `notOnList`, so an emptied one doesn't hide
+  it; not answered on this device today), in Settings order. Both groups are judged on the stored
+  list by the sheet and again on the card's draft (`isOneOff`, `notOnList`), so a row typed or a
+  save already sent counts at once. Each group is a `role="group"` named by its heading, and each
+  item a box, a leftover once per item as `planNext` would bring it (`sameItem`): the leftovers
+  start ticked, the routines up to `recurringPerDay` less the routines already on the list
+  (`offerPicks`), the rest unticked, and a box pressed keeps its answer while the groups change.
+  Ticking past the number says so (`TODAY_OFFER.over`, a live region always there under the
+  group), and Add to today adds them all the same. Add runs `acceptOffer` through the card's
+  draft, so what is typed goes out in the same save: the leftovers through `planNext`, then each
+  routine through `placePriority` with `end`, after every row of the padded list, so the free rows
+  stay for one-offs; an emptied row holding the item is taken back (`takeBack`), and a routine
+  that doesn't fit is skipped. Add and Not today (Start fresh while no routine shows) record every
+  routine shown, ticked or not, under `USER_KEYS.recurringAnswered` (`useRecurringAnswered`: per
+  item, day and device, so another device still offers it and a new day starts with none; an
+  answer joins what is stored when it is given, so another tab's answers stay), and leftovers
+  shown hold Start fresh (`leftOpenDismissed`), so removing a row the notice added brings nothing
+  back. Two devices adding one routine meet in the merge, which keeps the stored row
+  (`dedupeLinks`). A recurring row counts as a priority everywhere but the nudge (`nudgeFor`
+  counts one-offs, `isOneOff`); `leftOpen`, a row's card (`needsCard`) and Plan tomorrow skip it,
+  since it comes back on its own weekdays. With the board off nothing is offered but the plain
+  "Still open from …" block, whose gate (`useLeftOpen`'s `wanted`) and `leftOpen` skip recurring
+  rows either way. An emptied recurring row says `EMPTIED_RECURRING` under it, logged time or not,
+  board on or off, in place of `EMPTIED_ROW`. With the board on a written recurring row shows
+  `RepeatMark` first in its chip's cell: under the field on a phone, and from 640 px in the 10rem
+  column, which the cell fills so the chip shrinks beside the mark.
 - **In progress is today's list** (`client/src/lib/board.ts`, `hooks/useBoard.tsx`). The board
   (on with the `board` setting, off by default) shows the cards and today's rows from the day
   store, matched by `cardUid` (`boardColumns`); nothing about In progress is stored, so the
@@ -965,9 +1011,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `'merge'` if a device may change it, `'fixed'` if the stored value stands once stored → its
   rule in `parsePriorityRows` for a value of the wrong kind and for one left out (a missing
   `'merge'` field must read as unchanged, as `withCategories` does for the category, or an old
-  tab's save would clear it) → its default in `emptyRow` (`client/src/lib/priorities.ts`) and
-  in `addPriority`'s row (`useDay.tsx`) → if carry-over keeps it, `PrioritySeed`, `textSeed`
-  and `planNext`'s row (`lib/plan.ts`) → if it is a link a list holds once, `LINKS`
+  tab's save would clear it) → its default in `emptyRow` (`client/src/lib/priorities.ts`), in
+  `addPriority`'s row (`useDay.tsx`) and, if a recurring row carries it, in `recurringRow`
+  (`lib/recurring.ts`) → if carry-over keeps it, `PrioritySeed`, `textSeed` and `planNext`'s row
+  (`lib/plan.ts`) → if it is a link a list holds once, `LINKS`
   (`shared/priorities.ts`), which `repeatedLink`, `dedupeLinks`, `dropShadowedLinks` and
   `sharesLink` read (`placePriority` and `planNext` match through `sharesLink`) → if the row's
   card carries it too (as it does `categoryUid`), a `board_cards` column, the field on
@@ -1188,7 +1235,12 @@ The browser pass for each surface (the logic under it is already tested):
   a touch screen each day takes 44 × 44 px); Remove, which asks first, with the focus on the next
   title. At 375 the rows wrap and the seven days fit on one line. On the board, a recurring row's
   meta line has the Repeats mark, and the editor of today's shows the title as text with the line
-  about renaming it on the sheet.
+  about renaming it on the sheet. On the sheet, with a routine due today (see "Dev data is
+  disposable" for both groups): the morning notice with "Still open from …" and "Repeats today",
+  the routines ticked up to Recurring rows per day and the line once more are ticked, Add to today
+  putting the routines after the padded rows with the mark before the chip, and Not today holding
+  after a reload; an emptied routine row's note; at 1280 and 1000 the mark and a long category in
+  the chip's column, and at 375 the mark before the chip under the field.
 - **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
   Month / Quarter). With the board on (`PUT /api/settings {"board":true}`), By category in
   Review → Week and Month (solid and striped bars, No category last), in light and dark. For

@@ -125,12 +125,25 @@ export const WARNING_ACTIONS = {
 /** Under a Top priorities row that was cleared after focus was logged on it: the time stays with the row. Null: under a minute. */
 export const EMPTIED_ROW = (time: string | null) => `The ${time ?? 'time'} logged on this row stays with it. Use Add priority for something new.`;
 
+/** Under an emptied Top priorities row from a recurring priority, in place of EMPTIED_ROW, logged time or not. */
+export const EMPTIED_RECURRING = 'This row is still a recurring priority. Use Add priority for something new.';
+
 /** On today's empty priorities, when the last day with a plan left rows unticked. */
 export const LEFT_OPEN = {
   title: (from: string) => `Still open from ${from}`,
   add: 'Add to today',
   dismiss: 'Start fresh',
 };
+
+/**
+ * The morning notice's recurring group (with the board on): its heading, the button that answers
+ * it, and the line when more are ticked than Recurring rows per day.
+ */
+export const TODAY_OFFER = {
+  recurring: 'Repeats today',
+  notToday: 'Not today',
+  over: (n: number) => `More than ${n} recurring ${n === 1 ? 'row' : 'rows'} today.`,
+} as const;
 
 /** Confirm dialogs. Each names what it does; the two that delete a user or many days say it cannot be undone. */
 export const CONFIRM = {

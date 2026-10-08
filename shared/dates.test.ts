@@ -6,6 +6,7 @@ import {
   daysBetween,
   endOfDay,
   HOUR_MS,
+  isoWeekday,
   isValidDateKey,
   isWeekend,
   parseDateKey,
@@ -83,6 +84,25 @@ describe('date arithmetic', () => {
       expect(todayKey(endOfDay('2026-09-06'))).toBe('2026-09-06');
     } finally {
       vi.unstubAllEnvs();
+    }
+  });
+});
+
+describe('isoWeekday', () => {
+  const week = () => ['2026-09-28', '2026-09-30', '2026-10-04', '2026-03-08', '2026-11-01', '2026-03-09'].map(isoWeekday);
+
+  it('numbers Monday 1 to Sunday 7, the US DST Sundays included', () => {
+    expect(week()).toEqual([1, 3, 7, 7, 7, 1]);
+  });
+
+  it('gives the same answer in a zone far ahead of UTC or far behind it', () => {
+    for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago']) {
+      vi.stubEnv('TZ', zone);
+      try {
+        expect(week(), zone).toEqual([1, 3, 7, 7, 7, 1]);
+      } finally {
+        vi.unstubAllEnvs();
+      }
     }
   });
 });
