@@ -153,7 +153,8 @@ describe('copy builders', () => {
     expect(BOARD.full).toBe('Later and Next hold 300 cards at most.');
     expect(BOARD.recurringStays('Monitor the queue')).toBe("Monitor the queue stays on today's list. Use Remove from today.");
     expect(BOARD.planned('Write a KB', 'tomorrow')).toBe("Write a KB is planned for tomorrow. Change it on that day's sheet.");
-    expect(BOARD.doneOn('Monday')).toBe("Done on Monday. Untick it on that day's sheet.");
+    expect(BOARD.doneOn('yesterday')).toBe("Done yesterday. Untick it on that day's sheet.");
+    expect(BOARD.doneOn('Mon, Oct 5')).toBe("Done Mon, Oct 5. Untick it on that day's sheet.");
   });
 
   it('says a done item stays done and offers a new card in the lane it was moved to', () => {

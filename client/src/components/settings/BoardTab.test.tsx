@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 import * as api from '../../api';
 import { BOARD_LIMITS, LIMITS } from '../../../../shared/api.js';
 import { warnQuietly } from '../../lib/alerts';
-import { withCategory, withCategoryPatch, withoutCategory, withoutRecurring, withRecurring, withRecurringPatch } from '../../lib/board';
+import { withCategory, withCategoryPatch, withoutCategory, withItem, withItemPatch, withoutItem } from '../../lib/board';
 import { BOARD, CONFIRM, LOAD_FAILED } from '../../lib/copy';
 import { apiError, makeBoard, makeCategory, makeRecurring, makeSettings, settle, SettingsAndDays } from '../../test/hooks';
 import type { Board } from '../../types';
@@ -57,9 +57,9 @@ beforeEach(() => {
   vi.mocked(api.addCategory).mockImplementation((c) => Promise.resolve((onServer = withCategory(onServer, c))));
   vi.mocked(api.patchCategory).mockImplementation((uid, patch) => Promise.resolve((onServer = withCategoryPatch(onServer, uid, patch))));
   vi.mocked(api.deleteCategory).mockImplementation((uid) => Promise.resolve((onServer = withoutCategory(onServer, uid))));
-  vi.mocked(api.addRecurring).mockImplementation((item) => Promise.resolve((onServer = withRecurring(onServer, item))));
-  vi.mocked(api.patchRecurring).mockImplementation((uid, patch) => Promise.resolve((onServer = withRecurringPatch(onServer, uid, patch))));
-  vi.mocked(api.deleteRecurring).mockImplementation((uid) => Promise.resolve((onServer = withoutRecurring(onServer, uid))));
+  vi.mocked(api.addItem).mockImplementation((item) => Promise.resolve((onServer = withItem(onServer, item, 0))));
+  vi.mocked(api.editItem).mockImplementation((uid, patch) => Promise.resolve((onServer = withItemPatch(onServer, uid, patch))));
+  vi.mocked(api.deleteItem).mockImplementation((uid) => Promise.resolve((onServer = withoutItem(onServer, uid))));
 });
 afterEach(() => {
   cleanup();
@@ -298,7 +298,7 @@ describe('BoardTab: recurring priorities', () => {
     fireEvent.change(titleBox('Follow-ups'), { target: { value: '  Chase  replies ' } });
     fireEvent.blur(titleBox('Follow-ups'));
     await settle();
-    expect(api.patchRecurring).toHaveBeenCalledExactlyOnceWith(FOLLOW.uid, { title: 'Chase  replies' });
+    expect(api.editItem).toHaveBeenCalledExactlyOnceWith(FOLLOW.uid, { title: 'Chase  replies' });
     expect(save).toHaveBeenCalledTimes(1);
     expect(titles()).toEqual(['Monitor the queue', 'Chase  replies']);
 
@@ -311,7 +311,7 @@ describe('BoardTab: recurring priorities', () => {
     expect(document.activeElement).toBe(titleBox('Monitor the queue'));
     fireEvent.keyDown(titleBox('Monitor the queue'), { key: 'Enter' });
     await settle();
-    expect(api.patchRecurring).toHaveBeenLastCalledWith(QUEUE.uid, { title: 'Watch the queue' });
+    expect(api.editItem).toHaveBeenLastCalledWith(QUEUE.uid, { title: 'Watch the queue' });
     expect(document.activeElement).not.toBe(titleBox('Watch the queue'));
 
     fireEvent.change(titleBox('Watch the queue'), { target: { value: '   ' } });
@@ -321,16 +321,16 @@ describe('BoardTab: recurring priorities', () => {
     fireEvent.blur(titleBox('Watch the queue'));
     expect(titleBox('Watch the queue').value).toBe('Watch the queue');
     await settle();
-    expect(api.patchRecurring).toHaveBeenCalledTimes(2);
+    expect(api.editItem).toHaveBeenCalledTimes(2);
   });
 
   it('shows a rename from another device in the box, and puts the title back when a rename is not saved', async () => {
     await renderTab();
-    onServer = withRecurringPatch(onServer, FOLLOW.uid, { title: 'Chase replies' });
+    onServer = withItemPatch(onServer, FOLLOW.uid, { title: 'Chase replies' });
     await settle(60_000);
     expect(titles()).toEqual(['Monitor the queue', 'Chase replies']);
 
-    vi.mocked(api.patchRecurring).mockRejectedValueOnce(new Error('offline'));
+    vi.mocked(api.editItem).mockRejectedValueOnce(new Error('offline'));
     fireEvent.change(titleBox('Chase replies'), { target: { value: 'Calls' } });
     fireEvent.blur(titleBox('Chase replies'));
     await settle();
@@ -343,14 +343,14 @@ describe('BoardTab: recurring priorities', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Category for Follow-ups: none' }));
     fireEvent.click(screen.getByRole('option', { name: 'Admin' }));
     await settle();
-    expect(api.patchRecurring).toHaveBeenCalledExactlyOnceWith(FOLLOW.uid, { categoryUid: ADMIN.uid });
+    expect(api.editItem).toHaveBeenCalledExactlyOnceWith(FOLLOW.uid, { categoryUid: ADMIN.uid });
     expect(screen.getByRole('button', { name: 'Category for Follow-ups: Admin' })).toBeTruthy();
     expect(save).toHaveBeenCalledTimes(1);
     // No category takes it off.
     fireEvent.click(screen.getByRole('button', { name: 'Category for Monitor the queue: Tickets' }));
     fireEvent.click(screen.getByRole('option', { name: 'No category' }));
     await settle();
-    expect(api.patchRecurring).toHaveBeenLastCalledWith(QUEUE.uid, { categoryUid: null });
+    expect(api.editItem).toHaveBeenLastCalledWith(QUEUE.uid, { categoryUid: null });
     expect(screen.getByRole('button', { name: 'Category for Monitor the queue: none' })).toBeTruthy();
   });
 
@@ -374,11 +374,11 @@ describe('BoardTab: recurring priorities', () => {
     await renderTab();
     fireEvent.click(day('Follow-ups', 'Tuesday'));
     await settle();
-    expect(api.patchRecurring).toHaveBeenLastCalledWith(FOLLOW.uid, { weekdays: [1, 2, 3, 5] });
+    expect(api.editItem).toHaveBeenLastCalledWith(FOLLOW.uid, { weekdays: [1, 2, 3, 5] });
     expect(pressed('Follow-ups')).toEqual(['Monday', 'Tuesday', 'Wednesday', 'Friday']);
     fireEvent.click(day('Monitor the queue', 'Monday'));
     await settle();
-    expect(api.patchRecurring).toHaveBeenLastCalledWith(QUEUE.uid, { weekdays: [2, 3, 4, 5] });
+    expect(api.editItem).toHaveBeenLastCalledWith(QUEUE.uid, { weekdays: [2, 3, 4, 5] });
 
     // The one day left stays pressed and in reach, and a press on it sends nothing.
     const friday = day('Timesheet', 'Friday');
@@ -388,12 +388,12 @@ describe('BoardTab: recurring priorities', () => {
     expect(day('Follow-ups', 'Monday').hasAttribute('aria-disabled')).toBe(false);
     fireEvent.click(friday);
     await settle();
-    expect(api.patchRecurring).toHaveBeenCalledTimes(2);
+    expect(api.editItem).toHaveBeenCalledTimes(2);
     expect(pressed('Timesheet')).toEqual(['Friday']);
     // Another day on frees it.
     fireEvent.click(day('Timesheet', 'Sunday'));
     await settle();
-    expect(api.patchRecurring).toHaveBeenLastCalledWith('rec000000003', { weekdays: [5, 7] });
+    expect(api.editItem).toHaveBeenLastCalledWith('rec000000003', { weekdays: [5, 7] });
     expect(day('Timesheet', 'Friday').hasAttribute('aria-disabled')).toBe(false);
   });
 
@@ -407,7 +407,7 @@ describe('BoardTab: recurring priorities', () => {
     remove('Monitor the queue');
     expect(confirm).toHaveBeenCalledExactlyOnceWith(CONFIRM.deleteRecurring('Monitor the queue'));
     await settle();
-    expect(api.deleteRecurring).toHaveBeenCalledExactlyOnceWith(QUEUE.uid);
+    expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith(QUEUE.uid);
     expect(titles()).toEqual(['Follow-ups']);
     expect(document.activeElement).toBe(titleBox('Follow-ups'));
     fireEvent.click(addButton());
@@ -433,7 +433,7 @@ describe('BoardTab: recurring priorities', () => {
     fireEvent.click(button);
     expect(confirm).toHaveBeenCalledExactlyOnceWith(CONFIRM.deleteRecurring('Follow-ups'));
     await settle();
-    expect(api.deleteRecurring).not.toHaveBeenCalled();
+    expect(api.deleteItem).not.toHaveBeenCalled();
     expect(save).not.toHaveBeenCalled();
     expect(titles()).toEqual(['Monitor the queue', 'Follow-ups']);
     expect(document.activeElement).toBe(removeButton('Follow-ups'));
@@ -441,7 +441,7 @@ describe('BoardTab: recurring priorities', () => {
     confirm.mockReturnValue(true);
     fireEvent.click(removeButton('Follow-ups'));
     await settle();
-    expect(api.deleteRecurring).toHaveBeenCalledExactlyOnceWith(FOLLOW.uid);
+    expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith(FOLLOW.uid);
     expect(titles()).toEqual(['Monitor the queue']);
   });
 
@@ -451,11 +451,11 @@ describe('BoardTab: recurring priorities', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove Follow-ups' }));
     await settle();
     expect(api.deleteCategory).toHaveBeenCalledExactlyOnceWith('cat000000009');
-    expect(api.deleteRecurring).not.toHaveBeenCalled();
+    expect(api.deleteItem).not.toHaveBeenCalled();
     expect(confirm).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Remove recurring priority Follow-ups' }));
     await settle();
-    expect(api.deleteRecurring).toHaveBeenCalledExactlyOnceWith(FOLLOW.uid);
+    expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith(FOLLOW.uid);
     expect(api.deleteCategory).toHaveBeenCalledTimes(1);
   });
 
@@ -480,7 +480,7 @@ describe('BoardTab: recurring priorities', () => {
 
   it('counts a delete another device made already as done', async () => {
     await renderTab();
-    vi.mocked(api.deleteRecurring).mockRejectedValueOnce(apiError(404));
+    vi.mocked(api.deleteItem).mockRejectedValueOnce(apiError(404));
     fireEvent.click(removeButton('Follow-ups'));
     await settle();
     expect(titles()).toEqual(['Monitor the queue']);
@@ -498,13 +498,13 @@ describe('BoardTab: recurring priorities', () => {
     fireEvent.keyDown(newItemBox(), { key: 'Enter', isComposing: true });
     fireEvent.keyDown(newItemBox(), { key: 'Tab' });
     await settle();
-    expect(api.addRecurring).not.toHaveBeenCalled();
+    expect(api.addItem).not.toHaveBeenCalled();
     expect(newItemBox().value).toBe('  Timesheet ');
     expect(newItemBox().maxLength).toBe(LIMITS.priorityText);
     fireEvent.keyDown(newItemBox(), { key: 'Enter' });
     await settle();
-    expect(api.addRecurring).toHaveBeenCalledTimes(1);
-    const [made] = vi.mocked(api.addRecurring).mock.calls[0]!;
+    expect(api.addItem).toHaveBeenCalledTimes(1);
+    const [made] = vi.mocked(api.addItem).mock.calls[0]!;
     expect(made).toMatchObject({ title: 'Timesheet', categoryUid: null, weekdays: [1, 2, 3, 4, 5] });
     expect(made.uid).toMatch(/^[0-9a-f]{12}$/);
     expect(titles()).toEqual(['Monitor the queue', 'Follow-ups', 'Timesheet']);
@@ -514,13 +514,13 @@ describe('BoardTab: recurring priorities', () => {
     fireEvent.blur(newItemBox());
     await settle();
     expect(titles()).toEqual(['Monitor the queue', 'Follow-ups', 'Timesheet', 'Inbox zero']);
-    expect(vi.mocked(api.addRecurring).mock.calls[1]![0].uid).not.toBe(made.uid);
+    expect(vi.mocked(api.addItem).mock.calls[1]![0].uid).not.toBe(made.uid);
     expect(screen.queryByRole('textbox', { name: 'New recurring priority' })).toBeNull();
     // Left blank, the row closes and sends nothing.
     fireEvent.click(addButton());
     fireEvent.blur(newItemBox());
     expect(screen.queryByRole('textbox', { name: 'New recurring priority' })).toBeNull();
-    expect(api.addRecurring).toHaveBeenCalledTimes(2);
+    expect(api.addItem).toHaveBeenCalledTimes(2);
     expect(save).toHaveBeenCalledTimes(2);
   });
 
@@ -529,7 +529,7 @@ describe('BoardTab: recurring priorities', () => {
       ...onServer,
       recurring: Array.from({ length: BOARD_LIMITS.recurring }, (_, i) => makeRecurring(`rec${String(i).padStart(9, '0')}`, `Item ${i}`)),
     };
-    vi.mocked(api.addRecurring).mockRejectedValueOnce(new Error('Request failed (400)'));
+    vi.mocked(api.addItem).mockRejectedValueOnce(new Error('Request failed (400)'));
     await renderTab();
     expect(titles()).toHaveLength(BOARD_LIMITS.recurring);
     fireEvent.click(addButton());
