@@ -731,26 +731,25 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   content (`hasContent`, so a day with only a break is left out) and also gives `sessions`
   (completed ones, `focusOf`), `breaks` (count and time, a running one so far, `breakSeconds`),
   `midDay` (rows added mid-day, how many got ticked, and `categoryUid`: the category more than
-  half of them had, else null) and `typicalDay`: the medians, rounded half up, of the rows
-  written and ticked on the days before today with a row written. Today
-  is left out because it is still going, and it is null under two such days; Review shows it
-  for a Week or a Month. The Days tile's target is `periodTarget`: a Week's is the Work week
-  setting, as on the timeclock's week line, and a Month's or a Quarter's is `targetSeconds`,
-  the clocked-in days' own lengths added up through `daySettings`. Not done groups the one-off
-  rows left open into tasks across days (`addToNotDone`): rows linked to one card are one task
-  (`card:<cardUid>`), whatever their text; a row with no card joins the latest task of its
-  text, else starts one (`text:<sameText>`); a carded row whose card has no task yet takes over
-  the cardless task of its text, in its place in the order. A carded row's tick settles its
-  card's task and the cardless task of its text, a cardless tick every task of its text, and a
-  tick on a day settles the same task left open beside it. Two cards with one title stay two
-  tasks. A recurring priority's rows (`recurringUid`) are priorities in every count (the tiles,
-  `midDay`, `typicalDay`, the retro card, the calendar and its stickers) but never a task in Not
-  done, which lists one-offs only: `reviewRange` groups them by `recurringUid` into `routines`
-  (the days a row had text, how many of them it was ticked, its focus; most days first, then most
-  focus, then by title), each day on its own, so a tick never settles another day's miss and a
-  same-text one-off stays a task of its own. A routine is titled by its item through
-  `recurringTitles` (uid → title) while the item exists, else by its latest row's text, so a
-  retyped row or a deleted item stays one entry. `reviewDay`'s
+  half of them had, else null) and `typicalDay`: the medians, rounded half up, of the rows written
+  and ticked on the days before today with a row written. Today is left out because it is still
+  going, and it is null under two such days; Review shows it for a Week or a Month. The Days
+  tile's target is `periodTarget`: a Week's is the Work week setting, as on the timeclock's week
+  line, and a Month's or a Quarter's is `targetSeconds`, the clocked-in days' own lengths added up
+  through `daySettings`. Not done groups the one-off rows left open into tasks across days
+  (`addToNotDone`): rows linked to one card are one task (`card:<cardUid>`), whatever their text;
+  a row with no card joins the latest task of its text, else starts one (`text:<sameText>`); a
+  carded row whose card has no task yet takes over the cardless task of its text, in its place in
+  the order. A carded row's tick settles its card's task and the cardless task of its text, a
+  cardless tick every task of its text, and a tick on a day settles the same task left open beside
+  it. Two cards with one title stay two tasks. A recurring priority's rows (`recurringUid`) are
+  priorities in every count (the tiles, `midDay`, `typicalDay`, the retro card, the calendar and
+  its stickers) but never a task in Not done, which lists one-offs only: `reviewRange` groups them
+  by `recurringUid` into `routines` (the days a row had text, how many of them it was ticked, its
+  focus; most days first, then most focus, then by title), each day on its own, so a tick never
+  settles another day's miss and a same-text one-off stays a task of its own. A routine is titled
+  by its item through `recurringTitles` (uid → title) while the item exists, else by its
+  latest row's text, so a retyped row or a deleted item stays one entry. `reviewDay`'s
   `routines` (`{ done, total }`) is the retro card's "routines 3 of 4". A session's category is
   `sessionCategory(s, rows)`: the category of the written row its `priorityUid` names on its
   day (none included), else its own `categoryUid` (picked in the day log, or copied by the
@@ -767,9 +766,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   and in its `offPlanSeconds` part, so an emptied row's sessions count off the plan under its
   category. A uid outside `known` (the board's categories, removed ones included) counts as
   none, there and in `midDay`. Most time first, then most ticks, none last; a category with
-  neither is left out. Review passes `known` and `recurringTitles` from `useBoardState()` while
-  the board is on and has loaded, and empty ones otherwise, so with the board off nothing is
-  grouped by category and a routine keeps its latest row's text.
+  neither is left out. Review shows By category only while a listed bucket has a category.
+  Review passes `known` and `recurringTitles` from `useBoardState()` while the board is on and
+  has loaded, and empty ones otherwise, so with the board off nothing is grouped by category and
+  a routine keeps its latest row's text.
 - **History opens on the route's date** (`route.date ?? today`), with that day picked. The
   calendar holds its month by its first day (`startOfMonth`) and Review its period by `from`,
   so neither moves at midnight. "Open day" first records the picked day (and the Review period,
@@ -1169,9 +1169,11 @@ The browser pass for each surface (the logic under it is already tested):
   tomorrow row one, then the same at 1280 in the split's columns.
 - **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
   Month / Quarter). With the board on (`PUT /api/settings {"board":true}`), By category in
-  Review → Week and Month (solid and striped bars, No category last), and Added mid-day's
-  "mostly …" once the last weekday's "Reply to the recruiter" row has a category (the seed gives
-  it none), in light and dark.
+  Review → Week and Month (solid and striped bars, No category last), in light and dark. For
+  Added mid-day's "mostly …", give the last weekday's "Reply to the recruiter" row a category
+  with its chip (the seed gives these rows none) and open the Week that holds that day (◀ on a
+  Monday): the seed writes that row on the same weekday most weeks, so a Month that holds
+  another one names none.
 - **The board**: after `npm run seed`, turn it on (`PUT /api/settings {"board":true}`, see "Dev
   data is disposable") and press Board. At 1440: the four columns, capture with Enter and
   Shift+Enter, Move to from each column (a done item to Next shows the notice, and Add a new card

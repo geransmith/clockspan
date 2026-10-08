@@ -533,6 +533,11 @@ describe('reviewRange: By category', () => {
     expect(r.byCategory).toEqual([bucket(TICKETS, 1500, 0, 2), bucket(KB, 0, 0, 1), bucket(null, 0, 0, 1)]);
   });
 
+  it('leaves out No category when its rows have neither time nor a tick', () => {
+    const r = review([makeDay(MON, { priorities: [makePriority(1, 'Ship it', { categoryUid: TICKETS, done: true }), makePriority(2, 'Call the bank')] })]);
+    expect(r.byCategory).toEqual([bucket(TICKETS, 0, 0, 1)]);
+  });
+
   it("counts a category the board doesn't know as none, and every category with no board", () => {
     const days = [
       makeDay(MON, {
