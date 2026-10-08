@@ -3,8 +3,8 @@
  * under on every day; a day's list (`priorities`) names the tasks on it, with each one's place,
  * its tick that day and when it was put there. Board cards and recurring priorities become tasks,
  * and so does each run of a one-off task's rows across days. The old per-day rows stay whole in
- * `priorities_v1`, and the card fields nothing reads go into `legacy_*` columns, so nothing stored
- * is lost.
+ * `priorities_v1`, and the card fields the board no longer uses go into `legacy_*` columns, so
+ * nothing stored is lost.
  *
  * Frozen like every migration: it keeps its own copies of the helpers it needs, so a later change
  * to `shared/` can't change how an old database migrates.
@@ -25,7 +25,7 @@ const SCHEMA = `
     created_at   INTEGER NOT NULL,
     archived_at  INTEGER,                                   -- a recurring priority removed in Settings, or a task this migration archived
     deleted_at   INTEGER,                                   -- deleted everywhere: the row stays as a tombstone until the prune
-    legacy_done_at   INTEGER,                               -- board_cards.done_at; never read, NULL on new rows
+    legacy_done_at   INTEGER,                               -- board_cards.done_at; read only by the prune, NULL on new rows
     legacy_untouched INTEGER,                               -- board_cards.untouched; never read, NULL on new rows
     legacy_uid       TEXT,                                  -- the uid this migration had to replace; never read
     UNIQUE (user_id, uid),
@@ -175,21 +175,24 @@ function backfill(db: DB, userId: number, now: number): void {
     return Number(insert.run({ ...values, userId, uid: own, legacyUid: own === uid ? null : uid }).lastInsertRowid);
   };
 
-  // Each card's latest linked day, and the days a written row names it on.
-  const latestDay = new Map<string, string>();
+  // Each card's latest linked day (by its id, emptied rows included), and the days a written row
+  // names it on.
+  const latestDay = new Map<string, number>();
   const named = new Set<string>();
   const namedOn = new Set<string>();
   for (const r of rows) {
     if (r.card_uid == null) continue;
-    latestDay.set(r.card_uid, r.date);
+    latestDay.set(r.card_uid, r.day_id);
     if (written(r.text)) {
       named.add(r.card_uid);
-      namedOn.add(`${r.card_uid} ${r.date}`);
+      namedOn.add(`${r.card_uid} ${r.day_id}`);
     }
   }
 
   const cardTasks = new Map<string, number>();
-  const laned: number[] = [];
+  // The cards in Later or Next: task id to card uid.
+  const laned = new Map<number, string>();
+  const wasDone: number[] = [];
   for (const c of db.prepare(`SELECT * FROM board_cards WHERE user_id = ? ORDER BY id`).all(userId) as CardRow[]) {
     const last = latestDay.get(c.uid);
     // Held: a card a save made whose latest linked rows were all emptied, which the board showed nowhere.
@@ -209,7 +212,8 @@ function backfill(db: DB, userId: number, now: number): void {
     };
     const id = add(c.uid, task);
     cardTasks.set(c.uid, id);
-    if (lane !== null) laned.push(id);
+    if (lane !== null) laned.set(id, c.uid);
+    if (c.lane === 'done') wasDone.push(id);
   }
 
   const routineTasks = new Map<string, number>();
@@ -235,16 +239,21 @@ function backfill(db: DB, userId: number, now: number): void {
   // a tick ends the chain: a task carried and left open is one task, and the same text a month
   // later, or twice on one day, is another.
   const chains = new Map<string, Named[]>();
-  const chained = (row: Row): number => {
-    const key = textKey(row.text);
-    const same = chains.get(key) ?? [];
-    const open = same.filter(({ row: last }) => last.done === 0 && last.date < row.date && daysBetween(last.date, row.date) <= CHAIN_DAYS);
+  /** The open chain a row of its text continues, if any. */
+  const openChain = (row: Row): Named | undefined => {
+    const open = (chains.get(textKey(row.text)) ?? []).filter(
+      ({ row: last }) => last.done === 0 && last.date < row.date && daysBetween(last.date, row.date) <= CHAIN_DAYS,
+    );
     // Of several, the one whose latest row is on the latest day, then the higher on that day's
     // list: a day's positions are unique, so two chains never tie and every run groups alike.
-    const joined = open.sort((a, b) => b.row.date.localeCompare(a.row.date) || a.row.position - b.row.position)[0];
+    return open.sort((a, b) => b.row.date.localeCompare(a.row.date) || a.row.position - b.row.position)[0];
+  };
+  const chained = (row: Row): number => {
+    const joined = openChain(row);
     if (joined) return joined.id;
     const started = addFromRow(row.uid, row, {});
-    chains.set(key, [...same, started]);
+    const key = textKey(row.text);
+    chains.set(key, [...(chains.get(key) ?? []), started]);
     return started.id;
   };
 
@@ -253,11 +262,34 @@ function backfill(db: DB, userId: number, now: number): void {
   // Each task's entry on its latest day: the rows are walked in date order.
   const latest = new Map<number, Entry>();
   const links: { dayId: number; uid: string; itemId: number }[] = [];
+
+  const drop = db.prepare(`DELETE FROM items WHERE id = ? RETURNING uid`).pluck();
+  /**
+   * The task of the card a row links. A card's first written row can continue an open chain of
+   * its text: rows typed with the board off and carried, until the old daily sweep gave the carried
+   * row a card. That chain is the card's work, so its rows become the card's entries (under the
+   * card's name, as any card row) and its task goes, freeing its uid. The chain's days are behind
+   * the walk, so their entries' keys are never looked up again.
+   */
+  const carded = (uid: string, row: Row): number => {
+    const id = linked(cardTasks, uid, row, {});
+    const chain = latest.has(id) ? undefined : openChain(row);
+    if (chain) {
+      const same = chains.get(textKey(row.text))!;
+      same.splice(same.indexOf(chain), 1);
+      fromRows.delete(chain.id);
+      for (const e of entries.values()) if (e.itemId === chain.id) e.itemId = id;
+      for (const l of links) if (l.itemId === chain.id) l.itemId = id;
+      taken.delete(drop.get(chain.id) as string);
+    }
+    return id;
+  };
+
   for (const r of rows) {
     if (!written(r.text)) continue;
     const id =
       r.card_uid != null
-        ? linked(cardTasks, r.card_uid, r, {})
+        ? carded(r.card_uid, r)
         : r.recurring_uid != null
           ? linked(routineTasks, r.recurring_uid, r, { weekdays: weekdayBit(r.date) })
           : chained(r);
@@ -274,13 +306,19 @@ function backfill(db: DB, userId: number, now: number): void {
     entries.set(at, entry);
     latest.set(id, entry);
   }
-  // A card in Later or Next whose latest row is ticked was put back there after the tick (the
-  // board's untick, the correction for a mistaken tick). Done is read from the latest entry's
-  // tick, so that tick goes, or the task would show as done again; priorities_v1 keeps it.
-  for (const id of laned) {
+  // A card in Later or Next whose latest linked row is ticked was put back there after the tick
+  // (the board's untick, the correction for a mistaken tick). Done is read from the latest entry's
+  // tick, so that tick goes, or the task would show as done again; priorities_v1 keeps it. A linked
+  // row on a later day, even emptied, means the card was pulled onto that list after it was done:
+  // that tick is real and stays.
+  for (const [id, uid] of laned) {
     const entry = latest.get(id);
-    if (entry) entry.done = 0;
+    if (entry && entry.dayId === latestDay.get(uid)) entry.done = 0;
   }
+  // A Done card whose latest entry is open had its ticked row emptied or removed after an open
+  // one, and would show as left open: it is archived, as a Done card with no written row is.
+  const archive = db.prepare(`UPDATE items SET archived_at = ? WHERE id = ?`);
+  for (const id of wasDone) if (latest.get(id)?.done === 0) archive.run(now, id);
 
   // An emptied row makes no entry. Its sessions stay with the card or recurring priority it links
   // when that is a task; otherwise they keep counting under the row's category, as they did

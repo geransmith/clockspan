@@ -394,6 +394,20 @@ describe('migration 13: each task stored once', () => {
     db.close();
   });
 
+  it('keeps the tick of a card in Later or Next that a later list holds, even emptied there', () => {
+    const { db, day, row, card } = before();
+    // Done, pulled onto a later list, which moved it to Next, and emptied there.
+    card('card00000001', 'Migrate the wiki', 'next', 1);
+    const mon = day('2026-09-07');
+    const tue = day('2026-09-08');
+    row(mon, 1, 'Migrate the wiki', { card: 'card00000001', done: true });
+    row(tue, 1, '', { uid: 'empty0000001', card: 'card00000001' });
+
+    migrate(db);
+    expect(list(db, mon)).toEqual([{ uid: 'card00000001', position: 1, done: 1, added_at: 2000 }]);
+    db.close();
+  });
+
   it('takes a held card out of the lanes, and archives one no written row names', () => {
     const { db, day, row, card, session } = before();
     card('held00000001', 'Held, written before', 'next', 1, { untouched: true });
@@ -423,19 +437,28 @@ describe('migration 13: each task stored once', () => {
     db.close();
   });
 
-  it('takes Done cards out of the lanes, keeps done_at and untouched, and archives one whose ticked row was removed', () => {
+  it('takes Done cards out of the lanes, keeps done_at and untouched, and archives one whose ticked row was removed or emptied after an open one', () => {
     const { db, day, row, card } = before();
     card('later0000001', 'Later', 'later', 1);
     card('done00000001', 'Done', 'done', 0, { doneAt: 5000, untouched: true });
     card('done00000002', 'Done, row removed', 'done', 0, { doneAt: 6000 });
+    card('done00000003', 'Done, row emptied', 'done', 0, { doneAt: 7000 });
     const mon = day('2026-09-07');
+    const tue = day('2026-09-08');
     row(mon, 1, 'Done', { card: 'done00000001', done: true });
+    row(mon, 2, 'Done, row emptied', { card: 'done00000003' });
+    row(tue, 1, '', { uid: 'empty0000001', card: 'done00000003' });
 
     migrate(db);
     expect(item(db, 'later0000001')).toMatchObject({ lane: 'later', position: 1, archived_at: null, legacy_done_at: null, legacy_untouched: 0 });
     expect(item(db, 'done00000001')).toMatchObject({ lane: null, position: 0, archived_at: null, legacy_done_at: 5000, legacy_untouched: 1 });
     expect(item(db, 'done00000002')).toMatchObject({ lane: null, position: 0, archived_at: NOW, legacy_done_at: 6000, legacy_untouched: 0 });
-    expect(list(db, mon)).toEqual([{ uid: 'done00000001', position: 1, done: 1, added_at: 2000 }]);
+    // Its latest entry is open: it would show as left open.
+    expect(item(db, 'done00000003')).toMatchObject({ lane: null, position: 0, archived_at: NOW, legacy_done_at: 7000 });
+    expect(list(db, mon)).toEqual([
+      { uid: 'done00000001', position: 1, done: 1, added_at: 2000 },
+      { uid: 'done00000003', position: 2, done: 0, added_at: 2000 },
+    ]);
     db.close();
   });
 
@@ -608,6 +631,34 @@ describe('migration 13: each task stored once', () => {
       { date: '2026-09-09', position: 2, uid: 'first0000001' },
     ]);
     expect(grouped()).toEqual(once);
+  });
+
+  it("folds into a card the open chain its first written row continues, and the chain's sessions follow", () => {
+    const { db, day, row, card, session } = before();
+    card('card00000001', 'Fix the flaky test', 'next', 1, { category: 'cat000000001' });
+    card('card00000002', 'Slides', 'next', 2);
+    const mon = day('2026-09-07');
+    const tue = day('2026-09-08');
+    // Typed with the board off; the daily sweep gave Tuesday's carried row a card.
+    row(mon, 1, 'flaky test', { uid: 'row000000001', category: 'cat000000002' });
+    row(mon, 2, 'Flaky test', { uid: 'row000000002' });
+    // A tick ends a chain.
+    row(mon, 3, 'Slides', { uid: 'row000000003', done: true });
+    row(tue, 1, 'Flaky test', { uid: 'row000000004', card: 'card00000001' });
+    row(tue, 2, 'Slides', { uid: 'row000000005', card: 'card00000002' });
+    // The chain's uid is free again.
+    row(tue, 3, 'Other', { uid: 'row000000001' });
+    const s = session(mon, 'row000000001');
+
+    migrate(db);
+    // Of the two open chains, the higher on Monday's list, as a row joins one.
+    expect(list(db, mon).map((e) => (e as { uid: string }).uid)).toEqual(['card00000001', 'row000000002', 'row000000003']);
+    expect(list(db, tue).map((e) => (e as { uid: string }).uid)).toEqual(['card00000001', 'card00000002', 'row000000001']);
+    expect(item(db, 'card00000001')).toMatchObject({ title: 'Fix the flaky test', category_uid: 'cat000000001', lane: 'next' });
+    expect(item(db, 'row000000001')).toMatchObject({ title: 'Other', legacy_uid: null });
+    expect(linkOf(db, s).uid).toBe('card00000001');
+    expect(countRows(db, 'items')).toBe(5);
+    db.close();
   });
 
   it('links each session to the task of its row on its own day, and leaves the rest unplanned', () => {

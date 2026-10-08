@@ -93,18 +93,22 @@ export function nextFromLater(db: DB, userId: number, date: string, items: reado
  * Deletes the user's tasks (those in `only` when given) that nothing names: no entry, no
  * session, and either archived or a one-off in no lane. A task in a lane is the board's, and a
  * recurring priority in use a setting, so neither goes. A tombstone is skipped: it stays until the
- * prune, so a late save naming its uid can't make the task again. Returns how many went.
+ * prune, so a late save naming its uid can't make the task again. With `archivedBefore` (the
+ * prune's cutoff), an archived task goes only once it was archived, or its old card done, before
+ * that instant, as the old prune kept a Done card until its `done_at` passed the cutoff. Returns
+ * how many went.
  */
-export function collectItems(db: DB, userId: number, only?: readonly number[]): number {
+export function collectItems(db: DB, userId: number, only?: readonly number[], archivedBefore?: number): number {
   return db
     .prepare(
-      `DELETE FROM items WHERE user_id = ? ${only ? 'AND id IN (SELECT value FROM json_each(?))' : ''}
+      `DELETE FROM items WHERE user_id = @userId ${only ? 'AND id IN (SELECT value FROM json_each(@only))' : ''}
          AND deleted_at IS NULL
          AND NOT EXISTS (SELECT 1 FROM priorities p WHERE p.item_id = items.id)
          AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.item_id = items.id)
-         AND (archived_at IS NOT NULL OR (weekdays IS NULL AND lane IS NULL))`,
+         AND (archived_at IS NOT NULL OR (weekdays IS NULL AND lane IS NULL))
+         ${archivedBefore === undefined ? '' : 'AND (archived_at IS NULL OR COALESCE(legacy_done_at, archived_at) < @archivedBefore)'}`,
     )
-    .run(...(only ? [userId, inList(only)] : [userId])).changes;
+    .run({ userId, only: only && inList(only), archivedBefore }).changes;
 }
 
 /**

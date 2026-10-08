@@ -351,11 +351,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   ticked before the cutoff, named by no entry or session once the days are gone, whatever its
   lane; one a session still names leaves its lane, since nothing would say it was done), then
   the tombstones of tasks deleted before the cutoff (UTC midnight of `before`), then
-  any task nothing names (`collectItems`, which skips the newer tombstones), and closes up a lane
-  that lost one. An open task in a lane and a recurring priority in use are never taken. With
-  retention off nothing runs, so tombstones stay. It answers both counts (`Pruned`: days and
-  tasks, tombstones included), and `POST /days/prune` reports the days; the Data tab reads the
-  board again after its delete while the board is on.
+  any task nothing names (`collectItems`, which skips the newer tombstones, and an archived task
+  until it was archived, or its old card done (`legacy_done_at`), before the cutoff), and closes
+  up a lane that lost one. An open task in a lane and a recurring priority in use are never
+  taken. With retention off nothing runs, so tombstones stay. It answers both counts (`Pruned`:
+  days and tasks, tombstones included), and `POST /days/prune` reports the days; the Data tab
+  reads the board again after its delete while the board is on.
   `reclaimSpace` (VACUUM + WAL checkpoint) runs after a prune that deleted a day or a task and
   after an admin deletes a user (`DELETE /api/auth/users/:id`), so the file shrinks and deleted
   text does not stay in free pages; it must not run inside a transaction.

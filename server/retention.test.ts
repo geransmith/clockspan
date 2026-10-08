@@ -5,7 +5,7 @@ import { seedDatabase } from './dev/seed.js';
 import { cutoffKey, effectiveKeepDays, runRetention } from './retention.js';
 import { DEFAULT_SETTINGS } from '../shared/settings.js';
 import { DAY_MS } from '../shared/dates.js';
-import type { UserRow } from './db.js';
+import { ensureDefaultUser, type UserRow } from './db.js';
 import type { Board } from '../shared/api.js';
 
 describe('cutoffKey', () => {
@@ -193,6 +193,20 @@ describe('pruning tasks', () => {
     expect(await prune()).toEqual({ deleted: 0 });
     expect(uids()).toEqual(['card00000002']);
     expect(app.db.serialize().includes('Task text only the prune knew')).toBe(false);
+  });
+
+  it('keeps an archived task nothing names until it was archived, or its old card done, before the cutoff', async () => {
+    app = await startTestApp();
+    const insert = app.db.prepare(`INSERT INTO items (user_id, uid, title, created_at, archived_at, legacy_done_at) VALUES (?, ?, ?, 0, ?, ?)`);
+    const user = ensureDefaultUser(app.db).id;
+    const before = Date.parse('2026-01-31T23:59:59Z');
+    const at = Date.parse('2026-02-01T00:00:00Z');
+    insert.run(user, 'card00000001', 'Archived before', before, null);
+    insert.run(user, 'card00000002', 'Archived at the cutoff', at, null);
+    insert.run(user, 'card00000003', 'Done before, archived after', at, before);
+    insert.run(user, 'card00000004', 'Done at the cutoff, archived before', before, at);
+    expect(await prune()).toEqual({ deleted: 0 });
+    expect(uids()).toEqual(['card00000002', 'card00000004']);
   });
 
   it('logs the tasks each scheduled pass deleted, tombstones included, and leaves them while retention is off', async () => {

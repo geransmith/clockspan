@@ -12,7 +12,8 @@ import { DAY_MS } from '../shared/dates.js';
  * `startBackgroundJobs` in app.ts runs through `runRetention` on a timer. Both go through
  * `pruneDays` so the rules are in one place. Deleting a `days` row cascades to its punches,
  * entries, old per-day rows, sessions and breaks. The same prune takes the tasks done before the
- * cutoff, the deleted tasks' tombstones from before it, and any task nothing names;
+ * cutoff, the deleted tasks' tombstones from before it, and any task nothing names (an archived
+ * one once it was archived, or its old card done, before it);
  * settings, logins, categories, recurring priorities in use and open tasks in a lane are never
  * touched.
  */
@@ -61,8 +62,8 @@ const NOT_A_SETTING = `(weekdays IS NULL OR archived_at IS NOT NULL)`;
  * and named by nothing: those whose latest entry was ticked before it, whatever their lane. Then
  * the tombstones of tasks deleted before it (UTC midnight, like `cutoffKey`), which no open page
  * still sends after a retention window of 30 days or more, and any task nothing names
- * (`collectItems`, which skips the newer tombstones). A done task kept for its sessions leaves its
- * lane, and a lane that lost a task closes up.
+ * (`collectItems`, which skips the newer tombstones, and archived tasks archived or done since the
+ * cutoff). A done task kept for its sessions leaves its lane, and a lane that lost a task closes up.
  */
 export function pruneDays(db: DB, userId: number, before: string): Pruned {
   return db.transaction((): Pruned => {
@@ -90,8 +91,9 @@ export function pruneDays(db: DB, userId: number, before: string): Pruned {
     const unlaned = db
       .prepare(`UPDATE items SET lane = NULL, position = 0 WHERE user_id = ? AND id IN (SELECT value FROM json_each(?)) AND lane IS NOT NULL`)
       .run(userId, inList(done)).changes;
-    const tombstones = db.prepare(`DELETE FROM items WHERE user_id = ? AND deleted_at < ?`).run(userId, Date.parse(`${before}T00:00:00Z`)).changes;
-    const items = finished + tombstones + collectItems(db, userId);
+    const cutoff = Date.parse(`${before}T00:00:00Z`);
+    const tombstones = db.prepare(`DELETE FROM items WHERE user_id = ? AND deleted_at < ?`).run(userId, cutoff).changes;
+    const items = finished + tombstones + collectItems(db, userId, undefined, cutoff);
     if (items > 0 || unlaned > 0) {
       renumber(db, userId, 'later');
       renumber(db, userId, 'next');
