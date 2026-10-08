@@ -22,11 +22,11 @@ description.
   `package.json` makes npm refuse `install`, `ci` and `run` on an older Node.
 - Client: React 19, TypeScript 7 (the native `tsc`: the `typescript` package has no `tsserver` or
   JS API, so editors need the native TypeScript extension, and `npm run typecheck` is the source
-  of truth), Vite 8. `@dnd-kit/sortable` for drag/drop (loaded on the first Customize);
-  `react-aria` + `react-stately` + `@internationalized/date` for the punch time field. No router
-  (the date, the view (the sheet, History or the board) and the review period a day was opened
-  from live in the URL query, `hooks/useRoute.ts`; today is `date: null`, so a sheet left open
-  over midnight moves to the new day) and no CSS framework.
+  of truth), Vite 8. `@dnd-kit/sortable` for drag/drop (loaded on the first Customize, and with
+  the board); `react-aria` + `react-stately` + `@internationalized/date` for the punch time
+  field. No router (the date, the view (the sheet, History or the board) and the review period a
+  day was opened from live in the URL query, `hooks/useRoute.ts`; today is `date: null`, so a
+  sheet left open over midnight moves to the new day) and no CSS framework.
 - Server: Express 5 (ESM, `NodeNext`, imports end in `.js`), `better-sqlite3`, `openid-client`
   v6, `cookie`. Passwords: `node:crypto` scrypt (async).
 - Tests: Vitest 5; hook tests run under happy-dom with `@testing-library/react`. Lint: oxlint
@@ -107,16 +107,19 @@ client/                 Vite root → dist/client
                         fired alarms, Start fresh, the break-over mark) and adoptUser, which records
                         who the app is open for under AUTH_USER_KEY and drops the last user's keys
     board.ts            the board's columns from the cards and today's rows (boardColumns), what a move
-                        does and which store it writes (planMove, moveTargets, MoveRefused), the cards the
-                        left-open offer may bring back (offeredLeftovers), and the board as a write shows
-                        it (withCard, withPatch, withoutCard)
+                        does and which store it writes (planMove, moveTargets, MoveRefused), where a drop
+                        lands and what a drag says (dropTarget, withDrag, overAnnouncement,
+                        moveAnnouncement), the cards the left-open offer may bring back
+                        (offeredLeftovers), and the board as a write shows it (withCard, withPatch,
+                        withoutCard)
   src/hooks/            state and effects (useDay, useTimer, useSettings, useBoard, useAlarms, …), each
                         with a happy-dom test beside it (useLatest is covered through the hooks that use
                         it, and AppProviders through the tests that render it).
                         useClock is the app's one 1-second clock; useSaveStatus
                         (Saving… / Saved / Not saved) serves the settings dialog; useBoard is the
                         board's store (BoardProvider, its refresh and the daily sweep); useMediaQuery
-                        follows a media query for behaviour (the capture box's autofocus).
+                        follows a media query for behaviour (the capture box's autofocus, the board's
+                        drop glide under reduced motion).
                         src/test/fixtures.ts has the plain factories and TEST_SETTINGS (no React);
                         src/test/hooks.tsx re-exports fixtures.ts and AppProviders and has
                         SettingsAndDays, serveRange (a mocked getRange that answers from a list of
@@ -124,7 +127,8 @@ client/                 Vite root → dist/client
   src/components/       the cards, History (Calendar + Review), Banners, FinishChoice, and the pieces
                         several of them share (Folded: a long list's Show all); settings/ holds
                         SettingsDialog (the shell and tabs), a file per tab, and controls.tsx;
-                        board/ holds the Board page (Board, BoardCard, Capture), its own lazy chunk
+                        board/ holds the Board page (Board, BoardCard, Capture, and dnd.ts: its
+                        collision and keyboard settings for dnd-kit), its own lazy chunk
   src/auth/             AuthGate and the setup / login / new-password pages
   src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
   src/styles.css        design tokens and all component CSS
@@ -355,9 +359,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `settings.sounds[event]`, an id from the catalog in `shared/sounds.ts`;
   `settings.sound` is the master switch over all of them, and
   `none` is the per-event off. A celebration (day complete and work week reached in
-  `Timeclock.tsx`, a priority ticked in `Priorities.tsx` or on the board (its checkbox, or Move to
-  Done), the next day planned in `PlanNext.tsx`) is a `useCelebration(moment, event)`
-  (`hooks/useCelebration.ts`): the sound
+  `Timeclock.tsx`, a priority ticked in `Priorities.tsx` or on the board (its checkbox, Move to
+  Done, or a drop into Done), the next day planned in `PlanNext.tsx`) is a
+  `useCelebration(moment, event)` (`hooks/useCelebration.ts`): the sound
   under `settings.sound`, the burst under `settings.celebrations`. A state's moment comes from
   `useBecameTrue`, so it is the day *becoming* done while the card is mounted, never a done day
   opening. The work-week moment is null until `loaded`, because its target is a setting; the day
@@ -669,7 +673,19 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   done-item notice or a refusal; what the store refuses once a move is under way (`MoveRefused`:
   a full list, a stale card, a list not loaded) is a banner. With the board on, the left-open
   offer brings back a row whose card is in Next under the card's title, and leaves one whose
-  card the board moved to Later, finished or deleted (`offeredLeftovers`).
+  card the board moved to Later, finished or deleted (`offeredLeftovers`). A drag (`Board.tsx`,
+  with dnd-kit's settings in `components/board/dnd.ts`) starts at an item's grip. A planned card
+  and a recurring row have none, and an item whose move is on its way can't be picked up until
+  the move lands. Later's and Next's cards sort, each lane a `SortableContext` of the cards it
+  shows (planned ones left out); In progress and Done take a drop as a whole column. While
+  dragged, the item shows in the column it is over (`withDrag`); where it lands is `dropTarget`
+  (in a lane, the place of the card it is over as the list showed it sorting, which is before
+  that card for an item from another column; at the end of an empty lane; null where it
+  started), and the drop goes through `planMove` as Move to does. What a screen reader hears
+  comes from `BOARD_DRAG`, `overAnnouncement` and `moveAnnouncement` (a done item's line is
+  `DONE_STAYS.announce`). dnd-kit's own focus return is off, since it would take the focus from
+  the notice a drop brings: a keyboard drag puts it back on the item's grip, and so does closing
+  the notice (on the title where the grip is hidden or missing).
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started —
   one rule, no clock-in fallback. `GET /days/range` returns full days and the client does the
@@ -742,15 +758,16 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   cached immutable. The SPA fallback serves `index.html` for any other non-API path; a miss
   under `/assets` is a 404 (a page from before an upgrade asking for an old chunk).
 - **History, the board, the settings dialog and drag and drop are lazy chunks** (`lazy()` in
-  `App.tsx` for `History`, `Board` and `SettingsDialog`, in `Sheet.tsx` for `SortableCards`,
-  which holds every `@dnd-kit` import). A static import of one of them from the first screen
-  folds it back into the main chunk. Everything under `components/board/` loads only through
-  `Board`'s chunk; what the sheet shares with it (`lib/board.ts`, `hooks/useBoard.tsx`) stays out
-  of that folder. The sheet renders plain `CardFrame`s until the first Customize and stays on
-  `SortableCards` after it, since swapping lists remounts the cards. A chunk that fails to
-  load (an upgrade while the page was open) reloads the page once a minute at most
-  (`vite:preloadError` in `main.tsx`, `lib/reload.ts`); the `ErrorBoundary` card shows until
-  the reload lands, and stays when no reload is made.
+  `App.tsx` for `History`, `Board` and `SettingsDialog`, in `Sheet.tsx` for `SortableCards`;
+  `SortableCards` and `components/board/` hold every `@dnd-kit` import). A static import of one
+  of them from the first screen folds it back into the main chunk. Everything under
+  `components/board/` loads only through `Board`'s chunk; what other views share with it
+  (`lib/board.ts` and `hooks/useBoard.tsx` with the sheet, `Folded` with History's Review) stays
+  out of that folder and imports no dnd-kit. The sheet renders plain `CardFrame`s until the
+  first Customize and stays on `SortableCards` after it, since swapping lists remounts the
+  cards. A chunk that fails to load (an upgrade while the page was open) reloads the page once a
+  minute at most (`vite:preloadError` in `main.tsx`, `lib/reload.ts`); the `ErrorBoundary` card
+  shows until the reload lands, and stays when no reload is made.
 - **A wide window shows the sheet in two columns, chosen when the sheet mounts.** Each layout
   entry has a `side` (`'left' | 'right'`), which `normalizeLayout` keeps or sets to the card's
   `DEFAULT_SIDE` (`shared/settings.ts`), so a layout saved before the columns needs no
@@ -1077,6 +1094,12 @@ The browser pass for each surface (the logic under it is already tested):
   where the columns are narrowest: titles clamp to two lines, meta lines wrap, the Move to select
   fits. At 375: the switch shows one column, the notice wraps, and with sign-in on
   (`web-local`) the sheet's five header buttons fit with the brand's name gone. Light and dark.
+  The drag pass: at 1440, drag with the mouse between each pair of columns (Later and Next take
+  the card where it is dropped), a done row onto Later (the notice, and Add a new card lands
+  there), then by keyboard (Tab to a grip, Space, arrows, Space) with a screen reader, which
+  hears where the card is and the done-item line, and Escape puts it back; with reduced motion
+  on, nothing glides. At 1000 the copy under the pointer isn't clipped; at 375 a card sorts
+  within the column shown, In progress and Done show no grip, and Move to still moves.
 - **The History calendar**: one month at the mobile preset: ◀ to a seeded month, tap a day,
   **Open day**, browser Back lands on that month with the day picked, and back through the
   header, **Review this week** lands on that week. Review → Month → ◀ → a row → Back lands on

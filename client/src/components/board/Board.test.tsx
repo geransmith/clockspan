@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import { unlockAudio, warnQuietly } from '../../lib/alerts';
 import { withCard, withoutCard, withPatch } from '../../lib/board';
-import { BOARD, CONFIRM, DONE_STAYS, LOAD_FAILED, PRIORITY_WARNINGS, WARNING_ACTIONS } from '../../lib/copy';
+import { BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, PRIORITY_WARNINGS, WARNING_ACTIONS } from '../../lib/copy';
 import { apiError, deferred, makeBoard, makeCard, makeDay, makePriority, makeSettings, serveRange, settle, SettingsAndDays } from '../../test/hooks';
 import type { Board as BoardData, Priority } from '../../types';
 import { Board } from './Board';
@@ -39,6 +39,8 @@ async function renderBoard(settings = makeSettings({ board: true })) {
 
 /** A column by its heading. */
 const column = (name: string) => screen.getByRole('region', { name });
+/** The board notice's live region (drag and drop has a live region of its own). */
+const notice = () => document.querySelector<HTMLElement>('.board-notice[role="status"]')!;
 /** The titles a column shows, in order, and Done's fold. */
 const titlesIn = (name: string) => [...column(name).querySelectorAll('.board-card-title, .board-earlier')].map((b) => b.textContent);
 /** Opens an item's editor by its title. */
@@ -231,15 +233,15 @@ describe('Board', () => {
     await renderBoard();
     openEditor('Follow up');
     moveTo('progress');
-    const notice = screen.getByRole('status');
-    expect(PRIORITY_WARNINGS.fresh).toContain(within(notice).getByText(/./, { selector: 'span:not(.notice-actions)' }).textContent);
-    fireEvent.click(within(notice).getByRole('button', { name: WARNING_ACTIONS.fresh.keep }));
+    const box = notice();
+    expect(PRIORITY_WARNINGS.fresh).toContain(within(box).getByText(/./, { selector: 'span:not(.notice-actions)' }).textContent);
+    fireEvent.click(within(box).getByRole('button', { name: WARNING_ACTIONS.fresh.keep }));
     await settle();
     expect(api.putPriorities).not.toHaveBeenCalled();
-    expect(within(screen.getByRole('status')).queryByRole('button')).toBeNull();
+    expect(within(notice()).queryByRole('button')).toBeNull();
     // The editor stays open behind a notice, and the next move replaces it.
     moveTo('progress');
-    fireEvent.click(within(screen.getByRole('status')).getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
+    fireEvent.click(within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
     await settle();
     expect(putLists()[0]!.texts).toEqual(['Report', 'Email', 'Invoices', 'Follow up']);
     // A drop into Done asks nothing.
@@ -254,11 +256,11 @@ describe('Board', () => {
       await renderBoard();
       openEditor('Email');
       moveTo('next');
-      const notice = screen.getByRole('status');
-      expect(notice.textContent).toContain(DONE_STAYS.title('Email'));
-      expect(notice.textContent).toContain(DONE_STAYS.body);
+      const box = notice();
+      expect(box.textContent).toContain(DONE_STAYS.title('Email'));
+      expect(box.textContent).toContain(DONE_STAYS.body);
       // The notice takes the focus, so a keyboard user reaches its buttons.
-      expect(document.activeElement).toBe(within(notice).getByRole('button', { name: DONE_STAYS.add('Next') }));
+      expect(document.activeElement).toBe(within(box).getByRole('button', { name: DONE_STAYS.add('Next') }));
       await settle();
       expect(api.putPriorities).not.toHaveBeenCalled();
       expect(api.addCard).not.toHaveBeenCalled();
@@ -289,16 +291,20 @@ describe('Board', () => {
       expect(vi.mocked(api.addCard).mock.lastCall![0]).toMatchObject({ title: 'Shipped', lane: 'later', before: 'later0000001' });
     });
 
-    it('Leave it and Escape close the notice, send nothing and put the focus back on the item', async () => {
+    it("Leave it and Escape close the notice, send nothing and put the focus back on the item's grip, or its title where the grip takes none", async () => {
       await renderBoard();
       openEditor('Email');
       moveTo('later');
       fireEvent.click(screen.getByRole('button', { name: DONE_STAYS.leave }));
-      expect(within(screen.getByRole('status')).queryByRole('button')).toBeNull();
-      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Email' }));
+      expect(within(notice()).queryByRole('button')).toBeNull();
+      const grip = screen.getByRole('button', { name: 'Drag to move Email' }) as HTMLButtonElement;
+      expect(document.activeElement).toBe(grip);
+      // A grip hidden on a phone takes no focus, as a disabled one doesn't here.
+      grip.disabled = true;
       moveTo('next');
       fireEvent.keyDown(screen.getByRole('button', { name: DONE_STAYS.leave }), { key: 'Escape' });
-      expect(within(screen.getByRole('status')).queryByRole('button')).toBeNull();
+      expect(within(notice()).queryByRole('button')).toBeNull();
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Email' }));
       await settle();
       expect(api.addCard).not.toHaveBeenCalled();
     });
@@ -364,9 +370,9 @@ describe('Board', () => {
     await renderBoard();
     openEditor('Report');
     moveTo('later');
-    expect(screen.getByRole('status').textContent).toContain(BOARD.planned('Report', 'tomorrow'));
+    expect(notice().textContent).toContain(BOARD.planned('Report', 'tomorrow'));
     fireEvent.click(screen.getByRole('button', { name: BOARD.close }));
-    expect(screen.getByRole('status').textContent).toBe('');
+    expect(notice().textContent).toBe('');
     moveTo('next');
     await settle();
     expect(api.addCard).toHaveBeenCalledExactlyOnceWith({ uid: 'card00000001', title: 'Report', categoryUid: null, lane: 'next', before: null });
@@ -459,5 +465,212 @@ describe('Board', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await settle();
     expect(titlesIn('Later')).toEqual(['Write a KB']);
+  });
+});
+
+describe('dragging', () => {
+  // happy-dom lays nothing out, so this is a desktop window's: the four columns side by side,
+  // 280 px wide from x 20, with cards 40 px tall and 50 px apart from y 260, and the copy under
+  // the pointer where dnd-kit puts it.
+  beforeEach(() => {
+    const box = (left: number, top: number, width: number, height: number) => new DOMRect(left, top, width, height);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const cols = [...document.querySelectorAll('.board-col')];
+      const col = this.closest('.board-col');
+      if (this.classList.contains('board-col')) return box(20 + cols.indexOf(this) * 300, 200, 280, 600);
+      if (col && this.matches('li.board-card'))
+        return box(32 + cols.indexOf(col) * 300, 260 + [...col.querySelectorAll('li.board-card')].indexOf(this) * 50, 256, 40);
+      // The copy fills dnd-kit's fixed frame, which is where the item was, moved by a translate.
+      const frame = [this, this.parentElement].find((el) => el?.style.position === 'fixed');
+      if (frame) {
+        const [, x = '0', y = '0'] = /translate3d\((-?[\d.]+)px, (-?[\d.]+)px/.exec(frame.style.transform) ?? [];
+        const px = (v: string) => parseFloat(v) || 0;
+        return box(px(frame.style.left) + px(x), px(frame.style.top) + px(y), px(frame.style.width), px(frame.style.height));
+      }
+      return box(0, 0, 0, 0);
+    });
+  });
+
+  const grip = (title: string) => screen.getByRole('button', { name: `Drag to move ${title}` });
+  /** What dnd-kit's live region last said. */
+  const said = () => document.querySelector('[id^="DndLiveRegion"]')!.textContent;
+  async function press(code: string, target: Element | Document = document) {
+    fireEvent.keyDown(target, { code });
+    await settle();
+  }
+  /** Space on the item's grip, as a keyboard user picks it up. */
+  async function pickUp(title: string) {
+    grip(title).focus();
+    await press('Space', grip(title));
+  }
+
+  it('moves a card into the next lane by keyboard, before the card it lands on, saying what happens and keeping the focus on its grip', async () => {
+    await renderBoard();
+    await pickUp('Write a KB');
+    expect(said()).toBe(BOARD_DRAG.pickedUp('Write a KB', 'Later'));
+    await press('ArrowRight');
+    expect(said()).toBe(BOARD_DRAG.overBefore('Write a KB', 'Next', 'Follow up'));
+    // It shows where it would land, in a column marked as the one it is over.
+    expect(titlesIn('Next')).toEqual(['Write a KB', 'Follow up', 'Plan B']);
+    expect(column('Next').hasAttribute('data-over')).toBe(true);
+    await press('Space');
+    expect(api.patchCard).toHaveBeenCalledExactlyOnceWith('later0000001', { today: WED, lane: 'next', before: 'next00000001' });
+    expect(said()).toBe(BOARD_DRAG.moved('Write a KB', 'Next'));
+    expect(titlesIn('Next')).toEqual(['Write a KB', 'Follow up', 'Plan B']);
+    expect(column('Next').hasAttribute('data-over')).toBe(false);
+    expect(document.activeElement).toBe(grip('Write a KB'));
+  });
+
+  it('sorts a card within its lane by keyboard', async () => {
+    onServer = makeBoard(...onServer.cards, makeCard('later0000002', 'Call the vendor', { position: 2 }));
+    await renderBoard();
+    await pickUp('Write a KB');
+    await press('ArrowDown');
+    expect(said()).toBe(BOARD_DRAG.overEnd('Write a KB', 'Later'));
+    await press('Space');
+    expect(api.patchCard).toHaveBeenCalledExactlyOnceWith('later0000001', { today: WED, before: null });
+    expect(titlesIn('Later')).toEqual(['Call the vendor', 'Write a KB']);
+  });
+
+  it("pulls a card onto today's list by keyboard: Next, then In progress", async () => {
+    await renderBoard();
+    await pickUp('Write a KB');
+    await press('ArrowRight');
+    await press('ArrowRight');
+    expect(said()).toBe(BOARD_DRAG.over('Write a KB', 'In progress'));
+    expect(titlesIn('In progress')).toEqual(['Report', 'Write a KB']);
+    await press('Space');
+    expect(said()).toBe(BOARD_DRAG.moved('Write a KB', 'In progress'));
+    expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Write a KB'], touched: ['later0000001'] }]);
+    expect(titlesIn('In progress')).toEqual(['Report', 'Write a KB']);
+    // A row of today's now, under a new id: the focus finds its grip there.
+    expect(document.activeElement).toBe(grip('Write a KB'));
+  });
+
+  it('keeps a done row done when it is dropped on Next, and Add a new card puts one where it was dropped', async () => {
+    await renderBoard();
+    await pickUp('Email');
+    expect(said()).toBe(BOARD_DRAG.pickedUp('Email', 'Done'));
+    // In progress and Done don't sort: up and down go nowhere.
+    await press('ArrowUp');
+    expect(said()).toBe(BOARD_DRAG.pickedUp('Email', 'Done'));
+    await press('ArrowLeft');
+    await press('ArrowLeft');
+    expect(titlesIn('Next')).toEqual(['Email', 'Follow up', 'Plan B']);
+    await press('Space');
+    expect(said()).toBe(DONE_STAYS.announce('Email', 'Next'));
+    expect(titlesIn('Done')).toEqual(['Email', 'Earlier this week · 2']);
+    expect(document.activeElement).toBe(within(notice()).getByRole('button', { name: DONE_STAYS.add('Next') }));
+    fireEvent.click(screen.getByRole('button', { name: DONE_STAYS.add('Next') }));
+    await settle();
+    expect(vi.mocked(api.addCard).mock.calls.map(([c]) => [c.title, c.lane, c.before])).toEqual([['Email', 'next', 'next00000001']]);
+    expect(api.putPriorities).not.toHaveBeenCalled();
+    expect(titlesIn('Next')).toEqual(['Email', 'Follow up', 'Plan B']);
+  });
+
+  it('says when the item is back over where it started, though not as it is picked up', async () => {
+    await renderBoard();
+    await pickUp('Report');
+    expect(said()).toBe(BOARD_DRAG.pickedUp('Report', 'In progress'));
+    await press('ArrowRight');
+    expect(said()).toBe(BOARD_DRAG.over('Report', 'Done'));
+    await press('ArrowLeft');
+    expect(said()).toBe(BOARD_DRAG.overStart('Report', 'In progress'));
+    await press('Escape');
+  });
+
+  it('puts the item back on Escape, sending nothing', async () => {
+    await renderBoard();
+    await pickUp('Write a KB');
+    await press('ArrowRight');
+    await press('Escape');
+    expect(said()).toBe(BOARD_DRAG.cancelled('Write a KB', 'Later'));
+    expect(titlesIn('Later')).toEqual(['Write a KB']);
+    expect(titlesIn('Next')).toEqual(['Follow up', 'Plan B']);
+    expect(document.activeElement).toBe(grip('Write a KB'));
+    await settle();
+    expect(api.patchCard).not.toHaveBeenCalled();
+  });
+
+  it('says a drop where it started changed nothing, and sends nothing', async () => {
+    await renderBoard();
+    await pickUp('Report');
+    await press('Space');
+    expect(said()).toBe(BOARD_DRAG.stays('Report', 'In progress'));
+    expect(api.putPriorities).not.toHaveBeenCalled();
+  });
+
+  it('ticks a row dropped on Done with the mouse, unlocking the sound', async () => {
+    await renderBoard();
+    fireEvent.pointerDown(grip('Report'), { isPrimary: true, button: 0, clientX: 640, clientY: 270 });
+    fireEvent.pointerMove(document, { isPrimary: true, clientX: 700, clientY: 280 });
+    await settle();
+    fireEvent.pointerMove(document, { isPrimary: true, clientX: 960, clientY: 400 });
+    await settle();
+    expect(said()).toBe(BOARD_DRAG.over('Report', 'Done'));
+    fireEvent.pointerUp(document, { isPrimary: true, clientX: 960, clientY: 400 });
+    expect(unlockAudio).toHaveBeenCalledTimes(1);
+    // dnd-kit keeps a click guard on the document for 50 ms after a pointer drag, which would
+    // swallow the next test's clicks.
+    await settle(50);
+    expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', ''], touched: ['card00000001'] }]);
+    expect(lists[WED]![0]!.done).toBe(true);
+  });
+
+  it('holds a pull onto a full list with the nudge, as Move to does', async () => {
+    lists[WED] = [row(1, 'Report', { cardUid: 'card00000001' }), row(2, 'Email', { cardUid: 'card00000002' }), row(3, 'Invoices', { cardUid: 'card00000003' })];
+    await renderBoard();
+    await pickUp('Follow up');
+    await press('ArrowRight');
+    await press('Space');
+    expect(PRIORITY_WARNINGS.fresh).toContain(said());
+    const add = within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.add });
+    expect(document.activeElement).toBe(add);
+    await settle();
+    expect(api.putPriorities).not.toHaveBeenCalled();
+    // Add anyway goes with the notice: the focus goes to the grip of the row the card became.
+    fireEvent.click(add);
+    await settle();
+    expect(putLists()[0]!.texts).toEqual(['Report', 'Email', 'Invoices', 'Follow up']);
+    expect(document.activeElement).toBe(grip('Follow up'));
+  });
+
+  it("doesn't pick up an item whose move is on its way until the move lands", async () => {
+    const placed = deferred<BoardData>();
+    vi.mocked(api.addCard).mockReturnValueOnce(placed.promise);
+    await renderBoard();
+    openEditor('Report');
+    moveTo('later');
+    // Today's row shows in Later while its park waits on the board's answer, with its grip held.
+    expect(titlesIn('Later')).toEqual(['Report', 'Write a KB']);
+    expect(grip('Report').getAttribute('aria-disabled')).toBe('true');
+    await pickUp('Report');
+    expect(said()).toBe('');
+    placed.resolve((onServer = withCard(onServer, { uid: 'card00000001', title: 'Report', categoryUid: null, lane: 'later', before: 'later0000001' }, NOW)));
+    await settle();
+    expect(grip('Report').getAttribute('aria-disabled')).toBe('false');
+    await pickUp('Report');
+    expect(said()).toBe(BOARD_DRAG.pickedUp('Report', 'Later'));
+    await press('Escape');
+  });
+
+  it("keeps Later's fold as it was while a card dragged in makes it ten", async () => {
+    const later = Array.from({ length: 9 }, (_, i) => makeCard(`later${i}`.padEnd(12, '0'), `Later ${i}`, { position: i + 1 }));
+    onServer = makeBoard(...later, makeCard('next00000001', 'Follow up', { lane: 'next' }));
+    await renderBoard();
+    await pickUp('Follow up');
+    await press('ArrowLeft');
+    expect(titlesIn('Later')).toHaveLength(10);
+    expect(screen.queryByRole('button', { name: /^Show all/ })).toBeNull();
+    await press('Escape');
+  });
+
+  it('gives no grip to a planned card or a recurring row, which stay where their lists put them', async () => {
+    lists[WED] = [row(1, 'Monitor the queue', { recurringUid: 'rec000000001' }), row(2, 'Report', { cardUid: 'card00000001' })];
+    await renderBoard();
+    expect(screen.queryByRole('button', { name: 'Drag to move Plan B' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Drag to move Monitor the queue' })).toBeNull();
+    expect(grip('Follow up')).toBeTruthy();
+    expect(grip('Report')).toBeTruthy();
   });
 });

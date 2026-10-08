@@ -2179,6 +2179,48 @@ button {
   align-items: flex-start;
   gap: 8px;
 }
+/* The drag handle, drawn small at the card's edge; its touch area is in the pointer: coarse block.
+   touch-action: none keeps a finger on it from scrolling the page. In progress and Done take a
+   drag only to another column, and a phone shows one column at a time: their grips show from
+   900 px. */
+.board-grip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-3);
+  cursor: grab;
+  touch-action: none;
+}
+.board-grip:active {
+  cursor: grabbing;
+}
+.board-col:not([data-lane]) .board-grip {
+  display: none;
+}
+/* The column a dragged item shows in, away from its own. */
+.board-col[data-over] {
+  border-color: var(--accent);
+}
+/* The copy under the pointer (a DragOverlay on the page's body), the size of the item it lifts. */
+.board-card--lifted {
+  height: 100%;
+  box-shadow: var(--shadow);
+  cursor: grabbing;
+}
+.board-card--lifted .board-card-title {
+  font-weight: 550;
+  line-height: 24px;
+}
+.board-card--lifted .board-grip {
+  cursor: inherit;
+}
 /* The tick's label is its touch area (the coarse block); the box sits on the title's first line. */
 .board-tick {
   display: flex;
@@ -2265,6 +2307,9 @@ button {
   }
   .board-cols .board-col {
     display: flex;
+  }
+  .board-col:not([data-lane]) .board-grip {
+    display: inline-flex;
   }
 }
 
@@ -2503,6 +2548,7 @@ dialog.dialog::backdrop {
   .timer-add-priority,
   .about-link,
   .priority-tick,
+  .board-grip,
   .board-tick,
   .brand,
   .calendar-day {
@@ -2518,6 +2564,7 @@ dialog.dialog::backdrop {
   .timer-add-priority::after,
   .about-link::after,
   .priority-tick::after,
+  .board-grip::after,
   .board-tick::after,
   .brand::after,
   .calendar-day::after {
@@ -2574,6 +2621,11 @@ dialog.dialog::backdrop {
   .board-tick {
     --hit-inset: -11px -8px -11px -10px;
   }
+  /* 20 × 24 px, 10 px in from a card's left edge in a column with 12 px of padding, 8 px from the
+     tick or the title on its right, with cards 8 px apart: 38 × 44 px, 2 px into the gap. */
+  .board-grip {
+    --hit-inset: -10px -4px -10px -14px;
+  }
   /* 40 px at the top of the page with nothing above it: 44 px. */
   .brand {
     --hit-inset: -2px 0;
@@ -2615,6 +2667,13 @@ dialog.dialog::backdrop {
   .board-card-open {
     padding-block: 10px;
     margin-block: -10px;
+  }
+}
+/* From 900 px a grip shows before the tick of In progress and Done: each reaches half the 8 px
+   gap between them. */
+@media (pointer: coarse) and (min-width: 900px) {
+  .board-grip + .board-tick {
+    --hit-inset: -11px -8px -11px -4px;
   }
 }
 

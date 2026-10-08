@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BANNERS_MORE,
   BOARD,
+  BOARD_DRAG,
   BREAK,
   BREAK_SUGGESTION,
   CELEBRATION_EMOJI,
@@ -132,6 +133,18 @@ describe('copy builders', () => {
   it('says a done item stays done and offers a new card in the lane it was moved to', () => {
     expect(DONE_STAYS.title('Ship the fix')).toBe('Ship the fix is done.');
     expect(DONE_STAYS.add('Next')).toBe('Add a new card to Next');
+    expect(DONE_STAYS.announce('Ship the fix', 'Next')).toBe('Ship the fix stays in Done. The notice can add a new card to Next.');
+  });
+
+  it('names the card and the column in what a drag on the board says', () => {
+    expect(BOARD_DRAG.pickedUp('Write a KB', 'Later')).toBe('Picked up Write a KB, in Later.');
+    expect(BOARD_DRAG.over('Write a KB', 'In progress')).toBe('Write a KB is over In progress.');
+    expect(BOARD_DRAG.overBefore('Write a KB', 'Next', 'Follow up')).toBe('Write a KB is over Next, before Follow up.');
+    expect(BOARD_DRAG.overEnd('Write a KB', 'Next')).toBe('Write a KB is over Next, at the end.');
+    expect(BOARD_DRAG.overStart('Write a KB', 'Later')).toBe('Write a KB is over Later, where it started.');
+    expect(BOARD_DRAG.moved('Write a KB', 'In progress')).toBe('Write a KB moved to In progress.');
+    expect(BOARD_DRAG.stays('Write a KB', 'Later')).toBe('Write a KB stays in Later.');
+    expect(BOARD_DRAG.cancelled('Write a KB', 'Later')).toBe('Move cancelled. Write a KB is back in Later.');
   });
 
   it('counts the alerts the banner stack leaves out', () => {

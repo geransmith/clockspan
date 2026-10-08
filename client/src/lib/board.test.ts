@@ -6,21 +6,28 @@ import {
   boardColumns,
   boardFull,
   cardUidOf,
+  columnDropId,
+  dropTarget,
+  findItem,
   laneStart,
   MoveRefused,
+  moveAnnouncement,
   moveTargets,
   needsCard,
   offeredLeftovers,
+  overAnnouncement,
   planMove,
   plannedFor,
   withCard,
+  withDrag,
   withoutCard,
   withPatch,
   type BoardColumns,
   type BoardItem,
+  type ColumnId,
   type ColumnsInput,
 } from './board';
-import { BOARD } from './copy';
+import { BOARD, BOARD_DRAG, DONE_STAYS } from './copy';
 
 // A Wednesday, so the week has a Monday and a Tuesday before it.
 const MON = '2026-09-28';
@@ -235,6 +242,11 @@ describe('planMove', () => {
     expect(planMove(item('card:next'), 'next', null, ctx)).toEqual({ kind: 'patch', uid: 'next', patch: { before: null } });
   });
 
+  it("sorts nothing for today's row shown in a lane while its park is on its way, with or without its card in this copy", () => {
+    expect(planMove({ ...open, column: 'later' }, 'later', 'later', ctx)).toBeNull();
+    expect(planMove({ ...carried, column: 'next' }, 'next', null, ctx)).toBeNull();
+  });
+
   it("pulls a Later or Next card onto today as a new row of its own, in the card's category: open with the nudge, ticked without", () => {
     expect(planMove(item('card:later'), 'progress', null, ctx)).toEqual({
       kind: 'place',
@@ -310,6 +322,121 @@ describe('planMove', () => {
     expect(moveTargets(carried)).toEqual(['later', 'next', 'done']);
     expect(moveTargets(recurring)).toEqual(['done']);
     expect(moveTargets(item('card:planned'))).toEqual([]);
+  });
+});
+
+describe('dragging', () => {
+  const ctx = { today: WED };
+  const NAMES: Record<ColumnId, string> = { later: 'Later', next: 'Next', progress: 'In progress', done: 'Done' };
+  const cards: BoardCard[] = [
+    makeCard('a', 'A'),
+    makeCard('b', 'B', { position: 2 }),
+    makeCard('c', 'C', { position: 3 }),
+    makeCard('d', 'D', { lane: 'next' }),
+    makeCard('p', 'Plan B', { lane: 'next', position: 2, listDate: THU }),
+    makeCard('e', 'Shipped', { lane: 'done', doneAt: at(TUE, 9) }),
+    makeCard('carried', 'Carried', { lane: 'next', position: 3, listDate: THU }),
+  ];
+  const todayRows = [
+    row(1, 'Open', { cardUid: 'open00000001' }),
+    row(2, 'Ticked', { done: true }),
+    row(3, 'Monitor the queue', { recurringUid: 'rec000000001' }),
+    row(4, 'Carried', { cardUid: 'carried' }),
+  ];
+  const c = columns({ cards, todayRows });
+  const open = rowId(WED, 1);
+  const ticked = rowId(WED, 2);
+  const item = (id: string) => findItem(c, id)!.item;
+
+  it('finds an item and the column showing it, the week of Done included', () => {
+    expect(findItem(c, 'card:b')).toEqual({ item: c.later[1], column: 'later' });
+    expect(findItem(c, 'card:e')).toEqual({ item: c.doneEarlier[0], column: 'done' });
+    expect(findItem(c, ticked)).toEqual({ item: c.doneToday[0], column: 'done' });
+    expect(findItem(c, 'card:gone')).toBeNull();
+  });
+
+  it('shows the dragged item in the column it is over, keeping the column it started in', () => {
+    const shown = withDrag(c, 'card:a', { to: 'next', before: 'd' });
+    expect(ids(shown)).toMatchObject({ later: ['card:b', 'card:c'], next: ['card:a', 'card:d', 'card:p'] });
+    expect(findItem(shown, 'card:a')).toEqual({ item: c.later[0], column: 'next' });
+    expect(ids(withDrag(c, 'card:a', { to: 'next', before: null })).next).toEqual(['card:d', 'card:p', 'card:a']);
+    // In progress takes it at the end and Done at the top, as a move on its way shows it.
+    expect(ids(withDrag(c, 'card:e', { to: 'progress', before: null }))).toMatchObject({
+      progress: [open, rowId(WED, 3), rowId(WED, 4), 'card:e'],
+      doneEarlier: [],
+    });
+    expect(ids(withDrag(c, open, { to: 'done', before: null })).doneToday).toEqual([open, ticked]);
+    expect(withDrag(c, 'card:gone', { to: 'next', before: null })).toBe(c);
+  });
+
+  describe('dropTarget', () => {
+    it('lands nowhere without a droppable, or for an id no column shows', () => {
+      expect(dropTarget(null, 'card:a', c)).toBeNull();
+      expect(dropTarget('card:gone', 'card:a', c)).toBeNull();
+      expect(dropTarget('card:b', 'card:gone', c)).toBeNull();
+    });
+
+    it("goes before the card it is over in another lane, at a column's end, and anywhere in In progress or Done", () => {
+      expect(dropTarget('card:d', 'card:a', c)).toEqual({ to: 'next', before: 'd' });
+      expect(dropTarget('card:p', 'card:a', c)).toEqual({ to: 'next', before: 'p' });
+      expect(dropTarget(columnDropId('next'), 'card:a', c)).toEqual({ to: 'next', before: null });
+      expect(dropTarget(columnDropId('progress'), 'card:a', c)).toEqual({ to: 'progress', before: null });
+      expect(dropTarget(columnDropId('done'), open, c)).toEqual({ to: 'done', before: null });
+      expect(dropTarget(columnDropId('later'), open, c)).toEqual({ to: 'later', before: null });
+      // Today's rows take no drop of their own: over one is over its column.
+      expect(dropTarget(open, 'card:a', c)).toEqual({ to: 'progress', before: null });
+    });
+
+    it('takes the place of the card it is over in its own lane, as the list showed it sorting', () => {
+      expect(dropTarget('card:c', 'card:a', c)).toEqual({ to: 'later', before: null });
+      expect(dropTarget('card:b', 'card:a', c)).toEqual({ to: 'later', before: 'c' });
+      expect(dropTarget('card:a', 'card:c', c)).toEqual({ to: 'later', before: 'a' });
+      expect(dropTarget('card:p', 'card:d', c)).toEqual({ to: 'next', before: null });
+    });
+
+    it('lands where it started: over itself, or over its own column', () => {
+      expect(dropTarget('card:a', 'card:a', c)).toBeNull();
+      expect(dropTarget(columnDropId('later'), 'card:b', c)).toBeNull();
+      expect(dropTarget(columnDropId('progress'), open, c)).toBeNull();
+      expect(dropTarget(columnDropId('done'), 'card:e', c)).toBeNull();
+      expect(dropTarget(columnDropId('done'), ticked, c)).toBeNull();
+    });
+
+    it('reads the columns as the drag shows them, with the item in the column it is over', () => {
+      const shown = withDrag(c, 'card:a', { to: 'next', before: 'd' });
+      expect(dropTarget('card:a', 'card:a', shown)).toEqual({ to: 'next', before: 'd' });
+      expect(dropTarget('card:d', 'card:a', shown)).toEqual({ to: 'next', before: 'p' });
+      expect(dropTarget('card:p', 'card:a', shown)).toEqual({ to: 'next', before: null });
+      expect(dropTarget(columnDropId('progress'), 'card:a', withDrag(c, 'card:a', { to: 'progress', before: null }))).toEqual({
+        to: 'progress',
+        before: null,
+      });
+      // A row of today shown in Later lands there; back over In progress, it is where it started.
+      const parked = withDrag(c, open, { to: 'later', before: 'a' });
+      expect(dropTarget(open, open, parked)).toEqual({ to: 'later', before: 'a' });
+      expect(dropTarget(columnDropId('progress'), open, parked)).toBeNull();
+      // Shown in Next, then back over the top of its own lane: it goes there, though B started first after A.
+      expect(dropTarget('card:a', 'card:b', withDrag(c, 'card:b', { to: 'next', before: null }))).toEqual({ to: 'later', before: 'a' });
+    });
+  });
+
+  it('says how a drop ended: stayed, moved, turned down, or done and staying done', () => {
+    expect(moveAnnouncement(null, item('card:a'), 'later', NAMES)).toBe(BOARD_DRAG.stays('A', 'Later'));
+    expect(moveAnnouncement(null, item(open), 'progress', NAMES)).toBe(BOARD_DRAG.stays('Open', 'In progress'));
+    expect(moveAnnouncement(planMove(item('card:a'), 'next', 'd', ctx), item('card:a'), 'next', NAMES)).toBe(BOARD_DRAG.moved('A', 'Next'));
+    expect(moveAnnouncement(planMove(item(open), 'done', null, ctx), item(open), 'done', NAMES)).toBe(BOARD_DRAG.moved('Open', 'Done'));
+    expect(moveAnnouncement(planMove(item(ticked), 'next', null, ctx), item(ticked), 'next', NAMES)).toBe(DONE_STAYS.announce('Ticked', 'Next'));
+    const carried = item(rowId(WED, 4));
+    expect(moveAnnouncement(planMove(carried, 'later', null, ctx), carried, 'later', NAMES)).toBe(BOARD.planned('Carried', 'tomorrow'));
+    const recurring = item(rowId(WED, 3));
+    expect(moveAnnouncement(planMove(recurring, 'next', null, ctx), recurring, 'next', NAMES)).toBe(BOARD.recurringStays('Monitor the queue'));
+  });
+
+  it('says where a dragged item would land: the column, and in Later or Next before which card, or back where it started', () => {
+    expect(overAnnouncement(null, item('card:a'), c, NAMES)).toBe(BOARD_DRAG.overStart('A', 'Later'));
+    expect(overAnnouncement({ to: 'progress', before: null }, item('card:a'), c, NAMES)).toBe(BOARD_DRAG.over('A', 'In progress'));
+    expect(overAnnouncement({ to: 'next', before: 'd' }, item('card:a'), c, NAMES)).toBe(BOARD_DRAG.overBefore('A', 'Next', 'D'));
+    expect(overAnnouncement({ to: 'next', before: null }, item('card:a'), c, NAMES)).toBe(BOARD_DRAG.overEnd('A', 'Next'));
   });
 });
 
