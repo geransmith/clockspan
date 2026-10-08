@@ -196,6 +196,17 @@ function keepSessionCategories(db: DB, dayId: number, stored: Priority[], list: 
 }
 
 /**
+ * The sessions logged on an emptied row this save writes in again drop a category of their own
+ * (one picked in the log while the row was empty): the row decides from then on. Left on, the
+ * pick would be hidden behind the row and take the time over when the row is emptied or removed.
+ */
+function dropSessionCategories(db: DB, dayId: number, stored: Priority[], list: Priority[]): void {
+  const emptied = new Set(stored.filter((p) => !hasText(p)).map((p) => p.uid));
+  const drop = db.prepare(`UPDATE sessions SET category_uid = NULL WHERE day_id = ? AND priority_uid = ?`);
+  for (const row of list) if (hasText(row) && emptied.has(row.uid)) drop.run(dayId, row.uid);
+}
+
+/**
  * Rows by their day's id, each list in the rows' order. Not `Map.groupBy`: it is ES2024, and
  * oxlint's type-aware rules check server files without that lib, whatever the tsconfigs say.
  */
@@ -335,7 +346,8 @@ export function daysRouter(db: DB, config: Config): Router {
   // transaction (`mirrorCards`): `cards` (the board is on and the day is today or later, which
   // only the client knows) makes a card for each text row without one, and `touched` names the
   // cards a board action handled through their rows. So do the sessions logged on a removed row,
-  // which take its category (`keepSessionCategories`).
+  // which take its category (`keepSessionCategories`), and those on an emptied row written in
+  // again, which drop their own (`dropSessionCategories`).
   r.put('/:date/priorities', (req, res) => {
     const user = currentUser(req);
     const { date } = req.params;
@@ -365,6 +377,7 @@ export function daysRouter(db: DB, config: Config): Router {
       );
       for (const p of list) ins.run(dayId, p.position, p.text, p.done ? 1 : 0, p.uid, p.addedAt, p.cardUid, p.recurringUid, p.categoryUid);
       keepSessionCategories(db, dayId, stored, list);
+      dropSessionCategories(db, dayId, stored, list);
       return list;
     })();
     if (typeof saved === 'string') return refuse(res, 400, saved);

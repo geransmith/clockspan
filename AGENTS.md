@@ -577,10 +577,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   removed stays gone unless this device changed it. A row another device added since `base`
   stays, in this device's first row never written in (never a cleared one, which still stands
   for its item) or at the end, and a row added on both with the same text (`sameText`) is one
-  row, the stored one, when the row added here links to nothing and the stored one has no
-  recurring priority (a card it may hold: a save with `cards` made it). Order is this device's.
-  Removing a row is sending the list without it. With no base (curl, a tab from before the
-  merge) the list replaces the stored one, the fixed fields aside.
+  row, the stored one, when the row added here links to nothing (no card, no recurring
+  priority) and the stored one has no recurring priority (a card it may hold: a save with
+  `cards` made it); the stored row takes the category picked here when it has none, and keeps
+  its own when it has one. Order is this device's. Removing a row is sending the list without
+  it. With no base (curl, a tab from before the merge) the list replaces the stored one, the
+  fixed fields aside.
 - **A priority's identity is its `uid`, never its position.** The client mints it (`newUid()`)
   the first time a row gets text and stamps `addedAt`; both survive a text clear and a renumber.
   `sessions.priority_uid` points at it (null or a removed row = unplanned). `POST/PATCH`
@@ -641,8 +643,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   priorities save removes that row: the PUT copies it onto the day's sessions on that row that
   have none (`keepSessionCategories`, in the same transaction), and the day store, seeing that
   save take a row with a category off a list a session points at (`leavesCategory`), reads the
-  day again. An emptied row stays on its list with its category, so its sessions keep counting under
-  it, unless the day log gave one a category of its own, and nothing is copied. On the client
+  day again. An emptied row stays on its list with its category, so its sessions keep counting
+  under it, unless the day log gave one a category of its own, and nothing is copied. Once the
+  row is written in again it decides: the PUT drops the `categoryUid` of the day's sessions on
+  it (`dropSessionCategories`, in the same transaction), and the day store, seeing a save write
+  in an emptied row that a session with a category of its own points at (`regainsText`), reads
+  the day again, or its copy would keep the pick the server dropped. On the client
   `CategoryChip` is the one way a category is picked, fed by `useCategoryPick` (null while the board
   is off or before its first read, and then no chip shows), which the board page and the sheet call
   once and pass down as `pick`: the sheet's goes to Top priorities (a written row's chip, which

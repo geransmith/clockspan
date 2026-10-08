@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as api from '../api';
 import { emptyDay } from '../../../shared/api.js';
 import { todayKey } from '../../../shared/dates.js';
-import { mergePriorities } from '../../../shared/priorities.js';
+import { hasText, mergePriorities } from '../../../shared/priorities.js';
 import { sameText } from '../../../shared/text.js';
 import type { Day, Priority, PruneResult, Punch, Session } from '../types';
 import { dismissByTag, warnQuietly } from '../lib/alerts';
@@ -73,7 +73,9 @@ interface DayStore {
    * made since `base` onto what it holds, so a row or a tick another device saved meanwhile
    * stays, and until it answers the day shows the same merge (`mergePriorities`). Once saved, a
    * day whose list lost a row with a category that a session was logged on is read again: the
-   * server gave the session that category (`leavesCategory`).
+   * server gave the session that category (`leavesCategory`). So is one whose list wrote in again
+   * an emptied row that a session with a category of its own was logged on: the server took that
+   * category off (`regainsText`).
    */
   setPriorities: (date: string, priorities: Priority[], base: Priority[]) => Promise<boolean>;
   /**
@@ -81,7 +83,7 @@ interface DayStore {
    * gets the rows the store shows now (`current()`, so a list a blur-flush just set), padded to the
    * user's count, and returns the list to save, or null for nothing to save. `touched` is the card
    * a board action works on through its row (`PrioritiesPut.touched`). Saved as `setPriorities`
-   * saves, the read after a row with a category leaves included. Never rejects.
+   * saves, the reads of the day after it included. Never rejects.
    */
   editPriorities: (date: string, fn: (rows: Priority[]) => Priority[] | null, touched?: string | null) => Promise<PrioritiesEdit>;
   /** The day as the store shows it now, changes on their way included: for a board job that reads the list again after an await. */
@@ -152,6 +154,17 @@ function leavesCategory(before: Priority[], rows: Priority[], sessions: Session[
   const listed = new Set(rows.map((p) => p.uid));
   const gone = new Set(before.filter((p) => p.categoryUid != null && !listed.has(p.uid)).map((p) => p.uid));
   return sessions.some((s) => s.categoryUid == null && gone.has(s.priorityUid));
+}
+
+/**
+ * Whether `rows`, a day's list once a priorities save is in, wrote in again a row emptied in
+ * `before` that a session of the day with a category of its own was logged on. The server then
+ * dropped that category (`dropSessionCategories`), which only a read of the day shows.
+ */
+function regainsText(before: Priority[], rows: Priority[], sessions: Session[]): boolean {
+  const written = new Set(rows.filter(hasText).map((p) => p.uid));
+  const again = new Set(before.filter((p) => !hasText(p) && written.has(p.uid)).map((p) => p.uid));
+  return sessions.some((s) => s.categoryUid != null && again.has(s.priorityUid));
 }
 
 /** The lists a save sends whole. */
@@ -421,7 +434,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
         { base, show: (rows) => mergePriorities(rows, base, priorities), touched },
       );
       const day = shownDay(current().days[date]);
-      if (saved && day && leavesCategory([...base, ...shown], day.priorities, day.sessions)) void refresh(date);
+      const before = [...base, ...shown];
+      if (saved && day && (leavesCategory(before, day.priorities, day.sessions) || regainsText(before, day.priorities, day.sessions))) void refresh(date);
       return saved;
     },
     [sendLatest, boardOn, current, refresh],
