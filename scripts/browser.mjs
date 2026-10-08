@@ -78,6 +78,11 @@ function launchBrowser(bin, profileDir) {
     `--user-data-dir=${profileDir}`,
     '--no-first-run',
     '--no-default-browser-check',
+    // Without these, a Chrome build macOS hasn't seen before asks the Keychain for "Chrome Safe
+    // Storage" on every launch, and a page load waits on the answer. The throwaway profile stores
+    // nothing worth encrypting.
+    '--use-mock-keychain',
+    '--password-store=basic',
     '--hide-scrollbars',
     '--disable-gpu',
     'about:blank',
