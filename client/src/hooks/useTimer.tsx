@@ -8,10 +8,10 @@ import { ApiError } from '../lib/apiError';
 import { SAVE_FAILED, TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
 import { addPending, fetched, settle, settleWith, shown, untracked, type Tracked } from '../lib/optimistic';
-import { editedSession } from '../lib/retro';
+import { editedSession, sessionName, sessionRow } from '../lib/retro';
 import { readStored, writeStored } from '../lib/storage';
 import { adjustedPlan, DUE_GRACE_SECONDS, dueKey, PAUSE_LIMIT_SECONDS, timerView, type TimerView } from '../lib/timer';
-import { useDayStore } from './useDay';
+import { useDays, useDayStore } from './useDay';
 import { useClock } from './useClock';
 import { useRefreshLoop } from './useRefreshLoop';
 import { useSettings } from './useSettings';
@@ -20,6 +20,14 @@ import { useWakeLock } from './useWakeLock';
 
 interface TimerCtx extends Pick<TimerView, 'countdownSeconds' | 'elapsedSeconds' | 'progress' | 'paused' | 'due' | 'overrunSeconds' | 'canAdd'> {
   running: Session | null;
+  /**
+   * What the running session is called (`sessionName`): its row's current text while that row is
+   * written on the session's day, else its label; '' while none runs. The bar, the timer card,
+   * the tab title and the timer's alerts all name it by this.
+   */
+  name: string;
+  /** The running session is on a written row of its day, which names it: its label isn't edited then. */
+  linked: boolean;
   /** Leaves `unlockAudio()` to the caller, in its tap: the timer card may await a new priority's save before it starts. */
   start: (date: string, plannedSeconds: number, label: string, priorityUid?: string | null) => Promise<void>;
   /** Mid-session, ± the planned length; once due, +N is N more minutes from now. Plans are whole minutes. */
@@ -93,6 +101,11 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // (`settings.sounds`, `settings.sound`).
   const { settings, loaded } = useSettings();
   const { refresh, applySession, prioritiesSaved } = useDayStore();
+  // A day the store doesn't hold (a session started before midnight, after a reload) names it by its label.
+  const { days } = useDays();
+  const rows = running ? (days[running.date]?.priorities ?? []) : [];
+  const name = running ? sessionName(running, rows) : '';
+  const linked = running != null && sessionRow(running, rows) != null;
   // An end (a finish or a cancel, by hand or not) is out: the auto-finish waits for its answer.
   const completing = useRef(false);
   // After a failed finish (server unreachable) wait before trying again (`nextBackoff`). The
@@ -171,6 +184,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     const forgotten = pausedForSeconds >= PAUSE_LIMIT_SECONDS;
     if (!(due && overrunSeconds >= DUE_GRACE_SECONDS) && !forgotten) return;
     const session = running;
+    const title = name;
     end(() => api.finishSession(session.id))
       .then((done) => {
         retry.current = { at: 0, delay: 0 };
@@ -179,7 +193,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         if (forgotten) {
           alert({
             title: TIMER_PAUSED_OUT.title,
-            body: TIMER_PAUSED_OUT.body(session.label, formatDuration(done.durationSeconds)),
+            body: TIMER_PAUSED_OUT.body(title, formatDuration(done.durationSeconds)),
             tone: 'info',
             tag: 'timer-complete',
             sound: false,
@@ -191,7 +205,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         const chimed = chimedFor(chimedEnd.current, dueKey(session.id, endAt));
         alert({
           title: TIMER_DONE.title,
-          body: TIMER_DONE.body(session.label, formatDuration(done.durationSeconds)),
+          body: TIMER_DONE.body(title, formatDuration(done.durationSeconds)),
           tone: 'success',
           chime: settings.sounds.timer,
           tag: 'timer-complete',
@@ -203,16 +217,14 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         const delay = nextBackoff(retry.current.delay);
         retry.current = { at: Date.now() + delay, delay };
       });
-  }, [running, loaded, now, endAt, due, overrunSeconds, pausedForSeconds, end, settings.sound, settings.sounds.timer, settings.notifications]);
+  }, [running, name, loaded, now, endAt, due, overrunSeconds, pausedForSeconds, end, settings.sound, settings.sounds.timer, settings.notifications]);
 
   useWakeLock(running != null && !paused && !due && settings.keepScreenAwake);
 
   // Written only when its text changes, never reset between ticks: a reset in this effect's
   // cleanup would put "Clockspan" up between every two ticks, which a host that shows each
   // title change (the desktop app's browser pane) paints as a flicker.
-  const tabTitle = running
-    ? `${paused ? 'Paused ' : ''}${formatCountdown(countdownSeconds)}${running.label ? ` · ${running.label}` : ''} — ${BASE_TITLE}`
-    : BASE_TITLE;
+  const tabTitle = running ? `${paused ? 'Paused ' : ''}${formatCountdown(countdownSeconds)}${name ? ` · ${name}` : ''} — ${BASE_TITLE}` : BASE_TITLE;
   useEffect(() => {
     document.title = tabTitle;
   }, [tabTitle]);
@@ -380,7 +392,10 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     if (!loaded || overrunSeconds >= DUE_GRACE_SECONDS) return;
     const key = dueKey(running.id, endAt);
     // Raised again, quietly, when the time worked reaches the longest plan: + has nothing left
-    // to add, and a button that does nothing must not stay up.
+    // to add, and a button that does nothing must not stay up. A new name doesn't raise it again:
+    // a rename typed while it is up would bring a closed banner back and announce it at each
+    // pause in the typing. It keeps the name it was raised with, as its notification does; the
+    // bar, the card and the tab title show the new one.
     const raised = `${key}:${canAdd}`;
     if (raisedBanner.current === raised) return;
     raisedBanner.current = raised;
@@ -389,7 +404,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     writeStored(DUE_STORAGE_KEY, key);
     alert({
       title: TIMER_DUE.title,
-      body: TIMER_DUE.body(running.label, formatDuration(running.plannedSeconds)),
+      body: TIMER_DUE.body(name, formatDuration(running.plannedSeconds)),
       tone: 'info',
       sticky: true,
       chime: settings.sounds.timer,
@@ -398,11 +413,13 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       sound: fresh && settings.sound,
       notifications: fresh && settings.notifications,
     });
-  }, [running, loaded, due, overrunSeconds, endAt, canAdd, step, adjust, settings.sound, settings.sounds.timer, settings.notifications]);
+  }, [running, name, loaded, due, overrunSeconds, endAt, canAdd, step, adjust, settings.sound, settings.sounds.timer, settings.notifications]);
 
   const value = useMemo(
     () => ({
       running,
+      name,
+      linked,
       countdownSeconds,
       elapsedSeconds,
       progress,
@@ -424,6 +441,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     }),
     [
       running,
+      name,
+      linked,
       countdownSeconds,
       elapsedSeconds,
       progress,

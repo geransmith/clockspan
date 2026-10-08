@@ -136,6 +136,13 @@ describe('FocusTimer', () => {
     expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Ship the fix', 'abcdef123456');
   });
 
+  it("names the running session by its row's current text, not the label it started with", async () => {
+    vi.mocked(api.getRunning).mockResolvedValue({ session: makeSession({ label: 'Started as this', priorityUid: 'abcdef123456' }) });
+    await renderCard([makePriority(1, 'Ship the fix', { uid: 'abcdef123456' })]);
+    expect(screen.getByText('Ship the fix').className).toBe('timer-running-label');
+    expect(screen.queryByText('Started as this')).toBeNull();
+  });
+
   it('adds typed work to the plan and starts linked to the new row', async () => {
     vi.mocked(api.startSession).mockResolvedValue(started());
     await renderCard();

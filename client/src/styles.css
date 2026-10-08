@@ -1608,7 +1608,8 @@ button {
   font-weight: 600;
   border-radius: 6px;
 }
-.running-label:hover {
+/* The button only: a session on a written row shows its name as text, with nothing to press. */
+button.running-label:hover {
   background: var(--surface-2);
 }
 .running-label-input {
@@ -1819,10 +1820,12 @@ button {
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.log-label:hover {
+/* The button only: a linked session's edit shows its name as text, with nothing to press. */
+button.log-label:hover {
   background: var(--surface-2);
 }
-/* The label, the priority select and the category chip, stacked while a row is being edited. */
+/* The label (a linked session's name, as text), the priority select and the category chip, stacked
+   while a row is being edited. */
 .log-edit {
   grid-area: label;
   display: flex;

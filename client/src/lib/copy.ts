@@ -159,8 +159,8 @@ export const CONFIRM = {
   deleteRecurring: (title: string) => `Delete ${title}? Rows it already added keep their text.`,
 } as const;
 
-/** A timer line, with the session's label in front when it has one. */
-const labelled = (label: string, text: string) => (label ? `${label} · ${text}` : text);
+/** A timer line, with the session's name (`useTimer().name`) in front when it has one. */
+const named = (name: string, text: string) => (name ? `${name} · ${text}` : text);
 
 /**
  * The alert when a focus timer reaches zero: the session stays open until it is finished or
@@ -168,7 +168,7 @@ const labelled = (label: string, text: string) => (label ? `${label} · ${text}`
  */
 export const TIMER_DUE = {
   title: "Time's up",
-  body: (label: string, planned: string) => labelled(label, `${planned}. Finish, or add more time.`),
+  body: (name: string, planned: string) => named(name, `${planned}. Finish, or add more time.`),
   more: (minutes: number) => `Add ${minutes} min`,
 } as const;
 
@@ -184,13 +184,13 @@ export const FINISH_CHOICE = {
 /** The alert when a timer that ran out got no answer and was logged at its planned length. */
 export const TIMER_DONE = {
   title: 'Focus session complete',
-  body: (label: string, duration: string) => labelled(label, `${duration} logged.`),
+  body: (name: string, duration: string) => named(name, `${duration} logged.`),
 } as const;
 
 /** Banner when a pause was left for an hour: the session was closed where the pause began. */
 export const TIMER_PAUSED_OUT = {
   title: 'Focus session closed',
-  body: (label: string, duration: string) => labelled(label, `${duration} logged. It sat paused for an hour, so it ended where the pause began.`),
+  body: (name: string, duration: string) => named(name, `${duration} logged. It sat paused for an hour, so it ended where the pause began.`),
 } as const;
 
 /** The focus timer's break: the button, the line while it runs, and the banner when it's over. */

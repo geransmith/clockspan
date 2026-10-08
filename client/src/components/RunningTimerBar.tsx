@@ -6,11 +6,15 @@ import { TimerControls } from './TimerControls';
 
 /** Fixed to the top of the viewport whenever a timer is running, on every view. */
 export function RunningTimerBar() {
-  const { running, countdownSeconds, progress, paused, due, edit } = useTimer();
+  const { running, name, linked, countdownSeconds, progress, paused, due, edit } = useTimer();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   // Set when Enter or Escape ends the edit, so focus goes back to the label; a blur leaves focus where it went.
   const [returnFocus, setReturnFocus] = useState(false);
+  // On a written row the row names the session, and its label isn't edited: a box open as the
+  // session is linked (on another device, to a row or by its emptied row written in again)
+  // closes, unsent.
+  if (editing && linked) setEditing(false);
   if (!running) return null;
 
   const commitLabel = () => {
@@ -22,7 +26,9 @@ export function RunningTimerBar() {
     <div className={`running-bar${paused ? ' is-paused' : ''}${due ? ' is-due' : ''}`}>
       <div className="running-bar-inner">
         <span className="running-dot" aria-hidden="true" />
-        {editing ? (
+        {linked ? (
+          <span className="running-label">{name}</span>
+        ) : editing ? (
           <LabelInput
             className="running-label-input"
             value={draft}
@@ -49,7 +55,7 @@ export function RunningTimerBar() {
             }}
             title="Edit label"
           >
-            <SessionLabel label={running.label} />
+            <SessionLabel label={name} />
           </button>
         )}
         <span className="running-time" role="timer" aria-label={due ? 'Time over' : 'Time remaining'}>
