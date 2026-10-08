@@ -1,11 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
+import { oneItem } from './migrations/oneItem.js';
 
 export type DB = Database.Database;
 
-// Append-only. Each entry runs once, in order, guarded by PRAGMA user_version.
-export const MIGRATIONS: string[] = [
+/** SQL, or a function for a change that needs code (a backfill), kept in `migrations/` and frozen like the SQL. */
+export type Migration = string | ((db: DB) => void);
+
+// Append-only. Each entry runs once, in order, in a transaction of its own, guarded by PRAGMA user_version.
+export const MIGRATIONS: Migration[] = [
   `
   CREATE TABLE users (
     id            INTEGER PRIMARY KEY,
@@ -177,6 +181,9 @@ export const MIGRATIONS: string[] = [
     UNIQUE (user_id, uid)
   );
   `,
+  // Each task stored once: a board card, a recurring priority or a priority typed on a day is a
+  // row of `items`, and a day's list names the tasks on it. The old rows stay in priorities_v1.
+  oneItem,
 ];
 
 export function openDatabase(dbPath: string): DB {
@@ -193,9 +200,10 @@ export function openDatabase(dbPath: string): DB {
 export function migrate(db: DB, upTo: number = MIGRATIONS.length): void {
   const current = db.pragma('user_version', { simple: true }) as number;
   for (let v = current; v < upTo; v++) {
-    const sql = MIGRATIONS[v]!;
+    const step = MIGRATIONS[v]!;
     db.transaction(() => {
-      db.exec(sql);
+      if (typeof step === 'string') db.exec(step);
+      else step(db);
       db.pragma(`user_version = ${v + 1}`);
     })();
   }

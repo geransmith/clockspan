@@ -243,7 +243,7 @@ Login is rate-limited to 5 failed attempts per 15 minutes per IP, counting an IP
 
 The app refuses to start if `APP_URL`, `OIDC_ISSUER`, `OIDC_CLIENT_ID` or `OIDC_CLIENT_SECRET` is missing, or if `OIDC_ISSUER` isn't an `https://` URL (the sign-in library never contacts a provider over plain http). If Authentik is briefly unreachable at startup the app still boots and retries discovery in the background. Sign out also ends the Authentik session when the provider advertises an end-session endpoint.
 
-**Switching modes later.** Data is keyed by user. A sign-in belongs to the mode it was made in, so after a switch everyone signs in again (under `local` with no account yet, the first visit shows the create-account page). Going from `none` to `local` creates a fresh admin; the old implicit user's data stays in the database. To hand it to the new account, stop the container and run the script below before the new account records a day of its own (a user has one row per date, so a date both accounts used stops the script and nothing moves). Days move together with their sessions and breaks, which belong to a user as well as a day. Board cards, categories and recurring priorities move too; their ids are random, so the two accounts never clash on them. The last two statements bring the old settings along, replacing any the admin saved; leave them out to keep the admin's.
+**Switching modes later.** Data is keyed by user. A sign-in belongs to the mode it was made in, so after a switch everyone signs in again (under `local` with no account yet, the first visit shows the create-account page). Going from `none` to `local` creates a fresh admin; the old implicit user's data stays in the database. To hand it to the new account, stop the container and run the script below before the new account records a day of its own (a user has one row per date, so a date both accounts used stops the script and nothing moves). Days move together with their sessions and breaks, which belong to a user as well as a day. Tasks (each priority, board card and recurring priority) and categories move too; their ids are random, so the two accounts never clash on them. The last two statements bring the old settings along, replacing any the admin saved; leave them out to keep the admin's.
 
 ```bash
 sqlite3 /path/on/host/focus.db <<'SQL'
@@ -255,9 +255,8 @@ CREATE TEMP TABLE handover AS SELECT
 UPDATE days        SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
 UPDATE sessions    SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
 UPDATE breaks      SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
-UPDATE board_cards SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
+UPDATE items       SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
 UPDATE categories  SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
-UPDATE recurring   SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);
 DELETE FROM settings WHERE user_id = (SELECT to_id FROM handover)
                 AND EXISTS (SELECT 1 FROM settings WHERE user_id = (SELECT from_id FROM handover));
 UPDATE settings SET user_id = (SELECT to_id FROM handover) WHERE user_id = (SELECT from_id FROM handover);

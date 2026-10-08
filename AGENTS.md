@@ -74,6 +74,8 @@ server/                 Express API → dist/server
                         OIDC, warming the `Discovery` index.ts passes in; started by index.ts only)
   security.ts           every security header, rejectCrossSiteWrites and rejectUnknownHosts
   config.ts, db.ts      env parsing (throws on bad config); pragmas, MIGRATIONS, the default user
+  migrations/           the migrations that need code, frozen: oneItem.ts (13: each task stored once,
+                        items backfilled from the cards, recurring priorities and per-day rows)
   settings.ts           mergeSettings (defaults + validation on every read and write), loadSettings
   board.ts              the board's cards as stored: boardJson (listDate and held read from the rows;
                         the categories and the recurring priorities), weekdayMask / weekdaysOf (a
@@ -936,9 +938,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   the move empties a side or fills an empty one), so the sheet puts the focus on its arrow
   there.
 - **Migrations are append-only** in `server/db.ts` (`MIGRATIONS[]`, `PRAGMA user_version`).
-  Every FK to `users` or `days` is `ON DELETE CASCADE`. A column nothing uses stays in the
-  table rather than a migration dropping it: `sessions.notes` is one (never shown or edited;
-  the API no longer reads or writes it).
+  An entry is SQL, or a function in `server/migrations/` when the change needs code. Every FK
+  to `users` or `days` is `ON DELETE CASCADE`. A column nothing uses stays in the table rather
+  than a migration dropping it: `sessions.notes` is one (never shown or edited; the API no
+  longer reads or writes it).
 
 ## How to add…
 
@@ -1080,11 +1083,16 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   that router's `*.test.ts`: happy path, each 400, and that another user gets a 404/empty
   result (the scoping test is not optional). A new `/:date` route also gets a row in the
   bad-date table at the end of `server/routes/days.test.ts`.
-- **A schema change**: append a migration string to `MIGRATIONS` in `db.ts`. Never edit an
-  existing entry. A new table with a `user_id` also joins the README's script under "Switching
-  modes later"; `server/db.test.ts` fails until it does. A new column on a day, session,
-  priority or break also needs the seed note under "A per-day field". A new `Priority` field
-  follows "A priority field".
+- **A schema change**: append a migration to `MIGRATIONS` in `db.ts`: a string of SQL, or, for
+  a change that needs code (a backfill), a function of the database in a file of its own under
+  `server/migrations/`, which `migrate()` runs in the same transaction as its version bump.
+  Never edit an existing entry. A function's file is frozen too: it keeps its own copies of the
+  helpers it uses (as `oneItem.ts` does of `sameText` and `hasText`), so a later change to
+  `shared/` can't change how an old database migrates, and its `db.test.ts` cases stop at the
+  version before it (`migrate(db, n)`), write the old rows, then run it. A new table with a
+  `user_id` also joins the README's script under "Switching modes later"; `server/db.test.ts`
+  fails until it does. A new column on a day, session, priority or break also needs the seed
+  note under "A per-day field". A new `Priority` field follows "A priority field".
 - **A security header, CSP source or request guard**: `server/security.ts` only (tests in
   `server/app.test.ts`), then the `prod` config check.
 - **A config env var**: parse and validate it in `server/config.ts` (throw with a clear
