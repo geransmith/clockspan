@@ -359,6 +359,11 @@ button {
   opacity: 0.35;
   cursor: not-allowed;
 }
+/* A tick kept while its row's box is blank: the browser's own disabled look still reads as ticked,
+   which 0.35 would fade to nearly nothing in the light theme. */
+.checkbox:disabled:checked {
+  opacity: 1;
+}
 .switch {
   appearance: none;
   width: 46px;
@@ -1353,7 +1358,8 @@ button {
   resize: none;
   overflow: hidden;
 }
-.priority-row.is-done .priority-input {
+/* A blank box's placeholder isn't its task's name, so it isn't struck through. */
+.priority-row.is-done .priority-input:not(:placeholder-shown) {
   text-decoration: line-through;
   color: var(--text-3);
 }
@@ -3105,6 +3111,11 @@ dialog.dialog::backdrop {
   .priority-end .category-chip {
     --hit-inset: -5px -4px -13px;
   }
+  /* A note under a row's chip line goes up to 4 px under the chip and takes the line's 8 px below
+     itself, so it reads as its own row's and not the next one's. */
+  .priority-row:has(.priority-end) + .priority-note {
+    margin-block: -20px 8px;
+  }
   /* The edit-in-place inputs are drawn at 38 px to sit in their rows with a mouse. */
   .log-label-input,
   .log-plan-select,
@@ -3140,6 +3151,9 @@ dialog.dialog::backdrop {
   }
   .priority-end .category-chip {
     --hit-inset: -9px -4px;
+  }
+  .priority-row:has(.priority-end) + .priority-note {
+    margin-block: -4px 0;
   }
 }
 /* From 900 px a grip shows before the tick of In progress and Done: each reaches half the 8 px

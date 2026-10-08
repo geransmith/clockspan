@@ -61,8 +61,9 @@ export interface BoardStore {
   addItem(item: NewItem): Promise<void>;
   /**
    * A task off today's list edited on the board, or a recurring priority renamed, given a category
-   * or other weekdays in Settings → Board, which reaches every day it is on. Today's list is read
-   * again after it when it holds the task.
+   * or other weekdays in Settings → Board, which reaches every day it is on. After a new name or
+   * category, the held days that name the task and the ranges on screen are read again
+   * (`taskChanged`).
    */
   editItem(uid: string, patch: ItemPatch): Promise<void>;
   /**
@@ -70,7 +71,7 @@ export interface BoardStore {
    * off today's list, then, once today's saves are in (so a task typed seconds ago exists or never
    * went), `DELETE /items/:uid` (a 404 counts as done: a save took it already, or another device),
    * then every held day that named it read again and the ranges on screen with them
-   * (`taskDeleted`). Works with the board off.
+   * (`taskChanged`). Works with the board off.
    */
   deleteItem(uid: string): Promise<void>;
   /** A recurring priority removed in Settings → Board: it stops repeating, and the days it was on keep it (a 404 counts as done). */
@@ -222,9 +223,8 @@ export function BoardProvider({ children }: { children: ReactNode }) {
         (b) => withItemPatch(b, uid, patch),
         async () => {
           const saved = await api.editItem(uid, patch);
-          const today = todayKey();
-          // A recurring priority renamed in Settings: today's row shows the new name.
-          if (dayStore.shown(today)?.priorities.some((p) => p.uid === uid)) void dayStore.refresh(today, { fresh: true });
+          // The server renamed or filed it on every day: the board's earlier days in Done, today's row.
+          if (patch.title !== undefined || patch.categoryUid !== undefined) dayStore.taskChanged(uid);
           return saved;
         },
       ),
@@ -314,7 +314,7 @@ export function BoardProvider({ children }: { children: ReactNode }) {
           if (dayStore.shown(today)?.priorities.some((p) => p.uid === uid)) await offToday(uid);
           else await dayStore.prioritiesSaved(today);
           const saved = await unlessGone(api.deleteItem(uid));
-          dayStore.taskDeleted(uid);
+          dayStore.taskChanged(uid);
           return saved;
         },
       ),

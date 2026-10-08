@@ -38,7 +38,7 @@ describe('copy builders', () => {
   it('says how far a rename reaches, and what a blank name does', () => {
     expect(RENAME_NOTE(3)).toBe('Also renames it on 3 earlier days.');
     expect(RENAME_NOTE(1)).toBe('Also renames it on 1 earlier day.');
-    expect(BLANK_NOTE('Email Bob')).toBe('Empty, it goes back to Email Bob when you leave the box. × takes it off this day.');
+    expect(BLANK_NOTE('Email Bob')).toBe('Left empty, it goes back to “Email Bob”. × takes it off this day.');
   });
 
   it('asks before × takes a task off a day, with the parts of the body that apply', () => {

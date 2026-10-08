@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { MINUTE_MS } from '../../../shared/dates.js';
 import { completedSession, makeDay, makePriority, makeSession, punchesAt } from '../test/fixtures';
 import type { Day } from '../types';
 import { editedSession, focusOf, hasContent, loggedByUid, reviewDay, sessionCategory, sessionCategoryEdit, sessionName, sessionRow } from './retro';
@@ -19,22 +20,30 @@ describe('focusOf', () => {
 });
 
 describe('loggedByUid', () => {
-  it("adds up each row's completed sessions by uid, and nothing else", () => {
+  it("adds up each task's completed sessions and a running one's time so far, and nothing else", () => {
     const sessions = [
       completedSession(1, 0, 600, { priorityUid: 'aaaaaaaaaaaa' }),
       completedSession(2, 1, 300, { priorityUid: 'aaaaaaaaaaaa' }),
       completedSession(3, 2, 120, { priorityUid: 'bbbbbbbbbbbb' }),
       completedSession(4, 3, 900),
       completedSession(5, 4, 100, { priorityUid: 'bbbbbbbbbbbb', status: 'cancelled' }),
-      makeSession({ id: 6, startedAt: 5, plannedSeconds: 900, priorityUid: 'cccccccccccc' }),
+      // Running for 10 minutes, 2 of them paused.
+      makeSession({ id: 6, startedAt: 0, plannedSeconds: 900, priorityUid: 'cccccccccccc', pausedSeconds: 120 }),
     ];
-    expect(loggedByUid(sessions)).toEqual(
+    expect(loggedByUid(sessions, 10 * MINUTE_MS)).toEqual(
       new Map([
         ['aaaaaaaaaaaa', 900],
         ['bbbbbbbbbbbb', 120],
+        ['cccccccccccc', 480],
       ]),
     );
-    expect(loggedByUid([]).size).toBe(0);
+    expect(loggedByUid([], 0).size).toBe(0);
+  });
+
+  it('counts a timer that has only just started, or reads as not started on a clock behind, as a second', () => {
+    const running = makeSession({ id: 1, startedAt: 5000, plannedSeconds: 900, priorityUid: 'cccccccccccc' });
+    expect(loggedByUid([running], 5000).get('cccccccccccc')).toBe(1);
+    expect(loggedByUid([running], 4000).get('cccccccccccc')).toBe(1);
   });
 });
 

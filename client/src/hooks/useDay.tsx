@@ -69,11 +69,12 @@ interface DayStore {
    */
   pruneBefore: (before: string) => Promise<PruneResult>;
   /**
-   * A task the server has deleted everywhere (the board store's `deleteItem`): every held day whose
-   * list or log names it is read again, so its lists drop it and its sessions show unplanned, and
-   * `generation` moves, so no range on screen offers or counts it from an older answer.
+   * A task the server has changed on every day it is on (the board store's `editItem` renamed it or
+   * gave it a category, `deleteItem` deleted it): every held day whose list or log names it is read
+   * again, so its lists and sessions show the new name and category, or drop it and show its time
+   * unplanned, and `generation` moves, so no range on screen shows it from an older answer.
    */
-  taskDeleted: (uid: string) => void;
+  taskChanged: (uid: string) => void;
   setPunches: (date: string, punches: Punch[]) => Promise<boolean>;
   /**
    * A day's priorities, built on `base` (the list the caller read). The server lays the changes
@@ -284,6 +285,18 @@ export function DayProvider({ children }: { children: ReactNode }) {
     [current, update, fetchDay],
   );
 
+  // Reads again, fresh, each held day `picks`: the server changed it through a write for another day
+  // or for a task.
+  const readAgain = useCallback(
+    (picks: (day: Day, date: string) => boolean) => {
+      for (const [date, t] of Object.entries(current().days)) {
+        const day = shownDay(t);
+        if (day && picks(day, date)) void refresh(date, { fresh: true });
+      }
+    },
+    [current, refresh],
+  );
+
   // Every write ends here. Saved: the changes `ids` leave the pending list and the server's
   // answer becomes the stored copy. Not saved: they leave it all the same, so the screen is back
   // on the stored copy at once, a banner says so (the edit vanishing on its own would look like
@@ -394,14 +407,25 @@ export function DayProvider({ children }: { children: ReactNode }) {
   );
 
   // Every priorities save, the board's and the timer's included, shown as the server will merge
-  // it while it is out.
+  // it while it is out. A task the save put on the list or took off (Plan tomorrow, a carry, ×) is
+  // on another number of days (`listed`, `earlier`) wherever else it is, so the other held days
+  // holding it are read again: × asks from those counts.
   const setPriorities = useCallback(
     (date: string, priorities: Priority[], base: Priority[]) =>
-      sendLatest('priorities', date, priorities, async (p, b) => (await api.putPriorities(date, p, b)).priorities, {
-        base,
-        show: (rows) => mergePriorities(rows, base, priorities),
-      }),
-    [sendLatest],
+      sendLatest(
+        'priorities',
+        date,
+        priorities,
+        async (p, b) => {
+          const saved = (await api.putPriorities(date, p, b)).priorities;
+          // A priorities save always goes with its base.
+          const moved = (uid: string | null) => uid != null && b!.some((q) => q.uid === uid) !== saved.some((q) => q.uid === uid);
+          readAgain((day, d) => d !== date && day.priorities.some((q) => moved(q.uid)));
+          return saved;
+        },
+        { base, show: (rows) => mergePriorities(rows, base, priorities) },
+      ),
+    [sendLatest, readAgain],
   );
 
   const shownCopy = useCallback((date: string) => shownDay(current().days[date]), [current]);
@@ -585,15 +609,12 @@ export function DayProvider({ children }: { children: ReactNode }) {
     [current, refresh],
   );
 
-  const taskDeleted = useCallback(
+  const taskChanged = useCallback(
     (uid: string) => {
-      for (const [date, t] of Object.entries(current().days)) {
-        const day = shownDay(t);
-        if (day?.priorities.some((p) => p.uid === uid) || day?.sessions.some((s) => s.priorityUid === uid)) void refresh(date, { fresh: true });
-      }
+      readAgain((day) => day.priorities.some((p) => p.uid === uid) || day.sessions.some((s) => s.priorityUid === uid));
       setGeneration((g) => g + 1);
     },
-    [current, refresh],
+    [readAgain],
   );
 
   const days = useMemo(() => {
@@ -612,7 +633,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       refresh,
       readRange,
       pruneBefore,
-      taskDeleted,
+      taskChanged,
       setPunches,
       setPriorities,
       editPriorities,
@@ -634,7 +655,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       refresh,
       readRange,
       pruneBefore,
-      taskDeleted,
+      taskChanged,
       setPunches,
       setPriorities,
       editPriorities,

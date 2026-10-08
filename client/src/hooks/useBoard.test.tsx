@@ -27,7 +27,7 @@ import {
   TODAY,
   YESTERDAY,
 } from '../test/hooks';
-import type { Board, Day, Priority } from '../types';
+import type { Board, Priority } from '../types';
 import { useBoardState, useBoardStore, useCategoryPick } from './useBoard';
 import { useDay, useDays, useDayStore } from './useDay';
 import { useLeftOpen } from './useLeftOpen';
@@ -261,22 +261,45 @@ describe('task writes', () => {
     expect(api.getDay).toHaveBeenCalledTimes(1);
   });
 
-  it("read today's list again after an edit of a task it holds, a recurring priority renamed in Settings, and no other day", async () => {
+  it('read again every held day that names a task given a new name or category, and the ranges on screen, and nothing after a lane or weekdays', async () => {
     const queue = makeRecurring('rcur00000001', 'Monitor the queue');
     onServer = { ...onServer, recurring: [queue] };
-    lists[TODAY] = [makePriority(1, 'Monitor the queue', { uid: queue.uid, recurring: true })];
+    const row = makePriority(1, 'Monitor the queue', { uid: queue.uid, recurring: true });
+    lists[TODAY] = [row];
+    lists[YESTERDAY] = [row];
+    lists[TOMORROW] = [makePriority(1, 'Email')];
     const { result } = renderBoard();
     await settle();
-    await act(() => result.current.store.editItem('later0000001', { title: 'Write the KB' }));
-    expect(api.getDay).toHaveBeenCalledTimes(1);
-    // The server renamed it on every day: today's read takes the new name.
-    const read = deferred<Day>();
-    vi.mocked(api.getDay).mockReturnValueOnce(read.promise);
-    await act(() => result.current.store.editItem(queue.uid, { title: 'Watch the queue' }));
-    expect(api.getDay).toHaveBeenCalledTimes(2);
-    read.resolve(makeDay(TODAY, { priorities: [{ ...lists[TODAY][0]!, text: 'Watch the queue' }] }));
+    for (const d of [YESTERDAY, TOMORROW]) await act(() => result.current.days.load(d));
+    const reads = () =>
+      vi
+        .mocked(api.getDay)
+        .mock.calls.map(([d]) => d)
+        .sort();
+    vi.mocked(api.getDay).mockClear();
+    await act(() => result.current.store.editItem('next00000001', { lane: 'later', before: null }));
+    await act(() => result.current.store.editItem(queue.uid, { weekdays: [1, 3] }));
     await settle();
+    expect(api.getDay).not.toHaveBeenCalled();
+    expect(result.current.generation).toBe(0);
+    // A task no held day names: only the ranges ask again.
+    await act(() => result.current.store.editItem('later0000001', { title: 'Write the KB' }));
+    await settle();
+    expect(api.getDay).not.toHaveBeenCalled();
+    expect(result.current.generation).toBe(1);
+    // The server renamed it on every day: each held day's read takes the new name.
+    lists[TODAY] = lists[YESTERDAY] = [{ ...row, text: 'Watch the queue' }];
+    await act(() => result.current.store.editItem(queue.uid, { title: 'Watch the queue' }));
+    await settle();
+    expect(reads()).toEqual([YESTERDAY, TODAY]);
+    expect(result.current.days.shown(YESTERDAY)?.priorities[0]?.text).toBe('Watch the queue');
     expect(result.current.days.shown(TODAY)?.priorities[0]?.text).toBe('Watch the queue');
+    expect(result.current.generation).toBe(2);
+    vi.mocked(api.getDay).mockClear();
+    await act(() => result.current.store.editItem(queue.uid, { categoryUid: null }));
+    await settle();
+    expect(reads()).toEqual([YESTERDAY, TODAY]);
+    expect(result.current.generation).toBe(3);
   });
 });
 

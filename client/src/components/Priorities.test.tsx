@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DAY_MS } from '../../../shared/dates.js';
+import { DAY_MS, MINUTE_MS } from '../../../shared/dates.js';
 import { mergePriorities } from '../../../shared/priorities.js';
 import * as api from '../api';
 import { useDay } from '../hooks/useDay';
@@ -20,6 +20,7 @@ import {
   makePick,
   makePriority,
   makeRecurring,
+  makeSession,
   makeSettings,
   NEW_CATEGORY,
   settle,
@@ -80,14 +81,15 @@ function OnTheStore({ pick = null }: { pick?: CategoryPick | null }) {
 
 /**
  * Renders `OnTheStore` against a server that stores each save as the route does (merged with
- * `mergePriorities`) the moment it arrives, and answers it once `answer()` is called.
+ * `mergePriorities`, free rows left out) the moment it arrives, and answers it once `answer()` is
+ * called.
  */
 async function renderOnStore(rows: Priority[], pick: CategoryPick | null = null) {
   let onServer = rows;
   const gate = deferred<void>();
   vi.mocked(api.getDay).mockImplementation(() => Promise.resolve(makeDay(TODAY, { priorities: onServer })));
   vi.mocked(api.putPriorities).mockImplementation(async (_date, list, base) => {
-    onServer = mergePriorities(onServer, base ?? onServer, list);
+    onServer = mergePriorities(onServer, base ?? onServer, list).filter((p) => p.uid != null);
     const priorities = onServer;
     await gate.promise;
     return { priorities };
@@ -228,6 +230,27 @@ describe('Priorities', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove priority 4' }));
     expect(saved()).toHaveLength(3);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add priority' }));
+  });
+
+  it('keeps a row it added while free, though the stored list comes back without it, until the server holds a task there', async () => {
+    const written = [makePriority(1, 'Report'), makePriority(2, 'Invoices'), makePriority(3, 'Email')];
+    const { again, saved } = await renderCard(written);
+    fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
+    fireEvent.click(screen.getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
+    await settle();
+    // The server keeps no free row.
+    again([...written]);
+    expect(screen.getAllByRole('textbox')).toHaveLength(4);
+    expect(document.activeElement).toBe(textbox(4));
+    fireEvent.change(textbox(4), { target: { value: 'Call the bank' } });
+    fireEvent.blur(textbox(4));
+    await settle();
+    const bank = saved()[3]!;
+    expect(bank).toMatchObject({ position: 4, text: 'Call the bank' });
+    again([...written, bank]);
+    // Then another device takes it off.
+    again([...written]);
+    expect(screen.getAllByRole('textbox')).toHaveLength(3);
   });
 
   it('keeps focus on a remove button when a row before the last is removed', async () => {
@@ -660,12 +683,13 @@ describe('Priorities: a blank name', () => {
     expect(textbox(2).value).toBe('Email Bob');
   });
 
-  it("keeps the row's tick, with its box disabled, and saves no change to it", async () => {
+  it("keeps the row's tick, with its box disabled, counted as a done row of the list, and saves no change to it", async () => {
     const { onChange } = await renderCard(rows());
     fireEvent.click(tick(1));
     blankOut(1);
     expect(tick(1).checked).toBe(true);
     expect(tick(1).disabled).toBe(true);
+    expect(screen.getByText('1 of 2 done')).toBeTruthy();
     await settle(400);
     fireEvent.blur(textbox(1));
     expect(tick(1).checked).toBe(true);
@@ -780,11 +804,13 @@ describe('Priorities: ×', () => {
     expect(saved()[0]).toEqual(blank(1));
   });
 
-  it('asks about a task on other days, or with time logged on it, a session logged since the day was read included', async () => {
+  it('asks about a task on other days, or with time logged on it, a session logged since the day was read and a timer running on it included', async () => {
+    const email = makePriority(1, 'Email');
     const cases: [Priority, Session[], string][] = [
       [makePriority(1, 'Email', { listed: 3 }), [], REMOVE_TASK.body(2, null)],
       [makePriority(1, 'Email', { logged: 80 * 60 }), [], REMOVE_TASK.body(0, '1h 20m')],
-      [makePriority(1, 'Email'), [completedSession(1, T0, 30, { priorityUid: makePriority(1, '').uid })], REMOVE_TASK.body(0, '1m')],
+      [email, [completedSession(1, T0, 30, { priorityUid: email.uid })], REMOVE_TASK.body(0, '1m')],
+      [email, [makeSession({ startedAt: T0 - 12 * MINUTE_MS, priorityUid: email.uid })], REMOVE_TASK.body(0, '12m')],
     ];
     for (const [row, sessions, body] of cases) {
       const { onChange, unmount } = await renderCard([row], undefined, sessions);
@@ -862,6 +888,41 @@ describe('Priorities: ×', () => {
 });
 
 describe('Priorities on the day store', () => {
+  it('keeps a row Add priority put past Rows per day, with the focus in it, once the server answers without it, and saves it once typed in', async () => {
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ priorityCount: 1 }));
+    const { stored, answer } = await renderOnStore([makePriority(1, 'Report')]);
+    fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
+    expect(document.activeElement).toBe(textbox(2));
+    await answer();
+    expect(screen.getAllByRole('textbox')).toHaveLength(2);
+    expect(document.activeElement).toBe(textbox(2));
+    fireEvent.change(textbox(2), { target: { value: 'Call the bank' } });
+    fireEvent.blur(textbox(2));
+    await settle();
+    expect(stored().map((p) => p.text)).toEqual(['Report', 'Call the bank']);
+  });
+
+  it('keeps the row Add anyway put past Rows per day the same, and lets its × take it away', async () => {
+    const { stored, answer } = await renderOnStore([makePriority(1, 'Report'), makePriority(2, 'Invoices'), makePriority(3, 'Email')]);
+    fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
+    fireEvent.click(screen.getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
+    await answer();
+    expect(screen.getAllByRole('textbox')).toHaveLength(4);
+    expect(document.activeElement).toBe(textbox(4));
+    fireEvent.change(textbox(4), { target: { value: 'Call the bank' } });
+    fireEvent.blur(textbox(4));
+    await settle();
+    expect(stored().map((p) => p.text)).toEqual(['Report', 'Invoices', 'Email', 'Call the bank']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
+    fireEvent.click(screen.getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
+    await settle();
+    expect(screen.getAllByRole('textbox')).toHaveLength(5);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove priority 5' }));
+    await settle();
+    expect(screen.getAllByRole('textbox')).toHaveLength(4);
+  });
+
   it('sends an untick made before the tick is answered as a change from the tick', async () => {
     const { stored, answer } = await renderOnStore([makePriority(1, 'Report')]);
     fireEvent.click(tick(1));

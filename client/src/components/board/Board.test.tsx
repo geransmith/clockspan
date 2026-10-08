@@ -397,7 +397,7 @@ describe('Board', () => {
     const editor = column('In progress').querySelector<HTMLElement>('.board-editor')!;
     expect(within(editor).queryByRole('textbox', { name: 'Title' })).toBeNull();
     expect(editor.querySelector('.board-editor-title')?.textContent).toBe('Monitor the queue');
-    expect(editorLines('In progress')).toEqual(['Settings → Board renames it.']);
+    expect(editorLines('In progress')).toEqual([BOARD.recurringRename]);
     expect(within(editor).getByRole('button', { name: 'Category for Monitor the queue: none' })).toBeTruthy();
     expect(within(editor).getByRole('button', { name: 'Remove from today' })).toBeTruthy();
     expect(screen.getByRole('checkbox', { name: 'Monitor the queue done' })).toBeTruthy();
@@ -421,7 +421,7 @@ describe('Board', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
     openEditor('Tuesday row');
     expect(column('Done').querySelector('.board-editor-title')?.textContent).toBe('Tuesday row');
-    expect(editorLines('Done')).toEqual(['Settings → Board renames it.']);
+    expect(editorLines('Done')).toEqual([BOARD.recurringRename]);
   });
 
   it('marks a recurring row on its meta line, and only that row', async () => {

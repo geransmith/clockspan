@@ -848,7 +848,41 @@ describe('editPriorities', () => {
   });
 });
 
-describe('a task deleted everywhere', () => {
+describe('a priorities save that puts a task on a list or takes one off', () => {
+  const TOMORROW = '2026-09-29';
+  const report = makePriority(1, 'Report', { uid: 'task00000001' });
+  const email = makePriority(2, 'Email', { uid: 'task00000002' });
+
+  it('reads again the other held days whose lists hold that task, whose counts of days moved, and no other', async () => {
+    const held = [
+      makeDay(TODAY, { priorities: [report, email] }),
+      makeDay(YESTERDAY, { priorities: [{ ...email, position: 1 }] }),
+      makeDay(OTHER, { priorities: [makePriority(1, 'Invoices', { uid: 'task00000003' })] }),
+      makeDay(TOMORROW),
+    ];
+    vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(held.find((d) => d.date === date)!));
+    vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
+    const { result } = renderStore(null);
+    for (const d of held) await act(() => result.current.load(d.date));
+    const read = () => vi.mocked(api.getDay).mock.calls.map(([d]) => d);
+    vi.mocked(api.getDay).mockClear();
+    // Plan tomorrow puts Report on tomorrow's list: today's copy has it on one day.
+    await act(() => result.current.setPriorities(TOMORROW, [report], []));
+    await settle();
+    expect(read()).toEqual([TODAY]);
+    // A rename puts nothing on and takes nothing off.
+    vi.mocked(api.getDay).mockClear();
+    await act(() => result.current.setPriorities(TOMORROW, [{ ...report, text: 'Report v2' }], [report]));
+    await settle();
+    expect(read()).toEqual([]);
+    // Email off today's list: yesterday's copy has it on two days.
+    await act(() => result.current.setPriorities(TODAY, [report], [report, email]));
+    await settle();
+    expect(read()).toEqual([YESTERDAY]);
+  });
+});
+
+describe('a task changed on the server', () => {
   const TASK = 'task00000001';
 
   it('reads again each held day whose list or log names it, and no other, and moves generation', async () => {
@@ -866,7 +900,7 @@ describe('a task deleted everywhere', () => {
         date === TODAY ? makeDay(TODAY) : makeDay(YESTERDAY, { sessions: [endSession(makeSession({ id: 2, date: YESTERDAY, label: 'Report' }))] }),
       ),
     );
-    act(() => result.current.taskDeleted(TASK));
+    act(() => result.current.taskChanged(TASK));
     await settle();
     expect(
       vi
@@ -886,7 +920,7 @@ describe('a task deleted everywhere', () => {
     const out = deferred<Day>();
     vi.mocked(api.getDay).mockReturnValueOnce(out.promise).mockResolvedValueOnce(makeDay(TODAY));
     const refreshed = begin(() => result.current.refresh(TODAY));
-    act(() => result.current.taskDeleted(TASK));
+    act(() => result.current.taskChanged(TASK));
     out.resolve(makeDay(TODAY, { priorities: [makePriority(1, 'Report', { uid: TASK })] }));
     await act(() => refreshed);
     await settle();

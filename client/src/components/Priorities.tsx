@@ -89,7 +89,11 @@ interface Asked {
 export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick = null, leftOpen, offer }: Props) {
   const { settings } = useSettings();
   const count = settings.priorityCount;
-  const stored = useMemo(() => padPriorities(priorities, count), [priorities, count]);
+  // The rows Add priority put past the stored list: the server keeps no free row, so the card pads
+  // the stored list to them until a task the server holds reaches the last one, or it mounts again.
+  const [added, setAdded] = useState(0);
+  if (added > 0 && priorities.some((p) => p.uid != null && p.position >= added)) setAdded(0);
+  const stored = useMemo(() => padPriorities(priorities, Math.max(count, added)), [priorities, count, added]);
   // Let go once sent: a list held after a failed save would stop the card following the stored
   // list (a row the timer's "Also add to today's priorities" or another device added, a tick
   // made elsewhere) until a later save went through. A failed row goes back to the stored copy,
@@ -109,7 +113,6 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick 
   // A tick gets a burst from its checkbox.
   const [ticked, setTicked] = useState<Moment | null>(null);
   const { anchor, burst } = useCelebration<HTMLInputElement>(ticked, 'priorityDone');
-  const logged = useMemo(() => loggedByUid(sessions), [sessions]);
   const noteId = useId();
   // The row whose box has the focus, by its place (its key), and its text then: the rename note
   // compares with it. A free row's task is minted by its first key, so its uid at focus can't say.
@@ -125,7 +128,8 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick 
   };
   const doneRows = local.filter((p) => p.done);
   const done = doneRows.length;
-  const total = local.filter(hasText).length;
+  // A blank box is still its task's row, so it counts as one, ticked or not.
+  const total = local.filter((p) => p.uid != null).length;
   // The leftovers are offered while no one-off is written: a routine on the list is no plan.
   const noOneOff = !local.some(isOneOff);
   // The morning notice's groups, judged again on the draft (the sheet judged the stored list), so
@@ -154,7 +158,10 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick 
     setWarning(null);
     const next = [...local, emptyRow(local.length + 1)];
     // Rendered at once, so the new row is there to take focus inside the same tap.
-    flushSync(() => editList(next, true));
+    flushSync(() => {
+      setAdded(next.length);
+      editList(next, true);
+    });
     inputs.current.get(next.length)?.focus();
   };
   // Focus goes where Add priority would put a new priority.
@@ -196,8 +203,12 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick 
     focusFree();
   };
   const removeRow = (position: number) => {
+    const next = removePriority(local, position);
     // Removing a row before the last moves the next row's X under focus; the last row takes its X with it.
-    flushSync(() => editList(removePriority(local, position), true));
+    flushSync(() => {
+      setAdded((n) => Math.min(n, next.length));
+      editList(next, true);
+    });
     if (position === local.length) addButton.current?.focus();
   };
   // Within Rows per day the row stays, free, with the focus in its box; past that it goes.
@@ -206,10 +217,11 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick 
     flushSync(() => editList(clearRow(local, position), true));
     inputs.current.get(position)?.focus();
   };
-  // × asks first when the task is on other days or has time logged on it, since Delete everywhere
-  // is then a different answer; a recurring priority's row never asks (Settings removes those).
+  // × asks first when the task is on other days or has time logged on it, a timer running on it
+  // included, since Delete everywhere is then a different answer; a recurring priority's row never
+  // asks (Settings removes those).
   const remove = (p: Priority) => {
-    const time = p.uid == null ? 0 : Math.max(p.logged, logged.get(p.uid) ?? 0);
+    const time = p.uid == null ? 0 : Math.max(p.logged, loggedByUid(sessions, Date.now()).get(p.uid) ?? 0);
     if (p.uid != null && !isRecurring(p) && (p.listed > 1 || time > 0)) {
       setAsked({ uid: p.uid, name: hasText(p) ? p.text : (storedName(p.uid) ?? ''), otherDays: Math.max(0, p.listed - 1), logged: time });
     } else takeOff(p.position);

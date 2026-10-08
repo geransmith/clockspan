@@ -492,10 +492,14 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   up stands in for it. `pruneBefore` is the one store write sent on no queue (the queues are keyed
   by day, session and breaks), so a change still on its way for a day before the cutoff can land
   after the prune and re-create that day, which the re-read after the prune shows. After a full
-  delete (the board store's `deleteItem`) `taskDeleted(uid)` reads again every held day whose list
-  or log names the task, `refresh(date, { fresh: true })` (a read already out may have left before
-  the delete, so its answer is dropped and the day asked for again), and moves `generation` as
-  `pruneBefore` does, so no range on screen offers or counts the task from an older answer. The day
+  delete (the board store's `deleteItem`), and after a new name or category (its `editItem`),
+  `taskChanged(uid)` reads again every held day whose list or log names the task,
+  `refresh(date, { fresh: true })` (a read already out may have left before the change, so its
+  answer is dropped and the day asked for again), and moves `generation` as `pruneBefore` does, so
+  no range on screen (the board's Done, History, Review) shows the task from an older answer. A
+  priorities save that puts a task on its list or takes one off (Plan tomorrow, a carry, ×) reads
+  again, the same way, the other held days whose lists hold that task, since their `listed` and
+  `earlier` moved and × asks from them. The day
   store, `useSettings`, `useTimer` and `useBoard` are all built on `useTracked`
   (`hooks/useTracked.ts`); a board write rejects when it fails, like a settings save, and the board
   is read again. `apply` and commit functions are pure: read the clock outside them. The board's
@@ -658,7 +662,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   skips the free ones, so positions can have gaps where free rows sat (`padPriorities` fills
   them by position): the morning offer's routines stay after the padded rows, and a row typed
   under empty ones stays where it was typed. Add priority and the timer's Also add
-  (`placePriority`, `hasRoom`) use the first free row or a new one at the end, and `planNext`
+  (`placePriority`, `hasRoom`) use the first free row or a new one at the end; a row Add priority
+  puts past the stored list stays on the card while it is free (`added`: the card pads the stored
+  list to it until a stored task reaches it, × takes it, or the card mounts again), and `planNext`
   (Plan tomorrow, the left-open Add) drops only free rows. The nudge (`nudgeFor`) counts the
   one-off rows with text (`isOneOff`), while the warning's kind still counts every written row.
   Every reader of a list skips free rows with `hasText` (`shared/priorities.ts`).
@@ -694,7 +700,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   box doesn't remove its task: while it is blank and focused the note under it reads
   `BLANK_NOTE(name)`, the list goes out with that row's name as it was (`named`; ticks and the
   other rows still save), its checkbox is disabled and its tick kept (`editPriority` clears
-  `done` only on a free row), and leaving the box or Escape puts the stored name back (a row
+  `done` only on a free row), it still counts in "N of M done", and leaving the box or Escape
+  puts the stored name back (a row
   typed and emptied before it was ever saved becomes a free row again). The server refuses a
   row with a uid and a blank name. Typing over a written row renames its task on every day;
   while the box's text differs from the name it had when it took the focus and earlier days'
@@ -702,8 +709,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   rather than a question. × shows on every row with a task and every row past Rows per day:
   within Rows per day the row stays, free, with the focus in its box (`clearRow`), and past it
   the row goes. A recurring row, or a one-off on no other day with no time logged, comes off at
-  once; a one-off on other days (`p.listed > 1`) or with time logged (`p.logged`, or a completed
-  session in the day's log, so one finished since the read counts) asks first in `RemoveTask`
+  once; a one-off on other days (`p.listed > 1`) or with time logged (`p.logged`, or a session in
+  the day's log, `loggedByUid`: one finished since the read, or a timer running on it, counted so
+  far and as a second at least) asks first in `RemoveTask`
   (built like `FinishChoice`: `useModalDialog`, the focus on the frame; `REMOVE_TASK`): Off this
   day (the × path), Delete everywhere (the × path, then the board store's `deleteItem`, which
   works with the board off; its failure raises the "Change not saved" banner and leaves the task
@@ -1358,9 +1366,11 @@ The browser pass for each surface (the logic under it is already tested):
   priorities" fills the first free row; a log row's select reassigns it. Empty a written row's
   box: the note under it says the name comes back, the tick stays with its checkbox disabled,
   and leaving the box or Escape puts the name back. Retype the carried row's name: the note says
-  how many earlier days it renames. × on a task typed today with no time logged takes it off at
-  once (an empty row within Rows per day, the focus in its box); × on the carried row, or one
-  with time logged, opens "Remove …" (Off this day, Delete everywhere, Cancel; Escape gives the
+  how many earlier days it renames (at 375 with the board on, under its own chip, nearer it than
+  the next row). Add priority past Rows per day (Add anyway): the new row stays, empty, with the
+  focus in it. × on a task typed today with no time logged takes it off at once (an empty row
+  within Rows per day, the focus in its box); × on the carried row, or one with time logged or a
+  timer running on it, opens "Remove …" (Off this day, Delete everywhere, Cancel; Escape gives the
   focus back to ×), at desktop width and at 375, in light and dark, and Delete everywhere takes
   the task off every day while its sessions stay in the log under its name. With the board on:
   pick a category on a row (an empty chip shows only on the row's hover or focus with a mouse,
@@ -1457,7 +1467,8 @@ The browser pass for each surface (the logic under it is already tested):
   `useRefreshLoop`, which listens for `visibilitychange` and never `focus`; a new one goes
   through it too, and nothing in the app listens for the window's `focus`. Reads tied to what
   is shown (a held day read again when a view shows it, the days and ranges asked again after
-  a prune or a full delete, `AuthGate`'s `/me` after a 401, the board read as its page opens and
+  a prune, a full delete, a task's new name or category or a list save that moves a task,
+  `AuthGate`'s `/me` after a 401, the board read as its page opens and
   after a prune) are not refreshes and stay outside the loop.
 - The board's refresh lives in `BoardRefresh` (`hooks/useBoard.tsx`), a child the provider
   mounts only while the board is on: switching it on reads at once (StrictMode's second mount

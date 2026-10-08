@@ -1,6 +1,7 @@
 import type { SessionEdit } from '../api';
 import type { CompletedSession, Day, Priority, Session } from '../types';
 import { hasText } from '../../../shared/priorities.js';
+import { activeMs } from '../../../shared/timer.js';
 
 export interface PriorityReview {
   priority: Priority;
@@ -40,14 +41,17 @@ export function focusOf(sessions: Session[]): { seconds: number; count: number }
 }
 
 /**
- * Completed focus by the task it was logged on: seconds per `priorityUid`. A running or cancelled
- * session, or one on no task, adds nothing.
+ * Focus by the task it was logged on, at `now`: seconds per `priorityUid`, a running session's so
+ * far included. A running one counts a second at least, so a timer that just started (or a clock
+ * behind the server's) still counts as time on its task. A cancelled session, or one on no task,
+ * adds nothing.
  */
-export function loggedByUid(sessions: Session[]): Map<string, number> {
+export function loggedByUid(sessions: Session[], now: number): Map<string, number> {
   const out = new Map<string, number>();
   for (const s of sessions) {
-    if (s.status !== 'completed' || s.priorityUid == null) continue;
-    out.set(s.priorityUid, (out.get(s.priorityUid) ?? 0) + s.durationSeconds);
+    if (s.status === 'cancelled' || s.priorityUid == null) continue;
+    const seconds = s.status === 'completed' ? s.durationSeconds : Math.max(1, activeMs(s, now) / 1000);
+    out.set(s.priorityUid, (out.get(s.priorityUid) ?? 0) + seconds);
   }
   return out;
 }

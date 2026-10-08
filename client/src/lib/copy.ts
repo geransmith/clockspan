@@ -126,7 +126,7 @@ export const WARNING_ACTIONS = {
 export const RENAME_NOTE = (earlier: number) => `Also renames it on ${counted(earlier, 'earlier day')}.`;
 
 /** Under a Top priorities row whose box was emptied: a blank name isn't saved. */
-export const BLANK_NOTE = (name: string) => `Empty, it goes back to ${name} when you leave the box. × takes it off this day.`;
+export const BLANK_NOTE = (name: string) => `Left empty, it goes back to “${name}”. × takes it off this day.`;
 
 /** Where a task is and the time logged on it, for a question that deletes it everywhere: "It is on 3 days, and 1h 20m is logged on it." */
 const taskFacts = (where: string, logged: string | null) => {
@@ -303,7 +303,8 @@ export const ADD_PRIORITY_FAILED = {
  * `close` its button. `full` is also the capture box's line while it is shut at the cap.
  * `nameTaken` is Settings → Board's line under a category named like another in use. `doneOn` is
  * the editor's line on a task ticked on an earlier day, which the board doesn't untick; `when`
- * is `dayName`'s in-sentence word or date.
+ * is `dayName`'s in-sentence word or date. `recurringRename` is the editor's line on a recurring
+ * priority's row, whose title the board shows as text.
  */
 export const BOARD = {
   full: `Later and Next hold ${BOARD_LIMITS.openCards} cards at most.`,
@@ -312,6 +313,7 @@ export const BOARD = {
   close: 'Close',
   nameTaken: 'There is already a category with that name.',
   doneOn: (when: string) => `Done ${when}. Untick it on that day's sheet.`,
+  recurringRename: 'Settings → Board renames it.',
 } as const;
 
 /**

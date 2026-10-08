@@ -329,7 +329,7 @@ export const Board = memo(function Board({ today }: { today: string }) {
     const note = doneEarlier
       ? BOARD.doneOn(dayName(item.card!.listDate!, today, true))
       : item.recurring && board.recurring.some((r) => r.uid === item.uid)
-        ? 'Settings → Board renames it.'
+        ? BOARD.recurringRename
         : undefined;
     const tick: Parameters<typeof BoardCardView>[0]['tick'] = onToday
       ? { checked: item.row!.done, onChange: (checked, el) => run(item, checked ? 'done' : 'progress', null, el.getBoundingClientRect()) }
