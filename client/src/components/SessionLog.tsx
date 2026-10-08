@@ -1,15 +1,18 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { SessionEdit } from '../api';
 import { useDayStore } from '../hooks/useDay';
 import { useTimer } from '../hooks/useTimer';
+import { categoryOf, type CategoryPick } from '../lib/board';
 import { CONFIRM } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { breakSeconds } from '../lib/breaks';
 import { counted, formatDuration } from '../lib/format';
 import { hasText } from '../../../shared/priorities.js';
-import { focusOf } from '../lib/retro';
+import { focusOf, sessionCategory, sessionCategoryEdit, sessionLinkEdit } from '../lib/retro';
 import { timerView } from '../lib/timer';
 import type { Break, Priority, Session } from '../types';
+import { CategoryChip } from './CategoryChip';
+import { CategoryDot } from './CategoryDot';
 import { Trash } from './Icons';
 import { LabelInput, SessionLabel } from './SessionLabel';
 
@@ -19,12 +22,14 @@ interface Props {
   sessions: Session[];
   breaks: Break[];
   priorities: Priority[];
+  /** The category chip's data: a session on no written row can be given a category. Null (the board off) shows none. */
+  pick?: CategoryPick | null;
   now: number;
 }
 
 type Entry = { at: number; session: Session } | { at: number; brk: Break };
 
-export function SessionLog({ date, isToday, sessions, breaks, priorities, now }: Props) {
+export function SessionLog({ date, isToday, sessions, breaks, priorities, pick = null, now }: Props) {
   const store = useDayStore();
   const { running, edit } = useTimer();
   const focus = focusOf(sessions);
@@ -69,6 +74,8 @@ export function SessionLog({ date, isToday, sessions, breaks, priorities, now }:
               session={e.session}
               now={now}
               planned={planned}
+              rows={priorities}
+              pick={pick}
               onEdit={(patch) => void (live(e.session) ? edit(patch) : store.updateSession(date, e.session.id, patch))}
               onDelete={() => void store.removeSession(date, e.session.id)}
             />
@@ -120,12 +127,17 @@ function Row({
   session: s,
   now,
   planned,
+  rows,
+  pick,
   onEdit,
   onDelete,
 }: {
   session: Session;
   now: number;
   planned: Priority[];
+  /** The day's rows, emptied ones included: what the session's category is read from. */
+  rows: Priority[];
+  pick: CategoryPick | null;
   onEdit: (patch: SessionEdit) => void;
   onDelete: () => void;
 }) {
@@ -135,24 +147,33 @@ function Row({
   // Set when a key or the select ends the edit, so focus goes back to the label; a blur leaves focus where it went.
   const [returnFocus, setReturnFocus] = useState(false);
   const editBox = useRef<HTMLSpanElement>(null);
+  const blurCheck = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(blurCheck.current), []);
   const running = s.status === 'running';
   const paused = running && s.pausedAt != null;
   // A running row counts its focus so far, which holds still while paused.
   const seconds = running ? timerView(s, now).elapsedSeconds : s.durationSeconds;
   // A link to a row that was since removed reads as unplanned.
   const linked = s.priorityUid ? planned.find((p) => p.uid === s.priorityUid) : undefined;
-  // One PATCH per edit: label and link together, so two responses can't land out of order.
-  const commit = (extra: Pick<SessionEdit, 'priorityUid'> = {}) => {
+  // What the session counts under, when the board holds it.
+  const category = pick ? categoryOf(pick.categories, sessionCategory(s, rows)) : undefined;
+  // One PATCH per edit: label, link and category together, so two responses can't land out of order.
+  const commit = (extra: Pick<SessionEdit, 'priorityUid' | 'categoryUid'> = {}) => {
     setEditing(false);
     const patch = { ...extra, ...(draft.trim() !== s.label ? { label: draft.trim() } : {}) };
     if (Object.keys(patch).length > 0) onEdit(patch);
   };
-  // Moving from the label input to the priority select must not end the edit, and iOS
-  // doesn't always report relatedTarget, so check where focus landed a tick later.
-  const onBlur = () =>
-    setTimeout(() => {
+  // Moving from the label input to the priority select or the category chip (and its list)
+  // must not end the edit, and iOS doesn't always report relatedTarget, so check where focus
+  // landed a tick later. Only the last check runs: a press outside an open category list moves
+  // the focus twice in one go (option to chip, chip to the press), and two checks would both
+  // find it outside and send the edit twice.
+  const onBlur = () => {
+    clearTimeout(blurCheck.current);
+    blurCheck.current = setTimeout(() => {
       if (editBox.current && !editBox.current.contains(document.activeElement)) commit();
     }, 0);
+  };
   return (
     <li className={`log-row${running ? ' is-running' : ''}`}>
       <span className="log-time">
@@ -180,7 +201,7 @@ function Row({
               value={linked?.uid ?? ''}
               onChange={(e) => {
                 setReturnFocus(true);
-                commit({ priorityUid: e.target.value || null });
+                commit(sessionLinkEdit(s, e.target.value || null));
               }}
               aria-label="Priority this session was for"
             >
@@ -192,6 +213,20 @@ function Row({
               ))}
             </select>
           )}
+          {/* A session on a written row counts under the row's category, which the row's own chip sets. */}
+          {pick && !linked && (
+            <span className="log-edit-category">
+              <CategoryChip
+                value={category?.uid ?? null}
+                onChange={(categoryUid) => {
+                  setReturnFocus(true);
+                  commit(sessionCategoryEdit(s, rows, categoryUid));
+                }}
+                pick={pick}
+                label="Category for this session"
+              />
+            </span>
+          )}
         </span>
       ) : (
         <button
@@ -202,13 +237,21 @@ function Row({
             setReturnFocus(false);
             setEditing(true);
           }}
-          title={linked ? `Priority ${linked.position}: ${linked.text}. Click to edit` : 'Edit label or link to a priority'}
+          title={
+            linked
+              ? `Priority ${linked.position}: ${linked.text}. Click to edit`
+              : pick
+                ? 'Edit label, priority or category'
+                : 'Edit label or link to a priority'
+          }
         >
           {linked && (
             <span className="log-plan" role="img" aria-label={`Priority ${linked.position}`}>
               {linked.position}
             </span>
           )}
+          {/* A planned row shows its priority's number instead, and the priority its category. */}
+          {!linked && category && <CategoryDot color={category.color} label={category.name} />}
           <SessionLabel label={s.label} />
         </button>
       )}

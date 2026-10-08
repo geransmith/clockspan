@@ -5,7 +5,8 @@ import { HOUR_MS } from '../../../shared/dates.js';
 import * as api from '../api';
 import { playSound, unlockAudio } from '../lib/alerts';
 import { LOAD_FAILED, PLAN_NEXT } from '../lib/copy';
-import { deferred, makeDay, makePriority, makeSettings, SettingsAndDays, settle, T0, TODAY } from '../test/hooks';
+import type { CategoryPick } from '../lib/board';
+import { deferred, makeCategory, makeDay, makePick, makePriority, makeSettings, SettingsAndDays, settle, T0, TODAY } from '../test/hooks';
 import type { Day, Priority } from '../types';
 import { PlanNext } from './PlanNext';
 
@@ -22,16 +23,26 @@ const TODAYS: Priority[] = [
   makePriority(4, '', { uid: null, addedAt: null }),
 ];
 
-async function renderPlan({ next = makeDay(NEXT) as Day | Promise<Day>, todays = TODAYS } = {}) {
+async function renderPlan({ next = makeDay(NEXT) as Day | Promise<Day>, todays = TODAYS, pick = null as CategoryPick | null } = {}) {
   vi.mocked(api.getDay).mockImplementation((d) => (d === NEXT ? Promise.resolve(next) : Promise.resolve(makeDay(d))));
   const card = (rows: Priority[]) => (
     <SettingsAndDays>
-      <PlanNext today={TODAY} priorities={rows} />
+      <PlanNext today={TODAY} priorities={rows} pick={pick} />
     </SettingsAndDays>
   );
   const view = render(card(todays));
   await settle();
-  return { ...view, again: (rows: Priority[]) => view.rerender(card(rows)) };
+  return {
+    ...view,
+    again: (rows: Priority[]) => view.rerender(card(rows)),
+    /** The board goes off (on another device) while the planner is open: the sheet passes no chip data. */
+    boardOff: () =>
+      view.rerender(
+        <SettingsAndDays>
+          <PlanNext today={TODAY} priorities={todays} pick={null} />
+        </SettingsAndDays>,
+      ),
+  };
 }
 
 const open = async () => {
@@ -175,6 +186,55 @@ describe('PlanNext', () => {
     ]);
     // Tomorrow's row is its own: a fresh uid.
     expect(sent()[0]!.uid).not.toBe(linked.uid);
+  });
+
+  it('offers a category for each row typed in while the board is on, and sends each row in its own', async () => {
+    const tickets = makeCategory('cat000000001', 'Tickets');
+    const admin = makeCategory('cat000000002', 'Admin', { color: 'teal' });
+    const chip = (text: string) => screen.queryByRole('button', { name: new RegExp(`^Category for ${text}:`) });
+    await renderPlan({ todays: [makePriority(1, 'Review the PR', { categoryUid: tickets.uid })], pick: makePick([tickets, admin]) });
+    await open();
+    type('Book flights');
+    type('Pay rent');
+    // A row carried over keeps its own category, and has no chip.
+    expect(chip('Review the PR')).toBeNull();
+    expect(chip('Book flights')!.getAttribute('aria-label')).toBe('Category for Book flights: none');
+    expect(chip('Book flights')!.closest('li')!.className).toBe('plan-next-extra');
+    fireEvent.click(chip('Book flights')!);
+    fireEvent.click(screen.getByRole('option', { name: 'Admin' }));
+    expect(chip('Book flights')!.getAttribute('aria-label')).toBe('Category for Book flights: Admin');
+    expect(chip('Pay rent')!.getAttribute('aria-label')).toBe('Category for Pay rent: none');
+    fireEvent.click(chip('Pay rent')!);
+    fireEvent.click(screen.getByRole('option', { name: 'Tickets' }));
+    // Typed and not entered: it has had no chip, so it goes with no category, whatever the row before it has.
+    type('Call the bank', false);
+    await save();
+    expect(sent().map((p) => [p.text, p.categoryUid])).toEqual([
+      ['Review the PR', tickets.uid],
+      ['Book flights', admin.uid],
+      ['Pay rent', tickets.uid],
+      ['Call the bank', null],
+    ]);
+  });
+
+  it('offers no category for a row typed in with the board off', async () => {
+    await renderPlan();
+    await open();
+    type('Book flights');
+    expect(screen.queryByRole('button', { name: /^Category for/ })).toBeNull();
+  });
+
+  it('sends no category for a row whose chip went with the board, a pick made before included', async () => {
+    const admin = makeCategory('cat000000002', 'Admin', { color: 'teal' });
+    const { boardOff } = await renderPlan({ pick: makePick([admin]) });
+    await open();
+    type('Book flights');
+    fireEvent.click(screen.getByRole('button', { name: /^Category for Book flights:/ }));
+    fireEvent.click(screen.getByRole('option', { name: 'Admin' }));
+    boardOff();
+    expect(screen.queryByRole('button', { name: /^Category for/ })).toBeNull();
+    await save();
+    expect(sent().find((p) => p.text === 'Book flights')).toMatchObject({ categoryUid: null });
   });
 
   it("doesn't offer a row whose card is on the next day's list already, under any text", async () => {

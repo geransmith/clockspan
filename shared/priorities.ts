@@ -135,12 +135,13 @@ function mergeRow(stored: Priority, base: Priority, mine: Priority): Priority {
  * - A row this device removed (in `base`, not in `mine`) goes. One another device removed (in
  *   `base`, not in `stored`) stays gone, unless this device changed it.
  * - A row added here (in neither) stays. So does one another device added since `base` (only in
- *   `stored`): where a row added here has its text (`sameText`) and links to nothing, and the
- *   stored row has no recurring priority (a card it may hold, since the server makes one on a
- *   save with `cards`), the stored row takes that row's place and the one added here goes, so
- *   two devices that both took the left-open offer store one set. Two rows of one text on one
- *   device's list stay two. Another device's other new rows take this device's first rows never
- *   written in (an emptied row still stands for its item), else go at the end.
+ *   `stored`): where a row added here has its text (`sameText`) and links to nothing (no card,
+ *   no recurring priority), and the stored row has no recurring priority (a card it may hold,
+ *   since the server makes one on a save with `cards`), the stored row takes that row's place,
+ *   and that row's category when it has none of its own, and the one added here goes, so two
+ *   devices that both took the left-open offer store one set. Two rows of one text on one
+ *   device's list stay two. Another device's other new rows take this device's first rows
+ *   never written in (an emptied row still stands for its item), else go at the end.
  *
  * This device's order wins. Then only a row with text stays ticked; one text row per card and
  * per recurring priority stays, the stored one where there is one (`dedupeLinks`), which also
@@ -169,7 +170,8 @@ export function mergePriorities(stored: Priority[], base: Priority[], mine: Prio
       const pairs = (t: Priority) => !placed.has(t) && t.recurringUid == null && sameText(t.text) === sameText(m.text);
       const twin = hasText(m) && !hasLink(m) ? theirs.find(pairs) : undefined;
       if (twin) placed.add(twin);
-      out.push(twin ?? m);
+      // The stored row stands, with the category picked here when it has none of its own.
+      out.push(twin ? { ...twin, categoryUid: twin.categoryUid ?? m.categoryUid } : m);
     }
   }
   for (const t of theirs) {

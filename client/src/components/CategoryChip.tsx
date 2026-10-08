@@ -82,7 +82,13 @@ export function CategoryChip({ value, onChange, pick, label }: Props) {
     if (!open) return;
     const follow = () => place(chip.current, pop.current);
     const outside = (e: PointerEvent) => {
-      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+      if (wrap.current?.contains(e.target as Node)) return;
+      // The list goes before the press's mousedown moves the focus, and the focused option with
+      // it: the focus would fall to the page with no blur React reports, so a box that ends its
+      // edit when the focus leaves it (a day log row's) would never hear it go. On the chip, the
+      // mousedown moves it on from inside that box.
+      if (pop.current?.contains(document.activeElement)) chip.current?.focus({ preventScroll: true });
+      setOpen(false);
     };
     window.addEventListener('scroll', follow, true);
     window.addEventListener('resize', follow);
@@ -157,7 +163,12 @@ export function CategoryChip({ value, onChange, pick, label }: Props) {
         aria-controls={open ? listId : undefined}
         aria-label={`${label}: ${current?.name ?? 'none'}`}
         title={current?.name}
-        onClick={() => (open ? setOpen(false) : openList())}
+        onClick={() => (open ? close() : openList())}
+        // Safari, and Firefox on macOS, don't focus a button they press, so the focus would leave
+        // for the page, and a box that ends its edit when the focus leaves it (a day log row's)
+        // would end it. A press leaves the focus where it is: until the list opens and takes it,
+        // or, open, until the list closes and gives it to the chip.
+        onMouseDown={(e) => e.preventDefault()}
         onKeyDown={(e) => {
           if (escape(e) || e.key !== 'ArrowDown') return;
           e.preventDefault();

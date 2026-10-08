@@ -175,6 +175,14 @@ describe('mergePriorities: links', () => {
     expect(mergePriorities(list(['x', 'Invoices', CARD]), [], list(['m', 'Invoices']))).toEqual(list(['x', 'Invoices', CARD]));
   });
 
+  it('gives the stored row of a pair the category picked here when it has none, and keeps its own when it has one', () => {
+    // The timer's Also add, or Plan tomorrow, with a category picked, meets the other device's row.
+    const mine = list(['m', 'Call the bank', { categoryUid: 'cat000000001' }]);
+    expect(mergePriorities(list(['x', 'Call the bank', CARD]), [], mine)).toEqual(list(['x', 'Call the bank', { ...CARD, categoryUid: 'cat000000001' }]));
+    const stored = list(['x', 'Call the bank', { ...CARD, categoryUid: 'cat000000002' }]);
+    expect(mergePriorities(stored, [], mine)).toEqual(stored);
+  });
+
   it("pairs no row that holds a recurring priority, nor one added here with a link: another device's row of the same text stays beside it", () => {
     expect(mergePriorities(list(['x', 'Invoices', ROUTINE]), [], list(['m', 'Invoices']))).toEqual(list(['m', 'Invoices'], ['x', 'Invoices', ROUTINE]));
     expect(mergePriorities(list(['x', 'Invoices']), [], list(['m', 'Invoices', ROUTINE]))).toEqual(list(['m', 'Invoices', ROUTINE], ['x', 'Invoices']));

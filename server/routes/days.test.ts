@@ -643,6 +643,17 @@ describe('PUT /api/days/:date/priorities: board cards', () => {
     ]);
   });
 
+  it("gives the stored row of a pair, and its card, the category picked on the other device's row when it has none", async () => {
+    const [bank] = (await saveOn(TUE, [{ text: 'Call the bank', uid: 'aaaaaaaaaaa1' }], { base: [] })).body.priorities;
+    // The second device adds the same text through the timer's Also add, with a category picked.
+    const r = await saveOn(TUE, [{ text: 'Call the bank', uid: 'bbbbbbbbbbb1', categoryUid: 'cat000000001' }], { base: [] });
+    expect(r.body.priorities).toEqual([{ ...bank, categoryUid: 'cat000000001' }]);
+    expect(await card(bank.cardUid)).toMatchObject({ title: 'Call the bank', categoryUid: 'cat000000001' });
+    // One with a category keeps it.
+    await saveOn(TUE, [{ text: 'Call the bank', uid: 'ccccccccccc1', categoryUid: 'cat000000002' }], { base: [] });
+    expect([(await rowOn(TUE)).categoryUid, (await card(bank.cardUid))!.categoryUid]).toEqual(['cat000000001', 'cat000000001']);
+  });
+
   it('brings a card a list takes to Next with its title, at the top unless it was in Next, or to Done ticked', async () => {
     await capture('card00000001', 'Write the KB', 'later');
     await capture('card00000004', 'Update the macros', 'later');
@@ -985,6 +996,29 @@ describe('PUT /api/days/:date/priorities: the categories of sessions', () => {
     ]);
   });
 
+  it('drops a category picked in the log when the emptied row its session is on is written in again, so the row decides', async () => {
+    const bank = row('aaaaaaaaaaa1', 'Call the bank', 'cat000000001');
+    const other = row('aaaaaaaaaaa2', 'Email');
+    await save([bank, other]);
+    const onBank = await logged(bank.uid);
+    const onOther = await logged(other.uid);
+    await save([{ ...bank, text: '' }, other]);
+    await app.api.patch(`/api/sessions/${onBank}`, { categoryUid: 'cat000000002' });
+    await app.api.patch(`/api/sessions/${onOther}`, { categoryUid: 'cat000000003' });
+    // A save that leaves the row emptied keeps the pick, which the session counts under while the row is empty.
+    await save([
+      { ...bank, text: '' },
+      { ...other, text: 'Email the team' },
+    ]);
+    expect(await categoryOf(onBank)).toBe('cat000000002');
+    // Typed in again: the pick goes, and a session on a row that kept its text keeps its own.
+    await save([bank, other]);
+    expect([await categoryOf(onBank), await categoryOf(onOther)]).toEqual([null, 'cat000000003']);
+    // Removed: the session takes the row's category, not the pick.
+    await save([other]);
+    expect(await categoryOf(onBank)).toBe('cat000000001');
+  });
+
   it("leaves another day's sessions alone, though a row there has the removed row's uid", async () => {
     const other = '2026-08-04';
     await app.api.put(`/api/days/${other}/priorities`, { priorities: [row('aaaaaaaaaaa1', 'Report')] });
@@ -993,6 +1027,18 @@ describe('PUT /api/days/:date/priorities: the categories of sessions', () => {
     await save([]);
     const day = (await app.api.get(`/api/days/${other}`)).body as { sessions: { id: number; categoryUid: string | null }[] };
     expect(day.sessions).toMatchObject([{ id: there, categoryUid: null }]);
+  });
+
+  it("leaves another day's log picks alone when an emptied row with the same uid is written in again", async () => {
+    const other = '2026-08-04';
+    await app.api.put(`/api/days/${other}/priorities`, { priorities: [row('aaaaaaaaaaa1', 'Report')] });
+    const there = await logged('aaaaaaaaaaa1', other);
+    await app.api.patch(`/api/sessions/${there}`, { categoryUid: 'cat000000005' });
+    await save([row('aaaaaaaaaaa1', 'Report', 'cat000000001')]);
+    await save([row('aaaaaaaaaaa1', '', 'cat000000001')]);
+    await save([row('aaaaaaaaaaa1', 'Report', 'cat000000001')]);
+    const day = (await app.api.get(`/api/days/${other}`)).body as { sessions: { id: number; categoryUid: string | null }[] };
+    expect(day.sessions).toMatchObject([{ id: there, categoryUid: 'cat000000005' }]);
   });
 });
 

@@ -5,11 +5,13 @@ import { useTimeFormat } from '../hooks/useTimeFormat';
 import { useSubmit } from '../hooks/useSubmit';
 import { useTimer } from '../hooks/useTimer';
 import { dismissByTag, unlockAudio } from '../lib/alerts';
+import type { CategoryPick } from '../lib/board';
 import { BREAK, TIMER_DUE } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
 import { hasRoom, isOpen } from '../lib/priorities';
 import { LIMITS } from '../../../shared/api.js';
 import type { Priority, Session } from '../types';
+import { CategoryChip } from './CategoryChip';
 import { SessionLabel } from './SessionLabel';
 import { TimerControls } from './TimerControls';
 import { ErrorLine } from './ErrorLine';
@@ -18,11 +20,13 @@ interface Props {
   date: string;
   isToday: boolean;
   priorities: Priority[];
-  /** Adds a row to today's priorities and resolves to its uid. */
-  onAddPriority: (text: string) => Promise<string>;
+  /** Adds a row to today's priorities, in that category, and resolves to its uid. */
+  onAddPriority: (text: string, categoryUid: string | null) => Promise<string>;
+  /** The category chip's data: "Also add to today's priorities" offers a category for the row. Null (the board off) shows none. */
+  pick?: CategoryPick | null;
 }
 
-export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) {
+export function FocusTimer({ date, isToday, priorities, onAddPriority, pick = null }: Props) {
   const timer = useTimer();
   const breakTimer = useBreak();
   const { settings } = useSettings();
@@ -30,6 +34,8 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
   const [label, setLabel] = useState('');
   const [linked, setLinked] = useState<string | null>(null);
   const [addAsPriority, setAddAsPriority] = useState(false);
+  // The new row's category, offered beside "Also add to today's priorities" while it is ticked.
+  const [category, setCategory] = useState<string | null>(null);
   // A start is out: the start and break buttons are disabled until it answers. A second start
   // would add the priority twice and meet the first timer as a 409, which reads as one started
   // on another device. A break tap goes out on the day store's queue, not the timer's, so it
@@ -51,7 +57,7 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
   // has a row for it. On a full list the tick would only earn an error at Start.
   const offerAdd = isToday && trimmed !== '' && !linkedStillOpen && hasRoom(priorities, settings.priorityCount);
 
-  const pick = (p: Priority) => {
+  const toggleLink = (p: Priority) => {
     if (linked === p.uid) {
       setLinked(null);
       return;
@@ -70,16 +76,19 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
     run(async () => {
       let uid = linkedStillOpen ? linked : null;
       if (offerAdd && addAsPriority) {
-        uid = await onAddPriority(trimmed);
+        // With the board off there is no chip, and a category picked before it went off isn't shown.
+        uid = await onAddPriority(trimmed, pick ? category : null);
         // Linked from here on, so a retry after a failed start uses this row instead of adding another.
         setLinked(uid);
         setAddAsPriority(false);
+        setCategory(null);
       }
       // Back to work: the server ends a running break as the session starts, so nothing to send here.
       await timer.start(date, minutes * 60, trimmed, uid);
       setLabel('');
       setLinked(null);
       setAddAsPriority(false);
+      setCategory(null);
     });
   };
 
@@ -102,7 +111,7 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
               <button
                 key={p.uid}
                 className="chip"
-                onClick={() => pick(p)}
+                onClick={() => toggleLink(p)}
                 aria-pressed={linked === p.uid}
                 title={linked === p.uid ? 'Unlink from this priority' : `Link the next session to priority ${p.position}`}
               >
@@ -114,10 +123,13 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority }: Props) 
         </div>
       )}
       {offerAdd && (
-        <label className="inline-check timer-add-priority">
-          <input type="checkbox" className="checkbox" checked={addAsPriority} onChange={(e) => setAddAsPriority(e.target.checked)} />
-          <span>Also add to today's priorities</span>
-        </label>
+        <div className="timer-add">
+          <label className="inline-check timer-add-priority">
+            <input type="checkbox" className="checkbox" checked={addAsPriority} onChange={(e) => setAddAsPriority(e.target.checked)} />
+            <span>Also add to today's priorities</span>
+          </label>
+          {pick && addAsPriority && <CategoryChip value={category} onChange={setCategory} pick={pick} label="Category for the new priority" />}
+        </div>
       )}
       {breakTimer.endsAt != null && (
         <div className="timer-break">

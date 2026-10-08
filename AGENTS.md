@@ -577,10 +577,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   removed stays gone unless this device changed it. A row another device added since `base`
   stays, in this device's first row never written in (never a cleared one, which still stands
   for its item) or at the end, and a row added on both with the same text (`sameText`) is one
-  row, the stored one, when the row added here links to nothing and the stored one has no
-  recurring priority (a card it may hold: a save with `cards` made it). Order is this device's.
-  Removing a row is sending the list without it. With no base (curl, a tab from before the
-  merge) the list replaces the stored one, the fixed fields aside.
+  row, the stored one, when the row added here links to nothing (no card, no recurring
+  priority) and the stored one has no recurring priority (a card it may hold: a save with
+  `cards` made it); the stored row takes the category picked here when it has none, and keeps
+  its own when it has one. Order is this device's. Removing a row is sending the list without
+  it. With no base (curl, a tab from before the merge) the list replaces the stored one, the
+  fixed fields aside.
 - **A priority's identity is its `uid`, never its position.** The client mints it (`newUid()`)
   the first time a row gets text and stamps `addedAt`; both survive a text clear and a renumber.
   `sessions.priority_uid` points at it (null or a removed row = unplanned). `POST/PATCH`
@@ -642,11 +644,22 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   have none (`keepSessionCategories`, in the same transaction), and the day store, seeing that
   save take a row with a category off a list a session points at (`leavesCategory`), reads the
   day again. An emptied row stays on its list with its category, so its sessions keep counting
-  under it and nothing is copied. On the client `CategoryChip` is the one way a category is
-  picked, fed by `useCategoryPick` (null while the board is off). Its New category box runs
-  `categoryForName` (`lib/board.ts`): the category in use by that name, else a removed one
-  brought back under its own uid, else a new one in `nextColor` (the colour the fewest categories
-  in use have, so the eight repeat evenly). The chip sets that uid at once and the create goes
+  under it, unless the day log gave one a category of its own, and nothing is copied. Once the
+  row is written in again it decides: the PUT drops the `categoryUid` of the day's sessions on
+  it (`dropSessionCategories`, in the same transaction), and the day store, seeing a save write
+  in an emptied row that a session with a category of its own points at (`regainsText`), reads
+  the day again, or its copy would keep the pick the server dropped. On the client
+  `CategoryChip` is the one way a category is picked, fed by `useCategoryPick` (null while the board
+  is off or before its first read, and then no chip shows), which the board page and the sheet call
+  once and pass down as `pick`: the sheet's goes to Top priorities (a written row's chip, which
+  saves at once), the timer (the row Also add makes, `addPriority(date, text, categoryUid)`), the
+  day log (a session on no written row, in the edit's one PATCH) and, through the retrospective,
+  Plan tomorrow (a row typed in). A press on the chip leaves the focus where it is until the list
+  takes it or gives it back to the chip, since Safari and Firefox on macOS don't focus a pressed
+  button and the day log's edit ends when the focus leaves it. Its New category box runs
+  `categoryForName` (`lib/board.ts`): the category in use by that name, else a removed one brought
+  back under its own uid, else a new one in `nextColor` (the colour the fewest categories in use
+  have, so the eight repeat evenly). The chip sets that uid at once and the create goes
   out as an optimistic board write; opening the list reads the board again, and a create the
   server refuses (another device took the name, a cap) is taken off with the "Change not saved"
   banner, so what picked it reads as no category. The board's capture box remembers its last
@@ -734,7 +747,17 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   same-text one-off stays a task of its own. A routine is titled by its item through
   `recurringTitles` (uid → title; Review passes none yet) while the item exists, else by its
   latest row's text, so a retyped row or a deleted item stays one entry. `reviewDay`'s
-  `routines` (`{ done, total }`) is the retro card's "routines 3 of 4".
+  `routines` (`{ done, total }`) is the retro card's "routines 3 of 4". A session's category is
+  `sessionCategory(s, rows)`: the category of the written row its `priorityUid` names on its
+  day (none included), else its own `categoryUid` (picked in the day log, or copied by the
+  server when its row was removed), else that of an emptied row it still names, else none. The
+  day log picks one only for a session on no written row, since the row's own chip decides the rest,
+  and shows it as a `CategoryDot` named by its `label`, the one dot drawn without its name beside
+  it. A pick is the edit `sessionCategoryEdit` gives: a category is set as the session's own, and No
+  category also takes a session off an emptied row that has a category (`priorityUid: null`), since
+  none of its own goes by the row's. Linking a session to a written row with the log's select drops
+  a category of its own (`sessionLinkEdit`): the row decides from then on, and the server copies a
+  removed row's category only onto sessions with none.
 - **History opens on the route's date** (`route.date ?? today`), with that day picked. The
   calendar holds its month by its first day (`startOfMonth`) and Review its period by `from`,
   so neither moves at midnight. "Open day" first records the picked day (and the Review period,
@@ -997,10 +1020,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   for fills, borders, icons and bars. A category's colour (`--cat-<id>`, picked by `data-color`)
   is a fill only, in all three token blocks at 3:1 and up on both surfaces (`theme-css.test.ts`
   checks); a category's name is never drawn in it, and its dot always sits beside the name, since
-  the eight colours repeat (`nextColor`). `CategoryChip` is the one category picker: its list is
-  `position: fixed` inside the chip's wrapper, placed by `placePopover` (`lib/popover.ts`) and
-  scrolling inside, so no card or dialog clips it and New category stays in view.
-  `.category-chip` and `.swatch` are in the coarse block.
+  the eight colours repeat (`nextColor`); the one exception is the day log's dot, named by its
+  `label`. `CategoryChip` is the one category picker: its list is `position: fixed` inside the
+  chip's wrapper, placed by `placePopover` (`lib/popover.ts`) and scrolling inside, so no card or
+  dialog clips it and New category stays in view. A sheet row's empty chip (a priority row's, a Plan
+  tomorrow row's) is quiet: with a mouse it shows on the row's hover or focus only, from the
+  `(hover: hover)` rule beside the chip's. `.category-chip` and `.swatch` are in the coarse block.
 - Numeric settings inputs commit on blur or Enter, never on every keystroke (`NumberInput`);
   `DurationField` commits when focus leaves its hours / minutes pair or on Enter, so moving from
   hours to minutes saves nothing. A blank or non-numeric box puts the stored value back and
@@ -1121,7 +1146,13 @@ The browser pass for each surface (the logic under it is already tested):
   ticked row); tap a chip, start, and the log row shows the number; "Also add to today's
   priorities" fills the first row never written in, never a cleared one; a log row's select
   reassigns it. Clear a row with focus logged on it: the note under it says the time stays, and
-  Add priority goes past it.
+  Add priority goes past it. With the board on: pick a category on a row (an empty chip shows only
+  on the row's hover or focus with a mouse, always on a phone; a long name ends in an ellipsis; at
+  375 the chip sits under the field, nearer it than the next row's, and the field keeps the row's
+  width, beside the × past Rows per day; from 640 it sits beside the field, which ends in the same
+  place written or empty), tick Also add and pick one for the new row (the chip beside it wraps
+  under it at 375), give an unplanned log session one (its dot before the label) and a Plan
+  tomorrow row one, then the same at 1280 in the split's columns.
 - **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
   Month / Quarter).
 - **The board**: after `npm run seed`, turn it on (`PUT /api/settings {"board":true}`, see "Dev

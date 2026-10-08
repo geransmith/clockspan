@@ -630,7 +630,20 @@ describe('priorities', () => {
     });
     const rows = result.current.days[TODAY]!.priorities;
     expect(rows.map((p) => p.text)).toEqual(['First', 'From the timer', '']);
-    expect(rows[1]).toMatchObject({ uid, addedAt: T0 });
+    expect(rows[1]).toMatchObject({ uid, addedAt: T0, categoryUid: null });
+  });
+
+  it('addPriority writes the row in the category it is given, and sends it', async () => {
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [makePriority(1, 'First')] }));
+    vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
+    const { result } = renderStore();
+    await settle();
+    let uid = '';
+    await act(async () => {
+      uid = await result.current.addPriority(TODAY, 'From the timer', 'cat000000001');
+    });
+    expect(vi.mocked(api.putPriorities).mock.lastCall![1][1]).toMatchObject({ uid, text: 'From the timer', categoryUid: 'cat000000001' });
+    expect(result.current.days[TODAY]!.priorities[1]).toMatchObject({ uid, categoryUid: 'cat000000001' });
   });
 
   it('addPriority passes a cleared row, which keeps its uid and the sessions on it, for one never written in', async () => {
@@ -669,6 +682,22 @@ describe('priorities', () => {
       ['Call the bank', 'phone0000001'],
       ['', null],
     ]);
+  });
+
+  it("addPriority gives another device's row of the same text the category picked here when it has none, and resolves to its uid", async () => {
+    const report = makePriority(1, 'Report');
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [report] }));
+    // The phone added the row first, and the server made its card; the server merges as the route does.
+    const onServer = [report, makePriority(2, 'Call the bank', { uid: 'phone0000001', cardUid: 'card00000001' })];
+    vi.mocked(api.putPriorities).mockImplementation((_date, list, { base }) => Promise.resolve({ priorities: mergePriorities(onServer, base!, list) }));
+    const { result } = renderStore();
+    await settle();
+    let uid = '';
+    await act(async () => {
+      uid = await result.current.addPriority(TODAY, 'Call the bank', 'cat000000001');
+    });
+    expect(uid).toBe('phone0000001');
+    expect(result.current.days[TODAY]!.priorities[1]).toMatchObject({ uid: 'phone0000001', cardUid: 'card00000001', categoryUid: 'cat000000001' });
   });
 
   it('addPriority resolves to the uid it made when the row is gone by the time the save is answered', async () => {
@@ -742,6 +771,34 @@ describe('priorities', () => {
     const removal = begin(() => result.current.setPriorities(TODAY, [{ ...email, position: 1 }], stored));
     picked.resolve({ priorities: withCategory });
     await act(() => Promise.all([pick, removal]));
+    await settle();
+    expect(api.getDay).toHaveBeenCalledTimes(2);
+    expect(result.current.days[TODAY]!.sessions).toEqual(after.sessions);
+  });
+
+  it('reads the day again after a save that writes in an emptied row a session with a category of its own was logged on, to show the category gone', async () => {
+    const bank = makePriority(1, '', { categoryUid: 'cat000000001' });
+    const email = makePriority(2, 'Email');
+    const plain = makePriority(3, '');
+    const onBank = endSession(makeSession({ id: 4, priorityUid: bank.uid, categoryUid: 'cat000000002' }));
+    const onEmail = endSession(makeSession({ id: 5, priorityUid: email.uid, categoryUid: 'cat000000003' }));
+    const onPlain = endSession(makeSession({ id: 6, priorityUid: plain.uid }));
+    const renamed = { ...email, text: 'Email the team' };
+    const written = { ...plain, text: 'Plan the week' };
+    const typed = { ...bank, text: 'Call the bank' };
+    const after = makeDay(TODAY, { priorities: [typed, renamed, written], sessions: [{ ...onBank, categoryUid: null }, onEmail, onPlain] });
+    vi.mocked(api.getDay)
+      .mockResolvedValueOnce(makeDay(TODAY, { priorities: [bank, email, plain], sessions: [onBank, onEmail, onPlain] }))
+      .mockResolvedValueOnce(after);
+    vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
+    const { result } = renderStore();
+    await settle();
+    // A row that had its text all along, and an emptied one whose session has no category of its
+    // own, change nothing on their sessions.
+    await act(() => result.current.setPriorities(TODAY, [bank, renamed, written], [bank, email, plain]));
+    await settle();
+    expect(api.getDay).toHaveBeenCalledTimes(1);
+    await act(() => result.current.setPriorities(TODAY, [typed, renamed, written], [bank, renamed, written]));
     await settle();
     expect(api.getDay).toHaveBeenCalledTimes(2);
     expect(result.current.days[TODAY]!.sessions).toEqual(after.sessions);

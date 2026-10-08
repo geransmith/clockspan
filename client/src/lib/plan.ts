@@ -18,9 +18,9 @@ export function nextWorkDay(date: string, showWeekends: boolean): string {
 /** What a row put on a day's list from elsewhere starts from: its text and its links. A row carried over is its own seed. */
 export type PrioritySeed = Pick<Priority, 'text' | 'cardUid' | 'recurringUid' | 'categoryUid'>;
 
-/** A seed for a priority typed new, linked to nothing. */
-export function textSeed(text: string): PrioritySeed {
-  return { text, cardUid: null, recurringUid: null, categoryUid: null };
+/** A seed for a priority typed new, linked to no card or recurring priority, in `categoryUid` if given. */
+export function textSeed(text: string, categoryUid: string | null = null): PrioritySeed {
+  return { text, cardUid: null, recurringUid: null, categoryUid };
 }
 
 /**

@@ -1,10 +1,26 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { HOUR_MS } from '../../../shared/dates.js';
 import * as api from '../api';
-import { LEFT_OPEN } from '../lib/copy';
+import { LEFT_OPEN, PLAN_NEXT } from '../lib/copy';
 import { SPLIT_QUERY } from '../lib/layout';
-import { AppProviders, deferred, makeBoard, makeCard, makeDay, makePriority, makeSettings, serveRange, settle, T0, TODAY, YESTERDAY } from '../test/hooks';
+import {
+  AppProviders,
+  completedSession,
+  deferred,
+  makeBoard,
+  makeCard,
+  makeCategory,
+  makeDay,
+  makePriority,
+  makeSettings,
+  serveRange,
+  settle,
+  T0,
+  TODAY,
+  YESTERDAY,
+} from '../test/hooks';
 import type { Board, Settings } from '../types';
 import { Sheet } from './Sheet';
 import { SortableCards } from './SortableCards';
@@ -185,5 +201,51 @@ describe('Sheet: what the last day left open, with the board on', () => {
     vi.mocked(api.getBoard).mockResolvedValue(makeBoard(makeCard('later0000001', 'Parked')));
     await renderSheet();
     expect(screen.queryByText(LEFT_OPEN.title('yesterday'))).toBeNull();
+  });
+});
+
+describe("Sheet: a category's chip, with the board on", () => {
+  const TICKETS = makeCategory('cat000000001', 'Tickets');
+  const ADMIN = makeCategory('cat000000002', 'Admin', { color: 'teal' });
+  const day = makeDay(TODAY, {
+    priorities: [makePriority(1, 'Report', { categoryUid: TICKETS.uid })],
+    sessions: [completedSession(1, T0 - HOUR_MS, 25 * 60, { label: 'Inbox', categoryUid: ADMIN.uid })],
+  });
+  const chips = () => screen.queryAllByRole('button', { name: /^Category for / }).map((b) => b.getAttribute('aria-label'));
+
+  beforeEach(() => {
+    vi.mocked(api.getDay).mockResolvedValue(day);
+    vi.mocked(api.getBoard).mockResolvedValue({ ...makeBoard(), categories: [TICKETS, ADMIN] });
+    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve({ priorities }));
+  });
+
+  it("gives a priority row, the timer's new row, the log and Plan tomorrow's rows the board's categories", async () => {
+    stored = makeSettings({ board: true });
+    await renderSheet();
+    expect(chips()).toEqual(['Category for priority 1: Tickets']);
+    expect(screen.getByRole('img', { name: 'Admin' })).toBeTruthy();
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Session label' }), { target: { value: 'Call the vendor' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: "Also add to today's priorities" }));
+    fireEvent.click(screen.getByRole('button', { name: 'Category for the new priority: none' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Admin' }));
+    vi.mocked(api.startSession).mockReturnValue(new Promise(() => {}));
+    fireEvent.click(screen.getByRole('button', { name: /^25\s*min$/ }));
+    await settle();
+    expect(vi.mocked(api.putPriorities).mock.lastCall![1][1]).toMatchObject({ text: 'Call the vendor', categoryUid: ADMIN.uid });
+
+    fireEvent.click(screen.getByRole('button', { name: PLAN_NEXT.open('tomorrow') }));
+    await settle();
+    const box = screen.getByRole('textbox', { name: PLAN_NEXT.placeholder });
+    fireEvent.change(box, { target: { value: 'Book flights' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(screen.getByRole('button', { name: 'Category for Book flights: none' })).toBeTruthy();
+  });
+
+  it('shows none of them with the board off', async () => {
+    await renderSheet();
+    expect(chips()).toEqual([]);
+    expect(screen.queryByRole('img', { name: 'Admin' })).toBeNull();
+    expect(api.getBoard).not.toHaveBeenCalled();
   });
 });
