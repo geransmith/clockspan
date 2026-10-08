@@ -143,6 +143,7 @@ export const CONFIRM = {
   deleteDays: (n: number, before: string) => `Delete ${counted(n, 'day')} before ${before}? This cannot be undone.`,
   /** `off` names the days whose list the card is taken off too ("today", "tomorrow"). */
   deleteCard: (off: string[]) => (off.length ? `Delete this card and take it off the list for ${off.join(' and ')}?` : 'Delete this card?'),
+  deleteRecurring: (title: string) => `Delete ${title}? Rows it already added keep their text.`,
 } as const;
 
 /** A timer line, with the session's label in front when it has one. */

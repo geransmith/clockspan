@@ -5,7 +5,7 @@ import { categoryName } from '../../../../shared/text.js';
 import type { RecurringPatch } from '../../api';
 import { useBoardState, useBoardStore, useCategoryPick } from '../../hooks/useBoard';
 import { activeCategories, categoryForName, categoryNameTaken, nextColor, type CategoryPick } from '../../lib/board';
-import { BOARD, LOAD_FAILED } from '../../lib/copy';
+import { BOARD, CONFIRM, LOAD_FAILED } from '../../lib/copy';
 import { newUid } from '../../lib/priorities';
 import type { Category, CategoryColor, Recurring } from '../../types';
 import { CategoryChip } from '../CategoryChip';
@@ -252,12 +252,14 @@ function RecurringList({ items, pick, save }: { items: Recurring[]; pick: Catego
   const [adding, setAdding] = useState(false);
   const titleBoxes = useRef(new Map<string, HTMLInputElement>());
   const addButton = useRef<HTMLButtonElement>(null);
-  // As with a category: the next row's title takes the focus, else the one before, else Add.
-  const remove = (uid: string) => {
-    const at = items.findIndex((r) => r.uid === uid);
+  // The delete is for good, so it asks first, unlike a category's Remove, which archives. Then, as
+  // with a category, the next row's title takes the focus, else the one before, else Add.
+  const remove = (item: Recurring) => {
+    if (!window.confirm(CONFIRM.deleteRecurring(item.title))) return;
+    const at = items.findIndex((r) => r.uid === item.uid);
     const near = items[at + 1] ?? items[at - 1];
     (near ? titleBoxes.current.get(near.uid) : addButton.current)?.focus();
-    void save(() => store.removeRecurring(uid));
+    void save(() => store.removeRecurring(item.uid));
   };
   return (
     <>
@@ -268,7 +270,7 @@ function RecurringList({ items, pick, save }: { items: Recurring[]; pick: Catego
           item={item}
           pick={pick}
           save={save}
-          onRemove={() => remove(item.uid)}
+          onRemove={() => remove(item)}
           titleRef={(box) => {
             if (box) titleBoxes.current.set(item.uid, box);
             else titleBoxes.current.delete(item.uid);
@@ -291,8 +293,8 @@ function RecurringList({ items, pick, save }: { items: Recurring[]; pick: Catego
 /**
  * A recurring priority: its title (saved on blur or Enter; a blank or unchanged one is put back),
  * its category chip, its seven days, each pressed to add or drop it, and Remove, which deletes it
- * with no confirm: the rows it added keep their text and category. The last day on stays on, and
- * stays focusable, so the item is always offered on some day.
+ * for good once confirmed: the rows it added keep their text and category. The last day on stays
+ * on, and stays focusable, so the item is always offered on some day.
  */
 function RecurringRow({
   item,
@@ -359,7 +361,8 @@ function RecurringRow({
           );
         })}
       </div>
-      <button className="btn btn-ghost" onClick={onRemove} aria-label={`Remove ${item.title}`}>
+      {/* Named apart from a category's Remove, which a recurring priority can share a name with. */}
+      <button className="btn btn-ghost" onClick={onRemove} aria-label={`Remove recurring priority ${item.title}`}>
         Remove
       </button>
     </div>

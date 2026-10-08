@@ -676,7 +676,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   adds (on Monday to Friday, no category), renames, gives a category, sets the weekdays of (the
   last day on stays on) and removes recurring priorities (the board store's `addRecurring`,
   `editRecurring` and `removeRecurring`, where a 404 on the delete counts as done), each through
-  the dialog's `save`.
+  the dialog's `save`. A recurring priority's Remove asks first (`CONFIRM.deleteRecurring`), since
+  the delete is for good; a category's archives it and doesn't ask.
 - **A recurring priority is a row of its own, named by its uid** (`recurring`, routes in
   `routes/board.ts`, answered in `Board.recurring` in the order they were made): a title, a
   category and the weekdays it is offered on, ISO 1 (Monday) to 7 on the wire and a mask in the
@@ -704,16 +705,16 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   would show in its place. The editor's category chip goes where its title goes: a row of today's
   list changes through the row (`editRow`, the card as touched, and the save copies it onto the
   card), any other card through a PATCH, and a planned card or an earlier day's row has none. A
-  recurring row's title isn't edited on the board: its editor shows it as text, with a line
-  pointing at Settings → Board, where its recurring priority is renamed; its meta line carries
-  the Repeats mark (`RepeatMark`). The day store sends `cards` on every priorities PUT while the
-  board is on and the list's day is today or later, read as the PUT goes out, so a row typed on the
-  sheet gets its card. After a board read, once per page load and day, the board sends today's list
-  asking for cards when a row has none (the sweep, on its queue), so rows typed while it was off
-  have cards before Plan tomorrow carries them. A park places the row's card
-  (`POST /board/cards` with the row's `cardUid`, and its title and category as the list shows
-  them when the job runs, since the POST writes both onto the card) before it takes the row off
-  the list, and a row with no card yet first goes out in a save that asks for one, so a retry
+  recurring row's title isn't edited on the board: its editor shows it as text, with a line pointing
+  at the sheet for today's row and, while the item exists, at Settings → Board for its recurring
+  priority; its meta line carries the Repeats mark (`RepeatMark`). The day store sends `cards` on
+  every priorities PUT while the board is on and the list's day is today or later, read as the PUT
+  goes out, so a row typed on the sheet gets its card. After a board read, once per page load and
+  day, the board sends today's list asking for cards when a row has none (the sweep, on its queue),
+  so rows typed while it was off have cards before Plan tomorrow carries them. A park places the
+  row's card (`POST /board/cards` with the row's `cardUid`, and its title and category as the list
+  shows them when the job runs, since the POST writes both onto the card) before it takes the row
+  off the list, and a row with no card yet first goes out in a save that asks for one, so a retry
   after a failed removal places the same card. Delete takes the card's row off today's list and
   off its later day's list (loaded first), then deletes the card. One `role="status"` slot under
   the capture box holds the board notice: the pull nudge (`nudgeFor`, as Add priority asks), the
@@ -830,13 +831,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   of them from the first screen folds it back into the main chunk. Everything under
   `components/board/` loads only through `Board`'s chunk; what other views share with it
   (`lib/board.ts` and `hooks/useBoard.tsx` with the sheet, the settings and History's Review,
-  `Folded` with Review, the category pieces, `CategoryChip`, `CategoryDot` (Review's too) and
-  `lib/popover.ts`, and `RepeatMark`, kept out so the sheet can show it) stays out of that
-  folder and imports no dnd-kit. The sheet renders plain
-  `CardFrame`s until the first Customize and stays on `SortableCards` after it, since swapping
-  lists remounts the cards. A chunk that fails to load (an upgrade while the page was open)
-  reloads the page once a minute at most (`vite:preloadError` in `main.tsx`, `lib/reload.ts`);
-  the `ErrorBoundary` card shows until the reload lands, and stays when no reload is made.
+  `Folded` with Review, the category pieces (`CategoryChip`, `CategoryDot`, which Review uses
+  too, and `lib/popover.ts`) and `RepeatMark`, kept out so the sheet can show it) stays out of
+  that folder and imports no dnd-kit. The sheet renders plain `CardFrame`s until the first
+  Customize and stays on `SortableCards` after it, since swapping lists remounts the cards. A
+  chunk that fails to load (an upgrade while the page was open) reloads the page once a minute
+  at most (`vite:preloadError` in `main.tsx`, `lib/reload.ts`); the `ErrorBoundary` card shows
+  until the reload lands, and stays when no reload is made.
 - **A wide window shows the sheet in two columns, chosen when the sheet mounts.** Each layout
   entry has a `side` (`'left' | 'right'`), which `normalizeLayout` keeps or sets to the card's
   `DEFAULT_SIDE` (`shared/settings.ts`), so a layout saved before the columns needs no
@@ -1182,9 +1183,10 @@ The browser pass for each surface (the logic under it is already tested):
   rows per day with its hint beside the box; Add recurring priority (Enter leaves an empty box for
   the next, the focus leaving closes it); a rename; a category from the row's chip, where Escape
   closes only the list and the dialog stays open; the days (the last one on stays pressed, and on
-  a touch screen each day takes 44 × 44 px); Remove, with the focus on the next title. At 375 the
-  rows wrap and the seven days fit on one line. On the board, a recurring row's meta line has the
-  Repeats mark, and its editor shows the title as text with the line about Settings → Board.
+  a touch screen each day takes 44 × 44 px); Remove, which asks first, with the focus on the next
+  title. At 375 the rows wrap and the seven days fit on one line. On the board, a recurring row's
+  meta line has the Repeats mark, and the editor of today's shows the title as text with the line
+  about renaming it on the sheet.
 - **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
   Month / Quarter). With the board on (`PUT /api/settings {"board":true}`), By category in
   Review → Week and Month (solid and striped bars, No category last), in light and dark. For

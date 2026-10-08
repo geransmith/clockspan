@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import * as api from '../../api';
 import { BOARD_LIMITS, LIMITS } from '../../../../shared/api.js';
 import { warnQuietly } from '../../lib/alerts';
 import { withCategory, withCategoryPatch, withoutCategory, withoutRecurring, withRecurring, withRecurringPatch } from '../../lib/board';
-import { BOARD, LOAD_FAILED } from '../../lib/copy';
+import { BOARD, CONFIRM, LOAD_FAILED } from '../../lib/copy';
 import { apiError, makeBoard, makeCategory, makeRecurring, makeSettings, settle, SettingsAndDays } from '../../test/hooks';
 import type { Board } from '../../types';
 import { BoardTab } from './BoardTab';
@@ -251,9 +251,14 @@ describe('BoardTab: recurring priorities', () => {
     days(title)
       .filter((b) => b.getAttribute('aria-pressed') === 'true')
       .map((b) => b.getAttribute('aria-label'));
+  const removeButton = (title: string) => screen.getByRole('button', { name: `Remove recurring priority ${title}` });
+  /** The delete's confirm, answered yes unless a case says otherwise. */
+  let confirm: Mock<(message?: string) => boolean>;
 
   beforeEach(() => {
     onServer = { ...onServer, recurring: [QUEUE, FOLLOW] };
+    confirm = vi.fn(() => true);
+    vi.stubGlobal('confirm', confirm);
   });
 
   it('says how many recurring rows the morning offer ticks, described by its hint, and saves a change through set', async () => {
@@ -283,7 +288,7 @@ describe('BoardTab: recurring priorities', () => {
     expect(pressed('Follow-ups')).toEqual(['Monday', 'Wednesday', 'Friday']);
     expect(screen.getByRole('button', { name: 'Category for Monitor the queue: Tickets' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Category for Follow-ups: none' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Remove Follow-ups' })).toBeTruthy();
+    expect(removeButton('Follow-ups').textContent).toBe('Remove');
     expect(titleBox('Follow-ups').maxLength).toBe(LIMITS.priorityText);
     expect(screen.queryByText('No recurring priorities yet.')).toBeNull();
   });
@@ -392,21 +397,19 @@ describe('BoardTab: recurring priorities', () => {
     expect(day('Timesheet', 'Friday').hasAttribute('aria-disabled')).toBe(false);
   });
 
-  it('removes one with no confirm, the focus on the next title, else the one before, else Add recurring priority', async () => {
-    const confirm = vi.fn(() => true);
-    vi.stubGlobal('confirm', confirm);
+  it('removes one once confirmed, the focus on the next title, else the one before, else Add recurring priority', async () => {
     await renderTab();
     const remove = (title: string) => {
-      const button = screen.getByRole('button', { name: `Remove ${title}` });
+      const button = removeButton(title);
       button.focus();
       fireEvent.click(button);
     };
     remove('Monitor the queue');
+    expect(confirm).toHaveBeenCalledExactlyOnceWith(CONFIRM.deleteRecurring('Monitor the queue'));
     await settle();
     expect(api.deleteRecurring).toHaveBeenCalledExactlyOnceWith(QUEUE.uid);
     expect(titles()).toEqual(['Follow-ups']);
     expect(document.activeElement).toBe(titleBox('Follow-ups'));
-    expect(confirm).not.toHaveBeenCalled();
     fireEvent.click(addButton());
     fireEvent.change(newItemBox(), { target: { value: 'Timesheet' } });
     fireEvent.keyDown(newItemBox(), { key: 'Enter' });
@@ -422,10 +425,44 @@ describe('BoardTab: recurring priorities', () => {
     expect(save).toHaveBeenCalledTimes(4);
   });
 
+  it('sends nothing and leaves the focus on Remove when the confirm is turned down', async () => {
+    confirm.mockReturnValue(false);
+    await renderTab();
+    const button = removeButton('Follow-ups');
+    button.focus();
+    fireEvent.click(button);
+    expect(confirm).toHaveBeenCalledExactlyOnceWith(CONFIRM.deleteRecurring('Follow-ups'));
+    await settle();
+    expect(api.deleteRecurring).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    expect(titles()).toEqual(['Monitor the queue', 'Follow-ups']);
+    expect(document.activeElement).toBe(removeButton('Follow-ups'));
+
+    confirm.mockReturnValue(true);
+    fireEvent.click(removeButton('Follow-ups'));
+    await settle();
+    expect(api.deleteRecurring).toHaveBeenCalledExactlyOnceWith(FOLLOW.uid);
+    expect(titles()).toEqual(['Monitor the queue']);
+  });
+
+  it("names its Remove apart from a category's of the same name, and each removes its own", async () => {
+    onServer = { ...onServer, categories: [TICKETS, makeCategory('cat000000009', 'Follow-ups')], recurring: [FOLLOW] };
+    await renderTab();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Follow-ups' }));
+    await settle();
+    expect(api.deleteCategory).toHaveBeenCalledExactlyOnceWith('cat000000009');
+    expect(api.deleteRecurring).not.toHaveBeenCalled();
+    expect(confirm).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove recurring priority Follow-ups' }));
+    await settle();
+    expect(api.deleteRecurring).toHaveBeenCalledExactlyOnceWith(FOLLOW.uid);
+    expect(api.deleteCategory).toHaveBeenCalledTimes(1);
+  });
+
   it('puts the focus on the next title when a row in the middle goes', async () => {
     onServer = { ...onServer, recurring: [QUEUE, FOLLOW, makeRecurring('rec000000003', 'Timesheet')] };
     await renderTab();
-    const button = screen.getByRole('button', { name: 'Remove Follow-ups' });
+    const button = removeButton('Follow-ups');
     button.focus();
     fireEvent.click(button);
     await settle();
@@ -437,14 +474,14 @@ describe('BoardTab: recurring priorities', () => {
     await renderTab();
     fireEvent.change(titleBox('Follow-ups'), { target: { value: 'Chase replies' } });
     expect(screen.getByRole('group', { name: 'Days for Follow-ups' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Remove Follow-ups' })).toBeTruthy();
+    expect(removeButton('Follow-ups')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Category for Follow-ups: none' })).toBeTruthy();
   });
 
   it('counts a delete another device made already as done', async () => {
     await renderTab();
     vi.mocked(api.deleteRecurring).mockRejectedValueOnce(apiError(404));
-    fireEvent.click(screen.getByRole('button', { name: 'Remove Follow-ups' }));
+    fireEvent.click(removeButton('Follow-ups'));
     await settle();
     expect(titles()).toEqual(['Monitor the queue']);
     expect(notSaved).toBe(0);
