@@ -138,6 +138,35 @@ describe('sessions', () => {
     expect((await app.api.patch(`/api/sessions/${id}`, { categoryUid: null })).body.session.categoryUid).toBeNull();
   });
 
+  it("drops a session's own category when a patch links it to a row, whatever it sent", async () => {
+    const [WRITTEN, EMPTIED] = ['aaaaaaaaaaaa', 'bbbbbbbbbbbb'];
+    const [MINE, ROWS] = ['cat000000001', 'cat000000002'];
+    await app.api.put(`/api/days/${DATE}/priorities`, {
+      priorities: [
+        { text: 'Plan', uid: WRITTEN, categoryUid: ROWS },
+        { text: '', uid: EMPTIED, categoryUid: ROWS },
+      ],
+    });
+    const { id } = (await start()).body.session;
+    await app.api.post(`/api/sessions/${id}/finish`);
+    const patch = async (body: Record<string, unknown>) => (await app.api.patch(`/api/sessions/${id}`, body)).body.session as Record<string, unknown>;
+    expect(await patch({ categoryUid: MINE })).toMatchObject({ priorityUid: null, categoryUid: MINE });
+
+    // Linked, it counts under the row's category: a pick of its own would take the time over once
+    // the row was emptied, so it goes, and one sent with the link isn't stored.
+    expect(await patch({ priorityUid: WRITTEN.toUpperCase() })).toMatchObject({ priorityUid: WRITTEN, categoryUid: null });
+    expect(await patch({ priorityUid: WRITTEN, categoryUid: MINE })).toMatchObject({ priorityUid: WRITTEN, categoryUid: null });
+    // Unlinked, it has none: nothing brings the earlier pick back. One sent with the unlink is kept.
+    expect(await patch({ priorityUid: null })).toMatchObject({ priorityUid: null, categoryUid: null });
+    expect(await patch({ priorityUid: null, categoryUid: MINE })).toMatchObject({ priorityUid: null, categoryUid: MINE });
+
+    // A link to an emptied row drops it too: the session goes by that row's category.
+    expect(await patch({ priorityUid: EMPTIED })).toMatchObject({ priorityUid: EMPTIED, categoryUid: null });
+    // A pick or an edit that leaves the link alone keeps it, as the log picks for a session on an emptied row.
+    expect(await patch({ categoryUid: MINE })).toMatchObject({ priorityUid: EMPTIED, categoryUid: MINE });
+    expect(await patch({ label: 'Planned' })).toMatchObject({ priorityUid: EMPTIED, categoryUid: MINE });
+  });
+
   it('finishes at the planned end when the timer expired unattended', async () => {
     const { id } = (await start({ plannedSeconds: 600 })).body.session;
     // Finished an hour later: the log shows the planned 10 min, not 60.
@@ -299,6 +328,11 @@ describe('sessions are scoped to the signed-in user', () => {
     expect(await b.patch(`/api/sessions/${id}`, { label: 'mine now' })).toMatchObject({ status: 404, body: { error: 'Session not found.' } });
     expect((await b.patch(`/api/sessions/${id}`, { categoryUid: 'cat000000001' })).status).toBe(404);
     expect((await a.get('/api/sessions/running')).body.session.categoryUid).toBeNull();
+    // A link to A's own written row is a 404 for B too, and leaves A's pick and link alone.
+    const uid: string = (await a.put(`/api/days/${DATE}/priorities`, { priorities: [{ text: 'Plan' }] })).body.priorities[0].uid;
+    await a.patch(`/api/sessions/${id}`, { categoryUid: 'cat000000001' });
+    expect(await b.patch(`/api/sessions/${id}`, { priorityUid: uid })).toMatchObject({ status: 404, body: { error: 'Session not found.' } });
+    expect((await a.get('/api/sessions/running')).body.session).toMatchObject({ priorityUid: null, categoryUid: 'cat000000001' });
     expect((await b.post(`/api/sessions/${id}/pause`)).status).toBe(404);
     expect((await b.post(`/api/sessions/${id}/resume`)).status).toBe(404);
     expect((await b.post(`/api/sessions/${id}/finish`)).status).toBe(404);

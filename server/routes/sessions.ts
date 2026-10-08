@@ -89,7 +89,10 @@ export function sessionsRouter(db: DB): Router {
     res.json({ session: sessionRowToJson(getOwned(db, 'sessions', userId, id)!) } satisfies SessionResponse);
 
   // The category is the one picked in the log; null takes it off. A session on a written row
-  // counts under that row's category whatever this holds.
+  // counts under that row's category whatever this holds. A link to a row drops it, whatever was
+  // sent, since the row decides from then on: kept, it would take the time over once the row was
+  // emptied or removed. The priorities PUT drops it the same way when a row is written in again
+  // (`dropSessionCategories`).
   r.patch('/:id', (req, res) => {
     const s = owned(res);
     const { plannedSeconds, label, priorityUid, categoryUid } = req.body as {
@@ -111,11 +114,12 @@ export function sessionsRouter(db: DB): Router {
     }
     const name = parseLabel(label);
     if ('error' in name) return refuse(res, 400, name.error);
+    const own = category.categoryUid === undefined ? s.category_uid : category.categoryUid;
     db.prepare(`UPDATE sessions SET planned_seconds = ?, label = ?, priority_uid = ?, category_uid = ? WHERE id = ?`).run(
       planned,
       name.label ?? s.label,
       link.uid === undefined ? s.priority_uid : link.uid,
-      category.categoryUid === undefined ? s.category_uid : category.categoryUid,
+      link.uid == null ? own : null,
       s.id,
     );
     reply(res, s.user_id, s.id);

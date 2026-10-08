@@ -343,7 +343,8 @@ it('every press does nothing without a running session', async () => {
 
 describe('edit', () => {
   it('links to a row once its priorities save answers, and a pause pressed meanwhile goes out after', async () => {
-    const { result } = await renderRunning(startedAgo(5));
+    // Shown at once without the category it was given in the log: the server drops it on a link.
+    const { result } = await renderRunning(startedAgo(5, { categoryUid: 'cat000000001' }));
     const rows = deferred<{ priorities: Priority[] }>();
     vi.mocked(api.putPriorities).mockReturnValueOnce(rows.promise);
     vi.mocked(api.patchSession).mockResolvedValue({ session: startedAgo(5, { priorityUid: 'u1' }) });
@@ -355,7 +356,7 @@ describe('edit', () => {
       linked = result.current.timer.edit({ priorityUid: 'u1' });
       paused = result.current.timer.pause();
     });
-    expect(result.current.timer.running).toMatchObject({ priorityUid: 'u1', pausedAt: T0 });
+    expect(result.current.timer.running).toMatchObject({ priorityUid: 'u1', categoryUid: null, pausedAt: T0 });
     await settle();
     expect(api.patchSession).not.toHaveBeenCalled();
     expect(api.pauseSession).not.toHaveBeenCalled();

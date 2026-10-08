@@ -84,12 +84,13 @@ export function sessionCategoryEdit(s: Session, rows: Priority[], categoryUid: s
 }
 
 /**
- * The day log's edit that links a session to a written row, or to none. Linked, the row decides
- * its category, so a category of its own goes: kept, it would outrank the row's once the row was
- * emptied, and the server copies a removed row's category only onto sessions that have none.
+ * A session with an edit laid on, as the server stores it: a link to a row drops a category of
+ * its own, since the row decides from then on. The day store and the timer show an edit this way
+ * while it is out, so a priorities save answered meanwhile judges the session as the server will
+ * hold it (the day store's `leavesCategory`).
  */
-export function sessionLinkEdit(s: Session, priorityUid: string | null): Pick<SessionEdit, 'categoryUid' | 'priorityUid'> {
-  return priorityUid != null && s.categoryUid != null ? { priorityUid, categoryUid: null } : { priorityUid };
+export function editedSession(s: Session, patch: SessionEdit): Session {
+  return { ...s, ...patch, ...(patch.priorityUid ? { categoryUid: null } : {}) };
 }
 
 /**

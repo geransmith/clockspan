@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { completedSession, makeDay, makePriority, makeSession, punchesAt } from '../test/fixtures';
 import type { Day } from '../types';
-import { focusOf, hasContent, loggedByUid, reviewDay, sessionCategory, sessionCategoryEdit, sessionLinkEdit } from './retro';
+import { editedSession, focusOf, hasContent, loggedByUid, reviewDay, sessionCategory, sessionCategoryEdit } from './retro';
 
 const FIRST_UID = makePriority(1, '').uid;
 
@@ -91,21 +91,16 @@ describe("a session's category", () => {
     });
   });
 
-  describe('sessionLinkEdit', () => {
-    it('drops a category of its own when the session is linked to a row, which decides from then on', () => {
-      expect(sessionLinkEdit(on(null, ADMIN), report.uid)).toEqual({ priorityUid: report.uid, categoryUid: null });
-      expect(sessionLinkEdit(on(null), report.uid)).toEqual({ priorityUid: report.uid });
+  describe('editedSession', () => {
+    it('drops a category of its own when the edit links the session to a row, whatever it sent, as the server does', () => {
+      expect(editedSession(on(null, ADMIN), { priorityUid: report.uid })).toEqual(on(report.uid));
+      expect(editedSession(on(null, ADMIN), { priorityUid: report.uid, categoryUid: TICKETS })).toEqual(on(report.uid));
     });
 
-    it('keeps the category of its own when the session is unlinked', () => {
-      expect(sessionLinkEdit(on(report.uid, ADMIN), null)).toEqual({ priorityUid: null });
-    });
-
-    it("keeps a linked session under its row's category once the row is emptied, not an earlier pick", () => {
-      // Picked Admin while unplanned, then linked to the report, which is emptied later.
-      const linked = { ...on(null, ADMIN), ...sessionLinkEdit(on(null, ADMIN), report.uid) };
-      expect(sessionCategory(linked, rows)).toBe(TICKETS);
-      expect(sessionCategory(linked, [{ ...report, text: '' }])).toBe(TICKETS);
+    it('lays any other edit on as sent: an unlink, a pick, a rename', () => {
+      expect(editedSession(on(report.uid), { priorityUid: null, categoryUid: ADMIN })).toEqual(on(null, ADMIN));
+      expect(editedSession(on(emptied.uid, ADMIN), { categoryUid: TICKETS })).toEqual(on(emptied.uid, TICKETS));
+      expect(editedSession(on(emptied.uid, ADMIN), { label: 'Renamed' })).toEqual({ ...on(emptied.uid, ADMIN), label: 'Renamed' });
     });
   });
 });

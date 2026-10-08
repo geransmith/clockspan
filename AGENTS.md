@@ -673,7 +673,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   row that wasn't one in the stored list (`dropSessionCategories`, in the same transaction),
   and the day store, seeing a save write in an emptied row that a session with a category of
   its own points at (`regainsText`), reads the day again, or its copy would keep the pick the
-  server dropped. On the client
+  server dropped. A `PATCH /sessions/:id` that links a session to a row drops a category of its
+  own the same way, whatever it sent, and the day store and the timer show the edit so while it
+  is out (`editedSession`), so a removal answered first still reads the day again. On the client
   `CategoryChip` is the one way a category is picked, fed by `useCategoryPick` (null while the board
   is off or before its first read, and then no chip shows), which the board page, the sheet and
   Settings → Board each call once and pass down as `pick`: the sheet's goes to Top priorities (a
@@ -820,9 +822,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   and shows it as a `CategoryDot` named by its `label`, the one dot drawn without its name beside
   it. A pick is the edit `sessionCategoryEdit` gives: a category is set as the session's own, and No
   category also takes a session off an emptied row that has a category (`priorityUid: null`), since
-  none of its own goes by the row's. Linking a session to a written row with the log's select drops
-  a category of its own (`sessionLinkEdit`): the row decides from then on, and the server copies a
-  removed row's category only onto sessions with none. `byCategory` (`CategoryTime`) is the
+  none of its own goes by the row's. Linking a session to a written row with the log's select sends
+  only the link, and the server drops a category of its own: the row decides from then on, and the
+  server copies a removed row's category only onto sessions with none. `byCategory` (`CategoryTime`) is the
   focus and the ticks by category: each written row's focus (`seconds`) and tick (`done`) under
   the row's category, and each session off a written row under `sessionCategory`, in `seconds`
   and in its `offPlanSeconds` part, so an emptied row's sessions count off the plan under its

@@ -11,6 +11,7 @@ import { ADD_PRIORITY_FAILED, LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
 import { endBreaksAt } from '../lib/breaks';
 import { addPending, confirm, fetched, settle, shown, untracked, type Tracked } from '../lib/optimistic';
 import { newUid, padPriorities, placePriority } from '../lib/priorities';
+import { editedSession } from '../lib/retro';
 import { normalizePunches } from '../lib/timeclock';
 import { useLatest } from './useLatest';
 import { useRefreshLoop } from './useRefreshLoop';
@@ -551,7 +552,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       inOrder(
         `session:${id}`,
         date,
-        (d) => ({ ...d, sessions: d.sessions.map((s) => (s.id === id ? { ...s, ...patch } : s)) }),
+        (d) => ({ ...d, sessions: d.sessions.map((s) => (s.id === id ? editedSession(s, patch) : s)) }),
         async () => {
           if (patch.priorityUid) await prioritiesSaved(date);
           const { session } = await api.patchSession(id, patch);
