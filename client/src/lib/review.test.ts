@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { atTime, MINUTE_MS } from '../../../shared/dates.js';
 import { completedSession, makeBreak, makeDay, makePriority, makeSession, punchesAt, TEST_SETTINGS, type EndPatch } from '../test/fixtures';
-import { periodRange, periodTarget, reviewRange } from './review';
+import { periodRange, periodTarget, reviewRange, type CategoryTime } from './review';
 import type { Day } from '../types';
 
 const FIRST_UID = makePriority(1, '').uid;
@@ -125,8 +125,9 @@ describe('reviewRange', () => {
       sessions: 0,
       targetSeconds: 0,
       breaks: { count: 0, seconds: 0 },
-      midDay: { added: 0, done: 0 },
+      midDay: { added: 0, done: 0, categoryUid: null },
       typicalDay: null,
+      byCategory: [],
       unplanned: [],
       routines: [],
       notDone: [],
@@ -193,7 +194,7 @@ describe('reviewRange', () => {
       priorities: [makePriority(1, 'Reply to Kim', { addedAt: at('2026-09-16', 10), done: true })],
       sessions: [session(2, '2026-09-16', at('2026-09-16', 9), 600)],
     });
-    expect(reviewRange([mon, tue, wed], settings, '2026-09-16', now).midDay).toEqual({ added: 3, done: 2 });
+    expect(reviewRange([mon, tue, wed], settings, '2026-09-16', now).midDay).toEqual({ added: 3, done: 2, categoryUid: null });
   });
 
   it("takes a typical day's plan from the medians of the planned days before today", () => {
@@ -357,7 +358,7 @@ describe('reviewRange: Routines', () => {
       priorities: rows.map(([text, recurringUid = null, done = false], i) => makePriority(i + 1, text, { recurringUid, done, ...BEFORE_WORK })),
       sessions: focusOn == null ? [] : [session(1, date, at(date, 9), 25 * 60, { priorityUid: makePriority(focusOn, '').uid })],
     });
-  const review = (days: Day[], titles?: ReadonlyMap<string, string>) => reviewRange(days, settings, '2026-09-18', now, titles);
+  const review = (days: Day[], titles?: ReadonlyMap<string, string>) => reviewRange(days, settings, '2026-09-18', now, undefined, titles);
 
   it('counts the days a routine was ticked of the days it was on the list, and keeps its misses out of Not done', () => {
     const r = review([
@@ -438,5 +439,234 @@ describe('reviewRange: Routines', () => {
     expect(review(days).routines.map((g) => g.title)).toEqual(['Tickets', 'Monitor the queue', 'Follow-ups', 'Inbox']);
     // Sorted by the item's title, not the row's.
     expect(review(days, new Map([['rcur0000000b', 'Alerts']])).routines.map((g) => g.title)).toEqual(['Tickets', 'Monitor the queue', 'Alerts', 'Follow-ups']);
+  });
+});
+
+describe('reviewRange: By category', () => {
+  const now = at('2026-09-18', 17);
+  const MON = '2026-09-14';
+  const TUE = '2026-09-15';
+  const TICKETS = 'cat000000001';
+  const ADMIN = 'cat000000002';
+  const KB = 'cat000000003';
+  // Not one of the board's: another device's, or from before a handover.
+  const GONE = 'cat0000000ff';
+  const known = new Set([TICKETS, ADMIN, KB]);
+  const review = (days: Day[], categories: ReadonlySet<string> = known) => reviewRange(days, settings, '2026-09-18', now, categories);
+  const uid = (position: number) => makePriority(position, '').uid;
+  const bucket = (categoryUid: string | null, seconds: number, offPlanSeconds: number, done: number): CategoryTime => ({
+    categoryUid,
+    seconds,
+    offPlanSeconds,
+    done,
+  });
+  /** A day whose first session started at 9:00, with a row written at 10:00, 11:00, … in each of these categories. */
+  const addedMidDay = (...categories: (string | null)[]) =>
+    makeDay(MON, {
+      priorities: categories.map((categoryUid, i) => makePriority(i + 1, `Row ${i + 1}`, { categoryUid, addedAt: at(MON, 10 + i) })),
+      sessions: [session(1, MON, at(MON, 9), 600, { label: 'Inbox' })],
+    });
+
+  it("counts an emptied row's sessions off the plan under its category", () => {
+    const r = review([
+      makeDay(MON, {
+        priorities: [makePriority(1, '', { categoryUid: TICKETS })],
+        sessions: [session(1, MON, at(MON, 9), 1500, { priorityUid: uid(1) })],
+      }),
+    ]);
+    expect(r.byCategory).toEqual([bucket(TICKETS, 1500, 1500, 0)]);
+    expect(r.offPlanSeconds).toBe(1500);
+  });
+
+  it("counts a written row's focus on plan under the row's category, none included, whatever the session's own", () => {
+    const r = review([
+      makeDay(MON, {
+        priorities: [makePriority(1, 'Ship it', { categoryUid: TICKETS }), makePriority(2, 'Call the bank')],
+        sessions: [
+          session(1, MON, at(MON, 9), 3000, { priorityUid: uid(1), categoryUid: ADMIN }),
+          session(2, MON, at(MON, 10), 600, { priorityUid: uid(2), categoryUid: ADMIN }),
+        ],
+      }),
+    ]);
+    expect(r.byCategory).toEqual([bucket(TICKETS, 3000, 0, 0), bucket(null, 600, 0, 0)]);
+  });
+
+  it('counts a session on no row under its own category or none, and one on a removed row under the category copied onto it', () => {
+    const r = review([
+      makeDay(MON, {
+        priorities: [makePriority(1, 'Ship it')],
+        sessions: [
+          session(1, MON, at(MON, 9), 1200, { label: 'Inbox', categoryUid: ADMIN }),
+          session(2, MON, at(MON, 10), 600, { label: 'Slack' }),
+          // Its row was taken off the list, and the save copied the row's category onto it.
+          session(3, MON, at(MON, 11), 900, { priorityUid: 'gone0000000x', categoryUid: TICKETS }),
+        ],
+      }),
+    ]);
+    expect(r.byCategory).toEqual([bucket(ADMIN, 1200, 1200, 0), bucket(TICKETS, 900, 900, 0), bucket(null, 600, 600, 0)]);
+  });
+
+  it("puts a session on an emptied row under a category picked for it rather than the row's", () => {
+    const r = review([
+      makeDay(MON, {
+        priorities: [makePriority(1, '', { categoryUid: TICKETS })],
+        sessions: [session(1, MON, at(MON, 9), 1200, { priorityUid: uid(1), categoryUid: ADMIN }), session(2, MON, at(MON, 10), 600, { priorityUid: uid(1) })],
+      }),
+    ]);
+    expect(r.byCategory).toEqual([bucket(ADMIN, 1200, 1200, 0), bucket(TICKETS, 600, 600, 0)]);
+  });
+
+  it("counts the ticks under each row's category, routines included, and lists a category ticked with no time", () => {
+    const r = review([
+      makeDay(MON, {
+        priorities: [
+          makePriority(1, 'Ship it', { categoryUid: TICKETS, done: true }),
+          makePriority(2, 'Monitor the queue', { recurringUid: 'rcur00000001', categoryUid: TICKETS, done: true }),
+          makePriority(3, 'Update the KB', { categoryUid: KB, done: true }),
+          // Neither ticked nor focused on: not listed.
+          makePriority(4, 'Plan the offsite', { categoryUid: ADMIN }),
+          makePriority(5, 'Order lunch', { done: true }),
+        ],
+        sessions: [session(1, MON, at(MON, 9), 1500, { priorityUid: uid(2) })],
+      }),
+    ]);
+    expect(r.byCategory).toEqual([bucket(TICKETS, 1500, 0, 2), bucket(KB, 0, 0, 1), bucket(null, 0, 0, 1)]);
+  });
+
+  it('leaves out No category when its rows have neither time nor a tick', () => {
+    const r = review([makeDay(MON, { priorities: [makePriority(1, 'Ship it', { categoryUid: TICKETS, done: true }), makePriority(2, 'Call the bank')] })]);
+    expect(r.byCategory).toEqual([bucket(TICKETS, 0, 0, 1)]);
+  });
+
+  it("counts a category the board doesn't know as none, and every category with no board", () => {
+    const days = [
+      makeDay(MON, {
+        priorities: [makePriority(1, 'Ship it', { categoryUid: TICKETS, done: true }), makePriority(2, 'Read the RFC', { categoryUid: GONE, done: true })],
+        sessions: [
+          session(1, MON, at(MON, 9), 600, { priorityUid: uid(1) }),
+          session(2, MON, at(MON, 10), 300, { priorityUid: uid(2) }),
+          session(3, MON, at(MON, 11), 120, { label: 'Inbox', categoryUid: GONE }),
+        ],
+      }),
+    ];
+    expect(review(days).byCategory).toEqual([bucket(TICKETS, 600, 0, 1), bucket(null, 420, 120, 1)]);
+    expect(review(days, new Set()).byCategory).toEqual([bucket(null, 1020, 120, 2)]);
+    expect(reviewRange(days, settings, '2026-09-18', now).byCategory).toEqual([bucket(null, 1020, 120, 2)]);
+  });
+
+  it('lists the most time first, then the most ticks, ties in the order first met, and no category last', () => {
+    const C4 = 'cat000000004';
+    const C5 = 'cat000000005';
+    const C9 = 'cat000000009';
+    const r = review(
+      [
+        makeDay(TUE, {
+          priorities: [
+            makePriority(1, 'Write the KB page', { categoryUid: KB, done: true }),
+            makePriority(2, 'Review the KB', { categoryUid: KB, done: true }),
+            makePriority(3, 'File the invoice', { categoryUid: C4, done: true }),
+            makePriority(4, 'Sort the backlog', { categoryUid: C5 }),
+          ],
+          sessions: [session(3, TUE, at(TUE, 9), 600, { priorityUid: uid(1) }), session(4, TUE, at(TUE, 10), 300, { priorityUid: uid(4) })],
+        }),
+        makeDay(MON, {
+          priorities: [
+            makePriority(1, 'Book the room', { categoryUid: ADMIN, done: true }),
+            makePriority(2, 'Ship it', { categoryUid: TICKETS, done: true }),
+            makePriority(3, 'Triage', { categoryUid: C9 }),
+            makePriority(4, 'Deep work'),
+          ],
+          sessions: [
+            session(1, MON, at(MON, 9), 600, { priorityUid: uid(2) }),
+            session(2, MON, at(MON, 10), 300, { priorityUid: uid(3) }),
+            session(5, MON, at(MON, 11), 7200, { priorityUid: uid(4) }),
+          ],
+        }),
+      ],
+      new Set([...known, C4, C5, C9]),
+    );
+    // Monday is met first: C9 before C5 on equal time, Admin before C4 on equal ticks.
+    expect(r.byCategory.map((c) => c.categoryUid)).toEqual([KB, TICKETS, C9, C5, ADMIN, C4, null]);
+  });
+
+  it('counts no running or cancelled session and no day after today', () => {
+    const r = review([
+      makeDay(MON, {
+        priorities: [makePriority(1, 'Ship it', { categoryUid: TICKETS })],
+        sessions: [
+          makeSession({ id: 1, date: MON, startedAt: at(MON, 9), priorityUid: uid(1) }),
+          session(2, MON, at(MON, 10), 300, { status: 'cancelled', label: 'Inbox', categoryUid: ADMIN }),
+        ],
+      }),
+      makeDay('2026-09-19', {
+        priorities: [makePriority(1, 'Plan ahead', { categoryUid: TICKETS, done: true })],
+        sessions: [session(3, '2026-09-19', at('2026-09-19', 9), 600, { label: 'Early', categoryUid: ADMIN })],
+      }),
+    ]);
+    expect(r.days).toBe(1);
+    expect(r.byCategory).toEqual([]);
+  });
+
+  it('adds up to the focus, the time off the plan and the ticks', () => {
+    const r = review([
+      makeDay(MON, {
+        priorities: [
+          makePriority(1, 'Ship it', { categoryUid: TICKETS, done: true }),
+          makePriority(2, '', { categoryUid: ADMIN }),
+          makePriority(3, 'Read the RFC', { categoryUid: GONE, done: true }),
+          makePriority(4, 'Monitor the queue', { recurringUid: 'rcur00000001', categoryUid: KB, done: true }),
+        ],
+        sessions: [
+          session(1, MON, at(MON, 9), 1500, { priorityUid: uid(1) }),
+          session(2, MON, at(MON, 10), 900, { priorityUid: uid(2) }),
+          session(3, MON, at(MON, 11), 600, { priorityUid: uid(3) }),
+          session(4, MON, at(MON, 12), 300, { priorityUid: uid(4) }),
+        ],
+      }),
+      makeDay(TUE, {
+        priorities: [makePriority(1, 'Write the report', { done: true })],
+        sessions: [
+          session(5, TUE, at(TUE, 9), 1200, { label: 'Inbox', categoryUid: TICKETS }),
+          session(6, TUE, at(TUE, 10), 420, { priorityUid: 'gone0000000x', categoryUid: ADMIN }),
+          session(7, TUE, at(TUE, 11), 240, { label: 'Slack' }),
+        ],
+      }),
+    ]);
+    const sum = (f: (c: CategoryTime) => number) => r.byCategory.reduce((n, c) => n + f(c), 0);
+    expect(r).toMatchObject({ focusedSeconds: 5160, offPlanSeconds: 2760, prioritiesDone: 4 });
+    expect(sum((c) => c.seconds)).toBe(r.focusedSeconds);
+    expect(sum((c) => c.offPlanSeconds)).toBe(r.offPlanSeconds);
+    expect(sum((c) => c.done)).toBe(r.prioritiesDone);
+  });
+
+  it('names the category more than half the rows added mid-day had, routines among them', () => {
+    const mon = makeDay(MON, {
+      priorities: [
+        makePriority(1, 'Plan the week', { categoryUid: ADMIN, ...BEFORE_WORK }),
+        makePriority(2, 'Fire drill', { categoryUid: TICKETS, addedAt: at(MON, 11), done: true }),
+      ],
+      sessions: [session(1, MON, at(MON, 9), 600, { label: 'Inbox' })],
+    });
+    const tue = makeDay(TUE, {
+      priorities: [
+        makePriority(1, 'Monitor the queue', { recurringUid: 'rcur00000001', categoryUid: TICKETS, addedAt: at(TUE, 10) }),
+        makePriority(2, 'Book the room', { categoryUid: ADMIN, addedAt: at(TUE, 11) }),
+      ],
+      sessions: [session(2, TUE, at(TUE, 9), 600, { label: 'Inbox' })],
+    });
+    // Two of the three across the days; without the routine's row it would be one of two.
+    expect(review([mon, tue]).midDay).toEqual({ added: 3, done: 1, categoryUid: TICKETS });
+  });
+
+  it('names no category for exactly half the rows added mid-day, or the most of them short of half', () => {
+    expect(review([addedMidDay(TICKETS, TICKETS, ADMIN)]).midDay.categoryUid).toBe(TICKETS);
+    expect(review([addedMidDay(TICKETS, TICKETS, ADMIN, null)]).midDay.categoryUid).toBeNull();
+    expect(review([addedMidDay(TICKETS, TICKETS, ADMIN, KB, null)]).midDay.categoryUid).toBeNull();
+  });
+
+  it("names no category the board doesn't know, and none with no rows added mid-day", () => {
+    expect(review([addedMidDay(GONE, GONE, TICKETS)]).midDay.categoryUid).toBeNull();
+    expect(review([addedMidDay(TICKETS, TICKETS, ADMIN)], new Set()).midDay.categoryUid).toBeNull();
+    expect(review([addedMidDay()]).midDay).toEqual({ added: 0, done: 0, categoryUid: null });
   });
 });

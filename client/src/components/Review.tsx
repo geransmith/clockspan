@@ -1,9 +1,12 @@
+import { useBoardState } from '../hooks/useBoard';
 import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
+import { categoryOf } from '../lib/board';
 import { LOAD_FAILED } from '../lib/copy';
 import { counted, formatDateLong, formatDuration, formatWeekday } from '../lib/format';
-import { PERIOD_KINDS, periodRange, periodTarget, reviewRange, type PeriodKind, type ReviewPeriod } from '../lib/review';
-import type { Day } from '../types';
+import { PERIOD_KINDS, periodRange, periodTarget, reviewRange, type CategoryTime, type PeriodKind, type ReviewPeriod } from '../lib/review';
+import type { Category, Day } from '../types';
+import { CategoryDot } from './CategoryDot';
 import { Folded } from './Folded';
 import { Check } from './Icons';
 import { LoadFailed } from './LoadFailed';
@@ -27,8 +30,8 @@ interface Props {
 
 /**
  * The daily retrospectives rolled up: how the period's time split between the plan and
- * everything else, how often each routine got done, which one-offs never did, and each day's
- * note on why.
+ * everything else (and by category, with the board on), how often each routine got done, which
+ * one-offs never did, and each day's note on why.
  */
 export function Review({ today, now, period: { kind, from }, onPeriod, onOpen }: Props) {
   const period = periodRange(kind, from, 0);
@@ -60,7 +63,15 @@ export function Review({ today, now, period: { kind, from }, onPeriod, onOpen }:
 
 function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; now: number; kind: PeriodKind; onOpen: (date: string) => void }) {
   const { settings } = useSettings();
-  const r = reviewRange(days, settings, today, now);
+  const { board, on } = useBoardState();
+  // With the board off, or before its first read answers, nothing is counted under a category
+  // and a routine keeps its latest row's text. A removed category stays known, so the time
+  // logged under it keeps its name.
+  const shown = on ? board : undefined;
+  const categories = shown?.categories ?? [];
+  const known = new Set(categories.map((c) => c.uid));
+  const recurringTitles = new Map(shown?.recurring.map((i) => [i.uid, i.title] as const));
+  const r = reviewRange(days, settings, today, now, known, recurringTitles);
   if (r.days === 0) return <p className="muted center review-empty">Nothing recorded.</p>;
   // A row merged across days names them in a week and counts them in a longer period; it
   // opens the latest of them.
@@ -77,8 +88,9 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
   // A session finished within its first second logs no time, so there can be sessions and no share.
   const sessions = counted(r.sessions, 'session') + (r.onPlanPercent == null ? '' : ` · ${r.onPlanPercent}% on plan`);
   const typical = kind === 'quarter' ? null : r.typicalDay;
+  const mostly = categoryOf(categories, r.midDay.categoryUid);
   const facts: { label: string; value: string }[] = [];
-  if (r.midDay.added > 0) facts.push({ label: 'Added mid-day', value: `${r.midDay.added} · ${r.midDay.done} done` });
+  if (r.midDay.added > 0) facts.push({ label: 'Added mid-day', value: `${r.midDay.added} · ${r.midDay.done} done${mostly ? ` · mostly ${mostly.name}` : ''}` });
   if (r.breaks.count > 0) facts.push({ label: 'Breaks', value: `${r.breaks.count} · ${formatDuration(r.breaks.seconds)}` });
   if (typical) facts.push({ label: 'Typical day', value: `${typical.planned} planned · ${typical.done} done` });
 
@@ -103,6 +115,8 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
           ))}
         </ul>
       )}
+
+      {r.byCategory.some((c) => c.categoryUid != null) && <ByCategory byCategory={r.byCategory} categories={categories} />}
 
       <section className="review-section">
         <h3 className="section-heading">
@@ -213,5 +227,52 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
         )}
       </section>
     </div>
+  );
+}
+
+/**
+ * Each category's focus as a bar against the period's largest, the part on a priority solid and
+ * the part off the plan striped in the same colour; the row's text says all the bar does.
+ * Its rows open no day: a category's time is spread over many.
+ */
+function ByCategory({ byCategory, categories }: { byCategory: CategoryTime[]; categories: Category[] }) {
+  const longest = Math.max(...byCategory.map((c) => c.seconds));
+  const share = (part: number, whole: number) => `${(part / whole) * 100}%`;
+  return (
+    <section className="review-section">
+      <h3 className="section-heading">By category</h3>
+      <Folded
+        className="review-list"
+        items={byCategory.map((c) => {
+          // A listed uid is one of the board's, so this misses only for none.
+          const cat = categoryOf(categories, c.categoryUid);
+          const onPlan = c.seconds - c.offPlanSeconds;
+          return (
+            <li key={c.categoryUid ?? 'none'} className="review-category">
+              {cat && <CategoryDot color={cat.color} />}
+              <span className="review-text">{cat ? cat.name : 'No category'}</span>
+              {(c.offPlanSeconds >= 60 || c.done > 0) && (
+                <span className="review-category-parts">
+                  {c.offPlanSeconds >= 60 && <span className="muted small">{formatDuration(c.offPlanSeconds)} off the plan</span>}
+                  {c.done > 0 && <span className="muted small">{c.done} done</span>}
+                </span>
+              )}
+              <span className="review-time">{c.seconds > 0 ? formatDuration(c.seconds) : <span className="muted">no time</span>}</span>
+              {c.seconds > 0 && (
+                <span
+                  className={cat ? 'category-bar' : 'category-bar category-bar--none'}
+                  data-color={cat?.color}
+                  aria-hidden="true"
+                  style={{ width: share(c.seconds, longest) }}
+                >
+                  {onPlan > 0 && <span className="category-bar-on" style={{ width: share(onPlan, c.seconds) }} />}
+                  {c.offPlanSeconds > 0 && <span className="category-bar-off" style={{ width: share(c.offPlanSeconds, c.seconds) }} />}
+                </span>
+              )}
+            </li>
+          );
+        })}
+      />
+    </section>
   );
 }

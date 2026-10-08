@@ -3,7 +3,7 @@ import { addDays, addMonths, startOfQuarter, startOfWeek } from '../../../shared
 import { breakSeconds } from './breaks';
 import { formatDateSpan, formatMonth } from './format';
 import { sameText } from '../../../shared/text.js';
-import { focusOf, hasContent, reviewDay, type PriorityReview } from './retro';
+import { focusOf, hasContent, reviewDay, sessionCategory, type PriorityReview } from './retro';
 import { dayTimeclock, daySettings, type TimeclockSettings } from './timeclock';
 
 export const PERIOD_KINDS = ['week', 'month', 'quarter'] as const;
@@ -72,6 +72,22 @@ export interface RoutineReview {
   focusedSeconds: number;
 }
 
+/**
+ * The range's focus and ticks under one category: each written row's under the row's category,
+ * and each session off a written row under `sessionCategory`, so an emptied row's sessions count
+ * off the plan under its category.
+ */
+export interface CategoryTime {
+  /** A category the board knows (`known`); null for none, or one it doesn't know. */
+  categoryUid: string | null;
+  /** Completed focus under it, on plan and off. */
+  seconds: number;
+  /** The part not for a written row. */
+  offPlanSeconds: number;
+  /** Priorities ticked under it. */
+  done: number;
+}
+
 /** A task not ticked by the end of the range: a one-off's rows left open across days, grouped by card, else by text (`addToNotDone`). */
 export interface OpenPriority {
   /** `card:<cardUid>` or `text:<sameText>`. */
@@ -101,14 +117,23 @@ export interface RangeReview {
   targetSeconds: number;
   /** Timer breaks, a running one so far. */
   breaks: { count: number; seconds: number };
-  /** Rows added mid-day (`PriorityReview.addedMidDay`) and how many of them got ticked. */
-  midDay: { added: number; done: number };
+  /**
+   * Rows added mid-day (`PriorityReview.addedMidDay`), how many of them got ticked, and the
+   * category more than half of them had, if one did (a plurality short of half names none).
+   */
+  midDay: { added: number; done: number; categoryUid: string | null };
   /**
    * A typical day's rows written and ticked: the medians, each rounded half up, of the days
    * before today with a row written. Today is left out because it is still going; null with
    * fewer than two such days.
    */
   typicalDay: { planned: number; done: number } | null;
+  /**
+   * The focus and the ticks by category, most time first, then the most ticks, and no category
+   * last. A category with neither is left out; the sums are `focusedSeconds`, `offPlanSeconds`
+   * and `prioritiesDone`.
+   */
+  byCategory: CategoryTime[];
   /** Off-plan work by label, most time first: where the time went instead. */
   unplanned: UnplannedWork[];
   /** The recurring priorities on the range's lists: on the most days first, then the most focus, then by title. */
@@ -127,12 +152,15 @@ export interface RangeReview {
  * and none of it has happened yet. A day with nothing on it (`hasContent`) is left out too,
  * even with a break logged. A recurring priority's rows count as priorities in every total and
  * go to `routines` rather than Not done; `recurringTitles` (the board's items by uid) names them.
+ * `known` is the uids of the board's categories, removed ones included: a category outside it
+ * (none while the board is off) counts as none, in `byCategory` and in `midDay`.
  */
 export function reviewRange(
   days: Day[],
   settings: TimeclockSettings,
   today: string,
   now: number,
+  known: ReadonlySet<string> = new Set(),
   recurringTitles: ReadonlyMap<string, string> = new Map(),
 ): RangeReview {
   const out: RangeReview = {
@@ -147,8 +175,9 @@ export function reviewRange(
     sessions: 0,
     targetSeconds: 0,
     breaks: { count: 0, seconds: 0 },
-    midDay: { added: 0, done: 0 },
+    midDay: { added: 0, done: 0, categoryUid: null },
     typicalDay: null,
+    byCategory: [],
     unplanned: [],
     routines: [],
     notDone: [],
@@ -157,6 +186,16 @@ export function reviewRange(
   const unplanned = new Map<string, UnplannedWork>();
   const routines = new Map<string, RoutineReview>();
   const notDone = new Map<string, OpenPriority>();
+  // Met first, first in the map: the sort keeps that order on a tie.
+  const byCategory = new Map<string | null, CategoryTime>();
+  const midDayCategories = new Map<string, number>();
+  const knownOrNone = (uid: string | null) => (uid != null && known.has(uid) ? uid : null);
+  const categoryTime = (uid: string | null): CategoryTime => {
+    const categoryUid = knownOrNone(uid);
+    let c = byCategory.get(categoryUid);
+    if (!c) byCategory.set(categoryUid, (c = { categoryUid, seconds: 0, offPlanSeconds: 0, done: 0 }));
+    return c;
+  };
   // Rows written and ticked on each finished day with a plan, for the typical day.
   const plannedRows: number[] = [];
   const doneRows: number[] = [];
@@ -179,9 +218,14 @@ export function reviewRange(
     for (const b of day.breaks) out.breaks.seconds += breakSeconds(b, now);
     const oneOffs: PriorityReview[] = [];
     for (const p of r.planned) {
+      const c = categoryTime(p.priority.categoryUid);
+      c.seconds += p.focusedSeconds;
+      if (p.priority.done) c.done++;
       if (p.addedMidDay) {
         out.midDay.added++;
         if (p.priority.done) out.midDay.done++;
+        const category = knownOrNone(p.priority.categoryUid);
+        if (category != null) midDayCategories.set(category, (midDayCategories.get(category) ?? 0) + 1);
       }
       const uid = p.priority.recurringUid;
       if (uid == null) {
@@ -206,6 +250,9 @@ export function reviewRange(
       g.label = session.label.trim();
       g.seconds += session.durationSeconds;
       addDate(g.dates, day.date);
+      const c = categoryTime(sessionCategory(session, day.priorities));
+      c.seconds += session.durationSeconds;
+      c.offPlanSeconds += session.durationSeconds;
     }
     addToNotDone(notDone, oneOffs, day.date);
     const note = day.retroNote.trim();
@@ -214,6 +261,13 @@ export function reviewRange(
   if (out.focusedSeconds > 0) out.onPlanPercent = Math.round((onPlan / out.focusedSeconds) * 100);
   // One planned day is that day, not a typical one.
   if (plannedRows.length > 1) out.typicalDay = { planned: median(plannedRows), done: median(doneRows) };
+  // More than half, so at most one category can be named.
+  for (const [uid, count] of midDayCategories) if (count * 2 > out.midDay.added) out.midDay.categoryUid = uid;
+  const listed = [...byCategory.values()].filter((c) => c.seconds > 0 || c.done > 0);
+  out.byCategory = [
+    ...listed.filter((c) => c.categoryUid != null).sort((a, b) => b.seconds - a.seconds || b.done - a.done),
+    ...listed.filter((c) => c.categoryUid == null),
+  ];
   out.unplanned = [...unplanned.values()].sort((a, b) => b.seconds - a.seconds || a.dates[0]!.localeCompare(b.dates[0]!));
   for (const g of routines.values()) g.title = recurringTitles.get(g.recurringUid) ?? g.title;
   out.routines = [...routines.values()].sort(

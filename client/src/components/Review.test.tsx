@@ -1,11 +1,26 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { atTime } from '../../../shared/dates.js';
+import { atTime, MINUTE_MS } from '../../../shared/dates.js';
 import * as api from '../api';
 import { LOAD_FAILED } from '../lib/copy';
 import type { ReviewPeriod } from '../lib/review';
-import { completedSession, makeBreak, makeDay, makePriority, makeSettings, punchesAt, serveRange, SettingsAndDays, settle } from '../test/hooks';
+import {
+  completedSession,
+  deferred,
+  makeBoard,
+  makeBreak,
+  makeCategory,
+  makeDay,
+  makePriority,
+  makeRecurring,
+  makeSettings,
+  punchesAt,
+  serveRange,
+  SettingsAndDays,
+  settle,
+} from '../test/hooks';
+import type { Board } from '../types';
 import { Review } from './Review';
 
 vi.mock('../api');
@@ -53,6 +68,29 @@ const rows = (heading: string) => {
     ...[...row.querySelectorAll('.review-meta > *')].map((m) => m.textContent),
   ]);
 };
+
+/**
+ * By category's rows: each one's dot colour, name, muted parts and time, and its bar (null for
+ * none): its colour, whether it is No category's, its width and its on and off parts' widths.
+ */
+const categoryRows = () =>
+  [...document.querySelectorAll('.review-category')].map((row) => {
+    const bar = row.querySelector<HTMLElement>('.category-bar');
+    const part = (kind: string) => bar?.querySelector<HTMLElement>(`.category-bar-${kind}`)?.style.width ?? null;
+    return {
+      dot: row.querySelector('.cat-dot')?.getAttribute('data-color') ?? null,
+      name: row.querySelector('.review-text')?.textContent,
+      parts: [...row.querySelectorAll('.review-category-parts > *')].map((p) => p.textContent),
+      time: row.querySelector('.review-time')?.textContent,
+      bar: bar && {
+        color: bar.getAttribute('data-color'),
+        none: bar.classList.contains('category-bar--none'),
+        width: bar.style.width,
+        on: part('on'),
+        off: part('off'),
+      },
+    };
+  });
 
 async function review(period: ReviewPeriod, onOpen = vi.fn()) {
   const onPeriod = vi.fn();
@@ -223,5 +261,184 @@ describe('Review', () => {
     await review({ kind: 'week', from: MON });
     expect(screen.getByText('Days')).toBeTruthy();
     expect(screen.queryByText(/^worked/)).toBeNull();
+  });
+});
+
+describe('Review: By category', () => {
+  const TICKETS = makeCategory('cat000000001', 'Tickets');
+  const ADMIN = makeCategory('cat000000002', 'Admin', { color: 'teal' });
+  // Removed since: the time logged under it keeps its name.
+  const KB = makeCategory('cat000000003', 'Knowledge base', { color: 'gold', archived: true });
+  // Not one the board has.
+  const GONE = 'cat0000000ff';
+  const QUEUE = 'rcur00000001';
+  const uid = (position: number) => makePriority(position, '').uid;
+  /**
+   * Tickets: 45m on a written row (ticked) and 15m on an emptied one, plus a row written at 11:00,
+   * after the first session. Admin: 30m on no row. Knowledge base: a tick and no time. No
+   * category: 15m on a row in a category the board doesn't have. A routine no one focused on.
+   */
+  const day = makeDay(MON, {
+    priorities: [
+      makePriority(1, 'Ship it', { categoryUid: TICKETS.uid, done: true, addedAt: 0 }),
+      makePriority(2, '', { categoryUid: TICKETS.uid, addedAt: 0 }),
+      makePriority(3, 'Update the KB', { categoryUid: KB.uid, done: true, addedAt: 0 }),
+      makePriority(4, 'Read the RFC', { categoryUid: GONE, addedAt: 0 }),
+      makePriority(5, 'Fire drill', { categoryUid: TICKETS.uid, addedAt: atTime(MON, 11, 0) }),
+      makePriority(6, 'Monitor the queue', { recurringUid: QUEUE, addedAt: 0 }),
+    ],
+    sessions: [
+      completedSession(1, atTime(MON, 9, 0), 45 * 60, { date: MON, priorityUid: uid(1) }),
+      completedSession(2, atTime(MON, 10, 0), 15 * 60, { date: MON, priorityUid: uid(2) }),
+      completedSession(3, atTime(MON, 11, 0), 30 * 60, { date: MON, label: 'Inbox', categoryUid: ADMIN.uid }),
+      completedSession(4, atTime(MON, 12, 0), 15 * 60, { date: MON, priorityUid: uid(4) }),
+    ],
+  });
+  const board: Board = { ...makeBoard(), categories: [TICKETS, ADMIN, KB], recurring: [makeRecurring(QUEUE, 'Watch the queue')] };
+  const boardOn = () => vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ board: true }));
+
+  beforeEach(() => {
+    serveRange([day]);
+    vi.mocked(api.getBoard).mockResolvedValue(board);
+  });
+
+  it('shows nothing by category with the board off', async () => {
+    await review({ kind: 'week', from: MON });
+    expect(sections()).toEqual(['Off the plan', 'Routines', 'Not done', 'Why']);
+    expect(document.querySelector('.review-category')).toBeNull();
+    expect(facts()[0]).toBe('Added mid-day: 1 · 0 done');
+    expect(rows('Routines')[0]![0]).toBe('Monitor the queue');
+    expect(api.getBoard).not.toHaveBeenCalled();
+  });
+
+  it('lists the time and ticks by category after the facts, its bar solid on plan and striped off it, no category last', async () => {
+    boardOn();
+    await review({ kind: 'week', from: MON });
+    expect(sections()).toEqual(['By category', 'Off the plan', 'Routines', 'Not done', 'Why']);
+    expect(document.querySelector('.tiles + .review-facts + .review-section .review-category')).not.toBeNull();
+    // Each bar against Tickets' hour; its parts against the bar.
+    expect(categoryRows()).toEqual([
+      {
+        dot: 'blue',
+        name: 'Tickets',
+        parts: ['15m off the plan', '1 done'],
+        time: '1h 00m',
+        bar: { color: 'blue', none: false, width: '100%', on: '75%', off: '25%' },
+      },
+      { dot: 'teal', name: 'Admin', parts: ['30m off the plan'], time: '30m', bar: { color: 'teal', none: false, width: '50%', on: null, off: '100%' } },
+      { dot: 'gold', name: 'Knowledge base', parts: ['1 done'], time: 'no time', bar: null },
+      { dot: null, name: 'No category', parts: [], time: '15m', bar: { color: null, none: true, width: '25%', on: '100%', off: null } },
+    ]);
+    // A name is never drawn in its colour, and the bars are left to the text for a screen reader.
+    for (const name of document.querySelectorAll('.review-category .review-text')) expect(name.closest('[data-color]')).toBeNull();
+    expect(document.querySelectorAll('.category-bar:not([aria-hidden="true"])')).toHaveLength(0);
+    expect(document.querySelectorAll('.review-category .cat-dot')).toHaveLength(3);
+    // Its rows open nothing.
+    expect(document.querySelector('.review-category button')).toBeNull();
+  });
+
+  it("names the category most rows added mid-day had, and titles a routine by its item's title", async () => {
+    boardOn();
+    await review({ kind: 'week', from: MON });
+    expect(facts()[0]).toBe('Added mid-day: 1 · 0 done · mostly Tickets');
+    expect(rows('Routines')[0]![0]).toBe('Watch the queue');
+  });
+
+  it('leaves out an off-plan part under a minute, and the parts line with nothing in it', async () => {
+    boardOn();
+    const offFor = (seconds: number, done = false) =>
+      makeDay(MON, {
+        priorities: [makePriority(1, 'Ship it', { categoryUid: TICKETS.uid, done, addedAt: 0 })],
+        sessions: [
+          completedSession(1, atTime(MON, 9, 0), 25 * 60, { date: MON, priorityUid: uid(1) }),
+          completedSession(2, atTime(MON, 10, 0), seconds, { date: MON, label: 'Inbox', categoryUid: TICKETS.uid }),
+        ],
+      });
+    serveRange([offFor(59)]);
+    await review({ kind: 'week', from: MON });
+    expect(document.querySelector('.review-category')).not.toBeNull();
+    expect(document.querySelector('.review-category-parts')).toBeNull();
+    cleanup();
+
+    serveRange([offFor(59, true)]);
+    await review({ kind: 'week', from: MON });
+    expect(categoryRows().map((c) => c.parts)).toEqual([['1 done']]);
+    cleanup();
+
+    serveRange([offFor(60)]);
+    await review({ kind: 'week', from: MON });
+    expect(categoryRows().map((c) => c.parts)).toEqual([['1m off the plan']]);
+  });
+
+  it("sizes each bar against the largest category's time, no category's included", async () => {
+    boardOn();
+    serveRange([
+      makeDay(MON, {
+        priorities: [makePriority(1, 'Ship it', { categoryUid: TICKETS.uid, addedAt: 0 }), makePriority(2, 'Call the bank', { addedAt: 0 })],
+        sessions: [
+          completedSession(1, atTime(MON, 9, 0), 30 * 60, { date: MON, priorityUid: uid(1) }),
+          completedSession(2, atTime(MON, 10, 0), 60 * 60, { date: MON, priorityUid: uid(2) }),
+          completedSession(3, atTime(MON, 11, 0), 15 * 60, { date: MON, label: 'Inbox', categoryUid: ADMIN.uid }),
+        ],
+      }),
+    ]);
+    await review({ kind: 'week', from: MON });
+    expect(categoryRows().map((c) => [c.name, c.bar?.width])).toEqual([
+      ['Tickets', '50%'],
+      ['Admin', '25%'],
+      ['No category', '100%'],
+    ]);
+  });
+
+  it('shows no section when nothing in the period has a category', async () => {
+    boardOn();
+    serveRange([mon, tue]);
+    await review({ kind: 'week', from: MON });
+    expect(sections()).toEqual(['Off the plan', 'Not done', 'Why']);
+    expect(facts()[0]).toBe('Added mid-day: 1 · 0 done');
+  });
+
+  it("waits for the board's first read, and shows what the board off shows when that read fails", async () => {
+    boardOn();
+    const read = deferred<Board>();
+    vi.mocked(api.getBoard).mockReturnValue(read.promise);
+    await review({ kind: 'week', from: MON });
+    expect(sections()[0]).toBe('Off the plan');
+    expect(facts()[0]).toBe('Added mid-day: 1 · 0 done');
+    read.resolve(board);
+    await settle();
+    expect(sections()[0]).toBe('By category');
+    expect(facts()[0]).toBe('Added mid-day: 1 · 0 done · mostly Tickets');
+    cleanup();
+
+    vi.mocked(api.getBoard).mockRejectedValue(new Error('Request failed (502)'));
+    await review({ kind: 'week', from: MON });
+    expect(sections()).toEqual(['Off the plan', 'Routines', 'Not done', 'Why']);
+    expect(facts()[0]).toBe('Added mid-day: 1 · 0 done');
+    expect(rows('Routines')[0]![0]).toBe('Monitor the queue');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('goes back to no categories once the board is switched off, though the board is still held', async () => {
+    boardOn();
+    await review({ kind: 'week', from: MON });
+    expect(sections()[0]).toBe('By category');
+    // Switched off on another device: the settings are read again a minute later.
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
+    await settle(MINUTE_MS);
+    expect(sections()).toEqual(['Off the plan', 'Routines', 'Not done', 'Why']);
+    expect(facts()[0]).toBe('Added mid-day: 1 · 0 done');
+    expect(rows('Routines')[0]![0]).toBe('Monitor the queue');
+  });
+
+  it('folds a long list after eight rows', async () => {
+    boardOn();
+    const categories = Array.from({ length: 10 }, (_, i) => makeCategory(`cat00000000${i}`, `Category ${i}`));
+    vi.mocked(api.getBoard).mockResolvedValue({ ...board, categories });
+    serveRange([makeDay(MON, { priorities: categories.map((c, i) => makePriority(i + 1, `Row ${i}`, { categoryUid: c.uid, done: true, addedAt: 0 })) })]);
+    await review({ kind: 'week', from: MON });
+    expect(categoryRows()).toHaveLength(8);
+    fireEvent.click(screen.getByRole('button', { name: 'Show all 10' }));
+    expect(categoryRows().map((c) => c.name)).toEqual(categories.map((c) => c.name));
   });
 });
