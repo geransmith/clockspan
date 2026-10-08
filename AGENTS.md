@@ -592,9 +592,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (`UID_RE`; a row never written in holds none, and one row is never both a card and a recurring
   priority), and a null link matches nothing (`sharesLink`). Carry-over (the left-open Add and
   Plan tomorrow, through `planNext`'s seeds) gives the new day's row a fresh uid and `addedAt`
-  and carries all three. `cardUid` and `recurringUid` are fixed once stored (no client changes
-  them; the server fills a null `cardUid` when a save makes the row's card, see the board rule
-  below); `categoryUid` changes like the text. A cleared row keeps all three. A stored list
+  and carries all three, but with the board on a left-open row whose card is in Next takes the
+  card's title and category (`offeredLeftovers`, below), which the board may have changed since
+  that row's day. `cardUid` and `recurringUid` are fixed once stored (no client changes them; the
+  server fills a null `cardUid` when a save makes the row's card, see the board rule below);
+  `categoryUid` changes like the text. A cleared row keeps all three. A stored list
   never holds two text rows with one card or one recurring priority: a sent list that repeats
   one is refused (400) when one of the two rows is new to the server (`repeatedLink`), and the
   merge keeps the stored row of a repeat, else the first, at the first of their places
@@ -707,8 +709,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   the capture box holds the board notice: the pull nudge (`nudgeFor`, as Add priority asks), the
   done-item notice or a refusal; what the store refuses once a move is under way (`MoveRefused`:
   a full list, a stale card, a list not loaded) is a banner. With the board on, the left-open
-  offer brings back a row whose card is in Next under the card's title, and leaves one whose
-  card the board moved to Later, finished or deleted (`offeredLeftovers`). A drag (`Board.tsx`,
+  offer brings back a row whose card is in Next under the card's title and in its category (the
+  row's would go back onto the card with today's save), and leaves one whose card the board
+  moved to Later, finished or deleted (`offeredLeftovers`). A drag (`Board.tsx`,
   with dnd-kit's settings in `components/board/dnd.ts`) starts at an item's grip. A planned card
   and a recurring row have none, and an item whose move is on its way can't be picked up until
   the move lands. Later's and Next's cards sort, each lane a `SortableContext` of the cards it

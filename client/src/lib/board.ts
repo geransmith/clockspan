@@ -387,8 +387,9 @@ export function overAnnouncement(target: DropTarget | null, item: BoardItem, col
 /**
  * The left-open rows the offer brings back while the board is on, as seeds for today's list: a
  * row whose card has left Next (moved to Later, done, or deleted on the board) stays where the
- * board put it, and one whose card is in Next takes the card's title. A row with no card goes as
- * written. Null while the board hasn't loaded.
+ * board put it, and one whose card is in Next takes the card's title and category. The board may
+ * have changed either since that day, and the row's own would be written back onto the card when
+ * today's list is saved. A row with no card goes as written. Null while the board hasn't loaded.
  */
 export function offeredLeftovers(rows: Priority[], cards: BoardCard[] | undefined): PrioritySeed[] | null {
   if (!cards) return null;
@@ -397,7 +398,7 @@ export function offeredLeftovers(rows: Priority[], cards: BoardCard[] | undefine
     const seed = { text: p.text, cardUid: p.cardUid, recurringUid: p.recurringUid, categoryUid: p.categoryUid };
     if (p.cardUid == null) return [seed];
     const card = byUid.get(p.cardUid);
-    return card?.lane === 'next' ? [{ ...seed, text: card.title }] : [];
+    return card?.lane === 'next' ? [{ ...seed, text: card.title, categoryUid: card.categoryUid }] : [];
   });
 }
 

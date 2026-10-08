@@ -458,24 +458,32 @@ describe('MoveRefused', () => {
 });
 
 describe('offeredLeftovers', () => {
-  const rows = [
-    row(1, 'No card', { categoryUid: 'cafe00000001' }),
-    row(2, 'Old title', { cardUid: 'next' }),
-    row(3, 'Parked', { cardUid: 'later' }),
-    row(4, 'Finished', { cardUid: 'done' }),
-    row(5, 'Deleted', { cardUid: 'gone00000001' }),
-  ];
-  const cards = [makeCard('next', 'New title', { lane: 'next' }), makeCard('later', 'Parked'), makeCard('done', 'Finished', { lane: 'done', doneAt: T0 })];
+  const tickets = 'cafe00000001';
+  const kb = 'cafe00000003';
+  const carried = row(1, 'Old title', { cardUid: 'next', categoryUid: tickets });
+  const inNext = (categoryUid: string | null) => [makeCard('next', 'New title', { lane: 'next', categoryUid })];
 
-  it("brings back a row with no card as written, and one whose card is in Next under the card's title, as seeds", () => {
-    expect(offeredLeftovers(rows, cards)).toEqual([
-      { text: 'No card', cardUid: null, recurringUid: null, categoryUid: 'cafe00000001' },
-      { text: 'New title', cardUid: 'next', recurringUid: null, categoryUid: null },
-    ]);
+  it("brings back a row whose card is in Next under the card's title and in the card's category, as a seed", () => {
+    expect(offeredLeftovers([carried], inNext(kb))).toEqual([{ text: 'New title', cardUid: 'next', recurringUid: null, categoryUid: kb }]);
+  });
+
+  it("brings it back with no category once the board cleared the card's", () => {
+    expect(offeredLeftovers([carried], inNext(null))).toEqual([{ text: 'New title', cardUid: 'next', recurringUid: null, categoryUid: null }]);
+  });
+
+  it('brings back a row with no card as written, and leaves one whose card was moved to Later, finished or deleted', () => {
+    const rows = [
+      row(1, 'No card', { categoryUid: tickets }),
+      row(2, 'Parked', { cardUid: 'later', categoryUid: tickets }),
+      row(3, 'Finished', { cardUid: 'done', categoryUid: tickets }),
+      row(4, 'Deleted', { cardUid: 'gone00000001', categoryUid: tickets }),
+    ];
+    const cards = [makeCard('later', 'Parked', { categoryUid: kb }), makeCard('done', 'Finished', { lane: 'done', doneAt: T0, categoryUid: kb })];
+    expect(offeredLeftovers(rows, cards)).toEqual([{ text: 'No card', cardUid: null, recurringUid: null, categoryUid: tickets }]);
   });
 
   it('offers nothing while the board has not loaded', () => {
-    expect(offeredLeftovers(rows, undefined)).toBeNull();
+    expect(offeredLeftovers([carried], undefined)).toBeNull();
   });
 });
 

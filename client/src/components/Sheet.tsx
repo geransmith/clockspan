@@ -51,7 +51,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
   const focus = focusOf(day?.sessions ?? []);
   // Today's list with nothing written yet offers what the last planned day left unticked. With the
   // board on, a row whose card was moved off Next on the board stays there, and one in Next comes
-  // back under the card's title; until the board has loaded, nothing is offered.
+  // back under the card's title and in its category; until the board has loaded, nothing is offered.
   const { leftOpen, dismiss: dismissLeftOpen } = useLeftOpen(today, isToday && day != null && !day.priorities.some(hasText));
   const { board, on: boardOn } = useBoardState();
   // The category chip on the cards that offer one; null while the board is off or not read yet, and then no chip shows.
