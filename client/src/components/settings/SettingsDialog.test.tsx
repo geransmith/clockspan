@@ -148,7 +148,9 @@ describe('SettingsDialog', () => {
     vi.mocked(api.getBoard).mockResolvedValue(makeBoard());
     await renderDialog();
     await openTab('Sheet');
-    expect(hint('Board page')).toBe("Adds a Board button (a page for tasks that aren't for today) and categories, set up in the Board tab.");
+    expect(hint('Board page')).toBe(
+      "Adds a Board button (a page for tasks that aren't for today), categories and recurring priorities, set up in the Board tab.",
+    );
     expect(tabNames()).toEqual(['Timeclock', 'Alarms', 'Sheet', 'Data', 'Account']);
     fireEvent.click(toggle('Board page'));
     await settle();
@@ -181,6 +183,22 @@ describe('SettingsDialog', () => {
     expect(screen.getByLabelText('Work day hours')).toBeTruthy();
     // Board stays the tab picked last, for when the board is back.
     expect(localStorage.getItem('focus:settingsTab')).toBe('board');
+  });
+
+  it('hands the Board tab the settings, and saves its number through the header', async () => {
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ board: true, recurringPerDay: 4 }));
+    vi.mocked(api.getBoard).mockResolvedValue(makeBoard());
+    vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(applySettingsPatch(makeSettings({ board: true, recurringPerDay: 4 }), patch)));
+    await renderDialog();
+    await openTab('Board');
+    const perDay = screen.getByRole('textbox', { name: 'Recurring rows per day', hidden: true }) as HTMLInputElement;
+    expect(perDay.value).toBe('4');
+    fireEvent.change(perDay, { target: { value: '6' } });
+    fireEvent.blur(perDay);
+    await settle();
+    expect(api.putSettings).toHaveBeenCalledWith({ recurringPerDay: 6 });
+    expect(perDay.value).toBe('6');
+    expect(screen.getByRole('status', { hidden: true }).textContent).toContain(SAVE_STATUS.saved);
   });
 
   it('drops the overtime clause from the retrospective hint when Overtime is off', async () => {

@@ -5,7 +5,19 @@ import * as api from '../api';
 import { DAY_MS, MINUTE_MS } from '../../../shared/dates.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { warnQuietly } from '../lib/alerts';
-import { MoveRefused, withCard, withCategory, withCategoryPatch, withoutCard, withoutCategory, withPatch, type StoreMove } from '../lib/board';
+import {
+  MoveRefused,
+  withCard,
+  withCategory,
+  withCategoryPatch,
+  withoutCard,
+  withoutCategory,
+  withoutRecurring,
+  withPatch,
+  withRecurring,
+  withRecurringPatch,
+  type StoreMove,
+} from '../lib/board';
 import { ADD_PRIORITY_FAILED, BOARD, SAVE_FAILED } from '../lib/copy';
 import {
   apiError,
@@ -16,6 +28,7 @@ import {
   makeCategory,
   makeDay,
   makePriority,
+  makeRecurring,
   makeSettings,
   settle,
   SettingsAndDays,
@@ -71,6 +84,9 @@ beforeEach(() => {
   vi.mocked(api.addCategory).mockImplementation((c) => Promise.resolve((onServer = withCategory(onServer, c))));
   vi.mocked(api.patchCategory).mockImplementation((uid, patch) => Promise.resolve((onServer = withCategoryPatch(onServer, uid, patch))));
   vi.mocked(api.deleteCategory).mockImplementation((uid) => Promise.resolve((onServer = withoutCategory(onServer, uid))));
+  vi.mocked(api.addRecurring).mockImplementation((item) => Promise.resolve((onServer = withRecurring(onServer, item))));
+  vi.mocked(api.patchRecurring).mockImplementation((uid, patch) => Promise.resolve((onServer = withRecurringPatch(onServer, uid, patch))));
+  vi.mocked(api.deleteRecurring).mockImplementation((uid) => Promise.resolve((onServer = withoutRecurring(onServer, uid))));
 });
 afterEach(() => {
   cleanup();
@@ -753,4 +769,71 @@ describe('categories', () => {
 it('useBoardState and useBoardStore refuse to run outside the provider', () => {
   expect(() => renderHook(() => useBoardState())).toThrow('useBoardState outside BoardProvider');
   expect(() => renderHook(() => useBoardStore())).toThrow('useBoardStore outside BoardProvider');
+});
+
+describe('recurring priorities', () => {
+  const QUEUE = makeRecurring('rec000000001', 'Monitor the queue');
+  const titles = (b: Board | undefined) => b?.recurring.map((r) => `${r.title} ${r.weekdays.join('')}`);
+
+  beforeEach(() => {
+    onServer = { ...onServer, recurring: [QUEUE] };
+  });
+
+  it('show a new, edited or deleted item at once, and go out one after another', async () => {
+    const first = deferred<Board>();
+    vi.mocked(api.addRecurring).mockReturnValueOnce(first.promise);
+    const { result } = renderBoard();
+    await settle();
+    const timesheet = makeRecurring('rec000000002', 'Timesheet', { weekdays: [5] });
+    act(() => {
+      void result.current.store.addRecurring(timesheet);
+      void result.current.store.editRecurring('rec000000002', { title: 'Timesheets', weekdays: [5, 1] });
+      void result.current.store.removeRecurring('rec000000001');
+    });
+    expect(titles(result.current.board)).toEqual(['Timesheets 15']);
+    expect(api.patchRecurring).not.toHaveBeenCalled();
+    expect(api.deleteRecurring).not.toHaveBeenCalled();
+    first.resolve((onServer = withRecurring(onServer, timesheet)));
+    await settle();
+    expect(api.addRecurring).toHaveBeenCalledExactlyOnceWith(timesheet);
+    expect(api.patchRecurring).toHaveBeenCalledExactlyOnceWith('rec000000002', { title: 'Timesheets', weekdays: [5, 1] });
+    expect(api.deleteRecurring).toHaveBeenCalledExactlyOnceWith('rec000000001');
+    expect(vi.mocked(api.patchRecurring).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(api.deleteRecurring).mock.invocationCallOrder[0]!);
+    expect(result.current.board).toEqual(onServer);
+    expect(titles(result.current.board)).toEqual(['Timesheets 15']);
+  });
+
+  it('take a failed write off, reject, and read the board again', async () => {
+    const { result } = renderBoard();
+    await settle();
+    vi.mocked(api.patchRecurring).mockRejectedValueOnce(new Error('offline'));
+    await expect(act(() => result.current.store.editRecurring('rec000000001', { title: 'Queue' }))).rejects.toThrow('offline');
+    expect(titles(result.current.board)).toEqual(['Monitor the queue 12345']);
+    expect(api.getBoard).toHaveBeenCalledTimes(2);
+
+    vi.mocked(api.addRecurring).mockRejectedValueOnce(apiError(400));
+    await expect(act(() => result.current.store.addRecurring(makeRecurring('rec000000002', 'Timesheet')))).rejects.toThrow('Request failed (400)');
+    expect(titles(result.current.board)).toEqual(['Monitor the queue 12345']);
+
+    vi.mocked(api.deleteRecurring).mockRejectedValueOnce(apiError(500));
+    await expect(act(() => result.current.store.removeRecurring('rec000000001'))).rejects.toThrow('Request failed (500)');
+    expect(titles(result.current.board)).toEqual(['Monitor the queue 12345']);
+    expect(api.getBoard).toHaveBeenCalledTimes(4);
+  });
+
+  it('count a 404 on a delete as done: another device deleted it already', async () => {
+    const { result } = renderBoard();
+    await settle();
+    // A read that still has it, sent before the delete was answered, doesn't bring it back.
+    const old = deferred<Board>();
+    vi.mocked(api.getBoard).mockReturnValueOnce(old.promise);
+    act(() => void result.current.store.load());
+    vi.mocked(api.deleteRecurring).mockRejectedValueOnce(apiError(404));
+    await act(() => result.current.store.removeRecurring('rec000000001'));
+    old.resolve(onServer);
+    await settle();
+    expect(titles(result.current.board)).toEqual([]);
+    // And the 404 reads nothing again.
+    expect(api.getBoard).toHaveBeenCalledTimes(2);
+  });
 });

@@ -13,6 +13,7 @@ import {
   makeCategory,
   makeDay,
   makePriority,
+  makeRecurring,
   makeSettings,
   serveRange,
   settle,
@@ -271,6 +272,8 @@ describe('Board', () => {
       const box = notice();
       expect(box.textContent).toContain(DONE_STAYS.title('Email'));
       expect(box.textContent).toContain(DONE_STAYS.body);
+      // A task that keeps coming back has a better home than a new card each time.
+      expect(box.textContent).toContain('make it a recurring priority in Settings → Board');
       // The notice takes the focus, so a keyboard user reaches its buttons.
       expect(document.activeElement).toBe(within(box).getByRole('button', { name: DONE_STAYS.add('Next') }));
       await settle();
@@ -336,6 +339,60 @@ describe('Board', () => {
     await settle();
     expect(putLists()).toEqual([{ date: WED, texts: ['', ''], touched: undefined }]);
     expect(api.deleteCard).not.toHaveBeenCalled();
+  });
+
+  /** The lines under the title in the open editor of a column: where it is renamed, or changed. */
+  const editorLines = (name: string) => [...column(name).querySelectorAll('.board-editor p.muted.small')].map((p) => p.textContent);
+
+  it("shows today's recurring row's title as text, renamed on the sheet, and keeps its chip, its tick and Remove from today", async () => {
+    onServer = { ...onServer, recurring: [makeRecurring('rec000000001', 'Monitor the queue')] };
+    lists[WED] = [row(1, 'Monitor the queue', { recurringUid: 'rec000000001' }), row(2, 'Report', { cardUid: 'card00000001' })];
+    await renderBoard();
+    openEditor('Monitor the queue');
+    const editor = column('In progress').querySelector<HTMLElement>('.board-editor')!;
+    expect(within(editor).queryByRole('textbox', { name: 'Title' })).toBeNull();
+    expect(editor.querySelector('.board-editor-title')?.textContent).toBe('Monitor the queue');
+    // A rename in Settings → Board changes the recurring priority, not the rows it already added.
+    expect(editorLines('In progress')).toEqual(['Rename it on the sheet. Settings → Board renames the recurring priority.']);
+    expect(within(editor).getByRole('button', { name: 'Category for Monitor the queue: none' })).toBeTruthy();
+    expect(within(editor).getByRole('button', { name: 'Remove from today' })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: 'Monitor the queue done' })).toBeTruthy();
+    // A row with a card is still renamed in place, with no line.
+    openEditor('Report');
+    expect(screen.getByRole('textbox', { name: 'Title' })).toBeTruthy();
+    expect(editorLines('In progress')).toEqual([]);
+  });
+
+  it("points only at the sheet for today's recurring row once its recurring priority is deleted", async () => {
+    lists[WED] = [row(1, 'Monitor the queue', { recurringUid: 'rec000000001' })];
+    await renderBoard();
+    openEditor('Monitor the queue');
+    expect(editorLines('In progress')).toEqual(['Rename it on the sheet.']);
+    expect(column('In progress').querySelector('.board-editor')?.textContent).not.toContain('Settings');
+    expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull();
+  });
+
+  it("gives an earlier day's recurring row in Done no line about renaming it", async () => {
+    onServer = { ...onServer, recurring: [makeRecurring('rec000000001', 'Monitor the queue')] };
+    serveRange([makeDay(TUE, { priorities: [row(1, 'Monitor the queue', { recurringUid: 'rec000000001', done: true })] }), makeDay(MON)]);
+    await renderBoard();
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
+    openEditor('Monitor the queue');
+    expect(column('Done').querySelector('.board-editor-title')?.textContent).toBe('Monitor the queue');
+    expect(editorLines('Done')).toEqual([]);
+  });
+
+  it('marks a recurring row on its meta line, and only that row', async () => {
+    lists[WED] = [row(1, 'Monitor the queue', { recurringUid: 'rec000000001' }), row(2, 'Report', { cardUid: 'card00000001' })];
+    await renderBoard();
+    const metas = [...column('In progress').querySelectorAll('.board-card-meta')];
+    expect(metas).toHaveLength(1);
+    expect(
+      within(metas[0] as HTMLElement)
+        .getByRole('img', { name: 'Repeats' })
+        .getAttribute('title'),
+    ).toBe('Repeats');
+    expect(metas[0]!.closest('.board-card')?.querySelector('.board-card-title')?.textContent).toBe('Monitor the queue');
   });
 
   it('offers a planned card Delete only, with a confirm that names its day', async () => {
@@ -718,6 +775,14 @@ describe('categories', () => {
     expect(meta('In progress').map((m) => m.textContent)).toEqual(['Old work']);
     // A card with none has no meta line, and a planned one says when.
     expect(meta('Next').map((m) => m.textContent)).toEqual(['Planned for tomorrow']);
+  });
+
+  it("puts a recurring row's mark after its category", async () => {
+    lists[WED] = [row(1, 'Monitor the queue', { recurringUid: 'rec000000001', categoryUid: TICKETS.uid })];
+    await renderBoard();
+    const meta = column('In progress').querySelector('.board-card-meta')!;
+    expect([...meta.children].map((c) => c.className)).toEqual(['board-card-category', 'repeat-mark']);
+    expect(meta.textContent).toBe('Tickets');
   });
 
   it("sends a new card in the capture box's category, remembered on this device", async () => {

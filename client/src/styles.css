@@ -500,6 +500,16 @@ button {
   min-width: 0;
   max-width: 100%;
 }
+/* A row added from a recurring priority: a small mark beside it, not a control. */
+.repeat-mark {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-2);
+}
+.repeat-mark svg {
+  width: 16px;
+  height: 16px;
+}
 /* Drawn at 28 px to sit beside what it labels; 44 px to a tap (the coarse block). */
 .category-chip {
   min-height: 28px;
@@ -1102,7 +1112,9 @@ button {
 .target-row > .setting-row {
   flex-wrap: nowrap;
 }
-.target-row .toggle-text {
+/* A label with its hint under it, beside a control: the text takes the room and wraps, so the
+   control stays on its line. */
+.setting-row > .toggle-text {
   flex: 1;
 }
 .target-edit {
@@ -2827,19 +2839,22 @@ dialog.dialog::backdrop {
   flex-direction: column;
   gap: 4px;
 }
-/* Settings → Board: a category's name, its eight swatches and Remove, wrapping onto more lines
-   on a phone. */
-.category-row {
+/* Settings → Board: a category's name, its eight swatches and Remove, and a recurring priority's
+   title, category, weekdays and Remove, wrapping onto more lines on a phone. */
+.category-row,
+.recurring-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
-.category-name {
+.category-name,
+.recurring-title {
   flex: 1 1 8rem;
   min-width: 0;
 }
-.category-row > .btn {
+.category-row > .btn,
+.recurring-row > .btn {
   margin-left: auto;
 }
 .category-row > .error {
@@ -2855,6 +2870,18 @@ dialog.dialog::backdrop {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+/* A recurring priority's seven days, one letter each, drawn one size: 7 × 38 px and 6 px gaps
+   take 302 px, which fits the dialog on a 375 px phone. */
+.weekdays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.weekdays .chip {
+  width: 38px;
+  padding: 0;
+  justify-content: center;
 }
 /* A radio under its dot: the arrow keys move along a category's colours, as in any radio group. */
 .swatch {
@@ -2955,6 +2982,11 @@ dialog.dialog::backdrop {
   /* 36 px, 6 px from the next chip or row: 42 px. */
   .chip {
     --hit-inset: -4px -1px;
+  }
+  /* A weekday's 38 × 36 px (36 × 34 inside the border), 6 px from the next and 8 px from the row
+     above or below: 44 × 44 px, reaching 3 px into the gap beside it and 4 px up and down. */
+  .weekdays .chip {
+    --hit-inset: -5px -4px;
   }
   /* 28 px, centred in a row 44 px tall (beside the capture box's 44 px Add button or, from 640 px,
      a priority's field, at the end of a planner's row, or on a row of its own in the board's

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CARD_IDS, DEFAULT_SETTINGS, DEFAULT_SIDE, normalizeLayout } from './settings.js';
+import { CARD_IDS, DEFAULT_SETTINGS, DEFAULT_SIDE, normalizeLayout, SETTING_LIMITS } from './settings.js';
 
 describe('DEFAULT_SETTINGS', () => {
   it('is frozen all the way down', () => {
@@ -8,6 +8,15 @@ describe('DEFAULT_SETTINGS', () => {
     expect(Object.isFrozen(DEFAULT_SETTINGS.alarms.lunchBy.leadMinutes)).toBe(true);
     expect(Object.isFrozen(DEFAULT_SETTINGS.layout[0])).toBe(true);
     expect(() => (DEFAULT_SETTINGS.alarms.lunchBy.leadMinutes as number[]).push(1)).toThrow();
+  });
+
+  it('sets every bounded number inside its bounds', () => {
+    expect(DEFAULT_SETTINGS.recurringPerDay).toBe(3);
+    for (const [key, { min, max }] of Object.entries(SETTING_LIMITS)) {
+      const value = DEFAULT_SETTINGS[key as keyof typeof SETTING_LIMITS];
+      expect(value, key).toBeGreaterThanOrEqual(min);
+      expect(value, key).toBeLessThanOrEqual(max);
+    }
   });
 
   it('puts the timeclock and priorities in the left column and the other cards in the right', () => {

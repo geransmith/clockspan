@@ -124,6 +124,10 @@ describe('copy builders', () => {
     expect(CONFIRM.deleteCard(['today', 'tomorrow'])).toBe('Delete this card and take it off the list for today and tomorrow?');
   });
 
+  it('names the recurring priority a delete takes, and says its rows stay', () => {
+    expect(CONFIRM.deleteRecurring('Follow-ups')).toBe('Delete Follow-ups? Rows it already added keep their text.');
+  });
+
   it('names the card and the day in the board refusals, and the cap in the full line', () => {
     expect(BOARD.full).toBe('Later and Next hold 300 cards at most.');
     expect(BOARD.recurringStays('Monitor the queue')).toBe("Monitor the queue stays on today's list. Use Remove from today.");

@@ -323,6 +323,14 @@ export const Board = memo(function Board({ today }: { today: string }) {
   const card = (item: BoardItem, drag?: ItemDrag) => {
     const onToday = item.row != null && item.date === today;
     const cardOnly = item.card != null && item.row == null;
+    // Today's recurring row is renamed on the sheet, and its recurring priority, while there is
+    // one, in Settings → Board, which leaves the rows it already added alone.
+    const renameNote =
+      onToday && item.recurring
+        ? board.recurring.some((r) => r.uid === item.row!.recurringUid)
+          ? 'Rename it on the sheet. Settings → Board renames the recurring priority.'
+          : 'Rename it on the sheet.'
+        : undefined;
     let tick: Parameters<typeof BoardCardView>[0]['tick'];
     if (onToday) tick = { checked: item.row!.done, onChange: (checked, el) => run(item, checked ? 'done' : 'progress', null, el.getBoundingClientRect()) };
     // A Done card off today's list: unticking is the correction for a mistaken tick, back to Next.
@@ -344,8 +352,10 @@ export const Board = memo(function Board({ today }: { today: string }) {
         }}
         tick={tick}
         onMove={(to, el) => run(item, to, to === 'later' || to === 'next' ? laneStart(columns, to) : null, el.getBoundingClientRect())}
+        // Not a recurring row's: today's is renamed on the sheet, and its recurring priority in
+        // Settings → Board.
         onRename={
-          onToday
+          onToday && !item.recurring
             ? (text) => report(store.editRow(item.row!.uid!, { text }, item.row!.cardUid))
             : cardOnly
               ? (title) => report(store.editCard(item.card!.uid, { title }))
@@ -365,6 +375,7 @@ export const Board = memo(function Board({ today }: { today: string }) {
         // only bring back its ticked row from an earlier day. The untick is the correction.
         onDelete={!item.recurring && (onToday || (cardOnly && item.column !== 'done')) ? () => remove(item) : undefined}
         onRemove={item.recurring && onToday ? () => report(store.deleteCard(null, item.row!.uid, null)) : undefined}
+        renameNote={renameNote}
         drag={drag}
       />
     );

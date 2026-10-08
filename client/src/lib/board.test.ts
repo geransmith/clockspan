@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HOUR_MS, parseDateKey } from '../../../shared/dates.js';
 import { CATEGORY_COLORS, LIMITS } from '../../../shared/api.js';
-import { makeBoard, makeCard, makeCategory, makeDay, makePriority, T0 } from '../test/fixtures';
+import { makeBoard, makeCard, makeCategory, makeDay, makePriority, makeRecurring, T0 } from '../test/fixtures';
 import type { BoardCard, Category, CategoryColor, Priority } from '../types';
 import {
   activeCategories,
@@ -30,7 +30,10 @@ import {
   withDrag,
   withoutCard,
   withoutCategory,
+  withoutRecurring,
   withPatch,
+  withRecurring,
+  withRecurringPatch,
   type BoardColumns,
   type BoardItem,
   type ColumnId,
@@ -636,6 +639,36 @@ describe('categories', () => {
 
     it('takes one out of use and keeps it', () => {
       expect(withoutCategory(board, 'a').categories).toEqual([makeCategory('a', 'Tickets', { archived: true }), board.categories[1]]);
+    });
+
+    describe('recurring priorities', () => {
+      const queue = makeRecurring('rec000000001', 'Monitor the queue');
+      const follow = makeRecurring('rec000000002', 'Follow-ups', { weekdays: [1, 3, 5] });
+      const withTwo = { ...board, recurring: [queue, follow] };
+
+      it('adds one after the others, its weekdays ascending, as the server answers them', () => {
+        const added = withRecurring(withTwo, makeRecurring('rec000000003', 'Timesheet', { weekdays: [5, 1] }));
+        expect(added.recurring).toEqual([queue, follow, makeRecurring('rec000000003', 'Timesheet', { weekdays: [1, 5] })]);
+        expect(added.categories).toBe(board.categories);
+      });
+
+      it('leaves the board as it is when the uid is held already, as the server does for a retry', () => {
+        expect(withRecurring(withTwo, makeRecurring('rec000000001', 'Other', { weekdays: [7] }))).toBe(withTwo);
+      });
+
+      it('changes the fields sent, keeps the ones left out, and puts the weekdays in order', () => {
+        expect(withRecurringPatch(withTwo, follow.uid, { title: 'Chase replies' }).recurring).toEqual([queue, { ...follow, title: 'Chase replies' }]);
+        expect(withRecurringPatch(withTwo, follow.uid, { categoryUid: 'cat000000001' }).recurring[1]).toEqual({ ...follow, categoryUid: 'cat000000001' });
+        expect(withRecurringPatch(withTwo, follow.uid, { weekdays: [7, 2, 4] }).recurring[1]).toEqual({ ...follow, weekdays: [2, 4, 7] });
+        expect(withRecurringPatch(withTwo, queue.uid, { categoryUid: null }).recurring[0]).toEqual(queue);
+        const filed = { ...withTwo, recurring: [{ ...queue, categoryUid: 'cat000000001' }] };
+        expect(withRecurringPatch(filed, queue.uid, { categoryUid: null }).recurring[0]).toEqual(queue);
+      });
+
+      it('takes one off', () => {
+        expect(withoutRecurring(withTwo, queue.uid).recurring).toEqual([follow]);
+        expect(withoutRecurring(withTwo, 'gone00000001').recurring).toEqual([queue, follow]);
+      });
     });
   });
 });

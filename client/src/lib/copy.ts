@@ -143,6 +143,7 @@ export const CONFIRM = {
   deleteDays: (n: number, before: string) => `Delete ${counted(n, 'day')} before ${before}? This cannot be undone.`,
   /** `off` names the days whose list the card is taken off too ("today", "tomorrow"). */
   deleteCard: (off: string[]) => (off.length ? `Delete this card and take it off the list for ${off.join(' and ')}?` : 'Delete this card?'),
+  deleteRecurring: (title: string) => `Delete ${title}? Rows it already added keep their text.`,
 } as const;
 
 /** A timer line, with the session's label in front when it has one. */
@@ -275,12 +276,13 @@ export const BOARD = {
 } as const;
 
 /**
- * The board notice when a done item is moved into Later or Next: it stays done, and more work goes
- * on a new card. `announce` is what a screen reader hears as such a drag ends.
+ * The board notice when a done item is moved into Later or Next: it stays done, more work goes on
+ * a new card, and work that keeps coming back can be a recurring priority. `announce` is what a
+ * screen reader hears as such a drag ends.
  */
 export const DONE_STAYS = {
   title: (title: string) => `${title} is done.`,
-  body: 'More work on it goes on a new card.',
+  body: 'More work on it goes on a new card. If it keeps coming back, make it a recurring priority in Settings → Board.',
   add: (lane: string) => `Add a new card to ${lane}`,
   leave: 'Leave it',
   announce: (title: string, lane: string) => `${title} stays in Done. The notice can add a new card to ${lane}.`,

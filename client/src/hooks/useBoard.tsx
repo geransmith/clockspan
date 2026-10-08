@@ -1,9 +1,9 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
-import type { CardPatch, CategoryPatch, NewCard, NewCategory } from '../api';
+import type { CardPatch, CategoryPatch, NewCard, NewCategory, RecurringPatch } from '../api';
 import { todayKey } from '../../../shared/dates.js';
 import { hasText } from '../../../shared/priorities.js';
-import type { Board, Priority } from '../types';
+import type { Board, Priority, Recurring } from '../types';
 import { ApiError } from '../lib/apiError';
 import { warnQuietly } from '../lib/alerts';
 import {
@@ -15,7 +15,10 @@ import {
   withCategoryPatch,
   withoutCard,
   withoutCategory,
+  withoutRecurring,
   withPatch,
+  withRecurring,
+  withRecurringPatch,
   type CategoryPick,
   type StoreMove,
 } from '../lib/board';
@@ -77,6 +80,12 @@ export interface BoardStore {
   editCategory(uid: string, patch: CategoryPatch): Promise<void>;
   /** A category removed in Settings → Board: archived, so past time keeps its name. */
   removeCategory(uid: string): Promise<void>;
+  /** A new recurring priority, made in Settings → Board. */
+  addRecurring(item: Recurring): Promise<void>;
+  /** A recurring priority renamed, given a category or other weekdays in Settings → Board; the rows it added keep theirs. */
+  editRecurring(uid: string, patch: RecurringPatch): Promise<void>;
+  /** A recurring priority deleted for good in Settings → Board (a 404 counts as done: another device deleted it). */
+  removeRecurring(uid: string): Promise<void>;
 }
 
 const StateCtx = createContext<BoardState | null>(null);
@@ -94,7 +103,7 @@ function without(rows: Priority[], drop: (p: Priority) => boolean): Priority[] |
   return rows.some(drop) ? rows.filter((p) => !drop(p)).map((p, i) => ({ ...p, position: i + 1 })) : null;
 }
 
-/** A 404 on a delete: another device, or a save in this job, took the card already. */
+/** A 404 on a delete: another device, or a save in this job, took the card (or the recurring priority) already. */
 async function unlessGone(send: Promise<Board>): Promise<Board | null> {
   try {
     return await send;
@@ -354,11 +363,38 @@ export function BoardProvider({ children }: { children: ReactNode }) {
     [write],
   );
 
+  const addRecurring = useCallback(
+    (item: Recurring) =>
+      write(
+        (b) => withRecurring(b, item),
+        () => api.addRecurring(item),
+      ),
+    [write],
+  );
+
+  const editRecurring = useCallback(
+    (uid: string, patch: RecurringPatch) =>
+      write(
+        (b) => withRecurringPatch(b, uid, patch),
+        () => api.patchRecurring(uid, patch),
+      ),
+    [write],
+  );
+
+  const removeRecurring = useCallback(
+    (uid: string) =>
+      write(
+        (b) => withoutRecurring(b, uid),
+        () => unlessGone(api.deleteRecurring(uid)),
+      ),
+    [write],
+  );
+
   const board = useMemo(() => shown(tracked), [tracked]);
   const state = useMemo(() => ({ board, failed, on }), [board, failed, on]);
   const store = useMemo(
-    () => ({ load, addCard, editCard, deleteCard, editRow, move, addCategory, editCategory, removeCategory }),
-    [load, addCard, editCard, deleteCard, editRow, move, addCategory, editCategory, removeCategory],
+    () => ({ load, addCard, editCard, deleteCard, editRow, move, addCategory, editCategory, removeCategory, addRecurring, editRecurring, removeRecurring }),
+    [load, addCard, editCard, deleteCard, editRow, move, addCategory, editCategory, removeCategory, addRecurring, editRecurring, removeRecurring],
   );
   return (
     <StateCtx.Provider value={state}>
@@ -398,13 +434,14 @@ function bannerOnFailure(saved: Promise<void>): void {
 }
 
 /**
- * The category chip's data, for a view that offers the chip and passes it down (the board page);
- * null while the board is off or before its first read. `create` gives the uid to set at once
- * (`categoryForName`): a category is a soft link, so the row or card that takes it needs no wait.
- * A new or removed category goes out as an optimistic `addCategory`, and its failure (a stale
- * copy whose name another device took, or a server cap) takes it off, reads the board again and
- * goes to `report`, the banner by default; what picked it then reads as no category. `refresh`
- * reads the board, as the chip's list does when it opens.
+ * The category chip's data, for a view that offers the chip and passes it down (the board page,
+ * the sheet, Settings → Board); null while the board is off or before its first read. `create`
+ * gives the uid to set at once (`categoryForName`): a category is a soft link, so the row or card
+ * that takes it needs no wait. A new or removed category goes out as an optimistic `addCategory`,
+ * and its failure (a stale copy whose name another device took, or a server cap) takes it off,
+ * reads the board again and goes to `report`, the banner by default (Settings → Board passes the
+ * dialog's save, whose header says Not saved); what picked it then reads as no category.
+ * `refresh` reads the board, as the chip's list does when it opens.
  */
 export function useCategoryPick(report: (saved: Promise<void>) => void = bannerOnFailure): CategoryPick | null {
   const { board, on } = useBoardState();

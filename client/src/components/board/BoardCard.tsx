@@ -6,6 +6,7 @@ import type { Category } from '../../types';
 import { CategoryChip } from '../CategoryChip';
 import { CategoryDot } from '../CategoryDot';
 import { Grip } from '../Icons';
+import { RepeatMark } from '../RepeatMark';
 
 export const COLUMN_NAMES: Record<ColumnId, string> = { later: 'Later', next: 'Next', progress: 'In progress', done: 'Done' };
 
@@ -21,7 +22,7 @@ interface Props {
   /** The checkbox: the row's tick, or a Done card's untick. None for an earlier day's row. */
   tick?: { checked: boolean; onChange: (checked: boolean, el: HTMLInputElement) => void };
   onMove: (to: ColumnId, el: HTMLElement) => void;
-  /** Renames it; without one the title shows as text (an earlier day's row). */
+  /** Renames it; without one the title shows as text (an earlier day's row; a recurring row, renamed on the sheet). */
   onRename?: (title: string) => void;
   /** Its category, when the board holds it: the meta line shows its dot and name. */
   category?: Category;
@@ -32,6 +33,8 @@ interface Props {
   onDelete?: () => void;
   /** A recurring row's way off today's list. */
   onRemove?: () => void;
+  /** The line under a title that shows as text, saying where it is renamed (today's recurring row). */
+  renameNote?: string;
   /** Drag and drop; an item without it has no grip. */
   drag?: ItemDrag;
 }
@@ -45,10 +48,11 @@ export interface ItemDrag {
 
 /**
  * A card or a row on the board: its tick, its number on today's list, its title (a button that
- * opens the editor), and a line with its category and when a later day's list holds it. The
- * editor renames it, sets its category, moves it to another column (Move to, the way to move
- * without dragging), and deletes it; a planned item's offers Delete only, since that day's list
- * decides it.
+ * opens the editor), and a line with its category, the Repeats mark of a recurring row, and when
+ * a later day's list holds it. The editor renames it, sets its category, moves it to another
+ * column (Move to, the way to move without dragging), and deletes it; a planned item's offers
+ * Delete only, since that day's list decides it. A recurring row's title shows as text: today's
+ * row is renamed on the sheet, and its recurring priority in Settings → Board.
  */
 export function BoardCardView({
   item,
@@ -65,6 +69,7 @@ export function BoardCardView({
   onCategory,
   onDelete,
   onRemove,
+  renameNote,
   drag,
 }: Props) {
   const targets = moveTargets(item);
@@ -99,7 +104,7 @@ export function BoardCardView({
           <span className="board-card-title">{item.title}</span>
         </button>
       </div>
-      {(category ?? item.planned) && (
+      {(category != null || item.planned != null || item.recurring) && (
         <p className="board-card-meta muted small">
           {category && (
             <span className="board-card-category">
@@ -107,6 +112,7 @@ export function BoardCardView({
               {category.name}
             </span>
           )}
+          {item.recurring && <RepeatMark />}
           {item.planned && <span>Planned for {dayName(item.planned, today, true)}</span>}
         </p>
       )}
@@ -117,6 +123,7 @@ export function BoardCardView({
           ) : (
             <p className="board-editor-title">{item.title}</p>
           )}
+          {renameNote && <p className="muted small">{renameNote}</p>}
           {pick && onCategory && !item.planned && (
             <div className="board-editor-category">
               <CategoryChip value={item.categoryUid} onChange={onCategory} pick={pick} label={`Category for ${item.title}`} />
