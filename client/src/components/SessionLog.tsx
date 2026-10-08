@@ -8,7 +8,7 @@ import { useTimeFormat } from '../hooks/useTimeFormat';
 import { breakSeconds } from '../lib/breaks';
 import { counted, formatDuration } from '../lib/format';
 import { hasText } from '../../../shared/priorities.js';
-import { focusOf, sessionCategory, sessionCategoryEdit, sessionLinkEdit } from '../lib/retro';
+import { focusOf, sessionCategory, sessionCategoryEdit } from '../lib/retro';
 import { timerView } from '../lib/timer';
 import type { Break, Priority, Session } from '../types';
 import { CategoryChip } from './CategoryChip';
@@ -201,7 +201,8 @@ function Row({
               value={linked?.uid ?? ''}
               onChange={(e) => {
                 setReturnFocus(true);
-                commit(sessionLinkEdit(s, e.target.value || null));
+                // Only the link: the server drops a category of its own, since the row decides from then on.
+                commit({ priorityUid: e.target.value || null });
               }}
               aria-label="Priority this session was for"
             >

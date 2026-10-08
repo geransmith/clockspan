@@ -1186,6 +1186,39 @@ describe('sessions', () => {
     expect(await act(() => done)).toBe(true);
     expect(api.patchSession).toHaveBeenCalledWith(1, { priorityUid: typed.uid });
   });
+
+  it('updateSession shows a link dropping a category of its own at once, so a removal answered first reads the day again', async () => {
+    const report = makePriority(1, 'Report', { categoryUid: 'cat000000001' });
+    const email = makePriority(2, 'Email');
+    const picked = endSession(makeSession({ id: 4, categoryUid: 'cat000000002' }));
+    const linked = { ...picked, priorityUid: report.uid, categoryUid: null };
+    // The server took the link, then the removal gave the session the row's category.
+    const after = makeDay(TODAY, { priorities: [{ ...email, position: 1 }], sessions: [{ ...linked, categoryUid: 'cat000000001' }] });
+    const reread = deferred<Day>();
+    vi.mocked(api.getDay)
+      .mockResolvedValueOnce(makeDay(TODAY, { priorities: [report, email], sessions: [picked] }))
+      .mockReturnValueOnce(reread.promise)
+      .mockResolvedValue(after);
+    const answer = deferred<{ session: Session }>();
+    vi.mocked(api.patchSession).mockReturnValueOnce(answer.promise);
+    vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
+    const { result } = renderStore();
+    await settle();
+    const link = begin(() => result.current.updateSession(TODAY, 4, { priorityUid: report.uid }));
+    expect(result.current.days[TODAY]?.sessions).toEqual([linked]);
+    await settle();
+    expect(api.patchSession).toHaveBeenCalledWith(4, { priorityUid: report.uid });
+
+    // The removal is answered while the link is still out.
+    await act(() => result.current.setPriorities(TODAY, [{ ...email, position: 1 }], [report, email]));
+    await settle();
+    expect(api.getDay).toHaveBeenCalledTimes(2);
+    answer.resolve({ session: linked });
+    await act(() => link);
+    reread.resolve(after);
+    await settle();
+    expect(result.current.days[TODAY]?.sessions).toEqual(after.sessions);
+  });
 });
 
 describe('breaks', () => {

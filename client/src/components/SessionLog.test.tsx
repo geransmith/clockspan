@@ -285,12 +285,36 @@ describe('SessionLog', () => {
       expect(chip()!.getAttribute('aria-label')).toBe('Category for this session: none');
     });
 
-    it('drops the category a session was given here when the select links it to a row, in the same PATCH', async () => {
-      await renderLog([at(1, 'Picked', { categoryUid: ADMIN.uid })], [], TODAY, { priorities: ROWS, pick: PICK });
+    it('sends only the link from the select, and shows the server dropping the category the session was given here', async () => {
+      let stored = at(1, 'Picked', { categoryUid: ADMIN.uid });
+      vi.mocked(api.getDay).mockImplementation(() => Promise.resolve(makeDay(TODAY, { priorities: ROWS, sessions: [stored] })));
+      // As the server answers: a link drops a category of its own.
+      vi.mocked(api.patchSession).mockImplementation((_id, patch) => {
+        stored = { ...stored, ...patch, ...(patch.priorityUid ? { categoryUid: null } : {}) };
+        return Promise.resolve({ session: stored });
+      });
+      render(
+        <AppProviders>
+          <LogOnStore pick={PICK} />
+        </AppProviders>,
+      );
+      await settle();
+      expect(dot('Admin')).toBeTruthy();
       edit(/Picked/);
       fireEvent.change(planSelect(), { target: { value: 'abcdef123456' } });
       await settle();
-      expect(api.patchSession).toHaveBeenCalledExactlyOnceWith(1, { priorityUid: 'abcdef123456', categoryUid: null });
+      expect(api.patchSession).toHaveBeenCalledExactlyOnceWith(1, { priorityUid: 'abcdef123456' });
+      expect(screen.getByRole('img', { name: 'Priority 1' })).toBeTruthy();
+      expect(dot('Admin')).toBeNull();
+
+      // Unlinked, it has none: the pick went with the link.
+      edit(/Picked/);
+      fireEvent.change(planSelect(), { target: { value: '' } });
+      await settle();
+      expect(api.patchSession).toHaveBeenLastCalledWith(1, { priorityUid: null });
+      expect(dot('Admin')).toBeNull();
+      edit(/Picked/);
+      expect(chip()!.getAttribute('aria-label')).toBe('Category for this session: none');
     });
 
     // A press elsewhere: its pointerdown closes the list, and its mousedown then moves the focus.

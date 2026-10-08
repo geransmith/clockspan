@@ -8,6 +8,7 @@ import { ApiError } from '../lib/apiError';
 import { SAVE_FAILED, TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
 import { addPending, fetched, settle, settleWith, shown, untracked, type Tracked } from '../lib/optimistic';
+import { editedSession } from '../lib/retro';
 import { readStored, writeStored } from '../lib/storage';
 import { adjustedPlan, DUE_GRACE_SECONDS, dueKey, PAUSE_LIMIT_SECONDS, timerView, type TimerView } from '../lib/timer';
 import { useDayStore } from './useDay';
@@ -313,7 +314,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       attempt((cur) =>
         press(
           cur,
-          (s) => ({ ...s, ...patch }),
+          (s) => editedSession(s, patch),
           async () => {
             if (patch.priorityUid) await prioritiesSaved(cur.date);
             return api.patchSession(cur.id, patch);
