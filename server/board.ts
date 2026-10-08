@@ -164,7 +164,7 @@ export function weekdayMask(weekdays: readonly number[]): number {
 }
 
 /** The ISO weekdays in a recurring priority's mask, ascending. */
-export function weekdaysOf(mask: number): number[] {
+function weekdaysOf(mask: number): number[] {
   return [1, 2, 3, 4, 5, 6, 7].filter((day) => mask & (1 << (day - 1)));
 }
 

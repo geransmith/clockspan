@@ -19,7 +19,7 @@ type MergedField = Exclude<keyof Priority, 'position' | 'uid' | ReadOnlyField>;
  * on, else the stored one. A new `Priority` field fails typecheck until it is listed here or as
  * read only.
  */
-export const MERGED: Record<MergedField, 'merge'> = {
+const MERGED: Record<MergedField, 'merge'> = {
   text: 'merge',
   done: 'merge',
   addedAt: 'merge',

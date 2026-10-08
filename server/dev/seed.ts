@@ -128,9 +128,9 @@ export const SEEDED_CATEGORIES = [
 type CategoryName = (typeof SEEDED_CATEGORIES)[number]['name'];
 
 /**
- * The category each sample text counts under, the same on every day: most rows and their cards
- * have one, and so do the unplanned "Inbox" sessions. The rest (a personal errand, a review for a
- * colleague) have none.
+ * The category each sample text counts under, the same on every day: most tasks have one, and so
+ * do the unplanned "Inbox" sessions. The rest (a personal errand, a review for a colleague, the
+ * recruiter's reply) have none.
  */
 const CATEGORY_OF: Readonly<Record<string, CategoryName>> = {
   'Finish the expense report': 'Admin',

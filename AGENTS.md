@@ -8,9 +8,10 @@ nudge when the list grows), a focus timer that logs what was done and for which 
 retrospective card (plan vs. log, a "why" note, a nudge before clock-out), a week / month /
 quarter review, alarms for lunch, clock-out and the second meal period, and an optional Board
 page for tasks that aren't for today (off by default; its In progress column is today's Top
-priorities, and its cards carry categories, made from a card's chip or in Settings → Board; the
-same switch brings recurring priorities, set up in Settings → Board and offered on Top priorities
-on their weekdays).
+priorities, and tasks carry categories, made from a chip or in Settings → Board; the same switch
+brings recurring priorities, set up in Settings → Board and offered on Top priorities on their
+weekdays). Each task (a priority, a board card, a recurring priority) is stored once, with one
+name and one category; a day's list names the tasks on it.
 "Overtime approved" silences the clock-out alarm only. Every day is persisted; old days can be
 pruned. Data is **per user**; auth is optional (`AUTH_MODE=none | local | oidc`). One Docker
 container, SQLite on `/data`. A PWA used mostly on a laptop or desktop and laid out for phones
@@ -49,22 +50,23 @@ shared/                 imported by both sides, always with a `.js` suffix
                         MAX_PRIORITIES, SETTING_LIMITS, RETENTION_LIMITS
   api.ts                every wire type and `emptyDay`; the server's JSON builders and client/src/api.ts both use them,
                         the input limits both sides check (LIMITS, USERNAME, PASSWORD_LENGTH), the board's
-                        lanes (LANES), the server's caps on it (BOARD_LIMITS), the category colours
-                        (CATEGORY_COLORS) and the header naming the server's version (VERSION_HEADER)
+                        open lanes (OpenLane), how far back a task left open is offered and shown
+                        (LOOKBACK_DAYS), the server's caps on the board (BOARD_LIMITS, whose
+                        listWindowDays is built on LOOKBACK_DAYS), the category colours (CATEGORY_COLORS)
+                        and the header naming the server's version (VERSION_HEADER)
   sounds.ts             the sound catalog (SOUNDS, SOUND_EVENTS)
   dates.ts, timer.ts    date keys; pause-aware session timing (activeMs, plannedEndAt, pausedSecondsAfter,
                         PLANNED_SECONDS)
   punches.ts            kindForPosition: a punch row's kind is its position's parity; punchesKey: a list's
                         rows and times as one string; samePunches compares two lists by it;
                         MAX_PUNCHES (the server's row cap; the card hides Add extra out / in at it)
-  priorities.ts         hasText; isFree (a row never written in, where a new priority may go); mergePriorities:
-                        a priorities save laid onto the stored list as the changes made since its base,
-                        field by field as MERGED lists ('merge' or 'fixed'); sharesLink (two rows on one
-                        card or recurring priority); repeatedLink (what the PUT refuses); the merge's
-                        clean-up, dedupeLinks (one text row per link) and dropShadowedLinks (an emptied
-                        row loses a link a text row holds)
-  text.ts               sameText: the key the same text typed twice is matched by, and category names are
-                        compared by; categoryName: a category's name as the server stores it
+  priorities.ts         hasText; isFree (a row no task is on: the client pads a list with these, and a new
+                        priority goes into one); mergePriorities: a priorities save laid onto the stored
+                        list as the changes made since its base, rows matched by their task's uid, field by
+                        field as MERGED lists
+  text.ts               sameText: the key a task typed again by hand is matched by (Plan tomorrow's typed
+                        rows, Review's Not done), and category names are compared by; categoryName: a
+                        category's name as the server stores it
   backoff.ts            nextBackoff: the wait between retries of a request that must answer
 server/                 Express API → dist/server
   app.ts                createApp(): headers, /api/health, /api/auth/me for every mode, auth routers,
@@ -77,20 +79,25 @@ server/                 Express API → dist/server
   migrations/           the migrations that need code, frozen: oneItem.ts (13: each task stored once,
                         items backfilled from the cards, recurring priorities and per-day rows)
   settings.ts           mergeSettings (defaults + validation on every read and write), loadSettings
-  board.ts              the board's cards as stored: boardJson (listDate and held read from the rows;
-                        the categories and the recurring priorities), weekdayMask / weekdaysOf (a
-                        recurring priority's weekdays to the table's mask and back), placing and
-                        renumbering, and mirrorCards (the cards following a priorities save)
-  retention.ts          old-day pruning (pruneDays, runRetention, the RETENTION_DAYS cap)
+  board.ts              tasks as the board sees them: boardJson (listDate and listDone read from the entries,
+                        listed and logged from itemCounts; the categories and the recurring priorities),
+                        weekdayMask (a recurring priority's weekdays as the table's mask), placing and
+                        renumbering a lane, the one lane rule a save follows (nextFromLater), collectItems
+                        (deletes the tasks nothing names) and deleteItem (the full delete, which leaves a
+                        tombstone)
+  retention.ts          old-day pruning (pruneDays, which also takes the tasks it leaves done and the
+                        tombstones of tasks deleted before the cutoff; runRetention, the RETENTION_DAYS cap)
   validate.ts           isWholeNumber: the one check for every bounded whole number the server takes;
                         isOneOf: a value from a fixed list (a setting's choices, a category's colour)
-  refuse.ts             refuse(): sends an ErrorResponse; every API refusal but the timer-start 409 goes through it
+  refuse.ts             refuse(): sends an ErrorResponse; every API refusal but the timer-start 409 goes through it;
+                        STALE_CLIENT, the 409's message to a page loaded before tasks were stored once
   auth/                 session cookie, scrypt passwords, the login limiter, publicUser/logName (users.ts),
                         middleware (currentUser), local + OIDC routes, resetPassword (reset.ts: what the
                         reset-password command does)
-  routes/               the days, sessions, breaks, settings and board routers; shared.ts has findDay,
-                        ownedRouter (rows of a day, by id), uidRouter (rows of a user, by uid) and the
-                        session and break row → JSON builders (dayJson is in days.ts)
+  routes/               the days, sessions, breaks, settings, items (a task's own create, edit and delete)
+                        and board (GET /board and the categories) routers; shared.ts has findDay,
+                        ownedRouter (rows of a day, by id), uidRouter (rows of a user, by uid: categories
+                        and tasks) and the session and break row → JSON builders (dayJson is in days.ts)
   dev/                  seed.ts + seed-cli.ts (`npm run seed`), harness.ts (startTestApp for route tests)
   index.ts, cli.ts      the process entrypoints: the server (warns under AUTH_MODE=none), reset-password
                         (reads the arguments and prints resetPassword's answer)
@@ -113,37 +120,39 @@ client/                 Vite root → dist/client
                         fired alarms, Start fresh, the break-over mark, the capture box's category, the
                         morning offer's answers) and adoptUser, which records who the app is open for
                         under AUTH_USER_KEY and drops the last user's keys
-    board.ts            the board's columns from the cards and today's rows (boardColumns), what a move
-                        does and which store it writes (planMove, moveTargets, MoveRefused), where a drop
+    board.ts            the board's columns from the tasks and today's rows (boardColumns), what a move
+                        does and which store it writes (planMove, moveTargets, MoveRefused), the cap
+                        the store checks before it sends a lane (boardFull, addsToLanes), where a drop
                         lands and what a drag says (dropTarget, withDrag, overAnnouncement,
-                        moveAnnouncement), the cards the left-open offer may bring back
-                        (offeredLeftovers), the category chip's data (CategoryPick) and what New
-                        category makes of a name (categoryForName, nextColor, categoryNameTaken), and
-                        the board as a write shows it (withCard, withPatch, withoutCard, withCategory,
-                        withCategoryPatch, withoutCategory, withRecurring, withRecurringPatch,
-                        withoutRecurring)
+                        moveAnnouncement), the left-open rows the offer brings back (offeredLeftovers),
+                        the category chip's data (CategoryPick) and what New category makes of a name
+                        (categoryForName, nextColor, categoryNameTaken), and the board as a write shows
+                        it (withItem, withItemPatch, withoutItem, withCategory, withCategoryPatch,
+                        withoutCategory)
     popover.ts          placePopover: where the category chip's list goes on screen (under the chip or
                         above it, inside the viewport)
     recurring.ts        the morning offer's routines: which are due (dueRecurring, notOnList), which
                         it ticks (offerPicks, recurringCount), the list after Add to today
-                        (acceptOffer, recurringRow) and this device's answers (readAnswered,
-                        writeAnswered)
+                        (acceptOffer; recurringRow, the recurring priority itself as a new row) and
+                        this device's answers (readAnswered, writeAnswered)
   src/hooks/            state and effects (useDay, useTimer, useSettings, useBoard, useAlarms, …), each
                         with a happy-dom test beside it (useLatest is covered through the hooks that use
                         it, and AppProviders through the tests that render it).
                         useClock is the app's one 1-second clock; useSaveStatus
                         (Saving… / Saved / Not saved) serves the settings dialog; useBoard is the
-                        board's store (BoardProvider, its refresh and the daily sweep) and
-                        useCategoryPick, the category chip's data and inline create; useMediaQuery
-                        follows a media query for behaviour (the capture box's autofocus, the board's
+                        board's store (BoardProvider and its refresh; its deleteItem, the full delete,
+                        is the sheet's × → Delete everywhere too) and useCategoryPick, the category
+                        chip's data and inline create; useMediaQuery follows a media query for
+                        behaviour (the capture box's autofocus, the board's
                         drop glide under reduced motion); useRecurringAnswered keeps the recurring
                         priorities the morning offer was answered for today on this device.
                         src/test/fixtures.ts has the plain factories and TEST_SETTINGS (no React);
                         src/test/hooks.tsx re-exports fixtures.ts and AppProviders and has
                         SettingsAndDays, serveRange (a mocked getRange that answers from a list of
                         days) and the act() helpers
-  src/components/       the cards, History (Calendar + Review), Banners, FinishChoice, TodayOffer (Top
-                        priorities' morning notice), and the pieces several of them share (Folded: a
+  src/components/       the cards, History (Calendar + Review), Banners, FinishChoice, RemoveTask (×'s Off
+                        this day / Delete everywhere), TodayOffer (Top priorities' morning notice), and
+                        the pieces several of them share (Folded: a
                         long list's Show all; CategoryChip, the one category picker, and
                         CategoryDot; RepeatMark, a recurring row's mark, kept here so the sheet can
                         show it); settings/ holds SettingsDialog (the shell and tabs), a file per
@@ -211,9 +220,10 @@ to start over, with no confirmation. Production data lives only on the Docker `/
 which the dev machine cannot reach. Run the destructive paths for real: delete a session or
 user, cancel a timer, `DELETE /api/settings`.
 
-Start from `npm run seed`, not an empty DB (`server/dev/seed.ts`). A run deletes every day,
-board card, category and recurring priority of the user it seeds, hand-made ones included, then
-writes the last 10 weekdays and today. Each past weekday takes a template by its distance back
+Start from `npm run seed`, not an empty DB (`server/dev/seed.ts`). A run deletes every day, task
+(board cards, recurring priorities and deleted tasks' tombstones included, since the sample's
+uids are fixed) and category of the user it seeds, hand-made ones included, then writes the last
+10 weekdays and today. Each past weekday takes a template by its distance back
 (`kindForDistance`): the last weekday has an extra out/in pair in the afternoon and a priority
 added mid-day (the README's retro shot), then come a normal day, an overtime day (approved,
 10 h 15 m worked, with the second meal taken as an out/in pair after lunch), an unreviewed day
@@ -223,33 +233,34 @@ the default 10 are three normal days, two each of the extra pair, overtime and u
 cancelled sessions in all) and one half day. Every past day has two to four one-off priorities,
 then a row for each recurring priority due on its weekday (below), and a note. Today is clocked
 in two hours before *now*. Its three priorities were planned two minutes after the last
-weekday's review, with that day's first open one-off row carried to position 1 (a row of its
-own, with its own uid) and the second row ticked; its log has a 50-minute session for the
+weekday's review, with that day's first open one-off task carried to position 1 (the same task,
+with its own `addedAt`) and the second row ticked; its log has a 50-minute session for the
 ticked row, an unplanned one paused for eight minutes and finished three minutes short of its
-25, a full break and one cut short. The board holds what saves with the board on would have made
-of the last weekday's and today's one-off rows (`insertBoard`), each row linked by its `cardUid`:
-open rows in Next, ticked ones in Done, all untouched, and today's carried row on the same card,
-in the same category, as its source row. Four cards were captured on the board: three in Later
-("Write a KB for the SSO reset", "Review canned replies", "Look into the export timeout") and
-one at the end of Next ("Follow up on the Acme SLA"). The board has four categories
-(`SEEDED_CATEGORIES`: Tickets, Follow-ups, Knowledge base, Admin), and each sample text counts
-under the same one on every day (`CATEGORY_OF`): most rows and their cards have one, two (a call
-to the bank, a colleague's pull request) have none, the captured cards have one, and so do the
-unplanned "Inbox" sessions (Tickets), the only sessions with a category of their own. The board
-has two recurring priorities (`SEEDED_RECURRING`): "Monitor the queue" Monday to Friday, under
-Tickets, and "Follow-ups" on Monday, Wednesday and Friday, under Follow-ups. Each past weekday
-lists the ones due on it after its one-off rows, written with the list (`routineRows`), linked by
-`recurringUid`, in the item's category and on no card: the queue is ticked, with a 25-minute
-session, on every template's day but the unreviewed one; the follow-ups are ticked, with a
-25-minute session, on normal and overtime days and left open on the rest. Today lists none, and
-a routine left open is never the row carried over to it. With the board on, today's sheet then
-offers them on a weekday (`--today` a weekday if needed); today's seeded one-off rows hide "Still
-open from …", so for both groups empty those rows, keeping them on the list, and reload: clear
-them on today's sheet, or
-`curl -s localhost:3000/api/days/<today> | jq '{priorities: [.priorities[] | .text = "" | .done = false]}' | curl -X PUT localhost:3000/api/days/<today>/priorities -H 'content-type: application/json' -d @-`.
-Removing them instead (a PUT of `[]`) deletes the untouched card of the row carried to today, and
-the board's offer then leaves that leftover out. The seed writes no settings, so the board is off
-on a new dev DB or after `--fresh`; this turns it on:
+25, a full break and one cut short. Each sample text is one task on every day it is on
+(`TASK_TEXTS`, `insertItems`), so it reads the same name and category on all of them. The last
+weekday's and today's open one-offs are in Next, today's above the last weekday's; the other
+tasks have no lane, so a done one shows by its tick, and one whose latest day left it open in the
+last `LOOKBACK_DAYS` shows in Next as left open. Four tasks
+were captured on the board: three in Later ("Write a KB for the SSO reset", "Review canned
+replies", "Look into the export timeout") and one at the end of Next ("Follow up on the Acme
+SLA"). The board has four categories (`SEEDED_CATEGORIES`: Tickets, Follow-ups, Knowledge base,
+Admin), and each sample text counts under the same one on every day (`CATEGORY_OF`): most tasks
+have one, three (a call to the bank, a colleague's pull request, the reply to the recruiter) have
+none, the captured tasks have one, and so do the unplanned "Inbox" sessions (Tickets), the only
+sessions with a category of their own. The board has two recurring priorities
+(`SEEDED_RECURRING`): "Monitor the queue" Monday to Friday, under Tickets, and "Follow-ups" on
+Monday, Wednesday and Friday, under Follow-ups. Each past weekday lists the ones due on it after
+its one-off rows, written with the list (`routineRows`), each row the recurring priority itself:
+the queue is ticked, with a 25-minute session, on every template's day but the unreviewed one;
+the follow-ups are ticked, with a 25-minute session, on normal and overtime days and left open on
+the rest. Today lists none, and a routine left open is never carried over to it. With the board
+on, today's sheet then offers them on a weekday (`--today` a weekday if needed); today's seeded
+one-off rows hide "Still open from …", so for both groups take those rows off today's list and
+reload: × on today's sheet (Off this day where it asks), or, since today lists no routine,
+`curl -X PUT localhost:3000/api/days/<today>/priorities -H 'content-type: application/json' -d '{"priorities":[]}'`.
+The carried task stays on the last weekday's list, open and in Next, so "Still open from …"
+offers it. The seed writes no settings, so the board is off on a new dev DB or after `--fresh`;
+this turns it on:
 `curl -X PUT localhost:3000/api/settings -H 'content-type: application/json' -d '{"board":true}'`.
 
 `--running` leaves a 25-minute timer running, started ten minutes before *now*, for timer work;
@@ -329,17 +340,22 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   nothing, and no user zone is known server-side.
 - **Old-day deletion goes through `pruneDays` (`server/retention.ts`)**, whether from the
   Data tab's button (`POST /days/prune`) or the scheduled `runRetention`. It deletes `days`
-  rows before a date key (cascades take punches, priorities, sessions, breaks), never a day with a
-  running session, and never settings, categories or recurring priorities. The Data tab sends it
+  rows before a date key (cascades take punches, entries, the old per-day rows in
+  `priorities_v1`, sessions, breaks), never a day with a running session, and never settings,
+  categories or recurring priorities in use. The Data tab sends it
   through the day store's `pruneBefore`, which reads the held days before the cutoff again and
   moves `generation`, so the ranges on screen ask again. The per-user setting
   `retention { enabled, days }` is capped by `RETENTION_DAYS` (`config.retentionDays`) via
-  `effectiveKeepDays`; a user with no settings row still gets the cap. The same prune takes the
-  board cards done before the cutoff and the untouched cards (made by a priorities save, never
-  handled on the board) that no row is linked to any more, which would otherwise show again once
-  their emptied row's day was gone; it answers both counts (`Pruned`), and `POST /days/prune`
-  reports the days; the Data tab reads the board again after its delete while the board is on.
-  `reclaimSpace` (VACUUM + WAL checkpoint) runs after a prune that deleted a day or a card and
+  `effectiveKeepDays`; a user with no settings row still gets the cap. The same prune, in its
+  transaction, takes the tasks it leaves done (a one-off or archived task whose latest entry was
+  ticked before the cutoff, named by no entry or session once the days are gone, whatever its
+  lane), then the tombstones of tasks deleted before the cutoff (UTC midnight of `before`), then
+  any task nothing names (`collectItems`, which skips the newer tombstones), and closes up a lane
+  that lost one. An open task in a lane and a recurring priority in use are never taken. With
+  retention off nothing runs, so tombstones stay. It answers both counts (`Pruned`: days and
+  tasks, tombstones included), and `POST /days/prune` reports the days; the Data tab reads the
+  board again after its delete while the board is on.
+  `reclaimSpace` (VACUUM + WAL checkpoint) runs after a prune that deleted a day or a task and
   after an admin deletes a user (`DELETE /api/auth/users/:id`), so the file shrinks and deleted
   text does not stay in free pages; it must not run inside a transaction.
 - **Every data query is scoped by `req.user.id`** (`currentUser(req)`). In `AUTH_MODE=none` that
@@ -353,11 +369,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   check lives: it is that router's `id` param handler (`router.param`), so every route on it
   with an `:id` is checked, one added later included, with nothing to list on the route. It
   answers 404 for another user's row or none, and the handler reads the row with `owned(res)`.
-  A table whose rows hang off the user rather than a day and are named by a uid (the board's
-  cards, `/board/cards/:uid`, categories, `/board/categories/:uid`, and recurring priorities,
-  `/board/recurring/:uid`) gets the same from `uidRouter()` beside it, as the router's `uid`
-  param handler: the uid's shape is checked, it is matched lowercased, and anyone else's or none
-  is a 404.
+  A table whose rows hang off the user rather than a day and are named by a uid (categories,
+  `/board/categories/:uid`, and tasks, `/items/:uid`) gets the same from `uidRouter()` beside
+  it, as the router's `uid` param handler: the uid's shape is checked, it is matched lowercased,
+  and anyone else's or none is a 404, and so is a deleted task's tombstone (`UID_GONE`), so every
+  `/items/:uid` route, one added later included, treats a deleted task as gone.
+  `getOwnedByUid` still returns a tombstone, so `POST /items` sees that its uid is taken.
 - **Settings go through `mergeSettings()` on every read and write** (`server/settings.ts`):
   the stored JSON is merged onto `DEFAULT_SETTINGS`, unknown keys are dropped, invalid values
   fall back, and a PUT stores the whole merged object, so a key added since a user's last save
@@ -459,28 +476,30 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   what the server holds now: a save's answer can be older than a read that landed first. A
   failed write just drops its change, so the screen is back on the confirmed copy at once (with
   the "Change not saved" banner), and the day is asked for again. A writer off the Priorities
-  card (the board) changes a list through `editPriorities(date, fn, touched)`: `fn` gets the
-  rows the store shows now (`current()`), padded, and it answers `'saved'`, `'notLoaded'`,
-  `'skipped'` (`fn` gave null) or `'failed'`, never rejecting. It saves through the same send as
-  `setPriorities` and `addPriority`, so a save that takes off a row with a category a session
-  was logged on reads the day again whichever of them sent it (`leavesCategory`). `shown(date)`
-  is the day as it shows now, for a board job reading the list again after an await. A delete or
-  a break's end the server answers 404 for counts as done: another device removed the row
-  already. A read's answer replaces the confirmed copy and never a change still on its way. It
-  is stale when the server confirmed a change after the read went out (`version`): a day read
-  then drops it (a day never loaded takes it anyway) and asks for the day again, whoever sent
-  the read, while a range read's stale day is left to the next read. An answer the same as the
-  confirmed copy changes nothing, so a day that didn't change keeps its identity. A day not
-  loaded yet keeps its changes until the server's copy arrives, so nothing made up stands in for
-  it. `pruneBefore` is the one store write sent on no queue (the queues are keyed by day,
-  session and breaks), so a change still on its way for a day before the cutoff can land after
-  the prune and re-create that day, which the re-read after the prune shows. The day store,
-  `useSettings`, `useTimer` and `useBoard` are all built on `useTracked`
-  (`hooks/useTracked.ts`); a board write rejects when it fails, like a settings save, and the
-  board is read again. `apply` and commit functions are pure: read the clock outside them. The
-  board's move handlers are built in its render and passed down to its cards, where the React
-  Compiler's purity lint refuses `Date.now()`, so a row the board places on today's list is
-  stamped `addedAt` by the store as it goes out.
+  card (the board) changes a list through `editPriorities(date, fn)`: `fn` gets the rows the
+  store shows now (`current()`), padded, and it answers `'saved'`, `'notLoaded'`, `'skipped'`
+  (`fn` gave null) or `'failed'`, never rejecting. It saves through the same send as
+  `setPriorities` and `addPriority`. `shown(date)` is the day as it shows now, for a board job
+  reading the list again after an await. A delete or a break's end the server answers 404 for counts
+  as done: another device removed the row already. A read's answer replaces the confirmed copy and
+  never a change still on its way. It is stale when the server confirmed a change after the read
+  went out (`version`): a day read then drops it (a day never loaded takes it anyway) and asks for
+  the day again, whoever sent the read, while a range read's stale day is left to the next read. An
+  answer the same as the confirmed copy changes nothing, so a day that didn't change keeps its
+  identity. A day not loaded yet keeps its changes until the server's copy arrives, so nothing made
+  up stands in for it. `pruneBefore` is the one store write sent on no queue (the queues are keyed
+  by day, session and breaks), so a change still on its way for a day before the cutoff can land
+  after the prune and re-create that day, which the re-read after the prune shows. After a full
+  delete (the board store's `deleteItem`) `taskDeleted(uid)` reads again every held day whose list
+  or log names the task, `refresh(date, { fresh: true })` (a read already out may have left before
+  the delete, so its answer is dropped and the day asked for again), and moves `generation` as
+  `pruneBefore` does, so no range on screen offers or counts the task from an older answer. The day
+  store, `useSettings`, `useTimer` and `useBoard` are all built on `useTracked`
+  (`hooks/useTracked.ts`); a board write rejects when it fails, like a settings save, and the board
+  is read again. `apply` and commit functions are pure: read the clock outside them. The board's
+  move handlers are built in its render and passed down to its cards, where the React Compiler's
+  purity lint refuses `Date.now()`, so a row the board places on today's list is stamped `addedAt`
+  by the store as it goes out.
 - **Suggested break lengths come only from `client/src/lib/breaks.ts`** (`suggestBreak`,
   pure, over a day's sessions: a fifth of the session, a long break for the fourth in a row, a
   15-minute gap restarts the count); with Suggest breaks off the Break button runs
@@ -522,17 +541,22 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   included. That queue is not ordered against the day store's `session:<id>` queue, which
   carries the other rows' edits and deletes. Two jobs wait across queues: a session start or
   edit that names a priority's uid first waits, inside its own queue's job, for that day's
-  priorities save still out (`prioritiesSaved`), since the server refuses a uid it hasn't
-  stored; and a board job that changes a day's list waits for that save (below). `useSettings`
-  sends its PUTs and resets one at a time. The board (`useBoard`) sends each write as one job on
-  its `'board'` queue, its change to the cards shown from the moment it is made; a job that
-  changes a day's list (a pull, a park, a tick, a rename, a Delete, the sweep) awaits that save
-  inside the job, through `editPriorities` and so on the day store's list sends. A pull, a
-  park's removal, a tick and a rename send the item's card as `touched`; a Delete and the sweep
-  send none. A list that takes a waiting one's place goes with the `touched` of every list it
-  replaced, as it goes with the oldest base. A new edit of a day's rows, the settings, the timer
-  or the board goes through one of these, never straight to `api`. Reads are not queued, and in
-  every store a read's answer never replaces a change still on its way.
+  priorities save still out (`prioritiesSaved`), since the server refuses a task that day's
+  list doesn't hold yet; and a board job that changes a day's list waits for that save
+  (below). `useSettings` sends its PUTs and resets one at a time. The board (`useBoard`) sends each
+  write as one job on its `'board'` queue, its change to the tasks shown from the moment it is made;
+  a job that changes today's list (a pull, a tick, a rename or category of today's row, Remove from
+  today) goes through `editPriorities`, and so on the day store's list sends, and awaits that save
+  inside the job. A park is one job of three steps: it awaits today's save still out
+  (`prioritiesSaved`), so a task typed seconds ago exists on the server, then PATCHes the task's
+  lane, then takes its row off today's list, so the save's clean-up never takes a task with no lane
+  and a retry places the same task; refused at the cap, it removes nothing. Delete (`deleteItem`,
+  the board's and the sheet's) takes the task's row off today's list, or awaits today's save when
+  the row is gone already (the sheet's × took it), then sends `DELETE /items/:uid`; it doesn't wait
+  for other days' saves, since the server drops a row naming a deleted task. A board PATCH of a task
+  off today's list needs no wait: the board read that task from the server. A new edit of a day's
+  rows, the settings, the timer or the board goes through one of these, never straight to `api`.
+  Reads are not queued, and in every store a read's answer never replaces a change still on its way.
 - **Punch positions are fixed**: 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in
   pairs, and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches`
   enforces it). Kind is parity (`kindForPosition`, `shared/punches.ts`). The math evaluates *set* punches
@@ -579,85 +603,110 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   needs no lunch with the meal periods on, and past the target with no lunch taken.
   `trackHours: false` only hides hours outside the day's own tiles (the week line, History's
   hours, the Clocked out sticker via `stickerReasons`); the timeclock still runs.
-- **Priorities are stored as the client sends them, merged with what other devices saved**
-  (positions 1..n, contiguous, ≤ `MAX_PRIORITIES`; no `done` on an empty row). A day never
-  edited has none. The card saves the rows it shows, its padded empty ones included, so a
-  cleared row keeps its `uid`, its `addedAt` and the sessions that point at it: it is the same
-  item, and typing in it again renames it (with focus logged on it, the card says under it that
-  the time stays). A new priority never lands on a cleared row: Add priority and the timer's
-  Also add (`placePriority`, `hasRoom`) use a row never written in (`isFree`: empty, no uid) or
-  a new one at the end, and `planNext` (Plan tomorrow, the left-open Add) drops only rows never
-  written in. The nudge (`nudgeFor`) counts the rows with text and no `recurringUid`, while the
-  warning's kind still counts every written row. The server never pads: the
-  client pads to `settings.priorityCount` with `padPriorities()`, and every reader of a list
-  skips empty rows with `hasText` (`shared/priorities.ts`). `PUT /days/:date/priorities` takes
-  the list and its `base`, the list it was built on (the card's draft sends what its edits were
-  made on, `PlanNext` and `addPriority` the day's shown copy), and stores
-  `mergePriorities(stored, base, list)`, which the day store also shows while the save is out.
-  Rows match by uid. Each `'merge'` field in `MERGED` takes this device's value where it
-  differs from `base`, else the stored one; a `'fixed'` field (`cardUid`, `recurringUid`) keeps
-  the stored row's value whatever arrives. A link a save leaves out keeps its value: a missing
-  `categoryUid` is read as the base row's, else the stored row's, and a missing card or
-  recurring priority is none on a new row. A row this device removed goes; one another device
-  removed stays gone unless this device changed it. A row another device added since `base`
-  stays, in this device's first row never written in (never a cleared one, which still stands
-  for its item) or at the end, and a row added on both with the same text (`sameText`) is one
-  row, the stored one, when the row added here links to nothing (no card, no recurring
-  priority) and the stored one has no recurring priority (a card it may hold: a save with
-  `cards` made it); the stored row takes the category picked here when it has none, and keeps
-  its own when it has one. Order is this device's. Removing a row is sending the list without
-  it. With no base (curl, a tab from before the merge) the list replaces the stored one, the
-  fixed fields aside.
-- **A priority's identity is its `uid`, never its position.** The client mints it (`newUid()`)
-  the first time a row gets text and stamps `addedAt`; both survive a text clear and a renumber.
-  `sessions.priority_uid` points at it (null or a removed row = unplanned). `POST/PATCH`
-  sessions check the uid exists on that day. Each day's row has its own uid, and three soft
-  links tie it to its task across days: `cardUid` (the board card), `recurringUid` (the
-  recurring priority it was added from) and `categoryUid`. They are checked for shape only
-  (`UID_RE`; a row never written in holds none, and one row is never both a card and a recurring
-  priority), and a null link matches nothing (`sharesLink`). Carry-over (the left-open Add and
-  Plan tomorrow, through `planNext`'s seeds) gives the new day's row a fresh uid and `addedAt`
-  and carries its card and category (a recurring row is never carried: `leftOpen` and Plan
-  tomorrow skip it), but with the board on a left-open row whose card is in Next takes the
-  card's title and category (`offeredLeftovers`, below), which the board may have changed since
-  that row's day. `cardUid` and `recurringUid` are fixed once stored (no client changes them; the
-  server fills a null `cardUid` when a save makes the row's card, see the board rule below);
-  `categoryUid` changes like the text. A cleared row keeps all three. A stored list
-  never holds two text rows with one card or one recurring priority: a sent list that repeats
-  one is refused (400) when one of the two rows is new to the server (`repeatedLink`), and the
-  merge keeps the stored row of a repeat, else the first, at the first of their places
-  (`dedupeLinks`). A cleared row loses a card or recurring priority a text row of its list holds
-  (`dropShadowedLinks`). `placePriority` and `planNext` never make a repeat: a row placed or
-  planned whose link a text row holds is skipped, and a cleared row that holds it takes it back
-  with its uid and `addedAt`, so the time logged on it counts again, and its category unless the
-  row placed brings one (`takeBack`).
-- **A board card follows its latest linked row** (`board_cards`, `server/board.ts`). A card's
-  latest linked day is the latest day whose list holds a row with its `cardUid`, text or
-  emptied; `BoardCard.listDate` is that day and `held` is derived from it on every read, never
-  stored. Priorities are written only by their PUT, and `mirrorCards` runs inside its
-  transaction, after the merge and before the rows are stored. The client says what the
-  server can't know: `cards` (the board is on and the list's day is today or later) makes a
-  card for each non-recurring text row with no `cardUid`, minted by the server and written onto
-  the row the answer carries, and gives a row gaining text whose card is gone its card back
-  under that `cardUid`, both under the 300-card cap on Later and Next (`BOARD_LIMITS`; at the
-  cap the row waits for a later save, and the save never fails for it); `touched` names the
-  cards a board action handled through their rows. Whatever `cards` is, only what the save
-  changed is copied, and only from the card's latest linked day: a row gaining text (new to the
-  list, or typed into again) gives the title, the category and the lane by its tick, new text
-  the title, a new category the category, a tick Done and an untick the top of Next; a card a
-  save makes takes its row's title and category. Done is reached only through a ticked row. A card a
-  save made stays `untouched` until a board POST or PATCH, or a save whose `touched` names it:
-  while its row there is emptied it is held (shown nowhere until the row has text again), and
-  when that row is removed it is deleted, so a row typed and then removed leaves no card behind.
-  A handled card is never deleted by a save: when its open row goes it stays where it is, or
-  goes back to Done when that row had taken it out (it is in Next and its latest remaining row
-  with text is ticked). A board `PATCH` carries the client's `today` and is refused (409) while
-  a row on that day's list or a later one is linked to the card, since that row decides it; a
-  `POST` of a uid that exists places that card (a park) instead of making one. A board write
-  that adds a card to Later and Next (a new one, or one taken out of Done) is refused at the
-  cap. Recurring rows never get a card.
+- **A task is stored once** (`items`, `server/board.ts`): a one-off typed on a sheet or made on
+  the board, or a recurring priority (`weekdays` set), each with one name and one category that
+  every day it is on shows, past days included. A day's list only names its tasks (below). A
+  task's lane (`later`, `next`, or none) is the board's alone: capture, a park, a Move to or drop
+  into Later or Next, and the done notice's Add a new card give one, and a task typed on a list
+  has none. Done is never stored: the server answers each task's `listDate` (its latest entry's
+  day) and `listDone` (that entry's tick), so the board and the days can't disagree. One lane
+  rule follows a save: a task in Later added open to its latest list (no entry on a later day)
+  goes to the top of Next (`nextFromLater`). A write sets the fields it changed and the last
+  write wins, with no version, `today` or 409: the list PUT writes a task's name (trimmed) and
+  category only where this device's row differs from its base row, makes a task for a uid new
+  to the user (no lane), and writes nothing for a task new to that list (a carry, a pull, the
+  offer), so a stale name never renames it; `PATCH /items/:uid` sets only the fields sent.
+  `POST /items` makes a task on the board (`lane`: capture, or a done item's new task) or a
+  recurring priority (`weekdays`), never both; a uid that exists answers the board as it is (a
+  retry), and an archived or deleted task's is a 404. The cap of 300 (`BOARD_LIMITS.openCards`)
+  counts the tasks in Later or Next whose latest entry isn't ticked; only board writes reach it,
+  refused with `BOARD.full`. A task's row is deleted in two places only: `collectItems`, which
+  deletes the tasks no entry or session names that are archived or a one-off in no lane (the
+  list PUT runs it on the tasks it took off, a session delete, cancel or relink on the task the
+  session left, Settings' Remove on its routine, the prune over everything), and the prune's
+  tombstone step. So a task typed and taken off again leaves nothing, a task in a lane stays,
+  and a task carried to a new day and taken off there keeps its earlier day. A cancel takes its
+  session off the task too, since a cancelled session counts nowhere. Archived (`archived_at`)
+  is a recurring priority removed in Settings, or a task the migration archived: it still shows
+  wherever an entry or session names it (`Priority.archived`), is never in a lane or offered,
+  and nothing unarchives it; a board write on it is a 404.
+- **A deleted task is a tombstone until the prune.** Delete, the board's and the sheet's
+  × → Delete everywhere, is `DELETE /items/:uid` on a one-off task, `deleteItem` in one
+  transaction: every session on it stays on its day as unplanned time, with the task's name (cut
+  to `LIMITS.sessionLabel`) as its label and its category as its own (a running one runs on),
+  every day's entry of it goes, and the row stays with `deleted_at` set, in no lane, named by
+  nothing. Nothing brings it back: the list PUT drops a row naming it from the sent list and
+  from `base` before the merge and stores the rest (no banner: the answer is the list as it
+  stands), every `/items/:uid` route answers 404 for it (the uid router), `POST /items` with its
+  uid is a 404, a session start or PATCH naming it is refused (it has no entry), `collectItems`
+  skips it, and no read shows it. The prune deletes it once `deleted_at` is before its cutoff;
+  with retention off it stays, a uid, a name and a category. `DELETE /items/:uid` on a recurring
+  priority is Settings' Remove instead: a routine has no full delete. Delete's confirm,
+  `CONFIRM.deleteTask(days, logged)`, gives the days the task is on and the time logged on it:
+  today's row's counts for an item on today's list, else the board's (`BoardCard.listed`,
+  `logged`).
+- **Priorities are entries of tasks, merged with what other devices saved.** A day's list is its
+  entries (`priorities`: day, task, position, tick, `addedAt`; the old per-day rows sit unread in
+  `priorities_v1`), so a row's `uid`, `text` and `categoryUid` are its task's, and `recurring`,
+  `archived`, `listed` (the days whose lists hold the task), `earlier` (those before this one)
+  and `logged` (its completed focus, every day) are read only, worked out by the server
+  (`itemCounts`). A day never edited has none. The client pads a list to
+  `settings.priorityCount` with free rows (`isFree`: no uid, no text) and saves the rows it
+  shows, free ones included; the server stores each row with a uid at its place in the list and
+  skips the free ones, so positions can have gaps where free rows sat (`padPriorities` fills
+  them by position): the morning offer's routines stay after the padded rows, and a row typed
+  under empty ones stays where it was typed. Add priority and the timer's Also add
+  (`placePriority`, `hasRoom`) use the first free row or a new one at the end, and `planNext`
+  (Plan tomorrow, the left-open Add) drops only free rows. The nudge (`nudgeFor`) counts the
+  one-off rows with text (`isOneOff`), while the warning's kind still counts every written row.
+  Every reader of a list skips free rows with `hasText` (`shared/priorities.ts`).
+  `PUT /days/:date/priorities` takes the list and its `base`, the list it was built on (the
+  card's draft sends what its edits were made on, `PlanNext` and `addPriority` the day's shown
+  copy), and stores `mergePriorities(stored, base, list)`, which the day store also shows while
+  the save is out. Rows match by uid. Each field in `MERGED` (`text`, `done`, `addedAt`,
+  `categoryUid`) takes this device's value where it differs from `base`, else the stored one. A
+  row this device removed goes; one another device removed stays gone unless this device changed
+  it (a rename or a tick brings it back). A row another device added since `base` stays, in this
+  device's first free row or at the end. Two devices putting one task on a list send its one
+  uid, so it is one entry; the same text typed new on each is two tasks. Order is this device's,
+  and removing a row is sending the list without it. A merged list longer than `MAX_PRIORITIES`
+  is refused (409), never cut. A uid repeated in one list and a row with a uid and a blank name
+  are 400s. With no base (curl) the stored list stands in for it.
+- **A row's identity is its task's `uid`, never its position.** An entry is (day, task), and the
+  key `(day_id, item_id)` allows one per task a day. The client mints a uid (`newUid()`) the
+  first time a row gets text and stamps `addedAt`; the save that first names it makes the task.
+  `sessions.item_id` points at the task (on the wire `Session.priorityUid` is its uid; null is
+  unplanned), and `POST/PATCH` sessions check the task has an entry on that day. Carry-over (the
+  left-open Add, Plan tomorrow, the morning offer, through `planNext`'s seeds) and a board pull
+  put the same task on the new day with its own `addedAt`, never a copy, so time logged on it
+  counts there too, and taking a task off a day and putting it back puts that day's time back
+  on the plan; a seed typed new (`textSeed`, `uid: null`) gets a new uid. `placePriority`,
+  `planNext` (`sameItem`) and `notOnList` match a row by uid alone, whatever its draft text, so
+  a task is never placed twice and a row whose box is blank still stands for its task. A
+  recurring row is never carried: `leftOpen` and Plan tomorrow skip it. A row the client builds
+  before the server answers takes the read-only fields from its source (a carried row its source
+  row's counts, a pull the board's `listed` and `logged`, a routine `recurring: true`), else the
+  defaults (`emptyRow`, `newTaskRow`), and the save's answer replaces them.
+- **A blank name is never saved, and × takes a task off a day** (`Priorities.tsx`). Emptying a
+  box doesn't remove its task: while it is blank and focused the note under it reads
+  `BLANK_NOTE(name)`, the list goes out with that row's name as it was (`named`; ticks and the
+  other rows still save), its checkbox is disabled and its tick kept (`editPriority` clears
+  `done` only on a free row), and leaving the box or Escape puts the stored name back (a row
+  typed and emptied before it was ever saved becomes a free row again). The server refuses a
+  row with a uid and a blank name. Typing over a written row renames its task on every day;
+  while the box's text differs from the name it had when it took the focus and earlier days'
+  lists hold the task (`p.earlier > 0`), the note reads `RENAME_NOTE(earlier)`, an indicator
+  rather than a question. × shows on every row with a task and every row past Rows per day:
+  within Rows per day the row stays, free, with the focus in its box (`clearRow`), and past it
+  the row goes. A recurring row, or a one-off on no other day with no time logged, comes off at
+  once; a one-off on other days (`p.listed > 1`) or with time logged (`p.logged`, or a completed
+  session in the day's log, so one finished since the read counts) asks first in `RemoveTask`
+  (built like `FinishChoice`: `useModalDialog`, the focus on the frame; `REMOVE_TASK`): Off this
+  day (the × path), Delete everywhere (the × path, then the board store's `deleteItem`, which
+  works with the board off; its failure raises the "Change not saved" banner and leaves the task
+  off that day only), or Cancel, which puts the focus back on ×.
 - **A category is a row of its own, named by its uid** (`categories`, routes in
-  `routes/board.ts`, answered in `Board.categories`). Rows, cards and sessions point at one by
+  `routes/board.ts`, answered in `Board.categories`). Tasks and sessions point at one by
   `categoryUid`, a soft link checked for shape only, so a category made on this device can reach
   the server after the row that names it. Removing one archives it (`archived_at`), never deletes
   it, so the time logged under it keeps its name; a `POST` of its uid brings it back with the name
@@ -666,21 +715,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   stop the README's handover script), and a new uid can't take a removed one's name either: the
   client brings that one back. The server caps them at 100 in use and 1000 stored
   (`BOARD_LIMITS`), sanity caps with no product limit behind them; colours (`CATEGORY_COLORS`,
-  checked with `isOneOf`) repeat. A session counts under the category of the written row it was
-  logged on; its own `categoryUid` is one picked in the log, or the category of its row once a
-  priorities save removes that row: the PUT copies it onto the day's sessions on that row that
-  have none (`keepSessionCategories`, in the same transaction), and the day store, seeing that
-  save take a row with a category off a list a session points at (`leavesCategory`), reads the
-  day again. An emptied row stays on its list with its category, so its sessions keep counting
-  under it, unless the day log gave one a category of its own, and nothing is copied. Once the
-  row is written in again (typed into, or a removed row a save brings back because this device
-  changed it), it decides: the PUT drops the `categoryUid` of the day's sessions on every text
-  row that wasn't one in the stored list (`dropSessionCategories`, in the same transaction),
-  and the day store, seeing a save write in an emptied row that a session with a category of
-  its own points at (`regainsText`), reads the day again, or its copy would keep the pick the
-  server dropped. A `PATCH /sessions/:id` that links a session to a row drops a category of its
-  own the same way, whatever it sent, and the day store and the timer show the edit so while it
-  is out (`editedSession`), so a removal answered first still reads the day again. On the client
+  checked with `isOneOf`) repeat. A session with a task counts under the task's category: the
+  server answers `Session.categoryUid` worked out (the task's, else the session's own), so its
+  own `category_uid` is read only while it has no task: one picked in the log (a pick for a
+  session with a task takes it off the task too), or the task's, copied by a full delete. A
+  `PATCH /sessions/:id` that links a session to a task drops a category of its own, and a
+  category sent for a session that keeps its task is refused (400); the day store and the timer
+  show an edit as the server will store it while it is out (`editedSession`). On the client
   `CategoryChip` is the one way a category is picked, fed by `useCategoryPick` (null while the board
   is off or before its first read, and then no chip shows), which the board page, the sheet and
   Settings → Board each call once and pass down as `pick`: the sheet's goes to Top priorities (a
@@ -701,98 +742,111 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   Settings → Board (`BoardTab`, shown while the board is on) adds (`categoryForName` again),
   renames (refusing a name in use, `categoryNameTaken`), recolours and removes categories, and
   adds (on Monday to Friday, no category), renames, gives a category, sets the weekdays of (the
-  last day on stays on) and removes recurring priorities (the board store's `addRecurring`,
-  `editRecurring` and `removeRecurring`, where a 404 on the delete counts as done), each through
-  the dialog's `save`. A recurring priority's Remove asks first (`CONFIRM.deleteRecurring`), since
-  the delete is for good; a category's archives it and doesn't ask.
-- **A recurring priority is a row of its own, named by its uid** (`recurring`, routes in
-  `routes/board.ts`, answered in `Board.recurring` in the order they were made): a title, a
-  category and the weekdays it is offered on, ISO 1 (Monday) to 7 on the wire and a mask in the
-  table (bit 0 for Monday; `weekdayMask`, `weekdaysOf` in `server/board.ts`). The rows it adds
-  point at it by `recurringUid`. Deleting one deletes it for good; those rows keep the link, now
-  to nothing, and their own category. The server caps them at 100 (`BOARD_LIMITS`), a sanity cap
-  with no product limit behind it, and never prunes them.
+  last day on stays on) and removes recurring priorities (the board store's `addItem` with
+  `weekdays`, `editItem` and `removeRecurring`, where a 404 on the delete counts as done: an
+  archived routine is one), each through the dialog's `save`. A recurring priority's Remove
+  archives it, and `collectItems` deletes it when nothing names it; it still asks first
+  (`CONFIRM.deleteRecurring`, which says the days it was on keep it), since nothing in the app
+  brings one back. A category's Remove archives it and doesn't ask.
+- **A recurring priority is a task with weekdays** (`items.weekdays`, made and edited through
+  `/items` from Settings → Board, answered in `Board.recurring` in the order they were made,
+  archived ones left out): a title, a category and the weekdays it is offered on, ISO 1 (Monday)
+  to 7 on the wire and a mask in the table (bit 0 for Monday; `weekdayMask` in
+  `server/board.ts`). The rows it adds are entries of it (`Priority.recurring`), so a rename or a
+  category, in Settings or on its row on the sheet, reaches every day it is on; a Settings edit
+  of one on today's list reads today again (`refresh(today, { fresh: true })`). It is never in a
+  lane (a `lane` sent for one is a 400) and has no full delete: Settings' Remove archives it, so
+  it is no longer offered, listed in Settings or counted toward the cap, and the days it was on
+  keep it. The server caps them at 100 in use (`BOARD_LIMITS`), a sanity cap with no product
+  limit behind it, and the prune never takes one in use.
 - **Recurring priorities are offered on today's sheet** (`client/src/lib/recurring.ts`,
   `components/TodayOffer.tsx`), worked out on the client while the board is on and read. Today's
-  Top priorities shows one morning notice: "Still open from …" (the leftovers, which the board may
-  retitle, `offeredLeftovers`) while no one-off row has text, and "Repeats today", the items due
-  (`dueRecurring`: the date's ISO weekday, `isoWeekday` in `shared/dates.ts`, computed in UTC from
-  the key; no row with text holding the item's uid, `notOnList`, so an emptied one doesn't hide
-  it; not answered on this device today), in Settings order. Both groups are judged on the stored
-  list by the sheet and again on the card's draft (`isOneOff`, `notOnList`), so a row typed or a
-  save already sent counts at once. Each group is a `role="group"` named by its heading, and each
-  item a box, a leftover once per item as `planNext` would bring it (`sameItem`): the leftovers
-  start ticked, the routines up to `recurringPerDay` less the routines already on the list
+  Top priorities shows one morning notice: "Still open from …" (the leftovers) while no one-off
+  row has text, and "Repeats today", the items due (`dueRecurring`: the date's ISO weekday,
+  `isoWeekday` in `shared/dates.ts`, computed in UTC from the key; no row of the list is its
+  task, `notOnList`, a row whose box is blank included; not answered on this device today), in
+  Settings order, taken from the recurring priorities the server has confirmed
+  (`useBoardState().recurring`), never one whose create is still on its way, which a list save
+  would make a one-off. The leftovers are `offeredLeftovers`' while the board is on: it drops one
+  whose task the board's copy has in Later, done (`listDone`) or archived, and offers one the
+  copy doesn't hold (a read behind); a leftover in no lane shows in Next as left open too until it
+  is brought back. Nothing is retitled, since a row's name is its task's. Both groups are judged on
+  the stored list by the sheet and again on the card's draft (`isOneOff`, `notOnList`), so a row
+  typed or a save already sent counts at once. Each group is a `role="group"` named by its heading,
+  and each item a box, a leftover once per item as `planNext` would bring it (`sameItem`): the
+  leftovers start ticked, the routines up to `recurringPerDay` less the routines already on the list
   (`offerPicks`), the rest unticked, and a box pressed keeps its answer while the groups change.
-  Ticking past the number says so (`TODAY_OFFER.over`, a live region always there under the
-  group), and Add to today adds them all the same. Add runs `acceptOffer` through the card's
-  draft, so what is typed goes out in the same save: the leftovers through `planNext`, then each
-  routine through `placePriority` with `end`, after every row of the padded list, so the free rows
-  stay for one-offs; an emptied row holding the item is taken back (`takeBack`), and a routine
-  that doesn't fit is skipped. Add and Not today (Start fresh while no routine shows) record every
-  routine shown, ticked or not, under `USER_KEYS.recurringAnswered` (`useRecurringAnswered`: per
-  item, day and device, so another device still offers it and a new day starts with none; an
-  answer joins what is stored when it is given, so another tab's answers stay), and leftovers
-  shown hold Start fresh (`leftOpenDismissed`), so removing a row the notice added brings nothing
-  back. Two devices adding one routine meet in the merge, which keeps the stored row
-  (`dedupeLinks`). A recurring row counts as a priority everywhere but the nudge (`nudgeFor`
-  counts one-offs, `isOneOff`); `leftOpen`, a row's card (`needsCard`) and Plan tomorrow skip it,
-  since it comes back on its own weekdays. With the board off nothing is offered but the plain
-  "Still open from …" block, whose gate (`useLeftOpen`'s `wanted`) and `leftOpen` skip recurring
-  rows either way. An emptied recurring row says `EMPTIED_RECURRING` under it, logged time or not,
-  board on or off, in place of `EMPTIED_ROW`. With the board on a written recurring row shows
-  `RepeatMark` first in its chip's cell: under the field on a phone, and from 640 px in the 10rem
-  column, which the cell fills so the chip shrinks beside the mark.
+  Ticking past the number says so (`TODAY_OFFER.over`, a live region always there under the group),
+  and Add to today adds them all the same. Add runs `acceptOffer` through the card's draft, so what
+  is typed goes out in the same save: the leftovers through `planNext`, then each routine through
+  `placePriority` with `end`, after every row of the padded list, so the free rows stay for
+  one-offs, and a routine that doesn't fit is skipped. Add and Not today (Start fresh while no
+  routine shows) record every routine shown, ticked or not, under `USER_KEYS.recurringAnswered`
+  (`useRecurringAnswered`: per item, day and device, so another device still offers it and a new day
+  starts with none; an answer joins what is stored when it is given, so another tab's answers stay),
+  and leftovers shown hold Start fresh (`leftOpenDismissed`), so removing a row the notice added
+  brings nothing back. Two devices adding one routine send its one uid, so it is one entry. A
+  recurring row counts as a priority everywhere but the nudge (`nudgeFor` counts one-offs,
+  `isOneOff`); `leftOpen` and Plan tomorrow skip it, since it comes back on its own weekdays, and ×
+  never asks about it. With the board off nothing is offered but the plain "Still open from …"
+  block, whose gate (`useLeftOpen`'s `wanted`) and `leftOpen` skip recurring rows either way;
+  `leftOpen` also skips an archived one-off (a card deleted before tasks were stored once), board on
+  or off, and reads the same `LOOKBACK_DAYS` the board's left-open group does. With the board on a
+  written recurring row shows `RepeatMark` first in its chip's cell: under the field on a phone, and
+  from 640 px in the 10rem column, which the cell fills so the chip shrinks beside the mark.
 - **In progress is today's list** (`client/src/lib/board.ts`, `hooks/useBoard.tsx`). The board
-  (on with the `board` setting, off by default) shows the cards and today's rows from the day
-  store, matched by `cardUid` (`boardColumns`); nothing about In progress is stored, so the
-  board and the sheet show one list. A card linked to a row of today's list shows only as that
-  row: open in In progress, ticked in Done, emptied nowhere. A `held` card shows nowhere. A card
-  a later day's list holds (`listDate` after today) is planned: shown in Next whatever its lane,
-  and read-only but for Delete; planned applies only off today's list, so a row carried to today
-  stays tickable. Done holds this week (`startOfWeek`): today's ticked rows and cards done
-  today, then the rest of the week folded, with an earlier ticked row shown only where no card
-  in the copy stands for it. Every Move to goes through `planMove`, which says what it writes: a
-  card's lane or place (`editCard`, a PATCH with today's date), or today's list through the day
-  store's `editPriorities` with the card as `touched` (a pull of a card or an earlier row onto
-  the list, in the item's category, a tick, a park of a row to Later or Next), or nothing: a
-  done item moved to Later or Next stays done and the notice offers a new card in its place,
-  with its title and category, and a recurring row, a planned card and a park to Later of a row
-  planned later are refused. A Done card's untick off today's list is a PATCH to Next, the
-  correction for a mistaken tick, and such a card offers no Delete: an earlier day's ticked row
-  would show in its place. The editor's category chip goes where its title goes: a row of today's
-  list changes through the row (`editRow`, the card as touched, and the save copies it onto the
-  card), any other card through a PATCH, and a planned card or an earlier day's row has none. A
-  recurring row's title isn't edited on the board: its editor shows it as text, with a line pointing
-  at the sheet for today's row and, while the item exists, at Settings → Board for its recurring
-  priority; its meta line carries the Repeats mark (`RepeatMark`). The day store sends `cards` on
-  every priorities PUT while the board is on and the list's day is today or later, read as the PUT
-  goes out, so a row typed on the sheet gets its card. After a board read, once per page load and
-  day, the board sends today's list asking for cards when a row has none (the sweep, on its queue),
-  so rows typed while it was off have cards before Plan tomorrow carries them. A park places the
-  row's card (`POST /board/cards` with the row's `cardUid`, and its title and category as the list
-  shows them when the job runs, since the POST writes both onto the card) before it takes the row
-  off the list, and a row with no card yet first goes out in a save that asks for one, so a retry
-  after a failed removal places the same card. Delete takes the card's row off today's list and
-  off its later day's list (loaded first), then deletes the card. One `role="status"` slot under
-  the capture box holds the board notice: the pull nudge (`nudgeFor`, as Add priority asks), the
-  done-item notice or a refusal; what the store refuses once a move is under way (`MoveRefused`:
-  a full list, a stale card, a list not loaded) is a banner. With the board on, the left-open
-  offer brings back a row whose card is in Next under the card's title and in its category (the
-  row's would go back onto the card with today's save), and leaves one whose card the board
-  moved to Later, finished or deleted (`offeredLeftovers`). A drag (`Board.tsx`,
-  with dnd-kit's settings in `components/board/dnd.ts`) starts at an item's grip. A planned card
-  and a recurring row have none, and an item whose move is on its way can't be picked up until
-  the move lands. Later's and Next's cards sort, each lane a `SortableContext` of the cards it
-  shows (planned ones left out); In progress and Done take a drop as a whole column. While
-  dragged, the item shows in the column it is over (`withDrag`); where it lands is `dropTarget`
-  (in a lane, the place of the card it is over as the list showed it sorting, which is before
-  that card for an item from another column; at the end of an empty lane; null where it
-  started), and the drop goes through `planMove` as Move to does. What a screen reader hears
-  comes from `BOARD_DRAG`, `overAnnouncement` and `moveAnnouncement` (a done item's line is
-  `DONE_STAYS.announce`). dnd-kit's own focus return is off, since it would take the focus from
-  the notice a drop brings: a keyboard drag puts it back on the item's grip, and so does closing
-  the notice (on the title where the grip is hidden or missing).
+  (on with the `board` setting, off by default) shows the tasks `GET /board` sends (the one-off
+  tasks in Later or Next that aren't done, then every other one whose latest entry is in the
+  last `BOARD_LIMITS.listWindowDays` or later; archived and deleted ones left out) and today's
+  rows from the day store, matched by uid (`boardColumns`); nothing about In progress is stored,
+  so the board and the sheet show one list. A task goes by the first rule that applies: on
+  today's list, it shows as its row (open in In progress, ticked in Done); a later day's list
+  holds it (`listDate` after today), it is planned, in Next (in its place when its lane is Next,
+  else after the tasks left open, by day) and read-only but for Delete; its latest entry is
+  ticked (`listDone`), it is in Done when that day is this week (`startOfWeek`), else nowhere; it
+  has a lane, that lane; with no lane, its latest entry was left open on one of the last
+  `LOOKBACK_DAYS` days, it is in Next after Next's own tasks as "Left open from …"
+  (`BoardItem.leftOpen`; newest day first, then the one made first), worked out with nothing
+  stored; else nowhere, while its days' sheets, History and Review still show it. Done also
+  holds each recurring priority ticked on an earlier day this week, once a day, so a one-off's
+  item id is `item:<uid>` in every column and a recurring row's `row:<date>:<uid>`. Turning the
+  board on shows today's list and the tasks left open at once; nothing is swept or stored. Every
+  Move to goes through `planMove`, which says what it writes: a task's lane or place
+  (`editItem`, a PATCH, which gives a left-open task a place of its own in Next or Later),
+  today's list through the day store's `editPriorities` (a pull of the task itself onto the
+  list, in its category, an earlier day's routine row included, or a tick), a park of today's
+  open row to Later or Next (see "Saves reach the server in the order they were made"), or
+  nothing: a done item moved to Later or Next stays done and the notice offers a new task in its
+  place, with its title and category, and a recurring row, a planned task and a park to Later of
+  a row planned later are refused. A lane given on a full board is refused before it is sent
+  (`boardFull`, `addsToLanes`, `BOARD.full`), the server's 400 being the backstop. A task ticked
+  on an earlier day, off today's list, has no checkbox and is read-only, its editor saying
+  `BOARD.doneOn(when)`: it is unticked on that day's sheet, since the board would rewrite a past
+  day, and Move to In progress puts it on today's list to work on again. A done task pulled onto
+  today and taken off again (a park included) is done again, its ticked entry once more its
+  latest. The editor's title and category chip go where the task is: a row of today's list
+  changes through the row (`editRow`, the sheet's save), and any other task but a planned or
+  done-earlier one through a PATCH (`editItem`). A recurring row's title isn't edited on the
+  board: its editor shows it as text, with "Settings → Board renames it." while the item is in
+  Settings, its meta line carries the Repeats mark (`RepeatMark`), and today's has Remove from
+  today (`removeFromToday`) in place of Delete. Delete is the full delete (`deleteItem`) on any
+  other one-off but a done-earlier task. One `role="status"` slot under the capture box holds
+  the board notice: the pull nudge (`nudgeFor`, as Add priority asks), the done-item notice or a
+  refusal; what the store refuses once a move is under way (`MoveRefused`: a full list, a full
+  board, a list not loaded) is a banner. A drag (`Board.tsx`, with dnd-kit's settings in
+  `components/board/dnd.ts`) starts at an item's grip. A planned task and a recurring row have
+  none, and an item whose move is on its way can't be picked up until the move lands. Later's
+  and Next's tasks sort, a left-open one in Next included, each lane a `SortableContext` of the
+  tasks it shows (planned ones left out); In progress and Done take a drop as a whole column.
+  While dragged, the item shows in the column it is over (`withDrag`); where it lands is
+  `dropTarget` (in a lane, the place of the item it is over as the list showed it sorting, which
+  is before that item for one from another column, and the end of the lane's own tasks over a
+  left-open or planned one; the end over the column itself; null where it started), and the drop
+  goes through `planMove` as Move to does. What a screen reader hears comes from `BOARD_DRAG`,
+  `overAnnouncement` and `moveAnnouncement` (a done item's line is `DONE_STAYS.announce`).
+  dnd-kit's own focus return is off, since it would take the focus from the notice a drop
+  brings: a keyboard drag puts it back on the item's grip, and so does closing the notice (on
+  the title where the grip is hidden or missing).
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started —
   one rule, no clock-in fallback. `GET /days/range` returns full days and the client does the
@@ -805,54 +859,57 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   going, and it is null under two such days; Review shows it for a Week or a Month. The Days
   tile's target is `periodTarget`: a Week's is the Work week setting, as on the timeclock's week
   line, and a Month's or a Quarter's is `targetSeconds`, the clocked-in days' own lengths added up
-  through `daySettings`. Not done groups the one-off rows left open into tasks across days
-  (`addToNotDone`): rows linked to one card are one task (`card:<cardUid>`), whatever their text;
-  a row with no card joins the latest task of its text, else starts one (`text:<sameText>`); a
-  carded row whose card has no task yet takes over the cardless task of its text, in its place in
-  the order. A carded row's tick settles its card's task and the cardless task of its text, a
-  cardless tick every task of its text, and a tick on a day settles the same task left open beside
-  it. Two cards with one title stay two tasks. A recurring priority's rows (`recurringUid`) are
-  priorities in every count (the tiles, `midDay`, `typicalDay`, the retro card, the calendar and
-  its stickers) but never a task in Not done, which lists one-offs only: `reviewRange` groups them
-  by `recurringUid` into `routines` (the days a row had text, how many of them it was ticked, its
-  focus; most days first, then most focus, then by title), each day on its own, so a tick never
-  settles another day's miss and a same-text one-off stays a task of its own. A routine is titled
-  by its item through `recurringTitles` (uid → title) while the item exists, else by its
-  latest row's text, so a retyped row or a deleted item stays one entry. `reviewDay`'s
-  `routines` (`{ done, total }`) is the retro card's "routines 3 of 4". A session's name is
-  `sessionName(s, rows)`: the current text of the written row its `priorityUid` names on its
-  day, else its `label` (unplanned, its row removed or emptied, or its day not in the store), so a
-  rename on the sheet, on this device or another, renames it in the day log, the timer card, the
-  running bar, the tab title and the timer's alerts as they are raised. `useTimer().name` is the
-  running session's (a "Time's up" banner already up keeps its name: see the timer rule). The
-  retro's Not on the plan and Review's Off the plan list sessions on no written row, which go by
-  their label anyway. The label stays as it was typed or copied at the start, and isn't edited
-  while the session is on a written row: the bar shows the name as plain text
-  (`useTimer().linked`), and the log's edit shows it as text over the priority select, with no
-  label box. A session gets a name of its own only off a row: Unplanned in the log's select sends
-  the link alone, the session then reads by the label it started with (the row's old text when
-  the row was renamed since), and its box edits that as before. A link never sends a label: the
-  select linking a session drops a label typed before it, and a box opened before another device
-  linked or unlinked the session closes, unsent. A session's category is
-  `sessionCategory(s, rows)`: the category of the written row its `priorityUid` names on its
-  day (none included), else its own `categoryUid` (picked in the day log, or copied by the
-  server when its row was removed), else that of an emptied row it still names, else none. The
-  day log picks one only for a session on no written row, since the row's own chip decides the rest,
-  and shows it as a `CategoryDot` named by its `label`, the one dot drawn without its name beside
-  it. A pick is the edit `sessionCategoryEdit` gives: a category is set as the session's own, and No
-  category also takes a session off an emptied row that has a category (`priorityUid: null`), since
-  none of its own goes by the row's. Linking a session to a written row with the log's select sends
-  only the link, and the server drops a category of its own: the row decides from then on, and the
-  server copies a removed row's category only onto sessions with none. `byCategory` (`CategoryTime`) is the
-  focus and the ticks by category: each written row's focus (`seconds`) and tick (`done`) under
-  the row's category, and each session off a written row under `sessionCategory`, in `seconds`
-  and in its `offPlanSeconds` part, so an emptied row's sessions count off the plan under its
-  category. A uid outside `known` (the board's categories, removed ones included) counts as
-  none, there and in `midDay`. Most time first, then most ticks, none last; a category with
-  neither is left out. Review shows By category only while a listed bucket has a category.
-  Review passes `known` and `recurringTitles` from `useBoardState()` while the board is on and
-  has loaded, and empty ones otherwise, so with the board off nothing is grouped by category and
-  a routine keeps its latest row's text.
+  through `daySettings`. Not done groups the one-off rows left open by their task
+  (`addToNotDone`; `OpenPriority.key` is the uid of the task that opened the entry): a tick
+  settles that task's earlier open days. A one-off typed again by hand on a later day is a new
+  task, so a narrow text fallback keeps such rows together: a task the board holds in no lane
+  (`laned`) that one list holds (`listed === 1`) joins the latest open entry of its text
+  (`sameText`) whose last day is 1 to `LOOKBACK_DAYS` days before; a tick ends that entry, and
+  such a tick also settles an open row of its text on the same day. A task with a lane or on two
+  lists groups by uid only, so two board tasks of one name stay two entries. An entry shows its
+  latest task's name. A recurring priority's rows (`Priority.recurring`) are priorities in every
+  count (the tiles, `midDay`, `typicalDay`, the retro card, the calendar and its stickers) but
+  never a task in Not done, which lists one-offs only: `reviewRange` groups them by uid into
+  `routines` (the days a row had text, how many of them it was ticked, its focus; most days
+  first, then most focus, then by title), each day on its own, so a tick never settles another
+  day's miss; a routine is titled by its rows' text, its current name on every day.
+  `reviewDay`'s `routines` (`{ done, total }`) is the retro card's "routines 3 of 4". A
+  session's name is `sessionName(s, rows)`: the text of the written row its task is on its day
+  (`sessionRow`), so a rename on the sheet shows at once, else `Session.title`, the task's
+  current name the server joins, once the task has left that day, else, with no task, its
+  `label`. So a rename renames it in the day log, the timer card, the running bar, the tab title
+  and the timer's alerts as they are raised, and in the retro's Not on the plan and Review's Off
+  the plan (grouped by task, else by label), which list the sessions whose task isn't on their
+  day's list or that have none. `useTimer().name` is the running session's (a "Time's up" banner
+  already up keeps its name: see the timer rule). A session with a task has no name of its own
+  to edit: the bar shows the name as plain text (`useTimer().linked`: the session has a task),
+  and the log's edit shows it as text over the priority select, with no label box, wherever the
+  task is (the select lists the session's own task when the day's list doesn't hold it). A
+  session gets a name of its own only off its task: Unplanned in the log's select sends the link
+  alone, and the server gives the session the task's current name as its label unless a label is
+  sent with it, which its box then edits; a full delete does the same. A link never sends a
+  label: the select linking a session drops a label typed before it, and a box opened before
+  another device linked or unlinked the session closes, unsent. A session's category is
+  `sessionCategory(s, rows)`: the category of the written row its task is on its day (none
+  included), so a chip changed on the sheet shows at once, else `Session.categoryUid` as the
+  server works it out (the task's, else the session's own). The day log picks one only for a
+  session not on a written row of its day, and shows it as a `CategoryDot` named by its `label`,
+  the one dot drawn without its name beside it. A pick is the edit `sessionCategoryEdit` gives:
+  the category as the session's own, and for a session with a task also `priorityUid: null`,
+  since a session with a task counts under the task's: picking one for time logged on a task
+  that left the day says what that time was for. Linking a session to a written row with the
+  log's select sends only the link, and the server drops a category of its own. `byCategory`
+  (`CategoryTime`) is the focus and the ticks by category: each written row's focus (`seconds`)
+  and tick (`done`) under its task's category, and each session off a written row under
+  `sessionCategory`, in `seconds` and in its `offPlanSeconds` part, so a task's time on a day
+  that no longer lists it counts off the plan under the task's category. A row's category is its
+  task's current one, so a category change moves the task's past time. A uid outside `known`
+  (the board's categories, removed ones included) counts as none, there and in `midDay`. Most
+  time first, then most ticks, none last; a category with neither is left out. Review shows By
+  category only while a listed bucket has a category. Review passes `known` and `laned` (the
+  uids of the tasks the board holds in Later or Next) from `useBoardState()` while the board is
+  on and has loaded, and empty ones otherwise, so with the board off nothing is grouped by
+  category and only `listed` decides Not done's text fallback.
 - **History opens on the route's date** (`route.date ?? today`), with that day picked. The
   calendar holds its month by its first day (`startOfMonth`) and Review its period by `from`,
   so neither moves at midnight. "Open day" first records the picked day (and the Review period,
@@ -892,7 +949,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   fails stays in its box, unsaved, though the store has dropped the change, and goes again on
   the next edit, blur or unmount; `Priorities` lets its list go once sent, because a list held
   after a failure would stop the card following the stored list (rows and ticks saved
-  elsewhere) until a save went through. Callbacks that must read the latest value use
+  elsewhere) until a save went through, and holds it only while a box is blank (see "A blank
+  name is never saved"), so a stored change doesn't put the name back while that box has the
+  focus. Callbacks that must read the latest value use
   `useLatest()`, never a ref written in render (the react-hooks lint enforces both).
 - Static assets are public; **all data is behind `/api/*`**. `/assets/*` is fingerprinted and
   cached immutable. The SPA fallback serves `index.html` for any other non-API path; a miss
@@ -922,7 +981,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   through `alerts.ts`: info, sticky, no chime and no notification, with a Reload button. It is
   raised once per server version heard, never on each answer, so a closed one stays closed until
   the server moves again. An `edge` image carries the last release's number, so only a release
-  asks.
+  asks. A page loaded before tasks were stored once sends shapes the server no longer takes, and
+  is refused by their presence, never their values, with 409 and `STALE_CLIENT`
+  (`server/refuse.ts`): a priorities PUT carrying `cards` or `touched`, or a row carrying
+  `cardUid` or `recurringUid` (`staleShape`), and any request under `/board/cards` or
+  `/board/recurring`. Its saves fail until it is reloaded, which the banner asks for, and none
+  is read as done or applied in part.
 - **A wide window shows the sheet in two columns, chosen when the sheet mounts.** Each layout
   entry has a `side` (`'left' | 'right'`), which `normalizeLayout` keeps or sets to the card's
   `DEFAULT_SIDE` (`shared/settings.ts`), so a layout saved before the columns needs no
@@ -938,10 +1002,18 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   the move empties a side or fills an empty one), so the sheet puts the focus on its arrow
   there.
 - **Migrations are append-only** in `server/db.ts` (`MIGRATIONS[]`, `PRAGMA user_version`).
-  An entry is SQL, or a function in `server/migrations/` when the change needs code. Every FK
-  to `users` or `days` is `ON DELETE CASCADE`. A column nothing uses stays in the table rather
-  than a migration dropping it: `sessions.notes` is one (never shown or edited; the API no
-  longer reads or writes it).
+  A migration may be a function: an entry is SQL, or, when the change needs code (a backfill),
+  a function of the database in a file of its own under `server/migrations/`, which `migrate()`
+  runs inside the same transaction as its version bump, so a failure leaves the database as it
+  was. A function is frozen like SQL: it keeps its own copies of the helpers it uses
+  (`oneItem.ts` copies `sameText`, `hasText` and the 14-day window), so a later change to
+  `shared/` can't change how an old database migrates. Every FK to `users` or `days` is
+  `ON DELETE CASCADE`; `priorities.item_id` and `sessions.item_id` are NO ACTION, so a task a
+  day or a session names can't be deleted, while a user delete still passes. A column or table
+  nothing uses stays rather than a migration dropping it, so a minor release loses no stored
+  value: `sessions.notes` (never shown or edited), `sessions.priority_uid`, the old per-day rows
+  in `priorities_v1` (still deleted with their days) and `items`' `legacy_*` columns, which only
+  migrated rows fill.
 
 ## How to add…
 
@@ -1042,35 +1114,42 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   fails there on a new field until the templates set it, or it is added to the type's `Omit`
   list if the server derives it (like `durationSeconds`). Write its column in `insertDay` too;
   typecheck does not check that.
-- **A priority field** (like `categoryUid`): append a migration adding the column to
-  `priorities` → the field on `Priority` (`shared/api.ts`) and the column on `PriorityRow`
-  (`routes/shared.ts`) → read it in `priorityJson` and write it in the PUT's INSERT
-  (`routes/days.ts`) → its `MERGED` entry (`shared/priorities.ts`, which typecheck asks for):
-  `'merge'` if a device may change it, `'fixed'` if the stored value stands once stored → its
-  rule in `parsePriorityRows` for a value of the wrong kind and for one left out (a missing
-  `'merge'` field must read as unchanged, as `withCategories` does for the category, or an old
-  tab's save would clear it) → its default in `emptyRow` (`client/src/lib/priorities.ts`), in
-  `addPriority`'s row (`useDay.tsx`) and, if a recurring row carries it, in `recurringRow`
-  (`lib/recurring.ts`) → if carry-over keeps it, `PrioritySeed`, `textSeed` and `planNext`'s row
-  (`lib/plan.ts`) → if it is a link a list holds once, `LINKS`
-  (`shared/priorities.ts`), which `repeatedLink`, `dedupeLinks`, `dropShadowedLinks` and
-  `sharesLink` read (`placePriority` and `planNext` match through `sharesLink`) → if the row's
-  card carries it too (as it does `categoryUid`), a `board_cards` column, the field on
-  `BoardCard` (`shared/api.ts`) and `CardRow` (`routes/shared.ts`), `boardJson`, and the copy in
-  `mirrorCards` (`server/board.ts`): a card the save makes, or whose row gains text, takes the
-  row's value, and otherwise only a change the save made is copied; the column also goes in the
-  card INSERTs of `createCard` and `mirrorCards`' `make` and in the seed's `insertBoard`, which
-  typecheck doesn't check → the seed (`server/dev/seed.ts`: its rows, typecheck asks;
-  `insertDay`'s INSERT, it doesn't) → `makePriority` (`client/src/test/fixtures.ts`) → the
-  padded-rows case in `server/routes/days.test.ts` ("takes the web app's rows as it pads and
-  sends them").
+- **A task field** (like the name or `categoryUid`: one value for the task, which every day it
+  is on shows): append a migration adding the column to `items` → `ItemRow` (`routes/shared.ts`)
+  → the field on `Priority` (`shared/api.ts`; the column in `ENTRIES`' join and `EntryRow`, read
+  in `priorityJson`, `routes/days.ts`) and on `BoardCard` (`boardJson`, `server/board.ts`), where
+  each reader needs it → if the sheet edits it, its `MERGED` entry (`shared/priorities.ts`;
+  typecheck asks for it there or in `ReadOnlyField`), its rule in `parsePriorityRows` for a value
+  of the wrong kind, and its write in the PUT beside the rename: on the task a uid new to the user
+  makes, and otherwise only where this device's row differs from its base row → if the board or
+  Settings edits it, `NewItem` and `ItemPatch` (`client/src/api.ts`), the `POST` and `PATCH`
+  routes in `routes/items.ts`, and `withItem` and `withItemPatch` (`lib/board.ts`) → its value on
+  every row the client builds: `emptyRow` and `newTaskRow` (`lib/priorities.ts`), and, taken
+  from the source, `planNext`'s row and `PrioritySeed` (`lib/plan.ts`), `recurringRow`
+  (`lib/recurring.ts`) and `planMove`'s pull (`lib/board.ts`) → the seed (`insertItems`' INSERT,
+  which typecheck doesn't check) → `makePriority` and `makeCard`
+  (`client/src/test/fixtures.ts`). A field the server works out (like `recurring` or `listed`)
+  is read only: it goes in `ReadOnlyField` (`shared/priorities.ts`), never in `MERGED` or
+  `parsePriorityRows`, which neither reads nor refuses it, and the seed fills it after the days
+  are built (`withCounts`, `UNCOUNTED`).
+- **An entry field** (like `done` or `addedAt`: a fact of one day's list): append a migration
+  adding the column to `priorities` → the column in `ENTRIES` and `EntryRow`, read in
+  `priorityJson` and written in the PUT's INSERT (`routes/days.ts`) → the field on `Priority`
+  (`shared/api.ts`) and its `MERGED` entry (`shared/priorities.ts`, which typecheck asks for) →
+  its rule in `parsePriorityRows` for a value of the wrong kind and for one left out → its
+  default in `emptyRow` and `newTaskRow` (`lib/priorities.ts`), `planNext`'s row (`lib/plan.ts`),
+  `recurringRow` (`lib/recurring.ts`) and `planMove`'s pull (`lib/board.ts`) → the seed
+  (`server/dev/seed.ts`: its rows, typecheck asks; `insertDay`'s INSERT, it doesn't) →
+  `makePriority` (`client/src/test/fixtures.ts`) → the padded-rows case in
+  `server/routes/days.test.ts` ("takes the web app's rows as it pads and sends them").
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
   `currentUser(req).id` (a `/:date` route goes on the days router, whose param handler checks
-  the date; a `/:id` route on the sessions or breaks router, or a `/:uid` route on the board's
-  cards, categories or recurring router, is checked by the router itself and reads its row with
+  the date; a `/:id` route on the sessions or breaks router, or a `/:uid` route on the
+  categories or items router, is checked by the router itself and reads its row with
   `owned(res)`; a new table addressed by id gets its entry in `OwnedRows` and `NOT_FOUND` and a
   router from `ownedRouter()`, and a new table of the user's addressed by uid its entry in
-  `UidRows` and `UID_NOT_FOUND` and a router from `uidRouter()`, all in `routes/shared.ts`),
+  `UidRows`, `UID_NOT_FOUND` and `UID_GONE` (a row that counts as none, like a task's
+  tombstone) and a router from `uidRouter()`, all in `routes/shared.ts`),
   validate input (`app.ts` makes a missing or non-JSON body `{}`, so a route reads fields
   straight off `req.body as { field?: unknown }`, with no `?? {}` or `?.`, and checks each one;
   the `no-unsafe-*` lint refuses reading it as `any`), refuse with
@@ -1091,8 +1170,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `shared/` can't change how an old database migrates, and its `db.test.ts` cases stop at the
   version before it (`migrate(db, n)`), write the old rows, then run it. A new table with a
   `user_id` also joins the README's script under "Switching modes later"; `server/db.test.ts`
-  fails until it does. A new column on a day, session, priority or break also needs the seed
-  note under "A per-day field". A new `Priority` field follows "A priority field".
+  fails until it does. A new column on a day, session, entry or break also needs the seed note
+  under "A per-day field". A new `Priority` field follows "A task field" or "An entry field".
 - **A security header, CSP source or request guard**: `server/security.ts` only (tests in
   `server/app.test.ts`), then the `prod` config check.
 - **A config env var**: parse and validate it in `server/config.ts` (throw with a clear
@@ -1268,41 +1347,54 @@ The browser pass for each surface (the logic under it is already tested):
 - **Priorities or the timer card**: tick one row and press Add priority (the notice lists the
   ticked row); tap a chip, start, and the log row shows the number; rename that row and the bar,
   the card, the tab title and the log row take the new text, with no label box in the bar or
-  the log row's edit (the name is text there, with no hover), and clear it and they show the
-  label the session started with, which both edit again; "Also add to today's priorities" fills
-  the first row never written in, never a cleared one; a log row's select reassigns it. Clear a
-  row with focus logged on it: the note under it says the time stays, and
-  Add priority goes past it. With the board on: pick a category on a row (an empty chip shows only
-  on the row's hover or focus with a mouse, always on a phone; a long name ends in an ellipsis; at
-  375 the chip sits under the field, nearer it than the next row's, and the field keeps the row's
-  width, beside the × past Rows per day; from 640 it sits beside the field, which ends in the same
-  place written or empty), tick Also add and pick one for the new row (the chip beside it wraps
-  under it at 375), give an unplanned log session one (its dot before the label) and a Plan
-  tomorrow row one, then the same at 1280 in the split's columns.
+  the log row's edit (the name is text there, with no hover), and set the log row to Unplanned
+  and it keeps the name as its label, which the log row's edit then edits; "Also add to today's
+  priorities" fills the first free row; a log row's select reassigns it. Empty a written row's
+  box: the note under it says the name comes back, the tick stays with its checkbox disabled,
+  and leaving the box or Escape puts the name back. Retype the carried row's name: the note says
+  how many earlier days it renames. × on a task typed today with no time logged takes it off at
+  once (an empty row within Rows per day, the focus in its box); × on the carried row, or one
+  with time logged, opens "Remove …" (Off this day, Delete everywhere, Cancel; Escape gives the
+  focus back to ×), at desktop width and at 375, in light and dark, and Delete everywhere takes
+  the task off every day while its sessions stay in the log under its name. With the board on:
+  pick a category on a row (an empty chip shows only on the row's hover or focus with a mouse,
+  always on a phone; a long name ends in an ellipsis; at 375 the chip sits under the field,
+  nearer it than the next row's, and the field keeps the row's width, beside the ×; from 640 it
+  sits beside the field, which ends in the same place written or empty), tick Also add and pick one
+  for the new row (the chip beside it wraps under it at 375), give an unplanned log session one (its
+  dot before the label) and a Plan tomorrow row one, then the same at 1280 in the split's columns.
 - **Recurring priorities**: with the board on, Settings → Board → Recurring priorities: Recurring
   rows per day with its hint beside the box; Add recurring priority (Enter leaves an empty box for
   the next, the focus leaving closes it); a rename; a category from the row's chip, where Escape
   closes only the list and the dialog stays open; the days (the last one on stays pressed, and on
-  a touch screen each day takes 44 × 44 px); Remove, which asks first, with the focus on the next
-  title. At 375 the rows wrap and the seven days fit on one line. On the board, a recurring row's
-  meta line has the Repeats mark, and the editor of today's shows the title as text with the line
-  about renaming it on the sheet. On the sheet, with a routine due today (see "Dev data is
-  disposable" for both groups): the morning notice with "Still open from …" and "Repeats today",
-  the routines ticked up to Recurring rows per day and the line once more are ticked, Add to today
-  putting the routines after the padded rows with the mark before the chip, and Not today holding
-  after a reload; an emptied routine row's note; at 1280 and 1000 the mark and a long category in
-  the chip's column, and at 375 the mark before the chip under the field.
+  a touch screen each day takes 44 × 44 px); Remove, which asks first with the reworded confirm
+  (its days keep it), with the focus on the next title. At 375 the rows wrap and the seven days
+  fit on one line. On the board, a recurring row's meta line has the Repeats mark, and the editor
+  of today's row, and of an earlier day's tick in Done, shows the title as text with "Settings →
+  Board renames it.". On the sheet, with a routine due today (see "Dev data is disposable" for
+  both groups): the morning notice with "Still open from …" and "Repeats today", the routines
+  ticked up to Recurring rows per day and the line once more are ticked, Add to today putting the
+  routines after the padded rows with the mark before the chip, and Not today holding after a
+  reload; a rename typed on a routine's row shows in Settings → Board and on its past days; × on
+  a routine's row takes it off that day without asking; at 1280 and 1000 the mark and a long
+  category in the chip's column, and at 375 the mark before the chip under the field.
 - **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
   Month / Quarter). With the board on (`PUT /api/settings {"board":true}`), By category in
   Review → Week and Month (solid and striped bars, No category last), in light and dark. For
   Added mid-day's "mostly …", give the last weekday's "Reply to the recruiter" row a category
-  with its chip (the seed gives these rows none) and open the Week that holds that day (◀ on a
-  Monday): the seed writes that row on the same weekday most weeks, so a Month that holds
-  another one names none.
+  with its chip (the seed files that task under none) and open the Week that holds that day (◀
+  on a Monday): it is one task on every day the seed adds it mid-day, so the category reaches
+  each of them, and any period holding one of those days names it.
 - **The board**: after `npm run seed`, turn it on (`PUT /api/settings {"board":true}`, see "Dev
-  data is disposable") and press Board. At 1440: the four columns, capture with Enter and
-  Shift+Enter, Move to from each column (a done item to Next shows the notice, and Add a new card
-  lands in Next), a pull past three rows asks first, Delete's confirm names the days. At 1000,
+  data is disposable") and press Board. At 1440: the four columns; a task typed on today's sheet
+  shows in In progress, in no lane; a task left open on an earlier day with no lane shows in Next
+  after Next's own tasks as "Left open from …", and a drag or Move to Next gives it a place;
+  capture with Enter and Shift+Enter; Move to from each column (a done item to Next shows the
+  notice, and Add a new card lands in Next); a park of a task typed seconds ago; a task done on an
+  earlier day has no checkbox and its editor says when it was done, and Move to In progress puts
+  it on today's list; this week's routine ticks in Done; a pull past three rows asks first;
+  Delete's confirm gives the days and the time logged, and the task is gone from the sheets of
+  its days afterwards. At 1000,
   where the columns are narrowest: titles clamp to two lines, meta lines wrap, the Move to select
   fits. At 375: the switch shows one column, the notice wraps, and with sign-in on
   (`web-local`) the sheet's five header buttons fit with the brand's name gone. Light and dark.
@@ -1358,9 +1450,9 @@ The browser pass for each surface (the logic under it is already tested):
   and come-back refreshes (today's day, the settings, the timer's sync, the board) go through
   `useRefreshLoop`, which listens for `visibilitychange` and never `focus`; a new one goes
   through it too, and nothing in the app listens for the window's `focus`. Reads tied to what
-  is shown (a held day read again when a view shows it, a range asked again after a prune,
-  `AuthGate`'s `/me` after a 401, the board read as its page opens and after a prune) are not
-  refreshes and stay outside the loop.
+  is shown (a held day read again when a view shows it, the days and ranges asked again after
+  a prune or a full delete, `AuthGate`'s `/me` after a 401, the board read as its page opens and
+  after a prune) are not refreshes and stay outside the loop.
 - The board's refresh lives in `BoardRefresh` (`hooks/useBoard.tsx`), a child the provider
   mounts only while the board is on: switching it on reads at once (StrictMode's second mount
   lands inside the loop's throttle), and nothing ticks while it is off. So the test files that
