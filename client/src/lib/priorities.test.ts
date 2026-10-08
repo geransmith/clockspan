@@ -4,6 +4,7 @@ import {
   editPriority,
   emptyRow,
   hasRoom,
+  isOneOff,
   isRecurring,
   leftOpen,
   newUid,
@@ -33,6 +34,15 @@ describe('isRecurring', () => {
     expect(isRecurring(makePriority(1, 'Monitor the queue', { recurringUid: 'rec000000001' }))).toBe(true);
     expect(isRecurring(makePriority(1, '', { recurringUid: 'rec000000001' }))).toBe(true);
     expect(isRecurring(makePriority(1, 'Report', { cardUid: 'card00000001' }))).toBe(false);
+  });
+});
+
+describe('isOneOff', () => {
+  it('is a row with text and no recurring priority, on a card or not', () => {
+    expect(isOneOff(makePriority(1, 'Report'))).toBe(true);
+    expect(isOneOff(makePriority(1, 'Report', { cardUid: 'card00000001' }))).toBe(true);
+    expect(isOneOff(makePriority(1, ' '))).toBe(false);
+    expect(isOneOff(makePriority(1, 'Monitor the queue', { recurringUid: 'rec000000001' }))).toBe(false);
   });
 });
 
@@ -88,6 +98,15 @@ describe('nudgeFor', () => {
     const rows = [makePriority(1, 'A', { done: true }), makePriority(2, 'B'), makePriority(3, 'C')];
     expect(nudgeFor(rows, 3)).toBe('progress');
     expect(nudgeFor([...rows.map((p) => ({ ...p, done: true })), makePriority(4, '')], 3)).toBe('complete');
+  });
+
+  it('leaves the routines out of the threshold, and counts them in the kind', () => {
+    const routines = [1, 2, 3].map((n) => makePriority(n, `Routine ${n}`, { recurringUid: `rcur0000000${n}`, done: true }));
+    const oneOffs = (n: number) => Array.from({ length: n }, (_, i) => makePriority(4 + i, `One-off ${i + 1}`));
+    expect(nudgeFor([...routines, ...oneOffs(2)], 3)).toBeNull();
+    // Three open one-offs reach it; the three ticked routines make it a list with progress.
+    expect(nudgeFor([...routines, ...oneOffs(3)], 3)).toBe('progress');
+    expect(nudgeFor(oneOffs(3), 3)).toBe('fresh');
   });
 });
 
@@ -216,6 +235,28 @@ describe('placePriority', () => {
     expect(placePriority(rows, 2, placed('Queue', ROUTINE))).toEqual(rows);
   });
 
+  it('with end, goes after every row of the padded list, past the free rows', () => {
+    const next = placePriority([makePriority(1, 'A')], 3, placed('Queue', ROUTINE), { end: true })!;
+    expect(next).toEqual([makePriority(1, 'A'), emptyRow(2), emptyRow(3), { ...placed('Queue', ROUTINE), position: 4 }]);
+  });
+
+  it('with end, still changes nothing for a repeat and takes back a cleared row first', () => {
+    const rows = [makePriority(1, 'Queue', ROUTINE)];
+    expect(placePriority(rows, 2, placed('Queue', ROUTINE), { end: true })).toEqual([...rows, emptyRow(2)]);
+    const cleared = makePriority(1, '', { uid: 'cleared00000', addedAt: 50, ...ROUTINE });
+    expect(placePriority([cleared], 2, placed('Queue', ROUTINE), { end: true })).toEqual([
+      { ...placed('Queue', ROUTINE), position: 1, uid: 'cleared00000', addedAt: 50 },
+      emptyRow(2),
+    ]);
+  });
+
+  it('with end, takes a free row at the cap, and refuses a full list', () => {
+    const full = Array.from({ length: MAX_PRIORITIES }, (_, i) => makePriority(i + 1, `p${i + 1}`));
+    const oneFree = full.map((p) => (p.position === 7 ? emptyRow(7) : p));
+    expect(placePriority(oneFree, 3, placed('Queue', ROUTINE), { end: true })![6]).toEqual({ ...placed('Queue', ROUTINE), position: 7 });
+    expect(placePriority(full, 3, placed('Queue', ROUTINE), { end: true })).toBeNull();
+  });
+
   it('refuses when the sheet is full', () => {
     const rows = Array.from({ length: MAX_PRIORITIES }, (_, i) => makePriority(i + 1, `p${i + 1}`));
     expect(placePriority(rows, 3, placed('One more'))).toBeNull();
@@ -257,6 +298,17 @@ describe('leftOpen', () => {
     expect(
       leftOpen([makeDay('2026-09-25', { priorities: [makePriority(1, 'Newer')] }), makeDay('2026-09-24', { priorities: [makePriority(1, 'Older')] })])?.date,
     ).toBe('2026-09-25');
+  });
+
+  it('carries no routine, and passes a day that held only routines', () => {
+    const queue = makePriority(1, 'Monitor the queue', ROUTINE);
+    const days = [
+      makeDay('2026-09-24', { priorities: [makePriority(1, 'Review the PR'), makePriority(2, 'Follow-ups', { recurringUid: 'rcur00000002' })] }),
+      makeDay('2026-09-25', { priorities: [queue] }),
+    ];
+    expect(leftOpen(days)).toEqual({ date: '2026-09-24', rows: [makePriority(1, 'Review the PR')] });
+    // A plan whose one-offs are all ticked carries nothing, its open routine included.
+    expect(leftOpen([makeDay('2026-09-25', { priorities: [makePriority(1, 'Ship it', { done: true }), { ...queue, position: 2 }] })])).toBeNull();
   });
 
   it('is null when no day had a plan or the last plan was finished', () => {

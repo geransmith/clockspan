@@ -3,6 +3,7 @@ import { useBoardState, useCategoryPick } from '../hooks/useBoard';
 import { useDay } from '../hooks/useDay';
 import { useLeftOpen } from '../hooks/useLeftOpen';
 import { useRange } from '../hooks/useRange';
+import { useRecurringAnswered } from '../hooks/useRecurringAnswered';
 import { useSettings } from '../hooks/useSettings';
 import { warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED, PUNCH_ORDER, SAVE_FAILED } from '../lib/copy';
@@ -10,7 +11,8 @@ import { startOfWeek } from '../../../shared/dates.js';
 import { dayName } from '../lib/format';
 import { offeredLeftovers } from '../lib/board';
 import { CARD_TITLES, moveCard, setCardSide, setCardVisible, SPLIT_QUERY, splitColumns } from '../lib/layout';
-import { hasText } from '../../../shared/priorities.js';
+import { isOneOff } from '../lib/priorities';
+import { dueRecurring } from '../lib/recurring';
 import { CARD_SIDES } from '../../../shared/settings.js';
 import { focusOf } from '../lib/retro';
 import { clampToDay, dayTimeclock, type TimeclockState } from '../lib/timeclock';
@@ -49,10 +51,13 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
   const { days: weekDays } = useRange(startOfWeek(date), date);
   const week = weekDays ? weekHours(weekDays, settings, today, now) : null;
   const focus = focusOf(day?.sessions ?? []);
-  // Today's list with nothing written yet offers what the last planned day left unticked. With the
-  // board on, a row whose card was moved off Next on the board stays there, and one in Next comes
-  // back under the card's title and in its category; until the board has loaded, nothing is offered.
-  const { leftOpen, dismiss: dismissLeftOpen } = useLeftOpen(today, isToday && day != null && !day.priorities.some(hasText));
+  // Today's list with no one-off written yet (a routine on it is no plan) offers what the last
+  // planned day left unticked. With the board on, a row whose card was moved off Next on the board
+  // stays there, and one in Next comes back under the card's title and in its category, in the
+  // morning notice beside the recurring priorities due today; until the board has loaded, nothing
+  // is offered.
+  const { leftOpen, dismiss: dismissLeftOpen } = useLeftOpen(today, isToday && day != null && !day.priorities.some(isOneOff));
+  const { answered, answer: answerRecurring } = useRecurringAnswered(today);
   const { board, on: boardOn } = useBoardState();
   // The category chip on the cards that offer one; null while the board is off or not read yet, and then no chip shows.
   const pick = useCategoryPick();
@@ -144,11 +149,23 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
             pick={pick}
             onChange={(p, base) => void store.setPriorities(date, p, base)}
             leftOpen={
-              leftOpen && leftovers?.length
+              !boardOn && leftOpen && leftovers?.length
                 ? {
                     from: dayName(leftOpen.date, today, true),
                     rows: leftovers,
                     dismiss: dismissLeftOpen,
+                  }
+                : null
+            }
+            offer={
+              boardOn && board && isToday
+                ? {
+                    leftovers: leftOpen && leftovers?.length ? { from: dayName(leftOpen.date, today, true), rows: leftovers } : null,
+                    recurring: dueRecurring(board.recurring, today, day.priorities, answered),
+                    answer: (shownRecurring, leftoversShown) => {
+                      answerRecurring(shownRecurring);
+                      if (leftoversShown) dismissLeftOpen();
+                    },
                   }
                 : null
             }

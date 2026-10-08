@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nextWorkDay, planNext, textSeed, type PrioritySeed } from './plan';
+import { nextWorkDay, planNext, sameItem, textSeed, type PrioritySeed } from './plan';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { makePriority } from '../test/fixtures';
 
@@ -16,6 +16,16 @@ describe('nextWorkDay', () => {
     expect(nextWorkDay('2026-09-25', false)).toBe('2026-09-28'); // Fri → Mon
     expect(nextWorkDay('2026-09-26', false)).toBe('2026-09-28'); // Sat → Mon
     expect(nextWorkDay('2026-09-24', false)).toBe('2026-09-25');
+  });
+});
+
+describe('sameItem', () => {
+  it('is the same text however it is typed, or a card or recurring priority both hold; a null link matches nothing', () => {
+    expect(sameItem(seed('Ship it'), seed(' ship  IT '))).toBe(true);
+    expect(sameItem(seed('Ship it', CARD), seed('Invoices', CARD))).toBe(true);
+    expect(sameItem(seed('Queue', ROUTINE), seed('Monitor', ROUTINE))).toBe(true);
+    expect(sameItem(seed('Ship it'), seed('Invoices'))).toBe(false);
+    expect(sameItem(seed('Ship it', CARD), seed('Invoices', { cardUid: 'card00000002' }))).toBe(false);
   });
 });
 

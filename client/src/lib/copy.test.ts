@@ -10,6 +10,7 @@ import {
   CONFIRM,
   DAYS_DELETED,
   DONE_STAYS,
+  EMPTIED_RECURRING,
   EMPTIED_ROW,
   FINISH_CHOICE,
   LEFT_OPEN,
@@ -24,6 +25,7 @@ import {
   TIMER_DONE,
   TIMER_DUE,
   TIMER_PAUSED_OUT,
+  TODAY_OFFER,
   UNREADABLE_ANSWER,
 } from './copy';
 
@@ -39,6 +41,12 @@ describe('copy builders', () => {
 
   it('names the day the offered priorities were left open on', () => {
     expect(LEFT_OPEN.title('yesterday')).toBe('Still open from yesterday');
+  });
+
+  it('says an emptied recurring row is still the routine, and names the number a day in the offer', () => {
+    expect(EMPTIED_RECURRING).toBe('This row is still a recurring priority. Use Add priority for something new.');
+    expect(TODAY_OFFER.over(3)).toBe('More than 3 recurring rows today.');
+    expect(TODAY_OFFER.over(1)).toBe('More than 1 recurring row today.');
   });
 
   it('describes a finished timer with or without a label', () => {

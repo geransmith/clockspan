@@ -21,7 +21,7 @@ import type { Board, BoardCard, Category, CategoryColor, Day, OpenLane, Priority
 import { BOARD, BOARD_DRAG, DONE_STAYS } from './copy';
 import { dayName } from './format';
 import type { PrioritySeed } from './plan';
-import { isOpen, isRecurring, newUid } from './priorities';
+import { isOneOff, isOpen, isRecurring, newUid } from './priorities';
 
 /** The board's four columns. Later and Next are card lanes; In progress and Done are mostly today's rows. */
 export type ColumnId = 'later' | 'next' | 'progress' | 'done';
@@ -60,7 +60,7 @@ export interface BoardColumns {
 
 /** A row the server should make a card for: written, with no card yet, and not a recurring priority's. */
 export function needsCard(p: Priority): boolean {
-  return hasText(p) && p.cardUid == null && !isRecurring(p);
+  return isOneOff(p) && p.cardUid == null;
 }
 
 /** The card an item stands for: its own, else the one its row names (a card this copy doesn't have yet); null for a row with none. */

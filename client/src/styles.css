@@ -671,6 +671,16 @@ button {
 .left-open-list li {
   overflow-wrap: anywhere;
 }
+/* With the board on, the same notice holds the leftovers and the routines due today, each a box
+   to tick: a title that wraps keeps its box at the top, as in the planner. */
+.today-offer .inline-check {
+  align-items: flex-start;
+  min-height: 32px;
+}
+/* The over line's live region is always there under the routines; empty, it gives back the gap. */
+.today-offer-over:empty {
+  margin-top: -4px;
+}
 /* End-of-day notice on the timeclock. */
 .notice--celebrate {
   background: var(--accent-soft);
@@ -1275,7 +1285,8 @@ button {
 }
 /* With the board on (.priority-row--end on every row), a written row's category chip sits on a
    line of its own under the field, so the field keeps the row's width beside the ×, and the chip
-   is nearer its own field than the next row's. An empty row has no chip and keeps one line. */
+   is nearer its own field than the next row's. An empty row has no chip and keeps one line. A
+   routine's row has its repeat mark first on that line, 6 px before the chip. */
 .priority-row--end {
   row-gap: 4px;
 }
@@ -1300,7 +1311,10 @@ button {
 /* From 640 px the chip is beside the field, in a column every row of the list keeps, written or
    empty, so a field ends in the same place either way: the first letter typed doesn't narrow it.
    10rem holds the widest chip: a name stopped at 9em of the chip's 0.82rem, plus 38 px of dot,
-   gap, padding and border, is 156 px at a 16 px root font, with more to spare at a larger one. */
+   gap, padding and border, is 156 px at a 16 px root font, with more to spare at a larger one.
+   A routine's repeat mark shares the column, before the chip: the cell takes the column's whole
+   width (not its content's, which would push past it), so the chip shrinks and a long name ends
+   in its ellipsis sooner. */
 @media (min-width: 640px) {
   .priority-row--end {
     grid-template-columns: 24px 22px 1fr 10rem;
@@ -1311,6 +1325,7 @@ button {
   .priority-end {
     grid-column: 4;
     grid-row: 1;
+    justify-self: stretch;
   }
 }
 .priority-num {
@@ -3061,11 +3076,12 @@ dialog.dialog::backdrop {
   }
   /* A check with its words, and a list row, draw nothing around themselves: on a touch screen
      they take a whole 44 px instead, which only adds air. The Review rows touch each other, so
-     an ::after has nowhere to go; the planner's rows and "When reached" are too close to theirs.
-     The planner's typed rows, the category chip's row in a card's editor and in a log row's
-     edit, its cell beside or under a priority's field, and a category's swatches grow to 44 px
-     so the hit areas of the controls inside them fit. */
+     an ::after has nowhere to go; the planner's rows, the morning notice's and "When reached" are
+     too close to theirs. The planner's typed rows, the category chip's row in a card's editor and
+     in a log row's edit, its cell beside or under a priority's field, and a category's swatches
+     grow to 44 px so the hit areas of the controls inside them fit. */
   .plan-next-list .inline-check,
+  .today-offer .inline-check,
   .plan-next-extra,
   .alarm-on-due,
   .review-row,

@@ -68,6 +68,7 @@ describe('adoptUser and otherUserStored', () => {
     'focus:left-open-dismissed': '2026-09-30',
     'focus:break-over': '1790000000000',
     'focus:capture-category': 'cafe00000001',
+    'focus:recurring-answered': '2026-09-30 rcur00000001',
   };
 
   /** A localStorage over a Map, holding the device's keys, one user's, and `focus:auth-user` when given. */

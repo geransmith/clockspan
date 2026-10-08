@@ -134,6 +134,18 @@ describe('daySummaryOf', () => {
   });
 });
 
+describe('a recurring priority, which counts as a priority', () => {
+  const queue = makePriority(2, 'Monitor the queue', { recurringUid: 'rcur00000001' });
+  const day = (routineDone: boolean) =>
+    daySummaryOf(makeDay('2026-09-14', { priorities: [makePriority(1, 'Report', { done: true }), { ...queue, done: routineDone }] }));
+
+  it('keeps All priorities done off while it is open, and earns it once ticked', () => {
+    expect(day(false)).toMatchObject({ prioritiesDone: 1, prioritiesTotal: 2 });
+    expect(earned(day(false))).not.toContain('priorities');
+    expect(earned(day(true))).toContain('priorities');
+  });
+});
+
 describe('countStickers', () => {
   it('totals the month by reason and counts a day with every sticker as full', () => {
     const full = makeSummary('2026-09-15', {

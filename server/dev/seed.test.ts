@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ensureDefaultUser, openDatabase, type DB } from '../db.js';
 import { insertSession, SESSION_COOKIE } from '../auth/session.js';
 import { countRows, SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from './harness.js';
-import { addMonths, atTime, DAY_MS, daysBetween, isWeekend, MINUTE_MS, punchWindow, startOfQuarter, startOfWeek, todayKey } from '../../shared/dates.js';
+import { addMonths, atTime, DAY_MS, isoWeekday, isWeekend, MINUTE_MS, punchWindow, startOfQuarter, todayKey } from '../../shared/dates.js';
 import { hasText } from '../../shared/priorities.js';
 import { LIMITS, type Board, type BoardCard, type Day } from '../../shared/api.js';
 import { DEFAULT_SETTINGS, SETTING_LIMITS } from '../../shared/settings.js';
@@ -30,9 +30,6 @@ const counts = (db: DB) =>
       countRows(db, t),
     ]),
   );
-
-/** ISO weekday, Monday 1 to Sunday 7, as recurring priorities store their schedule. */
-const isoWeekday = (date: string) => daysBetween(startOfWeek(date), date) + 1;
 
 /**
  * The board a seed wrote, against its days: each card a save made is in step with its latest
@@ -229,6 +226,17 @@ describe('seedDatabase', () => {
       expect(routines.map((p) => p.position)).toEqual(due.map((_, i) => day.priorities.length - due.length + i + 1));
       expect(routines.every((p) => p.addedAt === day.createdAt)).toBe(true);
     }
+    // The same schedule by date, so a wrong weekday in the shared isoWeekday can't pass both: the
+    // follow-ups fall on the Mondays, Wednesdays and Fridays before Wednesday 16 September.
+    const followUps = SEEDED_RECURRING.find((r) => r.title === 'Follow-ups')!.uid;
+    expect(m.days.filter((d) => d.priorities.some((p) => p.recurringUid === followUps)).map((d) => d.date)).toEqual([
+      '2026-09-02',
+      '2026-09-04',
+      '2026-09-07',
+      '2026-09-09',
+      '2026-09-11',
+      '2026-09-14',
+    ]);
     // Some ticked, some missed, some with focus logged; none on today.
     const routineRows = m.days.flatMap((d) => d.priorities.filter((p) => p.recurringUid != null).map((p) => ({ ...p, day: d })));
     expect(routineRows.some((p) => p.done) && routineRows.some((p) => !p.done)).toBe(true);

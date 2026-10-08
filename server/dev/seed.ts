@@ -4,7 +4,7 @@ import { upsertOidcUser } from '../auth/oidc.js';
 import { hashPassword } from '../auth/password.js';
 import { revokeSessions } from '../auth/session.js';
 import { boardJson, weekdayMask } from '../board.js';
-import { addDays, atTime, daysBetween, HOUR_MS, isWeekend, MINUTE_MS, startOfWeek } from '../../shared/dates.js';
+import { addDays, atTime, HOUR_MS, isoWeekday, isWeekend, MINUTE_MS } from '../../shared/dates.js';
 import { kindForPosition } from '../../shared/punches.js';
 import type { Board, Break, Category, Day, Lane, OpenLane, Priority, Punch, Recurring, Session } from '../../shared/api.js';
 
@@ -188,9 +188,7 @@ const ROUTINES_DONE: Readonly<Record<Exclude<DayKind, 'today'>, readonly string[
  * rows: written with the list, in the item's category, ticked as `ROUTINES_DONE` says.
  */
 function routineRows(date: string, index: number, kind: Exclude<DayKind, 'today'>, after: number, addedAt: number): SeededPriority[] {
-  // ISO: Monday 1 to Sunday 7.
-  const weekday = daysBetween(startOfWeek(date), date) + 1;
-  return SEEDED_RECURRING.filter((r) => r.weekdays.includes(weekday)).map((r, i) => ({
+  return SEEDED_RECURRING.filter((r) => r.weekdays.includes(isoWeekday(date))).map((r, i) => ({
     position: after + i + 1,
     text: r.title,
     done: ROUTINES_DONE[kind].includes(r.title),

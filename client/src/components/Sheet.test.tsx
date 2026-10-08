@@ -3,8 +3,9 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HOUR_MS } from '../../../shared/dates.js';
 import * as api from '../api';
-import { LEFT_OPEN, PLAN_NEXT } from '../lib/copy';
+import { LEFT_OPEN, PLAN_NEXT, TODAY_OFFER } from '../lib/copy';
 import { SPLIT_QUERY } from '../lib/layout';
+import { USER_KEYS } from '../lib/storage';
 import {
   AppProviders,
   completedSession,
@@ -14,6 +15,7 @@ import {
   makeCategory,
   makeDay,
   makePriority,
+  makeRecurring,
   makeSettings,
   serveRange,
   settle,
@@ -38,8 +40,8 @@ vi.mock('./SortableCards', async (importOriginal) => {
 let wideWindow = true;
 let stored: Settings;
 
-function SheetAt({ now = T0, customize = false }: { now?: number; customize?: boolean }) {
-  return <Sheet date={TODAY} today={TODAY} now={now} customize={customize} jumpTo={null} onJumped={() => {}} onPunchEditing={() => {}} />;
+function SheetAt({ date = TODAY, now = T0, customize = false }: { date?: string; now?: number; customize?: boolean }) {
+  return <Sheet date={date} today={TODAY} now={now} customize={customize} jumpTo={null} onJumped={() => {}} onPunchEditing={() => {}} />;
 }
 
 async function renderSheet(customize = false) {
@@ -174,7 +176,7 @@ describe('Sheet', () => {
 });
 
 describe('Sheet: what the last day left open, with the board on', () => {
-  it("offers a row whose card is in Next under the card's title, leaves one parked in Later where it is, and waits for the board", async () => {
+  it("offers a row whose card is in Next under the card's title in the morning notice, leaves one parked in Later where it is, and waits for the board", async () => {
     stored = makeSettings({ board: true });
     serveRange([
       makeDay(YESTERDAY, {
@@ -191,8 +193,9 @@ describe('Sheet: what the last day left open, with the board on', () => {
     expect(screen.queryByText(LEFT_OPEN.title('yesterday'))).toBeNull();
     board.resolve(makeBoard(makeCard('next00000001', 'New title', { lane: 'next' }), makeCard('later0000001', 'Parked since')));
     await settle();
-    const offer = screen.getByText(LEFT_OPEN.title('yesterday')).closest('.left-open')!;
+    const offer = screen.getByText(LEFT_OPEN.title('yesterday')).closest('.today-offer')!;
     expect([...offer.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['New title', 'No card']);
+    expect(screen.getByRole('button', { name: LEFT_OPEN.dismiss })).toBeTruthy();
   });
 
   it('offers nothing when every row it would bring back was moved off Next', async () => {
@@ -201,6 +204,119 @@ describe('Sheet: what the last day left open, with the board on', () => {
     vi.mocked(api.getBoard).mockResolvedValue(makeBoard(makeCard('later0000001', 'Parked')));
     await renderSheet();
     expect(screen.queryByText(LEFT_OPEN.title('yesterday'))).toBeNull();
+    expect(document.querySelector('.left-open')).toBeNull();
+  });
+});
+
+describe('Sheet: the recurring priorities due today', () => {
+  // TODAY is a Monday.
+  const QUEUE = makeRecurring('rcur00000001', 'Monitor the queue');
+  const SATURDAY = makeRecurring('rcur00000002', 'Water the plants', { weekdays: [6] });
+  const offered = () => [...document.querySelectorAll('.today-offer li')].map((li) => li.textContent);
+  const reload = async () => {
+    cleanup();
+    await renderSheet();
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    stored = makeSettings({ board: true });
+    vi.mocked(api.getBoard).mockResolvedValue({ ...makeBoard(), recurring: [SATURDAY, QUEUE] });
+    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve({ priorities }));
+  });
+
+  it('offers the ones due on its weekday, and none answered on this device today', async () => {
+    await renderSheet();
+    expect(offered()).toEqual(['Monitor the queue']);
+    expect(screen.getByText(TODAY_OFFER.recurring)).toBeTruthy();
+    localStorage.setItem(USER_KEYS.recurringAnswered, `${TODAY} ${QUEUE.uid}`);
+    await reload();
+    expect(document.querySelector('.today-offer')).toBeNull();
+    // Answers from another day count for nothing.
+    localStorage.setItem(USER_KEYS.recurringAnswered, `${YESTERDAY} ${QUEUE.uid}`);
+    await reload();
+    expect(offered()).toEqual(['Monitor the queue']);
+  });
+
+  it("adds one after the padded rows, and doesn't offer it again once its row is removed, after a reload too", async () => {
+    await renderSheet();
+    fireEvent.click(button(LEFT_OPEN.add));
+    await settle();
+    expect(vi.mocked(api.putPriorities).mock.lastCall![1].map((p) => [p.text, p.recurringUid])).toEqual([
+      ['', null],
+      ['', null],
+      ['', null],
+      ['Monitor the queue', QUEUE.uid],
+    ]);
+    expect(document.querySelector('.today-offer')).toBeNull();
+    fireEvent.click(button('Remove priority 4'));
+    await settle();
+    expect(vi.mocked(api.putPriorities).mock.lastCall![1].some((p) => p.recurringUid != null)).toBe(false);
+    expect(document.querySelector('.today-offer')).toBeNull();
+    await reload();
+    expect(document.querySelector('.today-offer')).toBeNull();
+  });
+
+  it('shows the leftovers beside them, and Not today holds both for the day', async () => {
+    serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Invoices')] })]);
+    await renderSheet();
+    expect(offered()).toEqual(['Invoices', 'Monitor the queue']);
+    fireEvent.click(button(TODAY_OFFER.notToday));
+    await settle();
+    expect(document.querySelector('.today-offer')).toBeNull();
+    expect(api.putPriorities).not.toHaveBeenCalled();
+    await reload();
+    expect(document.querySelector('.today-offer')).toBeNull();
+  });
+
+  it('leaves the leftovers for later when Not today answers the routines alone', async () => {
+    serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Invoices')] })]);
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [makePriority(1, 'Report')] }));
+    await renderSheet();
+    expect(offered()).toEqual(['Monitor the queue']);
+    fireEvent.click(button(TODAY_OFFER.notToday));
+    await settle();
+    expect(document.querySelector('.today-offer')).toBeNull();
+    // With the one-off cleared and saved, the list has no plan, and the leftovers are offered.
+    fireEvent.change(screen.getByLabelText('Priority 1'), { target: { value: '' } });
+    await settle(1000);
+    expect(offered()).toEqual(['Invoices']);
+    expect(screen.getByText(LEFT_OPEN.title('yesterday'))).toBeTruthy();
+  });
+
+  it("offers nothing on another day's sheet, though today's routines are due", async () => {
+    vi.mocked(api.getDay).mockImplementation((d) => Promise.resolve(makeDay(d)));
+    render(
+      <AppProviders>
+        <SheetAt date={YESTERDAY} />
+      </AppProviders>,
+    );
+    await settle();
+    expect(api.getBoard).toHaveBeenCalled();
+    expect(screen.getByLabelText('Priority 1')).toBeTruthy();
+    expect(document.querySelector('.today-offer')).toBeNull();
+  });
+
+  it('takes the routines away once the board is switched off on another device, and offers the leftovers in the plain block', async () => {
+    serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Invoices')] })]);
+    await renderSheet();
+    expect(offered()).toEqual(['Invoices', 'Monitor the queue']);
+    stored = makeSettings();
+    // The settings are read again each minute; the board keeps its last copy.
+    await settle(60_000);
+    expect(document.querySelector('.today-offer')).toBeNull();
+    expect(screen.getByText(LEFT_OPEN.title('yesterday'))).toBeTruthy();
+    expect(screen.queryByText(TODAY_OFFER.recurring)).toBeNull();
+  });
+
+  it('offers no routine with the board off, and the plain block still offers the leftovers while the list holds only a routine', async () => {
+    stored = makeSettings();
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [makePriority(1, 'Monitor the queue', { recurringUid: QUEUE.uid })] }));
+    serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Invoices')] })]);
+    await renderSheet();
+    expect(screen.getByText(LEFT_OPEN.title('yesterday')).closest('.left-open')!.classList.contains('today-offer')).toBe(false);
+    expect(screen.queryByText(TODAY_OFFER.recurring)).toBeNull();
+    expect(api.getBoard).not.toHaveBeenCalled();
   });
 });
 
