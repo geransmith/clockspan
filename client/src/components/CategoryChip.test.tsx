@@ -219,11 +219,30 @@ describe('CategoryChip', () => {
   it('closes on a press outside with no change, and stays open for a press inside', () => {
     const { onChange } = renderChip();
     fireEvent.click(chip());
+    const focused = document.activeElement;
     fireEvent.pointerDown(listbox());
     expect(isOpen()).toBe(true);
+    expect(document.activeElement).toBe(focused);
+    const focus = vi.spyOn(chip(), 'focus');
     fireEvent.pointerDown(outside());
     expect(isOpen()).toBe(false);
     expect(onChange).not.toHaveBeenCalled();
+    // The focus was on an option, which goes with the list: it is on the chip for the press's
+    // mousedown to move on, never left to fall to the page. The list is fixed, so the chip can
+    // be scrolled out of sight under it; scrolling it back would move the page under the press.
+    expect(focus).toHaveBeenCalledExactlyOnceWith({ preventScroll: true });
+    expect(document.activeElement).toBe(chip());
+  });
+
+  it('leaves the focus where it is on a press outside while the list does not hold it', () => {
+    renderChip();
+    fireEvent.click(chip());
+    // A press on the list's padding put the focus on the page, and the list stayed open.
+    (document.activeElement as HTMLElement).blur();
+    expect(isOpen()).toBe(true);
+    fireEvent.pointerDown(outside());
+    expect(isOpen()).toBe(false);
+    expect(document.activeElement).toBe(document.body);
   });
 
   it('makes a category from New category on Enter and picks it; a blank box does nothing', () => {

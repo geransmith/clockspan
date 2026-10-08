@@ -57,6 +57,7 @@ async function renderLog(
     <AppProviders>
       <BarLabel />
       <SessionLog date={date} isToday={date === TODAY} sessions={sessions} breaks={breaks} priorities={priorities} pick={pick} now={T0 + 30 * MINUTE_MS} />
+      <button>Elsewhere</button>
     </AppProviders>,
   );
   await settle();
@@ -66,6 +67,7 @@ const openEdit = () => fireEvent.click(screen.getByRole('button', { name: /Write
 const labelInput = () => screen.getByRole('textbox', { name: 'Session label' }) as HTMLInputElement;
 const planSelect = () => screen.getByRole('combobox', { name: 'Priority this session was for' }) as HTMLSelectElement;
 const bar = () => screen.getByRole('status', { name: 'Running bar' }).textContent;
+const elsewhere = () => screen.getByRole('button', { name: 'Elsewhere' });
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 + 30 * MINUTE_MS });
@@ -289,6 +291,36 @@ describe('SessionLog', () => {
       fireEvent.change(planSelect(), { target: { value: 'abcdef123456' } });
       await settle();
       expect(api.patchSession).toHaveBeenCalledExactlyOnceWith(1, { priorityUid: 'abcdef123456', categoryUid: null });
+    });
+
+    // A press elsewhere: its pointerdown closes the list, and its mousedown then moves the focus.
+    async function pressOutsideTheList(label: RegExp) {
+      edit(label);
+      fireEvent.change(labelInput(), { target: { value: 'Inbox triage' } });
+      fireEvent.click(chip()!);
+      await settle();
+      expect(document.activeElement!.getAttribute('role')).toBe('option');
+      fireEvent.pointerDown(elsewhere());
+      act(() => elsewhere().focus());
+      await settle();
+    }
+
+    it('ends the edit when a press outside closes the list, and sends the label once', async () => {
+      await renderLog([at(1, 'Inbox')], [], TODAY, { priorities: ROWS, pick: PICK });
+      await pressOutsideTheList(/Inbox/);
+      expect(screen.queryByRole('textbox', { name: 'Session label' })).toBeNull();
+      expect(document.activeElement).toBe(elsewhere());
+      expect(api.patchSession).toHaveBeenCalledExactlyOnceWith(1, { label: 'Inbox triage' });
+    });
+
+    it("ends the running row's edit the same way, through the timer", async () => {
+      vi.mocked(api.getRunning).mockResolvedValue({ session: RUNNING });
+      vi.mocked(api.patchSession).mockImplementation((id, patch) => Promise.resolve({ session: { ...RUNNING, id, ...patch } }));
+      await renderLog([RUNNING], [], TODAY, { priorities: ROWS, pick: PICK });
+      await pressOutsideTheList(/Still going/);
+      expect(screen.queryByRole('textbox', { name: 'Session label' })).toBeNull();
+      expect(api.patchSession).toHaveBeenCalledExactlyOnceWith(2, { label: 'Inbox triage' });
+      expect(bar()).toBe('Inbox triage');
     });
 
     it("edits the running row's category through the timer", async () => {

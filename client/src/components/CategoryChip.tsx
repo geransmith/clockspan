@@ -82,7 +82,13 @@ export function CategoryChip({ value, onChange, pick, label }: Props) {
     if (!open) return;
     const follow = () => place(chip.current, pop.current);
     const outside = (e: PointerEvent) => {
-      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+      if (wrap.current?.contains(e.target as Node)) return;
+      // The list goes before the press's mousedown moves the focus, and the focused option with
+      // it: the focus would fall to the page with no blur React reports, so a box that ends its
+      // edit when the focus leaves it (a day log row's) would never hear it go. On the chip, the
+      // mousedown moves it on from inside that box.
+      if (pop.current?.contains(document.activeElement)) chip.current?.focus({ preventScroll: true });
+      setOpen(false);
     };
     window.addEventListener('scroll', follow, true);
     window.addEventListener('resize', follow);

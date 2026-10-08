@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { SessionEdit } from '../api';
 import { useDayStore } from '../hooks/useDay';
 import { useTimer } from '../hooks/useTimer';
@@ -147,6 +147,8 @@ function Row({
   // Set when a key or the select ends the edit, so focus goes back to the label; a blur leaves focus where it went.
   const [returnFocus, setReturnFocus] = useState(false);
   const editBox = useRef<HTMLSpanElement>(null);
+  const blurCheck = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(blurCheck.current), []);
   const running = s.status === 'running';
   const paused = running && s.pausedAt != null;
   // A running row counts its focus so far, which holds still while paused.
@@ -163,11 +165,15 @@ function Row({
   };
   // Moving from the label input to the priority select or the category chip (and its list)
   // must not end the edit, and iOS doesn't always report relatedTarget, so check where focus
-  // landed a tick later.
-  const onBlur = () =>
-    setTimeout(() => {
+  // landed a tick later. Only the last check runs: a press outside an open category list moves
+  // the focus twice in one go (option to chip, chip to the press), and two checks would both
+  // find it outside and send the edit twice.
+  const onBlur = () => {
+    clearTimeout(blurCheck.current);
+    blurCheck.current = setTimeout(() => {
       if (editBox.current && !editBox.current.contains(document.activeElement)) commit();
     }, 0);
+  };
   return (
     <li className={`log-row${running ? ' is-running' : ''}`}>
       <span className="log-time">
