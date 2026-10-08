@@ -342,8 +342,8 @@ describe('migration 13: each task stored once', () => {
     card('card00000001', 'Write the report', 'next', 1, { category: 'cat000000001', createdAt: 700 });
     const mon = day('2026-09-07');
     const tue = day('2026-09-08');
-    row(mon, 1, 'Draft report', { uid: 'row000000001', card: 'card00000001', category: 'cat000000002' });
-    row(tue, 2, 'Report', { uid: 'row000000002', card: 'card00000001', done: true, addedAt: 3000 });
+    row(mon, 1, 'Draft report', { uid: 'row000000001', card: 'card00000001', category: 'cat000000002', done: true });
+    row(tue, 2, 'Report', { uid: 'row000000002', card: 'card00000001', addedAt: 3000 });
     const s = session(mon, 'row000000001');
 
     migrate(db);
@@ -360,10 +360,37 @@ describe('migration 13: each task stored once', () => {
       legacy_untouched: 0,
       legacy_uid: null,
     });
-    expect(list(db, mon)).toEqual([{ uid: 'card00000001', position: 1, done: 0, added_at: 2000 }]);
-    expect(list(db, tue)).toEqual([{ uid: 'card00000001', position: 2, done: 1, added_at: 3000 }]);
+    expect(list(db, mon)).toEqual([{ uid: 'card00000001', position: 1, done: 1, added_at: 2000 }]);
+    expect(list(db, tue)).toEqual([{ uid: 'card00000001', position: 2, done: 0, added_at: 3000 }]);
     expect(linkOf(db, s).uid).toBe('card00000001');
     expect(countRows(db, 'items')).toBe(1);
+    db.close();
+  });
+
+  it('opens the latest entry of a card the board put back in Later or Next after its tick, and keeps the tick in the old rows', () => {
+    const { db, day, row, card } = before();
+    // Unticked on the board: out of Done with done_at cleared, its row still ticked.
+    card('card00000001', 'Unticked', 'next', 1);
+    card('card00000002', 'Unticked, then parked', 'later', 1);
+    card('done00000001', 'Done', 'done', 0, { doneAt: 5000 });
+    const mon = day('2026-09-07');
+    const tue = day('2026-09-08');
+    row(mon, 1, 'Unticked', { card: 'card00000001', done: true });
+    row(tue, 1, 'Unticked', { card: 'card00000001', done: true });
+    row(tue, 2, 'Unticked, then parked', { card: 'card00000002', done: true });
+    row(tue, 3, 'Done', { card: 'done00000001', done: true });
+
+    migrate(db);
+    expect(item(db, 'card00000001')).toMatchObject({ lane: 'next', position: 1 });
+    expect(item(db, 'card00000002')).toMatchObject({ lane: 'later', position: 1 });
+    // Only the latest tick goes; an earlier day's stays, and so does a Done card's.
+    expect(list(db, mon)).toEqual([{ uid: 'card00000001', position: 1, done: 1, added_at: 2000 }]);
+    expect(list(db, tue)).toEqual([
+      { uid: 'card00000001', position: 1, done: 0, added_at: 2000 },
+      { uid: 'card00000002', position: 2, done: 0, added_at: 2000 },
+      { uid: 'done00000001', position: 3, done: 1, added_at: 2000 },
+    ]);
+    expect(db.prepare(`SELECT done FROM priorities_v1 WHERE day_id = ? ORDER BY position`).pluck().all(tue)).toEqual([1, 1, 1]);
     db.close();
   });
 
@@ -511,7 +538,7 @@ describe('migration 13: each task stored once', () => {
 
   it("makes one entry of a card's two rows on one day, at the first one's place, ticked when either is", () => {
     const { db, day, row, card, session } = before();
-    card('card00000001', 'Report', 'next', 1);
+    card('card00000001', 'Report', 'done', 0, { doneAt: 3000 });
     const mon = day('2026-09-07');
     row(mon, 1, 'Report', { uid: 'row000000001', card: 'card00000001', addedAt: 2000 });
     row(mon, 2, 'Slides', { uid: 'row000000002' });

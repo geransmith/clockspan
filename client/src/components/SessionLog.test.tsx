@@ -205,6 +205,16 @@ describe('SessionLog', () => {
       expect([...planSelect().options].map((o) => o.textContent)).toEqual(['Unplanned', 'Ship the hotfix', '1 · Email']);
     });
 
+    it('offers Unplanned to a session whose task left a day with no written rows', async () => {
+      await renderLog([{ ...onFix, title: 'Ship the hotfix' }], [], TODAY, { priorities: [] });
+      fireEvent.click(screen.getByRole('button', { name: 'Ship the hotfix' }));
+      expect(document.activeElement).toBe(planSelect());
+      expect([...planSelect().options].map((o) => o.textContent)).toEqual(['Unplanned', 'Ship the hotfix']);
+      fireEvent.change(planSelect(), { target: { value: '' } });
+      await settle();
+      expect(api.patchSession).toHaveBeenCalledExactlyOnceWith(1, { priorityUid: null });
+    });
+
     it('shows the name as text over the select in the edit of a session on a written row, with no label box', async () => {
       await renderLog([onFix]);
       expect(named().title).toBe('Priority 1. Click to change the priority');

@@ -246,7 +246,7 @@ export const Board = memo(function Board({ today }: { today: string }) {
 
   // The full delete, which asks with the days the task is on and the time logged on it: today's
   // row has the counts as the day was last read, any other item the board's.
-  const remove = (item: BoardItem) => {
+  const confirmDelete = (item: BoardItem) => {
     const { listed, logged } = (item.date === today ? item.row : item.card)!;
     if (!window.confirm(CONFIRM.deleteTask(listed, logged > 0 ? formatDurationCeil(logged) : null))) return;
     setOpen(null);
@@ -371,7 +371,7 @@ export const Board = memo(function Board({ today }: { today: string }) {
               : undefined
         }
         // A recurring priority is removed in Settings → Board, so its row only comes off today's list.
-        onDelete={!item.recurring && (onToday || editable) ? () => remove(item) : undefined}
+        onDelete={!item.recurring && (onToday || editable) ? () => confirmDelete(item) : undefined}
         onRemove={item.recurring && onToday ? () => report(store.removeFromToday(item.uid)) : undefined}
         note={note}
         drag={drag}

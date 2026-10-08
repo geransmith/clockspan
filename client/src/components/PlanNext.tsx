@@ -125,9 +125,9 @@ function Planner({
     if (!day) return;
     // The tap is the gesture iOS needs: the "next day planned" sound plays after the save answers.
     unlockAudio();
-    // A row carried over is the same task, as the rows are now. What is still in the box, never
-    // entered, has had no chip, so it goes with no category; so do the rows typed in once the
-    // board is off, whose chips are gone.
+    // A row carried over is the same task, under its current name and category. What is still in
+    // the box, never entered, has had no chip, so it goes with no category; so do the rows typed
+    // in once the board is off, whose chips are gone.
     const seeds = [...offered.filter((p) => picked.has(p.uid)), ...extra.map((e) => textSeed(e.text, pick ? e.categoryUid : null)), textSeed(draft)];
     const { rows, added } = planNext(day.priorities, seeds);
     if (added === 0) {

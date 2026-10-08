@@ -96,8 +96,8 @@ export function sessionsRouter(db: DB): Router {
   // A session with a task counts under the task's category, so one of its own is taken only by a
   // session left with no task: a category sent for one that keeps its task is refused, a link to a
   // task drops it, and null takes it off any session. A session that loses its task keeps the
-  // task's name as its label, unless a label is sent with it; the task it left is cleaned up when
-  // nothing else names it (`collectItems`).
+  // task's name as its label, unless a label is sent with it, and no category unless one is sent;
+  // the task it left is cleaned up when nothing else names it (`collectItems`).
   r.patch('/:id', (req, res) => {
     const s = owned(res);
     const { plannedSeconds, label, priorityUid, categoryUid } = req.body as {
@@ -121,8 +121,9 @@ export function sessionsRouter(db: DB): Router {
     }
     const name = parseLabel(label);
     if ('error' in name) return refuse(res, 400, name.error);
-    const own = itemId != null ? null : category.categoryUid === undefined ? s.category_uid : category.categoryUid;
     const left = s.item_id != null && itemId !== s.item_id;
+    // A session that leaves its task takes no category with it, nor one it held before it had it.
+    const own = itemId != null ? null : category.categoryUid !== undefined ? category.categoryUid : left ? null : s.category_uid;
     // The task's current name, so the session keeps reading under the name it showed.
     const called = name.label ?? (left && itemId == null ? s.item_title!.slice(0, LIMITS.sessionLabel) : s.label);
     db.transaction(() => {

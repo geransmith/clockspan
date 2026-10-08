@@ -698,6 +698,17 @@ describe('Priorities: a blank name', () => {
     expect(textbox(1).value).toBe('Report');
   });
 
+  it('says so for a task typed in a free row, saved and then emptied in one stay in the box', async () => {
+    const { saved, again } = await renderCard();
+    act(() => textbox(1).focus());
+    fireEvent.change(textbox(1), { target: { value: 'Call the bank' } });
+    await settle(400);
+    // The save's answer, with the task the first key made.
+    again(saved());
+    fireEvent.change(textbox(1), { target: { value: '' } });
+    expect(textbox(1).getAttribute('aria-describedby')).toBe(note('Call the bank')!.id);
+  });
+
   it('makes a row typed and emptied before it was saved a free row again, with no note and nothing sent', async () => {
     const { onChange } = await renderCard();
     act(() => textbox(1).focus());
@@ -779,7 +790,8 @@ describe('Priorities: ×', () => {
       const { onChange, unmount } = await renderCard([row], undefined, sessions);
       fireEvent.click(x(1));
       expect(dialog()!.textContent).toContain(REMOVE_TASK.title('Email'));
-      expect(dialog()!.textContent).toContain(body);
+      // The facts are read with the title.
+      expect(document.getElementById(dialog()!.getAttribute('aria-describedby')!)!.textContent).toBe(body);
       expect(onChange).not.toHaveBeenCalled();
       unmount();
     }

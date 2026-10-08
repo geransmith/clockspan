@@ -161,6 +161,21 @@ describe('pruning tasks', () => {
     expect(board.recurring.map((r) => r.uid)).toEqual(['rcur00000001']);
   });
 
+  it('takes a done task kept for a session on a later day out of its lane, which closes up', async () => {
+    app = await startTestApp();
+    for (const uid of ['aaaaaaaaaaa1', 'aaaaaaaaaaa2']) await app.api.post('/api/items', { uid, title: `Task ${uid}`, lane: 'later' });
+    await save(OLD, [row('aaaaaaaaaaa1', true)]);
+    // Back on a later day, where time is logged on it, then taken off that day's list.
+    await save(KEPT, [row('aaaaaaaaaaa1')]);
+    const { id } = (await app.api.post(`/api/days/${KEPT}/sessions`, { plannedSeconds: 600, priorityUid: 'aaaaaaaaaaa1' })).body.session as { id: number };
+    await app.api.post(`/api/sessions/${id}/finish`);
+    await save(KEPT, []);
+    expect(await prune()).toEqual({ deleted: 1 });
+    expect(uids()).toEqual(['aaaaaaaaaaa1', 'aaaaaaaaaaa2']);
+    const board = (await app.api.get('/api/board')).body as Board;
+    expect(board.cards.map((c) => [c.uid, c.lane, c.position])).toEqual([['aaaaaaaaaaa2', 'later', 1]]);
+  });
+
   it('keeps a done task a day kept for its running timer still lists', async () => {
     app = await startTestApp();
     await save(OLD, [row('aaaaaaaaaaa1', true), row('aaaaaaaaaaa2')]);

@@ -189,6 +189,7 @@ function backfill(db: DB, userId: number, now: number): void {
   }
 
   const cardTasks = new Map<string, number>();
+  const laned: number[] = [];
   for (const c of db.prepare(`SELECT * FROM board_cards WHERE user_id = ? ORDER BY id`).all(userId) as CardRow[]) {
     const last = latestDay.get(c.uid);
     // Held: a card a save made whose latest linked rows were all emptied, which the board showed nowhere.
@@ -206,7 +207,9 @@ function backfill(db: DB, userId: number, now: number): void {
       doneAt: c.done_at,
       untouched: c.untouched,
     };
-    cardTasks.set(c.uid, add(c.uid, task));
+    const id = add(c.uid, task);
+    cardTasks.set(c.uid, id);
+    if (lane !== null) laned.push(id);
   }
 
   const routineTasks = new Map<string, number>();
@@ -245,7 +248,10 @@ function backfill(db: DB, userId: number, now: number): void {
     return started.id;
   };
 
-  const entries = new Map<string, { dayId: number; itemId: number; position: number; done: number; addedAt: number }>();
+  type Entry = { dayId: number; itemId: number; position: number; done: number; addedAt: number };
+  const entries = new Map<string, Entry>();
+  // Each task's entry on its latest day: the rows are walked in date order.
+  const latest = new Map<number, Entry>();
   const links: { dayId: number; uid: string; itemId: number }[] = [];
   for (const r of rows) {
     if (!written(r.text)) continue;
@@ -263,9 +269,17 @@ function backfill(db: DB, userId: number, now: number): void {
     links.push({ dayId: r.day_id, uid: r.uid, itemId: id });
     // One entry per task and day, at its first row's place; a tick on any of its rows that day shows.
     const at = `${r.day_id} ${id}`;
-    const entry = entries.get(at);
-    if (entry) entry.done = Math.max(entry.done, r.done);
-    else entries.set(at, { dayId: r.day_id, itemId: id, position: r.position, done: r.done, addedAt: r.added_at });
+    const entry = entries.get(at) ?? { dayId: r.day_id, itemId: id, position: r.position, done: 0, addedAt: r.added_at };
+    entry.done = Math.max(entry.done, r.done);
+    entries.set(at, entry);
+    latest.set(id, entry);
+  }
+  // A card in Later or Next whose latest row is ticked was put back there after the tick (the
+  // board's untick, the correction for a mistaken tick). Done is read from the latest entry's
+  // tick, so that tick goes, or the task would show as done again; priorities_v1 keeps it.
+  for (const id of laned) {
+    const entry = latest.get(id);
+    if (entry) entry.done = 0;
   }
 
   // An emptied row makes no entry. Its sessions stay with the card or recurring priority it links

@@ -111,8 +111,9 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick 
   const { anchor, burst } = useCelebration<HTMLInputElement>(ticked, 'priorityDone');
   const logged = useMemo(() => loggedByUid(sessions), [sessions]);
   const noteId = useId();
-  // The row whose box has the focus, by its task, and its text then: the rename note compares with it.
-  const [focused, setFocused] = useState<{ uid: string | null; text: string } | null>(null);
+  // The row whose box has the focus, by its place (its key), and its text then: the rename note
+  // compares with it. A free row's task is minted by its first key, so its uid at focus can't say.
+  const [focused, setFocused] = useState<{ position: number; text: string } | null>(null);
   const [asked, setAsked] = useState<Asked | null>(null);
   const storedName = (uid: string | null) => stored.find((q) => q.uid === uid)?.text;
 
@@ -278,7 +279,7 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick 
         const placeholder = p.position === 1 ? 'The one thing to get done' : `Priority ${p.position}`;
         // While the box has the focus: retyped, a name that earlier days' lists hold renames it there
         // too; emptied, it says what happens to the name.
-        const inFocus = focused != null && p.uid != null && focused.uid === p.uid;
+        const inFocus = focused != null && p.uid != null && focused.position === p.position;
         const blankName = inFocus && empty ? storedName(p.uid) : undefined;
         const note = blankName ? BLANK_NOTE(blankName) : inFocus && !empty && p.text !== focused.text && p.earlier > 0 ? RENAME_NOTE(p.earlier) : null;
         const noteFor = `${noteId}-note-${p.position}`;
@@ -329,7 +330,7 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick 
                     if (e.key === 'Escape' && isBlank(p)) restore(p);
                   }}
                   onChange={(e) => edit(p.position, { text: e.target.value.replace(/[\r\n]+/g, ' ') })}
-                  onFocus={() => setFocused({ uid: p.uid, text: p.text })}
+                  onFocus={() => setFocused({ position: p.position, text: p.text })}
                   onBlur={() => {
                     setFocused(null);
                     if (isBlank(p)) restore(p);

@@ -170,6 +170,11 @@ describe('sessions', () => {
     }
     expect((await patch({ priorityUid: PLAN, categoryUid: null })).body.session).toMatchObject({ priorityUid: PLAN, categoryUid: TASKS });
     expect((await patch({ categoryUid: null })).status).toBe(200);
+    // One linked before links cleared it still holds its own; taken off its task, it has none.
+    app.db.prepare(`UPDATE sessions SET category_uid = ? WHERE id = ?`).run(MINE, id);
+    expect((await patch({ priorityUid: null })).body.session).toMatchObject({ priorityUid: null, categoryUid: null });
+    expect(app.count('sessions', 'id = ? AND category_uid IS NULL', id)).toBe(1);
+    await patch({ priorityUid: PLAN });
     // Taken off its task with a category: it counts under that one.
     expect((await patch({ priorityUid: null, categoryUid: MINE })).body.session).toMatchObject({ priorityUid: null, categoryUid: MINE });
   });

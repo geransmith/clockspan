@@ -210,7 +210,8 @@ function Row({
           ) : (
             <span className="log-label">{name}</span>
           )}
-          {planned.length > 0 && (
+          {/* A session with a task always has it, so Unplanned is there even when the day lists none. */}
+          {(hasTask || planned.length > 0) && (
             <select
               className="input select log-plan-select"
               autoFocus={editing === 'link'}

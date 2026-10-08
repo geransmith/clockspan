@@ -360,6 +360,17 @@ describe('reviewRange: Not done', () => {
     ]);
   });
 
+  it('keeps the entry a task with a lane opened its own, whatever a later task of its text does', () => {
+    const laned = new Set(['task00000001']);
+    expect(notDone([day(MON, row('Report', 'task00000001')), day(TUE, row('Report', 'task00000002', { done: true }))], laned)).toEqual([
+      ['task00000001', 'Report', [MON]],
+    ]);
+    expect(notDone([day(MON, row('Report', 'task00000001')), day(TUE, row('Report', 'task00000002'))], laned)).toEqual([
+      ['task00000001', 'Report', [MON]],
+      ['task00000002', 'Report', [TUE]],
+    ]);
+  });
+
   it('joins a retype to the latest open entry of its text', () => {
     const days = [day(MON, row('Email', 'task00000001', { listed: 2 }), row('Email', 'task00000002', { listed: 2 })), day(TUE, row('email', 'task00000003'))];
     expect(notDone(days)).toEqual([

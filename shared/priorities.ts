@@ -37,9 +37,9 @@ function changed(base: Priority, mine: Priority): boolean {
   return MERGE_FIELDS.some((f) => mine[f] !== base[f]);
 }
 
-/** The stored row with each merged field this device changed since `base` taken from `mine`; with no base row, every one. */
-function mergeRow(stored: Priority, base: Priority | undefined, mine: Priority): Priority {
-  return MERGE_FIELDS.reduce((row, f) => (base && mine[f] === base[f] ? row : { ...row, [f]: mine[f] }), stored);
+/** The stored row with each merged field this device changed since `base` taken from `mine`. */
+function mergeRow(stored: Priority, base: Priority, mine: Priority): Priority {
+  return MERGE_FIELDS.reduce((row, f) => (mine[f] === base[f] ? row : { ...row, [f]: mine[f] }), stored);
 }
 
 /**
@@ -50,8 +50,8 @@ function mergeRow(stored: Priority, base: Priority | undefined, mine: Priority):
  * - A row in all three keeps the stored value of each field (`MERGED`) this device left as it
  *   was in `base`, and takes this device's value of each field it changed: the same field
  *   changed on both goes to this device.
- * - A row in `mine` and `stored` but not in `base` (both devices put the task on the list) takes
- *   this device's value of every merged field.
+ * - A row in `mine` and `stored` but not in `base` (both devices put the task on the list) is
+ *   the stored row: the first save wins, so a copy behind can't undo a tick made since.
  * - A row this device removed (in `base`, not in `mine`) goes. One another device removed (in
  *   `base`, not in `stored`) stays gone, unless this device changed it.
  * - A row added here (in neither) stays. One another device added since `base` (only in
@@ -71,7 +71,7 @@ export function mergePriorities(stored: Priority[], base: Priority[], mine: Prio
   for (const m of mine) {
     const s = storedBy.get(m.uid);
     const b = baseBy.get(m.uid);
-    if (s) out.push(mergeRow(s, b, m));
+    if (s) out.push(b ? mergeRow(s, b, m) : s);
     else if (!b || changed(b, m)) out.push(m);
   }
   for (const t of theirs) {

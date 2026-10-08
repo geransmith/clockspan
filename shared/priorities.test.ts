@@ -82,12 +82,10 @@ describe('mergePriorities', () => {
     expect(mergePriorities([], list(['a', 'Report']), list(['a', 'Quarterly report']))).toEqual(list(['a', 'Quarterly report']));
   });
 
-  it("takes this device's merged fields when both devices put the task on the list since the base, and the stored row's own", () => {
-    // Both took the left-open offer, the other device first: one row for the one task.
+  it('keeps the stored row when both devices put the task on the list since the base', () => {
+    // Both took the left-open offer, the other device first, and it ticked the row since: one row for the one task, as stored.
     const stored = list(['a', 'Report', { done: true, addedAt: 300, recurring: true, listed: 3, earlier: 2, logged: 600 }]);
-    expect(mergePriorities(stored, [], list(['a', 'Report draft']))).toEqual(
-      list(['a', 'Report draft', { recurring: true, listed: 3, earlier: 2, logged: 600 }]),
-    );
+    expect(mergePriorities(stored, [], list(['a', 'Report draft']))).toEqual(stored);
   });
 
   it('keeps the read-only fields of the stored row whatever this device sends', () => {

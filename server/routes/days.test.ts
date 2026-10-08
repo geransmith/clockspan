@@ -344,6 +344,15 @@ describe('PUT /api/days/:date/priorities with a base', () => {
     ]);
   });
 
+  it('keeps the tick a device made on a task it carried when another device carries the same task on an older copy', async () => {
+    await app.api.put('/api/days/2026-08-31/priorities', { priorities: [row('Invoices', 'aaaaaaaaaaa1')] });
+    const carried = row('Invoices', 'aaaaaaaaaaa1', { addedAt: 1000 });
+    await app.api.put(PATH, { priorities: [carried, row(''), row('')], base: EMPTY });
+    await app.api.put(PATH, { priorities: [{ ...carried, done: true }, row(''), row('')], base: [carried, row(''), row('')] });
+    const r = await app.api.put(PATH, { priorities: [row('Invoices', 'aaaaaaaaaaa1', { addedAt: 5000 }), row(''), row('')], base: EMPTY });
+    expect(r.body.priorities.map((p: Priority) => [p.uid, p.done, p.addedAt])).toEqual([['aaaaaaaaaaa1', true, 1000]]);
+  });
+
   it("refuses a save whose list would hold more than the limit with another device's rows, and stores nothing", async () => {
     const own = Array.from({ length: MAX_PRIORITIES - 1 }, (_, i) => row(`Row ${i}`, `aaaaaaaa${String(i).padStart(4, '0')}`));
     await app.api.put(PATH, { priorities: [...own, row('Theirs', 'bbbbbbbbbbbb')] });

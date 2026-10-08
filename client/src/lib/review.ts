@@ -289,7 +289,7 @@ export function reviewRange(
  * latest open entry of its text (`sameText`) whose last day is at most `LOOKBACK_DAYS` before
  * this one, the rule `server/migrations/oneItem.ts` chains rows by: its tick settles that entry,
  * and so does the tick of another such task of its text on its day. The entry shows its latest
- * task's name. Two tasks of one name with a lane, or on two lists, stay two.
+ * task's name. A task with a lane neither joins nor is joined; one on two lists joins none.
  */
 function addToNotDone(
   notDone: Map<string, OpenPriority>,
@@ -304,9 +304,11 @@ function addToNotDone(
     if (own || !byText(p)) return own;
     const text = sameText(p.text);
     let latest: OpenPriority | undefined;
+    // An entry a task with a lane opened is that task's alone: its key is its uid.
     for (const g of notDone.values()) {
       const last = g.dates.at(-1)!;
-      if (sameText(g.text) === text && last < date && addDays(last, LOOKBACK_DAYS) >= date && (!latest || last >= latest.dates.at(-1)!)) latest = g;
+      if (!laned.has(g.key) && sameText(g.text) === text && last < date && addDays(last, LOOKBACK_DAYS) >= date && (!latest || last >= latest.dates.at(-1)!))
+        latest = g;
     }
     return latest;
   };

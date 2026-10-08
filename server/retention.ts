@@ -61,7 +61,8 @@ const NOT_A_SETTING = `(weekdays IS NULL OR archived_at IS NOT NULL)`;
  * and named by nothing: those whose latest entry was ticked before it, whatever their lane. Then
  * the tombstones of tasks deleted before it (UTC midnight, like `cutoffKey`), which no open page
  * still sends after a retention window of 30 days or more, and any task nothing names
- * (`collectItems`, which skips the newer tombstones). A lane that lost a task closes up.
+ * (`collectItems`, which skips the newer tombstones). A done task kept for its sessions leaves its
+ * lane, and a lane that lost a task closes up.
  */
 export function pruneDays(db: DB, userId: number, before: string): Pruned {
   return db.transaction((): Pruned => {
@@ -84,9 +85,14 @@ export function pruneDays(db: DB, userId: number, before: string): Pruned {
            AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.item_id = items.id)`,
       )
       .run(userId, inList(done)).changes;
+    // One kept for a session on a later day loses its lane: with its ticked day gone, nothing says
+    // it was done, and it would show as open there again.
+    const unlaned = db
+      .prepare(`UPDATE items SET lane = NULL, position = 0 WHERE user_id = ? AND id IN (SELECT value FROM json_each(?)) AND lane IS NOT NULL`)
+      .run(userId, inList(done)).changes;
     const tombstones = db.prepare(`DELETE FROM items WHERE user_id = ? AND deleted_at < ?`).run(userId, Date.parse(`${before}T00:00:00Z`)).changes;
     const items = finished + tombstones + collectItems(db, userId);
-    if (items > 0) {
+    if (items > 0 || unlaned > 0) {
       renumber(db, userId, 'later');
       renumber(db, userId, 'next');
     }

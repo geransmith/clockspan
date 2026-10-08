@@ -349,7 +349,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `effectiveKeepDays`; a user with no settings row still gets the cap. The same prune, in its
   transaction, takes the tasks it leaves done (a one-off or archived task whose latest entry was
   ticked before the cutoff, named by no entry or session once the days are gone, whatever its
-  lane), then the tombstones of tasks deleted before the cutoff (UTC midnight of `before`), then
+  lane; one a session still names leaves its lane, since nothing would say it was done), then
+  the tombstones of tasks deleted before the cutoff (UTC midnight of `before`), then
   any task nothing names (`collectItems`, which skips the newer tombstones), and closes up a lane
   that lost one. An open task in a lane and a recurring priority in use are never taken. With
   retention off nothing runs, so tombstones stay. It answers both counts (`Pruned`: days and
@@ -668,7 +669,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   row this device removed goes; one another device removed stays gone unless this device changed
   it (a rename or a tick brings it back). A row another device added since `base` stays, in this
   device's first free row or at the end. Two devices putting one task on a list send its one
-  uid, so it is one entry; the same text typed new on each is two tasks. Order is this device's,
+  uid, so it is one entry, the stored one: the first save wins, so a copy that is behind can't
+  undo a tick made since; the same text typed new on each is two tasks. Order is this device's,
   and removing a row is sending the list without it. A merged list longer than `MAX_PRIORITIES`
   is refused (409), never cut. A uid repeated in one list and a row with a uid and a blank name
   are 400s. With no base (curl) the stored list stands in for it.
@@ -887,7 +889,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   task is (the select lists the session's own task when the day's list doesn't hold it). A
   session gets a name of its own only off its task: Unplanned in the log's select sends the link
   alone, and the server gives the session the task's current name as its label unless a label is
-  sent with it, which its box then edits; a full delete does the same. A link never sends a
+  sent with it, which its box then edits, and no category of its own (`editedSession` shows the
+  same while the PATCH is out); a full delete gives it the name and the task's category. The
+  select is there for every session with a task, so Unplanned is offered on a day whose list has
+  no written row. A link never sends a
   label: the select linking a session drops a label typed before it, and a box opened before
   another device linked or unlinked the session closes, unsent. A session's category is
   `sessionCategory(s, rows)`: the category of the written row its task is on its day (none
@@ -1367,8 +1372,8 @@ The browser pass for each surface (the logic under it is already tested):
   rows per day with its hint beside the box; Add recurring priority (Enter leaves an empty box for
   the next, the focus leaving closes it); a rename; a category from the row's chip, where Escape
   closes only the list and the dialog stays open; the days (the last one on stays pressed, and on
-  a touch screen each day takes 44 × 44 px); Remove, which asks first with the reworded confirm
-  (its days keep it), with the focus on the next title. At 375 the rows wrap and the seven days
+  a touch screen each day takes 44 × 44 px); Remove, which asks first (`CONFIRM.deleteRecurring`:
+  it stops repeating and its days keep it), with the focus on the next title. At 375 the rows wrap and the seven days
   fit on one line. On the board, a recurring row's meta line has the Repeats mark, and the editor
   of today's row, and of an earlier day's tick in Done, shows the title as text with "Settings →
   Board renames it.". On the sheet, with a routine due today (see "Dev data is disposable" for

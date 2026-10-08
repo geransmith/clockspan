@@ -24,14 +24,18 @@ export function RemoveTask({ name, otherDays, logged, onOffDay, onEverywhere, on
   // Focus on the frame, as in FinishChoice, so Enter can't fire a button before the question is read.
   const dialog = useModalDialog(onCancel);
   const titleId = useId();
+  // The body holds what decides the answer, so it is read with the title.
+  const bodyId = useId();
   return (
-    <dialog {...dialog} className="dialog remove-task" aria-labelledby={titleId}>
+    <dialog {...dialog} className="dialog remove-task" aria-labelledby={titleId} aria-describedby={bodyId}>
       <div className="dialog-inner">
         <header className="dialog-head">
           <h2 id={titleId}>{REMOVE_TASK.title(name)}</h2>
         </header>
         <div className="dialog-body">
-          <p className="muted">{REMOVE_TASK.body(otherDays, logged)}</p>
+          <p id={bodyId} className="muted">
+            {REMOVE_TASK.body(otherDays, logged)}
+          </p>
         </div>
         <footer className="dialog-foot">
           <button className="btn btn-primary" onClick={onOffDay}>
