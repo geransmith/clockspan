@@ -190,7 +190,7 @@ describe('CategoryChip', () => {
     expect(isOpen()).toBe(true);
     fireEvent.blur(box, { relatedTarget: chip() });
     expect(isOpen()).toBe(true);
-    // A press on the list's padding moves the focus nowhere: it stays open.
+    // Focus going nowhere (the window losing it) leaves it open.
     fireEvent.blur(box, { relatedTarget: null });
     expect(isOpen()).toBe(true);
     fireEvent.blur(chip(), { relatedTarget: outside() });
@@ -237,12 +237,27 @@ describe('CategoryChip', () => {
   it('leaves the focus where it is on a press outside while the list does not hold it', () => {
     renderChip();
     fireEvent.click(chip());
-    // A press on the list's padding put the focus on the page, and the list stayed open.
-    (document.activeElement as HTMLElement).blur();
+    // Shift+Tab out of the first option: the one way the list stays open without the focus.
+    chip().focus();
     expect(isOpen()).toBe(true);
+    const focus = vi.spyOn(chip(), 'focus');
     fireEvent.pointerDown(outside());
     expect(isOpen()).toBe(false);
-    expect(document.activeElement).toBe(document.body);
+    expect(focus).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(chip());
+  });
+
+  it('leaves the focus where it is on a press inside the list, but for the New category box', () => {
+    renderChip();
+    fireEvent.click(chip());
+    const focused = document.activeElement;
+    // false: the press's default, which would move the focus to the page from the list's padding
+    // or the gap above the box, was stopped.
+    expect(fireEvent.mouseDown(document.querySelector('.category-pop')!)).toBe(false);
+    expect(fireEvent.mouseDown(options()[1]!)).toBe(false);
+    expect(fireEvent.mouseDown(newBox())).toBe(true);
+    expect(isOpen()).toBe(true);
+    expect(document.activeElement).toBe(focused);
   });
 
   it('makes a category from New category on Enter and picks it; a blank box does nothing', () => {

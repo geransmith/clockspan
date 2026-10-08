@@ -196,14 +196,17 @@ function keepSessionCategories(db: DB, dayId: number, stored: Priority[], list: 
 }
 
 /**
- * The sessions logged on an emptied row this save writes in again drop a category of their own
- * (one picked in the log while the row was empty): the row decides from then on. Left on, the
- * pick would be hidden behind the row and take the time over when the row is emptied or removed.
+ * The sessions logged on an emptied or removed row this save writes in again drop a category of
+ * their own (one picked in the log while the row was empty, or the row's, copied when it was
+ * removed): the row decides from then on. Left on, that category would be hidden behind the row
+ * and take the time over when the row is emptied or removed. Every text row the stored list
+ * doesn't hold as one is checked: a uid new to the server has no sessions, since a session names
+ * only a row its day holds.
  */
 function dropSessionCategories(db: DB, dayId: number, stored: Priority[], list: Priority[]): void {
-  const emptied = new Set(stored.filter((p) => !hasText(p)).map((p) => p.uid));
+  const written = new Set(stored.filter(hasText).map((p) => p.uid));
   const drop = db.prepare(`UPDATE sessions SET category_uid = NULL WHERE day_id = ? AND priority_uid = ?`);
-  for (const row of list) if (hasText(row) && emptied.has(row.uid)) drop.run(dayId, row.uid);
+  for (const row of list) if (hasText(row) && !written.has(row.uid)) drop.run(dayId, row.uid);
 }
 
 /**
@@ -346,8 +349,8 @@ export function daysRouter(db: DB, config: Config): Router {
   // transaction (`mirrorCards`): `cards` (the board is on and the day is today or later, which
   // only the client knows) makes a card for each text row without one, and `touched` names the
   // cards a board action handled through their rows. So do the sessions logged on a removed row,
-  // which take its category (`keepSessionCategories`), and those on an emptied row written in
-  // again, which drop their own (`dropSessionCategories`).
+  // which take its category (`keepSessionCategories`), and those on an emptied or removed row
+  // this save writes in again, which drop their own (`dropSessionCategories`).
   r.put('/:date/priorities', (req, res) => {
     const user = currentUser(req);
     const { date } = req.params;

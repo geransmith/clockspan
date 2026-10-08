@@ -1019,6 +1019,20 @@ describe('PUT /api/days/:date/priorities: the categories of sessions', () => {
     expect(await categoryOf(onBank)).toBe('cat000000001');
   });
 
+  it('drops the copied category when a removed row comes back in a save that changed it, so the row decides again', async () => {
+    const report = row('aaaaaaaaaaa1', 'Report', 'cat000000001');
+    await save([report]);
+    const onReport = await logged(report.uid);
+    await app.api.put(`/api/days/${DATE}/priorities`, { priorities: [], base: [report] });
+    expect(await categoryOf(onReport)).toBe('cat000000001');
+    // Built on the list that held it and changed (ticked): the merge brings the row back.
+    await app.api.put(`/api/days/${DATE}/priorities`, { priorities: [{ ...report, done: true }], base: [report] });
+    expect(await categoryOf(onReport)).toBeNull();
+    await save([{ ...report, done: true, categoryUid: 'cat000000002' }]);
+    await save([]);
+    expect(await categoryOf(onReport)).toBe('cat000000002');
+  });
+
   it("leaves another day's sessions alone, though a row there has the removed row's uid", async () => {
     const other = '2026-08-04';
     await app.api.put(`/api/days/${other}/priorities`, { priorities: [row('aaaaaaaaaaa1', 'Report')] });
