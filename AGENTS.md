@@ -1141,10 +1141,12 @@ The browser pass for each surface (the logic under it is already tested):
   priorities" fills the first row never written in, never a cleared one; a log row's select
   reassigns it. Clear a row with focus logged on it: the note under it says the time stays, and
   Add priority goes past it. With the board on: pick a category on a row (an empty chip shows only
-  on the row's hover or focus with a mouse, always on a phone; a long name ends in an ellipsis, and
-  at 375 the field keeps most of a row past Rows per day), tick Also add and pick one for the new
-  row (the chip beside it wraps under it at 375), give an unplanned log session one (its dot before
-  the label) and a Plan tomorrow row one, then the same at 1280 in the split's columns.
+  on the row's hover or focus with a mouse, always on a phone; a long name ends in an ellipsis; at
+  375 the chip sits under the field, nearer it than the next row's, and the field keeps the row's
+  width, beside the × past Rows per day; from 640 it sits beside the field, which ends in the same
+  place written or empty), tick Also add and pick one for the new row (the chip beside it wraps
+  under it at 375), give an unplanned log session one (its dot before the label) and a Plan
+  tomorrow row one, then the same at 1280 in the split's columns.
 - **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
   Month / Quarter).
 - **The board**: after `npm run seed`, turn it on (`PUT /api/settings {"board":true}`, see "Dev

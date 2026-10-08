@@ -271,10 +271,8 @@ describe("Priorities: a row's category", () => {
     expect(chip(1)!.getAttribute('aria-label')).toBe('Category for priority 1: Tickets');
     expect(chip(2)!.getAttribute('aria-label')).toBe('Category for priority 2: none');
     expect(chip(3)).toBeNull();
-    // The written rows take the grid with the chip's column; the empty one keeps the plain one.
     const rows = [...document.querySelectorAll('.priority-row')];
-    expect(rows.map((r) => r.classList.contains('priority-row--end'))).toEqual([true, true, false]);
-    // Tick, text, then chip: the tab order is the order seen.
+    // Tick, text, then chip.
     expect([...rows[0]!.querySelectorAll('input, textarea, button')].map((el) => el.getAttribute('aria-label'))).toEqual([
       'Priority 1 done',
       'Priority 1',
@@ -282,9 +280,22 @@ describe("Priorities: a row's category", () => {
     ]);
   });
 
-  it('shows no chip with the board off', async () => {
-    await renderCard([makePriority(1, 'Report', { categoryUid: TICKETS.uid })]);
+  it("gives every row the chip's column while the board is on, an empty one with no chip included", async () => {
+    const rows = [makePriority(1, 'A'), makePriority(2, 'B'), makePriority(3, 'C'), blank(4)];
+    await withPick(rows);
+    const shown = [...document.querySelectorAll('.priority-row')];
+    expect(shown.map((r) => r.classList.contains('priority-row--end'))).toEqual([true, true, true, true]);
+    // The empty row past the usual count: the column, its ×, and no chip.
+    expect(chip(4)).toBeNull();
+    expect(shown[3]!.querySelector('.priority-end')).toBeNull();
+    expect(shown[3]!.className).toContain('priority-row--removable');
+    expect(screen.getByRole('button', { name: 'Remove priority 4' })).toBeTruthy();
+  });
+
+  it('shows no chip and no chip column with the board off', async () => {
+    await renderCard([makePriority(1, 'Report', { categoryUid: TICKETS.uid }), blank(2), blank(3), blank(4)]);
     expect(chip(1)).toBeNull();
+    expect(document.querySelectorAll('.priority-row')).toHaveLength(4);
     expect(document.querySelector('.priority-row--end')).toBeNull();
   });
 
@@ -314,6 +325,19 @@ describe("Priorities: a row's category", () => {
     const sent = onChange.mock.calls.length;
     await settle(400);
     expect(onChange).toHaveBeenCalledTimes(sent);
+  });
+
+  it('files a pick under the row whose chip made it, leaving the others as they were', async () => {
+    const { saved } = await withPick([makePriority(1, 'Report', { categoryUid: TICKETS.uid }), makePriority(2, 'Email')]);
+    fireEvent.click(chip(2)!);
+    fireEvent.click(option('Admin'));
+    expect(saved().map((p) => [p.text, p.categoryUid])).toEqual([
+      ['Report', TICKETS.uid],
+      ['Email', ADMIN.uid],
+      ['', null],
+    ]);
+    expect(chip(2)!.getAttribute('aria-label')).toBe('Category for priority 2: Admin');
+    expect(chip(1)!.getAttribute('aria-label')).toBe('Category for priority 1: Tickets');
   });
 
   it("closes a row's list when another device's change moves a different row to its place", async () => {

@@ -151,7 +151,9 @@ export function Priorities({ priorities, sessions, onChange, pick = null, leftOp
       {local.map((p) => {
         const empty = !hasText(p);
         const removable = p.position > count;
-        // A written row only: an empty one has nothing to file yet, and keeps the plain grid.
+        // A written row only: an empty one has nothing to file yet. Every row takes the grid with
+        // the chip's column all the same, so on a wide screen a field ends in the same place
+        // written or empty, and the first letter typed doesn't narrow it.
         const chip = pick != null && !empty;
         const placeholder = p.position === 1 ? 'The one thing to get done' : `Priority ${p.position}`;
         // A cleared row is still the same item: the focus logged on it stays, and a new priority
@@ -160,7 +162,7 @@ export function Priorities({ priorities, sessions, onChange, pick = null, leftOp
         const heldId = `${noteId}-held-${p.position}`;
         return (
           <Fragment key={p.position}>
-            <div className={`priority-row${p.done ? ' is-done' : ''}${removable ? ' priority-row--removable' : ''}${chip ? ' priority-row--end' : ''}`}>
+            <div className={`priority-row${p.done ? ' is-done' : ''}${removable ? ' priority-row--removable' : ''}${pick != null ? ' priority-row--end' : ''}`}>
               <span className="priority-num" aria-hidden="true">
                 {p.position}
               </span>
