@@ -128,8 +128,9 @@ export function CategoryChip({ value, onChange, pick, label }: Props) {
     close();
     return true;
   };
-  // Focus moving to something outside closes it. A press on the list's padding moves it nowhere
-  // (no related target), and leaves it open, as a press outside closes it (the pointerdown above).
+  // Focus moving to something outside closes it, as a press outside does (the pointerdown above);
+  // a press inside leaves the focus where it is (the list's mousedown). Focus going nowhere (the
+  // window losing it) leaves the list open.
   const leave = (e: FocusEvent) => {
     if (open && e.relatedTarget && !wrap.current?.contains(e.relatedTarget)) setOpen(false);
   };
@@ -188,7 +189,20 @@ export function CategoryChip({ value, onChange, pick, label }: Props) {
         )}
       </button>
       {open && (
-        <div ref={pop} className="category-pop">
+        <div
+          ref={pop}
+          className="category-pop"
+          // Nothing between the list and a day log row's box takes focus, so a press on the list's
+          // padding or the gap above New category would move the focus to the page, and the box
+          // would end its edit, closing the list before anything was picked. A press here leaves
+          // the focus where it is: an option's click picks and gives it to the chip, and the New
+          // category box still takes it. The handler only holds the focus, so the wrapper is
+          // presentation to a screen reader; the listbox and the box keep their roles.
+          role="presentation"
+          onMouseDown={(e) => {
+            if (!(e.target instanceof HTMLInputElement)) e.preventDefault();
+          }}
+        >
           <div id={listId} className="category-options" role="listbox" aria-label="Category">
             {options.map((o, i) => (
               <div

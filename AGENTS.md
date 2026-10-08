@@ -650,10 +650,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   save take a row with a category off a list a session points at (`leavesCategory`), reads the
   day again. An emptied row stays on its list with its category, so its sessions keep counting
   under it, unless the day log gave one a category of its own, and nothing is copied. Once the
-  row is written in again it decides: the PUT drops the `categoryUid` of the day's sessions on
-  it (`dropSessionCategories`, in the same transaction), and the day store, seeing a save write
-  in an emptied row that a session with a category of its own points at (`regainsText`), reads
-  the day again, or its copy would keep the pick the server dropped. On the client
+  row is written in again (typed into, or a removed row a save brings back because this device
+  changed it), it decides: the PUT drops the `categoryUid` of the day's sessions on every text
+  row that wasn't one in the stored list (`dropSessionCategories`, in the same transaction),
+  and the day store, seeing a save write in an emptied row that a session with a category of
+  its own points at (`regainsText`), reads the day again, or its copy would keep the pick the
+  server dropped. On the client
   `CategoryChip` is the one way a category is picked, fed by `useCategoryPick` (null while the board
   is off or before its first read, and then no chip shows), which the board page, the sheet and
   Settings → Board each call once and pass down as `pick`: the sheet's goes to Top priorities (a
