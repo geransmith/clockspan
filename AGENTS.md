@@ -8,12 +8,12 @@ nudge when the list grows), a focus timer that logs what was done and for which 
 retrospective card (plan vs. log, a "why" note, a nudge before clock-out), a week / month /
 quarter review, alarms for lunch, clock-out and the second meal period, and an optional Board
 page for tasks that aren't for today (off by default; its In progress column is today's Top
-priorities). "Overtime approved" silences the clock-out alarm only. Every day is persisted; old
-days can be pruned.
-Data is **per user**; auth is optional (`AUTH_MODE=none | local | oidc`). One Docker container,
-SQLite on `/data`. A PWA used mostly on a laptop or desktop and laid out for phones too.
-Meal-period defaults follow California rules; three switches (meal periods, overtime, hours)
-turn off what doesn't apply to exempt or salaried work. The README has the user-facing
+priorities, and its cards carry categories, made from a card's chip or in Settings → Board).
+"Overtime approved" silences the clock-out alarm only. Every day is persisted; old days can be
+pruned. Data is **per user**; auth is optional (`AUTH_MODE=none | local | oidc`). One Docker
+container, SQLite on `/data`. A PWA used mostly on a laptop or desktop and laid out for phones
+too. Meal-period defaults follow California rules; three switches (meal periods, overtime,
+hours) turn off what doesn't apply to exempt or salaried work. The README has the user-facing
 description.
 
 ## Stack & versions
@@ -62,7 +62,7 @@ shared/                 imported by both sides, always with a `.js` suffix
                         clean-up, dedupeLinks (one text row per link) and dropShadowedLinks (an emptied
                         row loses a link a text row holds)
   text.ts               sameText: the key the same text typed twice is matched by, and category names are
-                        compared by
+                        compared by; categoryName: a category's name as the server stores it
   backoff.ts            nextBackoff: the wait between retries of a request that must answer
 server/                 Express API → dist/server
   app.ts                createApp(): headers, /api/health, /api/auth/me for every mode, auth routers,
@@ -104,20 +104,26 @@ client/                 Vite root → dist/client
     alerts.ts           the one place that plays sound, shows notifications and pushes banners
     copy.ts             every line the app raises at the user; no logic
     storage.ts          localStorage that never throws (private mode, quota); the per-user keys (USER_KEYS:
-                        fired alarms, Start fresh, the break-over mark) and adoptUser, which records
-                        who the app is open for under AUTH_USER_KEY and drops the last user's keys
+                        fired alarms, Start fresh, the break-over mark, the capture box's category) and
+                        adoptUser, which records who the app is open for under AUTH_USER_KEY and drops
+                        the last user's keys
     board.ts            the board's columns from the cards and today's rows (boardColumns), what a move
                         does and which store it writes (planMove, moveTargets, MoveRefused), where a drop
                         lands and what a drag says (dropTarget, withDrag, overAnnouncement,
                         moveAnnouncement), the cards the left-open offer may bring back
-                        (offeredLeftovers), and the board as a write shows it (withCard, withPatch,
-                        withoutCard)
+                        (offeredLeftovers), the category chip's data (CategoryPick) and what New
+                        category makes of a name (categoryForName, nextColor, categoryNameTaken), and
+                        the board as a write shows it (withCard, withPatch, withoutCard, withCategory,
+                        withCategoryPatch, withoutCategory)
+    popover.ts          placePopover: where the category chip's list goes on screen (under the chip or
+                        above it, inside the viewport)
   src/hooks/            state and effects (useDay, useTimer, useSettings, useBoard, useAlarms, …), each
                         with a happy-dom test beside it (useLatest is covered through the hooks that use
                         it, and AppProviders through the tests that render it).
                         useClock is the app's one 1-second clock; useSaveStatus
                         (Saving… / Saved / Not saved) serves the settings dialog; useBoard is the
-                        board's store (BoardProvider, its refresh and the daily sweep); useMediaQuery
+                        board's store (BoardProvider, its refresh and the daily sweep) and
+                        useCategoryPick, the category chip's data and inline create; useMediaQuery
                         follows a media query for behaviour (the capture box's autofocus, the board's
                         drop glide under reduced motion).
                         src/test/fixtures.ts has the plain factories and TEST_SETTINGS (no React);
@@ -125,10 +131,12 @@ client/                 Vite root → dist/client
                         SettingsAndDays, serveRange (a mocked getRange that answers from a list of
                         days) and the act() helpers
   src/components/       the cards, History (Calendar + Review), Banners, FinishChoice, and the pieces
-                        several of them share (Folded: a long list's Show all); settings/ holds
-                        SettingsDialog (the shell and tabs), a file per tab, and controls.tsx;
-                        board/ holds the Board page (Board, BoardCard, Capture, and dnd.ts: its
-                        collision and keyboard settings for dnd-kit), its own lazy chunk
+                        several of them share (Folded: a long list's Show all; CategoryChip, the one
+                        category picker, and CategoryDot); settings/ holds SettingsDialog (the shell
+                        and tabs), a file per tab (BoardTab: the categories, shown while the board is
+                        on), and controls.tsx; board/ holds the Board page (Board, BoardCard, Capture,
+                        and dnd.ts: its collision and keyboard settings for dnd-kit), its own lazy
+                        chunk
   src/auth/             AuthGate and the setup / login / new-password pages
   src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
   src/styles.css        design tokens and all component CSS
@@ -634,7 +642,18 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   have none (`keepSessionCategories`, in the same transaction), and the day store, seeing that
   save take a row with a category off a list a session points at (`leavesCategory`), reads the
   day again. An emptied row stays on its list with its category, so its sessions keep counting
-  under it and nothing is copied.
+  under it and nothing is copied. On the client `CategoryChip` is the one way a category is
+  picked, fed by `useCategoryPick` (null while the board is off). Its New category box runs
+  `categoryForName` (`lib/board.ts`): the category in use by that name, else a removed one
+  brought back under its own uid, else a new one in `nextColor` (the colour the fewest categories
+  in use have, so the eight repeat evenly). The chip sets that uid at once and the create goes
+  out as an optimistic board write; opening the list reads the board again, and a create the
+  server refuses (another device took the name, a cap) is taken off with the "Change not saved"
+  banner, so what picked it reads as no category. The board's capture box remembers its last
+  category on the device (`USER_KEYS.captureCategory`; a removed or unknown one reads as none).
+  Settings → Board (`BoardTab`, shown while the board is on) adds (`categoryForName` again),
+  renames (refusing a name in use, `categoryNameTaken`), recolours and removes, each through the
+  dialog's `save`.
 - **A recurring priority is a row of its own, named by its uid** (`recurring`, routes in
   `routes/board.ts`, answered in `Board.recurring` in the order they were made): a title, a
   category and the weekdays it is offered on, ISO 1 (Monday) to 7 on the wire and a mask in the
@@ -659,11 +678,14 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   with its title and category, and a recurring row, a planned card and a park to Later of a row
   planned later are refused. A Done card's untick off today's list is a PATCH to Next, the
   correction for a mistaken tick, and such a card offers no Delete: an earlier day's ticked row
-  would show in its place. The day store sends `cards` on every priorities PUT while the board
-  is on and the list's day is today or later, read as the PUT goes out, so a row typed on the
-  sheet gets its card. After a board read, once per page load and day, the board sends today's
-  list asking for cards when a row has none (the sweep, on its queue), so rows typed while it
-  was off have cards before Plan tomorrow carries them. A park places the row's card
+  would show in its place. The editor's category chip goes where its title goes: a row of today's
+  list changes through the row (`editRow`, the card as touched, and the save copies it onto the
+  card), any other card through a PATCH, and a planned card or an earlier day's row has none. The
+  day store sends `cards` on every priorities PUT while the board is on and the list's day is
+  today or later, read as the PUT goes out, so a row typed on the sheet gets its card. After a
+  board read, once per page load and day, the board sends today's list asking for cards when a
+  row has none (the sweep, on its queue), so rows typed while it was off have cards before Plan
+  tomorrow carries them. A park places the row's card
   (`POST /board/cards` with the row's `cardUid`, and its title and category as the list shows
   them when the job runs, since the POST writes both onto the card) before it takes the row off
   the list, and a row with no card yet first goes out in a save that asks for one, so a retry
@@ -762,12 +784,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `SortableCards` and `components/board/` hold every `@dnd-kit` import). A static import of one
   of them from the first screen folds it back into the main chunk. Everything under
   `components/board/` loads only through `Board`'s chunk; what other views share with it
-  (`lib/board.ts` and `hooks/useBoard.tsx` with the sheet, `Folded` with History's Review) stays
-  out of that folder and imports no dnd-kit. The sheet renders plain `CardFrame`s until the
-  first Customize and stays on `SortableCards` after it, since swapping lists remounts the
-  cards. A chunk that fails to load (an upgrade while the page was open) reloads the page once a
-  minute at most (`vite:preloadError` in `main.tsx`, `lib/reload.ts`); the `ErrorBoundary` card
-  shows until the reload lands, and stays when no reload is made.
+  (`lib/board.ts` and `hooks/useBoard.tsx` with the sheet and the settings, `Folded` with
+  History's Review, and the category pieces, `CategoryChip`, `CategoryDot` and
+  `lib/popover.ts`) stays out of that folder and imports no dnd-kit. The sheet renders plain
+  `CardFrame`s until the first Customize and stays on `SortableCards` after it, since swapping
+  lists remounts the cards. A chunk that fails to load (an upgrade while the page was open)
+  reloads the page once a minute at most (`vite:preloadError` in `main.tsx`, `lib/reload.ts`);
+  the `ErrorBoundary` card shows until the reload lands, and stays when no reload is made.
 - **A wide window shows the sheet in two columns, chosen when the sheet mounts.** Each layout
   entry has a `side` (`'left' | 'right'`), which `normalizeLayout` keeps or sets to the card's
   `DEFAULT_SIDE` (`shared/settings.ts`), so a layout saved before the columns needs no
@@ -817,8 +840,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `shared/settings.ts`, and a number's bounds to `SETTING_LIMITS` there → validate it in
   `mergeSettings()` (`server/settings.ts`; `flag(key)` takes a switch, `limited(key)` checks a
   number against its bounds) → add the control to its tab in `client/src/components/settings/`
-  (`TimeclockTab`, `AlarmsTab`, `SheetTab`, `DataTab`; the Sheet tab's "History" section holds
-  the calendar's switches, and its "Board" section the board's): a `DurationField`
+  (`TimeclockTab`, `AlarmsTab`, `SheetTab`, `DataTab`, and `BoardTab`, shown while the board is
+  on, which takes only the dialog's `save`, for its board writes, so a setting added there gives
+  it `TabProps` (`settings`, `set`) as well; the Sheet tab's "History" section holds the
+  calendar's switches, and its "Board" section the board's): a `DurationField`
   (`components/DurationField.tsx`) for hours and minutes or a `NumberField`
   (`settings/controls.tsx`) for one number, whose `unit` suffix is "min" unless given, each
   with `{...SETTING_LIMITS.<key>}` for `min` and `max`; a `SelectField`
@@ -829,6 +854,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   field in `mergeSettings` (as `mergeRetention` does), and gets a partial entry in
   `SettingsPatch` (`client/src/api.ts`) and a merge in `applySettingsPatch`
   (`client/src/lib/settings.ts`). Nothing else to mirror.
+- **A category colour** (the palette is eight on purpose, and colours repeat past that): add the
+  id to `CATEGORY_COLORS` in `shared/api.ts` (the server's `isOneOf` check, `nextColor` and the
+  swatches read it) → its `--cat-<id>` token in all three token blocks of `styles.css`, at 3:1 or
+  more on `--surface` and `--surface-2` in both themes, and its `[data-color='<id>']` rule beside
+  the others → its name in `COLOR_NAMES` (`settings/BoardTab.tsx`; the type makes a missing one an
+  error). `theme-css.test.ts` fails on a missing token, one under 3:1 or a missing rule.
 - **A sound**: drop the clip in as `client/src/sounds/<id>.mp3` (CC0 only, MP3 so Safari can
   decode it, a couple of seconds at most) → add `{ id, label, kind: 'clip' }` to `SOUNDS` in
   `shared/sounds.ts` → add its title, author and source line to `client/src/sounds/README.md`.
@@ -963,7 +994,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `--safe-bottom`, `--safe-left` and `--safe-right` (a phone held sideways puts the notch on a
   side). Words in a tone's colour use its `-ink` token (`--accent-ink`, `--ok-ink`,
   `--warn-ink`, `--danger-ink`), which keeps light-mode text at 4.5:1 and up; the tone itself is
-  for fills, borders, icons and bars.
+  for fills, borders, icons and bars. A category's colour (`--cat-<id>`, picked by `data-color`)
+  is a fill only, in all three token blocks at 3:1 and up on both surfaces (`theme-css.test.ts`
+  checks); a category's name is never drawn in it, and its dot always sits beside the name, since
+  the eight colours repeat (`nextColor`). `CategoryChip` is the one category picker: its list is
+  `position: fixed` inside the chip's wrapper, placed by `placePopover` (`lib/popover.ts`) and
+  scrolling inside, so no card or dialog clips it and New category stays in view.
+  `.category-chip` and `.swatch` are in the coarse block.
 - Numeric settings inputs commit on blur or Enter, never on every keystroke (`NumberInput`);
   `DurationField` commits when focus leaves its hours / minutes pair or on Enter, so moving from
   hours to minutes saves nothing. A blank or non-numeric box puts the stored value back and
@@ -1100,6 +1137,11 @@ The browser pass for each surface (the logic under it is already tested):
   hears where the card is and the done-item line, and Escape puts it back; with reduced motion
   on, nothing glides. At 1000 the copy under the pointer isn't clipped; at 375 a card sorts
   within the column shown, In progress and Done show no grip, and Move to still moves.
+  Categories (with about 30 added by `curl` to `/api/board/categories` for a long list): the
+  capture chip (a pick, New category, kept after a reload), a card editor's chip by keyboard
+  (the arrows, Home/End, Enter, Escape) with its list scrolling inside and the box in view, the
+  cards' dot and name (a long name at 1000), and Settings → Board (a rename, a name in use,
+  the swatches wrapping at 375, Remove, the touch areas).
 - **The History calendar**: one month at the mobile preset: ◀ to a seeded month, tap a day,
   **Open day**, browser Back lands on that month with the day picked, and back through the
   header, **Review this week** lands on that week. Review → Month → ◀ → a row → Back lands on

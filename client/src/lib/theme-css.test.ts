@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { CATEGORY_COLORS } from '../../../shared/api.js';
 import { SPLIT_QUERY } from './layout';
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -15,7 +16,22 @@ const tokens = (selector: string) => {
     .map((l) => l.trim());
 };
 
-const bg = (selector: string) => /^--bg: (.+);$/m.exec(tokens(selector).join('\n'))?.[1];
+/** A token's value in the block that opens with `selector {`. */
+const token = (selector: string, name: string) => new RegExp(`^--${name}: (.+);$`, 'm').exec(tokens(selector).join('\n'))?.[1];
+const bg = (selector: string) => token(selector, 'bg');
+
+/** WCAG's contrast ratio between two `#rrggbb` colours. */
+function contrast(a: string, b: string): number {
+  const luminance = (hex: string) => {
+    const [r, g, bl] = [1, 3, 5].map((i) => {
+      const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r! + 0.7152 * g! + 0.0722 * bl!;
+  };
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi! + 0.05) / (lo! + 0.05);
+}
 
 describe('styles.css', () => {
   // The dark palette is written twice: under the system's dark scheme and for a forced dark theme.
@@ -43,6 +59,24 @@ describe('styles.css', () => {
 
     const manifest = JSON.parse(read('../../public/manifest.webmanifest')) as { background_color?: unknown };
     expect(manifest.background_color).toBe(light);
+  });
+
+  // A dot is the only place a category's colour shows, so it has to stand out from the cards and
+  // columns it sits on, in both themes (WCAG's 3:1 for graphics).
+  it('gives every category colour a token in each theme, at 3:1 or more on both surfaces', () => {
+    for (const theme of [':root', ":root[data-theme='dark']"]) {
+      for (const color of CATEGORY_COLORS) {
+        const fill = token(theme, `cat-${color}`);
+        expect(fill, `${theme} --cat-${color}`).toMatch(/^#[0-9a-f]{6}$/);
+        for (const surface of ['surface', 'surface-2']) {
+          expect(contrast(fill!, token(theme, surface)!), `${theme} --cat-${color} on --${surface}`).toBeGreaterThanOrEqual(3);
+        }
+      }
+    }
+  });
+
+  it('picks each category colour by its data-color', () => {
+    for (const color of CATEGORY_COLORS) expect(css).toContain(`[data-color='${color}'] {\n  --cat: var(--cat-${color});\n}`);
   });
 
   // The sheet picks two columns with matchMedia(SPLIT_QUERY), and the stylesheet lays them out

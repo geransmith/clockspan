@@ -6,7 +6,8 @@
  * already chimed. `USER_KEYS` hold the state of the user the app is open for, and `adoptUser`
  * drops them when the user changes (a sign-out, or someone else signing in on this browser): an
  * alarm key names a date and a minute, Start fresh names a date and the break-over mark names a
- * break's start, so another user's would silence this one's.
+ * break's start, so another user's would silence this one's, and the capture box's category is
+ * another user's uid.
  */
 export function readStored(key: string): string | null {
   try {
@@ -52,8 +53,16 @@ export function pruneStored(prefix: string, keep: string): void {
 export const AUTH_USER_KEY = 'focus:auth-user';
 const storedUser = (id: number | null): string => (id === null ? '' : String(id));
 
-/** The stored values (a key, or a prefix) that hold one user's state. A new one joins this list. */
-export const USER_KEYS = { alarms: 'focus:alarms:', leftOpenDismissed: 'focus:left-open-dismissed', breakOver: 'focus:break-over' } as const;
+/**
+ * The stored values (a key, or a prefix) that hold one user's state. A new one joins this list.
+ * `captureCategory` is the category the board's capture box last picked (its uid, '' for none).
+ */
+export const USER_KEYS = {
+  alarms: 'focus:alarms:',
+  leftOpenDismissed: 'focus:left-open-dismissed',
+  breakOver: 'focus:break-over',
+  captureCategory: 'focus:capture-category',
+} as const;
 
 /**
  * Records who the app is open for (null: no one) and drops the last user's `USER_KEYS` when it

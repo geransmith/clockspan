@@ -6,7 +6,7 @@ import { boardJson, createCard, linkedFrom, openCount, placeCard, removeCard, we
 import { isOneOf, isWholeNumber } from '../validate.js';
 import { getOwnedByUid, parseCategoryUid, uidRouter, UID_RE, type CategoryRow } from './shared.js';
 import { hasText } from '../../shared/priorities.js';
-import { sameText } from '../../shared/text.js';
+import { categoryName, sameText } from '../../shared/text.js';
 import { isValidDateKey } from '../../shared/dates.js';
 import { BOARD_LIMITS, CATEGORY_COLORS, LIMITS, type Board, type OpenLane } from '../../shared/api.js';
 
@@ -40,10 +40,10 @@ function parseBefore(raw: unknown): { before: string | null | undefined } | { er
   return { error: 'before must be a card id or null.' };
 }
 
-/** A category's name: trimmed, inner spaces collapsed, cut to `LIMITS.categoryName`; null for anything but text. */
+/** A category's name as stored (`categoryName`); null for anything but text, or blank text. */
 function parseName(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
-  const name = raw.trim().replace(/\s+/g, ' ').slice(0, LIMITS.categoryName).trim();
+  const name = categoryName(raw);
   return name === '' ? null : name;
 }
 

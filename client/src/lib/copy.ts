@@ -263,6 +263,7 @@ export const ADD_PRIORITY_FAILED = {
  * The board's refusals: a banner when the store turns a move down (`full`, `stale`), and the
  * board notice's lines for a move refused before anything is sent (`recurringStays`, `planned`),
  * with `close` its button. `full` is also the capture box's line while it is shut at the cap.
+ * `nameTaken` is Settings → Board's line under a category named like another in use.
  */
 export const BOARD = {
   full: `Later and Next hold ${BOARD_LIMITS.openCards} cards at most.`,
@@ -270,6 +271,7 @@ export const BOARD = {
   recurringStays: (title: string) => `${title} stays on today's list. Use Remove from today.`,
   planned: (title: string, when: string) => `${title} is planned for ${when}. Change it on that day's sheet.`,
   close: 'Close',
+  nameTaken: 'There is already a category with that name.',
 } as const;
 
 /**

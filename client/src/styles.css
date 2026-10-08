@@ -30,6 +30,17 @@
   --danger: #d12f2f;
   --danger-soft: #fde7e7;
   --danger-ink: #bd2a2a;
+  /* A category's colour (CategoryDot, the swatches): a fill only, 3:1 and up on --surface and
+     --surface-2 in both themes (theme-css.test.ts checks). A category's name is never drawn in
+     it, so these have no -ink. */
+  --cat-blue: #2563eb;
+  --cat-teal: #0d9488;
+  --cat-green: #15803d;
+  --cat-gold: #a16207;
+  --cat-orange: #ea580c;
+  --cat-pink: #db2777;
+  --cat-purple: #7c3aed;
+  --cat-grey: #64748b;
   --radius: 16px;
   --radius-sm: 10px;
   --shadow: 0 1px 2px rgba(20, 24, 40, 0.04), 0 6px 20px rgba(20, 24, 40, 0.06);
@@ -70,6 +81,14 @@
     --danger: #f36c6c;
     --danger-soft: #3f1b1b;
     --danger-ink: var(--danger);
+    --cat-blue: #60a5fa;
+    --cat-teal: #2dd4bf;
+    --cat-green: #4ade80;
+    --cat-gold: #facc15;
+    --cat-orange: #fb923c;
+    --cat-pink: #f472b6;
+    --cat-purple: #a78bfa;
+    --cat-grey: #94a3b8;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.35);
   }
 }
@@ -96,6 +115,14 @@
   --danger: #f36c6c;
   --danger-soft: #3f1b1b;
   --danger-ink: var(--danger);
+  --cat-blue: #60a5fa;
+  --cat-teal: #2dd4bf;
+  --cat-green: #4ade80;
+  --cat-gold: #facc15;
+  --cat-orange: #fb923c;
+  --cat-pink: #f472b6;
+  --cat-purple: #a78bfa;
+  --cat-grey: #94a3b8;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.35);
   /* Form controls and scrollbars follow a forced theme too. */
   color-scheme: dark;
@@ -427,6 +454,124 @@ button {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+/* ---------- categories ---------- */
+/* A category's colour is picked by its data-color (CategoryDot, the swatches), never an inline
+   colour; it fills a dot that always sits beside the category's name. */
+[data-color='blue'] {
+  --cat: var(--cat-blue);
+}
+[data-color='teal'] {
+  --cat: var(--cat-teal);
+}
+[data-color='green'] {
+  --cat: var(--cat-green);
+}
+[data-color='gold'] {
+  --cat: var(--cat-gold);
+}
+[data-color='orange'] {
+  --cat: var(--cat-orange);
+}
+[data-color='pink'] {
+  --cat: var(--cat-pink);
+}
+[data-color='purple'] {
+  --cat: var(--cat-purple);
+}
+[data-color='grey'] {
+  --cat: var(--cat-grey);
+}
+.cat-dot {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--cat);
+  /* Forced colours would paint every dot alike. */
+  forced-color-adjust: none;
+}
+.category-wrap {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+/* Drawn at 28 px to sit beside what it labels; 44 px to a tap (the coarse block). */
+.category-chip {
+  min-height: 28px;
+  max-width: 100%;
+  padding: 0 10px;
+  font-size: 0.82rem;
+}
+.category-chip--empty {
+  border-style: dashed;
+  color: var(--text-2);
+}
+.category-chip-name {
+  max-width: 9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The chip's list: fixed on the screen, so a card's or a dialog's overflow can't clip it, and
+   placed by script (CategoryChip, lib/popover.ts) over the running bar. */
+.category-pop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 51;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: max-content;
+  min-width: 200px;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+/* However many categories there are, the list scrolls inside and the New category box under it
+   stays in view. */
+.category-options {
+  display: flex;
+  flex-direction: column;
+  max-height: min(18rem, 50vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.category-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+.category-option:hover {
+  background: var(--surface-2);
+}
+/* Inside the list's scroll box, where an outer ring would be clipped. */
+.category-option:focus-visible {
+  outline-offset: -2px;
+}
+.category-option[aria-selected='true'] {
+  font-weight: 650;
+}
+.category-option-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.category-option svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
 }
 .avatar {
   width: 28px;
@@ -2119,13 +2264,23 @@ button {
   flex-direction: column;
   gap: 4px;
 }
+/* On a phone the box has its own line, with the category chip and Add under it. */
 .board-capture-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 8px;
 }
-.board-capture-row .input {
-  flex: 1;
-  min-width: 0;
+.board-capture-row > .input {
+  grid-column: 1 / -1;
+}
+@media (min-width: 640px) {
+  .board-capture-row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+  .board-capture-row > .input {
+    grid-column: auto;
+  }
 }
 /* The notice's live region is always there; empty, it gives back the gap before it. */
 .board-notice:empty {
@@ -2259,7 +2414,21 @@ button {
   color: var(--text-3);
 }
 .board-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
   overflow-wrap: anywhere;
+}
+.board-card-category {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.board-editor-category {
+  display: flex;
+  align-items: center;
 }
 .board-editor {
   display: flex;
@@ -2386,7 +2555,8 @@ dialog.dialog::backdrop {
   border-bottom: 1px solid var(--border);
   overflow-x: auto;
 }
-/* Sized so all five tabs (local accounts add Account) fit a 375 px phone without scrolling. */
+/* Sized so the five tabs (local accounts add Account) fit a 375 px phone; a sixth (Board, while
+   it is on) scrolls the strip. */
 .tab {
   min-height: 44px;
   padding: 0 9px;
@@ -2500,6 +2670,57 @@ dialog.dialog::backdrop {
   flex-direction: column;
   gap: 4px;
 }
+/* Settings → Board: a category's name, its eight swatches and Remove, wrapping onto more lines
+   on a phone. */
+.category-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.category-name {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+.category-row > .btn {
+  margin-left: auto;
+}
+.category-row > .error {
+  flex-basis: 100%;
+}
+.category-row > .cat-dot,
+.swatch .cat-dot {
+  width: 24px;
+  height: 24px;
+}
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+/* A radio under its dot: the arrow keys move along a category's colours, as in any radio group. */
+.swatch {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+}
+.swatch input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.swatch input:checked + .cat-dot {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--text);
+}
+.swatch input:focus-visible + .cat-dot {
+  outline: 2px solid var(--accent);
+  outline-offset: 5px;
+}
 .user-row {
   display: flex;
   align-items: center;
@@ -2551,7 +2772,8 @@ dialog.dialog::backdrop {
   .board-grip,
   .board-tick,
   .brand,
-  .calendar-day {
+  .calendar-day,
+  .swatch {
     position: relative;
   }
   .chip::after,
@@ -2567,7 +2789,8 @@ dialog.dialog::backdrop {
   .board-grip::after,
   .board-tick::after,
   .brand::after,
-  .calendar-day::after {
+  .calendar-day::after,
+  .swatch::after {
     content: '';
     position: absolute;
     inset: var(--hit-inset);
@@ -2575,6 +2798,16 @@ dialog.dialog::backdrop {
   /* 36 px, 6 px from the next chip or row: 42 px. */
   .chip {
     --hit-inset: -4px -1px;
+  }
+  /* 28 px, centred in a row 44 px tall (beside the capture box's 44 px Add button, or on a row
+     of its own in the board's editor), 8 px from the control beside it: 44 px tall, reaching half
+     that gap. */
+  .category-chip {
+    --hit-inset: -8px -4px;
+  }
+  /* A 24 px dot, 8 px from the next, centred in a row 44 px tall: 44 × 32 px. */
+  .swatch {
+    --hit-inset: -10px -4px;
   }
   /* 36 px on a row of its own: 44 px. */
   .segment {
@@ -2636,10 +2869,15 @@ dialog.dialog::backdrop {
   }
   /* A check with its words, and a list row, draw nothing around themselves: on a touch screen
      they take a whole 44 px instead, which only adds air. The Review rows touch each other, so
-     an ::after has nowhere to go; the planner's rows and "When reached" are too close to theirs. */
+     an ::after has nowhere to go; the planner's rows and "When reached" are too close to theirs.
+     The category chip's row in a card's editor and a category's swatches grow to 44 px so the
+     hit areas of the controls inside them fit. */
   .plan-next-list .inline-check,
   .alarm-on-due,
-  .review-row {
+  .review-row,
+  .category-option,
+  .board-editor-category,
+  .swatches {
     min-height: 44px;
   }
   /* The edit-in-place inputs are drawn at 38 px to sit in their rows with a mouse. */

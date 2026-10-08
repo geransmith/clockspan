@@ -2,19 +2,21 @@
  * The board's logic, with no React and no dnd-kit: which column each card and each of today's
  * rows shows in (`boardColumns`), what a move does and which store it writes (`planMove`), where a
  * drop lands and what a drag says (`dropTarget`, `withDrag`, `moveAnnouncement`), the cards the
- * left-open offer may bring back (`offeredLeftovers`), and the board as a write shows it before
- * the server answers (`withCard`, `withPatch`, `withoutCard`).
+ * left-open offer may bring back (`offeredLeftovers`), what New category makes of a name
+ * (`categoryForName`, `nextColor`), and the board as a write shows it before the server answers
+ * (`withCard`, `withPatch`, `withoutCard`, `withCategory`, `withCategoryPatch`, `withoutCategory`).
  *
  * In progress is never stored: it is today's open rows, matched to their cards by `cardUid`, so
  * the board and the sheet show one list. A card linked to a row of today's list shows where that
  * row says (open: In progress, ticked: Done, emptied: nowhere); any other card by `held`, then
  * `listDate` (a later day's list holds it: planned, in Next), then its lane.
  */
-import type { CardPatch, NewCard } from '../api';
-import { BOARD_LIMITS } from '../../../shared/api.js';
+import type { CardPatch, CategoryPatch, NewCard, NewCategory } from '../api';
+import { BOARD_LIMITS, CATEGORY_COLORS } from '../../../shared/api.js';
 import { todayKey } from '../../../shared/dates.js';
 import { hasText } from '../../../shared/priorities.js';
-import type { Board, BoardCard, Day, OpenLane, Priority } from '../types';
+import { categoryName, sameText } from '../../../shared/text.js';
+import type { Board, BoardCard, Category, CategoryColor, Day, OpenLane, Priority } from '../types';
 import { BOARD, BOARD_DRAG, DONE_STAYS } from './copy';
 import { dayName } from './format';
 import type { PrioritySeed } from './plan';
@@ -431,11 +433,11 @@ export function withCard(board: Board, card: NewCard, now: number): Board {
   return { ...board, cards: placed(board.cards, made, card.lane, card.before) };
 }
 
-/** The board as `PATCH /board/cards/:uid` leaves it: the title, a lane (out of Done too), or `before` alone to reorder an open lane. */
-export function withPatch(board: Board, uid: string, { title, lane, before }: Omit<CardPatch, 'today'>): Board {
+/** The board as `PATCH /board/cards/:uid` leaves it: the title, the category, a lane (out of Done too), or `before` alone to reorder an open lane. */
+export function withPatch(board: Board, uid: string, { title, categoryUid, lane, before }: Omit<CardPatch, 'today'>): Board {
   const card = board.cards.find((c) => c.uid === uid);
   if (!card) return board;
-  const titled = { ...card, title: title ?? card.title };
+  const titled = { ...card, title: title ?? card.title, categoryUid: categoryUid === undefined ? card.categoryUid : categoryUid };
   const to = lane ?? (card.lane === 'done' ? undefined : card.lane);
   if (to === undefined || (to === card.lane && before === undefined)) return { ...board, cards: board.cards.map((c) => (c.uid === uid ? titled : c)) };
   return { ...board, cards: placed(board.cards, titled, to, before ?? null) };
@@ -444,4 +446,85 @@ export function withPatch(board: Board, uid: string, { title, lane, before }: Om
 /** The board without the card. */
 export function withoutCard(board: Board, uid: string): Board {
   return { ...board, cards: board.cards.filter((c) => c.uid !== uid) };
+}
+
+/**
+ * The category chip's data, from `useCategoryPick`: the board's categories and New category's
+ * create, for the views that offer the chip.
+ */
+export interface CategoryPick {
+  /** Every category, removed ones included; only those in use are offered. */
+  categories: Category[];
+  /**
+   * The uid to set for a name typed into New category (`categoryForName`), with the category sent
+   * on its way when it is new or removed; null for a blank name.
+   */
+  create: (name: string) => string | null;
+  /** Reads the board again: the list calls it as it opens, so a category made on another device is there. */
+  refresh: () => void;
+}
+
+/** The categories in use, in the order they were made: what the chip and Settings offer. */
+export function activeCategories(categories: Category[]): Category[] {
+  return categories.filter((c) => !c.archived);
+}
+
+/** The category `uid` names, a removed one included; undefined for none, or a uid the board doesn't hold. */
+export function categoryOf(categories: Category[], uid: string | null): Category | undefined {
+  return uid == null ? undefined : categories.find((c) => c.uid === uid);
+}
+
+/**
+ * The colour the fewest categories in use have, the first in `CATEGORY_COLORS` on a tie: an
+ * unused one while any is left, then the colours repeat evenly, since there are only eight.
+ */
+export function nextColor(categories: Category[]): CategoryColor {
+  const uses = (color: CategoryColor) => categories.filter((c) => !c.archived && c.color === color).length;
+  return CATEGORY_COLORS.reduce((best, color) => (uses(color) < uses(best) ? color : best));
+}
+
+/** Whether a category in use, other than `exceptUid`, has this name, whatever its case or spacing. */
+export function categoryNameTaken(categories: Category[], name: string, exceptUid: string | null): boolean {
+  const key = sameText(name);
+  return categories.some((c) => !c.archived && c.uid !== exceptUid && sameText(c.name) === key);
+}
+
+/**
+ * What New category makes of `name`, as the server will take it: the category in use with that
+ * name (nothing to send); else a removed one with that name, the newest if several, brought back
+ * under its own uid (the server refuses its name to a new uid), in its old colour while no
+ * category in use has it, else in `nextColor`; else a new category under `uid` in `nextColor`.
+ * Null for a blank name.
+ */
+export function categoryForName(categories: Category[], name: string, uid: string): { uid: string; send: NewCategory | null } | null {
+  const tidy = categoryName(name);
+  if (!tidy) return null;
+  const named = categories.filter((c) => sameText(c.name) === sameText(tidy));
+  const inUse = named.find((c) => !c.archived);
+  if (inUse) return { uid: inUse.uid, send: null };
+  const removed = named.at(-1);
+  if (!removed) return { uid, send: { uid, name: tidy, color: nextColor(categories) } };
+  const free = !categories.some((c) => !c.archived && c.color === removed.color);
+  return { uid: removed.uid, send: { uid: removed.uid, name: tidy, color: free ? removed.color : nextColor(categories) } };
+}
+
+/**
+ * The board as `POST /board/categories` leaves it: a new category after the others, a removed one
+ * back in use in its place with the name and colour sent, or one in use as it was (a retry).
+ */
+export function withCategory(board: Board, sent: NewCategory): Board {
+  const found = board.categories.find((c) => c.uid === sent.uid);
+  if (found && !found.archived) return board;
+  const made: Category = { uid: sent.uid, name: sent.name, color: sent.color, archived: false };
+  return { ...board, categories: found ? board.categories.map((c) => (c === found ? made : c)) : [...board.categories, made] };
+}
+
+/** The board as `PATCH /board/categories/:uid` leaves it: a new name or colour, a field left out kept. */
+export function withCategoryPatch(board: Board, uid: string, patch: CategoryPatch): Board {
+  return { ...board, categories: board.categories.map((c) => (c.uid === uid ? { ...c, ...patch } : c)) };
+}
+
+/** The board as `DELETE /board/categories/:uid` leaves it: the category kept, so past time keeps its name, and out of use. */
+export function withoutCategory(board: Board, uid: string): Board {
+  return { ...board, categories: board.categories.map((c) => (c.uid === uid ? { ...c, archived: true } : c)) };
 }

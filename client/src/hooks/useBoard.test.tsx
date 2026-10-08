@@ -5,7 +5,7 @@ import * as api from '../api';
 import { DAY_MS, MINUTE_MS } from '../../../shared/dates.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { warnQuietly } from '../lib/alerts';
-import { MoveRefused, withCard, withoutCard, withPatch, type StoreMove } from '../lib/board';
+import { MoveRefused, withCard, withCategory, withCategoryPatch, withoutCard, withoutCategory, withPatch, type StoreMove } from '../lib/board';
 import { ADD_PRIORITY_FAILED, BOARD, SAVE_FAILED } from '../lib/copy';
 import {
   apiError,
@@ -13,6 +13,7 @@ import {
   deferred,
   makeBoard,
   makeCard,
+  makeCategory,
   makeDay,
   makePriority,
   makeSettings,
@@ -23,7 +24,7 @@ import {
   TODAY,
 } from '../test/hooks';
 import type { Board, Day, Priority } from '../types';
-import { useBoardState, useBoardStore } from './useBoard';
+import { useBoardState, useBoardStore, useCategoryPick } from './useBoard';
 import { useDay, useDayStore } from './useDay';
 import { useSettings } from './useSettings';
 
@@ -67,6 +68,9 @@ beforeEach(() => {
   vi.mocked(api.addCard).mockImplementation((card) => Promise.resolve((onServer = withCard(onServer, card, T0))));
   vi.mocked(api.patchCard).mockImplementation((uid, { today: _today, ...patch }) => Promise.resolve((onServer = withPatch(onServer, uid, patch))));
   vi.mocked(api.deleteCard).mockImplementation((uid) => Promise.resolve((onServer = withoutCard(onServer, uid))));
+  vi.mocked(api.addCategory).mockImplementation((c) => Promise.resolve((onServer = withCategory(onServer, c))));
+  vi.mocked(api.patchCategory).mockImplementation((uid, patch) => Promise.resolve((onServer = withCategoryPatch(onServer, uid, patch))));
+  vi.mocked(api.deleteCategory).mockImplementation((uid) => Promise.resolve((onServer = withoutCategory(onServer, uid))));
 });
 afterEach(() => {
   cleanup();
@@ -370,7 +374,9 @@ describe('moves', () => {
     await expect(move(result, { kind: 'tick', rowUid: 'row000000001', done: true, cardUid: null })).rejects.toThrow(
       new MoveRefused(ADD_PRIORITY_FAILED.notLoaded),
     );
-    await expect(act(() => result.current.store.renameRow('row000000001', 'New', null))).rejects.toThrow(new MoveRefused(ADD_PRIORITY_FAILED.notLoaded));
+    await expect(act(() => result.current.store.editRow('row000000001', { text: 'New' }, null))).rejects.toThrow(
+      new MoveRefused(ADD_PRIORITY_FAILED.notLoaded),
+    );
   });
 
   it("tick and untick a row of today's list with its card as touched, and leave a row gone meanwhile alone", async () => {
@@ -387,12 +393,16 @@ describe('moves', () => {
     expect(api.putPriorities).toHaveBeenCalledTimes(2);
   });
 
-  it('rename a row of today with its card as touched', async () => {
+  it('rename a row of today, or give it a category, with its card as touched', async () => {
     lists[TODAY] = [carded(1, 'Report', 'card00000001')];
     const { result } = renderBoard();
     await settle();
-    await act(() => result.current.store.renameRow(lists[TODAY]![0]!.uid!, 'Report v2', 'card00000001'));
+    const uid = lists[TODAY]![0]!.uid!;
+    await act(() => result.current.store.editRow(uid, { text: 'Report v2' }, 'card00000001'));
     expect(putCalls()).toEqual([{ date: TODAY, texts: ['Report v2', '', ''], cards: true, touched: ['card00000001'] }]);
+    await act(() => result.current.store.editRow(uid, { categoryUid: 'cafe00000001' }, 'card00000001'));
+    expect(lists[TODAY]![0]).toMatchObject({ text: 'Report v2', categoryUid: 'cafe00000001' });
+    expect(putCalls()[1]!.touched).toEqual(['card00000001']);
   });
 
   it('change a card through a patch move as an edit, sent with today', async () => {
@@ -616,6 +626,127 @@ describe('deleteCard', () => {
     await act(() => result.current.store.deleteCard('later0000001', 'gone00000001', TOMORROW));
     expect(api.putPriorities).not.toHaveBeenCalled();
     expect(api.deleteCard).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('categories', () => {
+  const TICKETS = makeCategory('cat000000001', 'Tickets');
+  const names = (b: Board | undefined) => b?.categories.map((c) => `${c.name}${c.archived ? ' (removed)' : ''}`);
+
+  beforeEach(() => {
+    onServer = { ...onServer, categories: [TICKETS] };
+  });
+
+  it('show a new, renamed or removed category at once, and go out one after another', async () => {
+    const first = deferred<Board>();
+    vi.mocked(api.addCategory).mockReturnValueOnce(first.promise);
+    const { result } = renderBoard();
+    await settle();
+    act(() => {
+      void result.current.store.addCategory({ uid: 'cat000000002', name: 'KB', color: 'teal' });
+      void result.current.store.editCategory('cat000000001', { name: 'Tix', color: 'pink' });
+      void result.current.store.removeCategory('cat000000001');
+    });
+    expect(names(result.current.board)).toEqual(['Tix (removed)', 'KB']);
+    expect(api.patchCategory).not.toHaveBeenCalled();
+    first.resolve((onServer = withCategory(onServer, { uid: 'cat000000002', name: 'KB', color: 'teal' })));
+    await settle();
+    expect(api.patchCategory).toHaveBeenCalledExactlyOnceWith('cat000000001', { name: 'Tix', color: 'pink' });
+    expect(api.deleteCategory).toHaveBeenCalledExactlyOnceWith('cat000000001');
+    expect(result.current.board).toEqual(onServer);
+    expect(result.current.board?.categories[0]).toMatchObject({ color: 'pink', archived: true });
+  });
+
+  it('take a failed category write off, reject, and read the board again', async () => {
+    const { result } = renderBoard();
+    await settle();
+    vi.mocked(api.patchCategory).mockRejectedValueOnce(new Error('offline'));
+    await expect(act(() => result.current.store.editCategory('cat000000001', { name: 'Tix' }))).rejects.toThrow('offline');
+    expect(names(result.current.board)).toEqual(['Tickets']);
+    expect(api.getBoard).toHaveBeenCalledTimes(2);
+  });
+
+  describe('useCategoryPick', () => {
+    function renderPick(report?: (saved: Promise<void>) => void) {
+      return renderHook(() => ({ pick: useCategoryPick(report), board: useBoardState().board, updateSettings: useSettings().update }), {
+        wrapper: SettingsAndDays,
+      });
+    }
+
+    it('is null while the board is off, and until its first read lands', async () => {
+      vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
+      const read = deferred<Board>();
+      vi.mocked(api.getBoard).mockReturnValueOnce(read.promise);
+      const { result } = renderPick();
+      await settle();
+      expect(result.current.pick).toBeNull();
+      await act(() => result.current.updateSettings({ board: true }));
+      expect(result.current.pick).toBeNull();
+      read.resolve(onServer);
+      await settle();
+      expect(result.current.pick?.categories).toEqual([TICKETS]);
+    });
+
+    it('makes a new category at once and gives its uid, and gives a category in use by its name without sending', async () => {
+      const { result } = renderPick();
+      await settle();
+      let uid: string | null = null;
+      act(() => {
+        uid = result.current.pick!.create('  Knowledge   base ');
+      });
+      expect(uid).toMatch(/^[0-9a-f]{12}$/);
+      expect(result.current.pick?.categories).toEqual([TICKETS, makeCategory(uid!, 'Knowledge base', { color: 'teal' })]);
+      await settle();
+      expect(api.addCategory).toHaveBeenCalledExactlyOnceWith({ uid, name: 'Knowledge base', color: 'teal' });
+
+      expect(result.current.pick!.create('TICKETS')).toBe('cat000000001');
+      expect(result.current.pick!.create(' ')).toBeNull();
+      await settle();
+      expect(api.addCategory).toHaveBeenCalledTimes(1);
+    });
+
+    it('brings a removed category back under its own uid', async () => {
+      onServer = { ...onServer, categories: [TICKETS, makeCategory('cat000000002', 'Admin', { color: 'gold', archived: true })] };
+      const { result } = renderPick();
+      await settle();
+      let uid: string | null = null;
+      act(() => {
+        uid = result.current.pick!.create('admin');
+      });
+      expect(uid).toBe('cat000000002');
+      await settle();
+      expect(api.addCategory).toHaveBeenCalledWith({ uid: 'cat000000002', name: 'admin', color: 'gold' });
+      expect(result.current.pick?.categories[1]).toEqual(makeCategory('cat000000002', 'admin', { color: 'gold' }));
+    });
+
+    it('hands a failed create to report, with the category taken off and the board read again', async () => {
+      const report = vi.fn<(saved: Promise<void>) => void>();
+      const { result } = renderPick(report);
+      await settle();
+      vi.mocked(api.addCategory).mockRejectedValueOnce(new Error('offline'));
+      act(() => void result.current.pick!.create('KB'));
+      await expect(report.mock.calls[0]![0]).rejects.toThrow('offline');
+      await settle();
+      expect(result.current.pick?.categories).toEqual([TICKETS]);
+      expect(api.getBoard).toHaveBeenCalledTimes(2);
+    });
+
+    it('raises the not-saved banner for a failed create by default', async () => {
+      const { result } = renderPick();
+      await settle();
+      vi.mocked(api.addCategory).mockRejectedValueOnce(new Error('offline'));
+      act(() => void result.current.pick!.create('KB'));
+      await settle();
+      expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ title: SAVE_FAILED.title }));
+    });
+
+    it('reads the board again on refresh', async () => {
+      const { result } = renderPick();
+      await settle();
+      act(() => result.current.pick!.refresh());
+      await settle();
+      expect(api.getBoard).toHaveBeenCalledTimes(2);
+    });
   });
 });
 
