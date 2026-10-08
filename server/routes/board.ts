@@ -1,59 +1,25 @@
 import { Router } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
-import { refuse } from '../refuse.js';
-import { boardJson, createCard, linkedFrom, openCount, placeCard, removeCard, weekdayMask } from '../board.js';
-import { isOneOf, isWholeNumber } from '../validate.js';
-import { getOwnedByUid, parseCategoryUid, uidRouter, UID_RE, type CategoryRow } from './shared.js';
-import { hasText } from '../../shared/priorities.js';
+import { refuse, STALE_CLIENT } from '../refuse.js';
+import { boardJson } from '../board.js';
+import { isOneOf } from '../validate.js';
+import { uidRouter, UID_RE, type CategoryRow } from './shared.js';
 import { categoryName, sameText } from '../../shared/text.js';
-import { isValidDateKey } from '../../shared/dates.js';
-import { BOARD_LIMITS, CATEGORY_COLORS, LIMITS, type Board, type OpenLane } from '../../shared/api.js';
+import { BOARD_LIMITS, CATEGORY_COLORS, type Board } from '../../shared/api.js';
 
-const FULL = `The board holds at most ${BOARD_LIMITS.openCards} cards in Later and Next.`;
-const NO_TITLE = 'A card needs a title.';
-const BAD_LANE = 'lane must be later or next.';
 const NO_NAME = 'A category needs a name.';
 const BAD_COLOR = `color must be one of ${CATEGORY_COLORS.join(', ')}.`;
 const NAME_TAKEN = 'There is already a category with that name.';
 const NAME_REMOVED = 'A removed category has that name. Restore it by its id.';
 const CATEGORIES_FULL = `The board keeps at most ${BOARD_LIMITS.categories} categories.`;
 const CATEGORIES_STORED = `The board keeps at most ${BOARD_LIMITS.categoriesStored} categories, removed ones included.`;
-const NO_RECURRING_TITLE = 'A recurring priority needs a title.';
-const BAD_WEEKDAYS = 'weekdays must be one or more days from 1 to 7.';
-const RECURRING_FULL = `The board keeps at most ${BOARD_LIMITS.recurring} recurring priorities.`;
-
-/** A card's or a recurring priority's title, which becomes a row's text: trimmed and cut to a priority's length; null for anything but text. */
-function parseTitle(raw: unknown): string | null {
-  return typeof raw === 'string' && hasText({ text: raw }) ? raw.trim().slice(0, LIMITS.priorityText) : null;
-}
-
-/** The lanes the board puts a card in; Done is reached only through a ticked row. */
-function isOpenLane(raw: unknown): raw is OpenLane {
-  return raw === 'later' || raw === 'next';
-}
-
-/** Where a card goes in its lane: before this card (lowercased), or at the end for null; undefined = not mentioned. */
-function parseBefore(raw: unknown): { before: string | null | undefined } | { error: string } {
-  if (raw == null) return { before: raw };
-  if (typeof raw === 'string' && UID_RE.test(raw)) return { before: raw.toLowerCase() };
-  return { error: 'before must be a card id or null.' };
-}
 
 /** A category's name as stored (`categoryName`); null for anything but text, or blank text. */
 function parseName(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
   const name = categoryName(raw);
   return name === '' ? null : name;
-}
-
-/** A recurring priority's weekdays as the table's mask: one or more distinct ISO weekdays (1..7) in any order; null for anything else. */
-function parseWeekdays(raw: unknown): number | null {
-  if (!Array.isArray(raw)) return null;
-  const sent: unknown[] = raw;
-  const days = sent.filter((day): day is number => isWholeNumber(day, { min: 1, max: 7 }));
-  if (days.length === 0 || days.length !== sent.length || new Set(days).size !== days.length) return null;
-  return weekdayMask(days);
 }
 
 /** The user's categories, removed ones included. */
@@ -118,7 +84,7 @@ function categoriesRouter(db: DB): Router {
     res.json(boardJson(db, category.user_id) satisfies Board);
   });
 
-  // Removed in Settings: archived, so the rows, cards and sessions that name it keep its name.
+  // Removed in Settings: archived, so the tasks and sessions that name it keep its name.
   r.delete('/:uid', (_req, res) => {
     const category = owned(res);
     db.prepare(`UPDATE categories SET archived_at = COALESCE(archived_at, ?) WHERE id = ?`).run(Date.now(), category.id);
@@ -129,74 +95,9 @@ function categoriesRouter(db: DB): Router {
 }
 
 /**
- * The recurring priorities' routes under `/board/recurring`. The client offers each on its
- * weekdays, and the rows it adds carry its uid (`recurringUid`); deleting one deletes it for
- * good, and those rows keep the link, now to nothing, and their own category. There is no limit
- * in the product: the 100 is a sanity cap.
- */
-function recurringRouter(db: DB): Router {
-  const { router: r, owned } = uidRouter(db, 'recurring');
-  const count = (userId: number) => (db.prepare(`SELECT COUNT(*) AS n FROM recurring WHERE user_id = ?`).get(userId) as { n: number }).n;
-
-  // A new recurring priority; a uid in use already answers the board as it is (a retry), even at the cap.
-  r.post('/', (req, res) => {
-    const userId = currentUser(req).id;
-    const body = req.body as { uid?: unknown; title?: unknown; categoryUid?: unknown; weekdays?: unknown };
-    if (typeof body.uid !== 'string' || !UID_RE.test(body.uid)) return refuse(res, 400, 'uid must be a recurring priority id.');
-    const title = parseTitle(body.title);
-    if (title === null) return refuse(res, 400, NO_RECURRING_TITLE);
-    const category = parseCategoryUid(body.categoryUid);
-    if ('error' in category) return refuse(res, 400, category.error);
-    const weekdays = parseWeekdays(body.weekdays);
-    if (weekdays === null) return refuse(res, 400, BAD_WEEKDAYS);
-    const uid = body.uid.toLowerCase();
-    const outcome = db.transaction((): 'kept' | 'created' | 'full' => {
-      if (getOwnedByUid(db, 'recurring', userId, uid)) return 'kept';
-      if (count(userId) >= BOARD_LIMITS.recurring) return 'full';
-      db.prepare(`INSERT INTO recurring (user_id, uid, title, category_uid, weekdays) VALUES (?, ?, ?, ?, ?)`).run(
-        userId,
-        uid,
-        title,
-        category.categoryUid ?? null,
-        weekdays,
-      );
-      return 'created';
-    })();
-    if (outcome === 'full') return refuse(res, 400, RECURRING_FULL);
-    res.status(outcome === 'created' ? 201 : 200).json(boardJson(db, userId) satisfies Board);
-  });
-
-  // A new title, category or weekdays; a field left out keeps its value. The rows already added
-  // keep their own text and category.
-  r.patch('/:uid', (req, res) => {
-    const item = owned(res);
-    const body = req.body as { title?: unknown; categoryUid?: unknown; weekdays?: unknown };
-    const title = body.title === undefined ? item.title : parseTitle(body.title);
-    if (title === null) return refuse(res, 400, NO_RECURRING_TITLE);
-    const category = parseCategoryUid(body.categoryUid);
-    if ('error' in category) return refuse(res, 400, category.error);
-    const weekdays = body.weekdays === undefined ? item.weekdays : parseWeekdays(body.weekdays);
-    if (weekdays === null) return refuse(res, 400, BAD_WEEKDAYS);
-    const categoryUid = category.categoryUid === undefined ? item.category_uid : category.categoryUid;
-    db.prepare(`UPDATE recurring SET title = ?, category_uid = ?, weekdays = ? WHERE id = ?`).run(title, categoryUid, weekdays, item.id);
-    res.json(boardJson(db, item.user_id) satisfies Board);
-  });
-
-  r.delete('/:uid', (_req, res) => {
-    const item = owned(res);
-    db.prepare(`DELETE FROM recurring WHERE id = ?`).run(item.id);
-    res.json(boardJson(db, item.user_id) satisfies Board);
-  });
-
-  return r;
-}
-
-/**
- * The board: `GET /board`, the cards' own routes under `/board/cards`, the categories' under
- * `/board/categories` and the recurring priorities' under `/board/recurring`, where every
- * `/:uid` route works on the caller's own row or answers 404 (`uidRouter`). Every write answers
- * the whole board. Rows reach a card only through a priorities save (`mirrorCards`), and a card
- * reaches Done only through a ticked row.
+ * The board: `GET /board`, and the categories' routes under `/board/categories`, where every
+ * `/:uid` route works on the caller's own category or answers 404 (`uidRouter`). The tasks' own
+ * routes are under `/items` (`routes/items.ts`). Every write answers the whole board.
  */
 export function boardRouter(db: DB): Router {
   const r = Router();
@@ -205,82 +106,9 @@ export function boardRouter(db: DB): Router {
     res.json(boardJson(db, currentUser(req).id) satisfies Board);
   });
 
-  const { router: cards, owned } = uidRouter(db, 'board_cards');
-
-  // A new card, or an existing one placed (a park: the board takes a row of today's list back
-  // under the card the row is linked to). Placing takes the card out of Done, and the new title
-  // and category (a category left out keeps the card's), and marks it handled. The cap counts
-  // only a card new to Later and Next.
-  cards.post('/', (req, res) => {
-    const user = currentUser(req);
-    const body = req.body as { uid?: unknown; title?: unknown; categoryUid?: unknown; lane?: unknown; before?: unknown };
-    if (typeof body.uid !== 'string' || !UID_RE.test(body.uid)) return refuse(res, 400, 'uid must be a card id.');
-    const title = parseTitle(body.title);
-    if (title === null) return refuse(res, 400, NO_TITLE);
-    const category = parseCategoryUid(body.categoryUid);
-    if ('error' in category) return refuse(res, 400, category.error);
-    const lane = body.lane;
-    if (!isOpenLane(lane)) return refuse(res, 400, BAD_LANE);
-    const place = parseBefore(body.before);
-    if ('error' in place) return refuse(res, 400, place.error);
-    const uid = body.uid.toLowerCase();
-    const outcome = db.transaction((): 'created' | 'placed' | 'full' => {
-      const card = getOwnedByUid(db, 'board_cards', user.id, uid);
-      if ((!card || card.lane === 'done') && openCount(db, user.id) >= BOARD_LIMITS.openCards) return 'full';
-      if (!card) {
-        createCard(db, user.id, { uid, title, categoryUid: category.categoryUid ?? null }, lane, place.before ?? null, Date.now());
-        return 'created';
-      }
-      const categoryUid = category.categoryUid === undefined ? card.category_uid : category.categoryUid;
-      db.prepare(`UPDATE board_cards SET title = ?, category_uid = ?, untouched = 0 WHERE id = ?`).run(title, categoryUid, card.id);
-      placeCard(db, user.id, card, lane, place.before ?? null);
-      return 'placed';
-    })();
-    if (outcome === 'full') return refuse(res, 400, FULL);
-    res.status(outcome === 'created' ? 201 : 200).json(boardJson(db, user.id) satisfies Board);
-  });
-
-  // An edit made on the board: the title, the category, a move to Later or Next (out of Done,
-  // the correction of a mistaken tick), or `before` alone to reorder its lane. While a row on the
-  // client's today or a later day is linked to the card, that row decides it, so the edit is
-  // refused: it comes from a copy older than the list (another device moved the card onto it).
-  cards.patch('/:uid', (req, res) => {
-    const card = owned(res);
-    const body = req.body as { today?: unknown; title?: unknown; categoryUid?: unknown; lane?: unknown; before?: unknown };
-    if (!isValidDateKey(body.today)) return refuse(res, 400, 'today must be a date (YYYY-MM-DD).');
-    const title = body.title === undefined ? undefined : parseTitle(body.title);
-    if (title === null) return refuse(res, 400, NO_TITLE);
-    const category = parseCategoryUid(body.categoryUid);
-    if ('error' in category) return refuse(res, 400, category.error);
-    const lane = body.lane;
-    if (lane !== undefined && !isOpenLane(lane)) return refuse(res, 400, BAD_LANE);
-    const place = parseBefore(body.before);
-    if ('error' in place) return refuse(res, 400, place.error);
-    if (linkedFrom(db, card.user_id, card.uid, body.today)) return refuse(res, 409, "That card is on today's list or a later one.");
-    // A card in Done stays there unless a lane is named; `before` alone reorders an open lane.
-    const to = lane ?? (card.lane === 'done' ? undefined : card.lane);
-    const moves = to !== undefined && (to !== card.lane || place.before !== undefined);
-    const categoryUid = category.categoryUid === undefined ? card.category_uid : category.categoryUid;
-    const outcome = db.transaction((): 'full' | 'saved' => {
-      if (moves && card.lane === 'done' && openCount(db, card.user_id) >= BOARD_LIMITS.openCards) return 'full';
-      db.prepare(`UPDATE board_cards SET title = COALESCE(?, title), category_uid = ?, untouched = 0 WHERE id = ?`).run(title ?? null, categoryUid, card.id);
-      if (moves) placeCard(db, card.user_id, card, to, place.before ?? null);
-      return 'saved';
-    })();
-    if (outcome === 'full') return refuse(res, 400, FULL);
-    res.json(boardJson(db, card.user_id) satisfies Board);
-  });
-
-  // The rows linked to the card keep their cardUid, linked to nothing: the board takes the card
-  // off today's list and its later day's first, through priorities saves.
-  cards.delete('/:uid', (_req, res) => {
-    const card = owned(res);
-    db.transaction(() => removeCard(db, card.user_id, card))();
-    res.json(boardJson(db, card.user_id) satisfies Board);
-  });
-
-  r.use('/cards', cards);
   r.use('/categories', categoriesRouter(db));
-  r.use('/recurring', recurringRouter(db));
+  // A page loaded before tasks were stored once still sends its card and recurring writes here.
+  // A plain 404 would read as done to its Delete, so it is told to reload instead.
+  r.use(['/cards', '/recurring'], (_req, res) => refuse(res, 409, STALE_CLIENT));
   return r;
 }

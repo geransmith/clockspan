@@ -2,6 +2,7 @@ import type { RequestHandler, Response, Router } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { refuse } from '../refuse.js';
+import { collectItems } from '../board.js';
 import {
   endRunningBreak,
   ensureDay,
@@ -18,17 +19,21 @@ import { LIMITS, type OkResponse, type RunningResponse, type SessionConflict, ty
 import { pausedSecondsAfter, PLANNED_SECONDS, plannedEndAt } from '../../shared/timer.js';
 
 /**
- * A session's priority link: undefined = not mentioned, null = unplanned, a uid that must
- * exist on that day (`dayId` undefined: a day not stored yet, which has none). Returns an
- * error message for anything else.
+ * A session's task, from its `priorityUid`: undefined = not mentioned, null = unplanned, else the
+ * task with that uid, which that day's list must hold (`dayId` undefined: a day not stored yet,
+ * which holds none). A deleted task is on no list, so it is refused the same way. Returns an error
+ * message for anything else.
  */
-function parsePriorityUid(db: DB, dayId: number | undefined, raw: unknown): { uid: string | null | undefined } | { error: string } {
-  if (raw === undefined) return { uid: undefined };
-  if (raw === null) return { uid: null };
+function parsePriorityUid(db: DB, dayId: number | undefined, raw: unknown): { itemId: number | null | undefined } | { error: string } {
+  if (raw === undefined) return { itemId: undefined };
+  if (raw === null) return { itemId: null };
   if (typeof raw !== 'string' || !UID_RE.test(raw)) return { error: 'priorityUid must be a priority id or null.' };
-  const uid = raw.toLowerCase();
-  const hit = dayId !== undefined && db.prepare(`SELECT 1 FROM priorities WHERE day_id = ? AND uid = ?`).get(dayId, uid);
-  return hit ? { uid } : { error: 'That priority is not on this day.' };
+  const hit =
+    dayId === undefined
+      ? undefined
+      : (db.prepare(`SELECT i.id FROM priorities p JOIN items i ON i.id = p.item_id WHERE p.day_id = ? AND i.uid = ?`).get(dayId, raw.toLowerCase()) as
+          { id: number } | undefined);
+  return hit ? { itemId: hit.id } : { error: 'That priority is not on this day.' };
 }
 
 /**
@@ -66,10 +71,10 @@ export function startSession(db: DB): RequestHandler<{ date: string }> {
       endRunningBreak(db, user.id, now);
       const info = db
         .prepare(
-          `INSERT INTO sessions (day_id, user_id, label, planned_seconds, started_at, ended_at, status, priority_uid)
+          `INSERT INTO sessions (day_id, user_id, label, planned_seconds, started_at, ended_at, status, item_id)
            VALUES (?, ?, ?, ?, ?, NULL, 'running', ?)`,
         )
-        .run(dayId, user.id, name.label ?? '', planned.seconds, now, link.uid ?? null);
+        .run(dayId, user.id, name.label ?? '', planned.seconds, now, link.itemId ?? null);
       return Number(info.lastInsertRowid);
     })();
     res.status(201).json({ session: sessionRowToJson(getOwned(db, 'sessions', user.id, id)!) } satisfies SessionResponse);
@@ -88,11 +93,11 @@ export function sessionsRouter(db: DB): Router {
   const reply = (res: Response, userId: number, id: number) =>
     res.json({ session: sessionRowToJson(getOwned(db, 'sessions', userId, id)!) } satisfies SessionResponse);
 
-  // The category is the one picked in the log; null takes it off. A session on a written row
-  // counts under that row's category whatever this holds. A link to a row drops it, whatever was
-  // sent, since the row decides from then on: kept, it would take the time over once the row was
-  // emptied or removed. The priorities PUT drops it the same way when a row is written in again
-  // (`dropSessionCategories`).
+  // A session with a task counts under the task's category, so one of its own is taken only by a
+  // session left with no task: a category sent for one that keeps its task is refused, a link to a
+  // task drops it, and null takes it off any session. A session that loses its task keeps the
+  // task's name as its label, unless a label is sent with it; the task it left is cleaned up when
+  // nothing else names it (`collectItems`).
   r.patch('/:id', (req, res) => {
     const s = owned(res);
     const { plannedSeconds, label, priorityUid, categoryUid } = req.body as {
@@ -105,6 +110,8 @@ export function sessionsRouter(db: DB): Router {
     if ('error' in link) return refuse(res, 400, link.error);
     const category = parseCategoryUid(categoryUid);
     if ('error' in category) return refuse(res, 400, category.error);
+    const itemId = link.itemId === undefined ? s.item_id : link.itemId;
+    if (itemId != null && category.categoryUid != null) return refuse(res, 400, 'A session on a priority counts under its category.');
     let planned = s.planned_seconds;
     if (plannedSeconds !== undefined) {
       const parsed = parsePlannedSeconds(plannedSeconds, PLANNED_SECONDS);
@@ -114,14 +121,14 @@ export function sessionsRouter(db: DB): Router {
     }
     const name = parseLabel(label);
     if ('error' in name) return refuse(res, 400, name.error);
-    const own = category.categoryUid === undefined ? s.category_uid : category.categoryUid;
-    db.prepare(`UPDATE sessions SET planned_seconds = ?, label = ?, priority_uid = ?, category_uid = ? WHERE id = ?`).run(
-      planned,
-      name.label ?? s.label,
-      link.uid === undefined ? s.priority_uid : link.uid,
-      link.uid == null ? own : null,
-      s.id,
-    );
+    const own = itemId != null ? null : category.categoryUid === undefined ? s.category_uid : category.categoryUid;
+    const left = s.item_id != null && itemId !== s.item_id;
+    // The task's current name, so the session keeps reading under the name it showed.
+    const called = name.label ?? (left && itemId == null ? s.item_title!.slice(0, LIMITS.sessionLabel) : s.label);
+    db.transaction(() => {
+      db.prepare(`UPDATE sessions SET planned_seconds = ?, label = ?, item_id = ?, category_uid = ? WHERE id = ?`).run(planned, called, itemId, own, s.id);
+      if (left) collectItems(db, s.user_id, [s.item_id!]);
+    })();
     reply(res, s.user_id, s.id);
   });
 
@@ -164,17 +171,29 @@ export function sessionsRouter(db: DB): Router {
     reply(res, s.user_id, s.id);
   });
 
+  // A cancelled session counts nowhere and is never shown, so it lets go of its task, which goes
+  // too when nothing else names it.
   r.post('/:id/cancel', (_req, res) => {
     const s = owned(res);
     if (s.status === 'running') {
-      // A paused session ends where its pause began, as on finish, so the pause isn't counted.
-      db.prepare(`UPDATE sessions SET ended_at = COALESCE(paused_at, ?), paused_at = NULL, status = 'cancelled' WHERE id = ?`).run(Date.now(), s.id);
+      db.transaction(() => {
+        // A paused session ends where its pause began, as on finish, so the pause isn't counted.
+        db.prepare(`UPDATE sessions SET ended_at = COALESCE(paused_at, ?), paused_at = NULL, status = 'cancelled', item_id = NULL WHERE id = ?`).run(
+          Date.now(),
+          s.id,
+        );
+        if (s.item_id != null) collectItems(db, s.user_id, [s.item_id]);
+      })();
     }
     reply(res, s.user_id, s.id);
   });
 
   r.delete('/:id', (_req, res) => {
-    db.prepare(`DELETE FROM sessions WHERE id = ?`).run(owned(res).id);
+    const s = owned(res);
+    db.transaction(() => {
+      db.prepare(`DELETE FROM sessions WHERE id = ?`).run(s.id);
+      if (s.item_id != null) collectItems(db, s.user_id, [s.item_id]);
+    })();
     res.json({ ok: true } satisfies OkResponse);
   });
 

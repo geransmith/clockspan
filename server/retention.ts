@@ -3,7 +3,7 @@ import type { DB } from './db.js';
 import type { PruneInfo } from '../shared/api.js';
 import type { Settings } from '../shared/settings.js';
 import { loadSettings } from './settings.js';
-import { renumber } from './board.js';
+import { collectItems, inList, renumber } from './board.js';
 import { DAY_MS } from '../shared/dates.js';
 
 /**
@@ -11,9 +11,10 @@ import { DAY_MS } from '../shared/dates.js';
  * prune (per-user setting, plus an optional server-wide ceiling from RETENTION_DAYS), which
  * `startBackgroundJobs` in app.ts runs through `runRetention` on a timer. Both go through
  * `pruneDays` so the rules are in one place. Deleting a `days` row cascades to its punches,
- * priorities, sessions and breaks. The same prune takes the board cards done before the cutoff,
- * and the cards a priorities save made, never handled on the board, whose rows are all gone
- * now; settings, logins, categories, recurring priorities and the other cards are never touched.
+ * entries, old per-day rows, sessions and breaks. The same prune takes the tasks done before the
+ * cutoff, the deleted tasks' tombstones from before it, and any task nothing names;
+ * settings, logins, categories, recurring priorities in use and open tasks in a lane are never
+ * touched.
  */
 
 /**
@@ -46,32 +47,50 @@ export function countDays(db: DB, userId: number, before: string): PruneCounts {
     .get(before, userId) as PruneCounts;
 }
 
-/** What one prune deleted: days, and board cards. */
+/** What one prune deleted: days, and tasks, tombstones included. */
 export interface Pruned {
   days: number;
-  cards: number;
+  items: number;
 }
 
+/** A one-off task, or an archived one: a recurring priority in use is a setting, however long ago it was last done. */
+const NOT_A_SETTING = `(weekdays IS NULL OR archived_at IS NOT NULL)`;
+
 /**
- * Deletes the user's days before `before` (YYYY-MM-DD, exclusive), the cards done before it
- * (UTC midnight, like `cutoffKey`), and the untouched cards no row is linked to any more: such a
- * card held nothing made on the board, and with its emptied row's day gone it would show again.
+ * Deletes the user's days before `before` (YYYY-MM-DD, exclusive), and the tasks they leave done
+ * and named by nothing: those whose latest entry was ticked before it, whatever their lane. Then
+ * the tombstones of tasks deleted before it (UTC midnight, like `cutoffKey`), which no open page
+ * still sends after a retention window of 30 days or more, and any task nothing names
+ * (`collectItems`, which skips the newer tombstones). A lane that lost a task closes up.
  */
 export function pruneDays(db: DB, userId: number, before: string): Pruned {
   return db.transaction((): Pruned => {
+    // Read before the days go: once they have, nothing says these were done.
+    const done = (
+      db
+        .prepare(
+          `SELECT i.id FROM items i JOIN priorities p ON p.item_id = i.id JOIN days d ON d.id = p.day_id
+           WHERE i.user_id = ? AND ${NOT_A_SETTING} AND p.done = 1 AND d.date < ?
+             AND d.date = (SELECT MAX(d2.date) FROM priorities p2 JOIN days d2 ON d2.id = p2.day_id WHERE p2.item_id = i.id)`,
+        )
+        .all(userId, before) as { id: number }[]
+    ).map((i) => i.id);
     const days = db.prepare(`DELETE FROM days WHERE user_id = ? AND date < ? AND ${NO_RUNNING_TIMER}`).run(userId, before).changes;
-    const done = db
-      .prepare(`DELETE FROM board_cards WHERE user_id = ? AND lane = 'done' AND done_at < ?`)
-      .run(userId, Date.parse(`${before}T00:00:00Z`)).changes;
-    const unlinked = db
+    // A day kept for its running timer still names its tasks, and a session may name one from a later day.
+    const finished = db
       .prepare(
-        `DELETE FROM board_cards WHERE user_id = ? AND untouched = 1 AND NOT EXISTS (
-           SELECT 1 FROM priorities p JOIN days d ON d.id = p.day_id WHERE d.user_id = board_cards.user_id AND p.card_uid = board_cards.uid)`,
+        `DELETE FROM items WHERE user_id = ? AND id IN (SELECT value FROM json_each(?)) AND ${NOT_A_SETTING}
+           AND NOT EXISTS (SELECT 1 FROM priorities p WHERE p.item_id = items.id)
+           AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.item_id = items.id)`,
       )
-      .run(userId).changes;
-    // An untouched card is in Next or Done: only a priorities save puts one anywhere.
-    if (unlinked > 0) renumber(db, userId, 'next');
-    return { days, cards: done + unlinked };
+      .run(userId, inList(done)).changes;
+    const tombstones = db.prepare(`DELETE FROM items WHERE user_id = ? AND deleted_at < ?`).run(userId, Date.parse(`${before}T00:00:00Z`)).changes;
+    const items = finished + tombstones + collectItems(db, userId);
+    if (items > 0) {
+      renumber(db, userId, 'later');
+      renumber(db, userId, 'next');
+    }
+    return { days, items };
   })();
 }
 
@@ -97,17 +116,17 @@ export function effectiveKeepDays(settings: Settings, config: Config): number | 
 /** One pass over every user. Returns the number of days deleted. */
 export function runRetention(db: DB, config: Config, now: number = Date.now()): number {
   const users = db.prepare(`SELECT id FROM users`).all() as { id: number }[];
-  const deleted: Pruned = { days: 0, cards: 0 };
+  const deleted: Pruned = { days: 0, items: 0 };
   for (const { id } of users) {
     const keep = effectiveKeepDays(loadSettings(db, id), config);
     if (keep == null) continue;
     const pruned = pruneDays(db, id, cutoffKey(now, keep));
     deleted.days += pruned.days;
-    deleted.cards += pruned.cards;
+    deleted.items += pruned.items;
   }
-  const { days, cards } = deleted;
-  if (days > 0 || cards > 0) reclaimSpace(db);
+  const { days, items } = deleted;
+  if (days > 0 || items > 0) reclaimSpace(db);
   if (days > 0) console.log(`[retention] deleted ${days} day${days === 1 ? '' : 's'}`);
-  if (cards > 0) console.log(`[retention] deleted ${cards} board card${cards === 1 ? '' : 's'}`);
+  if (items > 0) console.log(`[retention] deleted ${items} task${items === 1 ? '' : 's'}`);
   return days;
 }

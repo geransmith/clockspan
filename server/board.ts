@@ -1,104 +1,155 @@
 /**
- * The board's cards as stored: what the board routes (`routes/board.ts`), a priorities save
- * (`mirrorCards`) and the prune (`retention.ts`) write, and the board the API answers with, its
- * categories and recurring priorities included. A card belongs to its user, and rows point at
- * it by its uid (`priorities.card_uid`, a soft link). In progress is never stored: it is today's
- * open rows, which the client matches to cards by `cardUid`. A card's latest linked day is the
- * latest day whose list holds a row linked to it, with text or emptied; only a save of that
- * day's list changes the card.
+ * Tasks as the board sees them, and what changes them beyond a priorities save's own writes. A
+ * task (`items`) belongs to its user and is named by its uid; a day's list names it through an
+ * entry (`priorities.item_id`) and a session through `sessions.item_id`. Only the board puts a task
+ * in Later or Next (`lane`), and done is never stored: a task is done when its latest entry is
+ * ticked (`listDone`). Here are the lanes and their order, the one lane rule a save follows
+ * (`nextFromLater`), the clean-up of tasks nothing names (`collectItems`), the full delete
+ * (`deleteItem`), and the board the API answers with, its categories and recurring priorities
+ * included.
  */
-import { randomBytes } from 'node:crypto';
 import type { DB } from './db.js';
-import { getOwnedByUid, type CardRow, type CategoryRow, type RecurringRow } from './routes/shared.js';
-import { hasText } from '../shared/priorities.js';
-import { addDays, DAY_MS } from '../shared/dates.js';
-import { BOARD_LIMITS, type Board, type BoardCard, type Category, type OpenLane, type Priority, type Recurring } from '../shared/api.js';
+import type { CategoryRow, ItemRow } from './routes/shared.js';
+import { DAY_MS } from '../shared/dates.js';
+import { activeMs } from '../shared/timer.js';
+import { BOARD_LIMITS, LIMITS, type Board, type BoardCard, type Category, type OpenLane, type Recurring } from '../shared/api.js';
 
-/** The uids of a lane's cards in their order. */
+/** A list of ids or uids as one bound parameter, read in SQL as `IN (SELECT value FROM json_each(?))`. */
+export function inList(values: readonly (number | string)[]): string {
+  return JSON.stringify(values);
+}
+
+/** Each of the user's tasks' latest entry: the date of the latest day whose list holds it, and its tick there. One bound parameter, the user. */
+const LATEST = `SELECT item_id, date, done FROM (
+    SELECT p.item_id, d.date, p.done, ROW_NUMBER() OVER (PARTITION BY p.item_id ORDER BY d.date DESC) AS n
+    FROM priorities p JOIN days d ON d.id = p.day_id WHERE d.user_id = ?
+  ) WHERE n = 1`;
+
+/** The uids of a lane's tasks in their order. */
 function laneOrder(db: DB, userId: number, lane: OpenLane): string[] {
-  const rows = db.prepare(`SELECT uid FROM board_cards WHERE user_id = ? AND lane = ? ORDER BY position, id`).all(userId, lane) as { uid: string }[];
+  const rows = db.prepare(`SELECT uid FROM items WHERE user_id = ? AND lane = ? ORDER BY position, id`).all(userId, lane) as { uid: string }[];
   return rows.map((c) => c.uid);
 }
 
-/** Numbers the given cards 1..n in this order. */
+/** Numbers the given tasks 1..n in this order. */
 function writeOrder(db: DB, userId: number, uids: string[]): void {
-  const set = db.prepare(`UPDATE board_cards SET position = ? WHERE user_id = ? AND uid = ?`);
+  const set = db.prepare(`UPDATE items SET position = ? WHERE user_id = ? AND uid = ?`);
   uids.forEach((uid, i) => set.run(i + 1, userId, uid));
 }
 
-/** Numbers a lane's cards 1..n: `first`, cards of that lane, at the top in this order, then the rest as they were. */
+/** Numbers a lane's tasks 1..n: `first`, tasks of that lane, at the top in this order, then the rest as they were. */
 export function renumber(db: DB, userId: number, lane: OpenLane, first: readonly string[] = []): void {
   writeOrder(db, userId, [...first, ...laneOrder(db, userId, lane).filter((uid) => !first.includes(uid))]);
 }
 
-/** Cards in Later and Next, which `BOARD_LIMITS.openCards` caps. Done and In progress don't count. */
+/** Tasks in Later and Next that aren't done, which `BOARD_LIMITS.openCards` caps. */
 export function openCount(db: DB, userId: number): number {
-  return (db.prepare(`SELECT COUNT(*) AS n FROM board_cards WHERE user_id = ? AND lane <> 'done'`).get(userId) as { n: number }).n;
-}
-
-/** Whether a row on `from`'s list or a later day's is linked to the card, with text or emptied. */
-export function linkedFrom(db: DB, userId: number, uid: string, from: string): boolean {
   return (
     db
-      .prepare(`SELECT 1 FROM priorities p JOIN days d ON d.id = p.day_id WHERE d.user_id = ? AND p.card_uid = ? AND d.date >= ? LIMIT 1`)
-      .get(userId, uid, from) !== undefined
-  );
+      .prepare(
+        `SELECT COUNT(*) AS n FROM items i LEFT JOIN (${LATEST}) l ON l.item_id = i.id WHERE i.user_id = ? AND i.lane IS NOT NULL AND COALESCE(l.done, 0) = 0`,
+      )
+      .get(userId, userId) as { n: number }
+  ).n;
+}
+
+/** Whether the task's latest entry is ticked: it is done. */
+export function isDone(db: DB, itemId: number): boolean {
+  const latest = db.prepare(`SELECT p.done FROM priorities p JOIN days d ON d.id = p.day_id WHERE p.item_id = ? ORDER BY d.date DESC LIMIT 1`).get(itemId) as
+    { done: number } | undefined;
+  return latest?.done === 1;
 }
 
 /**
- * The card goes to `lane`, before `before` there, or at the end when that names no card of the
- * lane (null, another lane's, itself); out of Done if it was there. The lane it left is
- * renumbered.
+ * The task goes to `lane`, before `before` there, or at the end when that names no task of the
+ * lane (null, another lane's, itself). The lane it left is renumbered.
  */
-export function placeCard(db: DB, userId: number, card: CardRow, lane: OpenLane, before: string | null): void {
-  db.prepare(`UPDATE board_cards SET lane = ?, done_at = NULL WHERE id = ?`).run(lane, card.id);
-  const order = laneOrder(db, userId, lane).filter((uid) => uid !== card.uid);
+export function placeItem(db: DB, userId: number, item: ItemRow, lane: OpenLane, before: string | null): void {
+  db.prepare(`UPDATE items SET lane = ? WHERE id = ?`).run(lane, item.id);
+  const order = laneOrder(db, userId, lane).filter((uid) => uid !== item.uid);
   const at = before == null ? -1 : order.indexOf(before);
-  order.splice(at === -1 ? order.length : at, 0, card.uid);
+  order.splice(at === -1 ? order.length : at, 0, item.uid);
   writeOrder(db, userId, order);
-  if (card.lane !== lane && card.lane !== 'done') renumber(db, userId, card.lane);
+  if (item.lane != null && item.lane !== lane) renumber(db, userId, item.lane);
 }
 
-/** A card the board made (capture, or a new card for a done item), handled from the start, placed in `lane` before `before`. */
-export function createCard(
-  db: DB,
-  userId: number,
-  card: Pick<BoardCard, 'uid' | 'title' | 'categoryUid'>,
-  lane: OpenLane,
-  before: string | null,
-  now: number,
-): void {
-  const { uid, title, categoryUid } = card;
-  db.prepare(`INSERT INTO board_cards (user_id, uid, title, category_uid, lane, position, created_at, untouched) VALUES (?, ?, ?, ?, ?, 0, ?, 0)`).run(
-    userId,
-    uid,
-    title,
-    categoryUid,
-    lane,
-    now,
-  );
-  placeCard(db, userId, getOwnedByUid(db, 'board_cards', userId, uid)!, lane, before);
+/**
+ * The lane rule a priorities save follows, for the tasks it added open to `date`'s list: a task in
+ * Later whose latest list that is (no entry on a later date) goes to the top of Next, in the order
+ * given, so a task pulled from Later onto today and left open is lined up in Next. A task in Next
+ * keeps its place, and one with no lane stays without.
+ */
+export function nextFromLater(db: DB, userId: number, date: string, items: readonly ItemRow[]): void {
+  const later = db.prepare(`SELECT 1 FROM priorities p JOIN days d ON d.id = p.day_id WHERE p.item_id = ? AND d.date > ? LIMIT 1`);
+  const moved = items.filter((i) => i.lane === 'later' && later.get(i.id, date) === undefined).map((i) => i.uid);
+  if (moved.length === 0) return;
+  const move = db.prepare(`UPDATE items SET lane = 'next' WHERE user_id = ? AND uid = ?`);
+  for (const uid of moved) move.run(userId, uid);
+  renumber(db, userId, 'later');
+  renumber(db, userId, 'next', moved);
 }
 
-/** Deletes the card and closes the gap in its lane. The rows linked to it keep their `cardUid`, now linked to nothing. */
-export function removeCard(db: DB, userId: number, card: CardRow): void {
-  db.prepare(`DELETE FROM board_cards WHERE id = ?`).run(card.id);
-  if (card.lane !== 'done') renumber(db, userId, card.lane);
-}
-
-/** Each linked card's latest day, and whether a row of its on that day has text. */
-function latestLinks(db: DB, userId: number): Map<string, { date: string; text: boolean }> {
-  const rows = db
+/**
+ * Deletes the user's tasks (those in `only` when given) that nothing names: no entry, no
+ * session, and either archived or a one-off in no lane. A task in a lane is the board's, and a
+ * recurring priority in use a setting, so neither goes. A tombstone is skipped: it stays until the
+ * prune, so a late save naming its uid can't make the task again. Returns how many went.
+ */
+export function collectItems(db: DB, userId: number, only?: readonly number[]): number {
+  return db
     .prepare(
-      `SELECT p.card_uid AS card, d.date, p.text FROM priorities p JOIN days d ON d.id = p.day_id WHERE d.user_id = ? AND p.card_uid IS NOT NULL ORDER BY d.date DESC`,
+      `DELETE FROM items WHERE user_id = ? ${only ? 'AND id IN (SELECT value FROM json_each(?))' : ''}
+         AND deleted_at IS NULL
+         AND NOT EXISTS (SELECT 1 FROM priorities p WHERE p.item_id = items.id)
+         AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.item_id = items.id)
+         AND (archived_at IS NOT NULL OR (weekdays IS NULL AND lane IS NULL))`,
     )
-    .all(userId) as { card: string; date: string; text: string }[];
-  const links = new Map<string, { date: string; text: boolean }>();
-  for (const row of rows) {
-    const link = links.get(row.card) ?? links.set(row.card, { date: row.date, text: false }).get(row.card)!;
-    if (row.date === link.date && hasText(row)) link.text = true;
-  }
-  return links;
+    .run(...(only ? [userId, inList(only)] : [userId])).changes;
+}
+
+/**
+ * Deletes a one-off task everywhere, in the caller's transaction: every session on it stays on
+ * its day as unplanned time under the task's name and category (a running one runs on), every
+ * day's entry of it goes, and the task stays as a tombstone, in no lane, until the prune, so a save
+ * from a device that still has it can't bring it back. The lane it was in closes up.
+ */
+export function deleteItem(db: DB, userId: number, item: ItemRow, now: number): void {
+  db.prepare(`UPDATE sessions SET label = ?, category_uid = ?, item_id = NULL WHERE user_id = ? AND item_id = ?`).run(
+    item.title.slice(0, LIMITS.sessionLabel),
+    item.category_uid,
+    userId,
+    item.id,
+  );
+  db.prepare(`DELETE FROM priorities WHERE item_id = ?`).run(item.id);
+  db.prepare(`UPDATE items SET deleted_at = ?, lane = NULL, position = 0 WHERE id = ?`).run(now, item.id);
+  if (item.lane != null) renumber(db, userId, item.lane);
+}
+
+/** What `listed`, `earlier` and `logged` are worked out from: the dates of the days whose lists hold a task, and the focus logged on it. */
+export interface ItemCounts {
+  dates: string[];
+  /** Seconds of its completed sessions, every day. */
+  logged: number;
+}
+
+/** Each task's counts, by its id: one query for the entries and one for the sessions, however many tasks. */
+export function itemCounts(db: DB, ids: readonly number[]): Map<number, ItemCounts> {
+  const counts = new Map(ids.map((id) => [id, { dates: [] as string[], logged: 0 }]));
+  const list = inList([...counts.keys()]);
+  const entries = db
+    .prepare(`SELECT p.item_id, d.date FROM priorities p JOIN days d ON d.id = p.day_id WHERE p.item_id IN (SELECT value FROM json_each(?))`)
+    .all(list) as { item_id: number; date: string }[];
+  for (const e of entries) counts.get(e.item_id)!.dates.push(e.date);
+  const sessions = db
+    .prepare(
+      `SELECT item_id, started_at, ended_at, paused_seconds FROM sessions
+       WHERE status = 'completed' AND item_id IS NOT NULL AND item_id IN (SELECT value FROM json_each(?))`,
+    )
+    .all(list) as { item_id: number; started_at: number; ended_at: number; paused_seconds: number }[];
+  // Rounded per session, as each session's durationSeconds is, so the total is what the log adds up to.
+  for (const s of sessions)
+    counts.get(s.item_id)!.logged += Math.round(activeMs({ startedAt: s.started_at, pausedSeconds: s.paused_seconds, pausedAt: null }, s.ended_at) / 1000);
+  return counts;
 }
 
 /** The user's categories in the order they were made, removed ones included: past time keeps its name. */
@@ -107,172 +158,60 @@ function categoriesJson(db: DB, userId: number): Category[] {
   return rows.map((c) => ({ uid: c.uid, name: c.name, color: c.color, archived: c.archived_at != null }));
 }
 
-/** ISO weekdays (Monday 1 to Sunday 7) as the `recurring` table stores them: bit 0 for Monday. */
+/** ISO weekdays (Monday 1 to Sunday 7) as a recurring priority stores them: bit 0 for Monday. */
 export function weekdayMask(weekdays: readonly number[]): number {
   return weekdays.reduce((mask, day) => mask | (1 << (day - 1)), 0);
 }
 
-/** The ISO weekdays in a `recurring` mask, ascending. */
+/** The ISO weekdays in a recurring priority's mask, ascending. */
 export function weekdaysOf(mask: number): number[] {
   return [1, 2, 3, 4, 5, 6, 7].filter((day) => mask & (1 << (day - 1)));
 }
 
-/** The user's recurring priorities in the order they were made, the order the offer lists them in. */
+/** The user's recurring priorities not removed, in the order they were made, the order the offer lists them in. */
 function recurringJson(db: DB, userId: number): Recurring[] {
-  const rows = db.prepare(`SELECT * FROM recurring WHERE user_id = ? ORDER BY id`).all(userId) as RecurringRow[];
+  const rows = db
+    .prepare(`SELECT * FROM items WHERE user_id = ? AND weekdays IS NOT NULL AND archived_at IS NULL AND deleted_at IS NULL ORDER BY id`)
+    .all(userId) as (ItemRow & { weekdays: number })[];
   return rows.map((r) => ({ uid: r.uid, title: r.title, categoryUid: r.category_uid, weekdays: weekdaysOf(r.weekdays) }));
 }
 
 /**
- * The user's board: Later and Next in order, then the cards done in the last
- * `doneWindowDays`, newest first, the categories and the recurring priorities. `listDate` and
- * `held` are read from the rows on every call, so neither can drift from the lists.
+ * The user's board: the one-off tasks in Later and Next that aren't done, in order, then every
+ * other one whose latest entry is on or after `BOARD_LIMITS.listWindowDays` before the server's
+ * UTC today, with no upper bound, so a task planned weeks ahead is in it, and so is every task the
+ * client can show as done this week or left open; the categories and the recurring priorities.
+ * Archived and deleted tasks are left out. `listDate` and `listDone` are read from the lists on
+ * every call, so neither can drift from them.
  */
 export function boardJson(db: DB, userId: number, now: number = Date.now()): Board {
+  const from = new Date(now - BOARD_LIMITS.listWindowDays * DAY_MS).toISOString().slice(0, 10);
   const rows = db
     .prepare(
-      `SELECT * FROM board_cards WHERE user_id = ? AND (lane <> 'done' OR done_at >= ?)
-       ORDER BY CASE lane WHEN 'later' THEN 0 WHEN 'next' THEN 1 ELSE 2 END, position, done_at DESC, id`,
+      `SELECT i.*, l.date AS list_date, l.done AS list_done FROM items i LEFT JOIN (${LATEST}) l ON l.item_id = i.id
+       WHERE i.user_id = ? AND i.weekdays IS NULL AND i.archived_at IS NULL AND i.deleted_at IS NULL
+         AND ((i.lane IS NOT NULL AND COALESCE(l.done, 0) = 0) OR l.date >= ?)
+       ORDER BY CASE i.lane WHEN 'later' THEN 0 WHEN 'next' THEN 1 ELSE 2 END, i.position, l.date DESC, i.id`,
     )
-    .all(userId, now - BOARD_LIMITS.doneWindowDays * DAY_MS) as CardRow[];
-  const links = latestLinks(db, userId);
-  const cards = rows.map((c): BoardCard => {
-    const link = links.get(c.uid);
+    .all(userId, userId, from) as (ItemRow & { list_date: string | null; list_done: number | null })[];
+  const counts = itemCounts(
+    db,
+    rows.map((r) => r.id),
+  );
+  const cards = rows.map((r): BoardCard => {
+    const { dates, logged } = counts.get(r.id)!;
     return {
-      uid: c.uid,
-      title: c.title,
-      categoryUid: c.category_uid,
-      lane: c.lane,
-      position: c.position,
-      createdAt: c.created_at,
-      doneAt: c.done_at,
-      listDate: link?.date ?? null,
-      held: c.untouched === 1 && link?.text === false,
+      uid: r.uid,
+      title: r.title,
+      categoryUid: r.category_uid,
+      lane: r.lane,
+      position: r.position,
+      createdAt: r.created_at,
+      listDate: r.list_date,
+      listDone: r.list_done === 1,
+      listed: dates.length,
+      logged,
     };
   });
   return { cards, categories: categoriesJson(db, userId), recurring: recurringJson(db, userId) };
-}
-
-export interface MirrorOptions {
-  /** Make a card for each non-recurring text row with none: the client's `cards`, set while the board is on and the list's day is today or later. */
-  makeCards: boolean;
-  /** Cards a board action handled through their rows: marked handled, and left where the board put them when their row goes. */
-  touched: ReadonlySet<string>;
-}
-
-/**
- * Keeps each board card in step with its latest linked row, inside the priorities PUT's
- * transaction, before `list` (the merged list) replaces `stored`. First, every card `touched`
- * names is marked handled (untouched = 0). With `makeCards`, a non-recurring text row with no
- * card gets a new one, whose uid is written onto the row, and a row gaining text whose cardUid
- * names no card gets it back under that uid, under the cap on Later and Next; either takes the
- * row's title and category. Whatever `makeCards` is, only what this save changed is copied onto
- * a card, and only from its latest linked day: a row gaining text (new to the list, or typed
- * into again after it was emptied) gives its title and category, and its lane by the tick (open
- * goes to Next, at the top unless it was in Next already); new text gives the title, a new
- * category the category; a tick moves it to Done, an untick to the top of Next. An emptied
- * row changes nothing: an untouched card reads as `held` meanwhile. A card whose row
- * went from the list is deleted while untouched, unless `touched` names it; a handled one stays,
- * and goes back to Done if it was taken out of it for this row (open, in Next) and its latest
- * remaining row with text is ticked. Recurring rows never have a card. Returns the list to store.
- */
-export function mirrorCards(db: DB, userId: number, date: string, stored: Priority[], list: Priority[], now: number, opts: MirrorOptions): Priority[] {
-  const handled = db.prepare(`UPDATE board_cards SET untouched = 0 WHERE user_id = ? AND uid = ?`);
-  for (const uid of opts.touched) handled.run(userId, uid);
-  const isLatest = (uid: string) => !linkedFrom(db, userId, uid, addDays(date, 1));
-  const update = db.prepare(`UPDATE board_cards SET title = ?, lane = ?, position = ?, done_at = ? WHERE id = ?`);
-  const recategorise = db.prepare(`UPDATE board_cards SET category_uid = ? WHERE id = ?`);
-  const storedText = new Map(stored.filter(hasText).map((p) => [p.uid, p]));
-  // Cards that went to Next, in row order: a save puts them at the top.
-  const top: string[] = [];
-  let open = openCount(db, userId);
-  let changed = false;
-
-  /** A card for `row` under `uid`, in Done or at the top of Next by its tick; false when Later and Next are full. */
-  const make = (row: Priority, uid: string, untouched: boolean): boolean => {
-    if (open >= BOARD_LIMITS.openCards) return false;
-    db.prepare(
-      `INSERT INTO board_cards (user_id, uid, title, category_uid, lane, position, created_at, done_at, untouched) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)`,
-    ).run(userId, uid, row.text.trim(), row.categoryUid, row.done ? 'done' : 'next', now, row.done ? now : null, untouched ? 1 : 0);
-    if (!row.done) {
-      top.push(uid);
-      open++;
-    }
-    changed = true;
-    return true;
-  };
-  /**
-   * The card takes `row`'s title, and its lane by the tick: Done (its doneAt kept if it was
-   * there already), or Next, at the top unless `keepPlace` and it is in Next already.
-   */
-  const follow = (card: CardRow, row: Priority, keepPlace: boolean) => {
-    const title = row.text.trim();
-    // Later and Next gain the card when it leaves Done and lose it when it goes there, so a card
-    // made later in this save still finds them under the cap.
-    if (card.lane === 'done' && !row.done) open++;
-    else if (card.lane !== 'done' && row.done) open--;
-    if (row.done) update.run(title, 'done', 0, card.lane === 'done' ? card.done_at : now, card.id);
-    else if (keepPlace && card.lane === 'next') update.run(title, 'next', card.position, null, card.id);
-    else {
-      update.run(title, 'next', 0, null, card.id);
-      top.push(card.uid);
-    }
-    changed = true;
-  };
-
-  const out = list.map((row): Priority => {
-    if (row.recurringUid != null || !hasText(row)) return row;
-    if (row.cardUid == null) {
-      if (!opts.makeCards) return row;
-      const uid = randomBytes(6).toString('hex');
-      return make(row, uid, true) ? { ...row, cardUid: uid } : row;
-    }
-    if (!isLatest(row.cardUid)) return row;
-    const card = getOwnedByUid(db, 'board_cards', userId, row.cardUid);
-    const before = storedText.get(row.uid);
-    if (!before) {
-      // Gains text: new to this list, or typed into again after it was emptied.
-      if (card) {
-        follow(card, row, true);
-        recategorise.run(row.categoryUid, card.id);
-      } else if (opts.makeCards) make(row, row.cardUid, !opts.touched.has(row.cardUid));
-    } else if (card) {
-      if (row.done !== before.done) follow(card, row, false);
-      else if (row.text !== before.text) db.prepare(`UPDATE board_cards SET title = ? WHERE id = ?`).run(row.text.trim(), card.id);
-      if (row.categoryUid !== before.categoryUid) recategorise.run(row.categoryUid, card.id);
-    }
-    return row;
-  });
-
-  const onList = new Set(out.map((p) => p.cardUid));
-  for (const s of stored) {
-    const uid = s.cardUid;
-    if (uid == null || onList.has(uid) || opts.touched.has(uid) || !isLatest(uid)) continue;
-    const card = getOwnedByUid(db, 'board_cards', userId, uid);
-    if (!card) continue;
-    if (card.untouched === 1) {
-      db.prepare(`DELETE FROM board_cards WHERE id = ?`).run(card.id);
-      changed = true;
-    } else if (hasText(s) && !s.done && card.lane === 'next' && latestTextTicked(db, userId, uid, date)) {
-      // Taken out of Done for this row (a pull of a done card, say) and the row taken off again: back to Done.
-      update.run(card.title, 'done', 0, now, card.id);
-      changed = true;
-    }
-  }
-
-  if (changed) {
-    renumber(db, userId, 'later');
-    renumber(db, userId, 'next', top);
-  }
-  return out;
-}
-
-/** Whether the latest row with text linked to the card, on a day before `date`, is ticked. */
-function latestTextTicked(db: DB, userId: number, uid: string, date: string): boolean {
-  const rows = db
-    .prepare(
-      `SELECT p.text, p.done FROM priorities p JOIN days d ON d.id = p.day_id WHERE d.user_id = ? AND p.card_uid = ? AND d.date < ? ORDER BY d.date DESC`,
-    )
-    .all(userId, uid, date) as { text: string; done: number }[];
-  return rows.find(hasText)?.done === 1;
 }

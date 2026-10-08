@@ -5,8 +5,8 @@ import { seedDatabase } from './dev/seed.js';
 import { cutoffKey, effectiveKeepDays, runRetention } from './retention.js';
 import { DEFAULT_SETTINGS } from '../shared/settings.js';
 import { DAY_MS } from '../shared/dates.js';
-import { ensureDefaultUser, type UserRow } from './db.js';
-import type { BoardCard } from '../shared/api.js';
+import type { UserRow } from './db.js';
+import type { Board } from '../shared/api.js';
 
 describe('cutoffKey', () => {
   it('is the UTC date `keepDays` before now', () => {
@@ -69,26 +69,24 @@ describe('runRetention', () => {
     expect(seeded.length).toBeGreaterThan(keptAfter(60).length);
     expect(keptAfter(60).length).toBeGreaterThan(keptAfter(30).length);
 
-    // Each has a card done before both cutoffs and an untouched one no row links to.
-    const insert = app.db.prepare(
-      `INSERT INTO board_cards (user_id, uid, title, lane, position, created_at, done_at, untouched) VALUES (?, ?, ?, ?, ?, 0, ?, 1)`,
-    );
+    // Each has the tombstone of a task deleted before both cutoffs, and an archived one nothing names.
+    const insert = app.db.prepare(`INSERT INTO items (user_id, uid, title, created_at, archived_at, deleted_at) VALUES (?, ?, ?, 0, ?, ?)`);
     for (const user of [admin, member]) {
-      insert.run(user.id, 'card000000aa', 'Old', 'done', 0, SEED_NOW - 90 * DAY_MS);
-      insert.run(user.id, 'card000000bb', 'Loose', 'next', 99, null);
+      insert.run(user.id, 'card000000aa', 'Old', null, SEED_NOW - 90 * DAY_MS);
+      insert.run(user.id, 'card000000bb', 'Loose', 0, null);
     }
-    const cardsOf = (user: UserRow) => app.db.prepare(`SELECT * FROM board_cards WHERE user_id = ? ORDER BY id`).all(user.id) as { uid: string }[];
-    const memberCards = cardsOf(member);
+    const tasksOf = (user: UserRow) => app.db.prepare(`SELECT * FROM items WHERE user_id = ? ORDER BY id`).all(user.id) as { uid: string }[];
+    const memberTasks = tasksOf(member);
 
     // The admin keeps 30 days; sam's setting is off and there is no cap, so they keep everything.
     expect((await a.put('/api/settings', { retention: { enabled: true, days: 30 } })).status).toBe(200);
     expect(runRetention(app.db, app.config, SEED_NOW)).toBe(seeded.length - keptAfter(30).length);
     expect(datesOf(admin)).toEqual(keptAfter(30));
     expect(datesOf(member)).toEqual(seeded);
-    const adminUids = cardsOf(admin).map((c) => c.uid);
+    const adminUids = tasksOf(admin).map((c) => c.uid);
     expect(adminUids).not.toContain('card000000aa');
     expect(adminUids).not.toContain('card000000bb');
-    expect(cardsOf(member)).toEqual(memberCards);
+    expect(tasksOf(member)).toEqual(memberTasks);
 
     // A 60-day cap reaches sam too; the admin's own 30 is already the tighter limit.
     expect(runRetention(app.db, { ...app.config, retentionDays: 60 }, SEED_NOW)).toBe(seeded.length - keptAfter(60).length);
@@ -97,74 +95,107 @@ describe('runRetention', () => {
   });
 });
 
-// A prune also takes board cards: those done before the cutoff, and those a priorities save made
-// that were never handled on the board, once no row is linked to them.
-describe('pruning board cards', () => {
+// A prune also takes tasks: those done before the cutoff, the tombstones of those deleted before
+// it, and any task nothing names.
+describe('pruning tasks', () => {
   let app: TestApp;
-  afterEach(() => app.close());
-
-  const cards = async () => (await app.api.get('/api/board')).body.cards as BoardCard[];
-  const saveOn = (date: string, priorities: Record<string, unknown>[], extra: Record<string, unknown> = {}) =>
-    app.api.put(`/api/days/${date}/priorities`, { priorities, cards: true, ...extra });
-  const madeOn = async (date: string, text: string) => (await saveOn(date, [{ text }])).body.priorities[0].cardUid as string;
-  /** A card in Done since `doneAt`, which the board's window would no longer send. */
-  const doneCard = (uid: string, title: string, doneAt: number) =>
-    app.db
-      .prepare(`INSERT INTO board_cards (user_id, uid, title, lane, position, created_at, done_at) VALUES (?, ?, ?, 'done', 0, 0, ?)`)
-      .run(ensureDefaultUser(app.db).id, uid, title, doneAt);
-
-  it('deletes the cards done before the cutoff and the untouched ones whose rows all went, and keeps the rest', async () => {
-    app = await startTestApp();
-    const cutoff = Date.parse('2026-02-01T00:00:00Z');
-    doneCard('done00000001', 'Done before the cutoff', cutoff - 1);
-    doneCard('done00000002', 'Done at the cutoff', cutoff);
-    const old = await saveOn('2026-01-12', [{ text: 'Only on an old day' }, { text: 'Carried to February' }]);
-    const [gone, carried] = old.body.priorities.map((p: { cardUid: string }) => p.cardUid);
-    await saveOn('2026-02-02', [{ text: 'Carried to February', cardUid: carried }]);
-    const handled = await madeOn('2026-01-13', 'Handled on the board');
-    await saveOn('2026-01-13', [{ text: 'Handled on the board', cardUid: handled }], { touched: [handled] });
-    await app.api.post('/api/board/cards', { uid: 'card00000001', title: 'Captured', lane: 'next', before: null });
-    expect((await cards()).filter((c) => c.lane === 'next').map((c) => c.title)).toEqual([
-      'Handled on the board',
-      'Only on an old day',
-      'Carried to February',
-      'Captured',
-    ]);
-
-    expect((await app.api.post('/api/days/prune', { before: '2026-02-01' })).body).toEqual({ deleted: 2 });
-    const left = await cards();
-    expect(left.map((c) => c.uid)).not.toContain(gone);
-    // Next is numbered again, and the rest are as they were, the handled card now on no list.
-    expect(left.map((c) => [c.lane, c.position, c.title, c.listDate])).toEqual([
-      ['next', 1, 'Handled on the board', null],
-      ['next', 2, 'Carried to February', '2026-02-02'],
-      ['next', 3, 'Captured', null],
-    ]);
-    // The done one past the board's window is still stored.
-    expect(app.count('board_cards', 'uid = ?', 'done00000002')).toBe(1);
-    expect(app.count('board_cards', 'uid = ?', 'done00000001')).toBe(0);
+  afterEach(async () => {
+    vi.useRealTimers();
+    await app.close();
   });
 
-  it('compacts the file when only cards went', async () => {
+  const OLD = '2026-01-12';
+  const KEPT = '2026-02-02';
+  const save = (date: string, priorities: Record<string, unknown>[]) => app.api.put(`/api/days/${date}/priorities`, { priorities });
+  const row = (uid: string, done = false) => ({ text: `Task ${uid}`, uid, done });
+  const uids = () => (app.db.prepare(`SELECT uid FROM items ORDER BY uid`).all() as { uid: string }[]).map((i) => i.uid);
+  const prune = async () => (await app.api.post('/api/days/prune', { before: '2026-02-01' })).body as unknown;
+  /** Deletes the task everywhere at `at`, which its tombstone keeps. */
+  const deleteAt = async (uid: string, at: number) => {
+    vi.useFakeTimers({ now: at, toFake: ['Date'] });
+    await app.api.del(`/api/items/${uid}`);
+    vi.useRealTimers();
+  };
+
+  it('deletes the tasks done before the cutoff whatever their lane, and those left on no list in no lane, and keeps the rest', async () => {
     app = await startTestApp();
-    doneCard('done00000001', 'Card text only the prune knew', Date.parse('2026-01-15T12:00:00Z'));
-    expect((await app.api.post('/api/days/prune', { before: '2026-02-01' })).body).toEqual({ deleted: 0 });
-    expect(app.count('board_cards')).toBe(0);
-    expect(app.db.serialize().includes('Card text only the prune knew')).toBe(false);
+    for (const [uid, lane] of [
+      ['aaaaaaaaaaa2', 'next'],
+      ['aaaaaaaaaaa5', 'later'],
+      ['aaaaaaaaaaa7', 'next'],
+    ]) {
+      await app.api.post('/api/items', { uid, title: `Task ${uid}`, lane });
+    }
+    await app.api.post('/api/items', { uid: 'rcur00000001', title: 'Monitor the queue', weekdays: [1] });
+    await app.api.post('/api/items', { uid: 'rcur00000002', title: 'Removed routine', weekdays: [1] });
+    await save(OLD, [
+      // Done before the cutoff: one with no lane, one in Next.
+      row('aaaaaaaaaaa1', true),
+      row('aaaaaaaaaaa2', true),
+      // Done, then carried to a day the prune keeps and left open there.
+      row('aaaaaaaaaaa3', true),
+      // Left open on a day the prune takes, with no lane, and from Later, which its save lined up at the top of Next.
+      row('aaaaaaaaaaa4'),
+      row('aaaaaaaaaaa5'),
+      // Done, with a session on a later day that listed it then.
+      row('aaaaaaaaaaa6', true),
+      // A recurring priority done before the cutoff, in use and removed.
+      { text: 'Monitor the queue', uid: 'rcur00000001', done: true },
+      { text: 'Removed routine', uid: 'rcur00000002', done: true },
+    ]);
+    await app.api.del('/api/items/rcur00000002');
+    await save(KEPT, [row('aaaaaaaaaaa3'), row('aaaaaaaaaaa6')]);
+    const { id } = (await app.api.post(`/api/days/${KEPT}/sessions`, { plannedSeconds: 600, priorityUid: 'aaaaaaaaaaa6' })).body.session as { id: number };
+    await app.api.post(`/api/sessions/${id}/finish`);
+    await save(KEPT, [row('aaaaaaaaaaa3')]);
+    expect(app.count('items')).toBe(9);
+
+    expect(await prune()).toEqual({ deleted: 1 });
+    expect(uids()).toEqual(['aaaaaaaaaaa3', 'aaaaaaaaaaa5', 'aaaaaaaaaaa6', 'aaaaaaaaaaa7', 'rcur00000001']);
+    // Next closed up; the routine still repeats.
+    const board = (await app.api.get('/api/board')).body as Board;
+    expect(board.cards.filter((c) => c.lane != null).map((c) => [c.uid, c.lane, c.position])).toEqual([
+      ['aaaaaaaaaaa5', 'next', 1],
+      ['aaaaaaaaaaa7', 'next', 2],
+    ]);
+    expect(board.recurring.map((r) => r.uid)).toEqual(['rcur00000001']);
   });
 
-  it('logs the cards each scheduled pass deleted, and compacts the file for them', async () => {
+  it('keeps a done task a day kept for its running timer still lists', async () => {
+    app = await startTestApp();
+    await save(OLD, [row('aaaaaaaaaaa1', true), row('aaaaaaaaaaa2')]);
+    await app.api.post(`/api/days/${OLD}/sessions`, { plannedSeconds: 600, priorityUid: 'aaaaaaaaaaa2' });
+    expect(await prune()).toEqual({ deleted: 0 });
+    expect(uids()).toEqual(['aaaaaaaaaaa1', 'aaaaaaaaaaa2']);
+  });
+
+  it('deletes the tombstones of tasks deleted before the cutoff, keeps the later ones, and compacts the file when only tasks went', async () => {
+    app = await startTestApp();
+    await app.api.post('/api/items', { uid: 'card00000001', title: 'Task text only the prune knew', lane: 'later' });
+    await app.api.post('/api/items', { uid: 'card00000002', title: 'Deleted at the cutoff', lane: 'later' });
+    await deleteAt('card00000001', Date.parse('2026-01-31T23:59:59Z'));
+    await deleteAt('card00000002', Date.parse('2026-02-01T00:00:00Z'));
+    expect(await prune()).toEqual({ deleted: 0 });
+    expect(uids()).toEqual(['card00000002']);
+    expect(app.db.serialize().includes('Task text only the prune knew')).toBe(false);
+  });
+
+  it('logs the tasks each scheduled pass deleted, tombstones included, and leaves them while retention is off', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     app = await startTestApp();
-    expect((await app.api.put('/api/settings', { retention: { enabled: true, days: 30 } })).status).toBe(200);
-    doneCard('done00000001', 'Finished long ago', SEED_NOW - 40 * DAY_MS);
+    await app.api.post('/api/items', { uid: 'card00000001', title: 'Deleted long ago', lane: 'later' });
+    await deleteAt('card00000001', SEED_NOW - 40 * DAY_MS);
     expect(runRetention(app.db, app.config, SEED_NOW)).toBe(0);
-    expect(log).toHaveBeenCalledWith('[retention] deleted 1 board card');
+    expect(uids()).toEqual(['card00000001']);
+    expect(log).not.toHaveBeenCalled();
+
+    expect((await app.api.put('/api/settings', { retention: { enabled: true, days: 30 } })).status).toBe(200);
+    expect(runRetention(app.db, app.config, SEED_NOW)).toBe(0);
+    expect(log).toHaveBeenCalledWith('[retention] deleted 1 task');
     expect(log).not.toHaveBeenCalledWith(expect.stringMatching(/ day/));
-    expect(app.db.serialize().includes('Finished long ago')).toBe(false);
-    doneCard('done00000002', 'Old', SEED_NOW - 40 * DAY_MS);
-    doneCard('done00000003', 'Older', SEED_NOW - 50 * DAY_MS);
+    expect(app.db.serialize().includes('Deleted long ago')).toBe(false);
+    await save('2025-12-01', [row('aaaaaaaaaaa1', true), row('aaaaaaaaaaa2', true)]);
     runRetention(app.db, app.config, SEED_NOW);
-    expect(log).toHaveBeenLastCalledWith('[retention] deleted 2 board cards');
+    expect(log).toHaveBeenLastCalledWith('[retention] deleted 2 tasks');
   });
 });

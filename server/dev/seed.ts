@@ -6,17 +6,17 @@ import { revokeSessions } from '../auth/session.js';
 import { boardJson, weekdayMask } from '../board.js';
 import { addDays, atTime, HOUR_MS, isoWeekday, isWeekend, MINUTE_MS } from '../../shared/dates.js';
 import { kindForPosition } from '../../shared/punches.js';
-import type { Board, Break, Category, Day, Lane, OpenLane, Priority, Punch, Recurring, Session } from '../../shared/api.js';
+import type { Board, Break, Category, Day, OpenLane, Priority, Punch, Recurring, Session } from '../../shared/api.js';
 
 /**
  * Deterministic sample data for the dev DB and for API tests. Rows are written with plain
  * SQL because the API can only start a session "now"; past days need `started_at` in the
  * past. Everything here must satisfy the same invariants the routes enforce (see AGENTS.md):
- * punch positions 0..n with the last one odd, priority positions 1..n, `uid`/`added_at` only
- * on rows with text, every `priority_uid` resolving on its own day, no two sessions or
- * breaks of a day overlapping, each board card in step with its latest linked row, no list
- * linking two text rows to one card or one recurring priority, a recurring row only on its
- * item's weekdays and never with a card, and every `categoryUid` naming a seeded category.
+ * punch positions 0..n with the last one odd, priority positions from 1, every entry naming a
+ * task that exists, at most one entry per task on a day, every session's task listed on its own
+ * day, no cancelled session with a task, no two sessions or breaks of a day overlapping, a
+ * recurring priority listed only on its weekdays and never in a lane, no task named by nothing
+ * that isn't in a lane, and every `categoryUid` naming a seeded category.
  */
 
 export interface SeedOptions {
@@ -33,11 +33,9 @@ export interface SeedOptions {
   fresh?: boolean;
 }
 
-/** A priority row with text, so it always has its uid and addedAt. */
+/** An entry: a task on a day's list, so it always has its uid and addedAt. */
 type SeededPriority = Priority & { uid: string; addedAt: number };
 
-/** A one-off row as a template writes it: no card (`withCards` links the last weekday's and today's rows to the cards `insertBoard` writes) and no recurring priority (`routineRows` writes those). */
-const NO_LINKS = { cardUid: null, recurringUid: null } satisfies Pick<Priority, 'cardUid' | 'recurringUid'>;
 type SeededSession = Omit<Session, 'date' | 'pausedAt' | 'durationSeconds'>;
 type SeededBreak = Omit<Break, 'date'>;
 
@@ -161,6 +159,21 @@ function categoryFor(text: string): string | null {
   return SEEDED_CATEGORIES.find((c) => c.name === CATEGORY_OF[text])?.uid ?? null;
 }
 
+/** Every one-off task the templates put on a list. A text is one task on every day it is on, its uid its place here (`taskUid`). */
+const TASK_TEXTS: readonly string[] = [...PRIORITY_TEXTS, 'Reply to the recruiter', 'Ship the timeclock fix', 'Answer the two open support threads'];
+
+function taskUid(text: string): string {
+  return `task${(TASK_TEXTS.indexOf(text) + 1).toString(16).padStart(8, '0')}`;
+}
+
+/** What only the server works out, filled in once every day is built (`withCounts`). */
+const UNCOUNTED = { archived: false, listed: 0, earlier: 0, logged: 0 } as const;
+
+/** The entry for the one-off task `text` at `position`, in the task's category. */
+function oneOff(position: number, text: string, done: boolean, addedAt: number): SeededPriority {
+  return { position, text, done, uid: taskUid(text), addedAt, categoryUid: categoryFor(text), recurring: false, ...UNCOUNTED };
+}
+
 /**
  * The board's recurring priorities, in the order they were made: routine support work, each in
  * its category. Every past weekday lists the ones due on it (`routineRows`); today lists none.
@@ -184,19 +197,19 @@ const ROUTINES_DONE: Readonly<Record<Exclude<DayKind, 'today'>, readonly string[
 };
 
 /**
- * A row for each recurring priority due on `date`'s weekday, after the day's `after` one-off
- * rows: written with the list, in the item's category, ticked as `ROUTINES_DONE` says.
+ * An entry for each recurring priority due on `date`'s weekday, after the day's `after` one-off
+ * rows: written with the list, ticked as `ROUTINES_DONE` says.
  */
-function routineRows(date: string, index: number, kind: Exclude<DayKind, 'today'>, after: number, addedAt: number): SeededPriority[] {
+function routineRows(date: string, kind: Exclude<DayKind, 'today'>, after: number, addedAt: number): SeededPriority[] {
   return SEEDED_RECURRING.filter((r) => r.weekdays.includes(isoWeekday(date))).map((r, i) => ({
     position: after + i + 1,
     text: r.title,
     done: ROUTINES_DONE[kind].includes(r.title),
-    uid: uidFor(index, after + i + 1),
+    uid: r.uid,
     addedAt,
-    cardUid: null,
-    recurringUid: r.uid,
     categoryUid: r.categoryUid,
+    recurring: true,
+    ...UNCOUNTED,
   }));
 }
 
@@ -239,17 +252,6 @@ function noteRotation(): (pool: readonly string[]) => string {
   };
 }
 
-function uidFor(dayIndex: number, position: number): string {
-  // 12 lowercase hex chars, unique across the whole seed (uids only need to be unique per day,
-  // but distinct values keep review rollups easy to read).
-  return `${dayIndex.toString(16).padStart(4, '0')}${position.toString(16).padStart(2, '0')}`.padEnd(12, 'a');
-}
-
-/** The card a priorities save made for the row at `uidFor(dayIndex, position)`: its uid with a `c` tail, so the two never meet. */
-function cardFor(dayIndex: number, position: number): string {
-  return `${dayIndex.toString(16).padStart(4, '0')}${position.toString(16).padStart(2, '0')}`.padEnd(12, 'c');
-}
-
 /** Captured on the board, never on a list: the parking lot and one queued for next. */
 const CAPTURED: readonly [title: string, lane: OpenLane][] = [
   ['Write a KB for the SSO reset', 'later'],
@@ -261,23 +263,24 @@ const CAPTURED: readonly [title: string, lane: OpenLane][] = [
 /** A day as the templates build it, before the inserts give its sessions and breaks ids. */
 type DayDraft = Omit<SeededDay, 'sessions' | 'breaks'> & { sessions: Omit<SeededSession, 'id'>[]; breaks: Omit<SeededBreak, 'id'>[] };
 
-function insertDay(db: DB, userId: number, day: DayDraft): SeededDay {
+/** Writes a day, its entries naming the tasks in `items` (uid to id) and its sessions on them. */
+function insertDay(db: DB, userId: number, day: DayDraft, items: ReadonlyMap<string, number>): SeededDay {
   const info = db
     .prepare(`INSERT INTO days (user_id, date, created_at, overtime_approved, retro_note, retro_at, work_minutes) VALUES (?, ?, ?, ?, ?, ?, ?)`)
     .run(userId, day.date, day.createdAt, day.overtimeApproved ? 1 : 0, day.retroNote, day.retroAt, day.workMinutes);
   const dayId = Number(info.lastInsertRowid);
   const punch = db.prepare(`INSERT INTO punches (day_id, position, kind, at) VALUES (?, ?, ?, ?)`);
   for (const p of day.punches) punch.run(dayId, p.position, p.kind, p.at);
-  const prio = db.prepare(
-    `INSERT INTO priorities (day_id, position, text, done, uid, added_at, card_uid, recurring_uid, category_uid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
-  for (const p of day.priorities) prio.run(dayId, p.position, p.text, p.done ? 1 : 0, p.uid, p.addedAt, p.cardUid, p.recurringUid, p.categoryUid);
+  const entry = db.prepare(`INSERT INTO priorities (day_id, item_id, position, done, added_at) VALUES (?, ?, ?, ?, ?)`);
+  for (const p of day.priorities) entry.run(dayId, items.get(p.uid), p.position, p.done ? 1 : 0, p.addedAt);
   const sess = db.prepare(
-    `INSERT INTO sessions (day_id, user_id, label, planned_seconds, started_at, ended_at, status, priority_uid, paused_seconds, category_uid)
+    `INSERT INTO sessions (day_id, user_id, label, planned_seconds, started_at, ended_at, status, item_id, paused_seconds, category_uid)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const sessions: SeededSession[] = day.sessions.map((s) => {
-    const r = sess.run(dayId, userId, s.label, s.plannedSeconds, s.startedAt, s.endedAt, s.status, s.priorityUid, s.pausedSeconds, s.categoryUid);
+    // A session on a task counts under the task's category, so it keeps none of its own.
+    const [itemId, own] = s.priorityUid == null ? [null, s.categoryUid] : [items.get(s.priorityUid), null];
+    const r = sess.run(dayId, userId, s.label, s.plannedSeconds, s.startedAt, s.endedAt, s.status, itemId, s.pausedSeconds, own);
     return { id: Number(r.lastInsertRowid), ...s };
   });
   const rest = db.prepare(`INSERT INTO breaks (day_id, user_id, planned_seconds, started_at, ended_at) VALUES (?, ?, ?, ?, ?)`);
@@ -293,24 +296,30 @@ function punchRows(times: (number | null)[]): Punch[] {
 }
 
 /**
- * A finished session planned for `minutes`: for a priority row, which gives its label and uid
- * (and its category, which it counts under), or unplanned under a label, with the label's
- * category picked in the log. Worked shorter, it was finished early; paused, its end moves out
- * by the pause, which the log leaves out, the way the finish route records it. The cancelled
- * and running rows are this shape with `status` set over it, and for a running row
- * `endedAt: null`.
+ * A finished session planned for `minutes`: on a task, which gives its label, its name and the
+ * category it counts under, or unplanned under a label, with the label's category picked in the
+ * log. Worked shorter, it was finished early; paused, its end moves out by the pause, which the
+ * log leaves out, the way the finish route records it. The running row is this shape with
+ * `status` set over it and `endedAt: null`, and the cancelled one is `cancelled`'s.
  */
 function completed(work: SeededPriority | string, startedAt: number, minutes: number, worked = minutes, paused = 0): Omit<SeededSession, 'id'> {
+  const task = typeof work === 'string' ? null : work;
   return {
-    label: typeof work === 'string' ? work : work.text,
+    label: task?.text ?? (work as string),
     plannedSeconds: minutes * 60,
     startedAt,
     endedAt: startedAt + (worked + paused) * MINUTE_MS,
     status: 'completed',
-    priorityUid: typeof work === 'string' ? null : work.uid,
+    priorityUid: task?.uid ?? null,
+    title: task?.text ?? null,
     pausedSeconds: paused * 60,
-    categoryUid: typeof work === 'string' ? categoryFor(work) : null,
+    categoryUid: task ? task.categoryUid : categoryFor(work as string),
   };
+}
+
+/** The session cancelled: it counts nowhere, and a cancel lets go of its task. */
+function cancelled(session: Omit<SeededSession, 'id'>): Omit<SeededSession, 'id'> {
+  return { ...session, status: 'cancelled', priorityUid: null, title: null, categoryUid: null };
 }
 
 /** A break planned for `minutes`; one `took` less was ended early. */
@@ -319,7 +328,7 @@ function rested(startedAt: number, minutes: number, took = minutes): Omit<Seeded
 }
 
 /** Builds one past weekday. `index` counts from the oldest day; `kind` picks the template. */
-function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today'>, rand: () => number, note: (pool: readonly string[]) => string): DayDraft {
+function buildPastDay(date: string, kind: Exclude<DayKind, 'today'>, rand: () => number, note: (pool: readonly string[]) => string): DayDraft {
   const jitter = (spread: number) => Math.round((rand() - 0.5) * 2 * spread);
   const pick = <T>(arr: readonly T[]): T => arr[Math.floor(rand() * arr.length)]!;
   const texts = shuffle(PRIORITY_TEXTS, rand);
@@ -330,17 +339,9 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
   const lunchIn = lunchOut + (30 + Math.max(0, jitter(5))) * MINUTE_MS;
   const clockOut = atTime(date, 17, 0) + jitter(15) * MINUTE_MS;
 
-  const priority = (position: number, text: string, done: boolean, addedAt = createdAt): SeededPriority => ({
-    position,
-    text,
-    done,
-    uid: uidFor(index, position),
-    addedAt,
-    ...NO_LINKS,
-    categoryUid: categoryFor(text),
-  });
+  const priority = (position: number, text: string, done: boolean, addedAt = createdAt) => oneOff(position, text, done, addedAt);
   // The routines due on the day, after its `after` one-off rows, written with them.
-  const routines = (after: number, addedAt = createdAt) => routineRows(date, index, kind, after, addedAt);
+  const routines = (after: number, addedAt = createdAt) => routineRows(date, kind, after, addedAt);
   // A 25-minute session on the routine titled so, in a gap the template leaves; none when it isn't due that day.
   const onRoutine = (rows: SeededPriority[], title: string, startedAt: number) => {
     const row = rows.find((p) => p.text === title);
@@ -413,7 +414,7 @@ function buildPastDay(date: string, index: number, kind: Exclude<DayKind, 'today
       sessions: [
         completed(priorities[0]!, clockIn + 20 * MINUTE_MS, 25),
         // Cancelled a few minutes in: must not count anywhere.
-        { ...completed(priorities[1]!, clockIn + 60 * MINUTE_MS, 25, 5), status: 'cancelled' },
+        cancelled(completed(priorities[1]!, clockIn + 60 * MINUTE_MS, 25, 5)),
         completed(pick(UNPLANNED_LABELS), lunchIn + 30 * MINUTE_MS, 25),
       ],
       breaks: [],
@@ -485,26 +486,18 @@ export function kindForDistance(distance: number): Exclude<DayKind, 'today'> {
 }
 
 /** `last` is the weekday before, whose retrospective planned today's list; none with no history. */
-function buildToday(today: string, now: number, index: number, running: boolean, last: Pick<SeededDay, 'priorities' | 'retroAt'> | undefined): DayDraft {
+function buildToday(today: string, now: number, running: boolean, last: Pick<DayDraft, 'priorities' | 'retroAt'> | undefined): DayDraft {
   // Two hours ago, on the minute, but never before today started (a seed run at 01:00) or after now.
   const clockIn = Math.min(now, Math.max(atTime(today, 0, 5), Math.floor((now - 2 * HOUR_MS) / MINUTE_MS) * MINUTE_MS));
   // Planned the evening before with Plan next, which carries over what that day left open; the
   // planner's save is what stored today's row. With no history, written on arrival.
   const plannedAt = last?.retroAt != null ? last.retroAt + 2 * MINUTE_MS : clockIn - 3 * MINUTE_MS;
-  // A row of its own on the new day, linked to the same card, in the same category. A routine
-  // left open isn't carried over: it comes back on its own weekdays.
-  const carried = last?.priorities.find((p) => !p.done && p.recurringUid == null);
-  const row = (position: number, text: string, done: boolean): SeededPriority => ({
-    position,
-    text,
-    done,
-    uid: uidFor(index, position),
-    addedAt: plannedAt,
-    ...NO_LINKS,
-    categoryUid: categoryFor(text),
-  });
+  // The same task on the new day, with its own addedAt. A routine left open isn't carried over: it
+  // comes back on its own weekdays.
+  const carried = last?.priorities.find((p) => !p.done && !p.recurring);
+  const row = (position: number, text: string, done: boolean) => oneOff(position, text, done, plannedAt);
   const priorities = [
-    carried ? { ...row(1, carried.text, false), cardUid: carried.cardUid, categoryUid: carried.categoryUid } : row(1, 'Update the onboarding doc', false),
+    row(1, carried?.text ?? 'Update the onboarding doc', false),
     row(2, 'Ship the timeclock fix', true),
     row(3, 'Answer the two open support threads', false),
   ];
@@ -537,47 +530,51 @@ function buildToday(today: string, now: number, index: number, running: boolean,
 }
 
 /**
- * Every one-off text row of `day` linked to the card a save made for it (`cardFor`), unless it
- * carries one already. A routine's row never gets a card.
+ * Each entry with what the server works out for it from every seeded day: how many days list its
+ * task, how many of those are before its own, and the focus completed on the task.
  */
-function withCards(day: DayDraft, dayIndex: number): DayDraft {
-  return {
+function withCounts(days: DayDraft[]): DayDraft[] {
+  const dates = new Map<string, string[]>();
+  const logged = new Map<string, number>();
+  for (const day of days) {
+    for (const p of day.priorities) dates.set(p.uid, [...(dates.get(p.uid) ?? []), day.date]);
+    for (const s of day.sessions) {
+      if (s.status !== 'completed' || s.priorityUid == null) continue;
+      logged.set(s.priorityUid, (logged.get(s.priorityUid) ?? 0) + (s.endedAt! - s.startedAt) / 1000 - s.pausedSeconds);
+    }
+  }
+  return days.map((day) => ({
     ...day,
-    priorities: day.priorities.map((p) => (p.recurringUid != null ? p : { ...p, cardUid: p.cardUid ?? cardFor(dayIndex, p.position) })),
-  };
+    priorities: day.priorities.map((p) => {
+      const on = dates.get(p.uid)!;
+      return { ...p, listed: on.length, earlier: on.filter((d) => d < day.date).length, logged: logged.get(p.uid) ?? 0 };
+    }),
+  }));
 }
 
 /**
- * The board: the categories, the recurring priorities, the captured cards, handled on the board,
- * and a card for every one-off row of the last weekday and of today, as their saves with the
- * board on made them (untouched), each in step with its latest linked row: its title and
- * category, open in Next, ticked in Done when that day's review was written (today's, an hour
- * after clock-in). New cards went to the top of Next, so today's are above the last weekday's,
- * and both above the captured one.
+ * The tasks and the board: the categories, the recurring priorities, a task for every one-off text
+ * the days list, and the captured tasks, handled on the board. The last weekday's and today's open
+ * one-offs are in Next, as the board had them, today's above the last weekday's and both above
+ * the captured one; a done one is in no lane, since its tick says where it shows, and so are the
+ * older days' tasks. Returns each task's id by its uid, for the entries and sessions that name it.
  */
-function insertBoard(db: DB, userId: number, last: SeededDay | undefined, today: SeededDay, now: number): void {
+function insertItems(db: DB, userId: number, days: DayDraft[]): Map<string, number> {
   const category = db.prepare(`INSERT INTO categories (user_id, uid, name, color) VALUES (?, ?, ?, ?)`);
   for (const c of SEEDED_CATEGORIES) category.run(userId, c.uid, c.name, c.color);
-  const recurring = db.prepare(`INSERT INTO recurring (user_id, uid, title, category_uid, weekdays) VALUES (?, ?, ?, ?, ?)`);
-  for (const r of SEEDED_RECURRING) recurring.run(userId, r.uid, r.title, r.categoryUid, weekdayMask(r.weekdays));
-  const made = new Map<string, { title: string; categoryUid: string | null; lane: Lane; createdAt: number; doneAt: number | null }>();
+  const insert = db.prepare(
+    `INSERT INTO items (user_id, uid, title, category_uid, weekdays, lane, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+  );
+  const ids = new Map<string, number>();
+  const add = (uid: string, title: string, categoryUid: string | null, weekdays: number | null, lane: OpenLane | null, position: number, createdAt: number) =>
+    ids.set(uid, (insert.get(userId, uid, title, categoryUid, weekdays, lane, position, createdAt) as { id: number }).id);
+
+  const first = days[0]!;
+  for (const r of SEEDED_RECURRING) add(r.uid, r.title, r.categoryUid, weekdayMask(r.weekdays), null, 0, first.createdAt);
+  const [last, today] = days.length > 1 ? days.slice(-2) : [undefined, first];
   let next: string[] = [];
   for (const day of [last, today]) {
-    if (!day) continue;
-    const doneAt = day.retroAt ?? Math.min(now, day.punches[0]!.at! + HOUR_MS);
-    const fresh: string[] = [];
-    for (const p of day.priorities) {
-      const uid = p.cardUid;
-      if (uid == null) continue;
-      if (!made.has(uid) && !p.done) fresh.push(uid);
-      made.set(uid, {
-        title: p.text,
-        categoryUid: p.categoryUid,
-        lane: p.done ? 'done' : 'next',
-        createdAt: made.get(uid)?.createdAt ?? p.addedAt,
-        doneAt: p.done ? doneAt : null,
-      });
-    }
+    const fresh = (day?.priorities ?? []).filter((p) => !p.recurring && !p.done && !next.includes(p.uid)).map((p) => p.uid);
     next = [...fresh, ...next];
   }
   const captured = CAPTURED.map(([title, lane], i) => ({ uid: `card${String(i + 1).padStart(8, '0')}`, title, lane }));
@@ -585,22 +582,27 @@ function insertBoard(db: DB, userId: number, last: SeededDay | undefined, today:
     later: captured.filter((c) => c.lane === 'later').map((c) => c.uid),
     next: [...next, ...captured.filter((c) => c.lane === 'next').map((c) => c.uid)],
   };
-  const position = (uid: string, lane: Lane) => (lane === 'done' ? 0 : order[lane].indexOf(uid) + 1);
-  const insert = db.prepare(
-    `INSERT INTO board_cards (user_id, uid, title, category_uid, lane, position, created_at, done_at, untouched) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
-  for (const [uid, card] of made) insert.run(userId, uid, card.title, card.categoryUid, card.lane, position(uid, card.lane), card.createdAt, card.doneAt, 1);
+  const laneOf = (uid: string): [OpenLane | null, number] => {
+    const lane = (['later', 'next'] as const).find((l) => order[l].includes(uid));
+    return lane ? [lane, order[lane].indexOf(uid) + 1] : [null, 0];
+  };
+  for (const day of days) {
+    for (const p of day.priorities) {
+      if (p.recurring || ids.has(p.uid)) continue;
+      add(p.uid, p.text, p.categoryUid, null, ...laneOf(p.uid), p.addedAt);
+    }
+  }
   // Captured a few minutes apart, just before the last weekday's list was written.
-  const capturedAt = (last ?? today).createdAt;
-  captured.forEach((c, i) =>
-    insert.run(userId, c.uid, c.title, categoryFor(c.title), c.lane, position(c.uid, c.lane), capturedAt - (captured.length - i) * 5 * MINUTE_MS, null, 0),
-  );
+  const capturedAt = (last ?? today!).createdAt;
+  captured.forEach((c, i) => add(c.uid, c.title, categoryFor(c.title), null, ...laneOf(c.uid), capturedAt - (captured.length - i) * 5 * MINUTE_MS));
+  return ids;
 }
 
 /**
- * Replaces the user's days and board (cards, categories, recurring priorities) with the sample
- * set. Users are never deleted: in AUTH_MODE=none the running server holds the default user's
- * row for its lifetime, so recreating it would leave the server pointing at a dead id.
+ * Replaces the user's days, tasks (deleted ones' tombstones included: the sample's uids are fixed,
+ * and one left from a task deleted in the browser would hold its uid) and categories with the
+ * sample set. Users are never deleted: in AUTH_MODE=none the running server holds the default
+ * user's row for its lifetime, so recreating it would leave the server pointing at a dead id.
  */
 export function seedDatabase(db: DB, opts: SeedOptions): SeedManifest {
   const history = opts.days ?? DEFAULT_HISTORY_DAYS;
@@ -608,22 +610,18 @@ export function seedDatabase(db: DB, opts: SeedOptions): SeedManifest {
   const note = noteRotation();
   const dates = weekdaysBefore(opts.today, history);
   return db.transaction((): SeedManifest => {
+    // The days first: their entries and sessions name the tasks.
     db.prepare(`DELETE FROM days WHERE user_id = ?`).run(opts.userId);
-    db.prepare(`DELETE FROM board_cards WHERE user_id = ?`).run(opts.userId);
+    db.prepare(`DELETE FROM items WHERE user_id = ?`).run(opts.userId);
     db.prepare(`DELETE FROM categories WHERE user_id = ?`).run(opts.userId);
-    db.prepare(`DELETE FROM recurring WHERE user_id = ?`).run(opts.userId);
     if (opts.fresh) {
       db.prepare(`DELETE FROM settings WHERE user_id = ?`).run(opts.userId);
       revokeSessions(db, opts.userId);
     }
-    const drafts = dates.map((date, i) => buildPastDay(date, i, kindForDistance(dates.length - 1 - i), rand, note));
-    // The last weekday's rows got their cards when it was saved with the board on.
-    const lastIndex = drafts.length - 1;
-    if (lastIndex >= 0) drafts[lastIndex] = withCards(drafts[lastIndex]!, lastIndex);
-    const days = drafts.map((draft) => insertDay(db, opts.userId, draft));
-    const today = insertDay(db, opts.userId, withCards(buildToday(opts.today, opts.now, dates.length, Boolean(opts.running), days.at(-1)), dates.length));
-    insertBoard(db, opts.userId, days.at(-1), today, opts.now);
-    days.push(today);
+    const past = dates.map((date, i) => buildPastDay(date, kindForDistance(dates.length - 1 - i), rand, note));
+    const drafts = withCounts([...past, buildToday(opts.today, opts.now, Boolean(opts.running), past.at(-1))]);
+    const items = insertItems(db, opts.userId, drafts);
+    const days = drafts.map((draft) => insertDay(db, opts.userId, draft, items));
     return { days, board: boardJson(db, opts.userId, opts.now) };
   })();
 }
