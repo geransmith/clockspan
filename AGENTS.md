@@ -49,8 +49,8 @@ shared/                 imported by both sides, always with a `.js` suffix
                         MAX_PRIORITIES, SETTING_LIMITS, RETENTION_LIMITS
   api.ts                every wire type and `emptyDay`; the server's JSON builders and client/src/api.ts both use them,
                         the input limits both sides check (LIMITS, USERNAME, PASSWORD_LENGTH), the board's
-                        lanes (LANES), the server's caps on it (BOARD_LIMITS) and the category colours
-                        (CATEGORY_COLORS)
+                        lanes (LANES), the server's caps on it (BOARD_LIMITS), the category colours
+                        (CATEGORY_COLORS) and the header naming the server's version (VERSION_HEADER)
   sounds.ts             the sound catalog (SOUNDS, SOUND_EVENTS)
   dates.ts, timer.ts    date keys; pause-aware session timing (activeMs, plannedEndAt, pausedSecondsAfter,
                         PLANNED_SECONDS)
@@ -68,7 +68,8 @@ shared/                 imported by both sides, always with a `.js` suffix
   backoff.ts            nextBackoff: the wait between retries of a request that must answer
 server/                 Express API → dist/server
   app.ts                createApp(): headers, /api/health, /api/auth/me for every mode, auth routers,
-                        data routers behind requireAuth, static files and the SPA fallback;
+                        data routers behind requireAuth (each answer naming the server's version),
+                        static files and the SPA fallback;
                         startBackgroundJobs() (the login purge, the retention schedule and, under
                         OIDC, warming the `Discovery` index.ts passes in; started by index.ts only)
   security.ts           every security header, rejectCrossSiteWrites and rejectUnknownHosts
@@ -97,7 +98,8 @@ client/                 Vite root → dist/client
   src/App.tsx           Shell (route, settings dialog) inside AppProviders (hooks/AppProviders.tsx); today's
                         alarms are hooks/useTodayAlarms.ts
   src/api.ts            fetch wrapper (30 s timeout; UNAUTHENTICATED_EVENT on a 401 from anything but login and
-                        /me; throws lib/apiError.ts's ApiError, which a caller checks with instanceof);
+                        /me; the reload banner when an answer names another version; throws
+                        lib/apiError.ts's ApiError, which a caller checks with instanceof);
                         src/types.ts re-exports the shared types (types only)
   src/lib/              logic with no React, a test beside each file (the browser-facing ones stub the
                         globals, as alerts.ts does; apiError is covered through api.test)
@@ -296,7 +298,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   under `AUTH_MODE=none` only, on `/api` after `/api/health`, and reads the raw `Host` header,
   never `req.hostname`. Headers that describe one answer stay with the code that sends it: the
   static files' `Cache-Control` in `app.ts` and `Retry-After` in `refuseTooMany`
-  (`auth/limiter.ts`).
+  (`auth/limiter.ts`). `Clockspan-Version`, which guards nothing, is set in `app.ts` on the data
+  router (see "A page left open across an update asks to be reloaded").
 - **Cookies, sessions and passwords stay in `server/auth/`.** A request's cookies are read only
   through `readCookie()` (`auth/session.ts`), and `Set-Cookie` is written only through
   `cookieHeader()` there; outside `server/dev/` (the test harness's cookie jar) no other module
@@ -886,6 +889,19 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   chunk that fails to load (an upgrade while the page was open) reloads the page once a minute
   at most (`vite:preloadError` in `main.tsx`, `lib/reload.ts`); the `ErrorBoundary` card shows
   until the reload lands, and stays when no reload is made.
+- **A page left open across an update asks to be reloaded.** Every answer of the data routes, a
+  refusal included, names the server's version in `Clockspan-Version` (`VERSION_HEADER`,
+  `shared/api.ts`), set in `app.ts` on the `api` router after `requireAuth` and
+  `requireOwnPassword`, so no answer to someone not signed in (`/api/health`, `/api/auth/*`, a
+  401) says which version runs. It guards nothing, so it stays out of `security.ts`. The server reads its version from the nearest `package.json`
+  (`findPackageJSON`: the repo's in dev and tests, and in the image the one copied beside
+  `dist/`, which also makes `dist/server` an ES module); the client's build carries its own as
+  `__APP_VERSION__` (`define` in `vite.config.ts`). `request()` (`client/src/api.ts`) compares
+  the two on every answer that has the header, and on a mismatch raises the `UPDATED` banner
+  through `alerts.ts`: info, sticky, no chime and no notification, with a Reload button. It is
+  raised once per server version heard, never on each answer, so a closed one stays closed until
+  the server moves again. An `edge` image carries the last release's number, so only a release
+  asks.
 - **A wide window shows the sheet in two columns, chosen when the sheet mounts.** Each layout
   entry has a `side` (`'left' | 'right'`), which `normalizeLayout` keeps or sets to the card's
   `DEFAULT_SIDE` (`shared/settings.ts`), so a layout saved before the columns needs no
@@ -1210,6 +1226,11 @@ The browser pass for each surface (the logic under it is already tested):
 - **Sounds**: Settings → Alarms → Sounds. Test on a clip row fetches the file once (the network
   list); a second Test fetches nothing. A clock-out set today plays the day-complete sound once,
   and not again on reload.
+- **The update banner**: in the page, wrap `window.fetch` so each answer that has a
+  `Clockspan-Version` header names another version (a new `Response` over the same body, with
+  that header changed), then switch views. Look at the info banner with its Reload button at
+  desktop width and at the 375 px preset, in light and dark. That it shows once, stays, stays
+  closed and reloads is `api.test.ts`'s.
 - **Punches**: a pair added before lunch, an early Clock out (done, celebration), "Add extra
   out / in" after it (the old Clock out becomes Out N) and removing that pair. In the time
   field: clear Clock in and press `0` `7` `3` `0` (the hour advances, the period fills, the

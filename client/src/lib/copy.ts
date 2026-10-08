@@ -327,6 +327,16 @@ export const REQUEST_FAILED = (status: number) => `Request failed (${status})`;
 export const UNREADABLE_ANSWER = (status: number) => `Unreadable answer (${status})`;
 
 /**
+ * The banner when the server names a version other than this page's build (`api.ts`): the page
+ * was loaded before an update, and its saves may not suit the new server. The button reloads.
+ */
+export const UPDATED = {
+  title: 'Clockspan was updated',
+  body: 'Reload the page so your changes keep saving.',
+  reload: 'Reload',
+} as const;
+
+/**
  * In place of what could not be fetched (a sheet's day, the next-day planner's, a History tab's
  * days), and the banner a failed day load raises; the button asks again. Covers a refusal too,
  * like `SAVE_FAILED`.

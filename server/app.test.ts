@@ -8,6 +8,7 @@ import { loadConfig } from './config.js';
 import { ensureDefaultUser, openDatabase } from './db.js';
 import { countRows, SEED_TODAY, startTestApp, tempClientBuild, writeClientBuild, type TestApp } from './dev/harness.js';
 import { Discovery } from './auth/oidc.js';
+import { VERSION_HEADER } from '../shared/api.js';
 
 describe('response headers', () => {
   let app: TestApp;
@@ -47,6 +48,50 @@ describe('response headers', () => {
     app = await startTestApp({ env: { APP_URL: 'https://focus.example.com' } });
     const res = await app.api.get('/api/health');
     expect(res.headers.get('strict-transport-security')).toMatch(/^max-age=\d+$/);
+  });
+});
+
+describe('the version header', () => {
+  let app: TestApp;
+  afterEach(() => app.close());
+
+  // The repo's package.json, which is the nearest one to the server's source; the image copies
+  // the same file beside dist/.
+  const version = (JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../package.json'), 'utf8')) as { version: string }).version;
+
+  it("names the server's version on every data answer, a refusal included, so an open page can tell it is out of date", async () => {
+    app = await startTestApp();
+    const settings = await app.api.get('/api/settings');
+    expect(settings.status).toBe(200);
+    expect(settings.headers.get(VERSION_HEADER)).toBe(version);
+    const refused = await app.api.get('/api/days/not-a-date');
+    expect(refused.status).toBe(400);
+    expect(refused.headers.get(VERSION_HEADER)).toBe(version);
+  });
+
+  it('tells it to no one who has not signed in: not on the health check, the auth routes, a 401 or a temporary password', async () => {
+    app = await startTestApp({ authMode: 'local' });
+    const health = await app.api.get('/api/health');
+    expect(health.status).toBe(200);
+    expect(health.headers.get(VERSION_HEADER)).toBeNull();
+    const me = await app.api.get('/api/auth/me');
+    expect(me.status).toBe(200);
+    expect(me.headers.get(VERSION_HEADER)).toBeNull();
+    const lost = await app.api.get('/api/settings');
+    expect(lost.status).toBe(401);
+    expect(lost.headers.get(VERSION_HEADER)).toBeNull();
+
+    // Signed in, the data answers carry it and the auth routes still don't.
+    const { member, a, b } = await app.twoUsers();
+    expect((await a.get('/api/settings')).headers.get(VERSION_HEADER)).toBe(version);
+    expect((await a.get('/api/auth/me')).headers.get(VERSION_HEADER)).toBeNull();
+
+    // On a temporary password the data routes are shut until a password is chosen, and the
+    // refusal comes before the header.
+    app.db.prepare('UPDATE users SET must_change_password = 1 WHERE id = ?').run(member.id);
+    const blocked = await b.get('/api/settings');
+    expect(blocked.status).toBe(403);
+    expect(blocked.headers.get(VERSION_HEADER)).toBeNull();
   });
 });
 

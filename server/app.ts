@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import { findPackageJSON } from 'node:module';
 import express, { type Express } from 'express';
 import type { Config } from './config.js';
 import { hasLocalUser, type DB } from './db.js';
@@ -16,8 +17,14 @@ import { breaksRouter } from './routes/breaks.js';
 import { daysRouter } from './routes/days.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { settingsRouter } from './routes/settings.js';
-import type { AuthInfo, OkResponse } from '../shared/api.js';
+import { VERSION_HEADER, type AuthInfo, type OkResponse } from '../shared/api.js';
 import { HOUR_MS } from '../shared/dates.js';
+
+/**
+ * This server's version, from the nearest package.json: the repo's in dev and tests, and in the
+ * image the one copied beside dist/, which is also the file that makes dist/server an ES module.
+ */
+const VERSION = (JSON.parse(fs.readFileSync(findPackageJSON(import.meta.url)!, 'utf8')) as { version: string }).version;
 
 export interface AppOptions {
   /** Where the built client lives; the default is `dist/client` next to the built server. */
@@ -72,7 +79,13 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
 
   // ----- data (all behind auth, all scoped to req.user) -----
   const api = express.Router();
-  api.use(requireAuth, requireOwnPassword);
+  // Each data answer, a refusal included, names the server's version, so a page loaded before
+  // an update can tell and ask for a reload (client/src/api.ts). Only once signed in: the
+  // health check, the auth routes and a 401 tell no one which version runs here.
+  api.use(requireAuth, requireOwnPassword, (_req, res, next) => {
+    res.setHeader(VERSION_HEADER, VERSION);
+    next();
+  });
   api.use('/settings', settingsRouter(db));
   api.use('/days', daysRouter(db, config));
   api.use('/sessions', sessionsRouter(db));

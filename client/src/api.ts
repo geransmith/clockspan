@@ -27,8 +27,10 @@ import type {
   UserResponse,
   UsersResponse,
 } from './types';
+import { VERSION_HEADER } from '../../shared/api.js';
+import { alert } from './lib/alerts';
 import { ApiError } from './lib/apiError';
-import { REQUEST_FAILED, REQUEST_TIMEOUT, UNREADABLE_ANSWER } from './lib/copy';
+import { REQUEST_FAILED, REQUEST_TIMEOUT, UNREADABLE_ANSWER, UPDATED } from './lib/copy';
 
 export const UNAUTHENTICATED_EVENT = 'focus:unauthenticated';
 
@@ -43,6 +45,31 @@ export const REQUEST_TIMEOUT_MS = 30_000;
 
 const timedOut = (err: unknown): boolean => err instanceof DOMException && err.name === 'TimeoutError';
 
+/** The server version the update banner was raised for, so a closed banner stays closed until the server moves again. */
+let announced: string | null = null;
+
+/**
+ * Every signed-in data answer names the server's version (`VERSION_HEADER`). One that isn't
+ * this build's means the page was loaded before an update, and its saves may not suit the new
+ * server, so it asks for a reload: one quiet banner, kept until closed, raised once per version
+ * heard rather than on every answer. A refusal counts too, since a save the new server turns
+ * down is often the first answer to bring the news.
+ */
+function noticeVersion(version: string | null): void {
+  if (version === null || version === __APP_VERSION__ || version === announced) return;
+  announced = version;
+  alert({
+    title: UPDATED.title,
+    body: UPDATED.body,
+    tone: 'info',
+    tag: 'updated',
+    sticky: true,
+    action: { label: UPDATED.reload, run: () => window.location.reload() },
+    sound: false,
+    notifications: false,
+  });
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   let res: Response;
   try {
@@ -56,6 +83,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   } catch (err) {
     throw timedOut(err) ? new Error(REQUEST_TIMEOUT) : err;
   }
+  noticeVersion(res.headers.get(VERSION_HEADER));
   let data: unknown = null;
   try {
     data = await res.json();
