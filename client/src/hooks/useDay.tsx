@@ -87,10 +87,11 @@ interface DayStore {
   /** The day as the store shows it now, changes on their way included: for a board job that reads the list again after an await. */
   shown: (date: string) => Day | undefined;
   /**
-   * Add a priority from outside the card (the timer). Resolves to the uid of the row as stored,
-   * which is another device's when it added the same text first; rejects if it could not be saved.
+   * Add a priority from outside the card (the timer), in `categoryUid` if given. Resolves to the
+   * uid of the row as stored, which is another device's when it added the same text first;
+   * rejects if it could not be saved.
    */
-  addPriority: (date: string, text: string) => Promise<string>;
+  addPriority: (date: string, text: string, categoryUid?: string | null) => Promise<string>;
   /**
    * Resolves once no priorities save for that date is out or waiting, saved or not, and never
    * rejects. A write that names a priority's uid waits on it, because the server refuses a uid
@@ -442,12 +443,12 @@ export function DayProvider({ children }: { children: ReactNode }) {
   );
 
   const addPriority = useCallback(
-    async (date: string, text: string) => {
+    async (date: string, text: string, categoryUid: string | null = null) => {
       const day = shownDay(current().days[date]);
       // Only onto a list the store holds: where the row goes depends on the rows already there.
       if (!day) throw new Error(ADD_PRIORITY_FAILED.notLoaded);
       const uid = newUid();
-      const row = { text, done: false, uid, addedAt: Date.now(), cardUid: null, recurringUid: null, categoryUid: null };
+      const row = { text, done: false, uid, addedAt: Date.now(), cardUid: null, recurringUid: null, categoryUid };
       const next = placePriority(day.priorities, priorityCount.current, row);
       if (!next) throw new Error(ADD_PRIORITY_FAILED.full);
       // A timer must not start against a uid the server never stored.

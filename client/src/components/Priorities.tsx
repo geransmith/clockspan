@@ -4,6 +4,7 @@ import { useCelebration, type Moment } from '../hooks/useCelebration';
 import { useDebouncedDraft } from '../hooks/useDebouncedDraft';
 import { useSettings } from '../hooks/useSettings';
 import { unlockAudio } from '../lib/alerts';
+import type { CategoryPick } from '../lib/board';
 import { EMPTIED_ROW, LEFT_OPEN, WARNING_ACTIONS } from '../lib/copy';
 import { formatDuration } from '../lib/format';
 import { planNext, type PrioritySeed } from '../lib/plan';
@@ -14,6 +15,7 @@ import { LIMITS } from '../../../shared/api.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import type { Priority, Session } from '../types';
 import { Burst } from './Burst';
+import { CategoryChip } from './CategoryChip';
 import { Check, Plus, X } from './Icons';
 
 interface Props {
@@ -22,6 +24,8 @@ interface Props {
   sessions: Session[];
   /** `base`: the rows the edits were made on, the list the card last sent or last took up from `priorities`. */
   onChange: (priorities: Priority[], base: Priority[]) => void;
+  /** The category chip's data: each row with text gets a chip. Null (the board off) shows none. */
+  pick?: CategoryPick | null;
   /**
    * What the last planned day left unticked (`from` names that day), offered while the list is
    * empty: its rows as seeds, which the board may have retitled from their cards.
@@ -34,7 +38,7 @@ interface Props {
  * keystroke; checkboxes, add and remove save immediately. Keyed by date in the sheet, so a
  * new day mounts fresh instead of carrying drafts over.
  */
-export function Priorities({ priorities, sessions, onChange, leftOpen }: Props) {
+export function Priorities({ priorities, sessions, onChange, pick = null, leftOpen }: Props) {
   const { settings } = useSettings();
   const count = settings.priorityCount;
   const stored = useMemo(() => padPriorities(priorities, count), [priorities, count]);
@@ -147,6 +151,8 @@ export function Priorities({ priorities, sessions, onChange, leftOpen }: Props) 
       {local.map((p) => {
         const empty = !hasText(p);
         const removable = p.position > count;
+        // A written row only: an empty one has nothing to file yet, and keeps the plain grid.
+        const chip = pick != null && !empty;
         const placeholder = p.position === 1 ? 'The one thing to get done' : `Priority ${p.position}`;
         // A cleared row is still the same item: the focus logged on it stays, and a new priority
         // goes past it. The draft's row decides, so the first key typed takes the note away.
@@ -154,7 +160,7 @@ export function Priorities({ priorities, sessions, onChange, leftOpen }: Props) 
         const heldId = `${noteId}-held-${p.position}`;
         return (
           <Fragment key={p.position}>
-            <div className={`priority-row${p.done ? ' is-done' : ''}${removable ? ' priority-row--removable' : ''}`}>
+            <div className={`priority-row${p.done ? ' is-done' : ''}${removable ? ' priority-row--removable' : ''}${chip ? ' priority-row--end' : ''}`}>
               <span className="priority-num" aria-hidden="true">
                 {p.position}
               </span>
@@ -200,6 +206,20 @@ export function Priorities({ priorities, sessions, onChange, leftOpen }: Props) 
                   maxLength={LIMITS.priorityText}
                 />
               </span>
+              {chip && (
+                <span className="priority-end">
+                  {/* A pick saves at once, as a tick does. Keyed by the row, since the rows are by
+                      position: a row another device's change moves here gets a chip of its own,
+                      closed, so a list left open never picks for it. */}
+                  <CategoryChip
+                    key={p.uid}
+                    value={p.categoryUid}
+                    onChange={(categoryUid) => edit(p.position, { categoryUid }, true)}
+                    pick={pick}
+                    label={`Category for priority ${p.position}`}
+                  />
+                </span>
+              )}
               {removable && (
                 <button
                   className="btn btn-icon priority-remove"

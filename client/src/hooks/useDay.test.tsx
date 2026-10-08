@@ -630,7 +630,20 @@ describe('priorities', () => {
     });
     const rows = result.current.days[TODAY]!.priorities;
     expect(rows.map((p) => p.text)).toEqual(['First', 'From the timer', '']);
-    expect(rows[1]).toMatchObject({ uid, addedAt: T0 });
+    expect(rows[1]).toMatchObject({ uid, addedAt: T0, categoryUid: null });
+  });
+
+  it('addPriority writes the row in the category it is given, and sends it', async () => {
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [makePriority(1, 'First')] }));
+    vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
+    const { result } = renderStore();
+    await settle();
+    let uid = '';
+    await act(async () => {
+      uid = await result.current.addPriority(TODAY, 'From the timer', 'cat000000001');
+    });
+    expect(vi.mocked(api.putPriorities).mock.lastCall![1][1]).toMatchObject({ uid, text: 'From the timer', categoryUid: 'cat000000001' });
+    expect(result.current.days[TODAY]!.priorities[1]).toMatchObject({ uid, categoryUid: 'cat000000001' });
   });
 
   it('addPriority passes a cleared row, which keeps its uid and the sessions on it, for one never written in', async () => {

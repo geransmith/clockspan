@@ -78,6 +78,18 @@ describe('CategoryChip', () => {
     expect(isOpen()).toBe(false);
   });
 
+  it('leaves the focus where it is on a press, for the list to take as it opens and give back to the chip as it closes', () => {
+    renderChip(ADMIN.uid);
+    // false: the press's default, which moves the focus (to the page, in Safari), was stopped.
+    expect(fireEvent.mouseDown(chip())).toBe(false);
+    fireEvent.click(chip());
+    expect(document.activeElement).toBe(options()[2]);
+    expect(fireEvent.mouseDown(chip())).toBe(false);
+    fireEvent.click(chip());
+    expect(isOpen()).toBe(false);
+    expect(document.activeElement).toBe(chip());
+  });
+
   it('opens on ArrowDown with the focus on No category when none is set', () => {
     renderChip();
     expect(key(chip(), 'ArrowDown')).toBe(false);

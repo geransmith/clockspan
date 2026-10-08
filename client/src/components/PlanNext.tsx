@@ -3,6 +3,7 @@ import { useCelebration, type Moment } from '../hooks/useCelebration';
 import { useDay } from '../hooks/useDay';
 import { useSettings } from '../hooks/useSettings';
 import { unlockAudio } from '../lib/alerts';
+import type { CategoryPick } from '../lib/board';
 import { LOAD_FAILED, PLAN_NEXT } from '../lib/copy';
 import { dayName } from '../lib/format';
 import { nextWorkDay, planNext, textSeed } from '../lib/plan';
@@ -12,6 +13,7 @@ import { sameText } from '../../../shared/text.js';
 import { LIMITS } from '../../../shared/api.js';
 import type { Priority } from '../types';
 import { Burst } from './Burst';
+import { CategoryChip } from './CategoryChip';
 import { Plus } from './Icons';
 import { LoadFailed } from './LoadFailed';
 
@@ -19,13 +21,15 @@ interface Props {
   today: string;
   /** That day's priorities: the unticked ones are offered for the next day. */
   priorities: Priority[];
+  /** The category chip's data: each row typed in gets a chip. Null (the board off) shows none. */
+  pick?: CategoryPick | null;
 }
 
 /**
  * The end of the retrospective: put what's left, and anything new, on the next work day's
  * list tonight, while it's fresh. The day only loads once the planner opens.
  */
-export function PlanNext({ today, priorities }: Props) {
+export function PlanNext({ today, priorities, pick = null }: Props) {
   const { settings } = useSettings();
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -43,6 +47,7 @@ export function PlanNext({ today, priorities }: Props) {
           date={next}
           name={name}
           candidates={priorities.filter(isOpen)}
+          pick={pick}
           onDone={(added) => {
             setOpen(false);
             setReturnFocus(true);
@@ -82,12 +87,14 @@ function Planner({
   date,
   name,
   candidates,
+  pick,
   onDone,
   onCancel,
 }: {
   date: string;
   name: string;
   candidates: Priority[];
+  pick: CategoryPick | null;
   onDone: (added: number) => void;
   onCancel: () => void;
 }) {
@@ -95,7 +102,8 @@ function Planner({
   // Today's open rows start ticked: carrying them over is the usual answer. Held by uid, since
   // removing a row on the Priorities card (or on another device) renumbers the rest while this is open.
   const [picked, setPicked] = useState(() => new Set(candidates.map((p) => p.uid)));
-  const [extra, setExtra] = useState<string[]>([]);
+  // The rows typed in, each with the category its chip set.
+  const [extra, setExtra] = useState<{ text: string; categoryUid: string | null }[]>([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const onList = day?.priorities.filter(hasText) ?? [];
@@ -104,9 +112,10 @@ function Planner({
   const offered = candidates.filter((p) => !onList.some((q) => sameText(q.text) === sameText(p.text) || sharesLink(q, p)));
 
   const addDraft = () => {
-    if (draft.trim()) setExtra((x) => [...x, draft.trim()]);
+    if (draft.trim()) setExtra((x) => [...x, { text: draft.trim(), categoryUid: null }]);
     setDraft('');
   };
+  const setCategory = (i: number, categoryUid: string | null) => setExtra((x) => x.map((e, j) => (j === i ? { ...e, categoryUid } : e)));
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
       e.preventDefault();
@@ -117,8 +126,10 @@ function Planner({
     if (!day) return;
     // The tap is the gesture iOS needs: the "next day planned" sound plays after the save answers.
     unlockAudio();
-    // A row carried over is the same task: its links go with it, read as the rows are now.
-    const seeds = [...offered.filter((p) => picked.has(p.uid)), ...[...extra, draft].map(textSeed)];
+    // A row carried over is the same task: its links go with it, read as the rows are now. What
+    // is still in the box, never entered, has had no chip, so it goes with no category; so do the
+    // rows typed in once the board is off, whose chips are gone.
+    const seeds = [...offered.filter((p) => picked.has(p.uid)), ...extra.map((e) => textSeed(e.text, pick ? e.categoryUid : null)), textSeed(draft)];
     const { rows, added } = planNext(day.priorities, seeds);
     if (added === 0) {
       onDone(0);
@@ -159,9 +170,10 @@ function Planner({
               </label>
             </li>
           ))}
-          {extra.map((text, i) => (
+          {extra.map(({ text, categoryUid }, i) => (
             <li key={`extra-${i}`} className="plan-next-extra">
-              <Plus /> <span>{text}</span>
+              <Plus /> <span className="plan-next-extra-text">{text}</span>
+              {pick && <CategoryChip value={categoryUid} onChange={(uid) => setCategory(i, uid)} pick={pick} label={`Category for ${text}`} />}
             </li>
           ))}
         </ul>

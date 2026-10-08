@@ -5,7 +5,22 @@ import * as api from '../api';
 import { useDay } from '../hooks/useDay';
 import { dismissByTag, unlockAudio } from '../lib/alerts';
 import { BREAK } from '../lib/copy';
-import { AppProviders, deferred, makeBreak, makeDay, makePriority, makeSession, makeSettings, settle, T0, TODAY } from '../test/hooks';
+import type { CategoryPick } from '../lib/board';
+import {
+  AppProviders,
+  deferred,
+  endSession,
+  makeBreak,
+  makeCategory,
+  makeDay,
+  makePick,
+  makePriority,
+  makeSession,
+  makeSettings,
+  settle,
+  T0,
+  TODAY,
+} from '../test/hooks';
 import type { Break, Priority, SessionResponse } from '../types';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { FocusTimer } from './FocusTimer';
@@ -14,23 +29,40 @@ vi.mock('../api');
 vi.mock('../lib/alerts');
 
 /** The card as the sheet wires it: today's priorities from the store, and the store's addPriority. */
-function Card() {
+function Card({ pick }: { pick: CategoryPick | null }) {
   const { day, store } = useDay(TODAY);
   if (!day) return null;
-  return <FocusTimer date={TODAY} isToday priorities={day.priorities} onAddPriority={(text) => store.addPriority(TODAY, text)} />;
+  return (
+    <FocusTimer
+      date={TODAY}
+      isToday
+      priorities={day.priorities}
+      pick={pick}
+      onAddPriority={(text, categoryUid) => store.addPriority(TODAY, text, categoryUid)}
+    />
+  );
 }
 
 /** `n` priority rows, all ticked. */
 const ticked = (n: number) => Array.from({ length: n }, (_, i) => makePriority(i + 1, `Row ${i + 1}`, { done: true }));
 
-async function renderCard(priorities: Priority[] = [], breaks: Break[] = []) {
+async function renderCard(priorities: Priority[] = [], breaks: Break[] = [], pick: CategoryPick | null = null) {
   vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities, breaks }));
-  render(
+  const view = render(
     <AppProviders>
-      <Card />
+      <Card pick={pick} />
     </AppProviders>,
   );
   await settle();
+  return {
+    /** The board goes off (on another device): the sheet passes no chip data. */
+    boardOff: () =>
+      view.rerender(
+        <AppProviders>
+          <Card pick={null} />
+        </AppProviders>,
+      ),
+  };
 }
 
 const start25 = () => screen.getByRole('button', { name: /^25\s*min$/ });
@@ -154,6 +186,84 @@ describe('FocusTimer', () => {
     expect(unlockAudio).toHaveBeenCalled();
     await settle();
     expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Call the vendor', expect.any(String));
+  });
+
+  describe("the new row's category", () => {
+    const TICKETS = makeCategory('cat000000001', 'Tickets');
+    const ADMIN = makeCategory('cat000000002', 'Admin', { color: 'teal' });
+    const chip = () => screen.queryByRole('button', { name: /^Category for the new priority:/ });
+
+    it('offers a chip only while Also add is ticked, and adds the row in the category picked', async () => {
+      vi.mocked(api.startSession).mockResolvedValue(started());
+      await renderCard([], [], makePick([TICKETS, ADMIN]));
+      typeLabel('Call the vendor');
+      expect(chip()).toBeNull();
+      fireEvent.click(alsoAdd()!);
+      expect(chip()!.getAttribute('aria-label')).toBe('Category for the new priority: none');
+      fireEvent.click(chip()!);
+      fireEvent.click(screen.getByRole('option', { name: 'Admin' }));
+      expect(chip()!.getAttribute('aria-label')).toBe('Category for the new priority: Admin');
+      // Unticked, the chip goes and nothing is sent; ticked again, the pick is still there.
+      fireEvent.click(alsoAdd()!);
+      expect(chip()).toBeNull();
+      fireEvent.click(alsoAdd()!);
+      expect(chip()!.getAttribute('aria-label')).toBe('Category for the new priority: Admin');
+      expect(api.putPriorities).not.toHaveBeenCalled();
+
+      fireEvent.click(start25());
+      await settle();
+      const row = vi.mocked(api.putPriorities).mock.lastCall![1][0]!;
+      expect(row).toMatchObject({ text: 'Call the vendor', categoryUid: ADMIN.uid });
+      expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Call the vendor', row.uid);
+    });
+
+    it('starts the next session with no category, as the label starts empty', async () => {
+      vi.mocked(api.startSession).mockResolvedValue(started());
+      vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(makeSession({ label: 'Call the vendor' })) });
+      await renderCard([], [], makePick([TICKETS]));
+      typeLabel('Call the vendor');
+      fireEvent.click(alsoAdd()!);
+      fireEvent.click(chip()!);
+      fireEvent.click(screen.getByRole('option', { name: 'Tickets' }));
+      fireEvent.click(start25());
+      await settle();
+      fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+      await settle();
+      expect(screen.getByLabelText<HTMLInputElement>('Session label').value).toBe('');
+      typeLabel('Email the vendor');
+      fireEvent.click(alsoAdd()!);
+      expect(chip()!.getAttribute('aria-label')).toBe('Category for the new priority: none');
+    });
+
+    it('offers no category again once the row is added, a failed start included', async () => {
+      vi.mocked(api.startSession).mockRejectedValueOnce(new Error('The server did not answer in time.'));
+      await renderCard([], [], makePick([TICKETS]));
+      typeLabel('Call the vendor');
+      fireEvent.click(alsoAdd()!);
+      fireEvent.click(chip()!);
+      fireEvent.click(screen.getByRole('option', { name: 'Tickets' }));
+      fireEvent.click(start25());
+      await settle();
+      expect(vi.mocked(api.putPriorities).mock.lastCall![1][0]).toMatchObject({ text: 'Call the vendor', categoryUid: TICKETS.uid });
+      // The start failed after the row went on the list, linked: unlinked, the label offers Also add again.
+      fireEvent.click(screen.getByRole('button', { name: /Call the vendor/, pressed: true }));
+      fireEvent.click(alsoAdd()!);
+      expect(chip()!.getAttribute('aria-label')).toBe('Category for the new priority: none');
+    });
+
+    it('adds the row with no category with the board off, a pick made before it went off included', async () => {
+      vi.mocked(api.startSession).mockResolvedValue(started());
+      const { boardOff } = await renderCard([], [], makePick([TICKETS]));
+      typeLabel('Call the vendor');
+      fireEvent.click(alsoAdd()!);
+      fireEvent.click(chip()!);
+      fireEvent.click(screen.getByRole('option', { name: 'Tickets' }));
+      boardOff();
+      expect(chip()).toBeNull();
+      fireEvent.click(start25());
+      await settle();
+      expect(vi.mocked(api.putPriorities).mock.lastCall![1][0]).toMatchObject({ text: 'Call the vendor', categoryUid: null });
+    });
   });
 
   it('retries a failed start against the row it already added, not a second copy', async () => {

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { useBoardState } from '../hooks/useBoard';
+import { useBoardState, useCategoryPick } from '../hooks/useBoard';
 import { useDay } from '../hooks/useDay';
 import { useLeftOpen } from '../hooks/useLeftOpen';
 import { useRange } from '../hooks/useRange';
@@ -54,6 +54,8 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
   // back under the card's title; until the board has loaded, nothing is offered.
   const { leftOpen, dismiss: dismissLeftOpen } = useLeftOpen(today, isToday && day != null && !day.priorities.some(hasText));
   const { board, on: boardOn } = useBoardState();
+  // The category chip on the cards that offer one; null while the board is off or not read yet, and then no chip shows.
+  const pick = useCategoryPick();
   const leftovers = leftOpen && (boardOn ? offeredLeftovers(leftOpen.rows, board?.cards) : leftOpen.rows);
 
   const layout = settings.layout;
@@ -139,6 +141,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
             key={date}
             priorities={day.priorities}
             sessions={day.sessions}
+            pick={pick}
             onChange={(p, base) => void store.setPriorities(date, p, base)}
             leftOpen={
               leftOpen && leftovers?.length
@@ -152,9 +155,17 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
           />
         );
       case 'timer':
-        return <FocusTimer date={date} isToday={isToday} priorities={day.priorities} onAddPriority={(text) => store.addPriority(date, text)} />;
+        return (
+          <FocusTimer
+            date={date}
+            isToday={isToday}
+            priorities={day.priorities}
+            pick={pick}
+            onAddPriority={(text, categoryUid) => store.addPriority(date, text, categoryUid)}
+          />
+        );
       case 'log':
-        return <SessionLog date={date} isToday={isToday} sessions={day.sessions} breaks={day.breaks} priorities={day.priorities} now={now} />;
+        return <SessionLog date={date} isToday={isToday} sessions={day.sessions} breaks={day.breaks} priorities={day.priorities} pick={pick} now={now} />;
       case 'retro':
         return (
           <Retro
@@ -165,6 +176,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
             sessions={day.sessions}
             note={day.retroNote}
             reviewedAt={day.retroAt}
+            pick={pick}
             onChange={(patch) => store.setRetro(date, patch)}
           />
         );

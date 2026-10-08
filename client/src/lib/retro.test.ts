@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { completedSession, makeDay, makePriority, makeSession, punchesAt } from '../test/fixtures';
 import type { Day } from '../types';
-import { focusOf, hasContent, loggedByUid, reviewDay } from './retro';
+import { focusOf, hasContent, loggedByUid, reviewDay, sessionCategory, sessionCategoryEdit, sessionLinkEdit } from './retro';
 
 const FIRST_UID = makePriority(1, '').uid;
 
@@ -35,6 +35,78 @@ describe('loggedByUid', () => {
       ]),
     );
     expect(loggedByUid([]).size).toBe(0);
+  });
+});
+
+describe("a session's category", () => {
+  const TICKETS = 'cat000000001';
+  const ADMIN = 'cat000000002';
+  const report = makePriority(1, 'Report', { categoryUid: TICKETS });
+  const email = makePriority(2, 'Email');
+  const emptied = makePriority(3, '', { uid: 'emptied00000', categoryUid: ADMIN });
+  const rows = [report, email, emptied];
+  const on = (priorityUid: string | null, categoryUid: string | null = null) => completedSession(1, 0, 600, { priorityUid, categoryUid });
+
+  describe('sessionCategory', () => {
+    it("is the written row's category while the session is on one, none included, over its own pick", () => {
+      expect(sessionCategory(on(report.uid), rows)).toBe(TICKETS);
+      expect(sessionCategory(on(report.uid, ADMIN), rows)).toBe(TICKETS);
+      expect(sessionCategory(on(email.uid, ADMIN), rows)).toBeNull();
+    });
+
+    it("is the session's own category off a written row: unplanned, on a row since removed, or on an emptied one", () => {
+      expect(sessionCategory(on(null, ADMIN), rows)).toBe(ADMIN);
+      expect(sessionCategory(on('removed00000', ADMIN), rows)).toBe(ADMIN);
+      expect(sessionCategory(on(emptied.uid, TICKETS), rows)).toBe(TICKETS);
+    });
+
+    it("is an emptied row's category when the session has none of its own, else none", () => {
+      expect(sessionCategory(on(emptied.uid), rows)).toBe(ADMIN);
+      expect(sessionCategory(on(emptied.uid), [{ ...emptied, categoryUid: null }])).toBeNull();
+      expect(sessionCategory(on('removed00000'), rows)).toBeNull();
+      expect(sessionCategory(on(null), rows)).toBeNull();
+    });
+  });
+
+  describe('sessionCategoryEdit', () => {
+    it("sets a category as the session's own, and leaves a session on an emptied row on it", () => {
+      expect(sessionCategoryEdit(on(emptied.uid), rows, TICKETS)).toEqual({ categoryUid: TICKETS });
+      expect(sessionCategoryEdit(on(null), rows, ADMIN)).toEqual({ categoryUid: ADMIN });
+    });
+
+    it('takes a session off an emptied row for none when the row has a category, and only then', () => {
+      expect(sessionCategoryEdit(on(emptied.uid), rows, null)).toEqual({ categoryUid: null, priorityUid: null });
+      expect(sessionCategoryEdit(on(emptied.uid, TICKETS), rows, null)).toEqual({ categoryUid: null, priorityUid: null });
+      expect(sessionCategoryEdit(on(emptied.uid, TICKETS), [{ ...emptied, categoryUid: null }], null)).toEqual({ categoryUid: null });
+      expect(sessionCategoryEdit(on('removed00000', ADMIN), rows, null)).toEqual({ categoryUid: null });
+      expect(sessionCategoryEdit(on(null, ADMIN), rows, null)).toEqual({ categoryUid: null });
+      // The log offers no pick on a written row; an edit there would leave the session on it.
+      expect(sessionCategoryEdit(on(report.uid, ADMIN), rows, null)).toEqual({ categoryUid: null });
+    });
+
+    it('makes a session on no written row count under what was picked, none included', () => {
+      for (const s of [on(null, ADMIN), on('removed00000', TICKETS), on(emptied.uid), on(emptied.uid, TICKETS)]) {
+        for (const picked of [TICKETS, ADMIN, null]) expect(sessionCategory({ ...s, ...sessionCategoryEdit(s, rows, picked) }, rows)).toBe(picked);
+      }
+    });
+  });
+
+  describe('sessionLinkEdit', () => {
+    it('drops a category of its own when the session is linked to a row, which decides from then on', () => {
+      expect(sessionLinkEdit(on(null, ADMIN), report.uid)).toEqual({ priorityUid: report.uid, categoryUid: null });
+      expect(sessionLinkEdit(on(null), report.uid)).toEqual({ priorityUid: report.uid });
+    });
+
+    it('keeps the category of its own when the session is unlinked', () => {
+      expect(sessionLinkEdit(on(report.uid, ADMIN), null)).toEqual({ priorityUid: null });
+    });
+
+    it("keeps a linked session under its row's category once the row is emptied, not an earlier pick", () => {
+      // Picked Admin while unplanned, then linked to the report, which is emptied later.
+      const linked = { ...on(null, ADMIN), ...sessionLinkEdit(on(null, ADMIN), report.uid) };
+      expect(sessionCategory(linked, rows)).toBe(TICKETS);
+      expect(sessionCategory(linked, [{ ...report, text: '' }])).toBe(TICKETS);
+    });
   });
 });
 

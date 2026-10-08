@@ -111,4 +111,8 @@ describe('textSeed', () => {
   it('is a priority typed new: its text, linked to nothing', () => {
     expect(textSeed('Pay rent')).toEqual({ text: 'Pay rent', cardUid: null, recurringUid: null, categoryUid: null });
   });
+
+  it('takes the category it is given, and still no card or recurring priority', () => {
+    expect(textSeed('Pay rent', 'cat000000001')).toEqual({ text: 'Pay rent', cardUid: null, recurringUid: null, categoryUid: 'cat000000001' });
+  });
 });

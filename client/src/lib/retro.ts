@@ -1,3 +1,4 @@
+import type { SessionEdit } from '../api';
 import type { CompletedSession, Day, Priority, Session } from '../types';
 import { hasText } from '../../../shared/priorities.js';
 
@@ -49,6 +50,46 @@ export function loggedByUid(sessions: Session[]): Map<string, number> {
     out.set(s.priorityUid, (out.get(s.priorityUid) ?? 0) + s.durationSeconds);
   }
   return out;
+}
+
+/** The row of its day that a session's `priorityUid` names, while that row is on the list. */
+function namedRow(s: Session, rows: Priority[]): Priority | undefined {
+  return s.priorityUid == null ? undefined : rows.find((p) => p.uid === s.priorityUid);
+}
+
+/**
+ * The category a session counts under, given the rows of its own day. A session on a written
+ * row counts under that row's category, none included, so retagging the row moves its time.
+ * Off a written row, the session's own category decides: one picked in the log, or the one the
+ * server copied from its row when a save removed it. Failing that, an emptied row it still names
+ * keeps the time under that row's category. Else none.
+ */
+export function sessionCategory(s: Session, rows: Priority[]): string | null {
+  const row = namedRow(s, rows);
+  if (row && hasText(row)) return row.categoryUid;
+  return s.categoryUid ?? row?.categoryUid ?? null;
+}
+
+/**
+ * The day log's edit that makes a session on no written row count under `categoryUid`
+ * (`sessionCategory`). A category is set as the session's own, which outranks an emptied row it
+ * names. None can't be stored that way, since no category of its own means "go by that row": a
+ * session on an emptied row that has a category leaves the row as well (`priorityUid: null`).
+ * The log already shows it as unplanned; the row's note about the time kept on it stops
+ * counting it.
+ */
+export function sessionCategoryEdit(s: Session, rows: Priority[], categoryUid: string | null): Pick<SessionEdit, 'categoryUid' | 'priorityUid'> {
+  const row = namedRow(s, rows);
+  return categoryUid == null && row != null && !hasText(row) && row.categoryUid != null ? { categoryUid, priorityUid: null } : { categoryUid };
+}
+
+/**
+ * The day log's edit that links a session to a written row, or to none. Linked, the row decides
+ * its category, so a category of its own goes: kept, it would outrank the row's once the row was
+ * emptied, and the server copies a removed row's category only onto sessions that have none.
+ */
+export function sessionLinkEdit(s: Session, priorityUid: string | null): Pick<SessionEdit, 'categoryUid' | 'priorityUid'> {
+  return priorityUid != null && s.categoryUid != null ? { priorityUid, categoryUid: null } : { priorityUid };
 }
 
 /**

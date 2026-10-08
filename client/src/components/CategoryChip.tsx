@@ -157,7 +157,12 @@ export function CategoryChip({ value, onChange, pick, label }: Props) {
         aria-controls={open ? listId : undefined}
         aria-label={`${label}: ${current?.name ?? 'none'}`}
         title={current?.name}
-        onClick={() => (open ? setOpen(false) : openList())}
+        onClick={() => (open ? close() : openList())}
+        // Safari, and Firefox on macOS, don't focus a button they press, so the focus would leave
+        // for the page, and a box that ends its edit when the focus leaves it (a day log row's)
+        // would end it. A press leaves the focus where it is: until the list opens and takes it,
+        // or, open, until the list closes and gives it to the chip.
+        onMouseDown={(e) => e.preventDefault()}
         onKeyDown={(e) => {
           if (escape(e) || e.key !== 'ArrowDown') return;
           e.preventDefault();
