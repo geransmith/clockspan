@@ -135,7 +135,7 @@ describe('daySummaryOf', () => {
 });
 
 describe('a recurring priority, which counts as a priority', () => {
-  const queue = makePriority(2, 'Monitor the queue', { recurringUid: 'rcur00000001' });
+  const queue = makePriority(2, 'Monitor the queue', { uid: 'rcur00000001', recurring: true });
   const day = (routineDone: boolean) =>
     daySummaryOf(makeDay('2026-09-14', { priorities: [makePriority(1, 'Report', { done: true }), { ...queue, done: routineDone }] }));
 

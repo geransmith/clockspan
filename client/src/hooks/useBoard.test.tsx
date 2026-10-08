@@ -2,22 +2,11 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
-import { DAY_MS, MINUTE_MS } from '../../../shared/dates.js';
+import { BOARD_LIMITS } from '../../../shared/api.js';
+import { MINUTE_MS } from '../../../shared/dates.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { warnQuietly } from '../lib/alerts';
-import {
-  MoveRefused,
-  withCard,
-  withCategory,
-  withCategoryPatch,
-  withoutCard,
-  withoutCategory,
-  withoutRecurring,
-  withPatch,
-  withRecurring,
-  withRecurringPatch,
-  type StoreMove,
-} from '../lib/board';
+import { MoveRefused, withCategory, withCategoryPatch, withItem, withItemPatch, withoutCategory, withoutItem, type StoreMove } from '../lib/board';
 import { ADD_PRIORITY_FAILED, BOARD, SAVE_FAILED } from '../lib/copy';
 import {
   apiError,
@@ -30,15 +19,18 @@ import {
   makePriority,
   makeRecurring,
   makeSettings,
+  serveRange,
   settle,
   SettingsAndDays,
   setVisibility,
   T0,
   TODAY,
+  YESTERDAY,
 } from '../test/hooks';
 import type { Board, Day, Priority } from '../types';
 import { useBoardState, useBoardStore, useCategoryPick } from './useBoard';
-import { useDay, useDayStore } from './useDay';
+import { useDay, useDays, useDayStore } from './useDay';
+import { useLeftOpen } from './useLeftOpen';
 import { useSettings } from './useSettings';
 
 vi.mock('../api');
@@ -51,7 +43,7 @@ function renderBoard({ strict = false, today = true } = {}) {
   return renderHook(
     () => {
       if (today) useDay(TODAY);
-      return { ...useBoardState(), store: useBoardStore(), days: useDayStore(), updateSettings: useSettings().update };
+      return { ...useBoardState(), store: useBoardStore(), days: useDayStore(), generation: useDays().generation, updateSettings: useSettings().update };
     },
     { wrapper: SettingsAndDays, reactStrictMode: strict },
   );
@@ -62,12 +54,12 @@ let onServer: Board;
 /** Each day's list on the server, stored as each PUT sends it. */
 let lists: Record<string, Priority[]>;
 
-const putCalls = () =>
-  vi.mocked(api.putPriorities).mock.calls.map(([date, list, put]) => ({ date, texts: list.map((p) => p.text), cards: put.cards, touched: put.touched }));
-const LANE_ORDER = { later: 0, next: 1, done: 2 };
-/** The board's cards' titles in the order the server sends them: Later, Next, then Done, each by position. */
+const putCalls = () => vi.mocked(api.putPriorities).mock.calls.map(([date, list]) => ({ date, texts: list.map((p) => p.text) }));
+const LANE_ORDER = { later: 0, next: 1 };
+/** The board's tasks' titles in Later then Next, each by position, then the rest in the order sent. */
 const shownTexts = (b: Board | undefined) =>
-  b && [...b.cards].sort((x, y) => LANE_ORDER[x.lane] - LANE_ORDER[y.lane] || x.position - y.position).map((c) => c.title);
+  b && [...b.cards].sort((x, y) => (x.lane ? LANE_ORDER[x.lane] : 2) - (y.lane ? LANE_ORDER[y.lane] : 2) || x.position - y.position).map((c) => c.title);
+const callOrder = (fn: (...args: never[]) => unknown, n = 0) => vi.mocked(fn).mock.invocationCallOrder[n]!;
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
@@ -78,15 +70,12 @@ beforeEach(() => {
   vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(makeDay(date, { priorities: lists[date] ?? [] })));
   vi.mocked(api.putPriorities).mockImplementation((date, list) => Promise.resolve({ priorities: (lists[date] = list) }));
   vi.mocked(api.getBoard).mockImplementation(() => Promise.resolve(onServer));
-  vi.mocked(api.addCard).mockImplementation((card) => Promise.resolve((onServer = withCard(onServer, card, T0))));
-  vi.mocked(api.patchCard).mockImplementation((uid, { today: _today, ...patch }) => Promise.resolve((onServer = withPatch(onServer, uid, patch))));
-  vi.mocked(api.deleteCard).mockImplementation((uid) => Promise.resolve((onServer = withoutCard(onServer, uid))));
+  vi.mocked(api.addItem).mockImplementation((item) => Promise.resolve((onServer = withItem(onServer, item, T0))));
+  vi.mocked(api.editItem).mockImplementation((uid, patch) => Promise.resolve((onServer = withItemPatch(onServer, uid, patch))));
+  vi.mocked(api.deleteItem).mockImplementation((uid) => Promise.resolve((onServer = withoutItem(onServer, uid))));
   vi.mocked(api.addCategory).mockImplementation((c) => Promise.resolve((onServer = withCategory(onServer, c))));
   vi.mocked(api.patchCategory).mockImplementation((uid, patch) => Promise.resolve((onServer = withCategoryPatch(onServer, uid, patch))));
   vi.mocked(api.deleteCategory).mockImplementation((uid) => Promise.resolve((onServer = withoutCategory(onServer, uid))));
-  vi.mocked(api.addRecurring).mockImplementation((item) => Promise.resolve((onServer = withRecurring(onServer, item))));
-  vi.mocked(api.patchRecurring).mockImplementation((uid, patch) => Promise.resolve((onServer = withRecurringPatch(onServer, uid, patch))));
-  vi.mocked(api.deleteRecurring).mockImplementation((uid) => Promise.resolve((onServer = withoutRecurring(onServer, uid))));
 });
 afterEach(() => {
   cleanup();
@@ -110,8 +99,9 @@ describe('reading the board', () => {
     expect(result.current.board).toBeUndefined();
   });
 
-  it('reads at once when switched on, once under StrictMode, and keeps the board when switched off', async () => {
+  it("reads at once when switched on, once under StrictMode, sends nothing for today's rows, and keeps the board when switched off", async () => {
     vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
+    lists[TODAY] = [makePriority(1, 'Typed with the board off')];
     const { result } = renderBoard({ strict: true });
     await settle();
     expect(api.getBoard).not.toHaveBeenCalled();
@@ -120,6 +110,8 @@ describe('reading the board', () => {
     expect(api.getBoard).toHaveBeenCalledTimes(1);
     expect(result.current).toMatchObject({ on: true, failed: false });
     expect(shownTexts(result.current.board)).toEqual(['Write a KB', 'Follow up']);
+    // In progress is today's list: nothing is sent to show it.
+    expect(api.putPriorities).not.toHaveBeenCalled();
 
     await act(() => result.current.updateSettings({ board: false }));
     await settle(5 * MINUTE_MS);
@@ -195,181 +187,156 @@ describe('reading the board', () => {
     vi.mocked(api.getBoard).mockReturnValueOnce(old.promise);
     act(() => void result.current.store.load());
     const stale = onServer;
-    await act(() => result.current.store.addCard({ uid: 'new000000001', title: 'Captured', categoryUid: null, lane: 'later', before: null }));
+    await act(() => result.current.store.addItem({ uid: 'new000000001', title: 'Captured', categoryUid: null, lane: 'later', before: null }));
     old.resolve(stale);
     await settle();
     expect(shownTexts(result.current.board)).toEqual(['Write a KB', 'Captured', 'Follow up']);
   });
-});
 
-describe('the sweep', () => {
-  it("asks for cards for today's rows typed before the board was on, once, after the first read finds today held", async () => {
-    lists[TODAY] = [makePriority(1, 'Typed with the board off'), makePriority(2, 'Already carded', { cardUid: 'next00000001' })];
-    renderBoard();
-    await settle();
-    expect(putCalls()).toEqual([{ date: TODAY, texts: ['Typed with the board off', 'Already carded', ''], cards: true, touched: undefined }]);
-    // Once a day: the next read sends nothing, though the echo left the row without a card.
-    await settle(MINUTE_MS);
-    expect(api.getBoard).toHaveBeenCalledTimes(2);
-    expect(api.putPriorities).toHaveBeenCalledTimes(1);
-  });
-
-  it('sends nothing when every row has a card or is a recurring priority, and looks again on a new day', async () => {
-    lists[TODAY] = [makePriority(1, 'Carded', { cardUid: 'next00000001' }), makePriority(2, 'Monitor the queue', { recurringUid: 'rec000000001' })];
+  it('offers the recurring priorities the server has confirmed, never one whose create is still out', async () => {
+    const queue = makeRecurring('rcur00000001', 'Monitor the queue');
+    onServer = { ...onServer, recurring: [queue] };
     const { result } = renderBoard();
     await settle();
-    expect(api.putPriorities).not.toHaveBeenCalled();
-    // A new day, held, with a row from before the board: swept after the next read.
-    vi.setSystemTime(T0 + DAY_MS);
-    lists[TOMORROW] = [makePriority(1, 'Planned while off')];
-    await act(() => result.current.days.load(TOMORROW));
-    await settle(MINUTE_MS);
-    expect(putCalls()).toEqual([{ date: TOMORROW, texts: ['Planned while off', '', ''], cards: true, touched: undefined }]);
+    expect(result.current.recurring).toEqual([queue]);
+    const created = deferred<Board>();
+    vi.mocked(api.addItem).mockReturnValueOnce(created.promise);
+    const timesheet = { uid: 'rcur00000002', title: 'Timesheet', categoryUid: null, weekdays: [5] };
+    act(() => {
+      void result.current.store.addItem(timesheet);
+      void result.current.store.editItem(queue.uid, { title: 'Watch the queue' });
+    });
+    expect(result.current.board?.recurring.map((r) => r.title)).toEqual(['Watch the queue', 'Timesheet']);
+    // A rename on its way shows; a recurring priority the server doesn't hold yet isn't offered.
+    expect(result.current.recurring?.map((r) => r.title)).toEqual(['Watch the queue']);
+    created.resolve((onServer = withItem(onServer, timesheet, T0)));
+    await settle();
+    expect(result.current.recurring?.map((r) => r.title)).toEqual(['Watch the queue', 'Timesheet']);
   });
 
-  it('sends nothing when the rows have their cards by the time its turn on the board queue comes', async () => {
-    lists[TODAY] = [makePriority(1, 'Typed with the board off')];
-    const capture = deferred<Board>();
-    vi.mocked(api.addCard).mockReturnValueOnce(capture.promise);
-    const read = deferred<Board>();
-    vi.mocked(api.getBoard).mockReturnValueOnce(read.promise);
+  it('offers no recurring priority before the first read', async () => {
+    vi.mocked(api.getBoard).mockReturnValueOnce(new Promise(() => {}));
     const { result } = renderBoard();
     await settle();
-    // A capture is out on the board queue when the read lands, so the sweep waits behind it.
-    act(() => void result.current.store.addCard({ uid: 'cap000000001', title: 'Captured', categoryUid: null, lane: 'later', before: null }));
-    read.resolve(onServer);
-    await settle();
-    // Meanwhile the sheet saved the row, and the server gave it its card.
-    const shown = result.current.days.shown(TODAY)!.priorities;
-    vi.mocked(api.putPriorities).mockImplementationOnce((date, list) =>
-      Promise.resolve({ priorities: (lists[date] = list.map((p) => ({ ...p, cardUid: 'card00000001' }))) }),
-    );
-    await act(() => result.current.days.setPriorities(TODAY, shown, shown));
-    capture.resolve(onServer);
-    await settle();
-    expect(api.putPriorities).toHaveBeenCalledTimes(1);
-  });
-
-  it('waits for today to be held, and tries again after a read when its save failed', async () => {
-    const day = deferred<Day>();
-    vi.mocked(api.getDay).mockReturnValueOnce(day.promise);
-    renderBoard();
-    await settle();
-    expect(api.getBoard).toHaveBeenCalledTimes(1);
-    lists[TODAY] = [makePriority(1, 'From before')];
-    day.resolve(makeDay(TODAY, { priorities: lists[TODAY] }));
-    await settle();
-    expect(api.putPriorities).not.toHaveBeenCalled();
-
-    vi.mocked(api.putPriorities).mockRejectedValueOnce(new Error('offline'));
-    await settle(MINUTE_MS);
-    expect(api.putPriorities).toHaveBeenCalledTimes(1);
-    await settle(MINUTE_MS);
-    expect(putCalls().map((c) => c.cards)).toEqual([true, true]);
+    expect(result.current.recurring).toBeUndefined();
   });
 });
 
-describe('card writes', () => {
+describe('task writes', () => {
   it('show at once and go out one after another', async () => {
     const first = deferred<Board>();
-    vi.mocked(api.addCard).mockReturnValueOnce(first.promise);
+    vi.mocked(api.addItem).mockReturnValueOnce(first.promise);
     const { result } = renderBoard();
     await settle();
+    const captured = { uid: 'one000000001', title: 'One', categoryUid: null, lane: 'later' as const, before: 'later0000001' };
     act(() => {
-      void result.current.store.addCard({ uid: 'one000000001', title: 'One', categoryUid: null, lane: 'later', before: 'later0000001' });
-      void result.current.store.editCard('next00000001', { lane: 'later', before: null });
+      void result.current.store.addItem(captured);
+      void result.current.store.editItem('next00000001', { lane: 'later', before: null });
     });
     expect(shownTexts(result.current.board)).toEqual(['One', 'Write a KB', 'Follow up']);
     expect(result.current.board?.cards.find((c) => c.uid === 'next00000001')?.lane).toBe('later');
-    expect(api.patchCard).not.toHaveBeenCalled();
-    first.resolve((onServer = withCard(onServer, { uid: 'one000000001', title: 'One', categoryUid: null, lane: 'later', before: 'later0000001' }, T0)));
+    expect(api.editItem).not.toHaveBeenCalled();
+    first.resolve((onServer = withItem(onServer, captured, T0)));
     await settle();
-    expect(api.patchCard).toHaveBeenCalledExactlyOnceWith('next00000001', { today: TODAY, lane: 'later', before: null });
+    expect(api.editItem).toHaveBeenCalledExactlyOnceWith('next00000001', { lane: 'later', before: null });
     expect(result.current.board).toEqual(onServer);
   });
 
-  it('take a failed change off, reject, and read the board again', async () => {
+  it('take a failed change off, reject, and read the board again: a refusal of any kind', async () => {
     const { result } = renderBoard();
     await settle();
-    vi.mocked(api.addCard).mockRejectedValueOnce(new Error('offline'));
+    vi.mocked(api.addItem).mockRejectedValueOnce(new Error('offline'));
     await expect(
-      act(() => result.current.store.addCard({ uid: 'lost00000001', title: 'Lost', categoryUid: null, lane: 'next', before: null })),
+      act(() => result.current.store.addItem({ uid: 'lost00000001', title: 'Lost', categoryUid: null, lane: 'next', before: null })),
     ).rejects.toThrow('offline');
     expect(shownTexts(result.current.board)).toEqual(['Write a KB', 'Follow up']);
     expect(api.getBoard).toHaveBeenCalledTimes(2);
-  });
-
-  it('read today and the board again on a 409, and reject with the stale line', async () => {
-    const { result } = renderBoard();
-    await settle();
-    vi.mocked(api.patchCard).mockRejectedValueOnce(apiError(409));
-    const err = await act(() => result.current.store.editCard('later0000001', { title: 'Renamed' }).catch((e: unknown) => e));
-    expect(err).toBeInstanceOf(MoveRefused);
-    expect((err as Error).message).toBe(BOARD.stale);
-    expect(api.getDay).toHaveBeenCalledTimes(2);
-    expect(api.getBoard).toHaveBeenCalledTimes(2);
+    // A task deleted on another device.
+    vi.mocked(api.editItem).mockRejectedValueOnce(apiError(404));
+    const err = await act(() => result.current.store.editItem('later0000001', { title: 'Renamed' }).catch((e: unknown) => e));
+    expect(err).toMatchObject({ status: 404 });
+    expect(err).not.toBeInstanceOf(MoveRefused);
     expect(shownTexts(result.current.board)).toEqual(['Write a KB', 'Follow up']);
+    expect(api.getBoard).toHaveBeenCalledTimes(3);
+    expect(api.getDay).toHaveBeenCalledTimes(1);
   });
 
-  it("read the board again after a read still out on a 409, which may predate the other device's change", async () => {
+  it("read today's list again after an edit of a task it holds, a recurring priority renamed in Settings, and no other day", async () => {
+    const queue = makeRecurring('rcur00000001', 'Monitor the queue');
+    onServer = { ...onServer, recurring: [queue] };
+    lists[TODAY] = [makePriority(1, 'Monitor the queue', { uid: queue.uid, recurring: true })];
     const { result } = renderBoard();
     await settle();
-    const old = deferred<Board>();
-    vi.mocked(api.getBoard).mockReturnValueOnce(old.promise);
-    act(() => void result.current.store.load());
-    vi.mocked(api.patchCard).mockRejectedValueOnce(apiError(409));
-    const refused = begin(() => result.current.store.editCard('later0000001', { title: 'Renamed' }).catch((e: unknown) => e));
+    await act(() => result.current.store.editItem('later0000001', { title: 'Write the KB' }));
+    expect(api.getDay).toHaveBeenCalledTimes(1);
+    // The server renamed it on every day: today's read takes the new name.
+    const read = deferred<Day>();
+    vi.mocked(api.getDay).mockReturnValueOnce(read.promise);
+    await act(() => result.current.store.editItem(queue.uid, { title: 'Watch the queue' }));
+    expect(api.getDay).toHaveBeenCalledTimes(2);
+    read.resolve(makeDay(TODAY, { priorities: [{ ...lists[TODAY][0]!, text: 'Watch the queue' }] }));
     await settle();
-    expect(api.getBoard).toHaveBeenCalledTimes(2);
-    old.resolve(onServer);
-    expect(await act(() => refused)).toBeInstanceOf(MoveRefused);
-    expect(api.getBoard).toHaveBeenCalledTimes(3);
+    expect(result.current.days.shown(TODAY)?.priorities[0]?.text).toBe('Watch the queue');
+  });
+});
+
+describe('with the board off', () => {
+  beforeEach(() => {
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
+  });
+
+  it('sends a write, keeps no board from its answer, and reads none after a failure', async () => {
+    lists[TODAY] = [makePriority(1, 'Report', { uid: 'task00000001', listed: 2 })];
+    const { result } = renderBoard();
+    await settle();
+    await act(() => result.current.store.deleteItem('task00000001'));
+    expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith('task00000001');
+    expect(result.current.board).toBeUndefined();
+    vi.mocked(api.deleteItem).mockRejectedValueOnce(apiError(500));
+    await expect(act(() => result.current.store.deleteItem('task00000002'))).rejects.toThrow('Request failed (500)');
+    await settle();
+    expect(result.current.board).toBeUndefined();
+    expect(api.getBoard).not.toHaveBeenCalled();
   });
 });
 
 describe('moves', () => {
-  const carded = (position: number, text: string, cardUid: string, patch: Partial<Priority> = {}) => makePriority(position, text, { cardUid, ...patch });
   const move = (result: ReturnType<typeof renderBoard>['result'], m: StoreMove) => act(() => result.current.store.move(m));
+  /** A task's row as a pull builds it: the task itself, stamped by the store as it goes out. */
+  const pulled = (uid: string, text: string, done = false): Omit<Priority, 'position'> => ({ ...makePriority(0, text, { uid, done, addedAt: null }) });
 
-  it("pull a card onto today's list inside the job, touched, and the next board write waits for that save", async () => {
-    lists[TODAY] = [carded(1, 'Report', 'card00000001')];
+  it("pull a task onto today's list inside the job, as itself, and the next board write waits for that save", async () => {
+    lists[TODAY] = [makePriority(1, 'Report')];
     const { result } = renderBoard();
     await settle();
     const save = deferred<{ priorities: Priority[] }>();
     vi.mocked(api.putPriorities).mockReturnValueOnce(save.promise);
-    const row = { uid: 'pulled000001', addedAt: null, text: 'Write a KB', done: false, cardUid: 'later0000001', recurringUid: null, categoryUid: null };
     act(() => {
-      void result.current.store.move({ kind: 'place', row, nudge: true });
-      void result.current.store.addCard({ uid: 'after0000001', title: 'After', categoryUid: null, lane: 'next', before: null });
+      void result.current.store.move({ kind: 'place', row: pulled('later0000001', 'Write a KB'), nudge: true });
+      void result.current.store.addItem({ uid: 'after0000001', title: 'After', categoryUid: null, lane: 'next', before: null });
     });
     await settle();
-    expect(putCalls()).toEqual([{ date: TODAY, texts: ['Report', 'Write a KB', ''], cards: true, touched: ['later0000001'] }]);
-    // Stamped as it goes out: a row new to today's list.
-    expect(vi.mocked(api.putPriorities).mock.calls[0]![1][1]).toMatchObject({ uid: 'pulled000001', addedAt: T0 });
-    expect(api.addCard).not.toHaveBeenCalled();
+    expect(putCalls()).toEqual([{ date: TODAY, texts: ['Report', 'Write a KB', ''] }]);
+    // Stamped as it goes out: an entry new to today's list.
+    expect(vi.mocked(api.putPriorities).mock.calls[0]![1][1]).toMatchObject({ uid: 'later0000001', addedAt: T0 });
+    expect(api.addItem).not.toHaveBeenCalled();
     save.resolve({ priorities: vi.mocked(api.putPriorities).mock.calls[0]![1] });
     await settle();
-    expect(api.addCard).toHaveBeenCalledTimes(1);
+    expect(api.addItem).toHaveBeenCalledTimes(1);
   });
 
-  it('put a card in Done as a ticked row of today', async () => {
+  it('put a task in Done as a ticked row of today', async () => {
     const { result } = renderBoard();
     await settle();
-    const row = { uid: 'ticked000001', addedAt: T0, text: 'Follow up', done: true, cardUid: 'next00000001', recurringUid: null, categoryUid: null };
-    await move(result, { kind: 'place', row, nudge: false });
-    expect(lists[TODAY]![0]).toMatchObject({ text: 'Follow up', done: true, cardUid: 'next00000001' });
-    expect(putCalls()[0]!.touched).toEqual(['next00000001']);
+    await move(result, { kind: 'place', row: pulled('next00000001', 'Follow up', true), nudge: false });
+    expect(lists[TODAY]![0]).toMatchObject({ uid: 'next00000001', text: 'Follow up', done: true });
   });
 
   it('refuse a pull onto a full list or one not loaded, and say when the save failed', async () => {
-    lists[TODAY] = Array.from({ length: MAX_PRIORITIES }, (_, i) => makePriority(i + 1, `Row ${i + 1}`, { cardUid: `card${i}`.padEnd(12, '0') }));
+    lists[TODAY] = Array.from({ length: MAX_PRIORITIES }, (_, i) => makePriority(i + 1, `Row ${i + 1}`, { uid: `task${i}`.padEnd(12, '0') }));
     const { result } = renderBoard();
     await settle();
-    const place = (cardUid: string): StoreMove => ({
-      kind: 'place',
-      row: { uid: 'x00000000001', addedAt: T0, text: 'X', done: false, cardUid, recurringUid: null, categoryUid: null },
-      nudge: true,
-    });
+    const place = (uid: string): StoreMove => ({ kind: 'place', row: pulled(uid, 'X'), nudge: true });
     await expect(move(result, place('later0000001'))).rejects.toThrow(new MoveRefused(ADD_PRIORITY_FAILED.full));
     lists[TODAY] = [];
     await act(() => result.current.days.load(TODAY));
@@ -387,261 +354,259 @@ describe('moves', () => {
   it("refuse a tick or a rename while today's list is not loaded", async () => {
     const { result } = renderBoard({ today: false });
     await settle();
-    await expect(move(result, { kind: 'tick', rowUid: 'row000000001', done: true, cardUid: null })).rejects.toThrow(
-      new MoveRefused(ADD_PRIORITY_FAILED.notLoaded),
-    );
-    await expect(act(() => result.current.store.editRow('row000000001', { text: 'New' }, null))).rejects.toThrow(
-      new MoveRefused(ADD_PRIORITY_FAILED.notLoaded),
-    );
+    await expect(move(result, { kind: 'tick', uid: 'row000000001', done: true })).rejects.toThrow(new MoveRefused(ADD_PRIORITY_FAILED.notLoaded));
+    await expect(act(() => result.current.store.editRow('row000000001', { text: 'New' }))).rejects.toThrow(new MoveRefused(ADD_PRIORITY_FAILED.notLoaded));
   });
 
-  it("tick and untick a row of today's list with its card as touched, and leave a row gone meanwhile alone", async () => {
-    lists[TODAY] = [carded(1, 'Report', 'card00000001')];
+  it("tick and untick a row of today's list, and leave a row gone meanwhile alone", async () => {
+    lists[TODAY] = [makePriority(1, 'Report')];
     const { result } = renderBoard();
     await settle();
     const uid = lists[TODAY]![0]!.uid!;
-    await move(result, { kind: 'tick', rowUid: uid, done: true, cardUid: 'card00000001' });
+    await move(result, { kind: 'tick', uid, done: true });
     expect(lists[TODAY]![0]!.done).toBe(true);
-    await move(result, { kind: 'tick', rowUid: uid, done: false, cardUid: 'card00000001' });
+    await move(result, { kind: 'tick', uid, done: false });
     expect(lists[TODAY]![0]!.done).toBe(false);
-    expect(putCalls().map((c) => c.touched)).toEqual([['card00000001'], ['card00000001']]);
-    await move(result, { kind: 'tick', rowUid: 'gone00000001', done: true, cardUid: null });
+    await move(result, { kind: 'tick', uid: 'gone00000001', done: true });
     expect(api.putPriorities).toHaveBeenCalledTimes(2);
   });
 
-  it('rename a row of today, or give it a category, with its card as touched', async () => {
-    lists[TODAY] = [carded(1, 'Report', 'card00000001')];
+  it('rename a row of today, or give it a category, through the list', async () => {
+    lists[TODAY] = [makePriority(1, 'Report')];
     const { result } = renderBoard();
     await settle();
     const uid = lists[TODAY]![0]!.uid!;
-    await act(() => result.current.store.editRow(uid, { text: 'Report v2' }, 'card00000001'));
-    expect(putCalls()).toEqual([{ date: TODAY, texts: ['Report v2', '', ''], cards: true, touched: ['card00000001'] }]);
-    await act(() => result.current.store.editRow(uid, { categoryUid: 'cafe00000001' }, 'card00000001'));
+    await act(() => result.current.store.editRow(uid, { text: 'Report v2' }));
+    expect(putCalls()).toEqual([{ date: TODAY, texts: ['Report v2', '', ''] }]);
+    await act(() => result.current.store.editRow(uid, { categoryUid: 'cafe00000001' }));
     expect(lists[TODAY]![0]).toMatchObject({ text: 'Report v2', categoryUid: 'cafe00000001' });
-    expect(putCalls()[1]!.touched).toEqual(['card00000001']);
+    expect(api.editItem).not.toHaveBeenCalled();
   });
 
-  it('change a card through a patch move as an edit, sent with today', async () => {
+  it('change a task through a patch move as an edit', async () => {
     const { result } = renderBoard();
     await settle();
     await move(result, { kind: 'patch', uid: 'later0000001', patch: { lane: 'next', before: null } });
-    expect(api.patchCard).toHaveBeenCalledWith('later0000001', { today: TODAY, lane: 'next', before: null });
+    expect(api.editItem).toHaveBeenCalledWith('later0000001', { lane: 'next', before: null });
     expect(result.current.board?.cards.find((c) => c.uid === 'later0000001')?.lane).toBe('next');
   });
 
+  it("refuse a lane for a task that takes room there once Later and Next are full, sending nothing, with the board's line", async () => {
+    const full = Array.from({ length: BOARD_LIMITS.openCards }, (_, i) => makeCard(`full${i}`.padEnd(12, '0'), `Task ${i}`, { position: i + 1 }));
+    onServer = makeBoard(...full, makeCard('left00000001', 'Left open', { lane: null, listDate: YESTERDAY }));
+    const { result } = renderBoard();
+    await settle();
+    await expect(move(result, { kind: 'patch', uid: 'left00000001', patch: { lane: 'next', before: null } })).rejects.toThrow(new MoveRefused(BOARD.full));
+    expect(api.editItem).not.toHaveBeenCalled();
+    // A task in a lane already takes no more room.
+    await move(result, { kind: 'patch', uid: full[0]!.uid, patch: { lane: 'next', before: null } });
+    await move(result, { kind: 'patch', uid: full[1]!.uid, patch: { before: null } });
+    expect(api.editItem).toHaveBeenCalledTimes(2);
+  });
+
   describe('park', () => {
-    it("places the row's card first, then takes the row off today's list, touched", async () => {
-      lists[TODAY] = [carded(1, 'Report', 'card00000001'), carded(2, 'Email', 'card00000002')];
-      onServer = makeBoard(...onServer.cards, makeCard('card00000001', 'Report', { lane: 'next', position: 2, listDate: TODAY }));
+    it("places the task once today's save still out has landed, then takes the row off today's list", async () => {
+      lists[TODAY] = [makePriority(1, 'Report')];
       const { result } = renderBoard();
       await settle();
-      const placed = deferred<Board>();
-      vi.mocked(api.addCard).mockReturnValueOnce(placed.promise);
-      const parked = begin(() => result.current.store.move({ kind: 'park', row: lists[TODAY]![0]!, lane: 'later', before: 'later0000001' }));
+      // Typed a moment ago: the save that makes the task is still out.
+      const typed = makePriority(2, 'Email', { uid: 'typed0000001', listed: 0 });
+      const save = deferred<{ priorities: Priority[] }>();
+      vi.mocked(api.putPriorities).mockReturnValueOnce(save.promise);
+      act(() => void result.current.days.setPriorities(TODAY, [lists[TODAY]![0]!, typed], lists[TODAY]!));
+      const parked = begin(() => result.current.store.move({ kind: 'park', uid: 'typed0000001', lane: 'later', before: 'later0000001' }));
       await settle();
+      expect(api.editItem).not.toHaveBeenCalled();
+      onServer = makeBoard(...onServer.cards, makeCard('typed0000001', 'Email', { lane: null, listDate: TODAY }));
+      await act(() => result.current.store.load());
+      const placed = deferred<Board>();
+      vi.mocked(api.editItem).mockReturnValueOnce(placed.promise);
+      save.resolve({ priorities: (lists[TODAY] = vi.mocked(api.putPriorities).mock.calls[0]![1]) });
+      await settle();
+      expect(api.editItem).toHaveBeenCalledExactlyOnceWith('typed0000001', { lane: 'later', before: 'later0000001' });
       // Shown in Later while the board places it; the row leaves today's list once that is done.
-      expect(result.current.board?.cards.find((c) => c.uid === 'card00000001')).toMatchObject({ lane: 'later', position: 1 });
-      expect(api.putPriorities).not.toHaveBeenCalled();
-      placed.resolve((onServer = withCard(onServer, { uid: 'card00000001', title: 'Report', categoryUid: null, lane: 'later', before: 'later0000001' }, T0)));
+      expect(result.current.board?.cards.find((c) => c.uid === 'typed0000001')).toMatchObject({ lane: 'later', position: 1 });
+      expect(api.putPriorities).toHaveBeenCalledTimes(1);
+      placed.resolve((onServer = withItemPatch(onServer, 'typed0000001', { lane: 'later', before: 'later0000001' })));
       await act(() => parked);
-      expect(api.addCard).toHaveBeenCalledExactlyOnceWith({ uid: 'card00000001', title: 'Report', categoryUid: null, lane: 'later', before: 'later0000001' });
       // The list as the card pads it, less the row: the card pads it again on screen.
-      expect(putCalls()).toEqual([{ date: TODAY, texts: ['Email', ''], cards: true, touched: ['card00000001'] }]);
-      expect(vi.mocked(api.addCard).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(api.putPriorities).mock.invocationCallOrder[0]!);
-      expect(result.current.board?.cards.find((c) => c.uid === 'card00000001')).toMatchObject({ lane: 'later', position: 1 });
+      expect(putCalls().map((c) => c.texts)).toEqual([
+        ['Report', 'Email'],
+        ['Report', ''],
+      ]);
+      expect(callOrder(api.editItem)).toBeLessThan(callOrder(api.putPriorities, 1));
+      expect(result.current.board?.cards.find((c) => c.uid === 'typed0000001')).toMatchObject({ lane: 'later', position: 1 });
     });
 
-    it('sends no removal when placing the card fails', async () => {
-      lists[TODAY] = [carded(1, 'Report', 'card00000001')];
+    it('takes nothing off when placing the task fails: offline, deleted on another device, or the server at its cap', async () => {
+      lists[TODAY] = [makePriority(1, 'Report', { uid: 'later0000001' })];
       const { result } = renderBoard();
       await settle();
-      vi.mocked(api.addCard).mockRejectedValueOnce(new Error('offline'));
-      await expect(move(result, { kind: 'park', row: lists[TODAY]![0]!, lane: 'next', before: null })).rejects.toThrow('offline');
+      for (const refusal of [new Error('offline'), apiError(404), apiError(400)]) {
+        vi.mocked(api.editItem).mockRejectedValueOnce(refusal);
+        await expect(move(result, { kind: 'park', uid: 'later0000001', lane: 'next', before: null })).rejects.toBe(refusal);
+      }
       expect(api.putPriorities).not.toHaveBeenCalled();
       expect(lists[TODAY]!.map((p) => p.text)).toEqual(['Report']);
     });
 
-    it('gives a row with no card one first, from a save asking for cards, and places that card', async () => {
-      lists[TODAY] = [makePriority(1, 'Report', { cardUid: 'card00000009' }), makePriority(2, 'Email')];
+    it('refuses with the full line, sending nothing, when the task would take room in full lanes', async () => {
+      onServer = makeBoard(...Array.from({ length: BOARD_LIMITS.openCards }, (_, i) => makeCard(`full${i}`.padEnd(12, '0'), `Task ${i}`, { position: i + 1 })));
+      lists[TODAY] = [makePriority(1, 'Typed')];
       const { result } = renderBoard();
       await settle();
-      // The sweep has gone; the server makes Email's card on the save that asks.
-      vi.mocked(api.putPriorities).mockClear();
-      vi.mocked(api.putPriorities).mockImplementationOnce((date, list) =>
-        Promise.resolve({ priorities: (lists[date] = list.map((p) => (p.text === 'Email' ? { ...p, cardUid: 'minted000001' } : p))) }),
-      );
-      const email = result.current.days.shown(TODAY)!.priorities[1]!;
-      await move(result, { kind: 'park', row: email, lane: 'next', before: null });
-      expect(putCalls().map((c) => [c.texts, c.touched])).toEqual([
-        [['Report', 'Email', ''], undefined],
-        [['Report', ''], ['minted000001']],
-      ]);
-      expect(api.addCard).toHaveBeenCalledExactlyOnceWith({ uid: 'minted000001', title: 'Email', categoryUid: null, lane: 'next', before: null });
+      await expect(move(result, { kind: 'park', uid: lists[TODAY]![0]!.uid!, lane: 'later', before: null })).rejects.toThrow(new MoveRefused(BOARD.full));
+      expect(api.editItem).not.toHaveBeenCalled();
+      expect(api.putPriorities).not.toHaveBeenCalled();
     });
 
-    it("posts the row's title and category as the list shows them when the job runs, so a park keeps the card's category", async () => {
-      lists[TODAY] = [carded(1, 'Report', 'card00000001', { categoryUid: 'cafe00000001' })];
-      const { result } = renderBoard();
-      await settle();
-      const planned = result.current.days.shown(TODAY)!.priorities[0]!;
-      // Renamed and recategorised while the park waits behind a capture on the board queue.
-      const capture = deferred<Board>();
-      vi.mocked(api.addCard).mockReturnValueOnce(capture.promise);
-      act(() => void result.current.store.addCard({ uid: 'cap000000001', title: 'Captured', categoryUid: null, lane: 'later', before: null }));
-      const parked = begin(() => result.current.store.move({ kind: 'park', row: planned, lane: 'next', before: null }));
-      const renamed = { ...planned, text: 'Report v2', categoryUid: 'cafe00000002' };
-      await act(() => result.current.days.setPriorities(TODAY, [renamed], [planned]));
-      capture.resolve(onServer);
-      await act(() => parked);
-      expect(vi.mocked(api.addCard).mock.calls[1]![0]).toEqual({
-        uid: 'card00000001',
-        title: 'Report v2',
-        categoryUid: 'cafe00000002',
-        lane: 'next',
-        before: null,
-      });
-    });
-
-    it('keeps the planned title when the row was emptied meanwhile, and parks nothing for a cardless row gone from the list', async () => {
-      lists[TODAY] = [carded(1, 'Report', 'card00000001'), makePriority(2, 'Email')];
-      const { result } = renderBoard();
-      await settle();
-      vi.mocked(api.putPriorities).mockClear();
-      const [report, email] = result.current.days.shown(TODAY)!.priorities as [Priority, Priority];
-      await act(() => result.current.days.setPriorities(TODAY, [{ ...report, text: '' }, email], [report, email]));
-      await move(result, { kind: 'park', row: report, lane: 'next', before: null });
-      expect(api.addCard).toHaveBeenLastCalledWith({ uid: 'card00000001', title: 'Report', categoryUid: null, lane: 'next', before: null });
-
-      // Email taken off on another device; the mint save brings that list back with no Email.
-      vi.mocked(api.addCard).mockClear();
-      vi.mocked(api.putPriorities).mockImplementationOnce((date) => Promise.resolve({ priorities: (lists[date] = []) }));
-      await move(result, { kind: 'park', row: email, lane: 'later', before: null });
-      expect(api.addCard).not.toHaveBeenCalled();
-      expect(warnQuietly).not.toHaveBeenCalled();
-    });
-
-    it('refuses with the full line, posting nothing, when the save makes no card', async () => {
-      lists[TODAY] = [makePriority(1, 'Report', { cardUid: 'card00000009' }), makePriority(2, 'Email', { recurringUid: 'rec000000001' })];
-      const { result } = renderBoard();
-      await settle();
-      const row = { ...lists[TODAY]![1]!, recurringUid: null };
-      await expect(move(result, { kind: 'park', row, lane: 'later', before: null })).rejects.toThrow(new MoveRefused(BOARD.full));
-      expect(api.addCard).not.toHaveBeenCalled();
-    });
-
-    it('refuses a row whose list is not loaded or whose save fails, before placing anything', async () => {
-      const { result: noDay } = renderBoard({ today: false });
-      await settle();
-      await expect(move(noDay, { kind: 'park', row: makePriority(1, 'Report'), lane: 'later', before: null })).rejects.toThrow(
-        new MoveRefused(ADD_PRIORITY_FAILED.notLoaded),
-      );
-      cleanup();
-      lists[TODAY] = [makePriority(1, 'Report', { cardUid: 'card00000009' }), makePriority(2, 'Email')];
+    it('places the same task again on a retry after a failed removal, and leaves a row gone meanwhile alone', async () => {
+      lists[TODAY] = [makePriority(1, 'Report', { uid: 'later0000001' })];
       const { result } = renderBoard();
       await settle();
       vi.mocked(api.putPriorities).mockRejectedValueOnce(new Error('offline'));
-      await expect(move(result, { kind: 'park', row: lists[TODAY]![1]!, lane: 'later', before: null })).rejects.toThrow(SAVE_FAILED.title);
-      expect(api.addCard).not.toHaveBeenCalled();
+      const park: StoreMove = { kind: 'park', uid: 'later0000001', lane: 'next', before: null };
+      await expect(move(result, park)).rejects.toThrow(SAVE_FAILED.title);
+      expect(lists[TODAY]!.map((p) => p.text)).toEqual(['Report']);
+      await move(result, park);
+      expect(vi.mocked(api.editItem).mock.calls.map(([uid]) => uid)).toEqual(['later0000001', 'later0000001']);
+      expect(lists[TODAY]!.map((p) => p.text)).toEqual(['', '']);
+      // Gone from the list now: placed, nothing more sent.
+      await move(result, { ...park, lane: 'later' });
+      expect(api.editItem).toHaveBeenCalledTimes(3);
+      expect(api.putPriorities).toHaveBeenCalledTimes(2);
     });
 
-    it('places the same card again on a retry after a failed removal', async () => {
-      lists[TODAY] = [makePriority(1, 'Report', { cardUid: 'card00000009' }), makePriority(2, 'Email')];
-      const { result } = renderBoard();
+    it('refuses a row whose list is not loaded once it is placed', async () => {
+      const { result } = renderBoard({ today: false });
       await settle();
-      vi.mocked(api.putPriorities)
-        .mockImplementationOnce((date, list) =>
-          Promise.resolve({ priorities: (lists[date] = list.map((p) => (p.text === 'Email' ? { ...p, cardUid: 'minted000001' } : p))) }),
-        )
-        .mockRejectedValueOnce(new Error('offline'));
-      const email = () => result.current.days.shown(TODAY)!.priorities.find((p) => p.text === 'Email')!;
-      await expect(move(result, { kind: 'park', row: email(), lane: 'next', before: null })).rejects.toThrow(SAVE_FAILED.title);
-      // The row stays on today's list, linked to the card it was given.
-      expect(email().cardUid).toBe('minted000001');
-      await move(result, { kind: 'park', row: email(), lane: 'next', before: null });
-      expect(vi.mocked(api.addCard).mock.calls.map(([c]) => c.uid)).toEqual(['minted000001', 'minted000001']);
-      expect(lists[TODAY]!.map((p) => p.text)).toEqual(['Report', '']);
+      await expect(move(result, { kind: 'park', uid: 'later0000001', lane: 'next', before: null })).rejects.toThrow(
+        new MoveRefused(ADD_PRIORITY_FAILED.notLoaded),
+      );
     });
   });
 });
 
-describe('deleteCard', () => {
-  it("takes today's row off, then loads the later day and takes its row off, then deletes the card, gone from the board at once", async () => {
-    lists[TODAY] = [makePriority(1, 'Report', { cardUid: 'later0000001' }), makePriority(2, 'Email', { cardUid: 'card00000002' })];
-    lists[TOMORROW] = [makePriority(1, 'Plan', { cardUid: 'other0000001' }), makePriority(2, 'Report', { cardUid: 'later0000001' })];
+describe('deleteItem', () => {
+  it("takes the task off the board at once, off today's list, then deletes it once that save is in, and reads its days again", async () => {
+    lists[TODAY] = [makePriority(1, 'Report', { uid: 'later0000001' }), makePriority(2, 'Email')];
+    lists[YESTERDAY] = [makePriority(1, 'Report', { uid: 'later0000001' })];
     const { result } = renderBoard();
     await settle();
-    const remove = deferred<Board>();
-    vi.mocked(api.deleteCard).mockReturnValueOnce(remove.promise);
-    act(() => void result.current.store.deleteCard('later0000001', lists[TODAY]![0]!.uid, TOMORROW));
+    await act(() => result.current.days.load(YESTERDAY));
+    await act(() => result.current.days.load(TOMORROW));
+    const save = deferred<{ priorities: Priority[] }>();
+    vi.mocked(api.putPriorities).mockReturnValueOnce(save.promise);
+    const deleted = begin(() => result.current.store.deleteItem('later0000001'));
     expect(shownTexts(result.current.board)).toEqual(['Follow up']);
     await settle();
-    expect(putCalls().map((c) => [c.date, c.texts])).toEqual([
-      [TODAY, ['Email', '']],
-      [TOMORROW, ['Plan', '']],
-    ]);
-    expect(api.getDay).toHaveBeenCalledWith(TOMORROW);
-    expect(api.deleteCard).toHaveBeenCalledExactlyOnceWith('later0000001');
-    remove.resolve((onServer = withoutCard(onServer, 'later0000001')));
+    expect(putCalls()).toEqual([{ date: TODAY, texts: ['Email', ''] }]);
+    expect(api.deleteItem).not.toHaveBeenCalled();
+    save.resolve({ priorities: (lists[TODAY] = vi.mocked(api.putPriorities).mock.calls[0]![1]) });
+    // The server took it off every day.
+    vi.mocked(api.getDay).mockClear();
+    lists[YESTERDAY] = [];
+    await act(() => deleted);
     await settle();
+    expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith('later0000001');
+    expect(vi.mocked(api.getDay).mock.calls.map(([d]) => d)).toEqual([YESTERDAY]);
+    expect(result.current.days.shown(YESTERDAY)?.priorities).toEqual([]);
+    expect(result.current.generation).toBe(1);
     expect(shownTexts(result.current.board)).toEqual(['Follow up']);
   });
 
-  it('counts a 404 as done: a save in the job, or another device, took the card already', async () => {
+  it("waits for the sheet's save that took the row off today, then deletes", async () => {
+    lists[TODAY] = [makePriority(1, 'Report', { uid: 'task00000001', listed: 2 })];
     const { result } = renderBoard();
     await settle();
-    // A read that still has the card, sent before the delete was answered, doesn't bring it back.
+    const save = deferred<{ priorities: Priority[] }>();
+    vi.mocked(api.putPriorities).mockReturnValueOnce(save.promise);
+    // Delete everywhere on the sheet: its × save first, then the job.
+    act(() => void result.current.days.setPriorities(TODAY, [], lists[TODAY]!));
+    const deleted = begin(() => result.current.store.deleteItem('task00000001'));
+    await settle();
+    expect(api.deleteItem).not.toHaveBeenCalled();
+    save.resolve({ priorities: (lists[TODAY] = []) });
+    await act(() => deleted);
+    expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith('task00000001');
+    expect(api.putPriorities).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends its delete without waiting for another day's save still out", async () => {
+    const { result } = renderBoard();
+    await settle();
+    await act(() => result.current.days.load(YESTERDAY));
+    vi.mocked(api.putPriorities).mockReturnValueOnce(new Promise(() => {}));
+    act(() => void result.current.days.setPriorities(YESTERDAY, [makePriority(1, 'Write a KB', { uid: 'later0000001', done: true })], []));
+    await act(() => result.current.store.deleteItem('later0000001'));
+    expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith('later0000001');
+  });
+
+  it('counts a 404 as done: a save in the job, or another device, took the task already', async () => {
+    const { result } = renderBoard();
+    await settle();
+    // A read that still has the task, sent before the delete was answered, doesn't bring it back.
     const old = deferred<Board>();
     vi.mocked(api.getBoard).mockReturnValueOnce(old.promise);
     act(() => void result.current.store.load());
-    vi.mocked(api.deleteCard).mockRejectedValueOnce(apiError(404));
-    await act(() => result.current.store.deleteCard('later0000001', null, null));
+    vi.mocked(api.deleteItem).mockRejectedValueOnce(apiError(404));
+    await act(() => result.current.store.deleteItem('later0000001'));
     old.resolve(onServer);
     await settle();
     expect(shownTexts(result.current.board)).toEqual(['Follow up']);
     expect(api.putPriorities).not.toHaveBeenCalled();
+    expect(result.current.generation).toBe(1);
     // And the 404 reads nothing again.
     expect(api.getBoard).toHaveBeenCalledTimes(2);
   });
 
-  it("takes a recurring row, which has no card, off today's list and deletes nothing", async () => {
-    lists[TODAY] = [makePriority(1, 'Monitor the queue', { recurringUid: 'rec000000001' })];
+  it('puts the task back and rejects when the server refuses the delete, and reads the board again', async () => {
     const { result } = renderBoard();
     await settle();
-    await act(() => result.current.store.deleteCard(null, lists[TODAY]![0]!.uid, null));
-    expect(putCalls().map((c) => c.texts)).toEqual([['', '']]);
-    expect(api.deleteCard).not.toHaveBeenCalled();
-  });
-
-  it('brings the card back when the server refuses the delete', async () => {
-    const { result } = renderBoard();
-    await settle();
-    vi.mocked(api.deleteCard).mockRejectedValueOnce(apiError(500));
-    await expect(act(() => result.current.store.deleteCard('later0000001', null, null))).rejects.toThrow('Request failed (500)');
+    vi.mocked(api.deleteItem).mockRejectedValueOnce(apiError(500));
+    await expect(act(() => result.current.store.deleteItem('later0000001'))).rejects.toThrow('Request failed (500)');
     expect(shownTexts(result.current.board)).toEqual(['Write a KB', 'Follow up']);
+    expect(api.getBoard).toHaveBeenCalledTimes(2);
+    expect(result.current.generation).toBe(0);
   });
 
-  it('brings the card back when a step fails, and deletes nothing', async () => {
-    lists[TODAY] = [makePriority(1, 'Report', { cardUid: 'later0000001' })];
+  it("deletes nothing when today's list can't be saved without it, and puts the task back", async () => {
+    lists[TODAY] = [makePriority(1, 'Report', { uid: 'later0000001' })];
     const { result } = renderBoard();
     await settle();
     vi.mocked(api.putPriorities).mockRejectedValueOnce(new Error('offline'));
-    await expect(act(() => result.current.store.deleteCard('later0000001', lists[TODAY]![0]!.uid, null))).rejects.toThrow(SAVE_FAILED.title);
+    await expect(act(() => result.current.store.deleteItem('later0000001'))).rejects.toThrow(SAVE_FAILED.title);
     expect(shownTexts(result.current.board)).toEqual(['Write a KB', 'Follow up']);
-    expect(api.deleteCard).not.toHaveBeenCalled();
-
-    // A later day that could not be loaded stops the job there too.
-    vi.mocked(api.getDay).mockRejectedValueOnce(new Error('offline'));
-    await expect(act(() => result.current.store.deleteCard('later0000001', null, TOMORROW))).rejects.toThrow(new MoveRefused(ADD_PRIORITY_FAILED.notLoaded));
-    expect(api.deleteCard).not.toHaveBeenCalled();
+    expect(api.deleteItem).not.toHaveBeenCalled();
   });
 
-  it('skips a row already gone from a list', async () => {
+  it('reads again a left-open offer already fetched, which no longer offers the task, and a held past day that listed it', async () => {
+    serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Write a KB', { uid: 'later0000001' })] })]);
+    const { result } = renderHook(
+      () => {
+        useDay(TODAY);
+        return { store: useBoardStore(), offer: useLeftOpen(TODAY, true).leftOpen };
+      },
+      { wrapper: SettingsAndDays },
+    );
+    await settle();
+    expect(result.current.offer?.rows.map((p) => p.uid)).toEqual(['later0000001']);
+    serveRange([makeDay(YESTERDAY)]);
+    await act(() => result.current.store.deleteItem('later0000001'));
+    await settle();
+    expect(api.getRange).toHaveBeenCalledTimes(2);
+    expect(result.current.offer).toBeNull();
+  });
+});
+
+describe('removeFromToday', () => {
+  it("takes a recurring row off today's list and deletes nothing", async () => {
+    lists[TODAY] = [makePriority(1, 'Monitor the queue', { uid: 'rcur00000001', recurring: true })];
     const { result } = renderBoard();
     await settle();
-    await act(() => result.current.days.load(TOMORROW));
-    await act(() => result.current.store.deleteCard('later0000001', 'gone00000001', TOMORROW));
-    expect(api.putPriorities).not.toHaveBeenCalled();
-    expect(api.deleteCard).toHaveBeenCalledTimes(1);
+    await act(() => result.current.store.removeFromToday('rcur00000001'));
+    expect(putCalls()).toEqual([{ date: TODAY, texts: ['', ''] }]);
+    expect(api.deleteItem).not.toHaveBeenCalled();
   });
 });
 
@@ -772,64 +737,73 @@ it('useBoardState and useBoardStore refuse to run outside the provider', () => {
 });
 
 describe('recurring priorities', () => {
-  const QUEUE = makeRecurring('rec000000001', 'Monitor the queue');
+  const QUEUE = makeRecurring('rcur00000001', 'Monitor the queue');
   const titles = (b: Board | undefined) => b?.recurring.map((r) => `${r.title} ${r.weekdays.join('')}`);
 
   beforeEach(() => {
     onServer = { ...onServer, recurring: [QUEUE] };
   });
 
-  it('show a new, edited or deleted item at once, and go out one after another', async () => {
+  it('show a new, edited or removed item at once, and go out one after another', async () => {
     const first = deferred<Board>();
-    vi.mocked(api.addRecurring).mockReturnValueOnce(first.promise);
+    vi.mocked(api.addItem).mockReturnValueOnce(first.promise);
     const { result } = renderBoard();
     await settle();
-    const timesheet = makeRecurring('rec000000002', 'Timesheet', { weekdays: [5] });
+    const timesheet = makeRecurring('rcur00000002', 'Timesheet', { weekdays: [5] });
     act(() => {
-      void result.current.store.addRecurring(timesheet);
-      void result.current.store.editRecurring('rec000000002', { title: 'Timesheets', weekdays: [5, 1] });
-      void result.current.store.removeRecurring('rec000000001');
+      void result.current.store.addItem(timesheet);
+      void result.current.store.editItem('rcur00000002', { title: 'Timesheets', weekdays: [5, 1] });
+      void result.current.store.removeRecurring('rcur00000001');
     });
     expect(titles(result.current.board)).toEqual(['Timesheets 15']);
-    expect(api.patchRecurring).not.toHaveBeenCalled();
-    expect(api.deleteRecurring).not.toHaveBeenCalled();
-    first.resolve((onServer = withRecurring(onServer, timesheet)));
+    expect(api.editItem).not.toHaveBeenCalled();
+    expect(api.deleteItem).not.toHaveBeenCalled();
+    first.resolve((onServer = withItem(onServer, timesheet, T0)));
     await settle();
-    expect(api.addRecurring).toHaveBeenCalledExactlyOnceWith(timesheet);
-    expect(api.patchRecurring).toHaveBeenCalledExactlyOnceWith('rec000000002', { title: 'Timesheets', weekdays: [5, 1] });
-    expect(api.deleteRecurring).toHaveBeenCalledExactlyOnceWith('rec000000001');
-    expect(vi.mocked(api.patchRecurring).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(api.deleteRecurring).mock.invocationCallOrder[0]!);
+    expect(api.addItem).toHaveBeenCalledExactlyOnceWith(timesheet);
+    expect(api.editItem).toHaveBeenCalledExactlyOnceWith('rcur00000002', { title: 'Timesheets', weekdays: [5, 1] });
+    expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith('rcur00000001');
+    expect(callOrder(api.editItem)).toBeLessThan(callOrder(api.deleteItem));
     expect(result.current.board).toEqual(onServer);
     expect(titles(result.current.board)).toEqual(['Timesheets 15']);
+  });
+
+  it("removes one without touching today's list, which keeps its row", async () => {
+    lists[TODAY] = [makePriority(1, 'Monitor the queue', { uid: QUEUE.uid, recurring: true })];
+    const { result } = renderBoard();
+    await settle();
+    await act(() => result.current.store.removeRecurring(QUEUE.uid));
+    expect(api.putPriorities).not.toHaveBeenCalled();
+    expect(result.current.generation).toBe(0);
   });
 
   it('take a failed write off, reject, and read the board again', async () => {
     const { result } = renderBoard();
     await settle();
-    vi.mocked(api.patchRecurring).mockRejectedValueOnce(new Error('offline'));
-    await expect(act(() => result.current.store.editRecurring('rec000000001', { title: 'Queue' }))).rejects.toThrow('offline');
+    vi.mocked(api.editItem).mockRejectedValueOnce(new Error('offline'));
+    await expect(act(() => result.current.store.editItem('rcur00000001', { title: 'Queue' }))).rejects.toThrow('offline');
     expect(titles(result.current.board)).toEqual(['Monitor the queue 12345']);
     expect(api.getBoard).toHaveBeenCalledTimes(2);
 
-    vi.mocked(api.addRecurring).mockRejectedValueOnce(apiError(400));
-    await expect(act(() => result.current.store.addRecurring(makeRecurring('rec000000002', 'Timesheet')))).rejects.toThrow('Request failed (400)');
+    vi.mocked(api.addItem).mockRejectedValueOnce(apiError(400));
+    await expect(act(() => result.current.store.addItem(makeRecurring('rcur00000002', 'Timesheet')))).rejects.toThrow('Request failed (400)');
     expect(titles(result.current.board)).toEqual(['Monitor the queue 12345']);
 
-    vi.mocked(api.deleteRecurring).mockRejectedValueOnce(apiError(500));
-    await expect(act(() => result.current.store.removeRecurring('rec000000001'))).rejects.toThrow('Request failed (500)');
+    vi.mocked(api.deleteItem).mockRejectedValueOnce(apiError(500));
+    await expect(act(() => result.current.store.removeRecurring('rcur00000001'))).rejects.toThrow('Request failed (500)');
     expect(titles(result.current.board)).toEqual(['Monitor the queue 12345']);
     expect(api.getBoard).toHaveBeenCalledTimes(4);
   });
 
-  it('count a 404 on a delete as done: another device deleted it already', async () => {
+  it('count a 404 on a remove as done: another device removed it already', async () => {
     const { result } = renderBoard();
     await settle();
-    // A read that still has it, sent before the delete was answered, doesn't bring it back.
+    // A read that still has it, sent before the remove was answered, doesn't bring it back.
     const old = deferred<Board>();
     vi.mocked(api.getBoard).mockReturnValueOnce(old.promise);
     act(() => void result.current.store.load());
-    vi.mocked(api.deleteRecurring).mockRejectedValueOnce(apiError(404));
-    await act(() => result.current.store.removeRecurring('rec000000001'));
+    vi.mocked(api.deleteItem).mockRejectedValueOnce(apiError(404));
+    await act(() => result.current.store.removeRecurring('rcur00000001'));
     old.resolve(onServer);
     await settle();
     expect(titles(result.current.board)).toEqual([]);

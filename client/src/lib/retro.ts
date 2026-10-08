@@ -4,7 +4,7 @@ import { hasText } from '../../../shared/priorities.js';
 
 export interface PriorityReview {
   priority: Priority;
-  /** Completed session time linked to this row. */
+  /** Completed session time on this row's task, that day. */
   focusedSeconds: number;
   sessions: number;
   /** Written after the day's first completed session started: it arrived mid-day, not in the plan. */
@@ -14,13 +14,13 @@ export interface PriorityReview {
 export interface DayReview {
   /** Rows with text, in position order. */
   planned: PriorityReview[];
-  /** Completed sessions not linked to a row with text (unlinked, or linked to a row since removed or emptied). */
+  /** Completed sessions whose task isn't on the day's list, or that have none. */
   unplanned: CompletedSession[];
   onPlanSeconds: number;
   offPlanSeconds: number;
   done: number;
   total: number;
-  /** The rows added from a recurring priority (`recurringUid`), which `done` and `total` count too. */
+  /** The recurring priorities' rows (`recurring`), which `done` and `total` count too. */
   routines: { done: number; total: number };
 }
 
@@ -40,8 +40,8 @@ export function focusOf(sessions: Session[]): { seconds: number; count: number }
 }
 
 /**
- * Completed focus by the row it was logged against: seconds per `priorityUid`. A running or
- * cancelled session, or one on no row, adds nothing.
+ * Completed focus by the task it was logged on: seconds per `priorityUid`. A running or cancelled
+ * session, or one on no task, adds nothing.
  */
 export function loggedByUid(sessions: Session[]): Map<string, number> {
   const out = new Map<string, number>();
@@ -52,61 +52,54 @@ export function loggedByUid(sessions: Session[]): Map<string, number> {
   return out;
 }
 
-/** The row of its day that a session's `priorityUid` names, while that row is on the list. */
-function namedRow(s: Session, rows: Priority[]): Priority | undefined {
-  return s.priorityUid == null ? undefined : rows.find((p) => p.uid === s.priorityUid);
-}
-
-/** The written row of its day a session is on: the one its `priorityUid` names, while it has text. */
+/** The written row of its day a session's task is, while the day's list holds it. */
 export function sessionRow(s: Session, rows: Priority[]): Priority | undefined {
-  const row = namedRow(s, rows);
+  const row = s.priorityUid == null ? undefined : rows.find((p) => p.uid === s.priorityUid);
   return row && hasText(row) ? row : undefined;
 }
 
 /**
- * What a session is called, given the rows of its own day: the current text of its written row
- * (`sessionRow`), so a rename on the sheet (here or on another device) renames the session
- * wherever it shows. Off a written row (unplanned, its row removed or emptied, or a day not
- * read), the label it was stored with.
+ * What a session is called, given the rows of its own day: its task's current name, which is its
+ * row's text while the day's list holds it (so a rename on the sheet shows at once), else the
+ * name the server gave (`title`), once the task has left that day. A session with no task is
+ * called by its label.
  */
 export function sessionName(s: Session, rows: Priority[]): string {
-  return sessionRow(s, rows)?.text.trim() ?? s.label;
+  return sessionRow(s, rows)?.text.trim() ?? s.title ?? s.label;
 }
 
 /**
- * The category a session counts under, given the rows of its own day. A session on a written
- * row counts under that row's category, none included, so retagging the row moves its time.
- * Off a written row, the session's own category decides: one picked in the log, or the one the
- * server copied from its row when a save removed it. Failing that, an emptied row it still names
- * keeps the time under that row's category. Else none.
+ * The category a session counts under, given the rows of its own day: its row's while the day's
+ * list holds its task, so a chip changed on the sheet shows at once, none included; else the one
+ * the server gave, which is its task's, or for a session with no task one picked in the log or
+ * kept from the task it lost.
  */
 export function sessionCategory(s: Session, rows: Priority[]): string | null {
-  const row = namedRow(s, rows);
-  if (row && hasText(row)) return row.categoryUid;
-  return s.categoryUid ?? row?.categoryUid ?? null;
+  const row = sessionRow(s, rows);
+  return row ? row.categoryUid : s.categoryUid;
 }
 
 /**
- * The day log's edit that makes a session on no written row count under `categoryUid`
- * (`sessionCategory`). A category is set as the session's own, which outranks an emptied row it
- * names. None can't be stored that way, since no category of its own means "go by that row": a
- * session on an emptied row that has a category leaves the row as well (`priorityUid: null`).
- * The log already shows it as unplanned; the row's note about the time kept on it stops
- * counting it.
+ * The day log's edit that makes a session off the plan count under `categoryUid`, none included.
+ * A session with a task counts under the task's category, so one whose task left its day leaves
+ * the task too (`priorityUid: null`): picking a category for that time says what it was for.
  */
-export function sessionCategoryEdit(s: Session, rows: Priority[], categoryUid: string | null): Pick<SessionEdit, 'categoryUid' | 'priorityUid'> {
-  const row = namedRow(s, rows);
-  return categoryUid == null && row != null && !hasText(row) && row.categoryUid != null ? { categoryUid, priorityUid: null } : { categoryUid };
+export function sessionCategoryEdit(s: Session, categoryUid: string | null): Pick<SessionEdit, 'categoryUid' | 'priorityUid'> {
+  return s.priorityUid == null ? { categoryUid } : { categoryUid, priorityUid: null };
 }
 
 /**
- * A session with an edit laid on, as the server stores it: a link to a row drops a category of
- * its own, since the row decides from then on. The day store and the timer show an edit this way
- * while it is out, so a priorities save answered meanwhile judges the session as the server will
- * hold it (the day store's `leavesCategory`).
+ * A session with an edit laid on, as the server will store it, for the day store and the timer to
+ * show while the edit is out. Linked to another task, it loses a category of its own and is named
+ * and filed by that task's row until the answer brings the task's. Taken off its task, it keeps
+ * the task's name as its label unless the edit names it, and counts under the category sent, else
+ * none.
  */
 export function editedSession(s: Session, patch: SessionEdit): Session {
-  return { ...s, ...patch, ...(patch.priorityUid ? { categoryUid: null } : {}) };
+  const next = { ...s, ...patch };
+  if (patch.priorityUid === undefined || patch.priorityUid === s.priorityUid) return next;
+  if (patch.priorityUid != null) return { ...next, title: null, categoryUid: null };
+  return { ...next, title: null, label: patch.label ?? s.title ?? s.label, categoryUid: patch.categoryUid ?? null };
 }
 
 /**
@@ -126,7 +119,7 @@ export function hasContent(day: Day): boolean {
 
 /**
  * Pure plan-vs-actual for one day. Only completed sessions count; a running one isn't
- * done yet. A session is on plan when its uid matches a row that still has text.
+ * done yet. A session is on plan when the day's list holds its task.
  */
 export function reviewDay(priorities: Priority[], sessions: Session[]): DayReview {
   const rows = priorities.filter(hasText);
@@ -160,7 +153,7 @@ export function reviewDay(priorities: Priority[], sessions: Session[]): DayRevie
     };
   });
 
-  const routines = rows.filter((p) => p.recurringUid != null);
+  const routines = rows.filter((p) => p.recurring);
   return {
     planned,
     unplanned,

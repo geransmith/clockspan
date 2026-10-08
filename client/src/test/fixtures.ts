@@ -105,14 +105,30 @@ export function makeDay(date = TODAY, patch: Partial<Day> = {}): Day {
   return { ...emptyDay(date), punches: punchesAt(), ...patch };
 }
 
-/** A priority row with text, as the card saves it once typed: not done, with a uid and added at T0, linked to nothing. */
+/**
+ * A one-off task's row on a day's list, as the server answers it: not done, added at T0, in no
+ * category, on this day's list only and with nothing logged on it, unless `patch` says otherwise.
+ */
 export function makePriority(position: number, text: string, patch: Partial<Priority> = {}): Priority {
-  return { position, text, done: false, uid: `uid${position}`.padEnd(12, 'x'), addedAt: T0, cardUid: null, recurringUid: null, categoryUid: null, ...patch };
+  return {
+    position,
+    text,
+    done: false,
+    uid: `uid${position}`.padEnd(12, 'x'),
+    addedAt: T0,
+    categoryUid: null,
+    recurring: false,
+    archived: false,
+    listed: 1,
+    earlier: 0,
+    logged: 0,
+    ...patch,
+  };
 }
 
-/** A card in Later at position 1, made at T0, with no category and linked to no row, unless `patch` says otherwise. */
+/** A task in Later at position 1, made at T0, with no category and on no day's list, unless `patch` says otherwise. */
 export function makeCard(uid: string, title: string, patch: Partial<BoardCard> = {}): BoardCard {
-  return { uid, title, categoryUid: null, lane: 'later', position: 1, createdAt: T0, doneAt: null, listDate: null, held: false, ...patch };
+  return { uid, title, categoryUid: null, lane: 'later', position: 1, createdAt: T0, listDate: null, listDone: false, listed: 0, logged: 0, ...patch };
 }
 
 /** The board `GET /board` answers with these cards, and no categories or recurring priorities. */
@@ -133,6 +149,7 @@ export function makeSession(patch: Partial<RunningSession> = {}): RunningSession
     pausedAt: null,
     durationSeconds: null,
     priorityUid: null,
+    title: null,
     categoryUid: null,
     ...patch,
   };

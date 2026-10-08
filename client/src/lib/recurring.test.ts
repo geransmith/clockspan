@@ -11,10 +11,9 @@ const FOLLOW_UPS = makeRecurring('rcur00000002', 'Follow-ups', { weekdays: [1, 3
 const SATURDAY = makeRecurring('rcur00000003', 'Water the plants', { weekdays: [6] });
 const NONE = new Set<string>();
 
-/** A routine's row on today's list, with text unless given ''. */
+/** A routine's row on today's list, its box blank in the draft when given ''. */
 const routine = (position: number, item = QUEUE, text = item.title, patch: Partial<Priority> = {}) =>
-  makePriority(position, text, { recurringUid: item.uid, categoryUid: item.categoryUid, ...patch });
-const UID = /^[0-9a-f]{12}$/;
+  makePriority(position, text, { uid: item.uid, recurring: true, categoryUid: item.categoryUid, ...patch });
 
 describe('dueRecurring', () => {
   it("offers the items whose weekdays hold the date's, in the order given", () => {
@@ -23,29 +22,28 @@ describe('dueRecurring', () => {
     expect(dueRecurring([FOLLOW_UPS, SATURDAY, QUEUE], '2026-10-03', [], NONE)).toEqual([SATURDAY]);
   });
 
-  it('leaves out an item a row with text holds, but not one only an emptied row holds', () => {
+  it('leaves out an item a row of the list is, its box blank in the draft or not', () => {
     expect(dueRecurring([QUEUE, FOLLOW_UPS], TODAY, [routine(1)], NONE)).toEqual([FOLLOW_UPS]);
-    expect(dueRecurring([QUEUE, FOLLOW_UPS], TODAY, [routine(1, QUEUE, '')], NONE)).toEqual([QUEUE, FOLLOW_UPS]);
+    expect(dueRecurring([QUEUE, FOLLOW_UPS], TODAY, [routine(1, QUEUE, '')], NONE)).toEqual([FOLLOW_UPS]);
   });
 
-  it("leaves out an item answered today, and matches rows by the link alone: a one-off row of the title, or one linked to nothing, doesn't hide it", () => {
+  it("leaves out an item answered today, and matches rows by uid alone: a one-off row of the title doesn't hide it", () => {
     expect(dueRecurring([QUEUE, FOLLOW_UPS], TODAY, [], new Set([QUEUE.uid]))).toEqual([FOLLOW_UPS]);
     expect(dueRecurring([QUEUE], TODAY, [makePriority(1, 'Monitor the queue')], NONE)).toEqual([QUEUE]);
   });
 });
 
 describe('notOnList', () => {
-  it('leaves out the items a row with text holds, whatever the day, and keeps the order', () => {
+  it('leaves out the items a row of the list is, whatever the day or the row says, and keeps the order', () => {
     expect(notOnList([SATURDAY, FOLLOW_UPS, QUEUE], [routine(1, FOLLOW_UPS, 'Retyped'), routine(2, QUEUE, ''), makePriority(3, 'Water the plants')])).toEqual([
       SATURDAY,
-      QUEUE,
     ]);
   });
 });
 
 describe('recurringCount', () => {
-  it('counts the rows with text that came from a recurring priority', () => {
-    expect(recurringCount([routine(1), routine(2, FOLLOW_UPS, ''), makePriority(3, 'One-off'), routine(4, SATURDAY, 'Retyped')])).toBe(2);
+  it("counts the recurring priorities' rows, a blank draft of one included", () => {
+    expect(recurringCount([routine(1), routine(2, FOLLOW_UPS, ''), makePriority(3, 'One-off'), routine(4, SATURDAY, 'Retyped')])).toBe(3);
   });
 });
 
@@ -59,68 +57,60 @@ describe('offerPicks', () => {
 
   it('counts the routines already on the list, never going below none', () => {
     const other = makeRecurring('rcur00000004', 'Other');
-    expect(offerPicks(due, [routine(1, other), makePriority(2, 'One-off'), routine(3, other, '')], 2)).toEqual(new Set([QUEUE.uid]));
+    expect(offerPicks(due, [routine(1, other), makePriority(2, 'One-off')], 2)).toEqual(new Set([QUEUE.uid]));
     expect(offerPicks(due, [routine(1, other), routine(2, makeRecurring('rcur00000005', 'Another'))], 1)).toEqual(new Set());
   });
 });
 
 describe('recurringRow', () => {
-  it("is a new row of today with the item's title and category, linked to it and to no card", () => {
-    const row = recurringRow(QUEUE, T0);
-    expect(row).toEqual({
+  it("is the recurring priority itself, new to today, a recurring row showing the item's title and category", () => {
+    expect(recurringRow(QUEUE, T0)).toEqual({
       text: 'Monitor the queue',
       done: false,
-      uid: row.uid,
+      uid: QUEUE.uid,
       addedAt: T0,
-      cardUid: null,
-      recurringUid: QUEUE.uid,
       categoryUid: 'cafe00000001',
+      recurring: true,
+      archived: false,
+      listed: 0,
+      earlier: 0,
+      logged: 0,
     });
-    expect(row.uid).toMatch(UID);
-    expect(recurringRow(QUEUE, T0).uid).not.toBe(row.uid);
   });
 });
 
 describe('acceptOffer', () => {
-  const leftover = { text: 'Review the PR', cardUid: 'card00000001', recurringUid: null, categoryUid: null };
+  const leftover = makePriority(2, 'Review the PR', { uid: 'task00000001', categoryUid: 'cafe00000002' });
 
   it('puts the leftovers first and the routines after the padded rows, leaving the free rows for one-offs', () => {
     const list = acceptOffer([], 3, [leftover], [QUEUE, FOLLOW_UPS], T0);
-    expect(list.map((p) => [p.position, p.text, p.recurringUid])).toEqual([
-      [1, 'Review the PR', null],
-      [2, '', null],
-      [3, '', null],
-      [4, 'Monitor the queue', QUEUE.uid],
-      [5, 'Follow-ups', FOLLOW_UPS.uid],
+    expect(list.map((p) => [p.position, p.text, p.uid, p.recurring])).toEqual([
+      [1, 'Review the PR', 'task00000001', false],
+      [2, '', null, false],
+      [3, '', null, false],
+      [4, 'Monitor the queue', QUEUE.uid, true],
+      [5, 'Follow-ups', FOLLOW_UPS.uid, true],
     ]);
-    expect(list[0]).toMatchObject({ cardUid: 'card00000001', addedAt: T0 });
+    expect(list[0]).toMatchObject({ addedAt: T0, categoryUid: 'cafe00000002' });
     expect(list[1]).toEqual(emptyRow(2));
-    expect(list[3]).toMatchObject({ addedAt: T0, categoryUid: 'cafe00000001', cardUid: null });
+    expect(list[3]).toMatchObject({ addedAt: T0, categoryUid: 'cafe00000001' });
   });
 
-  it("takes back an emptied routine row, keeping its uid and addedAt, in the item's category or else its own", () => {
-    const emptied = routine(2, QUEUE, '', { uid: 'emptied00001', addedAt: 50, categoryUid: 'cafe00000009' });
-    const list = acceptOffer([makePriority(1, 'A'), emptied], 3, [], [QUEUE], T0);
-    expect(list).toEqual([makePriority(1, 'A'), { ...emptied, text: 'Monitor the queue', categoryUid: 'cafe00000001' }, emptyRow(3)]);
-    const plain = routine(1, FOLLOW_UPS, '', { uid: 'emptied00002', addedAt: 50, categoryUid: 'cafe00000009' });
-    expect(acceptOffer([plain], 1, [], [FOLLOW_UPS], T0)).toEqual([{ ...plain, text: 'Follow-ups' }]);
-  });
-
-  it('skips a routine a row with text already holds', () => {
-    const rows = [routine(1, QUEUE, 'Queue, renamed')];
-    expect(acceptOffer(rows, 1, [], [QUEUE, FOLLOW_UPS], T0).map((p) => [p.text, p.recurringUid])).toEqual([
+  it('skips a routine a row of the list is already, under any name or with its box blank', () => {
+    const rows = [routine(1, QUEUE, 'Queue, renamed'), routine(2, SATURDAY, '')];
+    expect(acceptOffer(rows, 1, [], [QUEUE, SATURDAY, FOLLOW_UPS], T0).map((p) => [p.text, p.uid])).toEqual([
       ['Queue, renamed', QUEUE.uid],
+      ['', SATURDAY.uid],
       ['Follow-ups', FOLLOW_UPS.uid],
     ]);
   });
 
-  it('brings the leftovers through planNext, which keeps an emptied one-off row ahead of them', () => {
-    const emptied = makePriority(2, '', { uid: 'emptied00003' });
-    const list = acceptOffer([emptyRow(1), emptied], 3, [leftover], [], T0);
-    expect(list.map((p) => [p.position, p.text, p.uid])).toEqual([
-      [1, '', 'emptied00003'],
-      [2, 'Review the PR', list[1]!.uid],
-      [3, '', null],
+  it('brings the leftovers through planNext, which drops the free rows and keeps the written ones ahead of them', () => {
+    const list = acceptOffer([emptyRow(1), makePriority(2, 'Ship it')], 3, [leftover], [], T0);
+    expect(list.map((p) => [p.position, p.text])).toEqual([
+      [1, 'Ship it'],
+      [2, 'Review the PR'],
+      [3, ''],
     ]);
   });
 
@@ -138,7 +128,7 @@ describe('acceptOffer', () => {
     const full = Array.from({ length: MAX_PRIORITIES - 1 }, (_, i) => makePriority(i + 1, `p${i + 1}`));
     const list = acceptOffer(full, 3, [], [QUEUE, FOLLOW_UPS], T0);
     expect(list).toHaveLength(MAX_PRIORITIES);
-    expect(list.map((p) => p.recurringUid).filter((u) => u != null)).toEqual([QUEUE.uid]);
+    expect(list.filter((p) => p.recurring).map((p) => p.uid)).toEqual([QUEUE.uid]);
   });
 });
 

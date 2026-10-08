@@ -18,7 +18,6 @@ import type {
   Punch,
   PunchesResponse,
   RangeResponse,
-  Recurring,
   RetroResponse,
   RunningResponse,
   SessionResponse,
@@ -139,21 +138,17 @@ export const resetSettings = () => request<Settings>('DELETE', '/api/settings');
 /** The body of PUT /days/:date/retro: a field left out keeps its stored value. */
 export type RetroPatch = { note?: string; done?: boolean };
 
-/**
- * What PUT /days/:date/priorities takes beside the list. `base`: the list this one was built on,
- * so the server keeps what another device changed since (`mergePriorities`); without it the list
- * replaces the stored one. `cards`: make a board card for each text row that has none, sent
- * while the board is on and the list's day is today or later (the server never decides what
- * today is). `touched`: the cards a board action handled through their rows, which the server
- * then leaves where the board put them.
- */
-export type PrioritiesPut = { base?: Priority[]; cards?: boolean; touched?: string[] };
-
 export const getDay = (date: string) => request<Day>('GET', `/api/days/${date}`);
 export const putPunches = (date: string, punches: Punch[]) =>
   request<PunchesResponse>('PUT', `/api/days/${date}/punches`, { punches: punches.map((p) => ({ at: p.at })) });
-export const putPriorities = (date: string, priorities: Priority[], put: PrioritiesPut) =>
-  request<PrioritiesResponse>('PUT', `/api/days/${date}/priorities`, { priorities, ...put });
+/**
+ * A day's list, and `base`, the list it was built on, so the server keeps what another device
+ * changed since (`mergePriorities`); without it the list replaces the stored one. A row naming a
+ * task the server doesn't hold makes it, and a row whose name or category differs from its base
+ * row's renames or files the task on every day.
+ */
+export const putPriorities = (date: string, priorities: Priority[], base?: Priority[]) =>
+  request<PrioritiesResponse>('PUT', `/api/days/${date}/priorities`, { priorities, base });
 export const putOvertime = (date: string, approved: boolean) => request<OvertimeResponse>('PUT', `/api/days/${date}/overtime`, { approved });
 export const putTarget = (date: string, workMinutes: number | null) => request<TargetResponse>('PUT', `/api/days/${date}/target`, { workMinutes });
 export const putRetro = (date: string, patch: RetroPatch) => request<RetroResponse>('PUT', `/api/days/${date}/retro`, patch);
@@ -164,7 +159,8 @@ export const pruneDays = (before: string) => request<PruneResult>('POST', '/api/
 // ----- sessions -----
 /**
  * What the log and the timer bar change on a session (PATCH /sessions/:id also takes
- * plannedSeconds). `categoryUid` is the one picked in the log, for a session not on a written row.
+ * plannedSeconds). `categoryUid` is one picked in the log, which the server takes only for a
+ * session left with no task: one with a task counts under the task's category.
  */
 export type SessionEdit = { label?: string; priorityUid?: string | null; categoryUid?: string | null };
 
@@ -186,33 +182,32 @@ export const deleteBreak = (id: number) => request<OkResponse>('DELETE', `/api/b
 
 // ----- board -----
 /**
- * POST /board/cards: a new card, or where an existing one goes (a park), with its title and
- * category. The uid is one the board minted, or the parked row's cardUid.
+ * POST /items: a task made on the board, in `lane` before `before` there (null: the end), or a
+ * recurring priority made in Settings, with its `weekdays`. A uid the server holds answers the
+ * board as it is, so a retry adds nothing.
  */
-export type NewCard = Pick<BoardCard, 'uid' | 'title' | 'categoryUid'> & { lane: OpenLane; before: string | null };
+export type NewItem = Pick<BoardCard, 'uid' | 'title' | 'categoryUid'> & ({ lane: OpenLane; before: string | null } | { weekdays: number[] });
 /**
- * PATCH /board/cards/:uid: a field left out keeps its value; `before` alone reorders the card's
- * lane. `today` is the client's date key: while a row on that day's list or a later one is
- * linked to the card, the server refuses the edit (409).
+ * PATCH /items/:uid: a field left out keeps its value. `before` alone reorders the task's lane;
+ * `lane` is for a one-off task and `weekdays` for a recurring priority. A rename or a category
+ * reaches every day the task is on.
  */
-export type CardPatch = { today: string; title?: string; categoryUid?: string | null; lane?: OpenLane; before?: string | null };
+export type ItemPatch = { title?: string; categoryUid?: string | null; lane?: OpenLane; before?: string | null; weekdays?: number[] };
 /** POST /board/categories: a new category, or a removed one brought back under its own uid. */
 export type NewCategory = Pick<Category, 'uid' | 'name' | 'color'>;
 /** PATCH /board/categories/:uid: a field left out keeps its value. */
 export type CategoryPatch = Partial<Pick<Category, 'name' | 'color'>>;
-/** PATCH /board/recurring/:uid: a field left out keeps its value. Rows it already added keep their own text and category. */
-export type RecurringPatch = Partial<Pick<Recurring, 'title' | 'categoryUid' | 'weekdays'>>;
 
 export const getBoard = () => request<Board>('GET', '/api/board');
-export const addCard = (card: NewCard) => request<Board>('POST', '/api/board/cards', card);
-export const patchCard = (uid: string, patch: CardPatch) => request<Board>('PATCH', `/api/board/cards/${uid}`, patch);
-export const deleteCard = (uid: string) => request<Board>('DELETE', `/api/board/cards/${uid}`);
+export const addItem = (item: NewItem) => request<Board>('POST', '/api/items', item);
+export const editItem = (uid: string, patch: ItemPatch) => request<Board>('PATCH', `/api/items/${uid}`, patch);
+/**
+ * A one-off task deleted everywhere: off every day's list, its sessions kept as unplanned time
+ * under its name. A recurring priority is removed instead: it stops repeating, and the days it was
+ * on keep it.
+ */
+export const deleteItem = (uid: string) => request<Board>('DELETE', `/api/items/${uid}`);
 export const addCategory = (category: NewCategory) => request<Board>('POST', '/api/board/categories', category);
 export const patchCategory = (uid: string, patch: CategoryPatch) => request<Board>('PATCH', `/api/board/categories/${uid}`, patch);
 /** Removes it from use: the server keeps it, archived, so past time keeps its name. */
 export const deleteCategory = (uid: string) => request<Board>('DELETE', `/api/board/categories/${uid}`);
-/** A uid the server already holds answers the board as it is, so a retry adds nothing. */
-export const addRecurring = (item: Recurring) => request<Board>('POST', '/api/board/recurring', item);
-export const patchRecurring = (uid: string, patch: RecurringPatch) => request<Board>('PATCH', `/api/board/recurring/${uid}`, patch);
-/** Deletes it for good: the rows it added keep their `recurringUid`, linked to nothing. */
-export const deleteRecurring = (uid: string) => request<Board>('DELETE', `/api/board/recurring/${uid}`);
