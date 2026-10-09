@@ -270,19 +270,21 @@ describe('PlanNext', () => {
   it('locks what it sends while the save is out, and stays open with the rows still offered when it fails', async () => {
     const answer = deferred<{ priorities: Priority[] }>();
     vi.mocked(api.putPriorities).mockReturnValue(answer.promise);
-    await renderPlan();
+    await renderPlan({ pick: makePick([makeCategory('cat000000001', 'Tickets')]) });
     await open();
     fireEvent.click(box('Call the bank'));
+    type('Book flights');
     fireEvent.click(saveButton());
     await settle();
-    // The row left unticked is still offered: nothing typed, ticked or cancelled now would go out
-    // with the save whose answer closes the planner.
+    // The row left unticked is still offered: nothing typed, ticked, filed or cancelled now would
+    // go out with the save whose answer closes the planner.
     const cancel = screen.getByRole('button', { name: 'Cancel' }) as HTMLButtonElement;
-    const locked = () => [saveButton(), draft(), box('Call the bank'), cancel].map((el) => el.disabled);
-    expect(locked()).toEqual([true, true, true, true]);
+    const chip = screen.getByRole('button', { name: /^Category for Book flights:/ }) as HTMLButtonElement;
+    const locked = () => [saveButton(), draft(), box('Call the bank'), cancel, chip].map((el) => el.disabled);
+    expect(locked()).toEqual([true, true, true, true, true]);
     answer.reject(new Error('Request failed (500)'));
     await settle();
-    expect(locked()).toEqual([false, false, false, false]);
+    expect(locked()).toEqual([false, false, false, false, false]);
     expect(box('Review the PR').checked).toBe(true);
     expect(status()).toBe('');
     expect(playSound).not.toHaveBeenCalled();

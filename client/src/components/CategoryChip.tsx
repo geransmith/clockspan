@@ -13,6 +13,8 @@ interface Props {
   pick: CategoryPick;
   /** What the category is for ("Category for new cards"): the chip is named "{label}: {name}", or "{label}: none". */
   label: string;
+  /** While true the chip can't be pressed or focused, so no list opens and nothing is picked. */
+  disabled?: boolean;
 }
 
 interface Option {
@@ -53,7 +55,7 @@ function focusOption(list: HTMLElement | null, i?: number): void {
  * further, so a dialog around it stays open. Opening reads the board again (`pick.refresh`), so a
  * category made on another device is offered.
  */
-export function CategoryChip({ value, onChange, pick, label }: Props) {
+export function CategoryChip({ value, onChange, pick, label, disabled }: Props) {
   const [open, setOpen] = useState(false);
   // The option in the tab order while the list is open: the selected one, then where the keys moved.
   const [active, setActive] = useState<string | null>(null);
@@ -161,6 +163,7 @@ export function CategoryChip({ value, onChange, pick, label }: Props) {
       <button
         ref={chip}
         type="button"
+        disabled={disabled}
         className={current ? 'chip category-chip' : 'chip category-chip category-chip--empty'}
         aria-haspopup="listbox"
         aria-expanded={open}
