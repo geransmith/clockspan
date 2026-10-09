@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { cleanup, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { renderHook } from '@testing-library/react';
+import { beforeEach, expect, it, vi } from 'vitest';
 import { warnQuietly } from '../lib/alerts';
 import { SAVE_FAILED } from '../lib/copy';
 import { begin, deferred, settle } from '../test/hooks';
@@ -10,10 +10,6 @@ vi.mock('../lib/alerts');
 
 beforeEach(() => {
   vi.useFakeTimers();
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 /** Starts a save whose answer the test gives by hand. */

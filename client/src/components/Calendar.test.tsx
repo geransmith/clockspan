@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { LOAD_FAILED } from '../lib/copy';
 import { formatMonth } from '../lib/format';
@@ -29,10 +29,6 @@ const picked = () => screen.getByRole('button', { pressed: true });
 beforeEach(() => {
   vi.useFakeTimers({ now: LAST_EVENING });
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 describe('Calendar', () => {

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { useModalDialog } from '../hooks/useModalDialog';
 import { makeCategory, makePick, NEW_CATEGORY } from '../test/fixtures';
 import type { Category } from '../types';
@@ -47,8 +47,6 @@ const optionNames = () => options().map((o) => o.textContent);
 const focusedName = () => document.activeElement?.textContent;
 const isOpen = () => chip().getAttribute('aria-expanded') === 'true';
 const key = (el: Element, k: string) => fireEvent.keyDown(el, { key: k });
-
-afterEach(cleanup);
 
 describe('CategoryChip', () => {
   it('shows the category set with its name, or a dashed Category for none or a uid the board lacks', () => {

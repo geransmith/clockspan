@@ -1,16 +1,12 @@
 // @vitest-environment happy-dom
-import { act, cleanup, renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { useEffect } from 'react';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import { deferred, settle } from '../test/hooks';
 import { useDebouncedDraft } from './useDebouncedDraft';
 
 beforeEach(() => {
   vi.useFakeTimers();
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 type Save = (value: string, base: string) => boolean | Promise<boolean>;

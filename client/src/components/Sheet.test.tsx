@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HOUR_MS } from '../../../shared/dates.js';
 import * as api from '../api';
 import { LEFT_OPEN, PLAN_NEXT, REMOVE_TASK, TODAY_OFFER } from '../lib/copy';
@@ -79,10 +79,6 @@ beforeEach(() => {
   vi.mocked(api.getRunning).mockResolvedValue({ session: null });
   vi.mocked(api.getDay).mockResolvedValue(makeDay());
   serveRange([]);
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 describe('Sheet', () => {

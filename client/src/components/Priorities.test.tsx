@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DAY_MS, MINUTE_MS } from '../../../shared/dates.js';
 import { mergePriorities } from '../../../shared/priorities.js';
 import * as api from '../api';
@@ -115,10 +115,6 @@ const tick = (n: number) => screen.getByLabelText(`Priority ${n} done`) as HTMLI
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 describe('Priorities', () => {

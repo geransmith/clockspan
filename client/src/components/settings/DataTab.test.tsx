@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import { CONFIRM, DAYS_DELETED } from '../../lib/copy';
 import { formatDateFull } from '../../lib/format';
@@ -25,10 +25,6 @@ beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
   vi.mocked(api.getPruneInfo).mockImplementation((before) => Promise.resolve({ before, matching: 2, total: 4, oldest: '2026-09-01', serverMaxDays: null }));
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 describe('DataTab', () => {

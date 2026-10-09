@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { act, cleanup, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { beforeEach, expect, it } from 'vitest';
 import { USER_KEYS } from '../lib/storage';
 import { TODAY } from '../test/fixtures';
 import { useRecurringAnswered } from './useRecurringAnswered';
@@ -9,7 +9,6 @@ const TOMORROW = '2026-09-29';
 const render = (today = TODAY) => renderHook((p: { today: string }) => useRecurringAnswered(p.today), { initialProps: { today } });
 
 beforeEach(() => localStorage.clear());
-afterEach(cleanup);
 
 it("reads today's answers from this device, and none from another day", () => {
   localStorage.setItem(USER_KEYS.recurringAnswered, `${TODAY} rcur00000001,rcur00000002`);

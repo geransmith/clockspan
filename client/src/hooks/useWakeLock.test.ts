@@ -30,7 +30,6 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
-  vi.useRealTimers();
   delete (navigator as { wakeLock?: unknown }).wakeLock;
 });
 

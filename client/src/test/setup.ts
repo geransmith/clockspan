@@ -1,3 +1,14 @@
+import { afterEach, vi } from 'vitest';
+
+// The teardown every test file would otherwise repeat. A file's own afterEach runs first (Vitest
+// runs after-hooks in reverse), so a file whose teardown needs the tree unmounted first calls
+// cleanup() itself. RTL is loaded only where the test has a DOM, so the server's node tests never
+// pull it in.
+afterEach(async () => {
+  if (typeof document !== 'undefined') (await import('@testing-library/react')).cleanup();
+  vi.useRealTimers();
+});
+
 // happy-dom fires `selectionchange` inside `collapse()`, even for a collapse to the point already
 // selected; browsers queue the event and skip an unchanged selection. React Aria's time segments
 // collapse the selection on `selectionchange`, so under happy-dom the two recurse until the stack

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * The module keeps its own state (the audio context, the banner list), so every test gets a
@@ -133,9 +133,6 @@ beforeEach(async () => {
   vi.stubGlobal('Notification', FakeNotification);
   vi.stubGlobal('window', { focus });
   alerts = await import('./alerts');
-});
-afterEach(() => {
-  vi.useRealTimers();
 });
 
 describe('audio', () => {

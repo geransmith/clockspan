@@ -78,13 +78,9 @@ describe('date arithmetic', () => {
     expect(hours('2026-03-08')).toBe(23);
     expect(hours('2026-11-01')).toBe(25);
     vi.stubEnv('TZ', 'America/Santiago');
-    try {
-      // Chile moves its clocks at 00:00, so this day starts at 01:00.
-      expect(hours('2026-09-06')).toBe(23);
-      expect(todayKey(endOfDay('2026-09-06'))).toBe('2026-09-06');
-    } finally {
-      vi.unstubAllEnvs();
-    }
+    // Chile moves its clocks at 00:00, so this day starts at 01:00.
+    expect(hours('2026-09-06')).toBe(23);
+    expect(todayKey(endOfDay('2026-09-06'))).toBe('2026-09-06');
   });
 });
 
@@ -98,11 +94,7 @@ describe('isoWeekday', () => {
   it('gives the same answer in a zone far ahead of UTC or far behind it', () => {
     for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago']) {
       vi.stubEnv('TZ', zone);
-      try {
-        expect(week(), zone).toEqual([1, 3, 7, 7, 7, 1]);
-      } finally {
-        vi.unstubAllEnvs();
-      }
+      expect(week(), zone).toEqual([1, 3, 7, 7, 7, 1]);
     }
   });
 });

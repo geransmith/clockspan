@@ -1,9 +1,7 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { DurationField } from './DurationField';
-
-afterEach(cleanup);
 
 function renderField(minutes = 480, onCommit = vi.fn()) {
   const view = render(<DurationField label="Work day" minutes={minutes} min={1} max={24 * 60} onCommit={onCommit} />);

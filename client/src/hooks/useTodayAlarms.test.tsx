@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { alert } from '../lib/alerts';
 import { MINUTE_MS } from '../../../shared/dates.js';
@@ -41,10 +41,6 @@ function freshDevice() {
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
   localStorage.clear();
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 describe('useTodayAlarms', () => {

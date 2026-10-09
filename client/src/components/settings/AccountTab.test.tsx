@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import { ApiError } from '../../lib/apiError';
 import { PASSWORD_CHANGED } from '../../lib/copy';
@@ -26,10 +26,6 @@ const deleteSam = async () => {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.stubGlobal('confirm', () => true);
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 describe('AccountTab', () => {

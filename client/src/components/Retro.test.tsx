@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
 import { PLAN_NEXT, RETRO_PROMPT } from '../lib/copy';
@@ -37,10 +37,6 @@ const markReviewed = () => fireEvent.click(screen.getByRole('button', { name: /M
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 describe('Retro', () => {

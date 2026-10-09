@@ -31,7 +31,6 @@ afterEach(() => {
   cleanup();
   // The banner list is module state, so each test starts with none.
   for (const b of getBanners()) dismissBanner(b.id);
-  vi.useRealTimers();
 });
 
 describe('Banners', () => {

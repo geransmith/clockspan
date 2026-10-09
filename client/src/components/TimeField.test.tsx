@@ -1,13 +1,11 @@
 // @vitest-environment happy-dom
 import { Time } from '@internationalized/date';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ComponentProps } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { timeToMs } from '../lib/timefield';
 import { TODAY } from '../test/hooks';
 import { TimeField } from './TimeField';
-
-afterEach(cleanup);
 
 type FieldProps = Partial<ComponentProps<typeof TimeField>>;
 

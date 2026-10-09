@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { CONFIRM } from '../lib/copy';
 import { useDay } from '../hooks/useDay';
@@ -83,10 +83,6 @@ beforeEach(() => {
   vi.mocked(api.patchSession).mockImplementation((id, patch) => Promise.resolve({ session: { ...DONE, id, ...patch } }));
   vi.mocked(api.deleteSession).mockResolvedValue({ ok: true });
   vi.mocked(api.deleteBreak).mockResolvedValue({ ok: true });
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 describe('SessionLog', () => {

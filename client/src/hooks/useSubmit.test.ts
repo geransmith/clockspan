@@ -1,16 +1,12 @@
 // @vitest-environment happy-dom
-import { act, cleanup, renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import type { SubmitEvent } from 'react';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import { deferred, settle } from '../test/hooks';
 import { useSubmit } from './useSubmit';
 
 beforeEach(() => {
   vi.useFakeTimers();
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 const event = (preventDefault = vi.fn()) => ({ preventDefault }) as unknown as SubmitEvent<HTMLFormElement>;

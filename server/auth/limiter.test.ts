@@ -1,9 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { accountKey, LoginLimiter, limiterKey, MAX_ACCOUNT_FAILURES } from './limiter.js';
 
 describe('LoginLimiter', () => {
-  afterEach(() => vi.useRealTimers());
-
   it('locks an address after five failures for fifteen minutes, and a success takes back only its own attempt', () => {
     vi.useFakeTimers();
     const limiter = new LoginLimiter();

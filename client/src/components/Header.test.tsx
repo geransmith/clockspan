@@ -40,7 +40,6 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
-  vi.useRealTimers();
   Reflect.deleteProperty(HTMLInputElement.prototype, 'showPicker');
 });
 

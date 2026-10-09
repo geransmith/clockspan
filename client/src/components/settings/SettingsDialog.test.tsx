@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import { AuthGate } from '../../auth/AuthGate';
 import { PASSWORD_CHANGED, SAVE_STATUS } from '../../lib/copy';
@@ -44,10 +44,6 @@ beforeEach(() => {
   vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(applySettingsPatch(makeSettings(), patch)));
   vi.mocked(api.getPruneInfo).mockImplementation((before) => Promise.resolve({ before, matching: 0, total: 4, oldest: '2026-09-01', serverMaxDays: null }));
   vi.mocked(api.listUsers).mockResolvedValue({ users: [ADMIN] });
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 describe('SettingsDialog', () => {

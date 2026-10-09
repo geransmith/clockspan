@@ -58,7 +58,6 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
-  vi.useRealTimers();
   document.title = '';
 });
 
