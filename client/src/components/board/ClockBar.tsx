@@ -31,7 +31,7 @@ export function ClockBar({ day, today, now }: { day: Day; today: string; now: nu
           <div key={id} className={tone || undefined}>
             <dt>{LABELS[id]}</dt>
             <dd className="clock-bar-value">{value}</dd>
-            {sub && <dd className="clock-bar-line">{sub}</dd>}
+            {sub && <dd className="tile-sub">{sub}</dd>}
           </div>
         ))}
       </dl>

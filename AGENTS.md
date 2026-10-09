@@ -556,7 +556,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `lib/timeclock.ts`: the first punch out of place and the one it should come after) are named by
   the sheet's notice (`PUNCH_ORDER`), which describes that row's field; such a day counts in no
   hours total (the week line, Review's worked time and target) and shows a dash and `CHECK_PUNCHES`
-  wherever its own hours would show (the sheet's tiles, History's cell and day panel).
+  wherever its own hours would show (the sheet's tiles, the board's clock bar, History's cell and
+  day panel).
 - **A punch row saves only complete times.** `TimeField` (React Aria segments) commits the moment
   hour, minute and period are all filled, and throws a half-typed draft away when focus leaves the
   field or on Escape, which keeps focus in the field, so the row never shows a time the server

@@ -2497,11 +2497,6 @@ button.log-label:hover {
 .clock-bar .tile--danger .clock-bar-value {
   color: var(--danger-ink);
 }
-.clock-bar-line {
-  font-size: 0.78rem;
-  line-height: 1.3;
-  color: var(--tile-ink, var(--text-2));
-}
 @media (min-width: 640px) {
   .clock-bar dl {
     display: flex;
@@ -2512,9 +2507,6 @@ button.log-label:hover {
     display: flex;
     align-items: baseline;
     gap: 8px;
-  }
-  .clock-bar-line {
-    font-size: 0.85rem;
   }
 }
 .board-switch .segment {

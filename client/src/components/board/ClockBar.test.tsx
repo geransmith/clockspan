@@ -60,6 +60,16 @@ describe('ClockBar', () => {
     ]);
   });
 
+  it('follows the Meal periods and Overtime settings', async () => {
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ timeFormat: '24h', mealRules: false, overtimeApproval: false }));
+    // A punched lunch still moves the clock out, with no Lunch by; time past the day isn't overtime.
+    await renderBar(makeDay(TODAY, { punches: punchesAt(at(8), at(12), at(12, 30)) }), at(17));
+    expect(items()).toEqual([
+      ['Clock in', hhmm(at(8))],
+      ['Clock out at', hhmm(at(16, 30)), '30m past your day'],
+    ]);
+  });
+
   it('names its region Timeclock and holds no live region, timer or tab stop', async () => {
     await renderBar(makeDay());
     const region = screen.getByRole('region', { name: 'Timeclock' });
