@@ -31,6 +31,10 @@ export function Header({ view, date, today, board, customize, onNavigate, onTogg
   // Next day on reaching today is disabled and Today goes once pressed, so either hands the focus
   // to Previous day rather than letting it fall back to the top of the page.
   const prevDay = useRef<HTMLButtonElement>(null);
+  // A key moves the focus to its button, as a click would have: the control it was on may go with the page.
+  const brandButton = useRef<HTMLButtonElement>(null);
+  const boardButton = useRef<HTMLButtonElement>(null);
+  const historyButton = useRef<HTMLButtonElement>(null);
   const onSheet = view === 'sheet';
   const onHistory = view === 'history';
   const onBoard = view === 'board';
@@ -45,14 +49,28 @@ export function Header({ view, date, today, board, customize, onNavigate, onTogg
   const toToday = () => onNavigate({ view: 'sheet', date: null });
   const toggleBoard = () => onNavigate({ view: onBoard ? 'sheet' : 'board' });
   const toggleHistory = () => onNavigate({ view: onHistory ? 'sheet' : 'history' });
-  const sheetKey = useShortcut('sheet', toToday);
-  const boardKey = useShortcut('board', board ? toggleBoard : null);
-  const historyKey = useShortcut('history', toggleHistory);
+  const sheetKey = useShortcut('sheet', () => {
+    brandButton.current?.focus();
+    toToday();
+  });
+  const boardKey = useShortcut(
+    'board',
+    board
+      ? () => {
+          boardButton.current?.focus();
+          toggleBoard();
+        }
+      : null,
+  );
+  const historyKey = useShortcut('history', () => {
+    historyButton.current?.focus();
+    toggleHistory();
+  });
 
   return (
     <header className="topbar">
       <div className={crowded ? 'topbar-row topbar-row--crowded' : 'topbar-row'}>
-        <button className="brand" onClick={toToday} title="Go to today" aria-keyshortcuts={sheetKey}>
+        <button ref={brandButton} className="brand" onClick={toToday} title="Go to today" aria-keyshortcuts={sheetKey}>
           <img src="/icons/icon.svg" alt="" width={28} height={28} />
           <span className="brand-name">Clockspan</span>
         </button>
@@ -65,12 +83,12 @@ export function Header({ view, date, today, board, customize, onNavigate, onTogg
             </button>
           )}
           {board && (
-            <button className="btn btn-icon" onClick={toggleBoard} aria-pressed={onBoard} title="Board" aria-keyshortcuts={boardKey}>
+            <button ref={boardButton} className="btn btn-icon" onClick={toggleBoard} aria-pressed={onBoard} title="Board" aria-keyshortcuts={boardKey}>
               <Columns />
               <span className="btn-text">Board</span>
             </button>
           )}
-          <button className="btn btn-icon" onClick={toggleHistory} aria-pressed={onHistory} title="History" aria-keyshortcuts={historyKey}>
+          <button ref={historyButton} className="btn btn-icon" onClick={toggleHistory} aria-pressed={onHistory} title="History" aria-keyshortcuts={historyKey}>
             <List />
             <span className="btn-text">History</span>
           </button>

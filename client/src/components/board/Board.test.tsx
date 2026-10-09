@@ -800,6 +800,16 @@ describe('adding from a column', () => {
     expect(isOpen('New card for Later')).toBe(false);
   });
 
+  // With today's list unread there is no Later's + to stand for, so N mustn't leave its box to open once it is.
+  it("leaves N alone while today's list could not be read", async () => {
+    vi.mocked(api.getDay).mockRejectedValueOnce(new Error('offline'));
+    await renderBoard();
+    expect(pressKey('n')).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await settle();
+    expect(isOpen('New card for Later')).toBe(false);
+  });
+
   it("shuts Later's and Next's + at the cap and In progress's on a full list, saying why under each, where Tab still reaches it", async () => {
     onServer = makeBoard(...fullBoard());
     await renderBoard();

@@ -946,20 +946,21 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   its button, with `useShortcut(id, run)` called before any early return, and `run` is null
   whenever that button is hidden or wouldn't act (F before time's up, + at the longest plan, N
   with Later's + shut, R while a start is out or off today's sheet), so a key never acts where its
-  button wouldn't, and R holds the start buttons as a tap on Break does. The hook answers the
-  button's `aria-keyshortcuts` while the key is bound and the `shortcuts` setting is on. Two
-  mounted bindings of one key (the bar's and the card's timer buttons) run the newer, and a
-  binding keeps its place while its `run` comes and goes. `useShortcutListener`, mounted once by
-  `Shortcuts` beside `FinishChoice` in `App.tsx`, is the one keydown listener on the window
-  (nothing else in the app listens for keys there or on the document), attached once the settings
-  have loaded and while `shortcuts` is on. Its guard, `shortcutFor`, leaves a key alone when it
-  was handled already, held down, composing or pressed with Ctrl, Cmd or Alt, when it is typed
-  into a field (a text box, a text area, a select, a time segment, the category list), and while a
-  dialog is open or an item is dragged. A key that acts calls `preventDefault()`, so the letter
-  isn't typed into the row it focused, and a timer key calls `unlockAudio()` first. Letters match
-  in either case, and + is matched on `KeyboardEvent.key`. The list is a static dialog in
-  `Shortcuts.tsx`, its labels beside it, not a lazy chunk. The setting is on by default and turns
-  every key off (WCAG 2.1.4).
+  button wouldn't, and R holds the start buttons as a tap on Break does. S, B and H put the focus
+  on their header button first, where a click leaves it, since the control it was on may go with
+  the page. The hook answers the button's `aria-keyshortcuts` while the key is bound and the
+  `shortcuts` setting is on. Two mounted bindings of one key (the bar's and the card's timer
+  buttons) run the newer, and a binding keeps its place while its `run` comes and goes.
+  `useShortcutListener`, mounted once by `Shortcuts` beside `FinishChoice` in `App.tsx`, is the
+  one keydown listener on the window (nothing else in the app listens for keys there or on the
+  document), attached once the settings have loaded and while `shortcuts` is on. Its guard,
+  `shortcutFor`, leaves a key alone when it was handled already, held down, composing or pressed
+  with Ctrl, Cmd or Alt, when it is typed into a field (a text box, a text area, a select, a time
+  segment, the category list), and while a dialog is open or an item is dragged. A key that acts
+  calls `preventDefault()`, so the letter isn't typed into the row it focused, and a timer key
+  calls `unlockAudio()` first. Letters match in either case, and + is matched on
+  `KeyboardEvent.key`. The list is a static dialog in `Shortcuts.tsx`, its labels beside it, not
+  a lazy chunk. The setting is on by default and turns every key off (WCAG 2.1.4).
 - **History, the board, the settings dialog and drag and drop are lazy chunks** (`lazy()` in
   `App.tsx` for `History`, `Board` and `SettingsDialog`, in `Sheet.tsx` for `SortableCards`;
   `SortableCards` and `components/board/` hold every `@dnd-kit` import). A static import of one
@@ -1411,12 +1412,13 @@ The browser pass for each surface (the logic under it is already tested):
   touch areas).
 - **Keyboard shortcuts**: after `npm run seed -- --running` with the board on, at 1280: ? opens
   the list with the focus on it, ? again does nothing and Escape gives the focus back; P pauses
-  and resumes, + adds the step, and once the timer has run out (see "The timer") F opens "How much
-  to log?", where keys do nothing; after the finish, R starts a break and R again does nothing; N
-  puts the focus in a free row with no n typed, and with three written rows leaves it on Add
-  priority beside the nudge; H and B there and back, S from History. An h typed into the bar's
-  label, a priority, Clock in's hour, the date picker and an open category list, or pressed with
-  Settings open, does nothing, and Option+B, Cmd+H and Ctrl+F do only what the browser does. On
+  and resumes, + adds the step, and once the timer is a minute or more past its end (see "The
+  timer") F opens "How much to log?", where keys do nothing; after the finish, R starts a break and
+  R again does nothing; N puts the focus in a free row with no n typed, and with three written rows
+  leaves it on Add priority beside the nudge; H and B there and back, S from History, each leaving
+  the focus on its header button. An h typed into a day log label (the Inbox row's edit), a
+  priority, Clock in's hour, the date picker and an open category list, or pressed with Settings
+  open, does nothing, and Option+B, Cmd+H and Ctrl+F do only what the browser does. On
   the board at 1440, N opens Later's box (with a box already open too), R does nothing, and a key
   pressed during a keyboard drag does nothing. With Settings → Sheet → Keyboard off no key acts.
   The list at 1000 and 375, light and dark; a screen reader reads its title and keys, and a

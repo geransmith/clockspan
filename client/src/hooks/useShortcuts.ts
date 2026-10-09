@@ -5,7 +5,7 @@ import { useLatest } from './useLatest';
 import { useSettings } from './useSettings';
 
 // Every binding, in the order they mounted. A module's state, as alerts.ts keeps its banners, so a
-// card that binds a key needs no provider around it in a test.
+// card that binds a key needs no shortcut provider of its own.
 const bindings = new Map<string, { id: ShortcutId; run: RefObject<(() => void) | null> }>();
 
 /** The newest mounted binding of the key that has something to run. */

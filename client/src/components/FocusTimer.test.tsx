@@ -37,13 +37,13 @@ let elsewhere = deferred<string | null>();
  * The card as the sheet wires it: today's priorities from the store. Beside it, whether the timer
  * counts a start as out, which the board reads, and a start made off the card, as the board's is.
  */
-function Card({ pick }: { pick: CategoryPick | null }) {
+function Card({ pick, isToday = true }: { pick: CategoryPick | null; isToday?: boolean }) {
   const { day } = useDay(TODAY);
   const { starting, start } = useTimer();
   if (!day) return null;
   return (
     <>
-      <FocusTimer date={TODAY} isToday priorities={day.priorities} pick={pick} />
+      <FocusTimer date={TODAY} isToday={isToday} priorities={day.priorities} pick={pick} />
       <output aria-label="A start is out">{String(starting)}</output>
       <button onClick={() => void start(TODAY, 25 * 60, 'Board task', elsewhere.promise)}>Start elsewhere</button>
     </>
@@ -53,12 +53,12 @@ function Card({ pick }: { pick: CategoryPick | null }) {
 /** `n` priority rows, all ticked. */
 const ticked = (n: number) => Array.from({ length: n }, (_, i) => makePriority(i + 1, `Row ${i + 1}`, { done: true }));
 
-async function renderCard(priorities: Priority[] = [], breaks: Break[] = [], pick: CategoryPick | null = null) {
+async function renderCard(priorities: Priority[] = [], breaks: Break[] = [], pick: CategoryPick | null = null, { isToday = true } = {}) {
   vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities, breaks }));
   const view = render(
     <AppProviders>
       <ShortcutKeys />
-      <Card pick={pick} />
+      <Card pick={pick} isToday={isToday} />
     </AppProviders>,
   );
   await settle();
@@ -138,6 +138,26 @@ describe('FocusTimer', () => {
     // A break runs: the Break button has gone, and R with it.
     expect(keys()).toBeUndefined();
     expect(pressKey('r')).toBe(true);
+  });
+
+  it('leaves R alone while a start made off the card is out, as the Break button is held', async () => {
+    vi.mocked(api.startSession).mockResolvedValue(started(makeSession({ label: 'Board task' })));
+    await renderCard();
+    fireEvent.click(screen.getByRole('button', { name: 'Start elsewhere' }));
+    await settle();
+    expect(disabled(/^Break · /)).toBe(true);
+    expect(pressKey('r')).toBe(true);
+    expect(api.startBreak).not.toHaveBeenCalled();
+    elsewhere.resolve(null);
+    await settle();
+  });
+
+  // A break is always today's, so R on a past day's card would start one there is no button for.
+  it("leaves R alone on a past day's card, which shows no Break button", async () => {
+    await renderCard([], [], null, { isToday: false });
+    expect(screen.queryByRole('button', { name: /^Break · / })).toBeNull();
+    expect(pressKey('r')).toBe(true);
+    expect(api.startBreak).not.toHaveBeenCalled();
   });
 
   it('leaves R alone while a timer runs', async () => {

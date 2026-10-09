@@ -13,13 +13,13 @@ import { useShortcut } from './useShortcuts';
 vi.mock('../api');
 vi.mock('../lib/alerts');
 
+type Binding = { id: ShortcutId; run: (() => void) | null; name: string };
+
 /** A button bound to a key, named `name`, as a card binds one beside its button. */
-function Bound({ id, run, name }: { id: ShortcutId; run: (() => void) | null; name: string }) {
+function Bound({ id, run, name }: Binding) {
   const keys = useShortcut(id, run);
   return <button aria-keyshortcuts={keys}>{name}</button>;
 }
-
-type Binding = { id: ShortcutId; run: (() => void) | null; name: string };
 
 /** The listener and the bindings, in mount order; `again` renders them anew (the same names keep their place). */
 async function renderKeys(bindings: Binding[]) {
@@ -88,13 +88,19 @@ describe('useShortcut', () => {
       { id: 'pause', run: null, name: 'Older' },
       { id: 'pause', run: first, name: 'Newer' },
     ]);
+    // Only Older's run changes, as a card re-rendering alone passes a new one.
+    again([
+      { id: 'pause', run: older, name: 'Older' },
+      { id: 'pause', run: first, name: 'Newer' },
+    ]);
+    pressKey('p');
+    expect(first).toHaveBeenCalledOnce();
     again([
       { id: 'pause', run: older, name: 'Older' },
       { id: 'pause', run: latest, name: 'Newer' },
     ]);
     pressKey('p');
     expect(latest).toHaveBeenCalledOnce();
-    expect(first).not.toHaveBeenCalled();
     expect(older).toHaveBeenCalledOnce();
     again([{ id: 'pause', run: null, name: 'Older' }]);
     expect(pressKey('p')).toBe(true);

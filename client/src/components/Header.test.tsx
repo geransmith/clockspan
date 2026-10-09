@@ -89,21 +89,32 @@ describe('Header', () => {
     }
   });
 
-  it('binds S to the brand, H to History and B to Board while the board is on, each button naming its key', async () => {
+  // The control the focus was on may go with the page, so the focus moves to the button, as a click leaves it.
+  it('binds S to the brand, H to History and B to Board while the board is on, each button naming its key and taking the focus', async () => {
     let onNavigate = await renderHeader(YESTERDAY, 'history');
-    const keys = (name: string) => screen.getByRole('button', { name }).getAttribute('aria-keyshortcuts');
+    const button = (name: string) => screen.getByRole('button', { name });
+    const keys = (name: string) => button(name).getAttribute('aria-keyshortcuts');
     expect([keys('Clockspan'), keys('History')]).toEqual(['S', 'H']);
     expect(pressKey('b')).toBe(true);
     pressKey('h');
     expect(onNavigate).toHaveBeenLastCalledWith({ view: 'sheet' });
     pressKey('s');
     expect(onNavigate).toHaveBeenLastCalledWith({ view: 'sheet', date: null });
+    expect(document.activeElement).toBe(button('Clockspan'));
     cleanup();
     onNavigate = await renderHeader(TODAY, 'board', { board: true });
     expect(keys('Board')).toBe('B');
     pressKey('b');
     expect(onNavigate).toHaveBeenLastCalledWith({ view: 'sheet' });
     expect(onNavigate).toHaveBeenCalledOnce();
+    cleanup();
+    onNavigate = await renderHeader(TODAY, 'sheet', { board: true });
+    pressKey('h');
+    expect(onNavigate).toHaveBeenLastCalledWith({ view: 'history' });
+    expect(document.activeElement).toBe(button('History'));
+    pressKey('b');
+    expect(onNavigate).toHaveBeenLastCalledWith({ view: 'board' });
+    expect(document.activeElement).toBe(button('Board'));
   });
 
   // A toggle's name stays put and aria-pressed says whether it is on, as Board's and History's do.

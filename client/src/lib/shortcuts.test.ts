@@ -65,6 +65,11 @@ describe('shortcutFor', () => {
       const el = add(html);
       expect(keyAt(el.querySelector('span, li') ?? el, 'h'), html).toBeNull();
     }
+    // Chrome's autofill sends a field a keydown with no key, so the field is checked before the key is read.
+    const field = add('<input />');
+    const autofill = new Event('keydown', { bubbles: true });
+    field.dispatchEvent(autofill);
+    expect(shortcutFor(autofill as KeyboardEvent)).toBeNull();
     for (const html of ['<button>Go</button>', '<input type="checkbox" />', '<input type="radio" />', '<span contenteditable="false">x</span>']) {
       expect(keyAt(add(html), 'h'), html).toBe('history');
     }
