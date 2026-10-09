@@ -242,7 +242,7 @@ describe('task writes', () => {
   });
 
   it("refuse a new task in a lane once Later and Next are full, sending nothing, with the board's line", async () => {
-    onServer = makeBoard(...Array.from({ length: BOARD_LIMITS.openCards }, (_, i) => makeCard(`full${i}`.padEnd(12, '0'), `Task ${i}`, { position: i + 1 })));
+    onServer = makeBoard(...Array.from({ length: BOARD_LIMITS.openCards }, (_, i) => makeCard(`full${i}`.padEnd(12, 'x'), `Task ${i}`, { position: i + 1 })));
     const { result } = renderBoard();
     await settle();
     await expect(
@@ -369,7 +369,7 @@ describe('moves', () => {
   });
 
   it('refuse a pull onto a full list or one not loaded, and say when the save failed', async () => {
-    lists[TODAY] = Array.from({ length: MAX_PRIORITIES }, (_, i) => makePriority(i + 1, `Row ${i + 1}`, { uid: `task${i}`.padEnd(12, '0') }));
+    lists[TODAY] = Array.from({ length: MAX_PRIORITIES }, (_, i) => makePriority(i + 1, `Row ${i + 1}`, { uid: `task${i}`.padEnd(12, 'x') }));
     const { result } = renderBoard();
     await settle();
     const place = (uid: string): StoreMove => ({ kind: 'place', row: pulled(uid, 'X'), nudge: true });
@@ -461,7 +461,7 @@ describe('moves', () => {
   });
 
   it("refuse a lane for a task that takes room there once Later and Next are full, sending nothing, with the board's line", async () => {
-    const full = Array.from({ length: BOARD_LIMITS.openCards }, (_, i) => makeCard(`full${i}`.padEnd(12, '0'), `Task ${i}`, { position: i + 1 }));
+    const full = Array.from({ length: BOARD_LIMITS.openCards }, (_, i) => makeCard(`full${i}`.padEnd(12, 'x'), `Task ${i}`, { position: i + 1 }));
     onServer = makeBoard(...full, makeCard('left00000001', 'Left open', { lane: null, listDate: YESTERDAY }));
     const { result } = renderBoard();
     await settle();
@@ -520,7 +520,7 @@ describe('moves', () => {
     });
 
     it('refuses with the full line, sending nothing, when the task would take room in full lanes', async () => {
-      onServer = makeBoard(...Array.from({ length: BOARD_LIMITS.openCards }, (_, i) => makeCard(`full${i}`.padEnd(12, '0'), `Task ${i}`, { position: i + 1 })));
+      onServer = makeBoard(...Array.from({ length: BOARD_LIMITS.openCards }, (_, i) => makeCard(`full${i}`.padEnd(12, 'x'), `Task ${i}`, { position: i + 1 })));
       lists[TODAY] = [makePriority(1, 'Typed')];
       const { result } = renderBoard();
       await settle();

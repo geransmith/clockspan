@@ -53,8 +53,8 @@ function ids(c: BoardColumns): Record<keyof BoardColumns, string[]> {
 }
 
 const row = (position: number, text: string, patch: Partial<Priority> = {}) =>
-  makePriority(position, text, { uid: `row${position}`.padEnd(12, '0'), ...patch });
-const rowUid = (position: number) => `row${position}`.padEnd(12, '0');
+  makePriority(position, text, { uid: `row${position}`.padEnd(12, 'x'), ...patch });
+const rowUid = (position: number) => `row${position}`.padEnd(12, 'x');
 const ROUTINE = { uid: 'rcur00000001', recurring: true };
 const EMPTY = { later: [], next: [], progress: [], doneToday: [], doneEarlier: [] };
 
