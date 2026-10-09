@@ -75,9 +75,9 @@ function Shell() {
   const { setEditingPunches } = useTodayAlarms(today, now, openRetro);
   // A board link opened with the board off (switched off here or on another device) shows the sheet.
   const view = route.view === 'board' && loaded && !settings.board ? 'sheet' : route.view;
-  const loading = <div className="sheet-loading" aria-busy="true" />;
+  const loading = <div className="loading" aria-busy="true" />;
   // With the board's class, so the page takes the board's width while its chunk and data load.
-  const boardLoading = <div className="board sheet-loading" aria-busy="true" />;
+  const boardLoading = <div className="board loading" aria-busy="true" />;
 
   const page = () => {
     switch (view) {
@@ -93,7 +93,7 @@ function Shell() {
         // Until the settings answer, whether the board is on isn't known.
         return loaded ? (
           <Suspense fallback={boardLoading}>
-            <Board today={today} />
+            <Board today={today} now={minute} />
           </Suspense>
         ) : (
           boardLoading

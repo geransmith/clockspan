@@ -125,7 +125,7 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
   if (!day || !tc)
     return (
       <div className={sheetClass}>
-        {failed ? <LoadFailed title={LOAD_FAILED.title} onRetry={() => void store.load(date)} /> : <div className="sheet-loading" aria-busy="true" />}
+        {failed ? <LoadFailed title={LOAD_FAILED.title} onRetry={() => void store.load(date)} /> : <div className="loading" aria-busy="true" />}
       </div>
     );
 
@@ -157,6 +157,7 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
             key={date}
             priorities={day.priorities}
             sessions={day.sessions}
+            now={now}
             pick={pick}
             onChange={(p, base) => store.setPriorities(date, p, base)}
             onDeleteTask={(uid) => boardStore.deleteItem(uid)}

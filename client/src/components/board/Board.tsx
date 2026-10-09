@@ -21,7 +21,6 @@ import { createPortal } from 'react-dom';
 import { addDays, startOfWeek } from '../../../../shared/dates.js';
 import { useBoardState, useBoardStore, useCategoryPick } from '../../hooks/useBoard';
 import { useCelebration, type Moment } from '../../hooks/useCelebration';
-import { useClock } from '../../hooks/useClock';
 import { useDay } from '../../hooks/useDay';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useRange } from '../../hooks/useRange';
@@ -92,10 +91,12 @@ const canDrag = (item: BoardItem) => !item.planned && !item.recurring;
  * The Board page: Later, Next, In progress and Done. In progress is today's list, the sheet's
  * Top priorities, and Done holds this week. An item moves by its grip (a mouse, a finger or the
  * keyboard) or its editor's Move to, and both go through `planMove`; a move the board can't make
- * shows in the notice under the capture box. It reads the clock for Delete's count of a timer
- * running on the task.
+ * shows in the notice under the capture box. `now` is App's clock floored to the minute, the one
+ * the sheet gets, for Delete's count of a timer running on the task: the page renders once a
+ * minute, and × on the sheet and Delete here count to the same minute. The move and delete
+ * handlers are built in render, where the purity lint refuses Date.now().
  */
-export const Board = memo(function Board({ today }: { today: string }) {
+export const Board = memo(function Board({ today, now }: { today: string; now: number }) {
   const { board, failed } = useBoardState();
   const store = useBoardStore();
   const { settings } = useSettings();
@@ -104,8 +105,6 @@ export const Board = memo(function Board({ today }: { today: string }) {
   // Done holds the week: the days before today (none on a Monday) give the rows ticked on them.
   const { days: earlierDays } = useRange(weekStart, addDays(today, -1), today !== weekStart);
   const pick = useCategoryPick();
-  // Read in render: the move and delete handlers are built here, where the purity lint refuses Date.now().
-  const now = useClock();
   useEffect(() => void store.load(), [store]);
 
   const [moving, setMoving] = useState<ReadonlyMap<string, DropTarget>>(() => new Map());
@@ -193,7 +192,7 @@ export const Board = memo(function Board({ today }: { today: string }) {
         <LoadFailed title={LOAD_FAILED.title} onRetry={() => void dayStore.load(today)} />
       </div>
     );
-  if (!board || !day || !columns || !shown || !pick) return <div className="board sheet-loading" aria-busy="true" />;
+  if (!board || !day || !columns || !shown || !pick) return <div className="board loading" aria-busy="true" />;
 
   const todayRows = day.priorities;
 
@@ -426,7 +425,7 @@ export const Board = memo(function Board({ today }: { today: string }) {
         inputRef={captureBox}
         onAdd={(title, lane, categoryUid) => report(store.addItem({ uid: newUid(), title, categoryUid, lane, before: laneStart(columns, lane) }))}
       />
-      {/* Always there, so what arrives is heard (see styles.css for its gap). */}
+      {/* Always there, so what arrives is heard. */}
       <div className="board-notice" role="status" ref={noticeBox}>
         {notice?.kind === 'nudge' && (
           <NoticeView

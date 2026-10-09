@@ -42,7 +42,7 @@ async function renderCard(priorities: Priority[] = [], sessions: Session[] = [],
   const onDeleteTask = vi.fn<(uid: string) => Promise<void>>(() => Promise.resolve());
   const card = (rows: Priority[], o: MorningOffer | null) => (
     <SettingsProvider>
-      <Priorities priorities={rows} sessions={sessions} onChange={onChange} onDeleteTask={onDeleteTask} pick={pick} offer={o} />
+      <Priorities priorities={rows} sessions={sessions} now={T0} onChange={onChange} onDeleteTask={onDeleteTask} pick={pick} offer={o} />
     </SettingsProvider>
   );
   const view = render(card(priorities, offer));
@@ -65,6 +65,7 @@ function OnTheStore({ pick = null }: { pick?: CategoryPick | null }) {
     <Priorities
       priorities={day.priorities}
       sessions={day.sessions}
+      now={T0}
       pick={pick}
       onChange={(p, base) => store.setPriorities(TODAY, p, base)}
       onDeleteTask={(uid) => boardStore.deleteItem(uid)}
@@ -810,6 +811,14 @@ describe('Priorities: ×', () => {
       expect(onChange).not.toHaveBeenCalled();
       unmount();
     }
+  });
+
+  it("counts a running timer to the sheet's minute, as the board's Delete does, not the second of the press", async () => {
+    const email = makePriority(1, 'Email');
+    await renderCard([email], [makeSession({ startedAt: T0 - 12 * MINUTE_MS, priorityUid: email.uid })]);
+    vi.setSystemTime(T0 + 50_000);
+    fireEvent.click(x(1));
+    expect(document.getElementById(dialog()!.getAttribute('aria-describedby')!)!.textContent).toBe(REMOVE_TASK.body(0, '12m'));
   });
 
   it('changes nothing on Cancel, and gives the focus back to the ×', async () => {

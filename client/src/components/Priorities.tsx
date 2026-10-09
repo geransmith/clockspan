@@ -26,6 +26,8 @@ interface Props {
   priorities: Priority[];
   /** The day's sessions: × asks first about a task with time logged on it, one finished since the day was read included. */
   sessions: Session[];
+  /** The sheet's clock, floored to the minute: × counts a running timer to it, as the board's Delete does. */
+  now: number;
   /** `base`: the rows the edits were made on, the list the card last sent or last took up from `priorities`. Resolves to whether it saved. */
   onChange: (priorities: Priority[], base: Priority[]) => Promise<boolean>;
   /** Deletes a task everywhere (the board store's `deleteItem`), for ×'s Delete everywhere; rejects when that fails. */
@@ -70,7 +72,7 @@ interface Asked {
  * keystroke; checkboxes, add and remove save immediately. Keyed by date in the sheet, so a
  * new day mounts fresh instead of carrying drafts over.
  */
-export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick, offer }: Props) {
+export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, pick, offer }: Props) {
   const { settings } = useSettings();
   const count = settings.priorityCount;
   // The rows Add priority put past the stored list: the server keeps no free row, so the card pads
@@ -158,7 +160,7 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick,
     else addButton.current?.focus();
   };
   // Rendered at once, so focus can go to the first row the offer filled inside the same tap; a
-  // routine already on the list may sit ahead of it (`planNext` keeps written rows first). With
+  // row already on the list may sit ahead of it (a leftover takes the first free row). With
   // nothing filled (every item a repeat, or none ticked) the focus goes where a new priority would.
   const fill = (next: Priority[]) => {
     flushSync(() => editList(next, true));
@@ -205,7 +207,7 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick,
   // asks (Settings removes those).
   const remove = (p: Priority) => {
     // `logged` is the other days' time, so the day's own log, a running timer included, adds to it.
-    const time = p.uid == null ? 0 : p.logged + (loggedByUid(sessions, Date.now()).get(p.uid) ?? 0);
+    const time = p.uid == null ? 0 : p.logged + (loggedByUid(sessions, now).get(p.uid) ?? 0);
     if (p.uid != null && !p.recurring && (p.listed > 1 || time > 0)) {
       setAsked({ uid: p.uid, name: hasText(p) ? p.text : (storedName(p.uid) ?? ''), otherDays: Math.max(0, p.listed - 1), logged: time });
     } else takeOff(p.position);
@@ -343,7 +345,7 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick,
           </Fragment>
         );
       })}
-      {/* Always there, so the warning is heard when it arrives (see styles.css for its gap). */}
+      {/* Always there, so the warning is heard when it arrives. */}
       <div className="priorities-notice" role="status">
         {warning && (
           <div className="notice notice--gentle">

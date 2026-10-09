@@ -53,7 +53,7 @@ export function BoardTab({ settings, set, save }: TabProps & { save: Save }) {
   useEffect(() => void store.load(), [store]);
   if (failed && !board) return <LoadFailed title={LOAD_FAILED.board} onRetry={() => void store.load()} />;
   // The chip's data is null only before the board's first read.
-  if (!board || !pick) return <div className="sheet-loading" aria-busy="true" />;
+  if (!board || !pick) return <div className="loading" aria-busy="true" />;
   return (
     <>
       <Categories categories={board.categories} save={save} />

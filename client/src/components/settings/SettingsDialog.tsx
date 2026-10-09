@@ -118,7 +118,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           {saveState === 'failed' && <p className="notice notice--danger">{SAVE_STATUS.failedDetail}</p>}
           {/* The defaults stand in until the first answer, and a list sent whole (the start buttons,
               an alarm's warnings) would write them over the stored one. */}
-          {loaded ? panel() : <div className="sheet-loading" aria-busy="true" />}
+          {loaded ? panel() : <div className="loading" aria-busy="true" />}
         </div>
       </div>
     </dialog>

@@ -42,7 +42,7 @@ describe('styles.css', () => {
   });
 
   // The browser bar and the install splash can't read a CSS variable, so index.html and the
-  // manifest repeat --bg.
+  // manifest repeat --bg (the manifest the light one, for both its colours).
   it('gives the theme-color metas and the manifest the page background', () => {
     const light = bg(':root');
     const dark = bg(":root[data-theme='dark']");
@@ -57,8 +57,9 @@ describe('styles.css', () => {
     expect(themeColor('light')).toBe(light);
     expect(themeColor('dark')).toBe(dark);
 
-    const manifest = JSON.parse(read('../../public/manifest.webmanifest')) as { background_color?: unknown };
+    const manifest = JSON.parse(read('../../public/manifest.webmanifest')) as { background_color?: unknown; theme_color?: unknown };
     expect(manifest.background_color).toBe(light);
+    expect(manifest.theme_color).toBe(light);
   });
 
   // A dot and Review's By category bars are the only places a category's colour shows, so it has
