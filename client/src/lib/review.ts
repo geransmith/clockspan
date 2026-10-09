@@ -149,7 +149,8 @@ export interface RangeReview {
 
 /**
  * Roll a range of full days up into one review. Worked time comes from the same timeclock
- * math as the sheet, frozen for past days, and break time by the day log's math
+ * math as the sheet, frozen for past days, with a day whose punches are out of order left out of
+ * it and of `targetSeconds`, and break time by the day log's math
  * (`breakSeconds`, a running break up to now); the plan and the focus reuse `reviewDay`. A day
  * after today is left out: all it can hold is a plan made the evening before (Plan tomorrow),
  * and none of it has happened yet. A day with nothing on it (`hasContent`) is left out too,
@@ -211,8 +212,12 @@ export function reviewRange(
     const tc = dayTimeclock(day, settings, today, now);
     const r = reviewDay(day.priorities, day.sessions);
     out.days++;
-    out.workedSeconds += tc.workedSeconds;
-    if (tc.clockIn != null) out.targetSeconds += daySettings(settings, day).workMinutes * 60;
+    // A day with punches out of order has no worked time to trust (its sheet shows a dash), so it
+    // is left out of the hours and of the target they are held to.
+    if (!tc.outOfOrder) {
+      out.workedSeconds += tc.workedSeconds;
+      if (tc.clockIn != null) out.targetSeconds += daySettings(settings, day).workMinutes * 60;
+    }
     out.focusedSeconds += r.onPlanSeconds + r.offPlanSeconds;
     out.sessions += focusOf(day.sessions).count;
     onPlan += r.onPlanSeconds;

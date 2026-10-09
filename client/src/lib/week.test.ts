@@ -30,6 +30,13 @@ describe('weekHours', () => {
     expect(weekHours([open], settings, TODAY, NOW).workedSeconds).toBe(16 * 3600 - 1);
   });
 
+  it('leaves out a day with punches out of order, as its sheet shows no worked time', () => {
+    const start = atTime('2026-09-28', 9, 0);
+    // Lunch in typed before lunch out.
+    const slipped = makeDay('2026-09-28', { punches: punchesAt(start, start + 3 * HOUR_MS, start + 2 * HOUR_MS, start + 8 * HOUR_MS) });
+    expect(weekHours([slipped, day('2026-09-29', 7.5)], settings, TODAY, NOW).workedSeconds).toBe(7.5 * 3600);
+  });
+
   it('reports a target of nothing when the week line is off', () => {
     expect(weekHours([], { ...settings, weekMinutes: 0 }, TODAY, NOW)).toEqual({ workedSeconds: 0, targetSeconds: 0, met: false, overSeconds: 0 });
     // Hours with no target are not over anything.

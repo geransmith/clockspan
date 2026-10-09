@@ -2,7 +2,10 @@ import type { Day } from '../types';
 import { dayTimeclock, type TimeclockSettings } from './timeclock';
 
 export interface WeekHours {
-  /** Worked from Monday up to and including the day, by the same math as each day's sheet. */
+  /**
+   * Worked from Monday up to and including the day, by the same math as each day's sheet. A day
+   * whose punches are out of order counts nothing: its sheet shows no worked time either.
+   */
   workedSeconds: number;
   targetSeconds: number;
   /** A target is set and the week has reached it. */
@@ -20,7 +23,10 @@ export interface WeekHours {
  * past), against the weekly target.
  */
 export function weekHours(days: Day[], settings: TimeclockSettings & { weekMinutes: number }, today: string, now: number): WeekHours {
-  const workedSeconds = days.reduce((sum, d) => sum + dayTimeclock(d, settings, today, now).workedSeconds, 0);
+  const workedSeconds = days.reduce((sum, d) => {
+    const tc = dayTimeclock(d, settings, today, now);
+    return tc.outOfOrder ? sum : sum + tc.workedSeconds;
+  }, 0);
   const targetSeconds = settings.weekMinutes * 60;
   const over = workedSeconds - targetSeconds;
   return { workedSeconds, targetSeconds, met: targetSeconds > 0 && workedSeconds >= targetSeconds, overSeconds: targetSeconds > 0 && over >= 60 ? over : 0 };

@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import * as api from '../api';
-import { LOAD_FAILED } from '../lib/copy';
+import { CHECK_PUNCHES, LOAD_FAILED } from '../lib/copy';
 import { formatMonth } from '../lib/format';
 import { makeDay, makeSettings, punchesAt, serveRange, SettingsAndDays, settle } from '../test/hooks';
 import { Calendar } from './Calendar';
@@ -98,6 +98,21 @@ describe('Calendar', () => {
     expect(picked().getAttribute('aria-label')).toMatch(/, nothing recorded$/);
     expect(screen.getByText('Nothing recorded.')).toBeTruthy();
     expect(screen.queryByText('Worked')).toBeNull();
+  });
+
+  it('shows Check punches for a day with punches out of order, in place of its hours', async () => {
+    const at = (h: number) => new Date(2026, 8, 29, h).getTime();
+    // Lunch in typed before lunch out.
+    serveRange([makeDay('2026-09-29', { punches: punchesAt(at(9), at(12), at(11), at(17)) })]);
+    const view = render(calendar(LAST, LAST_EVENING));
+    await settle();
+    const cell = view.container.querySelector<HTMLElement>('[data-date="2026-09-29"]')!;
+    expect(cell.getAttribute('aria-label')).toMatch(/, check punches$/);
+    expect(cell.querySelector('.calendar-worked')!.textContent).toBe('—');
+    expect(cell.querySelector('.calendar-bar')).toBeNull();
+    fireEvent.click(cell);
+    expect(screen.getByText(CHECK_PUNCHES)).toBeTruthy();
+    expect(screen.getByText('Worked').parentElement!.textContent).toContain('—');
   });
 
   it('drops a sticker filter whose reason leaves the legend', async () => {
