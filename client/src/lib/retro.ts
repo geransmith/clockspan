@@ -8,7 +8,7 @@ export interface PriorityReview {
   /** Completed session time on this row's task, that day. */
   focusedSeconds: number;
   sessions: number;
-  /** Written after the day's first completed session started: it arrived mid-day, not in the plan. */
+  /** Put on the day's list after the day's first completed session started: it arrived mid-day, not in the plan. */
   addedMidDay: boolean;
 }
 

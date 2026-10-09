@@ -25,6 +25,9 @@ export function Header({ view, date, today, board, customize, onNavigate, onTogg
   // Typing a date fires a change with a whole date per digit (a year goes 0002, 0020, 0202, 2026),
   // so only the first change in a visit to the field adds a history entry and the rest replace it.
   const typed = useRef(false);
+  // Next day on reaching today is disabled and Today goes once pressed, so either hands the focus
+  // to Previous day rather than letting it fall back to the top of the page.
+  const prevDay = useRef<HTMLButtonElement>(null);
   const onSheet = view === 'sheet';
   const onHistory = view === 'history';
   const onBoard = view === 'board';
@@ -81,7 +84,7 @@ export function Header({ view, date, today, board, customize, onNavigate, onTogg
       </div>
       {onSheet && (
         <div className="topbar-row datenav">
-          <button className="btn btn-icon" onClick={() => onNavigate({ date: addDays(date, -1) })} aria-label="Previous day">
+          <button ref={prevDay} className="btn btn-icon" onClick={() => onNavigate({ date: addDays(date, -1) })} aria-label="Previous day">
             <ChevronLeft />
           </button>
           <label className="datenav-label">
@@ -119,11 +122,26 @@ export function Header({ view, date, today, board, customize, onNavigate, onTogg
               aria-label="Pick a date"
             />
           </label>
-          <button className="btn btn-icon" onClick={() => onNavigate({ date: addDays(date, 1) })} aria-label="Next day" disabled={date >= today}>
+          <button
+            className="btn btn-icon"
+            onClick={() => {
+              const next = addDays(date, 1);
+              onNavigate({ date: next });
+              if (next >= today) prevDay.current?.focus();
+            }}
+            aria-label="Next day"
+            disabled={date >= today}
+          >
             <ChevronRight />
           </button>
           {!isToday && (
-            <button className="btn btn-ghost" onClick={() => onNavigate({ date: null })}>
+            <button
+              className="btn btn-ghost"
+              onClick={() => {
+                onNavigate({ date: null });
+                prevDay.current?.focus();
+              }}
+            >
               Today
             </button>
           )}

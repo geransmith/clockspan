@@ -285,11 +285,12 @@ export function reviewRange(
 /**
  * One day's one-off rows laid onto Not done, the tasks left open on the days before it, walked
  * oldest first. A task's days are one entry, keyed by its uid, and a tick settles it. A task
- * retyped by hand on a later day is a task of its own, so one with no lane on one list joins the
- * latest open entry of its text (`sameText`) whose last day is at most `LOOKBACK_DAYS` before
- * this one, the rule `server/migrations/oneItem.ts` chains rows by: its tick settles that entry,
- * and so does the tick of another such task of its text on its day. The entry shows its latest
- * task's name. A task with a lane neither joins nor is joined; one on two lists joins none.
+ * retyped by hand on a later day is a task of its own, so one with no lane, on its first day
+ * (`earlier === 0`), joins the latest open entry of its text (`sameText`) whose last day is at most
+ * `LOOKBACK_DAYS` before this one, the rule `server/migrations/oneItem.ts` chains rows by: its tick
+ * settles that entry, and so does the tick of another such task of its text on its day. Its later
+ * days follow the entry it joined, so carrying it on doesn't regroup a past period. The entry
+ * shows its latest task's name. A task with a lane neither joins nor is joined.
  */
 function addToNotDone(
   notDone: Map<string, OpenPriority>,
@@ -298,7 +299,7 @@ function addToNotDone(
   date: string,
   laned: ReadonlySet<string>,
 ): void {
-  const byText = (p: Priority) => !laned.has(p.uid!) && p.listed === 1;
+  const byText = (p: Priority) => !laned.has(p.uid!) && p.earlier === 0;
   const entryOf = (p: Priority): OpenPriority | undefined => {
     const own = notDone.get(groupOf.get(p.uid!) ?? '');
     if (own || !byText(p)) return own;

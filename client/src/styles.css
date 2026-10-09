@@ -2419,10 +2419,8 @@ button.log-label:hover {
 .category-bar-off:only-child {
   border-radius: 4px;
 }
-/* No category's bar, which has no data-color: a neutral at 3:1 and up on the surfaces in both
-   themes. Not set on .category-bar, which comes after the [data-color] rules at the same
-   specificity and would override every category's colour. */
-.category-bar--none {
+/* No category's bar: a neutral at 3:1 and up on the surfaces in both themes. */
+.category-bar:not([data-color]) {
   --cat: var(--text-2);
 }
 @media (min-width: 640px) {

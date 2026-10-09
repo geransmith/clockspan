@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useRef, useState } from 'react';
 import { startOfWeek } from '../../../shared/dates.js';
 import type { ReviewPeriod } from '../lib/review';
 import { Calendar } from './Calendar';
@@ -21,9 +21,13 @@ type Tab = 'days' | 'review';
 export const History = memo(function History({ today, now, date, review, onOpen }: Props) {
   const [tab, setTab] = useState<Tab>(review ? 'review' : 'days');
   const [period, setPeriod] = useState<ReviewPeriod>(() => review ?? { kind: 'week', from: startOfWeek(today) });
+  const reviewButton = useRef<HTMLButtonElement>(null);
+  // The calendar, and the button pressed in it, are hidden once Review shows: the focus goes to
+  // the Review switch rather than falling back to the top of the page.
   const reviewWeek = (d: string) => {
     setPeriod({ kind: 'week', from: startOfWeek(d) });
     setTab('review');
+    reviewButton.current?.focus();
   };
   return (
     <div className="history-view stack">
@@ -32,7 +36,7 @@ export const History = memo(function History({ today, now, date, review, onOpen 
         <button className="segment" aria-pressed={tab === 'days'} onClick={() => setTab('days')}>
           Days
         </button>
-        <button className="segment" aria-pressed={tab === 'review'} onClick={() => setTab('review')}>
+        <button ref={reviewButton} className="segment" aria-pressed={tab === 'review'} onClick={() => setTab('review')}>
           Review
         </button>
       </div>

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { addDays } from '../../../shared/dates.js';
 import * as api from '../api';
 import { AuthGate } from '../auth/AuthGate';
 import { VIEWS, type Route } from '../hooks/useRoute';
@@ -97,10 +98,24 @@ describe('Header', () => {
     }
   });
 
-  it('sends Today to the null route', async () => {
+  it('sends Today to the null route, handing the focus to Previous day as Today goes', async () => {
     const onNavigate = await renderHeader(YESTERDAY);
     fireEvent.click(screen.getByRole('button', { name: 'Today' }));
     expect(onNavigate).toHaveBeenCalledWith({ date: null });
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Previous day' }));
+  });
+
+  it('hands the focus to Previous day when Next day reaches today and is disabled', async () => {
+    const onNavigate = await renderHeader(addDays(YESTERDAY, -1));
+    fireEvent.click(screen.getByRole('button', { name: 'Next day' }));
+    expect(onNavigate).toHaveBeenLastCalledWith({ date: YESTERDAY });
+    expect(document.activeElement).toBe(document.body);
+    cleanup();
+
+    const fromYesterday = await renderHeader(YESTERDAY);
+    fireEvent.click(screen.getByRole('button', { name: 'Next day' }));
+    expect(fromYesterday).toHaveBeenLastCalledWith({ date: TODAY });
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Previous day' }));
   });
 
   it('adds one history entry per visit to or click on the date field, and skips a part-typed year', async () => {

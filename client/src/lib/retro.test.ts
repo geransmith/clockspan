@@ -189,7 +189,7 @@ describe('reviewDay', () => {
     expect(r.unplanned).toHaveLength(0);
   });
 
-  it('flags rows written after the first session started', () => {
+  it('flags rows put on the list after the first session started', () => {
     const priorities = [
       makePriority(1, 'Planned', { addedAt: 5_000 }),
       makePriority(2, 'From the manager', { addedAt: 50_000 }),
