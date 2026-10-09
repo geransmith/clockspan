@@ -457,12 +457,33 @@ describe('setPunches', () => {
     expect(result.current.days[TODAY]?.punches[0]?.at).toBe(T0 - MINUTE_MS);
   });
 
-  it('sends the list for a day never loaded, and leaves that day to load from the server', async () => {
+  it('sends the list for a day never loaded, as it is, and leaves that day to load from the server', async () => {
     vi.mocked(api.putPunches).mockImplementation(echoPunches);
     const { result } = renderStore(null);
     await act(() => result.current.setPunches(OTHER, punchesAt(T0)));
-    expect(vi.mocked(api.putPunches).mock.calls[0]?.[1][0]?.at).toBe(T0);
+    // No rows to build on: an empty base leaves the list as sent.
+    expect(api.putPunches).toHaveBeenCalledWith(OTHER, punchesAt(T0), []);
     expect(result.current.days[OTHER]).toBeUndefined();
+  });
+
+  it("sends the rows it was built on, and shows another device's punch merged the way the server will store it", async () => {
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { punches: punchesAt(T0) }));
+    const answer = deferred<PunchesResponse>();
+    vi.mocked(api.putPunches).mockReturnValueOnce(answer.promise);
+    const { result } = renderStore();
+    await settle();
+    const lunchOut = T0 + 180 * MINUTE_MS;
+    const clockOut = T0 + 480 * MINUTE_MS;
+    const done = begin(() => result.current.setPunches(TODAY, punchesAt(T0, lunchOut)));
+    await settle();
+    expect(api.putPunches).toHaveBeenCalledWith(TODAY, punchesAt(T0, lunchOut), punchesAt(T0));
+    // The phone clocked out meanwhile, and a refresh brings it in under the save still out.
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { punches: punchesAt(T0, null, null, clockOut) }));
+    await act(() => result.current.refresh(TODAY));
+    expect(result.current.days[TODAY]?.punches).toEqual(punchesAt(T0, lunchOut, null, clockOut));
+    answer.resolve({ punches: punchesAt(T0, lunchOut, null, clockOut) });
+    await act(() => done);
+    expect(result.current.days[TODAY]?.punches).toEqual(punchesAt(T0, lunchOut, null, clockOut));
   });
 });
 
@@ -736,21 +757,6 @@ describe('priorities', () => {
     expect(api.putPriorities).toHaveBeenCalledTimes(1);
   });
 
-  it('reads nothing again after a save that takes a row with a category off a list a session was logged on', async () => {
-    const report = makePriority(1, 'Report', { categoryUid: 'cat000000001' });
-    const email = makePriority(2, 'Email');
-    // The server answers the session's category as its task's, wherever the task is.
-    const onReport = endSession(makeSession({ id: 4, priorityUid: report.uid, categoryUid: 'cat000000001' }));
-    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [report, email], sessions: [onReport] }));
-    vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
-    const { result } = renderStore();
-    await settle();
-    await act(() => result.current.setPriorities(TODAY, [{ ...email, position: 1 }], [report, email]));
-    await settle();
-    expect(api.getDay).toHaveBeenCalledTimes(1);
-    expect(result.current.days[TODAY]!.sessions).toEqual([onReport]);
-  });
-
   it('prioritiesSaved resolves at once with no priorities save out', async () => {
     const { result } = renderStore(null);
     await expect(result.current.prioritiesSaved(TODAY)).resolves.toBeUndefined();
@@ -868,15 +874,49 @@ describe('a priorities save that puts a task on a list or takes one off', () => 
     await act(() => result.current.setPriorities(TOMORROW, [report], []));
     await settle();
     expect(read()).toEqual([TODAY]);
-    // A rename puts nothing on and takes nothing off.
+    // A tick puts nothing on and takes nothing off.
     vi.mocked(api.getDay).mockClear();
-    await act(() => result.current.setPriorities(TOMORROW, [{ ...report, text: 'Report v2' }], [report]));
+    await act(() => result.current.setPriorities(TOMORROW, [{ ...report, done: true }], [report]));
     await settle();
     expect(read()).toEqual([]);
     // Email off today's list: yesterday's copy has it on two days.
     await act(() => result.current.setPriorities(TODAY, [report], [report, email]));
     await settle();
     expect(read()).toEqual([YESTERDAY]);
+  });
+});
+
+describe('a priorities save that renames or files a task', () => {
+  it('reads again every held day naming it, the saved one included, and moves generation', async () => {
+    // Its time yesterday is the task's logged time on other days.
+    const report = makePriority(1, 'Report', { uid: 'task00000001', logged: 1500 });
+    const held = [
+      makeDay(TODAY, { priorities: [report] }),
+      makeDay(YESTERDAY, { sessions: [endSession(makeSession({ id: 2, date: YESTERDAY, priorityUid: report.uid, title: 'Report' }))] }),
+      makeDay(OTHER, { priorities: [makePriority(1, 'Email', { uid: 'task00000002' })] }),
+    ];
+    vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(held.find((d) => d.date === date)!));
+    vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
+    const { result } = renderStore(null);
+    for (const d of held) await act(() => result.current.load(d.date));
+    // Each day once, whatever a read dropped as stale asked again.
+    const read = () => [...new Set(vi.mocked(api.getDay).mock.calls.map(([d]) => d))].sort();
+    const save = async (row: Priority, base: Priority) => {
+      vi.mocked(api.getDay).mockClear();
+      const generation = result.current.generation;
+      await act(() => result.current.setPriorities(TODAY, [row], [base]));
+      await settle();
+      return { read: read(), moved: result.current.generation - generation };
+    };
+    const changed = { read: [YESTERDAY, TODAY], moved: 1 };
+    expect(await save({ ...report, text: 'Report v2' }, report)).toEqual(changed);
+    expect(await save({ ...report, categoryUid: 'cat000000001' }, report)).toEqual(changed);
+    // A tick, or spaces typed around the name, change nothing the server holds for the task.
+    expect(await save({ ...report, done: true }, report)).toEqual({ read: [], moved: 0 });
+    expect(await save({ ...report, text: ' Report ' }, report)).toEqual({ read: [], moved: 0 });
+    // A task on no other day, with nothing logged elsewhere: no other day can show its old name.
+    const fresh = makePriority(2, 'Draft', { uid: 'task00000003' });
+    expect(await save({ ...fresh, text: 'Draft v2' }, fresh)).toEqual({ read: [], moved: 0 });
   });
 });
 
@@ -1136,6 +1176,30 @@ describe('breaks', () => {
     await settle();
     await act(() => result.current.startBreak(TODAY, 300));
     expect(result.current.days[TODAY]?.breaks).toEqual([over, saved]);
+  });
+
+  it('startBreak replaces an ended break whose id the new one took (another device deleted it)', async () => {
+    const deleted = makeBreak({ id: 7, startedAt: T0 - 30 * MINUTE_MS, endedAt: T0 - 25 * MINUTE_MS });
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { breaks: [deleted] }));
+    const saved = makeBreak({ id: 7, startedAt: T0, endedAt: T0 + 5 * MINUTE_MS });
+    vi.mocked(api.startBreak).mockResolvedValue({ break: saved });
+    const { result } = renderStore();
+    await settle();
+    await act(() => result.current.startBreak(TODAY, 300));
+    expect(result.current.days[TODAY]?.breaks).toEqual([saved]);
+  });
+
+  it('startBreak ends the break still running on the day before, as the server does', async () => {
+    const late = makeBreak({ id: 3, date: YESTERDAY, plannedSeconds: 600, startedAt: MIDNIGHT - 5 * MINUTE_MS, endedAt: MIDNIGHT + 5 * MINUTE_MS });
+    vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(makeDay(date, { breaks: date === YESTERDAY ? [late] : [] })));
+    const saved = makeBreak({ id: 4, startedAt: MIDNIGHT + 2 * MINUTE_MS, endedAt: MIDNIGHT + 7 * MINUTE_MS });
+    vi.mocked(api.startBreak).mockResolvedValue({ break: saved });
+    const { result } = renderStore();
+    await act(() => result.current.load(YESTERDAY));
+    await settle();
+    await act(() => result.current.startBreak(TODAY, 300));
+    expect(result.current.days[YESTERDAY]?.breaks).toEqual([{ ...late, endedAt: MIDNIGHT + 2 * MINUTE_MS }]);
+    expect(result.current.days[TODAY]?.breaks).toEqual([saved]);
   });
 
   it('startBreak adds nothing and raises the banner when the server refuses', async () => {

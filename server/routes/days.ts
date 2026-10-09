@@ -28,7 +28,7 @@ import { startBreak } from './breaks.js';
 import { startSession } from './sessions.js';
 import { mergePriorities } from '../../shared/priorities.js';
 import { taskTitle } from '../../shared/text.js';
-import { kindForPosition, MAX_PUNCHES } from '../../shared/punches.js';
+import { kindForPosition, MAX_PUNCHES, mergePunches } from '../../shared/punches.js';
 import { MAX_PRIORITIES, SETTING_LIMITS } from '../../shared/settings.js';
 import {
   emptyDay,
@@ -66,6 +66,24 @@ function parseInstant(raw: unknown, from: number, to: number): number | null {
  */
 function isRow(raw: unknown): raw is Record<string, unknown> {
   return typeof raw === 'object' && raw !== null && !Array.isArray(raw);
+}
+
+/** A list of punch times as a PUT sends it (`punches` or its `base`): each row's position and kind from its place. */
+function parsePunches(input: unknown, date: string, list: string, row: string): Punch[] | string {
+  if (!Array.isArray(input)) return `${list} must be an array.`;
+  if (input.length > MAX_PUNCHES) return `${list} is limited to ${MAX_PUNCHES} rows.`;
+  // A punch belongs to its day: a time days away from the key is a client bug, not data.
+  const window = punchWindow(date);
+  const punches: Punch[] = [];
+  for (let i = 0; i < input.length; i++) {
+    const item: unknown = input[i];
+    if (!isRow(item)) return `${row} ${i} must be an object.`;
+    const raw = item.at;
+    const at = raw == null ? null : parseInstant(raw, window.from, window.to);
+    if (raw != null && at == null) return `${row} ${i} has an invalid time.`;
+    punches.push({ position: i, kind: kindForPosition(i), at });
+  }
+  return punches;
 }
 
 function punchesJson(rows: PunchRow[]): Punch[] {
@@ -300,29 +318,25 @@ export function daysRouter(db: DB, config: Config): Router {
     res.json((daysInRange(db, currentUser(req).id, date, date)[0] ?? emptyDay(date)) satisfies Day);
   });
 
-  // Full replace. Position parity defines kind: even = in, odd = out.
+  // Position parity defines kind: even = in, odd = out. `base` is the list the client built this
+  // one on: the server keeps the punches another device saved since (`mergePunches`), and with
+  // no base (curl) the list replaces the stored one.
   r.put('/:date/punches', (req, res) => {
     const user = currentUser(req);
     const { date } = req.params;
-    const input = (req.body as { punches?: unknown }).punches;
-    if (!Array.isArray(input)) return refuse(res, 400, 'punches must be an array.');
-    if (input.length > MAX_PUNCHES) return refuse(res, 400, `punches is limited to ${MAX_PUNCHES} rows.`);
-    // A punch belongs to its day: a time days away from the key is a client bug, not data.
-    const window = punchWindow(date);
-    const punches: Punch[] = [];
-    for (let i = 0; i < input.length; i++) {
-      const item: unknown = input[i];
-      if (!isRow(item)) return refuse(res, 400, `Punch ${i} must be an object.`);
-      const raw = item.at;
-      const at = raw == null ? null : parseInstant(raw, window.from, window.to);
-      if (raw != null && at == null) return refuse(res, 400, `Punch ${i} has an invalid time.`);
-      punches.push({ position: i, kind: kindForPosition(i), at });
-    }
-    db.transaction(() => {
+    const body = req.body as { punches?: unknown; base?: unknown };
+    const sent = parsePunches(body.punches, date, 'punches', 'Punch');
+    if (typeof sent === 'string') return refuse(res, 400, sent);
+    const base = body.base == null ? null : parsePunches(body.base, date, 'base', 'Base punch');
+    if (typeof base === 'string') return refuse(res, 400, base);
+    const punches = db.transaction(() => {
       const dayId = ensureDay(db, user.id, date);
+      const stored = punchesJson(db.prepare(`SELECT * FROM punches WHERE day_id = ? ORDER BY position`).all(dayId) as PunchRow[]);
+      const merged = mergePunches(stored, base, sent);
       db.prepare(`DELETE FROM punches WHERE day_id = ?`).run(dayId);
       const ins = db.prepare(`INSERT INTO punches (day_id, position, kind, at) VALUES (?, ?, ?, ?)`);
-      for (const p of punches) ins.run(dayId, p.position, p.kind, p.at);
+      for (const p of merged) ins.run(dayId, p.position, p.kind, p.at);
+      return merged;
     })();
     res.json({ punches } satisfies PunchesResponse);
   });

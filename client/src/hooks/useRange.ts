@@ -18,11 +18,11 @@ function useHeldOver(fetched: Day[] | null | undefined, from: string, to: string
 }
 
 /**
- * Full days for a date range, in date order, for the week line, the History calendar, the
- * review and the left-open offer. Read through the day store (`readRange`), whose held days take
- * the answer unless a change was confirmed meanwhile, then laid over with the store's copies
- * (`useHeldOver`). Read once per range while `enabled`, and again after a prune (`generation`),
- * whose deleted days the answer on screen may still hold; that answer stays shown meanwhile.
+ * Full days for a date range, in date order. Read through the day store (`readRange`), whose
+ * held days take the answer unless a change was confirmed meanwhile, then laid over with the
+ * store's copies (`useHeldOver`). Read once per range while `enabled`, and again after a prune or
+ * a task changed everywhere (`generation`), whose deleted days or old names the answer on screen
+ * may still hold; that answer stays shown meanwhile.
  * The answer is tagged with the range it is for, so stepping to another period reads as loading
  * (days null, not failed) straight away without clearing state inside the effect. A failed read
  * reads as `failed` until `retry` asks again (a History tab's Try again).

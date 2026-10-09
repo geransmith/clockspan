@@ -3,9 +3,10 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import * as api from '../api';
 import { dismissByTag, getBanners } from '../lib/alerts';
+import { whileUnsettled } from '../lib/optimistic';
 import { HTTPS_ONLY, NEW_PASSWORD, PASSWORD_MISMATCH, SIGN_OUT_FAILED } from '../lib/copy';
 import { AUTH_USER_KEY } from '../lib/storage';
-import { DEFAULT_USER, makeAuth, makeUser, setVisibility, settle } from '../test/hooks';
+import { DEFAULT_USER, deferred, makeAuth, makeUser, setVisibility, settle } from '../test/hooks';
 import type { AuthInfo } from '../types';
 import { AuthGate, useAuth } from './AuthGate';
 
@@ -230,6 +231,19 @@ describe('AuthGate', () => {
       await lostSession();
       expect(api.getAuth).toHaveBeenCalledTimes(1);
       expect(reload).not.toHaveBeenCalled();
+    });
+
+    it('waits for a save still on its way before it signs out', async () => {
+      await renderGate(makeAuth({ user: USER }));
+      vi.mocked(api.logout).mockResolvedValue({ ok: true });
+      const save = deferred<boolean>();
+      void whileUnsettled(save.promise);
+      await signOut();
+      expect(api.logout).not.toHaveBeenCalled();
+      save.resolve(true);
+      await settle();
+      expect(api.logout).toHaveBeenCalledOnce();
+      expect(assign).toHaveBeenCalledWith('/');
     });
 
     it("follows the provider's end-session redirect under OIDC", async () => {

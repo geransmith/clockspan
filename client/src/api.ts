@@ -140,8 +140,15 @@ export const resetSettings = () => request<Settings>('DELETE', '/api/settings');
 export type RetroPatch = { note?: string; done?: boolean };
 
 export const getDay = (date: string) => request<Day>('GET', `/api/days/${date}`);
-export const putPunches = (date: string, punches: Punch[]) =>
-  request<PunchesResponse>('PUT', `/api/days/${date}/punches`, { punches: punches.map((p) => ({ at: p.at })) });
+/**
+ * A day's punch times, and those of `base`, the rows they were built on, so the server keeps a
+ * punch another device saved since (`mergePunches`). Only the times go: each row's position and
+ * kind come from its place.
+ */
+export const putPunches = (date: string, punches: Punch[], base: Punch[]) => {
+  const times = (rows: Punch[]) => rows.map((p) => ({ at: p.at }));
+  return request<PunchesResponse>('PUT', `/api/days/${date}/punches`, { punches: times(punches), base: times(base) });
+};
 /**
  * A day's list, and `base`, the list it was built on, so the server keeps what another device
  * changed since (`mergePriorities`); without it the list replaces the stored one. A row naming a
