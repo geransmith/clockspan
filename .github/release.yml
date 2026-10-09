@@ -11,5 +11,9 @@ changelog:
       labels: [bug]
     - title: Docs
       labels: [documentation]
+    # Before the catch-all, which would take them: a PR goes in the first category it matches.
+    # A patch release cut for a security fix or a base image lists only these.
+    - title: Dependency updates
+      labels: [dependencies]
     - title: Other changes
       labels: ['*']

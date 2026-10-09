@@ -1,7 +1,3 @@
-# check=skip=SecretsUsedInArgOrEnv
-# The directive above must be the first line. It silences one build-check rule: the linter
-# reads "AUTH" in ENV AUTH_MODE as a secret, but that is a mode switch (none | local | oidc).
-# The secrets this app takes (OIDC_CLIENT_SECRET) are passed at run time, never baked in.
 # Both stages name the same base by digest, not just the tag: a tag moves when Node or Alpine
 # ships a fix, and an unpinned build would change under a release without anything in git
 # saying so. Dependabot opens a PR when the tag moves, and CI's image-smoke boots it first.
@@ -12,10 +8,10 @@
 FROM --platform=$BUILDPLATFORM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-# --ignore-scripts: better-sqlite3 ships prebuilds (including linux-musl) and loads them when
-# no build/ dir exists, but its binding.gyp makes npm run `node-gyp rebuild` by default, and
-# whether the allowScripts policy blocks that differs between npm 11 and 12 (npm 12 in this
-# image runs it, and the image has no python). esbuild's postinstall is only an optimisation.
+# --ignore-scripts (the image doesn't copy .npmrc): no dependency's install script runs.
+# better-sqlite3 needs none, since it loads its bundled linux-musl prebuild first, and its
+# binding.gyp would otherwise make npm run node-gyp, which needs python the image lacks.
+# esbuild's postinstall is only an optimisation.
 RUN npm ci --ignore-scripts
 COPY tsconfig.json tsconfig.server.json vite.config.ts ./
 COPY client ./client
@@ -44,8 +40,7 @@ RUN mkdir -p /data
 
 ENV NODE_ENV=production \
     PORT=8080 \
-    DATA_DIR=/data \
-    AUTH_MODE=none
+    DATA_DIR=/data
 
 EXPOSE 8080
 VOLUME ["/data"]
