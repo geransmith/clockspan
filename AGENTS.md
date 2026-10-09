@@ -798,11 +798,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   box open; an empty Enter or Escape closes it with the focus back on the +, Escape dropping the
   text; leaving it closes it only while it is empty. Later's card goes at the top and Next's at the
   end (`laneStart`, `addItem`). In progress's text is a new task on today's list, a `place` move of
-  `newTaskRow` through `move`, so on the board's queue; past the nudge it asks as Add priority does,
-  the text staying in the box until Add anyway, which closes the box and focuses the new row.
-  Later's and Next's + is `aria-disabled` at the cap (`boardFull`, `BOARD.full` under it), and In
-  progress's only on a full list (`hasRoom`, `ADD_PRIORITY_FAILED.full`), since its task has no
-  lane. A Delete that empties a column puts the focus on its +, or on Done's heading. One
+  `newTaskRow` through `move`, so on the board's queue, where it shows once its job starts (it has
+  no item for `moving` to show); past the nudge it asks as Add priority does, the text staying in
+  the box until Add anyway, which closes the box and focuses the new row. An edit of the box's text
+  or category drops the question, and the next Enter asks again. Later's and Next's + is
+  `aria-disabled` at the cap (`boardFull`, `BOARD.full` under it), and In progress's only on a full
+  list (`hasRoom`, `ADD_PRIORITY_FAILED.full`), since its task has no lane; a box open as its +
+  shuts closes. A Delete that empties a column puts the focus on its +, or on Done's heading. One
   `role="status"` slot above the columns holds the board notice (a pull's or a typed row's nudge,
   the done-item notice or a refusal); what the store refuses once a move is under way
   (`MoveRefused`) is a banner. A drag (`Board.tsx`, with dnd-kit's settings in
@@ -1185,8 +1187,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - A form that sends a request submits through `useSubmit()` (`hooks/useSubmit.ts`), and a
   button that sends one calls its `run`: one send at a time with the button disabled, and one
   error line (`ErrorLine`), cleared when a send starts and filled with what it throws (a
-  mismatched confirmation throws too). A store write that shows at once (a board column's box, a
-  card's Move to) is not a form send: it goes through its store, and a failure is the banner.
+  mismatched confirmation throws too). A store write that shows at once (a lane's box, a card's
+  Move to) is not a form send: it goes through its store, and a failure is the banner.
 - Comments explain *why* (browser quirks, math), not what.
 - No new dependency (a server one or a client library the bundle carries) without stating the
   reason in the PR body, which becomes the squash commit's message on `main`.

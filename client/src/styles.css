@@ -2498,6 +2498,10 @@ button.log-label:hover {
   opacity: 0.45;
   cursor: not-allowed;
 }
+/* Shut, it is aria-disabled, not :disabled, so .btn's press would still move it. */
+.board-add[aria-disabled='true']:active {
+  transform: none;
+}
 /* A column's box: the field, with the category chip beside it or, in a narrow column, under it. */
 .board-add-box {
   display: flex;
@@ -2508,6 +2512,10 @@ button.log-label:hover {
 .board-add-box > .input {
   flex: 1 1 10rem;
   min-width: 0;
+}
+/* Centred on its line, which takes 44 px on a touch screen (the pointer: coarse block). */
+.board-add-box > .category-wrap {
+  align-items: center;
 }
 .board-col-sub {
   margin-top: -6px;
@@ -3017,12 +3025,12 @@ dialog.dialog::backdrop {
   .weekdays .chip {
     --hit-inset: -5px -4px;
   }
-  /* 28 px, centred in a row 44 px tall (beside a board column's field or, from 640 px, a
-     priority's field, at the end of a planner's row, or on a row of its own in the board's
-     editor and a log row's edit), 6 px or more from the control beside it: 44 px tall, reaching
-     half that gap at most. Beside the timer's Also add, on a 32 px line 12 px from the next, it
-     reaches 6 px past it, half that gap too. Under a priority's field it reaches 4 px up and
-     12 px down (further on). */
+  /* 28 px, centred in a row 44 px tall (beside a board column's field, or under it on a 44 px
+     line of its own in a narrow column; from 640 px, beside a priority's field; at the end of a
+     planner's row; on a row of its own in the board's editor and a log row's edit), 6 px or more
+     from the control beside it: 44 px tall, reaching half that gap at most. Beside the timer's
+     Also add, on a 32 px line 12 px from the next, it reaches 6 px past it, half that gap too.
+     Under a priority's field it reaches 4 px up and 12 px down (further on). */
   .category-chip {
     --hit-inset: -9px -4px;
   }
@@ -3081,10 +3089,11 @@ dialog.dialog::backdrop {
   .board-grip {
     --hit-inset: -10px -4px -10px -14px;
   }
-  /* 32 px square at the end of a column's head, in the column's 12 px padding, 8 px above the
-     box, the line under the head or the first card, whose title reaches 2 px into that gap: 44 px. */
+  /* 32 px square (30 inside the border) at the end of a column's head, in the column's 12 px
+     padding, 8 px above the box or the first card, whose title reaches 2 px into that gap (In
+     progress's sub line takes no taps): 44 px. */
   .board-add {
-    --hit-inset: -6px;
+    --hit-inset: -7px;
   }
   /* 40 px at the top of the page with nothing above it: 44 px. */
   .brand {
@@ -3098,8 +3107,9 @@ dialog.dialog::backdrop {
      they take a whole 44 px instead, which only adds air. The Review rows touch each other, so
      an ::after has nowhere to go; the planner's rows, the morning notice's and "When reached" are
      too close to theirs. The planner's typed rows, the category chip's row in a card's editor and
-     in a log row's edit, its cell beside or under a priority's field, and a category's swatches
-     grow to 44 px so the hit areas of the controls inside them fit. */
+     in a log row's edit, its cell beside or under a priority's field, its line in a board
+     column's box, and a category's swatches grow to 44 px so the hit areas of the controls inside
+     them fit. */
   .plan-next-list .inline-check,
   .today-offer .inline-check,
   .plan-next-extra,
@@ -3108,6 +3118,7 @@ dialog.dialog::backdrop {
   .category-option,
   .board-editor-category,
   .log-edit-category,
+  .board-add-box > .category-wrap,
   .priority-end,
   .swatches {
     min-height: 44px;

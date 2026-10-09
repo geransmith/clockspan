@@ -54,6 +54,7 @@ import { ADD_PRIORITY_FAILED, BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILE
 import { dayName, formatDurationCeil } from '../../lib/format';
 import { hasRoom, newTaskRow, newUid, nudgeFor, pickWarning, type WarningKind } from '../../lib/priorities';
 import { loggedByUid } from '../../lib/retro';
+import { readStored, USER_KEYS, writeStored } from '../../lib/storage';
 import type { Category, OpenLane } from '../../types';
 import { Burst } from '../Burst';
 import { Folded } from '../Folded';
@@ -130,6 +131,8 @@ export const Board = memo(function Board({ today, now }: { today: string; now: n
   const [adding, setAdding] = useState<ReadonlySet<AddColumn>>(() => new Set());
   const fields = useRef(new Map<AddColumn, HTMLInputElement>());
   const heads = useRef(new Map<ColumnId, HTMLElement>());
+  // The boxes' one category, remembered on this device (a removed or unknown one reads as none).
+  const [boxCategory, setBoxCategory] = useState(() => readStored(USER_KEYS.captureCategory) || null);
   // The item a sent move left focus for: its title once it shows under that id, or its grip after
   // a keyboard drag, so Space picks it up again.
   const focusTo = useRef<string | null>(null);
@@ -275,11 +278,20 @@ export const Board = memo(function Board({ today, now }: { today: string; now: n
     });
     fields.current.get(id)?.focus();
   };
-  // `back`: the focus goes to the column's +. In progress's box takes the row its nudge held with it.
+  // The row In progress's nudge holds goes when its box closes or changes, so Add anyway never adds
+  // what the box no longer says: the next Enter asks again.
+  const dropHeldRow = () => setNotice((n) => (n?.kind === 'nudge' && 'row' in n.for ? null : n));
+  // `back`: the focus goes to the column's +.
   const closeAdd = (id: AddColumn, back: boolean) => {
     setAdding((a) => new Set([...a].filter((c) => c !== id)));
-    if (id === 'progress') setNotice((n) => (n?.kind === 'nudge' && 'row' in n.for ? null : n));
+    if (id === 'progress') dropHeldRow();
     if (back) heads.current.get(id)?.focus();
+  };
+  // A pick in one box is every box's, In progress's included.
+  const pickBoxCategory = (uid: string | null) => {
+    setBoxCategory(uid);
+    writeStored(USER_KEYS.captureCategory, uid ?? '');
+    dropHeldRow();
   };
   // A card typed in Later's box goes at the top, one in Next's at the end, as Move to puts them.
   const addCard = (lane: OpenLane) => (title: string, categoryUid: string | null) => {
@@ -298,10 +310,11 @@ export const Board = memo(function Board({ today, now }: { today: string; now: n
   };
 
   // Closing the notice puts the focus back where it came from: on the item it was about, on its
-  // grip where it has one, or in In progress's box, which keeps the row it held.
+  // grip where it has one, or in In progress's box, which keeps the row it held (shown again on a
+  // phone, where the notice stays up while another column shows).
   const closeNotice = () => {
     const about = notice?.kind === 'nudge' ? notice.for : notice;
-    if (about && 'row' in about) fields.current.get('progress')?.focus();
+    if (about && 'row' in about) openAdd('progress');
     else {
       const title = about && titles.current.get(about.item.id);
       if (title) focusItem(title, true);
@@ -488,6 +501,9 @@ export const Board = memo(function Board({ today, now }: { today: string; now: n
           if (el) fields.current.set(id, el);
           else fields.current.delete(id);
         }}
+        category={boxCategory}
+        onCategory={pickBoxCategory}
+        onEdit={id === 'progress' ? dropHeldRow : undefined}
         onAdd={onAdd}
         onClose={(back) => closeAdd(id, back)}
       />
@@ -495,6 +511,13 @@ export const Board = memo(function Board({ today, now }: { today: string; now: n
   });
   // The lanes' cap counts tasks in a lane; a row typed in In progress has none, so only a full list shuts it.
   const lanesFull = boardFull(board) ? BOARD.full : null;
+  const listFull = hasRoom(todayRows, settings.priorityCount) ? null : ADD_PRIORITY_FAILED.full;
+  // A box closes with its column, so it doesn't open again by itself when the column reopens.
+  const shutBoxes = [...adding].filter((id) => (id === 'progress' ? listFull : lanesFull));
+  if (shutBoxes.length > 0) {
+    setAdding((a) => new Set([...a].filter((id) => !shutBoxes.includes(id))));
+    if (shutBoxes.includes('progress')) dropHeldRow();
+  }
 
   return (
     <div className="board">
@@ -513,6 +536,7 @@ export const Board = memo(function Board({ today, now }: { today: string; now: n
                   // grip for a pull, and for a typed row on its title, the box closing.
                   if ('row' in held) {
                     closeAdd('progress', false);
+                    setShownColumn('progress');
                     placeRow(held.row);
                     focusTo.current = `item:${held.row.uid}`;
                   } else {
@@ -604,7 +628,7 @@ export const Board = memo(function Board({ today, now }: { today: string; now: n
             count={shown.progress.length}
             sub="Today's top priorities"
             headRef={headRef('progress')}
-            add={add('progress', hasRoom(todayRows, settings.priorityCount) ? null : ADD_PRIORITY_FAILED.full, addRow)}
+            add={add('progress', listFull, addRow)}
           >
             {shown.progress.length > 0 ? list(shown.progress, 'progress') : <Empty>Nothing open on today's list.</Empty>}
           </Column>

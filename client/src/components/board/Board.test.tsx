@@ -24,7 +24,6 @@ import {
   serveRange,
   settle,
   SettingsAndDays,
-  stubMatchMedia,
 } from '../../test/hooks';
 import type { Board as BoardData, Priority } from '../../types';
 import { Board } from './Board';
@@ -97,7 +96,6 @@ const shownColumns = () => [...document.querySelectorAll('.board-col[data-shown]
 
 beforeEach(() => {
   vi.useFakeTimers({ now: NOW });
-  stubMatchMedia(new Set());
   onServer = makeBoard(
     makeCard('later0000001', 'Write a KB'),
     makeCard('next00000001', 'Follow up', { lane: 'next' }),
@@ -555,6 +553,8 @@ describe('Board', () => {
     await settle();
     expect(titlesIn('Done')).toEqual(['Earlier this week · 2']);
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Done' }));
+    // happy-dom focuses any heading; a browser only one with a tabindex.
+    expect(screen.getByRole('heading', { name: 'Done' }).getAttribute('tabindex')).toBe('-1');
   });
 
   it("shows today's row parked in a lane where it lands, with no tick, rename, category or Remove until the park lands", async () => {
@@ -697,6 +697,7 @@ describe('adding from a column', () => {
     // Shift+Enter is Enter, and an input method's Enter adds nothing.
     fireEvent.change(next, { target: { value: 'Call the vendor' } });
     fireEvent.keyDown(next, { key: 'Enter', isComposing: true });
+    expect(next.value).toBe('Call the vendor');
     fireEvent.keyDown(next, { key: 'Enter', shiftKey: true });
     await settle();
     expect(added().map((c) => [c.title, c.categoryUid, c.lane, c.before])).toEqual([
@@ -765,9 +766,12 @@ describe('adding from a column', () => {
     for (const name of ['Later', 'Next']) {
       expect(plus(name).getAttribute('aria-disabled')).toBe('true');
       expect(why(plus(name))).toBe(BOARD.full);
+      expect((plus(name) as HTMLButtonElement).disabled).toBe(false);
       fireEvent.click(plus(name));
     }
     expect(screen.queryByRole('textbox')).toBeNull();
+    // A shut + doesn't show its column either.
+    expect(shownColumns()).toEqual(['In progress']);
     // A task typed in In progress has no lane: the cap doesn't count it.
     expect(plus('In progress').getAttribute('aria-disabled')).toBeNull();
     expect(plus('In progress').getAttribute('aria-describedby')).toBeNull();
@@ -787,6 +791,22 @@ describe('adding from a column', () => {
     expect(plus('Later').getAttribute('aria-disabled')).toBeNull();
   });
 
+  it("closes a box as its + shuts, so it doesn't open again by itself when the + opens", async () => {
+    vi.stubGlobal('confirm', () => true);
+    onServer = makeBoard(...fullBoard().slice(1));
+    await renderBoard();
+    fireEvent.click(plus('Later'));
+    enter(field('New card for Later'), 'One more');
+    expect(plus('Later').getAttribute('aria-disabled')).toBe('true');
+    expect(isOpen('New card for Later')).toBe(false);
+    await settle();
+    openEditor('One more');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await settle();
+    expect(plus('Later').getAttribute('aria-disabled')).toBeNull();
+    expect(isOpen('New card for Later')).toBe(false);
+  });
+
   it("adds a task to today's list from In progress's box on the board's queue, after a board write still out, and keeps the box", async () => {
     const placed = deferred<BoardData>();
     vi.mocked(api.editItem).mockReturnValueOnce(placed.promise);
@@ -802,7 +822,7 @@ describe('adding from a column', () => {
     expect(document.activeElement).toBe(box);
     await settle();
     expect(api.putPriorities).not.toHaveBeenCalled();
-    // Left empty, it closes; the row landing later takes the focus from nowhere.
+    // Left empty, it closes; the row that lands later doesn't take the focus (only Add anyway moves it).
     act(() => box.blur());
     expect(isOpen('New priority for today')).toBe(false);
     placed.resolve((onServer = withItemPatch(onServer, REPORT, { lane: 'later', before: 'later0000001' })));
@@ -828,19 +848,43 @@ describe('adding from a column', () => {
     expect(PRIORITY_WARNINGS.fresh).toContain(within(notice()).getByText(/./, { selector: 'span:not(.notice-actions)' }).textContent);
     expect(document.activeElement).toBe(within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
     expect(box.value).toBe('Call the vendor');
+    // On a phone the notice stays up while another column shows: its answer shows In progress again.
+    const show = (name: string) => fireEvent.click(within(screen.getByRole('group', { name: 'Board column' })).getByRole('button', { name }));
+    show('Next');
     fireEvent.click(within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.keep }));
     expect(within(notice()).queryByRole('button')).toBeNull();
+    expect(shownColumns()).toEqual(['In progress']);
     expect(document.activeElement).toBe(box);
     expect(box.value).toBe('Call the vendor');
     await settle();
     expect(api.putPriorities).not.toHaveBeenCalled();
 
     fireEvent.keyDown(box, { key: 'Enter' });
+    show('Later');
     fireEvent.click(within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
     expect(isOpen('New priority for today')).toBe(false);
+    expect(shownColumns()).toEqual(['In progress']);
     await settle();
     expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Invoices', 'Call the vendor'] }]);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Call the vendor' }));
+  });
+
+  it("drops the question In progress's box held when its text changes, and asks again on Enter with the new text", async () => {
+    lists[WED] = [row(1, 'Report'), row(2, 'Email'), row(3, 'Invoices')];
+    await renderBoard();
+    fireEvent.click(plus('In progress'));
+    const box = field('New priority for today');
+    enter(box, 'Call bank');
+    // Typing in another column's box leaves it.
+    fireEvent.click(plus('Later'));
+    fireEvent.change(field('New card for Later'), { target: { value: 'Half typed' } });
+    expect(within(notice()).getAllByRole('button')).toHaveLength(2);
+    fireEvent.change(box, { target: { value: 'Call the bank about fees' } });
+    expect(notice().textContent).toBe('');
+    fireEvent.keyDown(box, { key: 'Enter' });
+    fireEvent.click(within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
+    await settle();
+    expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Invoices', 'Call the bank about fees'] }]);
   });
 
   it("drops the row In progress's box held for the nudge when the box closes", async () => {
@@ -854,6 +898,23 @@ describe('adding from a column', () => {
     expect(document.activeElement).toBe(plus('In progress'));
     await settle();
     expect(api.putPriorities).not.toHaveBeenCalled();
+    // A pull's question stays when the box closes.
+    fireEvent.click(plus('In progress'));
+    fireEvent.change(field('New priority for today'), { target: { value: 'Half typed' } });
+    openEditor('Follow up');
+    moveTo('progress');
+    fireEvent.keyDown(field('New priority for today'), { key: 'Escape' });
+    expect(within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.add })).toBeTruthy();
+  });
+
+  it('clears an earlier notice when a row goes in from In progress below the nudge', async () => {
+    await renderBoard();
+    openEditor('Email');
+    moveTo('next');
+    expect(notice().textContent).toContain(DONE_STAYS.body);
+    fireEvent.click(plus('In progress'));
+    enter(field('New priority for today'), 'Call the vendor');
+    expect(notice().textContent).toBe('');
   });
 });
 
@@ -1134,6 +1195,17 @@ describe('categories', () => {
     enter(next, 'No category this time');
     await settle();
     expect(sentCategories()).toEqual([ADMIN.uid, ADMIN.uid, null]);
+  });
+
+  it('changes the category of a box already open when another box picks one', async () => {
+    await renderBoard();
+    fireEvent.change(laterBox(), { target: { value: 'Half typed' } });
+    fireEvent.click(chipOf(openBox('Next', 'New card for Next')));
+    pickOption('Admin');
+    expect(captureChip().getAttribute('aria-label')).toBe('Category for new cards: Admin');
+    fireEvent.keyDown(laterBox(), { key: 'Enter' });
+    await settle();
+    expect(sentCategories()).toEqual([ADMIN.uid]);
   });
 
   it('reads a remembered category that was removed, or that the board lacks, as none', async () => {

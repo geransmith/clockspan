@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { LIMITS } from '../../../../shared/api.js';
 import { activeCategories, COLUMN_NAMES, type CategoryPick, type ColumnId } from '../../lib/board';
-import { readStored, USER_KEYS, writeStored } from '../../lib/storage';
 import { CategoryChip } from '../CategoryChip';
 
 /**
  * A column's box, opened by the + in its head: a task that came up goes in with a keystroke and
  * the box is ready for the next one. Enter adds the text in the category beside the box, which
- * every column's box shares and this device remembers (a removed or unknown one reads as none).
+ * every column's box shares (`category`, kept by the board; a removed or unknown one reads as none).
  * An empty Enter or Escape closes the box with the focus back on the +, Escape dropping the text;
  * leaving it closes it only while it is empty. A store write that shows at once, not a form send:
  * the board's banner says if it failed.
@@ -16,24 +15,26 @@ export function Capture({
   to,
   pick,
   inputRef,
+  category: remembered,
+  onCategory,
+  onEdit,
   onAdd,
   onClose,
 }: {
   to: Exclude<ColumnId, 'done'>;
   pick: CategoryPick;
   inputRef: (el: HTMLInputElement | null) => void;
+  category: string | null;
+  onCategory: (uid: string | null) => void;
+  /** The text was changed. */
+  onEdit?: () => void;
   /** False when the text is held (In progress's nudge): it stays in the box. */
   onAdd: (title: string, categoryUid: string | null) => boolean;
   /** `back`: the focus goes back to the column's +. */
   onClose: (back: boolean) => void;
 }) {
   const [text, setText] = useState('');
-  const [stored, setStored] = useState(() => readStored(USER_KEYS.captureCategory) || null);
-  const category = activeCategories(pick.categories).some((c) => c.uid === stored) ? stored : null;
-  const pickCategory = (uid: string | null) => {
-    setStored(uid);
-    writeStored(USER_KEYS.captureCategory, uid ?? '');
-  };
+  const category = activeCategories(pick.categories).some((c) => c.uid === remembered) ? remembered : null;
   const today = to === 'progress';
   return (
     <div
@@ -55,7 +56,10 @@ export function Capture({
         ref={inputRef}
         className="input"
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          onEdit?.();
+        }}
         onKeyDown={(e) => {
           // An input method's Enter picks a candidate: it adds nothing.
           if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
@@ -68,7 +72,7 @@ export function Capture({
         aria-label={today ? 'New priority for today' : `New card for ${COLUMN_NAMES[to]}`}
         maxLength={LIMITS.priorityText}
       />
-      <CategoryChip value={category} onChange={pickCategory} pick={pick} label="Category for new cards" />
+      <CategoryChip value={category} onChange={onCategory} pick={pick} label="Category for new cards" />
     </div>
   );
 }
