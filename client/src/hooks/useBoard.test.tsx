@@ -195,7 +195,7 @@ describe('reading the board', () => {
     onServer = { ...onServer, recurring: [queue] };
     const { result } = renderBoard();
     await settle();
-    expect(result.current.recurring).toEqual([queue]);
+    expect(result.current.confirmedRecurring).toEqual([queue]);
     const created = deferred<Board>();
     vi.mocked(api.addItem).mockReturnValueOnce(created.promise);
     const timesheet = { uid: 'rcur00000002', title: 'Timesheet', categoryUid: null, weekdays: [5] };
@@ -205,17 +205,17 @@ describe('reading the board', () => {
     });
     expect(result.current.board?.recurring.map((r) => r.title)).toEqual(['Watch the queue', 'Timesheet']);
     // A rename on its way shows; a recurring priority the server doesn't hold yet isn't offered.
-    expect(result.current.recurring?.map((r) => r.title)).toEqual(['Watch the queue']);
+    expect(result.current.confirmedRecurring?.map((r) => r.title)).toEqual(['Watch the queue']);
     created.resolve((onServer = withItem(onServer, timesheet, T0)));
     await settle();
-    expect(result.current.recurring?.map((r) => r.title)).toEqual(['Watch the queue', 'Timesheet']);
+    expect(result.current.confirmedRecurring?.map((r) => r.title)).toEqual(['Watch the queue', 'Timesheet']);
   });
 
   it('offers no recurring priority before the first read', async () => {
     vi.mocked(api.getBoard).mockReturnValueOnce(new Promise(() => {}));
     const { result } = renderBoard();
     await settle();
-    expect(result.current.recurring).toBeUndefined();
+    expect(result.current.confirmedRecurring).toBeUndefined();
   });
 });
 

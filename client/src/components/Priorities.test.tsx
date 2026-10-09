@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DAY_MS, MINUTE_MS } from '../../../shared/dates.js';
+import { MINUTE_MS } from '../../../shared/dates.js';
 import { mergePriorities } from '../../../shared/priorities.js';
 import * as api from '../api';
 import { useDay } from '../hooks/useDay';
@@ -37,18 +37,12 @@ import type { MorningOffer } from './TodayOffer';
 vi.mock('../api');
 vi.mock('../lib/alerts');
 
-async function renderCard(
-  priorities: Priority[] = [],
-  leftOpen?: Parameters<typeof Priorities>[0]['leftOpen'],
-  sessions: Session[] = [],
-  pick: CategoryPick | null = null,
-  offer: MorningOffer | null = null,
-) {
-  const onChange = vi.fn<(p: Priority[], base: Priority[]) => void>();
+async function renderCard(priorities: Priority[] = [], sessions: Session[] = [], pick: CategoryPick | null = null, offer: MorningOffer | null = null) {
+  const onChange = vi.fn<(p: Priority[], base: Priority[]) => Promise<boolean>>(() => Promise.resolve(true));
   const onDeleteTask = vi.fn<(uid: string) => Promise<void>>(() => Promise.resolve());
   const card = (rows: Priority[], o: MorningOffer | null) => (
     <SettingsProvider>
-      <Priorities priorities={rows} sessions={sessions} onChange={onChange} onDeleteTask={onDeleteTask} pick={pick} leftOpen={leftOpen} offer={o} />
+      <Priorities priorities={rows} sessions={sessions} onChange={onChange} onDeleteTask={onDeleteTask} pick={pick} offer={o} />
     </SettingsProvider>
   );
   const view = render(card(priorities, offer));
@@ -72,7 +66,7 @@ function OnTheStore({ pick = null }: { pick?: CategoryPick | null }) {
       priorities={day.priorities}
       sessions={day.sessions}
       pick={pick}
-      onChange={(p, base) => void store.setPriorities(TODAY, p, base)}
+      onChange={(p, base) => store.setPriorities(TODAY, p, base)}
       onDeleteTask={(uid) => boardStore.deleteItem(uid)}
     />
   ) : null;
@@ -266,22 +260,6 @@ describe('Priorities', () => {
     expect(status.textContent).toContain('3 of 3 done');
     expect(screen.getByRole('button', { name: WARNING_ACTIONS.complete.add })).toBeTruthy();
   });
-
-  it("offers the last plan's open rows on an empty list, each its own task, added to today now", async () => {
-    const dismiss = vi.fn();
-    const yesterdays = [makePriority(2, 'Invoices', { addedAt: T0 - DAY_MS, listed: 1, logged: 600 })];
-    const { saved } = await renderCard([], { from: 'yesterday', rows: yesterdays, dismiss });
-    expect(screen.getByText(LEFT_OPEN.title('yesterday'))).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.dismiss }));
-    expect(dismiss).toHaveBeenCalled();
-    expect(document.activeElement).toBe(textbox(1));
-    fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
-    expect(saved().map((p) => p.text)).toEqual(['Invoices', '', '']);
-    // The offer is gone with its buttons; focus lands on the row it filled.
-    expect(screen.queryByRole('button', { name: LEFT_OPEN.add })).toBeNull();
-    expect(document.activeElement).toBe(textbox(1));
-    expect(saved()[0]).toMatchObject({ position: 1, text: 'Invoices', done: false, addedAt: T0, uid: yesterdays[0]!.uid, listed: 1, logged: 600 });
-  });
 });
 
 describe("Priorities: a row's category", () => {
@@ -290,7 +268,7 @@ describe("Priorities: a row's category", () => {
   const chip = (n: number) => screen.queryByRole('button', { name: new RegExp(`^Category for priority ${n}:`) });
   const option = (name: string) => screen.getByRole('option', { name });
   /** The card with the board on: the chip's data over Tickets and Admin, unless given. */
-  const withPick = (rows: Priority[], pick: CategoryPick = makePick([TICKETS, ADMIN])) => renderCard(rows, undefined, [], pick);
+  const withPick = (rows: Priority[], pick: CategoryPick = makePick([TICKETS, ADMIN])) => renderCard(rows, [], pick);
 
   it('puts a chip at the end of each row with text while the board is on, and none on an empty row', async () => {
     await withPick([makePriority(1, 'Report', { categoryUid: TICKETS.uid }), makePriority(2, 'Email')]);
@@ -426,42 +404,11 @@ const STANDUP = makeRecurring('rcur00000003', 'Standup notes');
 const routineRow = (position: number, item: Recurring, patch: Partial<Priority> = {}) =>
   makePriority(position, item.title, { uid: item.uid, recurring: true, categoryUid: item.categoryUid, ...patch });
 
-describe('Priorities: the left-open block, with the board off', () => {
-  it('lists the seeds it is given and brings each over as its own task, in its category', async () => {
-    const seeds = [seed('Invoices'), seed('Call the bank', { categoryUid: 'cafe00000001' })];
-    const { saved } = await renderCard([], { from: 'yesterday', rows: seeds, dismiss: vi.fn() });
-    expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Invoices', 'Call the bank']);
-    fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
-    expect(saved().map((p) => [p.text, p.uid, p.categoryUid])).toEqual([
-      ['Invoices', 'left:Invoices', null],
-      ['Call the bank', 'left:Call the bank', 'cafe00000001'],
-      ['', null, null],
-    ]);
-  });
-
-  it('shows while the list holds only routines, and goes once a one-off is written', async () => {
-    const rows = [routineRow(1, QUEUE, { done: true })];
-    await renderCard(rows, { from: 'yesterday', rows: [seed('Invoices')], dismiss: vi.fn() });
-    expect(screen.getByText(LEFT_OPEN.title('yesterday'))).toBeTruthy();
-    expect(document.querySelector('.today-offer')).toBeNull();
-    fireEvent.change(textbox(2), { target: { value: 'Call the bank' } });
-    expect(screen.queryByText(LEFT_OPEN.title('yesterday'))).toBeNull();
-  });
-
-  it('puts the focus on the row it filled, past a routine kept ahead of it', async () => {
-    const routine = routineRow(1, QUEUE);
-    const { saved } = await renderCard([routine], { from: 'yesterday', rows: [seed('Invoices')], dismiss: vi.fn() });
-    fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
-    expect(saved().map((p) => p.text)).toEqual(['Monitor the queue', 'Invoices', '']);
-    expect(document.activeElement).toBe(textbox(2));
-  });
-});
-
-describe('Priorities: the morning offer, with the board on', () => {
+describe('Priorities: the morning offer', () => {
   const offerOf = (patch: Partial<MorningOffer> = {}): MorningOffer => ({ leftovers: null, recurring: [], answer: vi.fn(), ...patch });
   /** The leftovers group as the sheet hands it down, from yesterday. */
   const left = (rows: PrioritySeed[]) => ({ from: 'yesterday', rows });
-  const withOffer = (rows: Priority[], offer: MorningOffer) => renderCard(rows, undefined, [], null, offer);
+  const withOffer = (rows: Priority[], offer: MorningOffer) => renderCard(rows, [], null, offer);
   const box = (name: string) => screen.getByRole('checkbox', { name }) as HTMLInputElement;
   const ticks = (...names: string[]) => names.map((n) => box(n).checked);
   const over = () => document.querySelector('.today-offer [role="status"]')!.textContent;
@@ -536,6 +483,10 @@ describe('Priorities: the morning offer, with the board on', () => {
     const { onChange, saved } = await withOffer([], offerOf({ leftovers: left(leftovers), recurring: [QUEUE, FOLLOW_UPS, STANDUP], answer }));
     fireEvent.click(box('Email'));
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
+    // The notice waits for the save, and answers once it is in.
+    expect(document.querySelector('.today-offer')).toBeNull();
+    expect(answer).not.toHaveBeenCalled();
+    await settle();
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(saved().map((p) => [p.position, p.text, p.uid, p.recurring])).toEqual([
       [1, 'Invoices', 'left:Invoices', false],
@@ -553,6 +504,47 @@ describe('Priorities: the morning offer, with the board on', () => {
     expect(shown()).toEqual(['Standup notes']);
   });
 
+  it("answers nothing when Add's save fails, and shows the notice again", async () => {
+    const answer = vi.fn();
+    const { onChange, again } = await withOffer([], offerOf({ leftovers: left([seed('Invoices')]), recurring: [QUEUE], answer }));
+    const save = deferred<boolean>();
+    onChange.mockReturnValueOnce(save.promise);
+    fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
+    expect(document.querySelector('.today-offer')).toBeNull();
+    save.resolve(false);
+    await settle();
+    expect(answer).not.toHaveBeenCalled();
+    // The store drops the change, so the stored list shows again, and the notice with it.
+    again([]);
+    expect(shown()).toEqual(['Invoices', 'Monitor the queue']);
+  });
+
+  it('with the board off shows the leftovers alone, each a ticked box, and brings each over as its own task, in its category, added now', async () => {
+    const answer = vi.fn();
+    const seeds = [seed('Invoices', { listed: 1, logged: 600 }), seed('Call the bank', { categoryUid: 'cafe00000001' })];
+    const { saved } = await withOffer([], offerOf({ leftovers: left(seeds), answer }));
+    expect(screen.getByRole('group', { name: LEFT_OPEN.title('yesterday') })).toBeTruthy();
+    expect(ticks('Invoices', 'Call the bank')).toEqual([true, true]);
+    fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
+    expect(saved().map((p) => [p.text, p.uid, p.categoryUid])).toEqual([
+      ['Invoices', 'left:Invoices', null],
+      ['Call the bank', 'left:Call the bank', 'cafe00000001'],
+      ['', null, null],
+    ]);
+    expect(saved()[0]).toMatchObject({ position: 1, done: false, addedAt: T0, listed: 1, logged: 600 });
+    expect(document.activeElement).toBe(textbox(1));
+    await settle();
+    // Start fresh then holds, so taking a row off again offers nothing back.
+    expect(answer).toHaveBeenCalledExactlyOnceWith([], true);
+  });
+
+  it('puts the focus on the leftover it filled, past a routine kept ahead of it', async () => {
+    const { saved } = await withOffer([routineRow(1, QUEUE)], offerOf({ leftovers: left([seed('Invoices')]) }));
+    fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
+    expect(saved().map((p) => p.text)).toEqual(['Monitor the queue', 'Invoices', '']);
+    expect(document.activeElement).toBe(textbox(2));
+  });
+
   it('puts the focus on a routine Add put after the padded rows, a row the card had not drawn yet', async () => {
     await withOffer([], offerOf({ recurring: [QUEUE] }));
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
@@ -565,6 +557,7 @@ describe('Priorities: the morning offer, with the board on', () => {
     fireEvent.click(box('Monitor the queue'));
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
     expect(saved().map((p) => p.text)).toEqual(['', 'Weekly report', '']);
+    await settle();
     expect(answer).toHaveBeenCalledExactlyOnceWith([QUEUE.uid], false);
     expect(document.activeElement).toBe(textbox(1));
   });
@@ -632,7 +625,7 @@ describe('Priorities: routines on the list', () => {
 
   it('marks a written routine row before its chip while the board is on, ticked or not, and no other row', async () => {
     const rows = [routineRow(1, QUEUE), routineRow(2, FOLLOW_UPS, { done: true }), makePriority(3, 'Report'), emptyRow(4)];
-    await renderCard(rows, undefined, [], makePick());
+    await renderCard(rows, [], makePick());
     const ends = [...document.querySelectorAll('.priority-row')].map((r) => [...(r.querySelector('.priority-end')?.children ?? [])].map((el) => el.className));
     expect(ends).toEqual([['repeat-mark', 'category-wrap'], ['repeat-mark', 'category-wrap'], ['category-wrap'], []]);
     expect(screen.getAllByRole('img', { name: 'Repeats' })).toHaveLength(2);
@@ -799,16 +792,17 @@ describe('Priorities: ×', () => {
     expect(saved()[0]).toEqual(emptyRow(1));
   });
 
-  it('asks about a task on other days, or with time logged on it, a session logged since the day was read and a timer running on it included', async () => {
+  it("asks about a task on other days, or with time logged on it, the day's own sessions added to the other days', a timer running on it included", async () => {
     const email = makePriority(1, 'Email');
     const cases: [Priority, Session[], string][] = [
       [makePriority(1, 'Email', { listed: 3 }), [], REMOVE_TASK.body(2, null)],
       [makePriority(1, 'Email', { logged: 80 * 60 }), [], REMOVE_TASK.body(0, '1h 20m')],
       [email, [completedSession(1, T0, 30, { priorityUid: email.uid })], REMOVE_TASK.body(0, '1m')],
       [email, [makeSession({ startedAt: T0 - 12 * MINUTE_MS, priorityUid: email.uid })], REMOVE_TASK.body(0, '12m')],
+      [makePriority(1, 'Email', { logged: 60 * 60 }), [makeSession({ startedAt: T0 - 12 * MINUTE_MS, priorityUid: email.uid })], REMOVE_TASK.body(0, '1h 12m')],
     ];
     for (const [row, sessions, body] of cases) {
-      const { onChange, unmount } = await renderCard([row], undefined, sessions);
+      const { onChange, unmount } = await renderCard([row], sessions);
       fireEvent.click(x(1));
       expect(dialog()!.textContent).toContain(REMOVE_TASK.title('Email'));
       // The facts are read with the title.
@@ -954,11 +948,7 @@ describe('Priorities on the day store', () => {
     // The delete waits for today's save without the row.
     expect(api.deleteItem).not.toHaveBeenCalled();
     await answer();
-    expect(
-      stored()
-        .filter((p) => p.uid != null)
-        .map((p) => p.text),
-    ).toEqual(['Report']);
+    expect(stored().map((p) => p.text)).toEqual(['Report']);
     expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith(rowUid(2));
     expect(vi.mocked(api.putPriorities).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(api.deleteItem).mock.invocationCallOrder[0]!);
   });

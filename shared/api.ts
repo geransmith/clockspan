@@ -69,7 +69,7 @@ export interface Priority {
   listed: number;
   /** Read only: how many of those days are before this one. */
   earlier: number;
-  /** Read only: seconds of completed sessions on the task, every day. */
+  /** Read only: seconds of completed sessions on the task on other days (the day's own are in its log). */
   logged: number;
 }
 

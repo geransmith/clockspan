@@ -7,7 +7,7 @@ import type { CategoryPick } from '../lib/board';
 import { LOAD_FAILED, PLAN_NEXT } from '../lib/copy';
 import { dayName } from '../lib/format';
 import { nextWorkDay, planNext, sameItem, textSeed } from '../lib/plan';
-import { isOpen, isRecurring } from '../lib/priorities';
+import { carriesOver } from '../lib/priorities';
 import { hasText } from '../../../shared/priorities.js';
 import { LIMITS } from '../../../shared/api.js';
 import type { Priority } from '../types';
@@ -45,7 +45,7 @@ export function PlanNext({ today, priorities, pick = null }: Props) {
         <Planner
           date={next}
           name={name}
-          candidates={priorities.filter((p) => isOpen(p) && !isRecurring(p))}
+          candidates={priorities.filter(carriesOver)}
           pick={pick}
           onDone={(added) => {
             setOpen(false);

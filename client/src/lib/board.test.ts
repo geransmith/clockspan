@@ -529,7 +529,6 @@ describe('offeredLeftovers', () => {
     row(3, 'Parked', { uid: 'later' }),
     row(4, 'Finished since', { uid: 'done' }),
     row(5, 'Not read by the board yet', { uid: 'unread' }),
-    row(6, 'Deleted before the update', { uid: 'archived', archived: true }),
   ];
   const cards = [
     makeCard('next', 'In Next', { lane: 'next', listDate: TUE }),
@@ -540,10 +539,6 @@ describe('offeredLeftovers', () => {
 
   it("brings back each row's own task, as it is called now, unless the board has it in Later or done; one the board hasn't read is offered", () => {
     expect(offeredLeftovers(rows, cards)).toEqual([rows[0], rows[1], rows[4]]);
-  });
-
-  it('never offers an archived task, which is missing from the board', () => {
-    expect(offeredLeftovers([rows[5]!], [])).toEqual([]);
   });
 
   it('offers nothing while the board has not loaded', () => {

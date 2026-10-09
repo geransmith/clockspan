@@ -5,8 +5,8 @@ import {
   editPriority,
   emptyRow,
   hasRoom,
+  carriesOver,
   isOneOff,
-  isRecurring,
   leftOpen,
   newTaskRow,
   newUid,
@@ -15,8 +15,6 @@ import {
   pickWarning,
   placePriority,
   removePriority,
-  warnThreshold,
-  warningKind,
 } from './priorities';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { makeDay, makePriority } from '../test/fixtures';
@@ -40,19 +38,21 @@ describe('newTaskRow', () => {
   });
 });
 
-describe('isRecurring', () => {
-  it("is a recurring priority's row, whatever its text", () => {
-    expect(isRecurring(makePriority(1, 'Monitor the queue', ROUTINE))).toBe(true);
-    expect(isRecurring(makePriority(1, '', ROUTINE))).toBe(true);
-    expect(isRecurring(makePriority(1, 'Report'))).toBe(false);
-  });
-});
-
 describe('isOneOff', () => {
   it("is a row with text that isn't a recurring priority's", () => {
     expect(isOneOff(makePriority(1, 'Report'))).toBe(true);
     expect(isOneOff(makePriority(1, ' '))).toBe(false);
     expect(isOneOff(makePriority(1, 'Monitor the queue', ROUTINE))).toBe(false);
+  });
+});
+
+describe('carriesOver', () => {
+  it('is an open one-off row: never ticked, empty, a routine or archived', () => {
+    expect(carriesOver(makePriority(1, 'Report'))).toBe(true);
+    expect(carriesOver(makePriority(1, 'Report', { done: true }))).toBe(false);
+    expect(carriesOver(makePriority(1, ''))).toBe(false);
+    expect(carriesOver(makePriority(1, 'Monitor the queue', ROUTINE))).toBe(false);
+    expect(carriesOver(makePriority(1, 'Old card', { archived: true }))).toBe(false);
   });
 });
 
@@ -84,29 +84,13 @@ describe('padPriorities', () => {
   });
 });
 
-describe('warnThreshold', () => {
-  it('is three unless the default is higher', () => {
-    expect(warnThreshold(1)).toBe(3);
-    expect(warnThreshold(3)).toBe(3);
-    expect(warnThreshold(5)).toBe(5);
-  });
-});
-
-describe('warningKind', () => {
-  it('depends on how much of the list is ticked', () => {
-    expect(warningKind(0, 0)).toBe('fresh');
-    expect(warningKind(0, 3)).toBe('fresh');
-    expect(warningKind(1, 3)).toBe('progress');
-    expect(warningKind(3, 3)).toBe('complete');
-  });
-});
-
 describe('nudgeFor', () => {
   it('stays quiet until the rows with text reach the threshold', () => {
     expect(nudgeFor([makePriority(1, 'A'), makePriority(2, 'B')], 3)).toBeNull();
     expect(nudgeFor([makePriority(1, 'A'), makePriority(2, 'B'), makePriority(3, 'C')], 3)).toBe('fresh');
-    // A higher Rows per day raises the threshold.
+    // A higher Rows per day raises the threshold; a lower one never takes it under three.
     expect(nudgeFor([makePriority(1, 'A'), makePriority(2, 'B'), makePriority(3, 'C')], 4)).toBeNull();
+    expect(nudgeFor([makePriority(1, 'A'), makePriority(2, 'B')], 1)).toBeNull();
   });
 
   it('counts only rows with text: a blank draft and a free row add nothing', () => {

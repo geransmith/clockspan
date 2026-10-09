@@ -478,7 +478,7 @@ describe('PUT /api/days/:date/priorities: the tasks', () => {
     expect(r.body.priorities).toEqual([stored(1, 'Report v2', 'aaaaaaaaaaa1', { done: true })]);
   });
 
-  it("answers each row with how many days list its task, how many of them come before the row's, and the focus done on it", async () => {
+  it("answers each row with how many days list its task, how many of them come before the row's, and the focus done on it on other days", async () => {
     const report = row('Report', 'aaaaaaaaaaa1');
     for (const date of [MON, TUE, WED]) await app.saveList(date, [report], []);
     const { id } = (await app.api.post(`/api/days/${TUE}/sessions`, { plannedSeconds: 600, priorityUid: 'aaaaaaaaaaa1' })).body.session as { id: number };
@@ -487,12 +487,16 @@ describe('PUT /api/days/:date/priorities: the tasks', () => {
     // A running one isn't logged yet.
     await app.api.post(`/api/days/${WED}/sessions`, { plannedSeconds: 600, priorityUid: 'aaaaaaaaaaa1' });
     const days = (await app.api.get(`/api/days/range?from=${MON}&to=${WED}`)).body.days as Day[];
+    // Tuesday's own five minutes are in its log, which the client adds.
     expect(days.map((d) => [d.priorities[0]!.listed, d.priorities[0]!.earlier, d.priorities[0]!.logged])).toEqual([
       [3, 0, 300],
-      [3, 1, 300],
+      [3, 1, 0],
       [3, 2, 300],
     ]);
-    expect((await rowsOn(TUE))[0]).toMatchObject({ listed: 3, earlier: 1, logged: 300 });
+    expect((await rowsOn(TUE))[0]).toMatchObject({ listed: 3, earlier: 1, logged: 0 });
+    // A save answers the same counts.
+    expect((await app.saveList(TUE, [report], [report])).body.priorities[0]).toMatchObject({ listed: 3, earlier: 1, logged: 0 });
+    expect((await app.saveList(WED, [report], [report])).body.priorities[0]).toMatchObject({ listed: 3, earlier: 2, logged: 300 });
   });
 
   it("answers a recurring priority's row as recurring, and one removed in Settings as archived", async () => {

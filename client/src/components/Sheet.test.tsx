@@ -295,26 +295,39 @@ describe('Sheet: the recurring priorities due today', () => {
     expect(document.querySelector('.today-offer')).toBeNull();
   });
 
-  it('takes the routines away once the board is switched off on another device, and offers the leftovers in the plain block', async () => {
+  it('takes the routines away once the board is switched off on another device, and offers the leftovers alone', async () => {
     serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Invoices')] })]);
     await renderSheet();
     expect(offered()).toEqual(['Invoices', 'Monitor the queue']);
     stored = makeSettings();
     // The settings are read again each minute; the board keeps its last copy.
     await settle(MINUTE_MS);
-    expect(document.querySelector('.today-offer')).toBeNull();
-    expect(screen.getByText(LEFT_OPEN.title('yesterday'))).toBeTruthy();
+    expect(offered()).toEqual(['Invoices']);
     expect(screen.queryByText(TODAY_OFFER.recurring)).toBeNull();
   });
 
-  it('offers no routine with the board off, and the plain block still offers the leftovers while the list holds only a routine', async () => {
+  it('offers no routine with the board off, and still offers the leftovers while the list holds only a routine', async () => {
     stored = makeSettings();
     vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [makePriority(1, 'Monitor the queue', { uid: QUEUE.uid, recurring: true })] }));
     serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Invoices')] })]);
     await renderSheet();
-    expect(screen.getByText(LEFT_OPEN.title('yesterday')).closest('.left-open')!.classList.contains('today-offer')).toBe(false);
+    expect(offered()).toEqual(['Invoices']);
     expect(screen.queryByText(TODAY_OFFER.recurring)).toBeNull();
     expect(api.getBoard).not.toHaveBeenCalled();
+  });
+
+  it("with the board off, doesn't offer the leftovers again once a row Add to today brought over is removed", async () => {
+    stored = makeSettings();
+    serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Invoices')] })]);
+    await renderSheet();
+    fireEvent.click(button(LEFT_OPEN.add));
+    await settle();
+    expect(vi.mocked(api.putPriorities).mock.lastCall![1].map((p) => p.text)).toEqual(['Invoices', '', '']);
+    fireEvent.click(button('Remove priority 1'));
+    await settle();
+    expect(document.querySelector('.today-offer')).toBeNull();
+    await reload();
+    expect(document.querySelector('.today-offer')).toBeNull();
   });
 });
 
