@@ -134,9 +134,10 @@ export interface Recurring {
 
 /**
  * `GET /board`, and the answer to every board and task write: the one-off tasks in Later and Next
- * in order, then the others whose latest entry is in the last `BOARD_LIMITS.listWindowDays` or
- * later; every category, removed ones included, in the order they were made; and the recurring
- * priorities not removed, in the order they were made.
+ * that aren't done, in order, then the others whose latest entry is from the last
+ * `LOOKBACK_DAYS` (and a day) to about two months ahead; every category, removed ones included,
+ * in the order they were made; and the recurring priorities not removed, in the order they were
+ * made.
  */
 export interface Board {
   cards: BoardCard[];
@@ -160,8 +161,6 @@ export const BOARD_LIMITS = {
   categoriesStored: 1000,
   /** Recurring priorities not removed. */
   recurring: 100,
-  /** How far back `GET /board` sends the tasks a list holds: `LOOKBACK_DAYS`, and a day of slack for the client's zone. */
-  listWindowDays: LOOKBACK_DAYS + 1,
 } as const;
 
 /** What a session has whatever its status. */

@@ -4,6 +4,7 @@ import { findLocalUser, hasLocalUser, insertLocalUser, type DB, type UserRow } f
 import type { Config } from '../config.js';
 import { refuse } from '../refuse.js';
 import { reclaimSpace } from '../retention.js';
+import { parseId } from '../validate.js';
 import { DUMMY_HASH, hashPassword, parseCredentials, parsePassword, verifyPassword } from './password.js';
 import { createSession, destroySession } from './session.js';
 import { setPassword } from './reset.js';
@@ -159,9 +160,8 @@ export function localAuthRouter(db: DB, config: Config, setupCode: string = newS
   });
 
   r.delete('/users/:id', requireAdmin, (req, res) => {
-    // Number() also reads '0x2', '2e0', '+2' and ' 2' (from %202) as 2.
-    if (!/^\d+$/.test(String(req.params.id))) return refuse(res, 404, 'User not found.');
-    const id = Number(req.params.id);
+    const id = parseId(String(req.params.id));
+    if (id === undefined) return refuse(res, 404, 'User not found.');
     const me = currentUser(req);
     if (id === me.id) return refuse(res, 400, 'You cannot delete your own account.');
     const info = db.prepare(`DELETE FROM users WHERE id = ? AND kind = 'local'`).run(id);

@@ -3,6 +3,7 @@ import {
   addDays,
   addMonths,
   atTime,
+  cutoffKey,
   daysBetween,
   endOfDay,
   HOUR_MS,
@@ -16,6 +17,14 @@ import {
   startOfWeek,
   todayKey,
 } from './dates.js';
+
+describe('cutoffKey', () => {
+  it('is the UTC date `days` before now, or after it when negative', () => {
+    expect(cutoffKey(Date.UTC(2026, 8, 16, 12), 30)).toBe('2026-08-17');
+    expect(cutoffKey(Date.UTC(2026, 0, 1, 0, 0, 1), 365)).toBe('2025-01-01');
+    expect(cutoffKey(Date.UTC(2026, 8, 16, 23, 59), -60)).toBe('2026-11-15');
+  });
+});
 
 describe('isValidDateKey', () => {
   it('accepts real calendar dates only', () => {

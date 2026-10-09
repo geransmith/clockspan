@@ -4,7 +4,7 @@ import type { PruneInfo } from '../shared/api.js';
 import type { Settings } from '../shared/settings.js';
 import { loadSettings } from './settings.js';
 import { collectItems, inList, renumber } from './board.js';
-import { DAY_MS } from '../shared/dates.js';
+import { cutoffKey } from '../shared/dates.js';
 
 /**
  * Old days are deleted two ways: the user's "Delete old days now" button and an automatic
@@ -18,16 +18,6 @@ import { DAY_MS } from '../shared/dates.js';
  * Settings, logins, categories, recurring priorities in use and open tasks in a lane are never
  * touched.
  */
-
-/**
- * Days whose key sorts before this one are older than `keepDays`. The server normally never
- * decides what "today" is (see AGENTS.md); this is the one place it computes a date, in UTC,
- * because the cutoff is at least 30 days back and no user zone is known. A day of slop on a
- * month-old boundary changes nothing.
- */
-export function cutoffKey(now: number, keepDays: number): string {
-  return new Date(now - keepDays * DAY_MS).toISOString().slice(0, 10);
-}
 
 type PruneCounts = Pick<PruneInfo, 'matching' | 'total' | 'oldest'>;
 
