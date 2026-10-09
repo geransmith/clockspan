@@ -104,7 +104,7 @@ function Planner({
   // The rows typed in, each with the category its chip set.
   const [extra, setExtra] = useState<{ text: string; categoryUid: string | null }[]>([]);
   const [draft, setDraft] = useState('');
-  // While the save is out nothing more can be typed, ticked or cancelled: its answer closes the planner.
+  // While the save is out nothing more can be typed, ticked, filed or cancelled: its answer closes the planner.
   const [busy, setBusy] = useState(false);
   const onList = day?.priorities.filter(hasText) ?? [];
   const already = onList.length;
@@ -174,7 +174,7 @@ function Planner({
           {extra.map(({ text, categoryUid }, i) => (
             <li key={`extra-${i}`} className="plan-next-extra">
               <Plus /> <span className="plan-next-extra-text">{text}</span>
-              {pick && <CategoryChip value={categoryUid} onChange={(uid) => setCategory(i, uid)} pick={pick} label={`Category for ${text}`} />}
+              {pick && <CategoryChip value={categoryUid} onChange={(uid) => setCategory(i, uid)} pick={pick} label={`Category for ${text}`} disabled={busy} />}
             </li>
           ))}
         </ul>
