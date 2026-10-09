@@ -170,6 +170,24 @@ describe('FocusTimer', () => {
     expect(alsoAdd()).not.toBeNull();
   });
 
+  it('starts linked to the open row whose name was typed, as its chip would', async () => {
+    vi.mocked(api.startSession).mockResolvedValue(started());
+    await renderCard([makePriority(1, 'Ship the fix', { uid: 'abcdef123456' })]);
+    typeLabel('  ship THE fix ');
+    fireEvent.click(start25());
+    await settle();
+    expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'ship THE fix', 'abcdef123456');
+  });
+
+  it("starts unplanned under a ticked row's name", async () => {
+    vi.mocked(api.startSession).mockResolvedValue(started());
+    await renderCard([makePriority(1, 'Email', { uid: 'abcdef123456', done: true })]);
+    typeLabel('Email');
+    fireEvent.click(start25());
+    await settle();
+    expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Email', null);
+  });
+
   it('does not offer to add typed work to a full list', async () => {
     await renderCard(ticked(MAX_PRIORITIES));
     typeLabel('Call the vendor');
