@@ -13,6 +13,14 @@ export function SheetTab({ settings, set }: TabProps) {
         <SelectField label="Theme" value={settings.theme} options={THEMES} labels={THEME_LABELS} onChange={(theme) => set({ theme })} />
         <p className="muted small">Automatic follows your device.</p>
       </Section>
+      <Section title="Keyboard">
+        <Toggle
+          label="Keyboard shortcuts"
+          hint="Single keys for a new priority or card, the pages and the timer. Press ? for the list. Keys typed into a field are left alone."
+          checked={settings.shortcuts}
+          onChange={(v) => set({ shortcuts: v })}
+        />
+      </Section>
       <Section title="Priorities">
         <NumberField
           label="Rows per day"

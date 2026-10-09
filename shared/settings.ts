@@ -80,6 +80,8 @@ export interface Settings {
   weekMinutes: number;
   timeFormat: TimeFormat;
   theme: Theme;
+  /** Single-key shortcuts (`client/src/lib/shortcuts.ts`); off for anyone a stray key gets in the way of (WCAG 2.1.4). */
+  shortcuts: boolean;
   adjustStepMinutes: number;
   /** The focus timer's Break button: how long a break runs, in minutes. */
   breakMinutes: number;
@@ -190,6 +192,7 @@ export const DEFAULT_SETTINGS: Settings = deepFreeze({
   weekMinutes: 40 * 60,
   timeFormat: 'auto',
   theme: 'auto',
+  shortcuts: true,
   adjustStepMinutes: 5,
   breakMinutes: 5,
   suggestBreaks: false,

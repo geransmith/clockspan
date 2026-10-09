@@ -17,7 +17,9 @@ import {
   makePriority,
   makeSession,
   makeSettings,
+  pressKey,
   settle,
+  ShortcutKeys,
   T0,
   TODAY,
 } from '../test/hooks';
@@ -55,6 +57,7 @@ async function renderCard(priorities: Priority[] = [], breaks: Break[] = [], pic
   vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities, breaks }));
   const view = render(
     <AppProviders>
+      <ShortcutKeys />
       <Card pick={pick} />
     </AppProviders>,
   );
@@ -64,6 +67,7 @@ async function renderCard(priorities: Priority[] = [], breaks: Break[] = [], pic
     boardOff: () =>
       view.rerender(
         <AppProviders>
+          <ShortcutKeys />
           <Card pick={null} />
         </AppProviders>,
       ),
@@ -115,6 +119,33 @@ describe('FocusTimer', () => {
     await settle();
     expect(disabled(/^25\s*min$/)).toBe(false);
     expect(screen.getByRole('button', { name: BREAK.end })).toBeTruthy();
+  });
+
+  it('starts a break on R as the Break button does, naming R on it, and holds the start buttons the same way', async () => {
+    const answer = deferred<{ break: Break }>();
+    vi.mocked(api.startBreak).mockReturnValue(answer.promise);
+    await renderCard();
+    const keys = () => screen.queryByRole('button', { name: /^Break · / })?.getAttribute('aria-keyshortcuts');
+    expect(keys()).toBe('R');
+    expect(pressKey('r')).toBe(false);
+    expect(disabled(/^25\s*min$/)).toBe(true);
+    // Held while its start is out, as the button is.
+    expect(keys()).toBeNull();
+    expect(pressKey('r')).toBe(true);
+    answer.resolve({ break: makeBreak({ startedAt: T0, endedAt: T0 + 5 * 60_000 }) });
+    await settle();
+    expect(api.startBreak).toHaveBeenCalledOnce();
+    // A break runs: the Break button has gone, and R with it.
+    expect(keys()).toBeUndefined();
+    expect(pressKey('r')).toBe(true);
+  });
+
+  it('leaves R alone while a timer runs', async () => {
+    vi.mocked(api.getRunning).mockResolvedValue({ session: makeSession() });
+    await renderCard();
+    expect(screen.getByRole('timer', { name: 'Time remaining' })).toBeTruthy();
+    expect(pressKey('r')).toBe(true);
+    expect(api.startBreak).not.toHaveBeenCalled();
   });
 
   it('holds End break while a start is out', async () => {

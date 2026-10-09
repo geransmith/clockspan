@@ -1,4 +1,5 @@
 import { useSettings } from '../hooks/useSettings';
+import { useShortcut } from '../hooks/useShortcuts';
 import { useTimer } from '../hooks/useTimer';
 import { CONFIRM } from '../lib/copy';
 import { Check, Minus, Pause, Play, Plus, X } from './Icons';
@@ -10,7 +11,8 @@ import { Check, Minus, Pause, Play, Plus, X } from './Icons';
  * +, Finish and Cancel stay; + is off at the longest plan the server takes. The bar shows the
  * icons and hides the words on a narrow screen, so there each button carries its name. − and +
  * carry theirs on the card too: the icons are hidden from screen readers and both say only the
- * step.
+ * step. Keys: P pauses or resumes, + adds the step, and F finishes only once time's up, so a
+ * stray F can't end a session early; − has none.
  */
 export function TimerControls({ compact = false }: { compact?: boolean }) {
   const { paused, due, canAdd, adjust, pause, resume, requestFinish, cancel } = useTimer();
@@ -22,6 +24,11 @@ export function TimerControls({ compact = false }: { compact?: boolean }) {
   const onCancel = () => {
     if (window.confirm(CONFIRM.cancelSession)) void cancel();
   };
+  const onMore = () => void adjust(step * 60);
+  const onPause = () => void (paused ? resume() : pause());
+  const moreKey = useShortcut('more', canAdd ? onMore : null);
+  const pauseKey = useShortcut('pause', due ? null : onPause);
+  const finishKey = useShortcut('finish', due ? requestFinish : null);
 
   return (
     <div className={compact ? 'running-controls' : 'timer-controls'}>
@@ -33,9 +40,10 @@ export function TimerControls({ compact = false }: { compact?: boolean }) {
       )}
       <button
         className={btn}
-        onClick={() => void adjust(step * 60)}
+        onClick={onMore}
         disabled={!canAdd}
         aria-label={`Add ${step} minutes`}
+        aria-keyshortcuts={moreKey}
         title={compact ? `+${step}m` : undefined}
       >
         <Plus />
@@ -43,17 +51,17 @@ export function TimerControls({ compact = false }: { compact?: boolean }) {
       </button>
       {!due &&
         (paused ? (
-          <button className={btn} onClick={() => void resume()} {...named('Resume timer', 'Resume')}>
+          <button className={btn} onClick={onPause} aria-keyshortcuts={pauseKey} {...named('Resume timer', 'Resume')}>
             <Play />
             {words('Resume')}
           </button>
         ) : (
-          <button className={btn} onClick={() => void pause()} {...named('Pause timer', 'Pause')}>
+          <button className={btn} onClick={onPause} aria-keyshortcuts={pauseKey} {...named('Pause timer', 'Pause')}>
             <Pause />
             {words('Pause')}
           </button>
         ))}
-      <button className={`${btn} btn-primary`} onClick={requestFinish} {...named('Finish timer', 'Finish now')}>
+      <button className={`${btn} btn-primary`} onClick={requestFinish} aria-keyshortcuts={finishKey} {...named('Finish timer', 'Finish now')}>
         <Check />
         {words('Finish')}
       </button>

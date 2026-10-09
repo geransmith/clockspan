@@ -25,6 +25,7 @@ import { useDay } from '../../hooks/useDay';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useRange } from '../../hooks/useRange';
 import { useSettings } from '../../hooks/useSettings';
+import { useShortcut } from '../../hooks/useShortcuts';
 import type { TimerCtx } from '../../hooks/useTimer';
 import { unlockAudio, warnQuietly, warnSaveFailed } from '../../lib/alerts';
 import {
@@ -209,6 +210,17 @@ export const Board = memo(function Board({
   useEffect(() => {
     if (notice) noticeBox.current?.querySelector('button')?.focus();
   }, [notice]);
+  // The one way a box opens: its column shows (a phone has one at a time), and its field takes the
+  // focus inside the tap, which is what lets iOS raise the keyboard. An open box only takes the focus.
+  const openAdd = (id: AddColumn) => {
+    flushSync(() => {
+      setShownColumn(id);
+      setAdding((a) => new Set(a).add(id));
+    });
+    fields.current.get(id)?.focus();
+  };
+  // N is Later's +, while that would open the box. A hook, so bound above the returns below.
+  const laterKey = useShortcut('new', board && day && pick && !boardFull(board) ? () => openAdd('later') : null);
 
   if (failed && !board)
     return (
@@ -290,15 +302,6 @@ export const Board = memo(function Board({
     return moveAnnouncement(move, item, to);
   };
 
-  // The one way a box opens: its column shows (a phone has one at a time), and its field takes the
-  // focus inside the tap, which is what lets iOS raise the keyboard. An open box only takes the focus.
-  const openAdd = (id: AddColumn) => {
-    flushSync(() => {
-      setShownColumn(id);
-      setAdding((a) => new Set(a).add(id));
-    });
-    fields.current.get(id)?.focus();
-  };
   // The row In progress's nudge holds goes when its box closes or changes, so Add anyway never adds
   // what the box no longer says: the next Enter asks again.
   const dropHeldRow = () => setNotice((n) => (n?.kind === 'nudge' && 'row' in n.for ? null : n));
@@ -531,6 +534,7 @@ export const Board = memo(function Board({
   const add = (id: AddColumn, shut: string | null, onAdd: (title: string, categoryUid: string | null) => boolean): ColumnAdd => ({
     shut,
     onOpen: () => openAdd(id),
+    keys: id === 'later' ? laterKey : undefined,
     box: adding.has(id) && (
       <Capture
         to={id}
@@ -701,6 +705,8 @@ export const Board = memo(function Board({
 interface ColumnAdd {
   shut: string | null;
   onOpen: () => void;
+  /** Its key, for `aria-keyshortcuts`: N on Later's. */
+  keys: string | undefined;
   box: ReactNode;
 }
 
@@ -750,6 +756,7 @@ function Column({
             title={`Add to ${COLUMN_NAMES[id]}`}
             aria-disabled={add.shut ? true : undefined}
             aria-describedby={add.shut ? shut : undefined}
+            aria-keyshortcuts={add.keys}
             onClick={add.shut ? undefined : add.onOpen}
           >
             <Plus />

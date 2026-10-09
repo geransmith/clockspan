@@ -138,6 +138,8 @@ client/                 Vite root → dist/client
     recurring.ts        the morning offer's routines: which are due (dueRecurring, notOnList), which
                         it ticks (offerPicks, recurringCount), the list after Add to today
                         (acceptOffer; recurringRow, the recurring priority itself as a new row)
+    shortcuts.ts        the single-key shortcuts: the one key list (SHORTCUTS) and the guard that
+                        leaves a key to a field, a dialog or a drag (shortcutFor)
   src/hooks/            state and effects (useDay, useTimer, useSettings, useBoard, useAlarms, …), each
                         with a happy-dom test beside it (useLatest is covered through the hooks that use
                         it, and AppProviders through the tests that render it).
@@ -147,13 +149,17 @@ client/                 Vite root → dist/client
                         Delete everywhere) and useCategoryPick, the category chip's data and inline
                         create; useMediaQuery follows a media query for behaviour; useFollowedDraft is a
                         text box's draft that follows the stored name; useRecurringAnswered keeps the
-                        recurring priorities the morning offer was answered for today on this device.
+                        recurring priorities the morning offer was answered for today on this device;
+                        useShortcuts binds a key beside its button (useShortcut) and is the one
+                        keydown listener (useShortcutListener).
                         src/test/fixtures.ts has the plain factories and TEST_SETTINGS (no React);
                         src/test/hooks.tsx re-exports fixtures.ts and AppProviders and has
                         SettingsAndDays, serveRange (a mocked getRange that answers from a list of
-                        days) and the act() helpers
+                        days), ShortcutKeys and pressKey (the key listener, and a key pressed where
+                        the focus is) and the act() helpers
   src/components/       the cards, History (Calendar + Review), Banners, FinishChoice, RemoveTask (×'s Off
-                        this day / Delete everywhere), TodayOffer (Top priorities' morning notice), and
+                        this day / Delete everywhere), TodayOffer (Top priorities' morning notice),
+                        Shortcuts (the key listener, and ? for the list of keys), and
                         the pieces several of them share (Folded: a long list's Show all; CategoryChip
                         and CategoryDot; RepeatMark, a recurring row's mark, and RunningMark, the
                         running session's pill, kept here so the sheet can show them; TimerLengths,
@@ -394,8 +400,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   banners). Never call `new Notification(...)` or `showNotification()` (its fallback where the
   constructor is refused, Chrome on Android), create an `AudioContext` or fetch a clip anywhere
   else. `unlockAudio()` must be called from a user gesture (the timer's length buttons,
-  `TimerLengths`, on the timer card and a board item's editor, `useBreak`'s `start` and every
-  punch commit do this) for iOS. What plays is
+  `TimerLengths`, on the timer card and a board item's editor, `useBreak`'s `start`, every
+  punch commit and the shortcut listener, for a timer key, do this) for iOS. What plays is
   `settings.sounds[event]`, an id from the catalog in `shared/sounds.ts`; `settings.sound` is the
   master switch over all of them, and `none` is the per-event off. A celebration (day complete and
   work week reached in `Timeclock.tsx`, a priority ticked in `Priorities.tsx` or on the board (its
@@ -508,10 +514,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   running break on any loaded day, since one started before midnight sits on the day before), so it
   never sends an end after a session start: the break may already be gone. The timer card disables
   its start and break buttons while a timer or break start is out (one `useSubmit`, and
-  `useTimer().starting` for a start from the board, whose Start holds on it too), since a break
-  write goes out on the day store's queue, not the timer's, and the two could reach the server in
-  either order; for the same reason a session start takes the break banners down in its tap
-  (`dismissByTag('break')`, in `TimerLengths`), whose Start break those buttons don't cover.
+  `useTimer().starting` for a start from the board, whose Start holds on it too; R, the Break
+  button's key, goes through the same `run`), since a break write goes out on the day store's
+  queue, not the timer's, and the two could reach the server in either order; for the same reason
+  a session start takes the break banners down in its tap (`dismissByTag('break')`, in
+  `TimerLengths`), whose Start break those buttons don't cover.
 - **Saves reach the server in the order they were made**, each store's on its own queue (`serial()`
   in `lib/optimistic.ts`, made by `useTracked`). In the day store, `setPunches` and `setPriorities`
   send a whole list, so one PUT per list and day is in flight and only the newest waiting list
@@ -932,6 +939,27 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - Static assets are public; **all data is behind `/api/*`**. `/assets/*` is fingerprinted and
   cached immutable. The SPA fallback serves `index.html` for any other non-API path; a miss
   under `/assets` is a 404 (a page from before an upgrade asking for an old chunk).
+- **A keyboard shortcut is bound where its button is.** `SHORTCUTS` (`lib/shortcuts.ts`) is the
+  one list of keys: N is Add priority on the sheet and Later's + on the board; S, B and H are the
+  header's brand, Board and History; ? opens the list; P, + and F are the running timer's Pause or
+  Resume, + and Finish; R is the timer card's Break. Each is bound by the component that renders
+  its button, with `useShortcut(id, run)` called before any early return, and `run` is null
+  whenever that button is hidden or wouldn't act (F before time's up, + at the longest plan, N
+  with Later's + shut, R while a start is out or off today's sheet), so a key never acts where its
+  button wouldn't, and R holds the start buttons as a tap on Break does. The hook answers the
+  button's `aria-keyshortcuts` while the key is bound and the `shortcuts` setting is on. Two
+  mounted bindings of one key (the bar's and the card's timer buttons) run the newer, and a
+  binding keeps its place while its `run` comes and goes. `useShortcutListener`, mounted once by
+  `Shortcuts` beside `FinishChoice` in `App.tsx`, is the one keydown listener on the window
+  (nothing else in the app listens for keys there or on the document), attached once the settings
+  have loaded and while `shortcuts` is on. Its guard, `shortcutFor`, leaves a key alone when it
+  was handled already, held down, composing or pressed with Ctrl, Cmd or Alt, when it is typed
+  into a field (a text box, a text area, a select, a time segment, the category list), and while a
+  dialog is open or an item is dragged. A key that acts calls `preventDefault()`, so the letter
+  isn't typed into the row it focused, and a timer key calls `unlockAudio()` first. Letters match
+  in either case, and + is matched on `KeyboardEvent.key`. The list is a static dialog in
+  `Shortcuts.tsx`, its labels beside it, not a lazy chunk. The setting is on by default and turns
+  every key off (WCAG 2.1.4).
 - **History, the board, the settings dialog and drag and drop are lazy chunks** (`lazy()` in
   `App.tsx` for `History`, `Board` and `SettingsDialog`, in `Sheet.tsx` for `SortableCards`;
   `SortableCards` and `components/board/` hold every `@dnd-kit` import). A static import of one
@@ -1037,6 +1065,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   field in `mergeSettings` (as `mergeRetention` does), and gets a partial entry in
   `SettingsPatch` (`client/src/api.ts`) and a merge in `applySettingsPatch`
   (`client/src/lib/settings.ts`). Nothing else to mirror.
+- **A keyboard shortcut**: add its id, key and group to `SHORTCUTS` (`lib/shortcuts.ts`; a test
+  checks that no two share a key, and a key in the `timer` group unlocks audio) → its label in
+  `Shortcuts.tsx`'s list (the type makes a missing one an error) → `useShortcut(id, run)` in the
+  component that renders its button, before any early return, with `run` null whenever the
+  button wouldn't act, and the hook's answer on the button's `aria-keyshortcuts` → a case in that
+  component's test, with `ShortcutKeys` in its wrapper and `pressKey` (`test/hooks.tsx`) → the
+  key in the README's Keyboard bullet.
 - **A category colour** (the palette is eight on purpose, and colours repeat past that): add the
   id to `CATEGORY_COLORS` in `shared/api.ts` (the server's `isOneOf` check, `nextColor` and the
   swatches read it) → its `--cat-<id>` token in all three token blocks of `styles.css`, at 3:1 or
@@ -1374,6 +1409,18 @@ The browser pass for each surface (the logic under it is already tested):
   chip with its list scrolling inside and the box in view, the cards' dot and name (a long name at
   1000), and Settings → Board (a rename, a name in use, the swatches wrapping at 375, Remove, the
   touch areas).
+- **Keyboard shortcuts**: after `npm run seed -- --running` with the board on, at 1280: ? opens
+  the list with the focus on it, ? again does nothing and Escape gives the focus back; P pauses
+  and resumes, + adds the step, and once the timer has run out (see "The timer") F opens "How much
+  to log?", where keys do nothing; after the finish, R starts a break and R again does nothing; N
+  puts the focus in a free row with no n typed, and with three written rows leaves it on Add
+  priority beside the nudge; H and B there and back, S from History. An h typed into the bar's
+  label, a priority, Clock in's hour, the date picker and an open category list, or pressed with
+  Settings open, does nothing, and Option+B, Cmd+H and Ctrl+F do only what the browser does. On
+  the board at 1440, N opens Later's box (with a box already open too), R does nothing, and a key
+  pressed during a keyboard drag does nothing. With Settings → Sheet → Keyboard off no key acts.
+  The list at 1000 and 375, light and dark; a screen reader reads its title and keys, and a
+  button's key.
 - **The History calendar**: one month at the mobile preset: ◀ to a seeded month, tap a day,
   **Open day**, browser Back lands on that month with the day picked, and back through the
   header, **Review this week** lands on that week. Review → Month → ◀ → a row → Back lands on that
@@ -1421,6 +1468,11 @@ The browser pass for each surface (the logic under it is already tested):
   lands inside the loop's throttle), and nothing ticks while it is off. So the test files that
   render `AppProviders` with `api` automocked need nothing for the board: `TEST_SETTINGS.board`
   is false, and the provider sends nothing.
+- A keydown inside a native modal `<dialog>` still bubbles to `window`, so the shortcut guard
+  checks for `dialog[open]` itself. Its drag check reads the `aria-pressed` dnd-kit sets on a grip
+  (beside `aria-roledescription`) while it drags; a dnd-kit upgrade that drops it lets keys
+  through mid-drag, which `Board.test.tsx`'s keyboard-drag case catches. A page key (S, B, H)
+  drops text left in a board box, as a click on the header does.
 - Prettier leaves `*.md` alone: wrap docs by hand.
 - A workflow step that must trigger CI needs a GitHub App or personal token.
 - The Node floor (`engines` and `devEngines` in `package.json`) has no upper bound, and `.npmrc`

@@ -147,6 +147,17 @@ describe('SettingsDialog', () => {
     expect(api.putSettings).toHaveBeenLastCalledWith({ clockBar: false });
   });
 
+  it('turns keyboard shortcuts off from the Sheet tab', async () => {
+    await renderDialog();
+    await openTab('Sheet');
+    expect(hint('Keyboard shortcuts')).toBe(
+      'Single keys for a new priority or card, the pages and the timer. Press ? for the list. Keys typed into a field are left alone.',
+    );
+    fireEvent.click(toggle('Keyboard shortcuts'));
+    await settle();
+    expect(api.putSettings).toHaveBeenLastCalledWith({ shortcuts: false });
+  });
+
   it('lists the stickers the calendar gives, without clocked out when hours are hidden', async () => {
     await renderDialog();
     await openTab('Sheet');

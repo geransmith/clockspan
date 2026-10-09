@@ -22,9 +22,11 @@ import {
   makeSession,
   makeRecurring,
   makeSettings,
+  pressKey,
   serveRange,
   settle,
   SettingsAndDays,
+  ShortcutKeys,
 } from '../../test/hooks';
 import type { Board as BoardData, Priority, Session } from '../../types';
 import { Board } from './Board';
@@ -68,6 +70,7 @@ async function renderBoard(
   vi.mocked(api.getSettings).mockResolvedValue(settings);
   const page = (at: number) => (
     <SettingsAndDays>
+      <ShortcutKeys />
       <Board today={WED} now={at} running={running} start={start} starting={starting} />
     </SettingsAndDays>
   );
@@ -782,6 +785,21 @@ describe('adding from a column', () => {
     expect(document.activeElement).toBe(field('New card for Later'));
   });
 
+  it("opens Later's box on N, showing Later on a phone, with N named on Later's + while it would open", async () => {
+    await renderBoard();
+    expect(plus('Later').getAttribute('aria-keyshortcuts')).toBe('N');
+    expect(plus('Next').hasAttribute('aria-keyshortcuts')).toBe(false);
+    expect(pressKey('n')).toBe(false);
+    expect(shownColumns()).toEqual(['Later']);
+    expect(document.activeElement).toBe(field('New card for Later'));
+    cleanup();
+    onServer = makeBoard(...fullBoard());
+    await renderBoard();
+    expect(plus('Later').hasAttribute('aria-keyshortcuts')).toBe(false);
+    expect(pressKey('n')).toBe(true);
+    expect(isOpen('New card for Later')).toBe(false);
+  });
+
   it("shuts Later's and Next's + at the cap and In progress's on a full list, saying why under each, where Tab still reaches it", async () => {
     onServer = makeBoard(...fullBoard());
     await renderBoard();
@@ -1217,6 +1235,16 @@ describe('dragging', () => {
     await press('ArrowLeft');
     expect(said()).toBe(BOARD_DRAG.overStart('Report', 'In progress'));
     await press('Escape');
+  });
+
+  it('ignores keys while an item is dragged by keyboard', async () => {
+    await renderBoard();
+    await pickUp('Write a KB');
+    expect(pressKey('n')).toBe(true);
+    expect(isOpen('New card for Later')).toBe(false);
+    await press('Escape');
+    expect(pressKey('n')).toBe(false);
+    expect(isOpen('New card for Later')).toBe(true);
   });
 
   it('puts the item back on Escape, sending nothing', async () => {

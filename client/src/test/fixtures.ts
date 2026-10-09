@@ -55,6 +55,7 @@ export const TEST_SETTINGS: Settings = {
   weekMinutes: 2400,
   timeFormat: 'auto',
   theme: 'auto',
+  shortcuts: true,
   adjustStepMinutes: 5,
   breakMinutes: 5,
   suggestBreaks: false,
