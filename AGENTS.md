@@ -735,13 +735,14 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   edits, or that has a note, and the box opens under the card's text, apart from the editor, saving
   800 ms after the last key; `onNote` takes the path `onRename` does (`editRow` for today's row,
   `editItem` for any other the board edits, none for an earlier day's row of a recurring priority
-  removed in Settings), and `saved` (`Board.tsx`) raises the banner and answers false. A routine's
+  removed in Settings), and `saved` (`lib/board.ts`) raises the banner and answers false. A routine's
   note is one on every day it is on. Nothing else shows a note: not Retro, Review, Plan tomorrow,
   the morning notice, the timer, the day log or History. A note of spaces and line breaks alone,
   stored untrimmed, counts as none (`hasNote`, `shared/text.ts`): its button is quiet and × doesn't
   ask for it. On the sheet, a row gone from the list before its note's save (another device took it
-  off) sends the note to the task through the board store's `editItem`, as `editRow` does, its
-  failure the banner.
+  off, or × did before the box saved) sends the note to the task through the board store's
+  `editItem`, as `editRow` does: a 404 (the task went with the row) counts as done
+  (`unlessGone`), and any other failure is the banner (`saved`).
 - **A category is a row of its own, named by its uid** (`categories`, routes in `routes/board.ts`,
   answered in `Board.categories`). Tasks and sessions point at one by `categoryUid`, a soft link
   checked for shape only, so a category made on this device can reach the server after the row that
@@ -1179,10 +1180,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   the rename: on the task a uid new to the user makes, and otherwise only where this device's row
   differs from its base row, and `setPriorities`' `taskChanged` condition (`hooks/useDay.tsx`) →
   if the board or Settings edits it, `NewItem` and `ItemPatch` (`client/src/api.ts`), the `POST`
-  and `PATCH` routes in `routes/items.ts`, `withItem` and `withItemPatch` (`lib/board.ts`), and in
-  `hooks/useBoard.tsx` `patchItem`'s `taskChanged` condition and the patch types of `editRow` and
-  `setRow`, so the held days that show it are read again → its value on every row the client
-  builds: `emptyRow` and `newTaskRow` (`lib/priorities.ts`), and, taken from the source,
+  and `PATCH` routes in `routes/items.ts`, `withItem`, `withItemPatch`, `RowPatch` and
+  `itemPatchOf` (`lib/board.ts`: a row's edit on the board, and that edit as the task's PATCH), and
+  in `hooks/useBoard.tsx` `patchItem`'s `taskChanged` condition and `setRow`'s patch type, so the
+  held days that show it are read again → its value on every row the client builds:
+  `emptyRow` and `newTaskRow` (`lib/priorities.ts`), and, taken from the source,
   `planNext`'s row and `PrioritySeed` (`lib/plan.ts`), `recurringRow` (`lib/recurring.ts`) and
   `planMove`'s pull (`lib/board.ts`) → the seed (its rows and `SEEDED_RECURRING`, which typecheck
   asks for; `insertItems`' INSERT, which it doesn't) → `makePriority`, `makeCard` and

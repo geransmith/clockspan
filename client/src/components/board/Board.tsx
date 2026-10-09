@@ -27,7 +27,7 @@ import { useRange } from '../../hooks/useRange';
 import { useSettings } from '../../hooks/useSettings';
 import { useShortcut } from '../../hooks/useShortcuts';
 import type { TimerCtx } from '../../hooks/useTimer';
-import { unlockAudio, warnQuietly, warnSaveFailed } from '../../lib/alerts';
+import { unlockAudio } from '../../lib/alerts';
 import {
   boardColumns,
   boardFull,
@@ -38,18 +38,20 @@ import {
   dropTarget,
   findItem,
   isLane,
+  itemPatchOf,
   itemsIn,
   laneStart,
-  MoveRefused,
   moveAnnouncement,
   onToday,
   overAnnouncement,
   planMove,
+  saved,
   withDrag,
   type BoardItem,
   type ColumnId,
   type DropTarget,
   type Move,
+  type RowPatch,
   type StoreMove,
 } from '../../lib/board';
 import { ADD_PRIORITY_FAILED, BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, WARNING_ACTIONS } from '../../lib/copy';
@@ -91,18 +93,6 @@ type Notice =
 
 /** The dragged item's place in its list while the copy under the pointer moves. */
 const DRAGGED_OPACITY = 0.4;
-
-/** A board write's failure as a banner: a refusal's own line, else the save one; whether it saved. */
-function saved(write: Promise<void>): Promise<boolean> {
-  return write.then(
-    () => true,
-    (err: unknown) => {
-      if (err instanceof MoveRefused) warnQuietly({ title: err.message, tag: 'board-move' });
-      else warnSaveFailed();
-      return false;
-    },
-  );
-}
 
 /** A board write sent and let go, its failure a banner. */
 function report(write: Promise<void>): void {
@@ -454,10 +444,10 @@ export const Board = memo(function Board({
     const editable = cardOnly || (item.recurring && board.recurring.some((r) => r.uid === item.uid));
     // The title, category and note are the task's, on every day: today's row through the list, the
     // sheet's write, which renames a recurring priority too; any other by a PATCH.
-    const editTask: ((patch: Parameters<typeof store.editRow>[1]) => Promise<void>) | null = throughRow
-      ? (patch) => store.editRow(item.uid, patch)
+    const editTask = throughRow
+      ? (patch: RowPatch) => store.editRow(item.uid, patch)
       : editable
-        ? (patch) => store.editItem(item.uid, { title: patch.text, categoryUid: patch.categoryUid, note: patch.note })
+        ? (patch: RowPatch) => store.editItem(item.uid, itemPatchOf(patch))
         : null;
     const close = () => {
       titles.current.get(item.id)?.focus();

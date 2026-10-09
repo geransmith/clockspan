@@ -9,6 +9,7 @@ import {
   addsToLanes,
   boardFull,
   categoryForName,
+  itemPatchOf,
   MoveRefused,
   withCategory,
   withCategoryPatch,
@@ -17,6 +18,7 @@ import {
   withoutCategory,
   withoutItem,
   type CategoryPick,
+  type RowPatch,
   type StoreMove,
 } from '../lib/board';
 import { ADD_PRIORITY_FAILED, BOARD, SAVE_FAILED } from '../lib/copy';
@@ -88,7 +90,7 @@ export interface BoardStore {
    * its earlier ticks in Done). A row gone from today's list meanwhile has its task patched
    * instead.
    */
-  editRow(uid: string, patch: Partial<Pick<Priority, 'text' | 'categoryUid' | 'note'>>): Promise<void>;
+  editRow(uid: string, patch: RowPatch): Promise<void>;
   /** A move `planMove` gave, as one job. */
   move(move: StoreMove): Promise<void>;
   /** A new category, or a removed one brought back under its uid (`categoryForName` says which). */
@@ -249,9 +251,9 @@ export function BoardProvider({ children }: { children: ReactNode }) {
   // meanwhile (another device took it off) still has it: sent to the task itself, in this job,
   // since the store's `editItem` would queue behind it.
   const editRow = useCallback(
-    (uid: string, patch: Partial<Pick<Priority, 'text' | 'categoryUid' | 'note'>>) => {
+    (uid: string, patch: RowPatch) => {
       const today = todayKey();
-      const itemPatch = { title: patch.text, categoryUid: patch.categoryUid, note: patch.note };
+      const itemPatch = itemPatchOf(patch);
       return write(
         (b) => withItemPatch(b, uid, itemPatch),
         async () => ((await setRow(today, uid, patch)) === 'skipped' ? patchItem(uid, itemPatch) : null),

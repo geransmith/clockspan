@@ -5,6 +5,7 @@ import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import * as api from '../api';
 import { useDayStore } from '../hooks/useDay';
 import { warnSaveFailed } from '../lib/alerts';
+import { ApiError } from '../lib/apiError';
 import { LEFT_OPEN, PLAN_NEXT, PUNCH_ORDER, REMOVE_TASK, TODAY_OFFER } from '../lib/copy';
 import { SPLIT_QUERY } from '../lib/layout';
 import { applySettingsPatch } from '../lib/settings';
@@ -466,6 +467,23 @@ describe("Sheet: a row's note", () => {
     await settle();
     expect(screen.queryByRole('textbox', { name: 'Note for priority 1' })).toBeNull();
     expect(api.putPriorities).not.toHaveBeenCalled();
+    expect(api.editItem).toHaveBeenCalledExactlyOnceWith(report.uid, { note: 'Kim has the numbers.' });
+    expect(warnSaveFailed).not.toHaveBeenCalled();
+  });
+
+  it('raises no banner when × takes the task before the box saved and the task goes with it', async () => {
+    const report = makePriority(1, 'Report');
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [report] }));
+    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve({ priorities: priorities.filter((p) => p.uid != null) }));
+    // The list's save without the row deleted the task, which nothing else names.
+    vi.mocked(api.editItem).mockRejectedValue(new ApiError(404, 'Not found'));
+    await renderSheet();
+    fireEvent.click(button('Add a note to priority 1'));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Note for priority 1' }), { target: { value: 'Kim has the numbers.' } });
+    // A tap that leaves the focus in the box, so nothing saves it before ×.
+    fireEvent.click(button('Remove priority 1'));
+    await settle();
+    expect(vi.mocked(api.putPriorities).mock.lastCall![1].some((p) => p.uid === report.uid)).toBe(false);
     expect(api.editItem).toHaveBeenCalledExactlyOnceWith(report.uid, { note: 'Kim has the numbers.' });
     expect(warnSaveFailed).not.toHaveBeenCalled();
   });

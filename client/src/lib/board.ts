@@ -1,6 +1,7 @@
 /**
  * The board's logic, with no React and no dnd-kit: which column each task and each of today's
- * rows shows in (`boardColumns`), what a move does and which store it writes (`planMove`), where a
+ * rows shows in (`boardColumns`), what a move does and which store it writes (`planMove`), a
+ * write's failure as a banner (`saved`, which the sheet's note uses too), where a
  * drop lands and what a drag says (`dropTarget`, `withDrag`, `moveAnnouncement`), the leftovers
  * the left-open offer brings back (`offeredLeftovers`), what New category makes of a name
  * (`categoryForName`, `nextColor`), and the board as a write shows it before the server answers
@@ -16,6 +17,7 @@ import { BOARD_LIMITS, CATEGORY_COLORS, LOOKBACK_DAYS, OPEN_LANES } from '../../
 import { addDays, startOfWeek } from '../../../shared/dates.js';
 import { categoryName, sameText } from '../../../shared/text.js';
 import type { Board, BoardCard, Category, CategoryColor, Day, OpenLane, Priority, Recurring } from '../types';
+import { warnQuietly, warnSaveFailed } from './alerts';
 import { BOARD, BOARD_DRAG, DONE_STAYS } from './copy';
 import { isTaskRow } from './priorities';
 import { dayName } from './format';
@@ -344,6 +346,18 @@ export function moveTargets(item: BoardItem, today: string): ColumnId[] {
 /** A board move the store turned down before it changed anything; its message is the line to show. */
 export class MoveRefused extends Error {}
 
+/** A board write's failure as a banner: a refusal's own line, else the save one; whether it saved. */
+export function saved(write: Promise<unknown>): Promise<boolean> {
+  return write.then(
+    () => true,
+    (err: unknown) => {
+      if (err instanceof MoveRefused) warnQuietly({ title: err.message, tag: 'board-move' });
+      else warnSaveFailed();
+      return false;
+    },
+  );
+}
+
 /** The drop id of a column, which `dropTarget` looks up; an item's drop id is its own id. */
 export const columnDropId = (column: ColumnId): string => `col:${column}`;
 
@@ -484,6 +498,12 @@ export function withItem(board: Board, item: NewItem, now: number): Board {
   };
   return { ...board, cards: placed(board.cards, made, item.lane, item.before) };
 }
+
+/** A task's name, category or note, as a row of a day's list edits them. */
+export type RowPatch = Partial<Pick<Priority, 'text' | 'categoryUid' | 'note'>>;
+
+/** A row's edit as its task's `PATCH /items/:uid`, which names the text its title. */
+export const itemPatchOf = ({ text, categoryUid, note }: RowPatch): ItemPatch => ({ title: text, categoryUid, note });
 
 /**
  * The board as `PATCH /items/:uid` leaves it: the fields sent, a field left out kept. A task takes

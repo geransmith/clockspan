@@ -17,7 +17,8 @@ export class ApiError extends Error {
 
 /**
  * A delete (or a break's end) answered 404 found the row gone already, another device or a save
- * took it: what was asked, so it counts as done, with null for the answer.
+ * took it: what was asked, so it counts as done, with null for the answer. A note sent to a task
+ * gone that way has nothing to keep it, so it counts as done too.
  */
 export async function unlessGone<T>(send: Promise<T>): Promise<T | null> {
   try {

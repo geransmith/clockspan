@@ -10,7 +10,8 @@ import { warnSaveFailed } from '../lib/alerts';
 import { LOAD_FAILED, PUNCH_ORDER } from '../lib/copy';
 import { startOfWeek } from '../../../shared/dates.js';
 import { dayName } from '../lib/format';
-import { offeredLeftovers } from '../lib/board';
+import { unlessGone } from '../lib/apiError';
+import { offeredLeftovers, saved } from '../lib/board';
 import { CARD_TITLES, moveCard, setCardSide, setCardVisible, SPLIT_QUERY, splitColumns } from '../lib/layout';
 import { isOneOff, patchRow } from '../lib/priorities';
 import { dueRecurring } from '../lib/recurring';
@@ -162,17 +163,11 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
             onChange={(p, base) => store.setPriorities(date, p, base)}
             onDeleteTask={(uid) => boardStore.deleteItem(uid)}
             // The note's own save, on the list as the store shows it. The note is the task's, on every day,
-            // so a row gone meanwhile (another device took it off) sends it to the task, as the board's editRow does.
+            // so a row gone meanwhile (another device or ×, before the box saved) sends it to the task, as
+            // the board's editRow does; a task gone with it (a 404) has nowhere to keep it.
             onNote={async (uid, note) => {
               const edit = await store.editPriorities(date, (rows) => patchRow(rows, uid, { note }));
-              if (edit !== 'skipped') return edit !== 'failed';
-              return boardStore.editItem(uid, { note }).then(
-                () => true,
-                () => {
-                  warnSaveFailed();
-                  return false;
-                },
-              );
+              return edit === 'skipped' ? saved(unlessGone(boardStore.editItem(uid, { note }))) : edit !== 'failed';
             }}
             offer={
               isToday
