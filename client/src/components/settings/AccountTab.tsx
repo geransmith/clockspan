@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import * as api from '../../api';
 import { useSubmit } from '../../hooks/useSubmit';
+import { unlessGone } from '../../lib/apiError';
 import { CONFIRM, PASSWORD_CHANGED, PASSWORD_MISMATCH } from '../../lib/copy';
 import { PASSWORD_LENGTH } from '../../../../shared/api.js';
 import type { PublicUser } from '../../types';
@@ -91,9 +92,10 @@ function Users({ me }: { me: PublicUser }) {
     if (!window.confirm(CONFIRM.deleteUser(u.name))) return;
     run(async () => {
       try {
-        await api.deleteUser(u.id);
+        // A 404: another device deleted the user already, which is what was asked.
+        await unlessGone(api.deleteUser(u.id));
       } finally {
-        // Reload either way: a 404 means another device already deleted the user, and the list should show it gone.
+        // Reload either way, so the list shows what the server holds.
         await load();
       }
     });

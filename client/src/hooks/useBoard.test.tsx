@@ -5,7 +5,7 @@ import * as api from '../api';
 import { BOARD_LIMITS } from '../../../shared/api.js';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
-import { warnQuietly } from '../lib/alerts';
+import { warnSaveFailed } from '../lib/alerts';
 import { MoveRefused, withCategory, withCategoryPatch, withItem, withItemPatch, withoutCategory, withoutItem, type StoreMove } from '../lib/board';
 import { ADD_PRIORITY_FAILED, BOARD, SAVE_FAILED } from '../lib/copy';
 import { applySettingsPatch } from '../lib/settings';
@@ -362,7 +362,7 @@ describe('moves', () => {
     await act(() => result.current.days.load(TODAY));
     vi.mocked(api.putPriorities).mockRejectedValueOnce(new Error('offline'));
     await expect(move(result, place('later0000001'))).rejects.toThrow(SAVE_FAILED.title);
-    expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ title: SAVE_FAILED.title }));
+    expect(warnSaveFailed).toHaveBeenCalledOnce();
 
     const { result: noDay } = renderBoard({ today: false });
     await settle();
@@ -738,7 +738,7 @@ describe('categories', () => {
       vi.mocked(api.addCategory).mockRejectedValueOnce(new Error('offline'));
       act(() => void result.current.pick!.create('KB'));
       await settle();
-      expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ title: SAVE_FAILED.title }));
+      expect(warnSaveFailed).toHaveBeenCalledOnce();
     });
 
     it('reads the board again on refresh', async () => {

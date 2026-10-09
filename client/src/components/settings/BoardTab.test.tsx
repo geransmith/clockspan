@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { MINUTE_MS } from '../../../../shared/dates.js';
 import * as api from '../../api';
 import { BOARD_LIMITS, LIMITS } from '../../../../shared/api.js';
-import { warnQuietly } from '../../lib/alerts';
+import { warnSaveFailed } from '../../lib/alerts';
 import { withCategory, withCategoryPatch, withoutCategory, withItem, withItemPatch, withoutItem } from '../../lib/board';
 import { BOARD, CONFIRM, LOAD_FAILED } from '../../lib/copy';
 import { apiError, makeBoard, makeCategory, makeRecurring, makeSettings, settle, SettingsAndDays } from '../../test/hooks';
@@ -358,7 +358,7 @@ describe('BoardTab: recurring priorities', () => {
     await settle();
     expect(api.addCategory).toHaveBeenCalledTimes(1);
     expect(notSaved).toBe(1);
-    expect(warnQuietly).not.toHaveBeenCalled();
+    expect(warnSaveFailed).not.toHaveBeenCalled();
     // What picked it reads as no category once the board has it back off.
     expect(screen.getByRole('button', { name: 'Category for Follow-ups: none' })).toBeTruthy();
   });

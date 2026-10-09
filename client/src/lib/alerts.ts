@@ -4,6 +4,7 @@
  */
 
 import type { ClipId, SoundId, SynthId } from '../../../shared/sounds.js';
+import { SAVE_FAILED } from './copy';
 import { clipUrl } from './sounds';
 
 export type Tone = 'info' | 'warn' | 'danger' | 'success';
@@ -237,4 +238,9 @@ export function alert({ chime, sound, notifications, sticky, ...fields }: AlertO
 /** A request failed: a danger banner with no chime and no notification, one per tag. */
 export function warnQuietly(o: { title: string; body?: string; tag: string }): void {
   alert({ ...o, tone: 'danger', sound: false, notifications: false });
+}
+
+/** A write failed: the "Change not saved" banner, under the one tag every save shares so a newer one replaces it. */
+export function warnSaveFailed(): void {
+  warnQuietly({ ...SAVE_FAILED, tag: 'save-failed' });
 }

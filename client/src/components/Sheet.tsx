@@ -5,8 +5,8 @@ import { useLeftOpen } from '../hooks/useLeftOpen';
 import { useRange } from '../hooks/useRange';
 import { useRecurringAnswered } from '../hooks/useRecurringAnswered';
 import { useSettings } from '../hooks/useSettings';
-import { warnQuietly } from '../lib/alerts';
-import { LOAD_FAILED, PUNCH_ORDER, SAVE_FAILED } from '../lib/copy';
+import { warnSaveFailed } from '../lib/alerts';
+import { LOAD_FAILED, PUNCH_ORDER } from '../lib/copy';
 import { startOfWeek } from '../../../shared/dates.js';
 import { dayName } from '../lib/format';
 import { offeredLeftovers } from '../lib/board';
@@ -82,7 +82,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
 
   // A failed save drops the change, so the stored layout shows again under any later change;
   // the banner is the only sign it happened.
-  const saveLayout = (next: typeof layout) => update({ layout: next }).catch(() => warnQuietly({ ...SAVE_FAILED, tag: 'save-failed' }));
+  const saveLayout = (next: typeof layout) => update({ layout: next }).catch(warnSaveFailed);
   const reorder = (from: number, to: number, side?: CardSide) => {
     const next = moveCard(layout, from, to, side);
     if (next) void saveLayout(next);

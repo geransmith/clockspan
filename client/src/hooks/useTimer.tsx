@@ -3,9 +3,9 @@ import * as api from '../api';
 import { nextBackoff } from '../../../shared/backoff.js';
 import { pausedSecondsAfter } from '../../../shared/timer.js';
 import type { Session, SessionConflict, SessionResponse } from '../types';
-import { alert, dismissByTag, warnQuietly } from '../lib/alerts';
+import { alert, dismissByTag, warnSaveFailed } from '../lib/alerts';
 import { ApiError } from '../lib/apiError';
-import { SAVE_FAILED, TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
+import { TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
 import { addPending, fetched, settle, settleWith, shown, untracked, type Tracked } from '../lib/optimistic';
 import { editedSession, sessionName } from '../lib/retro';
@@ -270,7 +270,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       try {
         await run(cur);
       } catch (err) {
-        warnQuietly({ ...SAVE_FAILED, tag: 'save-failed' });
+        warnSaveFailed();
         // Gone, or no longer running: it ended on another device. Show that now, not at the
         // next poll.
         if (err instanceof ApiError && (err.status === 404 || err.status === 409)) void syncNow();

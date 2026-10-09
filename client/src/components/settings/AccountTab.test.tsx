@@ -29,7 +29,7 @@ beforeEach(() => {
 });
 
 describe('AccountTab', () => {
-  it('reloads the list after a refused delete, so a user another device removed goes away', async () => {
+  it('counts a delete answered 404 as done and reloads the list, since another device removed the user', async () => {
     vi.mocked(api.listUsers)
       .mockResolvedValueOnce({ users: [admin, sam] })
       .mockResolvedValueOnce({ users: [admin] });
@@ -38,7 +38,7 @@ describe('AccountTab', () => {
     await deleteSam();
     expect(api.listUsers).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('button', { name: 'Delete sam' })).toBeNull();
-    expect(screen.getByRole('alert').textContent).toBe('User not found.');
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('clears the error line when a delete is tried again', async () => {

@@ -1,8 +1,7 @@
 // @vitest-environment happy-dom
 import { renderHook } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { warnQuietly } from '../lib/alerts';
-import { SAVE_FAILED } from '../lib/copy';
+import { warnSaveFailed } from '../lib/alerts';
 import { begin, deferred, settle } from '../test/hooks';
 import { useSaveStatus } from './useSaveStatus';
 
@@ -99,7 +98,7 @@ it('raises the quiet banner for a save that fails after the dialog has closed, a
   unmount();
   answer.reject(new Error('Request failed (500)'));
   await settle();
-  expect(warnQuietly).toHaveBeenCalledExactlyOnceWith({ ...SAVE_FAILED, tag: 'save-failed' });
+  expect(warnSaveFailed).toHaveBeenCalledOnce();
   expect(vi.getTimerCount()).toBe(0);
 });
 
@@ -109,6 +108,6 @@ it('says nothing for a save that succeeds after the dialog has closed', async ()
   unmount();
   answer.resolve();
   await settle();
-  expect(warnQuietly).not.toHaveBeenCalled();
+  expect(warnSaveFailed).not.toHaveBeenCalled();
   expect(vi.getTimerCount()).toBe(0);
 });

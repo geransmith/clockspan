@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { SAVE_FAILED } from './copy';
 
 /**
  * The module keeps its own state (the audio context, the banner list), so every test gets a
@@ -372,6 +373,12 @@ describe('banners', () => {
     expect(alerts.getBanners()[0]).toMatchObject({ title: 'Change not saved', tone: 'danger' });
     vi.advanceTimersByTime(8_000);
     expect(alerts.getBanners()).toEqual([]);
+  });
+
+  it('warnSaveFailed raises the "Change not saved" banner under one tag', () => {
+    alerts.warnSaveFailed();
+    alerts.warnSaveFailed();
+    expect(alerts.getBanners()).toEqual([expect.objectContaining({ ...SAVE_FAILED, tone: 'danger', tag: 'save-failed' })]);
   });
 
   it('an alert carries its action to the banner', () => {

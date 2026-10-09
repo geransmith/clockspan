@@ -2,7 +2,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
-import { dismissByTag, warnQuietly } from '../lib/alerts';
+import { dismissByTag, warnQuietly, warnSaveFailed } from '../lib/alerts';
 import { ADD_PRIORITY_FAILED, SAVE_FAILED } from '../lib/copy';
 import { normalizePunches } from '../lib/timeclock';
 import { mergePriorities } from '../../../shared/priorities.js';
@@ -296,7 +296,7 @@ describe('load after a write', () => {
     await act(() => result.current.setOvertimeApproved(TODAY, true));
     await act(() => result.current.removeBreak(TODAY, 1));
     expect(result.current.days[TODAY]?.breaks).toEqual([stored]);
-    expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ tag: 'save-failed' }));
+    expect(warnSaveFailed).toHaveBeenCalledOnce();
     expect(api.getDay).toHaveBeenCalledTimes(2);
     // Read before the overtime save, so it is dropped: the store asks again.
     out.resolve(makeDay(TODAY, { breaks: [stored] }));
@@ -316,7 +316,8 @@ describe('load after a write', () => {
     expect(api.getDay).toHaveBeenCalledTimes(2);
     expect(result.current.days[TODAY]?.punches[0]?.at).toBeNull();
     expect(result.current.failed.size).toBe(0);
-    expect(vi.mocked(warnQuietly).mock.calls.map(([w]) => w.tag)).toEqual(['save-failed']);
+    expect(warnQuietly).not.toHaveBeenCalled();
+    expect(warnSaveFailed).toHaveBeenCalledOnce();
   });
 
   it("keeps another list's change on top when a failed save's reload answers first", async () => {
@@ -452,7 +453,7 @@ describe('setPunches', () => {
     await act(() => done);
     await settle();
     expect(api.putPunches).toHaveBeenCalledTimes(1);
-    expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ title: SAVE_FAILED.title, tag: 'save-failed' }));
+    expect(warnSaveFailed).toHaveBeenCalledOnce();
     expect(result.current.days[TODAY]?.punches[0]?.at).toBe(T0 - MINUTE_MS);
   });
 
@@ -585,7 +586,7 @@ describe('priorities', () => {
       ).toBe(true),
     );
     expect(result.current.days[TODAY]?.priorities).toEqual([{ ...report, done: true }]);
-    expect(warnQuietly).not.toHaveBeenCalled();
+    expect(warnSaveFailed).not.toHaveBeenCalled();
     expect(api.getDay).toHaveBeenCalledTimes(1);
   });
 
@@ -605,7 +606,7 @@ describe('priorities', () => {
     expect(result.current.days[TODAY]?.priorities).toHaveLength(MAX_PRIORITIES + 1);
     refused.reject(apiError(409));
     await settle();
-    expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ title: SAVE_FAILED.title }));
+    expect(warnSaveFailed).toHaveBeenCalledOnce();
     expect(api.getDay).toHaveBeenCalledTimes(3);
     expect(result.current.days[TODAY]?.priorities).toEqual([phone]);
   });
@@ -831,7 +832,7 @@ describe('editPriorities', () => {
     expect(api.putPriorities).not.toHaveBeenCalled();
     vi.mocked(api.putPriorities).mockRejectedValueOnce(new Error('offline'));
     await act(async () => expect(await result.current.editPriorities(TODAY, (rows) => rows)).toBe('failed'));
-    expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ title: SAVE_FAILED.title }));
+    expect(warnSaveFailed).toHaveBeenCalledOnce();
   });
 
   it('shown gives the day with the changes on their way, and nothing for a day not held', async () => {
@@ -1049,7 +1050,7 @@ describe('sessions', () => {
     await act(() => result.current.removeSession(TODAY, 1));
     await settle();
     expect(result.current.days[TODAY]?.sessions).toEqual([]);
-    expect(warnQuietly).not.toHaveBeenCalled();
+    expect(warnSaveFailed).not.toHaveBeenCalled();
     expect(api.getDay).toHaveBeenCalledTimes(1);
   });
 
@@ -1144,7 +1145,7 @@ describe('breaks', () => {
     await settle();
     await act(() => result.current.startBreak(TODAY, 300));
     expect(result.current.days[TODAY]?.breaks).toEqual([]);
-    expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ title: SAVE_FAILED.title }));
+    expect(warnSaveFailed).toHaveBeenCalledOnce();
     // Asked for again, like after every refused save: the server may have moved on.
     expect(api.getDay).toHaveBeenCalledTimes(2);
   });
@@ -1260,14 +1261,14 @@ describe('breaks', () => {
     await act(() => result.current.removeBreak(TODAY, 1));
     await act(() => result.current.endBreak(TODAY, 2));
     expect(result.current.days[TODAY]?.breaks).toEqual([third]);
-    expect(warnQuietly).not.toHaveBeenCalled();
+    expect(warnSaveFailed).not.toHaveBeenCalled();
     expect(api.getDay).toHaveBeenCalledTimes(1);
 
     vi.mocked(api.getDay).mockResolvedValueOnce(makeDay(TODAY, { breaks: [third] }));
     await act(() => result.current.removeBreak(TODAY, 3));
     await settle();
     expect(result.current.days[TODAY]?.breaks).toEqual([third]);
-    expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ tag: 'save-failed' }));
+    expect(warnSaveFailed).toHaveBeenCalledOnce();
     expect(api.getDay).toHaveBeenCalledTimes(2);
   });
 });

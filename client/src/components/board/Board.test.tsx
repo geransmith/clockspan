@@ -5,7 +5,7 @@ import * as api from '../../api';
 import type { NewItem } from '../../api';
 import { BOARD_LIMITS, LOOKBACK_DAYS } from '../../../../shared/api.js';
 import { addDays } from '../../../../shared/dates.js';
-import { unlockAudio, warnQuietly } from '../../lib/alerts';
+import { unlockAudio, warnQuietly, warnSaveFailed } from '../../lib/alerts';
 import { withCategory, withItem, withItemPatch, withoutItem } from '../../lib/board';
 import { BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, PRIORITY_WARNINGS, WARNING_ACTIONS } from '../../lib/copy';
 import { USER_KEYS } from '../../lib/storage';
@@ -572,7 +572,7 @@ describe('Board', () => {
     openEditor('Write a KB');
     moveTo('next');
     await settle();
-    expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ tag: 'save-failed' }));
+    expect(warnSaveFailed).toHaveBeenCalledOnce();
     expect(titlesIn('Later')).toEqual(['Write a KB']);
   });
 
@@ -583,6 +583,7 @@ describe('Board', () => {
     moveTo('next');
     await settle();
     expect(warnQuietly).toHaveBeenCalledWith({ title: BOARD.full, tag: 'board-move' });
+    expect(warnSaveFailed).not.toHaveBeenCalled();
     expect(api.editItem).not.toHaveBeenCalled();
     expect(api.putPriorities).not.toHaveBeenCalled();
     expect(titlesIn('In progress')).toEqual(['Report']);
@@ -919,7 +920,7 @@ describe('categories', () => {
     fireEvent.change(box, { target: { value: 'Calls' } });
     fireEvent.keyDown(box, { key: 'Enter' });
     await settle();
-    expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ tag: 'save-failed' }));
+    expect(warnSaveFailed).toHaveBeenCalledOnce();
     expect(captureChip().getAttribute('aria-label')).toBe('Category for new cards: none');
   });
 

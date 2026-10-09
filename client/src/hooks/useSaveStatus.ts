@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { warnQuietly } from '../lib/alerts';
-import { SAVE_FAILED } from '../lib/copy';
+import { warnSaveFailed } from '../lib/alerts';
 
 export type SaveState = 'idle' | 'saving' | 'saved' | 'failed';
 
@@ -45,7 +44,7 @@ export function useSaveStatus(): { saveState: SaveState; save: (run: () => Promi
     } finally {
       pending.current--;
       if (!open.current) {
-        if (failed.current) warnQuietly({ ...SAVE_FAILED, tag: 'save-failed' });
+        if (failed.current) warnSaveFailed();
       } else if (pending.current === 0) {
         if (failed.current) setSaveState('failed');
         else {
