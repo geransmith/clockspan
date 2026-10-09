@@ -3,10 +3,11 @@
 
 ## Claude Code notes
 
-- Verify UI changes in the built-in browser: `preview_start` the `web` config from
-  `.claude/launch.json` (AGENTS.md's Commands section lists the others), look at desktop width
-  first (`resize_window` preset `desktop`), then the `mobile` preset for the phone pass, and
-  `colorScheme: light` / `dark` for each theme.
+- Browser passes run in the built-in browser, in the order AGENTS.md's Verification step 4
+  gives: `preview_start` the `web` config from `.claude/launch.json` (AGENTS.md's Commands
+  section lists the others), `resize_window` to each width a pass names (the `mobile` preset for
+  375; the `desktop` preset only clears the emulation, leaving the pane's own width), reload,
+  and `colorScheme: light` / `dark` for the themes.
 - A step behind `window.confirm`: stub it in the page (`window.confirm = () => true`) or send
   the request with curl.
 - Never type a password into the pane, not even the dev one. For a signed-in check under

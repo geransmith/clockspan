@@ -95,12 +95,13 @@ A fresh checkout has an empty database, so History, the retrospective and the we
 ten weekdays, each with punches, priorities, focus sessions and a retrospective note (an extra
 out / in pair, an overtime day, a day never marked reviewed and a half day among them), and
 today, clocked in two hours ago. It also writes four categories, two recurring priorities and
-some board cards; the board itself stays off until you turn it on (*Settings → Sheet → Board →
-Board page*). [AGENTS.md](AGENTS.md#dev-data-is-disposable) lists what each day holds.
+some tasks on the board; the board itself stays off until you turn it on (*Settings → Sheet →
+Board → Board page*). [AGENTS.md](AGENTS.md#dev-data-is-disposable) and
+[server/dev/seed.ts](server/dev/seed.ts) say what each day holds.
 
 Dates are relative to the day you run it, so the sample always lands in the current week.
-Each run first deletes every day, board card, category and recurring priority of the user it
-seeds, including ones you entered by hand; settings stay unless you pass `--fresh`. It only
+Each run first deletes every day, task (recurring priorities included) and category of the user
+it seeds, including ones you entered by hand; settings stay unless you pass `--fresh`. It only
 writes to the local database (`DATA_DIR`, default `./data`); it never touches a Docker `/data`
 volume. Safe to run while `npm run dev` is up; reload the page.
 

@@ -167,7 +167,7 @@ function taskUid(text: string): string {
   return `task${(TASK_TEXTS.indexOf(text) + 1).toString(16).padStart(8, '0')}`;
 }
 
-/** What only the server works out, filled in once every day is built (`withCounts`). */
+/** What only the server works out; `withCounts` fills in the counts once every day is built. */
 const UNCOUNTED = { archived: false, listed: 0, earlier: 0, logged: 0 } as const;
 
 /** The entry for the one-off task `text` at `position`, in the task's category. */

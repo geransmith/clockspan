@@ -15,7 +15,7 @@ export interface DayRow {
   work_minutes: number | null;
 }
 
-/** The `days` columns a `Day` is built from. `findDay` and `daysInRange` (`routes/days.ts`) both read these, so a new per-day column is added here once, and on `DayRow`. */
+/** The `days` columns a `Day` is built from. `findDay` below and `daysInRange` (`routes/days.ts`) both read these, so a new per-day column is added here once, and on `DayRow`. */
 export const DAY_COLUMNS = 'id, date, overtime_approved, retro_note, retro_at, work_minutes';
 
 export function findDay(db: DB, userId: number, date: string): DayRow | undefined {
