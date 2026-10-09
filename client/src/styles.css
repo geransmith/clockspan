@@ -2706,12 +2706,16 @@ button.log-label:hover {
   justify-content: space-between;
   gap: 4px 8px;
 }
-/* The timer card's length buttons, a line high beside their label, and under it where the column is narrow. */
+/* The timer card's length buttons, a line high: beside their label where they fit, wrapping in a
+   narrow column (the card's one-row grid can't shrink below its buttons). */
 .board-start .timer-quick {
+  display: flex;
+  flex-wrap: wrap;
   flex: 1 1 auto;
   gap: 6px;
 }
 .board-start .btn-quick {
+  flex: 1 0 auto;
   min-height: 44px;
   flex-direction: row;
   gap: 4px;

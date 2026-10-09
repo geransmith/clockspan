@@ -453,6 +453,8 @@ export const Board = memo(function Board({
         run(item, 'progress', null, { minutes });
         return;
       }
+      // As run() does: a nudge still up holds an earlier Start's minutes, which Add anyway would send.
+      setNotice(null);
       close();
       report(start(today, minutes * 60, item.title, item.uid));
     };

@@ -526,13 +526,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   after another (`inOrder`). `useTimer` sends the running session's writes one at a time on its own
   queue: start, adjust, edit, pause, resume, finish and cancel, the log's edits of the running row
   included. That queue is not ordered against the day store's `session:<id>` queue, which carries
-  the other rows' edits and deletes. Two jobs wait across queues: a session start or edit that names
-  a priority's uid first waits, inside its own queue's job, for that day's priorities save still out
-  (`prioritiesSaved`), since the server refuses a task that day's list doesn't hold yet; and a board
-  job that changes a day's list waits for that save (below). A start's uid may be a promise,
-  awaited first inside its job: the timer card's Also add hands it the new row's save, and a board
-  item's Start its pull, so it names the task once today's list holds it. `useSettings` sends its
-  PUTs and resets one at a time. The board (`useBoard`) sends each write as one job on its own
+  the other rows' edits and deletes. Three jobs wait across queues: a session start or edit that
+  names a priority's uid first waits, inside its own queue's job, for that day's priorities save
+  still out (`prioritiesSaved`), since the server refuses a task that day's list doesn't hold yet; a
+  board job that changes a day's list waits for that save (below); and a timer start whose uid is a
+  promise awaits it first inside its job (the timer card's Also add hands it the new row's save, a
+  board item's Start its pull), so it names the task once today's list holds it. `useSettings`
+  sends its PUTs and resets one at a time. The board (`useBoard`) sends each write as one job on its own
   queue, its change to the tasks shown from the moment it is made; a job that changes today's list
   (a pull, a row typed in In progress's box, a tick, a rename or category of today's row, Remove
   from today, which leaves a free row as × does, `takeOffRow`) goes through `editPriorities`, and so
@@ -1210,7 +1210,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   button that sends one calls its `run`: one send at a time with the button disabled, and one
   error line (`ErrorLine`), cleared when a send starts and filled with what it throws (a
   mismatched confirmation throws too). A store write that shows at once (a lane's box, a card's
-  Move to) is not a form send: it goes through its store, and a failure is the banner.
+  Move to), or a board item's Start timer, whose editor closes, is not a form send: it goes
+  through its store, and a failure is the banner.
 - Comments explain *why* (browser quirks, math), not what.
 - No new dependency (a server one or a client library the bundle carries) without stating the
   reason in the PR body, which becomes the squash commit's message on `main`.

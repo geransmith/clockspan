@@ -1019,6 +1019,17 @@ describe('starting the focus timer', () => {
     await expect(startedOn()).resolves.toBe('next00000001');
   });
 
+  it("takes down a card's nudge when a row's Start starts the timer, so Add anyway can't start a second", async () => {
+    lists[WED] = [row(1, 'Report'), row(2, 'Email'), row(3, 'Invoices')];
+    await renderBoard();
+    openEditor('Follow up');
+    startFor(25);
+    openEditor('Report');
+    startFor(15);
+    expect(within(notice()).queryByRole('button', { name: WARNING_ACTIONS.fresh.add })).toBeNull();
+    expect(start).toHaveBeenCalledExactlyOnceWith(WED, 15 * 60, 'Report', REPORT);
+  });
+
   it('starts nothing when the pull is refused on a full list, and the banner says why once', async () => {
     lists[WED] = Array.from({ length: MAX_PRIORITIES }, (_, i) => row(i + 1, `Task ${i + 1}`));
     await renderBoard();
@@ -1038,6 +1049,8 @@ describe('starting the focus timer', () => {
     vi.mocked(api.editItem).mockReturnValueOnce(placed.promise);
     await renderBoard();
     openEditor('Monitor the queue');
+    expect(startGroup()).not.toBeNull();
+    openEditor('Write a KB');
     expect(startGroup()).not.toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
     for (const title of ['Email', 'Shipped', 'Tuesday row', 'Plan B']) {

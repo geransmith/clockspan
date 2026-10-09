@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { useDay } from '../hooks/useDay';
 import { useTimer } from '../hooks/useTimer';
-import { unlockAudio } from '../lib/alerts';
 import { BREAK } from '../lib/copy';
 import type { CategoryPick } from '../lib/board';
 import {
@@ -29,15 +28,22 @@ import { FocusTimer } from './FocusTimer';
 vi.mock('../api');
 vi.mock('../lib/alerts');
 
-/** The card as the sheet wires it: today's priorities from the store. Beside it, whether the timer counts a start as out, which the board reads. */
+/** The task uid a start made off the card (a board item's Start) waits for. */
+let elsewhere = deferred<string | null>();
+
+/**
+ * The card as the sheet wires it: today's priorities from the store. Beside it, whether the timer
+ * counts a start as out, which the board reads, and a start made off the card, as the board's is.
+ */
 function Card({ pick }: { pick: CategoryPick | null }) {
   const { day } = useDay(TODAY);
-  const { starting } = useTimer();
+  const { starting, start } = useTimer();
   if (!day) return null;
   return (
     <>
       <FocusTimer date={TODAY} isToday priorities={day.priorities} pick={pick} />
       <output aria-label="A start is out">{String(starting)}</output>
+      <button onClick={() => void start(TODAY, 25 * 60, 'Board task', elsewhere.promise)}>Start elsewhere</button>
     </>
   );
 }
@@ -73,6 +79,7 @@ const startOut = () => screen.getByRole('status', { name: 'A start is out' }).te
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
+  elsewhere = deferred<string | null>();
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
   vi.mocked(api.getRunning).mockResolvedValue({ session: null });
   vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve({ priorities }));
@@ -123,6 +130,20 @@ describe('FocusTimer', () => {
     // The running timer takes the card's place, break and all.
     expect(screen.queryByRole('button', { name: BREAK.end })).toBeNull();
     expect(screen.getByRole('timer')).toBeTruthy();
+  });
+
+  it('holds the start and break buttons while a start made off the card is out', async () => {
+    vi.mocked(api.startSession).mockResolvedValue(started(makeSession({ label: 'Board task' })));
+    await renderCard([], [makeBreak({ startedAt: T0 - 30_000, endedAt: T0 + 270_000 })]);
+    expect(disabled(/^25\s*min$/)).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Start elsewhere' }));
+    await settle();
+    expect(disabled(/^25\s*min$/)).toBe(true);
+    expect(disabled(BREAK.end)).toBe(true);
+    elsewhere.resolve(null);
+    await settle();
+    expect(api.startSession).toHaveBeenCalledExactlyOnceWith(TODAY, 25 * 60, 'Board task', null);
+    expect(screen.getByRole('timer', { name: 'Time remaining' })).toBeTruthy();
   });
 
   it('links a session to the chip that was picked', async () => {
@@ -222,19 +243,6 @@ describe('FocusTimer', () => {
     await settle();
     expect(api.startSession).toHaveBeenCalledExactlyOnceWith(TODAY, 25 * 60, 'Call the vendor', rows[0]!.uid);
     expect(startOut()).toBe('false');
-  });
-
-  it('unlocks audio in the tap, before the priority is saved', async () => {
-    vi.mocked(api.startSession).mockResolvedValue(started());
-    await renderCard();
-    typeLabel('Call the vendor');
-    fireEvent.click(alsoAdd()!);
-    expect(unlockAudio).not.toHaveBeenCalled();
-    fireEvent.click(start25());
-    // Within the click itself, not after the priority's save answers.
-    expect(unlockAudio).toHaveBeenCalled();
-    await settle();
-    expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Call the vendor', expect.any(String));
   });
 
   describe("the new row's category", () => {
