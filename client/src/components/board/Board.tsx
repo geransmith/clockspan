@@ -25,6 +25,7 @@ import { useDay } from '../../hooks/useDay';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useRange } from '../../hooks/useRange';
 import { useSettings } from '../../hooks/useSettings';
+import type { TimerCtx } from '../../hooks/useTimer';
 import { unlockAudio, warnQuietly, warnSaveFailed } from '../../lib/alerts';
 import {
   boardColumns,
@@ -68,8 +69,14 @@ import { boardCollision, boardKeyboardCoordinates } from './dnd';
 /** The columns with a + in their head. */
 type AddColumn = Exclude<ColumnId, 'done'>;
 
-/** What a nudge holds until Add anyway: a pull, or a row typed in In progress's box. */
-type Held = { item: BoardItem; target: DropTarget; move: StoreMove } | { row: ReturnType<typeof newTaskRow> };
+/**
+ * How a move was made: where a tick was (its burst starts there), and the length of the timer an
+ * editor's Start starts on the task once its pull lands.
+ */
+type MoveOptions = { at?: DOMRect; minutes?: number };
+
+/** What a nudge holds until Add anyway: a pull (with a Start's length), or a row typed in In progress's box. */
+type Held = { item: BoardItem; target: DropTarget; move: StoreMove; minutes?: number } | { row: ReturnType<typeof newTaskRow> };
 
 /** What the board notice holds: one at a time, the newest move's. */
 type Notice =
@@ -104,9 +111,16 @@ const canDrag = (item: BoardItem) => !item.planned && !item.recurring;
  * for the clock bar's times and Delete's count of a timer running on the task: the page renders
  * once a minute, and the sheet's tiles and × count to the same minute. The move, add and delete
  * handlers are built in render, where the purity lint refuses Date.now() (the store stamps a
- * typed row's `addedAt`).
+ * typed row's `addedAt`). The timer's `running`, `start` and `starting` come from App too: its
+ * context changes every second, and these only when a timer starts, changes or ends.
  */
-export const Board = memo(function Board({ today, now }: { today: string; now: number }) {
+export const Board = memo(function Board({
+  today,
+  now,
+  running,
+  start,
+  starting,
+}: { today: string; now: number } & Pick<TimerCtx, 'running' | 'start' | 'starting'>) {
   const { board, failed } = useBoardState();
   const store = useBoardStore();
   const { settings } = useSettings();
@@ -216,8 +230,9 @@ export const Board = memo(function Board({ today, now }: { today: string; now: n
   // from where it was made (`at`, measured by the caller before the control goes with the item to
   // Done in this render, hidden there on a phone). The sound is unlocked in the tap that made it
   // (iOS). With no item, a row typed in In progress's box, whose field keeps the focus: nothing is
-  // focused for it once it lands.
-  const send = (item: BoardItem | null, target: DropTarget, move: StoreMove, at?: DOMRect) => {
+  // focused for it once it lands. With `minutes`, a pull an editor's Start made: the timer starts on
+  // the task once the pull's save answers, and one banner says why if either fails.
+  const send = (item: BoardItem | null, target: DropTarget, move: StoreMove, { at, minutes }: MoveOptions = {}) => {
     const ticks = (move.kind === 'tick' && move.done) || (move.kind === 'place' && move.row.done);
     if (ticks) {
       unlockAudio();
@@ -237,7 +252,11 @@ export const Board = memo(function Board({ today, now }: { today: string; now: n
         return next;
       }),
     );
-    report(sent);
+    if (minutes == null) report(sent);
+    else {
+      const pulled = sent.then(() => item!.uid);
+      report(start(today, minutes * 60, item!.title, pulled));
+    }
     // A move that failed leaves the item where it was, under its old id: nothing to wait for.
     void sent.catch(() => {
       if (focusTo.current === lands) focusTo.current = null;
@@ -257,16 +276,16 @@ export const Board = memo(function Board({ today, now }: { today: string; now: n
 
   // Every move, dragged or picked in Move to, goes through here: the newest one takes the notice's
   // place. It answers with what a drag says as it ends.
-  const run = (item: BoardItem, to: ColumnId, before: string | null, at?: DOMRect): string => {
+  const run = (item: BoardItem, to: ColumnId, before: string | null, options: MoveOptions = {}): string => {
     const move = planMove(item, to, before, today);
     setNotice(null);
     focusGrip.current = false;
     if (move?.kind === 'refuse' || move?.kind === 'doneStays') setNotice({ ...move, item });
     else if (move) {
       const target = { to, before };
-      const asked = move.kind === 'place' && move.nudge ? askFirst({ item, target, move }) : null;
+      const asked = move.kind === 'place' && move.nudge ? askFirst({ item, target, move, minutes: options.minutes }) : null;
       if (asked) return asked;
-      send(item, target, move, at);
+      send(item, target, move, options);
     }
     return moveAnnouncement(move, item, to);
   };
@@ -378,7 +397,7 @@ export const Board = memo(function Board({ today, now }: { today: string; now: n
       const r = active.rect.current.translated;
       const at = r ? new DOMRect(r.left, r.top, r.width, r.height) : undefined;
       const target = dropTarget(over ? String(over.id) : null, item.id, shown);
-      dropLine.current = target ? run(item, target.to, target.before, at) : moveAnnouncement(null, item, item.column);
+      dropLine.current = target ? run(item, target.to, target.before, { at }) : moveAnnouncement(null, item, item.column);
     }
     endDrag(item, activatorEvent);
   };
@@ -421,6 +440,22 @@ export const Board = memo(function Board({ today, now }: { today: string; now: n
     // and an earlier day's recurring row while its recurring priority is in Settings (one removed
     // there answers 404).
     const editable = cardOnly || (item.recurring && board.recurring.some((r) => r.uid === item.uid));
+    const close = () => {
+      titles.current.get(item.id)?.focus();
+      setOpen(null);
+    };
+    // A timer starts on today's open row and on an unplanned card in Later or Next, which a pull puts
+    // on today's list first, the nudge asking as Move to's does. None while a timer runs (another
+    // device's too, once synced) or the item's move is on its way.
+    const startable = !running && !moving.has(item.id) && item.column !== 'done' && !item.planned;
+    const onStart = (minutes: number) => {
+      if (!throughRow) {
+        run(item, 'progress', null, { minutes });
+        return;
+      }
+      close();
+      report(start(today, minutes * 60, item.title, item.uid));
+    };
     return (
       <BoardCardView
         key={item.id}
@@ -428,20 +463,17 @@ export const Board = memo(function Board({ today, now }: { today: string; now: n
         today={today}
         open={open === item.id}
         onToggle={() => setOpen((o) => (o === item.id ? null : item.id))}
-        onClose={() => {
-          titles.current.get(item.id)?.focus();
-          setOpen(null);
-        }}
+        onClose={close}
         titleRef={(el) => {
           if (el) titles.current.set(item.id, el);
           else titles.current.delete(item.id);
         }}
         tick={
           throughRow
-            ? { checked: item.row!.done, onChange: (checked, el) => run(item, checked ? 'done' : 'progress', null, el.getBoundingClientRect()) }
+            ? { checked: item.row!.done, onChange: (checked, el) => run(item, checked ? 'done' : 'progress', null, { at: el.getBoundingClientRect() }) }
             : undefined
         }
-        onMove={(to, el) => run(item, to, isLane(to) ? laneStart(columns, to) : null, el.getBoundingClientRect())}
+        onMove={(to, el) => run(item, to, isLane(to) ? laneStart(columns, to) : null, { at: el.getBoundingClientRect() })}
         // Today's row through the list, the sheet's write, which renames a recurring priority too; any other by a PATCH.
         onRename={
           throughRow ? (text) => report(store.editRow(item.uid, { text })) : editable ? (title) => report(store.editItem(item.uid, { title })) : undefined
@@ -459,6 +491,8 @@ export const Board = memo(function Board({ today, now }: { today: string; now: n
         onDelete={item.recurring ? undefined : () => confirmDelete(item)}
         onRemove={item.recurring && throughRow ? () => report(store.removeFromToday(item.uid)) : undefined}
         note={note}
+        start={startable ? { disabled: starting, onStart } : undefined}
+        running={running?.priorityUid === item.uid && item.date === running.date ? running : undefined}
         drag={drag}
       />
     );
@@ -543,7 +577,7 @@ export const Board = memo(function Board({ today, now }: { today: string; now: n
                     placeRow(held.row);
                     focusTo.current = `item:${held.row.uid}`;
                   } else {
-                    send(held.item, held.target, held.move);
+                    send(held.item, held.target, held.move, { minutes: held.minutes });
                     focusGrip.current = true;
                   }
                 },

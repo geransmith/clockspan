@@ -15,6 +15,7 @@ import type { Break, Priority, Session } from '../types';
 import { CategoryChip } from './CategoryChip';
 import { CategoryDot } from './CategoryDot';
 import { Trash } from './Icons';
+import { RunningMark } from './RunningMark';
 import { LabelInput, SessionLabel } from './SessionLabel';
 
 interface Props {
@@ -280,7 +281,7 @@ function Row({
         </button>
       )}
       <span className="log-duration">
-        {running && <span className={`pill ${paused ? 'pill--warn' : 'pill--ok'}`}>{paused ? 'paused' : 'running'}</span>} {formatDuration(seconds)}
+        {running && <RunningMark paused={paused} />} {formatDuration(seconds)}
       </span>
       <DeleteButton label={`Delete session at ${formatTime(s.startedAt)}`} question={CONFIRM.deleteSession} disabled={running} onDelete={onDelete} />
     </li>

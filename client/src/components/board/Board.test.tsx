@@ -6,7 +6,8 @@ import type { NewItem } from '../../api';
 import { BOARD_LIMITS, LOOKBACK_DAYS } from '../../../../shared/api.js';
 import { addDays, HOUR_MS, MINUTE_MS } from '../../../../shared/dates.js';
 import { MAX_PRIORITIES } from '../../../../shared/settings.js';
-import { unlockAudio, warnQuietly, warnSaveFailed } from '../../lib/alerts';
+import type { TimerCtx } from '../../hooks/useTimer';
+import { dismissByTag, unlockAudio, warnQuietly, warnSaveFailed } from '../../lib/alerts';
 import { withCategory, withItem, withItemPatch, withoutItem } from '../../lib/board';
 import { ADD_PRIORITY_FAILED, BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, PRIORITY_WARNINGS, WARNING_ACTIONS } from '../../lib/copy';
 import { USER_KEYS } from '../../lib/storage';
@@ -25,7 +26,7 @@ import {
   settle,
   SettingsAndDays,
 } from '../../test/hooks';
-import type { Board as BoardData, Priority } from '../../types';
+import type { Board as BoardData, Priority, Session } from '../../types';
 import { Board } from './Board';
 
 vi.mock('../../api');
@@ -52,12 +53,22 @@ const tuesdayRoutine = () => row(1, 'Tuesday row', { uid: 'rec000000009', recurr
 /** Later and Next at the cap. */
 const fullBoard = () => Array.from({ length: BOARD_LIMITS.openCards }, (_, i) => makeCard(`c${i}`.padEnd(12, 'x'), `Card ${i}`, { position: i + 1 }));
 
-/** Renders the board at `now`, the minute App hands it; the answer renders it again at another. */
-async function renderBoard(settings = makeSettings({ board: true }), now = NOW) {
+/** The timer's start as App hands it to the board: it waits for the uid it is given, as `useTimer` does, so a failed pull fails it. */
+const start = vi.fn<TimerCtx['start']>();
+
+/**
+ * Renders the board at `now`, the minute App hands it, with the timer App hands it (none running,
+ * no start out); the answer renders it again at another minute.
+ */
+async function renderBoard(
+  settings = makeSettings({ board: true }),
+  now = NOW,
+  { running = null, starting = false }: { running?: Session | null; starting?: boolean } = {},
+) {
   vi.mocked(api.getSettings).mockResolvedValue(settings);
   const page = (at: number) => (
     <SettingsAndDays>
-      <Board today={WED} now={at} />
+      <Board today={WED} now={at} running={running} start={start} starting={starting} />
     </SettingsAndDays>
   );
   const { rerender } = render(page(now));
@@ -112,6 +123,9 @@ beforeEach(() => {
   vi.mocked(api.addItem).mockImplementation((item) => Promise.resolve((onServer = withItem(onServer, item, NOW))));
   vi.mocked(api.editItem).mockImplementation((uid, patch) => Promise.resolve((onServer = withItemPatch(onServer, uid, patch))));
   vi.mocked(api.deleteItem).mockImplementation((uid) => Promise.resolve((onServer = withoutItem(onServer, uid))));
+  start.mockImplementation(async (_date, _seconds, _label, uid) => {
+    await uid;
+  });
 });
 
 describe('Board', () => {
@@ -924,6 +938,160 @@ describe('adding from a column', () => {
     fireEvent.click(plus('In progress'));
     enter(field('New priority for today'), 'Call the vendor');
     expect(notice().textContent).toBe('');
+  });
+});
+
+describe('starting the focus timer', () => {
+  /** The open editor's Start timer, or null. */
+  const startGroup = () => screen.queryByRole('group', { name: 'Start timer' });
+  /** Presses a length in the open editor's Start timer. */
+  const startFor = (minutes: number) => fireEvent.click(within(startGroup()!).getByRole('button', { name: new RegExp(`^${minutes}\\s*min$`) }));
+  /** The uid the last start was handed: a pull's comes once its save answers. */
+  const startedOn = () => start.mock.lastCall![3];
+
+  it("starts on today's open row from its editor under its title, with the focus back on the title", async () => {
+    await renderBoard();
+    openEditor('Report');
+    expect(
+      within(startGroup()!)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['15min', '25min', '50min']);
+    startFor(25);
+    expect(unlockAudio).toHaveBeenCalledOnce();
+    expect(dismissByTag).toHaveBeenCalledWith('break');
+    expect(start).toHaveBeenCalledExactlyOnceWith(WED, 25 * 60, 'Report', REPORT);
+    expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Report' }));
+    await settle();
+    expect(api.putPriorities).not.toHaveBeenCalled();
+  });
+
+  it("pulls a Next card onto today's list first, and starts on the task once the save answers", async () => {
+    const saved = deferred<{ priorities: Priority[] }>();
+    vi.mocked(api.putPriorities).mockReturnValueOnce(saved.promise);
+    await renderBoard();
+    openEditor('Follow up');
+    startFor(15);
+    // Asked at once, so the timer counts the start as out while the pull is on its way.
+    expect(start).toHaveBeenCalledExactlyOnceWith(WED, 15 * 60, 'Follow up', expect.any(Promise));
+    let uid: string | null | undefined;
+    void Promise.resolve(startedOn()).then((u) => {
+      uid = u;
+    });
+    await settle();
+    expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Follow up'] }]);
+    expect(uid).toBeUndefined();
+    saved.resolve({ priorities: (lists[WED] = vi.mocked(api.putPriorities).mock.lastCall![1]) });
+    await settle();
+    expect(uid).toBe('next00000001');
+    expect(titlesIn('In progress')).toEqual(['Report', 'Follow up']);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Follow up' }));
+  });
+
+  it('starts on a task left open on an earlier day the same way, pulled first', async () => {
+    onServer = makeBoard(...onServer.cards, makeCard('left00000001', 'Check the logs', { lane: null, listDate: TUE, listed: 1 }));
+    await renderBoard();
+    openEditor('Check the logs');
+    startFor(50);
+    await settle();
+    expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Check the logs'] }]);
+    expect(start.mock.lastCall!.slice(0, 3)).toEqual([WED, 50 * 60, 'Check the logs']);
+    await expect(startedOn()).resolves.toBe('left00000001');
+  });
+
+  it('holds a Start from a card at the nudge: Add anyway pulls and starts, Keep it short does neither', async () => {
+    lists[WED] = [row(1, 'Report'), row(2, 'Email'), row(3, 'Invoices')];
+    await renderBoard();
+    openEditor('Follow up');
+    startFor(25);
+    fireEvent.click(within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.keep }));
+    await settle();
+    expect(api.putPriorities).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
+    // The editor stays open behind the notice.
+    startFor(25);
+    expect(start).not.toHaveBeenCalled();
+    fireEvent.click(within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
+    await settle();
+    expect(putLists()[0]!.texts).toEqual(['Report', 'Email', 'Invoices', 'Follow up']);
+    expect(start).toHaveBeenCalledExactlyOnceWith(WED, 25 * 60, 'Follow up', expect.any(Promise));
+    await expect(startedOn()).resolves.toBe('next00000001');
+  });
+
+  it('starts nothing when the pull is refused on a full list, and the banner says why once', async () => {
+    lists[WED] = Array.from({ length: MAX_PRIORITIES }, (_, i) => row(i + 1, `Task ${i + 1}`));
+    await renderBoard();
+    openEditor('Follow up');
+    startFor(25);
+    fireEvent.click(within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
+    await settle();
+    expect(api.putPriorities).not.toHaveBeenCalled();
+    await expect(startedOn()).rejects.toThrow(ADD_PRIORITY_FAILED.full);
+    expect(warnQuietly).toHaveBeenCalledExactlyOnceWith({ title: ADD_PRIORITY_FAILED.full, tag: 'board-move' });
+    expect(warnSaveFailed).not.toHaveBeenCalled();
+  });
+
+  it("offers Start on today's recurring row too, and none in Done, on a planned task, or on an item whose move is on its way", async () => {
+    lists[WED] = [row(1, 'Report'), row(2, 'Email', { done: true }), row(3, 'Monitor the queue', { uid: 'rec000000001', recurring: true })];
+    const placed = deferred<BoardData>();
+    vi.mocked(api.editItem).mockReturnValueOnce(placed.promise);
+    await renderBoard();
+    openEditor('Monitor the queue');
+    expect(startGroup()).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
+    for (const title of ['Email', 'Shipped', 'Tuesday row', 'Plan B']) {
+      openEditor(title);
+      expect(startGroup()).toBeNull();
+    }
+    openEditor('Report');
+    moveTo('next');
+    openEditor('Report');
+    expect(startGroup()).toBeNull();
+    placed.resolve((onServer = withItemPatch(onServer, REPORT, { lane: 'next', before: null })));
+    await settle();
+    // Parked, it is a card of Next, pulled again by a Start.
+    expect(startGroup()).not.toBeNull();
+  });
+
+  it('offers no Start while a timer runs, and marks the item it runs on running, or paused, its title naming the mark', async () => {
+    await renderBoard(undefined, NOW, { running: makeSession({ date: WED, priorityUid: REPORT }) });
+    for (const title of ['Report', 'Follow up', 'Write a KB']) {
+      openEditor(title);
+      expect(startGroup()).toBeNull();
+    }
+    const marks = document.querySelectorAll('.board-card-meta .pill');
+    expect([...marks].map((m) => m.textContent)).toEqual(['running']);
+    expect(marks[0]!.parentElement!.firstElementChild).toBe(marks[0]);
+    expect(screen.getByRole('button', { name: 'Report' }).getAttribute('aria-describedby')).toBe(marks[0]!.id);
+
+    cleanup();
+    await renderBoard(undefined, NOW, { running: makeSession({ date: WED, priorityUid: REPORT, pausedAt: NOW }) });
+    expect([...document.querySelectorAll('.board-card-meta .pill')].map((m) => m.textContent)).toEqual(['paused']);
+
+    // A session on the task on another day marks nothing today.
+    cleanup();
+    await renderBoard(undefined, NOW, { running: makeSession({ date: TUE, priorityUid: REPORT }) });
+    expect(document.querySelector('.board-card-meta .pill')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Report' }).getAttribute('aria-describedby')).toBeNull();
+  });
+
+  it("holds Start while a start is out, and says in the banner when a row's start fails", async () => {
+    await renderBoard(undefined, NOW, { starting: true });
+    openEditor('Report');
+    expect(
+      within(startGroup()!)
+        .getAllByRole('button')
+        .every((b) => (b as HTMLButtonElement).disabled),
+    ).toBe(true);
+
+    cleanup();
+    start.mockRejectedValueOnce(new Error('offline'));
+    await renderBoard();
+    openEditor('Report');
+    startFor(25);
+    await settle();
+    expect(warnSaveFailed).toHaveBeenCalledOnce();
   });
 });
 

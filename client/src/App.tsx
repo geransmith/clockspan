@@ -40,7 +40,7 @@ function Shell() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [jumpTo, setJumpTo] = useState<CardId | null>(null);
   const { settings, loaded } = useSettings();
-  const { running } = useTimer();
+  const { running, start, starting } = useTimer();
   const now = useClock();
   // Only a real answer: the defaults' 'auto' would undo a forced theme main.tsx put up.
   useEffect(() => {
@@ -93,7 +93,7 @@ function Shell() {
         // Until the settings answer, whether the board is on isn't known.
         return loaded ? (
           <Suspense fallback={boardLoading}>
-            <Board today={today} now={minute} />
+            <Board today={today} now={minute} running={running} start={start} starting={starting} />
           </Suspense>
         ) : (
           boardLoading

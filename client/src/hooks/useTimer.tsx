@@ -18,7 +18,7 @@ import { useSettings } from './useSettings';
 import { useTracked } from './useTracked';
 import { useWakeLock } from './useWakeLock';
 
-interface TimerCtx extends Pick<TimerView, 'countdownSeconds' | 'elapsedSeconds' | 'progress' | 'paused' | 'due' | 'overrunSeconds' | 'canAdd'> {
+export interface TimerCtx extends Pick<TimerView, 'countdownSeconds' | 'elapsedSeconds' | 'progress' | 'paused' | 'due' | 'overrunSeconds' | 'canAdd'> {
   running: Session | null;
   /**
    * What the running session is called (`sessionName`): its task's current name, else its label;
@@ -28,8 +28,18 @@ interface TimerCtx extends Pick<TimerView, 'countdownSeconds' | 'elapsedSeconds'
   name: string;
   /** The running session has a task, which names it: it has no name of its own to edit until it is set to Unplanned. */
   linked: boolean;
-  /** Leaves `unlockAudio()` to the caller, in its tap: the timer card may await a new priority's save before it starts. */
-  start: (date: string, plannedSeconds: number, label: string, priorityUid?: string | null) => Promise<void>;
+  /**
+   * Leaves `unlockAudio()` to the caller, in its tap (`TimerLengths`). `priorityUid` may be a
+   * promise, awaited first on the queue: the uid of a row whose save is still out (the timer card's
+   * Also add, a board item's pull), so the start is out from the tap on. Its failure is the start's.
+   */
+  start: (date: string, plannedSeconds: number, label: string, priorityUid?: string | null | Promise<string | null>) => Promise<void>;
+  /**
+   * A start is out, from the call to its answer, the save it waits for included: the length and
+   * break buttons hold meanwhile, on the sheet and the board, since a second start would meet the
+   * first as a 409, which reads as a timer started on another device.
+   */
+  starting: boolean;
   /** Mid-session, ± the planned length; once due, +N is N more minutes from now. Plans are whole minutes. */
   adjust: (deltaSeconds: number) => Promise<void>;
   /**
@@ -97,6 +107,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // its end moves (time added, a pause), it closes and never opens over the next one.
   const [finishChoiceFor, setFinishChoiceFor] = useState<string | null>(null);
   const [finished, setFinished] = useState<Session | null>(null);
+  const [startsOut, setStartsOut] = useState(0);
   const now = useClock();
   // `loaded` gates the two effects that alert: on a fresh load the running session can answer
   // before the settings do, and an alert then would use the default sounds and Sound switch
@@ -259,12 +270,14 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const start = useCallback(
-    async (date: string, plannedSeconds: number, label: string, priorityUid: string | null = null) => {
+    async (date: string, plannedSeconds: number, label: string, priorityUid: string | null | Promise<string | null> = null) => {
+      setStartsOut((n) => n + 1);
       try {
         const { session } = await queue(async () => {
+          const uid = await priorityUid;
           // A chip can link a row whose priorities save is still out.
-          if (priorityUid) await prioritiesSaved(date);
-          return api.startSession(date, plannedSeconds, label, priorityUid);
+          if (uid) await prioritiesSaved(date);
+          return api.startSession(date, plannedSeconds, label, uid);
         });
         change((t) => settleWith(t, [], session));
         applySession(session);
@@ -277,6 +290,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         change((t) => settleWith(t, [], theirs));
         void refresh(theirs.date);
         alert({ ...TIMER_ELSEWHERE, tone: 'info', tag: 'timer-elsewhere', sound: false, notifications: false });
+      } finally {
+        setStartsOut((n) => n - 1);
       }
     },
     [change, queue, applySession, refresh, prioritiesSaved],
@@ -449,6 +464,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       due,
       overrunSeconds,
       start,
+      starting: startsOut > 0,
       adjust,
       canAdd,
       edit,
@@ -473,6 +489,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       due,
       overrunSeconds,
       start,
+      startsOut,
       adjust,
       canAdd,
       edit,
