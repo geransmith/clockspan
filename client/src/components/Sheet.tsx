@@ -161,8 +161,19 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
             pick={pick}
             onChange={(p, base) => store.setPriorities(date, p, base)}
             onDeleteTask={(uid) => boardStore.deleteItem(uid)}
-            // The note's own save, on the list as the store shows it; a row gone meanwhile has nothing to save.
-            onNote={async (uid, note) => (await store.editPriorities(date, (rows) => patchRow(rows, uid, { note }))) !== 'failed'}
+            // The note's own save, on the list as the store shows it. The note is the task's, on every day,
+            // so a row gone meanwhile (another device took it off) sends it to the task, as the board's editRow does.
+            onNote={async (uid, note) => {
+              const edit = await store.editPriorities(date, (rows) => patchRow(rows, uid, { note }));
+              if (edit !== 'skipped') return edit !== 'failed';
+              return boardStore.editItem(uid, { note }).then(
+                () => true,
+                () => {
+                  warnSaveFailed();
+                  return false;
+                },
+              );
+            }}
             offer={
               isToday
                 ? {

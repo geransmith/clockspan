@@ -1,7 +1,7 @@
 import { flushSync } from 'react-dom';
 import { useDebouncedDraft } from '../hooks/useDebouncedDraft';
 import { LIMITS } from '../../../shared/api.js';
-import { taskNote } from '../../../shared/text.js';
+import { hasNote, taskNote } from '../../../shared/text.js';
 import { Note } from './Icons';
 
 /** The note button's id, from its box's. */
@@ -16,7 +16,7 @@ const buttonId = (boxId: string) => `${boxId}-button`;
  * its title.
  */
 export function NoteToggle({ boxId, of, note, open, onToggle }: { boxId: string; of: string; note: string; open: boolean; onToggle: (open: boolean) => void }) {
-  const has = note !== '';
+  const has = hasNote(note);
   return (
     <button
       id={buttonId(boxId)}

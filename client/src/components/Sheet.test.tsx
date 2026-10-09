@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import * as api from '../api';
+import { useDayStore } from '../hooks/useDay';
 import { warnSaveFailed } from '../lib/alerts';
 import { LEFT_OPEN, PLAN_NEXT, PUNCH_ORDER, REMOVE_TASK, TODAY_OFFER } from '../lib/copy';
 import { SPLIT_QUERY } from '../lib/layout';
@@ -441,6 +442,32 @@ describe("Sheet: a row's note", () => {
     await settle();
     expect(api.putPriorities).toHaveBeenCalledTimes(3);
     expect(noteOf(vi.mocked(api.putPriorities).mock.lastCall![1])).toBe('Kim has them all.');
+  });
+
+  it("sends it to the task when the row has left the day's list before the box's save", async () => {
+    const report = makePriority(1, 'Report', { listed: 2 });
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [report] }));
+    vi.mocked(api.editItem).mockResolvedValue(makeBoard());
+    // The day store the sheet uses, to read the day again as the refresh loop would.
+    const { result } = renderHook(() => useDayStore(), {
+      wrapper: ({ children }) => (
+        <AppProviders>
+          <SheetAt />
+          {children}
+        </AppProviders>
+      ),
+    });
+    await settle();
+    fireEvent.click(button('Add a note to priority 1'));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Note for priority 1' }), { target: { value: 'Kim has the numbers.' } });
+    // Another device took it off this day: the read drops the row, and its box goes with it, unsent.
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY));
+    await act(() => result.current.refresh(TODAY));
+    await settle();
+    expect(screen.queryByRole('textbox', { name: 'Note for priority 1' })).toBeNull();
+    expect(api.putPriorities).not.toHaveBeenCalled();
+    expect(api.editItem).toHaveBeenCalledExactlyOnceWith(report.uid, { note: 'Kim has the numbers.' });
+    expect(warnSaveFailed).not.toHaveBeenCalled();
   });
 });
 

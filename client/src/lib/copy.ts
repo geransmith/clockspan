@@ -123,10 +123,10 @@ export const WARNING_ACTIONS = {
 } as const;
 
 /** Under a Top priorities row being retyped, while earlier days' lists hold its task: the name is one for every day. */
-export const RENAME_NOTE = (earlier: number) => `Also renames it on ${counted(earlier, 'earlier day')}.`;
+export const RENAME_HINT = (earlier: number) => `Also renames it on ${counted(earlier, 'earlier day')}.`;
 
 /** Under a Top priorities row whose box was emptied: a blank name isn't saved. */
-export const BLANK_NOTE = (name: string) => `Left empty, it goes back to “${name}”. × takes it off this day.`;
+export const BLANK_HINT = (name: string) => `Left empty, it goes back to “${name}”. × takes it off this day.`;
 
 /** Where a task is and the time logged on it, for a question that deletes it everywhere: "It is on 3 days, and 1h 20m is logged on it." */
 const taskFacts = (where: string, logged: string | null) => {

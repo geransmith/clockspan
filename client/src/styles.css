@@ -258,13 +258,15 @@ button {
     border-color 0.12s,
     transform 0.06s;
 }
-.btn:hover:not(:disabled) {
+/* A shut control that keeps its focus and description is aria-disabled, and looks as :disabled does. */
+.btn:hover:not(:disabled, [aria-disabled='true']) {
   background: var(--surface-2);
 }
-.btn:active:not(:disabled) {
+.btn:active:not(:disabled, [aria-disabled='true']) {
   transform: translateY(1px);
 }
-.btn:disabled {
+.btn:disabled,
+.btn[aria-disabled='true'] {
   opacity: 0.45;
   cursor: not-allowed;
 }
@@ -1067,7 +1069,8 @@ button {
   padding: 10px 8px;
   border: 1px solid transparent;
 }
-.tile-label {
+.tile-label,
+.clock-bar dt {
   font-size: 0.68rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -1119,7 +1122,8 @@ button {
   --tile-ink: var(--danger-ink);
 }
 /* Only an overdue tile colours its number too. */
-.tile--danger .tile-value {
+.tile--danger .tile-value,
+.tile--danger .clock-bar-value {
   color: var(--danger-ink);
 }
 .tile--accent {
@@ -2521,13 +2525,6 @@ button.log-label:hover {
   align-content: start;
   background: none;
 }
-.clock-bar dt {
-  font-size: 0.68rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-2);
-}
 .clock-bar dd {
   margin: 0;
 }
@@ -2535,9 +2532,6 @@ button.log-label:hover {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-.clock-bar .tile--danger .clock-bar-value {
-  color: var(--danger-ink);
 }
 @media (min-width: 640px) {
   .clock-bar dl {
@@ -2590,14 +2584,6 @@ button.log-label:hover {
 }
 .board-add:hover:not([aria-disabled='true']) {
   background: var(--surface-3);
-}
-.board-add[aria-disabled='true'] {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-/* Shut, it is aria-disabled, not :disabled, so .btn's press would still move it. */
-.board-add[aria-disabled='true']:active {
-  transform: none;
 }
 /* A column's box: the field, with the category chip beside it or, in a narrow column, under it. */
 .board-add-box {
@@ -3180,11 +3166,12 @@ kbd {
   .category-chip {
     --hit-inset: -9px -4px;
   }
-  /* 28 px square at the end of a board card's title row, 8 px from the title: 40 × 44 px, through
-     the card's 8 px padding and 2 px into the gap to the next card as the title's does, and half
-     the gap to the title. */
+  /* 28 px square at the end of a board card's title row, 8 px from the title: 44 × 44 px, through
+     the card's 8 px padding and 2 px into the gap to the next card as the title's does, half the
+     gap to the title, and on the right through the card's 10 px side padding and border into the
+     column's own, where nothing takes taps. */
   .note-toggle {
-    --hit-inset: -9px -9px -9px -5px;
+    --hit-inset: -9px -13px -9px -5px;
   }
   /* An open note box comes after its button, so positioned too it paints over the button's area
      where the two meet and takes the tap. */

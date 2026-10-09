@@ -700,20 +700,20 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `listed` and `logged`, a routine `recurring: true`), else the defaults (`emptyRow`, `newTaskRow`),
   and the save's answer replaces them.
 - **A blank name is never saved, and × takes a task off a day** (`Priorities.tsx`). Emptying a box
-  doesn't remove its task: while it is blank and focused the hint under it reads `BLANK_NOTE(name)`,
+  doesn't remove its task: while blank and focused the hint under it reads `BLANK_HINT(name)`,
   the list goes out with that row's name as it was (`named`; ticks and the other rows still save),
   its checkbox is disabled and its tick kept (`editPriority` clears `done` only on a free row), it
   still counts in "N of M done", and leaving the box or Escape puts the stored name back (a row
   typed and emptied before it was ever saved becomes a free row again). The server refuses a row
   with a uid and a blank name. Typing over a written row renames its task on every day; while the
   box's text differs from the name it had when it took the focus and earlier days' lists hold the
-  task (`p.earlier > 0`), the hint reads `RENAME_NOTE(earlier)`, an indicator rather than a
+  task (`p.earlier > 0`), the hint reads `RENAME_HINT(earlier)`, an indicator rather than a
   question. × shows on every row with a task and every row past Rows per day: within Rows per day
   the row stays, free, with the focus in its box (`takeOffRow`), and past it the row goes. A
   recurring row, or a one-off on no other day with no time logged and no note, comes off at once; a
   one-off on other days (`p.listed > 1`), with time logged (`p.logged`, the other days', plus the
-  day's log, `loggedByUid`, which counts a timer running on it) or with a note (`p.note`; asked for
-  the note alone, Off this day deletes the task too, `collectItems`, unless it has a lane, as
+  day's log, `loggedByUid`, which counts a timer running on it) or with a note (`hasNote`; asked
+  for the note alone, Off this day deletes the task too, `collectItems`, unless it has a lane, as
   `REMOVE_TASK.body` says) asks first in `RemoveTask` (built like `FinishChoice`:
   `useModalDialog`, the focus on the frame; `REMOVE_TASK`): Off this day (the × path), Delete
   everywhere (the × path, then the board store's `deleteItem`, which works with the board off; its
@@ -737,7 +737,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `editItem` for any other the board edits, none for an earlier day's row of a recurring priority
   removed in Settings), and `saved` (`Board.tsx`) raises the banner and answers false. A routine's
   note is one on every day it is on. Nothing else shows a note: not Retro, Review, Plan tomorrow,
-  the morning notice, the timer, the day log or History.
+  the morning notice, the timer, the day log or History. A note of spaces and line breaks alone,
+  stored untrimmed, counts as none (`hasNote`, `shared/text.ts`): its button is quiet and × doesn't
+  ask for it. On the sheet, a row gone from the list before its note's save (another device took it
+  off) sends the note to the task through the board store's `editItem`, as `editRow` does, its
+  failure the banner.
 - **A category is a row of its own, named by its uid** (`categories`, routes in `routes/board.ts`,
   answered in `Board.categories`). Tasks and sessions point at one by `categoryUid`, a soft link
   checked for shape only, so a category made on this device can reach the server after the row that
@@ -850,29 +854,30 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   to's does, Add anyway pulls and starts, Keep it short does neither), whose promise of the task's
   uid the start awaits, so a refused pull starts nothing and shows one banner. A start the server
   refuses (the task taken off the list meanwhile) is the save banner, and a 409 is adopted
-  (`TIMER_ELSEWHERE`). The item the running session is on, on its day, starts its meta line with
-  the day log's pill (`RunningMark`), which its title is `aria-describedby`. The + at
-  the end of Later's, Next's and In progress's head opens that column's box (`Capture`: a field and
-  the category chip; `openAdd`, which also shows the column on a phone). Enter adds and keeps the
-  box open; an empty Enter or Escape closes it with the focus back on the +, Escape dropping the
-  text; leaving it closes it only while it is empty. Later's card goes at the top and Next's at the
-  end (`laneStart`, `addItem`). In progress's text is a new task on today's list, a `place` move of
-  `newTaskRow` through `move`, so on the board's queue, where it shows once its job starts (it has
-  no item for `moving` to show); past the nudge it asks as Add priority does, the text staying in
-  the box until Add anyway, which closes the box and focuses the new row. An edit of the box's text
-  or category drops the question, and the next Enter asks again. Later's and Next's + is
-  `aria-disabled` at the cap (`boardFull`, `BOARD.full` under it), and In progress's only on a full
-  list (`hasRoom`, `ADD_PRIORITY_FAILED.full`), since its task has no lane; a box open as its +
-  shuts closes. A Delete that empties a column puts the focus on its +, or on Done's heading. One
-  `role="status"` slot above the columns holds the board notice (a pull's or a typed row's nudge,
-  the done-item notice or a refusal); what the store refuses once a move is under way
-  (`MoveRefused`) is a banner. A drag (`Board.tsx`, with dnd-kit's settings in
+  (`TIMER_ELSEWHERE`). The item the running session is on, on its day (a card, which has none, by
+  its task), starts its meta line with the day log's pill (`RunningMark`), which its title is
+  `aria-describedby`. The + at the end of Later's, Next's and In progress's head opens that
+  column's box (`Capture`: a field and the category chip; `openAdd`, which also shows the column on
+  a phone). Enter adds and keeps the box open; an empty Enter or Escape closes it with the focus
+  back on the +, Escape dropping the text; leaving it closes it only while it is empty. Later's
+  card goes at the top and Next's at the end (`laneStart`, `addItem`). In progress's text is a new
+  task on today's list, a `place` move of `newTaskRow` through `move`, so on the board's queue,
+  where it shows once its job starts (it has no item for `moving` to show); past the nudge it asks
+  as Add priority does, the text staying in the box until Add anyway, which closes the box and
+  focuses the new row. An edit of the box's text or category drops the question, and the next Enter
+  asks again. Later's and Next's + is `aria-disabled` at the cap (`boardFull`, `BOARD.full` under
+  it), and In progress's only on a full list (`hasRoom`, `ADD_PRIORITY_FAILED.full`), since its
+  task has no lane; a box open as its + shuts closes. A Delete that empties a column puts the focus
+  on its +, or on Done's heading. One `role="status"` slot above the columns holds the board notice
+  (a pull's or a typed row's nudge, the done-item notice or a refusal); what the store refuses once
+  a move is under way (`MoveRefused`) is a banner. A drag (`Board.tsx`, with dnd-kit's settings in
   `components/board/dnd.ts`) starts at an item's grip; a planned task and a recurring row have none,
   and an item whose move is on its way can't be picked up until the move lands. Where a drop lands
   is `dropTarget`'s (see its doc), and what a screen reader hears comes from `BOARD_DRAG`,
   `overAnnouncement` and `moveAnnouncement`. dnd-kit's own focus return is off, since it would take
   the focus from the notice a drop brings: a keyboard drag puts it back on the item's grip, and so
-  does closing the notice (on the title where the grip is hidden or missing).
+  does closing the notice (on the title where the grip is hidden or missing; for a row typed in In
+  progress's box, back in that box, which still holds the text).
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started — one
   rule, no clock-in fallback. `GET /days/range` returns full days and the client does the rollup
@@ -1098,13 +1103,14 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   field in `mergeSettings` (as `mergeRetention` does), and gets a partial entry in
   `SettingsPatch` (`client/src/api.ts`) and a merge in `applySettingsPatch`
   (`client/src/lib/settings.ts`). Nothing else to mirror.
-- **A keyboard shortcut**: add its id, key and group to `SHORTCUTS` (`lib/shortcuts.ts`; a test
-  checks that no two share a key, and a key in the `timer` group unlocks audio) → its label in
-  `Shortcuts.tsx`'s list (the type makes a missing one an error) → `useShortcut(id, run)` in the
-  component that renders its button, before any early return, with `run` null whenever the
-  button wouldn't act, and the hook's answer on the button's `aria-keyshortcuts` → a case in that
-  component's test, with `ShortcutKeys` in its wrapper and `pressKey` (`test/hooks.tsx`) → the
-  key in the README's Keyboard bullet.
+- **A keyboard shortcut**: add its id to `ShortcutId` and its key and group to `SHORTCUTS`
+  (`lib/shortcuts.ts`): the group is its heading in the ? list, and a key whose action can make a
+  sound goes in `timer`, the one group the listener unlocks audio for; a test checks that no two
+  share a key → its label in `Shortcuts.tsx`'s list (the type makes a missing one an error) →
+  `useShortcut(id, run)` in the component that renders its button, before any early return, with
+  `run` null whenever the button wouldn't act, and the hook's answer on the button's
+  `aria-keyshortcuts` → a case in that component's test, with `ShortcutKeys` in its wrapper and
+  `pressKey` (`test/hooks.tsx`) → the key in the README's Keyboard bullet.
 - **A category colour** (the palette is eight on purpose, and colours repeat past that): add the
   id to `CATEGORY_COLORS` in `shared/api.ts` (the server's `isOneOf` check, `nextColor` and the
   swatches read it) → its `--cat-<id>` token in all three token blocks of `styles.css`, at 3:1 or

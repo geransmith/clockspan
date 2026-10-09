@@ -452,6 +452,13 @@ export const Board = memo(function Board({
     // and an earlier day's recurring row while its recurring priority is in Settings (one removed
     // there answers 404).
     const editable = cardOnly || (item.recurring && board.recurring.some((r) => r.uid === item.uid));
+    // The title, category and note are the task's, on every day: today's row through the list, the
+    // sheet's write, which renames a recurring priority too; any other by a PATCH.
+    const editTask: ((patch: Parameters<typeof store.editRow>[1]) => Promise<void>) | null = throughRow
+      ? (patch) => store.editRow(item.uid, patch)
+      : editable
+        ? (patch) => store.editItem(item.uid, { title: patch.text, categoryUid: patch.categoryUid, note: patch.note })
+        : null;
     const close = () => {
       titles.current.get(item.id)?.focus();
       setOpen(null);
@@ -488,27 +495,17 @@ export const Board = memo(function Board({
             : undefined
         }
         onMove={(to, el) => run(item, to, isLane(to) ? laneStart(columns, to) : null, { at: el.getBoundingClientRect() })}
-        // Today's row through the list, the sheet's write, which renames a recurring priority too; any other by a PATCH.
-        onRename={
-          throughRow ? (text) => report(store.editRow(item.uid, { text })) : editable ? (title) => report(store.editItem(item.uid, { title })) : undefined
-        }
+        onRename={editTask ? (text) => report(editTask({ text })) : undefined}
         pick={pick}
-        // As the title: the category is the task's, on every day.
-        onCategory={
-          throughRow
-            ? (categoryUid) => report(store.editRow(item.uid, { categoryUid }))
-            : editable
-              ? (categoryUid) => report(store.editItem(item.uid, { categoryUid }))
-              : undefined
-        }
-        // As the title: the note is the task's, on every day.
-        onNote={throughRow ? (note) => saved(store.editRow(item.uid, { note })) : editable ? (note) => saved(store.editItem(item.uid, { note })) : undefined}
+        onCategory={editTask ? (categoryUid) => report(editTask({ categoryUid })) : undefined}
+        onNote={editTask ? (note) => saved(editTask({ note })) : undefined}
         // A recurring priority is removed in Settings → Board, so its row only comes off today's list.
         onDelete={item.recurring ? undefined : () => confirmDelete(item)}
         onRemove={item.recurring && throughRow ? () => report(store.removeFromToday(item.uid)) : undefined}
         hint={hint}
         start={startable ? { disabled: starting, onStart } : undefined}
-        running={running?.priorityUid === item.uid && item.date === running.date ? running : undefined}
+        // A recurring task's rows are told apart by their day; a card, which has none, by its task.
+        running={running?.priorityUid === item.uid && (item.date ?? running.date) === running.date ? running : undefined}
         drag={drag}
       />
     );
