@@ -156,8 +156,6 @@ const stored = (position: number, text: string, uid: string, patch: Partial<Prio
 });
 
 const texts = (priorities: { text: string }[]) => priorities.map((p) => p.text);
-/** The user's task with this uid as stored, tombstones included. */
-const itemOf = (uid: string) => app.db.prepare(`SELECT * FROM items WHERE uid = ?`).get(uid) as ItemRow | undefined;
 
 describe('PUT /api/days/:date/priorities', () => {
   it('stores each row with a task at its place, keeps client ids, and mints ids only for text rows without one', async () => {
@@ -286,7 +284,7 @@ describe('PUT /api/days/:date/priorities', () => {
     const claims = { recurring: true, archived: true, listed: 9, earlier: 4, logged: 3600 };
     const again = await app.api.put('/api/days/2026-09-01/priorities', { priorities: sent.map((p) => ({ ...p, ...claims })), base: expected });
     expect(again.body.priorities).toEqual(expected);
-    expect(itemOf('abcdef123456')).toMatchObject({ weekdays: null, archived_at: null });
+    expect(app.item('abcdef123456')).toMatchObject({ weekdays: null, archived_at: null });
   });
 
   it('refuses the shape a page from before tasks were stored once sends, by its fields whatever their values, and stores nothing', async () => {
@@ -358,7 +356,7 @@ describe('PUT /api/days/:date/priorities with a base', () => {
     await app.api.put(PATH, { priorities: [...own, row('Theirs', 'bbbbbbbbbbbb')] });
     const r = await app.api.put(PATH, { priorities: [...own, row('Mine', 'cccccccccccc')], base: own });
     expect([r.status, r.body.error]).toEqual([409, `This day's list already has ${MAX_PRIORITIES} priorities with another device's. Remove one first.`]);
-    expect(itemOf('cccccccccccc')).toBeUndefined();
+    expect(app.item('cccccccccccc')).toBeUndefined();
     expect(texts((await app.api.get('/api/days/2026-09-01')).body.priorities).at(-1)).toBe('Theirs');
   });
 
@@ -387,8 +385,6 @@ describe('PUT /api/days/:date/priorities: the tasks', () => {
   const MON = '2026-08-03';
   const TUE = '2026-08-04';
   const WED = '2026-08-05';
-  const save = (date: string, priorities: Record<string, unknown>[], base?: Record<string, unknown>[]) =>
-    app.api.put(`/api/days/${date}/priorities`, base ? { priorities, base } : { priorities });
   const rowsOn = async (date: string) => (await app.api.get(`/api/days/${date}`)).body.priorities as Priority[];
 
   beforeEach(async () => {
@@ -400,9 +396,9 @@ describe('PUT /api/days/:date/priorities: the tasks', () => {
   });
 
   it('makes a task for a uid new to the user, with its trimmed name and category, in no lane', async () => {
-    const r = await save(MON, [row('  Write the report  ', 'aaaaaaaaaaa1', { categoryUid: 'cat000000001' })]);
+    const r = await app.saveList(MON, [row('  Write the report  ', 'aaaaaaaaaaa1', { categoryUid: 'cat000000001' })]);
     expect(r.body.priorities).toEqual([stored(1, 'Write the report', 'aaaaaaaaaaa1', { categoryUid: 'cat000000001' })]);
-    expect(itemOf('aaaaaaaaaaa1')).toMatchObject({
+    expect(app.item('aaaaaaaaaaa1')).toMatchObject({
       title: 'Write the report',
       category_uid: 'cat000000001',
       weekdays: null,
@@ -416,9 +412,9 @@ describe('PUT /api/days/:date/priorities: the tasks', () => {
 
   it('writes a rename and a category this device made since its base to the task, which every day shows', async () => {
     const report = row('Report', 'aaaaaaaaaaa1');
-    await save(MON, [report]);
-    await save(TUE, [report], []);
-    const r = await save(TUE, [{ ...report, text: 'Quarterly report ', categoryUid: 'cat000000002' }], [report]);
+    await app.saveList(MON, [report]);
+    await app.saveList(TUE, [report], []);
+    const r = await app.saveList(TUE, [{ ...report, text: 'Quarterly report ', categoryUid: 'cat000000002' }], [report]);
     expect(r.body.priorities[0]).toMatchObject({ text: 'Quarterly report', categoryUid: 'cat000000002' });
     expect((await rowsOn(MON))[0]).toMatchObject({ text: 'Quarterly report', categoryUid: 'cat000000002' });
     const range = (await app.api.get(`/api/days/range?from=${MON}&to=${TUE}`)).body.days as Day[];
@@ -427,38 +423,64 @@ describe('PUT /api/days/:date/priorities: the tasks', () => {
 
   it('leaves a rename or a category another device made alone when this save changed only the tick', async () => {
     const report = row('Report', 'aaaaaaaaaaa1');
-    await save(MON, [report]);
-    await save(MON, [{ ...report, text: 'Quarterly report', categoryUid: 'cat000000001' }], [report]);
-    const r = await save(MON, [{ ...report, done: true }], [report]);
+    await app.saveList(MON, [report]);
+    await app.saveList(MON, [{ ...report, text: 'Quarterly report', categoryUid: 'cat000000001' }], [report]);
+    const r = await app.saveList(MON, [{ ...report, done: true }], [report]);
     expect(r.body.priorities[0]).toMatchObject({ text: 'Quarterly report', categoryUid: 'cat000000001', done: true });
   });
 
   it('writes nothing to a task a save puts on another list, whatever name and category it carries', async () => {
-    await save(MON, [row('Report', 'aaaaaaaaaaa1', { categoryUid: 'cat000000001' })]);
+    await app.saveList(MON, [row('Report', 'aaaaaaaaaaa1', { categoryUid: 'cat000000001' })]);
     // A carry from a copy older than a rename.
-    const r = await save(TUE, [row('Old name', 'aaaaaaaaaaa1', { categoryUid: null })], []);
+    const r = await app.saveList(TUE, [row('Old name', 'aaaaaaaaaaa1', { categoryUid: null })], []);
     expect(r.body.priorities[0]).toMatchObject({ text: 'Report', categoryUid: 'cat000000001' });
-    expect(itemOf('aaaaaaaaaaa1')).toMatchObject({ title: 'Report', category_uid: 'cat000000001' });
+    expect(app.item('aaaaaaaaaaa1')).toMatchObject({ title: 'Report', category_uid: 'cat000000001' });
   });
 
   it('reads the stored list as the base with none sent', async () => {
-    await save(MON, [row('Report', 'aaaaaaaaaaa1')]);
-    await save(MON, [row('Report v2', 'aaaaaaaaaaa1', { categoryUid: 'cat000000003' })]);
-    expect(itemOf('aaaaaaaaaaa1')).toMatchObject({ title: 'Report v2', category_uid: 'cat000000003' });
+    await app.saveList(MON, [row('Report', 'aaaaaaaaaaa1')]);
+    await app.saveList(MON, [row('Report v2', 'aaaaaaaaaaa1', { categoryUid: 'cat000000003' })]);
+    expect(app.item('aaaaaaaaaaa1')).toMatchObject({ title: 'Report v2', category_uid: 'cat000000003' });
+  });
+
+  it('reads a row sent with no categoryUid as keeping its category, with a base or without', async () => {
+    await app.saveList(MON, [row('Report', 'aaaaaaaaaaa1', { categoryUid: 'cat000000001' })]);
+    await app.saveList(TUE, [row('Report', 'aaaaaaaaaaa1')], []);
+    // curl, with no base: the task keeps its category on every day.
+    const bare = await app.saveList(MON, [{ text: 'Report v2', uid: 'aaaaaaaaaaa1', done: true }]);
+    expect(bare.body.priorities[0]).toMatchObject({ text: 'Report v2', categoryUid: 'cat000000001', done: true });
+    // A base that carries the category, and a row that leaves it out.
+    const based = await app.saveList(MON, [{ text: 'Report v3', uid: 'aaaaaaaaaaa1' }], bare.body.priorities);
+    expect(based.body.priorities[0]).toMatchObject({ text: 'Report v3', categoryUid: 'cat000000001' });
+    expect((await rowsOn(TUE))[0]).toMatchObject({ text: 'Report v3', categoryUid: 'cat000000001' });
+    // A new task sent without one has none.
+    await app.saveList(WED, [{ text: 'Email', uid: 'aaaaaaaaaaa2' }]);
+    expect(app.item('aaaaaaaaaaa2')!.category_uid).toBeNull();
+  });
+
+  it('stores a name trimmed and cut, with no space left at the cut, and writes no rename for a change of spacing alone', async () => {
+    const long = `  ${'k'.repeat(LIMITS.priorityText - 1)} tail`;
+    const r = await app.saveList(MON, [row(long, 'aaaaaaaaaaa1')]);
+    expect(r.body.priorities[0].text).toBe('k'.repeat(LIMITS.priorityText - 1));
+    await app.saveList(MON, [row('Report', 'aaaaaaaaaaa2')]);
+    await app.saveList(MON, [row('Report v2', 'aaaaaaaaaaa2')], [row('Report', 'aaaaaaaaaaa2')]);
+    // A device whose copy is from before the rename sends the old name with a space added.
+    await app.saveList(MON, [row('Report ', 'aaaaaaaaaaa2')], [row(' Report', 'aaaaaaaaaaa2')]);
+    expect(app.item('aaaaaaaaaaa2')!.title).toBe('Report v2');
   });
 
   it('makes the task again from the row when another device took it off its only list and this one changed it', async () => {
     const report = row('Report', 'aaaaaaaaaaa1');
-    await save(MON, [report]);
-    await save(MON, [], [report]);
-    expect(itemOf('aaaaaaaaaaa1')).toBeUndefined();
-    const r = await save(MON, [{ ...report, text: 'Report v2', done: true }], [report]);
+    await app.saveList(MON, [report]);
+    await app.saveList(MON, [], [report]);
+    expect(app.item('aaaaaaaaaaa1')).toBeUndefined();
+    const r = await app.saveList(MON, [{ ...report, text: 'Report v2', done: true }], [report]);
     expect(r.body.priorities).toEqual([stored(1, 'Report v2', 'aaaaaaaaaaa1', { done: true })]);
   });
 
   it("answers each row with how many days list its task, how many of them come before the row's, and the focus done on it", async () => {
     const report = row('Report', 'aaaaaaaaaaa1');
-    for (const date of [MON, TUE, WED]) await save(date, [report], []);
+    for (const date of [MON, TUE, WED]) await app.saveList(date, [report], []);
     const { id } = (await app.api.post(`/api/days/${TUE}/sessions`, { plannedSeconds: 600, priorityUid: 'aaaaaaaaaaa1' })).body.session as { id: number };
     vi.setSystemTime(SEED_NOW + 5 * MINUTE_MS);
     await app.api.post(`/api/sessions/${id}/finish`);
@@ -475,13 +497,13 @@ describe('PUT /api/days/:date/priorities: the tasks', () => {
 
   it("answers a recurring priority's row as recurring, and one removed in Settings as archived", async () => {
     await app.api.post('/api/items', { uid: 'rcur0000000a', title: 'Check the queue', categoryUid: 'cat000000001', weekdays: [1, 2, 3, 4, 5] });
-    const r = await save(MON, [row('Check the queue', 'rcur0000000a')], []);
+    const r = await app.saveList(MON, [row('Check the queue', 'rcur0000000a')], []);
     expect(r.body.priorities).toEqual([stored(1, 'Check the queue', 'rcur0000000a', { categoryUid: 'cat000000001', recurring: true })]);
     await app.api.del('/api/items/rcur0000000a');
     expect((await rowsOn(MON))[0]).toMatchObject({ recurring: true, archived: true });
     // A rename from its row reaches it still.
-    await save(MON, [row('Watch the queue', 'rcur0000000a')], [row('Check the queue', 'rcur0000000a')]);
-    expect(itemOf('rcur0000000a')).toMatchObject({ title: 'Watch the queue', weekdays: 0b11111 });
+    await app.saveList(MON, [row('Watch the queue', 'rcur0000000a')], [row('Check the queue', 'rcur0000000a')]);
+    expect(app.item('rcur0000000a')).toMatchObject({ title: 'Watch the queue', weekdays: 0b11111 });
   });
 });
 
@@ -496,14 +518,13 @@ describe('PUT /api/days/:date/priorities: the lane rule', () => {
       i.position,
       i.title,
     ]);
-  const capture = (uid: string, title: string, lane: string) => app.api.post('/api/items', { uid, title, lane, before: null });
 
   beforeEach(async () => {
     await app.close();
     app = await startTestApp();
-    await capture('card00000001', 'Write the KB', 'later');
-    await capture('card00000002', 'Update the macros', 'later');
-    await capture('card00000003', 'Follow up', 'next');
+    await app.capture('card00000001', 'Write the KB', 'later');
+    await app.capture('card00000002', 'Update the macros', 'later');
+    await app.capture('card00000003', 'Follow up', 'next');
   });
 
   it('brings a task in Later added open to its latest list to the top of Next, and closes up Later', async () => {
@@ -536,7 +557,7 @@ describe('PUT /api/days/:date/priorities: the lane rule', () => {
       ['later', 2, 'Update the macros'],
       ['next', 1, 'Follow up'],
     ]);
-    expect(itemOf('aaaaaaaaaaa1')).toMatchObject({ lane: null, position: 0 });
+    expect(app.item('aaaaaaaaaaa1')).toMatchObject({ lane: null, position: 0 });
   });
 });
 
@@ -561,7 +582,7 @@ describe('PUT /api/days/:date/priorities: tasks taken off', () => {
     await app.api.post(`/api/days/${MON}/sessions`, { plannedSeconds: 600, priorityUid: 'aaaaaaaaaaa3' });
     await app.api.put(`/api/days/${MON}/priorities`, { priorities: [] });
     await app.api.put(`/api/days/${TUE}/priorities`, { priorities: [] });
-    expect([itemOf('card0000000a'), itemOf('aaaaaaaaaaa2'), itemOf('aaaaaaaaaaa3')].map((i) => i?.title)).toEqual(['Write the KB', undefined, 'Call']);
+    expect([app.item('card0000000a'), app.item('aaaaaaaaaaa2'), app.item('aaaaaaaaaaa3')].map((i) => i?.title)).toEqual(['Write the KB', undefined, 'Call']);
   });
 });
 
@@ -578,7 +599,7 @@ describe('PUT /api/days/:date/priorities: a deleted task', () => {
     expect((await app.api.del(`/api/items/${report.uid}`)).status).toBe(200);
   });
 
-  it("drops its row from a stale save, stores the rest, and leaves the tombstone's name alone", async () => {
+  it('drops its row from a stale save, stores the rest, and leaves the tombstone as it was', async () => {
     const r = await app.api.put(`/api/days/${MON}/priorities`, {
       priorities: [
         { ...report, text: 'Report v2', done: true },
@@ -588,9 +609,9 @@ describe('PUT /api/days/:date/priorities: a deleted task', () => {
     });
     expect(r.status).toBe(200);
     expect(r.body.priorities).toEqual([stored(1, 'Email', email.uid!, { done: true })]);
-    expect(itemOf(report.uid!)).toMatchObject({ title: 'Report', deleted_at: expect.any(Number) });
+    expect(app.item(report.uid!)).toMatchObject({ title: report.uid, category_uid: null, deleted_at: expect.any(Number) });
     // The session the delete took off it stays off it.
-    expect(app.count('sessions', 'item_id = ?', itemOf(report.uid!)!.id)).toBe(0);
+    expect(app.count('sessions', 'item_id = ?', app.item(report.uid!)!.id)).toBe(0);
     expect(app.count('sessions', 'label = ? AND item_id IS NULL', 'Report')).toBe(1);
   });
 
@@ -598,7 +619,7 @@ describe('PUT /api/days/:date/priorities: a deleted task', () => {
     const r = await app.api.put(`/api/days/${TUE}/priorities`, { priorities: [{ ...report, text: 'Carried' }, row('')], base: [row(''), row('')] });
     expect(r.body.priorities).toEqual([]);
     expect(app.count('items', 'uid = ?', report.uid)).toBe(1);
-    expect(app.count('priorities', 'item_id = ?', itemOf(report.uid!)!.id)).toBe(0);
+    expect(app.count('priorities', 'item_id = ?', app.item(report.uid!)!.id)).toBe(0);
   });
 });
 

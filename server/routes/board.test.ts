@@ -19,19 +19,16 @@ afterEach(async () => {
 });
 
 const board = async () => (await app.api.get('/api/board')).body.cards as BoardCard[];
-const capture = (uid: string, title: string, lane: string) => app.api.post('/api/items', { uid, title, lane, before: null });
-/** Saves a day's list as the web app does. */
-const save = (date: string, priorities: Record<string, unknown>[]) => app.api.put(`/api/days/${date}/priorities`, { priorities });
 
 describe('GET /api/board', () => {
   it('sends the tasks in Later and Next in order, then the others a list holds, latest list first', async () => {
-    await capture('card00000001', 'Write the KB', 'later');
-    await capture('card00000002', 'Follow up', 'next');
-    await save(YESTERDAY, [
+    await app.capture('card00000001', 'Write the KB', 'later');
+    await app.capture('card00000002', 'Follow up', 'next');
+    await app.saveList(YESTERDAY, [
       { text: 'Report', uid: 'aaaaaaaaaaa1', done: true },
       { text: 'Left open', uid: 'aaaaaaaaaaa2' },
     ]);
-    await save(TODAY, [{ text: 'Email', uid: 'aaaaaaaaaaa3' }]);
+    await app.saveList(TODAY, [{ text: 'Email', uid: 'aaaaaaaaaaa3' }]);
     expect((await board()).map((c) => [c.uid, c.lane, c.position, c.listDate, c.listDone])).toEqual([
       ['card00000001', 'later', 1, null, false],
       ['card00000002', 'next', 1, null, false],
@@ -43,8 +40,8 @@ describe('GET /api/board', () => {
 
   it("reads each task's latest list, its tick there, how many lists hold it and the focus done on it", async () => {
     const report = { text: 'Report', uid: 'aaaaaaaaaaa1' };
-    await save(addDays(TODAY, -2), [report]);
-    await save(YESTERDAY, [{ ...report, done: true }]);
+    await app.saveList(addDays(TODAY, -2), [report]);
+    await app.saveList(YESTERDAY, [{ ...report, done: true }]);
     const { id } = (await app.api.post(`/api/days/${YESTERDAY}/sessions`, { plannedSeconds: 1500, priorityUid: report.uid })).body.session as { id: number };
     vi.setSystemTime(SEED_NOW + 20 * MINUTE_MS);
     await app.api.post(`/api/sessions/${id}/finish`);
@@ -63,20 +60,20 @@ describe('GET /api/board', () => {
       },
     ]);
     // Taken off its latest list, it is open again on the one before.
-    await save(YESTERDAY, []);
+    await app.saveList(YESTERDAY, []);
     expect((await board())[0]).toMatchObject({ listDate: addDays(TODAY, -2), listDone: false, listed: 1, logged: 1200 });
   });
 
   it('sends a task a list holds while its latest entry is in the last 15 days or later, whatever its lane, and leaves the rest out', async () => {
     vi.setSystemTime(SEED_NOW + 3 * DAY_MS);
     // SEED_NOW + 3 days is 2026-09-19 in UTC, so the window starts on 2026-09-04.
-    const open = (date: string, uid: string, done = false) => save(date, [{ text: uid, uid, done }]);
+    const open = (date: string, uid: string, done = false) => app.saveList(date, [{ text: uid, uid, done }]);
     await open('2026-10-09', 'aaaaaaaaaaa1');
     await open('2026-09-04', 'aaaaaaaaaaa2');
     await open('2026-09-03', 'aaaaaaaaaaa3');
-    await capture('card00000001', 'In Next, old', 'next');
+    await app.capture('card00000001', 'In Next, old', 'next');
     await open('2026-08-01', 'card00000001');
-    await capture('card00000002', 'Done long ago', 'next');
+    await app.capture('card00000002', 'Done long ago', 'next');
     await open('2026-08-02', 'card00000002', true);
     expect((await board()).map((c) => [c.uid, c.listDate, c.listDone])).toEqual([
       ['card00000001', '2026-08-01', false],
@@ -87,15 +84,15 @@ describe('GET /api/board', () => {
 
   it('leaves out recurring priorities, archived tasks and deleted ones, and a done task in a lane past the window', async () => {
     await app.api.post('/api/items', { uid: 'rcur00000001', title: 'Monitor the queue', weekdays: [1] });
-    await save(YESTERDAY, [
+    await app.saveList(YESTERDAY, [
       { text: 'Monitor the queue', uid: 'rcur00000001' },
       { text: 'Archived', uid: 'aaaaaaaaaaa1' },
     ]);
     app.db.prepare(`UPDATE items SET archived_at = 1 WHERE uid = 'aaaaaaaaaaa1'`).run();
-    await capture('card00000001', 'Deleted from Next', 'next');
+    await app.capture('card00000001', 'Deleted from Next', 'next');
     await app.api.del('/api/items/card00000001');
-    await capture('card00000002', 'Done in Later', 'later');
-    await save('2026-08-01', [{ text: 'Done in Later', uid: 'card00000002', done: true }]);
+    await app.capture('card00000002', 'Done in Later', 'later');
+    await app.saveList('2026-08-01', [{ text: 'Done in Later', uid: 'card00000002', done: true }]);
     expect(await board()).toEqual([]);
   });
 

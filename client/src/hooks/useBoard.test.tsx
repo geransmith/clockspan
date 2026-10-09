@@ -275,7 +275,7 @@ describe('task writes', () => {
         .sort();
     vi.mocked(api.getDay).mockClear();
     await act(() => result.current.store.editItem('next00000001', { lane: 'later', before: null }));
-    await act(() => result.current.store.editItem(queue.uid, { weekdays: [1, 3] }));
+    await act(() => result.current.store.editItem(queue.uid, { weekday: { day: 3, on: false } }));
     await settle();
     expect(api.getDay).not.toHaveBeenCalled();
     expect(result.current.generation).toBe(0);
@@ -772,7 +772,7 @@ describe('recurring priorities', () => {
     const timesheet = makeRecurring('rcur00000002', 'Timesheet', { weekdays: [5] });
     act(() => {
       void result.current.store.addItem(timesheet);
-      void result.current.store.editItem('rcur00000002', { title: 'Timesheets', weekdays: [5, 1] });
+      void result.current.store.editItem('rcur00000002', { title: 'Timesheets', weekday: { day: 1, on: true } });
       void result.current.store.removeRecurring('rcur00000001');
     });
     expect(titles(result.current.board)).toEqual(['Timesheets 15']);
@@ -781,7 +781,7 @@ describe('recurring priorities', () => {
     first.resolve((onServer = withItem(onServer, timesheet, T0)));
     await settle();
     expect(api.addItem).toHaveBeenCalledExactlyOnceWith(timesheet);
-    expect(api.editItem).toHaveBeenCalledExactlyOnceWith('rcur00000002', { title: 'Timesheets', weekdays: [5, 1] });
+    expect(api.editItem).toHaveBeenCalledExactlyOnceWith('rcur00000002', { title: 'Timesheets', weekday: { day: 1, on: true } });
     expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith('rcur00000001');
     expect(callOrder(api.editItem)).toBeLessThan(callOrder(api.deleteItem));
     expect(result.current.board).toEqual(onServer);

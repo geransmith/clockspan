@@ -63,7 +63,7 @@ export interface Priority {
   categoryUid: string | null;
   /** Read only: the task is a recurring priority. */
   recurring: boolean;
-  /** Read only: a recurring priority removed in Settings, or a task the move to stored tasks archived. */
+  /** Read only: a recurring priority removed in Settings, or a task the one-item migration (server/migrations/oneItem.ts) archived. */
   archived: boolean;
   /** Read only: how many days' lists hold the task. */
   listed: number;
@@ -74,7 +74,8 @@ export interface Priority {
 }
 
 /** The board's lanes a task can be placed in. In progress is today's list and Done a task whose latest entry is ticked, so neither is stored. */
-export type OpenLane = 'later' | 'next';
+export const OPEN_LANES = ['later', 'next'] as const;
+export type OpenLane = (typeof OPEN_LANES)[number];
 
 /**
  * A one-off task as the board sees it. Where it shows is worked out from its latest entry

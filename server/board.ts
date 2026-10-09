@@ -53,13 +53,6 @@ export function openCount(db: DB, userId: number): number {
   ).n;
 }
 
-/** Whether the task's latest entry is ticked: it is done. */
-export function isDone(db: DB, itemId: number): boolean {
-  const latest = db.prepare(`SELECT p.done FROM priorities p JOIN days d ON d.id = p.day_id WHERE p.item_id = ? ORDER BY d.date DESC LIMIT 1`).get(itemId) as
-    { done: number } | undefined;
-  return latest?.done === 1;
-}
-
 /**
  * The task goes to `lane`, before `before` there, or at the end when that names no task of the
  * lane (null, another lane's, itself). The lane it left is renumbered.
@@ -90,23 +83,24 @@ export function nextFromLater(db: DB, userId: number, date: string, items: reado
 }
 
 /**
- * Deletes the user's tasks (those in `only` when given) that nothing names: no entry, no
- * session, and either archived or a one-off in no lane. A task in a lane is the board's, and a
- * recurring priority in use a setting, so neither goes. A tombstone is skipped: it stays until the
- * prune, so a late save naming its uid can't make the task again. With `archivedBefore` (the
- * prune's cutoff), an archived task goes only once it was archived, or its old card done, before
- * that instant, as the old prune kept a Done card until its `done_at` passed the cutoff. Returns
- * how many went.
+ * Deletes the user's tasks (those in `only` when given) that nothing names: no entry, no session,
+ * and a one-off in no lane that isn't archived. A task in a lane is the board's, and a recurring
+ * priority in use a setting, so neither goes. A tombstone is skipped: it stays until the prune, so
+ * a late save naming its uid can't make the task again. An archived task (a removed recurring
+ * priority) goes only with `archivedBefore`, the prune's cutoff, once `legacy_done_at` (a card's
+ * done time, kept by the one-item migration), else `archived_at`, is before that instant: until
+ * then a stale offer that adds it finds it still archived, and can't make a one-off under its uid.
+ * Returns how many went.
  */
 export function collectItems(db: DB, userId: number, only?: readonly number[], archivedBefore?: number): number {
+  const archived = archivedBefore === undefined ? '' : 'OR (archived_at IS NOT NULL AND COALESCE(legacy_done_at, archived_at) < @archivedBefore)';
   return db
     .prepare(
       `DELETE FROM items WHERE user_id = @userId ${only ? 'AND id IN (SELECT value FROM json_each(@only))' : ''}
          AND deleted_at IS NULL
          AND NOT EXISTS (SELECT 1 FROM priorities p WHERE p.item_id = items.id)
          AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.item_id = items.id)
-         AND (archived_at IS NOT NULL OR (weekdays IS NULL AND lane IS NULL))
-         ${archivedBefore === undefined ? '' : 'AND (archived_at IS NULL OR COALESCE(legacy_done_at, archived_at) < @archivedBefore)'}`,
+         AND ((archived_at IS NULL AND weekdays IS NULL AND lane IS NULL) ${archived})`,
     )
     .run({ userId, only: only && inList(only), archivedBefore }).changes;
 }
@@ -115,7 +109,8 @@ export function collectItems(db: DB, userId: number, only?: readonly number[], a
  * Deletes a one-off task everywhere, in the caller's transaction: every session on it stays on
  * its day as unplanned time under the task's name and category (a running one runs on), every
  * day's entry of it goes, and the task stays as a tombstone, in no lane, until the prune, so a save
- * from a device that still has it can't bring it back. The lane it was in closes up.
+ * from a device that still has it can't bring it back. The tombstone keeps only the uid, which it
+ * also takes as its title, so the deleted name doesn't stay in the file. The lane it was in closes up.
  */
 export function deleteItem(db: DB, userId: number, item: ItemRow, now: number): void {
   db.prepare(`UPDATE sessions SET label = ?, category_uid = ?, item_id = NULL WHERE user_id = ? AND item_id = ?`).run(
@@ -125,7 +120,7 @@ export function deleteItem(db: DB, userId: number, item: ItemRow, now: number): 
     item.id,
   );
   db.prepare(`DELETE FROM priorities WHERE item_id = ?`).run(item.id);
-  db.prepare(`UPDATE items SET deleted_at = ?, lane = NULL, position = 0 WHERE id = ?`).run(now, item.id);
+  db.prepare(`UPDATE items SET deleted_at = ?, lane = NULL, position = 0, title = uid, category_uid = NULL WHERE id = ?`).run(now, item.id);
   if (item.lane != null) renumber(db, userId, item.lane);
 }
 

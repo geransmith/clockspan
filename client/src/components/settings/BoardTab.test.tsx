@@ -363,16 +363,17 @@ describe('BoardTab: recurring priorities', () => {
     expect(screen.getByRole('button', { name: 'Category for Follow-ups: none' })).toBeTruthy();
   });
 
-  it('sends the whole list of days, in order, as one is pressed, and keeps the last day on', async () => {
+  it('sends only the day pressed, and keeps the last day on', async () => {
     onServer = { ...onServer, recurring: [QUEUE, FOLLOW, makeRecurring('rec000000003', 'Timesheet', { weekdays: [5] })] };
     await renderTab();
     fireEvent.click(day('Follow-ups', 'Tuesday'));
     await settle();
-    expect(api.editItem).toHaveBeenLastCalledWith(FOLLOW.uid, { weekdays: [1, 2, 3, 5] });
+    expect(api.editItem).toHaveBeenLastCalledWith(FOLLOW.uid, { weekday: { day: 2, on: true } });
     expect(pressed('Follow-ups')).toEqual(['Monday', 'Tuesday', 'Wednesday', 'Friday']);
     fireEvent.click(day('Monitor the queue', 'Monday'));
     await settle();
-    expect(api.editItem).toHaveBeenLastCalledWith(QUEUE.uid, { weekdays: [2, 3, 4, 5] });
+    expect(api.editItem).toHaveBeenLastCalledWith(QUEUE.uid, { weekday: { day: 1, on: false } });
+    expect(pressed('Monitor the queue')).toEqual(['Tuesday', 'Wednesday', 'Thursday', 'Friday']);
 
     // The one day left stays pressed and in reach, and a press on it sends nothing.
     const friday = day('Timesheet', 'Friday');
@@ -387,7 +388,7 @@ describe('BoardTab: recurring priorities', () => {
     // Another day on frees it.
     fireEvent.click(day('Timesheet', 'Sunday'));
     await settle();
-    expect(api.editItem).toHaveBeenLastCalledWith('rec000000003', { weekdays: [5, 7] });
+    expect(api.editItem).toHaveBeenLastCalledWith('rec000000003', { weekday: { day: 7, on: true } });
     expect(day('Timesheet', 'Friday').hasAttribute('aria-disabled')).toBe(false);
   });
 

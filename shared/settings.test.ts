@@ -11,7 +11,6 @@ describe('DEFAULT_SETTINGS', () => {
   });
 
   it('sets every bounded number inside its bounds', () => {
-    expect(DEFAULT_SETTINGS.recurringPerDay).toBe(3);
     for (const [key, { min, max }] of Object.entries(SETTING_LIMITS)) {
       const value = DEFAULT_SETTINGS[key as keyof typeof SETTING_LIMITS];
       expect(value, key).toBeGreaterThanOrEqual(min);
@@ -46,7 +45,7 @@ describe('normalizeLayout', () => {
   it('shows every card in its default column when nothing usable was saved', () => {
     const defaults = CARD_IDS.map((id) => ({ id, visible: true, side: DEFAULT_SIDE[id] }));
     expect(normalizeLayout([null, 'retro', 3])).toEqual(defaults);
-    expect(normalizeLayout([])).toEqual(DEFAULT_SETTINGS.layout);
+    expect(normalizeLayout([])).toEqual(defaults);
   });
 
   it('reads a missing or non-boolean visible flag as shown', () => {

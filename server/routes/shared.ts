@@ -33,15 +33,19 @@ export function ensureDay(db: DB, userId: number, date: string): number {
 }
 
 /**
- * A `categoryUid` field (a task's, a session's): undefined = not mentioned, null = none, or a
- * uid, lowercased. Only the shape is checked: a category is a soft link, and one made on this
- * device may reach the server after the task or session that names it.
+ * An optional uid field (a `categoryUid`, a lane's `before`): undefined = not mentioned, null =
+ * none, or a uid, lowercased; anything else gets `message`. Only the shape is checked: a category
+ * is a soft link, and one made on this device may reach the server after the task or session that
+ * names it.
  */
-export function parseCategoryUid(raw: unknown): { categoryUid: string | null | undefined } | { error: string } {
-  if (raw == null) return { categoryUid: raw };
-  if (typeof raw === 'string' && UID_RE.test(raw)) return { categoryUid: raw.toLowerCase() };
-  return { error: "categoryUid must be a category's id or null." };
+export function parseUidField(raw: unknown, message: string): { uid: string | null | undefined } | { error: string } {
+  if (raw == null) return { uid: raw };
+  if (typeof raw === 'string' && UID_RE.test(raw)) return { uid: raw.toLowerCase() };
+  return { error: message };
 }
+
+/** What a bad `categoryUid` is refused with. */
+export const BAD_CATEGORY = "categoryUid must be a category's id or null.";
 
 /** A whole number of seconds within `bounds` for a `plannedSeconds` field, or the message to send back. */
 export function parsePlannedSeconds(raw: unknown, bounds: { min: number; max: number }): { seconds: number } | { error: string } {
@@ -171,7 +175,7 @@ interface UidRows {
   items: ItemRow;
 }
 type UidTable = keyof UidRows;
-const UID_NOT_FOUND: Record<UidTable, string> = { categories: 'Category not found.', items: 'Task not found.' };
+export const UID_NOT_FOUND: Record<UidTable, string> = { categories: 'Category not found.', items: 'Task not found.' };
 /** The rows a table keeps that its routes treat as none: a deleted task stays as a tombstone until the prune. */
 const UID_GONE: { [T in UidTable]: (row: UidRows[T]) => boolean } = { categories: () => false, items: (row) => row.deleted_at != null };
 

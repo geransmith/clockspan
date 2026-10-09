@@ -226,9 +226,9 @@ describe('the small lookups', () => {
     expect(boardFull(makeBoard(...open, makeCard('one', 'More')))).toBe(true);
   });
 
-  it('addsToLanes: a task in no lane, a done one, or one the copy lacks takes room in the lanes; one in a lane already, none', () => {
+  it('addsToLanes: a task in no lane, or one the copy lacks, takes room in the lanes; one in a lane already, done or not, none', () => {
     const board = makeBoard(makeCard('a', 'A'), makeCard('b', 'B', { lane: null }), makeCard('c', 'C', { lane: 'next', listDone: true, listDate: TUE }));
-    expect(['a', 'b', 'c', 'gone'].map((uid) => addsToLanes(board, uid))).toEqual([false, true, true, true]);
+    expect(['a', 'b', 'c', 'gone'].map((uid) => addsToLanes(board, uid))).toEqual([false, true, false, true]);
   });
 
   it("laneStart: the top of Later's own tasks, the end of Next's", () => {
@@ -617,10 +617,16 @@ describe('the board as a write shows it', () => {
       expect(task(withItemPatch(tagged, 'l1', { categoryUid: null }), 'l1')?.categoryUid).toBeNull();
     });
 
-    it('changes the fields sent of a recurring priority, keeps the ones left out, and puts the weekdays in order', () => {
+    it('changes the fields sent of a recurring priority, keeps the ones left out, and sets or clears one weekday, in order', () => {
       expect(withItemPatch(board, follow.uid, { title: 'Chase replies' }).recurring).toEqual([queue, { ...follow, title: 'Chase replies' }]);
       expect(withItemPatch(board, follow.uid, { categoryUid: 'cat000000001' }).recurring[1]).toEqual({ ...follow, categoryUid: 'cat000000001' });
-      expect(withItemPatch(board, follow.uid, { weekdays: [7, 2, 4] }).recurring[1]).toEqual({ ...follow, weekdays: [2, 4, 7] });
+      const weekdays = (patch: { day: number; on: boolean }, of = follow) =>
+        withItemPatch({ ...board, recurring: [of] }, of.uid, { weekday: patch }).recurring[0]!.weekdays;
+      expect(weekdays({ day: 2, on: true })).toEqual([1, 2, 3, 5]);
+      expect(weekdays({ day: 3, on: false })).toEqual([1, 5]);
+      expect([weekdays({ day: 5, on: true }), weekdays({ day: 7, on: false })]).toEqual([follow.weekdays, follow.weekdays]);
+      // The last day stays: the server refuses to clear it.
+      expect(weekdays({ day: 4, on: false }, { ...follow, weekdays: [4] })).toEqual([4]);
       const filed = { ...board, recurring: [{ ...queue, categoryUid: 'cat000000001' }] };
       expect(withItemPatch(filed, queue.uid, { categoryUid: null }).recurring[0]).toEqual(queue);
     });

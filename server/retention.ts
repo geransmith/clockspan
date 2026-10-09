@@ -13,8 +13,9 @@ import { DAY_MS } from '../shared/dates.js';
  * `pruneDays` so the rules are in one place. Deleting a `days` row cascades to its punches,
  * entries, old per-day rows, sessions and breaks. The same prune takes the tasks done before the
  * cutoff, the deleted tasks' tombstones from before it, and any task nothing names (an archived
- * one once it was archived, or its old card done, before it);
- * settings, logins, categories, recurring priorities in use and open tasks in a lane are never
+ * one once its `legacy_done_at`, a card's done time kept by the one-item migration, else its
+ * `archived_at`, is before it: the prune is the only thing that deletes an archived task).
+ * Settings, logins, categories, recurring priorities in use and open tasks in a lane are never
  * touched.
  */
 

@@ -13,7 +13,7 @@ import {
   DAY_COLUMNS,
   ensureDay,
   findDay,
-  parseCategoryUid,
+  parseUidField,
   sessionRowToJson,
   SESSIONS,
   UID_RE,
@@ -26,7 +26,8 @@ import {
 } from './shared.js';
 import { startBreak } from './breaks.js';
 import { startSession } from './sessions.js';
-import { hasText, mergePriorities } from '../../shared/priorities.js';
+import { mergePriorities } from '../../shared/priorities.js';
+import { taskTitle } from '../../shared/text.js';
 import { kindForPosition, MAX_PUNCHES } from '../../shared/punches.js';
 import { MAX_PRIORITIES, SETTING_LIMITS } from '../../shared/settings.js';
 import {
@@ -138,9 +139,10 @@ const BASE_ROWS: RowsLabel = { list: 'base', row: 'Base row' };
  * task. A row with a uid needs a name: a task's is never blank. A list and its base are read with
  * one `now`, so a row the merge compares across them isn't changed by two stamps a millisecond
  * apart. The fields the server works out (`recurring`, `listed` and the rest) are neither read nor
- * refused.
+ * refused. A row's text is stored as `taskTitle` gives it. The uids of the rows sent with no
+ * `categoryUid` go in `unsaid`, when given, so the save can read their category as unchanged.
  */
-function parsePriorityRows(input: unknown, label: RowsLabel, now: number): Priority[] | string {
+function parsePriorityRows(input: unknown, label: RowsLabel, now: number, unsaid?: Set<string>): Priority[] | string {
   if (!Array.isArray(input) || input.length > MAX_PRIORITIES) return `${label.list} must be an array of at most ${MAX_PRIORITIES}.`;
   const rows: Priority[] = [];
   const seen = new Set<string>();
@@ -151,8 +153,8 @@ function parsePriorityRows(input: unknown, label: RowsLabel, now: number): Prior
     // Checked like every other field: a value of the wrong kind is a client bug, not a row to guess at.
     if (item.text != null && typeof item.text !== 'string') return `${name} has invalid text.`;
     if (item.uid != null && !(typeof item.uid === 'string' && UID_RE.test(item.uid))) return `${name} has an invalid uid.`;
-    const text = typeof item.text === 'string' ? item.text.slice(0, LIMITS.priorityText) : '';
-    const written = hasText({ text });
+    const text = typeof item.text === 'string' ? taskTitle(item.text) : '';
+    const written = text !== '';
     let uid = typeof item.uid === 'string' ? item.uid.toLowerCase() : null;
     if (uid && !written) return `${name} needs a name.`;
     if (uid && seen.has(uid)) return `${name} repeats another row's uid.`;
@@ -164,15 +166,16 @@ function parsePriorityRows(input: unknown, label: RowsLabel, now: number): Prior
     if (addedAt == null && written) addedAt = now;
     // Checked like every other flag: `Boolean("false")` would tick the row. Null is absent, as for the other fields.
     if (item.done != null && typeof item.done !== 'boolean') return `${name} has an invalid done flag.`;
-    const category = parseCategoryUid(item.categoryUid);
-    if ('error' in category) return `${name} has an invalid category.`;
+    const category = parseUidField(item.categoryUid, `${name} has an invalid category.`);
+    if ('error' in category) return category.error;
+    if (uid && !('categoryUid' in item)) unsaid?.add(uid);
     rows.push({
       position: i + 1,
       text,
       done: written && item.done === true,
       uid,
       addedAt,
-      categoryUid: uid == null ? null : (category.categoryUid ?? null),
+      categoryUid: uid == null ? null : (category.uid ?? null),
       recurring: false,
       archived: false,
       listed: 0,
@@ -344,13 +347,17 @@ export function daysRouter(db: DB, config: Config): Router {
     const body = req.body as Record<string, unknown>;
     if (staleShape(body)) return refuse(res, 409, STALE_CLIENT);
     const now = Date.now();
-    const sent = parsePriorityRows(body.priorities, SENT_ROWS, now);
+    const unsaid = new Set<string>();
+    const sent = parsePriorityRows(body.priorities, SENT_ROWS, now, unsaid);
     if (typeof sent === 'string') return refuse(res, 400, sent);
     const sentBase = body.base == null ? null : parsePriorityRows(body.base, BASE_ROWS, now);
     if (typeof sentBase === 'string') return refuse(res, 400, sentBase);
     const saved = db.transaction((): Priority[] | null => {
       const day = findDay(db, user.id, date);
       const stored = day ? storedPriorities(db, day.id) : [];
+      // A row sent with no category (curl, a script) keeps the one its base gives it: left out is unchanged.
+      const baseCategory = new Map((sentBase ?? stored).map((p) => [p.uid, p.categoryUid]));
+      for (const p of sent) if (p.uid != null && unsaid.has(p.uid)) p.categoryUid = baseCategory.get(p.uid) ?? null;
       const uids = [...stored, ...sent, ...(sentBase ?? [])].flatMap((p) => (p.uid == null ? [] : [p.uid]));
       // Tombstones included: their rows are dropped, and their uids stay taken.
       const known = new Map(
@@ -379,10 +386,10 @@ export function daysRouter(db: DB, config: Config): Router {
         const m = mineBy.get(p.uid);
         const b = baseBy.get(p.uid);
         if (!item) {
-          item = create.get(user.id, p.uid, p.text.trim(), p.categoryUid, now) as ItemRow;
+          item = create.get(user.id, p.uid, p.text, p.categoryUid, now) as ItemRow;
         } else if (m && b) {
           // Only what this device changed: a rename or a category made elsewhere since stands.
-          if (m.text.trim() !== b.text.trim()) rename.run(m.text.trim(), item.id);
+          if (m.text !== b.text) rename.run(m.text, item.id);
           if (m.categoryUid !== b.categoryUid) recategorise.run(m.categoryUid, item.id);
         }
         if (!storedUids.has(p.uid) && !p.done) added.push(item);
