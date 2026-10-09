@@ -2,18 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadConfig } from './config.js';
 import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from './dev/harness.js';
 import { seedDatabase } from './dev/seed.js';
-import { cutoffKey, effectiveKeepDays, runRetention } from './retention.js';
+import { effectiveKeepDays, runRetention } from './retention.js';
 import { DEFAULT_SETTINGS } from '../shared/settings.js';
-import { DAY_MS } from '../shared/dates.js';
+import { cutoffKey, DAY_MS } from '../shared/dates.js';
 import { ensureDefaultUser, type UserRow } from './db.js';
 import type { Board } from '../shared/api.js';
-
-describe('cutoffKey', () => {
-  it('is the UTC date `keepDays` before now', () => {
-    expect(cutoffKey(Date.UTC(2026, 8, 16, 12), 30)).toBe('2026-08-17');
-    expect(cutoffKey(Date.UTC(2026, 0, 1, 0, 0, 1), 365)).toBe('2025-01-01');
-  });
-});
 
 describe('effectiveKeepDays', () => {
   const config = loadConfig({});

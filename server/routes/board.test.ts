@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from '../dev/harness.js';
 import { ensureDefaultUser } from '../db.js';
+import { LIST_WINDOW_DAYS, PLANNED_WINDOW_DAYS } from '../board.js';
 import { addDays, DAY_MS, MINUTE_MS } from '../../shared/dates.js';
 import { BOARD_LIMITS, LIMITS, type BoardCard, type Category } from '../../shared/api.js';
 
@@ -96,6 +97,20 @@ describe('GET /api/board', () => {
     expect(await board()).toEqual([]);
   });
 
+  it('sends a planned task up to PLANNED_WINDOW_DAYS ahead, and one in a lane however far', async () => {
+    const last = addDays(TODAY, PLANNED_WINDOW_DAYS);
+    await app.capture('aaaaaaaaaaa3', 'In Next', 'next');
+    await app.saveList(last, [{ text: 'Planned', uid: 'aaaaaaaaaaa1' }]);
+    await app.saveList(addDays(last, 1), [
+      { text: 'Too far', uid: 'aaaaaaaaaaa2' },
+      { text: 'In Next', uid: 'aaaaaaaaaaa3' },
+    ]);
+    expect((await board()).map((c) => [c.title, c.listDate])).toEqual([
+      ['In Next', addDays(last, 1)],
+      ['Planned', last],
+    ]);
+  });
+
   it('caps nothing it sends', async () => {
     const userId = ensureDefaultUser(app.db).id;
     const insert = app.db.prepare(`INSERT INTO items (user_id, uid, title, lane, position, created_at) VALUES (?, ?, 'Task', 'later', ?, 0)`);
@@ -125,7 +140,7 @@ describe('the seeded board', () => {
     const seeded = app.seeded!.board.cards;
     expect(await board()).toEqual(seeded);
     expect(seeded.filter((c) => c.lane == null).length).toBeGreaterThan(0);
-    vi.setSystemTime(SEED_NOW + (BOARD_LIMITS.listWindowDays + 1) * DAY_MS);
+    vi.setSystemTime(SEED_NOW + (LIST_WINDOW_DAYS + 1) * DAY_MS);
     expect(await board()).toEqual(seeded.filter((c) => c.lane != null && !c.listDone));
   });
 });

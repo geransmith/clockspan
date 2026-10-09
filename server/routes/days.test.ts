@@ -881,3 +881,32 @@ describe('the date check on every /:date route', () => {
     expect(app.count('days', 'date = ?', '2026-02-30')).toBe(0);
   });
 });
+
+// A year and a month past the server's UTC date, a write stores nothing: lists there would only grow the tables.
+describe('the distance check on every /:date write', () => {
+  it('refuses a write more than 400 days past the server date, and reads it', async () => {
+    vi.useFakeTimers({ now: SEED_NOW, toFake: ['Date'] });
+    try {
+      const far = '2027-10-22';
+      const day = `/api/days/${far}`;
+      const writes: [method: 'put' | 'post', path: string, body: unknown][] = [
+        ['put', `${day}/punches`, { punches: [] }],
+        ['put', `${day}/priorities`, { priorities: [{ text: 'x' }] }],
+        ['put', `${day}/overtime`, { approved: true }],
+        ['put', `${day}/target`, { workMinutes: 240 }],
+        ['put', `${day}/retro`, { note: 'x' }],
+        ['post', `${day}/sessions`, { plannedSeconds: 1500 }],
+        ['post', `${day}/breaks`, { plannedSeconds: 300 }],
+      ];
+      for (const [method, path, body] of writes) {
+        const r = await app.api[method](path, body);
+        expect([path, r.status, r.body]).toEqual([path, 400, { error: 'That date is too far ahead.' }]);
+      }
+      expect(app.count('days', 'date = ?', far)).toBe(0);
+      expect((await app.api.get(day)).status).toBe(200);
+      expect((await app.api.put('/api/days/2027-10-21/overtime', { approved: true })).status).toBe(200);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

@@ -11,3 +11,8 @@ export function isWholeNumber(value: unknown, bounds: { readonly min: number; re
 export function isOneOf<T extends string>(list: readonly T[], value: unknown): value is T {
   return list.includes(value as T);
 }
+
+/** A route's numeric id: plain digits only, since Number() also reads '0x1', '1e0', '+1' and ' 1' (from %201) as 1. */
+export function parseId(raw: string): number | undefined {
+  return /^\d+$/.test(raw) ? Number(raw) : undefined;
+}

@@ -7,7 +7,7 @@ import { refuse, STALE_CLIENT } from '../refuse.js';
 import { countDays, pruneDays, reclaimSpace } from '../retention.js';
 import { collectItems, inList, itemCounts, nextFromLater, type ItemCounts } from '../board.js';
 import { isWholeNumber } from '../validate.js';
-import { DAY_MS, daysBetween, isValidDateKey, punchWindow } from '../../shared/dates.js';
+import { cutoffKey, DAY_MS, daysBetween, isValidDateKey, punchWindow } from '../../shared/dates.js';
 import {
   breakRowToJson,
   DAY_COLUMNS,
@@ -17,8 +17,8 @@ import {
   sessionRowToJson,
   SESSIONS,
   UID_RE,
+  BREAKS,
   type BreakRow,
-  type Dated,
   type DayRow,
   type ItemRow,
   type PunchRow,
@@ -47,6 +47,12 @@ import {
 } from '../../shared/api.js';
 
 const MAX_RANGE_DAYS = 400;
+/**
+ * How far past the server's UTC date a day can be written: a year, and a month of slack so no
+ * zone or clock drift comes near it. Writes beyond it would only grow the tables (a list saved
+ * there makes tasks), so they are refused.
+ */
+const WRITE_AHEAD_DAYS = 400;
 
 /**
  * A stored instant is a safe integer the client can format; anything else (1e308, say) would
@@ -243,7 +249,7 @@ function rangeRows(db: DB, userId: number, from: string, to: string) {
       entries.map((e) => e.item_id),
     ),
     sessions: byDay(all(`${SESSIONS} WHERE ${range} AND x.status <> 'cancelled' ORDER BY x.started_at`) as SessionRow[]),
-    breaks: byDay(all(`SELECT x.*, d.date FROM breaks x ${inRange} ORDER BY x.started_at`) as Dated<BreakRow>[]),
+    breaks: byDay(all(`${BREAKS} WHERE ${range} ORDER BY x.started_at`) as BreakRow[]),
   };
 }
 type ChildRows = ReturnType<typeof rangeRows>;
@@ -279,9 +285,11 @@ export function daysRouter(db: DB, config: Config): Router {
   const r = Router();
 
   // Every route here with a :date in its path, one added later included, has the date checked
-  // once before its handler runs. /range and /prune are literal paths, so it never runs for them.
-  r.param('date', (_req, res, next, date: string) => {
+  // once before its handler runs, and a write (a session or break start included) its distance
+  // ahead. /range and /prune are literal paths, so it never runs for them.
+  r.param('date', (req, res, next, date: string) => {
     if (!isValidDateKey(date)) return refuse(res, 400, 'Invalid date.');
+    if (req.method !== 'GET' && date > cutoffKey(Date.now(), -WRITE_AHEAD_DAYS)) return refuse(res, 400, 'That date is too far ahead.');
     next();
   });
 

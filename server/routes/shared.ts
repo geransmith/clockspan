@@ -1,8 +1,8 @@
-import { Router, type Response } from 'express';
+import { Router, type Request, type Response } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { refuse } from '../refuse.js';
-import { isWholeNumber } from '../validate.js';
+import { isWholeNumber, parseId } from '../validate.js';
 import type { Break, CategoryColor, OpenLane, Punch, Session, SessionStatus } from '../../shared/api.js';
 import { activeMs, MIN_BREAK_MS } from '../../shared/timer.js';
 
@@ -104,10 +104,12 @@ interface SessionRowFields {
 
 export type SessionRow = SessionRowFields & ({ status: 'running'; ended_at: null } | { status: Exclude<SessionStatus, 'running'>; ended_at: number });
 
+/** A break as `BREAKS` reads it: its own columns and its day's date, which every answer about it carries. */
 export interface BreakRow {
   id: number;
   day_id: number;
   user_id: number;
+  date: string;
   planned_seconds: number;
   started_at: number;
   ended_at: number;
@@ -124,9 +126,6 @@ export interface CategoryRow {
   archived_at: number | null;
 }
 
-/** A break row with its day's date, which every answer about it carries. */
-export type Dated<Row> = Row & { date: string };
-
 /**
  * Sessions as every reader takes them (`x`): with their day's date, and through their task its
  * uid, current name and category, so a session is named and counted by its task's current name and category.
@@ -135,19 +134,42 @@ export const SESSIONS = `SELECT x.*, d.date, i.uid AS item_uid, i.title AS item_
     CASE WHEN x.item_id IS NOT NULL THEN i.category_uid ELSE x.category_uid END AS category
   FROM sessions x JOIN days d ON d.id = x.day_id LEFT JOIN items i ON i.id = x.item_id`;
 
+/** Breaks as every reader takes them (`x`), with their day's date. */
+export const BREAKS = 'SELECT x.*, d.date FROM breaks x JOIN days d ON d.id = x.day_id';
+
 /** The tables a `/:id` route works on: each row belongs to one user and one day. */
 interface OwnedRows {
   sessions: SessionRow;
-  breaks: Dated<BreakRow>;
+  breaks: BreakRow;
 }
 type OwnedTable = keyof OwnedRows;
 const NOT_FOUND: Record<OwnedTable, string> = { sessions: 'Session not found.', breaks: 'Break not found.' };
 /** How each table's rows are read (as `x`), with their date. */
-const OWNED_SELECT: Record<OwnedTable, string> = { sessions: SESSIONS, breaks: 'SELECT x.*, d.date FROM breaks x JOIN days d ON d.id = x.day_id' };
+const OWNED_SELECT: Record<OwnedTable, string> = { sessions: SESSIONS, breaks: BREAKS };
 
 /** The user's own row of `table` with its date; undefined for anyone else's, or none. */
 export function getOwned<T extends OwnedTable>(db: DB, table: T, userId: number, id: number): OwnedRows[T] | undefined {
   return db.prepare(`${OWNED_SELECT[table]} WHERE x.id = ? AND x.user_id = ?`).get(id, userId) as OwnedRows[T] | undefined;
+}
+
+/**
+ * A router whose `param` handler is the ownership check: `find` looks up the caller's own row
+ * for the param's value, and anything it doesn't find answers 404 with `notFound`. The row goes
+ * on to the handler, which reads it with `owned(res)` instead of repeating the lookup.
+ */
+function guardedRouter<Row>(
+  param: string,
+  find: (req: Request, value: string) => Row | undefined,
+  notFound: string,
+): { router: Router; owned: (res: Response) => Row } {
+  const router = Router();
+  router.param(param, (req, res, next, value: string) => {
+    const row = find(req, value);
+    if (row === undefined) return refuse(res, 404, notFound);
+    res.locals.owned = row;
+    next();
+  });
+  return { router, owned: (res) => res.locals.owned as Row };
 }
 
 /**
@@ -158,15 +180,14 @@ export function getOwned<T extends OwnedTable>(db: DB, table: T, userId: number,
  * handler, which reads it with `owned(res)` instead of repeating the lookup.
  */
 export function ownedRouter<T extends OwnedTable>(db: DB, table: T): { router: Router; owned: (res: Response) => OwnedRows[T] } {
-  const router = Router();
-  router.param('id', (req, res, next, id: string) => {
-    // Number() also reads '0x1', '1e0', '+1' and ' 1' (from %201) as 1.
-    const row = /^\d+$/.test(id) ? getOwned(db, table, currentUser(req).id, Number(id)) : undefined;
-    if (!row) return refuse(res, 404, NOT_FOUND[table]);
-    res.locals.owned = row;
-    next();
-  });
-  return { router, owned: (res) => res.locals.owned as OwnedRows[T] };
+  return guardedRouter(
+    'id',
+    (req, raw) => {
+      const id = parseId(raw);
+      return id === undefined ? undefined : getOwned(db, table, currentUser(req).id, id);
+    },
+    NOT_FOUND[table],
+  );
 }
 
 /** The tables a `/:uid` route works on: each row belongs to one user, and to no day, and is named by its uid. */
@@ -193,14 +214,14 @@ export function getOwnedByUid<T extends UidTable>(db: DB, table: T, userId: numb
  * `owned(res)`.
  */
 export function uidRouter<T extends UidTable>(db: DB, table: T): { router: Router; owned: (res: Response) => UidRows[T] } {
-  const router = Router();
-  router.param('uid', (req, res, next, uid: string) => {
-    const row = UID_RE.test(uid) ? getOwnedByUid(db, table, currentUser(req).id, uid.toLowerCase()) : undefined;
-    if (!row || UID_GONE[table](row)) return refuse(res, 404, UID_NOT_FOUND[table]);
-    res.locals.owned = row;
-    next();
-  });
-  return { router, owned: (res) => res.locals.owned as UidRows[T] };
+  return guardedRouter(
+    'uid',
+    (req, uid) => {
+      const row = UID_RE.test(uid) ? getOwnedByUid(db, table, currentUser(req).id, uid.toLowerCase()) : undefined;
+      return row && !UID_GONE[table](row) ? row : undefined;
+    },
+    UID_NOT_FOUND[table],
+  );
 }
 
 /** The user's running session, if any: there is at most one (a unique partial index). */
@@ -208,7 +229,7 @@ export function runningSession(db: DB, userId: number): SessionRow | undefined {
   return db.prepare(`${SESSIONS} WHERE x.user_id = ? AND x.status = 'running' LIMIT 1`).get(userId) as SessionRow | undefined;
 }
 
-export function breakRowToJson(b: Dated<BreakRow>): Break {
+export function breakRowToJson(b: BreakRow): Break {
   return { id: b.id, date: b.date, plannedSeconds: b.planned_seconds, startedAt: b.started_at, endedAt: b.ended_at };
 }
 

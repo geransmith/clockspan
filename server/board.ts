@@ -10,9 +10,9 @@
  */
 import type { DB } from './db.js';
 import type { CategoryRow, ItemRow } from './routes/shared.js';
-import { DAY_MS } from '../shared/dates.js';
+import { cutoffKey } from '../shared/dates.js';
 import { activeMs } from '../shared/timer.js';
-import { BOARD_LIMITS, LIMITS, type Board, type BoardCard, type Category, type OpenLane, type Recurring } from '../shared/api.js';
+import { LIMITS, LOOKBACK_DAYS, type Board, type BoardCard, type Category, type OpenLane, type Recurring } from '../shared/api.js';
 
 /** A list of ids or uids as one bound parameter, read in SQL as `IN (SELECT value FROM json_each(?))`. */
 export function inList(values: readonly (number | string)[]): string {
@@ -158,9 +158,12 @@ export function itemCounts(db: DB, ids: readonly number[]): Map<number, ItemCoun
 }
 
 /** The user's categories in the order they were made, removed ones included: past time keeps its name. */
+export function categoryRows(db: DB, userId: number): CategoryRow[] {
+  return db.prepare(`SELECT * FROM categories WHERE user_id = ? ORDER BY id`).all(userId) as CategoryRow[];
+}
+
 function categoriesJson(db: DB, userId: number): Category[] {
-  const rows = db.prepare(`SELECT * FROM categories WHERE user_id = ? ORDER BY id`).all(userId) as CategoryRow[];
-  return rows.map((c) => ({ uid: c.uid, name: c.name, color: c.color, archived: c.archived_at != null }));
+  return categoryRows(db, userId).map((c) => ({ uid: c.uid, name: c.name, color: c.color, archived: c.archived_at != null }));
 }
 
 /** ISO weekdays (Monday 1 to Sunday 7) as a recurring priority stores them: bit 0 for Monday. */
@@ -181,24 +184,30 @@ function recurringJson(db: DB, userId: number): Recurring[] {
   return rows.map((r) => ({ uid: r.uid, title: r.title, categoryUid: r.category_uid, weekdays: weekdaysOf(r.weekdays) }));
 }
 
+/** How far back the board sends the tasks a list holds: `LOOKBACK_DAYS`, and a day of slack for the client's zone. */
+export const LIST_WINDOW_DAYS = LOOKBACK_DAYS + 1;
+/** How far ahead it sends a planned task, so lists saved on far-off dates can't grow every answer. */
+export const PLANNED_WINDOW_DAYS = 60;
+
 /**
  * The user's board: the one-off tasks in Later and Next that aren't done, in order, then every
- * other one whose latest entry is on or after `BOARD_LIMITS.listWindowDays` before the server's
- * UTC today, with no upper bound, so a task planned weeks ahead is in it, and so is every task the
+ * other one whose latest entry is from `LIST_WINDOW_DAYS` before the server's UTC today to
+ * `PLANNED_WINDOW_DAYS` after it, so a task planned weeks ahead is in it, and so is every task the
  * client can show as done this week or left open; the categories and the recurring priorities.
  * Archived and deleted tasks are left out. `listDate` and `listDone` are read from the lists on
  * every call, so neither can drift from them.
  */
 export function boardJson(db: DB, userId: number, now: number = Date.now()): Board {
-  const from = new Date(now - BOARD_LIMITS.listWindowDays * DAY_MS).toISOString().slice(0, 10);
+  const from = cutoffKey(now, LIST_WINDOW_DAYS);
+  const to = cutoffKey(now, -PLANNED_WINDOW_DAYS);
   const rows = db
     .prepare(
       `SELECT i.*, l.date AS list_date, l.done AS list_done FROM items i LEFT JOIN (${LATEST}) l ON l.item_id = i.id
        WHERE i.user_id = ? AND i.weekdays IS NULL AND i.archived_at IS NULL AND i.deleted_at IS NULL
-         AND ((i.lane IS NOT NULL AND COALESCE(l.done, 0) = 0) OR l.date >= ?)
+         AND ((i.lane IS NOT NULL AND COALESCE(l.done, 0) = 0) OR l.date BETWEEN ? AND ?)
        ORDER BY CASE i.lane WHEN 'later' THEN 0 WHEN 'next' THEN 1 ELSE 2 END, i.position, l.date DESC, i.id`,
     )
-    .all(userId, userId, from) as (ItemRow & { list_date: string | null; list_done: number | null })[];
+    .all(userId, userId, from, to) as (ItemRow & { list_date: string | null; list_done: number | null })[];
   const counts = itemCounts(
     db,
     rows.map((r) => r.id),

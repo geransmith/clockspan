@@ -1,7 +1,8 @@
 /**
  * Date keys (`YYYY-MM-DD`) and the arithmetic on them. The client owns "today" (a key is
- * always the browser's local date); the server only ever validates a key it was sent, and
- * `isValidDateKey` is zone-free so that holds in any container TZ.
+ * always the browser's local date); the server validates a key it was sent, and
+ * `isValidDateKey` is zone-free so that holds in any container TZ. Its only own dates are
+ * `cutoffKey`'s, bounds far enough from now that a zone never matters.
  */
 
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -58,16 +59,25 @@ export function daysBetween(from: string, to: string): number {
   return (Date.parse(to) - Date.parse(from)) / DAY_MS;
 }
 
+/**
+ * The UTC date key `days` before `now` (after it when negative). The server never decides what
+ * "today" is; it takes this as a bound only, far enough from now that the client's zone changes
+ * nothing: the prune's cutoff (30 days or more back), the board's window and how far ahead a
+ * day may be written.
+ */
+export function cutoffKey(now: number, days: number): string {
+  return new Date(now - days * DAY_MS).toISOString().slice(0, 10);
+}
+
 export function addDays(key: string, n: number): string {
   const d = parseDateKey(key);
   d.setDate(d.getDate() + n);
   return dateKey(d);
 }
 
-/** Saturday or Sunday on the key's local date. */
+/** Saturday or Sunday on the key's date. */
 export function isWeekend(key: string): boolean {
-  const wd = parseDateKey(key).getDay();
-  return wd === 0 || wd === 6;
+  return isoWeekday(key) > 5;
 }
 
 /**
@@ -101,9 +111,7 @@ export function isoWeekday(key: string): number {
 
 /** Monday of the key's week: the review follows the work week, not the calendar one. */
 export function startOfWeek(key: string): string {
-  const d = parseDateKey(key);
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-  return dateKey(d);
+  return addDays(key, 1 - isoWeekday(key));
 }
 
 export function startOfMonth(key: string): string {

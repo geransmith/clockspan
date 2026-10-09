@@ -2,9 +2,9 @@ import { Router } from 'express';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { refuse, STALE_CLIENT } from '../refuse.js';
-import { boardJson } from '../board.js';
+import { boardJson, categoryRows } from '../board.js';
 import { isOneOf } from '../validate.js';
-import { uidRouter, UID_RE, type CategoryRow } from './shared.js';
+import { uidRouter, UID_RE } from './shared.js';
 import { categoryName, sameText } from '../../shared/text.js';
 import { BOARD_LIMITS, CATEGORY_COLORS, type Board } from '../../shared/api.js';
 
@@ -20,11 +20,6 @@ function parseName(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
   const name = categoryName(raw);
   return name === '' ? null : name;
-}
-
-/** The user's categories, removed ones included. */
-function categoryRows(db: DB, userId: number): CategoryRow[] {
-  return db.prepare(`SELECT * FROM categories WHERE user_id = ?`).all(userId) as CategoryRow[];
 }
 
 /**
