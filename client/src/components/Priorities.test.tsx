@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MINUTE_MS } from '../../../shared/dates.js';
+import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { mergePriorities } from '../../../shared/priorities.js';
 import * as api from '../api';
 import { useDay } from '../hooks/useDay';
@@ -24,9 +25,11 @@ import {
   makeSession,
   makeSettings,
   NEW_CATEGORY,
+  pressKey,
   rowUid,
   settle,
   SettingsAndDays,
+  ShortcutKeys,
   T0,
   TODAY,
 } from '../test/hooks';
@@ -42,6 +45,7 @@ async function renderCard(priorities: Priority[] = [], sessions: Session[] = [],
   const onDeleteTask = vi.fn<(uid: string) => Promise<void>>(() => Promise.resolve());
   const card = (rows: Priority[], o: MorningOffer | null) => (
     <SettingsProvider>
+      <ShortcutKeys />
       <Priorities priorities={rows} sessions={sessions} now={T0} onChange={onChange} onDeleteTask={onDeleteTask} pick={pick} offer={o} />
     </SettingsProvider>
   );
@@ -187,6 +191,28 @@ describe('Priorities', () => {
     expect(onChange).not.toHaveBeenCalled();
     expect(screen.getAllByRole('textbox')).toHaveLength(3);
     expect(document.activeElement).toBe(textbox(1));
+  });
+
+  it('adds on N as Add priority does, typing no n, with the focus on Add priority when it asks first', async () => {
+    const add = () => screen.getByRole('button', { name: 'Add priority' });
+    await renderCard([makePriority(1, 'Report')]);
+    expect(add().getAttribute('aria-keyshortcuts')).toBe('N');
+    expect(pressKey('n')).toBe(false);
+    expect(document.activeElement).toBe(textbox(2));
+    // In the box an N is typing.
+    expect(pressKey('n')).toBe(true);
+    cleanup();
+
+    const { onChange } = await renderCard([makePriority(1, 'Report'), makePriority(2, 'Invoices'), makePriority(3, 'Email')]);
+    pressKey('N', { shiftKey: true });
+    expect(document.activeElement).toBe(add());
+    expect(PRIORITY_WARNINGS.fresh.some((w) => screen.getByRole('status').textContent!.includes(w))).toBe(true);
+    expect(onChange).not.toHaveBeenCalled();
+    cleanup();
+
+    // A full list has no Add priority, and N does nothing.
+    await renderCard(Array.from({ length: MAX_PRIORITIES }, (_, i) => makePriority(i + 1, `Row ${i + 1}`)));
+    expect(pressKey('n')).toBe(true);
   });
 
   it('finds an empty row between written ones', async () => {

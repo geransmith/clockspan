@@ -2876,7 +2876,8 @@ dialog.dialog::backdrop {
 }
 @media (min-width: 640px) {
   dialog.finish-choice,
-  dialog.remove-task {
+  dialog.remove-task,
+  dialog.shortcuts-help {
     max-width: 440px;
   }
   .dialog-foot {
@@ -2899,6 +2900,30 @@ dialog.dialog::backdrop {
 }
 .settings-section:last-of-type {
   border-bottom: 0;
+}
+/* The keyboard shortcuts' list: a key, then what it does. */
+.shortcut-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 12px;
+  align-items: baseline;
+  margin: 0;
+}
+.shortcut-list dd {
+  margin: 0;
+}
+kbd {
+  display: inline-block;
+  min-width: 1.9em;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  text-align: center;
 }
 .settings-fields {
   display: flex;

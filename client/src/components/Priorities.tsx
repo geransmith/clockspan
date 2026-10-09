@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom';
 import { useCelebration, type Moment } from '../hooks/useCelebration';
 import { useDebouncedDraft } from '../hooks/useDebouncedDraft';
 import { useSettings } from '../hooks/useSettings';
+import { useShortcut } from '../hooks/useShortcuts';
 import { unlockAudio, warnSaveFailed } from '../lib/alerts';
 import type { CategoryPick } from '../lib/board';
 import { BLANK_NOTE, RENAME_NOTE, WARNING_ACTIONS } from '../lib/copy';
@@ -153,6 +154,17 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
     });
     inputs.current.get(next.length)?.focus();
   };
+  // N presses Add priority: the focus goes where a tap would leave it, on the new row, or on Add
+  // priority beside the nudge.
+  const addKey = useShortcut(
+    'new',
+    local.length < MAX_PRIORITIES
+      ? () => {
+          addButton.current?.focus();
+          addRow();
+        }
+      : null,
+  );
   // Focus goes where Add priority would put a new priority.
   const focusFree = (rows = local) => {
     const free = rows.find(isFree);
@@ -389,7 +401,7 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
       <Burst at={burst} />
       <div className="priorities-foot">
         {local.length < MAX_PRIORITIES ? (
-          <button ref={addButton} className="btn btn-ghost priority-add" onClick={() => addRow()}>
+          <button ref={addButton} className="btn btn-ghost priority-add" onClick={() => addRow()} aria-keyshortcuts={addKey}>
             <Plus />
             Add priority
           </button>

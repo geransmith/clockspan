@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
-import { AppProviders, endSession, makeDay, makeSession, makeSettings, settle, T0 } from '../test/hooks';
+import { AppProviders, endSession, makeDay, makeSession, makeSettings, pressKey, settle, ShortcutKeys, T0 } from '../test/hooks';
 import type { Session } from '../types';
 import { TimerControls } from './TimerControls';
 
@@ -14,6 +14,7 @@ async function renderControls(compact: boolean, session: Session = makeSession()
   vi.mocked(api.getRunning).mockResolvedValue({ session });
   render(
     <AppProviders>
+      <ShortcutKeys />
       <TimerControls compact={compact} />
     </AppProviders>,
   );
@@ -21,6 +22,7 @@ async function renderControls(compact: boolean, session: Session = makeSession()
 }
 
 const button = (name: string | RegExp) => screen.getByRole('button', { name });
+const keys = (name: string | RegExp) => button(name).getAttribute('aria-keyshortcuts');
 const names = () => screen.getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent!.trim());
 
 beforeEach(() => {
@@ -87,5 +89,44 @@ describe('TimerControls', () => {
     await renderControls(true, makeSession({ plannedSeconds: 8 * 3600, startedAt: T0 - 8 * HOUR_MS }));
     expect(names()).toEqual(['Add 5 minutes', 'Finish timer', 'Cancel session']);
     expect((button('Add 5 minutes') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("pauses and resumes on P and adds the step on +, each button naming its key, while F waits for time's up", async () => {
+    const running = makeSession();
+    await renderControls(false, running);
+    expect([keys('Remove 5 minutes'), keys('Add 5 minutes'), keys('Pause'), keys('Finish')]).toEqual([null, 'Plus', 'P', null]);
+    expect(pressKey('f')).toBe(true);
+    expect(pressKey('-')).toBe(true);
+    vi.mocked(api.pauseSession).mockResolvedValue({ session: { ...running, pausedAt: Date.now() } });
+    pressKey('p');
+    await settle();
+    expect(api.pauseSession).toHaveBeenCalledWith(running.id);
+    expect(keys('Resume')).toBe('P');
+    vi.mocked(api.resumeSession).mockResolvedValue({ session: { ...running, pausedSeconds: 0 } });
+    pressKey('P');
+    await settle();
+    expect(api.resumeSession).toHaveBeenCalledWith(running.id);
+    vi.mocked(api.patchSession).mockResolvedValue({ session: { ...running, plannedSeconds: running.plannedSeconds + 5 * 60 } });
+    pressKey('+');
+    await settle();
+    expect(api.patchSession).toHaveBeenCalledWith(running.id, { plannedSeconds: running.plannedSeconds + 5 * 60 });
+    expect(api.finishSession).not.toHaveBeenCalled();
+  });
+
+  it("finishes on F once time's up, where P does nothing, and leaves + alone at the longest plan", async () => {
+    // Half a minute past a 25-minute plan: due, with no length to ask about.
+    const due = makeSession({ startedAt: T0 - 20.5 * MINUTE_MS });
+    await renderControls(true, due);
+    expect(keys('Finish timer')).toBe('F');
+    expect(pressKey('p')).toBe(true);
+    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(due, { durationSeconds: 25 * 60 }) });
+    pressKey('f');
+    await settle();
+    expect(api.finishSession).toHaveBeenCalledOnce();
+    expect(api.pauseSession).not.toHaveBeenCalled();
+    cleanup();
+    await renderControls(true, makeSession({ plannedSeconds: 8 * 3600 }));
+    expect(keys('Add 5 minutes')).toBeNull();
+    expect(pressKey('+')).toBe(true);
   });
 });

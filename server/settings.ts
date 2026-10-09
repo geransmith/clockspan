@@ -102,6 +102,7 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     weekMinutes: limited('weekMinutes'),
     timeFormat: oneOf(TIME_FORMATS, p.timeFormat, base.timeFormat),
     theme: oneOf(THEMES, p.theme, base.theme),
+    shortcuts: flag('shortcuts'),
     adjustStepMinutes: limited('adjustStepMinutes'),
     breakMinutes: limited('breakMinutes'),
     suggestBreaks: flag('suggestBreaks'),

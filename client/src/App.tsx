@@ -4,6 +4,7 @@ import { Banners } from './components/Banners';
 import { Header } from './components/Header';
 import { RunningTimerBar } from './components/RunningTimerBar';
 import { FinishChoice } from './components/FinishChoice';
+import { Shortcuts } from './components/Shortcuts';
 import { Sheet } from './components/Sheet';
 import { AppProviders } from './hooks/AppProviders';
 import { useClock } from './hooks/useClock';
@@ -123,6 +124,7 @@ function Shell() {
         </Suspense>
       )}
       <FinishChoice />
+      <Shortcuts />
     </div>
   );
 }

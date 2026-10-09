@@ -1,10 +1,11 @@
-import { act } from '@testing-library/react';
+import { act, fireEvent } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { vi } from 'vitest';
 import * as api from '../api';
 import { BoardProvider } from '../hooks/useBoard';
 import { DayProvider } from '../hooks/useDay';
 import { SettingsProvider } from '../hooks/useSettings';
+import { useShortcutListener } from '../hooks/useShortcuts';
 import type { Day } from '../types';
 
 export * from './fixtures';
@@ -55,4 +56,15 @@ export function SettingsAndDays({ children }: { children: ReactNode }) {
       </DayProvider>
     </SettingsProvider>
   );
+}
+
+/** The keydown listener App mounts (`Shortcuts`), for a test that presses a card's key; inside the settings' provider. */
+export function ShortcutKeys() {
+  useShortcutListener();
+  return null;
+}
+
+/** A key pressed where the focus is, as the browser sends it: false once something took it (`preventDefault`). */
+export function pressKey(key: string, init: KeyboardEventInit = {}): boolean {
+  return fireEvent.keyDown(document.activeElement ?? document.body, { key, ...init });
 }

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useBreak } from '../hooks/useBreak';
 import { useDayStore } from '../hooks/useDay';
 import { useSettings } from '../hooks/useSettings';
+import { useShortcut } from '../hooks/useShortcuts';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { useSubmit } from '../hooks/useSubmit';
 import { useTimer } from '../hooks/useTimer';
@@ -47,6 +48,9 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
   // timer start's tap (`TimerLengths`).
   const { busy, error, run } = useSubmit();
   const held = busy || timer.starting;
+  // R is the Break button, so a break it starts holds the start buttons as a tap does.
+  const startBreak = () => run(() => breakTimer.start(breakTimer.next.minutes));
+  const breakKey = useShortcut('rest', !timer.running && isToday && breakTimer.endsAt == null && !held ? startBreak : null);
 
   if (timer.running) return <Running session={timer.running} />;
 
@@ -149,7 +153,7 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
       )}
       <TimerLengths onStart={start} disabled={!isToday || held} />
       {isToday && breakTimer.endsAt == null && (
-        <button className="btn btn-ghost timer-break-start" onClick={() => run(() => breakTimer.start(breakTimer.next.minutes))} disabled={held}>
+        <button className="btn btn-ghost timer-break-start" onClick={startBreak} disabled={held} aria-keyshortcuts={breakKey}>
           {BREAK.start(breakTimer.next.minutes, breakTimer.next.long)}
         </button>
       )}
