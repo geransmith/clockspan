@@ -3,10 +3,12 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import type { NewItem } from '../../api';
+import { BOARD_LIMITS, LOOKBACK_DAYS } from '../../../../shared/api.js';
 import { addDays } from '../../../../shared/dates.js';
 import { unlockAudio, warnQuietly } from '../../lib/alerts';
 import { withCategory, withItem, withItemPatch, withoutItem } from '../../lib/board';
 import { BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, PRIORITY_WARNINGS, WARNING_ACTIONS } from '../../lib/copy';
+import { USER_KEYS } from '../../lib/storage';
 import {
   deferred,
   makeBoard,
@@ -19,6 +21,7 @@ import {
   serveRange,
   settle,
   SettingsAndDays,
+  stubMatchMedia,
 } from '../../test/hooks';
 import type { Board as BoardData, Priority } from '../../types';
 import { Board } from './Board';
@@ -35,8 +38,8 @@ const NOW = new Date(2026, 8, 30, 10).getTime();
 
 let onServer: BoardData;
 let lists: Record<string, Priority[]>;
-/** Whether the page has a mouse or trackpad: the capture box focuses itself and says its keys. */
-let finePointer = true;
+/** The queries matchMedia matches now: '(pointer: fine)' while the page has a mouse or trackpad, so the capture box focuses itself and says its keys. */
+let media: Set<string>;
 
 /** A task on a day's list; its uid is the task's, `row<position>` unless given. */
 const row = (position: number, text: string, patch: Partial<Priority> = {}) =>
@@ -46,6 +49,8 @@ const REPORT = 'row100000000';
 const EMAIL = 'row200000000';
 /** A recurring priority's row, ticked on Tuesday. */
 const tuesdayRoutine = () => row(1, 'Tuesday row', { uid: 'rec000000009', recurring: true, done: true });
+/** Later and Next at the cap. */
+const fullBoard = () => Array.from({ length: BOARD_LIMITS.openCards }, (_, i) => makeCard(`c${i}`.padEnd(12, '0'), `Card ${i}`, { position: i + 1 }));
 
 async function renderBoard(settings = makeSettings({ board: true })) {
   vi.mocked(api.getSettings).mockResolvedValue(settings);
@@ -76,13 +81,8 @@ const added = () => vi.mocked(api.addItem).mock.calls.map(([item]) => item as Ex
 
 beforeEach(() => {
   vi.useFakeTimers({ now: NOW });
-  finePointer = true;
-  vi.stubGlobal('matchMedia', (query: string) => ({
-    matches: query === '(pointer: fine)' && finePointer,
-    media: query,
-    addEventListener: () => {},
-    removeEventListener: () => {},
-  }));
+  media = new Set(['(pointer: fine)']);
+  stubMatchMedia(media);
   onServer = makeBoard(
     makeCard('later0000001', 'Write a KB'),
     makeCard('next00000001', 'Follow up', { lane: 'next' }),
@@ -118,7 +118,7 @@ describe('Board', () => {
     onServer = makeBoard(
       ...onServer.cards,
       makeCard('left00000001', 'Check the logs', { lane: null, listDate: TUE, listed: 1 }),
-      makeCard('left00000002', 'Too old', { lane: null, listDate: addDays(WED, -15), listed: 1 }),
+      makeCard('left00000002', 'Too old', { lane: null, listDate: addDays(WED, -(LOOKBACK_DAYS + 1)), listed: 1 }),
     );
     await renderBoard();
     expect(titlesIn('Next')).toEqual(['Follow up', 'Plan B', 'Check the logs']);
@@ -167,8 +167,8 @@ describe('Board', () => {
   });
 
   it('leaves the focus alone and the keys unsaid on a touch screen, and stops capture at the cap', async () => {
-    finePointer = false;
-    onServer = makeBoard(...Array.from({ length: 300 }, (_, i) => makeCard(`c${i}`.padEnd(12, '0'), `Card ${i}`, { position: i + 1 })));
+    media.delete('(pointer: fine)');
+    onServer = makeBoard(...fullBoard());
     await renderBoard();
     const box = screen.getByRole('textbox', { name: 'Add a card' });
     expect(document.activeElement).not.toBe(box);
@@ -283,7 +283,7 @@ describe('Board', () => {
   });
 
   it('puts the focus on the moved item once it lands, when the move left it nowhere', async () => {
-    finePointer = false;
+    media.delete('(pointer: fine)');
     await renderBoard();
     openEditor('Report');
     // The select goes with the editor, and the focus with it.
@@ -339,8 +339,6 @@ describe('Board', () => {
       const box = notice();
       expect(box.textContent).toContain(DONE_STAYS.title('Email'));
       expect(box.textContent).toContain(DONE_STAYS.body);
-      // A task that keeps coming back has a better home than a new card each time.
-      expect(box.textContent).toContain('make it a recurring priority in Settings → Board');
       // The notice takes the focus, so a keyboard user reaches its buttons.
       expect(document.activeElement).toBe(within(box).getByRole('button', { name: DONE_STAYS.add('Next') }));
       await settle();
@@ -579,10 +577,7 @@ describe('Board', () => {
   });
 
   it('says why in the banner when the store refuses a move at the cap, sending nothing', async () => {
-    onServer = makeBoard(
-      ...Array.from({ length: 300 }, (_, i) => makeCard(`c${i}`.padEnd(12, '0'), `Card ${i}`, { position: i + 1 })),
-      makeCard(REPORT, 'Report', { lane: null, listDate: WED, listed: 1 }),
-    );
+    onServer = makeBoard(...fullBoard(), makeCard(REPORT, 'Report', { lane: null, listDate: WED, listed: 1 }));
     await renderBoard();
     openEditor('Report');
     moveTo('next');
@@ -613,7 +608,7 @@ describe('Board', () => {
   it('shows a Try again for a board that could not be read', async () => {
     vi.mocked(api.getBoard).mockRejectedValue(new Error('offline'));
     await renderBoard();
-    expect(screen.getByText(/Could not load the board/)).toBeTruthy();
+    expect(screen.getByText(new RegExp(LOAD_FAILED.board))).toBeTruthy();
     vi.mocked(api.getBoard).mockImplementation(() => Promise.resolve(onServer));
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await settle();
@@ -874,7 +869,7 @@ describe('categories', () => {
     expect(captureChip().textContent).toBe('Category');
     fireEvent.click(captureChip());
     pickOption('Admin');
-    expect(localStorage.getItem('focus:capture-category')).toBe(ADMIN.uid);
+    expect(localStorage.getItem(USER_KEYS.captureCategory)).toBe(ADMIN.uid);
     capture('Call the vendor');
     capture('Order cables');
     await settle();
@@ -885,14 +880,14 @@ describe('categories', () => {
     expect(captureChip().getAttribute('aria-label')).toBe('Category for new cards: Admin');
     fireEvent.click(captureChip());
     pickOption('No category');
-    expect(localStorage.getItem('focus:capture-category')).toBe('');
+    expect(localStorage.getItem(USER_KEYS.captureCategory)).toBe('');
     capture('No category this time');
     await settle();
     expect(sentCategories()).toEqual([ADMIN.uid, ADMIN.uid, null]);
   });
 
   it('reads a remembered category that was removed, or that the board lacks, as none', async () => {
-    localStorage.setItem('focus:capture-category', OLD.uid);
+    localStorage.setItem(USER_KEYS.captureCategory, OLD.uid);
     await renderBoard();
     expect(captureChip().getAttribute('aria-label')).toBe('Category for new cards: none');
     capture('A card');

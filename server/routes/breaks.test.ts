@@ -25,7 +25,7 @@ describe('breaks', () => {
     const r = await start();
     expect(r.status).toBe(201);
     const b = r.body.break;
-    expect(b).toMatchObject({ date: DATE, plannedSeconds: 300, startedAt: SEED_NOW, endedAt: SEED_NOW + 300_000 });
+    expect(b).toMatchObject({ date: DATE, plannedSeconds: 300, startedAt: SEED_NOW, endedAt: SEED_NOW + 5 * MINUTE_MS });
     expect((await day()).breaks).toEqual([b]);
   });
 
@@ -142,7 +142,7 @@ describe('breaks are scoped to the signed-in user', () => {
     await b.post(`/api/days/${DATE}/sessions`, { plannedSeconds: 1500 });
     const mine = (await a.get(`/api/days/${DATE}`)).body.breaks;
     expect(mine).toHaveLength(1);
-    expect(mine[0].endedAt - mine[0].startedAt).toBe(300_000);
+    expect(mine[0].endedAt - mine[0].startedAt).toBe(5 * MINUTE_MS);
     expect((await a.get(`/api/days/range?from=${DATE}&to=${DATE}`)).body.days[0].breaks).toEqual(mine);
   });
 });

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { MINUTE_MS } from '../../../../shared/dates.js';
 import * as api from '../../api';
 import { BOARD_LIMITS, LIMITS } from '../../../../shared/api.js';
 import { warnQuietly } from '../../lib/alerts';
@@ -320,7 +321,7 @@ describe('BoardTab: recurring priorities', () => {
   it('shows a rename from another device in the box, and puts the title back when a rename is not saved', async () => {
     await renderTab();
     onServer = withItemPatch(onServer, FOLLOW.uid, { title: 'Chase replies' });
-    await settle(60_000);
+    await settle(MINUTE_MS);
     expect(titles()).toEqual(['Monitor the queue', 'Chase replies']);
 
     vi.mocked(api.editItem).mockRejectedValueOnce(new Error('offline'));
@@ -544,7 +545,7 @@ describe('BoardTab: recurring priorities', () => {
   it('shows no chip once the board is off, as the dialog takes the tab away', async () => {
     await renderTab();
     vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
-    await settle(60_000);
+    await settle(MINUTE_MS);
     expect(titles()).toEqual(['Monitor the queue', 'Follow-ups']);
     expect(screen.queryByRole('button', { name: /^Category for / })).toBeNull();
   });

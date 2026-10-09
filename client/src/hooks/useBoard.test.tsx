@@ -8,6 +8,7 @@ import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { warnQuietly } from '../lib/alerts';
 import { MoveRefused, withCategory, withCategoryPatch, withItem, withItemPatch, withoutCategory, withoutItem, type StoreMove } from '../lib/board';
 import { ADD_PRIORITY_FAILED, BOARD, SAVE_FAILED } from '../lib/copy';
+import { applySettingsPatch } from '../lib/settings';
 import {
   apiError,
   begin,
@@ -66,7 +67,7 @@ beforeEach(() => {
   onServer = makeBoard(makeCard('later0000001', 'Write a KB'), makeCard('next00000001', 'Follow up', { lane: 'next' }));
   lists = {};
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ board: true }));
-  vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(makeSettings(patch as Parameters<typeof makeSettings>[0])));
+  vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(applySettingsPatch(makeSettings({ board: true }), patch)));
   vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(makeDay(date, { priorities: lists[date] ?? [] })));
   vi.mocked(api.putPriorities).mockImplementation((date, list) => Promise.resolve({ priorities: (lists[date] = list) }));
   vi.mocked(api.getBoard).mockImplementation(() => Promise.resolve(onServer));

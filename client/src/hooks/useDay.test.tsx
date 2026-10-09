@@ -20,6 +20,7 @@ import {
   makeSettings,
   MIDNIGHT,
   punchesAt,
+  rowUid,
   settle,
   SettingsAndDays,
   setVisibility,
@@ -560,7 +561,7 @@ describe('priorities', () => {
     await act(() => result.current.refresh(TODAY));
     expect(result.current.days[TODAY]?.priorities.map((p) => [p.position, p.text, p.uid, p.listed, p.logged])).toEqual([
       [1, 'Invoices', 'task00000001', 2, 600],
-      [2, 'Email', makePriority(2, '').uid, 1, 0],
+      [2, 'Email', rowUid(2), 1, 0],
     ]);
   });
 

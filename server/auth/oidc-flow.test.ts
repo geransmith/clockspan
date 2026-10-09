@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { HOUR_MS } from '../../shared/dates.js';
 import * as oidc from 'openid-client';
 import { startTestApp, type TestApp } from '../dev/harness.js';
 import { SESSION_COOKIE } from './session.js';
@@ -259,7 +260,7 @@ describe('Discovery', () => {
       vi.mocked(oidc.discovery).mockReset().mockRejectedValue(err);
       const d = new Discovery(ISSUER, 'clockspan', 'secret');
       await d.warm();
-      await vi.advanceTimersByTimeAsync(60 * 60_000);
+      await vi.advanceTimersByTimeAsync(HOUR_MS);
       expect(error.mock.calls).toEqual([
         [`[oidc] discovery failed (${why}); not retrying, since the answer won't change. Check OIDC_ISSUER against the provider's issuer URL.`],
       ]);

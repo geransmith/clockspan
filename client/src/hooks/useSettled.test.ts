@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { renderHook } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
+import { MINUTE_MS } from '../../../shared/dates.js';
 import { settle, T0 } from '../test/hooks';
 import { useSettled } from './useSettled';
 
@@ -23,13 +24,13 @@ it('passes a value on once it has stopped changing', async () => {
 
 it('waits a longer delay, and a new delay counts from when it changes', async () => {
   const { result, rerender } = render();
-  rerender({ value: 2, ms: 300_000 });
+  rerender({ value: 2, ms: 5 * MINUTE_MS });
   await settle(299_999);
   expect(result.current).toBe(1);
   await settle(1);
   expect(result.current).toBe(2);
 
-  rerender({ value: 3, ms: 300_000 });
+  rerender({ value: 3, ms: 5 * MINUTE_MS });
   await settle(10_000);
   expect(result.current).toBe(2);
   rerender({ value: 3, ms: 3000 });

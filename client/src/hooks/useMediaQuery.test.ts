@@ -1,28 +1,8 @@
 // @vitest-environment happy-dom
 import { act, renderHook } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { stubMatchMedia } from '../test/fixtures';
 import { useMediaQuery } from './useMediaQuery';
-
-/** A stand-in for `matchMedia`: each query answers from `matching`, and `change()` tells the listeners it moved. */
-function stubMatchMedia(matching: Set<string>) {
-  const listeners = new Map<string, Set<() => void>>();
-  vi.stubGlobal('matchMedia', (query: string) => ({
-    get matches() {
-      return matching.has(query);
-    },
-    media: query,
-    addEventListener: (_type: string, l: () => void) => listeners.set(query, (listeners.get(query) ?? new Set()).add(l)),
-    removeEventListener: (_type: string, l: () => void) => listeners.get(query)?.delete(l),
-  }));
-  return {
-    change(query: string, matches: boolean) {
-      if (matches) matching.add(query);
-      else matching.delete(query);
-      for (const l of listeners.get(query) ?? []) l();
-    },
-    listening: (query: string) => listeners.get(query)?.size ?? 0,
-  };
-}
 
 describe('useMediaQuery', () => {
   it('answers the query and follows it as it changes', () => {

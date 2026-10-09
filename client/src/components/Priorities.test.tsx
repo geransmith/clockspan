@@ -10,6 +10,7 @@ import { useBoardStore } from '../hooks/useBoard';
 import { playSound, unlockAudio, warnQuietly } from '../lib/alerts';
 import { BLANK_NOTE, LEFT_OPEN, PRIORITY_WARNINGS, REMOVE_TASK, RENAME_NOTE, SAVE_FAILED, TODAY_OFFER, WARNING_ACTIONS } from '../lib/copy';
 import type { PrioritySeed } from '../lib/plan';
+import { emptyRow } from '../lib/priorities';
 import type { CategoryPick } from '../lib/board';
 import {
   completedSession,
@@ -23,6 +24,7 @@ import {
   makeSession,
   makeSettings,
   NEW_CATEGORY,
+  rowUid,
   settle,
   SettingsAndDays,
   T0,
@@ -60,9 +62,6 @@ async function renderCard(
     again: (rows: Priority[], o: MorningOffer | null = offer) => view.rerender(card(rows, o)),
   };
 }
-
-/** A row the card pads the list with: nothing ever written in it. */
-const blank = (position: number) => makePriority(position, '', { uid: null, addedAt: null, listed: 0 });
 
 /** Today's card on the day store and the board store, wired as the sheet wires it. */
 function OnTheStore({ pick = null }: { pick?: CategoryPick | null }) {
@@ -164,7 +163,7 @@ describe('Priorities', () => {
     const report = makePriority(1, 'Report');
     const { onChange, saved, again } = await renderCard([report]);
     fireEvent.click(tick(1));
-    expect(onChange).toHaveBeenCalledExactlyOnceWith([{ ...report, done: true }, blank(2), blank(3)], [report, blank(2), blank(3)]);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith([{ ...report, done: true }, emptyRow(2), emptyRow(3)], [report, emptyRow(2), emptyRow(3)]);
     // The store's copy now shows the save, with a row from another device: the card takes it up.
     await settle();
     const stored = [...saved(), makePriority(4, 'From the phone', { uid: 'phone0000000' })];
@@ -309,7 +308,7 @@ describe("Priorities: a row's category", () => {
   });
 
   it("gives every row the chip's column while the board is on, an empty one with no chip included", async () => {
-    const rows = [makePriority(1, 'A'), makePriority(2, 'B'), makePriority(3, 'C'), blank(4)];
+    const rows = [makePriority(1, 'A'), makePriority(2, 'B'), makePriority(3, 'C'), emptyRow(4)];
     await withPick(rows);
     const shown = [...document.querySelectorAll('.priority-row')];
     expect(shown.map((r) => r.classList.contains('priority-row--end'))).toEqual([true, true, true, true]);
@@ -320,7 +319,7 @@ describe("Priorities: a row's category", () => {
   });
 
   it('shows no chip and no chip column with the board off', async () => {
-    await renderCard([makePriority(1, 'Report', { categoryUid: TICKETS.uid }), blank(2), blank(3), blank(4)]);
+    await renderCard([makePriority(1, 'Report', { categoryUid: TICKETS.uid }), emptyRow(2), emptyRow(3), emptyRow(4)]);
     expect(chip(1)).toBeNull();
     expect(document.querySelectorAll('.priority-row')).toHaveLength(4);
     expect(document.querySelector('.priority-row--end')).toBeNull();
@@ -562,7 +561,7 @@ describe('Priorities: the morning offer, with the board on', () => {
 
   it('with nothing ticked, adds no row, answers every item shown and puts the focus where a new priority goes', async () => {
     const answer = vi.fn();
-    const { saved } = await withOffer([blank(1), routineRow(2, makeRecurring('rcur00000009', 'Weekly report'))], offerOf({ recurring: [QUEUE], answer }));
+    const { saved } = await withOffer([emptyRow(1), routineRow(2, makeRecurring('rcur00000009', 'Weekly report'))], offerOf({ recurring: [QUEUE], answer }));
     fireEvent.click(box('Monitor the queue'));
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
     expect(saved().map((p) => p.text)).toEqual(['', 'Weekly report', '']);
@@ -632,7 +631,7 @@ describe('Priorities: routines on the list', () => {
   });
 
   it('marks a written routine row before its chip while the board is on, ticked or not, and no other row', async () => {
-    const rows = [routineRow(1, QUEUE), routineRow(2, FOLLOW_UPS, { done: true }), makePriority(3, 'Report'), blank(4)];
+    const rows = [routineRow(1, QUEUE), routineRow(2, FOLLOW_UPS, { done: true }), makePriority(3, 'Report'), emptyRow(4)];
     await renderCard(rows, undefined, [], makePick());
     const ends = [...document.querySelectorAll('.priority-row')].map((r) => [...(r.querySelector('.priority-end')?.children ?? [])].map((el) => el.className));
     expect(ends).toEqual([['repeat-mark', 'category-wrap'], ['repeat-mark', 'category-wrap'], ['category-wrap'], []]);
@@ -736,7 +735,7 @@ describe('Priorities: a blank name', () => {
     fireEvent.change(textbox(1), { target: { value: '' } });
     expect(document.querySelector('.priority-note')).toBeNull();
     fireEvent.blur(textbox(1));
-    expect(onChange).toHaveBeenLastCalledWith([blank(1), blank(2), blank(3)], [blank(1), blank(2), blank(3)]);
+    expect(onChange).toHaveBeenLastCalledWith([emptyRow(1), emptyRow(2), emptyRow(3)], [emptyRow(1), emptyRow(2), emptyRow(3)]);
     expect(screen.queryByRole('button', { name: 'Remove priority 1' })).toBeNull();
   });
 });
@@ -773,7 +772,7 @@ describe('Priorities: ×', () => {
   const everywhere = () => fireEvent.click(screen.getByRole('button', { name: REMOVE_TASK.everywhere }));
 
   it('is on every row with a task, and on every row past Rows per day', async () => {
-    await renderCard([makePriority(1, 'Report'), blank(2), blank(3), blank(4)]);
+    await renderCard([makePriority(1, 'Report'), emptyRow(2), emptyRow(3), emptyRow(4)]);
     expect(screen.getAllByRole('button', { name: /^Remove priority/ }).map((b) => b.getAttribute('aria-label'))).toEqual([
       'Remove priority 1',
       'Remove priority 4',
@@ -785,9 +784,9 @@ describe('Priorities: ×', () => {
     fireEvent.click(x(2));
     expect(dialog()).toBeNull();
     expect(saved().map((p) => [p.text, p.uid])).toEqual([
-      ['Report', makePriority(1, '').uid],
+      ['Report', rowUid(1)],
       ['', null],
-      ['Invoices', makePriority(3, '').uid],
+      ['Invoices', rowUid(3)],
     ]);
     expect(document.activeElement).toBe(textbox(2));
     expect(onDeleteTask).not.toHaveBeenCalled();
@@ -797,7 +796,7 @@ describe('Priorities: ×', () => {
     const { saved } = await renderCard([routineRow(1, QUEUE, { listed: 5, logged: 3000 })]);
     fireEvent.click(x(1));
     expect(dialog()).toBeNull();
-    expect(saved()[0]).toEqual(blank(1));
+    expect(saved()[0]).toEqual(emptyRow(1));
   });
 
   it('asks about a task on other days, or with time logged on it, a session logged since the day was read and a timer running on it included', async () => {
@@ -834,7 +833,7 @@ describe('Priorities: ×', () => {
     fireEvent.click(x(2));
     offDay();
     expect(dialog()).toBeNull();
-    expect(saved()[1]).toEqual(blank(2));
+    expect(saved()[1]).toEqual(emptyRow(2));
     expect(document.activeElement).toBe(textbox(2));
     expect(onDeleteTask).not.toHaveBeenCalled();
   });
@@ -855,8 +854,8 @@ describe('Priorities: ×', () => {
     });
     fireEvent.click(x(1));
     everywhere();
-    expect(saved()[0]).toEqual(blank(1));
-    expect(onDeleteTask).toHaveBeenCalledExactlyOnceWith(makePriority(1, '').uid);
+    expect(saved()[0]).toEqual(emptyRow(1));
+    expect(onDeleteTask).toHaveBeenCalledExactlyOnceWith(rowUid(1));
     await settle();
     expect(warnQuietly).not.toHaveBeenCalled();
   });
@@ -868,7 +867,7 @@ describe('Priorities: ×', () => {
     everywhere();
     await settle();
     expect(warnQuietly).toHaveBeenCalledExactlyOnceWith({ ...SAVE_FAILED, tag: 'save-failed' });
-    expect(saved()[0]).toEqual(blank(1));
+    expect(saved()[0]).toEqual(emptyRow(1));
   });
 
   it('still deletes everywhere when another device took the task off this list while it asked', async () => {
@@ -935,7 +934,7 @@ describe('Priorities on the day store', () => {
   });
 
   it('keeps a row removed when its text was saved on the way out of it and not answered yet', async () => {
-    const rows = [makePriority(1, 'Report'), makePriority(2, 'Invoices'), makePriority(3, 'Email'), blank(4)];
+    const rows = [makePriority(1, 'Report'), makePriority(2, 'Invoices'), makePriority(3, 'Email'), emptyRow(4)];
     const { stored, answer } = await renderOnStore(rows);
     fireEvent.change(textbox(4), { target: { value: 'Call the bank' } });
     fireEvent.blur(textbox(4));
@@ -960,7 +959,7 @@ describe('Priorities on the day store', () => {
         .filter((p) => p.uid != null)
         .map((p) => p.text),
     ).toEqual(['Report']);
-    expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith(makePriority(2, '').uid);
+    expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith(rowUid(2));
     expect(vi.mocked(api.putPriorities).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(api.deleteItem).mock.invocationCallOrder[0]!);
   });
 });

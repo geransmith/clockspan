@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { act, render, renderHook } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
+import { MINUTE_MS } from '../../../shared/dates.js';
 import { settle, setVisibility, T0 } from '../test/hooks';
 import { ClockProvider, useClock } from './useClock';
 
@@ -38,11 +39,11 @@ it('ticks at once when the tab comes back', async () => {
   const shown = () => Number(container.querySelector('output')?.textContent);
   await settle(1000);
   expect(shown()).toBe(T0 + 1000);
-  vi.setSystemTime(T0 + 60_000);
+  vi.setSystemTime(T0 + MINUTE_MS);
   act(() => setVisibility('hidden'));
   expect(shown()).toBe(T0 + 1000);
   act(() => setVisibility('visible'));
-  expect(shown()).toBe(T0 + 60_000);
+  expect(shown()).toBe(T0 + MINUTE_MS);
 });
 
 it('refuses to run outside the provider', () => {

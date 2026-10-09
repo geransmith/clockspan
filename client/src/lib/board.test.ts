@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CATEGORY_COLORS, LIMITS } from '../../../shared/api.js';
+import { BOARD_LIMITS, CATEGORY_COLORS, LIMITS } from '../../../shared/api.js';
 import { makeBoard, makeCard, makeCategory, makeDay, makePriority, makeRecurring, T0 } from '../test/fixtures';
 import type { BoardCard, Category, CategoryColor, Priority } from '../types';
 import {
@@ -219,7 +219,7 @@ describe('the small lookups', () => {
   });
 
   it('boardFull: the tasks in Later and Next that are not done, at the cap', () => {
-    const open = Array.from({ length: 299 }, (_, i) => makeCard(`c${i}`, 'C', { lane: i % 2 ? 'next' : 'later' }));
+    const open = Array.from({ length: BOARD_LIMITS.openCards - 1 }, (_, i) => makeCard(`c${i}`, 'C', { lane: i % 2 ? 'next' : 'later' }));
     expect(boardFull(makeBoard(...open, makeCard('done', 'D', { lane: 'next', listDate: TUE, listDone: true }), makeCard('none', 'N', { lane: null })))).toBe(
       false,
     );

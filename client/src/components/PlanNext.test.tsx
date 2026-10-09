@@ -6,7 +6,7 @@ import * as api from '../api';
 import { playSound, unlockAudio } from '../lib/alerts';
 import { LOAD_FAILED, PLAN_NEXT } from '../lib/copy';
 import type { CategoryPick } from '../lib/board';
-import { deferred, makeCategory, makeDay, makePick, makePriority, makeSettings, SettingsAndDays, settle, T0, TODAY } from '../test/hooks';
+import { deferred, makeCategory, makeDay, makePick, makePriority, makeSettings, rowUid, SettingsAndDays, settle, T0, TODAY } from '../test/hooks';
 import type { Day, Priority } from '../types';
 import { PlanNext } from './PlanNext';
 
@@ -186,10 +186,10 @@ describe('PlanNext', () => {
     await save();
     expect(sent().map((p) => [p.text, p.uid, p.categoryUid, p.listed, p.earlier, p.logged])).toEqual([
       ['Review the PR', carried.uid, 'cafe00000001', 2, 1, 600],
-      ['Call the bank', makePriority(2, '').uid, null, 1, 0, 0],
+      ['Call the bank', rowUid(2), null, 1, 0, 0],
       ['Book flights', sent()[2]!.uid, null, 0, 0, 0],
     ]);
-    expect([carried.uid, makePriority(2, '').uid]).not.toContain(sent()[2]!.uid);
+    expect([carried.uid, rowUid(2)]).not.toContain(sent()[2]!.uid);
   });
 
   it('offers a category for each row typed in while the board is on, and sends each row in its own', async () => {

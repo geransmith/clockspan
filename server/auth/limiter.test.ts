@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { MINUTE_MS } from '../../shared/dates.js';
 import { accountKey, LoginLimiter, limiterKey, MAX_ACCOUNT_FAILURES } from './limiter.js';
 
 describe('LoginLimiter', () => {
@@ -9,9 +10,9 @@ describe('LoginLimiter', () => {
     expect(limiter.retryAfter('a')).toBe(0);
     limiter.fail('a');
     expect(limiter.retryAfter('a')).toBe(15 * 60);
-    vi.advanceTimersByTime(14 * 60_000);
+    vi.advanceTimersByTime(14 * MINUTE_MS);
     expect(limiter.retryAfter('a')).toBe(60);
-    vi.advanceTimersByTime(60_000);
+    vi.advanceTimersByTime(MINUTE_MS);
     expect(limiter.retryAfter('a')).toBe(0);
     // A failure after the window starts a fresh count rather than adding to the stale one.
     limiter.fail('a');
@@ -45,7 +46,7 @@ describe('LoginLimiter', () => {
     // Still within the window: nothing to sweep, the map keeps growing.
     limiter.fail('fresh');
     expect(size()).toBe(1001);
-    vi.advanceTimersByTime(15 * 60_000);
+    vi.advanceTimersByTime(15 * MINUTE_MS);
     limiter.fail('after');
     expect(size()).toBe(1);
   });

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { MINUTE_MS } from '../../../shared/dates.js';
 import {
   counted,
   dayName,
@@ -56,7 +57,7 @@ describe('dates', () => {
     const minute = new Date(2026, 8, 16, 7, 5).getTime();
     expect(floorToMinute(minute)).toBe(minute);
     expect(floorToMinute(minute + 59_999)).toBe(minute);
-    expect(floorToMinute(minute + 60_000)).toBe(minute + 60_000);
+    expect(floorToMinute(minute + MINUTE_MS)).toBe(minute + MINUTE_MS);
   });
 });
 
