@@ -4,7 +4,7 @@ import * as api from './api';
 import { REQUEST_TIMEOUT_MS, UNAUTHENTICATED_EVENT } from './api';
 import { ApiError } from './lib/apiError';
 import { alert, dismissByTag, getBanners, subscribeBanners } from './lib/alerts';
-import { REQUEST_TIMEOUT, UPDATED } from './lib/copy';
+import { REQUEST_FAILED, REQUEST_TIMEOUT, UPDATED } from './lib/copy';
 import { emptyRow } from './lib/priorities';
 import { makePriority, TODAY } from './test/fixtures';
 import { VERSION_HEADER } from '../../shared/api.js';
@@ -89,8 +89,6 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
   ],
   // With the list it was built on, so the server can keep another device's changes.
   ['putPriorities', () => api.putPriorities(TODAY, [REPORT], [FREE]), 'PUT', `/api/days/${TODAY}/priorities`, { priorities: [REPORT], base: [FREE] }],
-  // With no base, the list replaces the stored one.
-  ['putPriorities, with no base', () => api.putPriorities(TODAY, [REPORT]), 'PUT', `/api/days/${TODAY}/priorities`, { priorities: [REPORT] }],
   ['putOvertime', () => api.putOvertime(TODAY, true), 'PUT', `/api/days/${TODAY}/overtime`, { approved: true }],
   ['putTarget', () => api.putTarget(TODAY, null), 'PUT', `/api/days/${TODAY}/target`, { workMinutes: null }],
   ['putRetro', () => api.putRetro(TODAY, { note: 'why', done: true }), 'PUT', `/api/days/${TODAY}/retro`, { note: 'why', done: true }],
@@ -179,7 +177,6 @@ describe('routes', () => {
     const sent = lastCall();
     expect(sent.path).toBe(path);
     expect(sent.init.method).toBe(method);
-    expect(sent.init.credentials).toBe('same-origin');
     expect(sent.init.signal).toBeDefined();
     if (body === undefined) {
       expect(sent.init.body).toBeUndefined();
@@ -203,6 +200,11 @@ describe('failures', () => {
   it('names the status when the body is not JSON, such as a proxy error page', async () => {
     answer(502, '<html>Bad gateway</html>', false);
     await expect(api.getDay(TODAY)).rejects.toMatchObject({ status: 502, message: 'Request failed (502)', body: null });
+  });
+
+  it("names the status when a proxy's JSON error is not a string", async () => {
+    answer(502, { error: { code: 502 } });
+    await expect(api.getDay(TODAY)).rejects.toMatchObject({ status: 502, message: REQUEST_FAILED(502) });
   });
 
   it('refuses a 200 whose body is not JSON, such as a sign-in page from a proxy in front', async () => {

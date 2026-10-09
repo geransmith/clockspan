@@ -1059,7 +1059,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   missing one) that renders the page through `lazy()` inside a `Suspense`, as History is, with
   the page named in the lazy-chunk rule under "Architecture rules" and in the comment above
   `App.tsx`'s `lazy` consts → a toggle in `Header.tsx` that goes to the view, and back to the
-  sheet from it, pressed only there (`aria-pressed={view === '<id>'}`). A view behind a setting,
+  sheet from it, pressed only there (`aria-pressed={view === '<id>'}`), its name fixed; then
+  revisit Header's `crowded` (the 375 px header holds five buttons) and check the header at
+  375. A view behind a setting,
   as the board is, also needs: the `view` const in `Shell` showing the sheet while the setting
   is off (a link opened then, or the setting switched off on another device), its `case`
   showing the loading block until the settings have loaded, and its Header toggle rendered only

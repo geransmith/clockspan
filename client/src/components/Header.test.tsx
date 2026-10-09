@@ -5,26 +5,34 @@ import { addDays } from '../../../shared/dates.js';
 import * as api from '../api';
 import { AuthGate } from '../auth/AuthGate';
 import { VIEWS, type Route } from '../hooks/useRoute';
-import { DEFAULT_USER, makeAuth, settle, TODAY, YESTERDAY } from '../test/hooks';
+import { SettingsProvider } from '../hooks/useSettings';
+import { DEFAULT_USER, deferred, makeAuth, makeSettings, settle, TODAY, YESTERDAY } from '../test/hooks';
+import type { Settings } from '../types';
 import { Header } from './Header';
 
 vi.mock('../api');
 
-async function renderHeader(date: string, view: Route['view'] = 'sheet', { board = false, auth = makeAuth({ mode: 'none', user: DEFAULT_USER }) } = {}) {
+async function renderHeader(
+  date: string,
+  view: Route['view'] = 'sheet',
+  { board = false, auth = makeAuth({ mode: 'none', user: DEFAULT_USER }), customize = false, onToggleCustomize = vi.fn() } = {},
+) {
   const onNavigate = vi.fn();
   vi.mocked(api.getAuth).mockResolvedValue(auth);
   render(
     <AuthGate>
-      <Header
-        view={view}
-        date={date}
-        today={TODAY}
-        board={board}
-        customize={false}
-        onNavigate={onNavigate}
-        onToggleCustomize={vi.fn()}
-        onOpenSettings={vi.fn()}
-      />
+      <SettingsProvider>
+        <Header
+          view={view}
+          date={date}
+          today={TODAY}
+          board={board}
+          customize={customize}
+          onNavigate={onNavigate}
+          onToggleCustomize={onToggleCustomize}
+          onOpenSettings={vi.fn()}
+        />
+      </SettingsProvider>
     </AuthGate>,
   );
   await settle();
@@ -38,6 +46,7 @@ function setShowPicker(value: (() => void) | undefined) {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
 });
 afterEach(() => {
   cleanup();
@@ -77,6 +86,34 @@ describe('Header', () => {
       expect(onNavigate, view).toHaveBeenCalledWith({ view: view === 'board' ? 'sheet' : 'board' });
       cleanup();
     }
+  });
+
+  // A toggle's name stays put and aria-pressed says whether it is on, as Board's and History's do.
+  it('keeps Customize named Customize, on or off, with aria-pressed saying which', async () => {
+    for (const customize of [false, true]) {
+      await renderHeader(TODAY, 'sheet', { customize });
+      const button = screen.getByRole('button', { name: 'Customize' });
+      expect(button.getAttribute('aria-pressed')).toBe(String(customize));
+      expect(button.title).toBe('Customize layout');
+      cleanup();
+    }
+  });
+
+  // Until the settings answer, the sheet shows the default layout, and any change would save it whole.
+  it("keeps Customize disabled until the settings have loaded, so a press before that can't change the layout", async () => {
+    const settings = deferred<Settings>();
+    vi.mocked(api.getSettings).mockReturnValue(settings.promise);
+    const onToggleCustomize = vi.fn();
+    await renderHeader(TODAY, 'sheet', { onToggleCustomize });
+    const button = screen.getByRole('button', { name: 'Customize' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
+    expect(onToggleCustomize).not.toHaveBeenCalled();
+    settings.resolve(makeSettings());
+    await settle();
+    expect(button.disabled).toBe(false);
+    fireEvent.click(button);
+    expect(onToggleCustomize).toHaveBeenCalledTimes(1);
   });
 
   // Customize, Board, History, Settings and Sign out leave no room on a phone for the brand's name.

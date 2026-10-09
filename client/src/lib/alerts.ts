@@ -3,7 +3,7 @@
  * the in-app banner queue. Nothing else in the app plays audio or calls Notification.
  */
 
-import type { ClipId, SoundId, SynthId } from '../../../shared/sounds.js';
+import type { ClipId, SoundId, SynthId } from '../types';
 import { SAVE_FAILED } from './copy';
 import { clipUrl } from './sounds';
 

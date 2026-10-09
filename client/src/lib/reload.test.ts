@@ -21,3 +21,11 @@ it('reloads when what is stored is not a time', () => {
   reloadForNewBuild(5, reload);
   expect(reload).toHaveBeenCalledTimes(1);
 });
+
+it('neither reloads nor records an attempt while offline', () => {
+  const reload = vi.fn();
+  reloadForNewBuild(1_000_000, reload, false);
+  expect(reload).not.toHaveBeenCalled();
+  reloadForNewBuild(1_000_000 + 1, reload, true);
+  expect(reload).toHaveBeenCalledTimes(1);
+});

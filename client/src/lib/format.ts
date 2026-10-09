@@ -1,5 +1,5 @@
 import { addDays, MINUTE_MS, pad2, parseDateKey } from '../../../shared/dates.js';
-import type { TimeFormat } from '../../../shared/settings.js';
+import type { TimeFormat } from '../types';
 
 // One formatter per clock; the locale decides everything else (separators, AM/PM spelling).
 const timeFmt = (hourCycle: 'h12' | 'h23') => new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', hourCycle });

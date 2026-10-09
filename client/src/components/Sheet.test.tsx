@@ -26,7 +26,7 @@ import {
   TODAY,
   YESTERDAY,
 } from '../test/hooks';
-import type { Board, Settings } from '../types';
+import type { Board, CardId, Settings } from '../types';
 import { Sheet } from './Sheet';
 import { SortableCards } from './SortableCards';
 
@@ -43,8 +43,20 @@ vi.mock('./SortableCards', async (importOriginal) => {
 let media: Set<string>;
 let stored: Settings;
 
-function SheetAt({ date = TODAY, now = T0, customize = false }: { date?: string; now?: number; customize?: boolean }) {
-  return <Sheet date={date} today={TODAY} now={now} customize={customize} jumpTo={null} onJumped={() => {}} onPunchEditing={() => {}} />;
+function SheetAt({
+  date = TODAY,
+  now = T0,
+  customize = false,
+  jumpTo = null,
+  onJumped = () => {},
+}: {
+  date?: string;
+  now?: number;
+  customize?: boolean;
+  jumpTo?: CardId | null;
+  onJumped?: () => void;
+}) {
+  return <Sheet date={date} today={TODAY} now={now} customize={customize} jumpTo={jumpTo} onJumped={onJumped} onPunchEditing={() => {}} />;
 }
 
 async function renderSheet(customize = false) {
@@ -132,6 +144,35 @@ describe('Sheet', () => {
     expect(document.activeElement).toBe(button('Move Focus timer to the right column'));
   });
 
+  it('gives the focus to the Show chip of a card hidden, and to the Hide button of a card shown', async () => {
+    await renderSheet(true);
+    fireEvent.click(button('Hide Day log'));
+    await settle();
+    const show = screen.getByRole('button', { name: 'Day log Show' });
+    expect(document.activeElement).toBe(show);
+    fireEvent.click(show);
+    await settle();
+    expect(document.activeElement).toBe(button('Hide Day log'));
+  });
+
+  it("scrolls to the card a banner's button jumps to and puts the focus in its note box", async () => {
+    const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView');
+    const onJumped = vi.fn();
+    try {
+      render(
+        <AppProviders>
+          <SheetAt jumpTo="retro" onJumped={onJumped} />
+        </AppProviders>,
+      );
+      await settle();
+      expect(scrolled.mock.contexts).toEqual([document.getElementById('card-retro')]);
+      expect(document.activeElement).toBe(document.querySelector('#card-retro textarea'));
+      expect(onJumped).toHaveBeenCalled();
+    } finally {
+      scrolled.mockRestore();
+    }
+  });
+
   it('steps a card up and down within its own column', async () => {
     await renderSheet(true);
     // Third in the layout, but first in the right column.
@@ -179,6 +220,8 @@ describe("Sheet: the timeclock card's state", () => {
     vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { punches: punchesAt(T0 - 3 * HOUR_MS) }));
     await renderSheet();
     expect(document.querySelector('.card-aside')?.textContent).toBe('Working');
+    // The notice's live region is there, empty, before any punch is out of order.
+    expect(document.querySelector('.punch-order[role="status"]')?.textContent).toBe('');
     cleanup();
     // Lunch in typed as 7:00, before the 8:00 Lunch out: the notice says so, and "Working" would be a guess.
     vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { punches: punchesAt(T0 - 3 * HOUR_MS, T0 - HOUR_MS, T0 - 2 * HOUR_MS) }));
@@ -190,6 +233,8 @@ describe("Sheet: the timeclock card's state", () => {
     vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { punches: punchesAt(T0 - 3 * HOUR_MS, T0 - HOUR_MS, T0 - 2 * HOUR_MS) }));
     await renderSheet();
     const notice = screen.getByText(PUNCH_ORDER('Lunch in', '7:00 AM', 'Lunch out', '8:00 AM'));
+    // Inside a live region that is there before it appears, so a screen reader hears it.
+    expect(notice.parentElement!.getAttribute('role')).toBe('status');
     const segments = (label: string) => within(screen.getByRole('group', { name: `${label} time` })).getAllByRole('spinbutton');
     for (const s of segments('Lunch in')) {
       expect(s.getAttribute('aria-invalid')).toBe('true');

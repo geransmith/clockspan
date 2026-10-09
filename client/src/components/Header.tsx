@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { useAuth } from '../auth/AuthGate';
+import { useSettings } from '../hooks/useSettings';
 import type { Route } from '../hooks/useRoute';
 import { CONFIRM } from '../lib/copy';
 import { addDays } from '../../../shared/dates.js';
@@ -22,6 +23,7 @@ interface Props {
 
 export function Header({ view, date, today, board, customize, onNavigate, onToggleCustomize, onOpenSettings }: Props) {
   const { auth, signOut } = useAuth();
+  const { loaded } = useSettings();
   // Typing a date fires a change with a whole date per digit (a year goes 0002, 0020, 0202, 2026),
   // so only the first change in a visit to the field adds a history entry and the rest replace it.
   const typed = useRef(false);
@@ -48,9 +50,10 @@ export function Header({ view, date, today, board, customize, onNavigate, onTogg
         </button>
         <div className="topbar-actions">
           {onSheet && (
-            <button className="btn btn-icon" onClick={onToggleCustomize} aria-pressed={customize} title={customize ? 'Done customizing' : 'Customize layout'}>
+            // Until the settings answer, the layout shown is the default one, and a change would save it whole over the user's.
+            <button className="btn btn-icon" onClick={onToggleCustomize} disabled={!loaded} aria-pressed={customize} title="Customize layout">
               <Layout />
-              <span className="btn-text">{customize ? 'Done' : 'Customize'}</span>
+              <span className="btn-text">Customize</span>
             </button>
           )}
           {board && (

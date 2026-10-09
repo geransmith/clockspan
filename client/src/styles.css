@@ -808,6 +808,11 @@ button {
 .sheet-loading {
   min-height: 200px;
 }
+/* The punch-order notice's live region (Sheet.tsx) stays on the page while empty; out of the
+   flow then, so it adds no gap. */
+.punch-order:empty {
+  position: absolute;
+}
 /* A load that failed (LoadFailed): the message and its retry button, side by side when they fit. */
 .load-failed {
   display: flex;

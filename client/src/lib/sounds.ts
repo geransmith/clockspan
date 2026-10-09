@@ -1,4 +1,4 @@
-import type { ClipId, SoundEvent } from '../../../shared/sounds.js';
+import type { ClipId, SoundEvent } from '../types';
 
 /**
  * Where each bundled clip lives. One glob over the folder, so a new clip is the file plus its
