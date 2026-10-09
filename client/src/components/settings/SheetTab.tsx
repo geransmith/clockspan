@@ -19,9 +19,9 @@ export function SheetTab({ settings, set }: TabProps) {
           unit="rows"
           value={settings.priorityCount}
           {...SETTING_LIMITS.priorityCount}
+          hint="New days start with this many rows. Add more on the sheet any time."
           onCommit={(m) => set({ priorityCount: m })}
         />
-        <p className="muted small">New days start with this many rows. Add more on the sheet any time.</p>
       </Section>
       <Section title="Focus timer">
         <div className="setting-row">

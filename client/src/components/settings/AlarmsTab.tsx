@@ -64,7 +64,7 @@ function AlarmEditor({ title, hint, alarm, onChange }: { title: string; hint?: s
       <div className="alarm-fields">
         <div className="setting-row">
           <span className="muted small">Warn before</span>
-          <span className="chips">
+          <span className="chips" role="group" aria-label="Warn before">
             {LEAD_CHOICES.map((m) => (
               <button key={m} className="chip" onClick={() => toggleLead(m)} disabled={!alarm.enabled} aria-pressed={alarm.leadMinutes.includes(m)}>
                 {m}m

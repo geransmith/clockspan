@@ -90,4 +90,11 @@ describe('AccountTab', () => {
     expect(username?.hidden).toBe(true);
     expect(username?.form?.textContent).toContain('Current password');
   });
+
+  it('labels the add-user fields', async () => {
+    vi.mocked(api.listUsers).mockResolvedValue({ users: [admin] });
+    await renderTab();
+    expect(screen.getByRole('textbox', { name: 'Username' })).toBeTruthy();
+    expect(screen.getByLabelText('Temporary password')).toBeTruthy();
+  });
 });

@@ -5,14 +5,9 @@
  */
 
 /** A box on screen in viewport pixels, as `getBoundingClientRect()` gives it. */
-export interface Box {
-  top: number;
-  right: number;
-  bottom: number;
-  left: number;
-}
+export type Box = Pick<DOMRectReadOnly, 'top' | 'right' | 'bottom'>;
 
-export interface Size {
+interface Size {
   width: number;
   height: number;
 }

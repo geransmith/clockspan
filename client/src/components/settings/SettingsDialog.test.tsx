@@ -4,11 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MINUTE_MS } from '../../../../shared/dates.js';
 import * as api from '../../api';
 import { AuthGate } from '../../auth/AuthGate';
-import { PASSWORD_CHANGED, SAVE_STATUS } from '../../lib/copy';
+import { SAVE_STATUS } from '../../lib/copy';
 import { applySettingsPatch } from '../../lib/settings';
 import { SOUND_EVENT_LABELS } from '../../lib/sounds';
-import { DEFAULT_USER, makeAuth, makeBoard, makeCategory, makeSettings, makeUser, settle, SettingsAndDays } from '../../test/hooks';
-import type { AuthInfo } from '../../types';
+import { DEFAULT_USER, deferred, makeAuth, makeBoard, makeCategory, makeSettings, makeUser, settle, SettingsAndDays } from '../../test/hooks';
+import type { AuthInfo, Settings } from '../../types';
 import { SettingsDialog } from './SettingsDialog';
 
 vi.mock('../../api');
@@ -222,20 +222,49 @@ describe('SettingsDialog', () => {
     expect(api.putSettings).toHaveBeenLastCalledWith({ sounds: { timer: 'bell' } });
   });
 
-  it('labels the add-user fields and announces a changed password', async () => {
+  it('holds the panel until the settings have loaded, then opens on the stored tab the settings offer', async () => {
+    const answer = deferred<Settings>();
+    vi.mocked(api.getSettings).mockReturnValue(answer.promise);
+    vi.mocked(api.getBoard).mockResolvedValue(makeBoard());
+    localStorage.setItem('focus:settingsTab', 'board');
     await renderDialog();
-    await openTab('Account');
-    expect(screen.getByRole('textbox', { name: 'Username', hidden: true })).toBeTruthy();
-    expect(screen.getByLabelText('Temporary password')).toBeTruthy();
-
-    vi.mocked(api.changePassword).mockResolvedValue({ ok: true });
-    const type = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
-    type('Current password', 'old-pass-123');
-    type('New password', 'new-pass-123');
-    type('Confirm new password', 'new-pass-123');
-    fireEvent.submit(screen.getByRole('button', { name: 'Change password', hidden: true }).closest('form')!);
+    // The defaults stand in: their start buttons are not the user's, so no box shows them.
+    expect(screen.queryByLabelText('Work day hours')).toBeNull();
+    expect(document.querySelector('[role="tabpanel"] .sheet-loading')).toBeTruthy();
+    answer.resolve(makeSettings({ board: true }));
     await settle();
-    expect(api.changePassword).toHaveBeenCalledWith('old-pass-123', 'new-pass-123');
-    expect(screen.getByText(PASSWORD_CHANGED).getAttribute('role')).toBe('status');
+    expect(screen.getByRole('tab', { name: 'Board', hidden: true }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('textbox', { name: 'Recurring rows per day', hidden: true })).toBeTruthy();
+  });
+
+  it('points only the shown tab at its panel', async () => {
+    await renderDialog();
+    const controls = screen.getAllByRole('tab', { hidden: true }).map((t) => t.getAttribute('aria-controls'));
+    expect(controls).toEqual(['panel-timeclock', null, null, null, null]);
+    expect(document.getElementById('panel-timeclock')).toBeTruthy();
+  });
+
+  it('saves a typed number when Escape closes the dialog with the focus still in its box', async () => {
+    const { onClose } = await renderDialog();
+    await openTab('Sheet');
+    const rows = screen.getByRole('textbox', { name: 'Rows per day', hidden: true }) as HTMLInputElement;
+    rows.focus();
+    fireEvent.change(rows, { target: { value: '6' } });
+    fireEvent.keyDown(rows, { key: 'Escape' });
+    await settle();
+    expect(api.putSettings).toHaveBeenCalledWith({ priorityCount: 6 });
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('saves a typed number when Close is pressed with the focus still in its box', async () => {
+    const { onClose } = await renderDialog();
+    await openTab('Sheet');
+    const rows = screen.getByRole('textbox', { name: 'Rows per day', hidden: true }) as HTMLInputElement;
+    rows.focus();
+    fireEvent.change(rows, { target: { value: '6' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Close settings', hidden: true }));
+    await settle();
+    expect(api.putSettings).toHaveBeenCalledWith({ priorityCount: 6 });
+    expect(onClose).toHaveBeenCalled();
   });
 });

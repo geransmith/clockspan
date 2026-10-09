@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { placePopover, POPOVER_MARGIN, type Box } from './popover';
 
 const VIEWPORT = { width: 400, height: 800 };
-/** A 28 px chip 100 px wide whose top edge is at `top` and right edge at `right`. */
-const chip = (top: number, right = 300): Box => ({ top, bottom: top + 28, left: right - 100, right });
+/** A 28 px chip whose top edge is at `top` and right edge at `right`. */
+const chip = (top: number, right = 300): Box => ({ top, bottom: top + 28, right });
 /** The list's size with its box: a list bounded at 288 px, the box and the padding. */
 const LIST = { width: 240, height: 360 };
 
