@@ -15,6 +15,7 @@ import {
   LOAD_FAILED,
   PLAN_NEXT,
   PRIORITY_WARNINGS,
+  PUNCH_ORDER,
   REMOVE_TASK,
   RENAME_NOTE,
   BLANK_NOTE,
@@ -31,6 +32,11 @@ import {
 } from './copy';
 
 describe('copy builders', () => {
+  it('names the punch out of place and the one it should come after, or that one missing', () => {
+    expect(PUNCH_ORDER('Lunch in', '11:00 AM', 'Lunch out', '12:00 PM')).toBe('Lunch in (11:00 AM) is earlier than Lunch out (12:00 PM).');
+    expect(PUNCH_ORDER('Clock out', '5:00 PM', 'Lunch in', null)).toBe('Clock out (5:00 PM) has no Lunch in before it.');
+  });
+
   it('names the user in the delete confirm', () => {
     expect(CONFIRM.deleteUser('sam')).toBe('Delete sam and ALL of their data? This cannot be undone.');
   });

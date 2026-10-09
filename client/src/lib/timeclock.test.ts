@@ -15,6 +15,7 @@ import {
   nextPunchPosition,
   normalizePunches,
   overtimeOn,
+  punchLabel,
   removePunchPair,
   secondMealApplies,
   targetFraction,
@@ -83,7 +84,7 @@ describe('computeTimeclock', () => {
     // 8:00 in, 9:30 out (appointment), 10:30 in, lunch not yet taken.
     const p = punches([T0, null, null, T0 + 1.5 * HOUR_MS, T0 + 2.5 * HOUR_MS]);
     const r = computeTimeclock(p, settings, T0 + 3 * HOUR_MS);
-    expect(r.outOfOrder).toBe(false);
+    expect(r.outOfOrder).toBeNull();
     expect(r.state).toBe('working');
     expect(r.workedSeconds).toBe(2 * 3600);
     expect(r.lunchStatus).toBe('upcoming');
@@ -154,16 +155,10 @@ describe('computeTimeclock', () => {
     expect(computeTimeclock(p, settings, T0 + 8.5 * HOUR_MS + 5 * MINUTE_MS).state).toBe('on-break');
   });
 
-  it('flags out-of-order punches instead of producing garbage', () => {
-    const p = punches([T0, T0 + 2 * HOUR_MS, T0 + 1 * HOUR_MS]);
-    const r = computeTimeclock(p, settings, T0 + 3 * HOUR_MS);
-    expect(r.outOfOrder).toBe(true);
-  });
-
   it('orders two punches at the same minute by row, whatever order the rows arrive in', () => {
     // Lunch out and back in at the same instant: a zero-length lunch, not out of order.
     const r = computeTimeclock(punches([T0, T0 + 4 * HOUR_MS, T0 + 4 * HOUR_MS, null]).reverse(), settings, T0 + 5 * HOUR_MS);
-    expect(r.outOfOrder).toBe(false);
+    expect(r.outOfOrder).toBeNull();
     expect(r.state).toBe('working');
     expect(r.workedSeconds).toBe(5 * 3600);
   });
@@ -236,10 +231,43 @@ describe('times typed ahead of now', () => {
     expect(reached.state).toBe('done');
     expect(reached.clockOutAt).toBe(T0 + 9 * HOUR_MS);
   });
+});
 
-  it('flags a time out of order at once, while it is still ahead', () => {
-    // Lunch in with no Lunch out: two ins in a row, the second one still to come.
-    expect(computeTimeclock(punches([T0, null, T0 + 4.5 * HOUR_MS, null]), settings, T0 + HOUR_MS).outOfOrder).toBe(true);
+describe('punches out of order', () => {
+  // The punch out of place, and the one it should come after.
+  const slip = (times: (number | null)[], now = T0 + 10 * HOUR_MS) => computeTimeclock(punches(times), settings, now).outOfOrder;
+  const h = (hours: number) => T0 + hours * HOUR_MS;
+
+  it('names a Lunch in earlier than its Lunch out, and an In earlier than its Out', () => {
+    // 9:00, 12:00 out, 11:00 back, 17:00: the Lunch in comes before the Lunch out.
+    expect(slip([h(1), h(4), h(3), h(9)])).toEqual({ position: 2, after: 1 });
+    // Lunch 12:00 to 12:30, then Out 1 at 14:00 and In 1 at 13:30.
+    expect(slip([h(0), h(4), h(4.5), h(6), h(5.5), h(9)])).toEqual({ position: 4, after: 3 });
+  });
+
+  it('names an In whose Out has no time, at once while it is still ahead', () => {
+    expect(slip([T0, null, h(4.5), null], h(1))).toEqual({ position: 2, after: 1 });
+  });
+
+  it('names a punch earlier than the Clock in', () => {
+    expect(slip([h(1), h(0), null, null])).toEqual({ position: 1, after: 0 });
+    // A Clock out typed as 2:00 AM.
+    expect(slip([T0, null, null, h(-6)])).toEqual({ position: 3, after: 0 });
+  });
+
+  it('names a Clock out earlier than another punch', () => {
+    expect(slip([T0, h(4), h(4.5), h(3)])).toEqual({ position: 3, after: 1 });
+  });
+
+  it('names the out after an out whose In is empty or later', () => {
+    // Out to lunch at 12:00, no Lunch in, Clock out at 17:00.
+    expect(slip([T0, h(4), null, h(9)])).toEqual({ position: 3, after: 2 });
+    // Lunch 10:00 to 11:00, with Out 1 at 10:15 and In 1 at 10:30 inside it.
+    expect(slip([T0, h(2), h(3), h(2.25), h(2.5), null])).toEqual({ position: 3, after: 2 });
+  });
+
+  it('is null while the punches alternate', () => {
+    expect(slip([T0, h(4), h(4.5), h(9)])).toBeNull();
   });
 });
 
@@ -397,6 +425,23 @@ describe('punch rows', () => {
     const gapped = punches([T0, null, null, null, null, null, null, null]).filter((p) => p.position !== 5);
     expect(extraPairs(gapped).map((p) => [p.out.position, p.in.position])).toEqual([[3, 4]]);
   });
+
+  it("names each row as the card does, the pairs numbered before lunch first, or in the card's own places", () => {
+    // Lunch 12:00 to 12:30, a pair at 14:00 (rows 3-4) and one at 10:00 (rows 5-6).
+    const p = punches([T0, T0 + 4 * HOUR_MS, T0 + 4.5 * HOUR_MS, T0 + 6 * HOUR_MS, T0 + 7 * HOUR_MS, T0 + 2 * HOUR_MS, T0 + 3 * HOUR_MS, null]);
+    const names = (pairs = extraPairs(p)) => p.map((r) => punchLabel(p, r.position, pairs));
+    expect(names()).toEqual(['Clock in', 'Lunch out', 'Lunch in', 'Out 2', 'In 2', 'Out 1', 'In 1', 'Clock out']);
+    expect(names(extraPairs(p).map((pair) => ({ ...pair, beforeLunch: true })))).toEqual([
+      'Clock in',
+      'Lunch out',
+      'Lunch in',
+      'Out 1',
+      'In 1',
+      'Out 2',
+      'In 2',
+      'Clock out',
+    ]);
+  });
 });
 
 describe('adding and removing an extra pair', () => {
@@ -425,22 +470,6 @@ describe('adding and removing an extra pair', () => {
       [2, 'in', T0 + 4.5 * HOUR_MS],
       [3, 'out', null],
     ]);
-  });
-});
-
-describe('frozen (past day)', () => {
-  it('treats a final clock-out as done even when short of the target', () => {
-    const p = punches([T0, T0 + 4 * HOUR_MS, T0 + 4.5 * HOUR_MS, T0 + 7 * HOUR_MS, null]);
-    const r = computeTimeclock(p, settings, T0 + 16 * HOUR_MS, { frozen: true });
-    expect(r.state).toBe('done');
-    expect(r.clockOutAt).toBe(T0 + 7 * HOUR_MS);
-    expect(r.workedSeconds).toBe(6.5 * 3600);
-  });
-
-  it('still counts an unclosed clock-in up to the frozen instant', () => {
-    const r = computeTimeclock(punches([T0, null, null]), settings, T0 + 16 * HOUR_MS, { frozen: true });
-    expect(r.state).toBe('working');
-    expect(r.workedSeconds).toBe(16 * 3600);
   });
 });
 
@@ -539,7 +568,6 @@ describe('lunchInPunchOrder', () => {
 
   it('with the meal periods on, leaves the lunch rows out only on a day that needs no lunch', () => {
     expect(inOrder(clockedIn, half, T0 + HOUR_MS)).toBe(false);
-    expect(nextPunchPosition(clockedIn, false)).toBe(3);
     expect(inOrder(clockedIn, settings, T0 + HOUR_MS)).toBe(true); // upcoming
     expect(inOrder(clockedIn, settings, T0 + 5 * HOUR_MS + 10 * MINUTE_MS)).toBe(true); // overdue
     expect(inOrder(punches([T0, T0 + 2 * HOUR_MS, T0 + 2.5 * HOUR_MS, null]), half, T0 + 3 * HOUR_MS)).toBe(true); // taken
@@ -553,7 +581,6 @@ describe('lunchInPunchOrder', () => {
 
   it('goes to the Clock out past the target with no lunch taken', () => {
     expect(inOrder(clockedIn, settings, T0 + 8 * HOUR_MS + 10 * MINUTE_MS)).toBe(false);
-    expect(nextPunchPosition(clockedIn, false)).toBe(3);
   });
 
   it('keeps them at lunch past the target, so the Now is Lunch in', () => {

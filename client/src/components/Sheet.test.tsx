@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import * as api from '../api';
-import { LEFT_OPEN, PLAN_NEXT, REMOVE_TASK, TODAY_OFFER } from '../lib/copy';
+import { LEFT_OPEN, PLAN_NEXT, PUNCH_ORDER, REMOVE_TASK, TODAY_OFFER } from '../lib/copy';
 import { SPLIT_QUERY } from '../lib/layout';
 import { applySettingsPatch } from '../lib/settings';
 import { USER_KEYS } from '../lib/storage';
@@ -18,6 +18,7 @@ import {
   makePriority,
   makeRecurring,
   makeSettings,
+  punchesAt,
   serveRange,
   settle,
   stubMatchMedia,
@@ -170,6 +171,31 @@ describe('Sheet', () => {
     fireEvent.click(button('Move Retrospective to the right column'));
     await settle();
     expect(columns()).toEqual([['Timeclock', 'Top priorities', 'Focus timer', 'Day log'], ['Retrospective']]);
+  });
+});
+
+describe("Sheet: the timeclock card's state", () => {
+  it('shows the state beside the title, and none while the punches are out of order', async () => {
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { punches: punchesAt(T0 - 3 * HOUR_MS) }));
+    await renderSheet();
+    expect(document.querySelector('.card-aside')?.textContent).toBe('Working');
+    cleanup();
+    // Lunch in typed as 7:00, before the 8:00 Lunch out: the notice says so, and "Working" would be a guess.
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { punches: punchesAt(T0 - 3 * HOUR_MS, T0 - HOUR_MS, T0 - 2 * HOUR_MS) }));
+    await renderSheet();
+    expect(document.querySelector('.card-aside')).toBeNull();
+  });
+
+  it('names the punch out of place in the notice, which describes that row', async () => {
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { punches: punchesAt(T0 - 3 * HOUR_MS, T0 - HOUR_MS, T0 - 2 * HOUR_MS) }));
+    await renderSheet();
+    const notice = screen.getByText(PUNCH_ORDER('Lunch in', '7:00 AM', 'Lunch out', '8:00 AM'));
+    const segments = (label: string) => within(screen.getByRole('group', { name: `${label} time` })).getAllByRole('spinbutton');
+    for (const s of segments('Lunch in')) {
+      expect(s.getAttribute('aria-invalid')).toBe('true');
+      expect(s.getAttribute('aria-describedby')?.split(' ')).toContain(notice.id);
+    }
+    expect(segments('Lunch out').some((s) => s.hasAttribute('aria-invalid'))).toBe(false);
   });
 });
 

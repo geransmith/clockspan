@@ -1169,6 +1169,11 @@ button {
 .timefield.is-partial {
   border-color: var(--warn);
 }
+/* The punch out of order, which the sheet's notice names. React Aria marks each segment. */
+.timefield:has([aria-invalid='true']) {
+  border-color: var(--warn);
+  border-width: 2px;
+}
 .timefield-seg {
   padding: 2px 3px;
   border-radius: 4px;

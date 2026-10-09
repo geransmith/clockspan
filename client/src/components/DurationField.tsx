@@ -1,7 +1,7 @@
 import { useState, type FocusEvent, type KeyboardEvent } from 'react';
 
 /** A length in minutes as the hours and minutes boxes show it. */
-const split = (minutes: number) => [String(Math.floor(minutes / 60)), String(minutes % 60)] as const;
+const split = (minutes: number): [string, string] => [String(Math.floor(minutes / 60)), String(minutes % 60)];
 
 /**
  * Hours + minutes inputs that commit when focus leaves the pair or on Enter, so half-typed values
@@ -21,16 +21,13 @@ export function DurationField({
   max: number;
   onCommit: (m: number) => void;
 }) {
-  const [h, setH] = useState(split(minutes)[0]);
-  const [m, setM] = useState(split(minutes)[1]);
+  const [[h, m], setDraft] = useState(() => split(minutes));
   // A new value from outside (save confirmed, reset) replaces the draft; React's
   // "adjust state while rendering" form, so it lands in the same render.
   const [seen, setSeen] = useState(minutes);
   if (minutes !== seen) {
     setSeen(minutes);
-    const [hh, mm] = split(minutes);
-    setH(hh);
-    setM(mm);
+    setDraft(split(minutes));
   }
   // Moving from hours to minutes is still typing: saving there would store the new hours with
   // the old minutes (5h 0m → 4h 30m passes through 4h 0m), which can move an alarm's deadline
@@ -41,11 +38,7 @@ export function DurationField({
     const mm = m.trim() === '' ? NaN : Number(m);
     const total = Number.isFinite(hh) && Number.isFinite(mm) ? Math.max(min, Math.min(max, Math.round(hh * 60 + mm))) : minutes;
     if (total !== minutes) onCommit(total);
-    else {
-      const [sh, sm] = split(minutes);
-      setH(sh);
-      setM(sm);
-    }
+    else setDraft(split(minutes));
   };
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && e.currentTarget.blur();
   return (
@@ -56,7 +49,7 @@ export function DurationField({
           className="input input-num"
           inputMode="numeric"
           value={h}
-          onChange={(e) => setH(e.target.value)}
+          onChange={(e) => setDraft([e.target.value, m])}
           onKeyDown={onKey}
           aria-label={`${label} hours`}
         />
@@ -65,7 +58,7 @@ export function DurationField({
           className="input input-num"
           inputMode="numeric"
           value={m}
-          onChange={(e) => setM(e.target.value)}
+          onChange={(e) => setDraft([h, e.target.value])}
           onKeyDown={onKey}
           aria-label={`${label} minutes`}
         />
