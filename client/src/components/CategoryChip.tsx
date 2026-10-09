@@ -56,7 +56,7 @@ function focusOption(list: HTMLElement | null, i?: number): void {
 export function CategoryChip({ value, onChange, pick, label }: Props) {
   const [open, setOpen] = useState(false);
   // The option in the tab order while the list is open: the selected one, then where the keys moved.
-  const [active, setActive] = useState(0);
+  const [active, setActive] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const wrap = useRef<HTMLSpanElement>(null);
   const chip = useRef<HTMLButtonElement>(null);
@@ -67,12 +67,15 @@ export function CategoryChip({ value, onChange, pick, label }: Props) {
   const selected = current?.uid ?? null;
   const options: Option[] = [
     { uid: null, name: 'No category', color: null },
-    ...activeCategories(pick.categories).map((c) => ({ uid: c.uid, name: c.name, color: c.color })),
+    ...activeCategories(pick.categories),
     // A removed category is never offered, but the one set still shows as set.
     ...(current?.archived ? [{ uid: current.uid, name: `${current.name} (removed)`, color: current.color }] : []),
   ];
-  // The re-read on opening can shorten the list under it.
-  const at = Math.min(active, options.length - 1);
+  // By uid, as the re-read on opening can add or drop a category before it; one dropped hands the stop to the first.
+  const at = Math.max(
+    0,
+    options.findIndex((o) => o.uid === active),
+  );
 
   // After every render while open, since the re-read can grow the list, and on any scroll or resize.
   useLayoutEffect(() => {
@@ -108,7 +111,7 @@ export function CategoryChip({ value, onChange, pick, label }: Props) {
   const openList = () => {
     pick.refresh();
     setDraft('');
-    setActive(options.findIndex((o) => o.uid === selected));
+    setActive(selected);
     setOpen(true);
   };
   const close = () => {
@@ -145,7 +148,7 @@ export function CategoryChip({ value, onChange, pick, label }: Props) {
     ]).get(e.key);
     if (to !== undefined) {
       e.preventDefault();
-      setActive(to);
+      setActive(options[to]!.uid);
       focusOption(pop.current, to);
     } else if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();

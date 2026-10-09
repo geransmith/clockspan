@@ -4,6 +4,8 @@ import { SETTING_LIMITS } from '../../../../shared/settings.js';
 import { categoryName } from '../../../../shared/text.js';
 import type { ItemPatch } from '../../api';
 import { useBoardState, useBoardStore, useCategoryPick } from '../../hooks/useBoard';
+import { useFollowedDraft } from '../../hooks/useFollowedDraft';
+import type { Save } from '../../hooks/useSaveStatus';
 import { activeCategories, categoryForName, categoryNameTaken, nextColor, type CategoryPick } from '../../lib/board';
 import { BOARD, CONFIRM, LOAD_FAILED } from '../../lib/copy';
 import { newUid } from '../../lib/priorities';
@@ -36,9 +38,6 @@ const WEEKDAYS = [
   { day: 7, letter: 'S', name: 'Sunday' },
 ] as const;
 
-/** The dialog's save: the header says Saving…, Saved or Not saved for each board write. */
-type Save = (run: () => Promise<void>) => Promise<void>;
-
 /**
  * Settings → Board, shown while the board is on: the categories, each renamed, recoloured or
  * removed in place, and Add category; then the recurring priorities, each renamed, given a
@@ -53,7 +52,8 @@ export function BoardTab({ settings, set, save }: TabProps & { save: Save }) {
   const pick = useCategoryPick((saved) => void save(() => saved));
   useEffect(() => void store.load(), [store]);
   if (failed && !board) return <LoadFailed title={LOAD_FAILED.board} onRetry={() => void store.load()} />;
-  if (!board) return <div className="sheet-loading" aria-busy="true" />;
+  // The chip's data is null only before the board's first read.
+  if (!board || !pick) return <div className="sheet-loading" aria-busy="true" />;
   return (
     <>
       <Categories categories={board.categories} save={save} />
@@ -72,35 +72,40 @@ export function BoardTab({ settings, set, save }: TabProps & { save: Save }) {
   );
 }
 
+/**
+ * A list's rows' boxes by uid and its Add button, for `focusNear`: a row goes with its Remove
+ * button, and the focus would fall to the page, so the next row's box takes it, else the one
+ * before, else Add.
+ */
+function useRowFocus() {
+  const boxes = useRef(new Map<string, HTMLInputElement>());
+  const addButton = useRef<HTMLButtonElement>(null);
+  const boxRef = (uid: string) => (box: HTMLInputElement | null) => {
+    if (box) boxes.current.set(uid, box);
+    else boxes.current.delete(uid);
+  };
+  const focusNear = (rows: { uid: string }[], uid: string) => {
+    const at = rows.findIndex((r) => r.uid === uid);
+    const near = rows[at + 1] ?? rows[at - 1];
+    (near ? boxes.current.get(near.uid) : addButton.current)?.focus();
+  };
+  return { boxRef, addButton, focusNear };
+}
+
 function Categories({ categories, save }: { categories: Category[]; save: Save }) {
   const store = useBoardStore();
   const [adding, setAdding] = useState(false);
-  const nameBoxes = useRef(new Map<string, HTMLInputElement>());
-  const addButton = useRef<HTMLButtonElement>(null);
+  const { boxRef, addButton, focusNear } = useRowFocus();
   const inUse = activeCategories(categories);
-  // The row goes with its Remove button, and the focus would fall to the page: the next row's
-  // name takes it, else the one before, else Add category.
   const remove = (uid: string) => {
-    const at = inUse.findIndex((c) => c.uid === uid);
-    const near = inUse[at + 1] ?? inUse[at - 1];
-    (near ? nameBoxes.current.get(near.uid) : addButton.current)?.focus();
+    focusNear(inUse, uid);
     void save(() => store.removeCategory(uid));
   };
   return (
     <Section title="Categories" hint="Removing a category keeps it on past days.">
       {inUse.length === 0 && !adding && <p className="muted small">No categories yet.</p>}
       {inUse.map((c) => (
-        <CategoryRow
-          key={c.uid}
-          category={c}
-          categories={categories}
-          save={save}
-          onRemove={() => remove(c.uid)}
-          nameRef={(box) => {
-            if (box) nameBoxes.current.set(c.uid, box);
-            else nameBoxes.current.delete(c.uid);
-          }}
-        />
+        <CategoryRow key={c.uid} category={c} categories={categories} save={save} onRemove={() => remove(c.uid)} nameRef={boxRef(c.uid)} />
       ))}
       {adding ? (
         <NewCategory categories={categories} save={save} onDone={() => setAdding(false)} />
@@ -134,14 +139,8 @@ function CategoryRow({
   nameRef: (box: HTMLInputElement | null) => void;
 }) {
   const store = useBoardStore();
-  const [draft, setDraft] = useState(category.name);
-  const [seen, setSeen] = useState(category.name);
+  const [draft, setDraft] = useFollowedDraft(category.name);
   const [error, setError] = useState<string | null>(null);
-  // A rename that landed, here or on another device, shows in the box.
-  if (category.name !== seen) {
-    setSeen(category.name);
-    setDraft(category.name);
-  }
   const name = categoryName(draft);
   const taken = categoryNameTaken(categories, name, category.uid);
   const commit = () => {
@@ -228,7 +227,7 @@ function NewCategory({ categories, save, onDone }: { categories: Category[]; sav
           if (add()) onDone();
         }}
         onKeyDown={(e) => {
-          if (e.key !== 'Enter' || e.nativeEvent.isComposing || !draft.trim()) return;
+          if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
           if (add()) setDraft('');
         }}
         maxLength={LIMITS.categoryName}
@@ -247,35 +246,21 @@ function NewCategory({ categories, save, onDone }: { categories: Category[]; sav
  * The recurring priorities in the order they were made, and Add recurring priority, always
  * offered: the server's cap of 100 shows only as Not saved.
  */
-function RecurringList({ items, pick, save }: { items: Recurring[]; pick: CategoryPick | null; save: Save }) {
+function RecurringList({ items, pick, save }: { items: Recurring[]; pick: CategoryPick; save: Save }) {
   const store = useBoardStore();
   const [adding, setAdding] = useState(false);
-  const titleBoxes = useRef(new Map<string, HTMLInputElement>());
-  const addButton = useRef<HTMLButtonElement>(null);
-  // It asks first, unlike a category's Remove: nothing brings a recurring priority back. Then, as
-  // with a category, the next row's title takes the focus, else the one before, else Add.
+  const { boxRef, addButton, focusNear } = useRowFocus();
+  // It asks first, unlike a category's Remove: nothing brings a recurring priority back.
   const remove = (item: Recurring) => {
     if (!window.confirm(CONFIRM.deleteRecurring(item.title))) return;
-    const at = items.findIndex((r) => r.uid === item.uid);
-    const near = items[at + 1] ?? items[at - 1];
-    (near ? titleBoxes.current.get(near.uid) : addButton.current)?.focus();
+    focusNear(items, item.uid);
     void save(() => store.removeRecurring(item.uid));
   };
   return (
     <>
       {items.length === 0 && !adding && <p className="muted small">No recurring priorities yet.</p>}
       {items.map((item) => (
-        <RecurringRow
-          key={item.uid}
-          item={item}
-          pick={pick}
-          save={save}
-          onRemove={() => remove(item)}
-          titleRef={(box) => {
-            if (box) titleBoxes.current.set(item.uid, box);
-            else titleBoxes.current.delete(item.uid);
-          }}
-        />
+        <RecurringRow key={item.uid} item={item} pick={pick} save={save} onRemove={() => remove(item)} titleRef={boxRef(item.uid)} />
       ))}
       {adding ? (
         <NewRecurring save={save} onDone={() => setAdding(false)} />
@@ -304,19 +289,13 @@ function RecurringRow({
   titleRef,
 }: {
   item: Recurring;
-  pick: CategoryPick | null;
+  pick: CategoryPick;
   save: Save;
   onRemove: () => void;
   titleRef: (box: HTMLInputElement | null) => void;
 }) {
   const store = useBoardStore();
-  const [draft, setDraft] = useState(item.title);
-  const [seen, setSeen] = useState(item.title);
-  // A rename that landed, here or on another device, shows in the box.
-  if (item.title !== seen) {
-    setSeen(item.title);
-    setDraft(item.title);
-  }
+  const [draft, setDraft] = useFollowedDraft(item.title);
   const edit = (patch: ItemPatch) => void save(() => store.editItem(item.uid, patch));
   const commit = () => {
     const title = draft.trim();
@@ -343,7 +322,7 @@ function RecurringRow({
         maxLength={LIMITS.priorityText}
         aria-label={`Title of ${item.title}`}
       />
-      {pick && <CategoryChip value={item.categoryUid} onChange={(categoryUid) => edit({ categoryUid })} pick={pick} label={`Category for ${item.title}`} />}
+      <CategoryChip value={item.categoryUid} onChange={(categoryUid) => edit({ categoryUid })} pick={pick} label={`Category for ${item.title}`} />
       <div className="weekdays" role="group" aria-label={`Days for ${item.title}`}>
         {WEEKDAYS.map(({ day, letter, name }) => {
           const on = item.weekdays.includes(day);
@@ -394,7 +373,7 @@ function NewRecurring({ save, onDone }: { save: Save; onDone: () => void }) {
           onDone();
         }}
         onKeyDown={(e) => {
-          if (e.key !== 'Enter' || e.nativeEvent.isComposing || !draft.trim()) return;
+          if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
           add();
           setDraft('');
         }}

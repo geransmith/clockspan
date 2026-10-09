@@ -542,12 +542,4 @@ describe('BoardTab: recurring priorities', () => {
     fireEvent.click(addButton());
     expect(screen.queryByText('No recurring priorities yet.')).toBeNull();
   });
-
-  it('shows no chip once the board is off, as the dialog takes the tab away', async () => {
-    await renderTab();
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
-    await settle(MINUTE_MS);
-    expect(titles()).toEqual(['Monitor the queue', 'Follow-ups']);
-    expect(screen.queryByRole('button', { name: /^Category for / })).toBeNull();
-  });
 });

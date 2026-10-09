@@ -31,6 +31,7 @@ export function Toggle({
       <input
         type="checkbox"
         role="switch"
+        // Redundant with `checked` on a native checkbox, but oxlint's jsx-a11y rule asks for it on a switch.
         aria-checked={checked}
         aria-labelledby={`${id}-label`}
         aria-describedby={hint ? `${id}-hint` : undefined}

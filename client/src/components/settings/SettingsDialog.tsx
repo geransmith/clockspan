@@ -26,25 +26,31 @@ const TABS: { id: TabId; label: string }[] = [
 const TAB_STORAGE_KEY = 'focus:settingsTab';
 
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
-  const { settings, update, reset } = useSettings();
+  const { settings, loaded, update, reset } = useSettings();
   const { auth } = useAuth();
   const { saveState, save } = useSaveStatus();
   // Account holds password + users, which only exist with local accounts; Board, the board's
   // categories and recurring priorities, only while the board is on.
   const tabs = TABS.filter((t) => (t.id !== 'account' || auth.mode === 'local') && (t.id !== 'board' || settings.board));
   // The tab picked last time, so reopening to tweak the same thing doesn't start over. It is saved
-  // when picked, never on open, so a stored tab not offered now (Account once local accounts are
-  // gone) opens Timeclock and stays stored until another tab is picked.
-  const [tab, setTabState] = useState<TabId>(() => tabs.find((t) => t.id === readStored(TAB_STORAGE_KEY))?.id ?? 'timeclock');
-  // A tab can go while it shows (the board switched off on another device): Timeclock then.
-  const shown = tabs.some((t) => t.id === tab) ? tab : 'timeclock';
+  // when picked, never on open. A tab not offered now (Account once local accounts are gone, Board
+  // while the board is off) shows Timeclock and stays picked for when it is back.
+  const [tab, setTabState] = useState(() => readStored(TAB_STORAGE_KEY));
+  const shown = tabs.find((t) => t.id === tab)?.id ?? 'timeclock';
   const setTab = (next: TabId) => {
     writeStored(TAB_STORAGE_KEY, next);
     setTabState(next);
   };
 
+  // Escape, a press on the backdrop and Close (Safari and Firefox on macOS don't focus a pressed
+  // button) close with the focus still in a box that saves on blur, and React reports no blur for a
+  // box removed while focused: blurring it first saves what was typed.
+  const close = () => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    onClose();
+  };
   // Focus lands on the dialog, not on the Close button, where Enter would shut what was just opened.
-  const dialog = useModalDialog(onClose);
+  const dialog = useModalDialog(close);
 
   const set = (patch: SettingsPatch) => void save(() => update(patch));
   const onReset = () => {
@@ -85,7 +91,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         <header className="dialog-head">
           <h2 id="settings-title">Settings</h2>
           <SaveStatus state={saveState} />
-          <button className="btn btn-icon" onClick={onClose} aria-label="Close settings">
+          <button className="btn btn-icon" onClick={close} aria-label="Close settings">
             <X />
           </button>
         </header>
@@ -97,7 +103,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               role="tab"
               id={`tab-${t.id}`}
               aria-selected={shown === t.id}
-              aria-controls={`panel-${t.id}`}
+              aria-controls={shown === t.id ? `panel-${t.id}` : undefined}
               tabIndex={shown === t.id ? 0 : -1}
               className="tab"
               onClick={() => setTab(t.id)}
@@ -110,7 +116,9 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         {/* Keyed so switching tabs starts each panel at the top instead of mid-scroll. */}
         <div key={shown} className="dialog-body" role="tabpanel" id={`panel-${shown}`} aria-labelledby={`tab-${shown}`}>
           {saveState === 'failed' && <p className="notice notice--danger">{SAVE_STATUS.failedDetail}</p>}
-          {panel()}
+          {/* The defaults stand in until the first answer, and a list sent whole (the start buttons,
+              an alarm's warnings) would write them over the stored one. */}
+          {loaded ? panel() : <div className="sheet-loading" aria-busy="true" />}
         </div>
       </div>
     </dialog>

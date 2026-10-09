@@ -1,5 +1,6 @@
-import { useRef, useState, type CSSProperties } from 'react';
+import { useRef, type CSSProperties } from 'react';
 import { LIMITS } from '../../../../shared/api.js';
+import { useFollowedDraft } from '../../hooks/useFollowedDraft';
 import { categoryOf, COLUMN_NAMES, moveTargets, type BoardItem, type CategoryPick, type ColumnId } from '../../lib/board';
 import { BOARD } from '../../lib/copy';
 import { dayName } from '../../lib/format';
@@ -180,16 +181,10 @@ export function CategoryTag({ category }: { category: Category }) {
  * editor with the focus back on the title as Escape does; Escape puts the title back.
  */
 function TitleField({ title, onRename, onClose }: { title: string; onRename: (title: string) => void; onClose: () => void }) {
-  const [draft, setDraft] = useState(title);
-  const [seen, setSeen] = useState(title);
+  const [draft, setDraft] = useFollowedDraft(title);
   // Enter and Escape move the focus to the title, and the blur that brings runs before the editor
   // has gone: it must know the edit already ended, saved or dropped.
   const ended = useRef(false);
-  // A rename that landed, here or on another device, shows in the box.
-  if (title !== seen) {
-    setSeen(title);
-    setDraft(title);
-  }
   const commit = () => {
     if (ended.current) return;
     const next = draft.trim();

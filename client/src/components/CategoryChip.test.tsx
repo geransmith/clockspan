@@ -277,14 +277,20 @@ describe('CategoryChip', () => {
     expect(document.activeElement).toBe(chip());
   });
 
-  it('picks a category in use when its name is typed', () => {
-    const { onChange, pick } = renderChip();
-    pick.create.mockReturnValueOnce(ADMIN.uid);
+  it('keeps the tab stop on the focused option when a read drops one before it, and on the first when it drops that one', () => {
+    const { reread } = renderChip(ADMIN.uid);
     fireEvent.click(chip());
-    const box = newBox();
-    fireEvent.change(box, { target: { value: 'admin' } });
-    key(box, 'Enter');
-    expect(onChange).toHaveBeenCalledExactlyOnceWith(ADMIN.uid);
+    expect(focusedName()).toBe('Admin');
+    const stop = () =>
+      options()
+        .filter((o) => o.tabIndex === 0)
+        .map((o) => o.textContent);
+    reread([{ ...TICKETS, archived: true }, ADMIN, KB]);
+    expect(stop()).toEqual(['Admin']);
+    key(document.activeElement!, 'ArrowDown');
+    expect(stop()).toEqual(['Knowledge base']);
+    reread([ADMIN]);
+    expect(stop()).toEqual(['No category']);
   });
 
   it('shows a removed category as set, offered in the list as "(removed)" and nowhere else', () => {

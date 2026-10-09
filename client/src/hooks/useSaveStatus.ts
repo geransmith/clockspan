@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { warnSaveFailed } from '../lib/alerts';
 
 export type SaveState = 'idle' | 'saving' | 'saved' | 'failed';
+/** Runs a provider call and says in the header whether it saved. */
+export type Save = (run: () => Promise<void>) => Promise<void>;
 
 /** How long "Saved" stays up before the header goes quiet. "Not saved" stays until the next save. */
 const SAVED_MS = 2500;
@@ -15,7 +17,7 @@ const SAVED_MS = 2500;
  * after the dialog has closed raises the quiet "Change not saved" banner instead, as the other
  * stores do, since no header is left to say so.
  */
-export function useSaveStatus(): { saveState: SaveState; save: (run: () => Promise<void>) => Promise<void> } {
+export function useSaveStatus(): { saveState: SaveState; save: Save } {
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const pending = useRef(0);
   const failed = useRef(false);
@@ -31,7 +33,7 @@ export function useSaveStatus(): { saveState: SaveState; save: (run: () => Promi
     };
   }, []);
 
-  const save = async (run: () => Promise<void>) => {
+  const save: Save = async (run) => {
     if (pending.current === 0) failed.current = false;
     pending.current++;
     window.clearTimeout(timer.current);
