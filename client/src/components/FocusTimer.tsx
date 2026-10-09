@@ -55,12 +55,12 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
   const open = priorities.filter((p) => isTaskRow(p) && !p.done);
   const linkedStillOpen = linked != null && open.some((p) => p.uid === linked);
   const trimmed = label.trim();
+  // An open row whose text was typed (a chip unlinked, its row's name typed) is on the plan
+  // already, as Plan tomorrow judges it (`sameItem`): the session starts on it, as its chip would.
+  const named = open.find((p) => sameText(p.text) === sameText(trimmed));
   // New work typed in, not tied to a row: offer to put it on the plan as well, while the plan
-  // has a row for it. On a full list the tick would only earn an error at Start. Text an open
-  // row already has (a chip unlinked, its row's name typed) is on the plan already, as Plan
-  // tomorrow judges it (`sameItem`).
-  const offerAdd =
-    isToday && trimmed !== '' && !linkedStillOpen && !open.some((p) => sameText(p.text) === sameText(trimmed)) && hasRoom(priorities, settings.priorityCount);
+  // has a row for it. On a full list the tick would only earn an error at Start.
+  const offerAdd = isToday && trimmed !== '' && !linkedStillOpen && !named && hasRoom(priorities, settings.priorityCount);
 
   const toggleLink = (p: Priority) => {
     if (linked === p.uid) {
@@ -79,7 +79,7 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
     unlockAudio();
     dismissByTag('break');
     run(async () => {
-      let uid = linkedStillOpen ? linked : null;
+      let uid = linkedStillOpen ? linked : (named?.uid ?? null);
       if (offerAdd && addAsPriority) {
         // With the board off there is no chip, and a category picked before it went off isn't shown.
         uid = await addPriority(date, trimmed, pick ? category : null);
