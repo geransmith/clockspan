@@ -813,17 +813,17 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   so the board and the sheet show one list. A task goes by the first rule that applies: on
   today's list, it shows as its row (open in In progress, ticked in Done); a later day's list
   holds it (`listDate` after today), it is planned, in Next (in its place when its lane is Next,
-  else after the tasks left open, by day) and read-only but for Delete; its latest entry is
-  ticked (`listDone`), it is in Done when that day is this week (`startOfWeek`), else nowhere; it
-  has a lane, that lane; with no lane, its latest entry was left open on one of the last
-  `LOOKBACK_DAYS` days, it is in Next after Next's own tasks as "Left open from …"
-  (`BoardItem.leftOpen`; newest day first, then the one made first), worked out with nothing
-  stored; else nowhere, while its days' sheets, History and Review still show it. Done also
-  holds each recurring priority ticked on an earlier day this week, once a day, so a one-off's
-  item id is `item:<uid>` in every column and a recurring row's `row:<date>:<uid>`. Turning the
-  board on shows today's list and the tasks left open at once; nothing is swept or stored. Every
-  Move to goes through `planMove`, which says what it writes: a task's lane or place
-  (`editItem`, a PATCH, which gives a left-open task a place of its own in Next or Later),
+  else after the tasks left open, by day), with no Move to or grip, since its day's list moves
+  and ticks it; its latest entry is ticked (`listDone`), it is in Done when that day is this week
+  (`startOfWeek`), else nowhere; it has a lane, that lane; with no lane, its latest entry was
+  left open on one of the last `LOOKBACK_DAYS` days, it is in Next after Next's own tasks as
+  "Left open from …" (`BoardItem.leftOpen`; newest day first, then the one made first), worked
+  out with nothing stored; else nowhere, while its days' sheets, History and Review still show
+  it. Done also holds each recurring priority ticked on an earlier day this week, once a day, so
+  a one-off's item id is `item:<uid>` in every column and a recurring row's `row:<date>:<uid>`.
+  Turning the board on shows today's list and the tasks left open at once; nothing is swept or
+  stored. Every Move to goes through `planMove`, which says what it writes: a task's lane or
+  place (`editItem`, a PATCH, which gives a left-open task a place of its own in Next or Later),
   today's list through the day store's `editPriorities` (a pull of the task itself onto the
   list, in its category, an earlier day's routine row included, or a tick), a park of today's
   open row to Later or Next (see "Saves reach the server in the order they were made"), or
@@ -831,33 +831,36 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   place, with its title and category, and a recurring row, a planned task and a park to Later of
   a row planned later are refused. A lane given on a full board is refused before it is sent
   (`boardFull`, `addsToLanes`, `BOARD.full`), the server's 400 being the backstop. A task ticked
-  on an earlier day, off today's list, has no checkbox and is read-only, its editor saying
+  on an earlier day, off today's list, has no checkbox, its editor saying
   `BOARD.doneOn(when)`: it is unticked on that day's sheet, since the board would rewrite a past
   day, and Move to In progress puts it on today's list to work on again. A done task pulled onto
   today and taken off again (a park included) is done again, its ticked entry once more its
-  latest. The editor's title and category chip go where the task is: a row of today's list
-  changes through the row (`editRow`, the sheet's save), and any other task but a planned or
-  done-earlier one through a PATCH (`editItem`). A recurring row's title isn't edited on the
-  board: its editor shows it as text, with "Settings → Board renames it." while the item is in
-  Settings, its meta line carries the Repeats mark (`RepeatMark`), and today's has Remove from
-  today (`removeFromToday`) in place of Delete. Delete is the full delete (`deleteItem`) on any
-  other one-off but a done-earlier task. One `role="status"` slot under the capture box holds
-  the board notice: the pull nudge (`nudgeFor`, as Add priority asks), the done-item notice or a
-  refusal; what the store refuses once a move is under way (`MoveRefused`: a full list, a full
-  board, a list not loaded) is a banner. A drag (`Board.tsx`, with dnd-kit's settings in
-  `components/board/dnd.ts`) starts at an item's grip. A planned task and a recurring row have
-  none, and an item whose move is on its way can't be picked up until the move lands. Later's
-  and Next's tasks sort, a left-open one in Next included, each lane a `SortableContext` of the
-  tasks it shows (planned ones left out); In progress and Done take a drop as a whole column.
-  While dragged, the item shows in the column it is over (`withDrag`); where it lands is
-  `dropTarget` (in a lane, the place of the item it is over as the list showed it sorting, which
-  is before that item for one from another column, and the end of the lane's own tasks over a
-  left-open or planned one; the end over the column itself; null where it started), and the drop
-  goes through `planMove` as Move to does. What a screen reader hears comes from `BOARD_DRAG`,
-  `overAnnouncement` and `moveAnnouncement` (a done item's line is `DONE_STAYS.announce`).
-  dnd-kit's own focus return is off, since it would take the focus from the notice a drop
-  brings: a keyboard drag puts it back on the item's grip, and so does closing the notice (on
-  the title where the grip is hidden or missing).
+  latest. The editor's title and category chip go where the task is, and rename or file it on
+  every day: a row of today's list changes through the row (`editRow`, the sheet's save, a
+  recurring row's included), and any other task through a PATCH (`editItem`), a planned or
+  done-earlier one included, and an earlier day's recurring row while its recurring priority is
+  in Settings (one removed there shows its title as text, with no chip). An earlier day's row of
+  a recurring priority in Settings shows the item's title and category, so a rename or a category
+  shows on its ticks in Done at once, today's row's included (`editRow` lays it on the board's
+  copy, then reads the days that hold it again, `taskChanged`). A recurring row's meta line
+  carries the Repeats mark (`RepeatMark`), and today's has Remove from today (`removeFromToday`)
+  in place of Delete. Delete is the full delete (`deleteItem`) on every one-off task. One
+  `role="status"` slot under the capture box holds the board notice: the pull nudge (`nudgeFor`,
+  as Add priority asks), the done-item notice or a refusal; what the store refuses once a move is
+  under way (`MoveRefused`: a full list, a full board, a list not loaded) is a banner. A drag
+  (`Board.tsx`, with dnd-kit's settings in `components/board/dnd.ts`) starts at an item's grip. A
+  planned task and a recurring row have none, and an item whose move is on its way can't be
+  picked up until the move lands. Later's and Next's tasks sort, a left-open one in Next
+  included, each lane a `SortableContext` of the tasks it shows (planned ones left out); In
+  progress and Done take a drop as a whole column. While dragged, the item shows in the column it
+  is over (`withDrag`); where it lands is `dropTarget` (in a lane, the place of the item it is
+  over as the list showed it sorting, which is before that item for one from another column, and
+  the end of the lane's own tasks over a left-open or planned one; the end over the column itself;
+  null where it started), and the drop goes through `planMove` as Move to does. What a screen
+  reader hears comes from `BOARD_DRAG`, `overAnnouncement` and `moveAnnouncement` (a done item's
+  line is `DONE_STAYS.announce`). dnd-kit's own focus return is off, since it would take the
+  focus from the notice a drop brings: a keyboard drag puts it back on the item's grip, and so
+  does closing the notice (on the title where the grip is hidden or missing).
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started —
   one rule, no clock-in fallback. `GET /days/range` returns full days and the client does the
@@ -1384,16 +1387,18 @@ The browser pass for each surface (the logic under it is already tested):
   the next, the focus leaving closes it); a rename; a category from the row's chip, where Escape
   closes only the list and the dialog stays open; the days (the last one on stays pressed, and on
   a touch screen each day takes 44 × 44 px); Remove, which asks first (`CONFIRM.deleteRecurring`:
-  it stops repeating and its days keep it), with the focus on the next title. At 375 the rows wrap and the seven days
-  fit on one line. On the board, a recurring row's meta line has the Repeats mark, and the editor
-  of today's row, and of an earlier day's tick in Done, shows the title as text with "Settings →
-  Board renames it.". On the sheet, with a routine due today (see "Dev data is disposable" for
-  both groups): the morning notice with "Still open from …" and "Repeats today", the routines
-  ticked up to Recurring rows per day and the line once more are ticked, Add to today putting the
-  routines after the padded rows with the mark before the chip, and Not today holding after a
-  reload; a rename typed on a routine's row shows in Settings → Board and on its past days; × on
-  a routine's row takes it off that day without asking; at 1280 and 1000 the mark and a long
-  category in the chip's column, and at 375 the mark before the chip under the field.
+  it stops repeating and its days keep it), with the focus on the next title. At 375 the rows
+  wrap and the seven days fit on one line. On the board, a recurring row's meta line has the
+  Repeats mark, and a rename or a category in the editor of today's row, and of an earlier day's
+  tick in Done, shows at once on its other ticks in Done and in Settings → Board, and on the
+  routine's other days' sheets. On the sheet, with a routine due today (see "Dev data is
+  disposable" for both groups): the morning notice with "Still open from …" and "Repeats
+  today", the routines ticked up to Recurring rows per day and the line once more are ticked, Add
+  to today putting the routines after the padded rows with the mark before the chip, and Not
+  today holding after a reload; a rename typed on a routine's row shows in Settings → Board and on
+  its past days; × on a routine's row takes it off that day without asking; at 1280 and 1000 the
+  mark and a long category in the chip's column, and at 375 the mark before the chip under the
+  field.
 - **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
   Month / Quarter). With the board on (`PUT /api/settings {"board":true}`), By category in
   Review → Week and Month (solid and striped bars, No category last), in light and dark. For
@@ -1408,10 +1413,11 @@ The browser pass for each surface (the logic under it is already tested):
   capture with Enter and Shift+Enter; Move to from each column (a done item to Next shows the
   notice, and Add a new card lands in Next); a park of a task typed seconds ago; a task done on an
   earlier day has no checkbox and its editor says when it was done, and Move to In progress puts
-  it on today's list; this week's routine ticks in Done; a pull past three rows asks first;
-  Delete's confirm gives the days and the time logged, and the task is gone from the sheets of
-  its days afterwards. At 1000,
-  where the columns are narrowest: titles clamp to two lines, meta lines wrap, the Move to select
+  it on today's list; a rename, a category and Delete on a done-earlier task and on a planned one
+  (whose editor has no Move to), shown on its days' sheets afterwards; this week's routine ticks
+  in Done; a pull past three rows asks first; Delete's confirm gives the days and the time
+  logged, and the task is gone from the sheets of its days afterwards. At 1000, where the
+  columns are narrowest: titles clamp to two lines, meta lines wrap, the Move to select
   fits. At 375: the switch shows one column, the notice wraps, and with sign-in on
   (`web-local`) the sheet's five header buttons fit with the brand's name gone. Light and dark.
   The drag pass: at 1440, drag with the mouse between each pair of columns (Later and Next take

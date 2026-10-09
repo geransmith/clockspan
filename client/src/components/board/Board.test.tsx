@@ -229,17 +229,16 @@ describe('Board', () => {
     expect(unlockAudio).toHaveBeenCalledTimes(1);
   });
 
-  it('shows a task done on an earlier day read-only, with no tick or Delete, saying where to untick it, and Move to brings it back', async () => {
+  it('gives a task done on an earlier day no tick, saying where to untick it, and Move to brings it back', async () => {
     await renderBoard();
     fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
     expect(screen.queryByRole('checkbox', { name: 'Shipped done' })).toBeNull();
     openEditor('Shipped');
     const editor = column('Done').querySelector<HTMLElement>('.board-editor')!;
-    expect(within(editor).queryByRole('textbox', { name: 'Title' })).toBeNull();
-    expect(editor.querySelector('.board-editor-title')?.textContent).toBe('Shipped');
     expect(within(editor).getByText(BOARD.doneOn('yesterday'))).toBeTruthy();
-    expect(within(editor).queryByRole('button', { name: /^Category for Shipped/ })).toBeNull();
-    expect(within(editor).queryByRole('button', { name: 'Delete' })).toBeNull();
+    expect(within(editor).getByRole('textbox', { name: 'Title' })).toBeTruthy();
+    expect(within(editor).getByRole('button', { name: 'Category for Shipped: none' })).toBeTruthy();
+    expect(within(editor).getByRole('button', { name: 'Delete' })).toBeTruthy();
     expect(moveOptions()).toEqual(['Pick a column', 'Later', 'Next', 'In progress']);
     moveTo('progress');
     await settle();
@@ -249,6 +248,29 @@ describe('Board', () => {
     openEditor('Email');
     expect(screen.getByRole('checkbox', { name: 'Email done' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Delete' })).toBeTruthy();
+  });
+
+  it('renames a task done on an earlier day by a PATCH, and deletes it everywhere with a confirm counting its days and time', async () => {
+    onServer = makeBoard(...onServer.cards.map((c) => (c.uid === 'done00000001' ? { ...c, listed: 2, logged: 25 * 60 } : c)));
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal('confirm', confirm);
+    await renderBoard();
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
+    openEditor('Shipped');
+    const title = screen.getByRole('textbox', { name: 'Title' });
+    fireEvent.change(title, { target: { value: 'Shipped v2' } });
+    fireEvent.keyDown(title, { key: 'Enter' });
+    await settle();
+    expect(api.editItem).toHaveBeenCalledExactlyOnceWith('done00000001', { title: 'Shipped v2' });
+    expect(titlesIn('Done')).toEqual(['Email', 'Earlier this week · 2', 'Shipped v2', 'Tuesday row']);
+
+    openEditor('Shipped v2');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(confirm).toHaveBeenCalledWith(CONFIRM.deleteTask(2, '25m'));
+    await settle();
+    expect(api.putPriorities).not.toHaveBeenCalled();
+    expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith('done00000001');
+    expect(titlesIn('Done')).toEqual(['Email', 'Earlier this week · 1', 'Tuesday row']);
   });
 
   it("parks today's row: its task placed in Later first, then the row off today's list", async () => {
@@ -389,39 +411,65 @@ describe('Board', () => {
   /** The lines under the title in the open editor of a column: where it is renamed, or changed. */
   const editorLines = (name: string) => [...column(name).querySelectorAll('.board-editor p.muted.small')].map((p) => p.textContent);
 
-  it("shows today's recurring row's title as text, renamed in Settings → Board, and keeps its chip, its tick and Remove from today", async () => {
+  it("renames today's recurring row through the row, which renames the recurring priority and its earlier ticks at once, and keeps its chip, its tick and Remove from today", async () => {
     onServer = { ...onServer, recurring: [makeRecurring('rec000000001', 'Monitor the queue')] };
     lists[WED] = [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true }), row(2, 'Report')];
+    serveRange([makeDay(TUE, { priorities: [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true, done: true })] })]);
     await renderBoard();
     openEditor('Monitor the queue');
     const editor = column('In progress').querySelector<HTMLElement>('.board-editor')!;
-    expect(within(editor).queryByRole('textbox', { name: 'Title' })).toBeNull();
-    expect(editor.querySelector('.board-editor-title')?.textContent).toBe('Monitor the queue');
-    expect(editorLines('In progress')).toEqual([BOARD.recurringRename]);
+    expect(editorLines('In progress')).toEqual([]);
     expect(within(editor).getByRole('button', { name: 'Category for Monitor the queue: none' })).toBeTruthy();
     expect(within(editor).getByRole('button', { name: 'Remove from today' })).toBeTruthy();
     expect(screen.getByRole('checkbox', { name: 'Monitor the queue done' })).toBeTruthy();
-    // A one-off task is still renamed in place, with no line.
-    openEditor('Report');
-    expect(screen.getByRole('textbox', { name: 'Title' })).toBeTruthy();
-    expect(editorLines('In progress')).toEqual([]);
+    const title = within(editor).getByRole('textbox', { name: 'Title' });
+    fireEvent.change(title, { target: { value: 'Watch the queue' } });
+    fireEvent.keyDown(title, { key: 'Enter' });
+    await settle();
+    expect(putLists()).toEqual([{ date: WED, texts: ['Watch the queue', 'Report', ''] }]);
+    expect(api.editItem).not.toHaveBeenCalled();
+    // Tuesday's tick shows its recurring priority's new name, and the days on screen are read again.
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
+    expect(titlesIn('Done')).toEqual(['Earlier this week · 2', 'Shipped', 'Watch the queue']);
+    expect(vi.mocked(api.getRange)).toHaveBeenCalledTimes(2);
   });
 
-  it("gives today's recurring row no line once its recurring priority is removed in Settings", async () => {
+  it("renames today's recurring row through the row once its recurring priority is removed in Settings too", async () => {
     lists[WED] = [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true })];
     await renderBoard();
     openEditor('Monitor the queue');
     expect(editorLines('In progress')).toEqual([]);
-    expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull();
+    const title = screen.getByRole('textbox', { name: 'Title' });
+    fireEvent.change(title, { target: { value: 'Watch the queue' } });
+    fireEvent.keyDown(title, { key: 'Enter' });
+    await settle();
+    expect(putLists()).toEqual([{ date: WED, texts: ['Watch the queue', '', ''] }]);
+    expect(api.editItem).not.toHaveBeenCalled();
   });
 
-  it("points an earlier day's recurring row in Done at Settings → Board too, which renames it on every day", async () => {
+  it("renames an earlier day's recurring row in Done by a PATCH of its recurring priority, and shows it as text once that is removed", async () => {
     onServer = { ...onServer, recurring: [makeRecurring('rec000000009', 'Tuesday row')] };
     await renderBoard();
     fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
     openEditor('Tuesday row');
+    expect(editorLines('Done')).toEqual([]);
+    const title = screen.getByRole('textbox', { name: 'Title' });
+    fireEvent.change(title, { target: { value: 'Tuesday task' } });
+    fireEvent.keyDown(title, { key: 'Enter' });
+    await settle();
+    expect(api.editItem).toHaveBeenCalledExactlyOnceWith('rec000000009', { title: 'Tuesday task' });
+    expect(api.putPriorities).not.toHaveBeenCalled();
+    expect(onServer.recurring[0]!.title).toBe('Tuesday task');
+    expect(titlesIn('Done')).toEqual(['Email', 'Earlier this week · 2', 'Shipped', 'Tuesday task']);
+
+    cleanup();
+    onServer = { ...onServer, recurring: [] };
+    await renderBoard();
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
+    openEditor('Tuesday row');
+    expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull();
     expect(column('Done').querySelector('.board-editor-title')?.textContent).toBe('Tuesday row');
-    expect(editorLines('Done')).toEqual([BOARD.recurringRename]);
+    expect(editorLines('Done')).toEqual([]);
   });
 
   it('marks a recurring row on its meta line, and only that row', async () => {
@@ -437,14 +485,19 @@ describe('Board', () => {
     expect(metas[0]!.closest('.board-card')?.querySelector('.board-card-title')?.textContent).toBe('Monitor the queue');
   });
 
-  it('offers a planned task Delete only, with a confirm that counts its days, and deletes it everywhere', async () => {
+  it('renames a planned task by a PATCH and deletes it everywhere with a confirm that counts its days, offering no Move to', async () => {
     const confirm = vi.fn(() => true);
     vi.stubGlobal('confirm', confirm);
     await renderBoard();
     openEditor('Plan B');
     expect(screen.queryByRole('combobox', { name: 'Move to' })).toBeNull();
-    expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull();
-    expect(screen.getByText("Change it on that day's sheet.")).toBeTruthy();
+    expect(editorLines('Next')).toEqual([BOARD.plannedSheet]);
+    const title = screen.getByRole('textbox', { name: 'Title' });
+    fireEvent.change(title, { target: { value: 'Plan C' } });
+    fireEvent.blur(title);
+    await settle();
+    expect(api.editItem).toHaveBeenCalledExactlyOnceWith('planned00001', { title: 'Plan C' });
+    expect(titlesIn('Next')).toEqual(['Follow up', 'Plan C']);
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     expect(confirm).toHaveBeenCalledWith(CONFIRM.deleteTask(1, null));
     await settle();
@@ -898,10 +951,25 @@ describe('categories', () => {
     expect(screen.getByRole('button', { name: 'Category for Write a KB: Admin' })).toBe(document.activeElement);
   });
 
-  it("offers no chip for a planned task or an earlier day's recurring row", async () => {
+  it("sets a planned task's category and an earlier day's recurring row's by a PATCH, and offers none once that recurring priority is removed", async () => {
+    onServer = { ...onServer, recurring: [makeRecurring('rec000000009', 'Tuesday row')] };
     await renderBoard();
     openEditor('Plan B');
-    expect(screen.queryByRole('button', { name: /^Category for Plan B/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Category for Plan B: none' }));
+    pickOption('Admin');
+    await settle();
+    expect(api.editItem).toHaveBeenCalledExactlyOnceWith('planned00001', { categoryUid: ADMIN.uid });
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 1' }));
+    openEditor('Tuesday row');
+    fireEvent.click(screen.getByRole('button', { name: 'Category for Tuesday row: none' }));
+    pickOption('Tickets');
+    await settle();
+    expect(api.editItem).toHaveBeenLastCalledWith('rec000000009', { categoryUid: TICKETS.uid });
+    expect(screen.getByRole('button', { name: 'Category for Tuesday row: Tickets' })).toBeTruthy();
+
+    cleanup();
+    onServer = { ...onServer, recurring: [] };
+    await renderBoard();
     fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 1' }));
     openEditor('Tuesday row');
     expect(screen.queryByRole('button', { name: /^Category for Tuesday row/ })).toBeNull();

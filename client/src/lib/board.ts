@@ -16,7 +16,7 @@ import { BOARD_LIMITS, CATEGORY_COLORS, LOOKBACK_DAYS } from '../../../shared/ap
 import { addDays, startOfWeek } from '../../../shared/dates.js';
 import { hasText } from '../../../shared/priorities.js';
 import { categoryName, sameText } from '../../../shared/text.js';
-import type { Board, BoardCard, Category, CategoryColor, Day, OpenLane, Priority } from '../types';
+import type { Board, BoardCard, Category, CategoryColor, Day, OpenLane, Priority, Recurring } from '../types';
 import { BOARD, BOARD_DRAG, DONE_STAYS } from './copy';
 import { dayName } from './format';
 import type { PrioritySeed } from './plan';
@@ -44,7 +44,7 @@ export interface BoardItem {
   /** What a pulled row or a done item's new task takes. */
   categoryUid: string | null;
   recurring: boolean;
-  /** For a task off today's list that a later day's list holds (its `listDate`): shown in Next, and read-only but for Delete. */
+  /** For a task off today's list that a later day's list holds (its `listDate`): shown in Next, and moved only by that day's list. */
   planned: string | null;
   /** For a task in no lane whose latest entry, on an earlier day of the last `LOOKBACK_DAYS`, was left open: that day. Shown in Next. */
   leftOpen: string | null;
@@ -101,6 +101,8 @@ export interface ColumnsInput {
   todayRows: Priority[];
   /** This week's days before today, for the recurring priorities ticked on them. */
   earlierDays: Day[];
+  /** The recurring priorities in Settings, whose title and category an earlier day's row of one shows, as a rename shows at once. */
+  recurring: Recurring[];
   /** Items shown in another column while a move that spans two stores is on its way, by item id. */
   moving?: ReadonlyMap<string, ColumnId>;
 }
@@ -114,12 +116,13 @@ export interface ColumnsInput {
  * tasks, newest day first, then oldest made first); else nowhere. Done also holds each recurring
  * priority ticked on an earlier day this week, once a day.
  */
-export function boardColumns({ cards, today, todayRows, earlierDays, moving }: ColumnsInput): BoardColumns {
+export function boardColumns({ cards, today, todayRows, earlierDays, recurring, moving }: ColumnsInput): BoardColumns {
   const weekStart = startOfWeek(today);
   const oldest = addDays(today, -LOOKBACK_DAYS);
   const byUid = new Map(cards.map((c) => [c.uid, c]));
   const written = todayRows.filter(isTaskRow);
   const listedToday = new Set(written.map((p) => p.uid));
+  const routines = new Map(recurring.map((r) => [r.uid, r]));
   const rowItem = (row: Priority & { uid: string }, date: string, column: ColumnId): BoardItem => ({
     id: row.recurring ? `row:${date}:${row.uid}` : `item:${row.uid}`,
     uid: row.uid,
@@ -178,7 +181,12 @@ export function boardColumns({ cards, today, todayRows, earlierDays, moving }: C
   const progress = written.filter((p) => !p.done).map((p) => rowItem(p, today, 'progress'));
   const doneToday = [...written.filter((p) => p.done).map((p) => rowItem(p, today, 'done')), ...doneOffToday.map((c) => cardItem(c, 'done'))];
   for (const d of earlierDays) {
-    for (const p of d.priorities.filter(isTaskRow)) if (p.recurring && p.done) earlier.push({ day: d.date, item: rowItem(p, d.date, 'done') });
+    for (const p of d.priorities.filter(isTaskRow)) {
+      if (!p.recurring || !p.done) continue;
+      const item = rowItem(p, d.date, 'done');
+      const r = routines.get(p.uid);
+      earlier.push({ day: d.date, item: r ? { ...item, title: r.title, categoryUid: r.categoryUid } : item });
+    }
   }
   // Stable: on a day, the tasks keep the server's order ahead of the routines' rows in position order.
   const doneEarlier = earlier.sort((a, b) => b.day.localeCompare(a.day)).map((e) => e.item);
