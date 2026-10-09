@@ -303,17 +303,17 @@ export const ADD_PRIORITY_FAILED = {
  * `close` its button. `full` is also the capture box's line while it is shut at the cap.
  * `nameTaken` is Settings → Board's line under a category named like another in use. `doneOn` is
  * the editor's line on a task ticked on an earlier day, which the board doesn't untick; `when`
- * is `dayName`'s in-sentence word or date. `recurringRename` is the editor's line on a recurring
- * priority's row, whose title the board shows as text.
+ * is `dayName`'s in-sentence word or date. `plannedSheet` is the editor's line on a task a later
+ * day's list holds, in place of Move to.
  */
 export const BOARD = {
   full: `Later and Next hold ${BOARD_LIMITS.openCards} cards at most.`,
   recurringStays: (title: string) => `${title} stays on today's list. Use Remove from today.`,
-  planned: (title: string, when: string) => `${title} is planned for ${when}. Change it on that day's sheet.`,
+  planned: (title: string, when: string) => `${title} is planned for ${when}. Tick it or take it off on that day's sheet.`,
   close: 'Close',
   nameTaken: 'There is already a category with that name.',
   doneOn: (when: string) => `Done ${when}. Untick it on that day's sheet.`,
-  recurringRename: 'Settings → Board renames it.',
+  plannedSheet: "Tick it or take it off on that day's sheet.",
 } as const;
 
 /**

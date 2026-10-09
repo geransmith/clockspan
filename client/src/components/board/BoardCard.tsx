@@ -1,6 +1,7 @@
 import { useRef, useState, type CSSProperties } from 'react';
 import { LIMITS } from '../../../../shared/api.js';
 import { moveTargets, type BoardItem, type CategoryPick, type ColumnId } from '../../lib/board';
+import { BOARD } from '../../lib/copy';
 import { dayName } from '../../lib/format';
 import type { Category } from '../../types';
 import { CategoryChip } from '../CategoryChip';
@@ -22,18 +23,18 @@ interface Props {
   /** The checkbox: today's row's tick. None off today's list, where a tick belongs to its own day. */
   tick?: { checked: boolean; onChange: (checked: boolean, el: HTMLInputElement) => void };
   onMove: (to: ColumnId, el: HTMLElement) => void;
-  /** Renames it; without one the title shows as text (a task done on an earlier day; a recurring row, renamed in Settings → Board). */
+  /** Renames it; without one the title shows as text (an earlier day's row of a recurring priority removed in Settings). */
   onRename?: (title: string) => void;
   /** Its category, when the board holds it: the meta line shows its dot and name. */
   category?: Category;
   /** The category chip's data; with `onCategory`, the editor offers the chip. */
   pick: CategoryPick | null;
-  /** Sets its category; none where the board doesn't (a task done on an earlier day, an earlier day's recurring row). */
+  /** Sets its category; none where the board doesn't (an earlier day's row of a recurring priority removed in Settings). */
   onCategory?: (uid: string | null) => void;
   onDelete?: () => void;
   /** A recurring row's way off today's list. */
   onRemove?: () => void;
-  /** The line under a title that shows as text: where a recurring row is renamed, or where a task done earlier is unticked. */
+  /** The line under the title: where a task done earlier is unticked. */
   note?: string;
   /** Drag and drop; an item without it has no grip. */
   drag?: ItemDrag;
@@ -51,8 +52,7 @@ export interface ItemDrag {
  * editor), and a line with its category, the Repeats mark of a recurring row, and the day a later
  * list holds it or it was left open on. The editor renames it, sets its category, moves it to
  * another column (Move to, the way to move without dragging), and deletes it; a planned item's
- * offers Delete only, since that day's list decides it. A recurring row's title shows as text,
- * since Settings → Board renames it, and so does a task done on an earlier day.
+ * offers no Move to, since that day's list decides where it shows.
  */
 export function BoardCardView({
   item,
@@ -119,19 +119,15 @@ export function BoardCardView({
       )}
       {open && (
         <div className="board-editor" id={editorId}>
-          {onRename && !item.planned ? (
-            <TitleField title={item.title} onRename={onRename} onClose={onClose} />
-          ) : (
-            <p className="board-editor-title">{item.title}</p>
-          )}
+          {onRename ? <TitleField title={item.title} onRename={onRename} onClose={onClose} /> : <p className="board-editor-title">{item.title}</p>}
           {note && <p className="muted small">{note}</p>}
-          {pick && onCategory && !item.planned && (
+          {pick && onCategory && (
             <div className="board-editor-category">
               <CategoryChip value={item.categoryUid} onChange={onCategory} pick={pick} label={`Category for ${item.title}`} />
             </div>
           )}
           {item.planned ? (
-            <p className="muted small">Change it on that day's sheet.</p>
+            <p className="muted small">{BOARD.plannedSheet}</p>
           ) : (
             targets.length > 0 && (
               <label className="board-move">

@@ -78,7 +78,11 @@ export interface BoardStore {
   removeRecurring(uid: string): Promise<void>;
   /** A row taken off today's list from the board: a recurring priority's Remove from today. */
   removeFromToday(uid: string): Promise<void>;
-  /** A row of today's list renamed or given a category on the board, which reaches every day its task is on. */
+  /**
+   * A row of today's list renamed or given a category on the board, which reaches every day its
+   * task is on. A recurring row's shows on the board's recurring priority at once, and the held
+   * days and ranges that name it are read again once the save is in (`taskChanged`).
+   */
   editRow(uid: string, patch: Partial<Pick<Priority, 'text' | 'categoryUid'>>): Promise<void>;
   /** A move `planMove` gave, as one job. */
   move(move: StoreMove): Promise<void>;
@@ -244,9 +248,22 @@ export function BoardProvider({ children }: { children: ReactNode }) {
     [dayStore],
   );
 
+  // A recurring row's save renames or files its recurring priority on every day: the board's copy
+  // shows it at once (Settings → Board, its earlier ticks in Done), and once the save is in, the
+  // days that hold it are read again.
   const editRow = useCallback(
-    (uid: string, patch: Partial<Pick<Priority, 'text' | 'categoryUid'>>) => queue(() => setRow(uid, patch), 'board'),
-    [queue, setRow],
+    (uid: string, patch: Partial<Pick<Priority, 'text' | 'categoryUid'>>) => {
+      if (!shown(current())?.recurring.some((r) => r.uid === uid)) return queue(() => setRow(uid, patch), 'board');
+      return write(
+        (b) => withItemPatch(b, uid, { title: patch.text, categoryUid: patch.categoryUid }),
+        async () => {
+          await setRow(uid, patch);
+          dayStore.taskChanged(uid);
+          return null;
+        },
+      );
+    },
+    [current, queue, setRow, write, dayStore],
   );
 
   // Today's list without the task, once that day's save is in. A row gone already sends nothing.

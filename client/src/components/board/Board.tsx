@@ -138,6 +138,7 @@ export const Board = memo(function Board({ today }: { today: string }) {
             today,
             todayRows: day.priorities,
             earlierDays: earlierDays ?? [],
+            recurring: board.recurring,
             moving,
           })
         : null,
@@ -322,19 +323,15 @@ export const Board = memo(function Board({ today }: { today: string }) {
     // A task off today's list as the board has it: in a lane, left open, planned, or done earlier.
     const cardOnly = item.card != null && item.row == null;
     // Ticked on an earlier day: that day's sheet unticks it, since the board would rewrite a past
-    // day. Read-only here; Move to In progress puts it on today's list to work on again.
-    const doneEarlier = cardOnly && !item.planned && item.card!.listDone;
-    // A recurring row's title shows as text: Settings → Board renames the recurring priority, on
-    // every day, while it is in use there.
-    const note = doneEarlier
-      ? BOARD.doneOn(dayName(item.card!.listDate!, today, true))
-      : item.recurring && board.recurring.some((r) => r.uid === item.uid)
-        ? BOARD.recurringRename
-        : undefined;
+    // day; Move to In progress puts it on today's list to work on again.
+    const note = cardOnly && !item.planned && item.card!.listDone ? BOARD.doneOn(dayName(item.card!.listDate!, today, true)) : undefined;
     const tick: Parameters<typeof BoardCardView>[0]['tick'] = onToday
       ? { checked: item.row!.done, onChange: (checked, el) => run(item, checked ? 'done' : 'progress', null, el.getBoundingClientRect()) }
       : undefined;
-    const editable = cardOnly && !doneEarlier;
+    // Off today's list, a PATCH renames or files it on every day: any one-off task the board has,
+    // and an earlier day's recurring row while its recurring priority is in Settings (one removed
+    // there answers 404).
+    const editable = cardOnly || (item.recurring && board.recurring.some((r) => r.uid === item.uid));
     return (
       <BoardCardView
         key={item.id}
@@ -352,17 +349,11 @@ export const Board = memo(function Board({ today }: { today: string }) {
         }}
         tick={tick}
         onMove={(to, el) => run(item, to, to === 'later' || to === 'next' ? laneStart(columns, to) : null, el.getBoundingClientRect())}
-        // Today's row through the list, the sheet's write; any other task, but a planned one, by a PATCH.
-        onRename={
-          onToday && !item.recurring
-            ? (text) => report(store.editRow(item.uid, { text }))
-            : editable
-              ? (title) => report(store.editItem(item.uid, { title }))
-              : undefined
-        }
+        // Today's row through the list, the sheet's write, which renames a recurring priority too; any other by a PATCH.
+        onRename={onToday ? (text) => report(store.editRow(item.uid, { text })) : editable ? (title) => report(store.editItem(item.uid, { title })) : undefined}
         category={pick ? categoryOf(pick.categories, item.categoryUid) : undefined}
         pick={pick}
-        // As the title, a recurring row's included: the category is the task's, on every day.
+        // As the title: the category is the task's, on every day.
         onCategory={
           onToday
             ? (categoryUid) => report(store.editRow(item.uid, { categoryUid }))
@@ -371,7 +362,7 @@ export const Board = memo(function Board({ today }: { today: string }) {
               : undefined
         }
         // A recurring priority is removed in Settings → Board, so its row only comes off today's list.
-        onDelete={!item.recurring && (onToday || editable) ? () => confirmDelete(item) : undefined}
+        onDelete={item.recurring ? undefined : () => confirmDelete(item)}
         onRemove={item.recurring && onToday ? () => report(store.removeFromToday(item.uid)) : undefined}
         note={note}
         drag={drag}

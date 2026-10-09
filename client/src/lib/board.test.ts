@@ -44,7 +44,7 @@ const THU = '2026-10-01';
 const FRI = '2026-10-02';
 
 function columns(input: Partial<ColumnsInput> = {}): BoardColumns {
-  return boardColumns({ cards: [], today: WED, todayRows: [], earlierDays: [], ...input });
+  return boardColumns({ cards: [], today: WED, todayRows: [], earlierDays: [], recurring: [], ...input });
 }
 
 /** Each column as its items' ids. */
@@ -134,6 +134,14 @@ describe('boardColumns', () => {
     const c = columns({ cards, earlierDays: [monday, tuesday] });
     expect(ids(c)).toEqual({ ...EMPTY, doneEarlier: ['item:tue', `row:${TUE}:rcur00000001`, 'item:mon', `row:${MON}:rcur00000001`] });
     expect(c.doneEarlier[1]).toMatchObject({ title: 'Monitor the queue', column: 'done', card: null, date: TUE, recurring: true });
+    // Its recurring priority's title and category, while it is in Settings, so a rename shows at once.
+    const renamed = columns({
+      cards,
+      earlierDays: [monday, tuesday],
+      recurring: [makeRecurring(ROUTINE.uid, 'Watch the queue', { categoryUid: 'cafe00000004' })],
+    });
+    expect(c.doneEarlier[1]!.row).toBe(renamed.doneEarlier[1]!.row);
+    expect(renamed.doneEarlier[1]).toMatchObject({ title: 'Watch the queue', categoryUid: 'cafe00000004' });
   });
 
   it('gives a routine ticked today and on two earlier days three Done items with ids of their own', () => {
