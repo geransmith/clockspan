@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { act, cleanup, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { alert, dismissByTag, unlockAudio, type AlertOptions } from '../lib/alerts';
 import { MINUTE_MS, todayKey } from '../../../shared/dates.js';
@@ -50,10 +50,6 @@ beforeEach(() => {
     Promise.resolve({ break: makeBreak({ id: 5, date, plannedSeconds, startedAt: Date.now(), endedAt: Date.now() + plannedSeconds * 1000 }) }),
   );
   vi.mocked(api.endBreak).mockImplementation((id) => Promise.resolve({ break: makeBreak({ id, startedAt: T0, endedAt: Date.now() }) }));
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 it("starts a break on today's sheet, counts it down and announces its end once, with the Break over sound", async () => {

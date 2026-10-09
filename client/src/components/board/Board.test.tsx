@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import type { NewItem } from '../../api';
 import { addDays } from '../../../../shared/dates.js';
@@ -99,10 +99,6 @@ beforeEach(() => {
   vi.mocked(api.addItem).mockImplementation((item) => Promise.resolve((onServer = withItem(onServer, item, NOW))));
   vi.mocked(api.editItem).mockImplementation((uid, patch) => Promise.resolve((onServer = withItemPatch(onServer, uid, patch))));
   vi.mocked(api.deleteItem).mockImplementation((uid) => Promise.resolve((onServer = withoutItem(onServer, uid))));
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 describe('Board', () => {

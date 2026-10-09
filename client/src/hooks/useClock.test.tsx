@@ -1,15 +1,11 @@
 // @vitest-environment happy-dom
-import { act, cleanup, render, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { act, render, renderHook } from '@testing-library/react';
+import { beforeEach, expect, it, vi } from 'vitest';
 import { settle, setVisibility, T0 } from '../test/hooks';
 import { ClockProvider, useClock } from './useClock';
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 function Reader() {

@@ -1,9 +1,7 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { NumberField } from './controls';
-
-afterEach(cleanup);
 
 function renderField() {
   const onCommit = vi.fn();

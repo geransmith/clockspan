@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { expect, it, vi } from 'vitest';
 import { useModalDialog } from './useModalDialog';
 
 function Dialog({ onClose }: { onClose: () => void }) {
@@ -11,8 +11,6 @@ function Dialog({ onClose }: { onClose: () => void }) {
     </dialog>
   );
 }
-
-afterEach(cleanup);
 
 it('opens as a modal with focus on itself, and locks the page scroll until unmounted', () => {
   const { unmount } = render(<Dialog onClose={vi.fn()} />);

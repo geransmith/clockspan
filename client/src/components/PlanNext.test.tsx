@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HOUR_MS } from '../../../shared/dates.js';
 import * as api from '../api';
 import { playSound, unlockAudio } from '../lib/alerts';
@@ -67,10 +67,6 @@ beforeEach(() => {
   vi.useFakeTimers({ now: T0 + 8 * HOUR_MS });
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ sounds: { ...makeSettings().sounds, planDone: 'triad' } }));
   vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve({ priorities }));
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 describe('PlanNext', () => {

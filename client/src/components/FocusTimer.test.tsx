@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { useDay } from '../hooks/useDay';
 import { dismissByTag, unlockAudio } from '../lib/alerts';
@@ -76,10 +76,6 @@ beforeEach(() => {
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
   vi.mocked(api.getRunning).mockResolvedValue({ session: null });
   vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve({ priorities }));
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 describe('FocusTimer', () => {

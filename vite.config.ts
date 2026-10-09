@@ -42,17 +42,20 @@ export default defineConfig({
     // under an agent, where Vitest picks its minimal reporter, which hides passing tests' output
     // whatever `silent` says.
     silent: 'passed-only',
-    // A workaround for a happy-dom recursion; the file says why.
+    // The teardown after every test (RTL's cleanup, real timers) and a workaround for a happy-dom
+    // recursion; the file says why.
     setupFiles: ['client/src/test/setup.ts'],
     // The CI runner is UTC, which has no DST, so a DST case would prove nothing there. Los
     // Angeles is the owner's zone and the one the meal rules follow.
     env: { TZ: 'America/Los_Angeles' },
     // Before each test: every mock's calls and queued answers go, spies come off what they
-    // wrapped, and stubbed globals are put back, so no test file writes its own teardown for
-    // them and a failing test can't leave a spy on console for the rest of its file.
+    // wrapped, and stubbed globals and env vars (a test's TZ) are put back, so no test file writes
+    // its own teardown for them and a failing test can't leave a spy on console for the rest of
+    // its file.
     mockReset: true,
     restoreMocks: true,
     unstubGlobals: true,
+    unstubEnvs: true,
     // `npm run test:coverage` is the gate: every file below must be fully covered on all four
     // metrics or the run fails. The set is what the suite is meant to prove: the server, shared,
     // the client's API calls, the pure client libs and the hooks (their tests run under

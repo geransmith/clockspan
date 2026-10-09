@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { playSound } from '../lib/alerts';
 import { BURST_MS } from '../lib/celebrate';
@@ -15,10 +15,6 @@ vi.mock('../lib/alerts');
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 describe('useBecameTrue', () => {

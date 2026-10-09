@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { act, cleanup, renderHook } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { useMediaQuery } from './useMediaQuery';
 
 /** A stand-in for `matchMedia`: each query answers from `matching`, and `change()` tells the listeners it moved. */
@@ -23,8 +23,6 @@ function stubMatchMedia(matching: Set<string>) {
     listening: (query: string) => listeners.get(query)?.size ?? 0,
   };
 }
-
-afterEach(cleanup);
 
 describe('useMediaQuery', () => {
   it('answers the query and follows it as it changes', () => {

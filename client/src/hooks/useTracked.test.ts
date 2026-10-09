@@ -1,9 +1,7 @@
 // @vitest-environment happy-dom
-import { act, cleanup, renderHook } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 import { useTracked } from './useTracked';
-
-afterEach(cleanup);
 
 describe('useTracked', () => {
   it('lets a callback read every change at once, before the render that shows it', () => {

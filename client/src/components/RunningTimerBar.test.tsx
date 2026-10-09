@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { UNTITLED_SESSION } from '../lib/copy';
 import { formatCountdown } from '../lib/format';
@@ -40,10 +40,6 @@ beforeEach(() => {
   vi.useFakeTimers({ now: T0 + 5 * MINUTE_MS });
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
   vi.mocked(api.getDay).mockResolvedValue(makeDay());
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 describe('RunningTimerBar', () => {

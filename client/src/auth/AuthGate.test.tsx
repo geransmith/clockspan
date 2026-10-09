@@ -82,7 +82,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   dismissByTag('sign-out-failed');
-  vi.useRealTimers();
 });
 
 describe('AuthGate', () => {

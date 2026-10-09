@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { cleanup, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { renderHook } from '@testing-library/react';
+import { beforeEach, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { makeSettings, settle, T0 } from '../test/hooks';
 import { SettingsProvider } from './useSettings';
@@ -10,10 +10,6 @@ vi.mock('../api');
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 it('follows the time format setting', async () => {

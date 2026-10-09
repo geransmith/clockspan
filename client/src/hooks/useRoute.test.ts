@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { T0, TODAY } from '../test/hooks';
 import { useRoute, VIEWS } from './useRoute';
 
@@ -10,10 +10,6 @@ const render = () => renderHook(() => useRoute());
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
   visit('/');
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 describe('reading the URL', () => {

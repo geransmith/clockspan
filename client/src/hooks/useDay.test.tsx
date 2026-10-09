@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { act, cleanup, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { dismissByTag, warnQuietly } from '../lib/alerts';
 import { ADD_PRIORITY_FAILED, SAVE_FAILED } from '../lib/copy';
@@ -54,10 +54,6 @@ const echoPriorities = (_date: string, priorities: Priority[]) => Promise.resolv
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 describe('load', () => {

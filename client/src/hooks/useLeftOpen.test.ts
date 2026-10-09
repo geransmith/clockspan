@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { act, cleanup, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { beforeEach, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { deferred, makeDay, makePriority, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
 import type { Day } from '../types';
@@ -21,10 +21,6 @@ beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
   localStorage.clear();
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 it("offers the last planned day's unticked rows from the two weeks before today", async () => {

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { begin, deferred, settle, setVisibility, T0 } from '../test/hooks';
 import { useRefreshLoop } from './useRefreshLoop';
@@ -8,10 +8,6 @@ import { useRefreshLoop } from './useRefreshLoop';
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
   setVisibility('visible');
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 describe('useRefreshLoop', () => {

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { cleanup, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { renderHook } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { alert, dismissByTag } from '../lib/alerts';
 import { computeTimeclock, type TimeclockResult } from '../lib/timeclock';
 import { MINUTE_MS } from '../../../shared/dates.js';
@@ -36,9 +36,6 @@ const overDay = tcAt(T0, T0 - 515 * MINUTE_MS, T0 - 300 * MINUTE_MS, T0 - 270 * 
 
 beforeEach(() => {
   localStorage.clear();
-});
-afterEach(() => {
-  cleanup();
 });
 
 describe('firing', () => {

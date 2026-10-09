@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { cleanup, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { renderHook } from '@testing-library/react';
+import { beforeEach, expect, it, vi } from 'vitest';
 import { settle, T0 } from '../test/hooks';
 import { useSettled } from './useSettled';
 
@@ -8,10 +8,6 @@ const render = () => renderHook((p: { value: number; ms: number }) => useSettled
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 it('passes a value on once it has stopped changing', async () => {

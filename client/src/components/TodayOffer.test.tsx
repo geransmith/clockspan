@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { expect, it, vi } from 'vitest';
 import { LEFT_OPEN, TODAY_OFFER } from '../lib/copy';
 import type { PrioritySeed } from '../lib/plan';
 import { makeRecurring } from '../test/fixtures';
@@ -14,8 +14,6 @@ const INVOICES: PrioritySeed = { uid: 'invoices0001', text: 'Invoices', category
 const EMAIL: PrioritySeed = { uid: 'email0000001', text: 'Email', categoryUid: null };
 
 const box = (name: string) => (screen.getByRole('checkbox', { name }) as HTMLInputElement).checked;
-
-afterEach(cleanup);
 
 it('keeps a box pressed by its item while the groups change around it, and starts an item that comes later as it should', () => {
   const onAdd = vi.fn<(leftovers: PrioritySeed[], recurring: Recurring[]) => void>();

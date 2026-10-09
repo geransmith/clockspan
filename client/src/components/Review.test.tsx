@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { atTime, MINUTE_MS } from '../../../shared/dates.js';
 import * as api from '../api';
 import { LOAD_FAILED } from '../lib/copy';
@@ -107,10 +107,6 @@ beforeEach(() => {
   vi.useFakeTimers({ now: NOW });
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
   vi.mocked(api.getRange).mockResolvedValue({ days: [] });
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 describe('Review', () => {

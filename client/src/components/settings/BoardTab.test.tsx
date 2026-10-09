@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import * as api from '../../api';
 import { BOARD_LIMITS, LIMITS } from '../../../../shared/api.js';
 import { warnQuietly } from '../../lib/alerts';
@@ -48,8 +48,6 @@ const swatch = (category: string, colour: string) =>
 
 beforeEach(() => {
   vi.useFakeTimers();
-  save.mockClear();
-  set.mockClear();
   notSaved = 0;
   onServer = { ...makeBoard(), categories: [TICKETS, ADMIN, OLD] };
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ board: true }));
@@ -60,11 +58,6 @@ beforeEach(() => {
   vi.mocked(api.addItem).mockImplementation((item) => Promise.resolve((onServer = withItem(onServer, item, 0))));
   vi.mocked(api.editItem).mockImplementation((uid, patch) => Promise.resolve((onServer = withItemPatch(onServer, uid, patch))));
   vi.mocked(api.deleteItem).mockImplementation((uid) => Promise.resolve((onServer = withoutItem(onServer, uid))));
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
-  vi.unstubAllGlobals();
 });
 
 describe('BoardTab', () => {

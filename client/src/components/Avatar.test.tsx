@@ -1,9 +1,7 @@
 // @vitest-environment happy-dom
-import { cleanup, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { render } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 import { Avatar } from './Avatar';
-
-afterEach(cleanup);
 
 describe('Avatar', () => {
   it('shows the first character of the name in capitals, an emoji whole', () => {

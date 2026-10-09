@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
 import { unlockAudio } from '../lib/alerts';
@@ -49,10 +49,6 @@ const focus = (el: HTMLElement) => act(() => el.focus());
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
   vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 describe('Timeclock', () => {

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { act, cleanup, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { CARD_IDS, DEFAULT_SETTINGS } from '../../../shared/settings.js';
@@ -14,10 +14,6 @@ const render = () => renderHook(() => useSettings(), { wrapper: SettingsProvider
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 describe('loading', () => {

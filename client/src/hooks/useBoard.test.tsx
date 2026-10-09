@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { act, cleanup, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { BOARD_LIMITS } from '../../../shared/api.js';
 import { MINUTE_MS } from '../../../shared/dates.js';
@@ -76,10 +76,6 @@ beforeEach(() => {
   vi.mocked(api.addCategory).mockImplementation((c) => Promise.resolve((onServer = withCategory(onServer, c))));
   vi.mocked(api.patchCategory).mockImplementation((uid, patch) => Promise.resolve((onServer = withCategoryPatch(onServer, uid, patch))));
   vi.mocked(api.deleteCategory).mockImplementation((uid) => Promise.resolve((onServer = withoutCategory(onServer, uid))));
-});
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
 });
 
 describe('reading the board', () => {
