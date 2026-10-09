@@ -3,7 +3,7 @@ import { addDays, isWeekend } from '../../../shared/dates.js';
 import { hasText, isFree } from '../../../shared/priorities.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { sameText } from '../../../shared/text.js';
-import { newUid } from './priorities';
+import { newTaskRow } from './priorities';
 
 /**
  * The day a plan made on `date` is for: the next one, or with weekends off the calendar (not
@@ -37,6 +37,15 @@ export function sameItem(row: Pick<Priority, 'uid' | 'text'>, seed: PrioritySeed
 }
 
 /**
+ * The row `seed` puts on a list, added `now`: its own task, or a uid of its own for one typed new,
+ * with its source row's counts until the save answers.
+ */
+export function seedRow(seed: PrioritySeed, now: number): Omit<Priority, 'position'> {
+  const row = newTaskRow(seed.text, seed.categoryUid, now);
+  return { ...row, uid: seed.uid ?? row.uid, listed: seed.listed ?? 0, earlier: seed.earlier ?? 0, logged: seed.logged ?? 0 };
+}
+
+/**
  * That day's list with `seeds` added after what it already holds. A seed is skipped when a row
  * there, or an earlier seed's, stands for the same task (`sameItem`). Only free rows are dropped.
  * A carried seed puts its own task on the list, so the time logged on it counts on the new day
@@ -50,19 +59,7 @@ export function planNext(existing: Priority[], seeds: PrioritySeed[], now = Date
   for (const seed of seeds) {
     const text = seed.text.trim();
     if (!text || rows.length >= MAX_PRIORITIES || rows.some((p) => sameItem(p, seed))) continue;
-    rows.push({
-      position: 0,
-      text,
-      done: false,
-      uid: seed.uid ?? newUid(),
-      addedAt: now,
-      categoryUid: seed.categoryUid,
-      recurring: false,
-      archived: false,
-      listed: seed.listed ?? 0,
-      earlier: seed.earlier ?? 0,
-      logged: seed.logged ?? 0,
-    });
+    rows.push({ ...seedRow({ ...seed, text }, now), position: 0 });
     added++;
   }
   return { rows: rows.map((p, i) => ({ ...p, position: i + 1 })), added };

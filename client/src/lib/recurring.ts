@@ -6,8 +6,8 @@
  */
 import type { Priority, Recurring } from '../types';
 import { isoWeekday } from '../../../shared/dates.js';
-import { planNext, type PrioritySeed } from './plan';
-import { padPriorities, placePriority } from './priorities';
+import { seedRow, type PrioritySeed } from './plan';
+import { newTaskRow, padPriorities, placePriority } from './priorities';
 
 /** The items no row on `rows` is yet, in the order given: a row is its task's whatever its draft text. */
 export function notOnList(items: Recurring[], rows: Priority[]): Recurring[] {
@@ -46,30 +46,19 @@ export function offerPicks(due: Recurring[], onToday: Priority[], perDay: number
  * the task: it renames a task only where the row's text differs from the list it was built on.
  */
 export function recurringRow(item: Recurring, now: number): Omit<Priority, 'position'> {
-  return {
-    text: item.title,
-    done: false,
-    uid: item.uid,
-    addedAt: now,
-    categoryUid: item.categoryUid,
-    recurring: true,
-    archived: false,
-    listed: 0,
-    earlier: 0,
-    logged: 0,
-  };
+  return { ...newTaskRow(item.title, item.categoryUid, now), uid: item.uid, recurring: true };
 }
 
 /**
- * The list after Add to today: the leftovers through `planNext` (then padded to `count`), then
- * each routine through `placePriority` with `end`, after every row of the padded list, so the
- * free base rows stay for one-offs. Either skips a task a row of the list is already. A routine
- * that doesn't fit (a full list) is skipped. With no leftovers picked `planNext` is skipped, since
- * it drops the free rows: a free row between written ones stays where it is, and nothing is
- * renumbered.
+ * The list after Add to today: each leftover through `placePriority` (`seedRow`), in the first
+ * free row of the list padded to `count`, then each routine through `placePriority` with `end`,
+ * after every row of the padded list, so the free base rows stay for one-offs. Nothing written
+ * moves, so routines another device added after the free rows stay there. Either skips a task a
+ * row of the list is already, and one that doesn't fit (a full list).
  */
 export function acceptOffer(rows: Priority[], count: number, leftovers: PrioritySeed[], recurring: Recurring[], now: number): Priority[] {
-  let list = padPriorities(leftovers.length ? planNext(rows, leftovers, now).rows : rows, count);
+  let list = padPriorities(rows, count);
+  for (const seed of leftovers) list = placePriority(list, count, seedRow(seed, now)) ?? list;
   for (const item of recurring) list = placePriority(list, count, recurringRow(item, now), { end: true }) ?? list;
   return list;
 }

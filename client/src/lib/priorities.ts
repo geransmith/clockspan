@@ -21,8 +21,10 @@ export function emptyRow(position: number): Priority {
 }
 
 /**
- * The row for a task typed new, in `categoryUid`: a uid of its own, added `now`, on no other day
- * and with nothing logged on it. The save that first names the uid makes the task.
+ * A row new to a day's list, in `categoryUid`: added `now`, unticked, a one-off, on no other day
+ * and with nothing logged on it, under a uid of its own (the save that first names it makes the
+ * task). A row placed from elsewhere (`seedRow`, `recurringRow`) starts from it and sets its task
+ * and the counts its source gave.
  */
 export function newTaskRow(text: string, categoryUid: string | null, now: number): Omit<Priority, 'position'> & { uid: string } {
   return { text, done: false, uid: newUid(), addedAt: now, categoryUid, recurring: false, archived: false, listed: 0, earlier: 0, logged: 0 };
