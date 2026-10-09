@@ -4,12 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import type { NewItem } from '../../api';
 import { BOARD_LIMITS, LOOKBACK_DAYS } from '../../../../shared/api.js';
-import { addDays } from '../../../../shared/dates.js';
+import { addDays, HOUR_MS } from '../../../../shared/dates.js';
 import { unlockAudio, warnQuietly, warnSaveFailed } from '../../lib/alerts';
 import { withCategory, withItem, withItemPatch, withoutItem } from '../../lib/board';
 import { BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, PRIORITY_WARNINGS, WARNING_ACTIONS } from '../../lib/copy';
 import { USER_KEYS } from '../../lib/storage';
 import {
+  completedSession,
   deferred,
   makeBoard,
   makeCard,
@@ -501,8 +502,13 @@ describe('Board', () => {
     expect(titlesIn('Next')).toEqual(['Follow up']);
   });
 
-  it("deletes today's task with a confirm counting its days and time from its row, its row off first, and nothing when turned down", async () => {
-    lists[WED]![0] = { ...lists[WED]![0]!, listed: 3, logged: 80 * 60 };
+  it("deletes today's task with a confirm counting its days and time from its row and today's log, its row off first, and nothing when turned down", async () => {
+    lists[WED]![0] = { ...lists[WED]![0]!, listed: 3, logged: 60 * 60 };
+    const getDay = vi.mocked(api.getDay).getMockImplementation()!;
+    vi.mocked(api.getDay).mockImplementation(async (date) => ({
+      ...(await getDay(date)),
+      sessions: date === WED ? [completedSession(1, NOW - HOUR_MS, 20 * 60, { priorityUid: REPORT })] : [],
+    }));
     const confirm = vi.fn(() => false);
     vi.stubGlobal('confirm', confirm);
     await renderBoard();

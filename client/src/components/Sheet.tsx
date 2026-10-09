@@ -52,12 +52,12 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
   const week = weekDays ? weekHours(weekDays, settings, today, now) : null;
   const focus = focusOf(day?.sessions ?? []);
   // Today's list with no one-off written yet (a routine on it is no plan) offers what the last
-  // planned day left unticked. With the board on, a task the board holds in Later or as done stays
-  // there, and the rest come back in the morning notice beside the recurring priorities due today
+  // planned day left unticked, in the morning notice. With the board on, a task the board holds in
+  // Later or as done stays there, and the rest come back beside the recurring priorities due today
   // (those the server has confirmed); until the board has loaded, nothing is offered.
   const { leftOpen, dismiss: dismissLeftOpen } = useLeftOpen(today, isToday && day != null && !day.priorities.some(isOneOff));
   const { answered, answer: answerRecurring } = useRecurringAnswered(today);
-  const { board, recurring, on: boardOn } = useBoardState();
+  const { board, confirmedRecurring, on: boardOn } = useBoardState();
   const boardStore = useBoardStore();
   // The category chip on the cards that offer one; null while the board is off or not read yet, and then no chip shows.
   const pick = useCategoryPick();
@@ -147,22 +147,13 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
             priorities={day.priorities}
             sessions={day.sessions}
             pick={pick}
-            onChange={(p, base) => void store.setPriorities(date, p, base)}
+            onChange={(p, base) => store.setPriorities(date, p, base)}
             onDeleteTask={(uid) => boardStore.deleteItem(uid)}
-            leftOpen={
-              !boardOn && leftOpen && leftovers?.length
-                ? {
-                    from: dayName(leftOpen.date, today, true),
-                    rows: leftovers,
-                    dismiss: dismissLeftOpen,
-                  }
-                : null
-            }
             offer={
-              boardOn && recurring && isToday
+              isToday
                 ? {
                     leftovers: leftOpen && leftovers?.length ? { from: dayName(leftOpen.date, today, true), rows: leftovers } : null,
-                    recurring: dueRecurring(recurring, today, day.priorities, answered),
+                    recurring: boardOn && confirmedRecurring ? dueRecurring(confirmedRecurring, today, day.priorities, answered) : [],
                     answer: (shownRecurring, leftoversShown) => {
                       answerRecurring(shownRecurring);
                       if (leftoversShown) dismissLeftOpen();

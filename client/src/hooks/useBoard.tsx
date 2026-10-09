@@ -36,7 +36,7 @@ export interface BoardState {
    * confirmed, so never one whose create is still on its way, which a list save would make a
    * one-off. Undefined until the first read.
    */
-  recurring: Recurring[] | undefined;
+  confirmedRecurring: Recurring[] | undefined;
   /** The first read failed (Try again is `load`); a later failed read keeps the board shown. */
   failed: boolean;
   /** The settings have loaded with the board switched on. While off, nothing is read and no answer is kept. */
@@ -365,11 +365,11 @@ export function BoardProvider({ children }: { children: ReactNode }) {
   );
 
   const board = useMemo(() => shown(tracked), [tracked]);
-  const recurring = useMemo(() => {
+  const confirmedRecurring = useMemo(() => {
     const confirmed = new Set(tracked.confirmed?.recurring.map((r) => r.uid));
     return board?.recurring.filter((r) => confirmed.has(r.uid));
   }, [board, tracked.confirmed]);
-  const state = useMemo(() => ({ board, recurring, failed, on }), [board, recurring, failed, on]);
+  const state = useMemo(() => ({ board, confirmedRecurring, failed, on }), [board, confirmedRecurring, failed, on]);
   const store = useMemo(
     () => ({ load, addItem, editItem, deleteItem, removeRecurring, removeFromToday, editRow, move, addCategory, editCategory, removeCategory }),
     [load, addItem, editItem, deleteItem, removeRecurring, removeFromToday, editRow, move, addCategory, editCategory, removeCategory],

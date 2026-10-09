@@ -6,9 +6,6 @@ import { PRIORITY_WARNINGS } from './copy';
 /** A row with text that isn't ticked: what the planner, the left-open offer and the timer's chips work from. */
 export const isOpen = (p: Priority) => hasText(p) && !p.done;
 
-/** A recurring priority's row: it stays on today's list and never goes in Later or Next. */
-export const isRecurring = (p: Pick<Priority, 'recurring'>) => p.recurring;
-
 /**
  * A one-off written on a list: a row with text that isn't a recurring priority's. A list with
  * none has no plan yet, so the left-open offer shows on it, and only these count toward the nudge.
@@ -45,29 +42,20 @@ export function padPriorities(rows: Priority[], count: number): Priority[] {
   return out;
 }
 
-/** Adding past this many rows gets a gentle warning first. */
-export function warnThreshold(count: number): number {
-  return Math.max(3, count);
-}
-
 /** Which pool the warning comes from: nothing ticked yet, some ticked, or all of them. */
 export type WarningKind = 'fresh' | 'progress' | 'complete';
 
-export function warningKind(done: number, total: number): WarningKind {
-  if (done <= 0) return 'fresh';
-  return done >= total ? 'complete' : 'progress';
-}
-
 /**
  * Whether adding a row to `rows` asks first, and with which kind of warning: null while the
- * one-off rows are fewer than `warnThreshold(count)`. The routines don't bring the warning on
- * sooner, since they have their own number a day (`recurringPerDay`). The kind still counts every
- * row with text, so the warning starts from all the work ticked.
+ * one-off rows are fewer than Rows per day (`count`), and never fewer than three. The routines
+ * don't bring the warning on sooner, since they have their own number a day (`recurringPerDay`).
+ * The kind still counts every row with text, so the warning starts from all the work ticked.
  */
 export function nudgeFor(rows: Priority[], count: number): WarningKind | null {
-  if (rows.filter(isOneOff).length < warnThreshold(count)) return null;
+  if (rows.filter(isOneOff).length < Math.max(3, count)) return null;
   const written = rows.filter(hasText);
-  return warningKind(written.filter((p) => p.done).length, written.length);
+  const done = written.filter((p) => p.done).length;
+  return done === 0 ? 'fresh' : done === written.length ? 'complete' : 'progress';
 }
 
 /** A random warning for the kind, never the same one twice in a row. */
@@ -141,16 +129,21 @@ export interface LeftOpen {
 }
 
 /**
- * The latest day with a one-off priority written, and its one-off rows that were never ticked. A
- * routine comes back on its own weekdays, so its rows are never carried, and a day that held only
- * routines isn't a plan. An archived one-off (a deleted card that `server/migrations/oneItem.ts`
- * kept for its rows) is never offered. Null when no day had a plan, or the last one has nothing
- * left to carry.
+ * A row carried to another day (the left-open offer, Plan tomorrow): open, and neither a routine,
+ * which comes back on its own weekdays, nor archived (a deleted card that
+ * `server/migrations/oneItem.ts` kept for its rows), which would otherwise be carried every day.
+ */
+export const carriesOver = (p: Priority) => isOpen(p) && !p.recurring && !p.archived;
+
+/**
+ * The latest day with a one-off priority written, and its rows that carry over (`carriesOver`). A
+ * day that held only routines isn't a plan. Null when no day had a plan, or the last one has
+ * nothing left to carry.
  */
 export function leftOpen(days: Day[]): LeftOpen | null {
   let last: Day | null = null;
   for (const d of days) if (d.priorities.some(isOneOff) && (!last || d.date > last.date)) last = d;
   if (!last) return null;
-  const rows = last.priorities.filter((p) => isOpen(p) && isOneOff(p) && !p.archived);
+  const rows = last.priorities.filter(carriesOver);
   return rows.length ? { date: last.date, rows } : null;
 }

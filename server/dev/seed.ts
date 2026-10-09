@@ -531,23 +531,32 @@ function buildToday(today: string, now: number, running: boolean, last: Pick<Day
 
 /**
  * Each entry with what the server works out for it from every seeded day: how many days list its
- * task, how many of those are before its own, and the focus completed on the task.
+ * task, how many of those are before its own, and the focus completed on the task on other days.
  */
 function withCounts(days: DayDraft[]): DayDraft[] {
   const dates = new Map<string, string[]>();
+  // Each task's focus, in all and by day (`uid date`): a row's `logged` is the other days'.
   const logged = new Map<string, number>();
+  const add = (key: string, seconds: number) => logged.set(key, (logged.get(key) ?? 0) + seconds);
   for (const day of days) {
     for (const p of day.priorities) dates.set(p.uid, [...(dates.get(p.uid) ?? []), day.date]);
     for (const s of day.sessions) {
       if (s.status !== 'completed' || s.priorityUid == null) continue;
-      logged.set(s.priorityUid, (logged.get(s.priorityUid) ?? 0) + (s.endedAt! - s.startedAt) / 1000 - s.pausedSeconds);
+      const seconds = (s.endedAt! - s.startedAt) / 1000 - s.pausedSeconds;
+      add(s.priorityUid, seconds);
+      add(`${s.priorityUid} ${day.date}`, seconds);
     }
   }
   return days.map((day) => ({
     ...day,
     priorities: day.priorities.map((p) => {
       const on = dates.get(p.uid)!;
-      return { ...p, listed: on.length, earlier: on.filter((d) => d < day.date).length, logged: logged.get(p.uid) ?? 0 };
+      return {
+        ...p,
+        listed: on.length,
+        earlier: on.filter((d) => d < day.date).length,
+        logged: (logged.get(p.uid) ?? 0) - (logged.get(`${p.uid} ${day.date}`) ?? 0),
+      };
     }),
   }));
 }

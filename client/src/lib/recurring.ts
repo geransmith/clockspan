@@ -8,7 +8,7 @@
 import type { Priority, Recurring } from '../types';
 import { isoWeekday } from '../../../shared/dates.js';
 import { planNext, type PrioritySeed } from './plan';
-import { isRecurring, padPriorities, placePriority } from './priorities';
+import { padPriorities, placePriority } from './priorities';
 
 /** The items no row on `rows` is yet, in the order given: a row is its task's whatever its draft text. */
 export function notOnList(items: Recurring[], rows: Priority[]): Recurring[] {
@@ -29,7 +29,7 @@ export function dueRecurring(items: Recurring[], date: string, rows: Priority[],
 
 /** The recurring priorities' rows on a list. */
 export function recurringCount(rows: Priority[]): number {
-  return rows.filter(isRecurring).length;
+  return rows.filter((p) => p.recurring).length;
 }
 
 /**

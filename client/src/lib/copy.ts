@@ -64,7 +64,7 @@ export const CELEBRATION_PHRASES = [
 
 /**
  * Shown when adding a priority past the threshold, by how much of the list is ticked
- * (`warningKind`): none, some, all. One is picked per attempt; counts live in the notice header,
+ * (`nudgeFor`): none, some, all. One is picked per attempt; counts live in the notice header,
  * not here.
  */
 export const PRIORITY_WARNINGS = {

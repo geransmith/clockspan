@@ -91,9 +91,9 @@ interface EntryRow {
 const ENTRIES = `SELECT x.day_id, x.position, x.done, x.added_at, x.item_id, i.uid, i.title, i.category_uid, i.weekdays, i.archived_at, d.date
   FROM priorities x JOIN items i ON i.id = x.item_id JOIN days d ON d.id = x.day_id`;
 
-/** An entry as the API sends it, with its task's counts (`itemCounts`). */
+/** An entry as the API sends it, with its task's counts (`itemCounts`): its focus on other days, since the day's own log is sent beside it. */
 function priorityJson(r: EntryRow, counts: ReadonlyMap<number, ItemCounts>): Priority {
-  const { dates, logged } = counts.get(r.item_id)!;
+  const { dates, logged, loggedOn } = counts.get(r.item_id)!;
   return {
     position: r.position,
     text: r.title,
@@ -105,22 +105,18 @@ function priorityJson(r: EntryRow, counts: ReadonlyMap<number, ItemCounts>): Pri
     archived: r.archived_at != null,
     listed: dates.length,
     earlier: dates.filter((d) => d < r.date).length,
-    logged,
+    logged: logged - (loggedOn.get(r.date) ?? 0),
   };
 }
 
-/** A list of entries as the API sends them, each task's counts read once for all of them. */
-function prioritiesJson(db: DB, rows: EntryRow[]): Priority[] {
+/** A day's list as stored, in order, each task's counts read once for all of them. */
+function storedPriorities(db: DB, dayId: number): Priority[] {
+  const rows = db.prepare(`${ENTRIES} WHERE x.day_id = ? ORDER BY x.position`).all(dayId) as EntryRow[];
   const counts = itemCounts(
     db,
     rows.map((r) => r.item_id),
   );
   return rows.map((r) => priorityJson(r, counts));
-}
-
-/** A day's list as stored, in order. */
-function storedPriorities(db: DB, dayId: number): Priority[] {
-  return prioritiesJson(db, db.prepare(`${ENTRIES} WHERE x.day_id = ? ORDER BY x.position`).all(dayId) as EntryRow[]);
 }
 
 /** What a list of priority rows is called in the errors: the list sent, or the base it was built on. */

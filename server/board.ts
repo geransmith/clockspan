@@ -129,11 +129,13 @@ export interface ItemCounts {
   dates: string[];
   /** Seconds of its completed sessions, every day. */
   logged: number;
+  /** The same seconds by the date of the day each session is on. */
+  loggedOn: Map<string, number>;
 }
 
 /** Each task's counts, by its id: one query for the entries and one for the sessions, however many tasks. */
 export function itemCounts(db: DB, ids: readonly number[]): Map<number, ItemCounts> {
-  const counts = new Map(ids.map((id) => [id, { dates: [] as string[], logged: 0 }]));
+  const counts = new Map(ids.map((id): [number, ItemCounts] => [id, { dates: [], logged: 0, loggedOn: new Map() }]));
   const list = inList([...counts.keys()]);
   const entries = db
     .prepare(`SELECT p.item_id, d.date FROM priorities p JOIN days d ON d.id = p.day_id WHERE p.item_id IN (SELECT value FROM json_each(?))`)
@@ -141,13 +143,17 @@ export function itemCounts(db: DB, ids: readonly number[]): Map<number, ItemCoun
   for (const e of entries) counts.get(e.item_id)!.dates.push(e.date);
   const sessions = db
     .prepare(
-      `SELECT item_id, started_at, ended_at, paused_seconds FROM sessions
-       WHERE status = 'completed' AND item_id IS NOT NULL AND item_id IN (SELECT value FROM json_each(?))`,
+      `SELECT s.item_id, s.started_at, s.ended_at, s.paused_seconds, d.date FROM sessions s JOIN days d ON d.id = s.day_id
+       WHERE s.status = 'completed' AND s.item_id IS NOT NULL AND s.item_id IN (SELECT value FROM json_each(?))`,
     )
-    .all(list) as { item_id: number; started_at: number; ended_at: number; paused_seconds: number }[];
-  // Rounded per session, as each session's durationSeconds is, so the total is what the log adds up to.
-  for (const s of sessions)
-    counts.get(s.item_id)!.logged += Math.round(activeMs({ startedAt: s.started_at, pausedSeconds: s.paused_seconds, pausedAt: null }, s.ended_at) / 1000);
+    .all(list) as { item_id: number; started_at: number; ended_at: number; paused_seconds: number; date: string }[];
+  for (const s of sessions) {
+    const c = counts.get(s.item_id)!;
+    // Rounded per session, as each session's durationSeconds is, so the total is what the log adds up to.
+    const seconds = Math.round(activeMs({ startedAt: s.started_at, pausedSeconds: s.paused_seconds, pausedAt: null }, s.ended_at) / 1000);
+    c.logged += seconds;
+    c.loggedOn.set(s.date, (c.loggedOn.get(s.date) ?? 0) + seconds);
+  }
   return counts;
 }
 

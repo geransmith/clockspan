@@ -141,8 +141,10 @@ describe('PlanNext', () => {
     expect(document.querySelector('.burst')).not.toBeNull();
   });
 
-  it("doesn't carry an open routine: it comes back on its own weekdays", async () => {
-    await renderPlan({ todays: [...TODAYS, makePriority(5, 'Monitor the queue', { uid: 'rcur00000001', recurring: true })] });
+  it("doesn't carry an open routine, which comes back on its own weekdays, or an archived task, which would come back every day", async () => {
+    await renderPlan({
+      todays: [...TODAYS, makePriority(5, 'Monitor the queue', { uid: 'rcur00000001', recurring: true }), makePriority(6, 'Old card', { archived: true })],
+    });
     await open();
     expect(screen.getAllByRole('checkbox').map((c) => c.closest('label')!.textContent)).toEqual(['Review the PR', 'Call the bank']);
     await save();

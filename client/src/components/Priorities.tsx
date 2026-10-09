@@ -5,21 +5,10 @@ import { useDebouncedDraft } from '../hooks/useDebouncedDraft';
 import { useSettings } from '../hooks/useSettings';
 import { unlockAudio, warnSaveFailed } from '../lib/alerts';
 import type { CategoryPick } from '../lib/board';
-import { BLANK_NOTE, LEFT_OPEN, RENAME_NOTE, WARNING_ACTIONS } from '../lib/copy';
+import { BLANK_NOTE, RENAME_NOTE, WARNING_ACTIONS } from '../lib/copy';
 import { formatDurationCeil } from '../lib/format';
-import { planNext, type PrioritySeed } from '../lib/plan';
-import {
-  clearRow,
-  editPriority,
-  emptyRow,
-  isOneOff,
-  isRecurring,
-  nudgeFor,
-  padPriorities,
-  pickWarning,
-  removePriority,
-  type WarningKind,
-} from '../lib/priorities';
+import type { PrioritySeed } from '../lib/plan';
+import { clearRow, editPriority, emptyRow, isOneOff, nudgeFor, padPriorities, pickWarning, removePriority, type WarningKind } from '../lib/priorities';
 import { acceptOffer, notOnList } from '../lib/recurring';
 import { loggedByUid } from '../lib/retro';
 import { hasText, isFree } from '../../../shared/priorities.js';
@@ -37,20 +26,15 @@ interface Props {
   priorities: Priority[];
   /** The day's sessions: × asks first about a task with time logged on it, one finished since the day was read included. */
   sessions: Session[];
-  /** `base`: the rows the edits were made on, the list the card last sent or last took up from `priorities`. */
-  onChange: (priorities: Priority[], base: Priority[]) => void;
+  /** `base`: the rows the edits were made on, the list the card last sent or last took up from `priorities`. Resolves to whether it saved. */
+  onChange: (priorities: Priority[], base: Priority[]) => Promise<boolean>;
   /** Deletes a task everywhere (the board store's `deleteItem`), for ×'s Delete everywhere; rejects when that fails. */
   onDeleteTask: (uid: string) => Promise<void>;
   /** The category chip's data: each row with text gets a chip. Null (the board off) shows none. */
   pick?: CategoryPick | null;
   /**
-   * With the board off, what the last planned day left unticked (`from` names that day), offered
-   * while the list has no one-off written (a routine on it doesn't count): its rows as seeds.
-   */
-  leftOpen?: { from: string; rows: PrioritySeed[]; dismiss: () => void } | null;
-  /**
-   * With the board on, today's morning notice in place of `leftOpen`: the leftovers while the list
-   * has no one-off written, and the routines due today that no row holds yet.
+   * Today's morning notice: the leftovers while the list has no one-off written (a routine on it
+   * doesn't count), and the routines due today that no row holds yet.
    */
   offer?: MorningOffer | null;
 }
@@ -86,7 +70,7 @@ interface Asked {
  * keystroke; checkboxes, add and remove save immediately. Keyed by date in the sheet, so a
  * new day mounts fresh instead of carrying drafts over.
  */
-export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick = null, leftOpen, offer }: Props) {
+export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick = null, offer }: Props) {
   const { settings } = useSettings();
   const count = settings.priorityCount;
   // The rows Add priority put past the stored list: the server keeps no free row, so the card pads
@@ -94,6 +78,8 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick 
   const [added, setAdded] = useState(0);
   if (added > 0 && priorities.some((p) => p.uid != null && p.position >= added)) setAdded(0);
   const stored = useMemo(() => padPriorities(priorities, Math.max(count, added)), [priorities, count, added]);
+  // The last list sent, for Add to today, which answers the offer once its save is in.
+  const sent = useRef<Promise<boolean>>(Promise.resolve(true));
   // Let go once sent: a list held after a failed save would stop the card following the stored
   // list (a row the timer's "Also add to today's priorities" or another device added, a tick
   // made elsewhere) until a later save went through. A failed row goes back to the stored copy,
@@ -101,7 +87,7 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick 
   // it was, and the draft is held, so the box stays empty until it is left rather than taking the
   // stored name back while it has the focus.
   const sendList = (list: Priority[], base: Priority[]) => {
-    onChange(named(list, base), base);
+    sent.current = onChange(named(list, base), base);
     return !list.some(isBlank);
   };
   const { draft: local, edit: editList, flush } = useDebouncedDraft(stored, sendList, 400);
@@ -118,6 +104,8 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick 
   // compares with it. A free row's task is minted by its first key, so its uid at focus can't say.
   const [focused, setFocused] = useState<{ position: number; text: string } | null>(null);
   const [asked, setAsked] = useState<Asked | null>(null);
+  // Add to today's save is out: the notice stays away, and comes back if the save fails.
+  const [adding, setAdding] = useState(false);
   const storedName = (uid: string | null) => stored.find((q) => q.uid === uid)?.text;
 
   const edit = (position: number, patch: Partial<Priority>, now = false) => {
@@ -131,10 +119,9 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick 
   // A blank box is still its task's row, so it counts as one, ticked or not.
   const total = local.filter((p) => p.uid != null).length;
   // The leftovers are offered while no one-off is written: a routine on the list is no plan.
-  const noOneOff = !local.some(isOneOff);
   // The morning notice's groups, judged again on the draft (the sheet judged the stored list), so
   // a row typed or a save already sent counts at once.
-  const offerLeftovers = offer?.leftovers && noOneOff ? offer.leftovers : null;
+  const offerLeftovers = offer?.leftovers && !local.some(isOneOff) ? offer.leftovers : null;
   const offerRecurring = offer ? notOnList(offer.recurring, local) : [];
 
   const addRow = (force = false) => {
@@ -179,27 +166,27 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick 
     if (first) inputs.current.get(first.position)?.focus();
     else focusFree(next);
   };
-  // Each row brings its own task over, added to today now, so the retro counts it as planned
-  // unless a session ran first. A task the list holds already isn't added twice.
-  const bringOver = (rows: PrioritySeed[]) => fill(padPriorities(planNext(local, rows).rows, count));
-  const dismissLeftOpen = (dismiss: () => void) => {
-    dismiss();
-    focusFree();
-  };
-  // The routines go after the padded rows, which stay free for one-offs (`acceptOffer`). Every
-  // item shown is answered, ticked or not, so the notice doesn't come back for it today, even
-  // when a row it added is removed.
-  const answerOffer = (answer: MorningOffer['answer']) =>
-    answer(
+  // Every item shown is answered, ticked or not, so the notice doesn't come back for it today,
+  // even when a row it added is removed.
+  const answerOffer = (offer: MorningOffer) =>
+    offer.answer(
       offerRecurring.map((r) => r.uid),
       offerLeftovers !== null,
     );
-  const acceptToday = (answer: MorningOffer['answer'], seeds: PrioritySeed[], recurring: Recurring[]) => {
+  // Each leftover brings its own task over, added to today now, so the retro counts it as planned
+  // unless a session ran first; the routines go after the padded rows, which stay free for
+  // one-offs (`acceptOffer`). The answer waits for the save: a failed one puts the list back, and
+  // the notice with it.
+  const acceptToday = (offer: MorningOffer, seeds: PrioritySeed[], recurring: Recurring[]) => {
+    setAdding(true);
     fill(acceptOffer(local, count, seeds, recurring, Date.now()));
-    answerOffer(answer);
+    void sent.current.then((ok) => {
+      if (ok) answerOffer(offer);
+      setAdding(false);
+    });
   };
-  const skipToday = (answer: MorningOffer['answer']) => {
-    answerOffer(answer);
+  const skipToday = (offer: MorningOffer) => {
+    answerOffer(offer);
     focusFree();
   };
   const removeRow = (position: number) => {
@@ -221,8 +208,9 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick 
   // included, since Delete everywhere is then a different answer; a recurring priority's row never
   // asks (Settings removes those).
   const remove = (p: Priority) => {
-    const time = p.uid == null ? 0 : Math.max(p.logged, loggedByUid(sessions, Date.now()).get(p.uid) ?? 0);
-    if (p.uid != null && !isRecurring(p) && (p.listed > 1 || time > 0)) {
+    // `logged` is the other days' time, so the day's own log, a running timer included, adds to it.
+    const time = p.uid == null ? 0 : p.logged + (loggedByUid(sessions, Date.now()).get(p.uid) ?? 0);
+    if (p.uid != null && !p.recurring && (p.listed > 1 || time > 0)) {
       setAsked({ uid: p.uid, name: hasText(p) ? p.text : (storedName(p.uid) ?? ''), otherDays: Math.max(0, p.listed - 1), logged: time });
     } else takeOff(p.position);
   };
@@ -250,35 +238,15 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick 
 
   return (
     <div className="priorities">
-      {offer && (offerLeftovers || offerRecurring.length > 0) && (
+      {offer && !adding && (offerLeftovers || offerRecurring.length > 0) && (
         <TodayOffer
           leftovers={offerLeftovers}
           recurring={offerRecurring}
           rows={local}
           perDay={settings.recurringPerDay}
-          onAdd={(seeds, recurring) => acceptToday(offer.answer, seeds, recurring)}
-          onSkip={() => skipToday(offer.answer)}
+          onAdd={(seeds, recurring) => acceptToday(offer, seeds, recurring)}
+          onSkip={() => skipToday(offer)}
         />
-      )}
-      {leftOpen && noOneOff && (
-        <div className="notice notice--gentle left-open">
-          <div className="left-open-list">
-            <strong>{LEFT_OPEN.title(leftOpen.from)}</strong>
-            <ul>
-              {leftOpen.rows.map((p, i) => (
-                <li key={i}>{p.text}</li>
-              ))}
-            </ul>
-          </div>
-          <span className="notice-actions">
-            <button className="btn" onClick={() => bringOver(leftOpen.rows)}>
-              {LEFT_OPEN.add}
-            </button>
-            <button className="btn btn-ghost" onClick={() => dismissLeftOpen(leftOpen.dismiss)}>
-              {LEFT_OPEN.dismiss}
-            </button>
-          </span>
-        </div>
       )}
       {local.map((p) => {
         const empty = !hasText(p);
@@ -353,7 +321,7 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick 
               </span>
               {chip && (
                 <span className="priority-end">
-                  {isRecurring(p) && <RepeatMark />}
+                  {p.recurring && <RepeatMark />}
                   {/* A pick saves at once, as a tick does. Keyed by the row, since the rows are by
                       position: a row another device's change moves here gets a chip of its own,
                       closed, so a list left open never picks for it. */}

@@ -247,9 +247,13 @@ export const Board = memo(function Board({ today }: { today: string }) {
   };
 
   // The full delete, which asks with the days the task is on and the time logged on it: today's
-  // row has the counts as the day was last read, any other item the board's.
+  // row has the counts as the day was last read, its other days' time to which today's log adds,
+  // and any other item the board's.
   const confirmDelete = (item: BoardItem) => {
-    const { listed, logged } = (item.date === today ? item.row : item.card)!;
+    const onToday = item.date === today;
+    const { listed, logged: counted } = (onToday ? item.row : item.card)!;
+    const todays = onToday ? day.sessions.reduce((t, s) => (s.status === 'completed' && s.priorityUid === item.uid ? t + s.durationSeconds : t), 0) : 0;
+    const logged = counted + todays;
     if (!window.confirm(CONFIRM.deleteTask(listed, logged > 0 ? formatDurationCeil(logged) : null))) return;
     setOpen(null);
     report(store.deleteItem(item.uid));
