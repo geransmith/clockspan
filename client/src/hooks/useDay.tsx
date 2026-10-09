@@ -3,8 +3,8 @@ import * as api from '../api';
 import { emptyDay } from '../../../shared/api.js';
 import { mergePriorities } from '../../../shared/priorities.js';
 import type { Day, Priority, PruneResult, Punch, Session } from '../types';
-import { dismissByTag, warnQuietly } from '../lib/alerts';
-import { ApiError } from '../lib/apiError';
+import { dismissByTag, warnQuietly, warnSaveFailed } from '../lib/alerts';
+import { unlessGone } from '../lib/apiError';
 import { ADD_PRIORITY_FAILED, LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
 import { endBreaksAt } from '../lib/breaks';
 import { addPending, confirm, fetched, settle, shown, untracked, type Tracked } from '../lib/optimistic';
@@ -172,19 +172,6 @@ interface Held {
   failed: ReadonlySet<string>;
 }
 
-/**
- * A delete or a break's end answered 404 found the row gone already (another device deleted
- * it): what was asked, so it counts as done, with null for the answer.
- */
-async function unlessGone<T>(send: Promise<T>): Promise<T | null> {
-  try {
-    return await send;
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 404) return null;
-    throw err;
-  }
-}
-
 // The shown day for each tracked value, worked out once per value: a day's object (and its
 // lists) keeps its identity until that day changes, which the drafts that follow it rely on.
 const shownDays = new WeakMap<Tracked<Day>, Day | undefined>();
@@ -311,7 +298,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
         return true;
       } catch {
         update(date, (t) => settle(t, ids));
-        warnQuietly({ ...SAVE_FAILED, tag: 'save-failed' });
+        warnSaveFailed();
         void fetchDay(date, true);
         return false;
       }

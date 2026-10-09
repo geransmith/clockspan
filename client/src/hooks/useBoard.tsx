@@ -3,8 +3,8 @@ import * as api from '../api';
 import type { CategoryPatch, ItemPatch, NewCategory, NewItem } from '../api';
 import { todayKey } from '../../../shared/dates.js';
 import type { Board, Priority, Recurring } from '../types';
-import { ApiError } from '../lib/apiError';
-import { warnQuietly } from '../lib/alerts';
+import { unlessGone } from '../lib/apiError';
+import { warnSaveFailed } from '../lib/alerts';
 import {
   addsToLanes,
   boardFull,
@@ -107,16 +107,6 @@ function editRefused(edit: PrioritiesEdit, skipped: string | null): Error | null
 /** The list without the task's row, renumbered; null when the list doesn't hold it. */
 function without(rows: Priority[], uid: string): Priority[] | null {
   return rows.some((p) => p.uid === uid) ? rows.filter((p) => p.uid !== uid).map((p, i) => ({ ...p, position: i + 1 })) : null;
-}
-
-/** A 404 on a delete: a save, or another device, took the task (or removed the recurring priority) already. */
-async function unlessGone(send: Promise<Board>): Promise<Board | null> {
-  try {
-    return await send;
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 404) return null;
-    throw err;
-  }
 }
 
 /**
@@ -418,7 +408,7 @@ export function useBoardStore(): BoardStore {
 
 /** A failed category create, said where the view has no other way: the "Change not saved" banner. */
 function bannerOnFailure(saved: Promise<void>): void {
-  void saved.catch(() => warnQuietly({ ...SAVE_FAILED, tag: 'save-failed' }));
+  void saved.catch(warnSaveFailed);
 }
 
 /**

@@ -25,7 +25,7 @@ import { useDay } from '../../hooks/useDay';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useRange } from '../../hooks/useRange';
 import { useSettings } from '../../hooks/useSettings';
-import { unlockAudio, warnQuietly } from '../../lib/alerts';
+import { unlockAudio, warnQuietly, warnSaveFailed } from '../../lib/alerts';
 import {
   boardColumns,
   boardFull,
@@ -46,7 +46,7 @@ import {
   type DropTarget,
   type StoreMove,
 } from '../../lib/board';
-import { BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, SAVE_FAILED, WARNING_ACTIONS } from '../../lib/copy';
+import { BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, WARNING_ACTIONS } from '../../lib/copy';
 import { dayName, formatDurationCeil } from '../../lib/format';
 import { newUid, nudgeFor, pickWarning, type WarningKind } from '../../lib/priorities';
 import type { Category, OpenLane } from '../../types';
@@ -73,9 +73,10 @@ const DRAGGED_OPACITY = 0.4;
 
 /** A board write's failure as a banner: a refusal's own line, else the save one. */
 function report(write: Promise<void>): void {
-  void write.catch((err: unknown) =>
-    warnQuietly(err instanceof MoveRefused ? { title: err.message, tag: 'board-move' } : { ...SAVE_FAILED, tag: 'save-failed' }),
-  );
+  void write.catch((err: unknown) => {
+    if (err instanceof MoveRefused) warnQuietly({ title: err.message, tag: 'board-move' });
+    else warnSaveFailed();
+  });
 }
 
 /** Planned items (their day's list decides them) and recurring rows (they stay on today's list) have no grip. */

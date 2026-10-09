@@ -3,9 +3,9 @@ import { flushSync } from 'react-dom';
 import { useCelebration, type Moment } from '../hooks/useCelebration';
 import { useDebouncedDraft } from '../hooks/useDebouncedDraft';
 import { useSettings } from '../hooks/useSettings';
-import { unlockAudio, warnQuietly } from '../lib/alerts';
+import { unlockAudio, warnSaveFailed } from '../lib/alerts';
 import type { CategoryPick } from '../lib/board';
-import { BLANK_NOTE, LEFT_OPEN, RENAME_NOTE, SAVE_FAILED, WARNING_ACTIONS } from '../lib/copy';
+import { BLANK_NOTE, LEFT_OPEN, RENAME_NOTE, WARNING_ACTIONS } from '../lib/copy';
 import { formatDurationCeil } from '../lib/format';
 import { planNext, type PrioritySeed } from '../lib/plan';
 import {
@@ -233,7 +233,7 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick 
     const row = local.find((p) => p.uid === ask.uid);
     if (row) takeOff(row.position);
     // The day's save without the row has gone out first; a failed delete leaves the task off this day only.
-    if (everywhere) void onDeleteTask(ask.uid).catch(() => warnQuietly({ ...SAVE_FAILED, tag: 'save-failed' }));
+    if (everywhere) void onDeleteTask(ask.uid).catch(warnSaveFailed);
   };
   // The blank box's name back: the task's as stored, or a free row for one never saved.
   const restore = (p: Priority) => {

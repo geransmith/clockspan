@@ -14,3 +14,16 @@ export class ApiError extends Error {
     super(message);
   }
 }
+
+/**
+ * A delete (or a break's end) answered 404 found the row gone already, another device or a save
+ * took it: what was asked, so it counts as done, with null for the answer.
+ */
+export async function unlessGone<T>(send: Promise<T>): Promise<T | null> {
+  try {
+    return await send;
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}

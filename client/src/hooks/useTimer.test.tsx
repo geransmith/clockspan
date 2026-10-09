@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
-import { alert, dismissByTag, warnQuietly } from '../lib/alerts';
+import { alert, dismissByTag, warnSaveFailed } from '../lib/alerts';
 import { TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
 import { formatCountdown } from '../lib/format';
 import { dueKey } from '../lib/timer';
@@ -113,7 +113,7 @@ describe('sync with the server', () => {
     vi.mocked(api.getRunning).mockRejectedValueOnce(new Error('offline'));
     await settle(MINUTE_MS);
     expect(result.current.timer.running?.id).toBe(1);
-    expect(warnQuietly).not.toHaveBeenCalled();
+    expect(warnSaveFailed).not.toHaveBeenCalled();
     expect(alert).not.toHaveBeenCalled();
   });
 
@@ -328,7 +328,7 @@ describe('adjust', () => {
     expect(result.current.timer.running?.plannedSeconds).toBe(2100);
     await act(() => b);
     expect(result.current.timer.running?.plannedSeconds).toBe(2100);
-    expect(warnQuietly).toHaveBeenCalledTimes(1);
+    expect(warnSaveFailed).toHaveBeenCalledTimes(1);
   });
 
   it('stops at the longest plan the server takes, and does nothing past it', async () => {
@@ -348,7 +348,7 @@ describe('adjust', () => {
     await act(() => due.result.current.timer.adjust(5 * 60));
     expect(api.patchSession).toHaveBeenCalledTimes(1);
     expect(api.finishSession).not.toHaveBeenCalled();
-    expect(warnQuietly).not.toHaveBeenCalled();
+    expect(warnSaveFailed).not.toHaveBeenCalled();
   });
 
   it('finishes when the new plan is already used up', async () => {
@@ -393,8 +393,7 @@ describe('adjust', () => {
     vi.mocked(api.patchSession).mockRejectedValue(new Error('offline'));
     await act(() => result.current.timer.adjust(5 * 60));
     expect(result.current.timer.running?.plannedSeconds).toBe(1500);
-    expect(warnQuietly).toHaveBeenCalledTimes(1);
-    expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ tag: 'save-failed' }));
+    expect(warnSaveFailed).toHaveBeenCalledTimes(1);
     expect(api.getRunning).toHaveBeenCalledTimes(1);
   });
 });
@@ -788,7 +787,7 @@ describe("time's up", () => {
     expect(dismissByTag).toHaveBeenCalledWith('timer-due');
     await settle();
     expect(result.current.timer.due).toBe(true);
-    expect(warnQuietly).toHaveBeenCalledTimes(1);
+    expect(warnSaveFailed).toHaveBeenCalledTimes(1);
     expect(alert).toHaveBeenCalledTimes(2);
     expect(vi.mocked(alert).mock.lastCall![0]).toMatchObject({
       tag: 'timer-due',

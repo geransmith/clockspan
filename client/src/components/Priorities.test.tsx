@@ -7,8 +7,8 @@ import * as api from '../api';
 import { useDay } from '../hooks/useDay';
 import { SettingsProvider } from '../hooks/useSettings';
 import { useBoardStore } from '../hooks/useBoard';
-import { playSound, unlockAudio, warnQuietly } from '../lib/alerts';
-import { BLANK_NOTE, LEFT_OPEN, PRIORITY_WARNINGS, REMOVE_TASK, RENAME_NOTE, SAVE_FAILED, TODAY_OFFER, WARNING_ACTIONS } from '../lib/copy';
+import { playSound, unlockAudio, warnSaveFailed } from '../lib/alerts';
+import { BLANK_NOTE, LEFT_OPEN, PRIORITY_WARNINGS, REMOVE_TASK, RENAME_NOTE, TODAY_OFFER, WARNING_ACTIONS } from '../lib/copy';
 import type { PrioritySeed } from '../lib/plan';
 import { emptyRow } from '../lib/priorities';
 import type { CategoryPick } from '../lib/board';
@@ -857,7 +857,7 @@ describe('Priorities: ×', () => {
     expect(saved()[0]).toEqual(emptyRow(1));
     expect(onDeleteTask).toHaveBeenCalledExactlyOnceWith(rowUid(1));
     await settle();
-    expect(warnQuietly).not.toHaveBeenCalled();
+    expect(warnSaveFailed).not.toHaveBeenCalled();
   });
 
   it('raises the banner when the delete fails, and leaves the task off this day', async () => {
@@ -866,7 +866,7 @@ describe('Priorities: ×', () => {
     fireEvent.click(x(1));
     everywhere();
     await settle();
-    expect(warnQuietly).toHaveBeenCalledExactlyOnceWith({ ...SAVE_FAILED, tag: 'save-failed' });
+    expect(warnSaveFailed).toHaveBeenCalledOnce();
     expect(saved()[0]).toEqual(emptyRow(1));
   });
 
