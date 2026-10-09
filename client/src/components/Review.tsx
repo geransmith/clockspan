@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useBoardState } from '../hooks/useBoard';
 import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
@@ -66,11 +67,12 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
   const { board, on } = useBoardState();
   // With the board off, or before its first read answers, nothing is counted under a category,
   // and Not done knows no task's lane. A removed category stays known, so the time logged under
-  // it keeps its name.
+  // it keeps its name. A done task keeps its lane but shows in Done, and the board stops sending
+  // it after a while, so only the open ones count as laned.
   const shown = on ? board : undefined;
   const categories = shown?.categories ?? [];
   const known = new Set(categories.map((c) => c.uid));
-  const laned = new Set(shown?.cards.filter((c) => c.lane != null).map((c) => c.uid));
+  const laned = new Set(shown?.cards.filter((c) => c.lane != null && !c.listDone).map((c) => c.uid));
   const r = reviewRange(days, settings, today, now, known, laned);
   if (r.days === 0) return <p className="muted center review-empty">Nothing recorded.</p>;
   // A row merged across days names them in a week and counts them in a longer period; it
@@ -128,17 +130,7 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
           <Folded
             className="review-list"
             items={r.unplanned.map((g) => (
-              <li key={g.key}>
-                <button className="review-row" onClick={() => onOpen(latest(g.dates))}>
-                  <span className="review-text">
-                    <SessionLabel label={g.label} />
-                  </span>
-                  <span className="review-meta">
-                    <span className="muted small">{when(g.dates)}</span>
-                    <span className="review-time">{formatDuration(g.seconds)}</span>
-                  </span>
-                </button>
-              </li>
+              <ReviewRow key={g.key} text={<SessionLabel label={g.label} />} meta={when(g.dates)} seconds={g.seconds} onOpen={() => onOpen(latest(g.dates))} />
             ))}
           />
         )}
@@ -152,17 +144,13 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
           <Folded
             className="review-list"
             items={r.routines.map((g) => (
-              <li key={g.uid}>
-                <button className="review-row" onClick={() => onOpen(latest(g.dates))}>
-                  <span className="review-text">{g.title}</span>
-                  <span className="review-meta">
-                    <span className="muted small">
-                      {g.done} of {counted(g.dates.length, 'day')}
-                    </span>
-                    <span className="review-time">{g.focusedSeconds > 0 ? formatDuration(g.focusedSeconds) : <span className="muted">no time</span>}</span>
-                  </span>
-                </button>
-              </li>
+              <ReviewRow
+                key={g.uid}
+                text={g.title}
+                meta={`${g.done} of ${counted(g.dates.length, 'day')}`}
+                seconds={g.focusedSeconds}
+                onOpen={() => onOpen(latest(g.dates))}
+              />
             ))}
           />
         </section>
@@ -184,18 +172,18 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
           <Folded
             className="review-list"
             items={r.notDone.map((g) => (
-              <li key={g.key}>
-                <button className="review-row" onClick={() => onOpen(latest(g.dates))}>
-                  <span className="review-text">
+              <ReviewRow
+                key={g.key}
+                text={
+                  <>
                     {g.text}
                     {g.addedMidDay && <span className="pill pill--warn inline-pill">mid-day</span>}
-                  </span>
-                  <span className="review-meta">
-                    <span className="muted small">{when(g.dates)}</span>
-                    <span className="review-time">{g.focusedSeconds > 0 ? formatDuration(g.focusedSeconds) : <span className="muted">no time</span>}</span>
-                  </span>
-                </button>
-              </li>
+                  </>
+                }
+                meta={when(g.dates)}
+                seconds={g.focusedSeconds}
+                onOpen={() => onOpen(latest(g.dates))}
+              />
             ))}
           />
         )}
@@ -230,6 +218,23 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
   );
 }
 
+const time = (seconds: number) => (seconds > 0 ? formatDuration(seconds) : <span className="muted">no time</span>);
+
+/** A row of Off the plan, Routines or Not done: what it is, when, its time, and a press opens its latest day. */
+function ReviewRow({ text, meta, seconds, onOpen }: { text: ReactNode; meta: string; seconds: number; onOpen: () => void }) {
+  return (
+    <li>
+      <button className="review-row" onClick={onOpen}>
+        <span className="review-text">{text}</span>
+        <span className="review-meta">
+          <span className="muted small">{meta}</span>
+          <span className="review-time">{time(seconds)}</span>
+        </span>
+      </button>
+    </li>
+  );
+}
+
 /**
  * Each category's focus as a bar against the period's largest, the part on a priority solid and
  * the part off the plan striped in the same colour; the row's text says all the bar does.
@@ -257,14 +262,9 @@ function ByCategory({ byCategory, categories }: { byCategory: CategoryTime[]; ca
                   {c.done > 0 && <span className="muted small">{c.done} done</span>}
                 </span>
               )}
-              <span className="review-time">{c.seconds > 0 ? formatDuration(c.seconds) : <span className="muted">no time</span>}</span>
+              <span className="review-time">{time(c.seconds)}</span>
               {c.seconds > 0 && (
-                <span
-                  className={cat ? 'category-bar' : 'category-bar category-bar--none'}
-                  data-color={cat?.color}
-                  aria-hidden="true"
-                  style={{ width: share(c.seconds, longest) }}
-                >
+                <span className="category-bar" data-color={cat?.color} aria-hidden="true" style={{ width: share(c.seconds, longest) }}>
                   {onPlan > 0 && <span className="category-bar-on" style={{ width: share(onPlan, c.seconds) }} />}
                   {c.offPlanSeconds > 0 && <span className="category-bar-off" style={{ width: share(c.offPlanSeconds, c.seconds) }} />}
                 </span>

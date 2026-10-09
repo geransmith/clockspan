@@ -93,22 +93,15 @@ describe('reviewRange', () => {
       priorities: [makePriority(1, 'Write the proposal', proposal)],
       sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600, { priorityUid: rowUid(1) })],
     });
-    const tue = makeDay('2026-09-15', { priorities: [makePriority(1, 'Write the proposal', { ...proposal, done: true })] });
+    const tue = makeDay('2026-09-15', { priorities: [makePriority(1, 'Write the proposal', { ...proposal, earlier: 1, done: true })] });
     const r = reviewRange([tue, mon], settings, '2026-09-16', now);
     // The tile still counts each day's rows; the list is what the range never finished.
     expect(r).toMatchObject({ prioritiesDone: 1, prioritiesTotal: 2, notDone: [] });
     // Left open again after the tick: only the days since, and only their time.
-    const wed = makeDay('2026-09-16', { priorities: [makePriority(1, 'Write the proposal', proposal)] });
+    const wed = makeDay('2026-09-16', { priorities: [makePriority(1, 'Write the proposal', { ...proposal, earlier: 2 })] });
     expect(reviewRange([mon, tue, wed], settings, '2026-09-16', now).notDone).toEqual([
       { key: rowUid(1), text: 'Write the proposal', dates: ['2026-09-16'], focusedSeconds: 0, addedMidDay: false },
     ]);
-    // Typed twice on one day, ticked once and left open once, in either order: the tick wins.
-    for (const priorities of [
-      [makePriority(1, 'Email', { done: true }), makePriority(2, 'email ')],
-      [makePriority(1, 'email '), makePriority(2, 'Email', { done: true })],
-    ]) {
-      expect(reviewRange([makeDay('2026-09-14', { priorities })], settings, '2026-09-16', now).notDone).toEqual([]);
-    }
   });
 
   it('is all zeros for no days', () => {
@@ -297,8 +290,14 @@ describe('reviewRange: Not done', () => {
   const MON = '2026-09-14';
   const TUE = '2026-09-15';
   const WED = '2026-09-16';
-  /** A row written before work, on one list unless `listed` says more. */
-  const row = (text: string, uid: string, patch: { done?: boolean; listed?: number } = {}) => ({ text, uid, done: false, listed: 1, ...patch });
+  /** A row written before work, on its task's first day unless `earlier` says more. */
+  const row = (text: string, uid: string, patch: { done?: boolean; earlier?: number; listed?: number } = {}) => ({
+    text,
+    uid,
+    done: false,
+    earlier: 0,
+    ...patch,
+  });
   /** A day whose rows were all written before work: none reads as added mid-day. */
   const day = (date: string, ...rows: ReturnType<typeof row>[]) =>
     makeDay(date, { priorities: rows.map(({ text, ...patch }, i) => makePriority(i + 1, text, { ...patch, ...BEFORE_WORK })) });
@@ -306,18 +305,18 @@ describe('reviewRange: Not done', () => {
     reviewRange(days, settings, '2026-10-20', now, undefined, laned).notDone.map((g) => [g.key, g.text, g.dates]);
 
   it("keeps a task's days one entry, by its uid, and a tick on a later day settles them", () => {
-    const report = (patch = {}) => row('Report', 'task00000001', { listed: 3, ...patch });
-    expect(notDone([day(MON, report()), day(TUE, report())])).toEqual([['task00000001', 'Report', [MON, TUE]]]);
-    expect(notDone([day(MON, report()), day(TUE, report()), day(WED, report({ done: true }))])).toEqual([]);
+    const report = (earlier: number, done = false) => row('Report', 'task00000001', { earlier, done });
+    expect(notDone([day(MON, report(0)), day(TUE, report(1))])).toEqual([['task00000001', 'Report', [MON, TUE]]]);
+    expect(notDone([day(MON, report(0)), day(TUE, report(1)), day(WED, report(2, true))])).toEqual([]);
   });
 
   it('keeps two tasks of one name two entries, and a tick of one leaves the other open', () => {
-    const email = (uid: string, patch = {}) => row('Email', uid, { listed: 2, ...patch });
+    const email = (uid: string, patch = {}) => row('Email', uid, patch);
     expect(notDone([day(MON, email('task00000001'), email('task00000002'))])).toEqual([
       ['task00000001', 'Email', [MON]],
       ['task00000002', 'Email', [MON]],
     ]);
-    expect(notDone([day(MON, email('task00000001'), email('task00000002')), day(TUE, email('task00000001', { done: true }))])).toEqual([
+    expect(notDone([day(MON, email('task00000001'), email('task00000002')), day(TUE, email('task00000001', { earlier: 1, done: true }))])).toEqual([
       ['task00000002', 'Email', [MON]],
     ]);
   });
@@ -340,21 +339,31 @@ describe('reviewRange: Not done', () => {
     ]);
   });
 
-  it('keeps a task with a lane, or on two lists, apart from another of its text', () => {
+  it('keeps a task with a lane, or first listed before the day, apart from another of its text', () => {
     const days = [day(MON, row('Report', 'task00000001')), day(TUE, row('Report', 'task00000002'))];
     expect(notDone(days, new Set(['task00000002']))).toEqual([
       ['task00000001', 'Report', [MON]],
       ['task00000002', 'Report', [TUE]],
     ]);
-    const carried = [day(MON, row('Report', 'task00000001')), day(TUE, row('Report', 'task00000002', { listed: 2 }))];
+    // Carried from a day before the range.
+    const carried = [day(MON, row('Report', 'task00000001')), day(TUE, row('Report', 'task00000002', { earlier: 1 }))];
     expect(notDone(carried)).toEqual([
       ['task00000001', 'Report', [MON]],
       ['task00000002', 'Report', [TUE]],
     ]);
     // Its tick settles its own entry only.
-    expect(notDone([day(MON, row('Report', 'task00000001')), day(TUE, row('Report', 'task00000002', { listed: 2, done: true }))])).toEqual([
+    expect(notDone([day(MON, row('Report', 'task00000001')), day(TUE, row('Report', 'task00000002', { earlier: 1, done: true }))])).toEqual([
       ['task00000001', 'Report', [MON]],
     ]);
+  });
+
+  it('keeps a retype joined when it is carried on to a later day', () => {
+    const days = [
+      day(MON, row('Report', 'task00000001')),
+      day(TUE, row('Report', 'task00000002', { listed: 2 })),
+      day(WED, row('Report', 'task00000002', { listed: 2, earlier: 1 })),
+    ];
+    expect(notDone(days)).toEqual([['task00000001', 'Report', [MON, TUE, WED]]]);
   });
 
   it('keeps the entry a task with a lane opened its own, whatever a later task of its text does', () => {
@@ -378,6 +387,7 @@ describe('reviewRange: Not done', () => {
 
   it('lets a tick win over a task of its text typed again and left open beside it, unless either has a lane', () => {
     expect(notDone([day(MON, row('Report', 'task00000001', { done: true }), row('report', 'task00000002'))])).toEqual([]);
+    expect(notDone([day(MON, row('report', 'task00000002'), row('Report', 'task00000001', { done: true }))])).toEqual([]);
     expect(notDone([day(MON, row('Report', 'task00000001', { done: true }), row('report', 'task00000002'))], new Set(['task00000001']))).toEqual([
       ['task00000002', 'report', [MON]],
     ]);
@@ -498,12 +508,6 @@ describe('reviewRange: By category', () => {
       sessions: [session(1, MON, at(MON, 9), 600, { label: 'Inbox' })],
     });
 
-  it("counts a task's sessions on a day whose list doesn't hold it off the plan, under the task's category", () => {
-    const r = review([makeDay(MON, { sessions: [session(1, MON, at(MON, 9), 1500, { priorityUid: 'task00000001', categoryUid: TICKETS })] })]);
-    expect(r.byCategory).toEqual([bucket(TICKETS, 1500, 1500, 0)]);
-    expect(r.offPlanSeconds).toBe(1500);
-  });
-
   it("counts a written row's focus on plan under the row's category, none included, whatever the session's own", () => {
     const r = review([
       makeDay(MON, {
@@ -530,6 +534,7 @@ describe('reviewRange: By category', () => {
       }),
     ]);
     expect(r.byCategory).toEqual([bucket(ADMIN, 1200, 1200, 0), bucket(TICKETS, 900, 900, 0), bucket(null, 600, 600, 0)]);
+    expect(r.offPlanSeconds).toBe(2700);
   });
 
   it("counts the ticks under each row's category, routines included, and lists a category ticked with no time", () => {

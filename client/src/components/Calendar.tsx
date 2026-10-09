@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { startOfMonth } from '../../../shared/dates.js';
 import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
@@ -36,6 +36,8 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
   const [month, setMonth] = useState(() => startOfMonth(date));
   const [selected, setSelected] = useState<string | null>(date);
   const [filter, setFilter] = useState<StickerId | null>(null);
+  // "This month" sits in the header, apart from the ◀ ▶ it hands the focus to.
+  const prevRef = useRef<HTMLButtonElement>(null);
   const period = periodRange('month', month, 0);
   const { days: list, failed, retry } = useRange(period.from, period.to);
   // The range lays the store's days over the answer, and one can be empty (today before a
@@ -65,9 +67,9 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
     <section className="card">
       <header className="card-head">
         <h2 className="card-title">Days</h2>
-        <PeriodReset kind="month" from={month} today={today} onFrom={step} />
+        <PeriodReset kind="month" from={month} today={today} onFrom={step} prevRef={prevRef} />
       </header>
-      <PeriodNav kind="month" label={period.label} from={month} today={today} onFrom={step} noReset />
+      <PeriodNav kind="month" label={period.label} from={month} today={today} onFrom={step} noReset prevRef={prevRef} />
       {failed ? <LoadFailed title={LOAD_FAILED.range} onRetry={retry} /> : !weeks && <div className="sheet-loading" aria-busy="true" />}
       {weeks && (
         <>
@@ -161,7 +163,7 @@ function DayCell({
   onSelect: (date: string) => void;
 }) {
   const cls = ['calendar-day'];
-  if (!d.hasData) cls.push('is-empty');
+  if (!d.timeclock) cls.push('is-empty');
   if (d.isFuture) cls.push('is-future');
   if (d.date === today) cls.push('is-today');
   if (full) cls.push('is-full');
@@ -191,7 +193,7 @@ function DayCell({
         </span>
       </>
     );
-  } else if (d.hasData) {
+  } else if (d.timeclock) {
     label = 'something recorded';
     face = <span className="calendar-dot" aria-hidden="true" />;
   } else {

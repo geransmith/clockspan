@@ -69,7 +69,7 @@ const rows = (heading: string) => {
 
 /**
  * By category's rows: each one's dot colour, name, muted parts and time, and its bar (null for
- * none): its colour, whether it is No category's, its width and its on and off parts' widths.
+ * none): its colour (null for No category's), its width and its on and off parts' widths.
  */
 const categoryRows = () =>
   [...document.querySelectorAll('.review-category')].map((row) => {
@@ -82,7 +82,6 @@ const categoryRows = () =>
       time: row.querySelector('.review-time')?.textContent,
       bar: bar && {
         color: bar.getAttribute('data-color'),
-        none: bar.classList.contains('category-bar--none'),
         width: bar.style.width,
         on: part('on'),
         off: part('off'),
@@ -144,8 +143,17 @@ describe('Review', () => {
     expect(onPeriod).toHaveBeenLastCalledWith({ kind: 'week', from: '2026-07-06' });
     fireEvent.click(screen.getByRole('button', { name: 'Next week' }));
     expect(onPeriod).toHaveBeenLastCalledWith({ kind: 'week', from: '2026-07-20' });
+    expect(document.activeElement).toBe(document.body);
+    // The reset goes once pressed: the focus moves to Previous.
     fireEvent.click(screen.getByRole('button', { name: 'This week' }));
     expect(onPeriod).toHaveBeenLastCalledWith({ kind: 'week', from: '2026-09-28' });
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Previous week' }));
+    cleanup();
+
+    // Next into the current period is disabled once pressed: the focus moves to Previous too.
+    await review({ kind: 'week', from: '2026-09-21' });
+    fireEvent.click(screen.getByRole('button', { name: 'Next week' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Previous week' }));
     cleanup();
 
     // The current period has no next and no reset.
@@ -229,6 +237,18 @@ describe('Review', () => {
       ['Email Bob', 'Mon', 'no time'],
       ['email bob', 'Tue', 'no time'],
     ]);
+    cleanup();
+
+    // A done task keeps its lane but shows in Done, and the board stops sending it after a while:
+    // its tick settles Monday's entry whether it is sent or not.
+    const ticked = [
+      makeDay(MON, { priorities: [makePriority(1, 'Email Bob', { uid: 'emailmon0001' })] }),
+      makeDay(TUE, { priorities: [makePriority(1, 'email bob', { uid: 'emailtue0001', done: true })] }),
+    ];
+    serveRange(ticked);
+    vi.mocked(api.getBoard).mockResolvedValue(makeBoard(makeCard('emailtue0001', 'email bob', { lane: 'next', listDate: TUE, listDone: true })));
+    await review({ kind: 'week', from: MON });
+    expect(screen.getByText('Every priority got ticked.')).toBeTruthy();
   });
 
   it("holds a month or a quarter to its days' own lengths, and leaves the typical day out of a quarter", async () => {
@@ -257,6 +277,20 @@ describe('Review', () => {
     expect(screen.getByText('Focused').parentElement?.querySelector('.tile-sub')?.textContent).toBe('1 session');
     expect(screen.getByText('Every logged session was for a priority.')).toBeTruthy();
     expect(screen.queryByText('No sessions logged.')).toBeNull();
+    cleanup();
+
+    serveRange([makeDay(MON, { sessions: [completedSession(1, start, 1500, { date: MON, label: 'Inbox', endedAt: start, durationSeconds: 0 })] })]);
+    await review({ kind: 'week', from: MON });
+    expect(rows('Off the plan')).toEqual([['Inbox', 'Mon', 'no time']]);
+  });
+
+  it('folds a long list after eight rows, and Show all hands the focus to the first row it shows', async () => {
+    serveRange([makeDay(MON, { priorities: Array.from({ length: 10 }, (_, i) => makePriority(i + 1, `Row ${i + 1}`, { addedAt: 0 })) })]);
+    await review({ kind: 'week', from: MON });
+    expect(rows('Not done')).toHaveLength(8);
+    fireEvent.click(screen.getByRole('button', { name: 'Show all 10' }));
+    expect(rows('Not done')).toHaveLength(10);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Row 9/ }));
   });
 
   it('drops the target with no Work week, the hours with Show hours off, and the facts strip with nothing in it', async () => {
@@ -316,7 +350,6 @@ describe('Review: By category', () => {
     expect(sections()).toEqual(['Off the plan', 'Routines', 'Not done', 'Why']);
     expect(document.querySelector('.review-category')).toBeNull();
     expect(facts()[0]).toBe('Added mid-day: 1 · 0 done');
-    expect(rows('Routines')[0]![0]).toBe('Monitor the queue');
     expect(api.getBoard).not.toHaveBeenCalled();
   });
 
@@ -332,11 +365,11 @@ describe('Review: By category', () => {
         name: 'Tickets',
         parts: ['15m off the plan', '1 done'],
         time: '1h 00m',
-        bar: { color: 'blue', none: false, width: '100%', on: '75%', off: '25%' },
+        bar: { color: 'blue', width: '100%', on: '75%', off: '25%' },
       },
-      { dot: 'teal', name: 'Admin', parts: ['30m off the plan'], time: '30m', bar: { color: 'teal', none: false, width: '50%', on: null, off: '100%' } },
+      { dot: 'teal', name: 'Admin', parts: ['30m off the plan'], time: '30m', bar: { color: 'teal', width: '50%', on: null, off: '100%' } },
       { dot: 'gold', name: 'Knowledge base', parts: ['1 done'], time: 'no time', bar: null },
-      { dot: null, name: 'No category', parts: [], time: '15m', bar: { color: null, none: true, width: '25%', on: '100%', off: null } },
+      { dot: null, name: 'No category', parts: [], time: '15m', bar: { color: null, width: '25%', on: '100%', off: null } },
     ]);
     // A name is never drawn in its colour, and the bars are left to the text for a screen reader.
     for (const name of document.querySelectorAll('.review-category .review-text')) expect(name.closest('[data-color]')).toBeNull();
@@ -423,7 +456,6 @@ describe('Review: By category', () => {
     await review({ kind: 'week', from: MON });
     expect(sections()).toEqual(['Off the plan', 'Routines', 'Not done', 'Why']);
     expect(facts()[0]).toBe('Added mid-day: 1 · 0 done');
-    expect(rows('Routines')[0]![0]).toBe('Monitor the queue');
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
@@ -436,7 +468,6 @@ describe('Review: By category', () => {
     await settle(MINUTE_MS);
     expect(sections()).toEqual(['Off the plan', 'Routines', 'Not done', 'Why']);
     expect(facts()[0]).toBe('Added mid-day: 1 · 0 done');
-    expect(rows('Routines')[0]![0]).toBe('Monitor the queue');
   });
 
   it('folds a long list after eight rows', async () => {
@@ -448,5 +479,6 @@ describe('Review: By category', () => {
     expect(categoryRows()).toHaveLength(8);
     fireEvent.click(screen.getByRole('button', { name: 'Show all 10' }));
     expect(categoryRows().map((c) => c.name)).toEqual(categories.map((c) => c.name));
+    expect(document.activeElement).toBe(document.querySelectorAll('.review-category')[8]);
   });
 });

@@ -55,6 +55,26 @@ describe('Calendar', () => {
     expect(api.getRange).toHaveBeenLastCalledWith(FIRST, '2026-10-31');
     expect(screen.getByRole('group', { name: formatMonth(FIRST) })).toBeTruthy();
     expect(screen.getByText('Tap a day to see it.')).toBeTruthy();
+    // The reset in the header goes once pressed: the focus moves to Previous month.
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Previous month' }));
+  });
+
+  it('hands the focus to Previous month when Next month reaches the current one and is disabled', async () => {
+    serveRange([]);
+    render(calendar(LAST, LAST_EVENING));
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));
+    await settle();
+    // Into a month still before the current one: Next stays, and so does the focus.
+    fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
+    await settle();
+    expect(document.activeElement).toBe(document.body);
+    fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
+    await settle();
+    expect((screen.getByRole('button', { name: 'Next month' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Previous month' }));
   });
 
   it('shows a failed load with Try again, which loads the month', async () => {

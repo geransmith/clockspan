@@ -7,13 +7,14 @@ export interface CalendarDay {
   /** A filler cell before the 1st or after the last day: blank, never selectable. */
   outside: boolean;
   isFuture: boolean;
-  /** The day has something on it (the caller passes only the days `hasContent` keeps); the cell is empty otherwise. */
-  hasData: boolean;
   /** What the day earned (see `stickersForDay`); empty for a filler. */
   stickers: StickerId[];
   /** It earned every sticker this user can earn (`stickerReasons`); false for a filler. */
   full: boolean;
-  /** The day's timeclock, worked out once for its stickers and its cell; null without data. */
+  /**
+   * The day's timeclock, worked out once for its stickers and its cell; null for a day with nothing
+   * on it (the caller passes only the days `hasContent` keeps), whose cell is empty.
+   */
   timeclock: TimeclockResult | null;
 }
 
@@ -48,7 +49,6 @@ export function calendarMonth(
         date,
         outside,
         isFuture: date > today,
-        hasData: d != null,
         stickers,
         full: stickers.length === reasons.length,
         timeclock,
