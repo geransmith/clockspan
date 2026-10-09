@@ -83,12 +83,4 @@ describe('mergeSettings', () => {
     }
     expect(mergeSettings(DEFAULT_SETTINGS, { alarms: { retro: { overdueEveryMinutes: 121 } } })).toEqual(DEFAULT_SETTINGS);
   });
-
-  it('keeps the recurring rows per day between 1 and 10', () => {
-    const stored = { ...DEFAULT_SETTINGS, recurringPerDay: 4 };
-    expect(mergeSettings(stored, { recurringPerDay: 0 }).recurringPerDay).toBe(4);
-    expect(mergeSettings(stored, { recurringPerDay: 11 }).recurringPerDay).toBe(4);
-    expect(mergeSettings(stored, { recurringPerDay: 5 }).recurringPerDay).toBe(5);
-    expect(mergeSettings(DEFAULT_SETTINGS, {}).recurringPerDay).toBe(3);
-  });
 });

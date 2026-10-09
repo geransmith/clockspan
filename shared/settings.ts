@@ -91,7 +91,7 @@ export interface Settings {
   suggestBreaks: boolean;
   /** The focus timer's start buttons, in minutes; always three. */
   timerMinutes: number[];
-  /** Rows a fresh day's priorities card starts with. */
+  /** Rows every day's priorities card shows at least (free rows pad it). */
   priorityCount: number;
   sound: boolean;
   notifications: boolean;
@@ -123,9 +123,8 @@ export interface Settings {
    */
   showWeekends: boolean;
   /**
-   * The Board page, for tasks that aren't for today, and its button in the header. With it on,
-   * a priorities save on today's or a later list makes a board card for each written row that
-   * has none (recurring rows excepted).
+   * The Board page, for tasks that aren't for today, and its button in the header, and with them
+   * the categories and recurring priorities (Settings → Board, the morning offer).
    */
   board: boolean;
   /** Recurring rows the morning offer ticks; more can be ticked. */

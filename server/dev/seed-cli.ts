@@ -1,9 +1,9 @@
 import { parseArgs } from 'node:util';
 import { loadConfig } from '../config.js';
 import { ensureDefaultUser, openDatabase } from '../db.js';
-import { isWholeNumber } from '../validate.js';
+import { isOneOf, isWholeNumber } from '../validate.js';
 import { insertSession, SESSION_COOKIE } from '../auth/session.js';
-import { AUTH_MODES, type AuthMode } from '../../shared/api.js';
+import { AUTH_MODES } from '../../shared/api.js';
 import { addMonths, atTime, isValidDateKey, startOfQuarter, todayKey } from '../../shared/dates.js';
 import {
   DEFAULT_HISTORY_DAYS,
@@ -80,16 +80,16 @@ const days = opts.quarter ? weekdaysSince(addMonths(startOfQuarter(today), -3), 
 if (opts.days === '' || !isWholeNumber(days, { min: 0, max: 400 })) fail(`--days must be a whole number from 0 to 400 (got "${opts.days}").`);
 const { fresh, running } = opts;
 
-// Checked here as well as in loadConfig: `--auth=` would be dropped below, and a mixed-case
-// mode, which loadConfig accepts, would skip the OIDC placeholders.
-if (opts.auth !== undefined && !AUTH_MODES.includes(opts.auth as AuthMode)) fail(`--auth must be one of ${AUTH_MODES.join('|')} (got "${opts.auth}").`);
+// Checked here as well as in loadConfig, which would take `--auth=`, dropped below, as unset.
+if (opts.auth !== undefined && !isOneOf(AUTH_MODES, opts.auth.toLowerCase())) fail(`--auth must be one of ${AUTH_MODES.join('|')} (got "${opts.auth}").`);
 const env: NodeJS.ProcessEnv = { ...process.env, ...(opts.auth ? { AUTH_MODE: opts.auth } : {}) };
-if (env.AUTH_MODE === 'oidc') {
+// Any spelling loadConfig takes, and a blank value, which it reads as unset.
+if (env.AUTH_MODE?.toLowerCase() === 'oidc') {
   // https, as the config will require; port 2 because fetch refuses 1 and 9 outright.
-  env.OIDC_ISSUER ??= 'https://127.0.0.1:2/';
-  env.OIDC_CLIENT_ID ??= 'clockspan-dev';
-  env.OIDC_CLIENT_SECRET ??= 'dev';
-  env.APP_URL ??= 'http://localhost:5173';
+  env.OIDC_ISSUER ||= 'https://127.0.0.1:2/';
+  env.OIDC_CLIENT_ID ||= 'clockspan-dev';
+  env.OIDC_CLIENT_SECRET ||= 'dev';
+  env.APP_URL ||= 'http://localhost:5173';
 }
 const config = loadConfig(env);
 const db = openDatabase(config.dbPath);

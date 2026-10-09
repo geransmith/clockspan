@@ -89,8 +89,8 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
   // layout. Honour it until the user's next save writes the setting itself.
   const stickerCard =
     Array.isArray(p.layout) &&
-    (p.layout as unknown[]).some((item) => {
-      const card = item as { id?: unknown; visible?: unknown } | null;
+    p.layout.some((item: unknown) => {
+      const card = record(item);
       return card?.id === 'stickers' && card.visible === true;
     });
 
