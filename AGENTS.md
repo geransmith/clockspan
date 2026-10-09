@@ -205,6 +205,14 @@ provider isn't there, so its sign-in button can't complete and discovery logs a 
 then; everything after sign-in works) and `prod` (the built bundle with the real headers on
 :8090). The `web*` configs share :5173, so run one at a time.
 
+## Questions and suggestions
+
+Ask and push back as a product manager would. When a request leaves a gap (what an edge case
+should do, how it fits what is already there) and the answer changes what gets built, ask
+before building. Suggest features, or a better or simpler way to build what was asked, freely
+in the reply. Build only what was asked: a suggestion stays out of the diff until the owner
+takes it up. A lean-code rule limits the diff, not the questions.
+
 ## Branches, PRs and releases
 
 `main` is protected: every change is a branch → PR → green checks → squash merge, and a release
