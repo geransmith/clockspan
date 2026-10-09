@@ -304,9 +304,9 @@ function punchRows(times: (number | null)[]): Punch[] {
  * `status` set over it and `endedAt: null`, and the cancelled one is `cancelled`'s.
  */
 function completed(work: SeededPriority | string, startedAt: number, minutes: number, worked = minutes, paused = 0): Omit<SeededSession, 'id'> {
-  const task = typeof work === 'string' ? null : work;
+  const [label, task] = typeof work === 'string' ? [work, null] : [work.text, work];
   return {
-    label: task?.text ?? (work as string),
+    label,
     plannedSeconds: minutes * 60,
     startedAt,
     endedAt: startedAt + (worked + paused) * MINUTE_MS,
@@ -314,7 +314,7 @@ function completed(work: SeededPriority | string, startedAt: number, minutes: nu
     priorityUid: task?.uid ?? null,
     title: task?.text ?? null,
     pausedSeconds: paused * 60,
-    categoryUid: task ? task.categoryUid : categoryFor(work as string),
+    categoryUid: task ? task.categoryUid : categoryFor(label),
   };
 }
 
@@ -328,7 +328,7 @@ function rested(startedAt: number, minutes: number, took = minutes): Omit<Seeded
   return { plannedSeconds: minutes * 60, startedAt, endedAt: startedAt + took * MINUTE_MS };
 }
 
-/** Builds one past weekday. `index` counts from the oldest day; `kind` picks the template. */
+/** Builds one past weekday from the template `kind` picks. */
 function buildPastDay(date: string, kind: Exclude<DayKind, 'today'>, rand: () => number, note: (pool: readonly string[]) => string): DayDraft {
   const jitter = (spread: number) => Math.round((rand() - 0.5) * 2 * spread);
   const pick = <T>(arr: readonly T[]): T => arr[Math.floor(rand() * arr.length)]!;
@@ -564,10 +564,9 @@ function withCounts(days: DayDraft[]): DayDraft[] {
 
 /**
  * The tasks and the board: the categories, the recurring priorities, a task for every one-off text
- * the days list, and the captured tasks, handled on the board. The last weekday's and today's open
- * one-offs are in Next, as the board had them, today's above the last weekday's and both above
- * the captured one; a done one is in no lane, since its tick says where it shows, and so are the
- * older days' tasks. Returns each task's id by its uid, for the entries and sessions that name it.
+ * the days list, in no lane (a task typed on a list has none), and the captured tasks, handled on
+ * the board, the only ones in a lane. Returns each task's id by its uid, for the entries and
+ * sessions that name it.
  */
 function insertItems(db: DB, userId: number, days: DayDraft[]): Map<string, number> {
   const category = db.prepare(`INSERT INTO categories (user_id, uid, name, color) VALUES (?, ?, ?, ?)`);
@@ -579,32 +578,19 @@ function insertItems(db: DB, userId: number, days: DayDraft[]): Map<string, numb
   const add = (uid: string, title: string, categoryUid: string | null, weekdays: number | null, lane: OpenLane | null, position: number, createdAt: number) =>
     ids.set(uid, (insert.get(userId, uid, title, categoryUid, weekdays, lane, position, createdAt) as { id: number }).id);
 
-  const first = days[0]!;
-  for (const r of SEEDED_RECURRING) add(r.uid, r.title, r.categoryUid, weekdayMask(r.weekdays), null, 0, first.createdAt);
-  const [last, today] = days.length > 1 ? days.slice(-2) : [undefined, first];
-  let next: string[] = [];
-  for (const day of [last, today]) {
-    const fresh = (day?.priorities ?? []).filter((p) => !p.recurring && !p.done && !next.includes(p.uid)).map((p) => p.uid);
-    next = [...fresh, ...next];
-  }
-  const captured = CAPTURED.map(([title, lane], i) => ({ uid: `card${String(i + 1).padStart(8, '0')}`, title, lane }));
-  const order = {
-    later: captured.filter((c) => c.lane === 'later').map((c) => c.uid),
-    next: [...next, ...captured.filter((c) => c.lane === 'next').map((c) => c.uid)],
-  };
-  const laneOf = (uid: string): [OpenLane | null, number] => {
-    const lane = (['later', 'next'] as const).find((l) => order[l].includes(uid));
-    return lane ? [lane, order[lane].indexOf(uid) + 1] : [null, 0];
-  };
+  for (const r of SEEDED_RECURRING) add(r.uid, r.title, r.categoryUid, weekdayMask(r.weekdays), null, 0, days[0]!.createdAt);
   for (const day of days) {
     for (const p of day.priorities) {
       if (p.recurring || ids.has(p.uid)) continue;
-      add(p.uid, p.text, p.categoryUid, null, ...laneOf(p.uid), p.addedAt);
+      add(p.uid, p.text, p.categoryUid, null, null, 0, p.addedAt);
     }
   }
   // Captured a few minutes apart, just before the last weekday's list was written.
-  const capturedAt = (last ?? today!).createdAt;
-  captured.forEach((c, i) => add(c.uid, c.title, categoryFor(c.title), null, ...laneOf(c.uid), capturedAt - (captured.length - i) * 5 * MINUTE_MS));
+  const capturedAt = (days.at(-2) ?? days.at(-1)!).createdAt;
+  CAPTURED.forEach(([title, lane], i) => {
+    const position = CAPTURED.slice(0, i + 1).filter(([, l]) => l === lane).length;
+    add(`card${String(i + 1).padStart(8, '0')}`, title, categoryFor(title), null, lane, position, capturedAt - (CAPTURED.length - i) * 5 * MINUTE_MS);
+  });
   return ids;
 }
 

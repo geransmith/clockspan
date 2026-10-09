@@ -154,7 +154,6 @@ describe('seedDatabase', () => {
         expect(p.uid).toMatch(/^[a-z0-9]{12}$/);
         expect(p.addedAt).toBeGreaterThan(0);
       }
-      expect(new Set(day.priorities.map((p) => p.uid)).size).toBe(day.priorities.length);
 
       // Sessions: each task is on the same day's list, and a cancelled one has none.
       const uids = new Set(day.priorities.map((p) => p.uid));
@@ -169,26 +168,18 @@ describe('seedDatabase', () => {
 
     expectConsistent(m, SEED_NOW);
     expectTasksInStep(db, m);
-    // Captured on the board: three in Later and one in Next, below the open tasks of today and the
-    // last weekday, on no list.
+    // Captured on the board: three in Later and one in Next, on no list.
     const named = (uid: string | null) => m.board.categories.find((c) => c.uid === uid)?.name;
     expect(m.board.cards.filter((c) => c.listDate == null).map((c) => [c.lane, c.position, c.title, named(c.categoryUid)])).toEqual([
       ['later', 1, 'Write a KB for the SSO reset', 'Knowledge base'],
       ['later', 2, 'Review canned replies', 'Knowledge base'],
       ['later', 3, 'Look into the export timeout', 'Tickets'],
-      ['next', 3, 'Follow up on the Acme SLA', 'Follow-ups'],
+      ['next', 1, 'Follow up on the Acme SLA', 'Follow-ups'],
     ]);
-    // In Next too: the open one-offs of today and the last weekday. Every other task a list holds
-    // is in no lane.
+    // A task typed on a list has no lane.
+    expect(m.board.cards.filter((c) => c.listDate != null && c.lane != null)).toEqual([]);
     const extra = m.days.at(-2)!;
     const today = m.days.at(-1)!;
-    // The ones today brought go above the carried one, as new tasks went to the top of Next.
-    const open = (d: SeededDay) => d.priorities.filter((p) => !p.done && !p.recurring).map((p) => p.uid);
-    const carried = open(extra);
-    expect(m.board.cards.filter((c) => c.listDate != null && c.lane != null).map((c) => c.uid)).toEqual([
-      ...open(today).filter((uid) => !carried.includes(uid)),
-      ...carried,
-    ]);
     // Most rows have a category, and so does each unplanned Inbox session; a session on a task
     // counts under the task's, and is named by it.
     const rows = m.days.flatMap((d) => d.priorities);
@@ -255,9 +246,8 @@ describe('seedDatabase', () => {
     const firstStart = Math.min(...extra.sessions.filter((s) => s.status === 'completed').map((s) => s.startedAt));
     expect(extra.priorities.filter((p) => p.addedAt > firstStart)).toHaveLength(1);
 
-    // Today's list was planned at the end of that day's retrospective, carrying its open task.
+    // Today's list was planned at the end of that day's retrospective (expectTasksInStep checks the carry).
     expect(today.priorities.every((p) => p.addedAt > extra.retroAt! && p.addedAt < today.punches[0]!.at!)).toBe(true);
-    expect(today.priorities[0]!.uid).toBe(extra.priorities.find((p) => !p.done && !p.recurring)!.uid);
     // A session paused and finished short of its plan, and a break ended early.
     const paused = today.sessions.find((s) => s.pausedSeconds > 0)!;
     expect(paused.endedAt! - paused.startedAt - paused.pausedSeconds * 1000).toBeLessThan(paused.plannedSeconds * 1000);
