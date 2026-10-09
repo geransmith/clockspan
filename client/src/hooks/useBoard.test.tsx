@@ -44,7 +44,14 @@ function renderBoard({ strict = false, today = true } = {}) {
   return renderHook(
     () => {
       if (today) useDay(TODAY);
-      return { ...useBoardState(), store: useBoardStore(), days: useDayStore(), generation: useDays().generation, updateSettings: useSettings().update };
+      return {
+        ...useBoardState(),
+        store: useBoardStore(),
+        days: useDayStore(),
+        heldDays: useDays().days,
+        generation: useDays().generation,
+        updateSettings: useSettings().update,
+      };
     },
     { wrapper: SettingsAndDays, reactStrictMode: strict },
   );
@@ -83,7 +90,6 @@ describe('reading the board', () => {
   it('sends nothing while the board is off or the settings have not loaded, and nothing ticks', async () => {
     const settings = deferred<ReturnType<typeof makeSettings>>();
     vi.mocked(api.getSettings).mockResolvedValue(makeSettings()).mockReturnValueOnce(settings.promise);
-    lists[TODAY] = [makePriority(1, 'Typed with the board off')];
     const { result } = renderBoard();
     await settle();
     expect(result.current.on).toBe(false);
@@ -92,13 +98,11 @@ describe('reading the board', () => {
     await act(() => result.current.store.load());
     expect(result.current.on).toBe(false);
     expect(api.getBoard).not.toHaveBeenCalled();
-    expect(api.putPriorities).not.toHaveBeenCalled();
     expect(result.current.board).toBeUndefined();
   });
 
-  it("reads at once when switched on, once under StrictMode, sends nothing for today's rows, and keeps the board when switched off", async () => {
+  it('reads at once when switched on, once under StrictMode, and keeps the board when switched off', async () => {
     vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
-    lists[TODAY] = [makePriority(1, 'Typed with the board off')];
     const { result } = renderBoard({ strict: true });
     await settle();
     expect(api.getBoard).not.toHaveBeenCalled();
@@ -107,8 +111,6 @@ describe('reading the board', () => {
     expect(api.getBoard).toHaveBeenCalledTimes(1);
     expect(result.current).toMatchObject({ on: true, failed: false });
     expect(shownTexts(result.current.board)).toEqual(['Write a KB', 'Follow up']);
-    // In progress is today's list: nothing is sent to show it.
-    expect(api.putPriorities).not.toHaveBeenCalled();
 
     await act(() => result.current.updateSettings({ board: false }));
     await settle(5 * MINUTE_MS);
@@ -239,6 +241,20 @@ describe('task writes', () => {
     expect(result.current.board).toEqual(onServer);
   });
 
+  it("refuse a new task in a lane once Later and Next are full, sending nothing, with the board's line", async () => {
+    onServer = makeBoard(...Array.from({ length: BOARD_LIMITS.openCards }, (_, i) => makeCard(`full${i}`.padEnd(12, '0'), `Task ${i}`, { position: i + 1 })));
+    const { result } = renderBoard();
+    await settle();
+    await expect(
+      act(() => result.current.store.addItem({ uid: 'new000000001', title: 'Captured', categoryUid: null, lane: 'next', before: null })),
+    ).rejects.toThrow(new MoveRefused(BOARD.full));
+    expect(api.addItem).not.toHaveBeenCalled();
+    expect(result.current.board?.cards).toHaveLength(BOARD_LIMITS.openCards);
+    // A recurring priority takes no lane.
+    await act(() => result.current.store.addItem(makeRecurring('rcur00000001', 'Timesheet')));
+    expect(api.addItem).toHaveBeenCalledOnce();
+  });
+
   it('take a failed change off, reject, and read the board again: a refusal of any kind', async () => {
     const { result } = renderBoard();
     await settle();
@@ -289,8 +305,8 @@ describe('task writes', () => {
     await act(() => result.current.store.editItem(queue.uid, { title: 'Watch the queue' }));
     await settle();
     expect(reads()).toEqual([YESTERDAY, TODAY]);
-    expect(result.current.days.shown(YESTERDAY)?.priorities[0]?.text).toBe('Watch the queue');
-    expect(result.current.days.shown(TODAY)?.priorities[0]?.text).toBe('Watch the queue');
+    expect(result.current.heldDays[YESTERDAY]?.priorities[0]?.text).toBe('Watch the queue');
+    expect(result.current.heldDays[TODAY]?.priorities[0]?.text).toBe('Watch the queue');
     expect(result.current.generation).toBe(2);
     vi.mocked(api.getDay).mockClear();
     await act(() => result.current.store.editItem(queue.uid, { categoryUid: null }));
@@ -403,6 +419,39 @@ describe('moves', () => {
     expect(api.editItem).not.toHaveBeenCalled();
   });
 
+  it("rename a row gone from today's list meanwhile, or give it a category, through its task", async () => {
+    const { result } = renderBoard();
+    await settle();
+    await act(() => result.current.store.editRow('later0000001', { text: 'Write the KB' }));
+    await act(() => result.current.store.editRow('later0000001', { categoryUid: 'cafe00000001' }));
+    expect(vi.mocked(api.editItem).mock.calls).toEqual([
+      ['later0000001', { title: 'Write the KB' }],
+      ['later0000001', { categoryUid: 'cafe00000001' }],
+    ]);
+    expect(api.putPriorities).not.toHaveBeenCalled();
+    expect(result.current.board?.cards.find((c) => c.uid === 'later0000001')).toMatchObject({ title: 'Write the KB', categoryUid: 'cafe00000001' });
+    expect(result.current.generation).toBe(2);
+  });
+
+  it('send a move made before midnight against that day, though its job runs after', async () => {
+    lists[TODAY] = [makePriority(1, 'Report')];
+    const { result } = renderBoard();
+    await settle();
+    const uid = lists[TODAY]![0]!.uid!;
+    const first = deferred<{ priorities: Priority[] }>();
+    vi.mocked(api.putPriorities).mockReturnValueOnce(first.promise);
+    act(() => {
+      void result.current.store.move({ kind: 'place', row: pulled('later0000001', 'Write a KB'), nudge: true });
+      void result.current.store.move({ kind: 'tick', uid, done: true });
+    });
+    await settle();
+    vi.setSystemTime(new Date(2026, 8, 29, 0, 1));
+    first.resolve({ priorities: (lists[TODAY] = vi.mocked(api.putPriorities).mock.calls[0]![1]) });
+    await settle();
+    expect(putCalls().map((c) => c.date)).toEqual([TODAY, TODAY]);
+    expect(lists[TODAY]![0]).toMatchObject({ uid, done: true });
+  });
+
   it('change a task through a patch move as an edit', async () => {
     const { result } = renderBoard();
     await settle();
@@ -452,7 +501,7 @@ describe('moves', () => {
       // The list as the card pads it, less the row: the card pads it again on screen.
       expect(putCalls().map((c) => c.texts)).toEqual([
         ['Report', 'Email'],
-        ['Report', ''],
+        ['Report', '', ''],
       ]);
       expect(callOrder(api.editItem)).toBeLessThan(callOrder(api.putPriorities, 1));
       expect(result.current.board?.cards.find((c) => c.uid === 'typed0000001')).toMatchObject({ lane: 'later', position: 1 });
@@ -490,11 +539,27 @@ describe('moves', () => {
       expect(lists[TODAY]!.map((p) => p.text)).toEqual(['Report']);
       await move(result, park);
       expect(vi.mocked(api.editItem).mock.calls.map(([uid]) => uid)).toEqual(['later0000001', 'later0000001']);
-      expect(lists[TODAY]!.map((p) => p.text)).toEqual(['', '']);
+      expect(lists[TODAY]!.map((p) => p.text)).toEqual(['', '', '']);
       // Gone from the list now: placed, nothing more sent.
       await move(result, { ...park, lane: 'later' });
       expect(api.editItem).toHaveBeenCalledTimes(3);
       expect(api.putPriorities).toHaveBeenCalledTimes(2);
+    });
+
+    it('reads the board again once the row is off, so a done task pulled back onto today shows done again', async () => {
+      const done = makeCard('done00000001', 'Shipped', { lane: null, listDate: YESTERDAY, listDone: true });
+      onServer = makeBoard(...onServer.cards, { ...done, listDate: TODAY, listDone: false });
+      lists[TODAY] = [makePriority(1, 'Shipped', { uid: done.uid, listed: 2 })];
+      const { result } = renderBoard();
+      await settle();
+      vi.mocked(api.putPriorities).mockImplementationOnce((date, list) => {
+        onServer = makeBoard(...onServer.cards.map((c) => (c.uid === done.uid ? { ...c, listDate: YESTERDAY, listDone: true } : c)));
+        return Promise.resolve({ priorities: (lists[date] = list) });
+      });
+      await move(result, { kind: 'park', uid: done.uid, lane: 'next', before: null });
+      await settle();
+      expect(api.getBoard).toHaveBeenCalledTimes(2);
+      expect(result.current.board?.cards.find((c) => c.uid === done.uid)).toMatchObject({ lane: 'next', listDone: true });
     });
 
     it('refuses a row whose list is not loaded once it is placed', async () => {
@@ -508,29 +573,39 @@ describe('moves', () => {
 });
 
 describe('deleteItem', () => {
-  it("takes the task off the board at once, off today's list, then deletes it once that save is in, and reads its days again", async () => {
-    lists[TODAY] = [makePriority(1, 'Report', { uid: 'later0000001' }), makePriority(2, 'Email')];
-    lists[YESTERDAY] = [makePriority(1, 'Report', { uid: 'later0000001' })];
+  it("takes the task off the board at once, deletes it once today's save is in, which takes it off every day, and reads its days again", async () => {
+    const report = makePriority(1, 'Report', { uid: 'later0000001', listed: 2 });
+    lists[TODAY] = [report];
+    lists[YESTERDAY] = [report];
     const { result } = renderBoard();
     await settle();
     await act(() => result.current.days.load(YESTERDAY));
     await act(() => result.current.days.load(TOMORROW));
+    // A task typed a moment ago: today's save is still out.
     const save = deferred<{ priorities: Priority[] }>();
     vi.mocked(api.putPriorities).mockReturnValueOnce(save.promise);
+    act(() => void result.current.days.setPriorities(TODAY, [report, makePriority(2, 'Email')], [report]));
     const deleted = begin(() => result.current.store.deleteItem('later0000001'));
     expect(shownTexts(result.current.board)).toEqual(['Follow up']);
     await settle();
-    expect(putCalls()).toEqual([{ date: TODAY, texts: ['Email', ''] }]);
     expect(api.deleteItem).not.toHaveBeenCalled();
     save.resolve({ priorities: (lists[TODAY] = vi.mocked(api.putPriorities).mock.calls[0]![1]) });
-    // The server took it off every day.
+    // The server took it off every day, today's list included, and kept its tombstone.
     vi.mocked(api.getDay).mockClear();
+    lists[TODAY] = lists[TODAY].filter((p) => p.uid !== report.uid);
     lists[YESTERDAY] = [];
     await act(() => deleted);
     await settle();
     expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith('later0000001');
-    expect(vi.mocked(api.getDay).mock.calls.map(([d]) => d)).toEqual([YESTERDAY]);
-    expect(result.current.days.shown(YESTERDAY)?.priorities).toEqual([]);
+    expect(api.putPriorities).toHaveBeenCalledOnce();
+    expect(
+      vi
+        .mocked(api.getDay)
+        .mock.calls.map(([d]) => d)
+        .sort(),
+    ).toEqual([YESTERDAY, TODAY]);
+    expect(result.current.heldDays[TODAY]?.priorities.map((p) => p.text)).toEqual(['Email']);
+    expect(result.current.heldDays[YESTERDAY]?.priorities).toEqual([]);
     expect(result.current.generation).toBe(1);
     expect(shownTexts(result.current.board)).toEqual(['Follow up']);
   });
@@ -562,7 +637,7 @@ describe('deleteItem', () => {
     expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith('later0000001');
   });
 
-  it('counts a 404 as done: a save in the job, or another device, took the task already', async () => {
+  it('counts a 404 as done: another device deleted the task already', async () => {
     const { result } = renderBoard();
     await settle();
     // A read that still has the task, sent before the delete was answered, doesn't bring it back.
@@ -590,16 +665,6 @@ describe('deleteItem', () => {
     expect(result.current.generation).toBe(0);
   });
 
-  it("deletes nothing when today's list can't be saved without it, and puts the task back", async () => {
-    lists[TODAY] = [makePriority(1, 'Report', { uid: 'later0000001' })];
-    const { result } = renderBoard();
-    await settle();
-    vi.mocked(api.putPriorities).mockRejectedValueOnce(new Error('offline'));
-    await expect(act(() => result.current.store.deleteItem('later0000001'))).rejects.toThrow(SAVE_FAILED.title);
-    expect(shownTexts(result.current.board)).toEqual(['Write a KB', 'Follow up']);
-    expect(api.deleteItem).not.toHaveBeenCalled();
-  });
-
   it('reads again a left-open offer already fetched, which no longer offers the task, and a held past day that listed it', async () => {
     serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Write a KB', { uid: 'later0000001' })] })]);
     const { result } = renderHook(
@@ -625,7 +690,7 @@ describe('removeFromToday', () => {
     const { result } = renderBoard();
     await settle();
     await act(() => result.current.store.removeFromToday('rcur00000001'));
-    expect(putCalls()).toEqual([{ date: TODAY, texts: ['', ''] }]);
+    expect(putCalls()).toEqual([{ date: TODAY, texts: ['', '', ''] }]);
     expect(api.deleteItem).not.toHaveBeenCalled();
   });
 });

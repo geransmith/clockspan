@@ -98,8 +98,6 @@ interface DayStore {
    * `setPriorities` saves. Never rejects.
    */
   editPriorities: (date: string, fn: (rows: Priority[]) => Priority[] | null) => Promise<PrioritiesEdit>;
-  /** The day as the store shows it now, changes on their way included: for a board job that reads the list again after an await. */
-  shown: (date: string) => Day | undefined;
   /**
    * Add a priority from outside the card (the timer), a task typed new in `categoryUid` if given.
    * Resolves to its uid once saved; rejects if it could not be saved.
@@ -665,7 +663,6 @@ export function DayProvider({ children }: { children: ReactNode }) {
       setPunches,
       setPriorities,
       editPriorities,
-      shown: shownCopy,
       addPriority,
       prioritiesSaved,
       setOvertimeApproved,
@@ -687,7 +684,6 @@ export function DayProvider({ children }: { children: ReactNode }) {
       setPunches,
       setPriorities,
       editPriorities,
-      shownCopy,
       addPriority,
       prioritiesSaved,
       setOvertimeApproved,

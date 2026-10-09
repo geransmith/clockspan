@@ -14,7 +14,6 @@ import {
   dropTarget,
   findItem,
   laneStart,
-  MoveRefused,
   moveAnnouncement,
   moveTargets,
   offeredLeftovers,
@@ -546,14 +545,6 @@ describe('dragging', () => {
     expect(overAnnouncement({ to: 'progress', before: null }, item('item:a'), c)).toBe(BOARD_DRAG.over('A', 'In progress'));
     expect(overAnnouncement({ to: 'next', before: 'd' }, item('item:a'), c)).toBe(BOARD_DRAG.overBefore('A', 'Next', 'D'));
     expect(overAnnouncement({ to: 'next', before: null }, item('item:a'), c)).toBe(BOARD_DRAG.overEnd('A', 'Next'));
-  });
-});
-
-describe('MoveRefused', () => {
-  it('is an Error carrying the line to show', () => {
-    const e = new MoveRefused(BOARD.full);
-    expect(e).toBeInstanceOf(Error);
-    expect(e.message).toBe(BOARD.full);
   });
 });
 

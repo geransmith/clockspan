@@ -21,8 +21,8 @@ import {
 } from '../lib/board';
 import { ADD_PRIORITY_FAILED, BOARD, SAVE_FAILED } from '../lib/copy';
 import { addPending, fetched, settle, settleWith, shown, untracked, type Tracked } from '../lib/optimistic';
-import { editPriority, newUid, placePriority } from '../lib/priorities';
-import { useDayStore, type PrioritiesEdit } from './useDay';
+import { newUid, placePriority, takeOffRow } from '../lib/priorities';
+import { useDayStore } from './useDay';
 import { useLatest } from './useLatest';
 import { useRefreshLoop } from './useRefreshLoop';
 import { useSettings } from './useSettings';
@@ -44,11 +44,12 @@ export interface BoardState {
 }
 
 /**
- * The board's writes, each one job on the `'board'` queue, so they reach the server in the order
- * made. A task's change shows at once, and a write rejects when it fails (the board is read
+ * The board's writes, each one job on the board store's queue, so they reach the server in the
+ * order made. A task's change shows at once, and a write rejects when it fails (the board is read
  * again). A move that changes today's list awaits that save inside its job; the day store shows
- * it from the moment the job sends it. The board makes the uids of the tasks it creates. The
- * object keeps its identity for the provider's life.
+ * it from the moment the job sends it. Today is the day the write was made on, even when its job
+ * runs after midnight. The board makes the uids of the tasks it creates. The object keeps its
+ * identity for the provider's life.
  */
 export interface BoardStore {
   /**
@@ -57,7 +58,10 @@ export interface BoardStore {
    * may have left before that, so a new one goes after it.
    */
   load(opts?: { fresh?: boolean }): Promise<void>;
-  /** A new task in a lane (capture, or a done item's new task), or a new recurring priority made in Settings → Board. */
+  /**
+   * A new task in a lane (capture, or a done item's new task), refused at the lanes' cap before it
+   * is sent, or a new recurring priority made in Settings → Board.
+   */
   addItem(item: NewItem): Promise<void>;
   /**
    * A task off today's list edited on the board, or a recurring priority renamed, given a category
@@ -68,20 +72,20 @@ export interface BoardStore {
   editItem(uid: string, patch: ItemPatch): Promise<void>;
   /**
    * A one-off task deleted everywhere, the board's Delete and the sheet's: off the board at once,
-   * off today's list, then, once today's saves are in (so a task typed seconds ago exists or never
-   * went), `DELETE /items/:uid` (a 404 counts as done: a save took it already, or another device),
-   * then every held day that named it read again and the ranges on screen with them
-   * (`taskChanged`). Works with the board off.
+   * then, once today's saves are in (so a task typed seconds ago exists or never went),
+   * `DELETE /items/:uid`, which takes it off every day, today's list included, and leaves its
+   * tombstone (a 404 counts as done: another device deleted it already), then every held day that
+   * named it read again and the ranges on screen with them (`taskChanged`). Works with the board off.
    */
   deleteItem(uid: string): Promise<void>;
   /** A recurring priority removed in Settings → Board: it stops repeating, and the days it was on keep it (a 404 counts as done). */
   removeRecurring(uid: string): Promise<void>;
-  /** A row taken off today's list from the board: a recurring priority's Remove from today. */
+  /** A row taken off today's list from the board as × takes it (`takeOffRow`): a recurring priority's Remove from today. */
   removeFromToday(uid: string): Promise<void>;
   /**
    * A row of today's list renamed or given a category on the board, which reaches every day its
-   * task is on. A recurring row's shows on the board's recurring priority at once, and the held
-   * days and ranges that name it are read again once the save is in (`taskChanged`).
+   * task is on and shows on the board's copy at once (a recurring priority in Settings → Board, its
+   * earlier ticks in Done). A row gone from today's list meanwhile has its task patched instead.
    */
   editRow(uid: string, patch: Partial<Pick<Priority, 'text' | 'categoryUid'>>): Promise<void>;
   /** A move `planMove` gave, as one job. */
@@ -96,18 +100,6 @@ export interface BoardStore {
 
 const StateCtx = createContext<BoardState | null>(null);
 const StoreCtx = createContext<BoardStore | null>(null);
-
-/** Why an edit of today's list can't go on: not loaded, a failed save, or `skipped` where that means something (a full list). */
-function editRefused(edit: PrioritiesEdit, skipped: string | null): Error | null {
-  if (edit === 'notLoaded') return new MoveRefused(ADD_PRIORITY_FAILED.notLoaded);
-  if (edit === 'failed') return new Error(SAVE_FAILED.title);
-  return edit === 'skipped' && skipped ? new MoveRefused(skipped) : null;
-}
-
-/** The list without the task's row, renumbered; null when the list doesn't hold it. */
-function without(rows: Priority[], uid: string): Priority[] | null {
-  return rows.some((p) => p.uid === uid) ? rows.filter((p) => p.uid !== uid).map((p, i) => ({ ...p, position: i + 1 })) : null;
-}
 
 /**
  * The board: the server's tasks plus the writes not confirmed yet (`lib/optimistic.ts`), like the
@@ -185,7 +177,7 @@ export function BoardProvider({ children }: { children: ReactNode }) {
   const write = useCallback(
     (apply: (b: Board) => Board, run: () => Promise<Board | null>) => {
       const id = pend(apply);
-      return queue(() => answer(id, apply, run), 'board');
+      return queue(() => answer(id, apply, run));
     },
     [pend, queue, answer],
   );
@@ -202,86 +194,108 @@ export function BoardProvider({ children }: { children: ReactNode }) {
 
   const addItem = useCallback(
     (item: NewItem) => {
+      const refused = 'lane' in item ? full(item.uid) : null;
+      if (refused) return Promise.reject(refused);
       const now = Date.now();
       return write(
         (b) => withItem(b, item, now),
         () => api.addItem(item),
       );
     },
-    [write],
+    [full, write],
+  );
+
+  // The server renamed or filed it on every day: the board's earlier days in Done, today's row.
+  const patchItem = useCallback(
+    async (uid: string, patch: ItemPatch) => {
+      const saved = await api.editItem(uid, patch);
+      if (patch.title !== undefined || patch.categoryUid !== undefined) dayStore.taskChanged(uid);
+      return saved;
+    },
+    [dayStore],
   );
 
   const editItem = useCallback(
     (uid: string, patch: ItemPatch) =>
       write(
         (b) => withItemPatch(b, uid, patch),
-        async () => {
-          const saved = await api.editItem(uid, patch);
-          // The server renamed or filed it on every day: the board's earlier days in Done, today's row.
-          if (patch.title !== undefined || patch.categoryUid !== undefined) dayStore.taskChanged(uid);
-          return saved;
-        },
+        () => patchItem(uid, patch),
       ),
-    [write, dayStore],
+    [write, patchItem],
   );
 
-  // A row of today's list changed through the day store. A row gone from the list meanwhile is left alone.
-  const setRow = useCallback(
-    async (uid: string, patch: Partial<Pick<Priority, 'text' | 'done' | 'categoryUid'>>) => {
-      const now = Date.now();
-      const edit = await dayStore.editPriorities(todayKey(), (rows) =>
-        rows.some((p) => p.uid === uid) ? rows.map((p) => (p.uid === uid ? editPriority(p, patch, now) : p)) : null,
-      );
-      const refused = editRefused(edit, null);
-      if (refused) throw refused;
+  // Today's list changed by `fn`, inside a job: refused while the list isn't loaded, a failed save
+  // thrown, and a change that gave nothing to save thrown only with `whenSkipped` (a full list).
+  const editToday = useCallback(
+    async (today: string, fn: (rows: Priority[]) => Priority[] | null, whenSkipped?: string): Promise<'saved' | 'skipped'> => {
+      const edit = await dayStore.editPriorities(today, fn);
+      if (edit === 'notLoaded') throw new MoveRefused(ADD_PRIORITY_FAILED.notLoaded);
+      if (edit === 'failed') throw new Error(SAVE_FAILED.title);
+      if (edit === 'skipped' && whenSkipped) throw new MoveRefused(whenSkipped);
+      return edit;
     },
     [dayStore],
   );
 
-  // A recurring row's save renames or files its recurring priority on every day: the board's copy
-  // shows it at once (Settings → Board, its earlier ticks in Done), and once the save is in, the
-  // days that hold it are read again.
+  // A row of today's list changed through the day store: 'skipped' when the row has gone meanwhile.
+  const setRow = useCallback(
+    (today: string, uid: string, patch: Partial<Pick<Priority, 'text' | 'done' | 'categoryUid'>>) =>
+      editToday(today, (rows) => (rows.some((p) => p.uid === uid) ? rows.map((p) => (p.uid === uid ? { ...p, ...patch } : p)) : null)),
+    [editToday],
+  );
+
+  // A rename or category reaches every day the task is on, so a row gone from today's list meanwhile
+  // (another device took it off) still has it: sent to the task itself, in this job, since the
+  // store's `editItem` would queue behind it.
   const editRow = useCallback(
     (uid: string, patch: Partial<Pick<Priority, 'text' | 'categoryUid'>>) => {
-      if (!shown(current())?.recurring.some((r) => r.uid === uid)) return queue(() => setRow(uid, patch), 'board');
+      const today = todayKey();
+      const itemPatch = { title: patch.text, categoryUid: patch.categoryUid };
       return write(
-        (b) => withItemPatch(b, uid, { title: patch.text, categoryUid: patch.categoryUid }),
-        async () => {
-          await setRow(uid, patch);
-          dayStore.taskChanged(uid);
-          return null;
-        },
+        (b) => withItemPatch(b, uid, itemPatch),
+        async () => ((await setRow(today, uid, patch)) === 'skipped' ? patchItem(uid, itemPatch) : null),
       );
     },
-    [current, queue, setRow, write, dayStore],
+    [write, setRow, patchItem],
   );
 
-  // Today's list without the task, once that day's save is in. A row gone already sends nothing.
+  // Today's list without the task, as × leaves it, once that day's save is in. A row gone already sends nothing.
   const offToday = useCallback(
-    async (uid: string) => {
-      const refused = editRefused(await dayStore.editPriorities(todayKey(), (rows) => without(rows, uid)), null);
-      if (refused) throw refused;
-    },
-    [dayStore],
+    (today: string, uid: string) =>
+      editToday(today, (rows) => {
+        const row = rows.find((p) => p.uid === uid);
+        return row ? takeOffRow(rows, row.position, priorityCount.current) : null;
+      }),
+    [editToday, priorityCount],
   );
 
-  const removeFromToday = useCallback((uid: string) => queue(() => offToday(uid), 'board'), [queue, offToday]);
+  const removeFromToday = useCallback(
+    (uid: string) => {
+      const today = todayKey();
+      return queue(async () => {
+        await offToday(today, uid);
+      });
+    },
+    [queue, offToday],
+  );
 
   // A row of today's list to Later or Next: once today's save still out has landed, so a task
   // typed seconds ago exists on the server, the task is placed, then its row leaves the list. The
   // place comes first, so the save's clean-up never takes a task with no lane, and a retry after a
-  // failed removal places the same task. Refused at the cap, nothing is removed.
+  // failed removal places the same task. Refused at the cap, nothing is removed. The board is read
+  // again after: a task pulled back from Done is done again once its row is off today.
   const park = useCallback(
-    async ({ uid, lane, before }: Extract<StoreMove, { kind: 'park' }>) => {
-      await dayStore.prioritiesSaved(todayKey());
+    async (today: string, { uid, lane, before }: Extract<StoreMove, { kind: 'park' }>) => {
+      await dayStore.prioritiesSaved(today);
       const refused = full(uid);
       if (refused) throw refused;
       const patch = { lane, before };
       const apply = (b: Board) => withItemPatch(b, uid, patch);
       await answer(pend(apply), apply, () => api.editItem(uid, patch));
-      await offToday(uid);
+      await offToday(today, uid);
+      void load({ fresh: true });
     },
-    [dayStore, full, pend, answer, offToday],
+    [dayStore, full, pend, answer, offToday, load],
   );
 
   const move = useCallback(
@@ -290,42 +304,43 @@ export function BoardProvider({ children }: { children: ReactNode }) {
         const refused = m.patch.lane ? full(m.uid) : null;
         return refused ? Promise.reject(refused) : editItem(m.uid, m.patch);
       }
+      const today = todayKey();
       return queue(async () => {
         switch (m.kind) {
           case 'park':
-            return park(m);
+            return park(today, m);
           case 'tick':
-            return setRow(m.uid, { done: m.done });
+            // A row gone meanwhile is left alone.
+            await setRow(today, m.uid, { done: m.done });
+            return;
           case 'place': {
             const row = { ...m.row, addedAt: Date.now() };
-            const edit = await dayStore.editPriorities(todayKey(), (rows) => placePriority(rows, priorityCount.current, row));
-            const refused = editRefused(edit, ADD_PRIORITY_FAILED.full);
-            if (refused) throw refused;
+            await editToday(today, (rows) => placePriority(rows, priorityCount.current, row), ADD_PRIORITY_FAILED.full);
           }
         }
-      }, 'board');
+      });
     },
-    [full, editItem, queue, park, setRow, dayStore, priorityCount],
+    [full, editItem, queue, park, setRow, editToday, priorityCount],
   );
 
-  // Today's saves go first: today's row comes off, or the sheet's save that took it off lands, so
-  // a task typed seconds ago is stored and then taken off, or never sent. Other days' saves still
-  // out aren't waited for: the server drops a row naming a deleted task, so none of them can bring
-  // it back.
+  // Today's saves go first, so a task typed seconds ago is stored, or the sheet's save that took
+  // it off has landed. The server's delete then takes every day's entry, today's included, and
+  // leaves the tombstone a device still holding the row can't bring the task back past. Other
+  // days' saves still out aren't waited for: the server drops a row naming a deleted task.
   const deleteItem = useCallback(
-    (uid: string) =>
-      write(
+    (uid: string) => {
+      const today = todayKey();
+      return write(
         (b) => withoutItem(b, uid),
         async () => {
-          const today = todayKey();
-          if (dayStore.shown(today)?.priorities.some((p) => p.uid === uid)) await offToday(uid);
-          else await dayStore.prioritiesSaved(today);
+          await dayStore.prioritiesSaved(today);
           const saved = await unlessGone(api.deleteItem(uid));
           dayStore.taskChanged(uid);
           return saved;
         },
-      ),
-    [write, dayStore, offToday],
+      );
+    },
+    [write, dayStore],
   );
 
   const removeRecurring = useCallback(

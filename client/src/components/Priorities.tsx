@@ -8,7 +8,7 @@ import type { CategoryPick } from '../lib/board';
 import { BLANK_NOTE, RENAME_NOTE, WARNING_ACTIONS } from '../lib/copy';
 import { formatDurationCeil } from '../lib/format';
 import type { PrioritySeed } from '../lib/plan';
-import { clearRow, editPriority, emptyRow, isOneOff, nudgeFor, padPriorities, pickWarning, removePriority, type WarningKind } from '../lib/priorities';
+import { editPriority, emptyRow, isOneOff, nudgeFor, padPriorities, pickWarning, takeOffRow, type WarningKind } from '../lib/priorities';
 import { acceptOffer, notOnList } from '../lib/recurring';
 import { loggedByUid } from '../lib/retro';
 import { hasText, isFree } from '../../../shared/priorities.js';
@@ -189,20 +189,16 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick,
     answerOffer(offer);
     focusFree();
   };
-  const removeRow = (position: number) => {
-    const next = removePriority(local, position);
-    // Removing a row before the last moves the next row's X under focus; the last row takes its X with it.
+  // Within Rows per day the row stays, free, with the focus in its box; past that it goes.
+  const takeOff = (position: number) => {
+    const next = takeOffRow(local, position, count);
     flushSync(() => {
       setAdded((n) => Math.min(n, next.length));
       editList(next, true);
     });
-    if (position === local.length) addButton.current?.focus();
-  };
-  // Within Rows per day the row stays, free, with the focus in its box; past that it goes.
-  const takeOff = (position: number) => {
-    if (position > count) return removeRow(position);
-    flushSync(() => editList(clearRow(local, position), true));
-    inputs.current.get(position)?.focus();
+    // Removing a row before the last moves the next row's X under focus; the last row takes its X with it.
+    if (position <= count) inputs.current.get(position)?.focus();
+    else if (position === local.length) addButton.current?.focus();
   };
   // × asks first when the task is on other days or has time logged on it, a timer running on it
   // included, since Delete everywhere is then a different answer; a recurring priority's row never
