@@ -68,22 +68,11 @@ describe('firing', () => {
     expect(vi.mocked(alert).mock.calls[1]![0].kicker).toMatch(/5 min/);
   });
 
-  it('remembers what fired across a reload, and forgets other days', () => {
-    localStorage.setItem('focus:alarms:2026-09-25', '["old"]');
+  it("remembers what fired across a reload, under today's date", () => {
     renderAlarms({ tc: lunchSoon }).unmount();
-    expect(localStorage.getItem('focus:alarms:2026-09-25')).toBeNull();
-    expect(JSON.parse(localStorage.getItem(`focus:alarms:${TODAY}`)!)).toHaveLength(1);
+    expect(localStorage.getItem('focus:alarms')).toMatch(new RegExp(`^${TODAY} lunchBy:lead:15:\\d+$`));
     renderAlarms({ tc: lunchSoon });
     expect(alert).toHaveBeenCalledTimes(1);
-  });
-
-  it('ignores a stored value that is not a list of keys', () => {
-    localStorage.setItem(`focus:alarms:${TODAY}`, '{"not":"a list"}');
-    renderAlarms({ tc: lunchSoon }).unmount();
-    expect(alert).toHaveBeenCalledTimes(1);
-    localStorage.setItem(`focus:alarms:${TODAY}`, '[7, null]');
-    renderAlarms({ tc: lunchSoon });
-    expect(alert).toHaveBeenCalledTimes(2);
   });
 
   it('starts a new fired set when the date changes', () => {
@@ -134,11 +123,12 @@ describe('clock-out and retro', () => {
     rerender({ date: TODAY, tc: tcAt(T0), now: T0, day: NO_DAY, settings });
     expect(vi.mocked(dismissByTag).mock.calls.flat().sort()).toEqual(['alarm:clockOut', 'alarm:lunchBy', 'alarm:retro', 'alarm:secondMeal']);
 
-    // Past midnight, yesterday's banner (and its Overtime approved button) goes with the day.
+    // Past midnight, yesterday's banners (and their buttons) go with the day, before the new
+    // day's punches have been judged.
     const next = renderAlarms({ tc: overDay });
     vi.mocked(dismissByTag).mockClear();
-    next.rerender({ date: '2026-09-29', tc: overDay, now: T0, day: NO_DAY, settings });
-    expect(dismissByTag).toHaveBeenCalledWith('alarm:clockOut');
+    next.rerender({ date: '2026-09-29', tc: null, now: T0, day: NO_DAY, settings });
+    expect(vi.mocked(dismissByTag).mock.calls.flat().sort()).toEqual(['alarm:clockOut', 'alarm:lunchBy', 'alarm:retro', 'alarm:secondMeal']);
   });
 
   it('a reviewed day disarms the retro alarm, and a moved target clears its banner', () => {

@@ -9,7 +9,8 @@ import { useSettings } from './useSettings';
 export interface Moment {
   /**
    * Where it was made, measured then: the burst starts there instead of at the anchor. For a
-   * control that is gone by the time the moment renders (a board tick moves its card to Done).
+   * control that is in place when it is pressed (a priority's tick), or gone by the time the
+   * moment renders (a board tick moves its card to Done).
    */
   at?: DOMRect;
 }
@@ -40,19 +41,23 @@ export function useBecameTrue(value: boolean | null): Moment | null {
  * Plays `sound`'s pick under the master sound switch and, with Celebrations on, returns an
  * emoji burst from the element holding `anchor` (or the moment's own `at`) for as long as one
  * lives. The anchor is measured once the moment has rendered, so it can be the notice that
- * appears with it. The settings are read through a ref instead of listed as a dependency, so a
- * later settings change doesn't rerun the effect for the last moment and play its sound or burst
- * again.
+ * appears with it. A moment raised before the settings have loaded is dropped, as every alert
+ * waits for them. The settings are read through a ref instead of listed as a dependency, so
+ * their first answer, or a later change, doesn't rerun the effect for the last moment and play
+ * its sound or burst again.
  */
-export function useCelebration<T extends HTMLElement>(moment: Moment | null, sound: SoundEvent): { anchor: RefObject<T | null>; burst: BurstAt | null } {
-  const { settings } = useSettings();
-  const latest = useLatest(settings);
+export function useCelebration<T extends HTMLElement = HTMLElement>(
+  moment: Moment | null,
+  sound: SoundEvent,
+): { anchor: RefObject<T | null>; burst: BurstAt | null } {
+  const { settings, loaded } = useSettings();
+  const latest = useLatest({ settings, loaded });
   const anchor = useRef<T>(null);
   // Kept with its moment: a newer moment hides a burst still flying from the last one.
   const [burst, setBurst] = useState<{ moment: Moment; at: BurstAt } | null>(null);
   useEffect(() => {
-    if (!moment) return;
-    const s = latest.current;
+    if (!moment || !latest.current.loaded) return;
+    const s = latest.current.settings;
     if (s.sound) playSound(s.sounds[sound]);
     const rect = s.celebrations ? (moment.at ?? anchor.current?.getBoundingClientRect()) : undefined;
     if (!rect) return;

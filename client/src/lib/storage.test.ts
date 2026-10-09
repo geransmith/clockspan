@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AUTH_USER_KEY, adoptUser, otherUserStored, pruneStored, readStored, readStoredJson, writeStored } from './storage';
+import { addToDaySet, AUTH_USER_KEY, adoptUser, otherUserStored, pruneStored, readDaySet, readStored, writeStored } from './storage';
 
 describe('stored values', () => {
   it('reads and writes through localStorage', () => {
@@ -22,22 +22,37 @@ describe('stored values', () => {
     expect(() => writeStored('focus:x', '1')).not.toThrow();
   });
 
-  it('reads JSON, and null for nothing stored or a value that does not parse', () => {
-    const store = new Map([
-      ['focus:list', '["a","b"]'],
-      ['focus:bad', '{nope'],
-    ]);
-    vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null });
-    expect(readStoredJson('focus:list')).toEqual(['a', 'b']);
-    expect(readStoredJson('focus:bad')).toBeNull();
-    expect(readStoredJson('focus:none')).toBeNull();
+  it("keeps a day's set under one key and reads it back for that day only", () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) });
+    expect(readDaySet('focus:set', '2026-09-28')).toEqual(new Set());
+    expect(addToDaySet('focus:set', '2026-09-28', ['a', 'b', 'a'])).toEqual(new Set(['a', 'b']));
+    expect(store.get('focus:set')).toBe('2026-09-28 a,b');
+    // What another tab stored meanwhile stays.
+    store.set('focus:set', '2026-09-28 a,c');
+    expect(addToDaySet('focus:set', '2026-09-28', ['d'])).toEqual(new Set(['a', 'c', 'd']));
+    expect(readDaySet('focus:set', '2026-09-28')).toEqual(new Set(['a', 'c', 'd']));
+    // Another day starts with none, and its first add drops the day before's.
+    expect(readDaySet('focus:set', '2026-09-29')).toEqual(new Set());
+    expect(addToDaySet('focus:set', '2026-09-29', ['e'])).toEqual(new Set(['e']));
+    expect(store.get('focus:set')).toBe('2026-09-29 e');
   });
 
-  it('prunes every key under a prefix but the one to keep, and nothing else', () => {
+  it('reads an empty set from anything else stored', () => {
     const store = new Map([
-      ['focus:alarms:2026-09-20', '[]'],
+      ['focus:date-only', '2026-09-28'],
+      ['focus:empty', '2026-09-28 '],
+      ['focus:prefixed', 'x2026-09-28 a'],
+      ['focus:json', '["a"]'],
+    ]);
+    vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null });
+    for (const key of store.keys()) expect(readDaySet(key, '2026-09-28')).toEqual(new Set());
+  });
+
+  it('prunes every key under a prefix, and nothing else', () => {
+    const store = new Map([
+      ['focus:alarms', '2026-09-22 x'],
       ['focus:alarms:2026-09-21', '[]'],
-      ['focus:alarms:2026-09-22', '["x"]'],
       ['focus:settingsTab', 'data'],
     ]);
     vi.stubGlobal('localStorage', {
@@ -47,8 +62,8 @@ describe('stored values', () => {
       key: (i: number) => [...store.keys()][i] ?? null,
       removeItem: (k: string) => void store.delete(k),
     });
-    pruneStored('focus:alarms:', 'focus:alarms:2026-09-22');
-    expect([...store.keys()]).toEqual(['focus:alarms:2026-09-22', 'focus:settingsTab']);
+    pruneStored('focus:alarms');
+    expect([...store.keys()]).toEqual(['focus:settingsTab']);
   });
 
   it('prunes nothing, quietly, when storage is blocked', () => {
@@ -57,14 +72,16 @@ describe('stored values', () => {
         throw new Error('SecurityError');
       },
     });
-    expect(() => pruneStored('focus:alarms:', 'focus:alarms:2026-09-22')).not.toThrow();
+    expect(() => pruneStored('focus:alarms')).not.toThrow();
   });
 });
 
 describe('adoptUser and otherUserStored', () => {
   const DEVICE = { 'focus:theme': 'dark', 'focus:settingsTab': 'data', 'focus:timer-due': '7:1790000000000' };
   const USERS = {
-    'focus:alarms:2026-09-30': '["x"]',
+    'focus:alarms': '2026-09-30 lunchBy:lead:15:29833440',
+    // Left by a version that kept a key per day.
+    'focus:alarms:2026-09-29': '["x"]',
     'focus:left-open-dismissed': '2026-09-30',
     'focus:break-over': '1790000000000',
     'focus:capture-category': 'cafe00000001',
@@ -105,10 +122,10 @@ describe('adoptUser and otherUserStored', () => {
     expect(Object.fromEntries(signedOut)).toEqual({ ...DEVICE, [AUTH_USER_KEY]: '' });
   });
 
-  it('drops nothing for a user signing in after no one', () => {
+  it('drops what a page left open after a sign-out wrote, for a user signing in after no one', () => {
     const store = stored('');
     adoptUser(2);
-    expect(Object.fromEntries(store)).toEqual({ ...DEVICE, ...USERS, [AUTH_USER_KEY]: '2' });
+    expect(Object.fromEntries(store)).toEqual({ ...DEVICE, [AUTH_USER_KEY]: '2' });
   });
 
   it('does nothing, quietly, when storage is blocked or missing', () => {

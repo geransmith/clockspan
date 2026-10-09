@@ -8,83 +8,82 @@ import { computeTimeclock } from './timeclock';
 import type { AlarmId, AlarmSettings } from '../types';
 
 const T = new Date(2026, 8, 16, 13, 0).getTime();
-const D = '2026-09-16';
 const alarms = (clock: Partial<AlarmSettings> = {}) => ({ ...TEST_SETTINGS.alarms, clockOut: { ...TEST_SETTINGS.alarms.clockOut, ...clock } });
 const target = (at: number, id: AlarmId = 'clockOut', armed = true): AlarmTarget => ({ id, at, armed });
 
 describe('dueEvents', () => {
   it('fires nothing before the first lead', () => {
-    const r = dueEvents(D, [target(T)], alarms(), new Set(), T - 20 * MINUTE_MS);
+    const r = dueEvents([target(T)], alarms(), new Set(), T - 20 * MINUTE_MS);
     expect(r.fire).toEqual([]);
     expect(r.crossed).toEqual([]);
   });
 
   it('fires a lead exactly when crossed and reports it as crossed', () => {
-    const r = dueEvents(D, [target(T)], alarms(), new Set(), T - 15 * MINUTE_MS);
+    const r = dueEvents([target(T)], alarms(), new Set(), T - 15 * MINUTE_MS);
     expect(r.fire.map((e) => [e.kind, e.minutes])).toEqual([['lead', 15]]);
-    expect(r.crossed).toEqual([eventKey(D, 'clockOut', 'lead', 15, T)]);
+    expect(r.crossed).toEqual([eventKey('clockOut', 'lead', 15, T)]);
   });
 
   it('does not re-fire an event already recorded as fired', () => {
-    const fired = new Set([eventKey(D, 'clockOut', 'lead', 15, T)]);
-    const r = dueEvents(D, [target(T)], alarms(), fired, T - 14 * MINUTE_MS);
+    const fired = new Set([eventKey('clockOut', 'lead', 15, T)]);
+    const r = dueEvents([target(T)], alarms(), fired, T - 14 * MINUTE_MS);
     expect(r.fire).toEqual([]);
   });
 
   it('fires the due event at the target', () => {
-    const fired = new Set([15, 5, 1].map((m) => eventKey(D, 'clockOut', 'lead', m, T)));
-    const r = dueEvents(D, [target(T)], alarms(), fired, T);
+    const fired = new Set([15, 5, 1].map((m) => eventKey('clockOut', 'lead', m, T)));
+    const r = dueEvents([target(T)], alarms(), fired, T);
     expect(r.fire.map((e) => e.kind)).toEqual(['due']);
   });
 
   it('repeats while overdue at the configured interval', () => {
-    const fired = new Set([...[15, 5, 1].map((m) => eventKey(D, 'clockOut', 'lead', m, T)), eventKey(D, 'clockOut', 'due', 0, T)]);
-    expect(dueEvents(D, [target(T)], alarms(), fired, T + 4 * MINUTE_MS).fire).toEqual([]);
-    const r = dueEvents(D, [target(T)], alarms(), fired, T + 5 * MINUTE_MS);
+    const fired = new Set([...[15, 5, 1].map((m) => eventKey('clockOut', 'lead', m, T)), eventKey('clockOut', 'due', 0, T)]);
+    expect(dueEvents([target(T)], alarms(), fired, T + 4 * MINUTE_MS).fire).toEqual([]);
+    const r = dueEvents([target(T)], alarms(), fired, T + 5 * MINUTE_MS);
     expect(r.fire.map((e) => [e.kind, e.minutes])).toEqual([['overdue', 5]]);
     fired.add(r.crossed[0]!);
-    const r2 = dueEvents(D, [target(T)], alarms(), fired, T + 10 * MINUTE_MS);
+    const r2 = dueEvents([target(T)], alarms(), fired, T + 10 * MINUTE_MS);
     expect(r2.fire.map((e) => [e.kind, e.minutes])).toEqual([['overdue', 10]]);
   });
 
   it('collapses a catch-up burst to the latest event and marks what was crossed', () => {
     // Phone slept from T-20m to T+7m: leads 15/5/1, due and overdue 5 all crossed.
-    const r = dueEvents(D, [target(T)], alarms(), new Set(), T + 7 * MINUTE_MS);
+    const r = dueEvents([target(T)], alarms(), new Set(), T + 7 * MINUTE_MS);
     expect(r.fire.map((e) => [e.kind, e.minutes])).toEqual([['overdue', 5]]);
     expect(r.crossed).toHaveLength(5);
   });
 
   it('keeps repeating every minute however long the day runs over', () => {
     const a = alarms({ overdueEveryMinutes: 1 });
-    const r = dueEvents(D, [target(T)], a, new Set(), T + 300 * MINUTE_MS);
+    const r = dueEvents([target(T)], a, new Set(), T + 300 * MINUTE_MS);
     expect(r.fire.map((e) => [e.kind, e.minutes])).toEqual([['overdue', 300]]);
     const fired = new Set(r.crossed);
-    expect(dueEvents(D, [target(T)], a, fired, T + 301 * MINUTE_MS).fire.map((e) => [e.kind, e.minutes])).toEqual([['overdue', 301]]);
+    expect(dueEvents([target(T)], a, fired, T + 301 * MINUTE_MS).fire.map((e) => [e.kind, e.minutes])).toEqual([['overdue', 301]]);
   });
 
   it('re-arms when the target moves later', () => {
     const fired = new Set<string>();
-    const first = dueEvents(D, [target(T)], alarms(), fired, T - 15 * MINUTE_MS);
+    const first = dueEvents([target(T)], alarms(), fired, T - 15 * MINUTE_MS);
     first.crossed.forEach((k) => fired.add(k));
     // Lunch ran long; clock-out is now 20 minutes later. The 15-minute lead is 5 minutes away again.
     const moved = T + 20 * MINUTE_MS;
-    expect(dueEvents(D, [target(moved)], alarms(), fired, T - 14 * MINUTE_MS).fire).toEqual([]);
-    const again = dueEvents(D, [target(moved)], alarms(), fired, moved - 15 * MINUTE_MS);
+    expect(dueEvents([target(moved)], alarms(), fired, T - 14 * MINUTE_MS).fire).toEqual([]);
+    const again = dueEvents([target(moved)], alarms(), fired, moved - 15 * MINUTE_MS);
     expect(again.fire.map((e) => [e.kind, e.minutes])).toEqual([['lead', 15]]);
   });
 
   it('ignores disarmed targets and disabled alarms', () => {
-    expect(dueEvents(D, [target(T, 'clockOut', false)], alarms(), new Set(), T).fire).toEqual([]);
-    expect(dueEvents(D, [target(T)], alarms({ enabled: false }), new Set(), T).fire).toEqual([]);
+    expect(dueEvents([target(T, 'clockOut', false)], alarms(), new Set(), T).fire).toEqual([]);
+    expect(dueEvents([target(T)], alarms({ enabled: false }), new Set(), T).fire).toEqual([]);
   });
 
   it('honours onDue=false and overdueEveryMinutes=0', () => {
     const a = alarms({ leadMinutes: [], onDue: false, overdueEveryMinutes: 0 });
-    expect(dueEvents(D, [target(T)], a, new Set(), T + 60 * MINUTE_MS).fire).toEqual([]);
+    expect(dueEvents([target(T)], a, new Set(), T + 60 * MINUTE_MS).fire).toEqual([]);
   });
 
   it('handles each target independently', () => {
-    const r = dueEvents(D, [target(T, 'lunchBy'), target(T + 3 * HOUR_MS, 'clockOut'), target(T + 15 * MINUTE_MS, 'secondMeal')], alarms(), new Set(), T);
+    const r = dueEvents([target(T, 'lunchBy'), target(T + 3 * HOUR_MS, 'clockOut'), target(T + 15 * MINUTE_MS, 'secondMeal')], alarms(), new Set(), T);
     expect(r.fire.map((e) => [e.id, e.kind])).toEqual([
       ['lunchBy', 'due'],
       ['secondMeal', 'lead'],
@@ -186,7 +185,7 @@ describe('describeEvent', () => {
   // Seen on time: half an hour ahead of the target, before any of these warnings is due.
   const ctx = { clockIn, hour12: true, workMinutes: 480, lunchDeadlineMinutes: 240, secondMealAfterMinutes: 600, now: T - 30 * MINUTE_MS };
   const ev = (id: AlarmId, kind: AlarmEvent['kind'], minutes: number, target: number): AlarmEvent => ({
-    key: eventKey(D, id, kind, minutes, target),
+    key: eventKey(id, kind, minutes, target),
     id,
     kind,
     minutes,
@@ -233,18 +232,22 @@ describe('describeEvent', () => {
     const lead = describeEvent(ev('lunchBy', 'lead', 15, T), ctx);
     expect(lead.title).toBe('Lunch in 15 min');
     expect(lead.body).toBe(`Lunch must start by ${formatTime(T, true)}, 4h after clocking in at ${formatTime(clockIn, true)}.`);
-    expect(describeEvent(ev('lunchBy', 'due', 0, T), ctx).title).toBe('Take lunch now');
-    expect(describeEvent(ev('lunchBy', 'overdue', 5, T), ctx).title).toBe('Lunch is 5 min overdue');
+    const due = describeEvent(ev('lunchBy', 'due', 0, T), ctx);
+    expect(due.title).toBe('Take lunch now');
+    expect(due.body).toBe(`Your lunch deadline is ${formatTime(T, true)}. Punch Lunch out.`);
+    const over = describeEvent(ev('lunchBy', 'overdue', 5, T), ctx);
+    expect(over.title).toBe('Lunch is 5 min overdue');
+    expect(over.body).toBe(`Your lunch deadline was ${formatTime(T, true)}. Punch Lunch out as soon as you can.`);
   });
 
   it('explains the second meal period rule', () => {
     const lead = describeEvent(ev('secondMeal', 'lead', 15, T), ctx);
     expect(lead.kicker).toBe('Second meal alarm · 15 min warning');
-    expect(lead.title).toBe('Second meal break in 15 min');
+    expect(lead.title).toBe('Second meal period in 15 min');
     expect(lead.body).toBe(`Your 10h of work ends at ${formatTime(T, true)}. A second meal period is due before then.`);
-    expect(describeEvent(ev('secondMeal', 'due', 0, T), ctx).title).toBe('Take your second meal break');
+    expect(describeEvent(ev('secondMeal', 'due', 0, T), ctx).title).toBe('Take your second meal period');
     const over = describeEvent(ev('secondMeal', 'overdue', 5, T), ctx);
-    expect(over.title).toBe('Second meal break is 5 min overdue');
+    expect(over.title).toBe('Second meal period is 5 min overdue');
     expect(over.body).toBe(`Your 10h of work ended at ${formatTime(T, true)}. Take your second meal period as soon as you can.`);
     expect(over.tone).toBe('danger');
   });
@@ -255,7 +258,7 @@ describe('describeEvent', () => {
     expect(late.kicker).toBe('Clock-out alarm · 15 min warning');
     expect(late.title).toBe('Clock out in 9 min');
     expect(describeEvent(ev('lunchBy', 'lead', 15, T), { ...ctx, now: T - 3 * MINUTE_MS }).title).toBe('Lunch in 3 min');
-    expect(describeEvent(ev('secondMeal', 'lead', 15, T), { ...ctx, now: T - 5 * MINUTE_MS }).title).toBe('Second meal break in 5 min');
+    expect(describeEvent(ev('secondMeal', 'lead', 15, T), { ...ctx, now: T - 5 * MINUTE_MS }).title).toBe('Second meal period in 5 min');
     // Never "in 0 min" in the last seconds.
     expect(describeEvent(ev('clockOut', 'lead', 1, T), { ...ctx, now: T - 1000 }).title).toBe('Clock out in 1 min');
   });

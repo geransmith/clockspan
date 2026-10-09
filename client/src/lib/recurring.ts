@@ -1,9 +1,8 @@
 /**
  * The morning offer's recurring half: which recurring priorities are due on a day and not on
  * its list yet (`dueRecurring`, `notOnList`), which of them the offer ticks (`offerPicks`, up to
- * `recurringPerDay`), the list after Add to today (`acceptOffer`), and the answers this device
- * gave today (`readAnswered`, `writeAnswered`), which `useRecurringAnswered` keeps. Pure: the
- * clock comes in as `now`.
+ * `recurringPerDay`) and the list after Add to today (`acceptOffer`). The answers this device
+ * gave today are `useRecurringAnswered`'s. Pure: the clock comes in as `now`.
  */
 import type { Priority, Recurring } from '../types';
 import { isoWeekday } from '../../../shared/dates.js';
@@ -73,22 +72,4 @@ export function acceptOffer(rows: Priority[], count: number, leftovers: Priority
   let list = padPriorities(leftovers.length ? planNext(rows, leftovers, now).rows : rows, count);
   for (const item of recurring) list = placePriority(list, count, recurringRow(item, now), { end: true }) ?? list;
   return list;
-}
-
-const ANSWERED_RE = /^(\d{4}-\d{2}-\d{2}) (.*)$/;
-
-/**
- * The recurring priorities answered (added or not) on this device on `date`, from what
- * `writeAnswered` stored: "YYYY-MM-DD uid,uid". Empty for another date, nothing stored, or
- * anything else, so a new day starts with none.
- */
-export function readAnswered(raw: string | null, date: string): Set<string> {
-  const m = raw == null ? null : ANSWERED_RE.exec(raw);
-  if (!m || m[1] !== date) return new Set();
-  return new Set(m[2]!.split(',').filter((uid) => uid !== ''));
-}
-
-/** What `readAnswered` reads back: the date and each uid once. */
-export function writeAnswered(date: string, uids: Iterable<string>): string {
-  return `${date} ${[...new Set(uids)].join(',')}`;
 }

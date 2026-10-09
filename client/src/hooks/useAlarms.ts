@@ -6,13 +6,7 @@ import { ALARM_TAG, alarmTargets, describeEvent, dueEvents, type TargetDay } fro
 import { alert, dismissByTag } from '../lib/alerts';
 import { ALARM_ACTIONS } from '../lib/copy';
 import { resolveHour12 } from '../lib/format';
-import { pruneStored, readStoredJson, USER_KEYS, writeStored } from '../lib/storage';
-
-/** The keys stored for a day: what this tab, or another one open on the same device, already fired. */
-function storedFired(dateKey: string): string[] {
-  const stored = readStoredJson(USER_KEYS.alarms + dateKey);
-  return Array.isArray(stored) ? stored.filter((k): k is string => typeof k === 'string') : [];
-}
+import { addToDaySet, readDaySet, USER_KEYS } from '../lib/storage';
 
 /** The day's switches (which targets are armed is `alarmTargets`) and the banner buttons. */
 export interface AlarmDayState extends TargetDay {
@@ -23,8 +17,8 @@ export interface AlarmDayState extends TargetDay {
 
 /**
  * App-level alarm engine for today's timeclock. Runs every tick: `alarmTargets` says which
- * deadlines are armed, the pure scheduler decides what is due, and the fired-set (persisted
- * per day) prevents repeats.
+ * deadlines are armed, the pure scheduler decides what is due, and the fired-set (today's,
+ * stored under `USER_KEYS.alarms`) prevents repeats.
  */
 export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings: Settings, now: number, day: AlarmDayState): void {
   const { overtimeApproved, retroDone, approveOvertime, openRetro } = day;
@@ -32,27 +26,26 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
   const lastTargets = useRef<Record<string, { at: number; armed: boolean }>>({});
 
   useEffect(() => {
-    // Not judged yet (settings or punches still settling): leave everything as it is.
-    if (!tc) return;
     // Every alarm banner belongs to one day's clock-in. A new day, or a clock-in cleared, takes
-    // them down: their buttons would act on a day that is no longer the one being judged.
+    // them down: their buttons would act on a day that is no longer the one being judged. The
+    // date is known before the new day has been judged, so its banners go at once.
     const clearBanners = () => {
       for (const id of Object.keys(lastTargets.current)) dismissByTag(ALARM_TAG + id);
       lastTargets.current = {};
     };
     if (fired.current?.date !== dateKey) {
-      if (fired.current) clearBanners();
-      // Other days' keys are dropped so the store never grows.
-      pruneStored(USER_KEYS.alarms, USER_KEYS.alarms + dateKey);
+      clearBanners();
       fired.current = { date: dateKey, set: new Set() };
     }
+    // Not judged yet (settings or punches still settling): leave the rest as it is.
+    if (!tc) return;
     if (tc.clockIn == null) {
       clearBanners();
       return;
     }
     // Read every time, not once: a second tab on this device writes what it fired, and
     // without its keys both tabs would ring every alarm.
-    for (const k of storedFired(dateKey)) fired.current.set.add(k);
+    for (const k of readDaySet(USER_KEYS.alarms, dateKey)) fired.current.set.add(k);
 
     const targets = alarmTargets(tc, settings, { overtimeApproved, retroDone });
 
@@ -64,11 +57,11 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
       lastTargets.current[t.id] = { at: t.at, armed: t.armed };
     }
 
-    const { fire, crossed } = dueEvents(dateKey, targets, settings.alarms, fired.current.set, now);
+    const { fire, crossed } = dueEvents(targets, settings.alarms, fired.current.set, now);
     if (crossed.length === 0) return;
     for (const k of crossed) fired.current.set.add(k);
     // With storage blocked (private mode, quota) alarms may repeat after a reload, which is acceptable.
-    writeStored(USER_KEYS.alarms + dateKey, JSON.stringify([...fired.current.set]));
+    addToDaySet(USER_KEYS.alarms, dateKey, fired.current.set);
 
     // Every alarm banner is sticky: the chime is what grabs attention, and the banner has to
     // still be there — saying which alarm and why — when the user looks up. The next

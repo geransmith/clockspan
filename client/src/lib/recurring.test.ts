@@ -3,7 +3,7 @@ import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { makePriority, makeRecurring, T0, TODAY } from '../test/fixtures';
 import type { Priority } from '../types';
 import { emptyRow } from './priorities';
-import { acceptOffer, dueRecurring, notOnList, offerPicks, readAnswered, recurringCount, recurringRow, writeAnswered } from './recurring';
+import { acceptOffer, dueRecurring, notOnList, offerPicks, recurringCount, recurringRow } from './recurring';
 
 // TODAY is a Monday.
 const QUEUE = makeRecurring('rcur00000001', 'Monitor the queue', { categoryUid: 'cafe00000001' });
@@ -129,21 +129,5 @@ describe('acceptOffer', () => {
     const list = acceptOffer(full, 3, [], [QUEUE, FOLLOW_UPS], T0);
     expect(list).toHaveLength(MAX_PRIORITIES);
     expect(list.filter((p) => p.recurring).map((p) => p.uid)).toEqual([QUEUE.uid]);
-  });
-});
-
-describe('readAnswered and writeAnswered', () => {
-  it('read back what was written for the same date, each uid once', () => {
-    const raw = writeAnswered(TODAY, [QUEUE.uid, FOLLOW_UPS.uid, QUEUE.uid]);
-    expect(raw).toBe(`${TODAY} ${QUEUE.uid},${FOLLOW_UPS.uid}`);
-    expect(readAnswered(raw, TODAY)).toEqual(new Set([QUEUE.uid, FOLLOW_UPS.uid]));
-  });
-
-  it('read nothing for another date, nothing stored, no list or something else', () => {
-    expect(readAnswered(writeAnswered(TODAY, [QUEUE.uid]), '2026-09-29')).toEqual(new Set());
-    expect(readAnswered(null, TODAY)).toEqual(new Set());
-    expect(readAnswered(TODAY, TODAY)).toEqual(new Set());
-    expect(readAnswered(writeAnswered(TODAY, []), TODAY)).toEqual(new Set());
-    expect(readAnswered(`x${TODAY} ${QUEUE.uid}`, TODAY)).toEqual(new Set());
   });
 });

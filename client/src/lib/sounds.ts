@@ -5,7 +5,7 @@ import type { ClipId, SoundEvent } from '../../../shared/sounds.js';
  * line in `shared/sounds.ts`; the test checks the two agree. Vite hands out fingerprinted
  * `/assets/` URLs in the build (served immutable) and `/src/sounds/…` in dev.
  */
-const CLIP_FILES = import.meta.glob('../sounds/*.mp3', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+const CLIP_FILES = import.meta.glob('../sounds/*.mp3', { eager: true, query: '?url', import: 'default' });
 
 export function clipUrl(id: ClipId): string {
   return CLIP_FILES[`../sounds/${id}.mp3`]!;
