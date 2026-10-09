@@ -20,6 +20,7 @@ import type {
   RangeResponse,
   RetroResponse,
   RunningResponse,
+  Session,
   SessionResponse,
   Settings,
   TargetResponse,
@@ -170,8 +171,16 @@ export const startSession = (date: string, plannedSeconds: number, label: string
 export const patchSession = (id: number, patch: SessionEdit & { plannedSeconds?: number }) => request<SessionResponse>('PATCH', `/api/sessions/${id}`, patch);
 export const pauseSession = (id: number) => request<SessionResponse>('POST', `/api/sessions/${id}/pause`);
 export const resumeSession = (id: number) => request<SessionResponse>('POST', `/api/sessions/${id}/resume`);
-export const finishSession = (id: number, countOverrun = false) =>
-  request<SessionResponse>('POST', `/api/sessions/${id}/finish`, countOverrun ? { countOverrun } : undefined);
+/**
+ * `expect` is the plan and pause an automatic finish judged the session by: the server refuses
+ * (409) a session another device has changed since. A finish by hand sends none.
+ */
+export const finishSession = (id: number, countOverrun = false, expect?: Pick<Session, 'plannedSeconds' | 'pausedAt'>) =>
+  request<SessionResponse>(
+    'POST',
+    `/api/sessions/${id}/finish`,
+    countOverrun || expect ? { ...(countOverrun && { countOverrun }), ...(expect && { expect }) } : undefined,
+  );
 export const cancelSession = (id: number) => request<SessionResponse>('POST', `/api/sessions/${id}/cancel`);
 export const deleteSession = (id: number) => request<OkResponse>('DELETE', `/api/sessions/${id}`);
 

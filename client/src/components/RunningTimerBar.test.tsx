@@ -6,6 +6,7 @@ import { UNTITLED_SESSION } from '../lib/copy';
 import { formatCountdown } from '../lib/format';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { useDay } from '../hooks/useDay';
+import { useTimer } from '../hooks/useTimer';
 import { AppProviders, makeDay, makePriority, makeSession, makeSettings, setVisibility, settle, T0, TODAY } from '../test/hooks';
 import type { Session } from '../types';
 import { RunningTimerBar } from './RunningTimerBar';
@@ -22,12 +23,18 @@ function HoldToday() {
   return <button onClick={() => void store.refresh(TODAY)}>Read today again</button>;
 }
 
+/** Renders the bar as App does: while a session runs, keyed by it. */
+function Bar() {
+  const { running } = useTimer();
+  return running ? <RunningTimerBar key={running.id} session={running} /> : null;
+}
+
 async function renderBar(session: Session) {
   vi.mocked(api.getRunning).mockResolvedValue({ session });
   render(
     <AppProviders>
       <HoldToday />
-      <RunningTimerBar />
+      <Bar />
     </AppProviders>,
   );
   await settle();

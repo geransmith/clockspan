@@ -38,14 +38,14 @@ export function RemoveTask({ name, otherDays, logged, onOffDay, onEverywhere, on
           </p>
         </div>
         <footer className="dialog-foot">
+          <button className="btn btn-ghost" onClick={onCancel}>
+            {REMOVE_TASK.cancel}
+          </button>
           <button className="btn btn-primary" onClick={onOffDay}>
             {REMOVE_TASK.offDay}
           </button>
           <button className="btn" onClick={onEverywhere}>
             {REMOVE_TASK.everywhere}
-          </button>
-          <button className="btn btn-ghost" onClick={onCancel}>
-            {REMOVE_TASK.cancel}
           </button>
         </footer>
       </div>

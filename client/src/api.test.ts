@@ -105,6 +105,14 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
   // A plain finish has no body, so the server clamps to the planned end.
   ['finishSession', () => api.finishSession(3), 'POST', '/api/sessions/3/finish', undefined],
   ['finishSession, counting the overrun', () => api.finishSession(3, true), 'POST', '/api/sessions/3/finish', { countOverrun: true }],
+  // The auto-finish says what it judged the session by.
+  [
+    'finishSession, on its own',
+    () => api.finishSession(3, false, { plannedSeconds: 1500, pausedAt: null }),
+    'POST',
+    '/api/sessions/3/finish',
+    { expect: { plannedSeconds: 1500, pausedAt: null } },
+  ],
   ['cancelSession', () => api.cancelSession(3), 'POST', '/api/sessions/3/cancel', undefined],
   ['deleteSession', () => api.deleteSession(3), 'DELETE', '/api/sessions/3', undefined],
   ['startBreak', () => api.startBreak(TODAY, 300), 'POST', `/api/days/${TODAY}/breaks`, { plannedSeconds: 300 }],

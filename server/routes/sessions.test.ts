@@ -349,6 +349,28 @@ describe('sessions', () => {
     expect(done.body.session).toMatchObject({ durationSeconds: 3540, endedAt: SEED_NOW + 3 * HOUR_MS - MINUTE_MS });
   });
 
+  it('refuses an automatic finish judged by a plan or pause that has changed since', async () => {
+    const { id } = (await start({ plannedSeconds: 600 })).body.session;
+    const finish = (body: unknown) => app.api.post(`/api/sessions/${id}/finish`, body);
+    for (const bad of [null, 'due', { plannedSeconds: '600', pausedAt: null }, { plannedSeconds: 600 }]) {
+      const r = await finish({ expect: bad });
+      expect([r.status, r.body.error]).toEqual([400, 'expect must hold plannedSeconds and pausedAt.']);
+    }
+    at(HOUR_MS);
+    // Another device gave it five more minutes, then paused it.
+    await app.api.patch(`/api/sessions/${id}`, { plannedSeconds: 900 });
+    const longer = await finish({ expect: { plannedSeconds: 600, pausedAt: null } });
+    expect([longer.status, longer.body.error]).toEqual([409, 'This timer was changed on another device.']);
+    await app.api.post(`/api/sessions/${id}/pause`);
+    expect((await finish({ expect: { plannedSeconds: 900, pausedAt: null } })).status).toBe(409);
+    expect((await app.api.get('/api/sessions/running')).body.session.id).toBe(id);
+    // Judged by the row as it is: finished at the planned end.
+    const done = await finish({ expect: { plannedSeconds: 900, pausedAt: SEED_NOW + HOUR_MS } });
+    expect(done.body.session).toMatchObject({ status: 'completed', durationSeconds: 900 });
+    // Over already: answered as it is, whatever it was judged by.
+    expect((await finish({ expect: { plannedSeconds: 600, pausedAt: null } })).body.session.status).toBe('completed');
+  });
+
   it('finishes early with the elapsed time', async () => {
     const { id } = (await start({ plannedSeconds: 1500 })).body.session;
     at(90_000);
