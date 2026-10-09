@@ -101,6 +101,7 @@ describe('pruning tasks', () => {
   const KEPT = '2026-02-02';
   const save = (date: string, priorities: Record<string, unknown>[]) => app.api.put(`/api/days/${date}/priorities`, { priorities });
   const row = (uid: string, done = false) => ({ text: `Task ${uid}`, uid, done });
+  const dates = () => (app.db.prepare(`SELECT date FROM days`).all() as { date: string }[]).map((d) => d.date);
   const uids = () => (app.db.prepare(`SELECT uid FROM items ORDER BY uid`).all() as { uid: string }[]).map((i) => i.uid);
   const prune = async () => (await app.api.post('/api/days/prune', { before: '2026-02-01' })).body as unknown;
   /** Deletes the task everywhere at `at`, which its tombstone keeps. */
@@ -132,11 +133,11 @@ describe('pruning tasks', () => {
       row('aaaaaaaaaaa5'),
       // Done, with a session on a later day that listed it then.
       row('aaaaaaaaaaa6', true),
-      // A recurring priority done before the cutoff, in use and removed.
+      // A recurring priority done before the cutoff, in use and removed before it.
       { text: 'Monitor the queue', uid: 'rcur00000001', done: true },
       { text: 'Removed routine', uid: 'rcur00000002', done: true },
     ]);
-    await app.api.del('/api/items/rcur00000002');
+    await deleteAt('rcur00000002', Date.parse('2026-01-20T00:00:00Z'));
     await save(KEPT, [row('aaaaaaaaaaa3'), row('aaaaaaaaaaa6')]);
     const { id } = (await app.api.post(`/api/days/${KEPT}/sessions`, { plannedSeconds: 600, priorityUid: 'aaaaaaaaaaa6' })).body.session as { id: number };
     await app.api.post(`/api/sessions/${id}/finish`);
@@ -186,6 +187,28 @@ describe('pruning tasks', () => {
     expect(await prune()).toEqual({ deleted: 0 });
     expect(uids()).toEqual(['card00000002']);
     expect(app.db.serialize().includes('Task text only the prune knew')).toBe(false);
+  });
+
+  it('keeps a tombstone 30 days, however recent the cutoff', async () => {
+    app = await startTestApp();
+    for (const uid of ['card00000001', 'card00000002']) await app.api.post('/api/items', { uid, title: `Task ${uid}`, lane: 'later' });
+    await deleteAt('card00000001', SEED_NOW - 30 * DAY_MS - 1);
+    await deleteAt('card00000002', SEED_NOW - DAY_MS);
+    vi.useFakeTimers({ now: SEED_NOW, toFake: ['Date'] });
+    expect((await app.api.post('/api/days/prune', { before: SEED_TODAY })).status).toBe(200);
+    expect(uids()).toEqual(['card00000002']);
+  });
+
+  it('answers a prune whose compaction fails, and logs the failure', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    app = await startTestApp();
+    await save(OLD, [row('aaaaaaaaaaa1')]);
+    vi.spyOn(app.db, 'exec').mockImplementation(() => {
+      throw new Error('database or disk is full');
+    });
+    expect(await prune()).toEqual({ deleted: 1 });
+    expect(error).toHaveBeenCalledWith('[db] compaction failed', expect.any(Error));
+    expect(dates()).toEqual([]);
   });
 
   it('keeps an archived task nothing names until it was archived, or its old card done, before the cutoff', async () => {

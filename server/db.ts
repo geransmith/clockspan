@@ -119,20 +119,15 @@ export const MIGRATIONS: Migration[] = [
   CREATE INDEX breaks_day ON breaks(day_id);
   CREATE INDEX breaks_user_end ON breaks(user_id, ended_at);
   `,
-  // Each day's row keeps its own uid; these tie the rows of one task across days: the board card
-  // it is on, the recurring priority it was added from, the category it counts under. Soft links,
-  // checked for shape only, like sessions.priority_uid. A card's rows are looked up by card.
+  // Links from a day's priority rows to their board card, recurring priority and category, which
+  // migration 13 replaced with one task per row (items).
   `
   ALTER TABLE priorities ADD COLUMN card_uid TEXT;
   ALTER TABLE priorities ADD COLUMN recurring_uid TEXT;
   ALTER TABLE priorities ADD COLUMN category_uid TEXT;
   CREATE INDEX priorities_card ON priorities(card_uid) WHERE card_uid IS NOT NULL;
   `,
-  // Board cards. Rows point at a card by its uid (priorities.card_uid); a card never shares a uid
-  // with a row. In progress is never stored: it is today's open rows. Position is 1..n within
-  // Later or Next, 0 in Done. untouched marks a card a priorities save made that the board has
-  // not handled since, which goes when its row is removed. UNIQUE (user_id, uid) is the index
-  // every lookup by user goes through.
+  // Board cards (board_cards), folded into items and dropped by migration 13.
   `
   CREATE TABLE board_cards (
     id         INTEGER PRIMARY KEY,
@@ -147,11 +142,10 @@ export const MIGRATIONS: Migration[] = [
     UNIQUE (user_id, uid)
   );
   `,
-  // Categories. A removed one is archived, never deleted, so past time keeps its name. Rows,
-  // cards and sessions point at one by its uid, a soft link like the others. Names are unique
-  // among a user's categories in the route, not here: a UNIQUE on the name would stop the
-  // README's handover script on a name both accounts used. A session's own category is one
-  // picked in the log, or its removed row's, which a priorities save copies onto it.
+  // Categories, and a session's own category. A removed one is archived, never deleted, so past
+  // time keeps its name. Names are unique among a user's categories in the route, not here: a
+  // UNIQUE on the name would stop the README's handover script on a name both accounts used.
+  // The board_cards column went with that table in migration 13.
   `
   CREATE TABLE categories (
     id          INTEGER PRIMARY KEY,
@@ -165,11 +159,8 @@ export const MIGRATIONS: Migration[] = [
   ALTER TABLE sessions    ADD COLUMN category_uid TEXT;
   ALTER TABLE board_cards ADD COLUMN category_uid TEXT;
   `,
-  // Recurring priorities. The rows one adds point at it by its uid (priorities.recurring_uid),
-  // a soft link that outlives it: deleting one deletes the row here only. weekdays is a mask of
-  // ISO weekdays, bit 0 for Monday to bit 6 for Sunday; the API speaks lists of 1..7. Nothing on
-  // the server looks rows up by recurring_uid (the client works out the offer and the review),
-  // so it has no index.
+  // Recurring priorities (recurring), folded into items, which keep the weekdays mask (bit 0 for
+  // Monday), and dropped by migration 13.
   `
   CREATE TABLE recurring (
     id           INTEGER PRIMARY KEY,
@@ -220,42 +211,6 @@ export interface UserRow {
   is_admin: number;
   created_at: number;
   must_change_password: number;
-}
-
-/**
- * The local account a typed name belongs to. Names match whatever their case ("Sam" is "sam");
- * an install from before that rule may hold both spellings, and there the exact one wins.
- */
-export function findLocalUser(db: DB, username: string): UserRow | undefined {
-  return db
-    .prepare(`SELECT * FROM users WHERE kind = 'local' AND username = ? COLLATE NOCASE ORDER BY username = ? DESC, id LIMIT 1`)
-    .get(username, username) as UserRow | undefined;
-}
-
-/** Whether a local account exists; none yet means the first visit is setup. */
-export function hasLocalUser(db: DB): boolean {
-  return (db.prepare(`SELECT EXISTS(SELECT 1 FROM users WHERE kind = 'local') AS found`).get() as { found: number }).found === 1;
-}
-
-/**
- * A new local account, or undefined when the name is taken. The check is part of the insert, so
- * two creates for one name can't both pass it, and it ignores case as sign-in does: "Sam" can't
- * be added beside "sam".
- */
-export function insertLocalUser(
-  db: DB,
-  username: string,
-  passwordHash: string,
-  { isAdmin, mustChangePassword }: { isAdmin: boolean; mustChangePassword: boolean },
-): UserRow | undefined {
-  return db
-    .prepare(
-      `INSERT INTO users (kind, username, password_hash, display_name, is_admin, created_at, must_change_password)
-       SELECT 'local', @username, @passwordHash, @username, @isAdmin, @now, @mustChangePassword
-       WHERE NOT EXISTS (SELECT 1 FROM users WHERE username = @username COLLATE NOCASE)
-       RETURNING *`,
-    )
-    .get({ username, passwordHash, isAdmin: Number(isAdmin), mustChangePassword: Number(mustChangePassword), now: Date.now() }) as UserRow | undefined;
 }
 
 /** In AUTH_MODE=none every request acts as this single user. */

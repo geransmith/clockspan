@@ -3,7 +3,7 @@ import path from 'node:path';
 import { AUTH_MODES, type AuthMode } from '../shared/api.js';
 import { DAY_MS } from '../shared/dates.js';
 import { RETENTION_LIMITS } from '../shared/settings.js';
-import { isWholeNumber } from './validate.js';
+import { isOneOf, isWholeNumber } from './validate.js';
 
 export interface Config {
   port: number;
@@ -145,11 +145,8 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env): Config {
   // Blank means unset. Unraid passes every template field, empty ones included (-e 'NAME'=''),
   // and so does a compose .env line like `COOKIE_SECURE=`; left in, '' would beat the defaults.
   const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(rawEnv).filter(([, value]) => value !== ''));
-  const authModeRaw = (env.AUTH_MODE ?? 'none').toLowerCase();
-  if (!AUTH_MODES.includes(authModeRaw as AuthMode)) {
-    throw new Error(`AUTH_MODE must be one of ${AUTH_MODES.join('|')} (got "${authModeRaw}")`);
-  }
-  const authMode = authModeRaw as AuthMode;
+  const authMode = (env.AUTH_MODE ?? 'none').toLowerCase();
+  if (!isOneOf(AUTH_MODES, authMode)) throw new Error(`AUTH_MODE must be one of ${AUTH_MODES.join('|')} (got "${authMode}")`);
 
   // The scheme and host are case-insensitive, but the OIDC redirect URI is compared exactly as
   // a string, so the value is kept in the form a browser uses, lowercase. Only the origin is

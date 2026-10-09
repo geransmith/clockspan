@@ -7,7 +7,7 @@ export function isWholeNumber(value: unknown, bounds: { readonly min: number; re
   return typeof value === 'number' && Number.isInteger(value) && value >= bounds.min && value <= bounds.max;
 }
 
-/** One of a fixed list of strings: a setting's choices, a category's colours. */
+/** One of a fixed list of strings: a setting's choices, a category's colours, AUTH_MODE. */
 export function isOneOf<T extends string>(list: readonly T[], value: unknown): value is T {
   return list.includes(value as T);
 }

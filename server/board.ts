@@ -20,7 +20,7 @@ export function inList(values: readonly (number | string)[]): string {
 }
 
 /** Each of the user's tasks' latest entry: the date of the latest day whose list holds it, and its tick there. One bound parameter, the user. */
-const LATEST = `SELECT item_id, date, done FROM (
+export const LATEST = `SELECT item_id, date, done FROM (
     SELECT p.item_id, d.date, p.done, ROW_NUMBER() OVER (PARTITION BY p.item_id ORDER BY d.date DESC) AS n
     FROM priorities p JOIN days d ON d.id = p.day_id WHERE d.user_id = ?
   ) WHERE n = 1`;

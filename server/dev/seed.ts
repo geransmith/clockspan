@@ -1,5 +1,6 @@
 import type { Config } from '../config.js';
-import { findLocalUser, insertLocalUser, type DB, type UserRow } from '../db.js';
+import type { DB, UserRow } from '../db.js';
+import { findLocalUser, insertLocalUser } from '../auth/users.js';
 import { upsertOidcUser } from '../auth/oidc.js';
 import { hashPassword } from '../auth/password.js';
 import { revokeSessions } from '../auth/session.js';

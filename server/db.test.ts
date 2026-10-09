@@ -3,6 +3,7 @@ import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MIGRATIONS, ensureDefaultUser, migrate, openDatabase, type DB } from './db.js';
 import { countRows } from './dev/harness.js';
+import type { ItemRow as SharedItemRow } from './routes/shared.js';
 
 /** A database stopped after migration `upTo`, with foreign keys on as `openDatabase` has them. */
 function migratedTo(upTo: number): DB {
@@ -11,6 +12,10 @@ function migratedTo(upTo: number): DB {
   migrate(db, upTo);
   return db;
 }
+
+/** A second user, a local account. */
+const addSam = (db: DB) =>
+  Number(db.prepare(`INSERT INTO users (kind, username, display_name, created_at) VALUES ('local', 'sam', 'Sam', 1)`).run().lastInsertRowid);
 
 describe('openDatabase', () => {
   it('runs every migration on a fresh database', () => {
@@ -74,7 +79,7 @@ describe('migration 4: one running session per user', () => {
   it('refuses a second running row for a user, and only that', () => {
     const db = openDatabase(':memory:');
     const user = ensureDefaultUser(db);
-    const other = Number(db.prepare(`INSERT INTO users (kind, username, display_name, created_at) VALUES ('local', 'sam', 'Sam', 1)`).run().lastInsertRowid);
+    const other = addSam(db);
     const day = db.prepare(`INSERT INTO days (user_id, date, created_at) VALUES (?, '2026-09-01', 1000)`).run(user.id).lastInsertRowid;
     const otherDay = db.prepare(`INSERT INTO days (user_id, date, created_at) VALUES (?, '2026-09-01', 1000)`).run(other).lastInsertRowid;
     const insert = db.prepare(
@@ -91,61 +96,18 @@ describe('migration 4: one running session per user', () => {
   });
 });
 
-describe('migration 9: priority links', () => {
-  it("adds each row's card, recurring priority and category, none on the rows already there, and indexes the cards", () => {
-    const db = migratedTo(8);
-    const user = ensureDefaultUser(db);
-    const day = db.prepare(`INSERT INTO days (user_id, date, created_at) VALUES (?, '2026-09-01', 1000)`).run(user.id).lastInsertRowid;
-    db.prepare(`INSERT INTO priorities (day_id, position, text, done, uid, added_at) VALUES (?, 1, 'Report', 0, 'abcdef123456', 1000)`).run(day);
-
-    migrate(db, 9);
-    expect(db.prepare(`SELECT text, card_uid, recurring_uid, category_uid FROM priorities`).all()).toEqual([
-      { text: 'Report', card_uid: null, recurring_uid: null, category_uid: null },
-    ]);
-    // A card's rows across days are looked up by card; rows with none stay out of the index.
-    const index = db.prepare(`SELECT tbl_name, sql FROM sqlite_master WHERE type = 'index' AND name = 'priorities_card'`).get() as {
-      tbl_name: string;
-      sql: string;
-    };
-    expect(index.tbl_name).toBe('priorities');
-    expect(index.sql).toMatch(/\(card_uid\) WHERE card_uid IS NOT NULL$/);
-    db.close();
-  });
-});
-
-describe('migration 10: board cards', () => {
-  it('keeps one card per uid for each user, in Later, Next or Done, and goes with its user', () => {
-    const db = migratedTo(10);
-    const user = ensureDefaultUser(db);
-    const other = Number(db.prepare(`INSERT INTO users (kind, username, display_name, created_at) VALUES ('local', 'sam', 'Sam', 1)`).run().lastInsertRowid);
-    const insert = db.prepare(`INSERT INTO board_cards (user_id, uid, title, lane, position, created_at) VALUES (?, ?, 'Report', ?, 1, 1000)`);
-    insert.run(user.id, 'card00000001', 'later');
-    expect(db.prepare(`SELECT untouched, done_at FROM board_cards`).get()).toEqual({ untouched: 0, done_at: null });
-    expect(() => insert.run(user.id, 'card00000001', 'next')).toThrow(/UNIQUE/);
-    // In progress is today's rows, never a lane.
-    expect(() => insert.run(user.id, 'card00000002', 'progress')).toThrow(/CHECK/);
-    // Uids are only unique per user.
-    insert.run(other, 'card00000001', 'done');
-    db.prepare(`DELETE FROM users WHERE id = ?`).run(other);
-    expect(countRows(db, 'board_cards')).toBe(1);
-    db.close();
-  });
-});
-
 describe('migration 11: categories', () => {
-  it('keeps one category per uid for each user, goes with its user, and gives sessions and cards none', () => {
+  it('keeps one category per uid for each user, goes with its user, and gives sessions none', () => {
     const db = migratedTo(10);
     const user = ensureDefaultUser(db);
     const day = db.prepare(`INSERT INTO days (user_id, date, created_at) VALUES (?, '2026-09-01', 1000)`).run(user.id).lastInsertRowid;
     db.prepare(
       `INSERT INTO sessions (day_id, user_id, label, planned_seconds, started_at, ended_at, status) VALUES (?, ?, 'x', 600, 500, 1100, 'completed')`,
     ).run(day, user.id);
-    db.prepare(`INSERT INTO board_cards (user_id, uid, title, lane, position, created_at) VALUES (?, 'card00000001', 'Report', 'later', 1, 1000)`).run(user.id);
 
     migrate(db, 11);
     expect(db.prepare(`SELECT category_uid FROM sessions`).all()).toEqual([{ category_uid: null }]);
-    expect(db.prepare(`SELECT category_uid FROM board_cards`).all()).toEqual([{ category_uid: null }]);
-    const other = Number(db.prepare(`INSERT INTO users (kind, username, display_name, created_at) VALUES ('local', 'sam', 'Sam', 1)`).run().lastInsertRowid);
+    const other = addSam(db);
     const insert = db.prepare(`INSERT INTO categories (user_id, uid, name, color) VALUES (?, ?, 'Tickets', 'blue')`);
     insert.run(user.id, 'cat000000001');
     expect(db.prepare(`SELECT archived_at FROM categories`).get()).toEqual({ archived_at: null });
@@ -155,27 +117,6 @@ describe('migration 11: categories', () => {
     insert.run(user.id, 'cat000000002');
     db.prepare(`DELETE FROM users WHERE id = ?`).run(other);
     expect(countRows(db, 'categories')).toBe(2);
-    db.close();
-  });
-});
-
-describe('migration 12: recurring priorities', () => {
-  it('keeps one recurring priority per uid for each user, on at least one weekday, and goes with its user', () => {
-    const db = migratedTo(12);
-    const user = ensureDefaultUser(db);
-    const other = Number(db.prepare(`INSERT INTO users (kind, username, display_name, created_at) VALUES ('local', 'sam', 'Sam', 1)`).run().lastInsertRowid);
-    const insert = db.prepare(`INSERT INTO recurring (user_id, uid, title, weekdays) VALUES (?, ?, 'Monitor the queue', ?)`);
-    insert.run(user.id, 'rcur00000001', 0b0011111);
-    expect(db.prepare(`SELECT category_uid FROM recurring`).get()).toEqual({ category_uid: null });
-    expect(() => insert.run(user.id, 'rcur00000001', 1)).toThrow(/UNIQUE/);
-    // A mask of the seven weekdays, bit 0 for Monday, with at least one of them set.
-    expect(() => insert.run(user.id, 'rcur00000002', 0)).toThrow(/CHECK/);
-    expect(() => insert.run(user.id, 'rcur00000002', 0b10000000)).toThrow(/CHECK/);
-    insert.run(user.id, 'rcur00000002', 0b1111111);
-    // Uids are only unique per user.
-    insert.run(other, 'rcur00000001', 1);
-    db.prepare(`DELETE FROM users WHERE id = ?`).run(other);
-    expect(countRows(db, 'recurring')).toBe(2);
     db.close();
   });
 });
@@ -205,22 +146,7 @@ describe('migration 13: each task stored once', () => {
     untouched?: boolean;
     category?: string;
   }
-  interface ItemRow {
-    id: number;
-    user_id: number;
-    uid: string;
-    title: string;
-    category_uid: string | null;
-    weekdays: number | null;
-    lane: string | null;
-    position: number;
-    created_at: number;
-    archived_at: number | null;
-    deleted_at: number | null;
-    legacy_done_at: number | null;
-    legacy_untouched: number | null;
-    legacy_uid: string | null;
-  }
+  type ItemRow = SharedItemRow & { legacy_done_at: number | null; legacy_untouched: number | null; legacy_uid: string | null };
 
   /** The schema migration 13 starts from, and helpers that write rows as the server before it stored them. */
   function before() {
@@ -270,7 +196,7 @@ describe('migration 13: each task stored once', () => {
   const list = (db: DB, dayId: number) =>
     db
       .prepare(`SELECT i.uid, p.position, p.done, p.added_at FROM priorities p JOIN items i ON i.id = p.item_id WHERE p.day_id = ? ORDER BY p.position`)
-      .all(dayId);
+      .all(dayId) as { uid: string; position: number; done: number; added_at: number | null }[];
   /** A session's task, by uid, and its own category. */
   const linkOf = (db: DB, sessionId: number) =>
     db.prepare(`SELECT i.uid, s.category_uid FROM sessions s LEFT JOIN items i ON i.id = s.item_id WHERE s.id = ?`).get(sessionId) as {
@@ -554,7 +480,7 @@ describe('migration 13: each task stored once', () => {
     const fresh = [queue!.uid, oldCard!.uid, typed!.uid];
     for (const uid of fresh) expect(uid).toMatch(FRESH);
     expect(new Set([...fresh, 'same00000001', 'rcur00000001']).size).toBe(5);
-    expect(list(db, mon).map((e) => (e as { uid: string }).uid)).toEqual(fresh);
+    expect(list(db, mon).map((e) => e.uid)).toEqual(fresh);
     expect(sessions.map((s) => linkOf(db, s).uid)).toEqual(fresh);
     db.close();
   });
@@ -596,8 +522,8 @@ describe('migration 13: each task stored once', () => {
     expect(item(db, 'email0000001')).toMatchObject({ title: 'email bob', category_uid: 'cat000000002', lane: null, created_at: 1100, archived_at: null });
     expect(item(db, 'email0000002')).toBeUndefined();
     expect(item(db, 'email0000003')).toMatchObject({ title: 'Email Bob', category_uid: null });
-    expect(list(db, sep15).map((e) => (e as { uid: string }).uid)).toEqual(['email0000001', 'bank00000002', 'bank00000003']);
-    expect(list(db, sep1).map((e) => (e as { uid: string }).uid)).toEqual(['email0000001', 'bank00000001']);
+    expect(list(db, sep15).map((e) => e.uid)).toEqual(['email0000001', 'bank00000002', 'bank00000003']);
+    expect(list(db, sep1).map((e) => e.uid)).toEqual(['email0000001', 'bank00000001']);
     expect(countRows(db, 'items')).toBe(5);
     db.close();
   });
@@ -652,8 +578,8 @@ describe('migration 13: each task stored once', () => {
 
     migrate(db);
     // Of the two open chains, the higher on Monday's list, as a row joins one.
-    expect(list(db, mon).map((e) => (e as { uid: string }).uid)).toEqual(['card00000001', 'row000000002', 'row000000003']);
-    expect(list(db, tue).map((e) => (e as { uid: string }).uid)).toEqual(['card00000001', 'card00000002', 'row000000001']);
+    expect(list(db, mon).map((e) => e.uid)).toEqual(['card00000001', 'row000000002', 'row000000003']);
+    expect(list(db, tue).map((e) => e.uid)).toEqual(['card00000001', 'card00000002', 'row000000001']);
     expect(item(db, 'card00000001')).toMatchObject({ title: 'Fix the flaky test', category_uid: 'cat000000001', lane: 'next' });
     expect(item(db, 'row000000001')).toMatchObject({ title: 'Other', legacy_uid: null });
     expect(linkOf(db, s).uid).toBe('card00000001');
@@ -712,7 +638,7 @@ describe('migration 13: each task stored once', () => {
 
   it('lets a user go with all of it, and refuses to delete a task a day or a session names', () => {
     const { db, user, day, row, card, routine, session } = before();
-    const other = Number(db.prepare(`INSERT INTO users (kind, username, display_name, created_at) VALUES ('local', 'sam', 'Sam', 1)`).run().lastInsertRowid);
+    const other = addSam(db);
     card('card00000001', 'Report', 'next', 1);
     card('held00000001', 'Held', 'next', 2, { untouched: true });
     routine('rcur00000001', 'Monitor the queue', 31);

@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { findLocalUser, type DB } from '../db.js';
+import type { DB } from '../db.js';
+import { findLocalUser } from './users.js';
 import { hashPassword, parsePassword } from './password.js';
 import { revokeSessions } from './session.js';
 

@@ -1,6 +1,6 @@
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import { Router } from 'express';
-import { findLocalUser, hasLocalUser, insertLocalUser, type DB, type UserRow } from '../db.js';
+import type { DB, UserRow } from '../db.js';
 import type { Config } from '../config.js';
 import { refuse } from '../refuse.js';
 import { reclaimSpace } from '../retention.js';
@@ -10,7 +10,7 @@ import { createSession, destroySession } from './session.js';
 import { setPassword } from './reset.js';
 import { currentUser, requireAdmin, requireAuth } from './middleware.js';
 import { accountKey, LoginLimiter, limiterKey, MAX_ACCOUNT_FAILURES, refuseTooMany, warnUntrustedProxy } from './limiter.js';
-import { logName, publicUser } from './users.js';
+import { findLocalUser, hasLocalUser, insertLocalUser, logName, publicUser } from './users.js';
 import type { LogoutResponse, OkResponse, UserResponse, UsersResponse } from '../../shared/api.js';
 
 /** Letters and digits that can't be read as one another: no 0/O, no 1/I/L. */
