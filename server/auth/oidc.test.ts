@@ -5,7 +5,7 @@ import { upsertOidcUser } from './oidc.js';
 
 /**
  * The harness points discovery at a port nothing listens on, so these cover everything that
- * does not need a live provider: the mode answer, the two error pages, the flow cookie, and
+ * does not need a live provider: the mode answer, the three error pages, the flow cookie, and
  * the user upsert. The code grant, with the token exchange and userinfo faked, is in
  * `oidc-flow.test.ts`.
  */
@@ -44,7 +44,7 @@ describe('AUTH_MODE=oidc', () => {
   it('refuses a callback without the flow cookie', async () => {
     const r = await raw('/auth/callback?code=abc&state=xyz');
     expect(r.status).toBe(400);
-    expect(await r.text()).toContain('<a href="/auth/login">Try again</a>');
+    expect(await r.text()).toBe('Sign-in session expired. <a href="/auth/login">Try again</a>.');
   });
 
   it('clears the flow cookie and shows fixed text when the callback cannot complete', async () => {
@@ -71,7 +71,7 @@ describe('AUTH_MODE=oidc', () => {
     expect(renamed.id).toBe(first.id);
     expect(renamed.display_name).toBe('Ada L.');
     expect(app.db.prepare(`SELECT display_name FROM users WHERE id = ?`).get(first.id)).toEqual({ display_name: 'Ada L.' });
-    // The same name again is a plain read.
+    // The same name again: the same row, unchanged.
     expect(upsertOidcUser(app.db, 'issuer', '1', 'Ada L.')).toMatchObject({ id: first.id, display_name: 'Ada L.' });
     expect(app.count('users', `kind = 'oidc'`)).toBe(2);
     // A name is a label: a provider that sends a paragraph gets the first 100 characters.

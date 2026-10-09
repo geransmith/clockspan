@@ -20,13 +20,15 @@ const MAX_ATTEMPTS = 5;
  */
 export const MAX_ACCOUNT_FAILURES = 50;
 const WINDOW_MS = 15 * MINUTE_MS;
-// Expired entries are swept once the map grows past this, so a spray of addresses can't
-// make it grow without bound.
+// Expired entries are swept once the map grows past this, and again each time it doubles
+// after a sweep, so the map holds at most what one window's failures add and a spray of
+// addresses costs one scan per doubling, not one per failure.
 const SWEEP_ABOVE = 1000;
 
 /** In-memory is fine for a single-process self-hosted app. */
 export class LoginLimiter {
   private attempts = new Map<string, { count: number; resetAt: number }>();
+  private sweepAbove = SWEEP_ABOVE;
 
   constructor(private readonly maxAttempts = MAX_ATTEMPTS) {}
 
@@ -39,8 +41,9 @@ export class LoginLimiter {
 
   fail(key: string): void {
     const now = Date.now();
-    if (this.attempts.size >= SWEEP_ABOVE) {
+    if (this.attempts.size >= this.sweepAbove) {
       for (const [k, v] of this.attempts) if (v.resetAt <= now) this.attempts.delete(k);
+      this.sweepAbove = Math.max(SWEEP_ABOVE, 2 * this.attempts.size);
     }
     const entry = this.attempts.get(key);
     if (!entry || entry.resetAt <= now) this.attempts.set(key, { count: 1, resetAt: now + WINDOW_MS });

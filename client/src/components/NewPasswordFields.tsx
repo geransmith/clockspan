@@ -1,4 +1,12 @@
+import type { InputHTMLAttributes } from 'react';
 import { PASSWORD_LENGTH } from '../../../shared/api.js';
+
+/** A new-password box with the server's length bounds, as `UsernameInput` is for usernames. */
+export function NewPasswordInput(props: Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'autoComplete' | 'minLength' | 'maxLength' | 'required'>) {
+  return (
+    <input className="input" type="password" autoComplete="new-password" minLength={PASSWORD_LENGTH.min} maxLength={PASSWORD_LENGTH.max} required {...props} />
+  );
+}
 
 /**
  * A new password typed twice, for the setup page, the temporary-password page and Settings →
@@ -21,16 +29,7 @@ export function NewPasswordFields({
   const field = (text: string, v: string, set: (v: string) => void) => (
     <label className="field">
       <span>{text}</span>
-      <input
-        className="input"
-        type="password"
-        autoComplete="new-password"
-        value={v}
-        onChange={(e) => set(e.target.value)}
-        minLength={PASSWORD_LENGTH.min}
-        maxLength={PASSWORD_LENGTH.max}
-        required
-      />
+      <NewPasswordInput value={v} onChange={(e) => set(e.target.value)} />
     </label>
   );
   return (
