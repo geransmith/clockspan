@@ -135,15 +135,16 @@ function Row({
   session: Session;
   now: number;
   planned: Priority[];
-  /** The day's rows, emptied ones included: what the session's category is read from. */
+  /** The day's rows: what the session's name and category are read from. */
   rows: Priority[];
   pick: CategoryPick | null;
   onEdit: (patch: SessionEdit) => void;
   onDelete: () => void;
 }) {
   const { formatTime } = useTimeFormat();
-  // The edit box opened: 'label' for a session off a written row (its label, the select and the
-  // chip), 'link' for one on a row, which names it (the name as text and the select).
+  // The edit box opened: 'label' for a session with no task (its label, the select and the chip),
+  // 'link' for one with a task, which names it (the name as text, the select, and the chip while
+  // the task is off the day's list).
   const [editing, setEditing] = useState<'label' | 'link' | null>(null);
   const [draft, setDraft] = useState('');
   // Set when a key or the select ends the edit, so focus goes back to the label; a blur leaves focus where it went.
@@ -155,12 +156,13 @@ function Row({
   const paused = running && s.pausedAt != null;
   // A running row counts its focus so far, which holds still while paused.
   const seconds = running ? timerView(s, now).elapsedSeconds : s.durationSeconds;
-  // A link to a row that was since removed reads as unplanned.
+  // On the plan: its task is a written row of the day.
   const linked = s.priorityUid ? planned.find((p) => p.uid === s.priorityUid) : undefined;
-  // What it is called: the linked row's current text, else its label.
+  const hasTask = s.priorityUid != null;
+  // What it is called: its task's current name, else its label.
   const name = sessionName(s, rows);
   // A box opened for a session linked or unlinked since (on another device) closes, unsent.
-  if (editing && (editing === 'link') !== (linked != null)) setEditing(null);
+  if (editing && (editing === 'link') !== hasTask) setEditing(null);
   // What the session counts under, when the board holds it.
   const category = pick ? categoryOf(pick.categories, sessionCategory(s, rows)) : undefined;
   // One PATCH per edit: label, link and category together, so two responses can't land out of order.
@@ -208,11 +210,12 @@ function Row({
           ) : (
             <span className="log-label">{name}</span>
           )}
-          {planned.length > 0 && (
+          {/* A session with a task always has it, so Unplanned is there even when the day lists none. */}
+          {(hasTask || planned.length > 0) && (
             <select
               className="input select log-plan-select"
               autoFocus={editing === 'link'}
-              value={linked?.uid ?? ''}
+              value={s.priorityUid ?? ''}
               onChange={(e) => {
                 setReturnFocus(true);
                 // Only the link: the server drops a category of its own, since the row decides from then on.
@@ -221,6 +224,8 @@ function Row({
               aria-label="Priority this session was for"
             >
               <option value="">Unplanned</option>
+              {/* A task taken off the day still names the session; Unplanned gives it a name of its own. */}
+              {hasTask && !linked && <option value={s.priorityUid!}>{name}</option>}
               {planned.map((p) => (
                 <option key={p.uid} value={p.uid!}>
                   {p.position} · {p.text}
@@ -235,7 +240,7 @@ function Row({
                 value={category?.uid ?? null}
                 onChange={(categoryUid) => {
                   setReturnFocus(true);
-                  commit(sessionCategoryEdit(s, rows, categoryUid));
+                  commit(sessionCategoryEdit(s, categoryUid));
                 }}
                 pick={pick}
                 label="Category for this session"
@@ -250,14 +255,16 @@ function Row({
           onClick={() => {
             setDraft(s.label);
             setReturnFocus(false);
-            setEditing(linked ? 'link' : 'label');
+            setEditing(hasTask ? 'link' : 'label');
           }}
           title={
             linked
               ? `Priority ${linked.position}. Click to change the priority`
-              : pick
-                ? 'Edit label, priority or category'
-                : 'Edit label or link to a priority'
+              : hasTask
+                ? 'Change the priority'
+                : pick
+                  ? 'Edit label, priority or category'
+                  : 'Edit label or link to a priority'
           }
         >
           {linked && (

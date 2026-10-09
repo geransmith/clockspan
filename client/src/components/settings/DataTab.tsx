@@ -51,7 +51,7 @@ export function DataTab({ settings, set, onReset }: TabProps & { onReset: () => 
  * Settings → Data → "Delete old days now". The count line is the server's answer for the
  * chosen cutoff, so the confirm names exactly what will go. The delete goes through the day
  * store (`pruneBefore`), so the days on screen follow it, and the board is read again while it is
- * on, since the prune takes the cards done before the cutoff. Not a settings save: nothing here
+ * on, since the prune takes the tasks done before the cutoff. Not a settings save: nothing here
  * goes through the header's Saving/Saved pill.
  */
 function DeleteOldDays() {

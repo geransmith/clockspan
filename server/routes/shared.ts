@@ -3,7 +3,7 @@ import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
 import { refuse } from '../refuse.js';
 import { isWholeNumber } from '../validate.js';
-import type { Break, CategoryColor, Lane, Punch, Session, SessionStatus } from '../../shared/api.js';
+import type { Break, CategoryColor, OpenLane, Punch, Session, SessionStatus } from '../../shared/api.js';
 import { activeMs, MIN_BREAK_MS } from '../../shared/timer.js';
 
 export interface DayRow {
@@ -22,7 +22,7 @@ export function findDay(db: DB, userId: number, date: string): DayRow | undefine
   return db.prepare(`SELECT ${DAY_COLUMNS} FROM days WHERE user_id = ? AND date = ?`).get(userId, date) as DayRow | undefined;
 }
 
-/** Ids the client or the server mints (a priority's, and those of the cards, categories and recurring priorities it links to): 12 hex chars (`newUid`); only the shape is checked, loosely. */
+/** Ids the client or the server mints (a task's, a category's): 12 hex chars (`newUid`); only the shape is checked, loosely. */
 export const UID_RE = /^[a-z0-9]{8,32}$/i;
 
 export function ensureDay(db: DB, userId: number, date: string): number {
@@ -33,9 +33,9 @@ export function ensureDay(db: DB, userId: number, date: string): number {
 }
 
 /**
- * A `categoryUid` field (a card's, a session's): undefined = not mentioned, null = none, or a
+ * A `categoryUid` field (a task's, a session's): undefined = not mentioned, null = none, or a
  * uid, lowercased. Only the shape is checked: a category is a soft link, and one made on this
- * device may reach the server after the row, card or session that names it.
+ * device may reach the server after the task or session that names it.
  */
 export function parseCategoryUid(raw: unknown): { categoryUid: string | null | undefined } | { error: string } {
   if (raw == null) return { categoryUid: raw };
@@ -57,30 +57,45 @@ export interface PunchRow {
   at: number | null;
 }
 
-export interface PriorityRow {
+/**
+ * A task as stored: a one-off, or a recurring priority (`weekdays` set, never in a lane). One a
+ * full delete took stays as a tombstone (`deleted_at` set) until the prune, so its uid stays taken.
+ */
+export interface ItemRow {
   id: number;
-  day_id: number;
-  position: number;
-  text: string;
-  done: number;
-  uid: string | null;
-  added_at: number | null;
-  card_uid: string | null;
-  recurring_uid: string | null;
+  user_id: number;
+  uid: string;
+  title: string;
   category_uid: string | null;
+  /** A mask: bit 0 for Monday to bit 6 for Sunday, at least one set; null on a one-off. */
+  weekdays: number | null;
+  lane: OpenLane | null;
+  /** 1..n within its lane, 0 with none. */
+  position: number;
+  created_at: number;
+  archived_at: number | null;
+  deleted_at: number | null;
 }
 
+/** A session as `SESSIONS` reads it: its own columns, its day's date, and its task's uid, name and the category it counts under. */
 interface SessionRowFields {
   id: number;
   day_id: number;
   user_id: number;
+  date: string;
   label: string;
   planned_seconds: number;
   started_at: number;
-  priority_uid: string | null;
   paused_seconds: number;
   paused_at: number | null;
+  /** The task; null for an unplanned session. */
+  item_id: number | null;
+  /** The category picked in the log, or kept from a task it lost; read only while it has no task. */
   category_uid: string | null;
+  item_uid: string | null;
+  item_title: string | null;
+  /** Its task's category with one, else its own: what it counts under. */
+  category: string | null;
 }
 
 export type SessionRow = SessionRowFields & ({ status: 'running'; ended_at: null } | { status: Exclude<SessionStatus, 'running'>; ended_at: number });
@@ -94,21 +109,6 @@ export interface BreakRow {
   ended_at: number;
 }
 
-/** A board card as stored. `untouched` is the server's alone: the wire carries what it implies (`BoardCard.held`). */
-export interface CardRow {
-  id: number;
-  user_id: number;
-  uid: string;
-  title: string;
-  lane: Lane;
-  position: number;
-  created_at: number;
-  done_at: number | null;
-  /** 1 for a card a priorities save made and the board has not handled since. */
-  untouched: number;
-  category_uid: string | null;
-}
-
 /** A category as stored; one removed in Settings has `archived_at` set and is never deleted. */
 export interface CategoryRow {
   id: number;
@@ -120,32 +120,30 @@ export interface CategoryRow {
   archived_at: number | null;
 }
 
-/** A recurring priority as stored. The API speaks `weekdays` as a list of ISO weekdays (`weekdaysOf`, `server/board.ts`). */
-export interface RecurringRow {
-  id: number;
-  user_id: number;
-  uid: string;
-  title: string;
-  category_uid: string | null;
-  /** A mask: bit 0 for Monday to bit 6 for Sunday, at least one set (the table's CHECK). */
-  weekdays: number;
-}
-
-/** A session or break row with its day's date, which every answer about it carries. */
+/** A break row with its day's date, which every answer about it carries. */
 export type Dated<Row> = Row & { date: string };
+
+/**
+ * Sessions as every reader takes them (`x`): with their day's date, and through their task its
+ * uid, current name and category, so a session is named and counted by its task's current name and category.
+ */
+export const SESSIONS = `SELECT x.*, d.date, i.uid AS item_uid, i.title AS item_title,
+    CASE WHEN x.item_id IS NOT NULL THEN i.category_uid ELSE x.category_uid END AS category
+  FROM sessions x JOIN days d ON d.id = x.day_id LEFT JOIN items i ON i.id = x.item_id`;
 
 /** The tables a `/:id` route works on: each row belongs to one user and one day. */
 interface OwnedRows {
   sessions: SessionRow;
-  breaks: BreakRow;
+  breaks: Dated<BreakRow>;
 }
 type OwnedTable = keyof OwnedRows;
 const NOT_FOUND: Record<OwnedTable, string> = { sessions: 'Session not found.', breaks: 'Break not found.' };
+/** How each table's rows are read (as `x`), with their date. */
+const OWNED_SELECT: Record<OwnedTable, string> = { sessions: SESSIONS, breaks: 'SELECT x.*, d.date FROM breaks x JOIN days d ON d.id = x.day_id' };
 
 /** The user's own row of `table` with its date; undefined for anyone else's, or none. */
-export function getOwned<T extends OwnedTable>(db: DB, table: T, userId: number, id: number): Dated<OwnedRows[T]> | undefined {
-  return db.prepare(`SELECT x.*, d.date FROM ${table} x JOIN days d ON d.id = x.day_id WHERE x.id = ? AND x.user_id = ?`).get(id, userId) as
-    Dated<OwnedRows[T]> | undefined;
+export function getOwned<T extends OwnedTable>(db: DB, table: T, userId: number, id: number): OwnedRows[T] | undefined {
+  return db.prepare(`${OWNED_SELECT[table]} WHERE x.id = ? AND x.user_id = ?`).get(id, userId) as OwnedRows[T] | undefined;
 }
 
 /**
@@ -155,7 +153,7 @@ export function getOwned<T extends OwnedTable>(db: DB, table: T, userId: number,
  * none (an id that is not plain digits finds none), and hands the caller's own on to the
  * handler, which reads it with `owned(res)` instead of repeating the lookup.
  */
-export function ownedRouter<T extends OwnedTable>(db: DB, table: T): { router: Router; owned: (res: Response) => Dated<OwnedRows[T]> } {
+export function ownedRouter<T extends OwnedTable>(db: DB, table: T): { router: Router; owned: (res: Response) => OwnedRows[T] } {
   const router = Router();
   router.param('id', (req, res, next, id: string) => {
     // Number() also reads '0x1', '1e0', '+1' and ' 1' (from %201) as 1.
@@ -164,23 +162,20 @@ export function ownedRouter<T extends OwnedTable>(db: DB, table: T): { router: R
     res.locals.owned = row;
     next();
   });
-  return { router, owned: (res) => res.locals.owned as Dated<OwnedRows[T]> };
+  return { router, owned: (res) => res.locals.owned as OwnedRows[T] };
 }
 
 /** The tables a `/:uid` route works on: each row belongs to one user, and to no day, and is named by its uid. */
 interface UidRows {
-  board_cards: CardRow;
   categories: CategoryRow;
-  recurring: RecurringRow;
+  items: ItemRow;
 }
 type UidTable = keyof UidRows;
-const UID_NOT_FOUND: Record<UidTable, string> = {
-  board_cards: 'Card not found.',
-  categories: 'Category not found.',
-  recurring: 'Recurring priority not found.',
-};
+const UID_NOT_FOUND: Record<UidTable, string> = { categories: 'Category not found.', items: 'Task not found.' };
+/** The rows a table keeps that its routes treat as none: a deleted task stays as a tombstone until the prune. */
+const UID_GONE: { [T in UidTable]: (row: UidRows[T]) => boolean } = { categories: () => false, items: (row) => row.deleted_at != null };
 
-/** The user's own row of `table` with this uid (lowercase); undefined for anyone else's, or none. */
+/** The user's own row of `table` with this uid (lowercase), a tombstone included; undefined for anyone else's, or none. */
 export function getOwnedByUid<T extends UidTable>(db: DB, table: T, userId: number, uid: string): UidRows[T] | undefined {
   return db.prepare(`SELECT * FROM ${table} WHERE user_id = ? AND uid = ?`).get(userId, uid) as UidRows[T] | undefined;
 }
@@ -189,14 +184,15 @@ export function getOwnedByUid<T extends UidTable>(db: DB, table: T, userId: numb
  * `ownedRouter` for a table whose rows hang off the user rather than a day: the router for
  * `table`'s `/:uid` routes, where the ownership check lives as the router's `uid` param handler,
  * so every route on it with a `:uid` in its path gets it, one added later included. It answers
- * 404 for anyone else's row, or none (a uid of the wrong shape finds none), and hands the
- * caller's own on to the handler, which reads it with `owned(res)`.
+ * 404 for anyone else's row, or none (a uid of the wrong shape finds none, and a deleted task's
+ * tombstone counts as none), and hands the caller's own on to the handler, which reads it with
+ * `owned(res)`.
  */
 export function uidRouter<T extends UidTable>(db: DB, table: T): { router: Router; owned: (res: Response) => UidRows[T] } {
   const router = Router();
   router.param('uid', (req, res, next, uid: string) => {
     const row = UID_RE.test(uid) ? getOwnedByUid(db, table, currentUser(req).id, uid.toLowerCase()) : undefined;
-    if (!row) return refuse(res, 404, UID_NOT_FOUND[table]);
+    if (!row || UID_GONE[table](row)) return refuse(res, 404, UID_NOT_FOUND[table]);
     res.locals.owned = row;
     next();
   });
@@ -204,9 +200,8 @@ export function uidRouter<T extends UidTable>(db: DB, table: T): { router: Route
 }
 
 /** The user's running session, if any: there is at most one (a unique partial index). */
-export function runningSession(db: DB, userId: number): Dated<SessionRow> | undefined {
-  return db.prepare(`SELECT s.*, d.date FROM sessions s JOIN days d ON d.id = s.day_id WHERE s.user_id = ? AND s.status = 'running' LIMIT 1`).get(userId) as
-    Dated<SessionRow> | undefined;
+export function runningSession(db: DB, userId: number): SessionRow | undefined {
+  return db.prepare(`${SESSIONS} WHERE x.user_id = ? AND x.status = 'running' LIMIT 1`).get(userId) as SessionRow | undefined;
 }
 
 export function breakRowToJson(b: Dated<BreakRow>): Break {
@@ -224,7 +219,7 @@ export function endRunningBreak(db: DB, userId: number, now: number): void {
   db.prepare(`UPDATE breaks SET ended_at = ? WHERE user_id = ? AND ended_at > ?`).run(now, userId, now);
 }
 
-export function sessionRowToJson(s: Dated<SessionRow>): Session {
+export function sessionRowToJson(s: SessionRow): Session {
   const fields = {
     id: s.id,
     date: s.date,
@@ -233,8 +228,9 @@ export function sessionRowToJson(s: Dated<SessionRow>): Session {
     startedAt: s.started_at,
     pausedSeconds: s.paused_seconds,
     pausedAt: s.paused_at,
-    priorityUid: s.priority_uid,
-    categoryUid: s.category_uid,
+    priorityUid: s.item_uid,
+    title: s.item_title,
+    categoryUid: s.category,
   };
   if (s.status === 'running') return { ...fields, status: 'running', endedAt: null, durationSeconds: null };
   return { ...fields, status: s.status, endedAt: s.ended_at, durationSeconds: Math.round(activeMs(fields, s.ended_at) / 1000) };

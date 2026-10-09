@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CATEGORY_COLORS, LIMITS } from '../../../../shared/api.js';
 import { SETTING_LIMITS } from '../../../../shared/settings.js';
 import { categoryName } from '../../../../shared/text.js';
-import type { RecurringPatch } from '../../api';
+import type { ItemPatch } from '../../api';
 import { useBoardState, useBoardStore, useCategoryPick } from '../../hooks/useBoard';
 import { activeCategories, categoryForName, categoryNameTaken, nextColor, type CategoryPick } from '../../lib/board';
 import { BOARD, CONFIRM, LOAD_FAILED } from '../../lib/copy';
@@ -252,7 +252,7 @@ function RecurringList({ items, pick, save }: { items: Recurring[]; pick: Catego
   const [adding, setAdding] = useState(false);
   const titleBoxes = useRef(new Map<string, HTMLInputElement>());
   const addButton = useRef<HTMLButtonElement>(null);
-  // The delete is for good, so it asks first, unlike a category's Remove, which archives. Then, as
+  // It asks first, unlike a category's Remove: nothing brings a recurring priority back. Then, as
   // with a category, the next row's title takes the focus, else the one before, else Add.
   const remove = (item: Recurring) => {
     if (!window.confirm(CONFIRM.deleteRecurring(item.title))) return;
@@ -292,9 +292,9 @@ function RecurringList({ items, pick, save }: { items: Recurring[]; pick: Catego
 
 /**
  * A recurring priority: its title (saved on blur or Enter; a blank or unchanged one is put back),
- * its category chip, its seven days, each pressed to add or drop it, and Remove, which deletes it
- * for good once confirmed: the rows it added keep their text and category. The last day on stays
- * on, and stays focusable, so the item is always offered on some day.
+ * its category chip, its seven days, each pressed to add or drop it, and Remove, which stops it
+ * repeating once confirmed: the days it was on keep it, under its name and category. The last day
+ * on stays on, and stays focusable, so the item is always offered on some day.
  */
 function RecurringRow({
   item,
@@ -317,7 +317,7 @@ function RecurringRow({
     setSeen(item.title);
     setDraft(item.title);
   }
-  const edit = (patch: RecurringPatch) => void save(() => store.editRecurring(item.uid, patch));
+  const edit = (patch: ItemPatch) => void save(() => store.editItem(item.uid, patch));
   const commit = () => {
     const title = draft.trim();
     if (!title || title === item.title) setDraft(item.title);
@@ -380,7 +380,7 @@ function NewRecurring({ save, onDone }: { save: Save; onDone: () => void }) {
   const add = () => {
     const title = draft.trim();
     // On the work week, with no category: both are a tap away in the row it becomes.
-    if (title) void save(() => store.addRecurring({ uid: newUid(), title, categoryUid: null, weekdays: [1, 2, 3, 4, 5] }));
+    if (title) void save(() => store.addItem({ uid: newUid(), title, categoryUid: null, weekdays: [1, 2, 3, 4, 5] }));
   };
   return (
     <div className="recurring-row">

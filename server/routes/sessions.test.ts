@@ -33,6 +33,7 @@ describe('sessions', () => {
       endedAt: null,
       durationSeconds: null,
       priorityUid: null,
+      title: null,
       pausedSeconds: 0,
       pausedAt: null,
       categoryUid: null,
@@ -69,8 +70,8 @@ describe('sessions', () => {
     expect(r.body.session).toMatchObject({ label: 'Work', plannedSeconds: 1500 });
   });
 
-  it('links only to a priority that exists on that day', async () => {
-    const prio = await app.api.put(`/api/days/${DATE}/priorities`, { priorities: [{ text: 'Plan' }] });
+  it('links only to a task on that day, and names it by its current name and category', async () => {
+    const prio = await app.api.put(`/api/days/${DATE}/priorities`, { priorities: [{ text: 'Plan', categoryUid: 'cat000000001' }] });
     const uid: string = prio.body.priorities[0].uid;
     const shape = await start({ priorityUid: 'nope' });
     expect([shape.status, shape.body.error]).toEqual([400, 'priorityUid must be a priority id or null.']);
@@ -78,11 +79,19 @@ describe('sessions', () => {
     expect([absent.status, absent.body.error]).toEqual([400, 'That priority is not on this day.']);
     const ok = await start({ priorityUid: uid.toUpperCase() });
     expect(ok.status).toBe(201);
-    expect(ok.body.session.priorityUid).toBe(uid);
-    // A uid from another day is "not on this day", and the refusal stores no day.
+    expect(ok.body.session).toMatchObject({ priorityUid: uid, title: 'Plan', label: 'Work', categoryUid: 'cat000000001' });
+    // A rename and a category reach it at once, and so does every reader of it.
+    await app.api.put(`/api/days/${DATE}/priorities`, { priorities: [{ text: 'Plan the week', uid, categoryUid: 'cat000000002' }] });
+    expect((await app.api.get('/api/sessions/running')).body.session).toMatchObject({ title: 'Plan the week', categoryUid: 'cat000000002' });
+    expect((await app.api.get(`/api/days/${DATE}`)).body.sessions[0]).toMatchObject({ title: 'Plan the week', categoryUid: 'cat000000002' });
+    // A task on another day only is "not on this day", and the refusal stores no day.
     await app.api.post(`/api/sessions/${ok.body.session.id}/finish`);
     expect((await app.api.post('/api/days/2026-09-02/sessions', { plannedSeconds: 600, priorityUid: uid })).status).toBe(400);
     expect(app.db.prepare(`SELECT date FROM days`).all()).toEqual([{ date: DATE }]);
+    // Nor does a task deleted everywhere.
+    await app.api.del(`/api/items/${uid}`);
+    const deleted = await start({ priorityUid: uid });
+    expect([deleted.status, deleted.body.error]).toEqual([400, 'That priority is not on this day.']);
   });
 
   it('patches the label and the link; planned time only while running', async () => {
@@ -102,7 +111,7 @@ describe('sessions', () => {
     });
     const shape = await app.api.patch(`/api/sessions/${id}`, { priorityUid: 'bad!' });
     expect([shape.status, shape.body.error]).toEqual([400, 'priorityUid must be a priority id or null.']);
-    // A priority that exists on another day is refused, and the link stays.
+    // A task on another day only is refused, and the link stays.
     const other: string = (await app.api.put('/api/days/2026-09-02/priorities', { priorities: [{ text: 'Other' }] })).body.priorities[0].uid;
     const elsewhere = await app.api.patch(`/api/sessions/${id}`, { priorityUid: other });
     expect([elsewhere.status, elsewhere.body.error]).toEqual([400, 'That priority is not on this day.']);
@@ -113,9 +122,13 @@ describe('sessions', () => {
     expect(badLabel.status).toBe(400);
     expect(badLabel.body.error).toMatch(/label must be a string/);
     expect((await app.api.get(`/api/days/${DATE}`)).body.sessions[0].label).toBe('x'.repeat(LIMITS.sessionLabel));
-    // Unlinking is explicit null; leaving it out keeps the link.
+    // Unlinking is explicit null; leaving it out keeps the link. The label sent with it stays.
     expect((await app.api.patch(`/api/sessions/${id}`, { label: 'still' })).body.session.priorityUid).toBe(uid);
-    expect((await app.api.patch(`/api/sessions/${id}`, { priorityUid: null })).body.session.priorityUid).toBeNull();
+    expect((await app.api.patch(`/api/sessions/${id}`, { priorityUid: null, label: 'mine' })).body.session).toMatchObject({
+      priorityUid: null,
+      title: null,
+      label: 'mine',
+    });
     await app.api.post(`/api/sessions/${id}/finish`);
     expect((await app.api.patch(`/api/sessions/${id}`, { plannedSeconds: 900 })).status).toBe(409);
     expect((await app.api.patch(`/api/sessions/${id}`, { label: 'after' })).status).toBe(200);
@@ -138,33 +151,92 @@ describe('sessions', () => {
     expect((await app.api.patch(`/api/sessions/${id}`, { categoryUid: null })).body.session.categoryUid).toBeNull();
   });
 
-  it("drops a session's own category when a patch links it to a row, whatever it sent", async () => {
-    const [WRITTEN, EMPTIED] = ['aaaaaaaaaaaa', 'bbbbbbbbbbbb'];
-    const [MINE, ROWS] = ['cat000000001', 'cat000000002'];
-    await app.api.put(`/api/days/${DATE}/priorities`, {
-      priorities: [
-        { text: 'Plan', uid: WRITTEN, categoryUid: ROWS },
-        { text: '', uid: EMPTIED, categoryUid: ROWS },
-      ],
-    });
+  it('keeps a category of its own only on a session with no task', async () => {
+    const [PLAN, MINE, TASKS] = ['aaaaaaaaaaaa', 'cat000000001', 'cat000000002'];
+    await app.api.put(`/api/days/${DATE}/priorities`, { priorities: [{ text: 'Plan', uid: PLAN, categoryUid: TASKS }] });
     const { id } = (await start()).body.session;
     await app.api.post(`/api/sessions/${id}/finish`);
-    const patch = async (body: Record<string, unknown>) => (await app.api.patch(`/api/sessions/${id}`, body)).body.session as Record<string, unknown>;
-    expect(await patch({ categoryUid: MINE })).toMatchObject({ priorityUid: null, categoryUid: MINE });
+    const patch = (body: Record<string, unknown>) => app.api.patch(`/api/sessions/${id}`, body);
+    expect((await patch({ categoryUid: MINE })).body.session).toMatchObject({ priorityUid: null, categoryUid: MINE });
 
-    // Linked, it counts under the row's category: a pick of its own would take the time over once
-    // the row was emptied, so it goes, and one sent with the link isn't stored.
-    expect(await patch({ priorityUid: WRITTEN.toUpperCase() })).toMatchObject({ priorityUid: WRITTEN, categoryUid: null });
-    expect(await patch({ priorityUid: WRITTEN, categoryUid: MINE })).toMatchObject({ priorityUid: WRITTEN, categoryUid: null });
-    // Unlinked, it has none: nothing brings the earlier pick back. One sent with the unlink is kept.
-    expect(await patch({ priorityUid: null })).toMatchObject({ priorityUid: null, categoryUid: null });
-    expect(await patch({ priorityUid: null, categoryUid: MINE })).toMatchObject({ priorityUid: null, categoryUid: MINE });
+    // Linked, it counts under the task's category, and its own goes: kept, it would come back on an unlink.
+    expect((await patch({ priorityUid: PLAN.toUpperCase() })).body.session).toMatchObject({ priorityUid: PLAN, categoryUid: TASKS });
+    expect(app.count('sessions', 'id = ? AND category_uid IS NULL', id)).toBe(1);
+    // A category for a session that keeps its task is refused; null is taken on any session.
+    const refused = [400, 'A session on a priority counts under its category.'];
+    for (const body of [{ categoryUid: MINE }, { priorityUid: PLAN, categoryUid: MINE }]) {
+      const r = await patch(body);
+      expect([r.status, r.body.error], JSON.stringify(body)).toEqual(refused);
+    }
+    expect((await patch({ priorityUid: PLAN, categoryUid: null })).body.session).toMatchObject({ priorityUid: PLAN, categoryUid: TASKS });
+    expect((await patch({ categoryUid: null })).status).toBe(200);
+    // One linked before links cleared it still holds its own; taken off its task, it has none.
+    app.db.prepare(`UPDATE sessions SET category_uid = ? WHERE id = ?`).run(MINE, id);
+    expect((await patch({ priorityUid: null })).body.session).toMatchObject({ priorityUid: null, categoryUid: null });
+    expect(app.count('sessions', 'id = ? AND category_uid IS NULL', id)).toBe(1);
+    await patch({ priorityUid: PLAN });
+    // Taken off its task with a category: it counts under that one.
+    expect((await patch({ priorityUid: null, categoryUid: MINE })).body.session).toMatchObject({ priorityUid: null, categoryUid: MINE });
+  });
 
-    // A link to an emptied row drops it too: the session goes by that row's category.
-    expect(await patch({ priorityUid: EMPTIED })).toMatchObject({ priorityUid: EMPTIED, categoryUid: null });
-    // A pick or an edit that leaves the link alone keeps it, as the log picks for a session on an emptied row.
-    expect(await patch({ categoryUid: MINE })).toMatchObject({ priorityUid: EMPTIED, categoryUid: MINE });
-    expect(await patch({ label: 'Planned' })).toMatchObject({ priorityUid: EMPTIED, categoryUid: MINE });
+  it("names a session taken off its task after the task's current name, unless a label is sent with it", async () => {
+    const long = 'k'.repeat(LIMITS.sessionLabel + 50);
+    await app.api.put(`/api/days/${DATE}/priorities`, {
+      priorities: [
+        { text: 'Plan', uid: 'aaaaaaaaaaa1' },
+        { text: long, uid: 'aaaaaaaaaaa2' },
+      ],
+    });
+    const { id } = (await start({ label: 'Started as', priorityUid: 'aaaaaaaaaaa1' })).body.session;
+    await app.api.put(`/api/days/${DATE}/priorities`, {
+      priorities: [
+        { text: 'Plan the week', uid: 'aaaaaaaaaaa1' },
+        { text: long, uid: 'aaaaaaaaaaa2' },
+      ],
+    });
+    expect((await app.api.patch(`/api/sessions/${id}`, { priorityUid: null })).body.session).toMatchObject({ label: 'Plan the week', title: null });
+    await app.api.patch(`/api/sessions/${id}`, { priorityUid: 'aaaaaaaaaaa2' });
+    expect((await app.api.patch(`/api/sessions/${id}`, { priorityUid: null, categoryUid: 'cat000000001' })).body.session.label).toBe(
+      long.slice(0, LIMITS.sessionLabel),
+    );
+    await app.api.patch(`/api/sessions/${id}`, { priorityUid: 'aaaaaaaaaaa1' });
+    // A move to another task keeps the label: the session is named by its task.
+    expect((await app.api.patch(`/api/sessions/${id}`, { priorityUid: 'aaaaaaaaaaa2' })).body.session.label).toBe(long.slice(0, LIMITS.sessionLabel));
+  });
+
+  it('cleans up a task taken off its day once its last session goes, is cancelled or moves to another task', async () => {
+    const tasks = ['aaaaaaaaaaa1', 'aaaaaaaaaaa2', 'aaaaaaaaaaa3', 'aaaaaaaaaaa4'];
+    await app.api.put(`/api/days/${DATE}/priorities`, { priorities: tasks.map((uid) => ({ text: uid, uid })) });
+    const log = async (uid: string, finish = true) => {
+      const { id } = (await start({ priorityUid: uid })).body.session;
+      if (finish) await app.api.post(`/api/sessions/${id}/finish`);
+      return id as number;
+    };
+    const deleted = await log(tasks[0]!);
+    const moved = await log(tasks[1]!);
+    await log(tasks[2]!);
+    const cancelled = await log(tasks[3]!, false);
+    // Off the day, each is kept by its session.
+    await app.api.put(`/api/days/${DATE}/priorities`, { priorities: [{ text: 'Other', uid: 'aaaaaaaaaaa5' }] });
+    const left = () => tasks.filter((uid) => app.count('items', 'uid = ?', uid) === 1);
+    expect(left()).toEqual(tasks);
+    await app.api.del(`/api/sessions/${deleted}`);
+    await app.api.patch(`/api/sessions/${moved}`, { priorityUid: 'aaaaaaaaaaa5' });
+    await app.api.post(`/api/sessions/${cancelled}/cancel`);
+    expect(left()).toEqual([tasks[2]]);
+    // A cancel lets go of the task: a cancelled session is never shown.
+    expect(app.count('sessions', 'id = ? AND item_id IS NULL', cancelled)).toBe(1);
+    // One still on its day stays when its last session goes.
+    await app.api.del(`/api/sessions/${moved}`);
+    expect(app.count('items', 'uid = ?', 'aaaaaaaaaaa5')).toBe(1);
+  });
+
+  it('refuses a link to a task deleted everywhere', async () => {
+    await app.api.put(`/api/days/${DATE}/priorities`, { priorities: [{ text: 'Plan', uid: 'aaaaaaaaaaa1' }] });
+    const { id } = (await start()).body.session;
+    await app.api.del('/api/items/aaaaaaaaaaa1');
+    const r = await app.api.patch(`/api/sessions/${id}`, { priorityUid: 'aaaaaaaaaaa1' });
+    expect([r.status, r.body.error]).toEqual([400, 'That priority is not on this day.']);
   });
 
   it('finishes at the planned end when the timer expired unattended', async () => {
@@ -328,7 +400,7 @@ describe('sessions are scoped to the signed-in user', () => {
     expect(await b.patch(`/api/sessions/${id}`, { label: 'mine now' })).toMatchObject({ status: 404, body: { error: 'Session not found.' } });
     expect((await b.patch(`/api/sessions/${id}`, { categoryUid: 'cat000000001' })).status).toBe(404);
     expect((await a.get('/api/sessions/running')).body.session.categoryUid).toBeNull();
-    // A link to A's own written row is a 404 for B too, and leaves A's pick and link alone.
+    // A link to A's own task is a 404 for B too, and leaves A's pick and link alone.
     const uid: string = (await a.put(`/api/days/${DATE}/priorities`, { priorities: [{ text: 'Plan' }] })).body.priorities[0].uid;
     await a.patch(`/api/sessions/${id}`, { categoryUid: 'cat000000001' });
     expect(await b.patch(`/api/sessions/${id}`, { priorityUid: uid })).toMatchObject({ status: 404, body: { error: 'Session not found.' } });

@@ -10,13 +10,14 @@ import {
   CONFIRM,
   DAYS_DELETED,
   DONE_STAYS,
-  EMPTIED_RECURRING,
-  EMPTIED_ROW,
   FINISH_CHOICE,
   LEFT_OPEN,
   LOAD_FAILED,
   PLAN_NEXT,
   PRIORITY_WARNINGS,
+  REMOVE_TASK,
+  RENAME_NOTE,
+  BLANK_NOTE,
   REQUEST_FAILED,
   SAVE_FAILED,
   SECOND_MEAL_NOTE,
@@ -34,17 +35,26 @@ describe('copy builders', () => {
     expect(CONFIRM.deleteUser('sam')).toBe('Delete sam and ALL of their data? This cannot be undone.');
   });
 
-  it('says how much time a cleared row keeps', () => {
-    expect(EMPTIED_ROW('25m')).toBe('The 25m logged on this row stays with it. Use Add priority for something new.');
-    expect(EMPTIED_ROW(null)).toBe('The time logged on this row stays with it. Use Add priority for something new.');
+  it('says how far a rename reaches, and what a blank name does', () => {
+    expect(RENAME_NOTE(3)).toBe('Also renames it on 3 earlier days.');
+    expect(RENAME_NOTE(1)).toBe('Also renames it on 1 earlier day.');
+    expect(BLANK_NOTE('Email Bob')).toBe('Left empty, it goes back to “Email Bob”. × takes it off this day.');
+  });
+
+  it('asks before × takes a task off a day, with the parts of the body that apply', () => {
+    expect(REMOVE_TASK.title('Email Bob')).toBe('Remove Email Bob');
+    expect(REMOVE_TASK.body(3, '1h 20m')).toBe(
+      'It is on 3 other days, and 1h 20m is logged on it. Delete everywhere takes it off every day. The time stays in the log, unplanned.',
+    );
+    expect(REMOVE_TASK.body(1, null)).toBe('It is on 1 other day. Delete everywhere takes it off every day.');
+    expect(REMOVE_TASK.body(0, '25m')).toBe('25m is logged on it. Delete everywhere takes it off every day. The time stays in the log, unplanned.');
   });
 
   it('names the day the offered priorities were left open on', () => {
     expect(LEFT_OPEN.title('yesterday')).toBe('Still open from yesterday');
   });
 
-  it('says an emptied recurring row is still the routine, and names the number a day in the offer', () => {
-    expect(EMPTIED_RECURRING).toBe('This row is still a recurring priority. Use Add priority for something new.');
+  it('names the number a day in the offer', () => {
     expect(TODAY_OFFER.over(3)).toBe('More than 3 recurring rows today.');
     expect(TODAY_OFFER.over(1)).toBe('More than 1 recurring row today.');
   });
@@ -126,20 +136,25 @@ describe('copy builders', () => {
     expect(DAYS_DELETED(1)).toBe('Deleted 1 day.');
   });
 
-  it('names the days a deleted card is taken off, and none when it is on no list', () => {
-    expect(CONFIRM.deleteCard([])).toBe('Delete this card?');
-    expect(CONFIRM.deleteCard(['today'])).toBe('Delete this card and take it off the list for today?');
-    expect(CONFIRM.deleteCard(['today', 'tomorrow'])).toBe('Delete this card and take it off the list for today and tomorrow?');
+  it("gives a deleted task's days and logged time, each where it applies", () => {
+    expect(CONFIRM.deleteTask(0, null)).toBe('Delete this task?');
+    expect(CONFIRM.deleteTask(4, '1h 20m')).toBe(
+      'Delete this task everywhere? It is on 4 days, and 1h 20m is logged on it. The time stays in the log, unplanned.',
+    );
+    expect(CONFIRM.deleteTask(1, null)).toBe('Delete this task everywhere? It is on 1 day.');
+    expect(CONFIRM.deleteTask(0, '5m')).toBe('Delete this task everywhere? 5m is logged on it. The time stays in the log, unplanned.');
   });
 
-  it('names the recurring priority a delete takes, and says its rows stay', () => {
-    expect(CONFIRM.deleteRecurring('Follow-ups')).toBe('Delete Follow-ups? Rows it already added keep their text.');
+  it('names the recurring priority Remove takes, and says its days keep it', () => {
+    expect(CONFIRM.deleteRecurring('Follow-ups')).toBe('Remove Follow-ups? It stops repeating. Days it was on keep it.');
   });
 
   it('names the card and the day in the board refusals, and the cap in the full line', () => {
     expect(BOARD.full).toBe('Later and Next hold 300 cards at most.');
     expect(BOARD.recurringStays('Monitor the queue')).toBe("Monitor the queue stays on today's list. Use Remove from today.");
     expect(BOARD.planned('Write a KB', 'tomorrow')).toBe("Write a KB is planned for tomorrow. Change it on that day's sheet.");
+    expect(BOARD.doneOn('yesterday')).toBe("Done yesterday. Untick it on that day's sheet.");
+    expect(BOARD.doneOn('Mon, Oct 5')).toBe("Done Mon, Oct 5. Untick it on that day's sheet.");
   });
 
   it('says a done item stays done and offers a new card in the lane it was moved to', () => {

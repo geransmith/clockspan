@@ -37,8 +37,9 @@ beforeEach(() => {
 });
 
 const DATE = '2026-09-28';
-const NO_LINKS = { cardUid: null, recurringUid: null, categoryUid: null };
-const REPORT_LINKS = { cardUid: 'card00000001', recurringUid: null, categoryUid: 'cafe00000001' };
+const COUNTS = { recurring: false, archived: false, listed: 1, earlier: 0, logged: 0 };
+const REPORT = { position: 1, text: 'Report', done: false, uid: 'abcdef123456', addedAt: 1, categoryUid: 'cafe00000001', ...COUNTS };
+const FREE = { position: 1, text: '', done: false, uid: null, addedAt: null, categoryUid: null, ...COUNTS, listed: 0 };
 
 // Every call the client makes: the method, the path and the JSON it sends (none for a GET).
 const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
@@ -78,36 +79,10 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
     `/api/days/${DATE}/punches`,
     { punches: [{ at: 5 }, { at: null }] },
   ],
-  // With the list it was built on, so the server can keep another device's changes, and every row's links.
-  [
-    'putPriorities',
-    () =>
-      api.putPriorities(DATE, [{ position: 1, text: 'Report', done: false, uid: 'abcdef123456', addedAt: 1, ...REPORT_LINKS }], {
-        base: [{ position: 1, text: '', done: false, uid: null, addedAt: null, ...NO_LINKS }],
-      }),
-    'PUT',
-    `/api/days/${DATE}/priorities`,
-    {
-      priorities: [{ position: 1, text: 'Report', done: false, uid: 'abcdef123456', addedAt: 1, ...REPORT_LINKS }],
-      base: [{ position: 1, text: '', done: false, uid: null, addedAt: null, ...NO_LINKS }],
-    },
-  ],
-  // The board's flags: make cards for rows without one, and the cards a board action handled.
-  [
-    'putPriorities, from the board',
-    () =>
-      api.putPriorities(DATE, [{ position: 1, text: 'Report', done: true, uid: 'abcdef123456', addedAt: 1, ...REPORT_LINKS }], {
-        cards: true,
-        touched: ['card00000001'],
-      }),
-    'PUT',
-    `/api/days/${DATE}/priorities`,
-    {
-      priorities: [{ position: 1, text: 'Report', done: true, uid: 'abcdef123456', addedAt: 1, ...REPORT_LINKS }],
-      cards: true,
-      touched: ['card00000001'],
-    },
-  ],
+  // With the list it was built on, so the server can keep another device's changes.
+  ['putPriorities', () => api.putPriorities(DATE, [REPORT], [FREE]), 'PUT', `/api/days/${DATE}/priorities`, { priorities: [REPORT], base: [FREE] }],
+  // With no base, the list replaces the stored one.
+  ['putPriorities, with no base', () => api.putPriorities(DATE, [REPORT]), 'PUT', `/api/days/${DATE}/priorities`, { priorities: [REPORT] }],
   ['putOvertime', () => api.putOvertime(DATE, true), 'PUT', `/api/days/${DATE}/overtime`, { approved: true }],
   ['putTarget', () => api.putTarget(DATE, null), 'PUT', `/api/days/${DATE}/target`, { workMinutes: null }],
   ['putRetro', () => api.putRetro(DATE, { note: 'why', done: true }), 'PUT', `/api/days/${DATE}/retro`, { note: 'why', done: true }],
@@ -136,20 +111,28 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
   ['deleteBreak', () => api.deleteBreak(4), 'DELETE', '/api/breaks/4', undefined],
   ['getBoard', () => api.getBoard(), 'GET', '/api/board', undefined],
   [
-    'addCard',
-    () => api.addCard({ uid: 'card00000002', title: 'Write the KB', categoryUid: 'cat000000001', lane: 'later', before: 'card00000001' }),
+    'addItem, a task in a lane',
+    () => api.addItem({ uid: 'task00000002', title: 'Write the KB', categoryUid: 'cat000000001', lane: 'later', before: 'task00000001' }),
     'POST',
-    '/api/board/cards',
-    { uid: 'card00000002', title: 'Write the KB', categoryUid: 'cat000000001', lane: 'later', before: 'card00000001' },
+    '/api/items',
+    { uid: 'task00000002', title: 'Write the KB', categoryUid: 'cat000000001', lane: 'later', before: 'task00000001' },
   ],
   [
-    'patchCard',
-    () => api.patchCard('card00000002', { today: DATE, categoryUid: null, lane: 'next', before: null }),
-    'PATCH',
-    '/api/board/cards/card00000002',
-    { today: DATE, categoryUid: null, lane: 'next', before: null },
+    'addItem, a recurring priority',
+    () => api.addItem({ uid: 'rcur00000001', title: 'Monitor the queue', categoryUid: null, weekdays: [1, 2, 3, 4, 5] }),
+    'POST',
+    '/api/items',
+    { uid: 'rcur00000001', title: 'Monitor the queue', categoryUid: null, weekdays: [1, 2, 3, 4, 5] },
   ],
-  ['deleteCard', () => api.deleteCard('card00000002'), 'DELETE', '/api/board/cards/card00000002', undefined],
+  [
+    'editItem',
+    () => api.editItem('task00000002', { title: 'Write the wiki', categoryUid: null, lane: 'next', before: null }),
+    'PATCH',
+    '/api/items/task00000002',
+    { title: 'Write the wiki', categoryUid: null, lane: 'next', before: null },
+  ],
+  ['editItem, the weekdays', () => api.editItem('rcur00000001', { weekdays: [1, 3, 5] }), 'PATCH', '/api/items/rcur00000001', { weekdays: [1, 3, 5] }],
+  ['deleteItem', () => api.deleteItem('task00000002'), 'DELETE', '/api/items/task00000002', undefined],
   [
     'addCategory',
     () => api.addCategory({ uid: 'cat000000001', name: 'Tickets', color: 'blue' }),
@@ -165,21 +148,6 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
     { name: 'Support tickets', color: 'teal' },
   ],
   ['deleteCategory', () => api.deleteCategory('cat000000001'), 'DELETE', '/api/board/categories/cat000000001', undefined],
-  [
-    'addRecurring',
-    () => api.addRecurring({ uid: 'rcur00000001', title: 'Monitor the queue', categoryUid: 'cat000000001', weekdays: [1, 2, 3, 4, 5] }),
-    'POST',
-    '/api/board/recurring',
-    { uid: 'rcur00000001', title: 'Monitor the queue', categoryUid: 'cat000000001', weekdays: [1, 2, 3, 4, 5] },
-  ],
-  [
-    'patchRecurring',
-    () => api.patchRecurring('rcur00000001', { title: 'Watch the queue', categoryUid: null, weekdays: [1, 3, 5] }),
-    'PATCH',
-    '/api/board/recurring/rcur00000001',
-    { title: 'Watch the queue', categoryUid: null, weekdays: [1, 3, 5] },
-  ],
-  ['deleteRecurring', () => api.deleteRecurring('rcur00000001'), 'DELETE', '/api/board/recurring/rcur00000001', undefined],
 ];
 
 describe('routes', () => {

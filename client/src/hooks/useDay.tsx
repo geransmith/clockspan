@@ -1,16 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import { emptyDay } from '../../../shared/api.js';
-import { todayKey } from '../../../shared/dates.js';
-import { hasText, mergePriorities } from '../../../shared/priorities.js';
-import { sameText } from '../../../shared/text.js';
+import { mergePriorities } from '../../../shared/priorities.js';
 import type { Day, Priority, PruneResult, Punch, Session } from '../types';
 import { dismissByTag, warnQuietly } from '../lib/alerts';
 import { ApiError } from '../lib/apiError';
 import { ADD_PRIORITY_FAILED, LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
 import { endBreaksAt } from '../lib/breaks';
 import { addPending, confirm, fetched, settle, shown, untracked, type Tracked } from '../lib/optimistic';
-import { newUid, padPriorities, placePriority } from '../lib/priorities';
+import { newTaskRow, padPriorities, placePriority } from '../lib/priorities';
 import { editedSession } from '../lib/retro';
 import { normalizePunches } from '../lib/timeclock';
 import { useLatest } from './useLatest';
@@ -26,7 +24,7 @@ interface DayState {
   days: Record<string, Day>;
   /** Dates whose first fetch failed; cleared by a load that succeeds. */
   failed: ReadonlySet<string>;
-  /** Moves after a prune: a range read before it may hold days that are gone. */
+  /** Moves after a prune or a task deleted everywhere: a range read before it may hold days, rows or links that are gone. */
   generation: number;
 }
 
@@ -54,9 +52,11 @@ interface DayStore {
    * Fetch a day the store holds again, since another device may have changed it, or one whose
    * first load failed; a day it doesn't hold is left to its first load. Quiet: a failure keeps
    * the copy (or the error) shown without another banner. Resolves when the answer is in,
-   * sharing a fetch already out.
+   * sharing a fetch already out. `fresh` is for a caller that has just changed what the server
+   * holds for the day another way (a task renamed in Settings): a fetch already out may have left
+   * before that, so its answer is dropped and the day asked for again.
    */
-  refresh: (date: string) => Promise<void>;
+  refresh: (date: string, opts?: { fresh?: boolean }) => Promise<void>;
   /**
    * `GET /days/range`, whose answer also lands on each day in it the store held when it went
    * out (as an empty day where the answer has none), unless the server confirmed a change to
@@ -68,31 +68,34 @@ interface DayStore {
    * again and `generation` moves. Rejects on a failure, unlike the setters.
    */
   pruneBefore: (before: string) => Promise<PruneResult>;
+  /**
+   * A task the server has changed on every day it is on (the board store's `editItem` renamed it or
+   * gave it a category, `deleteItem` deleted it): every held day whose list or log names it is read
+   * again, so its lists and sessions show the new name and category, or drop it and show its time
+   * unplanned, and `generation` moves, so no range on screen shows it from an older answer.
+   */
+  taskChanged: (uid: string) => void;
   setPunches: (date: string, punches: Punch[]) => Promise<boolean>;
   /**
    * A day's priorities, built on `base` (the list the caller read). The server lays the changes
    * made since `base` onto what it holds, so a row or a tick another device saved meanwhile
-   * stays, and until it answers the day shows the same merge (`mergePriorities`). Once saved, a
-   * day whose list lost a row with a category that a session was logged on is read again: the
-   * server gave the session that category (`leavesCategory`). So is one whose list wrote in again
-   * an emptied row that a session with a category of its own was logged on: the server took that
-   * category off (`regainsText`).
+   * stays, and until it answers the day shows the same merge (`mergePriorities`). A row naming a
+   * task the server doesn't hold makes it, and a row whose name or category differs from its base
+   * row's renames or files its task on every day.
    */
   setPriorities: (date: string, priorities: Priority[], base: Priority[]) => Promise<boolean>;
   /**
    * A held day's priorities changed by `fn`, for a writer off the Priorities card (the board): `fn`
    * gets the rows the store shows now (`current()`, so a list a blur-flush just set), padded to the
-   * user's count, and returns the list to save, or null for nothing to save. `touched` is the card
-   * a board action works on through its row (`PrioritiesPut.touched`). Saved as `setPriorities`
-   * saves, the reads of the day after it included. Never rejects.
+   * user's count, and returns the list to save, or null for nothing to save. Saved as
+   * `setPriorities` saves. Never rejects.
    */
-  editPriorities: (date: string, fn: (rows: Priority[]) => Priority[] | null, touched?: string | null) => Promise<PrioritiesEdit>;
+  editPriorities: (date: string, fn: (rows: Priority[]) => Priority[] | null) => Promise<PrioritiesEdit>;
   /** The day as the store shows it now, changes on their way included: for a board job that reads the list again after an await. */
   shown: (date: string) => Day | undefined;
   /**
-   * Add a priority from outside the card (the timer), in `categoryUid` if given. Resolves to the
-   * uid of the row as stored, which is another device's when it added the same text first;
-   * rejects if it could not be saved.
+   * Add a priority from outside the card (the timer), a task typed new in `categoryUid` if given.
+   * Resolves to its uid once saved; rejects if it could not be saved.
    */
   addPriority: (date: string, text: string, categoryUid?: string | null) => Promise<string>;
   /**
@@ -145,29 +148,6 @@ function withSession(d: Day, session: Session): Day {
   return { ...d, sessions: replaceById(d.sessions, session.id, session.status === 'cancelled' ? null : session) };
 }
 
-/**
- * Whether `rows`, a day's list once a priorities save is in, lost a row of `before` (the rows
- * the save was built on or shown over) with a category that a session of the day was logged on
- * with none of its own. The server then gave that session the row's category
- * (`keepSessionCategories`), which only a read of the day shows.
- */
-function leavesCategory(before: Priority[], rows: Priority[], sessions: Session[]): boolean {
-  const listed = new Set(rows.map((p) => p.uid));
-  const gone = new Set(before.filter((p) => p.categoryUid != null && !listed.has(p.uid)).map((p) => p.uid));
-  return sessions.some((s) => s.categoryUid == null && gone.has(s.priorityUid));
-}
-
-/**
- * Whether `rows`, a day's list once a priorities save is in, wrote in again a row emptied in
- * `before` that a session of the day with a category of its own was logged on. The server then
- * dropped that category (`dropSessionCategories`), which only a read of the day shows.
- */
-function regainsText(before: Priority[], rows: Priority[], sessions: Session[]): boolean {
-  const written = new Set(rows.filter(hasText).map((p) => p.uid));
-  const again = new Set(before.filter((p) => !hasText(p) && written.has(p.uid)).map((p) => p.uid));
-  return sessions.some((s) => s.categoryUid != null && again.has(s.priorityUid));
-}
-
 /** The lists a save sends whole. */
 type ListField = 'punches' | 'priorities';
 
@@ -177,8 +157,6 @@ interface ListSave<T> {
   list: T;
   /** What the oldest list set and not sent yet was built on; it goes with `list`. */
   base: T | undefined;
-  /** The cards the lists set and not sent yet were touched for, all of them: they go with `list`. */
-  touched: string[];
   /** The pending change of each list set, sent or waiting. */
   ids: number[];
   /** How many of `ids` were set when the last PUT went out. */
@@ -220,7 +198,6 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const { tracked, current, change, nextId, queue } = useTracked<Held>(() => ({ days: {}, failed: new Set() }));
   const { settings } = useSettings();
   const priorityCount = useLatest(settings.priorityCount);
-  const boardOn = useLatest(settings.board);
   const inflight = useRef(new Map<string, Promise<void>>());
   // The date whose failed load raised the banner (one at a time: a newer one replaces it).
   const bannerFor = useRef<string | null>(null);
@@ -295,14 +272,29 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const load = useCallback((date: string) => fetchDay(date), [fetchDay]);
 
   const refresh = useCallback(
-    async (date: string) => {
+    async (date: string, { fresh = false }: { fresh?: boolean } = {}) => {
+      const { days, failed } = current();
+      // Counted as a change the server confirmed: a read already out predates it, so its answer
+      // is dropped (or, on a day never loaded, taken) and the day asked for again.
+      if (fresh && days[date]) update(date, (t) => confirm(t, (d) => d));
       // Not loaded yet: useDay's first fetch owns that. If it failed, asking again here brings
       // today's alarms back once the server answers, without anyone pressing Try again.
-      const { days, failed } = current();
       if (!shownDay(days[date]) && !failed.has(date)) return;
       await fetchDay(date, true);
     },
-    [current, fetchDay],
+    [current, update, fetchDay],
+  );
+
+  // Reads again, fresh, each held day `picks`: the server changed it through a write for another day
+  // or for a task.
+  const readAgain = useCallback(
+    (picks: (day: Day, date: string) => boolean) => {
+      for (const [date, t] of Object.entries(current().days)) {
+        const day = shownDay(t);
+        if (day && picks(day, date)) void refresh(date, { fresh: true });
+      }
+    },
+    [current, refresh],
   );
 
   // Every write ends here. Saved: the changes `ids` leave the pending list and the server's
@@ -335,42 +327,38 @@ export function DayProvider({ children }: { children: ReactNode }) {
   // without one). Resolves to whether the newest list was saved.
   //
   // The newest list goes with the base of the oldest list not sent yet, so it carries every
-  // change made since, and with every card the lists it replaced were touched for. That needs
-  // every list that takes a waiting one's place to be built on `current()`, the copy that shows
-  // the one it replaces: the Priorities card flushes its draft on blur, before any other control
-  // on the sheet acts, and `addPriority` and `editPriorities` build on `current()`.
+  // change made since. That needs every list that takes a waiting one's place to be built on
+  // `current()`, the copy that shows the one it replaces: the Priorities card flushes its draft
+  // on blur, before any other control on the sheet acts, and `addPriority` and `editPriorities`
+  // build on `current()`.
   const sendLatest = useCallback(
     <F extends ListField>(
       field: F,
       date: string,
       list: Day[F],
-      send: (list: Day[F], base: Day[F] | undefined, touched: string[]) => Promise<Day[F]>,
-      { base, show, touched }: { base?: Day[F]; show?: (rows: Day[F]) => Day[F]; touched?: string | null } = {},
+      send: (list: Day[F], base: Day[F] | undefined) => Promise<Day[F]>,
+      { base, show }: { base?: Day[F]; show?: (rows: Day[F]) => Day[F] } = {},
     ): Promise<boolean> => {
       const saves = listSaves.current[field];
       const id = nextId();
       update(date, (t) => addPending(t, id, (d) => ({ ...d, [field]: show ? show(d[field]) : list })));
-      const card = touched ? [touched] : [];
       const waiting = saves.get(date);
       if (waiting) {
         // None waits unsent behind the one out, so this list is the oldest not sent yet.
-        if (waiting.sent === waiting.ids.length) {
-          waiting.base = base;
-          waiting.touched = card;
-        } else waiting.touched = [...new Set([...waiting.touched, ...card])];
+        if (waiting.sent === waiting.ids.length) waiting.base = base;
         waiting.list = list;
         waiting.ids.push(id);
         return waiting.drained;
       }
-      const q = { list, base, touched: card, ids: [id], sent: 0 };
+      const q = { list, base, ids: [id], sent: 0 };
       const drained = (async () => {
         try {
           // Each set adds its id: any past the ones sent means a newer list is waiting.
           while (q.sent < q.ids.length) {
             q.sent = q.ids.length;
-            const { list: sending, base: builtOn, touched: handled } = q;
+            const { list: sending, base: builtOn } = q;
             const run = async (): Promise<Commit> => {
-              const saved = await send(sending, builtOn, handled);
+              const saved = await send(sending, builtOn);
               return (d) => ({ ...d, [field]: saved });
             };
             if (!(await persist(date, [...q.ids], run))) {
@@ -418,43 +406,39 @@ export function DayProvider({ children }: { children: ReactNode }) {
     [sendLatest],
   );
 
-  // Every priorities save, the board's and the timer's included. `cards` is read as the PUT goes
-  // out: a list sent after the board was switched off, or after midnight made its day a past one,
-  // makes no cards.
-  const sendPriorities = useCallback(
-    async (date: string, priorities: Priority[], base: Priority[], touched: string | null = null) => {
-      // The rows shown now carry a category picked a moment ago whose save is still out, which
-      // `base` may not have yet: removing that row takes the category off too.
-      const shown = shownDay(current().days[date])?.priorities ?? [];
-      const saved = await sendLatest(
+  // Every priorities save, the board's and the timer's included, shown as the server will merge
+  // it while it is out. A task the save put on the list or took off (Plan tomorrow, a carry, ×) is
+  // on another number of days (`listed`, `earlier`) wherever else it is, so the other held days
+  // holding it are read again: × asks from those counts.
+  const setPriorities = useCallback(
+    (date: string, priorities: Priority[], base: Priority[]) =>
+      sendLatest(
         'priorities',
         date,
         priorities,
-        async (p, b, t) =>
-          (await api.putPriorities(date, p, { base: b, cards: boardOn.current && date >= todayKey(), touched: t.length ? t : undefined })).priorities,
-        { base, show: (rows) => mergePriorities(rows, base, priorities), touched },
-      );
-      const day = shownDay(current().days[date]);
-      const before = [...base, ...shown];
-      if (saved && day && (leavesCategory(before, day.priorities, day.sessions) || regainsText(before, day.priorities, day.sessions))) void refresh(date);
-      return saved;
-    },
-    [sendLatest, boardOn, current, refresh],
+        async (p, b) => {
+          const saved = (await api.putPriorities(date, p, b)).priorities;
+          // A priorities save always goes with its base.
+          const moved = (uid: string | null) => uid != null && b!.some((q) => q.uid === uid) !== saved.some((q) => q.uid === uid);
+          readAgain((day, d) => d !== date && day.priorities.some((q) => moved(q.uid)));
+          return saved;
+        },
+        { base, show: (rows) => mergePriorities(rows, base, priorities) },
+      ),
+    [sendLatest, readAgain],
   );
-
-  const setPriorities = useCallback((date: string, priorities: Priority[], base: Priority[]) => sendPriorities(date, priorities, base), [sendPriorities]);
 
   const shownCopy = useCallback((date: string) => shownDay(current().days[date]), [current]);
 
   const editPriorities = useCallback(
-    async (date: string, fn: (rows: Priority[]) => Priority[] | null, touched: string | null = null): Promise<PrioritiesEdit> => {
+    async (date: string, fn: (rows: Priority[]) => Priority[] | null): Promise<PrioritiesEdit> => {
       const day = shownCopy(date);
       if (!day) return 'notLoaded';
       const next = fn(padPriorities(day.priorities, priorityCount.current));
       if (!next) return 'skipped';
-      return (await sendPriorities(date, next, day.priorities, touched)) ? 'saved' : 'failed';
+      return (await setPriorities(date, next, day.priorities)) ? 'saved' : 'failed';
     },
-    [shownCopy, sendPriorities, priorityCount],
+    [shownCopy, setPriorities, priorityCount],
   );
 
   const addPriority = useCallback(
@@ -462,20 +446,14 @@ export function DayProvider({ children }: { children: ReactNode }) {
       const day = shownDay(current().days[date]);
       // Only onto a list the store holds: where the row goes depends on the rows already there.
       if (!day) throw new Error(ADD_PRIORITY_FAILED.notLoaded);
-      const uid = newUid();
-      const row = { text, done: false, uid, addedAt: Date.now(), cardUid: null, recurringUid: null, categoryUid };
+      const row = newTaskRow(text, categoryUid, Date.now());
       const next = placePriority(day.priorities, priorityCount.current, row);
       if (!next) throw new Error(ADD_PRIORITY_FAILED.full);
       // A timer must not start against a uid the server never stored.
-      if (!(await sendPriorities(date, next, day.priorities))) throw new Error(SAVE_FAILED.title);
-      // A row another device added with this text since is stored in this one's place
-      // (`mergePriorities`), and it is the one the timer must point at.
-      const rows = shownDay(current().days[date])!.priorities;
-      const listed = new Set(next.map((p) => p.uid));
-      const kept = rows.find((p) => p.uid === uid) ?? rows.find((p) => !listed.has(p.uid) && sameText(p.text) === sameText(text));
-      return kept?.uid ?? uid;
+      if (!(await setPriorities(date, next, day.priorities))) throw new Error(SAVE_FAILED.title);
+      return row.uid;
     },
-    [current, sendPriorities, priorityCount],
+    [current, setPriorities, priorityCount],
   );
 
   const prioritiesSaved = useCallback(async (date: string) => {
@@ -624,17 +602,19 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const pruneBefore = useCallback(
     async (before: string) => {
       const result = await api.pruneDays(before);
-      for (const date of Object.keys(current().days)) {
-        if (date >= before) continue;
-        // Counted as a change the server confirmed: a read already out predates the prune, so
-        // its answer is dropped (or, on a day never loaded, taken) and the day asked for again.
-        update(date, (t) => confirm(t, (d) => d));
-        void refresh(date);
-      }
+      for (const date of Object.keys(current().days)) if (date < before) void refresh(date, { fresh: true });
       setGeneration((g) => g + 1);
       return result;
     },
-    [current, update, refresh],
+    [current, refresh],
+  );
+
+  const taskChanged = useCallback(
+    (uid: string) => {
+      readAgain((day) => day.priorities.some((p) => p.uid === uid) || day.sessions.some((s) => s.priorityUid === uid));
+      setGeneration((g) => g + 1);
+    },
+    [readAgain],
   );
 
   const days = useMemo(() => {
@@ -653,6 +633,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       refresh,
       readRange,
       pruneBefore,
+      taskChanged,
       setPunches,
       setPriorities,
       editPriorities,
@@ -674,6 +655,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       refresh,
       readRange,
       pruneBefore,
+      taskChanged,
       setPunches,
       setPriorities,
       editPriorities,

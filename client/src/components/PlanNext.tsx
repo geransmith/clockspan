@@ -6,10 +6,9 @@ import { unlockAudio } from '../lib/alerts';
 import type { CategoryPick } from '../lib/board';
 import { LOAD_FAILED, PLAN_NEXT } from '../lib/copy';
 import { dayName } from '../lib/format';
-import { nextWorkDay, planNext, textSeed } from '../lib/plan';
+import { nextWorkDay, planNext, sameItem, textSeed } from '../lib/plan';
 import { isOpen, isRecurring } from '../lib/priorities';
-import { hasText, sharesLink } from '../../../shared/priorities.js';
-import { sameText } from '../../../shared/text.js';
+import { hasText } from '../../../shared/priorities.js';
 import { LIMITS } from '../../../shared/api.js';
 import type { Priority } from '../types';
 import { Burst } from './Burst';
@@ -108,8 +107,8 @@ function Planner({
   const [busy, setBusy] = useState(false);
   const onList = day?.priorities.filter(hasText) ?? [];
   const already = onList.length;
-  // A row already on that list (planned earlier tonight), by its text, its card or its recurring priority, isn't offered again.
-  const offered = candidates.filter((p) => !onList.some((q) => sameText(q.text) === sameText(p.text) || sharesLink(q, p)));
+  // A task already on that list (planned earlier tonight, or from another device) isn't offered again.
+  const offered = candidates.filter((p) => !onList.some((q) => sameItem(q, p)));
 
   const addDraft = () => {
     if (draft.trim()) setExtra((x) => [...x, { text: draft.trim(), categoryUid: null }]);
@@ -126,9 +125,9 @@ function Planner({
     if (!day) return;
     // The tap is the gesture iOS needs: the "next day planned" sound plays after the save answers.
     unlockAudio();
-    // A row carried over is the same task: its links go with it, read as the rows are now. What
-    // is still in the box, never entered, has had no chip, so it goes with no category; so do the
-    // rows typed in once the board is off, whose chips are gone.
+    // A row carried over is the same task, under its current name and category. What is still in
+    // the box, never entered, has had no chip, so it goes with no category; so do the rows typed
+    // in once the board is off, whose chips are gone.
     const seeds = [...offered.filter((p) => picked.has(p.uid)), ...extra.map((e) => textSeed(e.text, pick ? e.categoryUid : null)), textSeed(draft)];
     const { rows, added } = planNext(day.priorities, seeds);
     if (added === 0) {

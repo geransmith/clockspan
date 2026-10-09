@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { MINUTE_MS } from '../../../shared/dates.js';
 import { completedSession, makeDay, makePriority, makeSession, punchesAt } from '../test/fixtures';
 import type { Day } from '../types';
 import { editedSession, focusOf, hasContent, loggedByUid, reviewDay, sessionCategory, sessionCategoryEdit, sessionName, sessionRow } from './retro';
@@ -19,43 +20,55 @@ describe('focusOf', () => {
 });
 
 describe('loggedByUid', () => {
-  it("adds up each row's completed sessions by uid, and nothing else", () => {
+  it("adds up each task's completed sessions and a running one's time so far, and nothing else", () => {
     const sessions = [
       completedSession(1, 0, 600, { priorityUid: 'aaaaaaaaaaaa' }),
       completedSession(2, 1, 300, { priorityUid: 'aaaaaaaaaaaa' }),
       completedSession(3, 2, 120, { priorityUid: 'bbbbbbbbbbbb' }),
       completedSession(4, 3, 900),
       completedSession(5, 4, 100, { priorityUid: 'bbbbbbbbbbbb', status: 'cancelled' }),
-      makeSession({ id: 6, startedAt: 5, plannedSeconds: 900, priorityUid: 'cccccccccccc' }),
+      // Running for 10 minutes, 2 of them paused.
+      makeSession({ id: 6, startedAt: 0, plannedSeconds: 900, priorityUid: 'cccccccccccc', pausedSeconds: 120 }),
     ];
-    expect(loggedByUid(sessions)).toEqual(
+    expect(loggedByUid(sessions, 10 * MINUTE_MS)).toEqual(
       new Map([
         ['aaaaaaaaaaaa', 900],
         ['bbbbbbbbbbbb', 120],
+        ['cccccccccccc', 480],
       ]),
     );
-    expect(loggedByUid([]).size).toBe(0);
+    expect(loggedByUid([], 0).size).toBe(0);
+  });
+
+  it('counts a timer that has only just started, or reads as not started on a clock behind, as a second', () => {
+    const running = makeSession({ id: 1, startedAt: 5000, plannedSeconds: 900, priorityUid: 'cccccccccccc' });
+    expect(loggedByUid([running], 5000).get('cccccccccccc')).toBe(1);
+    expect(loggedByUid([running], 4000).get('cccccccccccc')).toBe(1);
   });
 });
 
 describe('sessionName and sessionRow', () => {
   const fix = makePriority(1, '  Ship the fix ');
-  const rows = [fix, makePriority(2, '', { uid: 'emptied00000' })];
-  const on = (priorityUid: string | null, label = 'Started as this') => makeSession({ priorityUid, label });
+  const rows = [fix, makePriority(2, '', { uid: 'blank0000000' })];
+  const on = (priorityUid: string | null, title: string | null = null, label = 'Started as this') => makeSession({ priorityUid, title, label });
 
-  it('is the current text of the written row the session names, trimmed, whatever label it started with', () => {
+  it("is its row's current text while the day's list holds its task, trimmed, whatever the server last called it", () => {
     expect(sessionRow(on(fix.uid), rows)).toBe(fix);
-    expect(sessionName(on(fix.uid), rows)).toBe('Ship the fix');
-    expect(sessionName(on(fix.uid, ''), rows)).toBe('Ship the fix');
+    expect(sessionName(on(fix.uid, 'Ship it'), rows)).toBe('Ship the fix');
+    expect(sessionName(on(fix.uid, null, ''), rows)).toBe('Ship the fix');
   });
 
-  it('is the label off a written row: unplanned, on a row since removed or emptied, or on a day not read', () => {
+  it("is the task's name the server gave once the task left the day, or its row is blank in the draft, or the day isn't read", () => {
+    expect(sessionName(on('gone00000000', 'Ship the hotfix'), rows)).toBe('Ship the hotfix');
+    expect(sessionName(on('blank0000000', 'Blanked task'), rows)).toBe('Blanked task');
+    expect(sessionRow(on('blank0000000'), rows)).toBeUndefined();
+    expect(sessionName(on(fix.uid, 'Ship it'), [])).toBe('Ship it');
+  });
+
+  it('is the label for a session with no task', () => {
+    expect(sessionRow(on(null), rows)).toBeUndefined();
     expect(sessionName(on(null), rows)).toBe('Started as this');
-    expect(sessionName(on('removed00000'), rows)).toBe('Started as this');
-    expect(sessionName(on('emptied00000'), rows)).toBe('Started as this');
-    expect(sessionRow(on('emptied00000'), rows)).toBeUndefined();
-    expect(sessionName(on(fix.uid), [])).toBe('Started as this');
-    expect(sessionName(on(null, ''), rows)).toBe('');
+    expect(sessionName(on(null, null, ''), rows)).toBe('');
   });
 });
 
@@ -64,64 +77,59 @@ describe("a session's category", () => {
   const ADMIN = 'cat000000002';
   const report = makePriority(1, 'Report', { categoryUid: TICKETS });
   const email = makePriority(2, 'Email');
-  const emptied = makePriority(3, '', { uid: 'emptied00000', categoryUid: ADMIN });
-  const rows = [report, email, emptied];
+  const rows = [report, email];
   const on = (priorityUid: string | null, categoryUid: string | null = null) => completedSession(1, 0, 600, { priorityUid, categoryUid });
 
   describe('sessionCategory', () => {
-    it("is the written row's category while the session is on one, none included, over its own pick", () => {
+    it("is its row's category while the day's list holds its task, none included, over what the server last said", () => {
       expect(sessionCategory(on(report.uid), rows)).toBe(TICKETS);
       expect(sessionCategory(on(report.uid, ADMIN), rows)).toBe(TICKETS);
       expect(sessionCategory(on(email.uid, ADMIN), rows)).toBeNull();
     });
 
-    it("is the session's own category off a written row: unplanned, on a row since removed, or on an emptied one", () => {
+    it("is the category the server gave off the list: the task's that left the day, or the session's own", () => {
+      expect(sessionCategory(on('gone00000000', ADMIN), rows)).toBe(ADMIN);
       expect(sessionCategory(on(null, ADMIN), rows)).toBe(ADMIN);
-      expect(sessionCategory(on('removed00000', ADMIN), rows)).toBe(ADMIN);
-      expect(sessionCategory(on(emptied.uid, TICKETS), rows)).toBe(TICKETS);
-    });
-
-    it("is an emptied row's category when the session has none of its own, else none", () => {
-      expect(sessionCategory(on(emptied.uid), rows)).toBe(ADMIN);
-      expect(sessionCategory(on(emptied.uid), [{ ...emptied, categoryUid: null }])).toBeNull();
-      expect(sessionCategory(on('removed00000'), rows)).toBeNull();
       expect(sessionCategory(on(null), rows)).toBeNull();
     });
   });
 
   describe('sessionCategoryEdit', () => {
-    it("sets a category as the session's own, and leaves a session on an emptied row on it", () => {
-      expect(sessionCategoryEdit(on(emptied.uid), rows, TICKETS)).toEqual({ categoryUid: TICKETS });
-      expect(sessionCategoryEdit(on(null), rows, ADMIN)).toEqual({ categoryUid: ADMIN });
+    it("sets a category as a session's own, and takes a session whose task left the day off the task", () => {
+      expect(sessionCategoryEdit(on(null, ADMIN), TICKETS)).toEqual({ categoryUid: TICKETS });
+      expect(sessionCategoryEdit(on(null, ADMIN), null)).toEqual({ categoryUid: null });
+      expect(sessionCategoryEdit(on('gone00000000', ADMIN), TICKETS)).toEqual({ categoryUid: TICKETS, priorityUid: null });
+      expect(sessionCategoryEdit(on('gone00000000', ADMIN), null)).toEqual({ categoryUid: null, priorityUid: null });
     });
 
-    it('takes a session off an emptied row for none when the row has a category, and only then', () => {
-      expect(sessionCategoryEdit(on(emptied.uid), rows, null)).toEqual({ categoryUid: null, priorityUid: null });
-      expect(sessionCategoryEdit(on(emptied.uid, TICKETS), rows, null)).toEqual({ categoryUid: null, priorityUid: null });
-      expect(sessionCategoryEdit(on(emptied.uid, TICKETS), [{ ...emptied, categoryUid: null }], null)).toEqual({ categoryUid: null });
-      expect(sessionCategoryEdit(on('removed00000', ADMIN), rows, null)).toEqual({ categoryUid: null });
-      expect(sessionCategoryEdit(on(null, ADMIN), rows, null)).toEqual({ categoryUid: null });
-      // The log offers no pick on a written row; an edit there would leave the session on it.
-      expect(sessionCategoryEdit(on(report.uid, ADMIN), rows, null)).toEqual({ categoryUid: null });
-    });
-
-    it('makes a session on no written row count under what was picked, none included', () => {
-      for (const s of [on(null, ADMIN), on('removed00000', TICKETS), on(emptied.uid), on(emptied.uid, TICKETS)]) {
-        for (const picked of [TICKETS, ADMIN, null]) expect(sessionCategory({ ...s, ...sessionCategoryEdit(s, rows, picked) }, rows)).toBe(picked);
+    it('makes a session off the plan count under what was picked, none included', () => {
+      for (const s of [on(null, ADMIN), on('gone00000000', TICKETS)]) {
+        for (const picked of [TICKETS, ADMIN, null]) expect(sessionCategory(editedSession(s, sessionCategoryEdit(s, picked)), rows)).toBe(picked);
       }
     });
   });
 
   describe('editedSession', () => {
-    it('drops a category of its own when the edit links the session to a row, whatever it sent, as the server does', () => {
-      expect(editedSession(on(null, ADMIN), { priorityUid: report.uid })).toEqual(on(report.uid));
-      expect(editedSession(on(null, ADMIN), { priorityUid: report.uid, categoryUid: TICKETS })).toEqual(on(report.uid));
+    const linked = (patch: Parameters<typeof completedSession>[3] = {}) =>
+      completedSession(1, 0, 600, { priorityUid: report.uid, title: 'Report', label: 'Started', categoryUid: TICKETS, ...patch });
+
+    it('lays an edit on as sent while the session keeps its task, or stays with none', () => {
+      expect(editedSession(linked(), { priorityUid: report.uid })).toEqual(linked());
+      expect(editedSession(on(null, ADMIN), { categoryUid: TICKETS })).toEqual(on(null, TICKETS));
+      expect(editedSession(on(null, ADMIN), { priorityUid: null, label: 'Renamed' })).toEqual({ ...on(null, ADMIN), label: 'Renamed' });
     });
 
-    it('lays any other edit on as sent: an unlink, a pick, a rename', () => {
-      expect(editedSession(on(report.uid), { priorityUid: null, categoryUid: ADMIN })).toEqual(on(null, ADMIN));
-      expect(editedSession(on(emptied.uid, ADMIN), { categoryUid: TICKETS })).toEqual(on(emptied.uid, TICKETS));
-      expect(editedSession(on(emptied.uid, ADMIN), { label: 'Renamed' })).toEqual({ ...on(emptied.uid, ADMIN), label: 'Renamed' });
+    it("links a session to another task, named and filed by that task's row from then on, its own category gone", () => {
+      expect(editedSession(on(null, ADMIN), { priorityUid: email.uid })).toEqual({ ...on(email.uid), title: null });
+      expect(sessionCategory(editedSession(on(null, ADMIN), { priorityUid: report.uid }), rows)).toBe(TICKETS);
+      expect(sessionName(editedSession(linked(), { priorityUid: email.uid }), rows)).toBe('Email');
+    });
+
+    it("takes a session off its task under the task's name, unless a label is sent, in the category sent or none, as the server does", () => {
+      expect(editedSession(linked(), { priorityUid: null })).toEqual(linked({ priorityUid: null, title: null, label: 'Report', categoryUid: null }));
+      expect(editedSession(linked(), { priorityUid: null, label: 'Mine' })).toMatchObject({ label: 'Mine', categoryUid: null });
+      expect(editedSession(linked(), { priorityUid: null, categoryUid: ADMIN })).toMatchObject({ label: 'Report', categoryUid: ADMIN });
+      expect(editedSession(linked({ title: null }), { priorityUid: null })).toMatchObject({ label: 'Started' });
     });
   });
 });
@@ -147,8 +155,12 @@ describe('hasContent', () => {
 });
 
 describe('reviewDay', () => {
-  it('splits time into on-plan and off-plan by uid', () => {
-    const priorities = [makePriority(1, 'Ship the report', { done: true }), makePriority(2, 'Call the bank'), makePriority(3, '')];
+  it("splits time into on-plan and off-plan by the day's tasks", () => {
+    const priorities = [
+      makePriority(1, 'Ship the report', { done: true }),
+      makePriority(2, 'Call the bank'),
+      makePriority(3, '', { uid: null, addedAt: null }),
+    ];
     const sessions = [
       completedSession(1, 10_000, 1500, { priorityUid: FIRST_UID }),
       completedSession(2, 20_000, 900, { priorityUid: FIRST_UID }),
@@ -195,12 +207,12 @@ describe('reviewDay', () => {
     const priorities = [
       makePriority(1, 'Ship the report', { done: true }),
       makePriority(2, 'Call the bank'),
-      makePriority(3, 'Monitor the queue', { recurringUid: 'rcur00000001', done: true }),
-      makePriority(4, 'Follow-ups', { recurringUid: 'rcur00000002' }),
-      // Emptied: no longer one of the day's rows, routine or not.
-      makePriority(5, '', { recurringUid: 'rcur00000003' }),
+      makePriority(3, 'Monitor the queue', { uid: 'rcur00000001', recurring: true, done: true }),
+      makePriority(4, 'Follow-ups', { uid: 'rcur00000002', recurring: true }),
+      // Padding: no row of the day's, routine or not.
+      makePriority(5, '', { uid: null, addedAt: null }),
     ];
-    const r = reviewDay(priorities, [completedSession(1, 10_000, 600, { priorityUid: makePriority(3, '').uid })]);
+    const r = reviewDay(priorities, [completedSession(1, 10_000, 600, { priorityUid: 'rcur00000001' })]);
     expect(r).toMatchObject({ done: 2, total: 4, routines: { done: 1, total: 2 }, onPlanSeconds: 600 });
     expect(reviewDay(priorities.slice(0, 2), []).routines).toEqual({ done: 0, total: 0 });
   });

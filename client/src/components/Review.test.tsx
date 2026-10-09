@@ -13,7 +13,7 @@ import {
   makeCategory,
   makeDay,
   makePriority,
-  makeRecurring,
+  makeCard,
   makeSettings,
   punchesAt,
   serveRange,
@@ -178,13 +178,13 @@ describe('Review', () => {
     const routineMon = makeDay(MON, {
       priorities: [
         makePriority(1, 'Ship it', { done: true, addedAt: 0 }),
-        makePriority(2, 'Monitor the queue', { recurringUid: QUEUE, done: true, addedAt: 0 }),
-        makePriority(3, 'Follow-ups', { recurringUid: 'rcur00000002', addedAt: 0 }),
+        makePriority(2, 'Monitor the queue', { uid: QUEUE, recurring: true, done: true, addedAt: 0 }),
+        makePriority(3, 'Follow-ups', { uid: 'rcur00000002', recurring: true, addedAt: 0 }),
       ],
-      sessions: [completedSession(1, atTime(MON, 9, 0), 3000, { date: MON, priorityUid: makePriority(2, '').uid })],
+      sessions: [completedSession(1, atTime(MON, 9, 0), 3000, { date: MON, priorityUid: QUEUE })],
     });
     const routineTue = makeDay(TUE, {
-      priorities: [makePriority(1, 'Write the report', { addedAt: 0 }), makePriority(2, 'Monitor the queue', { recurringUid: QUEUE, addedAt: 0 })],
+      priorities: [makePriority(1, 'Write the report', { addedAt: 0 }), makePriority(2, 'Monitor the queue', { uid: QUEUE, recurring: true, addedAt: 0 })],
     });
     serveRange([routineMon, routineTue]);
     const onOpen = vi.fn();
@@ -206,7 +206,7 @@ describe('Review', () => {
   it('says nothing outside the routines was left open once every one-off is ticked', async () => {
     serveRange([
       makeDay(MON, {
-        priorities: [makePriority(1, 'Ship it', { done: true }), makePriority(2, 'Monitor the queue', { recurringUid: 'rcur00000001' })],
+        priorities: [makePriority(1, 'Ship it', { done: true }), makePriority(2, 'Monitor the queue', { uid: 'rcur00000001', recurring: true })],
       }),
     ]);
     await review({ kind: 'week', from: MON });
@@ -217,6 +217,24 @@ describe('Review', () => {
     serveRange([makeDay(MON, { priorities: [makePriority(1, 'Ship it', { done: true })] })]);
     await review({ kind: 'week', from: MON });
     expect(screen.getByText('Every priority got ticked.')).toBeTruthy();
+  });
+
+  it('joins a one-off retyped on a later day to the first in Not done, unless the board holds the later one in a lane', async () => {
+    serveRange([
+      makeDay(MON, { priorities: [makePriority(1, 'Email Bob', { uid: 'emailmon0001' })] }),
+      makeDay(TUE, { priorities: [makePriority(1, 'email bob', { uid: 'emailtue0001' })] }),
+    ]);
+    await review({ kind: 'week', from: MON });
+    expect(rows('Not done')).toEqual([['email bob', 'Mon, Tue', 'no time']]);
+    cleanup();
+
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ board: true }));
+    vi.mocked(api.getBoard).mockResolvedValue(makeBoard(makeCard('emailtue0001', 'email bob', { lane: 'next' })));
+    await review({ kind: 'week', from: MON });
+    expect(rows('Not done')).toEqual([
+      ['Email Bob', 'Mon', 'no time'],
+      ['email bob', 'Tue', 'no time'],
+    ]);
   });
 
   it("holds a month or a quarter to its days' own lengths, and leaves the typical day out of a quarter", async () => {
@@ -274,27 +292,26 @@ describe('Review: By category', () => {
   const QUEUE = 'rcur00000001';
   const uid = (position: number) => makePriority(position, '').uid;
   /**
-   * Tickets: 45m on a written row (ticked) and 15m on an emptied one, plus a row written at 11:00,
-   * after the first session. Admin: 30m on no row. Knowledge base: a tick and no time. No
+   * Tickets: 45m on a written row (ticked) and 15m on a task taken off the day, plus a row
+   * written at 11:00, after the first session. Admin: 30m on no row. Knowledge base: a tick and no time. No
    * category: 15m on a row in a category the board doesn't have. A routine no one focused on.
    */
   const day = makeDay(MON, {
     priorities: [
       makePriority(1, 'Ship it', { categoryUid: TICKETS.uid, done: true, addedAt: 0 }),
-      makePriority(2, '', { categoryUid: TICKETS.uid, addedAt: 0 }),
       makePriority(3, 'Update the KB', { categoryUid: KB.uid, done: true, addedAt: 0 }),
       makePriority(4, 'Read the RFC', { categoryUid: GONE, addedAt: 0 }),
       makePriority(5, 'Fire drill', { categoryUid: TICKETS.uid, addedAt: atTime(MON, 11, 0) }),
-      makePriority(6, 'Monitor the queue', { recurringUid: QUEUE, addedAt: 0 }),
+      makePriority(6, 'Monitor the queue', { uid: QUEUE, recurring: true, addedAt: 0 }),
     ],
     sessions: [
       completedSession(1, atTime(MON, 9, 0), 45 * 60, { date: MON, priorityUid: uid(1) }),
-      completedSession(2, atTime(MON, 10, 0), 15 * 60, { date: MON, priorityUid: uid(2) }),
+      completedSession(2, atTime(MON, 10, 0), 15 * 60, { date: MON, priorityUid: 'leftday00001', title: 'Left the day', categoryUid: TICKETS.uid }),
       completedSession(3, atTime(MON, 11, 0), 30 * 60, { date: MON, label: 'Inbox', categoryUid: ADMIN.uid }),
       completedSession(4, atTime(MON, 12, 0), 15 * 60, { date: MON, priorityUid: uid(4) }),
     ],
   });
-  const board: Board = { ...makeBoard(), categories: [TICKETS, ADMIN, KB], recurring: [makeRecurring(QUEUE, 'Watch the queue')] };
+  const board: Board = { ...makeBoard(), categories: [TICKETS, ADMIN, KB] };
   const boardOn = () => vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ board: true }));
 
   beforeEach(() => {
@@ -337,11 +354,10 @@ describe('Review: By category', () => {
     expect(document.querySelector('.review-category button')).toBeNull();
   });
 
-  it("names the category most rows added mid-day had, and titles a routine by its item's title", async () => {
+  it('names the category most rows added mid-day had', async () => {
     boardOn();
     await review({ kind: 'week', from: MON });
     expect(facts()[0]).toBe('Added mid-day: 1 · 0 done · mostly Tickets');
-    expect(rows('Routines')[0]![0]).toBe('Watch the queue');
   });
 
   it('leaves out an off-plan part under a minute, and the parts line with nothing in it', async () => {

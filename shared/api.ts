@@ -40,54 +40,65 @@ export interface Punch {
 }
 
 /**
- * A day's stored list is the one a client last sent, merged with what other devices saved since
- * the copy it was built on (`mergePriorities`), in position order (1-based and contiguous): the
- * card saves the rows it shows, empty ones included, and a day never edited has none. `uid` is
- * the stable id sessions point at (null until the row has text); `addedAt` is when it got text.
- * Each day's row has its own uid; the links below tie the rows of one task across days. They are
- * soft links, checked for shape only: a uid with nothing behind it reads as none, and a null link
- * matches nothing. A row carried to another day gets a fresh uid and keeps its links.
+ * A task as it stands on one day's list: a day's list names the tasks on it (`uid`), each with its
+ * place, its tick that day and when it was put there, and the server joins the rest from the task
+ * itself, which is stored once, so a rename or a category shows on every day. The stored list is
+ * the one a client last sent, merged with what other devices saved since the copy it was built on
+ * (`mergePriorities`), in position order. Only rows with a task are stored: a client pads the list
+ * with free rows (uid null, text ''), so positions can have gaps where free rows sat. A day never
+ * edited has none.
  */
 export interface Priority {
+  /** Its row on the sheet, from 1. */
   position: number;
+  /** The task's current name; '' on a free row. */
   text: string;
+  /** Ticked on this day. */
   done: boolean;
+  /** The task's uid, which sessions point at; null only on a free row. */
   uid: string | null;
+  /** When it was put on this day's list. */
   addedAt: number | null;
-  /** The board card this row is on its day. Set when the row arrives on a list, or by the server when a save makes the row's card; fixed once stored. */
-  cardUid: string | null;
-  /** The recurring priority this row was added from; fixed once stored. Never set together with `cardUid`. */
-  recurringUid: string | null;
-  /** The category it counts under. Kept when the row's text is cleared. */
+  /** The task's current category. */
   categoryUid: string | null;
+  /** Read only: the task is a recurring priority. */
+  recurring: boolean;
+  /** Read only: a recurring priority removed in Settings, or a task the move to stored tasks archived. */
+  archived: boolean;
+  /** Read only: how many days' lists hold the task. */
+  listed: number;
+  /** Read only: how many of those days are before this one. */
+  earlier: number;
+  /** Read only: seconds of completed sessions on the task, every day. */
+  logged: number;
 }
 
-/** A board card's column while no row of today's list is linked to it. In progress is never stored: it is today's open rows. */
-export const LANES = ['later', 'next', 'done'] as const;
-export type Lane = (typeof LANES)[number];
-/** The lanes the board can put a card in: Done is reached only through a ticked row. */
-export type OpenLane = Exclude<Lane, 'done'>;
+/** The board's lanes a task can be placed in. In progress is today's list and Done a task whose latest entry is ticked, so neither is stored. */
+export type OpenLane = 'later' | 'next';
 
 /**
- * A board card. While a row of today's list is linked to it (its `cardUid`), that row decides
- * where it shows: open in In progress, ticked in Done, emptied nowhere. Otherwise `held`, then
- * `listDate`, then its `lane`. A priorities save keeps its title and lane in step with its
- * latest linked row.
+ * A one-off task as the board sees it. Where it shows is worked out from its latest entry
+ * (`listDate`, `listDone`) and its lane: on today's list it is that row, a later day's list plans
+ * it, a ticked latest entry is Done, and a task with no lane whose latest entry was left open
+ * shows in Next for `LOOKBACK_DAYS`.
  */
 export interface BoardCard {
   uid: string;
   title: string;
-  /** The category it counts under; a priorities save copies its row's when it changes there. */
   categoryUid: string | null;
-  lane: Lane;
-  /** 1..n within Later or Next; 0 in Done, which goes by `doneAt`. */
+  /** Later or Next, where the board put it; null: in neither. */
+  lane: OpenLane | null;
+  /** 1..n within its lane; 0 with none. */
   position: number;
   createdAt: number;
-  doneAt: number | null;
-  /** The latest day whose list holds a row linked to this card, with text or emptied; null with none. After the client's today, the card is planned. */
+  /** The latest day whose list holds it; null with none. After the client's today, the task is planned. */
   listDate: string | null;
-  /** Made by a priorities save and never handled on the board, with its row on `listDate` emptied: shown nowhere until that row has text again or is removed. */
-  held: boolean;
+  /** That day's tick: the task is done. */
+  listDone: boolean;
+  /** How many days' lists hold it. */
+  listed: number;
+  /** Seconds of completed sessions on it, every day. */
+  logged: number;
 }
 
 /** The colours a category can take. There are fewer than categories can be, so they repeat. */
@@ -95,8 +106,8 @@ export const CATEGORY_COLORS = ['blue', 'teal', 'green', 'gold', 'orange', 'pink
 export type CategoryColor = (typeof CATEGORY_COLORS)[number];
 
 /**
- * What a row, a card or a session counts under (their `categoryUid`). Names are unique among a
- * user's categories in use, whatever their case or spacing (`sameText`).
+ * What a task or a session with no task counts under (their `categoryUid`). Names are unique among
+ * a user's categories in use, whatever their case or spacing (`sameText`).
  */
 export interface Category {
   uid: string;
@@ -107,23 +118,24 @@ export interface Category {
 }
 
 /**
- * A recurring priority, offered on today's list on its weekdays (the client decides which day
- * is today). The rows it adds carry its uid as `recurringUid`, and keep it after it is deleted.
+ * A recurring priority: a task offered on today's list on its weekdays (the client decides which
+ * day is today). The rows it adds name it by its uid, so a rename reaches them all.
  */
 export interface Recurring {
   uid: string;
-  /** The text of the rows it adds. */
+  /** Its name, on every day it was added to. */
   title: string;
-  /** The category the rows it adds count under. */
+  /** The category it counts under, on every day it was added to. */
   categoryUid: string | null;
   /** ISO weekdays, Monday 1 to Sunday 7, ascending, at least one. */
   weekdays: number[];
 }
 
 /**
- * `GET /board`, and the answer to every board write: Later and Next in order, then the cards
- * done in the last `BOARD_LIMITS.doneWindowDays`; every category, removed ones included, in the
- * order they were made; and the recurring priorities in the order they were made.
+ * `GET /board`, and the answer to every board and task write: the one-off tasks in Later and Next
+ * in order, then the others whose latest entry is in the last `BOARD_LIMITS.listWindowDays` or
+ * later; every category, removed ones included, in the order they were made; and the recurring
+ * priorities not removed, in the order they were made.
  */
 export interface Board {
   cards: BoardCard[];
@@ -131,24 +143,31 @@ export interface Board {
   recurring: Recurring[];
 }
 
+/**
+ * How many days back a task left open still comes back: the morning's "Still open from …" reads
+ * this many days before today, and the board shows a task left open in Next for as long.
+ */
+export const LOOKBACK_DAYS = 14;
+
 /** The server's caps on the board: sanity limits for an internet-exposed install, not product limits. */
 export const BOARD_LIMITS = {
-  /** Cards in Later and Next together. */
+  /** Tasks in Later and Next that aren't done. */
   openCards: 300,
   /** Categories not removed. */
   categories: 100,
   /** Categories stored, removed ones included, so making and removing them can't grow the table for ever. */
   categoriesStored: 1000,
-  /** Recurring priorities. */
+  /** Recurring priorities not removed. */
   recurring: 100,
-  /** How far back `GET /board` sends Done cards: a week, and a day of slack for the client's zone. */
-  doneWindowDays: 8,
+  /** How far back `GET /board` sends the tasks a list holds: `LOOKBACK_DAYS`, and a day of slack for the client's zone. */
+  listWindowDays: LOOKBACK_DAYS + 1,
 } as const;
 
 /** What a session has whatever its status. */
 interface SessionFields {
   id: number;
   date: string;
+  /** What it was called when it started, or its task's name at the moment it lost the task. Shown only while it has no task. */
   label: string;
   plannedSeconds: number;
   startedAt: number;
@@ -156,13 +175,11 @@ interface SessionFields {
   pausedSeconds: number;
   /** When the current pause began; null while counting down or once ended. */
   pausedAt: number | null;
-  /** The priority this session was for; null (or a removed row's uid) means unplanned. */
+  /** The task this session was for; null means unplanned. Off the plan when its day's list doesn't hold it. */
   priorityUid: string | null;
-  /**
-   * Picked in the log for a session not on a written row, or the category of the row it was on,
-   * which the server copies here when a priorities save removes that row. A session on a written
-   * row counts under that row's category instead.
-   */
+  /** Read only: the task's current name; null with no task. */
+  title: string | null;
+  /** The category it counts under: its task's with one, else the one picked in the log or kept from a task it lost. */
   categoryUid: string | null;
 }
 
@@ -245,9 +262,9 @@ export interface PunchesResponse {
 }
 
 /**
- * `PUT /days/:date/priorities`: the rows as stored once the save is merged with the day's list
- * (`mergePriorities`), uids and addedAt filled in, and each stored row's links as stored,
- * with the `cardUid` of each card the save made.
+ * `PUT /days/:date/priorities`: the day's list as stored once the save is merged with it
+ * (`mergePriorities`), uids and addedAt filled in, each row with its task's name and category as
+ * they stand. A row that named a deleted task is not in it.
  */
 export interface PrioritiesResponse {
   priorities: Priority[];

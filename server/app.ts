@@ -15,6 +15,7 @@ import { rejectCrossSiteWrites, rejectUnknownHosts, securityHeaders } from './se
 import { boardRouter } from './routes/board.js';
 import { breaksRouter } from './routes/breaks.js';
 import { daysRouter } from './routes/days.js';
+import { itemsRouter } from './routes/items.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { settingsRouter } from './routes/settings.js';
 import { VERSION_HEADER, type AuthInfo, type OkResponse } from '../shared/api.js';
@@ -91,6 +92,7 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
   api.use('/sessions', sessionsRouter(db));
   api.use('/breaks', breaksRouter(db));
   api.use('/board', boardRouter(db));
+  api.use('/items', itemsRouter(db));
   app.use('/api', api);
 
   const notFound: express.RequestHandler = (_req, res) => refuse(res, 404, 'Not found.');

@@ -4,8 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
 import { PLAN_NEXT, RETRO_PROMPT } from '../lib/copy';
-import { deferred, makePriority, makeSettings, settle, T0, TODAY } from '../test/hooks';
-import type { Priority } from '../types';
+import { completedSession, deferred, makePriority, makeSettings, settle, T0, TODAY } from '../test/hooks';
+import type { Priority, Session } from '../types';
 import { Retro } from './Retro';
 
 vi.mock('../api');
@@ -15,11 +15,11 @@ vi.mock('../lib/alerts');
 const DATE = '2026-09-25';
 const PRIORITIES: Priority[] = [makePriority(1, 'Report', { uid: 'abcdef123456' })];
 
-async function renderCard(note = '', reviewedAt: number | null = null, priorities = PRIORITIES, date = DATE) {
+async function renderCard(note = '', reviewedAt: number | null = null, priorities = PRIORITIES, date = DATE, sessions: Session[] = []) {
   const onChange = vi.fn<(patch: api.RetroPatch) => Promise<boolean>>(() => Promise.resolve(true));
   const card = (n: string, r: number | null) => (
     <SettingsProvider>
-      <Retro date={date} today={TODAY} priorities={priorities} sessions={[]} note={n} reviewedAt={r} onChange={onChange} />
+      <Retro date={date} today={TODAY} priorities={priorities} sessions={sessions} note={n} reviewedAt={r} onChange={onChange} />
     </SettingsProvider>
   );
   const view = render(card(note, reviewedAt));
@@ -56,13 +56,24 @@ describe('Retro', () => {
     await renderCard('', null, [
       makePriority(1, 'Report', { done: true }),
       makePriority(2, 'Invoices'),
-      makePriority(3, 'Monitor the queue', { recurringUid: 'rcur00000001', done: true }),
-      makePriority(4, 'Follow-ups', { recurringUid: 'rcur00000002' }),
+      makePriority(3, 'Monitor the queue', { uid: 'rcur00000001', recurring: true, done: true }),
+      makePriority(4, 'Follow-ups', { uid: 'rcur00000002', recurring: true }),
     ]);
     expect(screen.getByText('Planned').querySelector('.muted')?.textContent).toBe('2 of 4 done · routines 1 of 2');
     cleanup();
     await renderCard();
     expect(screen.getByText('Planned').querySelector('.muted')?.textContent).toBe('0 of 1 done');
+  });
+
+  it("names each session not on the plan by its task's current name, else its label", async () => {
+    const sessions = [
+      completedSession(1, T0, 600, { label: 'Inbox' }),
+      completedSession(2, T0 + 1, 600, { label: 'Started as this', priorityUid: 'leftday00001', title: 'Left the day' }),
+      completedSession(3, T0 + 2, 600, { priorityUid: 'abcdef123456', title: 'Report' }),
+    ];
+    await renderCard('', null, PRIORITIES, DATE, sessions);
+    const section = screen.getByText('Not on the plan').closest('section')!;
+    expect([...section.querySelectorAll('.retro-text')].map((el) => el.firstChild!.textContent)).toEqual(['Inbox', 'Left the day']);
   });
 
   it('saves the note 800 ms after typing stops, once', async () => {

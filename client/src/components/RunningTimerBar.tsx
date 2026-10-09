@@ -11,9 +11,8 @@ export function RunningTimerBar() {
   const [draft, setDraft] = useState('');
   // Set when Enter or Escape ends the edit, so focus goes back to the label; a blur leaves focus where it went.
   const [returnFocus, setReturnFocus] = useState(false);
-  // On a written row the row names the session, and its label isn't edited: a box open as the
-  // session is linked (on another device, to a row or by its emptied row written in again)
-  // closes, unsent.
+  // A session with a task is named by the task, and has no label to edit: a box open as the
+  // session is linked (on another device) closes, unsent.
   if (editing && linked) setEditing(false);
   if (!running) return null;
 

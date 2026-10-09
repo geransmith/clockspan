@@ -3,9 +3,9 @@ import { Router } from 'express';
 import type { Config } from '../config.js';
 import type { DB } from '../db.js';
 import { currentUser } from '../auth/middleware.js';
-import { refuse } from '../refuse.js';
+import { refuse, STALE_CLIENT } from '../refuse.js';
 import { countDays, pruneDays, reclaimSpace } from '../retention.js';
-import { mirrorCards } from '../board.js';
+import { collectItems, inList, itemCounts, nextFromLater, type ItemCounts } from '../board.js';
 import { isWholeNumber } from '../validate.js';
 import { DAY_MS, daysBetween, isValidDateKey, punchWindow } from '../../shared/dates.js';
 import {
@@ -13,18 +13,20 @@ import {
   DAY_COLUMNS,
   ensureDay,
   findDay,
+  parseCategoryUid,
   sessionRowToJson,
+  SESSIONS,
   UID_RE,
   type BreakRow,
   type Dated,
   type DayRow,
-  type PriorityRow,
+  type ItemRow,
   type PunchRow,
   type SessionRow,
 } from './shared.js';
 import { startBreak } from './breaks.js';
 import { startSession } from './sessions.js';
-import { hasText, mergePriorities, repeatedLink } from '../../shared/priorities.js';
+import { hasText, mergePriorities } from '../../shared/priorities.js';
 import { kindForPosition, MAX_PUNCHES } from '../../shared/punches.js';
 import { MAX_PRIORITIES, SETTING_LIMITS } from '../../shared/settings.js';
 import {
@@ -69,23 +71,55 @@ function punchesJson(rows: PunchRow[]): Punch[] {
   return rows.map((p) => ({ position: p.position, kind: p.kind, at: p.at }));
 }
 
-/** A stored row as the API sends it, for a day's answer and for the merge a priorities save goes through. */
-function priorityJson(r: PriorityRow): Priority {
+/** A day's entry with its task, as `ENTRIES` reads it. */
+interface EntryRow {
+  day_id: number;
+  date: string;
+  position: number;
+  done: number;
+  added_at: number;
+  item_id: number;
+  uid: string;
+  title: string;
+  category_uid: string | null;
+  weekdays: number | null;
+  archived_at: number | null;
+}
+
+/** Entries (`x`) with their day's date and their task's uid, current name and category. */
+const ENTRIES = `SELECT x.day_id, x.position, x.done, x.added_at, x.item_id, i.uid, i.title, i.category_uid, i.weekdays, i.archived_at, d.date
+  FROM priorities x JOIN items i ON i.id = x.item_id JOIN days d ON d.id = x.day_id`;
+
+/** An entry as the API sends it, with its task's counts (`itemCounts`). */
+function priorityJson(r: EntryRow, counts: ReadonlyMap<number, ItemCounts>): Priority {
+  const { dates, logged } = counts.get(r.item_id)!;
   return {
     position: r.position,
-    text: r.text,
+    text: r.title,
     done: Boolean(r.done),
     uid: r.uid,
     addedAt: r.added_at,
-    cardUid: r.card_uid,
-    recurringUid: r.recurring_uid,
     categoryUid: r.category_uid,
+    recurring: r.weekdays != null,
+    archived: r.archived_at != null,
+    listed: dates.length,
+    earlier: dates.filter((d) => d < r.date).length,
+    logged,
   };
 }
 
-/** A day's priority rows as stored, in order. */
+/** A list of entries as the API sends them, each task's counts read once for all of them. */
+function prioritiesJson(db: DB, rows: EntryRow[]): Priority[] {
+  const counts = itemCounts(
+    db,
+    rows.map((r) => r.item_id),
+  );
+  return rows.map((r) => priorityJson(r, counts));
+}
+
+/** A day's list as stored, in order. */
 function storedPriorities(db: DB, dayId: number): Priority[] {
-  return (db.prepare(`SELECT * FROM priorities WHERE day_id = ? ORDER BY position`).all(dayId) as PriorityRow[]).map(priorityJson);
+  return prioritiesJson(db, db.prepare(`${ENTRIES} WHERE x.day_id = ? ORDER BY x.position`).all(dayId) as EntryRow[]);
 }
 
 /** What a list of priority rows is called in the errors: the list sent, or the base it was built on. */
@@ -96,27 +130,19 @@ interface RowsLabel {
 const SENT_ROWS: RowsLabel = { list: 'priorities', row: 'Priority' };
 const BASE_ROWS: RowsLabel = { list: 'base', row: 'Base row' };
 
-/** A row's links to its task, as the errors name them. */
-const LINK_NAMES = { cardUid: 'card', recurringUid: 'recurring priority', categoryUid: 'category' } as const;
-type LinkField = keyof typeof LINK_NAMES;
-const LINK_FIELDS = Object.keys(LINK_NAMES) as LinkField[];
-
-/** A row as a request sent it: `categoryUid` is undefined where the field was left out (`withCategories` fills it in). */
-type SentPriority = Omit<Priority, 'categoryUid'> & { categoryUid: string | null | undefined };
-
 /**
- * A list of priority rows from a request, numbered from 1, or the message to refuse it with.
- * The web app mints a uid and stamps addedAt the first time a row gets text, and always sends
- * both. The server fills them in for a text row that arrives without (curl, the route tests), so
- * every row with text has a uid a session can point at and an addedAt the retro can judge. A
- * list and its base are read with one `now`, so a row the merge compares across them isn't
- * changed by two stamps a millisecond apart. A card or recurring priority left out is none (a
- * stored row keeps its own anyway: `MERGED`); a category left out is filled in once the stored
- * rows are read. A row never written in (no uid) is a free slot and holds no links.
+ * A list of priority rows from a request, numbered from 1, or the message to refuse it with. A
+ * row is its task (`uid`), or a free row (no uid, no text) where none is. The web app mints a uid
+ * and stamps addedAt the first time a row gets text, and always sends both. The server fills them
+ * in for a text row that arrives without (curl, the route tests), so every row with text names a
+ * task. A row with a uid needs a name: a task's is never blank. A list and its base are read with
+ * one `now`, so a row the merge compares across them isn't changed by two stamps a millisecond
+ * apart. The fields the server works out (`recurring`, `listed` and the rest) are neither read nor
+ * refused.
  */
-function parsePriorityRows(input: unknown, label: RowsLabel, now: number): SentPriority[] | string {
+function parsePriorityRows(input: unknown, label: RowsLabel, now: number): Priority[] | string {
   if (!Array.isArray(input) || input.length > MAX_PRIORITIES) return `${label.list} must be an array of at most ${MAX_PRIORITIES}.`;
-  const rows: SentPriority[] = [];
+  const rows: Priority[] = [];
   const seen = new Set<string>();
   for (let i = 0; i < input.length; i++) {
     const item: unknown = input[i];
@@ -128,6 +154,7 @@ function parsePriorityRows(input: unknown, label: RowsLabel, now: number): SentP
     const text = typeof item.text === 'string' ? item.text.slice(0, LIMITS.priorityText) : '';
     const written = hasText({ text });
     let uid = typeof item.uid === 'string' ? item.uid.toLowerCase() : null;
+    if (uid && !written) return `${name} needs a name.`;
     if (uid && seen.has(uid)) return `${name} repeats another row's uid.`;
     if (!uid && written) uid = randomBytes(6).toString('hex');
     if (uid) seen.add(uid);
@@ -137,76 +164,33 @@ function parsePriorityRows(input: unknown, label: RowsLabel, now: number): SentP
     if (addedAt == null && written) addedAt = now;
     // Checked like every other flag: `Boolean("false")` would tick the row. Null is absent, as for the other fields.
     if (item.done != null && typeof item.done !== 'boolean') return `${name} has an invalid done flag.`;
-    const links: Partial<Record<LinkField, string | null>> = {};
-    for (const field of LINK_FIELDS) {
-      const raw = item[field];
-      if (raw != null && !(typeof raw === 'string' && UID_RE.test(raw))) return `${name} has an invalid ${LINK_NAMES[field]}.`;
-      if (raw !== undefined) links[field] = typeof raw === 'string' ? raw.toLowerCase() : null;
-    }
-    if (links.cardUid != null && links.recurringUid != null) return `${name} can't be both a card and a recurring priority.`;
-    const free = uid == null;
+    const category = parseCategoryUid(item.categoryUid);
+    if ('error' in category) return `${name} has an invalid category.`;
     rows.push({
       position: i + 1,
       text,
       done: written && item.done === true,
       uid,
       addedAt,
-      cardUid: free ? null : (links.cardUid ?? null),
-      recurringUid: free ? null : (links.recurringUid ?? null),
-      categoryUid: free ? null : links.categoryUid,
+      categoryUid: uid == null ? null : (category.categoryUid ?? null),
+      recurring: false,
+      archived: false,
+      listed: 0,
+      earlier: 0,
+      logged: 0,
     });
   }
   return rows;
 }
 
 /**
- * Each row's category where the request left the field out: that of the same uid's row in the
- * first of `sources` that holds it, else none. A field a client didn't send is one it didn't
- * change (a tab from before links), so the merge keeps the stored value.
+ * Whether a priorities save is shaped as a page loaded before tasks were stored once sends it:
+ * `cards` or `touched`, sent on every save whatever their value, or a row with a card or
+ * recurring-priority link. Such a page can't save until it reloads.
  */
-function withCategories(rows: SentPriority[], ...sources: Priority[][]): Priority[] {
-  return rows.map(({ categoryUid, ...p }) => {
-    if (categoryUid !== undefined) return { ...p, categoryUid };
-    const from = sources.map((list) => list.find((s) => s.uid === p.uid)).find((s) => s != null);
-    return { ...p, categoryUid: from?.categoryUid ?? null };
-  });
-}
-
-/**
- * `touched` from a priorities save: the cards a board action handled through their rows,
- * lowercased. None when left out; null when it isn't a list of at most one id per row.
- */
-function parseTouched(raw: unknown): Set<string> | null {
-  if (raw === undefined) return new Set();
-  if (!Array.isArray(raw) || raw.length > MAX_PRIORITIES) return null;
-  const ids: unknown[] = raw;
-  if (!ids.every((id): id is string => typeof id === 'string' && UID_RE.test(id))) return null;
-  return new Set(ids.map((id) => id.toLowerCase()));
-}
-
-/**
- * The sessions logged on a row this save removed take the row's category, unless they have one
- * of their own: the row is gone, so nothing else says what that time was for. An emptied row
- * stays on the list and keeps its category, which its sessions count under through it.
- */
-function keepSessionCategories(db: DB, dayId: number, stored: Priority[], list: Priority[]): void {
-  const listed = new Set(list.map((p) => p.uid));
-  const keep = db.prepare(`UPDATE sessions SET category_uid = ? WHERE day_id = ? AND priority_uid = ? AND category_uid IS NULL`);
-  for (const row of stored) if (row.categoryUid != null && !listed.has(row.uid)) keep.run(row.categoryUid, dayId, row.uid);
-}
-
-/**
- * The sessions logged on an emptied or removed row this save writes in again drop a category of
- * their own (one picked in the log while the row was empty, or the row's, copied when it was
- * removed): the row decides from then on. Left on, that category would be hidden behind the row
- * and take the time over when the row is emptied or removed. Every text row the stored list
- * doesn't hold as one is checked: a uid new to the server has no sessions, since a session names
- * only a row its day holds.
- */
-function dropSessionCategories(db: DB, dayId: number, stored: Priority[], list: Priority[]): void {
-  const written = new Set(stored.filter(hasText).map((p) => p.uid));
-  const drop = db.prepare(`UPDATE sessions SET category_uid = NULL WHERE day_id = ? AND priority_uid = ?`);
-  for (const row of list) if (hasText(row) && !written.has(row.uid)) drop.run(dayId, row.uid);
+function staleShape(body: Record<string, unknown>): boolean {
+  const rows: unknown[] = Array.isArray(body.priorities) ? body.priorities : [];
+  return 'cards' in body || 'touched' in body || rows.some((r) => isRow(r) && ('cardUid' in r || 'recurringUid' in r));
 }
 
 /**
@@ -230,12 +214,18 @@ function byDay<Row extends { day_id: number }>(rows: Row[]): Map<number, Row[]> 
  * cancelled sessions left out.
  */
 function rangeRows(db: DB, userId: number, from: string, to: string) {
-  const inRange = `JOIN days d ON d.id = x.day_id WHERE d.user_id = ? AND d.date >= ? AND d.date <= ?`;
+  const range = `d.user_id = ? AND d.date >= ? AND d.date <= ?`;
+  const inRange = `JOIN days d ON d.id = x.day_id WHERE ${range}`;
   const all = (sql: string) => db.prepare(sql).all(userId, from, to);
+  const entries = all(`${ENTRIES} WHERE ${range} ORDER BY x.position`) as EntryRow[];
   return {
     punches: byDay(all(`SELECT x.* FROM punches x ${inRange} ORDER BY x.position`) as PunchRow[]),
-    priorities: byDay(all(`SELECT x.* FROM priorities x ${inRange} ORDER BY x.position`) as PriorityRow[]),
-    sessions: byDay(all(`SELECT x.*, d.date FROM sessions x ${inRange} AND x.status <> 'cancelled' ORDER BY x.started_at`) as Dated<SessionRow>[]),
+    priorities: byDay(entries),
+    counts: itemCounts(
+      db,
+      entries.map((e) => e.item_id),
+    ),
+    sessions: byDay(all(`${SESSIONS} WHERE ${range} AND x.status <> 'cancelled' ORDER BY x.started_at`) as SessionRow[]),
     breaks: byDay(all(`SELECT x.*, d.date FROM breaks x ${inRange} ORDER BY x.started_at`) as Dated<BreakRow>[]),
   };
 }
@@ -247,8 +237,8 @@ function dayJson(day: DayRow, rows: ChildRows): Day {
   return {
     date: day.date,
     punches: punchesJson(of(rows.punches)),
-    // The rows as stored, empty ones included; the client pads to the user's `priorityCount`.
-    priorities: of(rows.priorities).map(priorityJson),
+    // The entries as stored, with gaps where free rows sat; the client pads to the user's `priorityCount`.
+    priorities: of(rows.priorities).map((r) => priorityJson(r, rows.counts)),
     overtimeApproved: Boolean(day.overtime_approved),
     retroNote: day.retro_note,
     retroAt: day.retro_at,
@@ -302,7 +292,7 @@ export function daysRouter(db: DB, config: Config): Router {
     const before = (req.body as { before?: unknown }).before;
     if (!isValidDateKey(before)) return refuse(res, 400, 'before must be a date (YYYY-MM-DD).');
     const pruned = pruneDays(db, currentUser(req).id, before);
-    if (pruned.days > 0 || pruned.cards > 0) reclaimSpace(db);
+    if (pruned.days > 0 || pruned.items > 0) reclaimSpace(db);
     res.json({ deleted: pruned.days } satisfies PruneResult);
   });
 
@@ -338,52 +328,76 @@ export function daysRouter(db: DB, config: Config): Router {
     res.json({ punches } satisfies PunchesResponse);
   });
 
-  // Array order is the position, so removing a row is sending the list without it. `base` is
-  // the list the client built this one on: the server lays the changes made since onto what it
-  // holds (`mergePriorities`), so a device saving on an old copy keeps what another device did
-  // meanwhile. With no base (curl, a tab from before merging) the list replaces the stored one,
-  // like punches, but for a stored row's card and recurring priority, which never change. An
-  // empty row can never be "done". A list that links two text rows to one card or one recurring
-  // priority is refused when one of the two is new here (`repeatedLink`); of two the server
-  // already holds, the merge keeps one. The board's cards follow the list in the same
-  // transaction (`mirrorCards`): `cards` (the board is on and the day is today or later, which
-  // only the client knows) makes a card for each text row without one, and `touched` names the
-  // cards a board action handled through their rows. So do the sessions logged on a removed row,
-  // which take its category (`keepSessionCategories`), and those on an emptied or removed row
-  // this save writes in again, which drop their own (`dropSessionCategories`).
+  // Array order is the position, so removing a row is sending the list without it; a free row
+  // holds its place and isn't stored. `base` is the list the client built this one on: the server
+  // lays the changes made since onto what it holds (`mergePriorities`), so a device saving on an
+  // old copy keeps what another device did meanwhile. With no base (curl) the stored list stands
+  // in for it. A row naming a deleted task is dropped before the merge, from the list and the
+  // base, so a device that still has the task can't bring it back, and the rest is stored. The
+  // tasks follow in the same transaction: a uid new to the user makes its task, and a row this
+  // device renamed or recategorised since its base writes that to its task, on every day. A task
+  // in Later added open to its latest list goes to Next (`nextFromLater`), and one the save took
+  // off its last list goes when nothing else names it (`collectItems`).
   r.put('/:date/priorities', (req, res) => {
     const user = currentUser(req);
     const { date } = req.params;
-    const body = req.body as { priorities?: unknown; base?: unknown; cards?: unknown; touched?: unknown };
+    const body = req.body as Record<string, unknown>;
+    if (staleShape(body)) return refuse(res, 409, STALE_CLIENT);
     const now = Date.now();
     const sent = parsePriorityRows(body.priorities, SENT_ROWS, now);
     if (typeof sent === 'string') return refuse(res, 400, sent);
     const sentBase = body.base == null ? null : parsePriorityRows(body.base, BASE_ROWS, now);
     if (typeof sentBase === 'string') return refuse(res, 400, sentBase);
-    if (body.cards !== undefined && typeof body.cards !== 'boolean') return refuse(res, 400, 'cards must be a boolean.');
-    const touched = parseTouched(body.touched);
-    if (!touched) return refuse(res, 400, `touched must be a list of at most ${MAX_PRIORITIES} card ids.`);
-    const saved = db.transaction((): Priority[] | string => {
+    const saved = db.transaction((): Priority[] | null => {
       const day = findDay(db, user.id, date);
       const stored = day ? storedPriorities(db, day.id) : [];
-      const base = sentBase ? withCategories(sentBase, stored) : stored;
-      const mine = withCategories(sent, base, stored);
-      const repeat = repeatedLink(mine, new Set(stored.map((p) => p.uid)));
-      // Refused before the day is made, so a refusal stores nothing.
-      if (repeat) return `Priority ${repeat.position} repeats another row's ${LINK_NAMES[repeat.field]}.`;
-      const dayId = day?.id ?? ensureDay(db, user.id, date);
-      const merged = mergePriorities(stored, base, mine);
-      const list = mirrorCards(db, user.id, date, stored, merged, now, { makeCards: body.cards === true, touched });
-      db.prepare(`DELETE FROM priorities WHERE day_id = ?`).run(dayId);
-      const ins = db.prepare(
-        `INSERT INTO priorities (day_id, position, text, done, uid, added_at, card_uid, recurring_uid, category_uid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      const uids = [...stored, ...sent, ...(sentBase ?? [])].flatMap((p) => (p.uid == null ? [] : [p.uid]));
+      // Tombstones included: their rows are dropped, and their uids stay taken.
+      const known = new Map(
+        (db.prepare(`SELECT * FROM items WHERE user_id = ? AND uid IN (SELECT value FROM json_each(?))`).all(user.id, inList(uids)) as ItemRow[]).map((i) => [
+          i.uid,
+          i,
+        ]),
       );
-      for (const p of list) ins.run(dayId, p.position, p.text, p.done ? 1 : 0, p.uid, p.addedAt, p.cardUid, p.recurringUid, p.categoryUid);
-      keepSessionCategories(db, dayId, stored, list);
-      dropSessionCategories(db, dayId, stored, list);
-      return list;
+      const live = (p: Priority) => p.uid == null || known.get(p.uid)?.deleted_at == null;
+      const mine = sent.filter(live);
+      const base = sentBase?.filter(live) ?? stored;
+      const merged = mergePriorities(stored, base, mine);
+      // Refused before the day is made, so a refusal stores nothing.
+      if (merged.length > MAX_PRIORITIES) return null;
+      const dayId = day?.id ?? ensureDay(db, user.id, date);
+      const mineBy = new Map(mine.map((p) => [p.uid, p]));
+      const baseBy = new Map(base.map((p) => [p.uid, p]));
+      const storedUids = new Set(stored.map((p) => p.uid));
+      const create = db.prepare(`INSERT INTO items (user_id, uid, title, category_uid, created_at) VALUES (?, ?, ?, ?, ?) RETURNING *`);
+      const rename = db.prepare(`UPDATE items SET title = ? WHERE id = ?`);
+      const recategorise = db.prepare(`UPDATE items SET category_uid = ? WHERE id = ?`);
+      const added: ItemRow[] = [];
+      const entries = merged.flatMap((p) => {
+        if (p.uid == null) return [];
+        let item = known.get(p.uid);
+        const m = mineBy.get(p.uid);
+        const b = baseBy.get(p.uid);
+        if (!item) {
+          item = create.get(user.id, p.uid, p.text.trim(), p.categoryUid, now) as ItemRow;
+        } else if (m && b) {
+          // Only what this device changed: a rename or a category made elsewhere since stands.
+          if (m.text.trim() !== b.text.trim()) rename.run(m.text.trim(), item.id);
+          if (m.categoryUid !== b.categoryUid) recategorise.run(m.categoryUid, item.id);
+        }
+        if (!storedUids.has(p.uid) && !p.done) added.push(item);
+        return [{ itemId: item.id, position: p.position, done: p.done, addedAt: p.addedAt! }];
+      });
+      db.prepare(`DELETE FROM priorities WHERE day_id = ?`).run(dayId);
+      const ins = db.prepare(`INSERT INTO priorities (day_id, item_id, position, done, added_at) VALUES (?, ?, ?, ?, ?)`);
+      for (const e of entries) ins.run(dayId, e.itemId, e.position, e.done ? 1 : 0, e.addedAt);
+      nextFromLater(db, user.id, date, added);
+      const kept = new Set(entries.map((e) => e.itemId));
+      const removed = stored.map((p) => known.get(p.uid!)!.id).filter((id) => !kept.has(id));
+      collectItems(db, user.id, removed);
+      return storedPriorities(db, dayId);
     })();
-    if (typeof saved === 'string') return refuse(res, 400, saved);
+    if (saved === null) return refuse(res, 409, `This day's list already has ${MAX_PRIORITIES} priorities with another device's. Remove one first.`);
     res.json({ priorities: saved } satisfies PrioritiesResponse);
   });
 

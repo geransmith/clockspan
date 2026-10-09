@@ -3,7 +3,7 @@ import { ensureDefaultUser, openDatabase, type DB } from '../db.js';
 import { insertSession, SESSION_COOKIE } from '../auth/session.js';
 import { countRows, SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from './harness.js';
 import { addMonths, atTime, DAY_MS, isoWeekday, isWeekend, MINUTE_MS, punchWindow, startOfQuarter, todayKey } from '../../shared/dates.js';
-import { hasText } from '../../shared/priorities.js';
+import type { ItemRow } from '../routes/shared.js';
 import { LIMITS, type Board, type BoardCard, type Day } from '../../shared/api.js';
 import { DEFAULT_SETTINGS, SETTING_LIMITS } from '../../shared/settings.js';
 import { BREAK_SECONDS, MIN_BREAK_MS, PLANNED_SECONDS } from '../../shared/timer.js';
@@ -25,66 +25,44 @@ import {
 
 const counts = (db: DB) =>
   Object.fromEntries(
-    ['days', 'punches', 'priorities', 'sessions', 'breaks', 'board_cards', 'categories', 'recurring', 'settings', 'auth_sessions'].map((t) => [
-      t,
-      countRows(db, t),
-    ]),
+    ['days', 'punches', 'priorities', 'sessions', 'breaks', 'items', 'categories', 'settings', 'auth_sessions'].map((t) => [t, countRows(db, t)]),
   );
 
 /**
- * The board a seed wrote, against its days: each card a save made is in step with its latest
- * linked row, the one-off rows the board saw (the last weekday's and today's) each have a card,
- * no list links two text rows to one card or one recurring priority, a routine's rows fall only
- * on its weekdays and never have a card, and every category named is one of the board's.
+ * The tasks a seed wrote, against its days: every entry names a task that exists and reads back
+ * its name, its category and whether it repeats, a day lists a task once, a recurring priority
+ * only on its weekdays, every task is named by a day or is in a lane or repeats, Later and Next
+ * are numbered from 1, every category named is one of the board's, and today's first row is the
+ * task the last weekday left open.
  */
-function expectBoardInStep(m: SeedManifest) {
-  const cards = new Map(m.board.cards.map((c) => [c.uid, c]));
-  const items = new Map(m.board.recurring.map((r) => [r.uid, r]));
-  const [last, today] = [m.days.at(-2), m.days.at(-1)!];
+function expectTasksInStep(db: DB, m: SeedManifest) {
   expect(m.board.categories).toEqual(SEEDED_CATEGORIES);
   expect(m.board.recurring).toEqual(SEEDED_RECURRING);
+  const routines = new Map(m.board.recurring.map((r) => [r.uid, r]));
   const categories = new Set(m.board.categories.map((c) => c.uid));
   const resolves = (uid: string | null) => uid === null || categories.has(uid);
-  expect(m.board.cards.every((c) => resolves(c.categoryUid))).toBe(true);
-  expect(m.board.recurring.every((r) => r.categoryUid != null && resolves(r.categoryUid))).toBe(true);
+  const tasks = new Map((db.prepare(`SELECT * FROM items`).all() as ItemRow[]).map((i) => [i.uid, i]));
+  expect([...tasks.values()].every((t) => resolves(t.category_uid) && t.deleted_at == null && t.archived_at == null)).toBe(true);
   for (const day of m.days) {
-    for (const link of ['cardUid', 'recurringUid'] as const) {
-      const linked = day.priorities.filter((p) => hasText(p) && p[link] != null).map((p) => p[link]);
-      expect(new Set(linked).size, `${day.date} ${link}`).toBe(linked.length);
-    }
+    expect(new Set(day.priorities.map((p) => p.uid)).size, day.date).toBe(day.priorities.length);
     expect(day.sessions.every((s) => resolves(s.categoryUid))).toBe(true);
     for (const p of day.priorities) {
-      expect(resolves(p.categoryUid), `${day.date} ${p.text}`).toBe(true);
-      if (p.recurringUid != null) {
-        // A routine's row: on one of its weekdays, under its title and category, on no card.
-        const item = items.get(p.recurringUid)!;
-        expect(item.weekdays, `${day.date} ${p.text}`).toContain(isoWeekday(day.date));
-        expect([p.text, p.categoryUid, p.cardUid]).toEqual([item.title, item.categoryUid, null]);
-      } else if (day === last || day === today) {
-        // Only the days the board was on for have cards.
-        expect(cards.has(p.cardUid!), `${day.date} ${p.text}`).toBe(true);
-      } else {
-        expect(p.cardUid).toBeNull();
-      }
+      const task = tasks.get(p.uid)!;
+      expect([task.title, task.category_uid, task.weekdays != null], `${day.date} ${p.text}`).toEqual([p.text, p.categoryUid, p.recurring]);
+      if (p.recurring) expect(routines.get(p.uid)!.weekdays, `${day.date} ${p.text}`).toContain(isoWeekday(day.date));
     }
   }
-  for (const card of m.board.cards) {
-    const rows = m.days.flatMap((d) => d.priorities.filter((p) => p.cardUid === card.uid).map((p) => ({ date: d.date, ...p })));
-    const latest = rows.at(-1);
-    expect(card.listDate).toBe(latest?.date ?? null);
-    expect(card.held).toBe(false);
-    if (latest) expect([card.title, card.categoryUid, card.lane], card.title).toEqual([latest.text, latest.categoryUid, latest.done ? 'done' : 'next']);
-  }
-  // Positions run 1..n in Later and in Next.
+  const named = new Set(m.days.flatMap((d) => d.priorities.map((p) => p.uid)));
+  for (const t of tasks.values()) expect(named.has(t.uid) || t.lane != null || t.weekdays != null, t.title).toBe(true);
   for (const lane of ['later', 'next'] as const) {
-    const positions = m.board.cards.filter((c) => c.lane === lane).map((c) => c.position);
-    expect(positions).toEqual(positions.map((_, i) => i + 1));
+    const positions = [...tasks.values()].filter((t) => t.lane === lane).map((t) => t.position);
+    expect(positions.sort((a, b) => a - b)).toEqual(positions.map((_, i) => i + 1));
   }
-  // Today's carried row is a row of its own on the same card, in the same category.
+  const [last, today] = [m.days.at(-2), m.days.at(-1)!];
   if (last) {
-    const source = last.priorities.find((p) => !p.done && p.recurringUid == null)!;
-    expect(today.priorities[0]).toMatchObject({ text: source.text, cardUid: source.cardUid, categoryUid: source.categoryUid });
-    expect(today.priorities[0]!.uid).not.toBe(source.uid);
+    const source = last.priorities.find((p) => !p.done && !p.recurring)!;
+    expect(today.priorities[0]).toMatchObject({ uid: source.uid, text: source.text, categoryUid: source.categoryUid });
+    expect(today.priorities[0]!.addedAt).not.toBe(source.addedAt);
   }
 }
 
@@ -169,7 +147,7 @@ describe('seedDatabase', () => {
       const set = day.punches.filter((p) => p.at != null).map((p) => p.at!);
       expect(set).toEqual([...set].sort((a, b) => a - b));
 
-      // Priorities: positions 1..n, an id and a time on every (text) row, unique ids.
+      // Priorities: positions 1..n, each naming its task, with a time.
       expect(day.priorities.map((p) => p.position)).toEqual(day.priorities.map((_, i) => i + 1));
       for (const p of day.priorities) {
         expect(p.text).not.toBe('');
@@ -178,10 +156,11 @@ describe('seedDatabase', () => {
       }
       expect(new Set(day.priorities.map((p) => p.uid)).size).toBe(day.priorities.length);
 
-      // Sessions: links resolve on the same day.
+      // Sessions: each task is on the same day's list, and a cancelled one has none.
       const uids = new Set(day.priorities.map((p) => p.uid));
       for (const s of day.sessions) {
         if (s.priorityUid !== null) expect(uids.has(s.priorityUid)).toBe(true);
+        if (s.status === 'cancelled') expect(s.priorityUid).toBeNull();
         if (s.status === 'running') expect(s.endedAt).toBeNull();
         else expect(s.endedAt).toBeGreaterThan(s.startedAt);
       }
@@ -189,9 +168,9 @@ describe('seedDatabase', () => {
     }
 
     expectConsistent(m, SEED_NOW);
-    expectBoardInStep(m);
-    // Captured on the board: three in Later and one in Next, below the cards today's and the last
-    // weekday's saves made, on no list.
+    expectTasksInStep(db, m);
+    // Captured on the board: three in Later and one in Next, below the open tasks of today and the
+    // last weekday, on no list.
     const named = (uid: string | null) => m.board.categories.find((c) => c.uid === uid)?.name;
     expect(m.board.cards.filter((c) => c.listDate == null).map((c) => [c.lane, c.position, c.title, named(c.categoryUid)])).toEqual([
       ['later', 1, 'Write a KB for the SSO reset', 'Knowledge base'],
@@ -199,28 +178,38 @@ describe('seedDatabase', () => {
       ['later', 3, 'Look into the export timeout', 'Tickets'],
       ['next', 3, 'Follow up on the Acme SLA', 'Follow-ups'],
     ]);
-    // Most rows have a category, and so does each unplanned Inbox session; the sessions on rows
-    // count under their rows'.
+    // In Next too: the open one-offs of today and the last weekday. Every other task a list holds
+    // is in no lane.
+    const extra = m.days.at(-2)!;
+    const today = m.days.at(-1)!;
+    // The ones today brought go above the carried one, as new tasks went to the top of Next.
+    const open = (d: SeededDay) => d.priorities.filter((p) => !p.done && !p.recurring).map((p) => p.uid);
+    const carried = open(extra);
+    expect(m.board.cards.filter((c) => c.listDate != null && c.lane != null).map((c) => c.uid)).toEqual([
+      ...open(today).filter((uid) => !carried.includes(uid)),
+      ...carried,
+    ]);
+    // Most rows have a category, and so does each unplanned Inbox session; a session on a task
+    // counts under the task's, and is named by it.
     const rows = m.days.flatMap((d) => d.priorities);
     expect(rows.filter((p) => p.categoryUid != null).length).toBeGreaterThan(rows.length / 2);
-    const sessions = m.days.flatMap((d) => d.sessions);
-    expect(sessions.filter((s) => s.categoryUid != null).every((s) => s.priorityUid == null && named(s.categoryUid) === 'Tickets')).toBe(true);
+    const sessions = m.days.flatMap((d) => d.sessions.map((s) => ({ ...s, row: d.priorities.find((p) => p.uid === s.priorityUid) })));
+    expect(sessions.filter((s) => s.row == null && s.categoryUid != null).every((s) => s.label === 'Inbox' && named(s.categoryUid) === 'Tickets')).toBe(true);
     expect(sessions.filter((s) => s.label === 'Inbox').every((s) => named(s.categoryUid) === 'Tickets')).toBe(true);
-    // A card a save made is untouched until the board handles it; one the board made never is.
-    for (const card of m.board.cards) expect(countRows(db, 'board_cards', 'uid = ? AND untouched = ?', card.uid, card.listDate == null ? 0 : 1)).toBe(1);
-    expect(countRows(db, 'board_cards')).toBe(m.board.cards.length);
+    for (const s of sessions.filter((s) => s.row != null)) expect([s.title, s.categoryUid]).toEqual([s.row!.text, s.row!.categoryUid]);
+    expect(countRows(db, 'items', 'weekdays IS NULL')).toBe(new Set(rows.filter((p) => !p.recurring).map((p) => p.uid)).size + 4);
     // Two recurring priorities for support work, each in its category.
     expect(m.board.recurring.map((r) => [r.title, r.weekdays, named(r.categoryUid)])).toEqual([
       ['Monitor the queue', [1, 2, 3, 4, 5], 'Tickets'],
       ['Follow-ups', [1, 3, 5], 'Follow-ups'],
     ]);
-    expect(countRows(db, 'recurring')).toBe(m.board.recurring.length);
+    expect(countRows(db, 'items', 'weekdays IS NOT NULL')).toBe(m.board.recurring.length);
     // Each past weekday lists the routines due on it, after its one-off rows and written with them.
     for (const day of m.days.slice(0, -1)) {
       const due = SEEDED_RECURRING.filter((r) => r.weekdays.includes(isoWeekday(day.date))).map((r) => r.uid);
-      const routines = day.priorities.filter((p) => p.recurringUid != null);
+      const routines = day.priorities.filter((p) => p.recurring);
       expect(
-        routines.map((p) => p.recurringUid),
+        routines.map((p) => p.uid),
         day.date,
       ).toEqual(due);
       expect(routines.map((p) => p.position)).toEqual(due.map((_, i) => day.priorities.length - due.length + i + 1));
@@ -229,7 +218,7 @@ describe('seedDatabase', () => {
     // The same schedule by date, so a wrong weekday in the shared isoWeekday can't pass both: the
     // follow-ups fall on the Mondays, Wednesdays and Fridays before Wednesday 16 September.
     const followUps = SEEDED_RECURRING.find((r) => r.title === 'Follow-ups')!.uid;
-    expect(m.days.filter((d) => d.priorities.some((p) => p.recurringUid === followUps)).map((d) => d.date)).toEqual([
+    expect(m.days.filter((d) => d.priorities.some((p) => p.uid === followUps)).map((d) => d.date)).toEqual([
       '2026-09-02',
       '2026-09-04',
       '2026-09-07',
@@ -238,10 +227,10 @@ describe('seedDatabase', () => {
       '2026-09-14',
     ]);
     // Some ticked, some missed, some with focus logged; none on today.
-    const routineRows = m.days.flatMap((d) => d.priorities.filter((p) => p.recurringUid != null).map((p) => ({ ...p, day: d })));
+    const routineRows = m.days.flatMap((d) => d.priorities.filter((p) => p.recurring).map((p) => ({ ...p, day: d })));
     expect(routineRows.some((p) => p.done) && routineRows.some((p) => !p.done)).toBe(true);
     expect(routineRows.some((p) => p.day.sessions.some((s) => s.priorityUid === p.uid))).toBe(true);
-    expect(m.days.at(-1)!.priorities.some((p) => p.recurringUid != null)).toBe(false);
+    expect(m.days.at(-1)!.priorities.some((p) => p.recurring)).toBe(false);
 
     // Every template shows up in the last week, and today has the one running timer.
     expect(new Set(m.days.map((d) => d.kind))).toEqual(new Set(['normal', 'extraPair', 'overtime', 'unreviewed', 'noLunch', 'today']));
@@ -261,16 +250,14 @@ describe('seedDatabase', () => {
     expect(workedMinutes(half)).toBe(half.workMinutes);
     expect(m.days.filter((d) => d.workMinutes != null)).toEqual([half]);
     // The last weekday, which the README's retrospective shot shows, has a row added mid-day.
-    const extra = m.days.at(-2)!;
     expect(extra.kind).toBe('extraPair');
     expect(extra.punches).toHaveLength(6);
     const firstStart = Math.min(...extra.sessions.filter((s) => s.status === 'completed').map((s) => s.startedAt));
     expect(extra.priorities.filter((p) => p.addedAt > firstStart)).toHaveLength(1);
 
-    // Today's list was planned at the end of that day's retrospective, carrying its open row.
-    const today = m.days.at(-1)!;
+    // Today's list was planned at the end of that day's retrospective, carrying its open task.
     expect(today.priorities.every((p) => p.addedAt > extra.retroAt! && p.addedAt < today.punches[0]!.at!)).toBe(true);
-    expect(today.priorities[0]!.text).toBe(extra.priorities.find((p) => !p.done && p.recurringUid == null)!.text);
+    expect(today.priorities[0]!.uid).toBe(extra.priorities.find((p) => !p.done && !p.recurring)!.uid);
     // A session paused and finished short of its plan, and a break ended early.
     const paused = today.sessions.find((s) => s.pausedSeconds > 0)!;
     expect(paused.endedAt! - paused.startedAt - paused.pausedSeconds * 1000).toBeLessThan(paused.plannedSeconds * 1000);
@@ -303,8 +290,19 @@ describe('seedDatabase', () => {
       // session, with its category.
       const today = (await app.api.get<Day>(`/api/days/${SEED_TODAY}`)).body;
       const paused = today.sessions.find((s) => s.pausedSeconds > 0)!;
-      expect(paused).toMatchObject({ label: 'Inbox', durationSeconds: 22 * 60, plannedSeconds: 25 * 60, priorityUid: null, categoryUid: 'cat000000001' });
-      expect(today.sessions).toEqual(app.seeded!.days.at(-1)!.sessions.map((s) => expect.objectContaining({ id: s.id, categoryUid: s.categoryUid })));
+      expect(paused).toMatchObject({
+        label: 'Inbox',
+        durationSeconds: 22 * 60,
+        plannedSeconds: 25 * 60,
+        priorityUid: null,
+        title: null,
+        categoryUid: 'cat000000001',
+      });
+      expect(today.sessions).toEqual(
+        app
+          .seeded!.days.at(-1)!
+          .sessions.map((s) => expect.objectContaining({ id: s.id, priorityUid: s.priorityUid, title: s.title, categoryUid: s.categoryUid })),
+      );
     } finally {
       await app.close();
     }
@@ -318,22 +316,22 @@ describe('seedDatabase', () => {
       const { admin, a, b } = await app.twoUsers();
       const m = seedDatabase(app.db, { userId: admin.id, today: SEED_TODAY, now: SEED_NOW });
       expect((await a.get('/api/board')).body).toEqual(m.board);
-      // As another user: every category, recurring priority and open card posts as it is, and
+      // As another user: every category, recurring priority and task in a lane posts as it is, and
       // lands in the same order.
       for (const c of m.board.categories) expect((await b.post('/api/board/categories', { uid: c.uid, name: c.name, color: c.color })).status).toBe(201);
-      for (const r of m.board.recurring) expect((await b.post('/api/board/recurring', r)).status).toBe(201);
-      const open = m.board.cards.filter((c) => c.lane !== 'done');
-      for (const c of open) {
-        expect((await b.post('/api/board/cards', { uid: c.uid, title: c.title, categoryUid: c.categoryUid, lane: c.lane, before: null })).status).toBe(201);
+      for (const r of m.board.recurring) expect((await b.post('/api/items', r)).status).toBe(201);
+      const laned = m.board.cards.filter((c) => c.lane != null);
+      for (const c of laned) {
+        expect((await b.post('/api/items', { uid: c.uid, title: c.title, categoryUid: c.categoryUid, lane: c.lane, before: null })).status).toBe(201);
       }
       const theirs = (await b.get('/api/board')).body as Board;
       expect(theirs.categories).toEqual(m.board.categories);
       expect(theirs.recurring).toEqual(m.board.recurring);
       const fields = (c: BoardCard) => [c.uid, c.title, c.categoryUid, c.lane, c.position];
-      expect(theirs.cards.map(fields)).toEqual(open.map(fields));
-      // Today's list saved back with the board on: every row keeps its card, and the board stays as it was.
+      expect(theirs.cards.map(fields)).toEqual(laned.map(fields));
+      // Today's list saved back: every row keeps its task, and the board stays as it was.
       const today = m.days.at(-1)!;
-      const saved = await a.put(`/api/days/${SEED_TODAY}/priorities`, { priorities: today.priorities, base: today.priorities, cards: true });
+      const saved = await a.put(`/api/days/${SEED_TODAY}/priorities`, { priorities: today.priorities, base: today.priorities });
       expect(saved).toMatchObject({ status: 200, body: { priorities: today.priorities } });
       expect((await a.get('/api/board')).body).toEqual(m.board);
     } finally {
@@ -347,7 +345,7 @@ describe('seedDatabase', () => {
     const user = ensureDefaultUser(db);
     const m = seedDatabase(db, { userId: user.id, today: SEED_TODAY, now: SEED_NOW, days: 60 });
     // The notes speak of the day's one-off rows: its routines come after them on the list.
-    const oneOffs = (d: SeededDay) => d.priorities.filter((p) => p.recurringUid == null);
+    const oneOffs = (d: SeededDay) => d.priorities.filter((p) => !p.recurring);
     const done = (d: SeededDay) => oneOffs(d).filter((p) => p.done).length;
     const claims: [RegExp, (d: SeededDay) => boolean][] = [
       [/^One done/, (d) => done(d) === 1],
@@ -374,6 +372,8 @@ describe('seedDatabase', () => {
     db.prepare(`INSERT INTO auth_sessions (user_id, token_hash, created_at, expires_at, last_seen_at) VALUES (?, 'h', 1, 2, 1)`).run(user.id);
     const first = seedDatabase(db, { userId: user.id, today: SEED_TODAY, now: SEED_NOW });
     const before = counts(db);
+    // A sample task deleted in the browser leaves its tombstone under its fixed uid: a run clears it.
+    db.prepare(`UPDATE items SET deleted_at = 1, lane = NULL WHERE uid = ?`).run(first.days.at(-1)!.priorities[0]!.uid);
     const second = seedDatabase(db, { userId: user.id, today: SEED_TODAY, now: SEED_NOW });
     expect(counts(db)).toEqual(before);
     expect(before.settings).toBe(1);
@@ -423,8 +423,8 @@ describe('seedDatabase', () => {
       const now = atTime(SEED_TODAY, hour, minute);
       const m = seedDatabase(db, { userId: user.id, today: SEED_TODAY, now, running: true });
       expectConsistent(m, now);
-      expectBoardInStep(m);
-      expect(m.board.cards.every((c) => c.createdAt <= now && (c.doneAt ?? 0) <= now)).toBe(true);
+      expectTasksInStep(db, m);
+      expect(m.board.cards.every((c) => c.createdAt <= now)).toBe(true);
       expect(m.days.at(-1)!.sessions.filter((s) => s.status === 'running')).toHaveLength(1);
       db.close();
     }
@@ -436,7 +436,7 @@ describe('seedDatabase', () => {
     const m = seedDatabase(db, { userId: user.id, today: SEED_TODAY, now: SEED_NOW, days: 0 });
     expect(m.days).toHaveLength(1);
     expectConsistent(m, SEED_NOW);
-    expectBoardInStep(m);
+    expectTasksInStep(db, m);
     const today = m.days[0]!;
     expect(today.priorities.every((p) => p.addedAt === today.createdAt && p.addedAt < today.punches[0]!.at!)).toBe(true);
     db.close();

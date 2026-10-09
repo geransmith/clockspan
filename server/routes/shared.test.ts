@@ -78,18 +78,20 @@ describe('the ownership check on /sessions/:id and /breaks/:id', () => {
   });
 });
 
-describe('the ownership check on /board/cards/:uid', () => {
+describe('the ownership check on /items/:uid', () => {
   let app: TestApp;
   beforeEach(async () => {
     app = await startTestApp({ authMode: 'local' });
   });
   afterEach(() => app.close());
 
-  it('covers a route added with no guard of its own', async () => {
+  it("covers a route added with no guard of its own, and treats a deleted task's tombstone as none", async () => {
     const { admin, member, a } = await app.twoUsers();
-    await a.post('/api/board/cards', { uid: 'card00000001', title: 'Write the KB', lane: 'later', before: null });
-    // A router made the way the board's is, plus a route that lists nothing before its handler.
-    const { router, owned } = uidRouter(app.db, 'board_cards');
+    await a.post('/api/items', { uid: 'card00000001', title: 'Write the KB', lane: 'later' });
+    await a.post('/api/items', { uid: 'card00000002', title: 'Deleted', lane: 'later' });
+    await a.del('/api/items/card00000002');
+    // A router made the way the items' is, plus a route that lists nothing before its handler.
+    const { router, owned } = uidRouter(app.db, 'items');
     const probe: express.RequestHandler = (_req, res) => {
       res.json({ title: owned(res).title });
     };
@@ -98,7 +100,7 @@ describe('the ownership check on /board/cards/:uid', () => {
         req.user = req.get('x-user') === 'b' ? member : admin;
         next();
       })
-      .use('/cards', router.get('/:uid/probe', probe));
+      .use('/items', router.get('/:uid/probe', probe));
     const server = mini.listen(0, '127.0.0.1');
     await once(server, 'listening');
     const get = async (path: string, user: 'a' | 'b') => {
@@ -106,25 +108,26 @@ describe('the ownership check on /board/cards/:uid', () => {
       return [r.status, await r.json()];
     };
     try {
-      expect(await get('/cards/card00000001/probe', 'a')).toEqual([200, { title: 'Write the KB' }]);
+      expect(await get('/items/card00000001/probe', 'a')).toEqual([200, { title: 'Write the KB' }]);
       // Whatever its case: the routes store uids lowercased.
-      expect(await get('/cards/CARD00000001/probe', 'a')).toEqual([200, { title: 'Write the KB' }]);
-      expect(await get('/cards/card00000001/probe', 'b')).toEqual([404, { error: 'Card not found.' }]);
+      expect(await get('/items/CARD00000001/probe', 'a')).toEqual([200, { title: 'Write the KB' }]);
+      expect(await get('/items/card00000001/probe', 'b')).toEqual([404, { error: 'Task not found.' }]);
+      expect(await get('/items/card00000002/probe', 'a')).toEqual([404, { error: 'Task not found.' }]);
     } finally {
       server.close();
     }
   });
 
-  it('answers 404 for a uid of the wrong shape, or one that names no card', async () => {
+  it('answers 404 for a uid of the wrong shape, or one that names no task', async () => {
     const { a } = await app.twoUsers();
-    await a.post('/api/board/cards', { uid: 'card00000001', title: 'Write the KB', lane: 'later', before: null });
+    await a.post('/api/items', { uid: 'card00000001', title: 'Write the KB', lane: 'later' });
     for (const uid of ['card', 'not-a-uid!', '%20card00000001', 'card00000001%20', 'c'.repeat(33), 'card00000002']) {
-      for (const r of [await a.patch(`/api/board/cards/${uid}`, { today: '2026-09-01', title: 'x' }), await a.del(`/api/board/cards/${uid}`)]) {
-        expect([uid, r.status, r.body]).toEqual([uid, 404, { error: 'Card not found.' }]);
+      for (const r of [await a.patch(`/api/items/${uid}`, { title: 'x' }), await a.del(`/api/items/${uid}`)]) {
+        expect([uid, r.status, r.body]).toEqual([uid, 404, { error: 'Task not found.' }]);
       }
     }
-    expect(app.count('board_cards', `title = 'Write the KB'`)).toBe(1);
+    expect(app.count('items', `title = 'Write the KB'`)).toBe(1);
     // A method no /:uid route takes never reaches the check: it is the API's plain 404.
-    expect((await a.get('/api/board/cards/card00000001')).body).toEqual({ error: 'Not found.' });
+    expect((await a.get('/api/items/card00000001')).body).toEqual({ error: 'Not found.' });
   });
 });

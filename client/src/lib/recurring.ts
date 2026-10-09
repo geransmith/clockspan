@@ -7,16 +7,12 @@
  */
 import type { Priority, Recurring } from '../types';
 import { isoWeekday } from '../../../shared/dates.js';
-import { hasText } from '../../../shared/priorities.js';
 import { planNext, type PrioritySeed } from './plan';
-import { isRecurring, newUid, padPriorities, placePriority } from './priorities';
+import { isRecurring, padPriorities, placePriority } from './priorities';
 
-/**
- * The items no row with text on `rows` holds yet, in the order given. An emptied row holding one
- * doesn't hide it: Add to today takes that row back.
- */
+/** The items no row on `rows` is yet, in the order given: a row is its task's whatever its draft text. */
 export function notOnList(items: Recurring[], rows: Priority[]): Recurring[] {
-  return items.filter((r) => !rows.some((p) => hasText(p) && p.recurringUid === r.uid));
+  return items.filter((r) => !rows.some((p) => p.uid === r.uid));
 }
 
 /**
@@ -31,9 +27,9 @@ export function dueRecurring(items: Recurring[], date: string, rows: Priority[],
   );
 }
 
-/** The rows with text on a list that came from a recurring priority. */
+/** The recurring priorities' rows on a list. */
 export function recurringCount(rows: Priority[]): number {
-  return rows.filter((p) => hasText(p) && isRecurring(p)).length;
+  return rows.filter(isRecurring).length;
 }
 
 /**
@@ -45,18 +41,33 @@ export function offerPicks(due: Recurring[], onToday: Priority[], perDay: number
   return new Set(due.slice(0, room).map((r) => r.uid));
 }
 
-/** The row the offer adds for `item`: its title and category, linked to it, on no card, new to today. */
+/**
+ * The row the offer adds for `item`: the recurring priority itself, new to today. Its name and
+ * category show as the board has them until the save answers. A save never writes them back onto
+ * the task: it renames a task only where the row's text differs from the list it was built on.
+ */
 export function recurringRow(item: Recurring, now: number): Omit<Priority, 'position'> {
-  return { text: item.title, done: false, uid: newUid(), addedAt: now, cardUid: null, recurringUid: item.uid, categoryUid: item.categoryUid };
+  return {
+    text: item.title,
+    done: false,
+    uid: item.uid,
+    addedAt: now,
+    categoryUid: item.categoryUid,
+    recurring: true,
+    archived: false,
+    listed: 0,
+    earlier: 0,
+    logged: 0,
+  };
 }
 
 /**
  * The list after Add to today: the leftovers through `planNext` (then padded to `count`), then
  * each routine through `placePriority` with `end`, after every row of the padded list, so the
- * empty base rows stay for one-offs. Either takes back an emptied row holding its link and skips
- * one a row with text already holds. A routine that doesn't fit (a full list) is skipped. With no
- * leftovers picked `planNext` is skipped, since it drops the rows never written in: a free row
- * between written ones stays where it is, and nothing is renumbered.
+ * free base rows stay for one-offs. Either skips a task a row of the list is already. A routine
+ * that doesn't fit (a full list) is skipped. With no leftovers picked `planNext` is skipped, since
+ * it drops the free rows: a free row between written ones stays where it is, and nothing is
+ * renumbered.
  */
 export function acceptOffer(rows: Priority[], count: number, leftovers: PrioritySeed[], recurring: Recurring[], now: number): Priority[] {
   let list = padPriorities(leftovers.length ? planNext(rows, leftovers, now).rows : rows, count);

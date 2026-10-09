@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HOUR_MS } from '../../../shared/dates.js';
 import * as api from '../api';
-import { LEFT_OPEN, PLAN_NEXT, TODAY_OFFER } from '../lib/copy';
+import { LEFT_OPEN, PLAN_NEXT, REMOVE_TASK, TODAY_OFFER } from '../lib/copy';
 import { SPLIT_QUERY } from '../lib/layout';
 import { USER_KEYS } from '../lib/storage';
 import {
@@ -176,14 +176,14 @@ describe('Sheet', () => {
 });
 
 describe('Sheet: what the last day left open, with the board on', () => {
-  it("offers a row whose card is in Next under the card's title in the morning notice, leaves one parked in Later where it is, and waits for the board", async () => {
+  it('offers a task in Next or on no lane in the morning notice, leaves one parked in Later where it is, and waits for the board', async () => {
     stored = makeSettings({ board: true });
     serveRange([
       makeDay(YESTERDAY, {
         priorities: [
-          makePriority(1, 'Old title', { cardUid: 'next00000001' }),
-          makePriority(2, 'Parked since', { cardUid: 'later0000001' }),
-          makePriority(3, 'No card'),
+          makePriority(1, 'In Next', { uid: 'next00000001' }),
+          makePriority(2, 'Parked since', { uid: 'later0000001' }),
+          makePriority(3, 'On no lane'),
         ],
       }),
     ]);
@@ -191,16 +191,16 @@ describe('Sheet: what the last day left open, with the board on', () => {
     vi.mocked(api.getBoard).mockReturnValue(board.promise);
     await renderSheet();
     expect(screen.queryByText(LEFT_OPEN.title('yesterday'))).toBeNull();
-    board.resolve(makeBoard(makeCard('next00000001', 'New title', { lane: 'next' }), makeCard('later0000001', 'Parked since')));
+    board.resolve(makeBoard(makeCard('next00000001', 'In Next', { lane: 'next' }), makeCard('later0000001', 'Parked since')));
     await settle();
     const offer = screen.getByText(LEFT_OPEN.title('yesterday')).closest('.today-offer')!;
-    expect([...offer.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['New title', 'No card']);
+    expect([...offer.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['In Next', 'On no lane']);
     expect(screen.getByRole('button', { name: LEFT_OPEN.dismiss })).toBeTruthy();
   });
 
   it('offers nothing when every row it would bring back was moved off Next', async () => {
     stored = makeSettings({ board: true });
-    serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Parked', { cardUid: 'later0000001' })] })]);
+    serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Parked', { uid: 'later0000001' })] })]);
     vi.mocked(api.getBoard).mockResolvedValue(makeBoard(makeCard('later0000001', 'Parked')));
     await renderSheet();
     expect(screen.queryByText(LEFT_OPEN.title('yesterday'))).toBeNull();
@@ -242,16 +242,16 @@ describe('Sheet: the recurring priorities due today', () => {
     await renderSheet();
     fireEvent.click(button(LEFT_OPEN.add));
     await settle();
-    expect(vi.mocked(api.putPriorities).mock.lastCall![1].map((p) => [p.text, p.recurringUid])).toEqual([
-      ['', null],
-      ['', null],
-      ['', null],
-      ['Monitor the queue', QUEUE.uid],
+    expect(vi.mocked(api.putPriorities).mock.lastCall![1].map((p) => [p.text, p.uid, p.recurring])).toEqual([
+      ['', null, false],
+      ['', null, false],
+      ['', null, false],
+      ['Monitor the queue', QUEUE.uid, true],
     ]);
     expect(document.querySelector('.today-offer')).toBeNull();
     fireEvent.click(button('Remove priority 4'));
     await settle();
-    expect(vi.mocked(api.putPriorities).mock.lastCall![1].some((p) => p.recurringUid != null)).toBe(false);
+    expect(vi.mocked(api.putPriorities).mock.lastCall![1].some((p) => p.recurring)).toBe(false);
     expect(document.querySelector('.today-offer')).toBeNull();
     await reload();
     expect(document.querySelector('.today-offer')).toBeNull();
@@ -277,9 +277,9 @@ describe('Sheet: the recurring priorities due today', () => {
     fireEvent.click(button(TODAY_OFFER.notToday));
     await settle();
     expect(document.querySelector('.today-offer')).toBeNull();
-    // With the one-off cleared and saved, the list has no plan, and the leftovers are offered.
-    fireEvent.change(screen.getByLabelText('Priority 1'), { target: { value: '' } });
-    await settle(1000);
+    // With the one-off taken off, the list has no plan, and the leftovers are offered.
+    fireEvent.click(button('Remove priority 1'));
+    await settle();
     expect(offered()).toEqual(['Invoices']);
     expect(screen.getByText(LEFT_OPEN.title('yesterday'))).toBeTruthy();
   });
@@ -311,11 +311,27 @@ describe('Sheet: the recurring priorities due today', () => {
 
   it('offers no routine with the board off, and the plain block still offers the leftovers while the list holds only a routine', async () => {
     stored = makeSettings();
-    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [makePriority(1, 'Monitor the queue', { recurringUid: QUEUE.uid })] }));
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [makePriority(1, 'Monitor the queue', { uid: QUEUE.uid, recurring: true })] }));
     serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Invoices')] })]);
     await renderSheet();
     expect(screen.getByText(LEFT_OPEN.title('yesterday')).closest('.left-open')!.classList.contains('today-offer')).toBe(false);
     expect(screen.queryByText(TODAY_OFFER.recurring)).toBeNull();
+    expect(api.getBoard).not.toHaveBeenCalled();
+  });
+});
+
+describe('Sheet: × on a task on other days', () => {
+  it('deletes it everywhere through the board store, with the board off too', async () => {
+    const email = makePriority(1, 'Email', { listed: 3 });
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [email] }));
+    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve({ priorities: priorities.filter((p) => p.uid != null) }));
+    vi.mocked(api.deleteItem).mockResolvedValue(makeBoard());
+    await renderSheet();
+    fireEvent.click(button('Remove priority 1'));
+    fireEvent.click(button(REMOVE_TASK.everywhere));
+    await settle();
+    expect(vi.mocked(api.putPriorities).mock.lastCall![1].some((p) => p.uid === email.uid)).toBe(false);
+    expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith(email.uid);
     expect(api.getBoard).not.toHaveBeenCalled();
   });
 });

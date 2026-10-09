@@ -18,7 +18,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { addDays, parseDateKey, startOfWeek } from '../../../../shared/dates.js';
+import { addDays, startOfWeek } from '../../../../shared/dates.js';
 import { useBoardState, useBoardStore, useCategoryPick } from '../../hooks/useBoard';
 import { useCelebration, type Moment } from '../../hooks/useCelebration';
 import { useDay } from '../../hooks/useDay';
@@ -29,7 +29,6 @@ import { unlockAudio, warnQuietly } from '../../lib/alerts';
 import {
   boardColumns,
   boardFull,
-  cardUidOf,
   categoryOf,
   columnDropId,
   COLUMNS,
@@ -41,7 +40,6 @@ import {
   moveAnnouncement,
   overAnnouncement,
   planMove,
-  plannedFor,
   withDrag,
   type BoardItem,
   type ColumnId,
@@ -49,7 +47,7 @@ import {
   type StoreMove,
 } from '../../lib/board';
 import { BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, SAVE_FAILED, WARNING_ACTIONS } from '../../lib/copy';
-import { dayName } from '../../lib/format';
+import { dayName, formatDurationCeil } from '../../lib/format';
 import { newUid, nudgeFor, pickWarning, type WarningKind } from '../../lib/priorities';
 import type { Category, OpenLane } from '../../types';
 import { Burst } from '../Burst';
@@ -140,12 +138,10 @@ export const Board = memo(function Board({ today }: { today: string }) {
             today,
             todayRows: day.priorities,
             earlierDays: earlierDays ?? [],
-            todayStart: parseDateKey(today).getTime(),
-            weekStart: parseDateKey(weekStart).getTime(),
             moving,
           })
         : null,
-    [board, day, earlierDays, today, weekStart, moving],
+    [board, day, earlierDays, today, moving],
   );
   // The columns as the drag shows them.
   const shown = useMemo(() => (columns && dragged && preview ? withDrag(columns, dragged, preview) : columns), [columns, dragged, preview]);
@@ -200,8 +196,9 @@ export const Board = memo(function Board({ today }: { today: string }) {
       setTicked({ at });
     }
     setOpen(null);
-    // Where the item will be once the move lands: a pulled card is a row of today's, a parked row its card.
-    const lands = move.kind === 'place' ? `row:${today}:${move.row.uid}` : move.kind === 'park' ? move.row.cardUid && `card:${move.row.cardUid}` : item.id;
+    // Where the item will be once the move lands: a one-off task keeps its id wherever it shows, and
+    // an earlier day's recurring row pulled onto today's list is today's row.
+    const lands = move.kind === 'place' && move.row.recurring ? `row:${today}:${move.row.uid}` : item.id;
     focusTo.current = lands;
     setMoving((m) => new Map(m).set(item.id, to));
     const sent = store.move(move).finally(() =>
@@ -247,13 +244,13 @@ export const Board = memo(function Board({ today }: { today: string }) {
     setNotice(null);
   };
 
-  const remove = (item: BoardItem) => {
-    const onToday = item.row != null && item.date === today;
-    const later = plannedFor(item, today);
-    const off = [...(onToday ? [dayName(today, today, true)] : []), ...(later ? [dayName(later, today, true)] : [])];
-    if (!window.confirm(CONFIRM.deleteCard(off))) return;
+  // The full delete, which asks with the days the task is on and the time logged on it: today's
+  // row has the counts as the day was last read, any other item the board's.
+  const confirmDelete = (item: BoardItem) => {
+    const { listed, logged } = (item.date === today ? item.row : item.card)!;
+    if (!window.confirm(CONFIRM.deleteTask(listed, logged > 0 ? formatDurationCeil(logged) : null))) return;
     setOpen(null);
-    report(store.deleteCard(cardUidOf(item), onToday ? item.row!.uid : null, later));
+    report(store.deleteItem(item.uid));
   };
 
   const find = (id: UniqueIdentifier) => findItem(shown, String(id));
@@ -322,19 +319,22 @@ export const Board = memo(function Board({ today }: { today: string }) {
 
   const card = (item: BoardItem, drag?: ItemDrag) => {
     const onToday = item.row != null && item.date === today;
+    // A task off today's list as the board has it: in a lane, left open, planned, or done earlier.
     const cardOnly = item.card != null && item.row == null;
-    // Today's recurring row is renamed on the sheet, and its recurring priority, while there is
-    // one, in Settings → Board, which leaves the rows it already added alone.
-    const renameNote =
-      onToday && item.recurring
-        ? board.recurring.some((r) => r.uid === item.row!.recurringUid)
-          ? 'Rename it on the sheet. Settings → Board renames the recurring priority.'
-          : 'Rename it on the sheet.'
+    // Ticked on an earlier day: that day's sheet unticks it, since the board would rewrite a past
+    // day. Read-only here; Move to In progress puts it on today's list to work on again.
+    const doneEarlier = cardOnly && !item.planned && item.card!.listDone;
+    // A recurring row's title shows as text: Settings → Board renames the recurring priority, on
+    // every day, while it is in use there.
+    const note = doneEarlier
+      ? BOARD.doneOn(dayName(item.card!.listDate!, today, true))
+      : item.recurring && board.recurring.some((r) => r.uid === item.uid)
+        ? BOARD.recurringRename
         : undefined;
-    let tick: Parameters<typeof BoardCardView>[0]['tick'];
-    if (onToday) tick = { checked: item.row!.done, onChange: (checked, el) => run(item, checked ? 'done' : 'progress', null, el.getBoundingClientRect()) };
-    // A Done card off today's list: unticking is the correction for a mistaken tick, back to Next.
-    else if (cardOnly && item.column === 'done') tick = { checked: true, onChange: () => report(store.editCard(item.card!.uid, { lane: 'next' })) };
+    const tick: Parameters<typeof BoardCardView>[0]['tick'] = onToday
+      ? { checked: item.row!.done, onChange: (checked, el) => run(item, checked ? 'done' : 'progress', null, el.getBoundingClientRect()) }
+      : undefined;
+    const editable = cardOnly && !doneEarlier;
     return (
       <BoardCardView
         key={item.id}
@@ -352,30 +352,28 @@ export const Board = memo(function Board({ today }: { today: string }) {
         }}
         tick={tick}
         onMove={(to, el) => run(item, to, to === 'later' || to === 'next' ? laneStart(columns, to) : null, el.getBoundingClientRect())}
-        // Not a recurring row's: today's is renamed on the sheet, and its recurring priority in
-        // Settings → Board.
+        // Today's row through the list, the sheet's write; any other task, but a planned one, by a PATCH.
         onRename={
           onToday && !item.recurring
-            ? (text) => report(store.editRow(item.row!.uid!, { text }, item.row!.cardUid))
-            : cardOnly
-              ? (title) => report(store.editCard(item.card!.uid, { title }))
+            ? (text) => report(store.editRow(item.uid, { text }))
+            : editable
+              ? (title) => report(store.editItem(item.uid, { title }))
               : undefined
         }
         category={pick ? categoryOf(pick.categories, item.categoryUid) : undefined}
         pick={pick}
-        // As the title: through today's row (its card follows), else on the card.
+        // As the title, a recurring row's included: the category is the task's, on every day.
         onCategory={
           onToday
-            ? (categoryUid) => report(store.editRow(item.row!.uid!, { categoryUid }, item.row!.cardUid))
-            : cardOnly
-              ? (categoryUid) => report(store.editCard(item.card!.uid, { categoryUid }))
+            ? (categoryUid) => report(store.editRow(item.uid, { categoryUid }))
+            : editable
+              ? (categoryUid) => report(store.editItem(item.uid, { categoryUid }))
               : undefined
         }
-        // Not on a Done card off today's list: Done is the week's record, and deleting the card would
-        // only bring back its ticked row from an earlier day. The untick is the correction.
-        onDelete={!item.recurring && (onToday || (cardOnly && item.column !== 'done')) ? () => remove(item) : undefined}
-        onRemove={item.recurring && onToday ? () => report(store.deleteCard(null, item.row!.uid, null)) : undefined}
-        renameNote={renameNote}
+        // A recurring priority is removed in Settings → Board, so its row only comes off today's list.
+        onDelete={!item.recurring && (onToday || editable) ? () => confirmDelete(item) : undefined}
+        onRemove={item.recurring && onToday ? () => report(store.removeFromToday(item.uid)) : undefined}
+        note={note}
         drag={drag}
       />
     );
@@ -410,7 +408,7 @@ export const Board = memo(function Board({ today }: { today: string }) {
       <Capture
         full={boardFull(board)}
         pick={pick}
-        onAdd={(title, lane, categoryUid) => report(store.addCard({ uid: newUid(), title, categoryUid, lane, before: laneStart(columns, lane) }))}
+        onAdd={(title, lane, categoryUid) => report(store.addItem({ uid: newUid(), title, categoryUid, lane, before: laneStart(columns, lane) }))}
       />
       {/* Always there, so what arrives is heard (see styles.css for its gap). */}
       <div className="board-notice" role="status" ref={noticeBox}>
@@ -441,7 +439,7 @@ export const Board = memo(function Board({ today }: { today: string }) {
                 label: DONE_STAYS.add(COLUMN_NAMES[notice.lane]),
                 run: () => {
                   closeNotice();
-                  report(store.addCard({ uid: newUid(), title: notice.title, categoryUid: notice.categoryUid, lane: notice.lane, before: notice.before }));
+                  report(store.addItem({ uid: newUid(), title: notice.title, categoryUid: notice.categoryUid, lane: notice.lane, before: notice.before }));
                 },
               },
               { label: DONE_STAYS.leave, run: closeNotice },

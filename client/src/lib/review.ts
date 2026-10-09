@@ -1,9 +1,10 @@
-import type { Day } from '../types';
+import type { Day, Priority } from '../types';
+import { LOOKBACK_DAYS } from '../../../shared/api.js';
 import { addDays, addMonths, startOfQuarter, startOfWeek } from '../../../shared/dates.js';
 import { breakSeconds } from './breaks';
 import { formatDateSpan, formatMonth } from './format';
 import { sameText } from '../../../shared/text.js';
-import { focusOf, hasContent, reviewDay, sessionCategory, type PriorityReview } from './retro';
+import { focusOf, hasContent, reviewDay, sessionCategory, sessionName, type PriorityReview } from './retro';
 import { dayTimeclock, daySettings, type TimeclockSettings } from './timeclock';
 
 export const PERIOD_KINDS = ['week', 'month', 'quarter'] as const;
@@ -44,12 +45,14 @@ export function periodRange(kind: PeriodKind, date: string, offset: number): Per
 }
 
 /**
- * Sessions that weren't for a priority, merged by label (ignoring case and spacing) so a
- * chore that keeps coming back reads as one row with its total. `label` is the latest
- * spelling, '' for untitled sessions.
+ * Time off the plan: a task's sessions on days whose list didn't hold it, as one row under the
+ * task's name, and the sessions with no task merged by label (ignoring case and spacing), so a
+ * chore that keeps coming back reads as one row with its total.
  */
 export interface UnplannedWork {
+  /** `task:<uid>`, or `label:<sameText>` for sessions with no task. */
   key: string;
+  /** The task's current name, or the label's latest spelling; '' for untitled sessions. */
   label: string;
   seconds: number;
   /** The distinct days it happened on, oldest first. */
@@ -57,13 +60,13 @@ export interface UnplannedWork {
 }
 
 /**
- * A recurring priority's rows across the range, linked by `recurringUid`, whatever their text:
- * the days it was on the list and how many of them it got ticked. Each day stands on its own, so
- * a tick doesn't settle an earlier miss, and none of its rows is a task left open in Not done.
+ * A recurring priority's rows across the range: the days it was on the list and how many of them
+ * it got ticked. Each day stands on its own, so a tick doesn't settle an earlier miss, and none of
+ * its rows is a task left open in Not done.
  */
 export interface RoutineReview {
-  recurringUid: string;
-  /** The item's current title (`recurringTitles`); else the latest row's text: the item was deleted, or the board is off. */
+  uid: string;
+  /** Its current name, which every row of it shows. */
   title: string;
   /** The days a row linked to it had text, oldest first; the row opens the latest. */
   dates: string[];
@@ -73,9 +76,9 @@ export interface RoutineReview {
 }
 
 /**
- * The range's focus and ticks under one category: each written row's under the row's category,
- * and each session off a written row under `sessionCategory`, so an emptied row's sessions count
- * off the plan under its category.
+ * The range's focus and ticks under one category: each row's under its task's category, and each
+ * session off the plan under `sessionCategory`, so a task's time on a day that didn't list it
+ * still counts under the task's category.
  */
 export interface CategoryTime {
   /** A category the board knows (`known`); null for none, or one it doesn't know. */
@@ -88,9 +91,9 @@ export interface CategoryTime {
   done: number;
 }
 
-/** A task not ticked by the end of the range: a one-off's rows left open across days, grouped by card, else by text (`addToNotDone`). */
+/** A task not ticked by the end of the range: a one-off's days left open, with a retyped task joined by its text (`addToNotDone`). */
 export interface OpenPriority {
-  /** `card:<cardUid>` or `text:<sameText>`. */
+  /** The uid of the task that opened it. */
   key: string;
   text: string;
   /** The distinct days it was left open on since it was last ticked, oldest first. */
@@ -134,7 +137,7 @@ export interface RangeReview {
    * and `prioritiesDone`.
    */
   byCategory: CategoryTime[];
-  /** Off-plan work by label, most time first: where the time went instead. */
+  /** Off-plan work by task, else by label, most time first: where the time went instead. */
   unplanned: UnplannedWork[];
   /** The recurring priorities on the range's lists: on the most days first, then the most focus, then by title. */
   routines: RoutineReview[];
@@ -151,9 +154,10 @@ export interface RangeReview {
  * after today is left out: all it can hold is a plan made the evening before (Plan tomorrow),
  * and none of it has happened yet. A day with nothing on it (`hasContent`) is left out too,
  * even with a break logged. A recurring priority's rows count as priorities in every total and
- * go to `routines` rather than Not done; `recurringTitles` (the board's items by uid) names them.
- * `known` is the uids of the board's categories, removed ones included: a category outside it
- * (none while the board is off) counts as none, in `byCategory` and in `midDay`.
+ * go to `routines` rather than Not done. `known` is the uids of the board's categories, removed
+ * ones included: a category outside it (none while the board is off) counts as none, in
+ * `byCategory` and in `midDay`. `laned` is the uids of the tasks the board holds in Later or Next,
+ * which Not done never joins to another task by its text.
  */
 export function reviewRange(
   days: Day[],
@@ -161,7 +165,7 @@ export function reviewRange(
   today: string,
   now: number,
   known: ReadonlySet<string> = new Set(),
-  recurringTitles: ReadonlyMap<string, string> = new Map(),
+  laned: ReadonlySet<string> = new Set(),
 ): RangeReview {
   const out: RangeReview = {
     days: 0,
@@ -186,6 +190,8 @@ export function reviewRange(
   const unplanned = new Map<string, UnplannedWork>();
   const routines = new Map<string, RoutineReview>();
   const notDone = new Map<string, OpenPriority>();
+  // Each one-off task's group in Not done, by its uid: its own, or the one its text joined.
+  const groupOf = new Map<string, string>();
   // Met first, first in the map: the sort keeps that order on a tie.
   const byCategory = new Map<string | null, CategoryTime>();
   const midDayCategories = new Map<string, number>();
@@ -227,13 +233,13 @@ export function reviewRange(
         const category = knownOrNone(p.priority.categoryUid);
         if (category != null) midDayCategories.set(category, (midDayCategories.get(category) ?? 0) + 1);
       }
-      const uid = p.priority.recurringUid;
-      if (uid == null) {
+      if (!p.priority.recurring) {
         oneOffs.push(p);
         continue;
       }
+      const uid = p.priority.uid!;
       let g = routines.get(uid);
-      if (!g) routines.set(uid, (g = { recurringUid: uid, title: '', dates: [], done: 0, focusedSeconds: 0 }));
+      if (!g) routines.set(uid, (g = { uid, title: '', dates: [], done: 0, focusedSeconds: 0 }));
       g.title = p.priority.text.trim();
       addDate(g.dates, day.date);
       if (p.priority.done) g.done++;
@@ -244,17 +250,17 @@ export function reviewRange(
       doneRows.push(r.done);
     }
     for (const session of r.unplanned) {
-      const key = sameText(session.label);
+      const key = session.priorityUid != null ? `task:${session.priorityUid}` : `label:${sameText(session.label)}`;
       let g = unplanned.get(key);
       if (!g) unplanned.set(key, (g = { key, label: '', seconds: 0, dates: [] }));
-      g.label = session.label.trim();
+      g.label = sessionName(session, day.priorities).trim();
       g.seconds += session.durationSeconds;
       addDate(g.dates, day.date);
       const c = categoryTime(sessionCategory(session, day.priorities));
       c.seconds += session.durationSeconds;
       c.offPlanSeconds += session.durationSeconds;
     }
-    addToNotDone(notDone, oneOffs, day.date);
+    addToNotDone(notDone, groupOf, oneOffs, day.date, laned);
     const note = day.retroNote.trim();
     if (note) out.notes.push({ date: day.date, note, reviewedAt: day.retroAt });
   }
@@ -269,7 +275,6 @@ export function reviewRange(
     ...listed.filter((c) => c.categoryUid == null),
   ];
   out.unplanned = [...unplanned.values()].sort((a, b) => b.seconds - a.seconds || a.dates[0]!.localeCompare(b.dates[0]!));
-  for (const g of routines.values()) g.title = recurringTitles.get(g.recurringUid) ?? g.title;
   out.routines = [...routines.values()].sort(
     (a, b) => b.dates.length - a.dates.length || b.focusedSeconds - a.focusedSeconds || a.title.localeCompare(b.title),
   );
@@ -277,69 +282,53 @@ export function reviewRange(
   return out;
 }
 
-const CARD_KEY = 'card:';
-const TEXT_KEY = 'text:';
-
 /**
- * One day's rows laid onto Not done, the tasks left open on the days before it, walked oldest
- * first. Rows linked to one card are one task, whatever their text. A row with no card joins
- * the latest task of its text (`sameText`), else starts a task of its own; a carded row whose
- * card has no task yet takes over the cardless task of its text, so a row that got its card
- * since stays one task. A tick settles: a carded row's, its card's task and the cardless task
- * of its text; a cardless row's, every task of its text. The same task left open beside a tick
- * on one day is settled too. Two cards with one title stay two tasks.
+ * One day's one-off rows laid onto Not done, the tasks left open on the days before it, walked
+ * oldest first. A task's days are one entry, keyed by its uid, and a tick settles it. A task
+ * retyped by hand on a later day is a task of its own, so one with no lane on one list joins the
+ * latest open entry of its text (`sameText`) whose last day is at most `LOOKBACK_DAYS` before
+ * this one, the rule `server/migrations/oneItem.ts` chains rows by: its tick settles that entry,
+ * and so does the tick of another such task of its text on its day. The entry shows its latest
+ * task's name. A task with a lane neither joins nor is joined; one on two lists joins none.
  */
-function addToNotDone(notDone: Map<string, OpenPriority>, rows: PriorityReview[], date: string): void {
-  const ticked = rows.filter((p) => p.priority.done).map((p) => p.priority);
-  const tickedCards = new Set(ticked.map((p) => p.cardUid));
-  const tickedTexts = new Set(ticked.map((p) => sameText(p.text)));
-  const cardlessTicks = new Set(ticked.filter((p) => p.cardUid == null).map((p) => sameText(p.text)));
-  for (const [key, g] of notDone) {
-    const text = sameText(g.text);
-    const settled = key.startsWith(CARD_KEY) ? tickedCards.has(key.slice(CARD_KEY.length)) : tickedTexts.has(text);
-    if (settled || cardlessTicks.has(text)) notDone.delete(key);
+function addToNotDone(
+  notDone: Map<string, OpenPriority>,
+  groupOf: Map<string, string>,
+  rows: PriorityReview[],
+  date: string,
+  laned: ReadonlySet<string>,
+): void {
+  const byText = (p: Priority) => !laned.has(p.uid!) && p.listed === 1;
+  const entryOf = (p: Priority): OpenPriority | undefined => {
+    const own = notDone.get(groupOf.get(p.uid!) ?? '');
+    if (own || !byText(p)) return own;
+    const text = sameText(p.text);
+    let latest: OpenPriority | undefined;
+    // An entry a task with a lane opened is that task's alone: its key is its uid.
+    for (const g of notDone.values()) {
+      const last = g.dates.at(-1)!;
+      if (!laned.has(g.key) && sameText(g.text) === text && last < date && addDays(last, LOOKBACK_DAYS) >= date && (!latest || last >= latest.dates.at(-1)!))
+        latest = g;
+    }
+    return latest;
+  };
+  const tickedTexts = new Set<string>();
+  for (const { priority: p } of rows) {
+    if (!p.done) continue;
+    const g = entryOf(p);
+    if (g) notDone.delete(g.key);
+    if (byText(p)) tickedTexts.add(sameText(p.text));
   }
   for (const { priority: p, focusedSeconds, addedMidDay } of rows) {
-    const text = sameText(p.text);
-    if (p.done || (p.cardUid != null ? tickedCards.has(p.cardUid) || cardlessTicks.has(text) : tickedTexts.has(text))) continue;
-    const g = p.cardUid != null ? cardTask(notDone, p.cardUid, text) : textTask(notDone, text);
+    if (p.done || (byText(p) && tickedTexts.has(sameText(p.text)))) continue;
+    let g = entryOf(p);
+    if (!g) notDone.set(p.uid!, (g = { key: p.uid!, text: '', dates: [], focusedSeconds: 0, addedMidDay: false }));
+    groupOf.set(p.uid!, g.key);
     g.text = p.text.trim();
     g.focusedSeconds += focusedSeconds;
     g.addedMidDay ||= addedMidDay;
     addDate(g.dates, date);
   }
-}
-
-/**
- * The card's task, taking over the cardless task of `text` when the card has none yet. The task
- * taken over keeps its place in `notDone`, whose order breaks ties in the sort, so a task that
- * got its card sorts where it did before.
- */
-function cardTask(notDone: Map<string, OpenPriority>, cardUid: string, text: string): OpenPriority {
-  const key = CARD_KEY + cardUid;
-  const existing = notDone.get(key);
-  if (existing) return existing;
-  const cardless = notDone.get(TEXT_KEY + text);
-  if (!cardless) {
-    const g: OpenPriority = { key, text: '', dates: [], focusedSeconds: 0, addedMidDay: false };
-    notDone.set(key, g);
-    return g;
-  }
-  const entries = [...notDone];
-  notDone.clear();
-  for (const [k, v] of entries) notDone.set(v === cardless ? key : k, v);
-  cardless.key = key;
-  return cardless;
-}
-
-/** The latest task of `text`, carded or not, else a new cardless one. */
-function textTask(notDone: Map<string, OpenPriority>, text: string): OpenPriority {
-  let latest: OpenPriority | undefined;
-  for (const g of notDone.values()) if (sameText(g.text) === text && (!latest || g.dates.at(-1)! >= latest.dates.at(-1)!)) latest = g;
-  if (latest) return latest;
-  const g: OpenPriority = { key: TEXT_KEY + text, text: '', dates: [], focusedSeconds: 0, addedMidDay: false };
-  notDone.set(g.key, g);
-  return g;
 }
 
 /**

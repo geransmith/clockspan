@@ -6,7 +6,7 @@ import { UNTITLED_SESSION } from '../lib/copy';
 import { formatCountdown } from '../lib/format';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { useDay } from '../hooks/useDay';
-import { AppProviders, makeDay, makePriority, makeSession, makeSettings, settle, T0, TODAY } from '../test/hooks';
+import { AppProviders, makeDay, makePriority, makeSession, makeSettings, setVisibility, settle, T0, TODAY } from '../test/hooks';
 import type { Session } from '../types';
 import { RunningTimerBar } from './RunningTimerBar';
 
@@ -130,7 +130,7 @@ describe('RunningTimerBar', () => {
     });
   });
 
-  describe('a session on a written row', () => {
+  describe('a session with a task', () => {
     const session = makeSession({ priorityUid: 'u1' });
     const today = (text: string) => makeDay(TODAY, { priorities: [makePriority(1, text, { uid: 'u1' })] });
     const readToday = async (text: string) => {
@@ -154,24 +154,24 @@ describe('RunningTimerBar', () => {
       expect(screen.getByText('Ship the hotfix').className).toBe('running-label');
     });
 
-    it('closes a label box open as its emptied row is written in again, sending nothing, and edits again once the row is emptied', async () => {
-      vi.mocked(api.getDay).mockResolvedValue(today(''));
-      await renderBar(session);
+    it('closes a label box open as another device links the session, sending nothing', async () => {
+      await renderBar(makeSession());
       fireEvent.click(label());
       fireEvent.change(input(), { target: { value: 'Typed meanwhile' } });
-      await readToday('Ship the fix');
+      // The timer's sync as the tab comes back finds it linked to the row.
+      vi.mocked(api.getRunning).mockResolvedValue({ session: { ...session, title: 'Ship the fix' } });
+      await settle(6000);
+      setVisibility('visible');
+      await settle();
       expect(screen.queryByRole('textbox')).toBeNull();
       expect(screen.getByText('Ship the fix').className).toBe('running-label');
+      expect(api.patchSession).not.toHaveBeenCalled();
+    });
 
-      // Off the row it reads by its label again, and the box opens on that, not on the draft dropped.
-      await readToday('');
-      expect(label().textContent).toBe('Write the report');
-      fireEvent.click(label());
-      expect(input().value).toBe('Write the report');
-      fireEvent.change(input(), { target: { value: 'Draft the summary' } });
-      fireEvent.keyDown(input(), { key: 'Enter' });
-      await settle();
-      expect(api.patchSession).toHaveBeenCalledExactlyOnceWith(1, { label: 'Draft the summary' });
+    it("names a session whose task left the day by the task's name, with no label to edit", async () => {
+      await renderBar(makeSession({ priorityUid: 'gone00000001', title: 'Left the day' }));
+      expect(screen.getByText('Left the day').className).toBe('running-label');
+      expect(screen.queryByTitle('Edit label')).toBeNull();
     });
   });
 });

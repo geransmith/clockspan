@@ -69,7 +69,7 @@ describe('reviewRange', () => {
       ['Help Sam', ['2026-09-15']],
       ['Fire drill', ['2026-09-14']],
     ]);
-    expect(r.notDone).toEqual([{ key: 'text:write the proposal', text: 'Write the proposal', dates: ['2026-09-14'], focusedSeconds: 0, addedMidDay: false }]);
+    expect(r.notDone).toEqual([{ key: SECOND_UID, text: 'Write the proposal', dates: ['2026-09-14'], focusedSeconds: 0, addedMidDay: false }]);
     // The note as typed, without the blank lines around it.
     expect(r.notes).toEqual([{ date: '2026-09-14', note: 'Slack ate the afternoon.', reviewedAt: d1.retroAt }]);
   });
@@ -90,20 +90,22 @@ describe('reviewRange', () => {
   });
 
   it('settles a priority ticked on a later day', () => {
+    // One task on three days.
+    const proposal = { listed: 3 };
     const mon = makeDay('2026-09-14', {
-      priorities: [makePriority(1, 'Write the proposal')],
+      priorities: [makePriority(1, 'Write the proposal', proposal)],
       sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600, { priorityUid: FIRST_UID })],
     });
-    const tue = makeDay('2026-09-15', { priorities: [makePriority(1, 'write the proposal ', { done: true })] });
+    const tue = makeDay('2026-09-15', { priorities: [makePriority(1, 'Write the proposal', { ...proposal, done: true })] });
     const r = reviewRange([tue, mon], settings, '2026-09-16', now);
     // The tile still counts each day's rows; the list is what the range never finished.
     expect(r).toMatchObject({ prioritiesDone: 1, prioritiesTotal: 2, notDone: [] });
     // Left open again after the tick: only the days since, and only their time.
-    const wed = makeDay('2026-09-16', { priorities: [makePriority(1, 'Write the proposal')] });
+    const wed = makeDay('2026-09-16', { priorities: [makePriority(1, 'Write the proposal', proposal)] });
     expect(reviewRange([mon, tue, wed], settings, '2026-09-16', now).notDone).toEqual([
-      { key: 'text:write the proposal', text: 'Write the proposal', dates: ['2026-09-16'], focusedSeconds: 0, addedMidDay: false },
+      { key: FIRST_UID, text: 'Write the proposal', dates: ['2026-09-16'], focusedSeconds: 0, addedMidDay: false },
     ]);
-    // Ticked and left open on one day, in either order: the tick wins.
+    // Typed twice on one day, ticked once and left open once, in either order: the tick wins.
     for (const priorities of [
       [makePriority(1, 'Email', { done: true }), makePriority(2, 'email ')],
       [makePriority(1, 'email '), makePriority(2, 'Email', { done: true })],
@@ -183,8 +185,8 @@ describe('reviewRange', () => {
         makePriority(1, 'Plan the week', BEFORE_WORK),
         makePriority(2, 'Fire drill', { addedAt: at('2026-09-14', 11), done: true }),
         makePriority(3, 'Call Sam back', { addedAt: at('2026-09-14', 12) }),
-        // Emptied since: no longer one of the day's rows.
-        makePriority(4, '', { addedAt: at('2026-09-14', 13) }),
+        // Padding: no row of the day's.
+        makePriority(4, '', { uid: null, addedAt: at('2026-09-14', 13) }),
       ],
       sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600)],
     });
@@ -239,111 +241,153 @@ describe('reviewRange', () => {
     expect(r.focusedSeconds).toBe(1200);
   });
 
-  it('merges repeats by label or text, whatever the case and spacing', () => {
+  it('merges sessions with no task by label, whatever the case and spacing, and lists Not done by task', () => {
+    const REVIEW = 'review000001';
     const mon = makeDay('2026-09-14', {
-      priorities: [makePriority(1, 'Review the PR', BEFORE_WORK), makePriority(2, 'Ship it', { done: true }), makePriority(3, 'Plan next sprint', BEFORE_WORK)],
+      priorities: [
+        makePriority(1, 'Review the PR', { uid: REVIEW, listed: 2, ...BEFORE_WORK }),
+        makePriority(2, 'Ship it', { done: true }),
+        makePriority(3, 'Plan next sprint', BEFORE_WORK),
+      ],
       sessions: [
         session(1, '2026-09-14', at('2026-09-14', 9), 600, { label: 'Expense receipts' }),
         session(2, '2026-09-14', at('2026-09-14', 11), 300, { label: 'expense  receipts ' }),
         session(3, '2026-09-14', at('2026-09-14', 13), 1500, { label: '' }),
-        session(4, '2026-09-14', at('2026-09-14', 14), 900, { priorityUid: FIRST_UID }),
+        session(4, '2026-09-14', at('2026-09-14', 14), 900, { priorityUid: REVIEW }),
       ],
     });
     const tue = makeDay('2026-09-15', {
-      priorities: [makePriority(1, 'Call the bank', BEFORE_WORK), makePriority(2, 'review the PR ', { addedAt: at('2026-09-15', 12) })],
+      priorities: [makePriority(1, 'Call the bank', BEFORE_WORK), makePriority(2, 'Review the PR', { uid: REVIEW, listed: 2, addedAt: at('2026-09-15', 12) })],
       sessions: [
         session(5, '2026-09-15', at('2026-09-15', 9), 600, { label: 'Expense Receipts' }),
-        session(6, '2026-09-15', at('2026-09-15', 10), 1200, { priorityUid: SECOND_UID }),
+        session(6, '2026-09-15', at('2026-09-15', 10), 1200, { priorityUid: REVIEW }),
       ],
     });
     const r = reviewRange([tue, mon], settings, '2026-09-16', now);
     expect(r.unplanned).toEqual([
-      { key: 'expense receipts', label: 'Expense Receipts', seconds: 1500, dates: ['2026-09-14', '2026-09-15'] },
-      { key: '', label: '', seconds: 1500, dates: ['2026-09-14'] },
+      { key: 'label:expense receipts', label: 'Expense Receipts', seconds: 1500, dates: ['2026-09-14', '2026-09-15'] },
+      { key: 'label:', label: '', seconds: 1500, dates: ['2026-09-14'] },
     ]);
-    // Left open on two days comes first, then by date; the latest spelling wins; mid-day on either day counts.
+    // Left open on two days comes first, then by date; mid-day on either day counts.
     expect(r.notDone).toEqual([
-      { key: 'text:review the pr', text: 'review the PR', dates: ['2026-09-14', '2026-09-15'], focusedSeconds: 2100, addedMidDay: true },
-      { key: 'text:plan next sprint', text: 'Plan next sprint', dates: ['2026-09-14'], focusedSeconds: 0, addedMidDay: false },
-      { key: 'text:call the bank', text: 'Call the bank', dates: ['2026-09-15'], focusedSeconds: 0, addedMidDay: false },
+      { key: REVIEW, text: 'Review the PR', dates: ['2026-09-14', '2026-09-15'], focusedSeconds: 2100, addedMidDay: true },
+      { key: makePriority(3, '').uid, text: 'Plan next sprint', dates: ['2026-09-14'], focusedSeconds: 0, addedMidDay: false },
+      { key: FIRST_UID, text: 'Call the bank', dates: ['2026-09-15'], focusedSeconds: 0, addedMidDay: false },
+    ]);
+  });
+
+  it("lists a task's time off the plan as one line under its current name, whatever its sessions started as, apart from a label's", () => {
+    const TASK = 'task00000001';
+    const off = (id: number, date: string, label: string, title: string) => session(id, date, at(date, 9 + id), 600, { priorityUid: TASK, title, label });
+    const days = [
+      makeDay('2026-09-14', { sessions: [off(1, '2026-09-14', 'Started as this', 'Report')] }),
+      makeDay('2026-09-15', {
+        sessions: [
+          off(2, '2026-09-15', 'Something else', 'Write the report'),
+          session(3, '2026-09-15', at('2026-09-15', 14), 300, { label: 'Write the report' }),
+        ],
+      }),
+    ];
+    expect(reviewRange(days, settings, '2026-09-16', now).unplanned).toEqual([
+      { key: `task:${TASK}`, label: 'Write the report', seconds: 1200, dates: ['2026-09-14', '2026-09-15'] },
+      { key: 'label:write the report', label: 'Write the report', seconds: 300, dates: ['2026-09-15'] },
     ]);
   });
 });
 
-// One-offs left open are grouped into tasks across days: by card, else by text.
 describe('reviewRange: Not done', () => {
-  const now = at('2026-09-18', 17);
+  const now = at('2026-10-20', 17);
   const MON = '2026-09-14';
   const TUE = '2026-09-15';
   const WED = '2026-09-16';
-  const A = 'carda0000001';
-  const B = 'cardb0000001';
-  type Row = [text: string, cardUid?: string | null, done?: boolean];
+  /** A row written before work, on one list unless `listed` says more. */
+  const row = (text: string, uid: string, patch: { done?: boolean; listed?: number } = {}) => ({ text, uid, done: false, listed: 1, ...patch });
   /** A day whose rows were all written before work: none reads as added mid-day. */
-  const day = (date: string, ...rows: Row[]) =>
-    makeDay(date, { priorities: rows.map(([text, cardUid = null, done = false], i) => makePriority(i + 1, text, { cardUid, done, ...BEFORE_WORK })) });
-  const notDone = (...days: Day[]) => reviewRange(days, settings, '2026-09-18', now).notDone.map((g) => [g.key, g.text, g.dates]);
+  const day = (date: string, ...rows: ReturnType<typeof row>[]) =>
+    makeDay(date, { priorities: rows.map(({ text, ...patch }, i) => makePriority(i + 1, text, { ...patch, ...BEFORE_WORK })) });
+  const notDone = (days: Day[], laned?: ReadonlySet<string>) =>
+    reviewRange(days, settings, '2026-10-20', now, undefined, laned).notDone.map((g) => [g.key, g.text, g.dates]);
 
-  it('settles a cardless row by a later tick of a carded row of its text, and the other way round', () => {
-    expect(notDone(day(MON, ['Report']), day(TUE, ['report', A, true]))).toEqual([]);
-    expect(notDone(day(MON, ['Report', A]), day(TUE, ['report', null, true]))).toEqual([]);
+  it("keeps a task's days one entry, by its uid, and a tick on a later day settles them", () => {
+    const report = (patch = {}) => row('Report', 'task00000001', { listed: 3, ...patch });
+    expect(notDone([day(MON, report()), day(TUE, report())])).toEqual([['task00000001', 'Report', [MON, TUE]]]);
+    expect(notDone([day(MON, report()), day(TUE, report()), day(WED, report({ done: true }))])).toEqual([]);
   });
 
-  it("makes a cardless task the card's once a row of its text gets a card, and a cardless row joins the latest task of its text", () => {
-    expect(notDone(day(MON, ['Report']), day(TUE, ['Report', A]))).toEqual([[`card:${A}`, 'Report', [MON, TUE]]]);
-    expect(notDone(day(MON, ['Report', A]), day(TUE, ['report ']))).toEqual([[`card:${A}`, 'report', [MON, TUE]]]);
-  });
-
-  it('keeps a task where it sorted when a row of it gets its card partway through', () => {
-    const days = [day(MON, ['Invoices'], ['Report'], ['Email']), day(TUE, ['Invoices'], ['Report', A], ['Email'])];
-    expect(notDone(...days)).toEqual([
-      ['text:invoices', 'Invoices', [MON, TUE]],
-      [`card:${A}`, 'Report', [MON, TUE]],
-      ['text:email', 'Email', [MON, TUE]],
+  it('keeps two tasks of one name two entries, and a tick of one leaves the other open', () => {
+    const email = (uid: string, patch = {}) => row('Email', uid, { listed: 2, ...patch });
+    expect(notDone([day(MON, email('task00000001'), email('task00000002'))])).toEqual([
+      ['task00000001', 'Email', [MON]],
+      ['task00000002', 'Email', [MON]],
+    ]);
+    expect(notDone([day(MON, email('task00000001'), email('task00000002')), day(TUE, email('task00000001', { done: true }))])).toEqual([
+      ['task00000002', 'Email', [MON]],
     ]);
   });
 
-  it("keeps a card's rows one task when it is renamed, under its latest text, and a tick of the card settles every day of it", () => {
-    expect(notDone(day(MON, ['Report', A]), day(TUE, ['Write the report', A]))).toEqual([[`card:${A}`, 'Write the report', [MON, TUE]]]);
-    expect(notDone(day(MON, ['Report', A]), day(TUE, ['Write the report', A]), day(WED, ['Send the report', A, true]))).toEqual([]);
+  it('joins a task retyped by hand to the open entry of its text, under the latest name, and its tick settles that entry', () => {
+    expect(notDone([day(MON, row('Report', 'task00000001')), day(TUE, row('report ', 'task00000002'))])).toEqual([['task00000001', 'report', [MON, TUE]]]);
+    expect(notDone([day(MON, row('Report', 'task00000001')), day(TUE, row('report', 'task00000002', { done: true }))])).toEqual([]);
+    // A tick ends the entry: the next retype starts one of its own.
+    const ended = [day(MON, row('Report', 'task00000001')), day(TUE, row('Report', 'task00000002', { done: true })), day(WED, row('Report', 'task00000003'))];
+    expect(notDone(ended)).toEqual([['task00000003', 'Report', [WED]]]);
   });
 
-  it('keeps two cards with one title two tasks, and a tick of one leaves the other open', () => {
-    expect(notDone(day(MON, ['Email', A], ['Email', B]))).toEqual([
-      [`card:${A}`, 'Email', [MON]],
-      [`card:${B}`, 'Email', [MON]],
-    ]);
-    expect(notDone(day(MON, ['Email', A], ['Email', B]), day(TUE, ['Email', A, true]))).toEqual([[`card:${B}`, 'Email', [MON]]]);
-    // A tick with no card settles every task of its text.
-    expect(notDone(day(MON, ['Email', A], ['Email', B]), day(TUE, ['email', null, true]))).toEqual([]);
-    // A row with no card left open joins one of them: the one seen last.
-    expect(notDone(day(MON, ['Email', A], ['Email', B]), day(TUE, ['email']), day(WED, ['Email', A]))).toEqual([
-      [`card:${A}`, 'Email', [MON, WED]],
-      [`card:${B}`, 'email', [MON, TUE]],
+  it('joins a retype at most 14 days after the entry was last left open', () => {
+    const twoWeeks = [day('2026-09-01', row('Report', 'task00000001')), day('2026-09-15', row('Report', 'task00000002'))];
+    expect(notDone(twoWeeks)).toEqual([['task00000001', 'Report', ['2026-09-01', '2026-09-15']]]);
+    const longer = [day('2026-09-01', row('Report', 'task00000001')), day('2026-09-16', row('Report', 'task00000002'))];
+    expect(notDone(longer)).toEqual([
+      ['task00000001', 'Report', ['2026-09-01']],
+      ['task00000002', 'Report', ['2026-09-16']],
     ]);
   });
 
-  it('lets a tick win over the same task left open on its day', () => {
-    expect(notDone(day(MON, ['Report', A, true], ['report']))).toEqual([]);
-    expect(notDone(day(MON, ['Report', null, true], ['report', A]))).toEqual([]);
-    // A card ticked doesn't settle another card of its title left open beside it.
-    expect(notDone(day(MON, ['Email', A, true], ['Email', B]))).toEqual([[`card:${B}`, 'Email', [MON]]]);
+  it('keeps a task with a lane, or on two lists, apart from another of its text', () => {
+    const days = [day(MON, row('Report', 'task00000001')), day(TUE, row('Report', 'task00000002'))];
+    expect(notDone(days, new Set(['task00000002']))).toEqual([
+      ['task00000001', 'Report', [MON]],
+      ['task00000002', 'Report', [TUE]],
+    ]);
+    const carried = [day(MON, row('Report', 'task00000001')), day(TUE, row('Report', 'task00000002', { listed: 2 }))];
+    expect(notDone(carried)).toEqual([
+      ['task00000001', 'Report', [MON]],
+      ['task00000002', 'Report', [TUE]],
+    ]);
+    // Its tick settles its own entry only.
+    expect(notDone([day(MON, row('Report', 'task00000001')), day(TUE, row('Report', 'task00000002', { listed: 2, done: true }))])).toEqual([
+      ['task00000001', 'Report', [MON]],
+    ]);
   });
 
-  it('groups and settles rows that share a card the way the same rows with no card group by text', () => {
-    const days = [
-      day(MON, ['Report', A], ['Invoices', B], ['Email']),
-      day(TUE, ['Report', A], ['Invoices', B, true]),
-      day(WED, ['Report', A], ['Call the bank']),
-    ];
-    const stripped = days.map((d) => ({ ...d, priorities: d.priorities.map((p) => ({ ...p, cardUid: null })) }));
-    const withoutKeys = (ds: Day[]) => reviewRange(ds, settings, '2026-09-18', now).notDone.map(({ key: _key, ...g }) => g);
-    expect(withoutKeys(days)).toEqual(withoutKeys(stripped));
-    expect(notDone(...days).map(([key]) => key)).toEqual([`card:${A}`, 'text:email', 'text:call the bank']);
+  it('keeps the entry a task with a lane opened its own, whatever a later task of its text does', () => {
+    const laned = new Set(['task00000001']);
+    expect(notDone([day(MON, row('Report', 'task00000001')), day(TUE, row('Report', 'task00000002', { done: true }))], laned)).toEqual([
+      ['task00000001', 'Report', [MON]],
+    ]);
+    expect(notDone([day(MON, row('Report', 'task00000001')), day(TUE, row('Report', 'task00000002'))], laned)).toEqual([
+      ['task00000001', 'Report', [MON]],
+      ['task00000002', 'Report', [TUE]],
+    ]);
+  });
+
+  it('joins a retype to the latest open entry of its text', () => {
+    const days = [day(MON, row('Email', 'task00000001', { listed: 2 }), row('Email', 'task00000002', { listed: 2 })), day(TUE, row('email', 'task00000003'))];
+    expect(notDone(days)).toEqual([
+      ['task00000002', 'email', [MON, TUE]],
+      ['task00000001', 'Email', [MON]],
+    ]);
+  });
+
+  it('lets a tick win over a task of its text typed again and left open beside it, unless either has a lane', () => {
+    expect(notDone([day(MON, row('Report', 'task00000001', { done: true }), row('report', 'task00000002'))])).toEqual([]);
+    expect(notDone([day(MON, row('Report', 'task00000001', { done: true }), row('report', 'task00000002'))], new Set(['task00000001']))).toEqual([
+      ['task00000002', 'report', [MON]],
+    ]);
   });
 });
 
-// A routine's rows (`recurringUid`) are one entry across days, counted day by day, never a task left open.
+// A routine's rows are one entry across days, counted day by day, never a task left open.
 describe('reviewRange: Routines', () => {
   const now = at('2026-09-18', 17);
   const MON = '2026-09-14';
@@ -351,22 +395,24 @@ describe('reviewRange: Routines', () => {
   const WED = '2026-09-16';
   const QUEUE = 'rcur00000001';
   const FOLLOW = 'rcur00000002';
-  type Row = [text: string, recurringUid?: string | null, done?: boolean];
-  /** A day whose rows were all written before work, with a 25-minute session on the row at position `focusOn`. */
-  const day = (date: string, rows: Row[], focusOn?: number) =>
+  type Row = [text: string, routine?: string | null, done?: boolean];
+  /** A day whose rows were all written before work, with a 25-minute session on the task `focusOn`. */
+  const day = (date: string, rows: Row[], focusOn?: string) =>
     makeDay(date, {
-      priorities: rows.map(([text, recurringUid = null, done = false], i) => makePriority(i + 1, text, { recurringUid, done, ...BEFORE_WORK })),
-      sessions: focusOn == null ? [] : [session(1, date, at(date, 9), 25 * 60, { priorityUid: makePriority(focusOn, '').uid })],
+      priorities: rows.map(([text, routine = null, done = false], i) =>
+        makePriority(i + 1, text, { ...(routine ? { uid: routine, recurring: true } : {}), done, ...BEFORE_WORK }),
+      ),
+      sessions: focusOn == null ? [] : [session(1, date, at(date, 9), 25 * 60, { priorityUid: focusOn })],
     });
-  const review = (days: Day[], titles?: ReadonlyMap<string, string>) => reviewRange(days, settings, '2026-09-18', now, undefined, titles);
+  const review = (days: Day[]) => reviewRange(days, settings, '2026-09-18', now);
 
   it('counts the days a routine was ticked of the days it was on the list, and keeps its misses out of Not done', () => {
     const r = review([
-      day(MON, [['Monitor the queue', QUEUE]], 1),
-      day(TUE, [['Monitor the queue', QUEUE, true]], 1),
+      day(MON, [['Monitor the queue', QUEUE]], QUEUE),
+      day(TUE, [['Monitor the queue', QUEUE, true]], QUEUE),
       day(WED, [['Monitor the queue', QUEUE]]),
     ]);
-    expect(r.routines).toEqual([{ recurringUid: QUEUE, title: 'Monitor the queue', dates: [MON, TUE, WED], done: 1, focusedSeconds: 50 * 60 }]);
+    expect(r.routines).toEqual([{ uid: QUEUE, title: 'Monitor the queue', dates: [MON, TUE, WED], done: 1, focusedSeconds: 50 * 60 }]);
     // Tuesday's tick doesn't settle Monday's miss, and neither miss is a task left open.
     expect(r.notDone).toEqual([]);
   });
@@ -375,10 +421,10 @@ describe('reviewRange: Routines', () => {
     const mon = makeDay(MON, {
       priorities: [
         makePriority(1, 'Ship it', { done: true, ...BEFORE_WORK }),
-        makePriority(2, 'Monitor the queue', { recurringUid: QUEUE, done: true, ...BEFORE_WORK }),
-        makePriority(3, 'Follow-ups', { recurringUid: FOLLOW, addedAt: at(MON, 11) }),
+        makePriority(2, 'Monitor the queue', { uid: QUEUE, recurring: true, done: true, ...BEFORE_WORK }),
+        makePriority(3, 'Follow-ups', { uid: FOLLOW, recurring: true, addedAt: at(MON, 11) }),
       ],
-      sessions: [session(1, MON, at(MON, 9), 600, { priorityUid: makePriority(2, '').uid })],
+      sessions: [session(1, MON, at(MON, 9), 600, { priorityUid: QUEUE })],
     });
     const r = review([
       mon,
@@ -403,22 +449,13 @@ describe('reviewRange: Routines', () => {
 
   it('leaves a one-off of the same text in Not done, unsettled by the routine', () => {
     const r = review([day(MON, [['Monitor the queue']]), day(TUE, [['monitor the queue', QUEUE, true]])]);
-    expect(r.notDone.map((g) => [g.key, g.dates])).toEqual([['text:monitor the queue', [MON]]]);
-    expect(r.routines.map((g) => [g.recurringUid, g.dates, g.done])).toEqual([[QUEUE, [TUE], 1]]);
+    expect(r.notDone.map((g) => [g.key, g.dates])).toEqual([[makePriority(1, '').uid, [MON]]]);
+    expect(r.routines.map((g) => [g.uid, g.dates, g.done])).toEqual([[QUEUE, [TUE], 1]]);
   });
 
-  it("keeps a routine whose row was retyped one entry, under the item's title while it exists, else the latest text", () => {
+  it("keeps a routine one entry by its uid, under its latest row's name", () => {
     const days = [day(MON, [['Monitor the queue', QUEUE, true]]), day(TUE, [['Watch the queue', QUEUE]])];
     expect(review(days).routines.map((g) => [g.title, g.dates])).toEqual([['Watch the queue', [MON, TUE]]]);
-    expect(review(days, new Map([[QUEUE, 'Check the queue']])).routines.map((g) => g.title)).toEqual(['Check the queue']);
-    // Deleted since: the board names other items but not this one.
-    expect(review(days, new Map([[FOLLOW, 'Follow-ups']])).routines.map((g) => g.title)).toEqual(['Watch the queue']);
-  });
-
-  it('leaves out a day whose routine row was emptied', () => {
-    const r = review([day(MON, [['Monitor the queue', QUEUE, true]]), day(TUE, [['', QUEUE]])]);
-    expect(r.routines.map((g) => [g.dates, g.done])).toEqual([[[MON], 1]]);
-    expect(r.prioritiesTotal).toBe(1);
   });
 
   it('lists the routines on the most days first, then the most focus, then by title', () => {
@@ -432,13 +469,11 @@ describe('reviewRange: Routines', () => {
           ['Inbox', 'rcur0000000b'],
         ],
         // The one focused, last of the one-day routines by title.
-        2,
+        QUEUE,
       ),
       day(TUE, [['Tickets', 'rcur0000000a']]),
     ];
     expect(review(days).routines.map((g) => g.title)).toEqual(['Tickets', 'Monitor the queue', 'Follow-ups', 'Inbox']);
-    // Sorted by the item's title, not the row's.
-    expect(review(days, new Map([['rcur0000000b', 'Alerts']])).routines.map((g) => g.title)).toEqual(['Tickets', 'Monitor the queue', 'Alerts', 'Follow-ups']);
   });
 });
 
@@ -467,13 +502,8 @@ describe('reviewRange: By category', () => {
       sessions: [session(1, MON, at(MON, 9), 600, { label: 'Inbox' })],
     });
 
-  it("counts an emptied row's sessions off the plan under its category", () => {
-    const r = review([
-      makeDay(MON, {
-        priorities: [makePriority(1, '', { categoryUid: TICKETS })],
-        sessions: [session(1, MON, at(MON, 9), 1500, { priorityUid: uid(1) })],
-      }),
-    ]);
+  it("counts a task's sessions on a day whose list doesn't hold it off the plan, under the task's category", () => {
+    const r = review([makeDay(MON, { sessions: [session(1, MON, at(MON, 9), 1500, { priorityUid: 'task00000001', categoryUid: TICKETS })] })]);
     expect(r.byCategory).toEqual([bucket(TICKETS, 1500, 1500, 0)]);
     expect(r.offPlanSeconds).toBe(1500);
   });
@@ -491,14 +521,14 @@ describe('reviewRange: By category', () => {
     expect(r.byCategory).toEqual([bucket(TICKETS, 3000, 0, 0), bucket(null, 600, 0, 0)]);
   });
 
-  it('counts a session on no row under its own category or none, and one on a removed row under the category copied onto it', () => {
+  it("counts a session with no task under its own category or none, and one whose task left the day under the task's", () => {
     const r = review([
       makeDay(MON, {
         priorities: [makePriority(1, 'Ship it')],
         sessions: [
           session(1, MON, at(MON, 9), 1200, { label: 'Inbox', categoryUid: ADMIN }),
           session(2, MON, at(MON, 10), 600, { label: 'Slack' }),
-          // Its row was taken off the list, and the save copied the row's category onto it.
+          // Its task was taken off the list; the server gives the task's category.
           session(3, MON, at(MON, 11), 900, { priorityUid: 'gone0000000x', categoryUid: TICKETS }),
         ],
       }),
@@ -506,28 +536,18 @@ describe('reviewRange: By category', () => {
     expect(r.byCategory).toEqual([bucket(ADMIN, 1200, 1200, 0), bucket(TICKETS, 900, 900, 0), bucket(null, 600, 600, 0)]);
   });
 
-  it("puts a session on an emptied row under a category picked for it rather than the row's", () => {
-    const r = review([
-      makeDay(MON, {
-        priorities: [makePriority(1, '', { categoryUid: TICKETS })],
-        sessions: [session(1, MON, at(MON, 9), 1200, { priorityUid: uid(1), categoryUid: ADMIN }), session(2, MON, at(MON, 10), 600, { priorityUid: uid(1) })],
-      }),
-    ]);
-    expect(r.byCategory).toEqual([bucket(ADMIN, 1200, 1200, 0), bucket(TICKETS, 600, 600, 0)]);
-  });
-
   it("counts the ticks under each row's category, routines included, and lists a category ticked with no time", () => {
     const r = review([
       makeDay(MON, {
         priorities: [
           makePriority(1, 'Ship it', { categoryUid: TICKETS, done: true }),
-          makePriority(2, 'Monitor the queue', { recurringUid: 'rcur00000001', categoryUid: TICKETS, done: true }),
+          makePriority(2, 'Monitor the queue', { uid: 'rcur00000001', recurring: true, categoryUid: TICKETS, done: true }),
           makePriority(3, 'Update the KB', { categoryUid: KB, done: true }),
           // Neither ticked nor focused on: not listed.
           makePriority(4, 'Plan the offsite', { categoryUid: ADMIN }),
           makePriority(5, 'Order lunch', { done: true }),
         ],
-        sessions: [session(1, MON, at(MON, 9), 1500, { priorityUid: uid(2) })],
+        sessions: [session(1, MON, at(MON, 9), 1500, { priorityUid: 'rcur00000001' })],
       }),
     ]);
     expect(r.byCategory).toEqual([bucket(TICKETS, 1500, 0, 2), bucket(KB, 0, 0, 1), bucket(null, 0, 0, 1)]);
@@ -612,15 +632,15 @@ describe('reviewRange: By category', () => {
       makeDay(MON, {
         priorities: [
           makePriority(1, 'Ship it', { categoryUid: TICKETS, done: true }),
-          makePriority(2, '', { categoryUid: ADMIN }),
           makePriority(3, 'Read the RFC', { categoryUid: GONE, done: true }),
-          makePriority(4, 'Monitor the queue', { recurringUid: 'rcur00000001', categoryUid: KB, done: true }),
+          makePriority(4, 'Monitor the queue', { uid: 'rcur00000001', recurring: true, categoryUid: KB, done: true }),
         ],
         sessions: [
           session(1, MON, at(MON, 9), 1500, { priorityUid: uid(1) }),
-          session(2, MON, at(MON, 10), 900, { priorityUid: uid(2) }),
+          // On a task taken off Monday's list.
+          session(2, MON, at(MON, 10), 900, { priorityUid: uid(2), categoryUid: ADMIN }),
           session(3, MON, at(MON, 11), 600, { priorityUid: uid(3) }),
-          session(4, MON, at(MON, 12), 300, { priorityUid: uid(4) }),
+          session(4, MON, at(MON, 12), 300, { priorityUid: 'rcur00000001' }),
         ],
       }),
       makeDay(TUE, {
@@ -649,7 +669,7 @@ describe('reviewRange: By category', () => {
     });
     const tue = makeDay(TUE, {
       priorities: [
-        makePriority(1, 'Monitor the queue', { recurringUid: 'rcur00000001', categoryUid: TICKETS, addedAt: at(TUE, 10) }),
+        makePriority(1, 'Monitor the queue', { uid: 'rcur00000001', recurring: true, categoryUid: TICKETS, addedAt: at(TUE, 10) }),
         makePriority(2, 'Book the room', { categoryUid: ADMIN, addedAt: at(TUE, 11) }),
       ],
       sessions: [session(2, TUE, at(TUE, 9), 600, { label: 'Inbox' })],

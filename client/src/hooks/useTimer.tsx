@@ -8,7 +8,7 @@ import { ApiError } from '../lib/apiError';
 import { SAVE_FAILED, TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
 import { addPending, fetched, settle, settleWith, shown, untracked, type Tracked } from '../lib/optimistic';
-import { editedSession, sessionName, sessionRow } from '../lib/retro';
+import { editedSession, sessionName } from '../lib/retro';
 import { readStored, writeStored } from '../lib/storage';
 import { adjustedPlan, DUE_GRACE_SECONDS, dueKey, PAUSE_LIMIT_SECONDS, timerView, type TimerView } from '../lib/timer';
 import { useDays, useDayStore } from './useDay';
@@ -21,12 +21,12 @@ import { useWakeLock } from './useWakeLock';
 interface TimerCtx extends Pick<TimerView, 'countdownSeconds' | 'elapsedSeconds' | 'progress' | 'paused' | 'due' | 'overrunSeconds' | 'canAdd'> {
   running: Session | null;
   /**
-   * What the running session is called (`sessionName`): its row's current text while that row is
-   * written on the session's day, else its label; '' while none runs. The bar, the timer card,
-   * the tab title and the timer's alerts all name it by this.
+   * What the running session is called (`sessionName`): its task's current name, else its label;
+   * '' while none runs. The bar, the timer card, the tab title and the timer's alerts all name it
+   * by this.
    */
   name: string;
-  /** The running session is on a written row of its day, which names it: its label isn't edited then. */
+  /** The running session has a task, which names it: it has no name of its own to edit until it is set to Unplanned. */
   linked: boolean;
   /** Leaves `unlockAudio()` to the caller, in its tap: the timer card may await a new priority's save before it starts. */
   start: (date: string, plannedSeconds: number, label: string, priorityUid?: string | null) => Promise<void>;
@@ -101,11 +101,11 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // (`settings.sounds`, `settings.sound`).
   const { settings, loaded } = useSettings();
   const { refresh, applySession, prioritiesSaved } = useDayStore();
-  // A day the store doesn't hold (a session started before midnight, after a reload) names it by its label.
+  // On a day the store doesn't hold (a session started before midnight, after a reload), the name the server gave.
   const { days } = useDays();
   const rows = running ? (days[running.date]?.priorities ?? []) : [];
   const name = running ? sessionName(running, rows) : '';
-  const linked = running != null && sessionRow(running, rows) != null;
+  const linked = running?.priorityUid != null;
   // An end (a finish or a cancel, by hand or not) is out: the auto-finish waits for its answer.
   const completing = useRef(false);
   // After a failed finish (server unreachable) wait before trying again (`nextBackoff`). The

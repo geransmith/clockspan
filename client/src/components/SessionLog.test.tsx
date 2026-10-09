@@ -180,16 +180,39 @@ describe('SessionLog', () => {
 
   describe("a session's name", () => {
     const fix = PLANNED[0]!;
-    const onFix = endSession(makeSession({ label: 'Started as this', priorityUid: fix.uid }), { endedAt: T0 + 25 * MINUTE_MS, durationSeconds: 25 * 60 });
+    const onFix = endSession(makeSession({ label: 'Started as this', priorityUid: fix.uid, title: 'Ship the fix' }), {
+      endedAt: T0 + 25 * MINUTE_MS,
+      durationSeconds: 25 * 60,
+    });
     const named = () => screen.getByRole('button', { name: /Ship the fix/ });
 
-    it('is the current text of the written row it is on, and its label off one', async () => {
-      await renderLog([onFix]);
+    it("is the current text of its task's row, the task's name once the task left the day, and its label with no task", async () => {
+      await renderLog([onFix, completedSession(2, T0 + 30 * MINUTE_MS, 60, { label: 'Inbox' })]);
       expect(named().textContent).toBe('1Ship the fix');
+      expect(screen.getByRole('button', { name: 'Inbox' })).toBeTruthy();
       cleanup();
-      // Emptied, the row names nothing: the label it was stored with, unplanned.
-      await renderLog([onFix], [], TODAY, { priorities: [{ ...fix, text: '' }] });
-      expect(screen.getByRole('button', { name: 'Started as this' })).toBeTruthy();
+      // Taken off the day and renamed since: off the plan, under the task's current name.
+      await renderLog([{ ...onFix, title: 'Ship the hotfix' }], [], TODAY, { priorities: [] });
+      expect(screen.getByRole('button', { name: 'Ship the hotfix' }).title).toBe('Change the priority');
+    });
+
+    it("shows a session whose task left the day by the task's name, with no label box, its task in the select", async () => {
+      await renderLog([{ ...onFix, title: 'Ship the hotfix' }], [], TODAY, { priorities: [makePriority(1, 'Email', { uid: 'email0000001' })] });
+      fireEvent.click(screen.getByRole('button', { name: 'Ship the hotfix' }));
+      expect(screen.queryByRole('textbox')).toBeNull();
+      expect(screen.getByText('Ship the hotfix', { selector: 'span' })).toBeTruthy();
+      expect(planSelect().value).toBe(fix.uid);
+      expect([...planSelect().options].map((o) => o.textContent)).toEqual(['Unplanned', 'Ship the hotfix', '1 · Email']);
+    });
+
+    it('offers Unplanned to a session whose task left a day with no written rows', async () => {
+      await renderLog([{ ...onFix, title: 'Ship the hotfix' }], [], TODAY, { priorities: [] });
+      fireEvent.click(screen.getByRole('button', { name: 'Ship the hotfix' }));
+      expect(document.activeElement).toBe(planSelect());
+      expect([...planSelect().options].map((o) => o.textContent)).toEqual(['Unplanned', 'Ship the hotfix']);
+      fireEvent.change(planSelect(), { target: { value: '' } });
+      await settle();
+      expect(api.patchSession).toHaveBeenCalledExactlyOnceWith(1, { priorityUid: null });
     });
 
     it('shows the name as text over the select in the edit of a session on a written row, with no label box', async () => {
@@ -207,7 +230,8 @@ describe('SessionLog', () => {
 
     it('edits the label again once Unplanned takes the session off its row', async () => {
       vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: PLANNED, sessions: [onFix] }));
-      vi.mocked(api.patchSession).mockImplementation((_id, patch) => Promise.resolve({ session: { ...onFix, ...patch } }));
+      // As the server answers: the task's name becomes the label.
+      vi.mocked(api.patchSession).mockImplementation((_id, patch) => Promise.resolve({ session: { ...onFix, ...patch, title: null, label: 'Ship the fix' } }));
       render(
         <AppProviders>
           <LogOnStore pick={null} />
@@ -219,11 +243,12 @@ describe('SessionLog', () => {
       await settle();
       expect(api.patchSession).toHaveBeenCalledExactlyOnceWith(1, { priorityUid: null });
 
-      // Off the row it reads by the label it started with, which its box edits as before.
-      const label = screen.getByRole('button', { name: 'Started as this' });
+      // With no task it keeps the task's name as a label of its own, which its box edits.
+      const label = screen.getByRole('button', { name: 'Ship the fix' });
+      expect(label.textContent).toBe('Ship the fix');
       expect(document.activeElement).toBe(label);
       fireEvent.click(label);
-      expect(labelInput().value).toBe('Started as this');
+      expect(labelInput().value).toBe('Ship the fix');
       fireEvent.change(labelInput(), { target: { value: ' Ship the fix for Acme ' } });
       fireEvent.keyDown(labelInput(), { key: 'Enter' });
       await settle();
@@ -231,8 +256,9 @@ describe('SessionLog', () => {
     });
 
     it('closes a box opened before another device linked or unlinked the session, sending nothing', async () => {
-      const rowReads = (text: string) => makeDay(TODAY, { priorities: [{ ...fix, text }], sessions: [onFix] });
-      vi.mocked(api.getDay).mockResolvedValue(rowReads(''));
+      const unplanned = { ...onFix, priorityUid: null, title: null };
+      const reads = (session: Session) => makeDay(TODAY, { priorities: PLANNED, sessions: [session] });
+      vi.mocked(api.getDay).mockResolvedValue(reads(unplanned));
       render(
         <AppProviders>
           <ReadAgain />
@@ -240,25 +266,27 @@ describe('SessionLog', () => {
         </AppProviders>,
       );
       await settle();
-      const readAgain = async (text: string) => {
-        vi.mocked(api.getDay).mockResolvedValue(rowReads(text));
+      const readAgain = async (session: Session) => {
+        vi.mocked(api.getDay).mockResolvedValue(reads(session));
         fireEvent.click(screen.getByRole('button', { name: 'Read today again' }));
         await settle();
       };
 
-      // Its row emptied, it goes by its label; the row is written in again while a label is typed.
+      // Linked elsewhere while a label is typed: the task names it from then on.
       fireEvent.click(screen.getByRole('button', { name: 'Started as this' }));
       fireEvent.change(labelInput(), { target: { value: 'Typed meanwhile' } });
-      await readAgain('Ship the fix');
+      await readAgain(onFix);
       expect(screen.queryByRole('textbox')).toBeNull();
       expect(named().textContent).toBe('1Ship the fix');
 
-      // A rename keeps the edit open on the new name; the row emptied closes it.
+      // A rename keeps the edit open on the new name; an unlink closes it.
       fireEvent.click(named());
-      await readAgain('Ship the hotfix');
-      expect(screen.getByText('Ship the hotfix').tagName).toBe('SPAN');
+      vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [{ ...fix, text: 'Ship the hotfix' }], sessions: [onFix] }));
+      fireEvent.click(screen.getByRole('button', { name: 'Read today again' }));
+      await settle();
+      expect(screen.getByText('Ship the hotfix', { selector: 'span' })).toBeTruthy();
       expect(planSelect()).toBeTruthy();
-      await readAgain('');
+      await readAgain(unplanned);
       expect(screen.queryByRole('combobox')).toBeNull();
       expect(screen.getByRole('button', { name: 'Started as this' })).toBeTruthy();
       await settle();
@@ -296,11 +324,10 @@ describe('SessionLog', () => {
     const TICKETS = makeCategory('cat000000001', 'Tickets');
     const ADMIN = makeCategory('cat000000002', 'Admin', { color: 'teal' });
     const PICK = makePick([TICKETS, ADMIN]);
-    // The fix's row has a category; the emptied row still has one too.
-    const ROWS = [
-      makePriority(1, 'Ship the fix', { uid: 'abcdef123456', categoryUid: TICKETS.uid }),
-      makePriority(2, '', { uid: 'emptied00000', categoryUid: ADMIN.uid }),
-    ];
+    // The fix's row has a category.
+    const ROWS = [makePriority(1, 'Ship the fix', { uid: 'abcdef123456', categoryUid: TICKETS.uid })];
+    /** On a task in Admin that was taken off the day: the server names it and files it by the task. */
+    const offDay = (id: number, label: string) => at(id, label, { priorityUid: 'leftday00001', title: 'Left the day', categoryUid: ADMIN.uid });
     const at = (id: number, label: string, patch: EndPatch = {}) => completedSession(id, T0 + id * MINUTE_MS, 60, { label, ...patch });
     const dot = (name: string) => screen.queryByRole('img', { name });
     const chip = () => screen.queryByRole('button', { name: /^Category for this session:/ });
@@ -310,7 +337,7 @@ describe('SessionLog', () => {
       await renderLog(
         [
           at(1, 'Picked', { categoryUid: ADMIN.uid }),
-          at(2, 'On the emptied row', { priorityUid: 'emptied00000' }),
+          offDay(2, 'Started as this'),
           at(3, 'On the fix', { priorityUid: 'abcdef123456', categoryUid: ADMIN.uid }),
           at(4, 'Unknown', { categoryUid: 'gone00000001' }),
           at(5, 'None'),
@@ -321,7 +348,7 @@ describe('SessionLog', () => {
       );
       // Each label button's name, the dot's coming first: a planned row reads as its priority's
       // number instead, and an unknown category as nothing.
-      for (const name of [/^Admin\s*Picked$/, /^Admin\s*On the emptied row$/, /^Priority 1\s*Ship the fix$/, /^Unknown$/, /^None$/]) {
+      for (const name of [/^Admin\s*Picked$/, /^Admin\s*Left the day$/, /^Priority 1\s*Ship the fix$/, /^Unknown$/, /^None$/]) {
         expect(screen.getByRole('button', { name })).toBeTruthy();
       }
       expect(screen.getByRole('button', { name: /Picked/ }).title).toBe('Edit label, priority or category');
@@ -341,13 +368,14 @@ describe('SessionLog', () => {
     });
 
     it('offers the chip in the edit of a session on no written row only, showing the category it counts under', async () => {
-      await renderLog([at(1, 'On the emptied row', { priorityUid: 'emptied00000' }), at(2, 'On the fix', { priorityUid: 'abcdef123456' })], [], TODAY, {
+      await renderLog([offDay(1, 'Started as this'), at(2, 'On the fix', { priorityUid: 'abcdef123456' })], [], TODAY, {
         priorities: ROWS,
         pick: PICK,
       });
-      edit(/On the emptied row/);
+      edit(/Left the day/);
       expect(chip()!.getAttribute('aria-label')).toBe('Category for this session: Admin');
-      fireEvent.keyDown(labelInput(), { key: 'Escape' });
+      act(() => planSelect().blur());
+      await settle();
       // The row's own chip on the sheet sets the category of a session on it.
       edit(/Ship the fix/);
       expect(chip()).toBeNull();
@@ -370,37 +398,27 @@ describe('SessionLog', () => {
       expect(document.activeElement).toBe(screen.getByRole('button', { name: /Picked/ }));
     });
 
-    it('clears the category of a session still on an emptied row with a category, by taking it off the row', async () => {
-      const onEmptied = at(1, 'On the emptied row', { priorityUid: 'emptied00000' });
-      vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: ROWS, sessions: [onEmptied] }));
-      vi.mocked(api.patchSession).mockImplementation((_id, patch) => Promise.resolve({ session: { ...onEmptied, ...patch } }));
+    it("takes a session whose task left the day off the task with a pick, which keeps the task's name as its label", async () => {
+      const left = offDay(1, 'Started as this');
+      vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: ROWS, sessions: [left] }));
+      // As the server answers an unlink with no label: the task's name becomes the label.
+      vi.mocked(api.patchSession).mockImplementation((_id, patch) => Promise.resolve({ session: { ...left, ...patch, title: null, label: 'Left the day' } }));
       render(
         <AppProviders>
           <LogOnStore pick={PICK} />
         </AppProviders>,
       );
       await settle();
-      // No pick of its own: it counts under the emptied row's category.
       expect(dot('Admin')).toBeTruthy();
-      edit(/On the emptied row/);
+      edit(/Left the day/);
       fireEvent.click(chip()!);
       fireEvent.click(screen.getByRole('option', { name: 'Tickets' }));
       await settle();
-      // A category of its own outranks the row's, so it stays on the row.
-      expect(api.patchSession).toHaveBeenLastCalledWith(1, { categoryUid: TICKETS.uid });
+      expect(api.patchSession).toHaveBeenCalledExactlyOnceWith(1, { categoryUid: TICKETS.uid, priorityUid: null });
       expect(dot('Tickets')).toBeTruthy();
-
-      edit(/On the emptied row/);
-      expect(chip()!.getAttribute('aria-label')).toBe('Category for this session: Tickets');
-      fireEvent.click(chip()!);
-      fireEvent.click(screen.getByRole('option', { name: 'No category' }));
-      await settle();
-      expect(api.patchSession).toHaveBeenLastCalledWith(1, { categoryUid: null, priorityUid: null });
-      expect(api.patchSession).toHaveBeenCalledTimes(2);
-      expect(dot('Tickets')).toBeNull();
-      expect(dot('Admin')).toBeNull();
-      edit(/On the emptied row/);
-      expect(chip()!.getAttribute('aria-label')).toBe('Category for this session: none');
+      // Now a session of its own: its label can be edited.
+      edit(/Left the day/);
+      expect(labelInput().value).toBe('Left the day');
     });
 
     it('sends only the link from the select, and shows the server dropping the category the session was given here', async () => {

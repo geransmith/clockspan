@@ -19,22 +19,22 @@ interface Props {
   /** Closes the editor from inside it (Escape in the title box), with focus back on the title. */
   onClose: () => void;
   titleRef: (el: HTMLButtonElement | null) => void;
-  /** The checkbox: the row's tick, or a Done card's untick. None for an earlier day's row. */
+  /** The checkbox: today's row's tick. None off today's list, where a tick belongs to its own day. */
   tick?: { checked: boolean; onChange: (checked: boolean, el: HTMLInputElement) => void };
   onMove: (to: ColumnId, el: HTMLElement) => void;
-  /** Renames it; without one the title shows as text (an earlier day's row; a recurring row, renamed on the sheet). */
+  /** Renames it; without one the title shows as text (a task done on an earlier day; a recurring row, renamed in Settings → Board). */
   onRename?: (title: string) => void;
   /** Its category, when the board holds it: the meta line shows its dot and name. */
   category?: Category;
   /** The category chip's data; with `onCategory`, the editor offers the chip. */
   pick: CategoryPick | null;
-  /** Sets its category; none where the board can't (an earlier day's row). */
+  /** Sets its category; none where the board doesn't (a task done on an earlier day, an earlier day's recurring row). */
   onCategory?: (uid: string | null) => void;
   onDelete?: () => void;
   /** A recurring row's way off today's list. */
   onRemove?: () => void;
-  /** The line under a title that shows as text, saying where it is renamed (today's recurring row). */
-  renameNote?: string;
+  /** The line under a title that shows as text: where a recurring row is renamed, or where a task done earlier is unticked. */
+  note?: string;
   /** Drag and drop; an item without it has no grip. */
   drag?: ItemDrag;
 }
@@ -47,12 +47,12 @@ export interface ItemDrag {
 }
 
 /**
- * A card or a row on the board: its tick, its number on today's list, its title (a button that
- * opens the editor), and a line with its category, the Repeats mark of a recurring row, and when
- * a later day's list holds it. The editor renames it, sets its category, moves it to another
- * column (Move to, the way to move without dragging), and deletes it; a planned item's offers
- * Delete only, since that day's list decides it. A recurring row's title shows as text: today's
- * row is renamed on the sheet, and its recurring priority in Settings → Board.
+ * A task on the board: its tick, its number on today's list, its title (a button that opens the
+ * editor), and a line with its category, the Repeats mark of a recurring row, and the day a later
+ * list holds it or it was left open on. The editor renames it, sets its category, moves it to
+ * another column (Move to, the way to move without dragging), and deletes it; a planned item's
+ * offers Delete only, since that day's list decides it. A recurring row's title shows as text,
+ * since Settings → Board renames it, and so does a task done on an earlier day.
  */
 export function BoardCardView({
   item,
@@ -69,7 +69,7 @@ export function BoardCardView({
   onCategory,
   onDelete,
   onRemove,
-  renameNote,
+  note,
   drag,
 }: Props) {
   const targets = moveTargets(item);
@@ -104,7 +104,7 @@ export function BoardCardView({
           <span className="board-card-title">{item.title}</span>
         </button>
       </div>
-      {(category != null || item.planned != null || item.recurring) && (
+      {(category != null || item.planned != null || item.leftOpen != null || item.recurring) && (
         <p className="board-card-meta muted small">
           {category && (
             <span className="board-card-category">
@@ -114,6 +114,7 @@ export function BoardCardView({
           )}
           {item.recurring && <RepeatMark />}
           {item.planned && <span>Planned for {dayName(item.planned, today, true)}</span>}
+          {item.leftOpen && <span>Left open from {dayName(item.leftOpen, today, true)}</span>}
         </p>
       )}
       {open && (
@@ -123,7 +124,7 @@ export function BoardCardView({
           ) : (
             <p className="board-editor-title">{item.title}</p>
           )}
-          {renameNote && <p className="muted small">{renameNote}</p>}
+          {note && <p className="muted small">{note}</p>}
           {pick && onCategory && !item.planned && (
             <div className="board-editor-category">
               <CategoryChip value={item.categoryUid} onChange={onCategory} pick={pick} label={`Category for ${item.title}`} />

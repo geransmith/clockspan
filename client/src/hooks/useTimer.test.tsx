@@ -152,8 +152,8 @@ describe("the running session's name", () => {
     return renderRunning(session);
   }
 
-  it("is its row's current text while that row is written on its day, in the tab title too, and its label off it", async () => {
-    const { result } = await renderOnRow(startedAgo(5, { priorityUid: 'u1' }));
+  it("is its row's current text while its day's list holds its task, in the tab title too, else the name the server gave", async () => {
+    const { result } = await renderOnRow(startedAgo(5, { priorityUid: 'u1', title: 'Ship the fix' }));
     expect(result.current.timer.name).toBe('Ship the fix');
     expect(result.current.timer.linked).toBe(true);
     expect(document.title).toBe('20:00 · Ship the fix — Clockspan');
@@ -164,18 +164,21 @@ describe("the running session's name", () => {
     expect(document.title).toBe('20:00 · Ship the hotfix — Clockspan');
     await settle();
 
-    // Emptied, the row names nothing: the session goes back to the label it was stored with.
-    act(() => void result.current.store.setPriorities(TODAY, [{ ...row, text: '' }], [renamed]));
-    expect(result.current.timer.name).toBe('Write the report');
-    expect(result.current.timer.linked).toBe(false);
-    expect(document.title).toBe('20:00 · Write the report — Clockspan');
+    // Taken off the day's list, the task still names it, and it has no name of its own to edit.
+    act(() => void result.current.store.setPriorities(TODAY, [], [renamed]));
+    expect(result.current.timer.name).toBe('Ship the fix');
+    expect(result.current.timer.linked).toBe(true);
     await settle();
   });
 
-  it('is its label while its day is not read, and empty while nothing runs', async () => {
-    const { result } = await renderOnRow(startedAgo(5, { priorityUid: 'u1', date: YESTERDAY }));
-    expect(result.current.timer.name).toBe('Write the report');
-    expect(result.current.timer.linked).toBe(false);
+  it("is the task's name the server gave while its day is not read, its label with no task, and empty while nothing runs", async () => {
+    const { result } = await renderOnRow(startedAgo(5, { priorityUid: 'u1', title: 'Ship the fix', date: YESTERDAY }));
+    expect(result.current.timer.name).toBe('Ship the fix');
+    expect(result.current.timer.linked).toBe(true);
+    cleanup();
+    const unplanned = await renderOnRow(startedAgo(5));
+    expect(unplanned.result.current.timer.name).toBe('Write the report');
+    expect(unplanned.result.current.timer.linked).toBe(false);
     cleanup();
     const idle = await renderOnRow(null);
     expect(idle.result.current.timer.name).toBe('');
