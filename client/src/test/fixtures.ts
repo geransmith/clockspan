@@ -112,7 +112,8 @@ export const rowUid = (position: number): string => `uid${position}`.padEnd(12, 
 
 /**
  * A one-off task's row on a day's list, as the server answers it: not done, added at T0, in no
- * category, on this day's list only and with nothing logged on it, unless `patch` says otherwise.
+ * category, with no note, on this day's list only and with nothing logged on it, unless `patch`
+ * says otherwise.
  */
 export function makePriority(position: number, text: string, patch: Partial<Priority> = {}): Priority {
   return {
@@ -122,6 +123,7 @@ export function makePriority(position: number, text: string, patch: Partial<Prio
     uid: rowUid(position),
     addedAt: T0,
     categoryUid: null,
+    note: '',
     recurring: false,
     archived: false,
     listed: 1,
@@ -131,9 +133,22 @@ export function makePriority(position: number, text: string, patch: Partial<Prio
   };
 }
 
-/** A task in Later at position 1, made at T0, with no category and on no day's list, unless `patch` says otherwise. */
+/** A task in Later at position 1, made at T0, with no category or note and on no day's list, unless `patch` says otherwise. */
 export function makeCard(uid: string, title: string, patch: Partial<BoardCard> = {}): BoardCard {
-  return { uid, title, categoryUid: null, lane: 'later', position: 1, createdAt: T0, listDate: null, listDone: false, listed: 0, logged: 0, ...patch };
+  return {
+    uid,
+    title,
+    categoryUid: null,
+    note: '',
+    lane: 'later',
+    position: 1,
+    createdAt: T0,
+    listDate: null,
+    listDone: false,
+    listed: 0,
+    logged: 0,
+    ...patch,
+  };
 }
 
 /** The board `GET /board` answers with these cards, and no categories or recurring priorities. */
@@ -179,9 +194,9 @@ export function makePick(categories: Category[] = []) {
 /** The uid `makePick`'s `create` gives. */
 export const NEW_CATEGORY = 'new000000001';
 
-/** A recurring priority with no category, every weekday Monday to Friday unless `patch` says otherwise. */
+/** A recurring priority with no category or note, every weekday Monday to Friday unless `patch` says otherwise. */
 export function makeRecurring(uid: string, title: string, patch: Partial<Recurring> = {}): Recurring {
-  return { uid, title, categoryUid: null, weekdays: [1, 2, 3, 4, 5], ...patch };
+  return { uid, title, categoryUid: null, note: '', weekdays: [1, 2, 3, 4, 5], ...patch };
 }
 
 /** What `endSession` may set on the ended session. */

@@ -175,6 +175,8 @@ export const MIGRATIONS: Migration[] = [
   // Each task stored once: a board card, a recurring priority or a priority typed on a day is a
   // row of `items`, and a day's list names the tasks on it. The old rows stay in priorities_v1.
   oneItem,
+  // A task's note, plain text; '' is none.
+  `ALTER TABLE items ADD COLUMN note TEXT NOT NULL DEFAULT ''`,
 ];
 
 export function openDatabase(dbPath: string): DB {

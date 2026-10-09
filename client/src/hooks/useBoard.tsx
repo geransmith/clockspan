@@ -21,7 +21,7 @@ import {
 } from '../lib/board';
 import { ADD_PRIORITY_FAILED, BOARD, SAVE_FAILED } from '../lib/copy';
 import { addPending, fetched, settle, settleWith, shown, untracked, type Tracked } from '../lib/optimistic';
-import { newUid, placePriority, takeOffRow } from '../lib/priorities';
+import { newUid, patchRow, placePriority, takeOffRow } from '../lib/priorities';
 import { useDayStore } from './useDay';
 import { useLatest } from './useLatest';
 import { useRefreshLoop } from './useRefreshLoop';
@@ -65,8 +65,8 @@ export interface BoardStore {
   addItem(item: NewItem): Promise<void>;
   /**
    * A task off today's list edited on the board, or a recurring priority renamed, given a category
-   * or other weekdays in Settings → Board, which reaches every day it is on. After a new name or
-   * category, the held days that name the task and the ranges on screen are read again
+   * or other weekdays in Settings → Board, which reaches every day it is on. After a new name,
+   * category or note, the held days that name the task and the ranges on screen are read again
    * (`taskChanged`).
    */
   editItem(uid: string, patch: ItemPatch): Promise<void>;
@@ -83,11 +83,12 @@ export interface BoardStore {
   /** A row taken off today's list from the board as × takes it (`takeOffRow`): a recurring priority's Remove from today. */
   removeFromToday(uid: string): Promise<void>;
   /**
-   * A row of today's list renamed or given a category on the board, which reaches every day its
-   * task is on and shows on the board's copy at once (a recurring priority in Settings → Board, its
-   * earlier ticks in Done). A row gone from today's list meanwhile has its task patched instead.
+   * A row of today's list renamed, given a category or a note on the board, which reaches every day
+   * its task is on and shows on the board's copy at once (a recurring priority in Settings → Board,
+   * its earlier ticks in Done). A row gone from today's list meanwhile has its task patched
+   * instead.
    */
-  editRow(uid: string, patch: Partial<Pick<Priority, 'text' | 'categoryUid'>>): Promise<void>;
+  editRow(uid: string, patch: Partial<Pick<Priority, 'text' | 'categoryUid' | 'note'>>): Promise<void>;
   /** A move `planMove` gave, as one job. */
   move(move: StoreMove): Promise<void>;
   /** A new category, or a removed one brought back under its uid (`categoryForName` says which). */
@@ -205,11 +206,11 @@ export function BoardProvider({ children }: { children: ReactNode }) {
     [full, write],
   );
 
-  // The server renamed or filed it on every day: the board's earlier days in Done, today's row.
+  // The server renamed, filed or noted it on every day: the board's earlier days in Done, today's row.
   const patchItem = useCallback(
     async (uid: string, patch: ItemPatch) => {
       const saved = await api.editItem(uid, patch);
-      if (patch.title !== undefined || patch.categoryUid !== undefined) dayStore.taskChanged(uid);
+      if (patch.title !== undefined || patch.categoryUid !== undefined || patch.note !== undefined) dayStore.taskChanged(uid);
       return saved;
     },
     [dayStore],
@@ -239,18 +240,18 @@ export function BoardProvider({ children }: { children: ReactNode }) {
 
   // A row of today's list changed through the day store: 'skipped' when the row has gone meanwhile.
   const setRow = useCallback(
-    (today: string, uid: string, patch: Partial<Pick<Priority, 'text' | 'done' | 'categoryUid'>>) =>
-      editToday(today, (rows) => (rows.some((p) => p.uid === uid) ? rows.map((p) => (p.uid === uid ? { ...p, ...patch } : p)) : null)),
+    (today: string, uid: string, patch: Partial<Pick<Priority, 'text' | 'done' | 'categoryUid' | 'note'>>) =>
+      editToday(today, (rows) => patchRow(rows, uid, patch)),
     [editToday],
   );
 
-  // A rename or category reaches every day the task is on, so a row gone from today's list meanwhile
-  // (another device took it off) still has it: sent to the task itself, in this job, since the
-  // store's `editItem` would queue behind it.
+  // A rename, category or note reaches every day the task is on, so a row gone from today's list
+  // meanwhile (another device took it off) still has it: sent to the task itself, in this job,
+  // since the store's `editItem` would queue behind it.
   const editRow = useCallback(
-    (uid: string, patch: Partial<Pick<Priority, 'text' | 'categoryUid'>>) => {
+    (uid: string, patch: Partial<Pick<Priority, 'text' | 'categoryUid' | 'note'>>) => {
       const today = todayKey();
-      const itemPatch = { title: patch.text, categoryUid: patch.categoryUid };
+      const itemPatch = { title: patch.text, categoryUid: patch.categoryUid, note: patch.note };
       return write(
         (b) => withItemPatch(b, uid, itemPatch),
         async () => ((await setRow(today, uid, patch)) === 'skipped' ? patchItem(uid, itemPatch) : null),

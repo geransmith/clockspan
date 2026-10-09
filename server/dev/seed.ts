@@ -155,6 +155,12 @@ const CATEGORY_OF: Readonly<Record<string, CategoryName>> = {
   Inbox: 'Tickets',
 };
 
+/** The note on a sample task, by its text; the others have none. */
+const NOTE_OF: Readonly<Record<string, string>> = {
+  'Write a KB for the SSO reset': 'From ticket 4821. Cover the admin console steps and the lockout case.',
+  'Answer the two open support threads': 'Acme: waiting on their logs.\nGlobex: send the workaround.',
+};
+
 /** The uid of the category `text` counts under, or null. */
 function categoryFor(text: string): string | null {
   return SEEDED_CATEGORIES.find((c) => c.name === CATEGORY_OF[text])?.uid ?? null;
@@ -172,7 +178,7 @@ const UNCOUNTED = { archived: false, listed: 0, earlier: 0, logged: 0 } as const
 
 /** The entry for the one-off task `text` at `position`, in the task's category. */
 function oneOff(position: number, text: string, done: boolean, addedAt: number): SeededPriority {
-  return { position, text, done, uid: taskUid(text), addedAt, categoryUid: categoryFor(text), recurring: false, ...UNCOUNTED };
+  return { position, text, done, uid: taskUid(text), addedAt, categoryUid: categoryFor(text), note: NOTE_OF[text] ?? '', recurring: false, ...UNCOUNTED };
 }
 
 /**
@@ -180,8 +186,8 @@ function oneOff(position: number, text: string, done: boolean, addedAt: number):
  * its category. Every past weekday lists the ones due on it (`routineRows`); today lists none.
  */
 export const SEEDED_RECURRING: readonly Recurring[] = [
-  { uid: 'rcur00000001', title: 'Monitor the queue', categoryUid: categoryFor('Monitor the queue'), weekdays: [1, 2, 3, 4, 5] },
-  { uid: 'rcur00000002', title: 'Follow-ups', categoryUid: categoryFor('Follow-ups'), weekdays: [1, 3, 5] },
+  { uid: 'rcur00000001', title: 'Monitor the queue', categoryUid: categoryFor('Monitor the queue'), note: '', weekdays: [1, 2, 3, 4, 5] },
+  { uid: 'rcur00000002', title: 'Follow-ups', categoryUid: categoryFor('Follow-ups'), note: '', weekdays: [1, 3, 5] },
 ];
 
 /**
@@ -209,6 +215,7 @@ function routineRows(date: string, kind: Exclude<DayKind, 'today'>, after: numbe
     uid: r.uid,
     addedAt,
     categoryUid: r.categoryUid,
+    note: r.note,
     recurring: true,
     ...UNCOUNTED,
   }));
@@ -572,24 +579,41 @@ function insertItems(db: DB, userId: number, days: DayDraft[]): Map<string, numb
   const category = db.prepare(`INSERT INTO categories (user_id, uid, name, color) VALUES (?, ?, ?, ?)`);
   for (const c of SEEDED_CATEGORIES) category.run(userId, c.uid, c.name, c.color);
   const insert = db.prepare(
-    `INSERT INTO items (user_id, uid, title, category_uid, weekdays, lane, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    `INSERT INTO items (user_id, uid, title, category_uid, note, weekdays, lane, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
   );
   const ids = new Map<string, number>();
-  const add = (uid: string, title: string, categoryUid: string | null, weekdays: number | null, lane: OpenLane | null, position: number, createdAt: number) =>
-    ids.set(uid, (insert.get(userId, uid, title, categoryUid, weekdays, lane, position, createdAt) as { id: number }).id);
+  const add = (
+    uid: string,
+    title: string,
+    categoryUid: string | null,
+    note: string,
+    weekdays: number | null,
+    lane: OpenLane | null,
+    position: number,
+    createdAt: number,
+  ) => ids.set(uid, (insert.get(userId, uid, title, categoryUid, note, weekdays, lane, position, createdAt) as { id: number }).id);
 
-  for (const r of SEEDED_RECURRING) add(r.uid, r.title, r.categoryUid, weekdayMask(r.weekdays), null, 0, days[0]!.createdAt);
+  for (const r of SEEDED_RECURRING) add(r.uid, r.title, r.categoryUid, r.note, weekdayMask(r.weekdays), null, 0, days[0]!.createdAt);
   for (const day of days) {
     for (const p of day.priorities) {
       if (p.recurring || ids.has(p.uid)) continue;
-      add(p.uid, p.text, p.categoryUid, null, null, 0, p.addedAt);
+      add(p.uid, p.text, p.categoryUid, p.note, null, null, 0, p.addedAt);
     }
   }
   // Captured a few minutes apart, just before the last weekday's list was written.
   const capturedAt = (days.at(-2) ?? days.at(-1)!).createdAt;
   CAPTURED.forEach(([title, lane], i) => {
     const position = CAPTURED.slice(0, i + 1).filter(([, l]) => l === lane).length;
-    add(`card${String(i + 1).padStart(8, '0')}`, title, categoryFor(title), null, lane, position, capturedAt - (CAPTURED.length - i) * 5 * MINUTE_MS);
+    add(
+      `card${String(i + 1).padStart(8, '0')}`,
+      title,
+      categoryFor(title),
+      NOTE_OF[title] ?? '',
+      null,
+      lane,
+      position,
+      capturedAt - (CAPTURED.length - i) * 5 * MINUTE_MS,
+    );
   });
   return ids;
 }

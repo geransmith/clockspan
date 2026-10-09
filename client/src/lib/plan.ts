@@ -17,10 +17,10 @@ export function nextWorkDay(date: string, showWeekends: boolean): string {
 
 /**
  * What a row put on a day's list from elsewhere starts from: its task (`uid`, null for a priority
- * typed new), its name and category, and the counts the server gave its source row, which the new
- * row shows until its save answers. A row carried over is its own seed.
+ * typed new), its name and category, and the note and counts the server gave its source row, which
+ * the new row shows until its save answers. A row carried over is its own seed.
  */
-export type PrioritySeed = Pick<Priority, 'uid' | 'text' | 'categoryUid'> & Partial<Pick<Priority, 'listed' | 'earlier' | 'logged'>>;
+export type PrioritySeed = Pick<Priority, 'uid' | 'text' | 'categoryUid'> & Partial<Pick<Priority, 'note' | 'listed' | 'earlier' | 'logged'>>;
 
 /** A seed for a priority typed new, in `categoryUid` if given: the save that names it makes its task. */
 export function textSeed(text: string, categoryUid: string | null = null): PrioritySeed {
@@ -38,11 +38,11 @@ export function sameItem(row: Pick<Priority, 'uid' | 'text'>, seed: PrioritySeed
 
 /**
  * The row `seed` puts on a list, added `now`: its own task, or a uid of its own for one typed new,
- * with its source row's counts until the save answers.
+ * with its source row's note and counts until the save answers.
  */
 export function seedRow(seed: PrioritySeed, now: number): Omit<Priority, 'position'> {
   const row = newTaskRow(seed.text, seed.categoryUid, now);
-  return { ...row, uid: seed.uid ?? row.uid, listed: seed.listed ?? 0, earlier: seed.earlier ?? 0, logged: seed.logged ?? 0 };
+  return { ...row, uid: seed.uid ?? row.uid, note: seed.note ?? '', listed: seed.listed ?? 0, earlier: seed.earlier ?? 0, logged: seed.logged ?? 0 };
 }
 
 /**

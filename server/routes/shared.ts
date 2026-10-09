@@ -71,6 +71,8 @@ export interface ItemRow {
   uid: string;
   title: string;
   category_uid: string | null;
+  /** '' with none. */
+  note: string;
   /** A mask: bit 0 for Monday to bit 6 for Sunday, at least one set; null on a one-off. */
   weekdays: number | null;
   lane: OpenLane | null;

@@ -43,10 +43,11 @@ vi.mock('../lib/alerts');
 async function renderCard(priorities: Priority[] = [], sessions: Session[] = [], pick: CategoryPick | null = null, offer: MorningOffer | null = null) {
   const onChange = vi.fn<(p: Priority[], base: Priority[]) => Promise<boolean>>(() => Promise.resolve(true));
   const onDeleteTask = vi.fn<(uid: string) => Promise<void>>(() => Promise.resolve());
+  const onNote = vi.fn<(uid: string, note: string) => Promise<boolean>>(() => Promise.resolve(true));
   const card = (rows: Priority[], o: MorningOffer | null) => (
     <SettingsProvider>
       <ShortcutKeys />
-      <Priorities priorities={rows} sessions={sessions} now={T0} onChange={onChange} onDeleteTask={onDeleteTask} pick={pick} offer={o} />
+      <Priorities priorities={rows} sessions={sessions} now={T0} onChange={onChange} onDeleteTask={onDeleteTask} onNote={onNote} pick={pick} offer={o} />
     </SettingsProvider>
   );
   const view = render(card(priorities, offer));
@@ -55,6 +56,7 @@ async function renderCard(priorities: Priority[] = [], sessions: Session[] = [],
     ...view,
     onChange,
     onDeleteTask,
+    onNote,
     saved: () => onChange.mock.lastCall![0],
     /** The card again with these rows, and this offer (the one it had unless given). */
     again: (rows: Priority[], o: MorningOffer | null = offer) => view.rerender(card(rows, o)),
@@ -73,6 +75,7 @@ function OnTheStore({ pick = null }: { pick?: CategoryPick | null }) {
       pick={pick}
       onChange={(p, base) => store.setPriorities(TODAY, p, base)}
       onDeleteTask={(uid) => boardStore.deleteItem(uid)}
+      onNote={() => Promise.resolve(true)}
     />
   ) : null;
 }
@@ -303,10 +306,11 @@ describe("Priorities: a row's category", () => {
     expect(chip(2)!.getAttribute('aria-label')).toBe('Category for priority 2: none');
     expect(chip(3)).toBeNull();
     const rows = [...document.querySelectorAll('.priority-row')];
-    // Tick, text, chip, then ×.
+    // Tick, text, note, chip, then ×.
     expect([...rows[0]!.querySelectorAll('input, textarea, button')].map((el) => el.getAttribute('aria-label'))).toEqual([
       'Priority 1 done',
       'Priority 1',
+      'Add a note to priority 1',
       'Category for priority 1: Tickets',
       'Remove priority 1',
     ]);
@@ -316,27 +320,30 @@ describe("Priorities: a row's category", () => {
     const rows = [makePriority(1, 'A'), makePriority(2, 'B'), makePriority(3, 'C'), emptyRow(4)];
     await withPick(rows);
     const shown = [...document.querySelectorAll('.priority-row')];
-    expect(shown.map((r) => r.classList.contains('priority-row--end'))).toEqual([true, true, true, true]);
+    expect(shown.map((r) => r.classList.contains('priority-row--chip'))).toEqual([true, true, true, true]);
     // The empty row past the usual count: the column, its ×, and no chip.
     expect(chip(4)).toBeNull();
     expect(shown[3]!.querySelector('.priority-end')).toBeNull();
     expect(screen.getByRole('button', { name: 'Remove priority 4' })).toBeTruthy();
   });
 
-  it('shows no chip and no chip column with the board off', async () => {
+  it("shows no chip and no chip column with the board off, and a written row's end holds its note button alone", async () => {
     await renderCard([makePriority(1, 'Report', { categoryUid: TICKETS.uid }), emptyRow(2), emptyRow(3), emptyRow(4)]);
     expect(chip(1)).toBeNull();
     expect(document.querySelectorAll('.priority-row')).toHaveLength(4);
-    expect(document.querySelector('.priority-row--end')).toBeNull();
+    expect(document.querySelector('.priority-row--chip')).toBeNull();
+    const ends = [...document.querySelectorAll('.priority-end')];
+    expect(ends.map((end) => [...end.children].map((el) => el.getAttribute('aria-label')))).toEqual([['Add a note to priority 1']]);
   });
 
   it('puts the chip before the × on a row past the usual count', async () => {
     const rows = [makePriority(1, 'A'), makePriority(2, 'B'), makePriority(3, 'C'), makePriority(4, 'D')];
     await withPick(rows);
     const row = document.querySelectorAll('.priority-row')[3]!;
-    expect(row.className).toContain('priority-row--end');
+    expect(row.className).toContain('priority-row--chip');
     expect([...row.querySelectorAll('textarea, button')].map((el) => el.getAttribute('aria-label'))).toEqual([
       'Priority 4',
+      'Add a note to priority 4',
       'Category for priority 4: none',
       'Remove priority 4',
     ]);
@@ -653,8 +660,15 @@ describe('Priorities: routines on the list', () => {
   it('marks a written routine row before its chip while the board is on, ticked or not, and no other row', async () => {
     const rows = [routineRow(1, QUEUE), routineRow(2, FOLLOW_UPS, { done: true }), makePriority(3, 'Report'), emptyRow(4)];
     await renderCard(rows, [], makePick());
-    const ends = [...document.querySelectorAll('.priority-row')].map((r) => [...(r.querySelector('.priority-end')?.children ?? [])].map((el) => el.className));
-    expect(ends).toEqual([['repeat-mark', 'category-wrap'], ['repeat-mark', 'category-wrap'], ['category-wrap'], []]);
+    const ends = [...document.querySelectorAll('.priority-row')].map((r) =>
+      [...(r.querySelector('.priority-end')?.children ?? [])].map((el) => (el.classList.contains('note-toggle') ? 'note-toggle' : el.className)),
+    );
+    expect(ends).toEqual([
+      ['repeat-mark', 'note-toggle', 'category-wrap'],
+      ['repeat-mark', 'note-toggle', 'category-wrap'],
+      ['note-toggle', 'category-wrap'],
+      [],
+    ]);
     expect(screen.getAllByRole('img', { name: 'Repeats' })).toHaveLength(2);
   });
 
@@ -753,7 +767,7 @@ describe('Priorities: a blank name', () => {
     act(() => textbox(1).focus());
     fireEvent.change(textbox(1), { target: { value: 'Call' } });
     fireEvent.change(textbox(1), { target: { value: '' } });
-    expect(document.querySelector('.priority-note')).toBeNull();
+    expect(document.querySelector('.priority-hint')).toBeNull();
     fireEvent.blur(textbox(1));
     expect(onChange).toHaveBeenLastCalledWith([emptyRow(1), emptyRow(2), emptyRow(3)], [emptyRow(1), emptyRow(2), emptyRow(3)]);
     expect(screen.queryByRole('button', { name: 'Remove priority 1' })).toBeNull();
@@ -781,7 +795,7 @@ describe('Priorities: the rename note', () => {
     await renderCard([makePriority(1, 'Report', { listed: 2 })]);
     act(() => textbox(1).focus());
     fireEvent.change(textbox(1), { target: { value: 'Report for Acme' } });
-    expect(document.querySelector('.priority-note')).toBeNull();
+    expect(document.querySelector('.priority-hint')).toBeNull();
   });
 });
 
@@ -813,20 +827,27 @@ describe('Priorities: ×', () => {
   });
 
   it("never asks on a recurring priority's row", async () => {
-    const { saved } = await renderCard([routineRow(1, QUEUE, { listed: 5, logged: 3000 })]);
+    const { saved } = await renderCard([routineRow(1, QUEUE, { listed: 5, logged: 3000, note: 'Tier 2 too.' })]);
     fireEvent.click(x(1));
     expect(dialog()).toBeNull();
     expect(saved()[0]).toEqual(emptyRow(1));
   });
 
-  it("asks about a task on other days, or with time logged on it, the day's own sessions added to the other days', a timer running on it included", async () => {
+  it("asks about a task on other days, with time logged on it, the day's own sessions added to the other days', a timer running on it included, or with a note", async () => {
     const email = makePriority(1, 'Email');
     const cases: [Priority, Session[], string][] = [
-      [makePriority(1, 'Email', { listed: 3 }), [], REMOVE_TASK.body(2, null)],
-      [makePriority(1, 'Email', { logged: 80 * 60 }), [], REMOVE_TASK.body(0, '1h 20m')],
-      [email, [completedSession(1, T0, 30, { priorityUid: email.uid })], REMOVE_TASK.body(0, '1m')],
-      [email, [makeSession({ startedAt: T0 - 12 * MINUTE_MS, priorityUid: email.uid })], REMOVE_TASK.body(0, '12m')],
-      [makePriority(1, 'Email', { logged: 60 * 60 }), [makeSession({ startedAt: T0 - 12 * MINUTE_MS, priorityUid: email.uid })], REMOVE_TASK.body(0, '1h 12m')],
+      [makePriority(1, 'Email', { listed: 3 }), [], REMOVE_TASK.body(2, null, false)],
+      [makePriority(1, 'Email', { logged: 80 * 60 }), [], REMOVE_TASK.body(0, '1h 20m', false)],
+      [email, [completedSession(1, T0, 30, { priorityUid: email.uid })], REMOVE_TASK.body(0, '1m', false)],
+      [email, [makeSession({ startedAt: T0 - 12 * MINUTE_MS, priorityUid: email.uid })], REMOVE_TASK.body(0, '12m', false)],
+      [
+        makePriority(1, 'Email', { logged: 60 * 60 }),
+        [makeSession({ startedAt: T0 - 12 * MINUTE_MS, priorityUid: email.uid })],
+        REMOVE_TASK.body(0, '1h 12m', false),
+      ],
+      // On no other day, with no time logged: the note alone asks, since it goes with the task.
+      [makePriority(1, 'Email', { note: 'Ask Kim' }), [], REMOVE_TASK.body(0, null, true)],
+      [makePriority(1, 'Email', { listed: 2, note: 'Ask Kim' }), [], REMOVE_TASK.body(1, null, true)],
     ];
     for (const [row, sessions, body] of cases) {
       const { onChange, unmount } = await renderCard([row], sessions);
@@ -844,7 +865,7 @@ describe('Priorities: ×', () => {
     await renderCard([email], [makeSession({ startedAt: T0 - 12 * MINUTE_MS, priorityUid: email.uid })]);
     vi.setSystemTime(T0 + 50_000);
     fireEvent.click(x(1));
-    expect(document.getElementById(dialog()!.getAttribute('aria-describedby')!)!.textContent).toBe(REMOVE_TASK.body(0, '12m'));
+    expect(document.getElementById(dialog()!.getAttribute('aria-describedby')!)!.textContent).toBe(REMOVE_TASK.body(0, '12m', false));
   });
 
   it('changes nothing on Cancel, and gives the focus back to the ×', async () => {
@@ -986,5 +1007,80 @@ describe('Priorities on the day store', () => {
     expect(stored().map((p) => p.text)).toEqual(['Report']);
     expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith(rowUid(2));
     expect(vi.mocked(api.putPriorities).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(api.deleteItem).mock.invocationCallOrder[0]!);
+  });
+});
+
+describe("Priorities: a row's note", () => {
+  const button = (n: number) => screen.getByRole('button', { name: new RegExp(`(^Note for|^Add a note to) priority ${n}$`) });
+  const box = (n: number) => screen.queryByRole('textbox', { name: `Note for priority ${n}` }) as HTMLTextAreaElement | null;
+  const open = (n: number) => fireEvent.click(button(n));
+  const rows = () => [makePriority(1, 'Report', { note: 'Kim has the numbers.\nDue Friday.' }), makePriority(2, 'Email')];
+
+  it('marks the button of a row with a note, and offers one on each written row, closed until it is pressed', async () => {
+    await renderCard([...rows(), emptyRow(3)]);
+    expect([button(1).getAttribute('aria-label'), button(1).classList.contains('note-toggle--empty')]).toEqual(['Note for priority 1', false]);
+    expect([button(2).getAttribute('aria-label'), button(2).classList.contains('note-toggle--empty')]).toEqual(['Add a note to priority 2', true]);
+    expect(screen.queryByRole('button', { name: /priority 3$/ })).toBeNull();
+    expect(button(1).getAttribute('aria-expanded')).toBe('false');
+    expect(box(1)).toBeNull();
+  });
+
+  it('opens the box with the focus in it, and Escape closes it with the text kept and the focus back on its button', async () => {
+    await renderCard(rows());
+    open(1);
+    expect(button(1).getAttribute('aria-expanded')).toBe('true');
+    expect(button(1).getAttribute('aria-controls')).toBe(box(1)!.id);
+    expect(document.activeElement).toBe(box(1));
+    expect(box(1)!.value).toBe('Kim has the numbers.\nDue Friday.');
+    fireEvent.change(box(1)!, { target: { value: 'Kim has the numbers.' } });
+    fireEvent.keyDown(box(1)!, { key: 'Escape' });
+    expect(box(1)).toBeNull();
+    expect(document.activeElement).toBe(button(1));
+    open(1);
+    expect(box(1)!.value).toBe('Kim has the numbers.');
+  });
+
+  it('saves a note 400 ms after the last key as the server stores it, and at once when the box is left, apart from the list', async () => {
+    const { onChange, onNote } = await renderCard(rows());
+    open(2);
+    fireEvent.change(box(2)!, { target: { value: 'Ask\u0007 Sam\n' } });
+    await settle(399);
+    expect(onNote).not.toHaveBeenCalled();
+    await settle(1);
+    expect(onNote.mock.calls).toEqual([[rowUid(2), 'Ask Sam\n']]);
+    fireEvent.change(box(2)!, { target: { value: 'Ask Sam first' } });
+    fireEvent.blur(box(2)!);
+    await settle();
+    expect(onNote.mock.lastCall).toEqual([rowUid(2), 'Ask Sam first']);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps a note whose save failed in its box, closed or not, and sends it again on the next edit or when the box is left', async () => {
+    const { onNote } = await renderCard(rows());
+    onNote.mockResolvedValue(false);
+    open(2);
+    fireEvent.change(box(2)!, { target: { value: 'Ask Sam' } });
+    fireEvent.keyDown(box(2)!, { key: 'Escape' });
+    await settle();
+    expect(onNote).toHaveBeenCalledTimes(1);
+    open(2);
+    expect(box(2)!.value).toBe('Ask Sam');
+    fireEvent.blur(box(2)!);
+    await settle();
+    expect(onNote).toHaveBeenCalledTimes(2);
+    onNote.mockResolvedValue(true);
+    fireEvent.change(box(2)!, { target: { value: 'Ask Sam today' } });
+    await settle(400);
+    expect(onNote.mock.lastCall).toEqual([rowUid(2), 'Ask Sam today']);
+  });
+
+  it('takes up a note saved elsewhere while nothing is being typed, and hides the box while the name is blank', async () => {
+    const { again } = await renderCard(rows());
+    open(1);
+    again([makePriority(1, 'Report', { note: 'From Kim' }), makePriority(2, 'Email')]);
+    expect(box(1)!.value).toBe('From Kim');
+    act(() => textbox(1).focus());
+    fireEvent.change(textbox(1), { target: { value: '' } });
+    expect(box(1)).toBeNull();
   });
 });

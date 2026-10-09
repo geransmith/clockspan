@@ -431,9 +431,10 @@ export function DayProvider({ children }: { children: ReactNode }) {
   // Every priorities save, the board's and the timer's included, shown as the server will merge
   // it while it is out. A task the save put on the list or took off (Plan tomorrow, a carry, ×) is
   // on another number of days (`listed`, `earlier`) wherever else it is, so the other held days
-  // holding it are read again: × asks from those counts. A row whose name or category differs
-  // from its base row's renamed or filed its task on every day it is on (`taskChanged`), which
-  // matters only when another day lists it or logged time on it (`listed`, `logged`).
+  // holding it are read again: × asks from those counts. A row whose name, category or note
+  // differs from its base row's renamed, filed or noted its task on every day it is on
+  // (`taskChanged`), which matters only when another day lists it or logged time on it (`listed`,
+  // `logged`).
   const setPriorities = useCallback(
     (date: string, priorities: Priority[], base: Priority[]) =>
       sendLatest(
@@ -448,7 +449,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
           for (const q of p) {
             const was = q.uid == null ? undefined : before.get(q.uid);
             const elsewhere = was && (was.listed > 1 || was.logged > 0);
-            if (elsewhere && (was.text.trim() !== q.text.trim() || was.categoryUid !== q.categoryUid)) taskChanged(q.uid!);
+            if (elsewhere && (was.text.trim() !== q.text.trim() || was.categoryUid !== q.categoryUid || was.note !== q.note)) taskChanged(q.uid!);
           }
           return saved;
         },

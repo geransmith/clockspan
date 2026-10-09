@@ -152,6 +152,7 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
     '/api/items/rcur00000001',
     { weekday: { day: 3, on: false } },
   ],
+  ['editItem, a note', () => api.editItem('task00000002', { note: 'Ask Kim.' }), 'PATCH', '/api/items/task00000002', { note: 'Ask Kim.' }],
   ['deleteItem', () => api.deleteItem('task00000002'), 'DELETE', '/api/items/task00000002', undefined],
   [
     'addCategory',

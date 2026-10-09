@@ -146,7 +146,7 @@ describe('migration 13: each task stored once', () => {
     untouched?: boolean;
     category?: string;
   }
-  type ItemRow = SharedItemRow & { legacy_done_at: number | null; legacy_untouched: number | null; legacy_uid: string | null };
+  type ItemRow = Omit<SharedItemRow, 'note'> & { legacy_done_at: number | null; legacy_untouched: number | null; legacy_uid: string | null };
 
   /** The schema migration 13 starts from, and helpers that write rows as the server before it stored them. */
   function before() {
@@ -213,7 +213,7 @@ describe('migration 13: each task stored once', () => {
     const s = session(mon, 'row000000001');
     const old = db.prepare(`SELECT * FROM priorities ORDER BY id`).all();
 
-    migrate(db);
+    migrate(db, 13);
     expect(db.pragma('user_version', { simple: true })).toBe(13);
     expect(db.prepare(`SELECT * FROM priorities_v1 ORDER BY id`).all()).toEqual(old);
     // The old link stays on the session, unread, beside the new one.
@@ -272,7 +272,7 @@ describe('migration 13: each task stored once', () => {
     row(tue, 2, 'Report', { uid: 'row000000002', card: 'card00000001', addedAt: 3000 });
     const s = session(mon, 'row000000001');
 
-    migrate(db);
+    migrate(db, 13);
     expect(item(db, 'card00000001')).toMatchObject({
       title: 'Write the report',
       category_uid: 'cat000000001',
@@ -306,7 +306,7 @@ describe('migration 13: each task stored once', () => {
     row(tue, 2, 'Unticked, then parked', { card: 'card00000002', done: true });
     row(tue, 3, 'Done', { card: 'done00000001', done: true });
 
-    migrate(db);
+    migrate(db, 13);
     expect(item(db, 'card00000001')).toMatchObject({ lane: 'next', position: 1 });
     expect(item(db, 'card00000002')).toMatchObject({ lane: 'later', position: 1 });
     // Only the latest tick goes; an earlier day's stays, and so does a Done card's.
@@ -329,7 +329,7 @@ describe('migration 13: each task stored once', () => {
     row(mon, 1, 'Migrate the wiki', { card: 'card00000001', done: true });
     row(tue, 1, '', { uid: 'empty0000001', card: 'card00000001' });
 
-    migrate(db);
+    migrate(db, 13);
     expect(list(db, mon)).toEqual([{ uid: 'card00000001', position: 1, done: 1, added_at: 2000 }]);
     db.close();
   });
@@ -349,7 +349,7 @@ describe('migration 13: each task stored once', () => {
     const onHeld = session(tue, 'empty0000001');
     const onNeverWritten = session(tue, 'empty0000002');
 
-    migrate(db);
+    migrate(db, 13);
     expect(item(db, 'held00000001')).toMatchObject({ lane: null, position: 0, archived_at: null, legacy_untouched: 1 });
     expect(item(db, 'held00000002')).toMatchObject({ title: 'Held, never written', lane: null, position: 0, archived_at: NOW });
     // Next closes up over the two.
@@ -375,7 +375,7 @@ describe('migration 13: each task stored once', () => {
     row(mon, 2, 'Done, row emptied', { card: 'done00000003' });
     row(tue, 1, '', { uid: 'empty0000001', card: 'done00000003' });
 
-    migrate(db);
+    migrate(db, 13);
     expect(item(db, 'later0000001')).toMatchObject({ lane: 'later', position: 1, archived_at: null, legacy_done_at: null, legacy_untouched: 0 });
     expect(item(db, 'done00000001')).toMatchObject({ lane: null, position: 0, archived_at: null, legacy_done_at: 5000, legacy_untouched: 1 });
     expect(item(db, 'done00000002')).toMatchObject({ lane: null, position: 0, archived_at: NOW, legacy_done_at: 6000, legacy_untouched: 0 });
@@ -402,7 +402,7 @@ describe('migration 13: each task stored once', () => {
     row(nextMon, 1, '', { uid: 'empty0000001', card: 'gone00000002', category: 'cat000000004' });
     const s = session(nextMon, 'empty0000001');
 
-    migrate(db);
+    migrate(db, 13);
     expect(item(db, 'gone00000001')).toMatchObject({
       title: 'New name',
       category_uid: 'cat000000002',
@@ -434,7 +434,7 @@ describe('migration 13: each task stored once', () => {
     row(tue, 4, '', { uid: 'empty0000001', recurring: 'rcur00000001' });
     const s = session(tue, 'empty0000001');
 
-    migrate(db);
+    migrate(db, 13);
     const queue = item(db, 'rcur00000001')!;
     const followUps = item(db, 'rcur00000002')!;
     expect(queue).toMatchObject({
@@ -468,7 +468,7 @@ describe('migration 13: each task stored once', () => {
     row(mon, 3, 'Typed', { uid: 'same00000001' });
     const sessions = [session(mon, 'row000000001'), session(mon, 'row000000002'), session(mon, 'same00000001')];
 
-    migrate(db);
+    migrate(db, 13);
     // Cards keep theirs, and so does a recurring priority no card holds.
     expect(item(db, 'same00000001')).toMatchObject({ title: 'Report', legacy_uid: null });
     expect(item(db, 'rcur00000001')).toMatchObject({ title: 'Follow-ups', legacy_uid: null });
@@ -494,7 +494,7 @@ describe('migration 13: each task stored once', () => {
     row(mon, 3, 'Report again', { uid: 'row000000003', card: 'card00000001', done: true, addedAt: 2500 });
     const sessions = [session(mon, 'row000000001'), session(mon, 'row000000003')];
 
-    migrate(db);
+    migrate(db, 13);
     expect(list(db, mon)).toEqual([
       { uid: 'card00000001', position: 1, done: 1, added_at: 2000 },
       { uid: 'row000000002', position: 2, done: 0, added_at: 2000 },
@@ -518,7 +518,7 @@ describe('migration 13: each task stored once', () => {
     row(sep15, 2, 'Call the bank', { uid: 'bank00000002' });
     row(sep15, 3, 'Call the bank', { uid: 'bank00000003' });
 
-    migrate(db);
+    migrate(db, 13);
     expect(item(db, 'email0000001')).toMatchObject({ title: 'email bob', category_uid: 'cat000000002', lane: null, created_at: 1100, archived_at: null });
     expect(item(db, 'email0000002')).toBeUndefined();
     expect(item(db, 'email0000003')).toMatchObject({ title: 'Email Bob', category_uid: null });
@@ -538,7 +538,7 @@ describe('migration 13: each task stored once', () => {
       row(mon, 2, 'Report', { uid: 'second000001' });
       row(tue, 1, 'Report', { uid: 'third0000001' });
       row(wed, 2, 'Report', { uid: 'fourth000001' });
-      migrate(db);
+      migrate(db, 13);
       const entries = db
         .prepare(
           `SELECT d.date, p.position, i.uid FROM priorities p JOIN days d ON d.id = p.day_id JOIN items i ON i.id = p.item_id ORDER BY d.date, p.position`,
@@ -576,7 +576,7 @@ describe('migration 13: each task stored once', () => {
     row(tue, 3, 'Other', { uid: 'row000000001' });
     const s = session(mon, 'row000000001');
 
-    migrate(db);
+    migrate(db, 13);
     // Of the two open chains, the higher on Monday's list, as a row joins one.
     expect(list(db, mon).map((e) => e.uid)).toEqual(['card00000001', 'row000000002', 'row000000003']);
     expect(list(db, tue).map((e) => e.uid)).toEqual(['card00000001', 'card00000002', 'row000000001']);
@@ -604,7 +604,7 @@ describe('migration 13: each task stored once', () => {
     const emptiedOwn = session(tue, 'empty0000001', { category: 'cat000000003' });
     const unplanned = session(tue, null);
 
-    migrate(db);
+    migrate(db, 13);
     const [slides] = replacing(db, 'row000000001');
     expect(linkOf(db, onMon)).toEqual({ uid: 'row000000001', category_uid: null });
     expect(linkOf(db, onTue)).toEqual({ uid: slides!.uid, category_uid: null });
@@ -627,7 +627,7 @@ describe('migration 13: each task stored once', () => {
     // An added time the row lacks is its day's.
     row(mon, 4, 'Slides', { uid: 'row000000002', addedAt: null });
 
-    migrate(db);
+    migrate(db, 13);
     expect(list(db, mon)).toEqual([
       { uid: 'row000000001', position: 2, done: 0, added_at: 2000 },
       { uid: 'row000000002', position: 4, done: 0, added_at: 1234 },
@@ -652,13 +652,25 @@ describe('migration 13: each task stored once', () => {
     // Uids are only unique per user.
     db.prepare(`INSERT INTO board_cards (user_id, uid, title, lane, position, created_at) VALUES (?, 'card00000001', 'Theirs', 'later', 1, 500)`).run(other);
 
-    migrate(db);
+    migrate(db, 13);
     const remove = db.prepare(`DELETE FROM items WHERE user_id = ? AND uid = ?`);
     expect(() => remove.run(user, 'card00000001')).toThrow(/FOREIGN KEY/);
     expect(() => remove.run(user, 'held00000001')).toThrow(/FOREIGN KEY/);
     db.prepare(`DELETE FROM users WHERE id = ?`).run(user);
     for (const table of ['days', 'priorities', 'priorities_v1', 'sessions']) expect(countRows(db, table), table).toBe(0);
     expect(db.prepare(`SELECT user_id, uid, title FROM items`).all()).toEqual([{ user_id: other, uid: 'card00000001', title: 'Theirs' }]);
+    db.close();
+  });
+});
+
+describe('migration 14: task notes', () => {
+  it('gives every task an empty note', () => {
+    const db = migratedTo(13);
+    const user = ensureDefaultUser(db);
+    db.prepare(`INSERT INTO items (user_id, uid, title, created_at) VALUES (?, 'card00000001', 'Report', 1000)`).run(user.id);
+
+    migrate(db, 14);
+    expect(db.prepare(`SELECT note FROM items`).all()).toEqual([{ note: '' }]);
     db.close();
   });
 });

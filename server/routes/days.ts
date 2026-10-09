@@ -27,7 +27,7 @@ import {
 import { startBreak } from './breaks.js';
 import { startSession } from './sessions.js';
 import { mergePriorities } from '../../shared/priorities.js';
-import { taskTitle } from '../../shared/text.js';
+import { taskNote, taskTitle } from '../../shared/text.js';
 import { kindForPosition, MAX_PUNCHES, mergePunches } from '../../shared/punches.js';
 import { MAX_PRIORITIES, SETTING_LIMITS } from '../../shared/settings.js';
 import {
@@ -107,12 +107,13 @@ interface EntryRow {
   uid: string;
   title: string;
   category_uid: string | null;
+  note: string;
   weekdays: number | null;
   archived_at: number | null;
 }
 
-/** Entries (`x`) with their day's date and their task's uid, current name and category. */
-const ENTRIES = `SELECT x.day_id, x.position, x.done, x.added_at, x.item_id, i.uid, i.title, i.category_uid, i.weekdays, i.archived_at, d.date
+/** Entries (`x`) with their day's date and their task's uid, current name, category and note. */
+const ENTRIES = `SELECT x.day_id, x.position, x.done, x.added_at, x.item_id, i.uid, i.title, i.category_uid, i.note, i.weekdays, i.archived_at, d.date
   FROM priorities x JOIN items i ON i.id = x.item_id JOIN days d ON d.id = x.day_id`;
 
 /** An entry as the API sends it, with its task's counts (`itemCounts`): its focus on other days, since the day's own log is sent beside it. */
@@ -125,6 +126,7 @@ function priorityJson(r: EntryRow, counts: ReadonlyMap<number, ItemCounts>): Pri
     uid: r.uid,
     addedAt: r.added_at,
     categoryUid: r.category_uid,
+    note: r.note,
     recurring: r.weekdays != null,
     archived: r.archived_at != null,
     listed: dates.length,
@@ -143,6 +145,12 @@ function storedPriorities(db: DB, dayId: number): Priority[] {
   return rows.map((r) => priorityJson(r, counts));
 }
 
+/** The uids of the rows a save sent without a field, by field: the save reads that field as unchanged. */
+interface Unsaid {
+  categoryUid: Set<string>;
+  note: Set<string>;
+}
+
 /** What a list of priority rows is called in the errors: the list sent, or the base it was built on. */
 interface RowsLabel {
   list: string;
@@ -159,10 +167,11 @@ const BASE_ROWS: RowsLabel = { list: 'base', row: 'Base row' };
  * task. A row with a uid needs a name: a task's is never blank. A list and its base are read with
  * one `now`, so a row the merge compares across them isn't changed by two stamps a millisecond
  * apart. The fields the server works out (`recurring`, `listed` and the rest) are neither read nor
- * refused. A row's text is stored as `taskTitle` gives it. The uids of the rows sent with no
- * `categoryUid` go in `unsaid`, when given, so the save can read their category as unchanged.
+ * refused. A row's text is stored as `taskTitle` gives it, and its note as `taskNote` does. The
+ * uids of the rows sent with no `categoryUid` or no `note` go in `unsaid`, when given, so the save
+ * can read that field as unchanged.
  */
-function parsePriorityRows(input: unknown, label: RowsLabel, now: number, unsaid?: Set<string>): Priority[] | string {
+function parsePriorityRows(input: unknown, label: RowsLabel, now: number, unsaid?: Unsaid): Priority[] | string {
   if (!Array.isArray(input) || input.length > MAX_PRIORITIES) return `${label.list} must be an array of at most ${MAX_PRIORITIES}.`;
   const rows: Priority[] = [];
   const seen = new Set<string>();
@@ -188,7 +197,9 @@ function parsePriorityRows(input: unknown, label: RowsLabel, now: number, unsaid
     if (item.done != null && typeof item.done !== 'boolean') return `${name} has an invalid done flag.`;
     const category = parseUidField(item.categoryUid, `${name} has an invalid category.`);
     if ('error' in category) return category.error;
-    if (uid && !('categoryUid' in item)) unsaid?.add(uid);
+    if (item.note != null && typeof item.note !== 'string') return `${name} has an invalid note.`;
+    if (uid && !('categoryUid' in item)) unsaid?.categoryUid.add(uid);
+    if (uid && item.note == null) unsaid?.note.add(uid);
     rows.push({
       position: i + 1,
       text,
@@ -196,6 +207,7 @@ function parsePriorityRows(input: unknown, label: RowsLabel, now: number, unsaid
       uid,
       addedAt,
       categoryUid: uid == null ? null : (category.uid ?? null),
+      note: uid != null && typeof item.note === 'string' ? taskNote(item.note) : '',
       recurring: false,
       archived: false,
       listed: 0,
@@ -356,16 +368,16 @@ export function daysRouter(db: DB, config: Config): Router {
   // in for it. A row naming a deleted task is dropped before the merge, from the list and the
   // base, so a device that still has the task can't bring it back, and the rest is stored. The
   // tasks follow in the same transaction: a uid new to the user makes its task, and a row this
-  // device renamed or recategorised since its base writes that to its task, on every day. A task
-  // in Later added open to its latest list goes to Next (`nextFromLater`), and one the save took
-  // off its last list goes when nothing else names it (`collectItems`).
+  // device renamed, recategorised or changed the note of since its base writes that to its task,
+  // on every day. A task in Later added open to its latest list goes to Next (`nextFromLater`),
+  // and one the save took off its last list goes when nothing else names it (`collectItems`).
   r.put('/:date/priorities', (req, res) => {
     const user = currentUser(req);
     const { date } = req.params;
     const body = req.body as Record<string, unknown>;
     if (staleShape(body)) return refuse(res, 409, STALE_CLIENT);
     const now = Date.now();
-    const unsaid = new Set<string>();
+    const unsaid: Unsaid = { categoryUid: new Set(), note: new Set() };
     const sent = parsePriorityRows(body.priorities, SENT_ROWS, now, unsaid);
     if (typeof sent === 'string') return refuse(res, 400, sent);
     const sentBase = body.base == null ? null : parsePriorityRows(body.base, BASE_ROWS, now);
@@ -373,9 +385,14 @@ export function daysRouter(db: DB, config: Config): Router {
     const saved = db.transaction((): Priority[] | null => {
       const day = findDay(db, user.id, date);
       const stored = day ? storedPriorities(db, day.id) : [];
-      // A row sent with no category (curl, a script) keeps the one its base gives it: left out is unchanged.
-      const baseCategory = new Map((sentBase ?? stored).map((p) => [p.uid, p.categoryUid]));
-      for (const p of sent) if (p.uid != null && unsaid.has(p.uid)) p.categoryUid = baseCategory.get(p.uid) ?? null;
+      // A row sent with no category or note (curl, a page from before notes) keeps what its base
+      // gives it: left out is unchanged.
+      const baseRow = new Map((sentBase ?? stored).map((p) => [p.uid, p]));
+      for (const p of sent) {
+        if (p.uid == null) continue;
+        if (unsaid.categoryUid.has(p.uid)) p.categoryUid = baseRow.get(p.uid)?.categoryUid ?? null;
+        if (unsaid.note.has(p.uid)) p.note = baseRow.get(p.uid)?.note ?? '';
+      }
       const uids = [...stored, ...sent, ...(sentBase ?? [])].flatMap((p) => (p.uid == null ? [] : [p.uid]));
       // Tombstones included: their rows are dropped, and their uids stay taken.
       const known = new Map(
@@ -394,9 +411,10 @@ export function daysRouter(db: DB, config: Config): Router {
       const mineBy = new Map(mine.map((p) => [p.uid, p]));
       const baseBy = new Map(base.map((p) => [p.uid, p]));
       const storedUids = new Set(stored.map((p) => p.uid));
-      const create = db.prepare(`INSERT INTO items (user_id, uid, title, category_uid, created_at) VALUES (?, ?, ?, ?, ?) RETURNING *`);
+      const create = db.prepare(`INSERT INTO items (user_id, uid, title, category_uid, note, created_at) VALUES (?, ?, ?, ?, ?, ?) RETURNING *`);
       const rename = db.prepare(`UPDATE items SET title = ? WHERE id = ?`);
       const recategorise = db.prepare(`UPDATE items SET category_uid = ? WHERE id = ?`);
+      const renote = db.prepare(`UPDATE items SET note = ? WHERE id = ?`);
       const added: ItemRow[] = [];
       const entries = merged.flatMap((p) => {
         if (p.uid == null) return [];
@@ -404,11 +422,12 @@ export function daysRouter(db: DB, config: Config): Router {
         const m = mineBy.get(p.uid);
         const b = baseBy.get(p.uid);
         if (!item) {
-          item = create.get(user.id, p.uid, p.text, p.categoryUid, now) as ItemRow;
+          item = create.get(user.id, p.uid, p.text, p.categoryUid, p.note, now) as ItemRow;
         } else if (m && b) {
-          // Only what this device changed: a rename or a category made elsewhere since stands.
+          // Only what this device changed: a rename, a category or a note made elsewhere since stands.
           if (m.text !== b.text) rename.run(m.text, item.id);
           if (m.categoryUid !== b.categoryUid) recategorise.run(m.categoryUid, item.id);
+          if (m.note !== b.note) renote.run(m.note, item.id);
         }
         if (!storedUids.has(p.uid) && !p.done) added.push(item);
         return [{ itemId: item.id, position: p.position, done: p.done, addedAt: p.addedAt! }];

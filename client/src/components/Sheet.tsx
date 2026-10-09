@@ -12,7 +12,7 @@ import { startOfWeek } from '../../../shared/dates.js';
 import { dayName } from '../lib/format';
 import { offeredLeftovers } from '../lib/board';
 import { CARD_TITLES, moveCard, setCardSide, setCardVisible, SPLIT_QUERY, splitColumns } from '../lib/layout';
-import { isOneOff } from '../lib/priorities';
+import { isOneOff, patchRow } from '../lib/priorities';
 import { dueRecurring } from '../lib/recurring';
 import { CARD_SIDES } from '../../../shared/settings.js';
 import { focusOf } from '../lib/retro';
@@ -161,6 +161,8 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
             pick={pick}
             onChange={(p, base) => store.setPriorities(date, p, base)}
             onDeleteTask={(uid) => boardStore.deleteItem(uid)}
+            // The note's own save, on the list as the store shows it; a row gone meanwhile has nothing to save.
+            onNote={async (uid, note) => (await store.editPriorities(date, (rows) => patchRow(rows, uid, { note }))) !== 'failed'}
             offer={
               isToday
                 ? {

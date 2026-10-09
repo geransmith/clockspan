@@ -41,12 +41,13 @@ export function offerPicks(due: Recurring[], onToday: Priority[], perDay: number
 }
 
 /**
- * The row the offer adds for `item`: the recurring priority itself, new to today. Its name and
- * category show as the board has them until the save answers. A save never writes them back onto
- * the task: it renames a task only where the row's text differs from the list it was built on.
+ * The row the offer adds for `item`: the recurring priority itself, new to today. Its name,
+ * category and note show as the board has them until the save answers. A save never writes them
+ * back onto the task: it renames a task only where the row's text differs from the list it was
+ * built on.
  */
 export function recurringRow(item: Recurring, now: number): Omit<Priority, 'position'> {
-  return { ...newTaskRow(item.title, item.categoryUid, now), uid: item.uid, recurring: true };
+  return { ...newTaskRow(item.title, item.categoryUid, now), uid: item.uid, note: item.note, recurring: true };
 }
 
 /**

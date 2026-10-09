@@ -162,6 +162,7 @@ const row = (text: string, uid: string | null = null, patch: Record<string, unkn
   uid,
   addedAt: uid ? T0 : null,
   categoryUid: null,
+  note: '',
   recurring: false,
   archived: false,
   listed: 0,
@@ -178,6 +179,7 @@ const stored = (position: number, text: string, uid: string, patch: Partial<Prio
   uid,
   addedAt: T0,
   categoryUid: null,
+  note: '',
   recurring: false,
   archived: false,
   listed: 1,
@@ -207,6 +209,31 @@ describe('PUT /api/days/:date/priorities', () => {
   it('cuts text at the shared limit', async () => {
     const r = await app.api.put('/api/days/2026-09-01/priorities', { priorities: [{ text: 'p'.repeat(LIMITS.priorityText + 50) }] });
     expect(r.body.priorities[0].text).toHaveLength(LIMITS.priorityText);
+  });
+
+  it('stores a note as taskNote gives it: line breaks and outer spaces kept, other control characters dropped, cut at the limit', async () => {
+    const r = await app.api.put('/api/days/2026-09-01/priorities', {
+      priorities: [
+        { text: 'Report', note: ' Acme:\u0000 logs\r\nGlobex \n' },
+        { text: 'Email', note: 'n'.repeat(LIMITS.itemNote + 5) },
+      ],
+    });
+    expect(r.body.priorities.map((p: Priority) => p.note)).toEqual([' Acme: logs\nGlobex \n', 'n'.repeat(LIMITS.itemNote)]);
+  });
+
+  it('takes a full list and its base with every name and note at the limit in the widest characters they keep', async () => {
+    // A name keeps control characters, which JSON writes as six bytes; a note drops them, and keeps three-byte ones at most.
+    const full = Array.from({ length: MAX_PRIORITIES }, (_, i) =>
+      row('\u0001'.repeat(LIMITS.priorityText), `aaaaaaaaaa${String(i).padStart(2, '0')}`, { note: '語'.repeat(LIMITS.itemNote) }),
+    );
+    expect((await app.saveList('2026-09-01', full)).status).toBe(200);
+    const body = { priorities: full.map((p) => ({ ...p, done: true })), base: full };
+    // Within express.json's 256 KB, with little to spare.
+    expect(Buffer.byteLength(JSON.stringify(body))).toBeGreaterThan(240_000);
+    expect(Buffer.byteLength(JSON.stringify(body))).toBeLessThan(256 * 1024);
+    const r = await app.api.put('/api/days/2026-09-01/priorities', body);
+    expect(r.status).toBe(200);
+    expect(r.body.priorities.map((p: Priority) => [p.done, p.note.length])).toEqual(full.map(() => [true, LIMITS.itemNote]));
   });
 
   it('is a full replace without a base: omitting a row removes it', async () => {
@@ -258,7 +285,7 @@ describe('PUT /api/days/:date/priorities', () => {
     expect(ok.body.priorities.map((p: { done: boolean }) => p.done)).toEqual([false, true, false]);
   });
 
-  it('refuses a malformed uid or category and text that is not a string, and stores nothing', async () => {
+  it('refuses a malformed uid or category and text or a note that is not a string, and stores nothing', async () => {
     const put = (r: Record<string, unknown>) => app.api.put('/api/days/2026-09-01/priorities', { priorities: [{ text: 'ok' }, r] });
     for (const uid of ['not-a-uid!', 'ab', 12345678]) {
       const r = await put({ text: 'x', uid });
@@ -271,6 +298,10 @@ describe('PUT /api/days/:date/priorities', () => {
     for (const categoryUid of ['not-a-uid!', 'ab', 12345678, true]) {
       const r = await put({ text: 'x', categoryUid });
       expect([r.status, r.body.error], String(categoryUid)).toEqual([400, 'Priority 2 has an invalid category.']);
+    }
+    for (const note of [42, ['x'], true]) {
+      const r = await put({ text: 'x', note });
+      expect([r.status, r.body.error], JSON.stringify(note)).toEqual([400, 'Priority 2 has an invalid note.']);
     }
     expect((await app.api.get('/api/days/2026-09-01')).body.priorities).toEqual([]);
     // Absent or null is a free row, and a free row holds no category.
@@ -307,10 +338,11 @@ describe('PUT /api/days/:date/priorities', () => {
 
   it("takes the web app's rows as it pads and sends them, and stores the same whatever the fields the server works out say", async () => {
     // padPriorities (client/src/lib/priorities.ts) sends every field of every row, free rows included.
-    const sent = [row('Write the report', 'abcdef123456', { done: true, categoryUid: 'cafe00000001' }), row(''), row('Email the team', '0123456789ab')];
+    const mine = { done: true, categoryUid: 'cafe00000001', note: 'Numbers from Kim.' };
+    const sent = [row('Write the report', 'abcdef123456', mine), row(''), row('Email the team', '0123456789ab')];
     const r = await app.api.put('/api/days/2026-09-01/priorities', { priorities: sent });
     expect(r.status).toBe(200);
-    const expected = [stored(1, 'Write the report', 'abcdef123456', { done: true, categoryUid: 'cafe00000001' }), stored(3, 'Email the team', '0123456789ab')];
+    const expected = [stored(1, 'Write the report', 'abcdef123456', mine), stored(3, 'Email the team', '0123456789ab')];
     expect(r.body.priorities).toEqual(expected);
     const claims = { recurring: true, archived: true, listed: 9, earlier: 4, logged: 3600 };
     const again = await app.api.put('/api/days/2026-09-01/priorities', { priorities: sent.map((p) => ({ ...p, ...claims })), base: expected });
@@ -426,12 +458,13 @@ describe('PUT /api/days/:date/priorities: the tasks', () => {
     vi.useRealTimers();
   });
 
-  it('makes a task for a uid new to the user, with its trimmed name and category, in no lane', async () => {
-    const r = await app.saveList(MON, [row('  Write the report  ', 'aaaaaaaaaaa1', { categoryUid: 'cat000000001' })]);
-    expect(r.body.priorities).toEqual([stored(1, 'Write the report', 'aaaaaaaaaaa1', { categoryUid: 'cat000000001' })]);
+  it('makes a task for a uid new to the user, with its trimmed name, its category and its note, in no lane', async () => {
+    const r = await app.saveList(MON, [row('  Write the report  ', 'aaaaaaaaaaa1', { categoryUid: 'cat000000001', note: 'Steps:\n' })]);
+    expect(r.body.priorities).toEqual([stored(1, 'Write the report', 'aaaaaaaaaaa1', { categoryUid: 'cat000000001', note: 'Steps:\n' })]);
     expect(app.item('aaaaaaaaaaa1')).toMatchObject({
       title: 'Write the report',
       category_uid: 'cat000000001',
+      note: 'Steps:\n',
       weekdays: null,
       lane: null,
       position: 0,
@@ -441,31 +474,38 @@ describe('PUT /api/days/:date/priorities: the tasks', () => {
     });
   });
 
-  it('writes a rename and a category this device made since its base to the task, which every day shows', async () => {
+  it('writes a rename, a category and a note this device made since its base to the task, which every day shows', async () => {
     const report = row('Report', 'aaaaaaaaaaa1');
     await app.saveList(MON, [report]);
     await app.saveList(TUE, [report], []);
-    const r = await app.saveList(TUE, [{ ...report, text: 'Quarterly report ', categoryUid: 'cat000000002' }], [report]);
-    expect(r.body.priorities[0]).toMatchObject({ text: 'Quarterly report', categoryUid: 'cat000000002' });
-    expect((await rowsOn(MON))[0]).toMatchObject({ text: 'Quarterly report', categoryUid: 'cat000000002' });
+    const r = await app.saveList(TUE, [{ ...report, text: 'Quarterly report ', categoryUid: 'cat000000002', note: 'Kim has the numbers.' }], [report]);
+    const changed = { text: 'Quarterly report', categoryUid: 'cat000000002', note: 'Kim has the numbers.' };
+    expect(r.body.priorities[0]).toMatchObject(changed);
+    expect((await rowsOn(MON))[0]).toMatchObject(changed);
     const range = (await app.api.get(`/api/days/range?from=${MON}&to=${TUE}`)).body.days as Day[];
-    expect(range.map((d) => d.priorities[0]!.text)).toEqual(['Quarterly report', 'Quarterly report']);
+    expect(range.map((d) => [d.priorities[0]!.text, d.priorities[0]!.note])).toEqual([
+      ['Quarterly report', 'Kim has the numbers.'],
+      ['Quarterly report', 'Kim has the numbers.'],
+    ]);
   });
 
-  it('leaves a rename or a category another device made alone when this save changed only the tick', async () => {
+  it('leaves a rename, a category or a note another device made alone when this save changed only the tick', async () => {
     const report = row('Report', 'aaaaaaaaaaa1');
     await app.saveList(MON, [report]);
-    await app.saveList(MON, [{ ...report, text: 'Quarterly report', categoryUid: 'cat000000001' }], [report]);
+    await app.saveList(MON, [{ ...report, text: 'Quarterly report', categoryUid: 'cat000000001', note: 'From Kim' }], [report]);
     const r = await app.saveList(MON, [{ ...report, done: true }], [report]);
-    expect(r.body.priorities[0]).toMatchObject({ text: 'Quarterly report', categoryUid: 'cat000000001', done: true });
+    expect(r.body.priorities[0]).toMatchObject({ text: 'Quarterly report', categoryUid: 'cat000000001', note: 'From Kim', done: true });
+    // The same note changed on both: this save's wins.
+    const both = await app.saveList(MON, [{ ...report, note: 'From Sam' }], [report]);
+    expect(both.body.priorities[0]).toMatchObject({ text: 'Quarterly report', note: 'From Sam' });
   });
 
-  it('writes nothing to a task a save puts on another list, whatever name and category it carries', async () => {
-    await app.saveList(MON, [row('Report', 'aaaaaaaaaaa1', { categoryUid: 'cat000000001' })]);
+  it('writes nothing to a task a save puts on another list, whatever name, category and note it carries', async () => {
+    await app.saveList(MON, [row('Report', 'aaaaaaaaaaa1', { categoryUid: 'cat000000001', note: 'From Kim' })]);
     // A carry from a copy older than a rename.
-    const r = await app.saveList(TUE, [row('Old name', 'aaaaaaaaaaa1', { categoryUid: null })], []);
-    expect(r.body.priorities[0]).toMatchObject({ text: 'Report', categoryUid: 'cat000000001' });
-    expect(app.item('aaaaaaaaaaa1')).toMatchObject({ title: 'Report', category_uid: 'cat000000001' });
+    const r = await app.saveList(TUE, [row('Old name', 'aaaaaaaaaaa1', { categoryUid: null, note: '' })], []);
+    expect(r.body.priorities[0]).toMatchObject({ text: 'Report', categoryUid: 'cat000000001', note: 'From Kim' });
+    expect(app.item('aaaaaaaaaaa1')).toMatchObject({ title: 'Report', category_uid: 'cat000000001', note: 'From Kim' });
   });
 
   it('reads the stored list as the base with none sent', async () => {
@@ -474,19 +514,24 @@ describe('PUT /api/days/:date/priorities: the tasks', () => {
     expect(app.item('aaaaaaaaaaa1')).toMatchObject({ title: 'Report v2', category_uid: 'cat000000003' });
   });
 
-  it('reads a row sent with no categoryUid as keeping its category, with a base or without', async () => {
-    await app.saveList(MON, [row('Report', 'aaaaaaaaaaa1', { categoryUid: 'cat000000001' })]);
+  it('reads a row sent with no categoryUid or note as keeping them, with a base or without', async () => {
+    const kept = { categoryUid: 'cat000000001', note: 'From Kim' };
+    await app.saveList(MON, [row('Report', 'aaaaaaaaaaa1', kept)]);
     await app.saveList(TUE, [row('Report', 'aaaaaaaaaaa1')], []);
-    // curl, with no base: the task keeps its category on every day.
+    // curl, with no base: the task keeps its category and note on every day.
     const bare = await app.saveList(MON, [{ text: 'Report v2', uid: 'aaaaaaaaaaa1', done: true }]);
-    expect(bare.body.priorities[0]).toMatchObject({ text: 'Report v2', categoryUid: 'cat000000001', done: true });
-    // A base that carries the category, and a row that leaves it out.
-    const based = await app.saveList(MON, [{ text: 'Report v3', uid: 'aaaaaaaaaaa1' }], bare.body.priorities);
-    expect(based.body.priorities[0]).toMatchObject({ text: 'Report v3', categoryUid: 'cat000000001' });
-    expect((await rowsOn(TUE))[0]).toMatchObject({ text: 'Report v3', categoryUid: 'cat000000001' });
-    // A new task sent without one has none.
+    expect(bare.body.priorities[0]).toMatchObject({ text: 'Report v2', ...kept, done: true });
+    // A base that carries them, and a row that leaves them out (null reads as left out, for the note).
+    const based = await app.saveList(MON, [{ text: 'Report v3', uid: 'aaaaaaaaaaa1', note: null }], bare.body.priorities);
+    expect(based.body.priorities[0]).toMatchObject({ text: 'Report v3', ...kept });
+    expect((await rowsOn(TUE))[0]).toMatchObject({ text: 'Report v3', ...kept });
+    // A page from before notes sends rows and a base with none: the note stands.
+    const old = ({ note: _, ...p }: Priority) => p;
+    await app.saveList(MON, [{ ...old(based.body.priorities[0]), text: 'Report v4' }], based.body.priorities.map(old));
+    expect(app.item('aaaaaaaaaaa1')).toMatchObject({ title: 'Report v4', category_uid: 'cat000000001', note: 'From Kim' });
+    // A new task sent without them has none.
     await app.saveList(WED, [{ text: 'Email', uid: 'aaaaaaaaaaa2' }]);
-    expect(app.item('aaaaaaaaaaa2')!.category_uid).toBeNull();
+    expect(app.item('aaaaaaaaaaa2')).toMatchObject({ category_uid: null, note: '' });
   });
 
   it('stores a name trimmed and cut, with no space left at the cut, and writes no rename for a change of spacing alone', async () => {

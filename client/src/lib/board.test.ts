@@ -265,7 +265,7 @@ describe('the small lookups', () => {
 
 describe('planMove', () => {
   const cards: BoardCard[] = [
-    makeCard('later', 'Write a KB', { categoryUid: 'cafe00000003', listed: 2, logged: 600 }),
+    makeCard('later', 'Write a KB', { categoryUid: 'cafe00000003', note: 'Ticket 4821', listed: 2, logged: 600 }),
     makeCard('next', 'Follow up', { lane: 'next' }),
     makeCard('planned', 'Plan B', { lane: 'next', position: 2, listDate: THU }),
     makeCard('doneTue', 'Shipped', { lane: null, listDate: TUE, listDone: true, listed: 1, logged: 1500 }),
@@ -281,7 +281,10 @@ describe('planMove', () => {
   const tuesday = makeDay(TUE, {
     priorities: [row(1, 'Follow-ups', { uid: 'rcur00000002', recurring: true, done: true, categoryUid: 'cafe00000004', listed: 5, logged: 300 })],
   });
-  const routines = [makeRecurring(ROUTINE.uid, 'Monitor the queue'), makeRecurring('rcur00000002', 'Follow-ups', { categoryUid: 'cafe00000004' })];
+  const routines = [
+    makeRecurring(ROUTINE.uid, 'Monitor the queue'),
+    makeRecurring('rcur00000002', 'Follow-ups', { categoryUid: 'cafe00000004', note: 'Acme first' }),
+  ];
   const c = columns({ cards, todayRows, earlierDays: [tuesday], recurring: routines });
   const item = (id: string) => findItem(c, id)!.item;
   const open = item(`item:${rowUid(1)}`);
@@ -307,7 +310,7 @@ describe('planMove', () => {
     expect(planMove({ ...carried, column: 'next' }, 'next', null, WED)).toBeNull();
   });
 
-  it("puts a task of Later or Next on today's list as itself, in its category, with the board's counts: open with the nudge, ticked without", () => {
+  it("puts a task of Later or Next on today's list as itself, in its category, with its note and the board's counts: open with the nudge, ticked without", () => {
     expect(planMove(item('item:later'), 'progress', null, WED)).toEqual({
       kind: 'place',
       row: {
@@ -316,6 +319,7 @@ describe('planMove', () => {
         text: 'Write a KB',
         done: false,
         categoryUid: 'cafe00000003',
+        note: 'Ticket 4821',
         recurring: false,
         archived: false,
         listed: 2,
@@ -336,7 +340,7 @@ describe('planMove', () => {
     });
   });
 
-  it("puts an earlier day's routine tick back on today as the same recurring priority, with that row's counts", () => {
+  it("puts an earlier day's routine tick back on today as the same recurring priority, with its note and that row's counts", () => {
     expect(planMove(routineTicked, 'progress', null, WED)).toEqual({
       kind: 'place',
       row: {
@@ -345,6 +349,7 @@ describe('planMove', () => {
         text: 'Follow-ups',
         done: false,
         categoryUid: 'cafe00000004',
+        note: 'Acme first',
         recurring: true,
         archived: false,
         listed: 5,
@@ -629,6 +634,14 @@ describe('the board as a write shows it', () => {
     it('places a task in no lane when one is named, and a reorder alone leaves it in none', () => {
       expect(task(withItemPatch(board, 'd1', { before: null }), 'd1')).toMatchObject({ lane: null, listDone: true });
       expect(task(withItemPatch(board, 'd1', { lane: 'next', before: 'n1' }), 'd1')).toMatchObject({ lane: 'next', position: 1, listDone: true });
+    });
+
+    it('patches a note onto a task or a recurring priority, and keeps it when the patch leaves it out', () => {
+      const noted = withItemPatch(board, 'l1', { note: 'Ask Kim' });
+      expect(task(noted, 'l1')).toMatchObject({ note: 'Ask Kim', lane: 'later', position: 1 });
+      expect(task(withItemPatch(noted, 'l1', { title: 'Kept' }), 'l1')?.note).toBe('Ask Kim');
+      expect(task(withItemPatch(noted, 'l1', { note: '' }), 'l1')?.note).toBe('');
+      expect(withItemPatch(board, follow.uid, { note: 'Acme first' }).recurring[1]).toEqual({ ...follow, note: 'Acme first' });
     });
 
     it('patches a category onto a task, or off it, and keeps it when the patch leaves it out', () => {

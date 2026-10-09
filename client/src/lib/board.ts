@@ -34,6 +34,8 @@ export interface BoardItem {
   /** The task's uid. */
   uid: string;
   title: string;
+  /** The task's note; '' with none. */
+  note: string;
   column: ColumnId;
   /** The task as this copy of the board has it; null for a recurring row, or a row of today's whose task the board hasn't read yet. */
   card: BoardCard | null;
@@ -127,6 +129,7 @@ export function boardColumns({ cards, today, todayRows, earlierDays, recurring, 
     id: row.recurring ? `row:${date}:${row.uid}` : `item:${row.uid}`,
     uid: row.uid,
     title: row.text.trim(),
+    note: row.note,
     column,
     card: byUid.get(row.uid) ?? null,
     row,
@@ -140,6 +143,7 @@ export function boardColumns({ cards, today, todayRows, earlierDays, recurring, 
     id: `item:${card.uid}`,
     uid: card.uid,
     title: card.title,
+    note: card.note,
     column,
     card,
     row: null,
@@ -185,7 +189,10 @@ export function boardColumns({ cards, today, todayRows, earlierDays, recurring, 
       const item = rowItem(p, d.date, 'done');
       const r = routines.get(p.uid);
       // One no longer in Settings is removed (archived), though the days read before may not say so yet.
-      earlier.push({ day: d.date, item: r ? { ...item, title: r.title, categoryUid: r.categoryUid } : { ...item, row: { ...p, archived: true } } });
+      earlier.push({
+        day: d.date,
+        item: r ? { ...item, title: r.title, note: r.note, categoryUid: r.categoryUid } : { ...item, row: { ...p, archived: true } },
+      });
     }
   }
   // Stable: on a day, the tasks keep the server's order ahead of the routines' rows in position order.
@@ -306,6 +313,7 @@ function toToday(item: BoardItem, done: boolean, today: string): Move {
     done,
     addedAt: null,
     categoryUid: item.categoryUid,
+    note: item.note,
     recurring: item.recurring,
     archived: false,
     listed: from.listed,
@@ -460,8 +468,20 @@ const ascending = (days: number[]) => [...days].sort((a, b) => a - b);
 export function withItem(board: Board, item: NewItem, now: number): Board {
   if (board.cards.some((c) => c.uid === item.uid) || board.recurring.some((r) => r.uid === item.uid)) return board;
   const { uid, title, categoryUid } = item;
-  if ('weekdays' in item) return { ...board, recurring: [...board.recurring, { uid, title, categoryUid, weekdays: ascending(item.weekdays) }] };
-  const made: BoardCard = { uid, title, categoryUid, lane: item.lane, position: 0, createdAt: now, listDate: null, listDone: false, listed: 0, logged: 0 };
+  if ('weekdays' in item) return { ...board, recurring: [...board.recurring, { uid, title, categoryUid, note: '', weekdays: ascending(item.weekdays) }] };
+  const made: BoardCard = {
+    uid,
+    title,
+    categoryUid,
+    note: '',
+    lane: item.lane,
+    position: 0,
+    createdAt: now,
+    listDate: null,
+    listDone: false,
+    listed: 0,
+    logged: 0,
+  };
   return { ...board, cards: placed(board.cards, made, item.lane, item.before) };
 }
 
@@ -470,11 +490,12 @@ export function withItem(board: Board, item: NewItem, now: number): Board {
  * a lane, or `before` alone to reorder its lane; a recurring priority takes one weekday set or
  * cleared, and keeps its days when that would clear the last, as the server refuses to.
  */
-export function withItemPatch(board: Board, uid: string, { title, categoryUid, lane, before, weekday }: ItemPatch): Board {
-  const named = <T extends { title: string; categoryUid: string | null }>(t: T): T => ({
+export function withItemPatch(board: Board, uid: string, { title, categoryUid, note, lane, before, weekday }: ItemPatch): Board {
+  const named = <T extends { title: string; categoryUid: string | null; note: string }>(t: T): T => ({
     ...t,
     title: title ?? t.title,
     categoryUid: categoryUid === undefined ? t.categoryUid : categoryUid,
+    note: note ?? t.note,
   });
   const days = (r: Recurring) => {
     if (!weekday) return r.weekdays;

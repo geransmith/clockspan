@@ -14,6 +14,7 @@ function list(...rows: Row[]): Priority[] {
     uid,
     addedAt: uid == null ? null : 100,
     categoryUid: null,
+    note: '',
     recurring: false,
     archived: false,
     listed: 0,

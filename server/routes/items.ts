@@ -5,7 +5,7 @@ import { refuse } from '../refuse.js';
 import { boardJson, deleteItem, openCount, placeItem, weekdayMask } from '../board.js';
 import { isOneOf, isWholeNumber } from '../validate.js';
 import { BAD_CATEGORY, getOwnedByUid, parseUidField, uidRouter, UID_NOT_FOUND, UID_RE, type ItemRow } from './shared.js';
-import { taskTitle } from '../../shared/text.js';
+import { taskNote, taskTitle } from '../../shared/text.js';
 import { BOARD_LIMITS, OPEN_LANES, type Board } from '../../shared/api.js';
 
 const NOT_FOUND = UID_NOT_FOUND.items;
@@ -19,6 +19,7 @@ const BAD_WEEKDAY = 'weekday must be a day from 1 to 7 with on true or false.';
 const LAST_WEEKDAY = 'A recurring priority keeps at least one weekday.';
 const WEEKDAYS_LIST = 'Send one day as weekday: { day, on }.';
 const BAD_BEFORE = 'before must be a task id or null.';
+const BAD_NOTE = 'note must be a string.';
 const FULL = `The board holds at most ${BOARD_LIMITS.openCards} tasks in Later and Next.`;
 const RECURRING_FULL = `The board keeps at most ${BOARD_LIMITS.recurring} recurring priorities.`;
 
@@ -95,19 +96,30 @@ export function itemsRouter(db: DB): Router {
     res.status(outcome === 'created' ? 201 : 200).json(boardJson(db, userId) satisfies Board);
   });
 
-  // A new name, category or place, or one weekday set or cleared (`weekday: { day, on }`); a field
-  // left out keeps its value. `before` alone reorders the task's lane. A lane given to a task that
-  // had none is checked against the cap: a done task in a lane isn't counted, so it takes no room.
+  // A new name, category, note or place, or one weekday set or cleared (`weekday: { day, on }`); a
+  // field left out keeps its value. `before` alone reorders the task's lane. A lane given to a task
+  // that had none is checked against the cap: a done task in a lane isn't counted, so it takes no
+  // room.
   r.patch('/:uid', (req, res) => {
     const item = owned(res);
     if (item.archived_at != null) return refuse(res, 404, NOT_FOUND);
-    const body = req.body as { title?: unknown; categoryUid?: unknown; lane?: unknown; before?: unknown; weekday?: unknown; weekdays?: unknown };
+    const body = req.body as {
+      title?: unknown;
+      categoryUid?: unknown;
+      note?: unknown;
+      lane?: unknown;
+      before?: unknown;
+      weekday?: unknown;
+      weekdays?: unknown;
+    };
     // A tab from before the upgrade sends the whole list; refused, so its change shows as not saved.
     if (body.weekdays !== undefined) return refuse(res, 400, WEEKDAYS_LIST);
     const title = body.title === undefined ? item.title : parseTitle(body.title);
     if (title === null) return refuse(res, 400, NO_TITLE);
     const category = parseUidField(body.categoryUid, BAD_CATEGORY);
     if ('error' in category) return refuse(res, 400, category.error);
+    if (body.note !== undefined && typeof body.note !== 'string') return refuse(res, 400, BAD_NOTE);
+    const note = body.note === undefined ? item.note : taskNote(body.note);
     const lane = body.lane;
     if (lane !== undefined && !isOneOf(OPEN_LANES, lane)) return refuse(res, 400, BAD_LANE);
     if (item.weekdays != null && lane !== undefined) return refuse(res, 400, ROUTINE_LANE);
@@ -129,7 +141,7 @@ export function itemsRouter(db: DB): Router {
     const outcome = db.transaction((): 'full' | 'saved' => {
       const gains = lane !== undefined && item.lane == null;
       if (gains && openCount(db, item.user_id) >= BOARD_LIMITS.openCards) return 'full';
-      db.prepare(`UPDATE items SET title = ?, category_uid = ?, weekdays = ? WHERE id = ?`).run(title, categoryUid, weekdays, item.id);
+      db.prepare(`UPDATE items SET title = ?, category_uid = ?, note = ?, weekdays = ? WHERE id = ?`).run(title, categoryUid, note, weekdays, item.id);
       if (moves) placeItem(db, item.user_id, item, to, place.uid ?? null);
       return 'saved';
     })();

@@ -46,12 +46,20 @@ describe('planNext', () => {
     expect(rows[2]!.uid).toMatch(/^[0-9a-f]{12}$/);
   });
 
-  it("puts a carried row's own task on the list, in its category, with its counts until the save answers", () => {
-    const source = makePriority(2, 'Invoices', { uid: 'task00000001', categoryUid: 'cafe00000001', listed: 2, earlier: 1, logged: 1500, done: false });
+  it("puts a carried row's own task on the list, in its category with its note, with its counts until the save answers", () => {
+    const source = makePriority(2, 'Invoices', {
+      uid: 'task00000001',
+      categoryUid: 'cafe00000001',
+      note: 'Ask Kim',
+      listed: 2,
+      earlier: 1,
+      logged: 1500,
+      done: false,
+    });
     const { rows, added } = planNext([], [source, textSeed('Pay rent', 'cafe00000002')], 99);
     expect(added).toBe(2);
     expect(rows).toEqual([
-      makePriority(1, 'Invoices', { uid: 'task00000001', addedAt: 99, categoryUid: 'cafe00000001', listed: 2, earlier: 1, logged: 1500 }),
+      makePriority(1, 'Invoices', { uid: 'task00000001', addedAt: 99, categoryUid: 'cafe00000001', note: 'Ask Kim', listed: 2, earlier: 1, logged: 1500 }),
       makePriority(2, 'Pay rent', { uid: rows[1]!.uid, addedAt: 99, categoryUid: 'cafe00000002', listed: 0 }),
     ]);
   });

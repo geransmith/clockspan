@@ -9,6 +9,8 @@ interface Props {
   otherDays: number;
   /** The time logged on it, formatted; null with none. */
   logged: string | null;
+  /** It has a note, which goes with it. */
+  note: boolean;
   onOffDay: () => void;
   onEverywhere: () => void;
   /** Cancel, Escape or a press outside: nothing changes, and the focus goes back to the ×. */
@@ -16,11 +18,11 @@ interface Props {
 }
 
 /**
- * Asked by × on a Top priorities row whose task is on other days or has time logged on it: take
- * it off this day, or delete it everywhere. `window.confirm` offers one action, so this is a
- * dialog. Its parent shows it by mounting it (`useModalDialog`).
+ * Asked by × on a Top priorities row whose task is on other days, has time logged on it or has a
+ * note: take it off this day, or delete it everywhere. `window.confirm` offers one action, so this
+ * is a dialog. Its parent shows it by mounting it (`useModalDialog`).
  */
-export function RemoveTask({ name, otherDays, logged, onOffDay, onEverywhere, onCancel }: Props) {
+export function RemoveTask({ name, otherDays, logged, note, onOffDay, onEverywhere, onCancel }: Props) {
   // Focus on the frame, as in FinishChoice, so Enter can't fire a button before the question is read.
   const dialog = useModalDialog(onCancel);
   const titleId = useId();
@@ -34,7 +36,7 @@ export function RemoveTask({ name, otherDays, logged, onOffDay, onEverywhere, on
         </header>
         <div className="dialog-body">
           <p id={bodyId} className="muted">
-            {REMOVE_TASK.body(otherDays, logged)}
+            {REMOVE_TASK.body(otherDays, logged, note)}
           </p>
         </div>
         <footer className="dialog-foot">

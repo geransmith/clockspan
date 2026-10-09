@@ -110,7 +110,8 @@ export function collectItems(db: DB, userId: number, only?: readonly number[], a
  * its day as unplanned time under the task's name and category (a running one runs on), every
  * day's entry of it goes, and the task stays as a tombstone, in no lane, until the prune, so a save
  * from a device that still has it can't bring it back. The tombstone keeps only the uid, which it
- * also takes as its title, so the deleted name doesn't stay in the file. The lane it was in closes up.
+ * also takes as its title, so the deleted name and note don't stay in the file. The lane it was in
+ * closes up.
  */
 export function deleteItem(db: DB, userId: number, item: ItemRow, now: number): void {
   db.prepare(`UPDATE sessions SET label = ?, category_uid = ?, item_id = NULL WHERE user_id = ? AND item_id = ?`).run(
@@ -120,7 +121,7 @@ export function deleteItem(db: DB, userId: number, item: ItemRow, now: number): 
     item.id,
   );
   db.prepare(`DELETE FROM priorities WHERE item_id = ?`).run(item.id);
-  db.prepare(`UPDATE items SET deleted_at = ?, lane = NULL, position = 0, title = uid, category_uid = NULL WHERE id = ?`).run(now, item.id);
+  db.prepare(`UPDATE items SET deleted_at = ?, lane = NULL, position = 0, title = uid, category_uid = NULL, note = '' WHERE id = ?`).run(now, item.id);
   if (item.lane != null) renumber(db, userId, item.lane);
 }
 
@@ -181,7 +182,7 @@ function recurringJson(db: DB, userId: number): Recurring[] {
   const rows = db
     .prepare(`SELECT * FROM items WHERE user_id = ? AND weekdays IS NOT NULL AND archived_at IS NULL AND deleted_at IS NULL ORDER BY id`)
     .all(userId) as (ItemRow & { weekdays: number })[];
-  return rows.map((r) => ({ uid: r.uid, title: r.title, categoryUid: r.category_uid, weekdays: weekdaysOf(r.weekdays) }));
+  return rows.map((r) => ({ uid: r.uid, title: r.title, categoryUid: r.category_uid, note: r.note, weekdays: weekdaysOf(r.weekdays) }));
 }
 
 /** How far back the board sends the tasks a list holds: `LOOKBACK_DAYS`, and a day of slack for the client's zone. */
@@ -218,6 +219,7 @@ export function boardJson(db: DB, userId: number, now: number = Date.now()): Boa
       uid: r.uid,
       title: r.title,
       categoryUid: r.category_uid,
+      note: r.note,
       lane: r.lane,
       position: r.position,
       createdAt: r.created_at,
