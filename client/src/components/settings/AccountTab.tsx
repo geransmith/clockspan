@@ -3,9 +3,8 @@ import * as api from '../../api';
 import { useSubmit } from '../../hooks/useSubmit';
 import { unlessGone } from '../../lib/apiError';
 import { CONFIRM, PASSWORD_CHANGED, PASSWORD_MISMATCH } from '../../lib/copy';
-import { PASSWORD_LENGTH } from '../../../../shared/api.js';
 import type { PublicUser } from '../../types';
-import { HiddenUsername, NewPasswordFields } from '../NewPasswordFields';
+import { HiddenUsername, NewPasswordFields, NewPasswordInput } from '../NewPasswordFields';
 import { UsernameInput } from '../UsernameInput';
 import { Section } from './controls';
 import { ErrorLine } from '../ErrorLine';
@@ -123,18 +122,7 @@ function Users({ me }: { me: PublicUser }) {
       </ul>
       <form className="user-add" onSubmit={add}>
         <UsernameInput placeholder="Username" aria-label="Username" autoComplete="off" value={username} onChange={(e) => setUsername(e.target.value)} />
-        <input
-          className="input"
-          type="password"
-          placeholder="Temporary password"
-          aria-label="Temporary password"
-          autoComplete="new-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          minLength={PASSWORD_LENGTH.min}
-          maxLength={PASSWORD_LENGTH.max}
-          required
-        />
+        <NewPasswordInput placeholder="Temporary password" aria-label="Temporary password" value={password} onChange={(e) => setPassword(e.target.value)} />
         <button className="btn btn-primary" type="submit" disabled={busy}>
           Add user
         </button>

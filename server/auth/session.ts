@@ -44,8 +44,8 @@ export function createSession(db: DB, config: Config, res: Response, userId: num
 /**
  * Returns the user for a valid session and slides its expiry; null otherwise. A valid session
  * is one whose user belongs to the running AUTH_MODE: one made before a mode switch never
- * resolves, so an OIDC-era admin never becomes a local admin, and its row expires and
- * `purgeExpiredSessions` removes it.
+ * resolves (a local account's cookie can't get past an OIDC provider's access policy, nor an
+ * OIDC sign-in into a local install), and its row expires and `purgeExpiredSessions` removes it.
  */
 export function resolveSession(db: DB, config: Config, req: Request, res: Response): UserRow | null {
   const token = readCookie(req, SESSION_COOKIE);

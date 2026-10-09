@@ -201,7 +201,7 @@ describe('Discovery', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     const c = configuration();
-    vi.mocked(oidc.discovery).mockReset().mockRejectedValueOnce(new Error('ECONNREFUSED')).mockResolvedValue(c);
+    vi.mocked(oidc.discovery).mockRejectedValueOnce(new Error('ECONNREFUSED')).mockResolvedValue(c);
 
     const d = new Discovery(ISSUER, 'clockspan', 'secret');
     const warm = d.warm();
@@ -226,7 +226,6 @@ describe('Discovery', () => {
     vi.useFakeTimers();
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.mocked(oidc.discovery)
-      .mockReset()
       .mockRejectedValueOnce(new TypeError('fetch failed', { cause: new Error('connect ECONNREFUSED 10.0.0.5:443') }))
       // Every address of a name refused: the detail is in `errors`, and the message is empty.
       .mockRejectedValueOnce(new TypeError('fetch failed', { cause: new AggregateError([], '') }))

@@ -55,10 +55,10 @@ describe('cookie sessions', () => {
     expect((await app.api.get('/api/auth/me')).body.user).toBeNull();
   });
 
-  it('never resolves a session whose user belongs to another AUTH_MODE, so an OIDC admin is no local admin', async () => {
+  it('never resolves a session whose user belongs to another AUTH_MODE', async () => {
     await app.api.post('/api/auth/setup', FIRST_RUN);
     // The row an OIDC install made for its first user, still holding the cookie it was signed in with.
-    app.db.prepare(`UPDATE users SET kind = 'oidc', oidc_sub = 'issuer|1', username = NULL, password_hash = NULL, is_admin = 1`).run();
+    app.db.prepare(`UPDATE users SET kind = 'oidc', oidc_sub = 'issuer|1', username = NULL, password_hash = NULL`).run();
     expect((await app.api.get('/api/settings')).status).toBe(401);
     expect((await app.api.get('/api/auth/users')).status).toBe(401);
     expect((await app.api.get('/api/auth/me')).body).toMatchObject({ user: null, setupRequired: true });

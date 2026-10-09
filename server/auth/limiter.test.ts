@@ -37,18 +37,26 @@ describe('LoginLimiter', () => {
     expect(limiter.retryAfter('sam')).toBeGreaterThan(0);
   });
 
-  it('sweeps expired entries once the map grows past a thousand addresses', () => {
+  it('sweeps expired entries once the map grows past a thousand addresses, then once it doubles', () => {
     vi.useFakeTimers();
     const limiter = new LoginLimiter();
     const size = () => (limiter as unknown as { attempts: Map<string, unknown> }).attempts.size;
     for (let i = 0; i < 1000; i++) limiter.fail(`10.0.${Math.floor(i / 256)}.${i % 256}`);
     expect(size()).toBe(1000);
-    // Still within the window: nothing to sweep, the map keeps growing.
-    limiter.fail('fresh');
-    expect(size()).toBe(1001);
     vi.advanceTimersByTime(15 * MINUTE_MS);
     limiter.fail('after');
     expect(size()).toBe(1);
+    for (let i = 0; i < 999; i++) limiter.fail(`10.1.${Math.floor(i / 256)}.${i % 256}`);
+    expect(size()).toBe(1000);
+    // Still within the window: nothing to sweep, the map keeps growing.
+    limiter.fail('fresh');
+    expect(size()).toBe(1001);
+    // That scan kept all 1000, so the next waits for 2000 entries: expired ones stay until then.
+    vi.advanceTimersByTime(15 * MINUTE_MS);
+    for (let i = 0; i < 999; i++) limiter.fail(`10.2.${Math.floor(i / 256)}.${i % 256}`);
+    expect(size()).toBe(2000);
+    limiter.fail('swept');
+    expect(size()).toBe(1000);
   });
 });
 
