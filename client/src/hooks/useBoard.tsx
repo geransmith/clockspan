@@ -21,7 +21,7 @@ import {
 } from '../lib/board';
 import { ADD_PRIORITY_FAILED, BOARD, SAVE_FAILED } from '../lib/copy';
 import { addPending, fetched, settle, settleWith, shown, untracked, type Tracked } from '../lib/optimistic';
-import { newUid, placePriority, takeOffRow } from '../lib/priorities';
+import { newUid, patchRow, placePriority, takeOffRow } from '../lib/priorities';
 import { useDayStore } from './useDay';
 import { useLatest } from './useLatest';
 import { useRefreshLoop } from './useRefreshLoop';
@@ -241,7 +241,7 @@ export function BoardProvider({ children }: { children: ReactNode }) {
   // A row of today's list changed through the day store: 'skipped' when the row has gone meanwhile.
   const setRow = useCallback(
     (today: string, uid: string, patch: Partial<Pick<Priority, 'text' | 'done' | 'categoryUid' | 'note'>>) =>
-      editToday(today, (rows) => (rows.some((p) => p.uid === uid) ? rows.map((p) => (p.uid === uid ? { ...p, ...patch } : p)) : null)),
+      editToday(today, (rows) => patchRow(rows, uid, patch)),
     [editToday],
   );
 

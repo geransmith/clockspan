@@ -827,7 +827,7 @@ describe('Priorities: ×', () => {
   });
 
   it("never asks on a recurring priority's row", async () => {
-    const { saved } = await renderCard([routineRow(1, QUEUE, { listed: 5, logged: 3000 })]);
+    const { saved } = await renderCard([routineRow(1, QUEUE, { listed: 5, logged: 3000, note: 'Tier 2 too.' })]);
     fireEvent.click(x(1));
     expect(dialog()).toBeNull();
     expect(saved()[0]).toEqual(emptyRow(1));

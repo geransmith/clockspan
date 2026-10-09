@@ -12,6 +12,7 @@ import {
   newUid,
   nudgeFor,
   padPriorities,
+  patchRow,
   pickWarning,
   placePriority,
   removePriority,
@@ -159,6 +160,14 @@ describe('editPriority', () => {
     expect(editPriority(named, { done: true }, 200).done).toBe(true);
     expect(editPriority({ ...named, done: true }, { text: '' }, 200).done).toBe(true);
     expect(editPriority(blank, { done: true }, 200)).toEqual(blank);
+  });
+});
+
+describe('patchRow', () => {
+  it("patches the task's row in place, and answers null when no row is that task's", () => {
+    const rows = [makePriority(1, 'A'), makePriority(2, 'B'), makePriority(3, 'C')];
+    expect(patchRow(rows, rows[1]!.uid!, { note: 'Ask Kim' })).toEqual([rows[0], { ...rows[1], note: 'Ask Kim' }, rows[2]]);
+    expect(patchRow(rows, 'gone00000001', { note: 'Ask Kim' })).toBeNull();
   });
 });
 

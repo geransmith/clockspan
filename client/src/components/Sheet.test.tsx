@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import * as api from '../api';
+import { warnSaveFailed } from '../lib/alerts';
 import { LEFT_OPEN, PLAN_NEXT, PUNCH_ORDER, REMOVE_TASK, TODAY_OFFER } from '../lib/copy';
 import { SPLIT_QUERY } from '../lib/layout';
 import { applySettingsPatch } from '../lib/settings';
@@ -415,6 +416,31 @@ describe('Sheet: × on a task on other days', () => {
     expect(vi.mocked(api.putPriorities).mock.lastCall![1].some((p) => p.uid === email.uid)).toBe(false);
     expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith(email.uid);
     expect(api.getBoard).not.toHaveBeenCalled();
+  });
+});
+
+describe("Sheet: a row's note", () => {
+  it('saves it on the list through the day store, and keeps it in its box when the save fails', async () => {
+    const report = makePriority(1, 'Report', { note: 'Kim has the numbers.' });
+    const noteOf = (rows: { uid: string | null; note: string }[]) => rows.find((p) => p.uid === report.uid)?.note;
+    const box = () => screen.getByRole('textbox', { name: 'Note for priority 1' }) as HTMLTextAreaElement;
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [report] }));
+    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve({ priorities: priorities.filter((p) => p.uid != null) }));
+    await renderSheet();
+    fireEvent.click(button('Note for priority 1'));
+    fireEvent.change(box(), { target: { value: 'Kim has them.' } });
+    await settle(400);
+    const [, list, base] = vi.mocked(api.putPriorities).mock.lastCall!;
+    expect([noteOf(list), noteOf(base)]).toEqual(['Kim has them.', 'Kim has the numbers.']);
+    vi.mocked(api.putPriorities).mockRejectedValueOnce(new Error('offline'));
+    fireEvent.change(box(), { target: { value: 'Kim has them all.' } });
+    await settle(400);
+    expect(warnSaveFailed).toHaveBeenCalledOnce();
+    expect(box().value).toBe('Kim has them all.');
+    fireEvent.blur(box());
+    await settle();
+    expect(api.putPriorities).toHaveBeenCalledTimes(3);
+    expect(noteOf(vi.mocked(api.putPriorities).mock.lastCall![1])).toBe('Kim has them all.');
   });
 });
 

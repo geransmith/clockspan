@@ -92,26 +92,21 @@ type Notice =
 /** The dragged item's place in its list while the copy under the pointer moves. */
 const DRAGGED_OPACITY = 0.4;
 
-/** A board write's failure as a banner: a refusal's own line, else the save one. */
-function warnFailed(err: unknown): void {
-  if (err instanceof MoveRefused) warnQuietly({ title: err.message, tag: 'board-move' });
-  else warnSaveFailed();
-}
-
-/** A board write sent and let go, its failure a banner. */
-function report(write: Promise<void>): void {
-  void write.catch(warnFailed);
-}
-
-/** A write whose box keeps what it sent on a failure (a note's): whether it saved, a failure raised as `report` does. */
+/** A board write's failure as a banner: a refusal's own line, else the save one; whether it saved. */
 function saved(write: Promise<void>): Promise<boolean> {
   return write.then(
     () => true,
     (err: unknown) => {
-      warnFailed(err);
+      if (err instanceof MoveRefused) warnQuietly({ title: err.message, tag: 'board-move' });
+      else warnSaveFailed();
       return false;
     },
   );
+}
+
+/** A board write sent and let go, its failure a banner. */
+function report(write: Promise<void>): void {
+  void saved(write);
 }
 
 /** Planned items (their day's list decides them) and recurring rows (they stay on today's list) have no grip. */

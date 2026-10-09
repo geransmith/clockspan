@@ -104,6 +104,11 @@ export function editPriority(row: Priority, patch: Partial<Priority>, now: numbe
   return hasText(merged) ? { ...merged, uid: newUid(), addedAt: now } : { ...merged, done: false };
 }
 
+/** The rows with the task `uid`'s row patched in place, or null when no row is that task's (it has gone meanwhile). */
+export function patchRow(rows: Priority[], uid: string, patch: Partial<Priority>): Priority[] | null {
+  return rows.some((p) => p.uid === uid) ? rows.map((p) => (p.uid === uid ? { ...p, ...patch } : p)) : null;
+}
+
 /** The rows with the one at `position` a free row: × on a row within Rows per day takes its task off and leaves the row. */
 export function clearRow(rows: Priority[], position: number): Priority[] {
   return rows.map((p) => (p.position === position ? emptyRow(position) : p));

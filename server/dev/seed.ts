@@ -582,21 +582,38 @@ function insertItems(db: DB, userId: number, days: DayDraft[]): Map<string, numb
     `INSERT INTO items (user_id, uid, title, category_uid, note, weekdays, lane, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
   );
   const ids = new Map<string, number>();
-  const add = (uid: string, title: string, categoryUid: string | null, weekdays: number | null, lane: OpenLane | null, position: number, createdAt: number) =>
-    ids.set(uid, (insert.get(userId, uid, title, categoryUid, NOTE_OF[title] ?? '', weekdays, lane, position, createdAt) as { id: number }).id);
+  const add = (
+    uid: string,
+    title: string,
+    categoryUid: string | null,
+    note: string,
+    weekdays: number | null,
+    lane: OpenLane | null,
+    position: number,
+    createdAt: number,
+  ) => ids.set(uid, (insert.get(userId, uid, title, categoryUid, note, weekdays, lane, position, createdAt) as { id: number }).id);
 
-  for (const r of SEEDED_RECURRING) add(r.uid, r.title, r.categoryUid, weekdayMask(r.weekdays), null, 0, days[0]!.createdAt);
+  for (const r of SEEDED_RECURRING) add(r.uid, r.title, r.categoryUid, r.note, weekdayMask(r.weekdays), null, 0, days[0]!.createdAt);
   for (const day of days) {
     for (const p of day.priorities) {
       if (p.recurring || ids.has(p.uid)) continue;
-      add(p.uid, p.text, p.categoryUid, null, null, 0, p.addedAt);
+      add(p.uid, p.text, p.categoryUid, p.note, null, null, 0, p.addedAt);
     }
   }
   // Captured a few minutes apart, just before the last weekday's list was written.
   const capturedAt = (days.at(-2) ?? days.at(-1)!).createdAt;
   CAPTURED.forEach(([title, lane], i) => {
     const position = CAPTURED.slice(0, i + 1).filter(([, l]) => l === lane).length;
-    add(`card${String(i + 1).padStart(8, '0')}`, title, categoryFor(title), null, lane, position, capturedAt - (CAPTURED.length - i) * 5 * MINUTE_MS);
+    add(
+      `card${String(i + 1).padStart(8, '0')}`,
+      title,
+      categoryFor(title),
+      NOTE_OF[title] ?? '',
+      null,
+      lane,
+      position,
+      capturedAt - (CAPTURED.length - i) * 5 * MINUTE_MS,
+    );
   });
   return ids;
 }

@@ -11,7 +11,7 @@ page for tasks that aren't for today (off by default; its In progress column is 
 priorities, and tasks carry categories, made from a chip or in Settings → Board; the same switch
 brings recurring priorities, set up in Settings → Board and offered on Top priorities on their
 weekdays). Each task (a priority, a board card, a recurring priority) is stored once, with one
-name and one category; a day's list names the tasks on it.
+name, one category and one note; a day's list names the tasks on it.
 "Overtime approved" silences the clock-out alarm only. Every day is persisted; old days can be
 pruned. Data is **per user**; auth is optional (`AUTH_MODE=none | local | oidc`). One Docker
 container, SQLite on `/data`. A PWA used mostly on a laptop or desktop and laid out for phones
@@ -66,8 +66,9 @@ shared/                 imported by both sides, always with a `.js` suffix
                         list as the changes made since its base, rows matched by their task's uid, field by
                         field as MERGED lists
   text.ts               sameText: the key a task typed again by hand is matched by (Plan tomorrow's typed
-                        rows, Review's Not done), and category names are compared by; categoryName and
-                        taskTitle: a category's and a task's name as the server stores them
+                        rows, Review's Not done), and category names are compared by; categoryName,
+                        taskTitle and taskNote: a category's name, and a task's name and note, as the
+                        server stores them
   backoff.ts            nextBackoff: the wait between retries of a request that must answer
 server/                 Express API → dist/server
   app.ts                createApp(): headers, /api/health, /api/auth/me for every mode, auth routers,
@@ -485,17 +486,18 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   server's copy arrives, so nothing made up stands in for it. `pruneBefore` is the one store write
   sent on no queue (the queues are keyed by day, session and breaks), so a change still on its way
   for a day before the cutoff can land after the prune and re-create that day, which the re-read
-  after the prune shows. After a full delete (the board store's `deleteItem`), a new name or
-  category (its `editItem`), or a priorities save whose row renamed or filed a task another day
-  lists or logged time on, `taskChanged(uid)` reads again every held day whose list or log names the
-  task, as a change the server confirmed (a read already out may have left before it, so its answer
-  is dropped and the day asked for again), and moves `generation` as `pruneBefore` does, so no range
-  on screen (the board's Done, History, Review) shows the task from an older answer. A priorities
-  save that puts a task on its list or takes one off (Plan tomorrow, a carry, ×) reads again, the
-  same way, the other held days whose lists hold that task, since their `listed` and `earlier` moved
-  and × asks from them. The day store, `useSettings`, `useTimer` and `useBoard` are all built on
-  `useTracked` (`hooks/useTracked.ts`); a board write rejects when it fails, like a settings save,
-  and the board is read again. `apply` and commit functions are pure: read the clock outside them.
+  after the prune shows. After a full delete (the board store's `deleteItem`), a new name,
+  category or note (its `editItem`), or a priorities save whose row renamed, filed or noted a task
+  another day lists or logged time on, `taskChanged(uid)` reads again every held day whose list or
+  log names the task, as a change the server confirmed (a read already out may have left before it,
+  so its answer is dropped and the day asked for again), and moves `generation` as `pruneBefore`
+  does, so no range on screen (the board's Done, History, Review) shows the task from an older
+  answer. A priorities save that puts a task on its list or takes one off (Plan tomorrow, a carry,
+  ×) reads again, the same way, the other held days whose lists hold that task, since their
+  `listed` and `earlier` moved and × asks from them. The day store, `useSettings`, `useTimer` and
+  `useBoard` are all built on `useTracked` (`hooks/useTracked.ts`); a board write rejects when it
+  fails, like a settings save, and the board is read again. `apply` and commit functions are pure:
+  read the clock outside them.
 - **Suggested break lengths come only from `client/src/lib/breaks.ts`** (`suggestBreak`, pure, over
   a day's sessions); with Suggest breaks off the Break button runs `settings.breakMinutes`. With
   `suggestBreaks` on, `useBreak` offers today's suggestion on the Break button and as a quiet banner
@@ -544,15 +546,16 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   task once today's list holds it. `useSettings` sends its PUTs and resets one at a time. The board
   (`useBoard`) sends each write as one job on its own queue, its change to the tasks shown from the
   moment it is made; a job that changes today's list (a pull, a row typed in In progress's box, a
-  tick, a rename or category of today's row, Remove from today, which leaves a free row as × does,
-  `takeOffRow`) goes through `editPriorities`, and so on the day store's list sends, and awaits that
-  save inside the job. A park waits for today's save still out, PATCHes the task's lane, then takes
-  its row off today's list and reads the board again; Delete (`deleteItem`, the board's and the
-  sheet's) waits for today's save, then sends `DELETE /items/:uid`, which takes every day's entry
-  and leaves the tombstone. `useBoard.tsx` says why each goes in that order. A board PATCH of a task
-  off today's list needs no wait: the board read that task from the server. A new edit of a day's
-  rows, the settings, the timer or the board goes through one of these, never straight to `api`.
-  Reads are not queued, and in every store a read's answer never replaces a change still on its way.
+  tick, a rename, category or note of today's row, Remove from today, which leaves a free row as ×
+  does, `takeOffRow`) goes through `editPriorities`, and so on the day store's list sends, and
+  awaits that save inside the job. A park waits for today's save still out, PATCHes the task's
+  lane, then takes its row off today's list and reads the board again; Delete (`deleteItem`, the
+  board's and the sheet's) waits for today's save, then sends `DELETE /items/:uid`, which takes
+  every day's entry and leaves the tombstone. `useBoard.tsx` says why each goes in that order. A
+  board PATCH of a task off today's list needs no wait: the board read that task from the server.
+  A new edit of a day's rows, the settings, the timer or the board goes through one of these, never
+  straight to `api`. Reads are not queued, and in every store a read's answer never replaces a
+  change still on its way.
 - **Punch positions are fixed**: 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in pairs,
   and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches` enforces
   it). Kind is parity (`kindForPosition`, `shared/punches.ts`). The math evaluates *set* punches
@@ -604,15 +607,16 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   board, or a recurring priority (`weekdays` set), each with one name, one category and one note
   that every day it is on shows, past days included. A day's list only names its tasks (below). A
   note is plain text up to `LIMITS.itemNote`, stored as `taskNote` (`shared/text.ts`) gives it
-  (control characters but line breaks and tabs dropped, never trimmed), and `''` is none; a
-  task's creates take none, and only the sheet's rows and the board's cards edit it (see "A task's
-  note"). A task's lane (`later`, `next`, or none) is the board's alone: the + of Later or Next, a
-  park, a Move to or drop into Later or Next, and the done notice's Add a new card give one, and a
-  task typed on a list has none. Done is never stored: the server answers each task's `listDate`
-  (its latest entry's day) and `listDone` (that entry's tick), so the board and the days can't
-  disagree. One lane rule follows a save: a task in Later added open to its latest list (no entry on
-  a later day) goes to the top of Next (`nextFromLater`). A write sets the fields it changed and the
-  last write wins: the list PUT writes a task's name (trimmed), category and note only where this
+  (control characters but line breaks and tabs dropped, never trimmed), and `''` is none;
+  `POST /items` makes a task with none, and the list PUT's create stores the row's; only the
+  sheet's rows and the board's cards edit it (see "A task's note"). A task's lane (`later`,
+  `next`, or none) is the board's alone: the + of Later or Next, a park, a Move to or drop into
+  Later or Next, and the done notice's Add a new card give one, and a task typed on a list has
+  none. Done is never stored: the server answers each task's `listDate` (its latest entry's day)
+  and `listDone` (that entry's tick), so the board and the days can't disagree. One lane rule
+  follows a save: a task in Later added open to its latest list (no entry on a later day) goes to
+  the top of Next (`nextFromLater`). A write sets the fields it changed and the last write wins:
+  the list PUT writes a task's name (trimmed), category and note only where this
   device's row differs from its base row, reads a row sent without a category or a note (a page from
   before notes, curl) as keeping them (`unsaid`), makes a task for a uid new to the user (no lane),
   and writes nothing for a task new to that list (a carry, a pull, the offer), so a stale name never
@@ -652,13 +656,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   minute clock `App` passes), as × counts them; else the board's (`BoardCard.listed`, `logged`).
 - **Priorities are entries of tasks, merged with what other devices saved.** A day's list is its
   entries (`priorities`: day, task, position, tick, `addedAt`; for the old per-day rows see
-  "Migrations"), so a row's `uid`, `text` and `categoryUid` are its task's, and the rest is read
-  only: `recurring` and `archived` from the task, and from `itemCounts` `listed` (the days whose
-  lists hold the task), `earlier` (those before this one) and `logged` (its completed focus on other
-  days; the day's own is in its log). A day never edited has none. The client pads a list to
-  `settings.priorityCount` with free rows (`isFree`: no uid, no text) and saves the rows it shows,
-  free ones included; the server stores each row with a uid at its place in the list and skips the
-  free ones, so positions can have gaps where free rows sat (`padPriorities` fills them by
+  "Migrations"), so a row's `uid`, `text`, `categoryUid` and `note` are its task's, and the rest is
+  read only: `recurring` and `archived` from the task, and from `itemCounts` `listed` (the days
+  whose lists hold the task), `earlier` (those before this one) and `logged` (its completed focus
+  on other days; the day's own is in its log). A day never edited has none. The client pads a list
+  to `settings.priorityCount` with free rows (`isFree`: no uid, no text) and saves the rows it
+  shows, free ones included; the server stores each row with a uid at its place in the list and
+  skips the free ones, so positions can have gaps where free rows sat (`padPriorities` fills them by
   position): the morning offer's routines stay after the padded rows, and a row typed under empty
   ones stays where it was typed. Add priority and the timer's Also add (`placePriority`, `hasRoom`)
   use the first free row or a new one at the end; a row Add priority puts past the stored list stays
@@ -696,24 +700,25 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `listed` and `logged`, a routine `recurring: true`), else the defaults (`emptyRow`, `newTaskRow`),
   and the save's answer replaces them.
 - **A blank name is never saved, and × takes a task off a day** (`Priorities.tsx`). Emptying a box
-  doesn't remove its task: while it is blank and focused the note under it reads `BLANK_NOTE(name)`,
+  doesn't remove its task: while it is blank and focused the hint under it reads `BLANK_NOTE(name)`,
   the list goes out with that row's name as it was (`named`; ticks and the other rows still save),
   its checkbox is disabled and its tick kept (`editPriority` clears `done` only on a free row), it
   still counts in "N of M done", and leaving the box or Escape puts the stored name back (a row
   typed and emptied before it was ever saved becomes a free row again). The server refuses a row
   with a uid and a blank name. Typing over a written row renames its task on every day; while the
   box's text differs from the name it had when it took the focus and earlier days' lists hold the
-  task (`p.earlier > 0`), the note reads `RENAME_NOTE(earlier)`, an indicator rather than a
+  task (`p.earlier > 0`), the hint reads `RENAME_NOTE(earlier)`, an indicator rather than a
   question. × shows on every row with a task and every row past Rows per day: within Rows per day
   the row stays, free, with the focus in its box (`takeOffRow`), and past it the row goes. A
   recurring row, or a one-off on no other day with no time logged and no note, comes off at once; a
   one-off on other days (`p.listed > 1`), with time logged (`p.logged`, the other days', plus the
-  day's log, `loggedByUid`, which counts a timer running on it) or with a note (`p.note`, which
-  `REMOVE_TASK.body` says goes with the task) asks first in `RemoveTask` (built like
-  `FinishChoice`: `useModalDialog`, the focus on the frame; `REMOVE_TASK`): Off this day (the ×
-  path), Delete everywhere (the × path, then the board store's `deleteItem`, which works with the
-  board off; its failure raises the "Change not saved" banner and leaves the task off that day
-  only), or Cancel, which puts the focus back on ×.
+  day's log, `loggedByUid`, which counts a timer running on it) or with a note (`p.note`; asked for
+  the note alone, Off this day deletes the task too, `collectItems`, unless it has a lane, as
+  `REMOVE_TASK.body` says) asks first in `RemoveTask` (built like `FinishChoice`:
+  `useModalDialog`, the focus on the frame; `REMOVE_TASK`): Off this day (the × path), Delete
+  everywhere (the × path, then the board store's `deleteItem`, which works with the board off; its
+  failure raises the "Change not saved" banner and leaves the task off that day only), or Cancel,
+  which puts the focus back on ×.
 - **A task's note shows only when its button opens it** (`components/Note.tsx`). `NoteToggle` is
   the one sign a note is there: drawn filled with one, and quiet with none (see Conventions), with
   `aria-expanded` and `aria-controls`, named "Note for …" or "Add a note to …", so a screen reader
@@ -726,13 +731,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   the board off the cell holds it alone) and the box under the row, after its hint; each row's
   note is a draft of its own, keyed by the task, apart from the list's, and saves 400 ms after the
   last key through `onNote`, the day store's `editPriorities` (`Sheet.tsx`), whose `'failed'`
-  keeps it. On the board (`BoardCard`) the button ends the title row of every card and the box
-  opens under the card's text, apart from the editor, saving 800 ms after the last key; `onNote`
-  takes the path `onRename` does (`editRow` for today's row, `editItem` for any other the board
-  edits, none for an earlier day's row of a recurring priority removed in Settings), and `saved`
-  (`Board.tsx`) raises the banner `report` would and answers false. A routine's note is one on
-  every day it is on. Nothing else shows a note: not Retro, Review, Plan tomorrow, the morning
-  notice, the timer, the day log or History.
+  keeps it. On the board (`BoardCard`) the button ends the title row of every card the board
+  edits, or that has a note, and the box opens under the card's text, apart from the editor, saving
+  800 ms after the last key; `onNote` takes the path `onRename` does (`editRow` for today's row,
+  `editItem` for any other the board edits, none for an earlier day's row of a recurring priority
+  removed in Settings), and `saved` (`Board.tsx`) raises the banner and answers false. A routine's
+  note is one on every day it is on. Nothing else shows a note: not Retro, Review, Plan tomorrow,
+  the morning notice, the timer, the day log or History.
 - **A category is a row of its own, named by its uid** (`categories`, routes in `routes/board.ts`,
   answered in `Board.categories`). Tasks and sessions point at one by `categoryUid`, a soft link
   checked for shape only, so a category made on this device can reach the server after the row that

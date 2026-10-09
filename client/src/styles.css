@@ -3180,11 +3180,16 @@ kbd {
   .category-chip {
     --hit-inset: -9px -4px;
   }
-  /* 28 px square at the end of a board card's title row, 8 px from the title: 44 px tall, through
-     the card's padding and 2 px into the gap to the next card as the title's does, and half the
-     gap to the title. */
+  /* 28 px square at the end of a board card's title row, 8 px from the title: 40 × 44 px, through
+     the card's 8 px padding and 2 px into the gap to the next card as the title's does, and half
+     the gap to the title. */
   .note-toggle {
-    --hit-inset: -8px -8px -8px -4px;
+    --hit-inset: -9px -9px -9px -5px;
+  }
+  /* An open note box comes after its button, so positioned too it paints over the button's area
+     where the two meet and takes the tap. */
+  .note-field {
+    position: relative;
   }
   /* A 24 px dot, 8 px from the next, centred in a row 44 px tall: 32 × 44 px. */
   .swatch {
@@ -3289,10 +3294,10 @@ kbd {
     --hit-inset: -5px -4px -13px;
   }
   /* On that line it reaches up and down as the chip does, half the 6 px to the chip after it, and
-     8 px back, where nothing on the line takes taps (the gap before the field's column, or the
-     repeat mark). */
+     13 px back, where nothing on the line takes taps (the gap before the field's column, or the
+     repeat mark): 44 × 44 px. */
   .priority-end .note-toggle {
-    --hit-inset: -5px -3px -13px -8px;
+    --hit-inset: -5px -4px -13px -14px;
   }
   /* A hint under a row's chip line goes up to 4 px under the chip and takes the line's 8 px below
      itself, so it reads as its own row's and not the next one's. */
@@ -3335,9 +3340,9 @@ kbd {
   .priority-end .category-chip {
     --hit-inset: -9px -4px;
   }
-  /* Beside the field, half the 10 px gap to it. */
+  /* Beside the field, half the 10 px gap to it and half the 6 px to the chip: 36 × 44 px. */
   .priority-end .note-toggle {
-    --hit-inset: -8px -3px -8px -5px;
+    --hit-inset: -9px -4px -9px -6px;
   }
   .priority-row:has(.priority-end) + .priority-hint {
     margin-block: -4px 0;

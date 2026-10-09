@@ -56,7 +56,9 @@ describe('copy builders', () => {
     expect(REMOVE_TASK.body(1, null, false)).toBe('It is on 1 other day. Delete everywhere takes it off every day.');
     expect(REMOVE_TASK.body(0, '25m', false)).toBe('25m is logged on it. Delete everywhere takes it off every day. The time stays in the log, unplanned.');
     expect(REMOVE_TASK.body(1, null, true)).toBe('It is on 1 other day. Delete everywhere takes it off every day. Its note goes with the task.');
-    expect(REMOVE_TASK.body(0, null, true)).toBe('Delete everywhere takes it off every day. Its note goes with the task.');
+    expect(REMOVE_TASK.body(0, null, true)).toBe(
+      'It is on no other day, so Off this day deletes it and its note too, unless the board keeps it in Later or Next.',
+    );
   });
 
   it('names the day the offered priorities were left open on', () => {

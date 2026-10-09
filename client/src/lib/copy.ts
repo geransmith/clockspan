@@ -144,9 +144,10 @@ const unplanned = (logged: string | null) => (logged ? ' The time stays in the l
 export const REMOVE_TASK = {
   title: (name: string) => `Remove ${name}`,
   body: (otherDays: number, logged: string | null, note: boolean) => {
+    // Asked for the note alone: nothing else names the task, so Off this day deletes it too (collectItems), unless it has a lane.
+    if (!otherDays && !logged) return 'It is on no other day, so Off this day deletes it and its note too, unless the board keeps it in Later or Next.';
     const where = otherDays ? `It is on ${counted(otherDays, 'other day')}` : '';
-    const facts = where || logged ? `${taskFacts(where, logged)} ` : '';
-    return `${facts}Delete everywhere takes it off every day.${unplanned(logged)}${note ? ' Its note goes with the task.' : ''}`;
+    return `${taskFacts(where, logged)} Delete everywhere takes it off every day.${unplanned(logged)}${note ? ' Its note goes with the task.' : ''}`;
   },
   offDay: 'Off this day',
   everywhere: 'Delete everywhere',
@@ -292,8 +293,8 @@ export const RETRO_PROMPT = 'What got in the way? What went to plan?';
  * category, Delete everywhere or settings save isn't saved.
  * One banner covers a request that got no answer and one the server turned down (a break
  * started while a timer runs, a session another device deleted), so the body names both.
- * It says nothing of what the sheet shows: the change is gone from it, except a retro note,
- * which stays in its box to send again (`useDebouncedDraft`).
+ * It says nothing of what the sheet shows: the change is gone from it, except a retro note or a
+ * task's note, which stay in their box to send again (`useDebouncedDraft`).
  */
 export const SAVE_FAILED = {
   title: 'Change not saved',
