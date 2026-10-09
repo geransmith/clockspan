@@ -1,5 +1,5 @@
-# Weekly dependency updates. Every PR is labelled skip-changelog and is merged by hand, like
-# any other PR (CONTRIBUTING.md).
+# Weekly dependency updates. Every PR is labelled dependencies (their own section of the release
+# notes) and is merged by hand, like any other PR (CONTRIBUTING.md).
 #
 # Every ecosystem waits 7 days after a release before proposing it (GitHub's default is 3):
 # that week is the margin for a hijacked release to be caught and pulled first. Security
@@ -12,7 +12,7 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
-    labels: [skip-changelog]
+    labels: [dependencies]
     # .npmrc pins exact versions; bump the pin rather than widening it to a range.
     versioning-strategy: increase
     groups:
@@ -31,7 +31,7 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
-    labels: [skip-changelog]
+    labels: [dependencies]
     # One PR for the week's action bumps: the docker/* actions often release together.
     # Majors are included.
     groups:
@@ -46,7 +46,7 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
-    labels: [skip-changelog]
+    labels: [dependencies]
     ignore:
       # A Node major is a deliberate move; AGENTS.md (Gotchas) lists what it moves.
       - dependency-name: node

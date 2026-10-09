@@ -10,7 +10,7 @@ request, squash-merged, with the `check` and `image-smoke` jobs green. Only coll
 push branches or merge. Outsiders can open a PR from a fork; its CI run waits for a
 collaborator to approve it, and a fork PR can never publish an image or a release.
 
-Dependabot (`.github/dependabot.yml`) opens a few `skip-changelog` PRs a week: npm, GitHub
+Dependabot (`.github/dependabot.yml`) opens a few `dependencies` PRs a week: npm, GitHub
 Actions and the Docker base image. Version updates are only proposed 7 days after the release
 (`cooldown`); security updates come at once. They are merged by hand like any other PR, as a
 batch once `check` and `image-smoke` are green:
@@ -24,10 +24,6 @@ Read a major version bump like an outside PR first: what could it break that the
 reach (component tests cover their logic only, and none test how they look)? Dependencies are pinned, so a fix only reaches
 users in a release: cut a patch release after merging a security update (or one that fixes a
 Dependabot alert) or a new Docker base image. Other bumps can wait for the next release.
-
-`package.json`'s `allowScripts` names esbuild at its exact version: it is the one install script
-a local `npm install` may run (CI and the image run none). When a bump moves esbuild to another
-version, move that entry in the same PR, or a local install leaves the script unapproved.
 
 ```bash
 git switch -c <topic>            # never work on main
@@ -46,7 +42,8 @@ git switch main && git pull
   and a line in the release notes, so write it for a reader who will not open the PR.
 - **One label**: `enhancement` (new behaviour or setting), `bug`, `documentation`,
   `breaking` (a change that needs a major release; see "Version" below, and it wins over the
-  others), or `skip-changelog` (housekeeping, release bumps, CI, dependency updates).
+  others), `dependencies` (Dependabot's PRs, under "Dependency updates" in the notes) or
+  `skip-changelog` (housekeeping, release bumps, CI).
   Unlabelled PRs land under "Other changes" in the notes.
 - **Body**: what changed, why, and how it was verified. A few lines is enough.
 - **Before opening**:
@@ -138,7 +135,7 @@ gh run rerun <run-id> --failed
 
 | Event | Jobs | Result |
 | --- | --- | --- |
-| Pull request | `check`, `image-smoke` (both required) | install without dependency scripts and check registry signatures; `npm audit --audit-level=high` (a new advisory can turn an unchanged PR red: merge the fix first); typecheck, lint, format:check, test:coverage, build; a changed version must be a higher `X.Y.Z` with no tag yet. The image is built for amd64 and for arm64 (under QEMU) and each is booted by `scripts/smoke-image.sh` (health, SPA shell, `/data` owner, root dropped, no npm, npx, corepack or yarn, the healthcheck command); nothing is pushed |
+| Pull request | `check`, `image-smoke` (both required) | install without dependency scripts and check registry signatures; `npm audit --audit-level=high` (a new advisory can turn an unchanged PR red: merge the fix first); typecheck, lint, format:check, test:coverage; a changed version must be a higher `X.Y.Z` with no tag yet. The image is built for amd64 and for arm64 (under QEMU) and each is booted by `scripts/smoke-image.sh` (health, SPA shell, `/data` owner, root dropped, no npm, npx, corepack or yarn, the healthcheck command); nothing is pushed |
 | Push to `main` | `check`, `image` | both platforms are built and booted by the same script, and only then pushed as one multi-platform `ghcr.io/geransmith/clockspan:edge` |
 | Push to `main` that changes the version | `check`, `image`, `release` | `:edge` and the release image tags (see [README → Docker](README.md#docker)), the git tag `vX.Y.Z` and the GitHub Release |
 | Pull request, push to `main`, weekly | `CodeQL` (not required) | static security analysis of the TypeScript (`security-extended`); alerts land in code scanning, and GitHub fails the PR's CodeQL check on a new high or critical one |

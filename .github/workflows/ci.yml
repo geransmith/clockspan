@@ -46,8 +46,8 @@ jobs:
       # PR the same comparison, against the base branch (the first parent of GitHub's merge
       # commit), refuses what CONTRIBUTING.md rules out: a version that isn't plain X.Y.Z (no
       # pre-releases), one lower than before, or one that already has a tag. It needs only git
-      # and node, so it runs first: a bad version fails in seconds, not after the install, the
-      # tests and the build.
+      # and node, so it runs first: a bad version fails in seconds, not after the install and the
+      # tests.
       - name: Detect a version bump
         id: version
         run: |
@@ -90,7 +90,6 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
       - run: npm run test:coverage
-      - run: npm run build
 
   # The image built and booted on every pull request, never pushed. Without it a Dependabot bump
   # of the Node base image or of better-sqlite3 (native, loaded from its musl prebuild) would

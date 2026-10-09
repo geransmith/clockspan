@@ -82,10 +82,9 @@
     // Off on purpose: `role="group"`, `role="status"` and `role="img"` on a div, span or p are
     // valid ARIA; the rule would want <fieldset>, <output> and <img> for them.
     "jsx-a11y/prefer-tag-over-role": "off",
-    // Off on purpose: the uses are the first field of the three sign-in pages (sign in, setup,
-    // new password), edit-in-place inputs the user just opened, and the board's capture box with
-    // a mouse and keyboard (board/Capture.tsx): in each, moving focus there is the expected
-    // behaviour.
+    // Off on purpose: autoFocus only moves focus where the user's own action expects it: a
+    // page's first field, an input just opened for editing, the control an edit returns to, a
+    // field remounted to keep focus, the board's capture box.
     "jsx-a11y/no-autofocus": "off"
   },
   "overrides": [
