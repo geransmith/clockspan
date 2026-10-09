@@ -50,7 +50,7 @@ describe('Banners', () => {
     fireEvent.click(banner('Clock out').getByRole('button', { name: 'Dismiss: Clock out' }));
     expect(screen.queryByText('Clock out')).toBeNull();
     for (const title of ['Lunch', 'Second meal', 'Retrospective']) expect(screen.getByText(title)).toBeTruthy();
-    expect(screen.queryByText(/more alert/)).toBeNull();
+    expect(screen.queryByText(BANNERS_MORE(1))).toBeNull();
   });
 
   it("runs a banner's action once and closes that banner", async () => {

@@ -163,7 +163,7 @@ export const LEFT_OPEN = {
 export const TODAY_OFFER = {
   recurring: 'Repeats today',
   notToday: 'Not today',
-  over: (n: number) => `More than ${n} recurring ${n === 1 ? 'row' : 'rows'} today.`,
+  over: (n: number) => `More than ${counted(n, 'recurring row')} today.`,
 } as const;
 
 /** Confirm dialogs. Each names what it does; the two that delete a user or many days say it cannot be undone. */
@@ -284,7 +284,8 @@ export const PLAN_NEXT = {
 export const RETRO_PROMPT = 'What got in the way? What went to plan?';
 
 /**
- * Banner when a punch, priority, note, log edit, timer action or layout change isn't saved.
+ * Banner when a punch, priority, note, log edit, timer action, layout change, board move, new
+ * category, Delete everywhere or settings save isn't saved.
  * One banner covers a request that got no answer and one the server turned down (a break
  * started while a timer runs, a session another device deleted), so the body names both.
  * It says nothing of what the sheet shows: the change is gone from it, except a retro note,
@@ -353,6 +354,17 @@ export const BOARD_DRAG = {
   cancelled: (title: string, column: string) => `Move cancelled. ${title} is back in ${column}.`,
 } as const;
 
+/**
+ * What a screen reader hears while a sheet card is dragged in Customize: picked up, its place
+ * in the list (`n` of `total`) as it moves, and where it was dropped or put back.
+ */
+export const CARD_DRAG = {
+  pickedUp: (title: string) => `Picked up ${title}.`,
+  at: (title: string, n: number, total: number) => `${title} is at position ${n} of ${total}.`,
+  dropped: (title: string, n: number, total: number) => `Dropped ${title} at position ${n} of ${total}.`,
+  cancelled: (title: string, n: number, total: number) => `Move cancelled. ${title} is back at position ${n} of ${total}.`,
+} as const;
+
 /** A request that got no answer within `REQUEST_TIMEOUT_MS` (`api.ts`), where a form shows its error. */
 export const REQUEST_TIMEOUT = 'The server did not answer in time.';
 
@@ -373,9 +385,8 @@ export const UPDATED = {
 } as const;
 
 /**
- * In place of what could not be fetched (a sheet's day, the next-day planner's, a History tab's
- * days), and the banner a failed day load raises; the button asks again. Covers a refusal too,
- * like `SAVE_FAILED`.
+ * In place of what could not be fetched, and the banner a failed day load raises; the button
+ * asks again. Covers a refusal too, like `SAVE_FAILED`.
  */
 export const LOAD_FAILED = {
   title: 'Could not load this day',

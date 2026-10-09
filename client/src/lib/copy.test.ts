@@ -5,6 +5,7 @@ import {
   BOARD_DRAG,
   BREAK,
   BREAK_SUGGESTION,
+  CARD_DRAG,
   CELEBRATION_EMOJI,
   CELEBRATION_PHRASES,
   CONFIRM,
@@ -179,6 +180,13 @@ describe('copy builders', () => {
     expect(BOARD_DRAG.moved('Write a KB', 'In progress')).toBe('Write a KB moved to In progress.');
     expect(BOARD_DRAG.stays('Write a KB', 'Later')).toBe('Write a KB stays in Later.');
     expect(BOARD_DRAG.cancelled('Write a KB', 'Later')).toBe('Move cancelled. Write a KB is back in Later.');
+  });
+
+  it('names the card and its place in what a drag on the sheet says', () => {
+    expect(CARD_DRAG.pickedUp('Focus timer')).toBe('Picked up Focus timer.');
+    expect(CARD_DRAG.at('Focus timer', 2, 5)).toBe('Focus timer is at position 2 of 5.');
+    expect(CARD_DRAG.dropped('Focus timer', 3, 5)).toBe('Dropped Focus timer at position 3 of 5.');
+    expect(CARD_DRAG.cancelled('Focus timer', 2, 5)).toBe('Move cancelled. Focus timer is back at position 2 of 5.');
   });
 
   it('counts the alerts the banner stack leaves out', () => {

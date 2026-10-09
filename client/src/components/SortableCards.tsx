@@ -11,6 +11,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { CARD_DRAG } from '../lib/copy';
 import { CARD_TITLES } from '../lib/layout';
 import type { CardId } from '../types';
 import { CardFrame, type SheetCard } from './CardFrame';
@@ -35,12 +36,12 @@ export function SortableCards({ cards, onReorder }: { cards: SheetCard[]; onReor
   // dnd-kit's defaults read the raw ids ("draggable item log"). onDragOver also fires at pickup,
   // with the card over itself, so it states where the card is rather than a move.
   const title = (id: UniqueIdentifier) => CARD_TITLES[id as CardId];
-  const place = (id: UniqueIdentifier) => `position ${indexOf(id) + 1} of ${cards.length}`;
+  const n = (id: UniqueIdentifier) => indexOf(id) + 1;
   const announcements: Announcements = {
-    onDragStart: ({ active }) => `Picked up ${title(active.id)}.`,
-    onDragOver: ({ active, over }) => `${title(active.id)} is at ${place((over ?? active).id)}.`,
-    onDragEnd: ({ active, over }) => `Dropped ${title(active.id)} at ${place((over ?? active).id)}.`,
-    onDragCancel: ({ active }) => `Move cancelled. ${title(active.id)} is back at ${place(active.id)}.`,
+    onDragStart: ({ active }) => CARD_DRAG.pickedUp(title(active.id)),
+    onDragOver: ({ active, over }) => CARD_DRAG.at(title(active.id), n((over ?? active).id), cards.length),
+    onDragEnd: ({ active, over }) => CARD_DRAG.dropped(title(active.id), n((over ?? active).id), cards.length),
+    onDragCancel: ({ active }) => CARD_DRAG.cancelled(title(active.id), n(active.id), cards.length),
   };
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd} accessibility={{ announcements }}>

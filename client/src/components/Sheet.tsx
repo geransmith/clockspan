@@ -91,25 +91,31 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
     const next = moveCard(layout, from, to, side);
     if (next) void saveLayout(next);
   };
-  const setVisible = (id: CardId, v: boolean) => void saveLayout(setCardVisible(layout, id, v));
-  // A card moved to the other column mounts again there, and the focus goes with the old
-  // button, so the card's arrow in its new place takes it. A new object each move runs the
-  // effect again for the same card.
-  const [swapped, setSwapped] = useState<{ id: CardId } | null>(null);
+  // Hide, Show and a move to the other column each unmount the button pressed (the card goes,
+  // the chip goes, the card mounts again in its new column), so the focus goes to the button
+  // that undoes it: the card's Show chip, its Hide button, its arrow in the new place. A new
+  // object each press runs the effect again for the same card.
+  const [refocus, setRefocus] = useState<{ selector: string } | null>(null);
+  const setVisible = (id: CardId, v: boolean) => {
+    setRefocus({ selector: v ? `#card-${id} .card-tools [aria-label^="Hide"]` : `.hidden-strip [data-card="${id}"]` });
+    void saveLayout(setCardVisible(layout, id, v));
+  };
   const setSide = (id: CardId, side: CardSide) => {
-    setSwapped({ id });
+    setRefocus({ selector: `#card-${id} [data-swap]` });
     void saveLayout(setCardSide(layout, id, side));
   };
   useEffect(() => {
-    if (swapped) document.querySelector<HTMLElement>(`#card-${swapped.id} [data-swap]`)?.focus();
-  }, [swapped]);
+    if (refocus) document.querySelector<HTMLElement>(refocus.selector)?.focus();
+  }, [refocus]);
 
   const ready = day != null;
   useEffect(() => {
     if (!jumpTo || !ready) return;
-    document
-      .getElementById(`card-${jumpTo}`)
-      ?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
+    const card = document.getElementById(`card-${jumpTo}`);
+    card?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
+    // The banner's button went with the banner; the note box (the one card jumped to is the
+    // retrospective) takes the focus, so the next Tab starts there and not at the top of the page.
+    card?.querySelector<HTMLElement>('textarea')?.focus({ preventScroll: true });
     onJumped();
   }, [jumpTo, ready, onJumped]);
 
@@ -220,7 +226,10 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
 
   return (
     <div className={sheetClass}>
-      {tc.outOfOrder && <PunchOrder id={orderNotice} punches={day.punches} slip={tc.outOfOrder} />}
+      {/* A live region already on the page when the notice appears, or a screen reader may not read it. */}
+      <div className="punch-order" role="status">
+        {tc.outOfOrder && <PunchOrder id={orderNotice} punches={day.punches} slip={tc.outOfOrder} />}
+      </div>
       {columns
         ? CARD_SIDES.map((side) => (
             <div key={side} className="sheet-col">
@@ -232,7 +241,7 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
         <div className="hidden-strip">
           <span className="muted">Hidden:</span>
           {hidden.map((l) => (
-            <button key={l.id} className="chip" onClick={() => setVisible(l.id, true)}>
+            <button key={l.id} className="chip" data-card={l.id} onClick={() => setVisible(l.id, true)}>
               {CARD_TITLES[l.id]} <span className="chip-action">Show</span>
             </button>
           ))}

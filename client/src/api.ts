@@ -38,8 +38,8 @@ export const UNAUTHENTICATED_EVENT = 'focus:unauthenticated';
  * How long a request may take, answer included. `fetch` has no limit of its own: one that never
  * answers (a phone changing networks mid-request) would hold whatever waits behind it until the
  * browser gave up minutes later, with nothing on screen meanwhile: the writes queued after it in
- * its store (the day's, the timer's or the settings'), or the later refreshes of a day whose read
- * is still out.
+ * its store (the day's, the timer's, the settings' or the board's), or the later refreshes of a day
+ * whose read is still out.
  */
 export const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -77,7 +77,6 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
       method,
       headers: body !== undefined ? { 'content-type': 'application/json' } : undefined,
       body: body !== undefined ? JSON.stringify(body) : undefined,
-      credentials: 'same-origin',
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (err) {
@@ -95,8 +94,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     if (res.ok) throw new ApiError(res.status, UNREADABLE_ANSWER(res.status), null);
   }
   if (!res.ok) {
-    // Partial: a proxy in front can answer an error as JSON of another shape.
-    const message = (data as Partial<ErrorResponse> | null)?.error ?? REQUEST_FAILED(res.status);
+    // A proxy in front can answer an error as JSON of another shape, so `error` counts only as a string.
+    const error = (data as { [K in keyof ErrorResponse]?: unknown } | null)?.error;
+    const message = typeof error === 'string' ? error : REQUEST_FAILED(res.status);
     // The login route answers 401 for a wrong password; that is not a lost session. The event
     // makes AuthGate ask /api/auth/me again, which the app never answers with a 401: one from
     // there comes from a proxy in front, and announcing it would ask /me again, forever.
@@ -151,11 +151,11 @@ export const putPunches = (date: string, punches: Punch[], base: Punch[]) => {
 };
 /**
  * A day's list, and `base`, the list it was built on, so the server keeps what another device
- * changed since (`mergePriorities`); without it the list replaces the stored one. A row naming a
+ * changed since (`mergePriorities`). A row naming a
  * task the server doesn't hold makes it, and a row whose name or category differs from its base
  * row's renames or files the task on every day.
  */
-export const putPriorities = (date: string, priorities: Priority[], base?: Priority[]) =>
+export const putPriorities = (date: string, priorities: Priority[], base: Priority[]) =>
   request<PrioritiesResponse>('PUT', `/api/days/${date}/priorities`, { priorities, base });
 export const putOvertime = (date: string, approved: boolean) => request<OvertimeResponse>('PUT', `/api/days/${date}/overtime`, { approved });
 export const putTarget = (date: string, workMinutes: number | null) => request<TargetResponse>('PUT', `/api/days/${date}/target`, { workMinutes });
