@@ -82,6 +82,7 @@ export const TEST_SETTINGS: Settings = {
   stickers: false,
   showWeekends: true,
   board: false,
+  clockBar: true,
   recurringPerDay: 3,
   alarms: {
     lunchBy: { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 },

@@ -159,8 +159,9 @@ client/                 Vite root → dist/client
                         show it); settings/ holds SettingsDialog (the shell and tabs), a file per
                         tab (BoardTab: the categories and recurring priorities, shown while the
                         board is on), and controls.tsx; board/ holds the Board page (Board,
-                        BoardCard, Capture: a column's box, opened by the + in its head, and
-                        dnd.ts: its collision and keyboard settings for dnd-kit), its own lazy chunk
+                        BoardCard, Capture: a column's box, opened by the + in its head, ClockBar:
+                        today's times above the columns, and dnd.ts: its collision and keyboard
+                        settings for dnd-kit), its own lazy chunk
   src/auth/             AuthGate and the setup / login / new-password pages
   src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
   src/styles.css        design tokens and all component CSS
@@ -555,7 +556,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `lib/timeclock.ts`: the first punch out of place and the one it should come after) are named by
   the sheet's notice (`PUNCH_ORDER`), which describes that row's field; such a day counts in no
   hours total (the week line, Review's worked time and target) and shows a dash and `CHECK_PUNCHES`
-  wherever its own hours would show (the sheet's tiles, History's cell and day panel).
+  wherever its own hours would show (the sheet's tiles, the board's clock bar, History's cell and
+  day panel).
 - **A punch row saves only complete times.** `TimeField` (React Aria segments) commits the moment
   hour, minute and period are all filled, and throws a half-typed draft away when focus leaves the
   field or on Escape, which keeps focus in the field, so the row never shows a time the server
@@ -569,18 +571,20 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   its threshold: `secondMealApplies` counts an approved day as one that will pass it, so the
   alarm and the card's note start when the switch is set, not when the day runs over. The
   setting `overtimeApproval` shows/hides the switch and banner button, and with it off the
-  Clock out tile reads time past the day as "past your day" rather than a red "Over by"; a
-  flagged day counts only while the setting is on: `overtimeOn` (`lib/timeclock.ts`) decides,
-  which `Timeclock` (the tiles get the flag from it) and `useTodayAlarms` call.
+  Clock out tile (and the board's clock bar, which takes its words) reads time past the day as
+  "past your day" rather than a red "Over by"; a flagged day counts only while the setting is
+  on: `overtimeOn` (`lib/timeclock.ts`) decides, which `Timeclock` (the tiles get the flag from
+  it), `ClockBar` and `useTodayAlarms` call.
 - **`mealRules: false` turns the meal periods off in the math, not in the components.**
   `computeTimeclock` then never needs a lunch (`not-needed`, so no lunch alarm and no lunch added to
   the clock-out time) and `secondMealApplies` is false; a lunch that was punched still counts. The
-  card drops the Lunch by tile (the Focused tile shows either way), and with `lunchPunches: false`
-  too it hides the Lunch out / in rows, which stay in the data at positions 1 and 2:
-  `lunchRowsShown` decides (never on a day with a lunch punched). `stickerReasons` and
-  `lunchInPunchOrder` follow the same switches. `trackHours: false` only hides hours outside the
-  day's own tiles (the week line, History's hours, the Clocked out sticker via `stickerReasons`);
-  the timeclock still runs.
+  card drops the Lunch by tile (the Focused tile shows either way), and the board's clock bar its
+  Lunch by (`clockBarItems` reads `mealRules`, since a punched lunch is still `taken`). With
+  `lunchPunches: false` too the card hides the Lunch out / in rows, which stay in the data at
+  positions 1 and 2: `lunchRowsShown` decides (never on a day with a lunch punched).
+  `stickerReasons` and `lunchInPunchOrder` follow the same switches. `trackHours: false` only
+  hides hours outside the day's own tiles (the week line, History's hours, the Clocked out sticker
+  via `stickerReasons`); the timeclock and the clock bar still run.
 - **A task is stored once** (`items`, `server/board.ts`): a one-off typed on a sheet or made on the
   board, or a recurring priority (`weekdays` set), each with one name and one category that every
   day it is on shows, past days included. A day's list only names its tasks (below). A task's lane
@@ -1004,11 +1008,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   number against its bounds) → add the control to its tab in `client/src/components/settings/`
   (`TimeclockTab`, `AlarmsTab`, `SheetTab`, `DataTab`, and `BoardTab`, shown while the board is
   on, which takes `TabProps` and the dialog's `save`, for its board writes; the Sheet tab's
-  "History" section holds the calendar's switches, and its "Board" section the board's): a
-  `DurationField` (`components/DurationField.tsx`) for hours and minutes or a `NumberField`
-  (`settings/controls.tsx`) for one number, each with `{...SETTING_LIMITS.<key>}` for `min` and
-  `max`; a `SelectField` (`settings/controls.tsx`) for one choice from a fixed list; a `Toggle`
-  for a switch.
+  "History" section holds the calendar's switches, and its "Board" section the board's, but for
+  Times on the board (`clockBar`), which sits with the timeclock's switches after Overtime and
+  shows while the board is on): a `DurationField` (`components/DurationField.tsx`) for hours and
+  minutes or a `NumberField` (`settings/controls.tsx`) for one number, each with
+  `{...SETTING_LIMITS.<key>}` for `min` and `max`; a `SelectField` (`settings/controls.tsx`) for
+  one choice from a fixed list; a `Toggle` for a switch.
   `NumberInput` on its own puts several numbers on one row, like the timer's start buttons. The
   new setting also goes in `TEST_SETTINGS` (`client/src/test/fixtures.ts`), and the type makes a
   missing one an error. A setting that is an object edited a field at a time is merged field by
@@ -1338,11 +1343,16 @@ The browser pass for each surface (the logic under it is already tested):
   (Tab to a grip, Space, arrows, Space) with a screen reader, which hears where the card is and the
   done-item line, and Escape puts it back; with reduced motion on, nothing glides. At 1000 the copy
   under the pointer isn't clipped; at 375 a card sorts within the column shown, In progress and Done
-  show no grip, and Move to still moves. Categories (with about 30 added by `curl` to
-  `/api/board/categories` for a long list): a box's chip (a pick, New category, kept after a reload
-  and in the other boxes), a card editor's chip with its list scrolling inside and the box in view,
-  the cards' dot and name (a long name at 1000), and Settings → Board (a rename, a name in use, the
-  swatches wrapping at 375, Remove, the touch areas).
+  show no grip, and Move to still moves. The clock bar, at 1440, 1000 and 375: above the notice
+  and the columns with the seeded times and the time left, one line from 640 px and label over
+  time over line on a phone; Overtime approved, Overtime off and the meal periods off (no Lunch
+  by, and the switch's hint drops the lunch deadline) change it as they change the sheet's tiles;
+  Settings → Timeclock → Times on the board off hides it, and with the board off the switch isn't
+  there. Categories (with about 30 added by `curl` to `/api/board/categories` for a long list): a
+  box's chip (a pick, New category, kept after a reload and in the other boxes), a card editor's
+  chip with its list scrolling inside and the box in view, the cards' dot and name (a long name at
+  1000), and Settings → Board (a rename, a name in use, the swatches wrapping at 375, Remove, the
+  touch areas).
 - **The History calendar**: one month at the mobile preset: ◀ to a seeded month, tap a day,
   **Open day**, browser Back lands on that month with the day picked, and back through the
   header, **Review this week** lands on that week. Review → Month → ◀ → a row → Back lands on that

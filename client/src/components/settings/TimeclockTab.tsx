@@ -46,6 +46,14 @@ export function TimeclockTab({ settings, set }: TabProps) {
         checked={settings.overtimeApproval}
         onChange={(v) => set({ overtimeApproval: v })}
       />
+      {settings.board && (
+        <Toggle
+          label="Times on the board"
+          hint={`Today's clock in${settings.mealRules ? ', lunch deadline' : ''} and clock out time, in a row above the board's columns.`}
+          checked={settings.clockBar}
+          onChange={(v) => set({ clockBar: v })}
+        />
+      )}
       <Toggle
         label="Show hours"
         hint="The week line, the hours in History and the review, and the Clocked out sticker. Off if you don't track hours."

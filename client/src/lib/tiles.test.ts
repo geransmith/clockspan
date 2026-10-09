@@ -4,7 +4,7 @@ import { punchesAt, TEST_SETTINGS } from '../test/fixtures';
 import { CHECK_PUNCHES } from './copy';
 import type { Punch, Settings } from '../types';
 import { addPunchPair, clampToDay, computeTimeclock, dayTimeclock } from './timeclock';
-import { focusTile, timeclockTiles, type TileOptions } from './tiles';
+import { clockBarItems, focusTile, timeclockTiles, type TileOptions } from './tiles';
 
 const DAY = '2026-09-28';
 const at = (h: number, m = 0) => atTime(DAY, h, m);
@@ -40,6 +40,21 @@ function pastTiles(rows: Punch[], workMinutes: number | null = null) {
     formatTime: hhmm,
   });
 }
+
+/** Today's clock bar on these punches, as Board's bar builds it. */
+function bar(rows: Punch[], now: number, settings: Partial<Settings> = {}) {
+  const s = { ...TEST_SETTINGS, ...settings };
+  return clockBarItems(computeTimeclock(rows, s, now), {
+    now,
+    isToday: true,
+    alarms: s.alarms,
+    overtimeApproval: true,
+    overtimeApproved: false,
+    formatTime: hhmm,
+    mealRules: s.mealRules,
+  });
+}
+const ids = (items: { id: string }[]) => items.map((i) => i.id);
 
 const empty = punchesAt();
 const clockedIn = punchesAt(at(8));
@@ -177,6 +192,53 @@ describe('punches out of order', () => {
       expect(t.clockOut).toEqual(check);
       expect(t.lunch.sub).toBe('Taken at 12:00');
     }
+  });
+});
+
+describe('clockBarItems', () => {
+  it('shows dashes before clock-in, with no Lunch by', () => {
+    expect(bar(empty, at(7))).toEqual([
+      { id: 'clockIn', value: '—', sub: '', tone: '' },
+      { id: 'clockOut', value: '—', sub: 'Clock in to see your end time', tone: '' },
+    ]);
+  });
+
+  it('counts down to a clock-in typed ahead of now, and plans the day from it', () => {
+    const ahead = bar(punchesAt(at(9)), at(8, 50));
+    expect(ahead[0]).toEqual({ id: 'clockIn', value: '9:00', sub: 'In 10m', tone: '' });
+    expect(ahead.at(-1)).toMatchObject({ id: 'clockOut', value: '17:30' });
+    expect(bar(punchesAt(at(9)), at(9, 5))[0]).toEqual({ id: 'clockIn', value: '9:00', sub: '', tone: '' });
+  });
+
+  it('shows Lunch by with the meal periods on and a lunch planned or taken, as its tile does', () => {
+    expect(bar(clockedIn, at(9))).toEqual([
+      { id: 'clockIn', value: '8:00', sub: '', tone: '' },
+      { id: 'lunch', ...tiles(clockedIn, at(9)).lunch },
+      { id: 'clockOut', ...tiles(clockedIn, at(9)).clockOut },
+    ]);
+    expect(bar(afterLunch, at(13))[1]).toEqual({ id: 'lunch', value: '13:00', sub: 'Taken at 12:00', tone: 'tile--ok' });
+    // A half day fits the lunch window, until the hours worked pass it.
+    expect(ids(bar(clockedIn, at(9), { workMinutes: 240 }))).toEqual(['clockIn', 'clockOut']);
+    expect(bar(clockedIn, at(13, 10), { workMinutes: 240 })[1]).toEqual({ id: 'lunch', value: '13:00', sub: 'Overdue by 10m', tone: 'tile--danger' });
+  });
+
+  it('drops Lunch by with the meal periods off, while a punched lunch still moves the clock out', () => {
+    expect(ids(bar(clockedIn, at(9), { mealRules: false }))).toEqual(['clockIn', 'clockOut']);
+    const taken = bar(afterLunch, at(13), { mealRules: false });
+    expect(ids(taken)).toEqual(['clockIn', 'clockOut']);
+    expect(taken[1]).toMatchObject({ value: '16:30' });
+  });
+
+  it('reads Clock out at as its tile does, punches out of order included', () => {
+    const cases: [Punch[], number][] = [
+      [clockedIn, at(9)],
+      [punchesAt(at(8), at(12)), at(12, 10)],
+      [afterLunch, at(17)],
+      [punchesAt(at(8), at(12), at(12, 30), at(16, 45)), at(17)],
+      [punchesAt(at(9), at(12), at(11), at(17)), at(17, 30)],
+    ];
+    for (const [rows, now] of cases) expect(bar(rows, now).at(-1)).toEqual({ id: 'clockOut', ...tiles(rows, now).clockOut });
+    expect(bar(punchesAt(at(9), at(12), at(11), at(17)), at(17, 30)).at(-1)).toEqual({ id: 'clockOut', value: '—', sub: CHECK_PUNCHES, tone: '' });
   });
 });
 

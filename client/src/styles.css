@@ -2454,6 +2454,61 @@ button.log-label:hover {
   flex-direction: column;
   gap: 12px;
 }
+/* Today's times (ClockBar.tsx): the running bar's surface and border, with no shadow, dot or
+   progress line, scrolling with the page. An item carries its tile's tone class for --tile-ink,
+   without the tile's fill. On a phone each item is a column, label over time over line, on rows
+   the items share (subgrid, as .tiles), so a wrapped line doesn't move the others; from 640 px
+   each item reads on one line. */
+.clock-bar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+}
+.clock-bar dl {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  column-gap: 12px;
+  margin: 0;
+}
+.clock-bar dl > div {
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  align-content: start;
+  background: none;
+}
+.clock-bar dt {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+.clock-bar dd {
+  margin: 0;
+}
+.clock-bar-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.clock-bar .tile--danger .clock-bar-value {
+  color: var(--danger-ink);
+}
+@media (min-width: 640px) {
+  .clock-bar dl {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 24px;
+  }
+  .clock-bar dl > div {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+}
 .board-switch .segment {
   padding: 0 12px;
 }
