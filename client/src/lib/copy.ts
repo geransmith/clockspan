@@ -297,8 +297,9 @@ export const SAVE_FAILED = {
 } as const;
 
 /**
- * Under the timer's Start buttons when "Also add to today's priorities" can't add the row, and the
- * board's banner when the store refuses a move onto today's list (`MoveRefused`).
+ * Under the timer's Start buttons when "Also add to today's priorities" can't add the row, the
+ * board's banner when the store refuses a move onto today's list (`MoveRefused`), and `full` the
+ * line under In progress's + while it is shut on a full list.
  */
 export const ADD_PRIORITY_FAILED = {
   full: 'The priorities list is full.',
@@ -308,7 +309,8 @@ export const ADD_PRIORITY_FAILED = {
 /**
  * The board's refusals: a banner when the store turns a move down (`full`), and the board
  * notice's lines for a move refused before anything is sent (`recurringStays`, `planned`,
- * `removed`), with `close` its button. `full` is also the capture box's line while it is shut at the cap.
+ * `removed`), with `close` its button. `full` is also the line under Later's and Next's + while
+ * they are shut at the cap.
  * `nameTaken` is Settings → Board's line under a category named like another in use. `doneOn` is
  * the editor's line on a task ticked on an earlier day, which the board doesn't untick; `when`
  * is `dayName`'s in-sentence word or date. `plannedSheet` is the editor's line on a task a later

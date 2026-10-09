@@ -86,7 +86,7 @@ function laneUid(item: BoardItem | undefined, lane: OpenLane): string | null {
   return item?.card?.lane === lane ? item.uid : null;
 }
 
-/** Where capture and Move to put a task: the top of Later, the end of Next's own tasks. */
+/** Where a column's + and Move to put a task: the top of Later, the end of Next's own tasks. */
 export function laneStart(columns: BoardColumns, lane: OpenLane): string | null {
   return lane === 'later' ? (columns.later.find((i) => laneUid(i, 'later') != null)?.uid ?? null) : null;
 }

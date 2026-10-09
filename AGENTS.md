@@ -121,7 +121,7 @@ client/                 Vite root → dist/client
     copy.ts             every line the app raises at the user; no logic
     storage.ts          localStorage that never throws (private mode, quota); readDaySet / addToDaySet, a
                         set kept for one date under one key; the per-user keys (USER_KEYS:
-                        fired alarms, Start fresh, the break-over mark, the capture box's category, the
+                        fired alarms, Start fresh, the break-over mark, the board boxes' category, the
                         morning offer's answers) and adoptUser, which records who the app is open for
                         under AUTH_USER_KEY and drops the last user's keys
     board.ts            the board's columns from the tasks and today's rows (boardColumns), what a move
@@ -159,8 +159,8 @@ client/                 Vite root → dist/client
                         show it); settings/ holds SettingsDialog (the shell and tabs), a file per
                         tab (BoardTab: the categories and recurring priorities, shown while the
                         board is on), and controls.tsx; board/ holds the Board page (Board,
-                        BoardCard, Capture, and dnd.ts: its collision and keyboard settings for
-                        dnd-kit), its own lazy chunk
+                        BoardCard, Capture: a column's box, opened by the + in its head, and
+                        dnd.ts: its collision and keyboard settings for dnd-kit), its own lazy chunk
   src/auth/             AuthGate and the setup / login / new-password pages
   src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
   src/styles.css        design tokens and all component CSS
@@ -526,16 +526,17 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (`prioritiesSaved`), since the server refuses a task that day's list doesn't hold yet; and a board
   job that changes a day's list waits for that save (below). `useSettings` sends its PUTs and resets
   one at a time. The board (`useBoard`) sends each write as one job on its own queue, its change to
-  the tasks shown from the moment it is made; a job that changes today's list (a pull, a tick, a
-  rename or category of today's row, Remove from today, which leaves a free row as × does,
-  `takeOffRow`) goes through `editPriorities`, and so on the day store's list sends, and awaits that
-  save inside the job. A park waits for today's save still out, PATCHes the task's lane, then takes
-  its row off today's list and reads the board again; Delete (`deleteItem`, the board's and the
-  sheet's) waits for today's save, then sends `DELETE /items/:uid`, which takes every day's entry
-  and leaves the tombstone. `useBoard.tsx` says why each goes in that order. A board PATCH of a task
-  off today's list needs no wait: the board read that task from the server. A new edit of a day's
-  rows, the settings, the timer or the board goes through one of these, never straight to `api`.
-  Reads are not queued, and in every store a read's answer never replaces a change still on its way.
+  the tasks shown from the moment it is made; a job that changes today's list (a pull, a row typed
+  in In progress's box, a tick, a rename or category of today's row, Remove from today, which leaves
+  a free row as × does, `takeOffRow`) goes through `editPriorities`, and so on the day store's list
+  sends, and awaits that save inside the job. A park waits for today's save still out, PATCHes the
+  task's lane, then takes its row off today's list and reads the board again; Delete (`deleteItem`,
+  the board's and the sheet's) waits for today's save, then sends `DELETE /items/:uid`, which takes
+  every day's entry and leaves the tombstone. `useBoard.tsx` says why each goes in that order. A
+  board PATCH of a task off today's list needs no wait: the board read that task from the server. A
+  new edit of a day's rows, the settings, the timer or the board goes through one of these, never
+  straight to `api`. Reads are not queued, and in every store a read's answer never replaces a
+  change still on its way.
 - **Punch positions are fixed**: 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in pairs,
   and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches` enforces
   it). Kind is parity (`kindForPosition`, `shared/punches.ts`). The math evaluates *set* punches
@@ -583,19 +584,19 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **A task is stored once** (`items`, `server/board.ts`): a one-off typed on a sheet or made on the
   board, or a recurring priority (`weekdays` set), each with one name and one category that every
   day it is on shows, past days included. A day's list only names its tasks (below). A task's lane
-  (`later`, `next`, or none) is the board's alone: capture, a park, a Move to or drop into Later or
-  Next, and the done notice's Add a new card give one, and a task typed on a list has none. Done is
-  never stored: the server answers each task's `listDate` (its latest entry's day) and `listDone`
-  (that entry's tick), so the board and the days can't disagree. One lane rule follows a save: a
-  task in Later added open to its latest list (no entry on a later day) goes to the top of Next
-  (`nextFromLater`). A write sets the fields it changed and the last write wins: the list PUT writes
-  a task's name (trimmed) and category only where this device's row differs from its base row, makes
-  a task for a uid new to the user (no lane), and writes nothing for a task new to that list (a
-  carry, a pull, the offer), so a stale name never renames it; `PATCH /items/:uid` sets only the
-  fields sent, and sets or clears one weekday at a time (`weekday: { day, on }`), so two devices'
-  toggles both land. `POST /items` makes a task on the board (`lane`: capture, or a done item's new
-  task) or a recurring priority (`weekdays`), never both; a uid that exists answers the board as it
-  is (a retry), and an archived or deleted task's is a 404. The cap of 300
+  (`later`, `next`, or none) is the board's alone: the + of Later or Next, a park, a Move to or drop
+  into Later or Next, and the done notice's Add a new card give one, and a task typed on a list has
+  none. Done is never stored: the server answers each task's `listDate` (its latest entry's day) and
+  `listDone` (that entry's tick), so the board and the days can't disagree. One lane rule follows a
+  save: a task in Later added open to its latest list (no entry on a later day) goes to the top of
+  Next (`nextFromLater`). A write sets the fields it changed and the last write wins: the list PUT
+  writes a task's name (trimmed) and category only where this device's row differs from its base
+  row, makes a task for a uid new to the user (no lane), and writes nothing for a task new to that
+  list (a carry, a pull, the offer), so a stale name never renames it; `PATCH /items/:uid` sets only
+  the fields sent, and sets or clears one weekday at a time (`weekday: { day, on }`), so two
+  devices' toggles both land. `POST /items` makes a task on the board (`lane`: Later's or Next's +,
+  or a done item's new task) or a recurring priority (`weekdays`), never both; a uid that exists
+  answers the board as it is (a retry), and an archived or deleted task's is a 404. The cap of 300
   (`BOARD_LIMITS.openCards`) counts the tasks in Later or Next whose latest entry isn't ticked; only
   board writes reach it (`POST /items` with a lane, a PATCH giving a lane to a task in none),
   refused with a 400 (`FULL`, `routes/items.ts`), and the board checks it first (`BOARD.full`). A
@@ -720,11 +721,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   repeat evenly). The chip sets that uid at once and the create goes out as an optimistic board
   write; opening the list reads the board again, and a create the server refuses (another device
   took the name, a cap) is taken off with the "Change not saved" banner (in Settings → Board, the
-  header's Not saved), so what picked it reads as no category. The board's capture box remembers its
-  last category on the device (`USER_KEYS.captureCategory`; a removed or unknown one reads as none).
-  Settings → Board (`BoardTab`, shown while the board is on) adds (`categoryForName` again), renames
-  (refusing a name in use, `categoryNameTaken`), recolours and removes categories, each through the
-  dialog's `save`; a category's Remove archives it and doesn't ask.
+  header's Not saved), so what picked it reads as no category. The board columns' boxes share one
+  category, the last picked on the device (`USER_KEYS.captureCategory`; a removed or unknown one
+  reads as none). Settings → Board (`BoardTab`, shown while the board is on) adds (`categoryForName`
+  again), renames (refusing a name in use, `categoryNameTaken`), recolours and removes categories,
+  each through the dialog's `save`; a category's Remove archives it and doesn't ask.
 - **A recurring priority is a task with weekdays** (`items.weekdays`, made and edited through
   `/items` from Settings → Board, answered in `Board.recurring` in the order they were made,
   archived ones left out): a title, a category and the weekdays it is offered on, ISO 1 (Monday) to
@@ -791,16 +792,26 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   work on again; taken off today again (a park included), it is done again. The editor's title and
   category chip rename or file the task on every day: today's row through the row (`editRow`), any
   other task through a PATCH (`editItem`). Delete is the full delete (`deleteItem`) on every one-off
-  task, and today's recurring row has Remove from today (`removeFromToday`) in its place. One
-  `role="status"` slot under the capture box holds the board notice (the pull nudge, the done-item
-  notice or a refusal); what the store refuses once a move is under way (`MoveRefused`) is a banner.
-  A drag (`Board.tsx`, with dnd-kit's settings in `components/board/dnd.ts`) starts at an item's
-  grip; a planned task and a recurring row have none, and an item whose move is on its way can't be
-  picked up until the move lands. Where a drop lands is `dropTarget`'s (see its doc), and what a
-  screen reader hears comes from `BOARD_DRAG`, `overAnnouncement` and `moveAnnouncement`. dnd-kit's
-  own focus return is off, since it would take the focus from the notice a drop brings: a keyboard
-  drag puts it back on the item's grip, and so does closing the notice (on the title where the grip
-  is hidden or missing).
+  task, and today's recurring row has Remove from today (`removeFromToday`) in its place. The + at
+  the end of Later's, Next's and In progress's head opens that column's box (`Capture`: a field and
+  the category chip; `openAdd`, which also shows the column on a phone). Enter adds and keeps the
+  box open; an empty Enter or Escape closes it with the focus back on the +, Escape dropping the
+  text; leaving it closes it only while it is empty. Later's card goes at the top and Next's at the
+  end (`laneStart`, `addItem`). In progress's text is a new task on today's list, a `place` move of
+  `newTaskRow` through `move`, so on the board's queue; past the nudge it asks as Add priority does,
+  the text staying in the box until Add anyway, which closes the box and focuses the new row.
+  Later's and Next's + is `aria-disabled` at the cap (`boardFull`, `BOARD.full` under it), and In
+  progress's only on a full list (`hasRoom`, `ADD_PRIORITY_FAILED.full`), since its task has no
+  lane. A Delete that empties a column puts the focus on its +, or on Done's heading. One
+  `role="status"` slot above the columns holds the board notice (a pull's or a typed row's nudge,
+  the done-item notice or a refusal); what the store refuses once a move is under way
+  (`MoveRefused`) is a banner. A drag (`Board.tsx`, with dnd-kit's settings in
+  `components/board/dnd.ts`) starts at an item's grip; a planned task and a recurring row have none,
+  and an item whose move is on its way can't be picked up until the move lands. Where a drop lands
+  is `dropTarget`'s (see its doc), and what a screen reader hears comes from `BOARD_DRAG`,
+  `overAnnouncement` and `moveAnnouncement`. dnd-kit's own focus return is off, since it would take
+  the focus from the notice a drop brings: a keyboard drag puts it back on the item's grip, and so
+  does closing the notice (on the title where the grip is hidden or missing).
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started — one
   rule, no clock-in fallback. `GET /days/range` returns full days and the client does the rollup
@@ -1145,27 +1156,27 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   rule is a window query, so a card in a column gets the wide-window rules at about half the width:
   a rule that needs the room (the timeclock's four tiles in a row) is undone under `.sheet--split`.
   Tap targets are 44 px on a touch screen: `.btn` and `.input` set `min-height: 44px`, and a compact
-  control (chip, segment, running-bar button, banner close/action, log delete) keeps its drawn size
-  and gets the rest from the `@media (pointer: coarse)` block at the end of `styles.css`, an empty
-  `::after` reaching past its edge (a control that clips its overflow grows its padding instead).
-  Where two controls sit closer than that, each reaches half the gap. A new compact control joins
-  that block. A toggle's on state is styled from its ARIA attribute (`[aria-pressed='true']`,
-  `[aria-selected='true']`), never a parallel `is-on` / `is-active` class. Inputs are 16 px so iOS
-  doesn't zoom. No external fonts or assets (the CSP would block them anyway). Safe-area insets via
-  `--safe-top`, `--safe-bottom`, `--safe-left` and `--safe-right` (a phone held sideways puts the
-  notch on a side). Words in a tone's colour use its `-ink` token (`--accent-ink`, `--ok-ink`,
-  `--warn-ink`, `--danger-ink`), which keeps light-mode text at 4.5:1 and up; the tone itself is for
-  fills, borders, icons and bars. A category's colour (`--cat-<id>`, picked by `data-color`) is a
-  fill only (see "A category colour" for its contrast): a dot, and Review's By category bars, solid
-  for the time on a priority and striped in the same colour for the time off the plan (No category's
-  bar is `--text-2`, not in the test). A category's name is never drawn in it, and its dot always
-  sits beside the name, since the eight colours repeat (`nextColor`); the one exception is the day
-  log's dot, named by its `label`. `CategoryChip` is the one category picker: its list is `position:
-  fixed` inside the chip's wrapper, placed by `placePopover` (`lib/popover.ts`) and scrolling
-  inside, so no card or dialog clips it and New category stays in view. A sheet row's empty chip (a
-  priority row's, a Plan tomorrow row's) is quiet: with a mouse it shows on the row's hover or focus
-  only, from the `(hover: hover)` rule beside the chip's. `.category-chip` and `.swatch` are in the
-  coarse block.
+  control (chip, segment, running-bar button, banner close/action, log delete, a board column's +)
+  keeps its drawn size and gets the rest from the `@media (pointer: coarse)` block at the end of
+  `styles.css`, an empty `::after` reaching past its edge (a control that clips its overflow grows
+  its padding instead). Where two controls sit closer than that, each reaches half the gap. A new
+  compact control joins that block. A toggle's on state is styled from its ARIA attribute
+  (`[aria-pressed='true']`, `[aria-selected='true']`), never a parallel `is-on` / `is-active` class.
+  Inputs are 16 px so iOS doesn't zoom. No external fonts or assets (the CSP would block them
+  anyway). Safe-area insets via `--safe-top`, `--safe-bottom`, `--safe-left` and `--safe-right` (a
+  phone held sideways puts the notch on a side). Words in a tone's colour use its `-ink` token
+  (`--accent-ink`, `--ok-ink`, `--warn-ink`, `--danger-ink`), which keeps light-mode text at 4.5:1
+  and up; the tone itself is for fills, borders, icons and bars. A category's colour (`--cat-<id>`,
+  picked by `data-color`) is a fill only (see "A category colour" for its contrast): a dot, and
+  Review's By category bars, solid for the time on a priority and striped in the same colour for the
+  time off the plan (No category's bar is `--text-2`, not in the test). A category's name is never
+  drawn in it, and its dot always sits beside the name, since the eight colours repeat
+  (`nextColor`); the one exception is the day log's dot, named by its `label`. `CategoryChip` is the
+  one category picker: its list is `position: fixed` inside the chip's wrapper, placed by
+  `placePopover` (`lib/popover.ts`) and scrolling inside, so no card or dialog clips it and New
+  category stays in view. A sheet row's empty chip (a priority row's, a Plan tomorrow row's) is
+  quiet: with a mouse it shows on the row's hover or focus only, from the `(hover: hover)` rule
+  beside the chip's. `.category-chip` and `.swatch` are in the coarse block.
 - Numeric settings inputs commit on blur or Enter, never on every keystroke (`NumberInput`);
   `DurationField` commits when focus leaves its hours / minutes pair or on Enter, so moving from
   hours to minutes saves nothing. A blank or non-numeric box puts the stored value back and
@@ -1174,9 +1185,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - A form that sends a request submits through `useSubmit()` (`hooks/useSubmit.ts`), and a
   button that sends one calls its `run`: one send at a time with the button disabled, and one
   error line (`ErrorLine`), cleared when a send starts and filled with what it throws (a
-  mismatched confirmation throws too). A store write that shows at once (the board's capture
-  box, a card's Move to) is not a form send: it goes through its store, and a failure is the
-  banner.
+  mismatched confirmation throws too). A store write that shows at once (a board column's box, a
+  card's Move to) is not a form send: it goes through its store, and a failure is the banner.
 - Comments explain *why* (browser quirks, math), not what.
 - No new dependency (a server one or a client library the bundle carries) without stating the
   reason in the PR body, which becomes the squash commit's message on `main`.
@@ -1312,23 +1322,25 @@ The browser pass for each surface (the logic under it is already tested):
   on a Monday): it is one task on every day the seed adds it mid-day, so the category reaches
   each of them, and any period holding one of those days names it.
 - **The board**: after `npm run seed`, turn it on (`PUT /api/settings {"board":true}`, see "Dev
-  data is disposable") and press Board. At 1440: the four columns, a left-open task's "Left open
-  from …" in Next, Move to from each column (a done item's notice), a park of a task typed seconds
-  ago, a done-earlier task's editor, and this week's routine ticks in Done. At 1000, where the
-  columns are narrowest: titles clamp to two lines, meta lines wrap, the Move to select
-  fits. At 375: the switch shows one column, the notice wraps, and with sign-in on (`web-local`,
-  `npm run seed -- --auth local --sessions`, the printed cookie set and the board turned on in
-  Settings → Sheet) the sheet's five header buttons fit with the brand's name gone. Light and dark.
-  The drag pass: at 1440, drag with the mouse between each pair of columns (Later and Next take
-  the card where it is dropped), a done row onto Later (the notice), then by keyboard (Tab to a
-  grip, Space, arrows, Space) with a screen reader, which hears where the card is and the
+  data is disposable") and press Board. At 1440: the four columns; each +'s box (Later's card at the
+  top, Next's at the end, In progress's row on today's sheet and asking past three rows; Enter keeps
+  the box, an empty Enter or Escape closes it, one with text stays open when left); a left-open
+  task's "Left open from …" in Next, Move to from each column (a done item's notice), a park of a
+  task typed seconds ago, a done-earlier task's editor, and this week's routine ticks in Done. At
+  1000, where the columns are narrowest: titles clamp to two lines, meta lines wrap, the Move to
+  select fits. At 375: the switch shows one column, the notice wraps, and with sign-in on
+  (`web-local`, `npm run seed -- --auth local --sessions`, the printed cookie set and the board
+  turned on in Settings → Sheet) the sheet's five header buttons fit with the brand's name gone.
+  Light and dark. The drag pass: at 1440, drag with the mouse between each pair of columns (Later
+  and Next take the card where it is dropped), a done row onto Later (the notice), then by keyboard
+  (Tab to a grip, Space, arrows, Space) with a screen reader, which hears where the card is and the
   done-item line, and Escape puts it back; with reduced motion on, nothing glides. At 1000 the copy
   under the pointer isn't clipped; at 375 a card sorts within the column shown, In progress and Done
   show no grip, and Move to still moves. Categories (with about 30 added by `curl` to
-  `/api/board/categories` for a long list): the capture chip (a pick, New category, kept after a
-  reload), a card editor's chip with its list scrolling inside and the box in view, the cards' dot
-  and name (a long name at 1000), and Settings → Board (a rename, a name in use, the swatches
-  wrapping at 375, Remove, the touch areas).
+  `/api/board/categories` for a long list): a box's chip (a pick, New category, kept after a reload
+  and in the other boxes), a card editor's chip with its list scrolling inside and the box in view,
+  the cards' dot and name (a long name at 1000), and Settings → Board (a rename, a name in use, the
+  swatches wrapping at 375, Remove, the touch areas).
 - **The History calendar**: one month at the mobile preset: ◀ to a seeded month, tap a day,
   **Open day**, browser Back lands on that month with the day picked, and back through the
   header, **Review this week** lands on that week. Review → Month → ◀ → a row → Back lands on that

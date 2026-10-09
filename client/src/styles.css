@@ -2454,29 +2454,6 @@ button.log-label:hover {
   flex-direction: column;
   gap: 12px;
 }
-.board-capture {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-/* On a phone the box has its own line, with the category chip and Add under it. */
-.board-capture-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-}
-.board-capture-row > .input {
-  grid-column: 1 / -1;
-}
-@media (min-width: 640px) {
-  .board-capture-row {
-    grid-template-columns: minmax(0, 1fr) auto auto;
-  }
-  .board-capture-row > .input {
-    grid-column: auto;
-  }
-}
 .board-switch .segment {
   padding: 0 12px;
 }
@@ -2500,8 +2477,37 @@ button.log-label:hover {
 }
 .board-col-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
+  /* The +'s height, so Done's head, which has none, lines its cards up with the others. */
+  min-height: 32px;
+}
+/* A column's +, drawn small at the end of its head; its touch area is in the pointer: coarse
+   block. The hover takes --surface-3, since .btn's --surface-2 is the column's own fill. */
+.board-add {
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+  margin-left: auto;
+  color: var(--text-2);
+}
+.board-add:hover:not([aria-disabled='true']) {
+  background: var(--surface-3);
+}
+.board-add[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* A column's box: the field, with the category chip beside it or, in a narrow column, under it. */
+.board-add-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.board-add-box > .input {
+  flex: 1 1 10rem;
+  min-width: 0;
 }
 .board-col-sub {
   margin-top: -6px;
@@ -2976,6 +2982,7 @@ dialog.dialog::backdrop {
   .priority-tick,
   .board-grip,
   .board-tick,
+  .board-add,
   .brand,
   .calendar-day,
   .swatch {
@@ -2993,6 +3000,7 @@ dialog.dialog::backdrop {
   .priority-tick::after,
   .board-grip::after,
   .board-tick::after,
+  .board-add::after,
   .brand::after,
   .calendar-day::after,
   .swatch::after {
@@ -3009,8 +3017,8 @@ dialog.dialog::backdrop {
   .weekdays .chip {
     --hit-inset: -5px -4px;
   }
-  /* 28 px, centred in a row 44 px tall (beside the capture box's 44 px Add button or, from 640 px,
-     a priority's field, at the end of a planner's row, or on a row of its own in the board's
+  /* 28 px, centred in a row 44 px tall (beside a board column's field or, from 640 px, a
+     priority's field, at the end of a planner's row, or on a row of its own in the board's
      editor and a log row's edit), 6 px or more from the control beside it: 44 px tall, reaching
      half that gap at most. Beside the timer's Also add, on a 32 px line 12 px from the next, it
      reaches 6 px past it, half that gap too. Under a priority's field it reaches 4 px up and
@@ -3072,6 +3080,11 @@ dialog.dialog::backdrop {
      tick or the title on its right, with cards 8 px apart: 38 × 44 px, 2 px into the gap. */
   .board-grip {
     --hit-inset: -10px -4px -10px -14px;
+  }
+  /* 32 px square at the end of a column's head, in the column's 12 px padding, 8 px above the
+     box, the line under the head or the first card, whose title reaches 2 px into that gap: 44 px. */
+  .board-add {
+    --hit-inset: -6px;
   }
   /* 40 px at the top of the page with nothing above it: 44 px. */
   .brand {

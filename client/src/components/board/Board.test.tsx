@@ -1,13 +1,14 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import type { NewItem } from '../../api';
 import { BOARD_LIMITS, LOOKBACK_DAYS } from '../../../../shared/api.js';
 import { addDays, HOUR_MS, MINUTE_MS } from '../../../../shared/dates.js';
+import { MAX_PRIORITIES } from '../../../../shared/settings.js';
 import { unlockAudio, warnQuietly, warnSaveFailed } from '../../lib/alerts';
 import { withCategory, withItem, withItemPatch, withoutItem } from '../../lib/board';
-import { BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, PRIORITY_WARNINGS, WARNING_ACTIONS } from '../../lib/copy';
+import { ADD_PRIORITY_FAILED, BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, PRIORITY_WARNINGS, WARNING_ACTIONS } from '../../lib/copy';
 import { USER_KEYS } from '../../lib/storage';
 import {
   completedSession,
@@ -40,8 +41,6 @@ const NOW = new Date(2026, 8, 30, 10).getTime();
 
 let onServer: BoardData;
 let lists: Record<string, Priority[]>;
-/** The queries matchMedia matches now: '(pointer: fine)' while the page has a mouse or trackpad, so the capture box focuses itself and says its keys. */
-let media: Set<string>;
 
 /** A task on a day's list; its uid is the task's, `row<position>` unless given. */
 const row = (position: number, text: string, patch: Partial<Priority> = {}) =>
@@ -81,13 +80,24 @@ const moveOptions = () =>
     .getAllByRole('option')
     .map((o) => o.textContent);
 const putLists = () => vi.mocked(api.putPriorities).mock.calls.map(([date, list]) => ({ date, texts: list.map((p) => p.text) }));
-/** The tasks capture and Add a new card sent: always to a lane. */
+/** The tasks a lane's box and Add a new card sent: always to a lane. */
 const added = () => vi.mocked(api.addItem).mock.calls.map(([item]) => item as Extract<NewItem, { lane: unknown }>);
+/** A column's + by its heading. */
+const plus = (name: string) => screen.getByRole('button', { name: `Add to ${name}` });
+/** A column's box by its field's name. */
+const field = (name: string) => screen.getByRole('textbox', { name }) as HTMLInputElement;
+const isOpen = (name: string) => screen.queryByRole('textbox', { name }) !== null;
+/** Types into a box and presses Enter. */
+const enter = (box: HTMLElement, text: string) => {
+  fireEvent.change(box, { target: { value: text } });
+  fireEvent.keyDown(box, { key: 'Enter' });
+};
+/** The columns a phone shows, one at a time. */
+const shownColumns = () => [...document.querySelectorAll('.board-col[data-shown]')].map((c) => c.querySelector('h2')!.textContent);
 
 beforeEach(() => {
   vi.useFakeTimers({ now: NOW });
-  media = new Set(['(pointer: fine)']);
-  stubMatchMedia(media);
+  stubMatchMedia(new Set());
   onServer = makeBoard(
     makeCard('later0000001', 'Write a KB'),
     makeCard('next00000001', 'Follow up', { lane: 'next' }),
@@ -140,46 +150,6 @@ describe('Board', () => {
     expect(api.editItem).toHaveBeenCalledExactlyOnceWith('left00000001', { lane: 'next', before: null });
     expect(titlesIn('Next')).toEqual(['Follow up', 'Plan B', 'Check the logs']);
     expect(within(column('Next')).queryByText('Left open from yesterday')).toBeNull();
-  });
-
-  it('adds a captured task at the top of Later on Enter and at the end of Next on Shift+Enter, keeping the box', async () => {
-    await renderBoard();
-    const box = screen.getByRole('textbox', { name: 'Add a card' }) as HTMLInputElement;
-    expect(document.activeElement).toBe(box);
-    expect(screen.getByText('Enter adds to Later, Shift+Enter to Next')).toBeTruthy();
-    fireEvent.change(box, { target: { value: '  Look into the export  ' } });
-    fireEvent.keyDown(box, { key: 'Enter' });
-    fireEvent.change(box, { target: { value: 'Call the vendor' } });
-    fireEvent.keyDown(box, { key: 'Enter', shiftKey: true });
-    // A blank box adds nothing.
-    fireEvent.keyDown(box, { key: 'Enter' });
-    await settle();
-    expect(added().map((c) => [c.title, c.categoryUid, c.lane, c.before])).toEqual([
-      ['Look into the export', null, 'later', 'later0000001'],
-      ['Call the vendor', null, 'next', null],
-    ]);
-    expect(box.value).toBe('');
-    expect(document.activeElement).toBe(box);
-    expect(titlesIn('Later')).toEqual(['Look into the export', 'Write a KB']);
-    // Plan B sits in Next at its place: planned for tomorrow, not moved.
-    expect(titlesIn('Next')).toEqual(['Follow up', 'Plan B', 'Call the vendor']);
-    // The button adds to Later too, and gives the focus back to the box.
-    fireEvent.change(box, { target: { value: 'One more' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add to Later' }));
-    expect(document.activeElement).toBe(box);
-    fireEvent.keyDown(box, { key: 'Escape' });
-    expect(document.activeElement).not.toBe(box);
-  });
-
-  it('leaves the focus alone and the keys unsaid on a touch screen, and stops capture at the cap', async () => {
-    media.delete('(pointer: fine)');
-    onServer = makeBoard(...fullBoard());
-    await renderBoard();
-    const box = screen.getByRole('textbox', { name: 'Add a card' });
-    expect(document.activeElement).not.toBe(box);
-    expect(screen.queryByText('Enter adds to Later, Shift+Enter to Next')).toBeNull();
-    expect((box as HTMLInputElement).disabled).toBe(true);
-    expect(screen.getByText(BOARD.full)).toBeTruthy();
   });
 
   it('moves a task between Later and Next with Move to', async () => {
@@ -288,7 +258,6 @@ describe('Board', () => {
   });
 
   it('puts the focus on the moved item once it lands, when the move left it nowhere', async () => {
-    media.delete('(pointer: fine)');
     await renderBoard();
     openEditor('Report');
     // The select goes with the editor, and the focus with it.
@@ -305,8 +274,8 @@ describe('Board', () => {
     await renderBoard();
     openEditor('Report');
     moveTo('later');
-    const box = screen.getByRole('textbox', { name: 'Add a card' });
-    box.focus();
+    fireEvent.click(plus('Later'));
+    const box = field('New card for Later');
     placed.resolve((onServer = withItemPatch(onServer, REPORT, { lane: 'later', before: 'later0000001' })));
     await settle();
     expect(titlesIn('Later')).toEqual(['Report', 'Write a KB']);
@@ -367,7 +336,7 @@ describe('Board', () => {
       expect(uid).not.toBe(EMAIL);
       expect(titlesIn('Done')).toContain('Email');
       expect(titlesIn('Next')).toEqual(['Follow up', 'Plan B', 'Email']);
-      // Later's new task goes at the top, as capture puts one.
+      // Later's new task goes at the top, as Later's + puts one.
       fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
       openEditor('Shipped');
       moveTo('later');
@@ -558,8 +527,7 @@ describe('Board', () => {
     expect(confirm).toHaveBeenLastCalledWith(CONFIRM.deleteTask(2, '16m'));
   });
 
-  it('puts the focus on the next item in the column after a Delete, else the one before, else the capture box', async () => {
-    media.delete('(pointer: fine)');
+  it("puts the focus on the next item in the column after a Delete, else the one before, else the column's + or Done's heading", async () => {
     vi.stubGlobal('confirm', () => true);
     onServer = makeBoard(...onServer.cards, makeCard('next00000002', 'Call back', { lane: 'next', position: 3 }));
     await renderBoard();
@@ -576,7 +544,17 @@ describe('Board', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     await settle();
     expect(titlesIn('Later')).toEqual([]);
-    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Add a card' }));
+    expect(document.activeElement).toBe(plus('Later'));
+    // Done has no +, and the items folded under Earlier this week take no focus: its heading does.
+    vi.mocked(api.deleteItem).mockImplementationOnce((uid) => {
+      lists[WED] = lists[WED]!.filter((p) => p.uid !== uid);
+      return Promise.resolve((onServer = withoutItem(onServer, uid)));
+    });
+    openEditor('Email');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await settle();
+    expect(titlesIn('Done')).toEqual(['Earlier this week · 2']);
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Done' }));
   });
 
   it("shows today's row parked in a lane where it lands, with no tick, rename, category or Remove until the park lands", async () => {
@@ -678,10 +656,9 @@ describe('Board', () => {
 
   it('shows one column at a time from the switch, In progress first', async () => {
     await renderBoard();
-    const shown = () => [...document.querySelectorAll('.board-col[data-shown]')].map((c) => c.querySelector('h2')!.textContent);
-    expect(shown()).toEqual(['In progress']);
+    expect(shownColumns()).toEqual(['In progress']);
     fireEvent.click(within(screen.getByRole('group', { name: 'Board column' })).getByRole('button', { name: 'Later' }));
-    expect(shown()).toEqual(['Later']);
+    expect(shownColumns()).toEqual(['Later']);
   });
 
   it('shows a Try again for a board that could not be read', async () => {
@@ -692,6 +669,191 @@ describe('Board', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await settle();
     expect(titlesIn('Later')).toEqual(['Write a KB']);
+  });
+});
+
+describe('adding from a column', () => {
+  it("adds a card at the top of Later or the end of Next from the column's +, keeping the box open for the next", async () => {
+    await renderBoard();
+    // No box is open until a + is pressed, and Done has no +.
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add to Done' })).toBeNull();
+    fireEvent.click(plus('Later'));
+    const later = field('New card for Later');
+    expect(document.activeElement).toBe(later);
+    expect(later.placeholder).toBe('New card');
+    enter(later, '  Look into the export  ');
+    expect(later.value).toBe('');
+    expect(document.activeElement).toBe(later);
+    // Pressed again, the + only gives its box the focus.
+    fireEvent.change(later, { target: { value: 'Half typed' } });
+    plus('Later').focus();
+    fireEvent.click(plus('Later'));
+    expect(document.activeElement).toBe(later);
+    expect(later.value).toBe('Half typed');
+    fireEvent.click(plus('Next'));
+    const next = field('New card for Next');
+    expect(document.activeElement).toBe(next);
+    // Shift+Enter is Enter, and an input method's Enter adds nothing.
+    fireEvent.change(next, { target: { value: 'Call the vendor' } });
+    fireEvent.keyDown(next, { key: 'Enter', isComposing: true });
+    fireEvent.keyDown(next, { key: 'Enter', shiftKey: true });
+    await settle();
+    expect(added().map((c) => [c.title, c.categoryUid, c.lane, c.before])).toEqual([
+      ['Look into the export', null, 'later', 'later0000001'],
+      ['Call the vendor', null, 'next', null],
+    ]);
+    expect(titlesIn('Later')).toEqual(['Look into the export', 'Write a KB']);
+    // Plan B sits in Next at its place: planned for tomorrow, not moved.
+    expect(titlesIn('Next')).toEqual(['Follow up', 'Plan B', 'Call the vendor']);
+    // Later's box, left with text, stays open.
+    expect(field('New card for Later').value).toBe('Half typed');
+  });
+
+  it('closes a box on Escape, dropping its text, or on an empty Enter, with the focus back on its +, and on leaving it only while empty', async () => {
+    await renderBoard();
+    fireEvent.click(plus('Later'));
+    fireEvent.change(field('New card for Later'), { target: { value: 'Half a thought' } });
+    // An input method's Escape is the input method's.
+    fireEvent.keyDown(field('New card for Later'), { key: 'Escape', isComposing: true });
+    expect(isOpen('New card for Later')).toBe(true);
+    fireEvent.keyDown(field('New card for Later'), { key: 'Escape' });
+    expect(isOpen('New card for Later')).toBe(false);
+    expect(document.activeElement).toBe(plus('Later'));
+    fireEvent.click(plus('Later'));
+    expect(field('New card for Later').value).toBe('');
+    fireEvent.change(field('New card for Later'), { target: { value: '   ' } });
+    fireEvent.keyDown(field('New card for Later'), { key: 'Enter' });
+    expect(isOpen('New card for Later')).toBe(false);
+    expect(document.activeElement).toBe(plus('Later'));
+
+    // Left with text it stays open; left empty it closes, and the focus stays where it went.
+    fireEvent.click(plus('Next'));
+    const next = field('New card for Next');
+    fireEvent.change(next, { target: { value: 'Keep me' } });
+    act(() => next.blur());
+    expect(field('New card for Next').value).toBe('Keep me');
+    fireEvent.change(next, { target: { value: '' } });
+    act(() => next.focus());
+    // Switching to another app closes nothing.
+    const away = vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    act(() => next.blur());
+    expect(isOpen('New card for Next')).toBe(true);
+    away.mockRestore();
+    act(() => next.focus());
+    openEditor('Write a KB');
+    const title = screen.getByRole('textbox', { name: 'Title' });
+    act(() => title.focus());
+    expect(isOpen('New card for Next')).toBe(false);
+    expect(document.activeElement).toBe(title);
+    await settle();
+    expect(api.addItem).not.toHaveBeenCalled();
+  });
+
+  it('shows the column whose + is pressed, as a phone shows one at a time', async () => {
+    await renderBoard();
+    expect(shownColumns()).toEqual(['In progress']);
+    fireEvent.click(plus('Later'));
+    expect(shownColumns()).toEqual(['Later']);
+    expect(document.activeElement).toBe(field('New card for Later'));
+  });
+
+  it("shuts Later's and Next's + at the cap and In progress's on a full list, saying why under each, where Tab still reaches it", async () => {
+    onServer = makeBoard(...fullBoard());
+    await renderBoard();
+    const why = (add: HTMLElement) => document.getElementById(add.getAttribute('aria-describedby')!)?.textContent;
+    for (const name of ['Later', 'Next']) {
+      expect(plus(name).getAttribute('aria-disabled')).toBe('true');
+      expect(why(plus(name))).toBe(BOARD.full);
+      fireEvent.click(plus(name));
+    }
+    expect(screen.queryByRole('textbox')).toBeNull();
+    // A task typed in In progress has no lane: the cap doesn't count it.
+    expect(plus('In progress').getAttribute('aria-disabled')).toBeNull();
+    expect(plus('In progress').getAttribute('aria-describedby')).toBeNull();
+    fireEvent.click(plus('In progress'));
+    enter(field('New priority for today'), 'Call the vendor');
+    await settle();
+    expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Call the vendor'] }]);
+
+    cleanup();
+    onServer = makeBoard();
+    lists[WED] = Array.from({ length: MAX_PRIORITIES }, (_, i) => row(i + 1, `Task ${i + 1}`));
+    await renderBoard();
+    expect(plus('In progress').getAttribute('aria-disabled')).toBe('true');
+    expect(why(plus('In progress'))).toBe(ADD_PRIORITY_FAILED.full);
+    fireEvent.click(plus('In progress'));
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(plus('Later').getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it("adds a task to today's list from In progress's box on the board's queue, after a board write still out, and keeps the box", async () => {
+    const placed = deferred<BoardData>();
+    vi.mocked(api.editItem).mockReturnValueOnce(placed.promise);
+    await renderBoard();
+    openEditor('Report');
+    moveTo('later');
+    fireEvent.click(plus('In progress'));
+    const box = field('New priority for today');
+    expect(box.placeholder).toBe('New priority');
+    enter(box, 'Call the vendor');
+    // The box stays open for the next one, with the focus.
+    expect(box.value).toBe('');
+    expect(document.activeElement).toBe(box);
+    await settle();
+    expect(api.putPriorities).not.toHaveBeenCalled();
+    // Left empty, it closes; the row landing later takes the focus from nowhere.
+    act(() => box.blur());
+    expect(isOpen('New priority for today')).toBe(false);
+    placed.resolve((onServer = withItemPatch(onServer, REPORT, { lane: 'later', before: 'later0000001' })));
+    await settle();
+    // The park's list, then the new row in the row it freed: a task of its own, in no lane.
+    expect(putLists()).toEqual([
+      { date: WED, texts: ['', 'Email', ''] },
+      { date: WED, texts: ['Call the vendor', 'Email', ''] },
+    ]);
+    expect(lists[WED]![0]).toMatchObject({ text: 'Call the vendor', done: false, recurring: false, categoryUid: null });
+    expect(lists[WED]![0]!.uid).toMatch(/^[0-9a-f]{12}$/);
+    expect(api.addItem).not.toHaveBeenCalled();
+    expect(titlesIn('In progress')).toEqual(['Call the vendor']);
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("asks first from In progress's box past the nudge: Keep it short leaves the text in the box, Add anyway adds it, closes the box and focuses the new row", async () => {
+    lists[WED] = [row(1, 'Report'), row(2, 'Email'), row(3, 'Invoices')];
+    await renderBoard();
+    fireEvent.click(plus('In progress'));
+    const box = field('New priority for today');
+    enter(box, 'Call the vendor');
+    expect(PRIORITY_WARNINGS.fresh).toContain(within(notice()).getByText(/./, { selector: 'span:not(.notice-actions)' }).textContent);
+    expect(document.activeElement).toBe(within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
+    expect(box.value).toBe('Call the vendor');
+    fireEvent.click(within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.keep }));
+    expect(within(notice()).queryByRole('button')).toBeNull();
+    expect(document.activeElement).toBe(box);
+    expect(box.value).toBe('Call the vendor');
+    await settle();
+    expect(api.putPriorities).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(box, { key: 'Enter' });
+    fireEvent.click(within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
+    expect(isOpen('New priority for today')).toBe(false);
+    await settle();
+    expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Invoices', 'Call the vendor'] }]);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Call the vendor' }));
+  });
+
+  it("drops the row In progress's box held for the nudge when the box closes", async () => {
+    lists[WED] = [row(1, 'Report'), row(2, 'Email'), row(3, 'Invoices')];
+    await renderBoard();
+    fireEvent.click(plus('In progress'));
+    enter(field('New priority for today'), 'Call the vendor');
+    expect(within(notice()).getAllByRole('button')).toHaveLength(2);
+    fireEvent.keyDown(field('New priority for today'), { key: 'Escape' });
+    expect(notice().textContent).toBe('');
+    expect(document.activeElement).toBe(plus('In progress'));
+    await settle();
+    expect(api.putPriorities).not.toHaveBeenCalled();
   });
 });
 
@@ -906,13 +1068,16 @@ describe('categories', () => {
   const TICKETS = makeCategory('cat000000001', 'Tickets');
   const ADMIN = makeCategory('cat000000002', 'Admin', { color: 'teal' });
   const OLD = makeCategory('cat000000003', 'Old work', { color: 'gold', archived: true });
-  const captureChip = () => screen.getByRole('button', { name: /^Category for new cards: / });
-  const pickOption = (name: string) => fireEvent.click(screen.getByRole('option', { name }));
-  const capture = (title: string) => {
-    const box = screen.getByRole('textbox', { name: 'Add a card' });
-    fireEvent.change(box, { target: { value: title } });
-    fireEvent.keyDown(box, { key: 'Enter' });
+  /** A column's box, opened by its + when it isn't open yet. */
+  const openBox = (column: string, name: string) => {
+    if (!isOpen(name)) fireEvent.click(plus(column));
+    return field(name);
   };
+  const laterBox = () => openBox('Later', 'New card for Later');
+  const chipOf = (box: HTMLElement) => within(box.closest<HTMLElement>('.board-add-box')!).getByRole('button', { name: /^Category for new cards: / });
+  const captureChip = () => chipOf(laterBox());
+  const pickOption = (name: string) => fireEvent.click(screen.getByRole('option', { name }));
+  const capture = (title: string) => enter(laterBox(), title);
   const sentCategories = () => added().map((c) => c.categoryUid);
 
   beforeEach(() => {
@@ -943,7 +1108,7 @@ describe('categories', () => {
     expect(meta.textContent).toBe('Tickets');
   });
 
-  it("sends a new card in the capture box's category, remembered on this device", async () => {
+  it("sends a new item in the box's category, remembered on this device and shared by every column's box", async () => {
     await renderBoard();
     expect(captureChip().textContent).toBe('Category');
     fireEvent.click(captureChip());
@@ -951,16 +1116,22 @@ describe('categories', () => {
     expect(localStorage.getItem(USER_KEYS.captureCategory)).toBe(ADMIN.uid);
     capture('Call the vendor');
     capture('Order cables');
+    // In progress's box reads it as it opens, and its row's task takes it.
+    const today = openBox('In progress', 'New priority for today');
+    expect(chipOf(today).getAttribute('aria-label')).toBe('Category for new cards: Admin');
+    enter(today, 'Ring the bank');
     await settle();
     expect(sentCategories()).toEqual([ADMIN.uid, ADMIN.uid]);
+    expect(lists[WED]!.find((p) => p.text === 'Ring the bank')?.categoryUid).toBe(ADMIN.uid);
 
     cleanup();
     await renderBoard();
-    expect(captureChip().getAttribute('aria-label')).toBe('Category for new cards: Admin');
-    fireEvent.click(captureChip());
+    const next = openBox('Next', 'New card for Next');
+    expect(chipOf(next).getAttribute('aria-label')).toBe('Category for new cards: Admin');
+    fireEvent.click(chipOf(next));
     pickOption('No category');
     expect(localStorage.getItem(USER_KEYS.captureCategory)).toBe('');
-    capture('No category this time');
+    enter(next, 'No category this time');
     await settle();
     expect(sentCategories()).toEqual([ADMIN.uid, ADMIN.uid, null]);
   });
@@ -974,7 +1145,7 @@ describe('categories', () => {
     expect(sentCategories()).toEqual([null]);
   });
 
-  it("makes a category from the capture chip's New category, in the next colour, and uses it at once", async () => {
+  it("makes a category from a box chip's New category, in the next colour, and uses it at once", async () => {
     await renderBoard();
     fireEvent.click(captureChip());
     const box = screen.getByRole('textbox', { name: 'New category' });
