@@ -19,6 +19,7 @@ import type { Priority, Recurring, Session } from '../types';
 import { Burst } from './Burst';
 import { CategoryChip } from './CategoryChip';
 import { Check, Plus, X } from './Icons';
+import { NoteField, NoteToggle } from './Note';
 import { RemoveTask } from './RemoveTask';
 import { RepeatMark } from './RepeatMark';
 import { TodayOffer, type MorningOffer } from './TodayOffer';
@@ -33,6 +34,8 @@ interface Props {
   onChange: (priorities: Priority[], base: Priority[]) => Promise<boolean>;
   /** Deletes a task everywhere (the board store's `deleteItem`), for ×'s Delete everywhere; rejects when that fails. */
   onDeleteTask: (uid: string) => Promise<void>;
+  /** Saves a row's note on its task, apart from the list's draft; resolves to whether it saved. */
+  onNote: (uid: string, note: string) => Promise<boolean>;
   /** The category chip's data: each row with text gets a chip. Null (the board off) shows none. */
   pick: CategoryPick | null;
   /**
@@ -60,20 +63,22 @@ function named(list: Priority[], base: Priority[]): Priority[] {
   });
 }
 
-/** What ×'s question needs: the task, and how many other days and how much time it would ask about. */
+/** What ×'s question needs: the task, and how many other days, how much time and whether a note it would ask about. */
 interface Asked {
   uid: string;
   name: string;
   otherDays: number;
   logged: number;
+  note: boolean;
 }
 
 /**
  * Starts with `priorityCount` rows and grows on demand. Text saves 400 ms after the last
- * keystroke; checkboxes, add and remove save immediately. Keyed by date in the sheet, so a
+ * keystroke; checkboxes, add and remove save immediately. A written row's note opens from its
+ * button and saves on its own, 400 ms after its last keystroke. Keyed by date in the sheet, so a
  * new day mounts fresh instead of carrying drafts over.
  */
-export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, pick, offer }: Props) {
+export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, onNote, pick, offer }: Props) {
   const { settings } = useSettings();
   const count = settings.priorityCount;
   // The rows Add priority put past the stored list: the server keeps no free row, so the card pads
@@ -102,8 +107,17 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
   // A tick gets a burst from its checkbox.
   const [ticked, setTicked] = useState<Moment | null>(null);
   const { burst } = useCelebration(ticked, 'priorityDone');
-  const noteId = useId();
-  // The row whose box has the focus, by its place (its key), and its text then: the rename note
+  const ids = useId();
+  // The rows whose note is open, by their task: none on each load.
+  const [notesOpen, setNotesOpen] = useState<ReadonlySet<string>>(new Set());
+  const showNote = (uid: string, open: boolean) =>
+    setNotesOpen((was) => {
+      const next = new Set(was);
+      if (open) next.add(uid);
+      else next.delete(uid);
+      return next;
+    });
+  // The row whose box has the focus, by its place (its key), and its text then: the rename hint
   // compares with it. A free row's task is minted by its first key, so its uid at focus can't say.
   const [focused, setFocused] = useState<{ position: number; text: string } | null>(null);
   const [asked, setAsked] = useState<Asked | null>(null);
@@ -215,13 +229,14 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
     else if (position === local.length) addButton.current?.focus();
   };
   // × asks first when the task is on other days or has time logged on it, a timer running on it
-  // included, since Delete everywhere is then a different answer; a recurring priority's row never
-  // asks (Settings removes those).
+  // included, since Delete everywhere is then a different answer, or when it has a note, which a
+  // delete takes with it; a recurring priority's row never asks (Settings removes those).
   const remove = (p: Priority) => {
     // `logged` is the other days' time, so the day's own log, a running timer included, adds to it.
     const time = p.uid == null ? 0 : p.logged + (loggedByUid(sessions, now).get(p.uid) ?? 0);
-    if (p.uid != null && !p.recurring && (p.listed > 1 || time > 0)) {
-      setAsked({ uid: p.uid, name: hasText(p) ? p.text : (storedName(p.uid) ?? ''), otherDays: Math.max(0, p.listed - 1), logged: time });
+    const note = p.note !== '';
+    if (p.uid != null && !p.recurring && (p.listed > 1 || time > 0 || note)) {
+      setAsked({ uid: p.uid, name: hasText(p) ? p.text : (storedName(p.uid) ?? ''), otherDays: Math.max(0, p.listed - 1), logged: time, note });
     } else takeOff(p.position);
   };
   // The dialog goes first, so the focus it gives back to × moves on from there.
@@ -262,20 +277,22 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
         const empty = !hasText(p);
         // Every row with a task, and any row past Rows per day.
         const removable = p.uid != null || p.position > count;
-        // A written row only: an empty one has nothing to file yet. Every row takes the grid with
-        // the chip's column all the same, so on a wide screen a field ends in the same place
-        // written or empty, and the first letter typed doesn't narrow it.
+        // A written row only, as the note button: an empty one has nothing to file or note yet.
+        // Every row takes the grid with their column all the same, so on a wide screen a field
+        // ends in the same place written or empty, and the first letter typed doesn't narrow it.
         const chip = pick != null && !empty;
         const placeholder = p.position === 1 ? 'The one thing to get done' : `Priority ${p.position}`;
         // While the box has the focus: retyped, a name that earlier days' lists hold renames it there
         // too; emptied, it says what happens to the name.
         const inFocus = focused != null && p.uid != null && focused.position === p.position;
         const blankName = inFocus && empty ? storedName(p.uid) : undefined;
-        const note = blankName ? BLANK_NOTE(blankName) : inFocus && !empty && p.text !== focused.text && p.earlier > 0 ? RENAME_NOTE(p.earlier) : null;
-        const noteFor = `${noteId}-note-${p.position}`;
+        const hint = blankName ? BLANK_NOTE(blankName) : inFocus && !empty && p.text !== focused.text && p.earlier > 0 ? RENAME_NOTE(p.earlier) : null;
+        const hintFor = `${ids}-hint-${p.position}`;
+        const noteBox = `${ids}-note-${p.uid}`;
+        const noteOpen = p.uid != null && notesOpen.has(p.uid);
         return (
           <Fragment key={p.position}>
-            <div className={`priority-row${p.done ? ' is-done' : ''}${pick != null ? ' priority-row--end' : ''}`}>
+            <div className={`priority-row${p.done ? ' is-done' : ''}${pick != null ? ' priority-row--chip' : ''}`}>
               <span className="priority-num" aria-hidden="true">
                 {p.position}
               </span>
@@ -310,7 +327,7 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
                   value={p.text}
                   placeholder={placeholder}
                   aria-label={`Priority ${p.position}`}
-                  aria-describedby={note ? noteFor : undefined}
+                  aria-describedby={hint ? hintFor : undefined}
                   // One line of text: Enter adds no line break, and a pasted one becomes a space.
                   // Escape on a blank box brings the name back, as leaving it does.
                   onKeyDown={(e) => {
@@ -328,19 +345,22 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
                   maxLength={LIMITS.priorityText}
                 />
               </span>
-              {chip && (
+              {!empty && (
                 <span className="priority-end">
-                  {p.recurring && <RepeatMark />}
+                  {chip && p.recurring && <RepeatMark />}
+                  <NoteToggle boxId={noteBox} of={`priority ${p.position}`} note={p.note} open={noteOpen} onToggle={(open) => showNote(p.uid!, open)} />
                   {/* A pick saves at once, as a tick does. Keyed by the row, since the rows are by
                       position: a row another device's change moves here gets a chip of its own,
                       closed, so a list left open never picks for it. */}
-                  <CategoryChip
-                    key={p.uid}
-                    value={p.categoryUid}
-                    onChange={(categoryUid) => edit(p.position, { categoryUid }, true)}
-                    pick={pick}
-                    label={`Category for priority ${p.position}`}
-                  />
+                  {chip && (
+                    <CategoryChip
+                      key={p.uid}
+                      value={p.categoryUid}
+                      onChange={(categoryUid) => edit(p.position, { categoryUid }, true)}
+                      pick={pick}
+                      label={`Category for priority ${p.position}`}
+                    />
+                  )}
                 </span>
               )}
               {removable && (
@@ -349,10 +369,24 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
                 </button>
               )}
             </div>
-            {note && (
-              <p className="muted small priority-note" id={noteFor}>
-                {note}
+            {hint && (
+              <p className="muted small priority-hint" id={hintFor}>
+                {hint}
               </p>
+            )}
+            {/* Its own draft, apart from the list's: a note whose save fails stays in its box.
+                Keyed by the task, as the chip is. Kept while the name is blanked, hidden with it. */}
+            {p.uid != null && (
+              <NoteField
+                key={p.uid}
+                id={noteBox}
+                of={`priority ${p.position}`}
+                note={p.note}
+                open={noteOpen && !empty}
+                onClose={() => showNote(p.uid!, false)}
+                onSave={(note) => onNote(p.uid!, note)}
+                ms={400}
+              />
             )}
           </Fragment>
         );
@@ -393,6 +427,7 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
           name={asked.name}
           otherDays={asked.otherDays}
           logged={asked.logged > 0 ? formatDurationCeil(asked.logged) : null}
+          note={asked.note}
           onOffDay={() => answer(false)}
           onEverywhere={() => answer(true)}
           onCancel={() => setAsked(null)}

@@ -17,17 +17,30 @@ export const isOneOff = (p: Pick<Priority, 'text' | 'recurring'>) => hasText(p) 
 
 /** A free row (`isFree`): no task on it, which is what the card pads a list with. */
 export function emptyRow(position: number): Priority {
-  return { position, text: '', done: false, uid: null, addedAt: null, categoryUid: null, recurring: false, archived: false, listed: 0, earlier: 0, logged: 0 };
+  return {
+    position,
+    text: '',
+    done: false,
+    uid: null,
+    addedAt: null,
+    categoryUid: null,
+    note: '',
+    recurring: false,
+    archived: false,
+    listed: 0,
+    earlier: 0,
+    logged: 0,
+  };
 }
 
 /**
- * A row new to a day's list, in `categoryUid`: added `now`, unticked, a one-off, on no other day
- * and with nothing logged on it, under a uid of its own (the save that first names it makes the
- * task). A row placed from elsewhere (`seedRow`, `recurringRow`) starts from it and sets its task
- * and the counts its source gave.
+ * A row new to a day's list, in `categoryUid`: added `now`, unticked, a one-off with no note, on
+ * no other day and with nothing logged on it, under a uid of its own (the save that first names it
+ * makes the task). A row placed from elsewhere (`seedRow`, `recurringRow`) starts from it and sets
+ * its task and the note and counts its source gave.
  */
 export function newTaskRow(text: string, categoryUid: string | null, now: number): Omit<Priority, 'position'> & { uid: string } {
-  return { text, done: false, uid: newUid(), addedAt: now, categoryUid, recurring: false, archived: false, listed: 0, earlier: 0, logged: 0 };
+  return { text, done: false, uid: newUid(), addedAt: now, categoryUid, note: '', recurring: false, archived: false, listed: 0, earlier: 0, logged: 0 };
 }
 
 /**

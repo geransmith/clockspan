@@ -1,4 +1,4 @@
-import { useRef, type CSSProperties } from 'react';
+import { useRef, useState, type CSSProperties } from 'react';
 import { LIMITS } from '../../../../shared/api.js';
 import { useFollowedDraft } from '../../hooks/useFollowedDraft';
 import { categoryOf, COLUMN_NAMES, moveTargets, type BoardItem, type CategoryPick, type ColumnId } from '../../lib/board';
@@ -8,6 +8,7 @@ import type { Category, Session } from '../../types';
 import { CategoryChip } from '../CategoryChip';
 import { CategoryDot } from '../CategoryDot';
 import { Grip } from '../Icons';
+import { NoteField, NoteToggle } from '../Note';
 import { RepeatMark } from '../RepeatMark';
 import { RunningMark } from '../RunningMark';
 import { TimerLengths } from '../TimerLengths';
@@ -30,11 +31,13 @@ interface Props {
   pick: CategoryPick;
   /** Sets its category; none where the board doesn't (an earlier day's row of a recurring priority removed in Settings). */
   onCategory?: (uid: string | null) => void;
+  /** Saves its note, resolving to whether it saved; without one the note shows as text, as the title does. */
+  onNote?: (note: string) => Promise<boolean>;
   onDelete?: () => void;
   /** A recurring row's way off today's list. */
   onRemove?: () => void;
-  /** The line under the title: where a task done earlier is unticked. */
-  note?: string;
+  /** The line under the title in the editor: where a task done earlier is unticked. */
+  hint?: string;
   /** The editor's Start timer, the timer card's length buttons; none where no timer can start on it (`Board`). */
   start?: { disabled: boolean; onStart: (minutes: number) => void };
   /** The session running on it: the meta line starts with the day log's pill, which the title names. */
@@ -52,11 +55,12 @@ export interface ItemDrag {
 
 /**
  * A task on the board: its tick, its number on today's list, its title (a button that opens the
- * editor), and a line with the timer running on it, its category, the Repeats mark of a recurring
- * row, and the day a later list holds it or it was left open on. The editor renames it, sets its
- * category, starts the focus timer on it, moves it to another column (Move to, the way to move
- * without dragging), and deletes it; a planned item's offers no Move to, since that day's list
- * decides where it shows.
+ * editor) and its note button, and a line with the timer running on it, its category, the Repeats
+ * mark of a recurring row, and the day a later list holds it or it was left open on. The note
+ * opens under that, apart from the editor, and saves 800 ms after the last key. The editor renames
+ * it, sets its category, starts the focus timer on it, moves it to another column (Move to, the
+ * way to move without dragging), and deletes it; a planned item's offers no Move to, since that
+ * day's list decides where it shows.
  */
 export function BoardCardView({
   item,
@@ -70,9 +74,10 @@ export function BoardCardView({
   onRename,
   pick,
   onCategory,
+  onNote,
   onDelete,
   onRemove,
-  note,
+  hint,
   start,
   running,
   drag,
@@ -81,6 +86,10 @@ export function BoardCardView({
   const category = categoryOf(pick.categories, item.categoryUid);
   const editorId = `editor-${item.id}`;
   const markId = `running-${item.id}`;
+  const noteBox = `note-${item.id}`;
+  // Closed on each load.
+  const [noteOpen, setNoteOpen] = useState(false);
+  const noted = onNote != null || item.note !== '';
   return (
     <li ref={drag?.nodeRef} style={drag?.style} className={`board-card${item.column === 'done' ? ' is-done' : ''}`}>
       <div className="board-card-row">
@@ -117,6 +126,7 @@ export function BoardCardView({
         >
           <span className="board-card-title">{item.title}</span>
         </button>
+        {noted && <NoteToggle boxId={noteBox} of={item.title} note={item.note} open={noteOpen} onToggle={setNoteOpen} />}
       </div>
       {(running != null || category != null || item.planned != null || item.leftOpen != null || item.recurring) && (
         <p className="board-card-meta muted small">
@@ -127,10 +137,11 @@ export function BoardCardView({
           {item.leftOpen && <span>Left open from {dayName(item.leftOpen, today, true)}</span>}
         </p>
       )}
+      {noted && <NoteField id={noteBox} of={item.title} note={item.note} open={noteOpen} onClose={() => setNoteOpen(false)} onSave={onNote} ms={800} />}
       {open && (
         <div className="board-editor" id={editorId}>
           {onRename ? <TitleField title={item.title} onRename={onRename} onClose={onClose} /> : <p className="board-editor-title">{item.title}</p>}
-          {note && <p className="muted small">{note}</p>}
+          {hint && <p className="muted small">{hint}</p>}
           {onCategory && (
             <div className="board-editor-category">
               <CategoryChip value={item.categoryUid} onChange={onCategory} pick={pick} label={`Category for ${item.title}`} />

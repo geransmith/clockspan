@@ -137,13 +137,17 @@ const taskFacts = (where: string, logged: string | null) => {
 const unplanned = (logged: string | null) => (logged ? ' The time stays in the log, unplanned.' : '');
 
 /**
- * The question × on a Top priorities row asks when its task is on other days or has time logged
- * on it. `logged` is null with no time; each part of the body shows only when it applies.
+ * The question × on a Top priorities row asks when its task is on other days, has time logged on
+ * it or has a note. `logged` is null with no time; each part of the body shows only when it
+ * applies.
  */
 export const REMOVE_TASK = {
   title: (name: string) => `Remove ${name}`,
-  body: (otherDays: number, logged: string | null) =>
-    `${taskFacts(otherDays ? `It is on ${counted(otherDays, 'other day')}` : '', logged)} Delete everywhere takes it off every day.${unplanned(logged)}`,
+  body: (otherDays: number, logged: string | null, note: boolean) => {
+    const where = otherDays ? `It is on ${counted(otherDays, 'other day')}` : '';
+    const facts = where || logged ? `${taskFacts(where, logged)} ` : '';
+    return `${facts}Delete everywhere takes it off every day.${unplanned(logged)}${note ? ' Its note goes with the task.' : ''}`;
+  },
   offDay: 'Off this day',
   everywhere: 'Delete everywhere',
   cancel: 'Cancel',

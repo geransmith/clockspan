@@ -36,6 +36,7 @@ describe('POST /api/items: a task made on the board', () => {
         uid: 'card0000000a',
         title: 'Write the KB',
         categoryUid: null,
+        note: '',
         lane: 'later',
         position: 1,
         createdAt: SEED_NOW,
@@ -133,8 +134,8 @@ describe('POST /api/items: a task made on the board', () => {
 });
 
 describe('POST /api/items: a recurring priority', () => {
-  const QUEUE: Recurring = { uid: 'rcur00000001', title: 'Monitor the queue', categoryUid: 'cat000000001', weekdays: [1, 2, 3, 4, 5] };
-  const FOLLOW_UPS: Recurring = { uid: 'rcur00000002', title: 'Follow-ups', categoryUid: null, weekdays: [1, 3, 5] };
+  const QUEUE: Recurring = { uid: 'rcur00000001', title: 'Monitor the queue', categoryUid: 'cat000000001', note: '', weekdays: [1, 2, 3, 4, 5] };
+  const FOLLOW_UPS: Recurring = { uid: 'rcur00000002', title: 'Follow-ups', categoryUid: null, note: '', weekdays: [1, 3, 5] };
   const routines = async () => (await app.api.get('/api/board')).body.recurring as Recurring[];
   const add = (item: object) => app.api.post('/api/items', item);
   /** Each routine's weekdays as the table holds them: a mask, bit 0 for Monday. */
@@ -148,7 +149,11 @@ describe('POST /api/items: a recurring priority', () => {
     // Weekdays in any order come back in order; a category left out is none.
     await add({ ...FOLLOW_UPS, weekdays: [5, 1, 3], categoryUid: undefined });
     await add({ uid: 'rcur00000003', title: 'k'.repeat(LIMITS.priorityText + 20), categoryUid: null, weekdays: [7, 6] });
-    expect(await routines()).toEqual([QUEUE, FOLLOW_UPS, { uid: 'rcur00000003', title: 'k'.repeat(LIMITS.priorityText), categoryUid: null, weekdays: [6, 7] }]);
+    expect(await routines()).toEqual([
+      QUEUE,
+      FOLLOW_UPS,
+      { uid: 'rcur00000003', title: 'k'.repeat(LIMITS.priorityText), categoryUid: null, note: '', weekdays: [6, 7] },
+    ]);
     expect(masks()).toEqual([
       { uid: 'rcur00000001', weekdays: 0b0011111 },
       { uid: 'rcur00000002', weekdays: 0b0010101 },
@@ -195,6 +200,16 @@ describe('PATCH /api/items/:uid', () => {
     expect(await cardOf('card00000001')).toMatchObject({ title: 'Write the KB article', categoryUid: 'cat000000001' });
     await patch('card00000001', { categoryUid: null });
     expect((await cardOf('card00000001'))!.categoryUid).toBeNull();
+  });
+
+  it('sets a note as taskNote stores it, keeps it when the field is left out, and clears it', async () => {
+    const note = ` Steps:\n1. Admin console\u0007\n${'k'.repeat(LIMITS.itemNote)}`;
+    expect((await patch('card00000001', { note })).status).toBe(200);
+    expect((await cardOf('card00000001'))!.note).toBe(` Steps:\n1. Admin console\n${'k'.repeat(LIMITS.itemNote - 25)}`);
+    await patch('card00000001', { title: 'Write the KB article' });
+    expect((await cardOf('card00000001'))!.note).toHaveLength(LIMITS.itemNote);
+    await patch('card00000001', { note: '' });
+    expect((await cardOf('card00000001'))!.note).toBe('');
   });
 
   it('renames, reorders, and moves a task between Later and Next', async () => {
@@ -256,9 +271,9 @@ describe('PATCH /api/items/:uid', () => {
 
   it('edits a recurring priority, never into a lane, and no one-off gets weekdays', async () => {
     await app.api.post('/api/items', { uid: 'rcur00000001', title: 'Monitor the queue', weekdays: [1, 2] });
-    await patch('RCUR00000001', { title: '  Watch the queue ', categoryUid: 'cat000000002', weekday: { day: 3, on: true } });
+    await patch('RCUR00000001', { title: '  Watch the queue ', categoryUid: 'cat000000002', note: 'Tier 2 too.', weekday: { day: 3, on: true } });
     expect((await app.api.get('/api/board')).body.recurring).toEqual([
-      { uid: 'rcur00000001', title: 'Watch the queue', categoryUid: 'cat000000002', weekdays: [1, 2, 3] },
+      { uid: 'rcur00000001', title: 'Watch the queue', categoryUid: 'cat000000002', note: 'Tier 2 too.', weekdays: [1, 2, 3] },
     ]);
     const WEEKDAY = 'weekday must be a day from 1 to 7 with on true or false.';
     for (const [uid, change, error] of [
@@ -304,6 +319,8 @@ describe('PATCH /api/items/:uid', () => {
       [{ before: ['card00000001'] }, 'before must be a task id or null.'],
       [{ categoryUid: 'x' }, "categoryUid must be a category's id or null."],
       [{ categoryUid: true }, "categoryUid must be a category's id or null."],
+      [{ note: null }, 'note must be a string.'],
+      [{ note: 42 }, 'note must be a string.'],
     ];
     const before = await board();
     for (const [change, error] of refusals) {
@@ -333,7 +350,7 @@ describe('DELETE /api/items/:uid: a one-off task', () => {
   it('takes it off every day and keeps its sessions there as unplanned time under its name and category, leaving a tombstone', async () => {
     await app.capture('card00000001', 'Write the KB', 'next');
     await app.capture('card00000002', 'Review canned replies', 'next');
-    await patch('card00000002', { categoryUid: 'cat000000001' });
+    await patch('card00000002', { categoryUid: 'cat000000001', note: 'Ask Kim first.' });
     const task = { text: 'Review canned replies', uid: 'card00000002' };
     await app.saveList(MON, [
       { ...task, done: true },
@@ -371,8 +388,8 @@ describe('DELETE /api/items/:uid: a one-off task', () => {
     expect((await app.api.get('/api/sessions/running')).body.session).toMatchObject({ id: running, status: 'running', priorityUid: null });
     // The cancelled one had let go of it already.
     expect(app.count('sessions', `status = 'cancelled' AND item_id IS NULL AND label = 'Started as'`)).toBe(1);
-    // The tombstone keeps only the uid: the deleted name and category stay on the sessions alone.
-    expect(app.item(task.uid)).toMatchObject({ title: task.uid, category_uid: null, lane: null, position: 0, deleted_at: Date.now() });
+    // The tombstone keeps only the uid: the deleted name and category stay on the sessions alone, and the note goes.
+    expect(app.item(task.uid)).toMatchObject({ title: task.uid, category_uid: null, note: '', lane: null, position: 0, deleted_at: Date.now() });
     expect(await lanes()).toEqual([['next', 1, 'Write the KB']]);
   });
 

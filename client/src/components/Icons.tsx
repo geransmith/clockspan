@@ -128,3 +128,11 @@ export const Repeat = () => (
     <path d="m17 2 4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3" />
   </svg>
 );
+/** A task's note: a page with lines, filled with its lines cut out (in the surface's colour) when the task has one. */
+export const Note = ({ filled = false }: { filled?: boolean }) => (
+  <svg {...base}>
+    <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" fill={filled ? 'currentColor' : 'none'} />
+    <path d="M14 3v6h6" />
+    <path d="M8 13h8M8 17h5" style={filled ? { stroke: 'var(--surface)' } : undefined} />
+  </svg>
+);

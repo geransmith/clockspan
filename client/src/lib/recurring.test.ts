@@ -6,7 +6,7 @@ import { emptyRow } from './priorities';
 import { acceptOffer, dueRecurring, notOnList, offerPicks, recurringCount, recurringRow } from './recurring';
 
 // TODAY is a Monday.
-const QUEUE = makeRecurring('rcur00000001', 'Monitor the queue', { categoryUid: 'cafe00000001' });
+const QUEUE = makeRecurring('rcur00000001', 'Monitor the queue', { categoryUid: 'cafe00000001', note: 'Tier 2 too.' });
 const FOLLOW_UPS = makeRecurring('rcur00000002', 'Follow-ups', { weekdays: [1, 3, 5] });
 const SATURDAY = makeRecurring('rcur00000003', 'Water the plants', { weekdays: [6] });
 const NONE = new Set<string>();
@@ -63,13 +63,14 @@ describe('offerPicks', () => {
 });
 
 describe('recurringRow', () => {
-  it("is the recurring priority itself, new to today, a recurring row showing the item's title and category", () => {
+  it("is the recurring priority itself, new to today, a recurring row showing the item's title, category and note", () => {
     expect(recurringRow(QUEUE, T0)).toEqual({
       text: 'Monitor the queue',
       done: false,
       uid: QUEUE.uid,
       addedAt: T0,
       categoryUid: 'cafe00000001',
+      note: 'Tier 2 too.',
       recurring: true,
       archived: false,
       listed: 0,

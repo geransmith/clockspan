@@ -407,7 +407,7 @@ describe('moves', () => {
     expect(api.putPriorities).toHaveBeenCalledTimes(2);
   });
 
-  it('rename a row of today, or give it a category, through the list', async () => {
+  it('rename a row of today, or give it a category or a note, through the list', async () => {
     lists[TODAY] = [makePriority(1, 'Report')];
     const { result } = renderBoard();
     await settle();
@@ -415,22 +415,29 @@ describe('moves', () => {
     await act(() => result.current.store.editRow(uid, { text: 'Report v2' }));
     expect(putCalls()).toEqual([{ date: TODAY, texts: ['Report v2', '', ''] }]);
     await act(() => result.current.store.editRow(uid, { categoryUid: 'cafe00000001' }));
-    expect(lists[TODAY]![0]).toMatchObject({ text: 'Report v2', categoryUid: 'cafe00000001' });
+    await act(() => result.current.store.editRow(uid, { note: 'Ask Kim' }));
+    expect(lists[TODAY]![0]).toMatchObject({ text: 'Report v2', categoryUid: 'cafe00000001', note: 'Ask Kim' });
     expect(api.editItem).not.toHaveBeenCalled();
   });
 
-  it("rename a row gone from today's list meanwhile, or give it a category, through its task", async () => {
+  it("rename a row gone from today's list meanwhile, or give it a category or a note, through its task", async () => {
     const { result } = renderBoard();
     await settle();
     await act(() => result.current.store.editRow('later0000001', { text: 'Write the KB' }));
     await act(() => result.current.store.editRow('later0000001', { categoryUid: 'cafe00000001' }));
+    await act(() => result.current.store.editRow('later0000001', { note: 'Ask Kim' }));
     expect(vi.mocked(api.editItem).mock.calls).toEqual([
       ['later0000001', { title: 'Write the KB' }],
       ['later0000001', { categoryUid: 'cafe00000001' }],
+      ['later0000001', { note: 'Ask Kim' }],
     ]);
     expect(api.putPriorities).not.toHaveBeenCalled();
-    expect(result.current.board?.cards.find((c) => c.uid === 'later0000001')).toMatchObject({ title: 'Write the KB', categoryUid: 'cafe00000001' });
-    expect(result.current.generation).toBe(2);
+    expect(result.current.board?.cards.find((c) => c.uid === 'later0000001')).toMatchObject({
+      title: 'Write the KB',
+      categoryUid: 'cafe00000001',
+      note: 'Ask Kim',
+    });
+    expect(result.current.generation).toBe(3);
   });
 
   it('send a move made before midnight against that day, though its job runs after', async () => {

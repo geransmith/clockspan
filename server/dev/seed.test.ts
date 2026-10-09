@@ -48,7 +48,7 @@ function expectTasksInStep(db: DB, m: SeedManifest) {
     expect(day.sessions.every((s) => resolves(s.categoryUid))).toBe(true);
     for (const p of day.priorities) {
       const task = tasks.get(p.uid)!;
-      expect([task.title, task.category_uid, task.weekdays != null], `${day.date} ${p.text}`).toEqual([p.text, p.categoryUid, p.recurring]);
+      expect([task.title, task.category_uid, task.note, task.weekdays != null], `${day.date} ${p.text}`).toEqual([p.text, p.categoryUid, p.note, p.recurring]);
       if (p.recurring) expect(routines.get(p.uid)!.weekdays, `${day.date} ${p.text}`).toContain(isoWeekday(day.date));
     }
   }
@@ -178,6 +178,11 @@ describe('seedDatabase', () => {
     ]);
     // A task typed on a list has no lane.
     expect(m.board.cards.filter((c) => c.listDate != null && c.lane != null)).toEqual([]);
+    // Two tasks have a note, one of them on two lines.
+    expect(m.board.cards.filter((c) => c.note !== '').map((c) => [c.title, c.note.split('\n').length])).toEqual([
+      ['Write a KB for the SSO reset', 1],
+      ['Answer the two open support threads', 2],
+    ]);
     const extra = m.days.at(-2)!;
     const today = m.days.at(-1)!;
     // Most rows have a category, and so does each unplanned Inbox session; a session on a task

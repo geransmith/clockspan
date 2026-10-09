@@ -13,6 +13,7 @@ export const LIMITS = {
   priorityText: 500,
   retroNote: 4000,
   categoryName: 40,
+  itemNote: 1000,
 } as const;
 
 /** A password's length: the server refuses one outside it, and the new-password inputs take `minLength` and `maxLength` from it. */
@@ -61,6 +62,8 @@ export interface Priority {
   addedAt: number | null;
   /** The task's current category. */
   categoryUid: string | null;
+  /** The task's note; '' with none. */
+  note: string;
   /** Read only: the task is a recurring priority. */
   recurring: boolean;
   /** Read only: a recurring priority removed in Settings, or a task the one-item migration (server/migrations/oneItem.ts) archived. */
@@ -87,6 +90,8 @@ export interface BoardCard {
   uid: string;
   title: string;
   categoryUid: string | null;
+  /** '' with none. */
+  note: string;
   /** Later or Next, where the board put it; null: in neither. */
   lane: OpenLane | null;
   /** 1..n within its lane; 0 with none. */
@@ -128,6 +133,8 @@ export interface Recurring {
   title: string;
   /** The category it counts under, on every day it was added to. */
   categoryUid: string | null;
+  /** Its note, on every day it was added to; '' with none. */
+  note: string;
   /** ISO weekdays, Monday 1 to Sunday 7, ascending, at least one. */
   weekdays: number[];
 }

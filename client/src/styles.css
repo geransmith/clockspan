@@ -536,13 +536,52 @@ button {
   white-space: nowrap;
 }
 /* A sheet row's empty chip shows with the mouse over the row or the focus in it, so a list with
-   no categories set reads as plain text. It still takes the focus and a press where it sits; a
-   touch screen, with no hover, always shows it. */
+   no categories set reads as plain text, and so does a sheet row's or a board card's note button
+   with no note, unless its box is open. They still take the focus and a press where they sit; a
+   touch screen, with no hover, always shows them. */
 @media (hover: hover) {
   .priority-row:not(:hover, :focus-within) .category-chip--empty,
+  .priority-row:not(:hover, :focus-within) .note-toggle--empty[aria-expanded='false'],
+  .board-card:not(:hover, :focus-within) .note-toggle--empty[aria-expanded='false'],
   .plan-next-extra:not(:hover, :focus-within) .category-chip--empty {
     opacity: 0;
   }
+}
+/* A task's note button: drawn at the chip's 28 px, and 44 px to a tap (the coarse block). */
+.note-toggle {
+  flex: none;
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  color: var(--text-2);
+}
+.note-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+/* Its box: quieter than a field, growing with its text (.grow-field) to eight lines, then
+   scrolling; the cap is on the box and on the copy that sets its height. */
+.note-field[hidden] {
+  display: none;
+}
+.note-input,
+.note-field::after {
+  max-height: calc(8 * 22px + 2 * 10px + 2px);
+}
+/* The copy's lines past the cap would still reach past the card's foot. */
+.note-field::after {
+  overflow: hidden;
+}
+.grow-field > .note-input {
+  overflow-y: auto;
+  background: transparent;
+  color: var(--text-2);
+}
+.note-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-2);
 }
 /* The chip's list: fixed on the screen, so a card's or a dialog's overflow can't clip it, and
    placed by script (CategoryChip, lib/popover.ts) over the running bar. */
@@ -1290,7 +1329,7 @@ button {
   display: grid;
   grid-template-columns: 24px 22px 1fr minmax(44px, auto);
   align-items: center;
-  gap: 10px;
+  gap: 4px 10px;
 }
 /* The tick's label is its touch area (below). Without the browser's own checkbox margin the box
    sits in its 22 px column, and the label is exactly the box in every engine. */
@@ -1300,13 +1339,10 @@ button {
 .priority-tick .checkbox {
   margin: 0;
 }
-/* With the board on (.priority-row--end on every row), a written row's category chip sits on a
-   line of its own under the field, so the field keeps the row's width beside the ×, and the chip
-   is nearer its own field than the next row's. An empty row has no chip and keeps one line. A
-   routine's row has its repeat mark first on that line, 6 px before the chip. */
-.priority-row--end {
-  row-gap: 4px;
-}
+/* A written row's note button, and with the board on its category chip after it, sit on a line
+   of their own under the field, so the field keeps the row's width beside the ×, and they are
+   nearer their own field than the next row's. An empty row has neither and keeps one line. A
+   routine's row has its repeat mark first on that line, 6 px before the button. */
 .priority-end {
   grid-column: 3;
   grid-row: 2;
@@ -1316,25 +1352,27 @@ button {
   gap: 6px;
   min-width: 0;
 }
+/* Line 1 of the last column, beside the field. From 640 px a free row has no button or chip,
+   which would leave its × in their column. */
 .priority-remove {
-  color: var(--text-3);
-}
-/* Line 1 of the last column, beside the field. From 640 px a free row has no chip, which would
-   leave its × in the chip's column. */
-.priority-row--end .priority-remove {
   grid-row: 1;
   grid-column: -2;
+  color: var(--text-3);
 }
-/* From 640 px the chip is beside the field, in a column every row of the list keeps, written or
+/* From 640 px the button is beside the field, in a column every row of the list keeps, written or
    empty, so a field ends in the same place either way: the first letter typed doesn't narrow it.
-   10rem holds the widest chip: a name stopped at 9em of the chip's 0.82rem, plus 38 px of dot,
+   With the board on (.priority-row--chip) the chip shares it, after the button's 28 px and 6 px:
+   10rem holds the widest chip, a name stopped at 9em of the chip's 0.82rem, plus 38 px of dot,
    gap, padding and border, is 156 px at a 16 px root font, with more to spare at a larger one.
-   A routine's repeat mark shares the column, before the chip: the cell takes the column's whole
-   width (not its content's, which would push past it), so the chip shrinks and a long name ends
-   in its ellipsis sooner. */
+   A routine's repeat mark shares the column too, first: the cell takes the column's whole width
+   (not its content's, which would push past it), so the chip shrinks and a long name ends in its
+   ellipsis sooner. */
 @media (min-width: 640px) {
-  .priority-row--end {
-    grid-template-columns: 24px 22px 1fr 10rem minmax(44px, auto);
+  .priority-row {
+    grid-template-columns: 24px 22px 1fr 28px minmax(44px, auto);
+  }
+  .priority-row--chip {
+    grid-template-columns: 24px 22px 1fr calc(10rem + 34px) minmax(44px, auto);
   }
   .priority-end {
     grid-column: 4;
@@ -1376,11 +1414,15 @@ button {
   text-decoration: line-through;
   color: var(--text-3);
 }
-/* The note under a row being retyped or left blank: closer to its row than the gap to the next
-   one, and lined up with the field (the number and tick columns and their two gaps). */
-.priority-note {
+/* The hint under a row being retyped or left blank: closer to its row than the gap to the next
+   one, and lined up with the field (the number and tick columns and their two gaps), as the
+   row's note is under that. */
+.priority-hint {
   margin-top: -4px;
   padding-left: calc(24px + 22px + 2 * 10px);
+}
+.priorities > .note-field {
+  margin-left: calc(24px + 22px + 2 * 10px);
 }
 .priorities-foot {
   display: flex;
@@ -2654,6 +2696,10 @@ button.log-label:hover {
   background: none;
   text-align: left;
 }
+/* The note button at the end of the title row, on the title's first 24 px line. */
+.board-card-row .note-toggle {
+  margin-block: -2px;
+}
 /* Two lines at most in a narrow column; the editor shows the whole title. The drag copy (Lifted)
    has this span without the button. */
 .board-card-title {
@@ -3089,6 +3135,7 @@ kbd {
   .board-grip,
   .board-tick,
   .board-add,
+  .note-toggle,
   .brand,
   .calendar-day,
   .swatch {
@@ -3107,6 +3154,7 @@ kbd {
   .board-grip::after,
   .board-tick::after,
   .board-add::after,
+  .note-toggle::after,
   .brand::after,
   .calendar-day::after,
   .swatch::after {
@@ -3131,6 +3179,12 @@ kbd {
      Under a priority's field it reaches 4 px up and 12 px down (further on). */
   .category-chip {
     --hit-inset: -9px -4px;
+  }
+  /* 28 px square at the end of a board card's title row, 8 px from the title: 44 px tall, through
+     the card's padding and 2 px into the gap to the next card as the title's does, and half the
+     gap to the title. */
+  .note-toggle {
+    --hit-inset: -8px -8px -8px -4px;
   }
   /* A 24 px dot, 8 px from the next, centred in a row 44 px tall: 32 × 44 px. */
   .swatch {
@@ -3225,7 +3279,7 @@ kbd {
      too little to reach 44 px in half of each. Its line takes 44 px right under the field and
      8 px more below, so the chip is 8 px from its field and 24 px from the next row's, nearer its
      own. It reaches half of each, 4 px up and 12 px down: 44 px. */
-  .priority-row--end {
+  .priority-row {
     row-gap: 0;
   }
   .priority-end {
@@ -3234,9 +3288,15 @@ kbd {
   .priority-end .category-chip {
     --hit-inset: -5px -4px -13px;
   }
-  /* A note under a row's chip line goes up to 4 px under the chip and takes the line's 8 px below
+  /* On that line it reaches up and down as the chip does, half the 6 px to the chip after it, and
+     8 px back, where nothing on the line takes taps (the gap before the field's column, or the
+     repeat mark). */
+  .priority-end .note-toggle {
+    --hit-inset: -5px -3px -13px -8px;
+  }
+  /* A hint under a row's chip line goes up to 4 px under the chip and takes the line's 8 px below
      itself, so it reads as its own row's and not the next one's. */
-  .priority-row:has(.priority-end) + .priority-note {
+  .priority-row:has(.priority-end) + .priority-hint {
     margin-block: -20px 8px;
   }
   /* The edit-in-place inputs are drawn at 38 px to sit in their rows with a mouse. */
@@ -3275,7 +3335,11 @@ kbd {
   .priority-end .category-chip {
     --hit-inset: -9px -4px;
   }
-  .priority-row:has(.priority-end) + .priority-note {
+  /* Beside the field, half the 10 px gap to it. */
+  .priority-end .note-toggle {
+    --hit-inset: -8px -3px -8px -5px;
+  }
+  .priority-row:has(.priority-end) + .priority-hint {
     margin-block: -4px 0;
   }
 }

@@ -901,6 +901,7 @@ describe('a priorities save that renames or files a task', () => {
     const changed = { read: [YESTERDAY, TODAY], moved: 1 };
     expect(await save({ ...report, text: 'Report v2' }, report)).toEqual(changed);
     expect(await save({ ...report, categoryUid: 'cat000000001' }, report)).toEqual(changed);
+    expect(await save({ ...report, note: 'Ask Kim' }, report)).toEqual(changed);
     // A tick, or spaces typed around the name, change nothing the server holds for the task.
     expect(await save({ ...report, done: true }, report)).toEqual({ read: [], moved: 0 });
     expect(await save({ ...report, text: ' Report ' }, report)).toEqual({ read: [], moved: 0 });

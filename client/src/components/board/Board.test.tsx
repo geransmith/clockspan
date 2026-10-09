@@ -969,6 +969,100 @@ describe('adding from a column', () => {
   });
 });
 
+describe("a card's note", () => {
+  const button = (title: string) => screen.getByRole('button', { name: new RegExp(`^(Note for|Add a note to) ${title}$`) });
+  const box = (title: string) => screen.queryByRole('textbox', { name: `Note for ${title}` }) as HTMLTextAreaElement | null;
+  const openNote = (title: string) => fireEvent.click(button(title));
+
+  it('puts the note button at the end of the title row on every card, marked only on one with a note', async () => {
+    onServer = { ...onServer, cards: onServer.cards.map((c) => (c.uid === 'later0000001' ? { ...c, note: 'From ticket 4821.' } : c)) };
+    await renderBoard();
+    const card = button('Write a KB').closest('.board-card')!;
+    expect(card.querySelector('.board-card-row')!.lastElementChild).toBe(button('Write a KB'));
+    expect([button('Write a KB').getAttribute('aria-label'), button('Write a KB').classList.contains('note-toggle--empty')]).toEqual([
+      'Note for Write a KB',
+      false,
+    ]);
+    expect([button('Follow up').getAttribute('aria-label'), button('Follow up').classList.contains('note-toggle--empty')]).toEqual([
+      'Add a note to Follow up',
+      true,
+    ]);
+    expect(document.querySelectorAll('.note-toggle:not(.note-toggle--empty)')).toHaveLength(1);
+  });
+
+  it('opens the note under the card, apart from the editor, and Escape closes and saves it with the text kept and the focus on its button', async () => {
+    onServer = { ...onServer, cards: onServer.cards.map((c) => (c.uid === 'later0000001' ? { ...c, note: 'From ticket 4821.' } : c)) };
+    await renderBoard();
+    expect(box('Write a KB')).toBeNull();
+    openNote('Write a KB');
+    expect(button('Write a KB').getAttribute('aria-expanded')).toBe('true');
+    expect(document.activeElement).toBe(box('Write a KB'));
+    expect(box('Write a KB')!.value).toBe('From ticket 4821.');
+    expect(box('Write a KB')!.closest('.board-editor')).toBeNull();
+    expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull();
+    fireEvent.change(box('Write a KB')!, { target: { value: 'From ticket 4821. Ask Kim.' } });
+    fireEvent.keyDown(box('Write a KB')!, { key: 'Escape' });
+    expect(box('Write a KB')).toBeNull();
+    expect(document.activeElement).toBe(button('Write a KB'));
+    // Closing it saved it, without waiting.
+    await settle();
+    expect(api.editItem).toHaveBeenCalledExactlyOnceWith('later0000001', { note: 'From ticket 4821. Ask Kim.' });
+    openNote('Write a KB');
+    expect(box('Write a KB')!.value).toBe('From ticket 4821. Ask Kim.');
+  });
+
+  it("saves a card's note by a PATCH 800 ms after the last key and when the box is left, and today's row's through the row", async () => {
+    await renderBoard();
+    openNote('Write a KB');
+    fireEvent.change(box('Write a KB')!, { target: { value: 'Ask Kim' } });
+    await settle(799);
+    expect(api.editItem).not.toHaveBeenCalled();
+    await settle(1);
+    expect(api.editItem).toHaveBeenCalledExactlyOnceWith('later0000001', { note: 'Ask Kim' });
+    fireEvent.change(box('Write a KB')!, { target: { value: 'Ask Kim first' } });
+    fireEvent.blur(box('Write a KB')!);
+    await settle();
+    expect(vi.mocked(api.editItem).mock.lastCall).toEqual(['later0000001', { note: 'Ask Kim first' }]);
+    expect(button('Write a KB').getAttribute('aria-label')).toBe('Note for Write a KB');
+
+    openNote('Report');
+    fireEvent.change(box('Report')!, { target: { value: 'Numbers from Kim' } });
+    fireEvent.blur(box('Report')!);
+    await settle();
+    expect(lists[WED]![0]).toMatchObject({ text: 'Report', note: 'Numbers from Kim' });
+    expect(api.editItem).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a note whose save failed in its box, with the banner, and sends it again on the next edit', async () => {
+    await renderBoard();
+    vi.mocked(api.editItem).mockRejectedValueOnce(new Error('offline'));
+    openNote('Write a KB');
+    fireEvent.change(box('Write a KB')!, { target: { value: 'Ask Kim' } });
+    fireEvent.blur(box('Write a KB')!);
+    await settle();
+    expect(warnSaveFailed).toHaveBeenCalledOnce();
+    expect(box('Write a KB')!.value).toBe('Ask Kim');
+    fireEvent.change(box('Write a KB')!, { target: { value: 'Ask Kim today' } });
+    await settle(800);
+    expect(vi.mocked(api.editItem).mock.lastCall).toEqual(['later0000001', { note: 'Ask Kim today' }]);
+    expect(onServer.cards.find((c) => c.uid === 'later0000001')!.note).toBe('Ask Kim today');
+  });
+
+  it("shows an earlier day's row of a removed recurring priority's note as text, and gives one without a note no button", async () => {
+    serveRange([
+      makeDay(TUE, { priorities: [row(1, 'Tuesday row', { uid: 'rec000000009', recurring: true, done: true, note: 'Acme first' })] }),
+      makeDay(MON, { priorities: [row(1, 'Monday row', { uid: 'rec000000008', recurring: true, done: true })] }),
+    ]);
+    await renderBoard();
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 3' }));
+    openNote('Tuesday row');
+    expect(box('Tuesday row')).toBeNull();
+    expect(document.getElementById(button('Tuesday row').getAttribute('aria-controls')!)!.textContent).toBe('Acme first');
+    expect(screen.queryByRole('button', { name: /Monday row$/ })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add a note to Monday row' })).toBeNull();
+  });
+});
+
 describe('starting the focus timer', () => {
   /** The open editor's Start timer, or null. */
   const startGroup = () => screen.queryByRole('group', { name: 'Start timer' });

@@ -161,6 +161,11 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
             pick={pick}
             onChange={(p, base) => store.setPriorities(date, p, base)}
             onDeleteTask={(uid) => boardStore.deleteItem(uid)}
+            // The note's own save, on the list as the store shows it; a row gone meanwhile has nothing to save.
+            onNote={async (uid, note) =>
+              (await store.editPriorities(date, (rows) => (rows.some((p) => p.uid === uid) ? rows.map((p) => (p.uid === uid ? { ...p, note } : p)) : null))) !==
+              'failed'
+            }
             offer={
               isToday
                 ? {

@@ -24,3 +24,16 @@ export function categoryName(text: string): string {
 export function taskTitle(text: string): string {
   return text.trim().slice(0, LIMITS.priorityText).trim();
 }
+
+/**
+ * A task's note as it is stored: control characters dropped but for line breaks and tabs, cut to
+ * `LIMITS.itemNote`, a surrogate left alone (one the cut split included) replaced, and never
+ * trimmed, so a line break just typed stays; '' is no note. The list save and the item PATCH store
+ * what this gives, and the note box sends it, so a full list stays under the server's body limit.
+ */
+export function taskNote(text: string): string {
+  return text
+    .replace(/(?![\n\t])\p{Cc}/gu, '')
+    .slice(0, LIMITS.itemNote)
+    .replace(/\p{Cs}/gu, '\uFFFD');
+}

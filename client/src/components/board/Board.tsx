@@ -93,11 +93,25 @@ type Notice =
 const DRAGGED_OPACITY = 0.4;
 
 /** A board write's failure as a banner: a refusal's own line, else the save one. */
+function warnFailed(err: unknown): void {
+  if (err instanceof MoveRefused) warnQuietly({ title: err.message, tag: 'board-move' });
+  else warnSaveFailed();
+}
+
+/** A board write sent and let go, its failure a banner. */
 function report(write: Promise<void>): void {
-  void write.catch((err: unknown) => {
-    if (err instanceof MoveRefused) warnQuietly({ title: err.message, tag: 'board-move' });
-    else warnSaveFailed();
-  });
+  void write.catch(warnFailed);
+}
+
+/** A write whose box keeps what it sent on a failure (a note's): whether it saved, a failure raised as `report` does. */
+function saved(write: Promise<void>): Promise<boolean> {
+  return write.then(
+    () => true,
+    (err: unknown) => {
+      warnFailed(err);
+      return false;
+    },
+  );
 }
 
 /** Planned items (their day's list decides them) and recurring rows (they stay on today's list) have no grip. */
@@ -438,7 +452,7 @@ export const Board = memo(function Board({
     const cardOnly = item.card != null && item.row == null;
     // Ticked on an earlier day: that day's sheet unticks it, since the board would rewrite a past
     // day; Move to In progress puts it on today's list to work on again.
-    const note = cardOnly && !item.planned && item.card!.listDone ? BOARD.doneOn(dayName(item.card!.listDate!, today, true)) : undefined;
+    const hint = cardOnly && !item.planned && item.card!.listDone ? BOARD.doneOn(dayName(item.card!.listDate!, today, true)) : undefined;
     // Off today's list, a PATCH renames or files it on every day: any one-off task the board has,
     // and an earlier day's recurring row while its recurring priority is in Settings (one removed
     // there answers 404).
@@ -492,10 +506,12 @@ export const Board = memo(function Board({
               ? (categoryUid) => report(store.editItem(item.uid, { categoryUid }))
               : undefined
         }
+        // As the title: the note is the task's, on every day.
+        onNote={throughRow ? (note) => saved(store.editRow(item.uid, { note })) : editable ? (note) => saved(store.editItem(item.uid, { note })) : undefined}
         // A recurring priority is removed in Settings → Board, so its row only comes off today's list.
         onDelete={item.recurring ? undefined : () => confirmDelete(item)}
         onRemove={item.recurring && throughRow ? () => report(store.removeFromToday(item.uid)) : undefined}
-        note={note}
+        hint={hint}
         start={startable ? { disabled: starting, onStart } : undefined}
         running={running?.priorityUid === item.uid && item.date === running.date ? running : undefined}
         drag={drag}
