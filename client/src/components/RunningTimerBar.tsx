@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useTimer } from '../hooks/useTimer';
 import { formatCountdown } from '../lib/format';
+import type { Session } from '../types';
 import { LabelInput, SessionLabel } from './SessionLabel';
 import { TimerControls } from './TimerControls';
 
-/** Fixed to the top of the viewport whenever a timer is running, on every view. */
-export function RunningTimerBar() {
-  const { running, name, linked, countdownSeconds, progress, paused, due, edit } = useTimer();
+/** Fixed to the top of the viewport whenever a timer is running, on every view; `session` is the one running. */
+export function RunningTimerBar({ session }: { session: Session }) {
+  const { name, linked, countdownSeconds, progress, paused, due, edit } = useTimer();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   // Set when Enter or Escape ends the edit, so focus goes back to the label; a blur leaves focus where it went.
@@ -14,11 +15,10 @@ export function RunningTimerBar() {
   // A session with a task is named by the task, and has no label to edit: a box open as the
   // session is linked (on another device) closes, unsent.
   if (editing && linked) setEditing(false);
-  if (!running) return null;
 
   const commitLabel = () => {
     setEditing(false);
-    if (draft.trim() !== running.label) void edit({ label: draft.trim() });
+    if (draft.trim() !== session.label) void edit({ label: draft.trim() });
   };
 
   return (
@@ -48,7 +48,7 @@ export function RunningTimerBar() {
             className="running-label"
             autoFocus={returnFocus}
             onClick={() => {
-              setDraft(running.label);
+              setDraft(session.label);
               setReturnFocus(false);
               setEditing(true);
             }}

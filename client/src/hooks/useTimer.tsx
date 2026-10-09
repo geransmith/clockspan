@@ -139,7 +139,9 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => {});
   }, [current, change, refresh]);
-  const { runNow: syncNow } = useRefreshLoop(sync, true);
+  // `syncing`: the tab came back and the sync it sent hasn't answered, so the copy shown may be
+  // hours old. The auto-finish and the time's-up banner wait for it, as the alarms do.
+  const { pending: syncing, runNow: syncNow } = useRefreshLoop(sync, true);
 
   // The session is over (finished or cancelled, here or by the server): nothing runs now, and
   // the day's log takes the row. Unless a sync has meanwhile shown a session another device
@@ -178,14 +180,16 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // Completion without the user: a timer that ran out and waited DUE_GRACE_SECONDS for an
   // answer (or expired while the page was closed — the server clamps ended_at to the planned
   // end either way), or a pause left for an hour (the server ends the session where the pause
-  // began, so nothing after it is logged).
+  // began, so nothing after it is logged). It sends the plan and pause it judged by, and the
+  // server refuses (409) a row another device changed since: given time or resumed, it may not
+  // be due any more, so a sync shows what it is now.
   useEffect(() => {
-    if (!running || !loaded || completing.current || now < retry.current.at) return;
+    if (!running || !loaded || syncing || completing.current || now < retry.current.at) return;
     const forgotten = pausedForSeconds >= PAUSE_LIMIT_SECONDS;
     if (!(due && overrunSeconds >= DUE_GRACE_SECONDS) && !forgotten) return;
     const session = running;
     const title = name;
-    end(() => api.finishSession(session.id))
+    end(() => api.finishSession(session.id, false, { plannedSeconds: session.plannedSeconds, pausedAt: session.pausedAt }))
       .then((done) => {
         retry.current = { at: 0, delay: 0 };
         // Cancelled on another device before this one heard: nothing to celebrate.
@@ -213,11 +217,27 @@ export function TimerProvider({ children }: { children: ReactNode }) {
           notifications: !chimed && settings.notifications,
         });
       })
-      .catch(() => {
+      .catch((err: unknown) => {
+        if (err instanceof ApiError && err.status === 409) void syncNow();
         const delay = nextBackoff(retry.current.delay);
         retry.current = { at: Date.now() + delay, delay };
       });
-  }, [running, name, loaded, now, endAt, due, overrunSeconds, pausedForSeconds, end, settings.sound, settings.sounds.timer, settings.notifications]);
+  }, [
+    running,
+    name,
+    loaded,
+    syncing,
+    now,
+    endAt,
+    due,
+    overrunSeconds,
+    pausedForSeconds,
+    end,
+    syncNow,
+    settings.sound,
+    settings.sounds.timer,
+    settings.notifications,
+  ]);
 
   useWakeLock(running != null && !paused && !due && settings.keepScreenAwake);
 
@@ -389,7 +409,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       raisedBanner.current = null;
       return;
     }
-    if (!loaded || overrunSeconds >= DUE_GRACE_SECONDS) return;
+    if (!loaded || syncing || overrunSeconds >= DUE_GRACE_SECONDS) return;
     const key = dueKey(running.id, endAt);
     // Raised again, quietly, when the time worked reaches the longest plan: + has nothing left
     // to add, and a button that does nothing must not stay up. A new name doesn't raise it again:
@@ -413,7 +433,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       sound: fresh && settings.sound,
       notifications: fresh && settings.notifications,
     });
-  }, [running, name, loaded, due, overrunSeconds, endAt, canAdd, step, adjust, settings.sound, settings.sounds.timer, settings.notifications]);
+  }, [running, name, loaded, syncing, due, overrunSeconds, endAt, canAdd, step, adjust, settings.sound, settings.sounds.timer, settings.notifications]);
 
   const value = useMemo(
     () => ({

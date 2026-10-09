@@ -19,6 +19,12 @@ import {
 import { LIMITS, type OkResponse, type RunningResponse, type SessionConflict, type SessionResponse } from '../../shared/api.js';
 import { pausedSecondsAfter, PLANNED_SECONDS, plannedEndAt } from '../../shared/timer.js';
 
+/** What an automatic finish judged the session by (`POST /sessions/:id/finish`'s `expect`). */
+function isJudged(raw: unknown): raw is { plannedSeconds: number; pausedAt: number | null } {
+  const { plannedSeconds, pausedAt } = (raw ?? {}) as { plannedSeconds?: unknown; pausedAt?: unknown };
+  return typeof plannedSeconds === 'number' && (pausedAt === null || typeof pausedAt === 'number');
+}
+
 /**
  * A session's task, from its `priorityUid`: undefined = not mentioned, null = unplanned, else the
  * task with that uid, which that day's list must hold (`dayId` undefined: a day not stored yet,
@@ -158,12 +164,18 @@ export function sessionsRouter(db: DB): Router {
   // Ends now, but never later than the planned end: a timer that ran out unattended is
   // recorded with its planned duration. `countOverrun: true` is the user choosing to log the
   // time past the end as well (they were there for it). A session finished while paused ends
-  // when the pause began (no work happened since), so the log excludes every pause.
+  // when the pause began (no work happened since), so the log excludes every pause. `expect` is
+  // the plan and pause an automatic finish judged the row by: once another device has given it
+  // time or resumed it, it may not be due any more, so that finish is refused.
   r.post('/:id/finish', (req, res) => {
     const s = owned(res);
-    const { countOverrun } = req.body as { countOverrun?: unknown };
+    const { countOverrun, expect } = req.body as { countOverrun?: unknown; expect?: unknown };
     if (countOverrun !== undefined && typeof countOverrun !== 'boolean') return refuse(res, 400, 'countOverrun must be a boolean.');
+    if (expect !== undefined && !isJudged(expect)) return refuse(res, 400, 'expect must hold plannedSeconds and pausedAt.');
     if (s.status === 'running') {
+      if (expect && (expect.plannedSeconds !== s.planned_seconds || expect.pausedAt !== s.paused_at)) {
+        return refuse(res, 409, 'This timer was changed on another device.');
+      }
       const now = Date.now();
       const timing = { startedAt: s.started_at, plannedSeconds: s.planned_seconds, pausedSeconds: s.paused_seconds, pausedAt: s.paused_at };
       const until = s.paused_at ?? now;

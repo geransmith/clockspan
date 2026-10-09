@@ -104,7 +104,7 @@ function Shell() {
   return (
     <div className={`app${running ? ' app--has-bar' : ''}`}>
       {/* Keyed by session: one another device swapped in must not inherit an open label draft. */}
-      {running && <RunningTimerBar key={running.id} />}
+      {running && <RunningTimerBar key={running.id} session={running} />}
       <Banners />
       <Header
         view={view}

@@ -17,6 +17,7 @@ import {
   makePriority,
   makeSession,
   makeSettings,
+  setVisibility,
   settle,
   T0,
   TODAY,
@@ -587,7 +588,7 @@ describe('pause and resume', () => {
       session: endSession(startedAgo(70, { label: '' }), { endedAt: T0 - 59 * MINUTE_MS, durationSeconds: 660 }),
     });
     await settle(MINUTE_MS);
-    expect(api.finishSession).toHaveBeenCalledWith(1);
+    expect(api.finishSession).toHaveBeenCalledWith(1, false, { plannedSeconds: 1500, pausedAt: T0 - 59 * MINUTE_MS });
     expect(result.current.timer.running).toBeNull();
     expect(alert).toHaveBeenCalledWith(
       expect.objectContaining({ title: TIMER_PAUSED_OUT.title, body: TIMER_PAUSED_OUT.body('', '11m'), sound: false, notifications: false }),
@@ -814,7 +815,7 @@ describe("time's up", () => {
     expect(alert).toHaveBeenCalledTimes(1); // the due banner, chimed
     vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(startedAgo(35, { label: '' }), { durationSeconds: 1500 }) });
     await settle(6000);
-    expect(api.finishSession).toHaveBeenCalledWith(1);
+    expect(api.finishSession).toHaveBeenCalledWith(1, false, { plannedSeconds: 1500, pausedAt: null });
     expect(result.current.timer.running).toBeNull();
     // Nobody pressed Finish: nothing for a break suggestion to follow.
     expect(result.current.timer.finished).toBeNull();
@@ -864,6 +865,59 @@ describe("time's up", () => {
     await settle();
     expect(result.current.timer.running).toBeNull();
     expect(alert).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The tab was hidden and its clock stood still for `minutes` (a phone's screen asleep), and the
+   * sync it sends as it comes back is held until the test answers it.
+   */
+  async function comeBackAfter(minutes: number) {
+    setVisibility('hidden');
+    vi.setSystemTime(Date.now() + minutes * MINUTE_MS);
+    const sync = deferred<RunningResponse>();
+    vi.mocked(api.getRunning).mockReturnValueOnce(sync.promise);
+    act(() => setVisibility('visible'));
+    await settle(1000);
+    return sync;
+  }
+
+  it("raises no time's-up banner on a copy from before the tab was hidden until its sync answers", async () => {
+    const session = startedAgo(20);
+    const { result } = await renderRunning(session);
+    const sync = await comeBackAfter(6);
+    expect(result.current.timer.due).toBe(true);
+    expect(alert).not.toHaveBeenCalled();
+    // Given ten more minutes on another device meanwhile.
+    sync.resolve({ session: { ...session, plannedSeconds: 35 * 60 } });
+    await settle(1000);
+    expect(result.current.timer.due).toBe(false);
+    expect(alert).not.toHaveBeenCalled();
+  });
+
+  it('sends no finish on a copy from before the tab was hidden until its sync answers', async () => {
+    const session = startedAgo(30);
+    const { result } = await renderRunning(session);
+    const sync = await comeBackAfter(10);
+    expect(result.current.timer.overrunSeconds).toBeGreaterThan(600);
+    expect(api.finishSession).not.toHaveBeenCalled();
+    sync.resolve({ session: { ...session, plannedSeconds: 50 * 60 } });
+    await settle(1000);
+    expect(api.finishSession).not.toHaveBeenCalled();
+    expect(result.current.timer).toMatchObject({ running: { id: 1, plannedSeconds: 3000 }, due: false });
+  });
+
+  it('shows the timer as it is now when the server refuses a finish judged by an older copy', async () => {
+    const session = startedAgo(34.9);
+    const { result } = await renderRunning(session);
+    // Another device gave it more time after this one's last sync.
+    vi.mocked(api.finishSession).mockRejectedValueOnce(apiError(409));
+    vi.mocked(api.getRunning).mockResolvedValue({ session: { ...session, plannedSeconds: 40 * 60 } });
+    await settle(6000);
+    expect(api.finishSession).toHaveBeenCalledWith(1, false, { plannedSeconds: 1500, pausedAt: null });
+    expect(api.getRunning).toHaveBeenCalledTimes(2);
+    await settle(5000);
+    expect(api.finishSession).toHaveBeenCalledTimes(1);
+    expect(result.current.timer).toMatchObject({ running: { plannedSeconds: 2400 }, due: false });
   });
 
   it('retries a failed auto-finish, 2 s doubling, one request at a time', async () => {

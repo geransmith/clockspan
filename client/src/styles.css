@@ -2775,8 +2775,8 @@ dialog.dialog::backdrop {
   padding-bottom: calc(24px + var(--safe-bottom));
 }
 /* Pinned under the scrolling body; carries the home-indicator inset on phones. The choices stack
-   full-width on a phone (the default on top); from 640px they sit in a row with the ghost button
-   (Back) on the left. */
+   full-width on a phone in markup order (Cancel or Back on top, then the default); from 640px they
+   sit in a row with the ghost button on the left. */
 .dialog-foot {
   flex: none;
   display: flex;
@@ -2796,8 +2796,8 @@ dialog.dialog::backdrop {
     justify-content: flex-end;
     align-items: center;
   }
+  /* Cancel comes first in the markup, so the Tab order is the order drawn in both layouts. */
   .dialog-foot .btn-ghost {
-    order: -1;
     margin-right: auto;
   }
 }
