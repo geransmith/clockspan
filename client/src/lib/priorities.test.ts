@@ -15,6 +15,7 @@ import {
   pickWarning,
   placePriority,
   removePriority,
+  takeOffRow,
 } from './priorities';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { makeDay, makePriority } from '../test/fixtures';
@@ -165,6 +166,15 @@ describe('clearRow', () => {
   it('leaves a free row where the task was, and the other rows where they are', () => {
     const rows = [makePriority(1, 'A'), makePriority(2, 'B', { done: true }), makePriority(3, 'C')];
     expect(clearRow(rows, 2)).toEqual([rows[0], emptyRow(2), rows[2]]);
+  });
+});
+
+describe('takeOffRow', () => {
+  it('leaves a free row within Rows per day, and drops the row past it', () => {
+    const rows = [makePriority(1, 'A'), makePriority(2, 'B'), makePriority(3, 'C')];
+    expect(takeOffRow(rows, 1, 2)).toEqual(clearRow(rows, 1));
+    expect(takeOffRow(rows, 2, 2)).toEqual(clearRow(rows, 2));
+    expect(takeOffRow(rows, 3, 2)).toEqual(removePriority(rows, 3));
   });
 });
 

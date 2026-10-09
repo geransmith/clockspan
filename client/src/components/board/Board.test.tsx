@@ -280,7 +280,7 @@ describe('Board', () => {
     moveTo('later');
     await settle();
     expect(api.editItem).toHaveBeenCalledExactlyOnceWith(REPORT, { lane: 'later', before: 'later0000001' });
-    expect(putLists()).toEqual([{ date: WED, texts: ['Email', ''] }]);
+    expect(putLists()).toEqual([{ date: WED, texts: ['', 'Email', ''] }]);
     expect(vi.mocked(api.editItem).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(api.putPriorities).mock.invocationCallOrder[0]!);
     expect(titlesIn('Later')).toEqual(['Report', 'Write a KB']);
     expect(titlesIn('In progress')).toEqual([]);
@@ -403,7 +403,7 @@ describe('Board', () => {
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Remove from today' }));
     await settle();
-    expect(putLists()).toEqual([{ date: WED, texts: ['', ''] }]);
+    expect(putLists()).toEqual([{ date: WED, texts: ['', '', ''] }]);
     expect(api.deleteItem).not.toHaveBeenCalled();
   });
 
@@ -412,7 +412,7 @@ describe('Board', () => {
 
   it("renames today's recurring row through the row, which renames the recurring priority and its earlier ticks at once, and keeps its chip, its tick and Remove from today", async () => {
     onServer = { ...onServer, recurring: [makeRecurring('rec000000001', 'Monitor the queue')] };
-    lists[WED] = [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true }), row(2, 'Report')];
+    lists[WED] = [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true, listed: 2 }), row(2, 'Report')];
     serveRange([makeDay(TUE, { priorities: [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true, done: true })] })]);
     await renderBoard();
     openEditor('Monitor the queue');
@@ -509,7 +509,7 @@ describe('Board', () => {
     expect(titlesIn('Next')).toEqual(['Follow up']);
   });
 
-  it("deletes today's task with a confirm counting its days and time from its row and today's log, its row off first, and nothing when turned down", async () => {
+  it("deletes today's task with a confirm counting its days and time from its row and today's log, the server taking its row off, and nothing when turned down", async () => {
     lists[WED]![0] = { ...lists[WED]![0]!, listed: 3, logged: 60 * 60 };
     const getDay = vi.mocked(api.getDay).getMockImplementation()!;
     vi.mocked(api.getDay).mockImplementation(async (date) => ({
@@ -527,11 +527,15 @@ describe('Board', () => {
     expect(api.deleteItem).not.toHaveBeenCalled();
 
     confirm.mockReturnValue(true);
+    // The server takes it off every day's list, today's included.
+    vi.mocked(api.deleteItem).mockImplementationOnce((uid) => {
+      lists[WED] = lists[WED]!.filter((p) => p.uid !== uid);
+      return Promise.resolve((onServer = withoutItem(onServer, uid)));
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     await settle();
-    expect(putLists()).toEqual([{ date: WED, texts: ['Email', ''] }]);
+    expect(api.putPriorities).not.toHaveBeenCalled();
     expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith(REPORT);
-    expect(vi.mocked(api.putPriorities).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(api.deleteItem).mock.invocationCallOrder[0]!);
     expect(titlesIn('In progress')).toEqual([]);
   });
 

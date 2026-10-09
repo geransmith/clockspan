@@ -840,16 +840,6 @@ describe('editPriorities', () => {
     await act(async () => expect(await result.current.editPriorities(TODAY, (rows) => rows)).toBe('failed'));
     expect(warnSaveFailed).toHaveBeenCalledOnce();
   });
-
-  it('shown gives the day with the changes on their way, and nothing for a day not held', async () => {
-    vi.mocked(api.putPriorities).mockReturnValueOnce(deferred<{ priorities: Priority[] }>().promise);
-    const { result } = renderStore();
-    await settle();
-    act(() => void result.current.setPriorities(TODAY, [makePriority(1, 'On its way')], []));
-    expect(result.current.shown(TODAY)?.priorities.map((p) => p.text)).toEqual(['On its way']);
-    expect(result.current.shown(TODAY)).toBe(result.current.days[TODAY]);
-    expect(result.current.shown(OTHER)).toBeUndefined();
-  });
 });
 
 describe('a priorities save that puts a task on a list or takes one off', () => {

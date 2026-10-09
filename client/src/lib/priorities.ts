@@ -99,6 +99,14 @@ export function removePriority(rows: Priority[], position: number): Priority[] {
   return rows.filter((p) => p.position !== position).map((p, i) => ({ ...p, position: i + 1 }));
 }
 
+/**
+ * The rows with a task taken off its day, as × and the board take it: within Rows per day
+ * (`count`) the row stays, free, so the rows under it keep their numbers; past it the row goes.
+ */
+export function takeOffRow(rows: Priority[], position: number, count: number): Priority[] {
+  return position > count ? removePriority(rows, position) : clearRow(rows, position);
+}
+
 /** Whether `placePriority` has somewhere to put a row: a free row, or space for one more. */
 export function hasRoom(rows: Priority[], count: number): boolean {
   const padded = padPriorities(rows, count);
