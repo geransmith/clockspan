@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from '../dev/harness.js';
 import { ensureDefaultUser } from '../db.js';
-import type { ItemRow } from './shared.js';
 import { addDays, MINUTE_MS } from '../../shared/dates.js';
 import { BOARD_LIMITS, LIMITS, type BoardCard, type Day, type Recurring, type Session } from '../../shared/api.js';
 
@@ -23,18 +22,14 @@ const board = async () => (await app.api.get('/api/board')).body.cards as BoardC
 /** Each task in a lane as [lane, position, title], in the board's order. */
 const lanes = async () => (await board()).filter((c) => c.lane != null).map((c) => [c.lane, c.position, c.title]);
 const cardOf = async (uid: string) => (await board()).find((c) => c.uid === uid);
-const capture = (uid: string, title: string, lane: string, before: string | null = null) => app.api.post('/api/items', { uid, title, lane, before });
 const patch = (uid: string, body: Record<string, unknown>) => app.api.patch(`/api/items/${uid}`, body);
 const remove = (uid: string) => app.api.del(`/api/items/${uid}`);
-/** Saves a day's list as the web app does. */
-const save = (date: string, priorities: Record<string, unknown>[]) => app.api.put(`/api/days/${date}/priorities`, { priorities });
-const itemOf = (uid: string) => app.db.prepare(`SELECT * FROM items WHERE uid = ?`).get(uid) as ItemRow | undefined;
 const NOT_FOUND = [404, { error: 'Task not found.' }];
 
 describe('POST /api/items: a task made on the board', () => {
   it('starts empty, and keeps each new task where it was put', async () => {
     expect((await app.api.get('/api/board')).body).toEqual({ cards: [], categories: [], recurring: [] });
-    const first = await capture('CARD0000000A', '  Write the KB  ', 'later');
+    const first = await app.capture('CARD0000000A', '  Write the KB  ', 'later');
     expect(first.status).toBe(201);
     expect(first.body.cards).toEqual([
       {
@@ -51,10 +46,10 @@ describe('POST /api/items: a task made on the board', () => {
       },
     ]);
     // Before the first task, at the end (null, or a task of another lane or none), and in Next.
-    await capture('card0000000b', 'Review canned replies', 'later', 'CARD0000000A');
-    await capture('card0000000c', 'Follow up on the SLA', 'next');
-    await capture('card0000000d', 'Look into the timeout', 'later', 'card0000000c');
-    await capture('card0000000e', 'Update the macros', 'later', 'card000000ff');
+    await app.capture('card0000000b', 'Review canned replies', 'later', 'CARD0000000A');
+    await app.capture('card0000000c', 'Follow up on the SLA', 'next');
+    await app.capture('card0000000d', 'Look into the timeout', 'later', 'card0000000c');
+    await app.capture('card0000000e', 'Update the macros', 'later', 'card000000ff');
     expect(await lanes()).toEqual([
       ['later', 1, 'Review canned replies'],
       ['later', 2, 'Write the KB'],
@@ -65,7 +60,7 @@ describe('POST /api/items: a task made on the board', () => {
     // A long title is cut like a priority's text; left out, before is the end.
     const long = await app.api.post('/api/items', { uid: 'card0000000f', title: 'k'.repeat(LIMITS.priorityText + 20), lane: 'next' });
     expect(long.body.cards.find((c: BoardCard) => c.uid === 'card0000000f')).toMatchObject({ lane: 'next', position: 2 });
-    expect(itemOf('card0000000f')!.title).toHaveLength(LIMITS.priorityText);
+    expect(app.item('card0000000f')!.title).toHaveLength(LIMITS.priorityText);
   });
 
   it('takes a category, or none', async () => {
@@ -103,19 +98,20 @@ describe('POST /api/items: a task made on the board', () => {
   });
 
   it('answers the board as it is for a uid in use, and 404 for a deleted or archived task, whose uid stays taken', async () => {
-    await capture('card00000001', 'Write the KB', 'later');
-    const again = await capture('card00000001', 'Something else', 'next');
+    await app.capture('card00000001', 'Write the KB', 'later');
+    const again = await app.capture('card00000001', 'Something else', 'next');
     expect(again.status).toBe(200);
     expect(await lanes()).toEqual([['later', 1, 'Write the KB']]);
 
     await remove('card00000001');
-    const tombstone = itemOf('card00000001');
-    expect([(await capture('card00000001', 'Write the KB', 'later')).status, (await capture('card00000001', 'Write the KB', 'later')).body]).toEqual(NOT_FOUND);
-    expect(itemOf('card00000001')).toEqual(tombstone);
+    const tombstone = app.item('card00000001');
+    const retry = await app.capture('card00000001', 'Write the KB', 'later');
+    expect([retry.status, retry.body]).toEqual(NOT_FOUND);
+    expect(app.item('card00000001')).toEqual(tombstone);
 
     // A recurring priority removed in Settings while a day lists it is archived.
     await app.api.post('/api/items', { uid: 'rcur00000001', title: 'Monitor the queue', weekdays: [1] });
-    await save(TODAY, [{ text: 'Monitor the queue', uid: 'rcur00000001' }]);
+    await app.saveList(TODAY, [{ text: 'Monitor the queue', uid: 'rcur00000001' }]);
     await remove('rcur00000001');
     const archived = await app.api.post('/api/items', { uid: 'rcur00000001', title: 'Monitor the queue', weekdays: [1] });
     expect([archived.status, archived.body]).toEqual(NOT_FOUND);
@@ -126,11 +122,11 @@ describe('POST /api/items: a task made on the board', () => {
     const insert = app.db.prepare(`INSERT INTO items (user_id, uid, title, lane, position, created_at) VALUES (?, ?, 'Task', ?, ?, 0)`);
     for (let i = 1; i <= BOARD_LIMITS.openCards; i++) insert.run(userId, `card${String(i).padStart(8, '0')}`, i % 2 ? 'later' : 'next', i);
     const full = [400, `The board holds at most ${BOARD_LIMITS.openCards} tasks in Later and Next.`];
-    const fresh = await capture('card99999999', 'One more', 'later');
+    const fresh = await app.capture('card99999999', 'One more', 'later');
     expect([fresh.status, fresh.body.error]).toEqual(full);
     // Ticked on its latest list, a task in a lane is done and leaves room.
-    await save(YESTERDAY, [{ text: 'Task', uid: 'card00000001', done: true }]);
-    expect((await capture('card99999999', 'One more', 'later')).status).toBe(201);
+    await app.saveList(YESTERDAY, [{ text: 'Task', uid: 'card00000001', done: true }]);
+    expect((await app.capture('card99999999', 'One more', 'later')).status).toBe(201);
     // A recurring priority isn't held to it.
     expect((await app.api.post('/api/items', { uid: 'rcur00000001', title: 'Queue', weekdays: [1] })).status).toBe(201);
   });
@@ -158,7 +154,7 @@ describe('POST /api/items: a recurring priority', () => {
       { uid: 'rcur00000002', weekdays: 0b0010101 },
       { uid: 'rcur00000003', weekdays: 0b1100000 },
     ]);
-    expect(itemOf('rcur00000001')).toMatchObject({ lane: null, position: 0, created_at: SEED_NOW });
+    expect(app.item('rcur00000001')).toMatchObject({ lane: null, position: 0, created_at: SEED_NOW });
   });
 
   it('refuses weekdays it could not store, and stores nothing', async () => {
@@ -187,9 +183,9 @@ describe('POST /api/items: a recurring priority', () => {
 
 describe('PATCH /api/items/:uid', () => {
   beforeEach(async () => {
-    await capture('card00000001', 'Write the KB', 'later');
-    await capture('card00000002', 'Review canned replies', 'later');
-    await capture('card00000003', 'Follow up on the SLA', 'next');
+    await app.capture('card00000001', 'Write the KB', 'later');
+    await app.capture('card00000002', 'Review canned replies', 'later');
+    await app.capture('card00000003', 'Follow up on the SLA', 'next');
   });
 
   it('sets and clears the category, and keeps it when the field is left out', async () => {
@@ -223,16 +219,17 @@ describe('PATCH /api/items/:uid', () => {
     expect((await cardOf('card00000001'))!).toMatchObject({ lane: 'next', position: 3 });
   });
 
-  it("applies an edit to a task on today's list or a later one: the last write wins", async () => {
-    await save(TODAY, [{ text: 'Write the KB', uid: 'card00000001' }]);
-    await save(addDays(TODAY, 1), [{ text: 'Write the KB', uid: 'card00000001' }]);
-    expect((await patch('card00000001', { title: 'Renamed', lane: 'later' })).status).toBe(200);
+  it("applies an edit to a task on today's list and a later one", async () => {
+    await app.saveList(TODAY, [{ text: 'Write the KB', uid: 'card00000001' }]);
+    await app.saveList(addDays(TODAY, 1), [{ text: 'Write the KB', uid: 'card00000001' }]);
+    expect((await patch('card00000001', { title: 'Renamed', lane: 'next' })).status).toBe(200);
     expect((await app.api.get(`/api/days/${TODAY}`)).body.priorities[0].text).toBe('Renamed');
+    expect((await cardOf('card00000001'))!.lane).toBe('next');
   });
 
-  it('gives a task with no lane a place, and checks the cap for it and for a done one', async () => {
+  it('gives a task with no lane a place, checked against the cap, which a done one takes no room under', async () => {
     // Typed on a day's list: no lane, and left open it shows in Next until one is given.
-    await save(YESTERDAY, [{ text: 'Left open', uid: 'aaaaaaaaaaa1' }]);
+    await app.saveList(YESTERDAY, [{ text: 'Left open', uid: 'aaaaaaaaaaa1' }]);
     expect((await patch('aaaaaaaaaaa1', { before: 'card00000003' })).body.cards.find((c: BoardCard) => c.uid === 'aaaaaaaaaaa1').lane).toBeNull();
     await patch('aaaaaaaaaaa1', { lane: 'next', before: 'card00000003' });
     expect((await lanes()).filter(([lane]) => lane === 'next')).toEqual([
@@ -244,40 +241,58 @@ describe('PATCH /api/items/:uid', () => {
     const insert = app.db.prepare(`INSERT INTO items (user_id, uid, title, lane, position, created_at) VALUES (?, ?, 'Task', 'later', ?, 0)`);
     // With the four in Later and Next, one past the cap, until one of them is ticked.
     for (let i = 1; i <= BOARD_LIMITS.openCards - 3; i++) insert.run(userId, `bulk${String(i).padStart(8, '0')}`, 100 + i);
-    await save(YESTERDAY, [
+    await app.saveList(YESTERDAY, [
       { text: 'Left open', uid: 'aaaaaaaaaaa1' },
       { text: 'Typed', uid: 'aaaaaaaaaaa2' },
       { text: 'Done', uid: 'card00000002', done: true },
     ]);
-    const full = [400, `The board holds at most ${BOARD_LIMITS.openCards} tasks in Later and Next.`];
-    for (const [uid, lane] of [
-      ['aaaaaaaaaaa2', 'later'],
-      ['card00000002', 'next'],
-    ]) {
-      const r = await patch(uid!, { lane });
-      expect([r.status, r.body.error], uid).toEqual(full);
-    }
-    expect(itemOf('aaaaaaaaaaa2')!.lane).toBeNull();
-    // One already open in a lane moves under the cap.
+    const r = await patch('aaaaaaaaaaa2', { lane: 'later' });
+    expect([r.status, r.body.error]).toEqual([400, `The board holds at most ${BOARD_LIMITS.openCards} tasks in Later and Next.`]);
+    expect(app.item('aaaaaaaaaaa2')!.lane).toBeNull();
+    // One already open in a lane moves at the cap, and so does a done one: neither adds to what it counts.
     expect((await patch('card00000001', { lane: 'next' })).status).toBe(200);
+    expect((await patch('card00000002', { lane: 'next' })).status).toBe(200);
   });
 
   it('edits a recurring priority, never into a lane, and no one-off gets weekdays', async () => {
     await app.api.post('/api/items', { uid: 'rcur00000001', title: 'Monitor the queue', weekdays: [1, 2] });
-    await patch('RCUR00000001', { title: '  Watch the queue ', categoryUid: 'cat000000002', weekdays: [3, 1] });
+    await patch('RCUR00000001', { title: '  Watch the queue ', categoryUid: 'cat000000002', weekday: { day: 3, on: true } });
     expect((await app.api.get('/api/board')).body.recurring).toEqual([
-      { uid: 'rcur00000001', title: 'Watch the queue', categoryUid: 'cat000000002', weekdays: [1, 3] },
+      { uid: 'rcur00000001', title: 'Watch the queue', categoryUid: 'cat000000002', weekdays: [1, 2, 3] },
     ]);
+    const WEEKDAY = 'weekday must be a day from 1 to 7 with on true or false.';
     for (const [uid, change, error] of [
       ['rcur00000001', { lane: 'next' }, 'A recurring priority stays off the board.'],
-      ['rcur00000001', { weekdays: [] }, 'weekdays must be one or more days from 1 to 7.'],
-      ['rcur00000001', { weekdays: null }, 'weekdays must be one or more days from 1 to 7.'],
-      ['card00000001', { weekdays: [1] }, 'Only a recurring priority has weekdays.'],
+      ['rcur00000001', { weekday: null }, WEEKDAY],
+      ['rcur00000001', { weekday: 3 }, WEEKDAY],
+      ['rcur00000001', { weekday: { day: 0, on: true } }, WEEKDAY],
+      ['rcur00000001', { weekday: { day: 8, on: false } }, WEEKDAY],
+      ['rcur00000001', { weekday: { day: 2, on: 'yes' } }, WEEKDAY],
+      ['rcur00000001', { weekday: { on: false } }, WEEKDAY],
+      // The whole list, as a tab from before the upgrade sends it, would put back another device's days.
+      ['rcur00000001', { weekdays: [1, 2, 4] }, 'Send one day as weekday: { day, on }.'],
+      ['card00000001', { weekday: { day: 1, on: true } }, 'Only a recurring priority has weekdays.'],
     ] as const) {
       const r = await patch(uid, change);
       expect([r.status, r.body.error], JSON.stringify(change)).toEqual([400, error]);
     }
-    expect(itemOf('rcur00000001')).toMatchObject({ lane: null, weekdays: 0b101 });
+    expect(app.item('rcur00000001')).toMatchObject({ lane: null, weekdays: 0b111 });
+  });
+
+  it("sets or clears one weekday, so two devices' changes to different days both land, and never clears the last", async () => {
+    await app.api.post('/api/items', { uid: 'rcur00000001', title: 'Monitor the queue', weekdays: [1, 2, 3, 4, 5] });
+    // The laptop adds Saturday; the phone, on its copy from before, takes Monday off.
+    await patch('rcur00000001', { weekday: { day: 6, on: true } });
+    await patch('rcur00000001', { weekday: { day: 1, on: false } });
+    // A day set again, or cleared again, stays as it is.
+    await patch('rcur00000001', { weekday: { day: 6, on: true } });
+    await patch('rcur00000001', { weekday: { day: 7, on: false } });
+    expect((await app.api.get('/api/board')).body.recurring[0].weekdays).toEqual([2, 3, 4, 5, 6]);
+
+    await app.api.post('/api/items', { uid: 'rcur00000002', title: 'Follow-ups', weekdays: [3] });
+    const last = await patch('rcur00000002', { weekday: { day: 3, on: false } });
+    expect([last.status, last.body.error]).toEqual([400, 'A recurring priority keeps at least one weekday.']);
+    expect(app.item('rcur00000002')!.weekdays).toBe(0b100);
   });
 
   it('refuses an edit it could not store, and changes nothing', async () => {
@@ -301,13 +316,13 @@ describe('PATCH /api/items/:uid', () => {
   it('answers 404 for a task deleted, archived or never made', async () => {
     await remove('card00000001');
     await app.api.post('/api/items', { uid: 'rcur00000001', title: 'Monitor the queue', weekdays: [1] });
-    await save(TODAY, [{ text: 'Monitor the queue', uid: 'rcur00000001' }]);
+    await app.saveList(TODAY, [{ text: 'Monitor the queue', uid: 'rcur00000001' }]);
     await remove('rcur00000001');
     for (const uid of ['card00000001', 'rcur00000001', 'card00000009']) {
       const r = await patch(uid, { title: 'Back' });
       expect([r.status, r.body], uid).toEqual(NOT_FOUND);
     }
-    expect([itemOf('card00000001')!.title, itemOf('rcur00000001')!.title]).toEqual(['Write the KB', 'Monitor the queue']);
+    expect([app.item('card00000001')!.title, app.item('rcur00000001')!.title]).toEqual(['card00000001', 'Monitor the queue']);
   });
 });
 
@@ -316,16 +331,16 @@ describe('DELETE /api/items/:uid: a one-off task', () => {
   const TUE = '2026-09-08';
 
   it('takes it off every day and keeps its sessions there as unplanned time under its name and category, leaving a tombstone', async () => {
-    await capture('card00000001', 'Write the KB', 'next');
-    await capture('card00000002', 'Review canned replies', 'next');
+    await app.capture('card00000001', 'Write the KB', 'next');
+    await app.capture('card00000002', 'Review canned replies', 'next');
     await patch('card00000002', { categoryUid: 'cat000000001' });
     const task = { text: 'Review canned replies', uid: 'card00000002' };
-    await save(MON, [
+    await app.saveList(MON, [
       { ...task, done: true },
       { text: 'Email', uid: 'aaaaaaaaaaa1' },
     ]);
-    await save(TUE, [task]);
-    await save(TODAY, [task]);
+    await app.saveList(TUE, [task]);
+    await app.saveList(TODAY, [task]);
     const log = async (date: string, end: 'finish' | 'cancel' | null) => {
       const { id } = (await app.api.post(`/api/days/${date}/sessions`, { plannedSeconds: 1500, label: 'Started as', priorityUid: task.uid })).body
         .session as Session;
@@ -356,22 +371,23 @@ describe('DELETE /api/items/:uid: a one-off task', () => {
     expect((await app.api.get('/api/sessions/running')).body.session).toMatchObject({ id: running, status: 'running', priorityUid: null });
     // The cancelled one had let go of it already.
     expect(app.count('sessions', `status = 'cancelled' AND item_id IS NULL AND label = 'Started as'`)).toBe(1);
-    expect(itemOf(task.uid)).toMatchObject({ title: task.text, category_uid: 'cat000000001', lane: null, position: 0, deleted_at: Date.now() });
+    // The tombstone keeps only the uid: the deleted name and category stay on the sessions alone.
+    expect(app.item(task.uid)).toMatchObject({ title: task.uid, category_uid: null, lane: null, position: 0, deleted_at: Date.now() });
     expect(await lanes()).toEqual([['next', 1, 'Write the KB']]);
   });
 
   it("cuts a long name to a session label's length, and deletes an archived one-off the same way", async () => {
-    await save(MON, [{ text: 'k'.repeat(LIMITS.priorityText), uid: 'aaaaaaaaaaa1' }]);
+    await app.saveList(MON, [{ text: 'k'.repeat(LIMITS.priorityText), uid: 'aaaaaaaaaaa1' }]);
     const { id } = (await app.api.post(`/api/days/${MON}/sessions`, { plannedSeconds: 600, priorityUid: 'aaaaaaaaaaa1' })).body.session as Session;
     app.db.prepare(`UPDATE items SET archived_at = 1 WHERE uid = 'aaaaaaaaaaa1'`).run();
     expect((await remove('aaaaaaaaaaa1')).status).toBe(200);
     const session = (await app.api.get(`/api/days/${MON}`)).body.sessions.find((s: Session) => s.id === id) as Session;
     expect(session.label).toBe('k'.repeat(LIMITS.sessionLabel));
-    expect(itemOf('aaaaaaaaaaa1')!.deleted_at).toBe(SEED_NOW);
+    expect(app.item('aaaaaaaaaaa1')!.deleted_at).toBe(SEED_NOW);
   });
 
   it('answers 404 for a second delete, and for a task never made', async () => {
-    await capture('card00000001', 'Write the KB', 'later');
+    await app.capture('card00000001', 'Write the KB', 'later');
     await remove('card00000001');
     for (const uid of ['card00000001', 'card00000009']) {
       const r = await remove(uid);
@@ -383,28 +399,41 @@ describe('DELETE /api/items/:uid: a one-off task', () => {
 describe('DELETE /api/items/:uid: a recurring priority', () => {
   const add = (uid: string, title: string) => app.api.post('/api/items', { uid, title, categoryUid: null, weekdays: [1, 2, 3, 4, 5] });
 
-  it('deletes one nothing names, and archives one a day lists, which stops repeating and stays on that day', async () => {
+  it('archives it, listed or not, so it stops repeating, stays on the days that list it, and stays stored until the prune', async () => {
     await add('rcur00000001', 'Monitor the queue');
     await add('rcur00000002', 'Follow-ups');
-    await save(TODAY, [{ text: 'Monitor the queue', uid: 'rcur00000001' }]);
+    await app.saveList(TODAY, [{ text: 'Monitor the queue', uid: 'rcur00000001' }]);
     const r = await remove('RCUR00000002');
     expect(r.body.recurring.map((x: Recurring) => x.uid)).toEqual(['rcur00000001']);
-    expect(itemOf('rcur00000002')).toBeUndefined();
+    expect(app.item('rcur00000002')).toMatchObject({ archived_at: SEED_NOW, deleted_at: null });
     const archived = await remove('rcur00000001');
     expect(archived.body.recurring).toEqual([]);
-    expect(itemOf('rcur00000001')).toMatchObject({ archived_at: SEED_NOW, deleted_at: null, weekdays: 0b11111 });
+    expect(app.item('rcur00000001')).toMatchObject({ archived_at: SEED_NOW, deleted_at: null, weekdays: 0b11111 });
     expect((await app.api.get(`/api/days/${TODAY}`)).body.priorities[0]).toMatchObject({ text: 'Monitor the queue', recurring: true, archived: true });
     // Removed already: nothing brings it back.
-    expect([(await remove('rcur00000001')).status, (await remove('rcur00000001')).body]).toEqual(NOT_FOUND);
+    const again = await remove('rcur00000001');
+    expect([again.status, again.body]).toEqual(NOT_FOUND);
+  });
+
+  it('keeps one a stale offer adds as the archived routine, never a one-off, and after its last list drops it', async () => {
+    await add('rcur00000001', 'Monitor the queue');
+    await remove('rcur00000001');
+    // The phone's board copy still offered it, and Add to today sends it.
+    const stale = await app.saveList(TODAY, [{ text: 'Monitor the queue', uid: 'rcur00000001' }]);
+    expect(stale.body.priorities).toEqual([expect.objectContaining({ uid: 'rcur00000001', recurring: true, archived: true })]);
+    expect((await board()).map((c) => c.uid)).toEqual([]);
+    await app.saveList(TODAY, [], stale.body.priorities);
+    expect(app.item('rcur00000001')).toMatchObject({ archived_at: SEED_NOW, weekdays: 0b11111 });
+    expect(app.count('items')).toBe(1);
   });
 
   it('archives one a session names after its day dropped it', async () => {
     await add('rcur00000001', 'Monitor the queue');
-    await save(TODAY, [{ text: 'Monitor the queue', uid: 'rcur00000001' }]);
+    await app.saveList(TODAY, [{ text: 'Monitor the queue', uid: 'rcur00000001' }]);
     await app.api.post(`/api/days/${TODAY}/sessions`, { plannedSeconds: 600, priorityUid: 'rcur00000001' });
-    await save(TODAY, []);
+    await app.saveList(TODAY, []);
     await remove('rcur00000001');
-    expect(itemOf('rcur00000001')!.archived_at).toBe(SEED_NOW);
+    expect(app.item('rcur00000001')!.archived_at).toBe(SEED_NOW);
   });
 });
 

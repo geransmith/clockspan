@@ -16,11 +16,9 @@ import {
   type UniqueIdentifier,
 } from '@dnd-kit/core';
 import { hasSortableData, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
-import { columnDropId, COLUMNS, isLane, type ColumnId } from '../../lib/board';
+import { columnDropId, COLUMNS, type ColumnId } from '../../lib/board';
 import type { OpenLane } from '../../types';
-
-/** Later and Next, the columns whose cards sort. */
-const OPEN_LANES = COLUMNS.filter(isLane);
+import { OPEN_LANES } from '../../../../shared/api.js';
 
 /** A droppable that is one of `lane`'s cards. */
 const inLane = (c: DroppableContainer, lane: OpenLane) => hasSortableData(c) && c.data.current.sortable.containerId === lane;

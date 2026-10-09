@@ -323,10 +323,11 @@ function RecurringRow({
     if (!title || title === item.title) setDraft(item.title);
     else edit({ title });
   };
+  // Only the day pressed goes out, so a change another device made to the other days stands.
   const toggleDay = (day: number) => {
     const on = item.weekdays.includes(day);
     if (on && item.weekdays.length === 1) return;
-    edit({ weekdays: on ? item.weekdays.filter((d) => d !== day) : [...item.weekdays, day].sort((a, b) => a - b) });
+    edit({ weekday: { day, on: !on } });
   };
   return (
     <div className="recurring-row">

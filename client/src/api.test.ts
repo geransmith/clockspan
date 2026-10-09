@@ -132,7 +132,13 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
     '/api/items/task00000002',
     { title: 'Write the wiki', categoryUid: null, lane: 'next', before: null },
   ],
-  ['editItem, the weekdays', () => api.editItem('rcur00000001', { weekdays: [1, 3, 5] }), 'PATCH', '/api/items/rcur00000001', { weekdays: [1, 3, 5] }],
+  [
+    'editItem, a weekday',
+    () => api.editItem('rcur00000001', { weekday: { day: 3, on: false } }),
+    'PATCH',
+    '/api/items/rcur00000001',
+    { weekday: { day: 3, on: false } },
+  ],
   ['deleteItem', () => api.deleteItem('task00000002'), 'DELETE', '/api/items/task00000002', undefined],
   [
     'addCategory',

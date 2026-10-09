@@ -179,7 +179,7 @@ describe('sessions', () => {
     expect((await patch({ priorityUid: null, categoryUid: MINE })).body.session).toMatchObject({ priorityUid: null, categoryUid: MINE });
   });
 
-  it("names a session taken off its task after the task's current name, unless a label is sent with it", async () => {
+  it("names a session taken off its task after the task's current name, cut to the label limit", async () => {
     const long = 'k'.repeat(LIMITS.sessionLabel + 50);
     await app.api.put(`/api/days/${DATE}/priorities`, {
       priorities: [
@@ -378,6 +378,11 @@ describe('sessions', () => {
     // A finish that arrives after the cancel (the other device's timer ran out) changes nothing:
     // the client reads the status to know whether to celebrate.
     expect((await app.api.post(`/api/sessions/${id}/finish`)).body.session.status).toBe('cancelled');
+    // An edit that arrives after it (the other device's day log) is refused, so it never takes a task.
+    await app.api.put(`/api/days/${DATE}/priorities`, { priorities: [{ text: 'Plan', uid: 'aaaaaaaaaaa1' }] });
+    const late = await app.api.patch(`/api/sessions/${id}`, { priorityUid: 'aaaaaaaaaaa1' });
+    expect([late.status, late.body]).toEqual([409, { error: 'This timer was cancelled.' }]);
+    expect(app.count('sessions', 'id = ? AND item_id IS NULL', id)).toBe(1);
   });
 
   it('deletes once', async () => {

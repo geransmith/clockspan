@@ -189,10 +189,11 @@ export const deleteBreak = (id: number) => request<OkResponse>('DELETE', `/api/b
 export type NewItem = Pick<BoardCard, 'uid' | 'title' | 'categoryUid'> & ({ lane: OpenLane; before: string | null } | { weekdays: number[] });
 /**
  * PATCH /items/:uid: a field left out keeps its value. `before` alone reorders the task's lane;
- * `lane` is for a one-off task and `weekdays` for a recurring priority. A rename or a category
+ * `lane` is for a one-off task, and `weekday` sets or clears one ISO weekday (1..7) of a recurring
+ * priority, so a change another device made to its other days stands. A rename or a category
  * reaches every day the task is on.
  */
-export type ItemPatch = { title?: string; categoryUid?: string | null; lane?: OpenLane; before?: string | null; weekdays?: number[] };
+export type ItemPatch = { title?: string; categoryUid?: string | null; lane?: OpenLane; before?: string | null; weekday?: { day: number; on: boolean } };
 /** POST /board/categories: a new category, or a removed one brought back under its own uid. */
 export type NewCategory = Pick<Category, 'uid' | 'name' | 'color'>;
 /** PATCH /board/categories/:uid: a field left out keeps its value. */

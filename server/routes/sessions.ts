@@ -4,12 +4,13 @@ import { currentUser } from '../auth/middleware.js';
 import { refuse } from '../refuse.js';
 import { collectItems } from '../board.js';
 import {
+  BAD_CATEGORY,
   endRunningBreak,
   ensureDay,
   findDay,
   getOwned,
   ownedRouter,
-  parseCategoryUid,
+  parseUidField,
   parsePlannedSeconds,
   runningSession,
   sessionRowToJson,
@@ -100,6 +101,8 @@ export function sessionsRouter(db: DB): Router {
   // the task it left is cleaned up when nothing else names it (`collectItems`).
   r.patch('/:id', (req, res) => {
     const s = owned(res);
+    // A cancelled session let go of its task and shows nowhere: a late edit from another device can't link it again.
+    if (s.status === 'cancelled') return refuse(res, 409, 'This timer was cancelled.');
     const { plannedSeconds, label, priorityUid, categoryUid } = req.body as {
       plannedSeconds?: unknown;
       label?: unknown;
@@ -108,10 +111,10 @@ export function sessionsRouter(db: DB): Router {
     };
     const link = parsePriorityUid(db, s.day_id, priorityUid);
     if ('error' in link) return refuse(res, 400, link.error);
-    const category = parseCategoryUid(categoryUid);
+    const category = parseUidField(categoryUid, BAD_CATEGORY);
     if ('error' in category) return refuse(res, 400, category.error);
     const itemId = link.itemId === undefined ? s.item_id : link.itemId;
-    if (itemId != null && category.categoryUid != null) return refuse(res, 400, 'A session on a priority counts under its category.');
+    if (itemId != null && category.uid != null) return refuse(res, 400, 'A session on a priority counts under its category.');
     let planned = s.planned_seconds;
     if (plannedSeconds !== undefined) {
       const parsed = parsePlannedSeconds(plannedSeconds, PLANNED_SECONDS);
@@ -123,7 +126,7 @@ export function sessionsRouter(db: DB): Router {
     if ('error' in name) return refuse(res, 400, name.error);
     const left = s.item_id != null && itemId !== s.item_id;
     // A session that leaves its task takes no category with it, nor one it held before it had it.
-    const own = itemId != null ? null : category.categoryUid !== undefined ? category.categoryUid : left ? null : s.category_uid;
+    const own = itemId != null ? null : category.uid !== undefined ? category.uid : left ? null : s.category_uid;
     // The task's current name, so the session keeps reading under the name it showed.
     const called = name.label ?? (left && itemId == null ? s.item_title!.slice(0, LIMITS.sessionLabel) : s.label);
     db.transaction(() => {

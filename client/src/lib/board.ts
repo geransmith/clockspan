@@ -12,7 +12,7 @@
  * and its lane (`boardColumns`), so the board and the sheet show one list and can't disagree.
  */
 import type { CategoryPatch, ItemPatch, NewCategory, NewItem } from '../api';
-import { BOARD_LIMITS, CATEGORY_COLORS, LOOKBACK_DAYS } from '../../../shared/api.js';
+import { BOARD_LIMITS, CATEGORY_COLORS, LOOKBACK_DAYS, OPEN_LANES } from '../../../shared/api.js';
 import { addDays, startOfWeek } from '../../../shared/dates.js';
 import { hasText } from '../../../shared/priorities.js';
 import { categoryName, sameText } from '../../../shared/text.js';
@@ -72,10 +72,13 @@ export function boardFull(board: Board): boolean {
   return board.cards.filter((c) => c.lane != null && !c.listDone).length >= BOARD_LIMITS.openCards;
 }
 
-/** Whether giving the task a lane adds one to what `boardFull` counts: one in no lane, or done, or one this copy doesn't have. */
+/**
+ * Whether giving the task a lane may add one to what `boardFull` counts: one in no lane, or one
+ * this copy doesn't have. A done task isn't counted in a lane or out of one.
+ */
 export function addsToLanes(board: Board, uid: string): boolean {
   const card = board.cards.find((c) => c.uid === uid);
-  return !card || card.lane == null || card.listDone;
+  return !card || card.lane == null;
 }
 
 /** The item's uid when it is one of `lane`'s own tasks, which a place in the lane is given before; null for any other. */
@@ -328,7 +331,7 @@ export interface DropTarget {
 
 /** Later and Next: the lanes a task is put in, which keep their order. */
 export function isLane(column: ColumnId): column is OpenLane {
-  return column === 'later' || column === 'next';
+  return (OPEN_LANES as readonly ColumnId[]).includes(column);
 }
 
 /** A column's items in the order shown: Done is today's, then the rest of the week. */
@@ -462,16 +465,23 @@ export function withItem(board: Board, item: NewItem, now: number): Board {
 
 /**
  * The board as `PATCH /items/:uid` leaves it: the fields sent, a field left out kept. A task takes
- * a lane, or `before` alone to reorder its lane; a recurring priority takes weekdays, ascending.
+ * a lane, or `before` alone to reorder its lane; a recurring priority takes one weekday set or
+ * cleared, and keeps its days when that would clear the last, as the server refuses to.
  */
-export function withItemPatch(board: Board, uid: string, { title, categoryUid, lane, before, weekdays }: ItemPatch): Board {
+export function withItemPatch(board: Board, uid: string, { title, categoryUid, lane, before, weekday }: ItemPatch): Board {
   const named = <T extends { title: string; categoryUid: string | null }>(t: T): T => ({
     ...t,
     title: title ?? t.title,
     categoryUid: categoryUid === undefined ? t.categoryUid : categoryUid,
   });
+  const days = (r: Recurring) => {
+    if (!weekday) return r.weekdays;
+    const rest = r.weekdays.filter((d) => d !== weekday.day);
+    const next = weekday.on ? ascending([...rest, weekday.day]) : rest;
+    return next.length > 0 ? next : r.weekdays;
+  };
   if (board.recurring.some((r) => r.uid === uid)) {
-    return { ...board, recurring: board.recurring.map((r) => (r.uid === uid ? { ...named(r), weekdays: ascending(weekdays ?? r.weekdays) } : r)) };
+    return { ...board, recurring: board.recurring.map((r) => (r.uid === uid ? { ...named(r), weekdays: days(r) } : r)) };
   }
   const card = board.cards.find((c) => c.uid === uid);
   if (!card) return board;

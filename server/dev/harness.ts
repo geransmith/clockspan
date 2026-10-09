@@ -9,6 +9,7 @@ import type { Discovery } from '../auth/oidc.js';
 import { loadConfig, type Config } from '../config.js';
 import { ensureDefaultUser, openDatabase, type DB, type UserRow } from '../db.js';
 import { ensureLocalUsers, LOCAL_USERS, seedDatabase, type SeedManifest, type SeedOptions } from './seed.js';
+import type { ItemRow } from '../routes/shared.js';
 import type { AuthMode } from '../../shared/api.js';
 import { atTime } from '../../shared/dates.js';
 
@@ -53,6 +54,12 @@ export interface TestApp {
   seeded?: SeedManifest;
   /** Rows in `table`, or those matching `where` (SQL, with `?` for each of `params`): `countRows` on this app's DB. */
   count(table: string, where?: string, ...params: unknown[]): number;
+  /** The task with this uid as stored, a tombstone included. */
+  item(uid: string): ItemRow | undefined;
+  /** Saves a day's list on the default client as the web app does, with the list it was built on when given. */
+  saveList(date: string, priorities: Record<string, unknown>[], base?: Record<string, unknown>[]): Promise<ApiResponse>;
+  /** A task captured on the board on the default client, in `lane` before `before` there (null: the end). */
+  capture(uid: string, title: string, lane: string, before?: string | null): Promise<ApiResponse>;
   /**
    * Under AUTH_MODE=local: the seed's two accounts, each signed in on a client of its own, for
    * the tests that check one user never sees or touches another's rows.
@@ -150,6 +157,17 @@ export async function startTestApp(opts: StartOptions = {}): Promise<TestApp> {
     authMode === 'oidc' ? { OIDC_ISSUER: 'https://127.0.0.1:2/', OIDC_CLIENT_ID: 'clockspan', OIDC_CLIENT_SECRET: 'secret', APP_URL: 'http://localhost' } : {};
   const config = loadConfig({ AUTH_MODE: authMode, ...oidcEnv, ...opts.env });
   const db = openDatabase(':memory:');
+  // Before the server listens, so a refused seed leaves nothing open.
+  let seeded: SeedManifest | undefined;
+  if (opts.seed) {
+    if (authMode !== 'none') {
+      db.close();
+      throw new Error('seed: true needs authMode "none"; under local auth create users first and call seedDatabase yourself.');
+    }
+    const user = ensureDefaultUser(db);
+    const extra = typeof opts.seed === 'object' ? opts.seed : {};
+    seeded = seedDatabase(db, { userId: user.id, today: SEED_TODAY, now: SEED_NOW, ...extra });
+  }
   // No client dir means the static block stays off, so /api tests never see index.html.
   const app = createApp(db, config, {
     clientDir: opts.clientDir ?? path.join(os.tmpdir(), 'clockspan-no-client'),
@@ -161,23 +179,19 @@ export async function startTestApp(opts: StartOptions = {}): Promise<TestApp> {
   await once(server, 'listening');
   const { port } = server.address() as AddressInfo;
   const url = `http://127.0.0.1:${port}`;
-
-  let seeded: SeedManifest | undefined;
-  if (opts.seed) {
-    if (authMode !== 'none') throw new Error('seed: true needs authMode "none"; under local auth create users first and call seedDatabase yourself.');
-    const user = ensureDefaultUser(db);
-    const extra = typeof opts.seed === 'object' ? opts.seed : {};
-    seeded = seedDatabase(db, { userId: user.id, today: SEED_TODAY, now: SEED_NOW, ...extra });
-  }
+  const api = makeClient(url);
 
   return {
     db,
     config,
     url,
-    api: makeClient(url),
+    api,
     client: () => makeClient(url),
     seeded,
     count: (table, where, ...params) => countRows(db, table, where, ...params),
+    item: (uid) => db.prepare(`SELECT * FROM items WHERE uid = ?`).get(uid) as ItemRow | undefined,
+    saveList: (date, priorities, base) => api.put(`/api/days/${date}/priorities`, base ? { priorities, base } : { priorities }),
+    capture: (uid, title, lane, before = null) => api.post('/api/items', { uid, title, lane, before }),
     twoUsers: async () => {
       const users = await ensureLocalUsers(db);
       const signIn = async (username: string) => {
