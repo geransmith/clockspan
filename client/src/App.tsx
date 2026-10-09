@@ -53,10 +53,10 @@ function Shell() {
   // The banner's button lands on today's sheet at the retrospective card, wherever the
   // user was when the alarm fired. Today is the null route, which follows the date, so a
   // `today` that lags the clock can't pin the sheet to yesterday.
-  const openRetro = useCallback(() => {
+  const openRetro = () => {
     navigate({ view: 'sheet', date: null });
     setJumpTo('retro');
-  }, [navigate]);
+  };
   const onJumped = useCallback(() => setJumpTo(null), []);
   // History and the sheet show nothing finer than a minute. Handed the clock floored to the
   // minute (and memoized), they render once a minute instead of every second.

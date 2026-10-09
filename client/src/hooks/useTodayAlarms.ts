@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { punchesKey } from '../../../shared/punches.js';
-import { computeTimeclock, daySettings, overtimeOn } from '../lib/timeclock';
+import { daySettings, dayTimeclock, overtimeOn } from '../lib/timeclock';
 import { useAlarms } from './useAlarms';
 import { useDay, useRefreshDay } from './useDay';
 import { useSettings } from './useSettings';
@@ -35,15 +35,13 @@ export function useTodayAlarms(today: string, now: number, openRetro: () => void
   const settledKey = useSettled(key, editingPunches ? HOLD_MS : 3000);
   const punches = loaded && day && settledKey === key && !refreshing ? day.punches : null;
   // Today's own work-day length (a half day), when one was set, is what the alarms go by.
+  // Nothing is memoized: Shell renders every second and useAlarms' effect runs on each tick anyway.
   const workMinutes = day?.workMinutes ?? null;
-  const todaySettings = useMemo(() => daySettings(settings, { workMinutes }), [settings, workMinutes]);
-  const tc = useMemo(() => (punches ? computeTimeclock(punches, todaySettings, now) : null), [punches, todaySettings, now]);
-  const overtimeApproved = overtimeOn(settings, Boolean(day?.overtimeApproved));
-  const approveOvertime = useCallback(() => void store.setOvertimeApproved(today, true), [store, today]);
-  useAlarms(today, tc, todaySettings, now, {
-    overtimeApproved,
+  const tc = punches ? dayTimeclock({ date: today, punches, workMinutes }, settings, today, now) : null;
+  useAlarms(today, tc, daySettings(settings, { workMinutes }), now, {
+    overtimeApproved: overtimeOn(settings, Boolean(day?.overtimeApproved)),
     retroDone: Boolean(day?.retroAt),
-    approveOvertime: settings.overtimeApproval ? approveOvertime : undefined,
+    approveOvertime: settings.overtimeApproval ? () => void store.setOvertimeApproved(today, true) : undefined,
     openRetro,
   });
   return { setEditingPunches };

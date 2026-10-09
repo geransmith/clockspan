@@ -106,6 +106,26 @@ describe('useCelebration', () => {
     expect(bare.result.current.c.burst).toBeNull();
   });
 
+  it('drops a moment raised before the settings have loaded, and their answer replays nothing', async () => {
+    let answer!: (s: Settings) => void;
+    vi.mocked(api.getSettings).mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    const { result, rerender } = renderHook(({ moment }: { moment: Moment | null }) => useCelebration(moment, 'weekDone'), {
+      initialProps: { moment: null as Moment | null },
+      wrapper: SettingsProvider,
+    });
+    result.current.anchor.current = anchorEl();
+    rerender({ moment: {} });
+    expect(playSound).not.toHaveBeenCalled();
+    expect(result.current.burst).toBeNull();
+    answer(makeSettings());
+    await settle();
+    expect(playSound).not.toHaveBeenCalled();
+    expect(result.current.burst).toBeNull();
+    rerender({ moment: {} });
+    expect(playSound).toHaveBeenCalledTimes(1);
+    expect(result.current.burst).not.toBeNull();
+  });
+
   it('a settings change replays nothing, the next moment reads the new settings, and a newer moment hides a burst still flying', async () => {
     const { result, rerender } = await render({});
     rerender({ moment: {} });

@@ -64,8 +64,8 @@ export interface AlarmEvent {
  * Keys include the target instant (minute precision) so a target that moves — a long
  * lunch pushing clock-out later — re-arms automatically, while a reload never re-fires.
  */
-export function eventKey(dateKey: string, id: AlarmId, kind: AlarmKind, minutes: number, target: number): string {
-  return `${dateKey}:${id}:${kind}:${minutes}:${Math.round(target / MINUTE_MS)}`;
+export function eventKey(id: AlarmId, kind: AlarmKind, minutes: number, target: number): string {
+  return `${id}:${kind}:${minutes}:${Math.round(target / MINUTE_MS)}`;
 }
 
 /**
@@ -75,7 +75,6 @@ export function eventKey(dateKey: string, id: AlarmId, kind: AlarmKind, minutes:
  * so there is no burst of chimes.
  */
 export function dueEvents(
-  dateKey: string,
   targets: AlarmTarget[],
   alarms: Record<AlarmId, AlarmSettings>,
   fired: ReadonlySet<string>,
@@ -90,7 +89,7 @@ export function dueEvents(
     if (!cfg.enabled) continue;
 
     const event = (kind: AlarmKind, minutes: number, at: number): AlarmEvent => ({
-      key: eventKey(dateKey, target.id, kind, minutes, target.at),
+      key: eventKey(target.id, kind, minutes, target.at),
       id: target.id,
       kind,
       minutes,
@@ -201,18 +200,18 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
           tone: 'warn',
         };
       }
-      if (kind === 'due') return { kicker, title: 'Take lunch now', body: `Your lunch deadline is ${target}. Start your break.`, tone: 'danger' };
+      if (kind === 'due') return { kicker, title: 'Take lunch now', body: `Your lunch deadline is ${target}. Punch Lunch out.`, tone: 'danger' };
       return {
         kicker,
         title: `Lunch is ${formatMinutes(e.minutes)} overdue`,
-        body: `Your lunch deadline was ${target}. Start your break as soon as you can.`,
+        body: `Your lunch deadline was ${target}. Punch Lunch out as soon as you can.`,
         tone: 'danger',
       };
     case 'secondMeal':
       if (kind === 'lead') {
         return {
           kicker,
-          title: `Second meal break in ${left}`,
+          title: `Second meal period in ${left}`,
           body: `Your ${mealHours} of work ends at ${target}. A second meal period is due before then.`,
           tone: 'warn',
         };
@@ -220,14 +219,14 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
       if (kind === 'due') {
         return {
           kicker,
-          title: 'Take your second meal break',
+          title: 'Take your second meal period',
           body: `You reached ${mealHours} of work at ${target}. A second meal period was due by then.`,
           tone: 'danger',
         };
       }
       return {
         kicker,
-        title: `Second meal break is ${formatMinutes(e.minutes)} overdue`,
+        title: `Second meal period is ${formatMinutes(e.minutes)} overdue`,
         body: `Your ${mealHours} of work ended at ${target}. Take your second meal period as soon as you can.`,
         tone: 'danger',
       };

@@ -98,7 +98,7 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick,
   const addButton = useRef<HTMLButtonElement>(null);
   // A tick gets a burst from its checkbox.
   const [ticked, setTicked] = useState<Moment | null>(null);
-  const { anchor, burst } = useCelebration<HTMLInputElement>(ticked, 'priorityDone');
+  const { burst } = useCelebration(ticked, 'priorityDone');
   const noteId = useId();
   // The row whose box has the focus, by its place (its key), and its text then: the rename note
   // compares with it. A free row's task is minted by its first key, so its uid at focus can't say.
@@ -280,8 +280,7 @@ export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick,
                     if (e.target.checked) {
                       // The sound plays once the tick has rendered; iOS only allows that after a tap unlocked it.
                       unlockAudio();
-                      anchor.current = e.target;
-                      setTicked({});
+                      setTicked({ at: e.target.getBoundingClientRect() });
                     }
                     edit(p.position, { done: e.target.checked }, true);
                   }}

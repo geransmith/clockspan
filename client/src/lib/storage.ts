@@ -3,12 +3,8 @@
  * quota), and everything the app keeps there is a nicety. A failure reads as "nothing stored".
  *
  * Most of it belongs to the device: the theme, the settings tab last picked, which timer end
- * already chimed. `USER_KEYS` hold the state of the user the app is open for, and `adoptUser`
- * drops them when the user changes (a sign-out, or someone else signing in on this browser): an
- * alarm key names a date and a minute, Start fresh names a date and the break-over mark names a
- * break's start, so another user's would silence this one's, the morning offer's answers name a
- * date and recurring priorities, so another user's could hide this one's items, and the capture
- * box's category is another user's uid.
+ * already chimed. `USER_KEYS` hold the state of the user the app is open for; `adoptUser` drops
+ * them when that user changes.
  */
 export function readStored(key: string): string | null {
   try {
@@ -26,24 +22,37 @@ export function writeStored(key: string, value: string): void {
   }
 }
 
-/** A stored JSON value, or null when there is none or it does not parse. */
-export function readStoredJson(key: string): unknown {
-  const raw = readStored(key);
-  if (raw == null) return null;
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch {
-    return null;
-  }
+const DAY_SET_RE = /^(\d{4}-\d{2}-\d{2}) (.*)$/;
+
+/**
+ * The set kept under `key` for `date`, stored as "YYYY-MM-DD a,b" (so an item holds no comma).
+ * Empty for another date, nothing stored or anything else, so a new day starts with none.
+ */
+export function readDaySet(key: string, date: string): Set<string> {
+  const m = DAY_SET_RE.exec(readStored(key) ?? '');
+  if (!m || m[1] !== date) return new Set();
+  return new Set(m[2]!.split(',').filter((item) => item !== ''));
 }
 
-/** Removes every key under `prefix` but `keep`, so a store kept per day never grows. */
-export function pruneStored(prefix: string, keep: string): void {
+/**
+ * Adds `items` to the set kept under `key` for `date` and returns it. It adds to what is stored
+ * now, not to a copy read earlier: another tab of this browser shares the key, and what it added
+ * stays.
+ */
+export function addToDaySet(key: string, date: string, items: Iterable<string>): Set<string> {
+  const set = readDaySet(key, date);
+  for (const item of items) set.add(item);
+  writeStored(key, `${date} ${[...set].join(',')}`);
+  return set;
+}
+
+/** Removes every key under `prefix`. */
+export function pruneStored(prefix: string): void {
   try {
     // Backwards: removing a key renumbers the ones after it.
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
-      if (k?.startsWith(prefix) && k !== keep) localStorage.removeItem(k);
+      if (k?.startsWith(prefix)) localStorage.removeItem(k);
     }
   } catch {
     // Not pruned; see above.
@@ -54,30 +63,35 @@ export function pruneStored(prefix: string, keep: string): void {
 export const AUTH_USER_KEY = 'focus:auth-user';
 const storedUser = (id: number | null): string => (id === null ? '' : String(id));
 
-/**
- * The stored values (a key, or a prefix) that hold one user's state. A new one joins this list.
- * `captureCategory` is the category the board's capture box last picked (its uid, '' for none).
- * `recurringAnswered` is the recurring priorities the morning offer was answered for today on this
- * device, added or not (`writeAnswered` in `lib/recurring.ts`).
- */
+/** The stored values that hold one user's state, each dropped as a prefix. A new one joins this list. */
 export const USER_KEYS = {
-  alarms: 'focus:alarms:',
+  /**
+   * Today's fired alarm keys (`useAlarms`), each naming an alarm and a minute: another user's
+   * would silence this one's. As a prefix it also takes the `focus:alarms:<date>` keys an
+   * earlier version kept.
+   */
+  alarms: 'focus:alarms',
+  /** The date Start fresh was pressed: another user's would hide this one's "Still open from …". */
   leftOpenDismissed: 'focus:left-open-dismissed',
+  /** The start of the break whose "Break's over" rang: another user's would silence this one's. */
   breakOver: 'focus:break-over',
+  /** The category the board's capture box last picked ('' for none): another user's uid. */
   captureCategory: 'focus:capture-category',
+  /** The recurring priorities the morning offer was answered for today (`useRecurringAnswered`): another user's uids. */
   recurringAnswered: 'focus:recurring-answered',
 } as const;
 
 /**
- * Records who the app is open for (null: no one) and drops the last user's `USER_KEYS` when it
- * changes. With no one recorded yet (the first load after an upgrade) it only records, so an
- * alarm that already rang does not ring again.
+ * Records who the app is open for (null: no one) and drops `USER_KEYS` when that changes, from
+ * no one too: a page left open after a sign-out may have written one before it reloaded. With
+ * nothing recorded yet (the first load after an upgrade) it only records, so an alarm that
+ * already rang does not ring again.
  */
 export function adoptUser(id: number | null): void {
   const next = storedUser(id);
   const last = readStored(AUTH_USER_KEY);
   if (next === last) return;
-  if (last) for (const key of Object.values(USER_KEYS)) pruneStored(key, '');
+  if (last !== null) for (const key of Object.values(USER_KEYS)) pruneStored(key);
   writeStored(AUTH_USER_KEY, next);
 }
 
