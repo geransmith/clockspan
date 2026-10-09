@@ -48,8 +48,9 @@ git switch main && git pull
 - **Body**: what changed, why, and how it was verified. A few lines is enough.
 - **Before opening**:
   - `npm run test:coverage`, `npm run typecheck`, `npm run lint` and `npm run format:check`
-    pass locally. CI runs the same plus `npm run build`. The coverage run fails unless every
-    file it measures is fully covered; `npm run format` fixes formatting.
+    pass locally. CI runs the same; `image-smoke` builds the image, which runs `npm run build`.
+    The coverage run fails unless every file it measures is fully covered (AGENTS.md's
+    "Verification expectations" says which); `npm run format` fixes formatting.
   - `npm run screenshots` has been re-run if a README image changed, and the PNGs of the
     changed surface are in the diff. A run on another day changes most of the others too:
     restore those.
