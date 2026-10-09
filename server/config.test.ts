@@ -1,14 +1,23 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import { DAY_MS } from '../shared/dates.js';
 import { loadConfig } from './config.js';
 
 const load = (env: Record<string, string> = {}) => loadConfig({ AUTH_MODE: 'none', ...env });
+const oidc = (env: NodeJS.ProcessEnv) =>
+  loadConfig({
+    AUTH_MODE: 'oidc',
+    APP_URL: 'https://focus.example.com',
+    OIDC_ISSUER: 'https://auth.example.com/',
+    OIDC_CLIENT_ID: 'c',
+    OIDC_CLIENT_SECRET: 's',
+    ...env,
+  });
 
 describe('TRUST_PROXY', () => {
   it('is off unless set', () => {
     expect(load().trustProxy).toBe(false);
-    expect(load({ TRUST_PROXY: '' }).trustProxy).toBe(false);
     expect(load({ TRUST_PROXY: '0' }).trustProxy).toBe(false);
     expect(load({ TRUST_PROXY: 'false' }).trustProxy).toBe(false);
   });
@@ -47,7 +56,6 @@ describe('TRUST_PROXY', () => {
 describe('ALLOWED_HOSTS', () => {
   it('is empty unless set', () => {
     expect(load().allowedHosts).toEqual([]);
-    expect(load({ ALLOWED_HOSTS: '' }).allowedHosts).toEqual([]);
   });
 
   it('takes names and leading-dot domains, trimmed and lowercased', () => {
@@ -86,13 +94,12 @@ describe('DATA_DIR', () => {
 
 describe('SESSION_TTL_DAYS', () => {
   it('defaults to 30 days', () => {
-    expect(load().sessionTtlMs).toBe(30 * 86_400_000);
-    expect(load({ SESSION_TTL_DAYS: '' }).sessionTtlMs).toBe(30 * 86_400_000);
+    expect(load().sessionTtlMs).toBe(30 * DAY_MS);
   });
 
   it('takes a positive number of days', () => {
-    expect(load({ SESSION_TTL_DAYS: '7' }).sessionTtlMs).toBe(7 * 86_400_000);
-    expect(load({ SESSION_TTL_DAYS: '0.5' }).sessionTtlMs).toBe(0.5 * 86_400_000);
+    expect(load({ SESSION_TTL_DAYS: '7' }).sessionTtlMs).toBe(7 * DAY_MS);
+    expect(load({ SESSION_TTL_DAYS: '0.5' }).sessionTtlMs).toBe(0.5 * DAY_MS);
   });
 
   it('refuses junk instead of silently falling back', () => {
@@ -101,23 +108,14 @@ describe('SESSION_TTL_DAYS', () => {
 });
 
 describe('RETENTION_DAYS', () => {
-  it('is optional, bounded, and a whole number', () => {
+  it('is optional, and takes a whole number of days within the range, naming it when refusing', () => {
     expect(load().retentionDays).toBeNull();
-    expect(load({ RETENTION_DAYS: '' }).retentionDays).toBeNull();
-    expect(load({ RETENTION_DAYS: '90' }).retentionDays).toBe(90);
-    expect(() => load({ RETENTION_DAYS: '10' })).toThrow(/RETENTION_DAYS/);
-    expect(() => load({ RETENTION_DAYS: '4000' })).toThrow(/RETENTION_DAYS/);
-    expect(() => load({ RETENTION_DAYS: 'abc' })).toThrow(/RETENTION_DAYS/);
-    expect(() => load({ RETENTION_DAYS: '1.5' })).toThrow(/RETENTION_DAYS/);
-  });
-
-  it('takes both ends of the range and names it when refusing', () => {
-    expect(load({ RETENTION_DAYS: '30' }).retentionDays).toBe(30);
-    expect(load({ RETENTION_DAYS: '3650' }).retentionDays).toBe(3650);
-    expect(() => load({ RETENTION_DAYS: '29' })).toThrow(
-      'RETENTION_DAYS must be a whole number of days from 30 to 3650, or unset to keep everything (got "29")',
-    );
-    expect(() => load({ RETENTION_DAYS: '3651' })).toThrow(/from 30 to 3650/);
+    for (const days of ['30', '90', '3650']) expect(load({ RETENTION_DAYS: days }).retentionDays, days).toBe(Number(days));
+    for (const bad of ['10', '29', '3651', '4000', 'abc', '1.5']) {
+      expect(() => load({ RETENTION_DAYS: bad }), bad).toThrow(
+        `RETENTION_DAYS must be a whole number of days from 30 to 3650, or unset to keep everything (got "${bad}")`,
+      );
+    }
   });
 });
 
@@ -132,41 +130,24 @@ describe('blank values', () => {
   it('count as unset, so the defaults apply', () => {
     expect(loadConfig({ AUTH_MODE: '' }).authMode).toBe('none');
     expect(load({ APP_URL: 'https://focus.example.com', COOKIE_SECURE: '' }).cookieSecure).toBe(true);
-    expect(load({ PORT: '', DATA_DIR: '', APP_URL: '', RETENTION_DAYS: '' })).toMatchObject({
+    expect(load({ PORT: '', DATA_DIR: '', APP_URL: '', RETENTION_DAYS: '', TRUST_PROXY: '', ALLOWED_HOSTS: '', SESSION_TTL_DAYS: '' })).toMatchObject({
       port: 3000,
       dbPath: path.resolve('./data', 'focus.db'),
       appUrl: null,
       retentionDays: null,
+      trustProxy: false,
+      allowedHosts: [],
+      sessionTtlMs: 30 * DAY_MS,
     });
-    const oidc = loadConfig({
-      AUTH_MODE: 'oidc',
-      APP_URL: 'https://focus.example.com',
-      OIDC_ISSUER: 'https://auth.example.com/',
-      OIDC_CLIENT_ID: 'clockspan',
-      OIDC_CLIENT_SECRET: 'secret',
-      OIDC_SCOPES: '',
-    });
-    expect(oidc.oidc?.scopes).toBe('openid profile email');
+    expect(oidc({ OIDC_SCOPES: '' }).oidc?.scopes).toBe('openid profile email');
   });
 
   it('still leave a required OIDC setting missing', () => {
-    expect(() =>
-      loadConfig({ AUTH_MODE: 'oidc', APP_URL: 'https://focus.example.com', OIDC_ISSUER: '', OIDC_CLIENT_ID: 'c', OIDC_CLIENT_SECRET: 's' }),
-    ).toThrow(/requires OIDC_ISSUER\./);
+    expect(() => oidc({ OIDC_ISSUER: '' })).toThrow(/requires OIDC_ISSUER\./);
   });
 });
 
 describe('APP_URL and OIDC_ISSUER', () => {
-  const oidc = (env: NodeJS.ProcessEnv) =>
-    loadConfig({
-      AUTH_MODE: 'oidc',
-      APP_URL: 'https://focus.example.com',
-      OIDC_ISSUER: 'https://auth.example.com/',
-      OIDC_CLIENT_ID: 'c',
-      OIDC_CLIENT_SECRET: 's',
-      ...env,
-    });
-
   it('refuses a value that is not an http(s) URL, naming the variable', () => {
     // A value without a scheme would crash createApp with a bare "Invalid URL".
     expect(() => load({ APP_URL: 'focus.example.com' })).toThrow(
@@ -214,7 +195,6 @@ describe('COOKIE_SECURE', () => {
   it('follows the APP_URL scheme unless set explicitly', () => {
     expect(load().cookieSecure).toBe(false);
     expect(load({ APP_URL: 'https://focus.example.com/' }).cookieSecure).toBe(true);
-    expect(load({ APP_URL: 'https://focus.example.com/' }).appUrl).toBe('https://focus.example.com');
     expect(load({ APP_URL: 'http://focus.lan' }).cookieSecure).toBe(false);
     // The scheme and host are case-insensitive; the Secure default and the OIDC redirect URI read the lowercase form.
     expect(load({ APP_URL: 'HTTPS://Focus.Example.com/' })).toMatchObject({ appUrl: 'https://focus.example.com', cookieSecure: true });

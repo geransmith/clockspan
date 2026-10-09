@@ -81,7 +81,7 @@ describe('adjustedPlan', () => {
 
   it('finishes when the new plan is already used up', () => {
     expect(adjustedPlan(makeSession({ plannedSeconds: 120 }), T0 + 90_000, -300)).toBe('finish');
-    expect(adjustedPlan(makeSession({ plannedSeconds: 120 }), T0 + 60_000, -60)).toBe('finish');
+    expect(adjustedPlan(makeSession({ plannedSeconds: 120 }), T0 + MINUTE_MS, -60)).toBe('finish');
   });
 });
 

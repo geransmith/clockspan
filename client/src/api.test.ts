@@ -5,7 +5,10 @@ import { REQUEST_TIMEOUT_MS, UNAUTHENTICATED_EVENT } from './api';
 import { ApiError } from './lib/apiError';
 import { alert, dismissByTag, getBanners, subscribeBanners } from './lib/alerts';
 import { REQUEST_TIMEOUT, UPDATED } from './lib/copy';
+import { emptyRow } from './lib/priorities';
+import { makePriority, TODAY } from './test/fixtures';
 import { VERSION_HEADER } from '../../shared/api.js';
+import { MINUTE_MS } from '../../shared/dates.js';
 
 // The real alerts, watched, so a test can see what a banner was raised with as well as the banner.
 vi.mock('./lib/alerts', { spy: true });
@@ -36,10 +39,8 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock);
 });
 
-const DATE = '2026-09-28';
-const COUNTS = { recurring: false, archived: false, listed: 1, earlier: 0, logged: 0 };
-const REPORT = { position: 1, text: 'Report', done: false, uid: 'abcdef123456', addedAt: 1, categoryUid: 'cafe00000001', ...COUNTS };
-const FREE = { position: 1, text: '', done: false, uid: null, addedAt: null, categoryUid: null, ...COUNTS, listed: 0 };
+const REPORT = makePriority(1, 'Report', { uid: 'abcdef123456', addedAt: 1, categoryUid: 'cafe00000001' });
+const FREE = emptyRow(1);
 
 // Every call the client makes: the method, the path and the JSON it sends (none for a GET).
 const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
@@ -66,35 +67,35 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
   ['getSettings', () => api.getSettings(), 'GET', '/api/settings', undefined],
   ['putSettings', () => api.putSettings({ sound: false }), 'PUT', '/api/settings', { sound: false }],
   ['resetSettings', () => api.resetSettings(), 'DELETE', '/api/settings', undefined],
-  ['getDay', () => api.getDay(DATE), 'GET', `/api/days/${DATE}`, undefined],
+  ['getDay', () => api.getDay(TODAY), 'GET', `/api/days/${TODAY}`, undefined],
   // Only the times go out: the server gives each row its position and kind from the order.
   [
     'putPunches',
     () =>
-      api.putPunches(DATE, [
+      api.putPunches(TODAY, [
         { position: 0, kind: 'in', at: 5 },
         { position: 1, kind: 'out', at: null },
       ]),
     'PUT',
-    `/api/days/${DATE}/punches`,
+    `/api/days/${TODAY}/punches`,
     { punches: [{ at: 5 }, { at: null }] },
   ],
   // With the list it was built on, so the server can keep another device's changes.
-  ['putPriorities', () => api.putPriorities(DATE, [REPORT], [FREE]), 'PUT', `/api/days/${DATE}/priorities`, { priorities: [REPORT], base: [FREE] }],
+  ['putPriorities', () => api.putPriorities(TODAY, [REPORT], [FREE]), 'PUT', `/api/days/${TODAY}/priorities`, { priorities: [REPORT], base: [FREE] }],
   // With no base, the list replaces the stored one.
-  ['putPriorities, with no base', () => api.putPriorities(DATE, [REPORT]), 'PUT', `/api/days/${DATE}/priorities`, { priorities: [REPORT] }],
-  ['putOvertime', () => api.putOvertime(DATE, true), 'PUT', `/api/days/${DATE}/overtime`, { approved: true }],
-  ['putTarget', () => api.putTarget(DATE, null), 'PUT', `/api/days/${DATE}/target`, { workMinutes: null }],
-  ['putRetro', () => api.putRetro(DATE, { note: 'why', done: true }), 'PUT', `/api/days/${DATE}/retro`, { note: 'why', done: true }],
-  ['getRange', () => api.getRange('2026-09-01', DATE), 'GET', `/api/days/range?from=2026-09-01&to=${DATE}`, undefined],
+  ['putPriorities, with no base', () => api.putPriorities(TODAY, [REPORT]), 'PUT', `/api/days/${TODAY}/priorities`, { priorities: [REPORT] }],
+  ['putOvertime', () => api.putOvertime(TODAY, true), 'PUT', `/api/days/${TODAY}/overtime`, { approved: true }],
+  ['putTarget', () => api.putTarget(TODAY, null), 'PUT', `/api/days/${TODAY}/target`, { workMinutes: null }],
+  ['putRetro', () => api.putRetro(TODAY, { note: 'why', done: true }), 'PUT', `/api/days/${TODAY}/retro`, { note: 'why', done: true }],
+  ['getRange', () => api.getRange('2026-09-01', TODAY), 'GET', `/api/days/range?from=2026-09-01&to=${TODAY}`, undefined],
   ['getPruneInfo', () => api.getPruneInfo('2025-09-28'), 'GET', '/api/days/prune?before=2025-09-28', undefined],
   ['pruneDays', () => api.pruneDays('2025-09-28'), 'POST', '/api/days/prune', { before: '2025-09-28' }],
   ['getRunning', () => api.getRunning(), 'GET', '/api/sessions/running', undefined],
   [
     'startSession',
-    () => api.startSession(DATE, 1500, 'Report', null),
+    () => api.startSession(TODAY, 1500, 'Report', null),
     'POST',
-    `/api/days/${DATE}/sessions`,
+    `/api/days/${TODAY}/sessions`,
     { plannedSeconds: 1500, label: 'Report', priorityUid: null },
   ],
   ['patchSession', () => api.patchSession(3, { label: 'Renamed' }), 'PATCH', '/api/sessions/3', { label: 'Renamed' }],
@@ -106,7 +107,7 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
   ['finishSession, counting the overrun', () => api.finishSession(3, true), 'POST', '/api/sessions/3/finish', { countOverrun: true }],
   ['cancelSession', () => api.cancelSession(3), 'POST', '/api/sessions/3/cancel', undefined],
   ['deleteSession', () => api.deleteSession(3), 'DELETE', '/api/sessions/3', undefined],
-  ['startBreak', () => api.startBreak(DATE, 300), 'POST', `/api/days/${DATE}/breaks`, { plannedSeconds: 300 }],
+  ['startBreak', () => api.startBreak(TODAY, 300), 'POST', `/api/days/${TODAY}/breaks`, { plannedSeconds: 300 }],
   ['endBreak', () => api.endBreak(4), 'POST', '/api/breaks/4/end', undefined],
   ['deleteBreak', () => api.deleteBreak(4), 'DELETE', '/api/breaks/4', undefined],
   ['getBoard', () => api.getBoard(), 'GET', '/api/board', undefined],
@@ -173,19 +174,19 @@ describe('failures', () => {
   it("throws an ApiError with the server's message, status and body", async () => {
     const body = { error: 'A timer is already running.', session: { id: 9 } };
     answer(409, body);
-    const err = await api.startSession(DATE, 1500, '', null).catch((e: unknown) => e);
+    const err = await api.startSession(TODAY, 1500, '', null).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect(err).toMatchObject({ status: 409, message: 'A timer is already running.', body });
   });
 
   it('names the status when the body is not JSON, such as a proxy error page', async () => {
     answer(502, '<html>Bad gateway</html>', false);
-    await expect(api.getDay(DATE)).rejects.toMatchObject({ status: 502, message: 'Request failed (502)', body: null });
+    await expect(api.getDay(TODAY)).rejects.toMatchObject({ status: 502, message: 'Request failed (502)', body: null });
   });
 
   it('refuses a 200 whose body is not JSON, such as a sign-in page from a proxy in front', async () => {
     answer(200, '<html>Sign in</html>', false);
-    await expect(api.getDay(DATE)).rejects.toMatchObject({ status: 200, message: 'Unreadable answer (200)', body: null });
+    await expect(api.getDay(TODAY)).rejects.toMatchObject({ status: 200, message: 'Unreadable answer (200)', body: null });
   });
 
   it('announces a lost session on a 401, but not for a wrong password at sign-in or from /api/auth/me itself', async () => {
@@ -193,7 +194,7 @@ describe('failures', () => {
     window.addEventListener(UNAUTHENTICATED_EVENT, lost);
     try {
       answer(401, { error: 'Not signed in.' });
-      await expect(api.getDay(DATE)).rejects.toMatchObject({ status: 401 });
+      await expect(api.getDay(TODAY)).rejects.toMatchObject({ status: 401 });
       expect(lost).toHaveBeenCalledTimes(1);
 
       answer(401, { error: 'Incorrect username or password.' });
@@ -212,7 +213,7 @@ describe('failures', () => {
   it('gives up after 30 s, waiting for the answer or its body, and says the server did not answer', async () => {
     const timeout = vi.spyOn(AbortSignal, 'timeout');
     fetchMock.mockRejectedValueOnce(new DOMException('signal timed out', 'TimeoutError'));
-    const err = await api.getDay(DATE).catch((e: unknown) => e);
+    const err = await api.getDay(TODAY).catch((e: unknown) => e);
     expect(timeout).toHaveBeenCalledWith(REQUEST_TIMEOUT_MS);
     expect(err).not.toBeInstanceOf(ApiError);
     expect(err).toMatchObject({ message: REQUEST_TIMEOUT });
@@ -220,7 +221,7 @@ describe('failures', () => {
     // The headers came, the body didn't.
     const stalled = { ok: true, status: 200, headers: new Headers(), json: () => Promise.reject(new DOMException('signal timed out', 'TimeoutError')) };
     fetchMock.mockResolvedValueOnce(stalled as unknown as Response);
-    await expect(api.putOvertime(DATE, true)).rejects.toThrow(REQUEST_TIMEOUT);
+    await expect(api.putOvertime(TODAY, true)).rejects.toThrow(REQUEST_TIMEOUT);
   });
 
   it('leaves a network failure as the error fetch threw', async () => {
@@ -257,7 +258,7 @@ describe('an update while the page is open', () => {
       answerFrom('9.0.0');
       await api.getSettings();
       answerFrom('9.0.0');
-      await api.getDay(DATE);
+      await api.getDay(TODAY);
       expect(raised).toHaveBeenCalledTimes(1);
       expect(updated()).toEqual([
         expect.objectContaining({ title: UPDATED.title, body: UPDATED.body, tone: 'info', action: { label: UPDATED.reload, run: expect.any(Function) } }),
@@ -267,7 +268,7 @@ describe('an update while the page is open', () => {
       const [raisedWith] = vi.mocked(alert).mock.calls[0]!;
       expect(raisedWith).toMatchObject({ sound: false, notifications: false, sticky: true });
       expect(raisedWith).not.toHaveProperty('chime');
-      vi.advanceTimersByTime(60_000);
+      vi.advanceTimersByTime(MINUTE_MS);
       expect(updated()).toHaveLength(1);
 
       dismissByTag('updated');

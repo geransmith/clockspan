@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { MINUTE_MS } from '../../../shared/dates.js';
-import { completedSession, makeDay, makePriority, makeSession, punchesAt } from '../test/fixtures';
+import { completedSession, makeDay, makePriority, makeSession, punchesAt, rowUid } from '../test/fixtures';
 import type { Day } from '../types';
 import { editedSession, focusOf, hasContent, loggedByUid, reviewDay, sessionCategory, sessionCategoryEdit, sessionName, sessionRow } from './retro';
-
-const FIRST_UID = makePriority(1, '').uid;
 
 describe('focusOf', () => {
   it('counts completed sessions only', () => {
@@ -162,8 +160,8 @@ describe('reviewDay', () => {
       makePriority(3, '', { uid: null, addedAt: null }),
     ];
     const sessions = [
-      completedSession(1, 10_000, 1500, { priorityUid: FIRST_UID }),
-      completedSession(2, 20_000, 900, { priorityUid: FIRST_UID }),
+      completedSession(1, 10_000, 1500, { priorityUid: rowUid(1) }),
+      completedSession(2, 20_000, 900, { priorityUid: rowUid(1) }),
       completedSession(3, 30_000, 600),
       completedSession(4, 40_000, 300, { priorityUid: 'gone00000000' }),
     ];
@@ -183,8 +181,8 @@ describe('reviewDay', () => {
     const r = reviewDay(
       [makePriority(1, 'A')],
       [
-        makeSession({ startedAt: 10_000, plannedSeconds: 600, priorityUid: FIRST_UID }),
-        completedSession(2, 20_000, 600, { status: 'cancelled', priorityUid: FIRST_UID }),
+        makeSession({ startedAt: 10_000, plannedSeconds: 600, priorityUid: rowUid(1) }),
+        completedSession(2, 20_000, 600, { status: 'cancelled', priorityUid: rowUid(1) }),
       ],
     );
     expect(r.onPlanSeconds).toBe(0);

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from '../dev/harness.js';
 import { seedDatabase } from '../dev/seed.js';
 import { LIMITS } from '../../shared/api.js';
-import { HOUR_MS } from '../../shared/dates.js';
+import { HOUR_MS, MINUTE_MS } from '../../shared/dates.js';
 
 const DATE = '2026-09-01';
 
@@ -246,7 +246,7 @@ describe('sessions', () => {
     const r = await app.api.post(`/api/sessions/${id}/finish`);
     expect(r.body.session).toMatchObject({ status: 'completed', durationSeconds: 600, endedAt: SEED_NOW + 600_000 });
     // Idempotent.
-    at(HOUR_MS + 60_000);
+    at(HOUR_MS + MINUTE_MS);
     expect((await app.api.post(`/api/sessions/${id}/finish`)).body.session.endedAt).toBe(SEED_NOW + 600_000);
     expect((await app.api.get('/api/sessions/running')).body.session).toBeNull();
   });
@@ -254,14 +254,14 @@ describe('sessions', () => {
   it('pauses and resumes, and logs only the time the clock was running', async () => {
     const { id } = (await start({ plannedSeconds: 1500 })).body.session;
     expect((await app.api.post(`/api/sessions/${id}/resume`)).body.session.pausedAt).toBeNull();
-    at(60_000);
+    at(MINUTE_MS);
     const paused = await app.api.post(`/api/sessions/${id}/pause`);
     expect(paused.status).toBe(200);
-    expect(paused.body.session).toMatchObject({ status: 'running', pausedSeconds: 0, pausedAt: SEED_NOW + 60_000 });
+    expect(paused.body.session).toMatchObject({ status: 'running', pausedSeconds: 0, pausedAt: SEED_NOW + MINUTE_MS });
     // Still the one running timer, and a second pause changes nothing.
-    expect((await app.api.get('/api/sessions/running')).body.session.pausedAt).toBe(SEED_NOW + 60_000);
+    expect((await app.api.get('/api/sessions/running')).body.session.pausedAt).toBe(SEED_NOW + MINUTE_MS);
     at(100_000);
-    expect((await app.api.post(`/api/sessions/${id}/pause`)).body.session.pausedAt).toBe(SEED_NOW + 60_000);
+    expect((await app.api.post(`/api/sessions/${id}/pause`)).body.session.pausedAt).toBe(SEED_NOW + MINUTE_MS);
     // Resuming banks the 90 s the pause lasted.
     at(150_000);
     const resumed = await app.api.post(`/api/sessions/${id}/resume`);
@@ -269,12 +269,18 @@ describe('sessions', () => {
     // Adjusting still works around a pause.
     expect((await app.api.patch(`/api/sessions/${id}`, { plannedSeconds: 600 })).body.session.plannedSeconds).toBe(600);
     // A second pause, then finish: the session ends when that pause began, and neither pause counts.
-    at(300_000);
+    at(5 * MINUTE_MS);
     await app.api.post(`/api/sessions/${id}/pause`);
     at(330_000);
     const done = await app.api.post(`/api/sessions/${id}/finish`);
     // 300 s from the start to the second pause, less the 90 s of the first.
-    expect(done.body.session).toMatchObject({ status: 'completed', pausedSeconds: 90, pausedAt: null, endedAt: SEED_NOW + 300_000, durationSeconds: 210 });
+    expect(done.body.session).toMatchObject({
+      status: 'completed',
+      pausedSeconds: 90,
+      pausedAt: null,
+      endedAt: SEED_NOW + 5 * MINUTE_MS,
+      durationSeconds: 210,
+    });
     // Ended sessions can't be paused or resumed.
     expect((await app.api.post(`/api/sessions/${id}/pause`)).status).toBe(409);
     expect((await app.api.post(`/api/sessions/${id}/resume`)).status).toBe(409);
@@ -285,7 +291,7 @@ describe('sessions', () => {
   it('clamps a timer that ran out to its planned end, pushed out by the pauses it had', async () => {
     const { id } = (await start({ plannedSeconds: 600 })).body.session;
     // Two minutes of pauses push the planned 10 min out to 12; finished at 20.
-    at(60_000);
+    at(MINUTE_MS);
     await app.api.post(`/api/sessions/${id}/pause`);
     at(180_000);
     await app.api.post(`/api/sessions/${id}/resume`);
@@ -297,7 +303,7 @@ describe('sessions', () => {
   it('logs the planned length for a timer paused after it ran out, however long the pause', async () => {
     const { id } = (await start({ plannedSeconds: 600 })).body.session;
     // Two minutes of pauses, so the plan runs out at 12 min; paused again at 15 and finished at 20.
-    at(60_000);
+    at(MINUTE_MS);
     await app.api.post(`/api/sessions/${id}/pause`);
     at(180_000);
     await app.api.post(`/api/sessions/${id}/resume`);
@@ -310,12 +316,12 @@ describe('sessions', () => {
 
   it('cancels a paused timer where the pause began, and clears the pause', async () => {
     const { id } = (await start()).body.session;
-    at(10 * 60_000);
+    at(10 * MINUTE_MS);
     await app.api.post(`/api/sessions/${id}/pause`);
     // Forty minutes paused before the cancel: none of it is focus time.
-    at(50 * 60_000);
+    at(50 * MINUTE_MS);
     const r = await app.api.post(`/api/sessions/${id}/cancel`);
-    expect(r.body.session).toMatchObject({ status: 'cancelled', pausedAt: null, endedAt: SEED_NOW + 10 * 60_000, durationSeconds: 600 });
+    expect(r.body.session).toMatchObject({ status: 'cancelled', pausedAt: null, endedAt: SEED_NOW + 10 * MINUTE_MS, durationSeconds: 600 });
   });
 
   it('logs the time past the planned end only when asked to', async () => {
@@ -336,11 +342,11 @@ describe('sessions', () => {
     expect(counted).toMatchObject({ status: 'completed', durationSeconds: 3600 });
     // A paused session still ends where the pause began, overrun or not.
     const second = (await start({ plannedSeconds: 600 })).body.session;
-    at(3 * HOUR_MS - 60_000);
+    at(3 * HOUR_MS - MINUTE_MS);
     await app.api.post(`/api/sessions/${second.id}/pause`);
     at(3 * HOUR_MS);
     const done = await app.api.post(`/api/sessions/${second.id}/finish`, { countOverrun: true });
-    expect(done.body.session).toMatchObject({ durationSeconds: 3540, endedAt: SEED_NOW + 3 * HOUR_MS - 60_000 });
+    expect(done.body.session).toMatchObject({ durationSeconds: 3540, endedAt: SEED_NOW + 3 * HOUR_MS - MINUTE_MS });
   });
 
   it('finishes early with the elapsed time', async () => {

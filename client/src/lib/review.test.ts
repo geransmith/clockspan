@@ -1,11 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { atTime, MINUTE_MS } from '../../../shared/dates.js';
-import { completedSession, makeBreak, makeDay, makePriority, makeSession, punchesAt, TEST_SETTINGS, type EndPatch } from '../test/fixtures';
+import { completedSession, makeBreak, makeDay, makePriority, makeSession, punchesAt, rowUid, TEST_SETTINGS, type EndPatch } from '../test/fixtures';
 import { periodRange, periodTarget, reviewRange, type CategoryTime } from './review';
 import type { Day } from '../types';
-
-const FIRST_UID = makePriority(1, '').uid;
-const SECOND_UID = makePriority(2, '').uid;
 
 const settings = TEST_SETTINGS;
 const at = (key: string, h: number, m = 0) => atTime(key, h, m);
@@ -37,7 +34,7 @@ describe('reviewRange', () => {
     punches: punchesAt(at('2026-09-14', 8), at('2026-09-14', 12), at('2026-09-14', 12, 30), at('2026-09-14', 16, 30)),
     priorities: [makePriority(1, 'Ship it', { done: true }), makePriority(2, 'Write the proposal', BEFORE_WORK)],
     sessions: [
-      session(1, '2026-09-14', at('2026-09-14', 9), 3000, { priorityUid: FIRST_UID }),
+      session(1, '2026-09-14', at('2026-09-14', 9), 3000, { priorityUid: rowUid(1) }),
       session(2, '2026-09-14', at('2026-09-14', 14), 1200, { label: 'Fire drill' }),
     ],
     retroNote: '\nSlack ate the afternoon.\n\n',
@@ -46,7 +43,7 @@ describe('reviewRange', () => {
   const d2 = makeDay('2026-09-15', {
     priorities: [makePriority(1, 'Call the bank', { done: true })],
     sessions: [
-      session(3, '2026-09-15', at('2026-09-15', 9), 600, { priorityUid: FIRST_UID }),
+      session(3, '2026-09-15', at('2026-09-15', 9), 600, { priorityUid: rowUid(1) }),
       session(4, '2026-09-15', at('2026-09-15', 10), 2400, { label: 'Help Sam' }),
     ],
   });
@@ -69,7 +66,7 @@ describe('reviewRange', () => {
       ['Help Sam', ['2026-09-15']],
       ['Fire drill', ['2026-09-14']],
     ]);
-    expect(r.notDone).toEqual([{ key: SECOND_UID, text: 'Write the proposal', dates: ['2026-09-14'], focusedSeconds: 0, addedMidDay: false }]);
+    expect(r.notDone).toEqual([{ key: rowUid(2), text: 'Write the proposal', dates: ['2026-09-14'], focusedSeconds: 0, addedMidDay: false }]);
     // The note as typed, without the blank lines around it.
     expect(r.notes).toEqual([{ date: '2026-09-14', note: 'Slack ate the afternoon.', reviewedAt: d1.retroAt }]);
   });
@@ -94,7 +91,7 @@ describe('reviewRange', () => {
     const proposal = { listed: 3 };
     const mon = makeDay('2026-09-14', {
       priorities: [makePriority(1, 'Write the proposal', proposal)],
-      sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600, { priorityUid: FIRST_UID })],
+      sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600, { priorityUid: rowUid(1) })],
     });
     const tue = makeDay('2026-09-15', { priorities: [makePriority(1, 'Write the proposal', { ...proposal, done: true })] });
     const r = reviewRange([tue, mon], settings, '2026-09-16', now);
@@ -103,7 +100,7 @@ describe('reviewRange', () => {
     // Left open again after the tick: only the days since, and only their time.
     const wed = makeDay('2026-09-16', { priorities: [makePriority(1, 'Write the proposal', proposal)] });
     expect(reviewRange([mon, tue, wed], settings, '2026-09-16', now).notDone).toEqual([
-      { key: FIRST_UID, text: 'Write the proposal', dates: ['2026-09-16'], focusedSeconds: 0, addedMidDay: false },
+      { key: rowUid(1), text: 'Write the proposal', dates: ['2026-09-16'], focusedSeconds: 0, addedMidDay: false },
     ]);
     // Typed twice on one day, ticked once and left open once, in either order: the tick wins.
     for (const priorities of [
@@ -216,10 +213,10 @@ describe('reviewRange', () => {
   it('rounds the on-plan share to a whole percent, and has none without focus logged', () => {
     const third = makeDay('2026-09-14', {
       priorities: [makePriority(1, 'Ship it')],
-      sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600, { priorityUid: FIRST_UID }), session(2, '2026-09-14', at('2026-09-14', 10), 1200)],
+      sessions: [session(1, '2026-09-14', at('2026-09-14', 9), 600, { priorityUid: rowUid(1) }), session(2, '2026-09-14', at('2026-09-14', 10), 1200)],
     });
     expect(reviewRange([third], settings, '2026-09-16', now).onPlanPercent).toBe(33);
-    const twoThirds = { ...third, sessions: third.sessions.map((s) => ({ ...s, priorityUid: s.priorityUid ? null : FIRST_UID })) };
+    const twoThirds = { ...third, sessions: third.sessions.map((s) => ({ ...s, priorityUid: s.priorityUid ? null : rowUid(1) })) };
     expect(reviewRange([twoThirds], settings, '2026-09-16', now).onPlanPercent).toBe(67);
     // All of it off the plan is none on it, which is not the same as nothing logged.
     const offPlan = { ...third, sessions: third.sessions.map((s) => ({ ...s, priorityUid: null })) };
@@ -271,8 +268,8 @@ describe('reviewRange', () => {
     // Left open on two days comes first, then by date; mid-day on either day counts.
     expect(r.notDone).toEqual([
       { key: REVIEW, text: 'Review the PR', dates: ['2026-09-14', '2026-09-15'], focusedSeconds: 2100, addedMidDay: true },
-      { key: makePriority(3, '').uid, text: 'Plan next sprint', dates: ['2026-09-14'], focusedSeconds: 0, addedMidDay: false },
-      { key: FIRST_UID, text: 'Call the bank', dates: ['2026-09-15'], focusedSeconds: 0, addedMidDay: false },
+      { key: rowUid(3), text: 'Plan next sprint', dates: ['2026-09-14'], focusedSeconds: 0, addedMidDay: false },
+      { key: rowUid(1), text: 'Call the bank', dates: ['2026-09-15'], focusedSeconds: 0, addedMidDay: false },
     ]);
   });
 
@@ -449,7 +446,7 @@ describe('reviewRange: Routines', () => {
 
   it('leaves a one-off of the same text in Not done, unsettled by the routine', () => {
     const r = review([day(MON, [['Monitor the queue']]), day(TUE, [['monitor the queue', QUEUE, true]])]);
-    expect(r.notDone.map((g) => [g.key, g.dates])).toEqual([[makePriority(1, '').uid, [MON]]]);
+    expect(r.notDone.map((g) => [g.key, g.dates])).toEqual([[rowUid(1), [MON]]]);
     expect(r.routines.map((g) => [g.uid, g.dates, g.done])).toEqual([[QUEUE, [TUE], 1]]);
   });
 
@@ -488,7 +485,6 @@ describe('reviewRange: By category', () => {
   const GONE = 'cat0000000ff';
   const known = new Set([TICKETS, ADMIN, KB]);
   const review = (days: Day[], categories: ReadonlySet<string> = known) => reviewRange(days, settings, '2026-09-18', now, categories);
-  const uid = (position: number) => makePriority(position, '').uid;
   const bucket = (categoryUid: string | null, seconds: number, offPlanSeconds: number, done: number): CategoryTime => ({
     categoryUid,
     seconds,
@@ -513,8 +509,8 @@ describe('reviewRange: By category', () => {
       makeDay(MON, {
         priorities: [makePriority(1, 'Ship it', { categoryUid: TICKETS }), makePriority(2, 'Call the bank')],
         sessions: [
-          session(1, MON, at(MON, 9), 3000, { priorityUid: uid(1), categoryUid: ADMIN }),
-          session(2, MON, at(MON, 10), 600, { priorityUid: uid(2), categoryUid: ADMIN }),
+          session(1, MON, at(MON, 9), 3000, { priorityUid: rowUid(1), categoryUid: ADMIN }),
+          session(2, MON, at(MON, 10), 600, { priorityUid: rowUid(2), categoryUid: ADMIN }),
         ],
       }),
     ]);
@@ -563,8 +559,8 @@ describe('reviewRange: By category', () => {
       makeDay(MON, {
         priorities: [makePriority(1, 'Ship it', { categoryUid: TICKETS, done: true }), makePriority(2, 'Read the RFC', { categoryUid: GONE, done: true })],
         sessions: [
-          session(1, MON, at(MON, 9), 600, { priorityUid: uid(1) }),
-          session(2, MON, at(MON, 10), 300, { priorityUid: uid(2) }),
+          session(1, MON, at(MON, 9), 600, { priorityUid: rowUid(1) }),
+          session(2, MON, at(MON, 10), 300, { priorityUid: rowUid(2) }),
           session(3, MON, at(MON, 11), 120, { label: 'Inbox', categoryUid: GONE }),
         ],
       }),
@@ -587,7 +583,7 @@ describe('reviewRange: By category', () => {
             makePriority(3, 'File the invoice', { categoryUid: C4, done: true }),
             makePriority(4, 'Sort the backlog', { categoryUid: C5 }),
           ],
-          sessions: [session(3, TUE, at(TUE, 9), 600, { priorityUid: uid(1) }), session(4, TUE, at(TUE, 10), 300, { priorityUid: uid(4) })],
+          sessions: [session(3, TUE, at(TUE, 9), 600, { priorityUid: rowUid(1) }), session(4, TUE, at(TUE, 10), 300, { priorityUid: rowUid(4) })],
         }),
         makeDay(MON, {
           priorities: [
@@ -597,9 +593,9 @@ describe('reviewRange: By category', () => {
             makePriority(4, 'Deep work'),
           ],
           sessions: [
-            session(1, MON, at(MON, 9), 600, { priorityUid: uid(2) }),
-            session(2, MON, at(MON, 10), 300, { priorityUid: uid(3) }),
-            session(5, MON, at(MON, 11), 7200, { priorityUid: uid(4) }),
+            session(1, MON, at(MON, 9), 600, { priorityUid: rowUid(2) }),
+            session(2, MON, at(MON, 10), 300, { priorityUid: rowUid(3) }),
+            session(5, MON, at(MON, 11), 7200, { priorityUid: rowUid(4) }),
           ],
         }),
       ],
@@ -614,7 +610,7 @@ describe('reviewRange: By category', () => {
       makeDay(MON, {
         priorities: [makePriority(1, 'Ship it', { categoryUid: TICKETS })],
         sessions: [
-          makeSession({ id: 1, date: MON, startedAt: at(MON, 9), priorityUid: uid(1) }),
+          makeSession({ id: 1, date: MON, startedAt: at(MON, 9), priorityUid: rowUid(1) }),
           session(2, MON, at(MON, 10), 300, { status: 'cancelled', label: 'Inbox', categoryUid: ADMIN }),
         ],
       }),
@@ -636,10 +632,10 @@ describe('reviewRange: By category', () => {
           makePriority(4, 'Monitor the queue', { uid: 'rcur00000001', recurring: true, categoryUid: KB, done: true }),
         ],
         sessions: [
-          session(1, MON, at(MON, 9), 1500, { priorityUid: uid(1) }),
+          session(1, MON, at(MON, 9), 1500, { priorityUid: rowUid(1) }),
           // On a task taken off Monday's list.
-          session(2, MON, at(MON, 10), 900, { priorityUid: uid(2), categoryUid: ADMIN }),
-          session(3, MON, at(MON, 11), 600, { priorityUid: uid(3) }),
+          session(2, MON, at(MON, 10), 900, { priorityUid: rowUid(2), categoryUid: ADMIN }),
+          session(3, MON, at(MON, 11), 600, { priorityUid: rowUid(3) }),
           session(4, MON, at(MON, 12), 300, { priorityUid: 'rcur00000001' }),
         ],
       }),

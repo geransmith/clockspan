@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HOUR_MS } from '../../../shared/dates.js';
+import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import * as api from '../api';
 import { LEFT_OPEN, PLAN_NEXT, REMOVE_TASK, TODAY_OFFER } from '../lib/copy';
 import { SPLIT_QUERY } from '../lib/layout';
+import { applySettingsPatch } from '../lib/settings';
 import { USER_KEYS } from '../lib/storage';
 import {
   AppProviders,
@@ -19,6 +20,7 @@ import {
   makeSettings,
   serveRange,
   settle,
+  stubMatchMedia,
   T0,
   TODAY,
   YESTERDAY,
@@ -36,8 +38,8 @@ vi.mock('./SortableCards', async (importOriginal) => {
   return { SortableCards: vi.fn(real.SortableCards) };
 });
 
-/** Whether the window is as wide as SPLIT_QUERY asks, as matchMedia answers it now. */
-let wideWindow = true;
+/** The queries matchMedia matches now: SPLIT_QUERY while the window is wide. */
+let media: Set<string>;
 let stored: Settings;
 
 function SheetAt({ date = TODAY, now = T0, customize = false }: { date?: string; now?: number; customize?: boolean }) {
@@ -68,12 +70,12 @@ const savedLayout = () => vi.mocked(api.putSettings).mock.lastCall?.[0].layout?.
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-  wideWindow = true;
-  vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === SPLIT_QUERY && wideWindow, media: query }) as MediaQueryList);
+  media = new Set([SPLIT_QUERY]);
+  stubMatchMedia(media);
   stored = makeSettings();
   vi.mocked(api.getSettings).mockImplementation(() => Promise.resolve(stored));
   vi.mocked(api.putSettings).mockImplementation((patch) => {
-    stored = { ...stored, ...patch } as Settings;
+    stored = applySettingsPatch(stored, patch);
     return Promise.resolve(stored);
   });
   vi.mocked(api.getRunning).mockResolvedValue({ session: null });
@@ -98,7 +100,7 @@ describe('Sheet', () => {
   });
 
   it('keeps a narrow window to one list, in the layout order', async () => {
-    wideWindow = false;
+    media.delete(SPLIT_QUERY);
     await renderSheet();
     expect(document.querySelector('.sheet--split')).toBeNull();
     expect(columns()).toEqual([['Timeclock', 'Top priorities', 'Focus timer', 'Day log', 'Retrospective']]);
@@ -106,7 +108,7 @@ describe('Sheet', () => {
 
   it('keeps the columns it mounted with when the window changes width', async () => {
     const { rerender } = await renderSheet();
-    wideWindow = false;
+    media.delete(SPLIT_QUERY);
     rerender(
       <AppProviders>
         <SheetAt now={T0 + 1000} />
@@ -154,7 +156,7 @@ describe('Sheet', () => {
   });
 
   it('offers no column moves in a narrow window', async () => {
-    wideWindow = false;
+    media.delete(SPLIT_QUERY);
     await renderSheet(true);
     expect(screen.queryByRole('button', { name: /column$/ })).toBeNull();
     expect(button('Move Focus timer up').disabled).toBe(false);
@@ -299,7 +301,7 @@ describe('Sheet: the recurring priorities due today', () => {
     expect(offered()).toEqual(['Invoices', 'Monitor the queue']);
     stored = makeSettings();
     // The settings are read again each minute; the board keeps its last copy.
-    await settle(60_000);
+    await settle(MINUTE_MS);
     expect(document.querySelector('.today-offer')).toBeNull();
     expect(screen.getByText(LEFT_OPEN.title('yesterday'))).toBeTruthy();
     expect(screen.queryByText(TODAY_OFFER.recurring)).toBeNull();

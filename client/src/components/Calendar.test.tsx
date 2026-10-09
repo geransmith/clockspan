@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MINUTE_MS } from '../../../shared/dates.js';
 import * as api from '../api';
 import { LOAD_FAILED } from '../lib/copy';
 import { formatMonth } from '../lib/format';
@@ -92,7 +93,7 @@ describe('Calendar', () => {
 
     // Show hours turned off elsewhere: the next settings refresh takes the Clocked out chip away.
     vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ stickers: true, trackHours: false }));
-    await settle(60_000);
+    await settle(MINUTE_MS);
     expect(screen.queryByRole('button', { name: /^Clocked out/ })).toBeNull();
     expect(cell()).toMatch(/, Lunch taken$/);
     expect(screen.getByRole('button', { name: /^Lunch taken/ }).getAttribute('aria-pressed')).toBe('false');

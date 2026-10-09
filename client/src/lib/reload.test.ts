@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, expect, it, vi } from 'vitest';
+import { MINUTE_MS } from '../../../shared/dates.js';
 import { reloadForNewBuild } from './reload';
 
 beforeEach(() => localStorage.clear());
@@ -10,7 +11,7 @@ it('reloads for a chunk that failed, then not again within a minute', () => {
   expect(reload).toHaveBeenCalledTimes(1);
   reloadForNewBuild(1_000_000 + 59_999, reload);
   expect(reload).toHaveBeenCalledTimes(1);
-  reloadForNewBuild(1_000_000 + 60_000, reload);
+  reloadForNewBuild(1_000_000 + MINUTE_MS, reload);
   expect(reload).toHaveBeenCalledTimes(2);
 });
 

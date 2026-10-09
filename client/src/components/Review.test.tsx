@@ -16,6 +16,7 @@ import {
   makeCard,
   makeSettings,
   punchesAt,
+  rowUid,
   serveRange,
   SettingsAndDays,
   settle,
@@ -38,10 +39,7 @@ const TUE = '2026-09-29';
 const mon = makeDay(MON, {
   punches: punchesAt(atTime(MON, 8, 0), atTime(MON, 12, 0), atTime(MON, 12, 30), atTime(MON, 16, 30)),
   priorities: [makePriority(1, 'Ship it', { done: true, addedAt: 0 }), makePriority(2, 'Call the bank', { addedAt: atTime(MON, 11, 0) })],
-  sessions: [
-    completedSession(1, atTime(MON, 9, 0), 3000, { date: MON, priorityUid: makePriority(1, '').uid }),
-    completedSession(2, atTime(MON, 14, 0), 600, { date: MON }),
-  ],
+  sessions: [completedSession(1, atTime(MON, 9, 0), 3000, { date: MON, priorityUid: rowUid(1) }), completedSession(2, atTime(MON, 14, 0), 600, { date: MON })],
   breaks: [makeBreak({ date: MON, plannedSeconds: 600, startedAt: atTime(MON, 9, 50), endedAt: atTime(MON, 10, 0) })],
 });
 const tue = makeDay(TUE, {
@@ -249,11 +247,10 @@ describe('Review', () => {
   it('counts a session that logged no time, with no on-plan share', async () => {
     // Finished within its first second: the server logs 0 seconds.
     const start = atTime(MON, 9, 0);
-    const uid = makePriority(1, '').uid;
     serveRange([
       makeDay(MON, {
         priorities: [makePriority(1, 'Ship it')],
-        sessions: [completedSession(1, start, 1500, { date: MON, priorityUid: uid, endedAt: start, durationSeconds: 0 })],
+        sessions: [completedSession(1, start, 1500, { date: MON, priorityUid: rowUid(1), endedAt: start, durationSeconds: 0 })],
       }),
     ]);
     await review({ kind: 'week', from: MON });
@@ -286,7 +283,6 @@ describe('Review: By category', () => {
   // Not one the board has.
   const GONE = 'cat0000000ff';
   const QUEUE = 'rcur00000001';
-  const uid = (position: number) => makePriority(position, '').uid;
   /**
    * Tickets: 45m on a written row (ticked) and 15m on a task taken off the day, plus a row
    * written at 11:00, after the first session. Admin: 30m on no row. Knowledge base: a tick and no time. No
@@ -301,10 +297,10 @@ describe('Review: By category', () => {
       makePriority(6, 'Monitor the queue', { uid: QUEUE, recurring: true, addedAt: 0 }),
     ],
     sessions: [
-      completedSession(1, atTime(MON, 9, 0), 45 * 60, { date: MON, priorityUid: uid(1) }),
+      completedSession(1, atTime(MON, 9, 0), 45 * 60, { date: MON, priorityUid: rowUid(1) }),
       completedSession(2, atTime(MON, 10, 0), 15 * 60, { date: MON, priorityUid: 'leftday00001', title: 'Left the day', categoryUid: TICKETS.uid }),
       completedSession(3, atTime(MON, 11, 0), 30 * 60, { date: MON, label: 'Inbox', categoryUid: ADMIN.uid }),
-      completedSession(4, atTime(MON, 12, 0), 15 * 60, { date: MON, priorityUid: uid(4) }),
+      completedSession(4, atTime(MON, 12, 0), 15 * 60, { date: MON, priorityUid: rowUid(4) }),
     ],
   });
   const board: Board = { ...makeBoard(), categories: [TICKETS, ADMIN, KB] };
@@ -362,7 +358,7 @@ describe('Review: By category', () => {
       makeDay(MON, {
         priorities: [makePriority(1, 'Ship it', { categoryUid: TICKETS.uid, done, addedAt: 0 })],
         sessions: [
-          completedSession(1, atTime(MON, 9, 0), 25 * 60, { date: MON, priorityUid: uid(1) }),
+          completedSession(1, atTime(MON, 9, 0), 25 * 60, { date: MON, priorityUid: rowUid(1) }),
           completedSession(2, atTime(MON, 10, 0), seconds, { date: MON, label: 'Inbox', categoryUid: TICKETS.uid }),
         ],
       });
@@ -388,8 +384,8 @@ describe('Review: By category', () => {
       makeDay(MON, {
         priorities: [makePriority(1, 'Ship it', { categoryUid: TICKETS.uid, addedAt: 0 }), makePriority(2, 'Call the bank', { addedAt: 0 })],
         sessions: [
-          completedSession(1, atTime(MON, 9, 0), 30 * 60, { date: MON, priorityUid: uid(1) }),
-          completedSession(2, atTime(MON, 10, 0), 60 * 60, { date: MON, priorityUid: uid(2) }),
+          completedSession(1, atTime(MON, 9, 0), 30 * 60, { date: MON, priorityUid: rowUid(1) }),
+          completedSession(2, atTime(MON, 10, 0), 60 * 60, { date: MON, priorityUid: rowUid(2) }),
           completedSession(3, atTime(MON, 11, 0), 15 * 60, { date: MON, label: 'Inbox', categoryUid: ADMIN.uid }),
         ],
       }),

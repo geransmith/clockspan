@@ -3,9 +3,9 @@ import { SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from '../dev/harness
 import { ensureDefaultUser } from '../db.js';
 import { seedDatabase, type DayKind } from '../dev/seed.js';
 import { ensureDay, type ItemRow } from './shared.js';
-import { MAX_PRIORITIES } from '../../shared/settings.js';
+import { MAX_PRIORITIES, SETTING_LIMITS } from '../../shared/settings.js';
 import { MAX_PUNCHES } from '../../shared/punches.js';
-import { HOUR_MS, MINUTE_MS, punchWindow } from '../../shared/dates.js';
+import { DAY_MS, HOUR_MS, MINUTE_MS, punchWindow } from '../../shared/dates.js';
 import { LIMITS, type Day, type Priority } from '../../shared/api.js';
 
 /** 2026-09-01's UTC midnight; the tests add hours to it, which keeps each time inside punchWindow('2026-09-01'). */
@@ -199,7 +199,7 @@ describe('PUT /api/days/:date/priorities', () => {
     };
     await bad(1e308);
     await bad(-1);
-    await bad(Date.now() + 2 * 86_400_000);
+    await bad(Date.now() + 2 * DAY_MS);
     await bad('yesterday');
     // Absent or null is fine: the server stamps a text row itself.
     const ok = await app.api.put('/api/days/2026-09-01/priorities', { priorities: [{ text: 'x', addedAt: null }, { text: 'y' }] });
@@ -621,11 +621,12 @@ describe('PUT /api/days/:date/target', () => {
   });
 
   it("takes only a whole number within the setting's bounds, or null", async () => {
-    for (const workMinutes of [0, 24 * 60 + 1, 90.5, '240', undefined]) {
+    const { min, max } = SETTING_LIMITS.workMinutes;
+    for (const workMinutes of [min - 1, max + 1, 90.5, '240', undefined]) {
       expect((await app.api.put('/api/days/2026-09-01/target', { workMinutes })).status).toBe(400);
     }
-    expect((await app.api.put('/api/days/2026-09-01/target', { workMinutes: 1 })).status).toBe(200);
-    expect((await app.api.put('/api/days/2026-09-01/target', { workMinutes: 24 * 60 })).status).toBe(200);
+    expect((await app.api.put('/api/days/2026-09-01/target', { workMinutes: min })).status).toBe(200);
+    expect((await app.api.put('/api/days/2026-09-01/target', { workMinutes: max })).status).toBe(200);
   });
 });
 

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MINUTE_MS } from '../../../../shared/dates.js';
 import * as api from '../../api';
 import { AuthGate } from '../../auth/AuthGate';
 import { PASSWORD_CHANGED, SAVE_STATUS } from '../../lib/copy';
@@ -173,7 +174,7 @@ describe('SettingsDialog', () => {
 
     // Another device switches the board off: the settings' next read takes the tab away.
     vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
-    await settle(60_000);
+    await settle(MINUTE_MS);
     expect(tabNames()).toEqual(['Timeclock', 'Alarms', 'Sheet', 'Data', 'Account']);
     expect(screen.getByRole('tab', { name: 'Timeclock', hidden: true }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByLabelText('Work day hours')).toBeTruthy();

@@ -47,7 +47,7 @@ describe('loading', () => {
     expect(result.current.loaded).toBe(false);
 
     vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ lunchDeadlineMinutes: 60 }));
-    await settle(60_000);
+    await settle(MINUTE_MS);
     expect(result.current.loaded).toBe(true);
     expect(result.current.settings.lunchDeadlineMinutes).toBe(60);
   });
@@ -74,7 +74,7 @@ describe('loading', () => {
     await settle();
     second.unmount();
     failing.reject(new Error('offline'));
-    await settle(60_000);
+    await settle(MINUTE_MS);
     expect(api.getSettings).toHaveBeenCalledTimes(1);
 
     // A retry already scheduled is cleared too.
@@ -82,7 +82,7 @@ describe('loading', () => {
     const third = render();
     await settle();
     third.unmount();
-    await settle(60_000);
+    await settle(MINUTE_MS);
     expect(api.getSettings).toHaveBeenCalledTimes(1);
   });
 });

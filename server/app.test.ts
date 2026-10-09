@@ -3,6 +3,7 @@ import http from 'node:http';
 import net, { type AddressInfo } from 'node:net';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { HOUR_MS, MINUTE_MS } from '../shared/dates.js';
 import { createApp, startBackgroundJobs } from './app.js';
 import { loadConfig } from './config.js';
 import { ensureDefaultUser, openDatabase } from './db.js';
@@ -434,14 +435,14 @@ describe('startBackgroundJobs', () => {
     db.prepare(`INSERT INTO auth_sessions (user_id, token_hash, created_at, expires_at, last_seen_at) VALUES (?, 'old', ?, ?, ?)`).run(
       user.id,
       0,
-      now + 60_000,
+      now + MINUTE_MS,
       0,
     );
     db.prepare(`INSERT INTO days (user_id, date, created_at) VALUES (?, '2025-01-01', 0)`).run(user.id);
     const count = (table: string) => countRows(db, table);
 
     createApp(db, config);
-    vi.advanceTimersByTime(7 * 3_600_000);
+    vi.advanceTimersByTime(7 * HOUR_MS);
     expect([count('auth_sessions'), count('days')]).toEqual([1, 1]);
 
     startBackgroundJobs(db, config);
@@ -452,7 +453,7 @@ describe('startBackgroundJobs', () => {
     expect(log).toHaveBeenCalledWith('[retention] deleted 1 day');
     // The login expired a minute after it was stored; the next six-hourly purge takes it.
     expect(count('auth_sessions')).toBe(1);
-    vi.advanceTimersByTime(6 * 3_600_000);
+    vi.advanceTimersByTime(6 * HOUR_MS);
     expect(count('auth_sessions')).toBe(0);
     db.close();
   });
@@ -485,7 +486,7 @@ describe('startBackgroundJobs', () => {
     startBackgroundJobs(db, loadConfig({ AUTH_MODE: 'none' }));
     // Stands in for a database that is busy or full when the prune and the purge run.
     db.close();
-    expect(() => vi.advanceTimersByTime(6 * 3_600_000)).not.toThrow();
+    expect(() => vi.advanceTimersByTime(6 * HOUR_MS)).not.toThrow();
     expect(error).toHaveBeenCalledWith('[sessions]', expect.any(Error));
     expect(error).toHaveBeenCalledWith('[retention]', expect.any(Error));
   });

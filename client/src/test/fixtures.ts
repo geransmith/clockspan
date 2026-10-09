@@ -105,6 +105,9 @@ export function makeDay(date = TODAY, patch: Partial<Day> = {}): Day {
   return { ...emptyDay(date), punches: punchesAt(), ...patch };
 }
 
+/** The uid `makePriority` gives the row at this position. */
+export const rowUid = (position: number): string => `uid${position}`.padEnd(12, 'x');
+
 /**
  * A one-off task's row on a day's list, as the server answers it: not done, added at T0, in no
  * category, on this day's list only and with nothing logged on it, unless `patch` says otherwise.
@@ -114,7 +117,7 @@ export function makePriority(position: number, text: string, patch: Partial<Prio
     position,
     text,
     done: false,
-    uid: `uid${position}`.padEnd(12, 'x'),
+    uid: rowUid(position),
     addedAt: T0,
     categoryUid: null,
     recurring: false,
@@ -219,6 +222,30 @@ export function makeAuth(patch: Partial<AuthInfo> = {}): AuthInfo {
 /** A day as the History calendar holds it (`daySummaryOf`): no punch set and nothing done. */
 export function makeSummary(date: string, patch: Partial<DaySummary> = {}): DaySummary {
   return { date, punches: punchesAt(), focusSeconds: 0, focusSessions: 0, prioritiesDone: 0, prioritiesTotal: 0, retroAt: null, workMinutes: null, ...patch };
+}
+
+/**
+ * A stand-in for `matchMedia`: each query answers from `matching` (a test may add to it or delete
+ * from it before a render), and `change()` tells the listeners it moved.
+ */
+export function stubMatchMedia(matching: Set<string>) {
+  const listeners = new Map<string, Set<() => void>>();
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    get matches() {
+      return matching.has(query);
+    },
+    media: query,
+    addEventListener: (_type: string, l: () => void) => listeners.set(query, (listeners.get(query) ?? new Set()).add(l)),
+    removeEventListener: (_type: string, l: () => void) => listeners.get(query)?.delete(l),
+  }));
+  return {
+    change(query: string, matches: boolean) {
+      if (matches) matching.add(query);
+      else matching.delete(query);
+      for (const l of listeners.get(query) ?? []) l();
+    },
+    listening: (query: string) => listeners.get(query)?.size ?? 0,
+  };
 }
 
 /** A promise the test settles by hand, for answers that must arrive in a chosen order. */
