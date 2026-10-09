@@ -93,6 +93,37 @@ describe('PUT /api/days/:date/punches', () => {
     expect((await app.api.get('/api/days/2026-09-01')).body.punches).toHaveLength(2);
   });
 
+  it('keeps a punch another device saved since the base, and replaces the list with no base', async () => {
+    const at = (...hours: (number | null)[]) => hours.map((h) => ({ at: h == null ? null : T0 + h * HOUR_MS }));
+    const times = (punches: { at: number | null }[]) => punches.map((p) => p.at);
+    await app.api.put('/api/days/2026-09-01/punches', { punches: at(8, 12, null, null) });
+    // The phone clocks out.
+    await app.api.put('/api/days/2026-09-01/punches', { punches: at(8, 12, null, 17), base: at(8, 12, null, null) });
+    // The laptop, on the copy from before, sets lunch in.
+    const r = await app.api.put('/api/days/2026-09-01/punches', { punches: at(8, 12, 12.5, null), base: at(8, 12, null, null) });
+    expect([r.status, times(r.body.punches)]).toEqual([200, times(at(8, 12, 12.5, 17))]);
+    expect(times((await app.api.get('/api/days/2026-09-01')).body.punches)).toEqual(times(at(8, 12, 12.5, 17)));
+    // A pair added on one side leaves the list as sent, and so does a save with no base.
+    const added = await app.api.put('/api/days/2026-09-01/punches', { punches: at(9, 12, 12.5, 17, null, null), base: at(8, 12, 12.5, 17) });
+    expect(times(added.body.punches)).toEqual(times(at(9, 12, 12.5, 17, null, null)));
+    const replaced = await app.api.put('/api/days/2026-09-01/punches', { punches: at(8, null, null, null) });
+    expect(times(replaced.body.punches)).toEqual(times(at(8, null, null, null)));
+  });
+
+  it('validates the base as it does the list', async () => {
+    const punches = [{ at: T0 + 8 * HOUR_MS }];
+    for (const [base, error] of [
+      ['x', 'base must be an array.'],
+      [Array(MAX_PUNCHES + 1).fill({ at: null }), `base is limited to ${MAX_PUNCHES} rows.`],
+      [[5], 'Base punch 0 must be an object.'],
+      [[{ at: null }, { at: 'noon' }], 'Base punch 1 has an invalid time.'],
+    ] as const) {
+      const r = await app.api.put('/api/days/2026-09-01/punches', { punches, base });
+      expect([r.status, r.body.error]).toEqual([400, error]);
+    }
+    expect((await app.api.get('/api/days/2026-09-01')).body.punches).toEqual([]);
+  });
+
   it('validates the body', async () => {
     expect((await app.api.put('/api/days/2026-09-01/punches', { punches: 'x' })).status).toBe(400);
     expect((await app.api.put('/api/days/2026-09-01/punches', { punches: [{ at: 'noon' }] })).status).toBe(400);

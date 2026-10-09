@@ -1,5 +1,5 @@
 /**
- * A value the server owns (a day, the settings, the running session), kept as two parts: what
+ * A value the server owns (a day, the settings, the running session, the board), kept as two parts: what
  * the server has confirmed, and the changes this device has made since that the server hasn't
  * confirmed yet. The screen shows the confirmed value with the pending changes laid over it in
  * the order they were made. That split carries every rule the stores need:
@@ -15,7 +15,7 @@
  * Pure and immutable: no function changes a `Tracked`; each returns a new one, or the same one
  * when nothing changed (`fetched`). `apply` and `commit` must be pure too (no clock reads inside
  * them), since the shown value is worked out again whenever it changes. `serial()`, the stores'
- * write queue, lives here too.
+ * write queue, lives here too, and `whenIdle()`, which waits for every write still on its way.
  */
 
 interface Pending<T> {
@@ -66,7 +66,7 @@ export function settle<T>(t: Tracked<T>, ids: readonly number[], commit?: (confi
 
 /**
  * `settle` for a server that answers with the whole value (the running session, all the
- * settings): its answer becomes the confirmed value, loaded or not, so a save made before the
+ * settings, the board): its answer becomes the confirmed value, loaded or not, so a save made before the
  * first read answered still shows.
  */
 export function settleWith<T>(t: Tracked<T>, ids: readonly number[], value: T): Tracked<T> {
@@ -88,7 +88,7 @@ export function confirm<T>(t: Tracked<T>, change: (confirmed: T) => T): Tracked<
  * dropped, except on a value never loaded, which takes it anyway since there is nothing better
  * to show. An answer that prints the same as the confirmed value changes nothing and `t` itself
  * comes back, so a store that works out what it shows per tracked value (useDay's `shownDays`,
- * the memos in useSettings and useTimer) keeps that value's identity, lists and all. The server
+ * the memos in useSettings, useTimer and useBoard) keeps that value's identity, lists and all. The server
  * builds days, settings and sessions in one fixed key order, and commits spread onto them in
  * place, so a key-order difference only costs a replace.
  */
@@ -110,7 +110,7 @@ type Queue = <R>(job: () => Promise<R>, key?: string) => Promise<R>;
 export function serial(): Queue {
   const tails = new Map<string, Promise<unknown>>();
   return (job, key = '') => {
-    const next = (tails.get(key) ?? Promise.resolve()).catch(() => {}).then(job);
+    const next = whileUnsettled((tails.get(key) ?? Promise.resolve()).catch(() => {}).then(job));
     tails.set(key, next);
     const forget = () => {
       if (tails.get(key) === next) tails.delete(key);
@@ -118,4 +118,25 @@ export function serial(): Queue {
     void next.then(forget, forget);
     return next;
   };
+}
+
+/** Every write still on its way, in any store: what `whenIdle` waits for. */
+const unsettled = new Set<Promise<unknown>>();
+
+/** `write`, counted among the writes `whenIdle` waits for until it settles. */
+export function whileUnsettled<T>(write: Promise<T>): Promise<T> {
+  unsettled.add(write);
+  const drop = () => unsettled.delete(write);
+  void write.then(drop, drop);
+  return write;
+}
+
+/**
+ * Resolves once every write `serial()` queued or `whileUnsettled` counted has settled, saved or
+ * not, those added while it waits included. A sign-out waits on it, or a write still waiting
+ * would go out after the session ended, or never. Each request has its own timeout, so the wait
+ * ends.
+ */
+export async function whenIdle(): Promise<void> {
+  while (unsettled.size > 0) await Promise.allSettled(unsettled);
 }

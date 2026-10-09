@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { deferred } from '../test/fixtures';
-import { addPending, confirm, fetched, serial, settle, settleWith, shown, untracked, type Tracked } from './optimistic';
+import { addPending, confirm, fetched, serial, settle, settleWith, shown, untracked, whenIdle, whileUnsettled, type Tracked } from './optimistic';
 
 type Row = { text: string; n: number };
 const loaded = (value: Row, version = 0): Tracked<Row> => ({ confirmed: value, pending: [], version });
@@ -158,5 +158,35 @@ describe('serial', () => {
     void queue(c.run, 'day:1');
     await flush();
     expect(started).toEqual(['a', 'b', 'c']);
+    // Answered, so no write is left on its way for whenIdle's cases.
+    b.answer().resolve('B');
+    c.answer().resolve('C');
+  });
+});
+
+describe('whenIdle', () => {
+  it('waits for every queued job and counted write, failed or not, those added while it waits included', async () => {
+    const queue = serial();
+    const a = deferred<string>();
+    const b = deferred<string>();
+    const c = deferred<string>();
+    void queue(() => a.promise, 'day:1').catch(() => {});
+    void whileUnsettled(b.promise);
+    let idle = false;
+    void whenIdle().then(() => (idle = true));
+    a.reject(new Error('offline'));
+    await Promise.resolve();
+    // A job queued while it waits counts too.
+    void queue(() => c.promise, 'day:2');
+    b.resolve('B');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(idle).toBe(false);
+    c.resolve('C');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(idle).toBe(true);
+  });
+
+  it('resolves at once with nothing on its way', async () => {
+    await expect(whenIdle()).resolves.toBeUndefined();
   });
 });

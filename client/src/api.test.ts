@@ -68,17 +68,24 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
   ['putSettings', () => api.putSettings({ sound: false }), 'PUT', '/api/settings', { sound: false }],
   ['resetSettings', () => api.resetSettings(), 'DELETE', '/api/settings', undefined],
   ['getDay', () => api.getDay(TODAY), 'GET', `/api/days/${TODAY}`, undefined],
-  // Only the times go out: the server gives each row its position and kind from the order.
+  // Only the times go out, with those it was built on: the server gives each row its position and kind from the order.
   [
     'putPunches',
     () =>
-      api.putPunches(TODAY, [
-        { position: 0, kind: 'in', at: 5 },
-        { position: 1, kind: 'out', at: null },
-      ]),
+      api.putPunches(
+        TODAY,
+        [
+          { position: 0, kind: 'in', at: 5 },
+          { position: 1, kind: 'out', at: null },
+        ],
+        [
+          { position: 0, kind: 'in', at: null },
+          { position: 1, kind: 'out', at: null },
+        ],
+      ),
     'PUT',
     `/api/days/${TODAY}/punches`,
-    { punches: [{ at: 5 }, { at: null }] },
+    { punches: [{ at: 5 }, { at: null }], base: [{ at: null }, { at: null }] },
   ],
   // With the list it was built on, so the server can keep another device's changes.
   ['putPriorities', () => api.putPriorities(TODAY, [REPORT], [FREE]), 'PUT', `/api/days/${TODAY}/priorities`, { priorities: [REPORT], base: [FREE] }],

@@ -3,6 +3,7 @@ import * as api from '../api';
 import type { AuthInfo, PublicUser } from '../types';
 import { warnQuietly } from '../lib/alerts';
 import { HTTPS_ONLY, SERVER_UNREACHABLE, SIGN_OUT_FAILED } from '../lib/copy';
+import { whenIdle } from '../lib/optimistic';
 import { adoptUser, AUTH_USER_KEY, otherUserStored } from '../lib/storage';
 import { LoginPage, OidcLoginPage } from './LoginPage';
 import { NewPasswordPage } from './NewPasswordPage';
@@ -106,6 +107,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }, [answered, leave]);
 
   const signOut = useCallback(async () => {
+    // A save still on its way (a draft the confirm's blur just flushed) would otherwise go out
+    // after the session ended, or not at all once the page leaves.
+    await whenIdle();
     const res = await api.logout().catch(() => null);
     if (res) {
       // Recorded before leaving: the provider's page never runs this app to tell the other tabs.

@@ -23,6 +23,17 @@ export function samePunches(a: readonly Punch[], b: readonly Punch[]): boolean {
 }
 
 /**
+ * A punch save laid onto the stored rows as the changes made since `base`, the rows the sender
+ * built `list` on: each row takes the sent time where it differs from the base and the stored one
+ * otherwise, so a punch another device saved meanwhile stays. A pair added or removed on either
+ * side (the lengths differ), or no base (curl), leaves the list as sent.
+ */
+export function mergePunches(stored: readonly Punch[], base: readonly Punch[] | null, list: Punch[]): Punch[] {
+  if (!base || base.length !== list.length || stored.length !== list.length) return list;
+  return list.map((p, i) => (p.at === base[i]!.at ? { ...p, at: stored[i]!.at } : p));
+}
+
+/**
  * Punch rows a day can hold: clock in, lunch out and in, 18 extra out/in pairs and the clock out.
  * The server refuses more, and the card stops offering Add extra out / in at it.
  */
