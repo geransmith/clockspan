@@ -1,6 +1,6 @@
 import { useRef, useState, type CSSProperties } from 'react';
 import { LIMITS } from '../../../../shared/api.js';
-import { moveTargets, type BoardItem, type CategoryPick, type ColumnId } from '../../lib/board';
+import { categoryOf, COLUMN_NAMES, moveTargets, type BoardItem, type CategoryPick, type ColumnId } from '../../lib/board';
 import { BOARD } from '../../lib/copy';
 import { dayName } from '../../lib/format';
 import type { Category } from '../../types';
@@ -8,8 +8,6 @@ import { CategoryChip } from '../CategoryChip';
 import { CategoryDot } from '../CategoryDot';
 import { Grip } from '../Icons';
 import { RepeatMark } from '../RepeatMark';
-
-export const COLUMN_NAMES: Record<ColumnId, string> = { later: 'Later', next: 'Next', progress: 'In progress', done: 'Done' };
 
 interface Props {
   item: BoardItem;
@@ -25,10 +23,8 @@ interface Props {
   onMove: (to: ColumnId, el: HTMLElement) => void;
   /** Renames it; without one the title shows as text (an earlier day's row of a recurring priority removed in Settings). */
   onRename?: (title: string) => void;
-  /** Its category, when the board holds it: the meta line shows its dot and name. */
-  category?: Category;
-  /** The category chip's data; with `onCategory`, the editor offers the chip. */
-  pick: CategoryPick | null;
+  /** The board's categories, whose dot and name the meta line shows for the item's, and with `onCategory` the editor's chip. */
+  pick: CategoryPick;
   /** Sets its category; none where the board doesn't (an earlier day's row of a recurring priority removed in Settings). */
   onCategory?: (uid: string | null) => void;
   onDelete?: () => void;
@@ -64,7 +60,6 @@ export function BoardCardView({
   tick,
   onMove,
   onRename,
-  category,
   pick,
   onCategory,
   onDelete,
@@ -72,7 +67,8 @@ export function BoardCardView({
   note,
   drag,
 }: Props) {
-  const targets = moveTargets(item);
+  const targets = moveTargets(item, today);
+  const category = categoryOf(pick.categories, item.categoryUid);
   const editorId = `editor-${item.id}`;
   return (
     <li ref={drag?.nodeRef} style={drag?.style} className={`board-card${item.column === 'done' ? ' is-done' : ''}`}>
@@ -106,12 +102,7 @@ export function BoardCardView({
       </div>
       {(category != null || item.planned != null || item.leftOpen != null || item.recurring) && (
         <p className="board-card-meta muted small">
-          {category && (
-            <span className="board-card-category">
-              <CategoryDot color={category.color} />
-              {category.name}
-            </span>
-          )}
+          {category && <CategoryTag category={category} />}
           {item.recurring && <RepeatMark />}
           {item.planned && <span>Planned for {dayName(item.planned, today, true)}</span>}
           {item.leftOpen && <span>Left open from {dayName(item.leftOpen, today, true)}</span>}
@@ -121,7 +112,7 @@ export function BoardCardView({
         <div className="board-editor" id={editorId}>
           {onRename ? <TitleField title={item.title} onRename={onRename} onClose={onClose} /> : <p className="board-editor-title">{item.title}</p>}
           {note && <p className="muted small">{note}</p>}
-          {pick && onCategory && (
+          {onCategory && (
             <div className="board-editor-category">
               <CategoryChip value={item.categoryUid} onChange={onCategory} pick={pick} label={`Category for ${item.title}`} />
             </div>
@@ -171,6 +162,16 @@ export function BoardCardView({
         </div>
       )}
     </li>
+  );
+}
+
+/** A category's dot and name, on a card's meta line and the card under the pointer. */
+export function CategoryTag({ category }: { category: Category }) {
+  return (
+    <span className="board-card-category">
+      <CategoryDot color={category.color} />
+      {category.name}
+    </span>
   );
 }
 

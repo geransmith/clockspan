@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useId, useState, type RefObject } from 'react';
 import { LIMITS } from '../../../../shared/api.js';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { activeCategories, type CategoryPick } from '../../lib/board';
@@ -17,10 +17,13 @@ import { CategoryChip } from '../CategoryChip';
 export function Capture({
   full,
   pick,
+  inputRef: input,
   onAdd,
 }: {
   full: boolean;
-  pick: CategoryPick | null;
+  pick: CategoryPick;
+  /** The box, which the board also focuses after a Delete leaves nothing else in the column. */
+  inputRef: RefObject<HTMLInputElement | null>;
   onAdd: (title: string, lane: OpenLane, categoryUid: string | null) => void;
 }) {
   // With a mouse and keyboard the box takes the focus as the board opens; on a phone that would
@@ -28,9 +31,8 @@ export function Capture({
   const fine = useMediaQuery('(pointer: fine)');
   const [text, setText] = useState('');
   const [stored, setStored] = useState(() => readStored(USER_KEYS.captureCategory) || null);
-  const input = useRef<HTMLInputElement>(null);
   const hintId = useId();
-  const category = pick && activeCategories(pick.categories).some((c) => c.uid === stored) ? stored : null;
+  const category = activeCategories(pick.categories).some((c) => c.uid === stored) ? stored : null;
   const pickCategory = (uid: string | null) => {
     setStored(uid);
     writeStored(USER_KEYS.captureCategory, uid ?? '');
@@ -66,7 +68,7 @@ export function Capture({
           autoFocus={fine}
           disabled={full}
         />
-        {pick && <CategoryChip value={category} onChange={pickCategory} pick={pick} label="Category for new cards" />}
+        <CategoryChip value={category} onChange={pickCategory} pick={pick} label="Category for new cards" />
         <button className="btn" onClick={() => add('later')} disabled={full || !text.trim()}>
           Add to Later
         </button>

@@ -21,6 +21,7 @@ import { createPortal } from 'react-dom';
 import { addDays, startOfWeek } from '../../../../shared/dates.js';
 import { useBoardState, useBoardStore, useCategoryPick } from '../../hooks/useBoard';
 import { useCelebration, type Moment } from '../../hooks/useCelebration';
+import { useClock } from '../../hooks/useClock';
 import { useDay } from '../../hooks/useDay';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useRange } from '../../hooks/useRange';
@@ -31,42 +32,47 @@ import {
   boardFull,
   categoryOf,
   columnDropId,
+  COLUMN_NAMES,
   COLUMNS,
   dropTarget,
   findItem,
   isLane,
+  itemsIn,
   laneStart,
   MoveRefused,
   moveAnnouncement,
+  onToday,
   overAnnouncement,
   planMove,
   withDrag,
   type BoardItem,
   type ColumnId,
   type DropTarget,
+  type Move,
   type StoreMove,
 } from '../../lib/board';
 import { BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, WARNING_ACTIONS } from '../../lib/copy';
 import { dayName, formatDurationCeil } from '../../lib/format';
 import { newUid, nudgeFor, pickWarning, type WarningKind } from '../../lib/priorities';
+import { loggedByUid } from '../../lib/retro';
 import type { Category, OpenLane } from '../../types';
 import { Burst } from '../Burst';
-import { CategoryDot } from '../CategoryDot';
 import { Folded } from '../Folded';
 import { Grip } from '../Icons';
 import { LoadFailed } from '../LoadFailed';
-import { BoardCardView, COLUMN_NAMES, type ItemDrag } from './BoardCard';
+import { BoardCardView, CategoryTag, type ItemDrag } from './BoardCard';
 import { Capture } from './Capture';
 import { boardCollision, boardKeyboardCoordinates } from './dnd';
 
 /** What the board notice holds: one at a time, the newest move's. */
 type Notice =
   /** A pull onto a list already as long as the sheet's nudge allows: held until Add anyway. */
-  | { kind: 'nudge'; warning: WarningKind; text: string; item: BoardItem; to: ColumnId; move: StoreMove }
-  /** A done item moved to Later or Next: it stays done, and a new card can take its place. */
-  | { kind: 'doneStays'; item: BoardItem; title: string; categoryUid: string | null; lane: OpenLane; before: string | null }
-  /** A move refused before anything was sent. */
-  | { kind: 'refuse'; item: BoardItem; message: string };
+  | { kind: 'nudge'; warning: WarningKind; text: string; item: BoardItem; target: DropTarget; move: StoreMove }
+  /**
+   * The move itself, with the item it was about: a done item moved to Later or Next (it stays
+   * done, and a new card can take its place), or a move refused before anything was sent.
+   */
+  | (Extract<Move, { kind: 'doneStays' | 'refuse' }> & { item: BoardItem });
 
 /** The dragged item's place in its list while the copy under the pointer moves. */
 const DRAGGED_OPACITY = 0.4;
@@ -86,8 +92,8 @@ const canDrag = (item: BoardItem) => !item.planned && !item.recurring;
  * The Board page: Later, Next, In progress and Done. In progress is today's list, the sheet's
  * Top priorities, and Done holds this week. An item moves by its grip (a mouse, a finger or the
  * keyboard) or its editor's Move to, and both go through `planMove`; a move the board can't make
- * shows in the notice under the capture box. Memoized: App re-renders every second, and nothing
- * here reads the clock.
+ * shows in the notice under the capture box. It reads the clock for Delete's count of a timer
+ * running on the task.
  */
 export const Board = memo(function Board({ today }: { today: string }) {
   const { board, failed } = useBoardState();
@@ -97,10 +103,12 @@ export const Board = memo(function Board({ today }: { today: string }) {
   const weekStart = startOfWeek(today);
   // Done holds the week: the days before today (none on a Monday) give the rows ticked on them.
   const { days: earlierDays } = useRange(weekStart, addDays(today, -1), today !== weekStart);
-  const pick = useCategoryPick(report);
+  const pick = useCategoryPick();
+  // Read in render: the move and delete handlers are built here, where the purity lint refuses Date.now().
+  const now = useClock();
   useEffect(() => void store.load(), [store]);
 
-  const [moving, setMoving] = useState<ReadonlyMap<string, ColumnId>>(() => new Map());
+  const [moving, setMoving] = useState<ReadonlyMap<string, DropTarget>>(() => new Map());
   const [notice, setNotice] = useState<Notice | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   // Below 900 px one column shows at a time.
@@ -111,6 +119,7 @@ export const Board = memo(function Board({ today }: { today: string }) {
   const lastWarning = useRef<string | undefined>(undefined);
   const titles = useRef(new Map<string, HTMLButtonElement>());
   const noticeBox = useRef<HTMLDivElement>(null);
+  const captureBox = useRef<HTMLInputElement>(null);
   // The item a sent move left focus for: its title once it shows under that id, or its grip after
   // a keyboard drag, so Space picks it up again.
   const focusTo = useRef<string | null>(null);
@@ -184,14 +193,14 @@ export const Board = memo(function Board({ today }: { today: string }) {
         <LoadFailed title={LOAD_FAILED.title} onRetry={() => void dayStore.load(today)} />
       </div>
     );
-  if (!board || !day || !columns || !shown) return <div className="board sheet-loading" aria-busy="true" />;
+  if (!board || !day || !columns || !shown || !pick) return <div className="board sheet-loading" aria-busy="true" />;
 
   const todayRows = day.priorities;
 
   // The move goes to the store; the item shows in its new column meanwhile. A tick celebrates
   // from where it was made (`at`, measured by the caller before the control goes with the item to
   // Done in this render, hidden there on a phone). The sound is unlocked in the tap that made it (iOS).
-  const send = (item: BoardItem, to: ColumnId, move: StoreMove, at?: DOMRect) => {
+  const send = (item: BoardItem, target: DropTarget, move: StoreMove, at?: DOMRect) => {
     const ticks = (move.kind === 'tick' && move.done) || (move.kind === 'place' && move.row.done);
     if (ticks) {
       unlockAudio();
@@ -199,14 +208,15 @@ export const Board = memo(function Board({ today }: { today: string }) {
     }
     setOpen(null);
     // Where the item will be once the move lands: a one-off task keeps its id wherever it shows, and
-    // an earlier day's recurring row pulled onto today's list is today's row.
+    // an earlier day's recurring row pulled onto today's list is today's row, while the earlier
+    // one stays in Done.
     const lands = move.kind === 'place' && move.row.recurring ? `row:${today}:${move.row.uid}` : item.id;
     focusTo.current = lands;
-    setMoving((m) => new Map(m).set(item.id, to));
+    setMoving((m) => new Map(m).set(lands, target));
     const sent = store.move(move).finally(() =>
       setMoving((m) => {
         const next = new Map(m);
-        next.delete(item.id);
+        next.delete(lands);
         return next;
       }),
     );
@@ -220,23 +230,21 @@ export const Board = memo(function Board({ today }: { today: string }) {
   // Every move, dragged or picked in Move to, goes through here: the newest one takes the notice's
   // place. It answers with what a drag says as it ends.
   const run = (item: BoardItem, to: ColumnId, before: string | null, at?: DOMRect): string => {
-    const move = planMove(item, to, before, { today });
+    const move = planMove(item, to, before, today);
     setNotice(null);
     focusGrip.current = false;
-    if (move?.kind === 'refuse') setNotice({ kind: 'refuse', item, message: move.message });
-    else if (move?.kind === 'doneStays')
-      setNotice({ kind: 'doneStays', item, title: move.title, categoryUid: move.categoryUid, lane: move.lane, before: move.before });
+    if (move?.kind === 'refuse' || move?.kind === 'doneStays') setNotice({ ...move, item });
     else if (move) {
       const warning = move.kind === 'place' && move.nudge ? nudgeFor(todayRows, settings.priorityCount) : null;
-      if (!warning) send(item, to, move, at);
+      if (!warning) send(item, { to, before }, move, at);
       else {
         const text = pickWarning(warning, lastWarning.current);
         lastWarning.current = text;
-        setNotice({ kind: 'nudge', warning, text, item, to, move });
+        setNotice({ kind: 'nudge', warning, text, item, target: { to, before }, move });
         return text;
       }
     }
-    return moveAnnouncement(move, item, to, COLUMN_NAMES);
+    return moveAnnouncement(move, item, to);
   };
 
   // Closing the notice puts the focus back on the item it was about, on its grip where it has one.
@@ -247,14 +255,21 @@ export const Board = memo(function Board({ today }: { today: string }) {
   };
 
   // The full delete, which asks with the days the task is on and the time logged on it: today's
-  // row has the counts as the day was last read, its other days' time to which today's log adds,
-  // and any other item the board's.
+  // row has the counts as the day was last read, its other days' time to which today's log adds
+  // (a timer running on it included, as × on the sheet counts it), and any other item the board's.
+  // The item goes with its Delete button, and the focus would fall to the page: the next item in
+  // its column takes it, else the one before, else the capture box.
   const confirmDelete = (item: BoardItem) => {
-    const onToday = item.date === today;
-    const { listed, logged: counted } = (onToday ? item.row : item.card)!;
-    const todays = onToday ? day.sessions.reduce((t, s) => (s.status === 'completed' && s.priorityUid === item.uid ? t + s.durationSeconds : t), 0) : 0;
+    const listedToday = onToday(item, today);
+    const { listed, logged: counted } = (listedToday ? item.row : item.card)!;
+    const todays = listedToday ? (loggedByUid(day.sessions, now).get(item.uid) ?? 0) : 0;
     const logged = counted + todays;
     if (!window.confirm(CONFIRM.deleteTask(listed, logged > 0 ? formatDurationCeil(logged) : null))) return;
+    const found = findItem(shown, item.id);
+    const items = found ? itemsIn(shown, found.column) : [];
+    const at = items.findIndex((i) => i.id === item.id);
+    const near = [items[at + 1], items[at - 1]].map((i) => i && titles.current.get(i.id)).find((el) => el != null);
+    (near ?? captureBox.current)?.focus();
     setOpen(null);
     report(store.deleteItem(item.uid));
   };
@@ -293,7 +308,7 @@ export const Board = memo(function Board({ today }: { today: string }) {
       const r = active.rect.current.translated;
       const at = r ? new DOMRect(r.left, r.top, r.width, r.height) : undefined;
       const target = dropTarget(over ? String(over.id) : null, item.id, shown);
-      dropLine.current = target ? run(item, target.to, target.before, at) : moveAnnouncement(null, item, item.column, COLUMN_NAMES);
+      dropLine.current = target ? run(item, target.to, target.before, at) : moveAnnouncement(null, item, item.column);
     }
     endDrag(item, activatorEvent);
   };
@@ -314,7 +329,7 @@ export const Board = memo(function Board({ today }: { today: string }) {
       overSaid.current = true;
       if (!item || !over) return undefined;
       const target = dropTarget(String(over.id), item.id, shown);
-      return target || !first ? overAnnouncement(target, item, shown, COLUMN_NAMES) : undefined;
+      return target || !first ? overAnnouncement(target, item, shown) : undefined;
     },
     onDragEnd: () => dropLine.current,
     onDragCancel: ({ active }) => {
@@ -324,15 +339,14 @@ export const Board = memo(function Board({ today }: { today: string }) {
   };
 
   const card = (item: BoardItem, drag?: ItemDrag) => {
-    const onToday = item.row != null && item.date === today;
+    // Today's row, edited through the list; one shown in a lane is on its way off it (a park), and
+    // its row's tick, title and category wait for the park to land.
+    const throughRow = onToday(item, today) && !isLane(item.column);
     // A task off today's list as the board has it: in a lane, left open, planned, or done earlier.
     const cardOnly = item.card != null && item.row == null;
     // Ticked on an earlier day: that day's sheet unticks it, since the board would rewrite a past
     // day; Move to In progress puts it on today's list to work on again.
     const note = cardOnly && !item.planned && item.card!.listDone ? BOARD.doneOn(dayName(item.card!.listDate!, today, true)) : undefined;
-    const tick: Parameters<typeof BoardCardView>[0]['tick'] = onToday
-      ? { checked: item.row!.done, onChange: (checked, el) => run(item, checked ? 'done' : 'progress', null, el.getBoundingClientRect()) }
-      : undefined;
     // Off today's list, a PATCH renames or files it on every day: any one-off task the board has,
     // and an earlier day's recurring row while its recurring priority is in Settings (one removed
     // there answers 404).
@@ -352,15 +366,20 @@ export const Board = memo(function Board({ today }: { today: string }) {
           if (el) titles.current.set(item.id, el);
           else titles.current.delete(item.id);
         }}
-        tick={tick}
-        onMove={(to, el) => run(item, to, to === 'later' || to === 'next' ? laneStart(columns, to) : null, el.getBoundingClientRect())}
+        tick={
+          throughRow
+            ? { checked: item.row!.done, onChange: (checked, el) => run(item, checked ? 'done' : 'progress', null, el.getBoundingClientRect()) }
+            : undefined
+        }
+        onMove={(to, el) => run(item, to, isLane(to) ? laneStart(columns, to) : null, el.getBoundingClientRect())}
         // Today's row through the list, the sheet's write, which renames a recurring priority too; any other by a PATCH.
-        onRename={onToday ? (text) => report(store.editRow(item.uid, { text })) : editable ? (title) => report(store.editItem(item.uid, { title })) : undefined}
-        category={pick ? categoryOf(pick.categories, item.categoryUid) : undefined}
+        onRename={
+          throughRow ? (text) => report(store.editRow(item.uid, { text })) : editable ? (title) => report(store.editItem(item.uid, { title })) : undefined
+        }
         pick={pick}
         // As the title: the category is the task's, on every day.
         onCategory={
-          onToday
+          throughRow
             ? (categoryUid) => report(store.editRow(item.uid, { categoryUid }))
             : editable
               ? (categoryUid) => report(store.editItem(item.uid, { categoryUid }))
@@ -368,7 +387,7 @@ export const Board = memo(function Board({ today }: { today: string }) {
         }
         // A recurring priority is removed in Settings → Board, so its row only comes off today's list.
         onDelete={item.recurring ? undefined : () => confirmDelete(item)}
-        onRemove={item.recurring && onToday ? () => report(store.removeFromToday(item.uid)) : undefined}
+        onRemove={item.recurring && throughRow ? () => report(store.removeFromToday(item.uid)) : undefined}
         note={note}
         drag={drag}
       />
@@ -404,6 +423,7 @@ export const Board = memo(function Board({ today }: { today: string }) {
       <Capture
         full={boardFull(board)}
         pick={pick}
+        inputRef={captureBox}
         onAdd={(title, lane, categoryUid) => report(store.addItem({ uid: newUid(), title, categoryUid, lane, before: laneStart(columns, lane) }))}
       />
       {/* Always there, so what arrives is heard (see styles.css for its gap). */}
@@ -414,9 +434,9 @@ export const Board = memo(function Board({ today }: { today: string }) {
             actions={[
               {
                 label: WARNING_ACTIONS[notice.warning].add,
-                run: (el) => {
+                run: () => {
                   setNotice(null);
-                  send(notice.item, notice.to, notice.move, el.getBoundingClientRect());
+                  send(notice.item, notice.target, notice.move);
                   // The button goes with the notice: the focus goes to the item's grip once it lands.
                   focusGrip.current = true;
                 },
@@ -502,7 +522,7 @@ export const Board = memo(function Board({ today }: { today: string }) {
         {/* On the page's body, so no column clips it; without the glide back when motion is reduced. */}
         {createPortal(
           <DragOverlay dropAnimation={reduceMotion ? null : undefined}>
-            {lifted && <Lifted item={lifted} category={pick ? categoryOf(pick.categories, lifted.categoryUid) : undefined} />}
+            {lifted && <Lifted item={lifted} category={categoryOf(pick.categories, lifted.categoryUid)} />}
           </DragOverlay>,
           document.body,
         )}
@@ -578,10 +598,7 @@ function Lifted({ item, category }: { item: BoardItem; category?: Category }) {
       </div>
       {category && (
         <p className="board-card-meta muted small">
-          <span className="board-card-category">
-            <CategoryDot color={category.color} />
-            {category.name}
-          </span>
+          <CategoryTag category={category} />
         </p>
       )}
     </div>
@@ -589,15 +606,7 @@ function Lifted({ item, category }: { item: BoardItem; category?: Category }) {
 }
 
 /** The board notice's content: its line and buttons, with Escape on a button closing it. */
-function NoticeView({
-  actions,
-  onClose,
-  children,
-}: {
-  actions: { label: string; run: (el: HTMLButtonElement) => void }[];
-  onClose: () => void;
-  children: ReactNode;
-}) {
+function NoticeView({ actions, onClose, children }: { actions: { label: string; run: () => void }[]; onClose: () => void; children: ReactNode }) {
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape') onClose();
   };
@@ -606,7 +615,7 @@ function NoticeView({
       <span>{children}</span>
       <span className="notice-actions">
         {actions.map((a) => (
-          <button key={a.label} className="btn btn-ghost" onClick={(e) => a.run(e.currentTarget)} onKeyDown={onKey}>
+          <button key={a.label} className="btn btn-ghost" onClick={a.run} onKeyDown={onKey}>
             {a.label}
           </button>
         ))}
@@ -616,5 +625,5 @@ function NoticeView({
 }
 
 function Empty({ children }: { children: ReactNode }) {
-  return <p className="muted small board-empty">{children}</p>;
+  return <p className="muted small">{children}</p>;
 }
