@@ -75,7 +75,7 @@ export const USER_KEYS = {
   leftOpenDismissed: 'focus:left-open-dismissed',
   /** The start of the break whose "Break's over" rang: another user's would silence this one's. */
   breakOver: 'focus:break-over',
-  /** The category the board's capture box last picked ('' for none): another user's uid. */
+  /** The category the board columns' boxes last picked ('' for none): another user's uid. */
   captureCategory: 'focus:capture-category',
   /** The recurring priorities the morning offer was answered for today (`useRecurringAnswered`): another user's uids. */
   recurringAnswered: 'focus:recurring-answered',

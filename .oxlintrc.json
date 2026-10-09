@@ -84,7 +84,7 @@
     "jsx-a11y/prefer-tag-over-role": "off",
     // Off on purpose: autoFocus only moves focus where the user's own action expects it: a
     // page's first field, an input just opened for editing, the control an edit returns to, a
-    // field remounted to keep focus, the board's capture box.
+    // field remounted to keep focus.
     "jsx-a11y/no-autofocus": "off"
   },
   "overrides": [

@@ -59,8 +59,8 @@ export interface BoardStore {
    */
   load(opts?: { fresh?: boolean }): Promise<void>;
   /**
-   * A new task in a lane (capture, or a done item's new task), refused at the lanes' cap before it
-   * is sent, or a new recurring priority made in Settings → Board.
+   * A new task in a lane (a column's +, or a done item's new task), refused at the lanes' cap
+   * before it is sent, or a new recurring priority made in Settings → Board.
    */
   addItem(item: NewItem): Promise<void>;
   /**
