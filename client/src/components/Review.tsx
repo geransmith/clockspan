@@ -56,7 +56,7 @@ export function Review({ today, now, period: { kind, from }, onPeriod, onOpen }:
       </header>
       <PeriodNav kind={kind} label={period.label} from={period.from} today={today} onFrom={(f) => onPeriod({ kind, from: f })} />
 
-      {failed ? <LoadFailed title={LOAD_FAILED.range} onRetry={retry} /> : !days && <div className="sheet-loading" aria-busy="true" />}
+      {failed ? <LoadFailed title={LOAD_FAILED.range} onRetry={retry} /> : !days && <div className="loading" aria-busy="true" />}
       {days && <Body key={`${kind}:${period.from}`} days={days} today={today} now={now} kind={kind} onOpen={onOpen} />}
     </section>
   );

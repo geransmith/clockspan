@@ -38,7 +38,8 @@ export function Header({ view, date, today, board, customize, onNavigate, onTogg
   const name = dayName(date, today);
   const long = formatDateLong(date);
   // Customize, Board, History, Settings and the user: five buttons and the brand's name don't fit
-  // a 375 px phone, so the name goes there (styles.css) and the logo stays.
+  // a 375 px phone, so the name goes there (styles.css) and the logo stays; the buttons' words
+  // come back from 760 px rather than 640.
   const crowded = onSheet && board && auth.mode !== 'none';
 
   return (

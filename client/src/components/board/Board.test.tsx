@@ -5,7 +5,6 @@ import * as api from '../../api';
 import type { NewItem } from '../../api';
 import { BOARD_LIMITS, LOOKBACK_DAYS } from '../../../../shared/api.js';
 import { addDays, HOUR_MS, MINUTE_MS } from '../../../../shared/dates.js';
-import { ClockProvider } from '../../hooks/useClock';
 import { unlockAudio, warnQuietly, warnSaveFailed } from '../../lib/alerts';
 import { withCategory, withItem, withItemPatch, withoutItem } from '../../lib/board';
 import { BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, PRIORITY_WARNINGS, WARNING_ACTIONS } from '../../lib/copy';
@@ -55,16 +54,17 @@ const tuesdayRoutine = () => row(1, 'Tuesday row', { uid: 'rec000000009', recurr
 /** Later and Next at the cap. */
 const fullBoard = () => Array.from({ length: BOARD_LIMITS.openCards }, (_, i) => makeCard(`c${i}`.padEnd(12, '0'), `Card ${i}`, { position: i + 1 }));
 
-async function renderBoard(settings = makeSettings({ board: true })) {
+/** Renders the board at `now`, the minute App hands it; the answer renders it again at another. */
+async function renderBoard(settings = makeSettings({ board: true }), now = NOW) {
   vi.mocked(api.getSettings).mockResolvedValue(settings);
-  render(
-    <ClockProvider>
-      <SettingsAndDays>
-        <Board today={WED} />
-      </SettingsAndDays>
-    </ClockProvider>,
+  const page = (at: number) => (
+    <SettingsAndDays>
+      <Board today={WED} now={at} />
+    </SettingsAndDays>
   );
+  const { rerender } = render(page(now));
   await settle();
+  return (at: number) => rerender(page(at));
 }
 
 /** A column by its heading. */
@@ -548,12 +548,12 @@ describe('Board', () => {
     }));
     const confirm = vi.fn(() => false);
     vi.stubGlobal('confirm', confirm);
-    await renderBoard();
+    const at = await renderBoard();
     openEditor('Report');
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     expect(confirm).toHaveBeenLastCalledWith(CONFIRM.deleteTask(2, '15m'));
-    // It reads the clock as it ticks.
-    await settle(30_000);
+    // It counts to the minute App hands it, the one the sheet's × reads.
+    at(NOW + MINUTE_MS);
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     expect(confirm).toHaveBeenLastCalledWith(CONFIRM.deleteTask(2, '16m'));
   });

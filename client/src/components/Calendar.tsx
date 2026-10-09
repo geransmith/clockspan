@@ -70,7 +70,7 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
         <PeriodReset kind="month" from={month} today={today} onFrom={step} prevRef={prevRef} />
       </header>
       <PeriodNav kind="month" label={period.label} from={month} today={today} onFrom={step} noReset prevRef={prevRef} />
-      {failed ? <LoadFailed title={LOAD_FAILED.range} onRetry={retry} /> : !weeks && <div className="sheet-loading" aria-busy="true" />}
+      {failed ? <LoadFailed title={LOAD_FAILED.range} onRetry={retry} /> : !weeks && <div className="loading" aria-busy="true" />}
       {weeks && (
         <>
           {count && (

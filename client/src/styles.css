@@ -209,12 +209,14 @@ button {
   color: var(--ok-ink);
   font-size: 0.92rem;
 }
-/* A settings result's live region is always there; empty, it gives back the gap before it. */
-.stack > .success:empty {
-  margin-top: -12px;
-}
-.settings-fields > .success:empty {
-  margin-top: -10px;
+/* Live regions that stay on the page so what arrives is heard: empty, they stay in the
+   accessibility tree but out of the flow, so they add no gap. */
+.success:empty,
+.punch-order:empty,
+.today-offer-over:empty,
+.priorities-notice:empty,
+.board-notice:empty {
+  position: absolute;
 }
 .stack {
   display: flex;
@@ -359,9 +361,9 @@ button {
   opacity: 0.35;
   cursor: not-allowed;
 }
-/* A tick kept while its row's box is blank: the browser's own disabled look still reads as ticked,
-   which 0.35 would fade to nearly nothing in the light theme. */
-.checkbox:disabled:checked {
+/* A tick kept while its priority row's box is blank: the browser's own disabled look still reads
+   as ticked, which 0.35 would fade to nearly nothing in the light theme. */
+.priority-tick .checkbox:disabled:checked {
   opacity: 1;
 }
 .switch {
@@ -582,8 +584,10 @@ button {
 .category-option:hover {
   background: var(--surface-2);
 }
-/* Inside the list's scroll box, where an outer ring would be clipped. */
-.category-option:focus-visible {
+/* Inside a scroll box (the category list, the settings tab strip), where an outer ring would be
+   clipped. */
+.category-option:focus-visible,
+.tab:focus-visible {
   outline-offset: -2px;
 }
 .category-option[aria-selected='true'] {
@@ -616,13 +620,14 @@ button {
   padding: 10px 14px;
   border-radius: var(--radius-sm);
   font-size: 0.92rem;
+  overflow-wrap: anywhere;
 }
 .notice--danger {
   background: var(--danger-soft);
   color: var(--danger-ink);
 }
-/* The Priorities nudge and the board notice: warm but not alarming, with the buttons on the
-   next line on phones. */
+/* The Priorities nudge, the left-open notice, the morning offer and the board notice: warm but
+   not alarming, with the buttons on the next line on phones. */
 .notice--gentle {
   background: var(--warn-soft);
   display: flex;
@@ -678,13 +683,10 @@ button {
 }
 /* With the board on, the same notice holds the leftovers and the routines due today, each a box
    to tick: a title that wraps keeps its box at the top, as in the planner. */
-.today-offer .inline-check {
+.today-offer .inline-check,
+.plan-next-list .inline-check {
   align-items: flex-start;
   min-height: 32px;
-}
-/* The over line's live region is always there under the routines; empty, it gives back the gap. */
-.today-offer-over:empty {
-  margin-top: -4px;
 }
 /* End-of-day notice on the timeclock. */
 .notice--celebrate {
@@ -805,13 +807,8 @@ button {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-.sheet-loading {
+.loading {
   min-height: 200px;
-}
-/* The punch-order notice's live region (Sheet.tsx) stays on the page while empty; out of the
-   flow then, so it adds no gap. */
-.punch-order:empty {
-  position: absolute;
 }
 /* A load that failed (LoadFailed): the message and its retry button, side by side when they fit. */
 .load-failed {
@@ -855,7 +852,8 @@ button {
   gap: 6px;
 }
 /* Five buttons (Customize, Board, History, Settings, the user) and the brand's name don't fit a
-   375 px phone: the name goes from sight there, still the button's name, and the logo stays. */
+   375 px phone: the name goes from sight there, still the button's name, and the logo stays.
+   From 640 px the buttons' words would overflow the row, so they wait for 760 px. */
 .topbar-row--crowded .brand-name {
   position: absolute;
   width: 1px;
@@ -872,6 +870,14 @@ button {
     overflow: visible;
     clip-path: none;
     white-space: normal;
+  }
+}
+.topbar-row--crowded .btn-text {
+  display: none;
+}
+@media (min-width: 760px) {
+  .topbar-row--crowded .btn-text {
+    display: inline;
   }
 }
 .user-chip {
@@ -987,7 +993,7 @@ button {
 /* One row at every width, the tiles sharing it equally whatever their count: each tile spans
    three rows, so each takes a column of its own (two in History's day panel with Show hours
    off, three elsewhere; the timeclock's four are below). On a phone the type shrinks instead of
-   the tiles stacking, which put the punch rows and the priorities most of a screen further
+   the tiles stacking, which would push the punch rows and the priorities most of a screen
    down. Each tile's label, value and sub-line sit on rows shared by the tiles in a row
    (subgrid), so a label that wraps to two lines ("Clock out at" on a narrow phone) doesn't drop
    that tile's number below the others. */
@@ -1277,10 +1283,6 @@ button {
   flex-direction: column;
   gap: 8px;
 }
-/* The warning's live region is always there; empty, it gives back the gap before it. */
-.priorities-notice:empty {
-  margin-top: -8px;
-}
 /* The last column is the ×'s, on every row: a written row has one, and a row keeps its width as
    its first letter is typed. */
 .priority-row {
@@ -1440,8 +1442,7 @@ button {
   align-items: center;
   gap: 12px 10px;
 }
-/* Alone, the check spans the card, as it did as the stack's own row: a press anywhere along it
-   ticks the box. */
+/* Alone, the check spans the card, so a press anywhere along it ticks the box. */
 .timer-add > .timer-add-priority:only-child {
   flex: auto;
 }
@@ -1939,7 +1940,7 @@ button.log-label:hover {
   border-top: 0;
 }
 /* Marks, not controls: a check for done, a dash for not done, an amber dot for work off the
-   plan. Nothing box-shaped, since a square here read as a checkbox waiting to be ticked. */
+   plan. Nothing box-shaped, since a square would read as a checkbox waiting to be ticked. */
 .retro-tick {
   grid-area: tick;
   width: 20px;
@@ -2045,10 +2046,6 @@ button.log-label:hover {
   gap: 6px;
   overflow-wrap: anywhere;
 }
-.plan-next-list .inline-check {
-  align-items: flex-start;
-  min-height: 32px;
-}
 .plan-next-extra {
   display: flex;
   align-items: center;
@@ -2078,7 +2075,7 @@ button.log-label:hover {
 }
 
 /* ---------- history ---------- */
-/* Days | Review switch. */
+/* History's Days | Review switch and the board's column switch. */
 .segmented {
   display: inline-flex;
   align-self: flex-start;
@@ -2199,7 +2196,7 @@ button.log-label:hover {
   color: var(--text-2);
   line-height: 1;
 }
-/* "7:39" rather than "7h 39m", which wrapped at the space in a phone-width cell. The smallest size
+/* "7:39" rather than "7h 39m", which would wrap at the space in a phone-width cell. The smallest size
    keeps "10:15" inside a seven-column cell on a 320px screen. */
 .calendar-worked {
   font-size: 0.6rem;
@@ -2479,10 +2476,6 @@ button.log-label:hover {
     grid-column: auto;
   }
 }
-/* The notice's live region is always there; empty, it gives back the gap before it. */
-.board-notice:empty {
-  margin-top: -12px;
-}
 .board-switch .segment {
   padding: 0 12px;
 }
@@ -2566,10 +2559,6 @@ button.log-label:hover {
   box-shadow: var(--shadow);
   cursor: grabbing;
 }
-.board-card--lifted .board-card-title {
-  font-weight: 550;
-  line-height: 24px;
-}
 .board-card--lifted .board-grip {
   cursor: inherit;
 }
@@ -2594,11 +2583,12 @@ button.log-label:hover {
   border: 0;
   background: none;
   text-align: left;
+}
+/* Two lines at most in a narrow column; the editor shows the whole title. The drag copy (Lifted)
+   has this span without the button. */
+.board-card-title {
   font-weight: 550;
   line-height: 24px;
-}
-/* Two lines at most in a narrow column; the editor shows the whole title. */
-.board-card-title {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -2737,6 +2727,7 @@ dialog.dialog::backdrop {
 .dialog-head h2 {
   flex: 1;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 .save-status {
   margin-right: 4px;
@@ -3026,7 +3017,7 @@ dialog.dialog::backdrop {
   .category-chip {
     --hit-inset: -9px -4px;
   }
-  /* A 24 px dot, 8 px from the next, centred in a row 44 px tall: 44 × 32 px. */
+  /* A 24 px dot, 8 px from the next, centred in a row 44 px tall: 32 × 44 px. */
   .swatch {
     --hit-inset: -10px -4px;
   }
@@ -3071,9 +3062,10 @@ dialog.dialog::backdrop {
     --hit-inset: -11px -5px -11px -17px;
   }
   /* 22 px square 10 px in from a card's left edge, 8 px from the title (or the row's number, which
-     takes no taps) on its right, with cards 8 px apart: 44 × 40 px, 3 px into the gap. */
+     takes no taps) on its right, with cards 8 px apart: 36 × 44 px, half the gap to the title and
+     3 px into the gap between cards. */
   .board-tick {
-    --hit-inset: -11px -8px -11px -10px;
+    --hit-inset: -11px -4px -11px -10px;
   }
   /* 20 × 24 px, 10 px in from a card's left edge in a column with 12 px of padding, 8 px from the
      tick or the title on its right, with cards 8 px apart: 38 × 44 px, 2 px into the gap. */
@@ -3165,10 +3157,10 @@ dialog.dialog::backdrop {
   }
 }
 /* From 900 px a grip shows before the tick of In progress and Done: each reaches half the 8 px
-   gap between them. */
+   gap between them, and the tick half the gap to the title. */
 @media (pointer: coarse) and (min-width: 900px) {
   .board-grip + .board-tick {
-    --hit-inset: -11px -8px -11px -4px;
+    --hit-inset: -11px -4px;
   }
 }
 
@@ -3183,9 +3175,10 @@ dialog.dialog::backdrop {
 }
 
 /* ---------- forced colors ---------- */
-/* The switch and the pressed and selected states are drawn only with backgrounds and shadows,
-   which forced-colors mode repaints or drops. The !important outranks each control's own, more
-   specific, state rule and the tints on what is inside it. */
+/* The switch, the pressed and selected states and the marks drawn only as a background (the
+   calendar's dots and bars, the running dot and progress, the live dot, the retro's dash and dot)
+   use backgrounds and shadows, which forced-colors mode repaints or drops. The !important outranks
+   each control's own, more specific, state rule and the tints on what is inside it. */
 @media (forced-colors: active) {
   .switch {
     border: 1px solid ButtonText;
@@ -3210,5 +3203,19 @@ dialog.dialog::backdrop {
   [aria-pressed='true'] .chip-num {
     background: HighlightText !important;
     color: Highlight !important;
+  }
+  .calendar-dot,
+  .calendar-bar > span,
+  .running-dot,
+  .running-progress,
+  .tile--live .tile-value::after,
+  .retro-tick::before {
+    forced-color-adjust: none;
+    background: CanvasText !important;
+  }
+  /* A selected day's marks sit on its Highlight. */
+  [aria-pressed='true'] .calendar-dot,
+  [aria-pressed='true'] .calendar-bar > span {
+    background: HighlightText !important;
   }
 }

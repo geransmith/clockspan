@@ -230,7 +230,7 @@ describe('SettingsDialog', () => {
     await renderDialog();
     // The defaults stand in: their start buttons are not the user's, so no box shows them.
     expect(screen.queryByLabelText('Work day hours')).toBeNull();
-    expect(document.querySelector('[role="tabpanel"] .sheet-loading')).toBeTruthy();
+    expect(document.querySelector('[role="tabpanel"] .loading')).toBeTruthy();
     answer.resolve(makeSettings({ board: true }));
     await settle();
     expect(screen.getByRole('tab', { name: 'Board', hidden: true }).getAttribute('aria-selected')).toBe('true');
