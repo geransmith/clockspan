@@ -1,4 +1,5 @@
 import type { AlarmSettings, Settings } from '../types';
+import { CHECK_PUNCHES } from './copy';
 import { counted, formatDuration, formatDurationCeil } from './format';
 import type { TimeclockResult } from './timeclock';
 
@@ -50,6 +51,13 @@ export function timeclockTiles(tc: TimeclockResult, o: TileOptions): { lunch: Ti
     }
   }
 
+  if (tc.outOfOrder) {
+    // The worked time and the end follow the punches in time order, which is broken: any number
+    // would be a guess, and the sheet's notice names the punch out of place.
+    const check: TileView = { value: '—', sub: CHECK_PUNCHES, tone: '' };
+    return { lunch, worked: check, clockOut: check };
+  }
+
   const clockOut: TileView = { value: '—', sub: 'Clock in to see your end time', tone: '' };
   if (!o.isToday && tc.state === 'working') {
     // A past day is judged at its end, so one still working there was never clocked out.
@@ -72,11 +80,12 @@ export function timeclockTiles(tc: TimeclockResult, o: TileOptions): { lunch: Ti
       // With overtime off (exempt, salaried work) there's no approval, and time past the day is just later.
       clockOut.tone = o.overtimeApproved || !o.overtimeApproval ? 'tile--accent' : 'tile--danger';
       clockOut.sub = o.overtimeApproval
-        ? `Over by ${formatDurationCeil(tc.overSeconds)}${o.overtimeApproved ? ' · OT approved' : ''}`
-        : `${formatDurationCeil(tc.overSeconds)} past your day`;
+        ? `Over by ${formatDuration(tc.overSeconds)}${o.overtimeApproved ? ' · OT approved' : ''}`
+        : `${formatDuration(tc.overSeconds)} past your day`;
     } else {
       clockOut.tone = !o.overtimeApproved && secs <= warnFromSeconds(o.alarms.clockOut) ? 'tile--warn' : '';
-      clockOut.sub = tc.state === 'working' ? `In ${formatDurationCeil(secs)}` : 'If you return now';
+      // At lunch the end time already holds the rest of the planned lunch.
+      clockOut.sub = tc.state === 'working' ? `In ${formatDurationCeil(secs)}` : tc.state === 'at-lunch' ? 'After lunch' : 'If you return now';
     }
   }
 

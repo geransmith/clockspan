@@ -17,6 +17,8 @@ interface Props {
   onCommit: (ms: number) => void;
   /** Focus entered or left the field; a field removed with focus inside reports leaving. */
   onFocusChange?: (focused: boolean) => void;
+  /** The id of a message saying this time is wrong: the field reads as invalid and is described by it. */
+  errorId?: string;
 }
 
 /**
@@ -39,6 +41,7 @@ function Field({
   label,
   onCommit,
   onFocusChange,
+  errorId,
   refocus,
   onDiscard,
 }: Props & { refocus: boolean; onDiscard: (keepFocus: boolean) => void }) {
@@ -55,6 +58,9 @@ function Field({
   const time = useMemo(() => msToTime(value), [value]);
   const fieldProps = {
     'aria-label': `${label} time`,
+    // React Aria puts both on every segment, which is what a screen reader lands on.
+    'aria-describedby': errorId,
+    isInvalid: errorId != null,
     value: time,
     onChange: (t: Time | null) => {
       if (t) onCommit(timeToMs(t, date));
@@ -86,8 +92,7 @@ function Field({
     ref,
   );
   // The cleanup also reports a field removed with focus inside, which Chrome and Firefox don't
-  // announce with a blur: the card unmounting, its pair removed or moved across lunch, and
-  // Escape's remount.
+  // announce with a blur: the card unmounting, its pair removed, and Escape's remount.
   useEffect(() => {
     if (!focused || !onFocusChange) return;
     onFocusChange(true);

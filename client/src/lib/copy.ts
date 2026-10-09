@@ -256,8 +256,15 @@ export const BANNERS_MORE = (n: number) => counted(n, 'more alert');
 export const SECOND_MEAL_NOTE = (overdue: boolean, at: string, worked: string) =>
   `Second meal period ${overdue ? 'was due' : 'due'} by ${at} (${worked} worked)`;
 
-/** Above the sheet when set punch times don't alternate in, out, in, out. */
-export const PUNCH_ORDER = 'Punch times are out of order. Check that ins and outs alternate.';
+/**
+ * Above the sheet when set punch times don't alternate in, out, in, out: the row out of place and
+ * the one it should come after, as the card names them, with their times (`afterAt` null: empty).
+ */
+export const PUNCH_ORDER = (row: string, at: string, after: string, afterAt: string | null) =>
+  afterAt == null ? `${row} (${at}) has no ${after} before it.` : `${row} (${at}) is earlier than ${after} (${afterAt}).`;
+
+/** The Worked and Clock out at tiles' line while the punches are out of order, where any number would be a guess. */
+export const CHECK_PUNCHES = 'Check punches';
 
 /** A session logged without a label, wherever sessions are listed. */
 export const UNTITLED_SESSION = 'Untitled session';

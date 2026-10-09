@@ -16,12 +16,13 @@ import {
   lunchRowsShown,
   nextPunchPosition,
   overtimeOn,
+  punchLabel,
   removePunchPair,
   secondMealApplies,
   type ExtraPair,
   type TimeclockResult,
 } from '../lib/timeclock';
-import { MAX_PUNCHES, samePunches } from '../../../shared/punches.js';
+import { MAX_PUNCHES, punchesKey, samePunches } from '../../../shared/punches.js';
 import { SETTING_LIMITS } from '../../../shared/settings.js';
 import type { WeekHours } from '../lib/week';
 import type { Punch } from '../types';
@@ -50,6 +51,8 @@ interface Props {
   onWorkMinutesChange: (minutes: number | null) => void;
   /** A punch time is being typed on today's sheet, or no longer is: the app holds today's alarms meanwhile. */
   onEditingChange: (editing: boolean) => void;
+  /** The id of the sheet's punch-order notice, which describes the punch out of place. */
+  orderNotice: string;
 }
 
 export function Timeclock({
@@ -66,6 +69,7 @@ export function Timeclock({
   onOvertimeChange,
   onWorkMinutesChange,
   onEditingChange,
+  orderNotice,
 }: Props) {
   const { settings, loaded } = useSettings();
   // The day's target and the settings its timeclock ran on (`daySettings`).
@@ -75,11 +79,19 @@ export function Timeclock({
   const otFeature = settings.overtimeApproval;
   const otOn = overtimeOn(settings, overtimeApproved);
 
+  // The Clock out this card last sent, so the day turning done on a list it didn't send (a
+  // refresh bringing another device's punches) isn't a moment. The time, not the whole list: the
+  // store shows its merge of a save, where another device's change to another row can stand.
+  const [sentOut, setSentOut] = useState<number | null>();
+  const send = (list: Punch[]) => {
+    setSentOut(clockOutAtOf(list));
+    onChange(list);
+  };
   const setAt = (position: number, at: number | null) => {
     // A punch is typed or tapped: the gesture iOS wants before any sound, so the day-complete
     // clip (played as the change renders) and the day's alarms can be heard.
     unlockAudio();
-    onChange(punches.map((p) => (p.position === position ? { ...p, at } : p)));
+    send(punches.map((p) => (p.position === position ? { ...p, at } : p)));
   };
   // The rows from before the last "Add extra out / in". Removing the pair it made while the rows
   // are still the ones it made (by value: a save's answer, or a refresh that changed something
@@ -90,14 +102,18 @@ export function Timeclock({
   const [added, setAdded] = useState<Punch[] | null>(null);
   const addPair = () => {
     setAdded(punches);
-    onChange(addPunchPair(punches));
+    send(addPunchPair(punches));
   };
+  // The pair being typed in keeps the block it had when the focus came in: a time on its way
+  // (10:3 of 10:30) can sit on the other side of lunch, and a move remounts the fields.
+  const [typing, setTyping] = useState<{ out: number; before: boolean } | null>(null);
   const removePair = (outPosition: number) => {
     // Removing a pair can end the day (an Add undone, or a stray Out after the Clock out gone) or
     // reach the week's target (a removed break counts as worked again), so both clips need this
     // gesture.
     unlockAudio();
-    onChange(added && outPosition === added.length - 1 && samePunches(addPunchPair(added), punches) ? added : removePunchPair(punches, outPosition));
+    setTyping(null);
+    send(added && outPosition === added.length - 1 && samePunches(addPunchPair(added), punches) ? added : removePunchPair(punches, outPosition));
   };
 
   const tiles = timeclockTiles(tc, {
@@ -110,12 +126,22 @@ export function Timeclock({
   });
 
   const celebration = tc.state === 'done' && tc.clockOutAt != null ? pickCelebration(tc.clockOutAt) : null;
-  // The burst and the sound mark the day *becoming* done while the card is open, not a day
-  // that already was when it mounted (the sheet keys this card by date); the same clock-out
-  // set again still counts. The burst flies from the notice. Done depends on the punches
-  // and the clock, never on the settings, so their arrival never makes a moment, and this needs
-  // no wait for them.
-  const { anchor: noticeRef, burst: dayBurst } = useCelebration<HTMLDivElement>(useBecameTrue(celebration != null), 'dayDone');
+  // Punches that changed since the last render to a list this card didn't send: that render is
+  // "not known" to the celebration, and the next one starts from there.
+  const key = punchesKey(punches);
+  const [seenKey, setSeenKey] = useState(key);
+  const fromElsewhere = key !== seenKey && clockOutAtOf(punches) !== sentOut;
+  if (key !== seenKey) {
+    setSeenKey(key);
+    if (fromElsewhere) setSentOut(undefined);
+  }
+  // The burst and the sound mark the day *becoming* done while the card is open, through this
+  // card's punches or the clock reaching a Clock out typed ahead: not a day that already was
+  // when it mounted (the sheet keys this card by date), nor one another device's punches finish.
+  // The same clock-out set again still counts. The burst flies from the notice. Done depends on
+  // the punches and the clock, never on the settings, so their arrival never makes a moment, and
+  // this needs no wait for them.
+  const { anchor: noticeRef, burst: dayBurst } = useCelebration<HTMLDivElement>(useBecameTrue(fromElsewhere ? null : celebration != null), 'dayDone');
   // The same for the week's target, on today's sheet: the clock running past it, or a punch
   // that gets it there. Unknown until the settings are in, or a shorter saved week than the
   // default would read as the target just met.
@@ -129,7 +155,7 @@ export function Timeclock({
 
   // ----- rows -----
   const byPos = new Map(punches.map((p) => [p.position, p]));
-  const pairs = extraPairs(punches);
+  const pairs = extraPairs(punches).map((p) => (p.out.position === typing?.out ? { ...p, beforeLunch: typing.before } : p));
   const before = pairs.filter((p) => p.beforeLunch);
   const after = pairs.filter((p) => !p.beforeLunch);
   const clockOutPos = clockOutPosition(punches);
@@ -137,6 +163,7 @@ export function Timeclock({
   const lunchRows = lunchRowsShown(punches, settings);
   // Today, until the day is done, the next empty row's Now is the filled button: one obvious tap.
   const nextPos = isToday && tc.state !== 'done' ? nextPunchPosition(punches, lunchInPunchOrder(punches, tc, settings)) : null;
+  const name = (position: number) => punchLabel(punches, position, pairs);
   const row = (punch: Punch, label: string) => (
     <PunchRow
       key={punch.position}
@@ -148,34 +175,40 @@ export function Timeclock({
       // A punch after the clock-in is expected to come after it; the time field's AM/PM guess uses that.
       anchorAt={punch.position === 0 ? null : tc.clockIn}
       next={punch.position === nextPos}
+      errorId={punch.position === tc.outOfOrder?.position ? orderNotice : undefined}
       // Only a time field on today's sheet holds today's alarms: Now, × and the pair buttons
       // save at once.
       onFocusChange={isToday ? onEditingChange : undefined}
       onSet={(at) => setAt(punch.position, at)}
     />
   );
-  const fixedRow = (position: number, label: string) => {
+  const fixedRow = (position: number) => {
     const p = byPos.get(position);
-    return p ? row(p, label) : null;
+    return p ? row(p, name(position)) : null;
   };
-  // Pairs are numbered in display order. A pair whose Out is edited across the lunch
-  // boundary re-mounts in the other block; its time is already saved by then. The remove
-  // button spans both rows so it reads as "remove this pair", not "clear the Out".
-  const pairBlock = (list: ExtraPair[], offset: number) =>
+  // Pairs are numbered in display order. A pair whose Out was edited across the lunch boundary
+  // moves to the other block once the focus leaves it. The remove button spans both rows so it
+  // reads as "remove this pair", not "clear the Out".
+  const pairBlock = (list: ExtraPair[]) =>
     list.length > 0 && (
       <div className="punch-extras">
-        {list.map((pair, i) => {
-          const n = offset + i + 1;
+        {list.map((pair) => {
+          const [out, back] = [name(pair.out.position), name(pair.in.position)];
           return (
-            <div key={pair.out.position} className="punch-pair">
+            <div
+              key={pair.out.position}
+              className="punch-pair"
+              onFocus={() => setTyping({ out: pair.out.position, before: pair.beforeLunch })}
+              onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setTyping(null)}
+            >
               <div className="punch-pair-rows">
-                {row(pair.out, `Out ${n}`)}
-                {row(pair.in, `In ${n}`)}
+                {row(pair.out, out)}
+                {row(pair.in, back)}
               </div>
               <button
                 className="btn btn-icon punch-remove"
                 onClick={() => removePair(pair.out.position)}
-                aria-label={`Remove Out ${n} / In ${n}`}
+                aria-label={`Remove ${out} / ${back}`}
                 title="Remove this out / in pair"
               >
                 <Trash />
@@ -247,12 +280,12 @@ export function Timeclock({
       )}
 
       <div className="punches">
-        {fixedRow(0, 'Clock in')}
-        {pairBlock(before, 0)}
-        {lunchRows && fixedRow(1, 'Lunch out')}
-        {lunchRows && fixedRow(2, 'Lunch in')}
-        {pairBlock(after, before.length)}
-        {clockOutPos != null && fixedRow(clockOutPos, 'Clock out')}
+        {fixedRow(0)}
+        {pairBlock(before)}
+        {lunchRows && fixedRow(1)}
+        {lunchRows && fixedRow(2)}
+        {pairBlock(after)}
+        {clockOutPos != null && fixedRow(clockOutPos)}
         {punches.length + 2 <= MAX_PUNCHES && (
           <button className="btn btn-ghost punch-add" onClick={addPair}>
             <Plus />
@@ -262,6 +295,12 @@ export function Timeclock({
       </div>
     </div>
   );
+}
+
+/** The Clock out row's time; null while it is empty or the list has none. */
+function clockOutAtOf(punches: Punch[]): number | null {
+  const pos = clockOutPosition(punches);
+  return punches.find((p) => p.position === pos)?.at ?? null;
 }
 
 /**
@@ -312,6 +351,7 @@ function PunchRow({
   hour12,
   anchorAt,
   next,
+  errorId,
   onFocusChange,
   onSet,
 }: {
@@ -323,13 +363,24 @@ function PunchRow({
   anchorAt: number | null;
   /** The row the next punch belongs in. */
   next: boolean;
+  /** See `TimeField.errorId`. */
+  errorId?: string;
   onFocusChange?: (focused: boolean) => void;
   onSet: (at: number | null) => void;
 }) {
   return (
     <div className={`punch-row punch-row--${punch.kind}`}>
       <span className="punch-label">{label}</span>
-      <TimeField value={punch.at} date={date} hour12={hour12} anchorAt={anchorAt} label={label} onCommit={onSet} onFocusChange={onFocusChange} />
+      <TimeField
+        value={punch.at}
+        date={date}
+        hour12={hour12}
+        anchorAt={anchorAt}
+        label={label}
+        onCommit={onSet}
+        onFocusChange={onFocusChange}
+        errorId={errorId}
+      />
       <button
         className={`btn ${next ? 'btn-primary' : 'btn-ghost'} punch-now`}
         onClick={() => onSet(floorToMinute(Date.now()))}

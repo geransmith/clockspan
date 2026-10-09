@@ -1,10 +1,11 @@
-import { lazy, memo, Suspense, useEffect, useState } from 'react';
+import { lazy, memo, Suspense, useEffect, useId, useState } from 'react';
 import { useBoardState, useBoardStore, useCategoryPick } from '../hooks/useBoard';
 import { useDay } from '../hooks/useDay';
 import { useLeftOpen } from '../hooks/useLeftOpen';
 import { useRange } from '../hooks/useRange';
 import { useRecurringAnswered } from '../hooks/useRecurringAnswered';
 import { useSettings } from '../hooks/useSettings';
+import { useTimeFormat } from '../hooks/useTimeFormat';
 import { warnSaveFailed } from '../lib/alerts';
 import { LOAD_FAILED, PUNCH_ORDER } from '../lib/copy';
 import { startOfWeek } from '../../../shared/dates.js';
@@ -15,9 +16,9 @@ import { isOneOff } from '../lib/priorities';
 import { dueRecurring } from '../lib/recurring';
 import { CARD_SIDES } from '../../../shared/settings.js';
 import { focusOf } from '../lib/retro';
-import { clampToDay, dayTimeclock, type TimeclockState } from '../lib/timeclock';
+import { clampToDay, dayTimeclock, punchLabel, type TimeclockResult, type TimeclockState } from '../lib/timeclock';
 import { weekHours } from '../lib/week';
-import type { CardId, CardSide } from '../types';
+import type { CardId, CardSide, Punch } from '../types';
 import { CardFrame, type SheetCard } from './CardFrame';
 import { FocusTimer } from './FocusTimer';
 import { LoadFailed } from './LoadFailed';
@@ -53,6 +54,7 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
   const { days: weekDays } = useRange(startOfWeek(date), date);
   const week = weekDays ? weekHours(weekDays, settings, today, now) : null;
   const focus = focusOf(day?.sessions ?? []);
+  const orderNotice = useId();
   // Today's list with no one-off written yet (a routine on it is no plan) offers what the last
   // planned day left unticked, in the morning notice. With the board on, a task the board holds in
   // Later or as done stays there, and the rest come back beside the recurring priorities due today
@@ -140,6 +142,7 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
             onOvertimeChange={(v) => void store.setOvertimeApproved(date, v)}
             onWorkMinutesChange={(m) => void store.setWorkMinutes(date, m)}
             onEditingChange={onPunchEditing}
+            orderNotice={orderNotice}
           />
         );
       case 'priorities':
@@ -193,7 +196,8 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
     const cards: SheetCard[] = entries.map((l, i) => ({
       id: l.id,
       body: render(l.id),
-      aside: l.id === 'timeclock' ? <StatePill state={tc.state} isToday={isToday} /> : undefined,
+      // Out of order, the state is only 'working' to keep the alarms armed; the notice says why.
+      aside: l.id === 'timeclock' && !tc.outOfOrder ? <StatePill state={tc.state} isToday={isToday} /> : undefined,
       customize: customize
         ? {
             onHide: () => setVisible(l.id, false),
@@ -216,7 +220,7 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
 
   return (
     <div className={sheetClass}>
-      {tc.outOfOrder && <div className="notice notice--danger">{PUNCH_ORDER}</div>}
+      {tc.outOfOrder && <PunchOrder id={orderNotice} punches={day.punches} slip={tc.outOfOrder} />}
       {columns
         ? CARD_SIDES.map((side) => (
             <div key={side} className="sheet-col">
@@ -238,6 +242,20 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
     </div>
   );
 });
+
+/** The punch out of place and the one it should come after, named and timed as the card shows them. */
+function PunchOrder({ id, punches, slip }: { id: string; punches: Punch[]; slip: NonNullable<TimeclockResult['outOfOrder']> }) {
+  const { formatTime } = useTimeFormat();
+  const time = (position: number) => {
+    const at = punches.find((p) => p.position === position)?.at;
+    return at == null ? null : formatTime(at);
+  };
+  return (
+    <div id={id} className="notice notice--danger">
+      {PUNCH_ORDER(punchLabel(punches, slip.position), time(slip.position)!, punchLabel(punches, slip.after), time(slip.after))}
+    </div>
+  );
+}
 
 function StatePill({ state, isToday }: { state: TimeclockState; isToday: boolean }) {
   // A past day is judged at its end, so one still "working" there was never clocked out.

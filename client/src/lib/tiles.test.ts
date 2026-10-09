@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { atTime, pad2 } from '../../../shared/dates.js';
 import { punchesAt, TEST_SETTINGS } from '../test/fixtures';
+import { CHECK_PUNCHES } from './copy';
 import type { Punch, Settings } from '../types';
 import { addPunchPair, clampToDay, computeTimeclock, dayTimeclock } from './timeclock';
 import { focusTile, timeclockTiles, type TileOptions } from './tiles';
@@ -98,14 +99,24 @@ describe('Clock out at', () => {
     expect(tiles(afterLunch, at(16, 20), { overtimeApproved: true }).clockOut.tone).toBe('');
   });
 
-  it('shows where the day would end on a break', () => {
-    expect(tiles(punchesAt(at(8), at(12)), at(12, 10)).clockOut.sub).toBe('If you return now');
+  it('shows where the day would end on a break, and after the lunch still to come at lunch', () => {
+    // Out 1 at 10:00 for ten minutes: 2 h worked, then 6 h and the 30 min lunch from 10:10.
+    expect(tiles(punchesAt(at(8), null, null, at(10), null, null), at(10, 10)).clockOut).toEqual({ value: '16:40', sub: 'If you return now', tone: '' });
+    // At lunch since 12:00: the 30 min lunch ends at 12:30, and 4 h are left after it.
+    expect(tiles(punchesAt(at(8), at(12)), at(12, 10)).clockOut).toEqual({ value: '16:30', sub: 'After lunch', tone: '' });
   });
 
   it('reads time past the day as overtime, approved or not, or as later when overtime is off', () => {
     expect(tiles(afterLunch, at(17)).clockOut).toEqual({ value: '16:30', sub: 'Over by 30m', tone: 'tile--danger' });
     expect(tiles(afterLunch, at(17), { overtimeApproved: true }).clockOut).toEqual({ value: '16:30', sub: 'Over by 30m · OT approved', tone: 'tile--accent' });
     expect(tiles(afterLunch, at(17), { overtimeApproval: false }).clockOut).toEqual({ value: '16:30', sub: '30m past your day', tone: 'tile--accent' });
+  });
+
+  it('rounds the time past the day down to the minute, as the Worked tile does', () => {
+    const t = tiles(afterLunch, at(17) + 30_000);
+    expect(t.worked.sub).toBe('30m over target');
+    expect(t.clockOut.sub).toBe('Over by 30m');
+    expect(tiles(afterLunch, at(17) + 30_000, { overtimeApproval: false }).clockOut.sub).toBe('30m past your day');
   });
 
   it('says On target, not over by 0m, on a break taken at the target and for the first minute past it', () => {
@@ -153,6 +164,19 @@ describe('a past day', () => {
     const lunchTaken = pastTiles(afterLunch);
     expect(lunchTaken.lunch).toEqual({ value: '13:00', sub: 'Taken at 12:00', tone: 'tile--ok' });
     expect(lunchTaken.clockOut.sub).toBe('No clock-out recorded');
+  });
+});
+
+describe('punches out of order', () => {
+  it('shows a dash and Check punches on Worked and Clock out at, today and on a past day', () => {
+    // Lunch in typed as 11:00, before the 12:00 Lunch out: the sheet's notice names the slip.
+    const tangled = punchesAt(at(9), at(12), at(11), at(17));
+    const check = { value: '—', sub: CHECK_PUNCHES, tone: '' };
+    for (const t of [tiles(tangled, at(17, 30)), pastTiles(tangled)]) {
+      expect(t.worked).toEqual(check);
+      expect(t.clockOut).toEqual(check);
+      expect(t.lunch.sub).toBe('Taken at 12:00');
+    }
   });
 });
 

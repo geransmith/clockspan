@@ -38,8 +38,12 @@ export interface TimeclockResult {
   secondMealBy: number | null;
   /** 'taken' once any non-lunch break starts after lunch out. */
   secondMealStatus: SecondMealStatus;
-  /** The punch times typed so far, ahead of now included, don't alternate in/out chronologically. */
-  outOfOrder: boolean;
+  /**
+   * The punch times typed so far, ahead of now included, don't alternate in/out chronologically:
+   * the first punch out of place and the punch it should come after, whose time can be empty
+   * (`orderSlip`). Null while they do.
+   */
+  outOfOrder: { position: number; after: number } | null;
 }
 
 const LUNCH_OUT_POSITION = 1;
@@ -96,13 +100,13 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
     clockOutStatus: 'none',
     secondMealBy: null,
     secondMealStatus: 'none',
-    outOfOrder: false,
+    outOfOrder: null,
   };
   if (clockIn == null) return empty;
 
   const typed = punches.filter((p): p is Punch & { at: number } => p.at != null).sort((a, b) => a.at - b.at || a.position - b.position);
   // Order is checked over every time typed, so a slip in one still ahead shows as it is typed.
-  const outOfOrder = !typed.every((p, i) => p.kind === kindForPosition(i));
+  const outOfOrder = orderSlip(typed, byPos, finalPos);
   const set = typed.filter((p) => p.at <= upTo);
 
   // Never let a future clock-in produce negative time.
@@ -202,6 +206,24 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
 }
 
 /**
+ * Null while the set punches, sorted by time, alternate in, out, in, out; else the punch out of
+ * place and the one it should come after. Nothing comes before the Clock in, and an In comes after
+ * its own Out. Past those, two outs follow each other: the In that should close the first is
+ * empty or later than the second, or the first is a Clock out that came early.
+ */
+function orderSlip(typed: (Punch & { at: number })[], byPos: Map<number, number | null>, finalPos: number | null): TimeclockResult['outOfOrder'] {
+  const i = typed.findIndex((p, k) => p.kind !== kindForPosition(k));
+  if (i < 0) return null;
+  const first = typed[0]!;
+  if (first.position !== 0) return { position: first.position, after: 0 };
+  const early = typed.find((p) => p.kind === 'in' && p.position > 0 && (byPos.get(p.position - 1) ?? Infinity) > p.at);
+  if (early) return { position: early.position, after: early.position - 1 };
+  // With every In after its Out, the slip is two outs in a row: i is at least 2.
+  const [out, next] = [typed[i - 1]!, typed[i]!];
+  return out.position === finalPos ? { position: out.position, after: next.position } : { position: next.position, after: out.position + 1 };
+}
+
+/**
  * The settings a day's timeclock runs on: its own work-day length when one was set for it (a
  * half day), the usual one otherwise. The sheet, the alarms, the calendar and the review all
  * go through this, so they agree on what a day's target was.
@@ -281,6 +303,19 @@ export function extraPairs(punches: Punch[]): ExtraPair[] {
     pairs.push({ out, in: back, beforeLunch: lunchOut == null || (out.at != null && out.at < lunchOut) });
   }
   return pairs;
+}
+
+/**
+ * A row's name as the card shows it. The extra pairs are numbered in the card's order, those
+ * before lunch first; the card passes its own `pairs`, which keep a pair being typed in its place.
+ */
+export function punchLabel(punches: Punch[], position: number, pairs = extraPairs(punches)): string {
+  if (position === clockOutPosition(punches)) return 'Clock out';
+  if (position <= LUNCH_IN_POSITION) return ['Clock in', 'Lunch out', 'Lunch in'][position]!;
+  const n = [...pairs.filter((p) => p.beforeLunch), ...pairs.filter((p) => !p.beforeLunch)].findIndex(
+    (p) => p.out.position === position || p.in.position === position,
+  );
+  return `${position % 2 === 1 ? 'Out' : 'In'} ${n + 1}`;
 }
 
 /** Whether lunch is tracked at all: the meal periods are on, or the Lunch out / in rows are kept with them off. */
