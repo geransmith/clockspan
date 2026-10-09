@@ -37,3 +37,6 @@ export function taskNote(text: string): string {
     .slice(0, LIMITS.itemNote)
     .replace(/\p{Cs}/gu, '\uFFFD');
 }
+
+/** Whether a stored note says anything: one of spaces and line breaks alone counts as none. */
+export const hasNote = (note: string): boolean => note.trim() !== '';

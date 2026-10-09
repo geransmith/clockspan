@@ -18,8 +18,8 @@ import {
   PRIORITY_WARNINGS,
   PUNCH_ORDER,
   REMOVE_TASK,
-  RENAME_NOTE,
-  BLANK_NOTE,
+  RENAME_HINT,
+  BLANK_HINT,
   REQUEST_FAILED,
   SAVE_FAILED,
   SECOND_MEAL_NOTE,
@@ -43,9 +43,9 @@ describe('copy builders', () => {
   });
 
   it('says how far a rename reaches, and what a blank name does', () => {
-    expect(RENAME_NOTE(3)).toBe('Also renames it on 3 earlier days.');
-    expect(RENAME_NOTE(1)).toBe('Also renames it on 1 earlier day.');
-    expect(BLANK_NOTE('Email Bob')).toBe('Left empty, it goes back to “Email Bob”. × takes it off this day.');
+    expect(RENAME_HINT(3)).toBe('Also renames it on 3 earlier days.');
+    expect(RENAME_HINT(1)).toBe('Also renames it on 1 earlier day.');
+    expect(BLANK_HINT('Email Bob')).toBe('Left empty, it goes back to “Email Bob”. × takes it off this day.');
   });
 
   it('asks before × takes a task off a day, with the parts of the body that apply', () => {

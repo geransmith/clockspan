@@ -1209,6 +1209,13 @@ describe('starting the focus timer', () => {
     await renderBoard(undefined, NOW, { running: makeSession({ date: TUE, priorityUid: REPORT }) });
     expect(document.querySelector('.board-card-meta .pill')).toBeNull();
     expect(screen.getByRole('button', { name: 'Report' }).getAttribute('aria-describedby')).toBeNull();
+
+    // A card has no day: a session on its task marks it, whatever day the session started on.
+    cleanup();
+    await renderBoard(undefined, NOW, { running: makeSession({ date: TUE, priorityUid: 'next00000001' }) });
+    const mark = document.querySelector('.board-card-meta .pill')!;
+    expect(mark.textContent).toBe('running');
+    expect(screen.getByRole('button', { name: 'Follow up' }).getAttribute('aria-describedby')).toBe(mark.id);
   });
 
   it("holds Start while a start is out, and says in the banner when a row's start fails", async () => {

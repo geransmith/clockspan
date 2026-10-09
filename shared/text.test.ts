@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LIMITS } from './api.js';
-import { categoryName, sameText, taskNote, taskTitle } from './text.js';
+import { categoryName, hasNote, sameText, taskNote, taskTitle } from './text.js';
 
 describe('sameText', () => {
   it('keys text by its words, whatever the case or spacing', () => {
@@ -44,5 +44,11 @@ describe('taskNote', () => {
     expect(taskNote('a\ud800b\udc00')).toBe('a\ufffdb\ufffd');
     expect(taskNote(`${'x'.repeat(LIMITS.itemNote - 1)}😀`)).toBe(`${'x'.repeat(LIMITS.itemNote - 1)}\ufffd`);
     expect(taskNote('😀')).toBe('😀');
+  });
+});
+
+describe('hasNote', () => {
+  it('counts a note with words, not one of spaces and line breaks alone', () => {
+    expect([hasNote('Ask Kim'), hasNote(' \n\t'), hasNote('')]).toEqual([true, false, false]);
   });
 });

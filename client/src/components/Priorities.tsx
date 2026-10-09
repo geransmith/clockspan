@@ -6,7 +6,7 @@ import { useSettings } from '../hooks/useSettings';
 import { useShortcut } from '../hooks/useShortcuts';
 import { unlockAudio, warnSaveFailed } from '../lib/alerts';
 import type { CategoryPick } from '../lib/board';
-import { BLANK_NOTE, RENAME_NOTE, WARNING_ACTIONS } from '../lib/copy';
+import { BLANK_HINT, RENAME_HINT, WARNING_ACTIONS } from '../lib/copy';
 import { formatDurationCeil } from '../lib/format';
 import type { PrioritySeed } from '../lib/plan';
 import { editPriority, emptyRow, isOneOff, nudgeFor, padPriorities, pickWarning, takeOffRow, type WarningKind } from '../lib/priorities';
@@ -14,6 +14,7 @@ import { acceptOffer, notOnList } from '../lib/recurring';
 import { loggedByUid } from '../lib/retro';
 import { hasText, isFree } from '../../../shared/priorities.js';
 import { LIMITS } from '../../../shared/api.js';
+import { hasNote } from '../../../shared/text.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import type { Priority, Recurring, Session } from '../types';
 import { Burst } from './Burst';
@@ -234,7 +235,7 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
   const remove = (p: Priority) => {
     // `logged` is the other days' time, so the day's own log, a running timer included, adds to it.
     const time = p.uid == null ? 0 : p.logged + (loggedByUid(sessions, now).get(p.uid) ?? 0);
-    const note = p.note !== '';
+    const note = hasNote(p.note);
     if (p.uid != null && !p.recurring && (p.listed > 1 || time > 0 || note)) {
       setAsked({ uid: p.uid, name: hasText(p) ? p.text : (storedName(p.uid) ?? ''), otherDays: Math.max(0, p.listed - 1), logged: time, note });
     } else takeOff(p.position);
@@ -286,7 +287,7 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
         // too; emptied, it says what happens to the name.
         const inFocus = focused != null && p.uid != null && focused.position === p.position;
         const blankName = inFocus && empty ? storedName(p.uid) : undefined;
-        const hint = blankName ? BLANK_NOTE(blankName) : inFocus && !empty && p.text !== focused.text && p.earlier > 0 ? RENAME_NOTE(p.earlier) : null;
+        const hint = blankName ? BLANK_HINT(blankName) : inFocus && !empty && p.text !== focused.text && p.earlier > 0 ? RENAME_HINT(p.earlier) : null;
         const hintFor = `${ids}-hint-${p.position}`;
         const noteBox = `${ids}-note-${p.uid}`;
         const noteOpen = p.uid != null && notesOpen.has(p.uid);

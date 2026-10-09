@@ -9,7 +9,7 @@ import { useDay } from '../hooks/useDay';
 import { SettingsProvider } from '../hooks/useSettings';
 import { useBoardStore } from '../hooks/useBoard';
 import { playSound, unlockAudio, warnSaveFailed } from '../lib/alerts';
-import { BLANK_NOTE, LEFT_OPEN, PRIORITY_WARNINGS, REMOVE_TASK, RENAME_NOTE, TODAY_OFFER, WARNING_ACTIONS } from '../lib/copy';
+import { BLANK_HINT, LEFT_OPEN, PRIORITY_WARNINGS, REMOVE_TASK, RENAME_HINT, TODAY_OFFER, WARNING_ACTIONS } from '../lib/copy';
 import type { PrioritySeed } from '../lib/plan';
 import { emptyRow } from '../lib/priorities';
 import type { CategoryPick } from '../lib/board';
@@ -680,7 +680,7 @@ describe('Priorities: routines on the list', () => {
 
 describe('Priorities: a blank name', () => {
   const rows = () => [makePriority(1, 'Report'), makePriority(2, 'Email')];
-  const note = (name: string) => screen.queryByText(BLANK_NOTE(name));
+  const hint = (name: string) => screen.queryByText(BLANK_HINT(name));
   const blankOut = (n: number) => {
     act(() => textbox(n).focus());
     fireEvent.change(textbox(n), { target: { value: '' } });
@@ -689,12 +689,12 @@ describe('Priorities: a blank name', () => {
   it("saves the name as it was, says so as the field's description, and brings the name back when the box is left", async () => {
     const { onChange } = await renderCard(rows());
     blankOut(1);
-    expect(textbox(1).getAttribute('aria-describedby')).toBe(note('Report')!.id);
+    expect(textbox(1).getAttribute('aria-describedby')).toBe(hint('Report')!.id);
     await settle(400);
     expect(textbox(1).value).toBe('');
     fireEvent.blur(textbox(1));
     expect(textbox(1).value).toBe('Report');
-    expect(note('Report')).toBeNull();
+    expect(hint('Report')).toBeNull();
     expect(textbox(1).hasAttribute('aria-describedby')).toBe(false);
     expect(onChange).toHaveBeenCalled();
     for (const [list] of onChange.mock.calls) expect(list.map((p) => p.text)).toEqual(['Report', 'Email', '']);
@@ -759,10 +759,10 @@ describe('Priorities: a blank name', () => {
     // The save's answer, with the task the first key made.
     again(saved());
     fireEvent.change(textbox(1), { target: { value: '' } });
-    expect(textbox(1).getAttribute('aria-describedby')).toBe(note('Call the bank')!.id);
+    expect(textbox(1).getAttribute('aria-describedby')).toBe(hint('Call the bank')!.id);
   });
 
-  it('makes a row typed and emptied before it was saved a free row again, with no note and nothing sent', async () => {
+  it('makes a row typed and emptied before it was saved a free row again, with no hint and nothing sent', async () => {
     const { onChange } = await renderCard();
     act(() => textbox(1).focus());
     fireEvent.change(textbox(1), { target: { value: 'Call' } });
@@ -774,21 +774,21 @@ describe('Priorities: a blank name', () => {
   });
 });
 
-describe('Priorities: the rename note', () => {
-  const note = (n: number) => screen.queryByText(RENAME_NOTE(n));
+describe('Priorities: the rename hint', () => {
+  const hint = (n: number) => screen.queryByText(RENAME_HINT(n));
 
   it("shows while a name that earlier days' lists hold is retyped in the focused box, as its description", async () => {
     await renderCard([makePriority(1, 'Report', { earlier: 3 }), makePriority(2, 'Email')]);
     act(() => textbox(1).focus());
-    expect(note(3)).toBeNull();
+    expect(hint(3)).toBeNull();
     fireEvent.change(textbox(1), { target: { value: 'Report for Acme' } });
-    expect(textbox(1).getAttribute('aria-describedby')).toBe(note(3)!.id);
+    expect(textbox(1).getAttribute('aria-describedby')).toBe(hint(3)!.id);
     // Typed back to the name it had: nothing renamed.
     fireEvent.change(textbox(1), { target: { value: 'Report' } });
-    expect(note(3)).toBeNull();
+    expect(hint(3)).toBeNull();
     fireEvent.change(textbox(1), { target: { value: 'Report for Acme' } });
     fireEvent.blur(textbox(1));
-    expect(note(3)).toBeNull();
+    expect(hint(3)).toBeNull();
   });
 
   it('says nothing for a task no earlier day holds', async () => {
@@ -824,6 +824,14 @@ describe('Priorities: ×', () => {
     ]);
     expect(document.activeElement).toBe(textbox(2));
     expect(onDeleteTask).not.toHaveBeenCalled();
+  });
+
+  it('counts a note of spaces and line breaks alone as none: its button is empty and × asks nothing', async () => {
+    const { saved } = await renderCard([makePriority(1, 'Report', { note: ' \n\n' })]);
+    expect(screen.getByRole('button', { name: 'Add a note to priority 1' }).classList.contains('note-toggle--empty')).toBe(true);
+    fireEvent.click(x(1));
+    expect(dialog()).toBeNull();
+    expect(saved()[0]).toEqual(emptyRow(1));
   });
 
   it("never asks on a recurring priority's row", async () => {

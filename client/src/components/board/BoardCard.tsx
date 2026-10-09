@@ -1,5 +1,6 @@
 import { useRef, useState, type CSSProperties } from 'react';
 import { LIMITS } from '../../../../shared/api.js';
+import { hasNote } from '../../../../shared/text.js';
 import { useFollowedDraft } from '../../hooks/useFollowedDraft';
 import { categoryOf, COLUMN_NAMES, moveTargets, type BoardItem, type CategoryPick, type ColumnId } from '../../lib/board';
 import { BOARD } from '../../lib/copy';
@@ -89,7 +90,7 @@ export function BoardCardView({
   const noteBox = `note-${item.id}`;
   // Closed on each load.
   const [noteOpen, setNoteOpen] = useState(false);
-  const noted = onNote != null || item.note !== '';
+  const noted = onNote != null || hasNote(item.note);
   return (
     <li ref={drag?.nodeRef} style={drag?.style} className={`board-card${item.column === 'done' ? ' is-done' : ''}`}>
       <div className="board-card-row">
