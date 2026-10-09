@@ -45,14 +45,14 @@ let media: Set<string>;
 
 /** A task on a day's list; its uid is the task's, `row<position>` unless given. */
 const row = (position: number, text: string, patch: Partial<Priority> = {}) =>
-  makePriority(position, text, { uid: `row${position}`.padEnd(12, '0'), ...patch });
+  makePriority(position, text, { uid: `row${position}`.padEnd(12, 'x'), ...patch });
 /** Today's two tasks, as the board has them too: the server sends every task listed in the last two weeks. */
-const REPORT = 'row100000000';
-const EMAIL = 'row200000000';
+const REPORT = 'row1xxxxxxxx';
+const EMAIL = 'row2xxxxxxxx';
 /** A recurring priority's row, ticked on Tuesday. */
 const tuesdayRoutine = () => row(1, 'Tuesday row', { uid: 'rec000000009', recurring: true, done: true });
 /** Later and Next at the cap. */
-const fullBoard = () => Array.from({ length: BOARD_LIMITS.openCards }, (_, i) => makeCard(`c${i}`.padEnd(12, '0'), `Card ${i}`, { position: i + 1 }));
+const fullBoard = () => Array.from({ length: BOARD_LIMITS.openCards }, (_, i) => makeCard(`c${i}`.padEnd(12, 'x'), `Card ${i}`, { position: i + 1 }));
 
 /** Renders the board at `now`, the minute App hands it; the answer renders it again at another. */
 async function renderBoard(settings = makeSettings({ board: true }), now = NOW) {
@@ -882,7 +882,7 @@ describe('dragging', () => {
   });
 
   it("keeps Later's fold as it was while a card dragged in makes it ten", async () => {
-    const later = Array.from({ length: 9 }, (_, i) => makeCard(`later${i}`.padEnd(12, '0'), `Later ${i}`, { position: i + 1 }));
+    const later = Array.from({ length: 9 }, (_, i) => makeCard(`later${i}`.padEnd(12, 'x'), `Later ${i}`, { position: i + 1 }));
     onServer = makeBoard(...later, makeCard('next00000001', 'Follow up', { lane: 'next' }));
     await renderBoard();
     await pickUp('Follow up');
