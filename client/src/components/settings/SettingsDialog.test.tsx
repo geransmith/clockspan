@@ -129,6 +129,24 @@ describe('SettingsDialog', () => {
     expect(api.putSettings).toHaveBeenLastCalledWith({ lunchPunches: false });
   });
 
+  it('offers Times on the board only with the board on, and drops the lunch deadline from its hint with the meal periods off', async () => {
+    await renderDialog();
+    expect(screen.queryByRole('switch', { name: 'Times on the board', hidden: true })).toBeNull();
+    // The board is switched on on another device: the settings' next read brings the switch.
+    const boardOn = makeSettings({ board: true });
+    vi.mocked(api.getSettings).mockResolvedValue(boardOn);
+    vi.mocked(api.getBoard).mockResolvedValue(makeBoard());
+    vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(applySettingsPatch(boardOn, patch)));
+    await settle(MINUTE_MS);
+    expect(hint('Times on the board')).toBe("Today's clock in, lunch deadline and clock out time, in a row above the board's columns.");
+    fireEvent.click(toggle('Meal periods'));
+    await settle();
+    expect(hint('Times on the board')).toBe("Today's clock in and clock out time, in a row above the board's columns.");
+    fireEvent.click(toggle('Times on the board'));
+    await settle();
+    expect(api.putSettings).toHaveBeenLastCalledWith({ clockBar: false });
+  });
+
   it('lists the stickers the calendar gives, without clocked out when hours are hidden', async () => {
     await renderDialog();
     await openTab('Sheet');

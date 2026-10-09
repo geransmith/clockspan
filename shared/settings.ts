@@ -127,6 +127,8 @@ export interface Settings {
    * the categories and recurring priorities (Settings → Board, the morning offer).
    */
   board: boolean;
+  /** Today's clock in, lunch deadline and clock out time in a row above the board's columns. */
+  clockBar: boolean;
   /** Recurring rows the morning offer ticks; more can be ticked. */
   recurringPerDay: number;
   alarms: Record<AlarmId, AlarmSettings>;
@@ -215,6 +217,7 @@ export const DEFAULT_SETTINGS: Settings = deepFreeze({
   stickers: false,
   showWeekends: true,
   board: false,
+  clockBar: true,
   recurringPerDay: 3,
   alarms: { lunchBy: { ...DEFAULT_ALARM }, clockOut: { ...DEFAULT_ALARM }, secondMeal: { ...DEFAULT_ALARM }, retro: { ...DEFAULT_RETRO_ALARM } },
   layout: normalizeLayout([]),

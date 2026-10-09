@@ -110,6 +110,30 @@ export function timeclockTiles(tc: TimeclockResult, o: TileOptions): { lunch: Ti
   return { lunch, worked, clockOut };
 }
 
+/** An item of the board's clock bar: which one, and its value, line and tone as a tile's. */
+export type ClockBarItem = TileView & { id: 'clockIn' | 'lunch' | 'clockOut' };
+
+/**
+ * The board's clock bar: Clock in, Lunch by and Clock out at, whose line is the time left, in the
+ * tiles' words. Lunch by shows with the meal periods on, once clocked in, while a lunch is planned
+ * or taken; a lunch punched with them off still moves Clock out at, as on the card.
+ */
+export function clockBarItems(tc: TimeclockResult, o: TileOptions & { mealRules: boolean }): ClockBarItem[] {
+  const { lunch, clockOut } = timeclockTiles(tc, o);
+  const { clockIn } = tc;
+  return [
+    {
+      id: 'clockIn',
+      value: clockIn == null ? '—' : o.formatTime(clockIn),
+      // A clock-in typed ahead of now: the day is planned from it already.
+      sub: clockIn != null && clockIn > o.now ? `In ${formatDurationCeil((clockIn - o.now) / 1000)}` : '',
+      tone: '',
+    },
+    ...(o.mealRules && clockIn != null && tc.lunchStatus !== 'not-needed' ? [{ id: 'lunch' as const, ...lunch }] : []),
+    { id: 'clockOut', ...clockOut },
+  ];
+}
+
 /** The Focused tile: the day's logged focus time and how many sessions it took. */
 export function focusTile(focus: { seconds: number; count: number }, isToday: boolean): TileView {
   return {

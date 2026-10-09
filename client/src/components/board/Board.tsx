@@ -62,6 +62,7 @@ import { Grip, Plus } from '../Icons';
 import { LoadFailed } from '../LoadFailed';
 import { BoardCardView, CategoryTag, type ItemDrag } from './BoardCard';
 import { Capture } from './Capture';
+import { ClockBar } from './ClockBar';
 import { boardCollision, boardKeyboardCoordinates } from './dnd';
 
 /** The columns with a + in their head. */
@@ -100,9 +101,10 @@ const canDrag = (item: BoardItem) => !item.planned && !item.recurring;
  * keyboard) or its editor's Move to, and both go through `planMove`; a move the board can't make
  * shows in the notice above the columns. The + in Later's, Next's and In progress's head opens a
  * box for a new item there. `now` is App's clock floored to the minute, the one the sheet gets,
- * for Delete's count of a timer running on the task: the page renders once a minute, and × on the
- * sheet and Delete here count to the same minute. The move, add and delete handlers are built in
- * render, where the purity lint refuses Date.now() (the store stamps a typed row's `addedAt`).
+ * for the clock bar's times and Delete's count of a timer running on the task: the page renders
+ * once a minute, and the sheet's tiles and × count to the same minute. The move, add and delete
+ * handlers are built in render, where the purity lint refuses Date.now() (the store stamps a
+ * typed row's `addedAt`).
  */
 export const Board = memo(function Board({ today, now }: { today: string; now: number }) {
   const { board, failed } = useBoardState();
@@ -521,6 +523,7 @@ export const Board = memo(function Board({ today, now }: { today: string; now: n
 
   return (
     <div className="board">
+      {settings.clockBar && <ClockBar day={day} today={today} now={now} />}
       {/* Always there, so what arrives is heard. */}
       <div className="board-notice" role="status" ref={noticeBox}>
         {notice?.kind === 'nudge' && (

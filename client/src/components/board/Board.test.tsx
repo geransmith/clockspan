@@ -127,6 +127,15 @@ describe('Board', () => {
     expect(screen.getByRole('button', { name: 'Earlier this week · 2' }).getAttribute('aria-expanded')).toBe('true');
   });
 
+  it("puts today's times above the notice and the columns, only with Times on the board on", async () => {
+    await renderBoard();
+    const board = document.querySelector('.board')!;
+    expect(board.firstElementChild).toBe(screen.getByRole('region', { name: 'Timeclock' }));
+    cleanup();
+    await renderBoard(makeSettings({ board: true, clockBar: false }));
+    expect(screen.queryByRole('region', { name: 'Timeclock' })).toBeNull();
+  });
+
   it('shows a task left open in the last two weeks in Next after its own tasks, saying when, and Move to Next gives it a place', async () => {
     onServer = makeBoard(
       ...onServer.cards,
