@@ -61,9 +61,9 @@ export interface BoardColumns {
   doneEarlier: BoardItem[];
 }
 
-/** The later day whose list holds the item's task, or null when none after `today` does. */
-export function plannedFor(item: BoardItem, today: string): string | null {
-  const day = item.card?.listDate;
+/** The later day whose list holds the task, or null when none after `today` does. */
+function laterDay(card: BoardCard | null, today: string): string | null {
+  const day = card?.listDate;
   return day != null && day > today ? day : null;
 }
 
@@ -103,8 +103,8 @@ export interface ColumnsInput {
   earlierDays: Day[];
   /** The recurring priorities in Settings, whose title and category an earlier day's row of one shows, as a rename shows at once. */
   recurring: Recurring[];
-  /** Items shown in another column while a move that spans two stores is on its way, by item id. */
-  moving?: ReadonlyMap<string, ColumnId>;
+  /** Where a move that spans two stores puts each item while it is on its way, by the id the item lands under. */
+  moving?: ReadonlyMap<string, DropTarget>;
 }
 
 /**
@@ -160,7 +160,7 @@ export function boardColumns({ cards, today, todayRows, earlierDays, recurring, 
   for (const c of cards) {
     if (listedToday.has(c.uid)) continue;
     const day = c.listDate;
-    if (day != null && day > today) (c.lane === 'next' ? ownNext : plannedElsewhere).push(c);
+    if (laterDay(c, today)) (c.lane === 'next' ? ownNext : plannedElsewhere).push(c);
     else if (c.listDone) {
       if (day === today) doneOffToday.push(c);
       else if (day! >= weekStart) earlier.push({ day: day!, item: cardItem(c, 'done') });
@@ -171,9 +171,8 @@ export function boardColumns({ cards, today, todayRows, earlierDays, recurring, 
   // Newest day first, then the one made first; the server keeps no order for them.
   leftOpen.sort((a, b) => b.listDate!.localeCompare(a.listDate!) || a.createdAt - b.createdAt);
   plannedElsewhere.sort((a, b) => a.listDate!.localeCompare(b.listDate!));
-  const planned = (c: BoardCard) => (c.listDate != null && c.listDate > today ? c.listDate : null);
   const next = [
-    ...ownNext.sort(byPosition).map((c) => cardItem(c, 'next', { planned: planned(c) })),
+    ...ownNext.sort(byPosition).map((c) => cardItem(c, 'next', { planned: laterDay(c, today) })),
     ...leftOpen.map((c) => cardItem(c, 'next', { leftOpen: c.listDate })),
     ...plannedElsewhere.map((c) => cardItem(c, 'next', { planned: c.listDate })),
   ];
@@ -185,7 +184,8 @@ export function boardColumns({ cards, today, todayRows, earlierDays, recurring, 
       if (!p.recurring || !p.done) continue;
       const item = rowItem(p, d.date, 'done');
       const r = routines.get(p.uid);
-      earlier.push({ day: d.date, item: r ? { ...item, title: r.title, categoryUid: r.categoryUid } : item });
+      // One no longer in Settings is removed (archived), though the days read before may not say so yet.
+      earlier.push({ day: d.date, item: r ? { ...item, title: r.title, categoryUid: r.categoryUid } : { ...item, row: { ...p, archived: true } } });
     }
   }
   // Stable: on a day, the tasks keep the server's order ahead of the routines' rows in position order.
@@ -195,29 +195,41 @@ export function boardColumns({ cards, today, todayRows, earlierDays, recurring, 
   return moving?.size ? withMoving(columns, moving) : columns;
 }
 
-/** The columns with each moving item taken out of its own and put at the top of Later or Done, or the end of Next or In progress. */
-function withMoving(columns: BoardColumns, moving: ReadonlyMap<string, ColumnId>): BoardColumns {
-  const moved: BoardItem[] = [];
-  const stay = (items: BoardItem[]) =>
-    items.filter((item) => {
-      const to = moving.get(item.id);
-      if (to === undefined || to === item.column) return true;
-      moved.push({ ...item, column: to });
-      return false;
-    });
-  const out: BoardColumns = {
-    later: stay(columns.later),
-    next: stay(columns.next),
-    progress: stay(columns.progress),
-    doneToday: stay(columns.doneToday),
-    doneEarlier: stay(columns.doneEarlier),
+/** The columns with each item whose move is on its way, shown in a column other than its target's, taken out and put where it lands (`insert`). */
+function withMoving(columns: BoardColumns, moving: ReadonlyMap<string, DropTarget>): BoardColumns {
+  const moved = (item: BoardItem) => {
+    const target = moving.get(item.id);
+    return target !== undefined && target.to !== item.column;
   };
-  for (const item of moved) {
-    if (item.column === 'later') out.later.unshift(item);
-    else if (item.column === 'done') out.doneToday.unshift(item);
-    else out[item.column].push(item);
+  const out = withoutItems(columns, moved);
+  for (const item of COLUMNS.flatMap((c) => itemsIn(columns, c)).filter(moved)) {
+    const target = moving.get(item.id)!;
+    insert(out, { ...item, column: target.to }, target);
   }
   return out;
+}
+
+/** The columns without the items `drop` picks. */
+function withoutItems(columns: BoardColumns, drop: (item: BoardItem) => boolean): BoardColumns {
+  const keep = (items: BoardItem[]) => items.filter((i) => !drop(i));
+  return {
+    later: keep(columns.later),
+    next: keep(columns.next),
+    progress: keep(columns.progress),
+    doneToday: keep(columns.doneToday),
+    doneEarlier: keep(columns.doneEarlier),
+  };
+}
+
+/** Puts `item` into `out` where it lands: at the top of Done, the end of In progress, or in a lane before the task named (null: after the lane's own tasks). */
+function insert(out: BoardColumns, item: BoardItem, { to, before }: DropTarget): void {
+  if (to === 'done') out.doneToday.unshift(item);
+  else if (to === 'progress') out.progress.push(item);
+  else {
+    const lane = out[to];
+    const at = lane.findIndex((i) => (before == null ? laneUid(i, to) == null : laneUid(i, to) === before));
+    lane.splice(at === -1 ? lane.length : at, 0, item);
+  }
 }
 
 /**
@@ -243,10 +255,6 @@ export type Move =
 /** The moves a store carries out. */
 export type StoreMove = Exclude<Move, { kind: 'doneStays' | 'refuse' }>;
 
-export interface MoveContext {
-  today: string;
-}
-
 const refuse = (message: string): Move => ({ kind: 'refuse', message });
 
 /**
@@ -255,33 +263,39 @@ const refuse = (message: string): Move => ({ kind: 'refuse', message });
  * started). A planned item is refused (its day's list decides it); a recurring row stays on
  * today's list; a done item stays done (the notice offers a new task in its place); today's row
  * whose task a later day's list holds can go to Next, where it stays planned, but not to Later. A
- * task left open gets a place of its own in Next, or in Later.
+ * task left open gets a place of its own in Next, or in Later. An earlier day's row of a removed
+ * recurring priority doesn't go back on today's list.
  */
-export function planMove(item: BoardItem, to: ColumnId, before: string | null, ctx: MoveContext): Move | null {
-  if (item.planned) return refuse(BOARD.planned(item.title, dayName(item.planned, ctx.today, true)));
+export function planMove(item: BoardItem, to: ColumnId, before: string | null, today: string): Move | null {
+  if (item.planned) return refuse(BOARD.planned(item.title, dayName(item.planned, today, true)));
   if (to === item.column) {
     // The board keeps an order only in Later and Next; today's list keeps the sheet's. A row shows
     // in a lane only while its park is on its way, with nothing to sort yet.
-    if (!isLane(to) || onToday(item, ctx)) return null;
+    if (!isLane(to) || onToday(item, today)) return null;
     return { kind: 'patch', uid: item.uid, patch: item.leftOpen ? { lane: to, before } : { before } };
   }
-  return isLane(to) ? toLane(item, to, before, ctx) : toToday(item, to === 'done', ctx);
+  return isLane(to) ? toLane(item, to, before, today) : toToday(item, to === 'done', today);
 }
 
-const onToday = (item: BoardItem, ctx: MoveContext) => item.row != null && item.date === ctx.today;
+/** The item is a row of today's list. */
+export const onToday = (item: BoardItem, today: string): boolean => item.row != null && item.date === today;
 
-function toLane(item: BoardItem, lane: OpenLane, before: string | null, ctx: MoveContext): Move {
+/** An earlier day's row whose task is archived: a recurring priority removed in Settings. */
+const removedEarlier = (item: BoardItem, today: string) => item.row?.archived === true && !onToday(item, today);
+
+function toLane(item: BoardItem, lane: OpenLane, before: string | null, today: string): Move {
   if (item.recurring) return refuse(BOARD.recurringStays(item.title));
   if (item.column === 'done') return { kind: 'doneStays', title: item.title, categoryUid: item.categoryUid, lane, before };
-  if (!onToday(item, ctx)) return { kind: 'patch', uid: item.uid, patch: { lane, before } };
+  if (!onToday(item, today)) return { kind: 'patch', uid: item.uid, patch: { lane, before } };
   // Today's open row. Its task stays planned on the later day's list, which Next shows and Later can't.
-  const later = plannedFor(item, ctx.today);
-  if (later && lane === 'later') return refuse(BOARD.planned(item.title, dayName(later, ctx.today, true)));
+  const later = laterDay(item.card, today);
+  if (later && lane === 'later') return refuse(BOARD.planned(item.title, dayName(later, today, true)));
   return { kind: 'park', uid: item.uid, lane, before };
 }
 
-function toToday(item: BoardItem, done: boolean, ctx: MoveContext): Move {
-  if (onToday(item, ctx)) return { kind: 'tick', uid: item.uid, done };
+function toToday(item: BoardItem, done: boolean, today: string): Move {
+  if (onToday(item, today)) return { kind: 'tick', uid: item.uid, done };
+  if (removedEarlier(item, today)) return refuse(BOARD.removed(item.title));
   // The task itself, put on today's list in its category, a recurring priority's included. Until
   // the save answers, its row shows the counts the earlier row or the board had: an item off
   // today's list is one or the other.
@@ -304,14 +318,19 @@ function toToday(item: BoardItem, done: boolean, ctx: MoveContext): Move {
 /** The columns in the order the board shows them. */
 export const COLUMNS: ColumnId[] = ['later', 'next', 'progress', 'done'];
 
+/** Each column's heading, which the board and what a drag says name it by. */
+export const COLUMN_NAMES: Record<ColumnId, string> = { later: 'Later', next: 'Next', progress: 'In progress', done: 'Done' };
+
 /**
- * The columns Move to offers: every other one, none for a planned item, and no Later or Next for
- * a recurring row. A done item, and today's row planned for a later day, keep Later and Next,
- * which answer with the board notice. A task left open keeps Next too, which gives it a place.
+ * The columns Move to offers: every other one, none for a planned item, no Later or Next for a
+ * recurring row, and no In progress for an earlier day's row of a removed one. A done item, and
+ * today's row planned for a later day, keep Later and Next, which answer with the board notice. A
+ * task left open keeps Next too, which gives it a place.
  */
-export function moveTargets(item: BoardItem): ColumnId[] {
+export function moveTargets(item: BoardItem, today: string): ColumnId[] {
   if (item.planned) return [];
-  return COLUMNS.filter((c) => (c !== item.column || (c === 'next' && item.leftOpen != null)) && !(item.recurring && isLane(c)));
+  const offered = (c: ColumnId) => c !== item.column || (c === 'next' && item.leftOpen != null);
+  return COLUMNS.filter((c) => offered(c) && !(item.recurring && isLane(c)) && !(c === 'progress' && removedEarlier(item, today)));
 }
 
 /** A board move the store turned down before it changed anything; its message is the line to show. */
@@ -332,7 +351,7 @@ export function isLane(column: ColumnId): column is OpenLane {
 }
 
 /** A column's items in the order shown: Done is today's, then the rest of the week. */
-function itemsIn(columns: BoardColumns, column: ColumnId): BoardItem[] {
+export function itemsIn(columns: BoardColumns, column: ColumnId): BoardItem[] {
   return column === 'done' ? [...columns.doneToday, ...columns.doneEarlier] : columns[column];
 }
 
@@ -350,24 +369,11 @@ export function findItem(columns: BoardColumns, id: string): { item: BoardItem; 
  * `to`, before the task named in Later or Next (null: after the lane's own tasks), at the end of
  * In progress or the top of Done. It keeps its `column`, the one the drag started in.
  */
-export function withDrag(columns: BoardColumns, id: string, { to, before }: DropTarget): BoardColumns {
+export function withDrag(columns: BoardColumns, id: string, target: DropTarget): BoardColumns {
   const found = findItem(columns, id);
   if (!found) return columns;
-  const without = (items: BoardItem[]) => items.filter((i) => i.id !== id);
-  const out: BoardColumns = {
-    later: without(columns.later),
-    next: without(columns.next),
-    progress: without(columns.progress),
-    doneToday: without(columns.doneToday),
-    doneEarlier: without(columns.doneEarlier),
-  };
-  if (to === 'done') out.doneToday.unshift(found.item);
-  else if (to === 'progress') out.progress.push(found.item);
-  else {
-    const lane = out[to];
-    const at = lane.findIndex((i) => (before == null ? laneUid(i, to) == null : laneUid(i, to) === before));
-    lane.splice(at === -1 ? lane.length : at, 0, found.item);
-  }
+  const out = withoutItems(columns, (i) => i.id === id);
+  insert(out, found.item, target);
   return out;
 }
 
@@ -400,17 +406,17 @@ export function dropTarget(over: string | null, active: string, columns: BoardCo
 }
 
 /** The drag's closing line for the move `planMove` gave: it stayed, it moved, it was refused (the notice's line), or it stays done. */
-export function moveAnnouncement(move: Move | null, item: BoardItem, to: ColumnId, names: Record<ColumnId, string>): string {
-  if (!move) return BOARD_DRAG.stays(item.title, names[item.column]);
+export function moveAnnouncement(move: Move | null, item: BoardItem, to: ColumnId): string {
+  if (!move) return BOARD_DRAG.stays(item.title, COLUMN_NAMES[item.column]);
   if (move.kind === 'refuse') return move.message;
-  if (move.kind === 'doneStays') return DONE_STAYS.announce(item.title, names[move.lane]);
-  return BOARD_DRAG.moved(item.title, names[to]);
+  if (move.kind === 'doneStays') return DONE_STAYS.announce(item.title, COLUMN_NAMES[move.lane]);
+  return BOARD_DRAG.moved(item.title, COLUMN_NAMES[to]);
 }
 
 /** What a drag says as it goes over a column: where the item would land, in Later or Next before which task, or that it is back where it started (a null target). */
-export function overAnnouncement(target: DropTarget | null, item: BoardItem, columns: BoardColumns, names: Record<ColumnId, string>): string {
-  if (!target) return BOARD_DRAG.overStart(item.title, names[item.column]);
-  const name = names[target.to];
+export function overAnnouncement(target: DropTarget | null, item: BoardItem, columns: BoardColumns): string {
+  if (!target) return BOARD_DRAG.overStart(item.title, COLUMN_NAMES[item.column]);
+  const name = COLUMN_NAMES[target.to];
   if (!isLane(target.to)) return BOARD_DRAG.over(item.title, name);
   const next = target.before == null ? undefined : columns[target.to].find((i) => i.uid === target.before);
   return next ? BOARD_DRAG.overBefore(item.title, name, next.title) : BOARD_DRAG.overEnd(item.title, name);

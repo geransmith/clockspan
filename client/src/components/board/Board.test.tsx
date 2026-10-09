@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import type { NewItem } from '../../api';
 import { BOARD_LIMITS, LOOKBACK_DAYS } from '../../../../shared/api.js';
-import { addDays, HOUR_MS } from '../../../../shared/dates.js';
+import { addDays, HOUR_MS, MINUTE_MS } from '../../../../shared/dates.js';
+import { ClockProvider } from '../../hooks/useClock';
 import { unlockAudio, warnQuietly, warnSaveFailed } from '../../lib/alerts';
 import { withCategory, withItem, withItemPatch, withoutItem } from '../../lib/board';
 import { BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, PRIORITY_WARNINGS, WARNING_ACTIONS } from '../../lib/copy';
@@ -17,6 +18,7 @@ import {
   makeCategory,
   makeDay,
   makePriority,
+  makeSession,
   makeRecurring,
   makeSettings,
   serveRange,
@@ -56,9 +58,11 @@ const fullBoard = () => Array.from({ length: BOARD_LIMITS.openCards }, (_, i) =>
 async function renderBoard(settings = makeSettings({ board: true })) {
   vi.mocked(api.getSettings).mockResolvedValue(settings);
   render(
-    <SettingsAndDays>
-      <Board today={WED} />
-    </SettingsAndDays>,
+    <ClockProvider>
+      <SettingsAndDays>
+        <Board today={WED} />
+      </SettingsAndDays>
+    </ClockProvider>,
   );
   await settle();
 }
@@ -448,6 +452,7 @@ describe('Board', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
     openEditor('Tuesday row');
     expect(editorLines('Done')).toEqual([]);
+    expect(moveOptions()).toEqual(['Pick a column', 'In progress']);
     const title = screen.getByRole('textbox', { name: 'Title' });
     fireEvent.change(title, { target: { value: 'Tuesday task' } });
     fireEvent.keyDown(title, { key: 'Enter' });
@@ -465,6 +470,8 @@ describe('Board', () => {
     expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull();
     expect(column('Done').querySelector('.board-editor-title')?.textContent).toBe('Tuesday row');
     expect(editorLines('Done')).toEqual([]);
+    // Removed, it doesn't go back on today's list.
+    expect(screen.queryByRole('combobox', { name: 'Move to' })).toBeNull();
   });
 
   it('marks a recurring row on its meta line, and only that row', async () => {
@@ -526,6 +533,67 @@ describe('Board', () => {
     expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith(REPORT);
     expect(vi.mocked(api.putPriorities).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(api.deleteItem).mock.invocationCallOrder[0]!);
     expect(titlesIn('In progress')).toEqual([]);
+  });
+
+  it("counts a timer running on today's task in Delete's confirm, as × on the sheet does", async () => {
+    lists[WED]![0] = { ...lists[WED]![0]!, listed: 2, logged: 5 * 60 };
+    const getDay = vi.mocked(api.getDay).getMockImplementation()!;
+    vi.mocked(api.getDay).mockImplementation(async (date) => ({
+      ...(await getDay(date)),
+      sessions: date === WED ? [makeSession({ date: WED, startedAt: NOW - 10 * MINUTE_MS, priorityUid: REPORT })] : [],
+    }));
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal('confirm', confirm);
+    await renderBoard();
+    openEditor('Report');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(confirm).toHaveBeenLastCalledWith(CONFIRM.deleteTask(2, '15m'));
+    // It reads the clock as it ticks.
+    await settle(30_000);
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(confirm).toHaveBeenLastCalledWith(CONFIRM.deleteTask(2, '16m'));
+  });
+
+  it('puts the focus on the next item in the column after a Delete, else the one before, else the capture box', async () => {
+    media.delete('(pointer: fine)');
+    vi.stubGlobal('confirm', () => true);
+    onServer = makeBoard(...onServer.cards, makeCard('next00000002', 'Call back', { lane: 'next', position: 3 }));
+    await renderBoard();
+    expect(titlesIn('Next')).toEqual(['Follow up', 'Plan B', 'Call back']);
+    openEditor('Follow up');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await settle();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Plan B' }));
+    openEditor('Call back');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await settle();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Plan B' }));
+    openEditor('Write a KB');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await settle();
+    expect(titlesIn('Later')).toEqual([]);
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Add a card' }));
+  });
+
+  it("shows today's row parked in a lane where it lands, with no tick, rename, category or Remove until the park lands", async () => {
+    onServer = makeBoard(...onServer.cards, makeCard('left00000001', 'Check the logs', { lane: null, listDate: TUE, listed: 1 }));
+    const placed = deferred<BoardData>();
+    vi.mocked(api.editItem).mockReturnValueOnce(placed.promise);
+    await renderBoard();
+    openEditor('Report');
+    moveTo('next');
+    // At the end of Next's own tasks, ahead of the one left open.
+    expect(titlesIn('Next')).toEqual(['Follow up', 'Plan B', 'Report', 'Check the logs']);
+    openEditor('Report');
+    expect(screen.queryByRole('checkbox', { name: 'Report done' })).toBeNull();
+    expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Category for Report/ })).toBeNull();
+    placed.resolve((onServer = withItemPatch(onServer, REPORT, { lane: 'next', before: null })));
+    await settle();
+    expect(titlesIn('Next')).toEqual(['Follow up', 'Plan B', 'Report', 'Check the logs']);
+    // The editor left open takes them once it lands.
+    expect(screen.getByRole('textbox', { name: 'Title' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Category for Report: none' })).toBeTruthy();
   });
 
   it("refuses to park today's row whose task a later day holds in Later, and parks it in Next", async () => {

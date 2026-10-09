@@ -18,10 +18,10 @@ import {
   moveAnnouncement,
   moveTargets,
   offeredLeftovers,
+  onToday,
   overAnnouncement,
   planMove,
   nextColor,
-  plannedFor,
   withCategory,
   withCategoryPatch,
   withDrag,
@@ -31,8 +31,8 @@ import {
   withoutItem,
   type BoardColumns,
   type BoardItem,
-  type ColumnId,
   type ColumnsInput,
+  type DropTarget,
 } from './board';
 import { BOARD, BOARD_DRAG, DONE_STAYS } from './copy';
 
@@ -140,8 +140,10 @@ describe('boardColumns', () => {
       earlierDays: [monday, tuesday],
       recurring: [makeRecurring(ROUTINE.uid, 'Watch the queue', { categoryUid: 'cafe00000004' })],
     });
-    expect(c.doneEarlier[1]!.row).toBe(renamed.doneEarlier[1]!.row);
+    expect(renamed.doneEarlier[1]!.row).toBe(tuesday.priorities[0]);
     expect(renamed.doneEarlier[1]).toMatchObject({ title: 'Watch the queue', categoryUid: 'cafe00000004' });
+    // Gone from Settings, it is removed, though the day was read before that.
+    expect(c.doneEarlier[1]!.row).toEqual({ ...tuesday.priorities[0], archived: true });
   });
 
   it('gives a routine ticked today and on two earlier days three Done items with ids of their own', () => {
@@ -182,40 +184,56 @@ describe('boardColumns', () => {
     });
   });
 
-  it('shows a moving item in the column it is going to: the top of Later and Done, the end of Next and In progress', () => {
-    const cards = [makeCard('a', 'A'), makeCard('b', 'B', { lane: 'next' }), makeCard('c', 'C', { position: 2 })];
-    const todayRows = [row(1, 'One'), row(2, 'Two', { done: true })];
-    const moving = new Map<string, ColumnId>([
-      ['item:c', 'next'],
-      [`item:${rowUid(1)}`, 'later'],
-      ['item:a', 'later'],
-      ['item:b', 'progress'],
-      [`item:${rowUid(2)}`, 'progress'],
+  it('shows a moving item where it lands: in a lane before the task named, else after its own tasks, the end of In progress, the top of Done', () => {
+    const cards = [
+      makeCard('a', 'A'),
+      makeCard('b', 'B', { lane: 'next' }),
+      makeCard('c', 'C', { position: 2 }),
+      makeCard('lo', 'Left open', { lane: null, listDate: TUE }),
+    ];
+    const todayRows = [row(1, 'One'), row(2, 'Two', { done: true }), row(3, 'Three')];
+    const moving = new Map<string, DropTarget>([
+      ['item:c', { to: 'next', before: null }],
+      [`item:${rowUid(1)}`, { to: 'later', before: 'c' }],
+      ['item:a', { to: 'later', before: null }],
+      ['item:b', { to: 'progress', before: null }],
+      [`item:${rowUid(2)}`, { to: 'progress', before: null }],
+      [`item:${rowUid(3)}`, { to: 'done', before: null }],
     ]);
     const c = columns({ cards, todayRows, moving });
     expect(ids(c)).toEqual({
-      later: [`item:${rowUid(1)}`, 'item:a'],
-      next: ['item:c'],
+      later: ['item:a', `item:${rowUid(1)}`],
+      next: ['item:c', 'item:lo'],
       progress: ['item:b', `item:${rowUid(2)}`],
-      doneToday: [],
+      doneToday: [`item:${rowUid(3)}`],
       doneEarlier: [],
     });
-    expect(c.later[0]!.column).toBe('later');
-    const done = columns({ cards, moving: new Map([['item:a', 'done' as const]]) });
-    expect(ids(done).doneToday).toEqual(['item:a']);
+    expect(c.later[1]!.column).toBe('later');
     // Nothing moving gives the columns as they are.
     expect(columns({ cards, moving: new Map() })).toEqual(columns({ cards }));
+  });
+
+  it("keeps an earlier day's routine tick in Done while it is pulled onto today's list, which shows the row it lands as once", () => {
+    const tuesday = makeDay(TUE, { priorities: [row(1, 'Monitor the queue', { ...ROUTINE, done: true })] });
+    const pulled = row(1, 'Monitor the queue', ROUTINE);
+    const c = columns({
+      todayRows: [pulled],
+      earlierDays: [tuesday],
+      recurring: [makeRecurring(ROUTINE.uid, 'Monitor the queue')],
+      moving: new Map([[`row:${WED}:${ROUTINE.uid}`, { to: 'progress', before: null }]]),
+    });
+    expect(ids(c)).toEqual({ ...EMPTY, progress: [`row:${WED}:${ROUTINE.uid}`], doneEarlier: [`row:${TUE}:${ROUTINE.uid}`] });
   });
 });
 
 describe('the small lookups', () => {
-  it("plannedFor: the later day whose list holds the task, never today or before, nor for a row the board hasn't read", () => {
-    const items = columns({
-      cards: [makeCard('t', 'T', { lane: 'next', listDate: THU }), makeCard('w', 'W', { lane: 'next', listDate: WED }), makeCard('n', 'N', { lane: 'next' })],
+  it("onToday: a row of today's list, never a task off it or an earlier day's row", () => {
+    const c = columns({
+      cards: [makeCard('n', 'N', { lane: 'next' })],
       todayRows: [row(1, 'Typed')],
+      earlierDays: [makeDay(TUE, { priorities: [row(1, 'Routine', { ...ROUTINE, done: true })] })],
     });
-    expect(items.next.map((i) => plannedFor(i, WED))).toEqual([THU, null, null]);
-    expect(plannedFor(items.progress[0]!, WED)).toBeNull();
+    expect([c.progress[0]!, c.next[0]!, c.doneEarlier[0]!].map((i) => onToday(i, WED))).toEqual([true, false, false]);
   });
 
   it('boardFull: the tasks in Later and Next that are not done, at the cap', () => {
@@ -237,13 +255,16 @@ describe('the small lookups', () => {
     expect(laneStart(c, 'next')).toBeNull();
     expect(laneStart(columns(), 'later')).toBeNull();
     // A row on its way to Later shows at the top, and isn't a place in the lane yet.
-    const moving = columns({ cards: [makeCard('first', 'First')], todayRows: [row(1, 'Parking')], moving: new Map([[`item:${rowUid(1)}`, 'later' as const]]) });
+    const moving = columns({
+      cards: [makeCard('first', 'First')],
+      todayRows: [row(1, 'Parking')],
+      moving: new Map([[`item:${rowUid(1)}`, { to: 'later' as const, before: 'first' }]]),
+    });
     expect(laneStart(moving, 'later')).toBe('first');
   });
 });
 
 describe('planMove', () => {
-  const ctx = { today: WED };
   const cards: BoardCard[] = [
     makeCard('later', 'Write a KB', { categoryUid: 'cafe00000003', listed: 2, logged: 600 }),
     makeCard('next', 'Follow up', { lane: 'next' }),
@@ -261,7 +282,8 @@ describe('planMove', () => {
   const tuesday = makeDay(TUE, {
     priorities: [row(1, 'Follow-ups', { uid: 'rcur00000002', recurring: true, done: true, categoryUid: 'cafe00000004', listed: 5, logged: 300 })],
   });
-  const c = columns({ cards, todayRows, earlierDays: [tuesday] });
+  const routines = [makeRecurring(ROUTINE.uid, 'Monitor the queue'), makeRecurring('rcur00000002', 'Follow-ups', { categoryUid: 'cafe00000004' })];
+  const c = columns({ cards, todayRows, earlierDays: [tuesday], recurring: routines });
   const item = (id: string) => findItem(c, id)!.item;
   const open = item(`item:${rowUid(1)}`);
   const ticked = item(`item:${rowUid(2)}`);
@@ -271,23 +293,23 @@ describe('planMove', () => {
   const routineTicked = item(`row:${TUE}:rcur00000002`);
 
   it('moves a task between Later and Next, or within one, as a patch', () => {
-    expect(planMove(item('item:later'), 'next', null, ctx)).toEqual({ kind: 'patch', uid: 'later', patch: { lane: 'next', before: null } });
-    expect(planMove(item('item:next'), 'later', 'later', ctx)).toEqual({ kind: 'patch', uid: 'next', patch: { lane: 'later', before: 'later' } });
-    expect(planMove(item('item:next'), 'next', null, ctx)).toEqual({ kind: 'patch', uid: 'next', patch: { before: null } });
+    expect(planMove(item('item:later'), 'next', null, WED)).toEqual({ kind: 'patch', uid: 'later', patch: { lane: 'next', before: null } });
+    expect(planMove(item('item:next'), 'later', 'later', WED)).toEqual({ kind: 'patch', uid: 'next', patch: { lane: 'later', before: 'later' } });
+    expect(planMove(item('item:next'), 'next', null, WED)).toEqual({ kind: 'patch', uid: 'next', patch: { before: null } });
   });
 
   it('gives a task left open a place of its own in Next, or in Later', () => {
-    expect(planMove(left, 'next', 'next', ctx)).toEqual({ kind: 'patch', uid: 'left', patch: { lane: 'next', before: 'next' } });
-    expect(planMove(left, 'later', null, ctx)).toEqual({ kind: 'patch', uid: 'left', patch: { lane: 'later', before: null } });
+    expect(planMove(left, 'next', 'next', WED)).toEqual({ kind: 'patch', uid: 'left', patch: { lane: 'next', before: 'next' } });
+    expect(planMove(left, 'later', null, WED)).toEqual({ kind: 'patch', uid: 'left', patch: { lane: 'later', before: null } });
   });
 
   it("sorts nothing for today's row shown in a lane while its park is on its way", () => {
-    expect(planMove({ ...open, column: 'later' }, 'later', 'later', ctx)).toBeNull();
-    expect(planMove({ ...carried, column: 'next' }, 'next', null, ctx)).toBeNull();
+    expect(planMove({ ...open, column: 'later' }, 'later', 'later', WED)).toBeNull();
+    expect(planMove({ ...carried, column: 'next' }, 'next', null, WED)).toBeNull();
   });
 
   it("puts a task of Later or Next on today's list as itself, in its category, with the board's counts: open with the nudge, ticked without", () => {
-    expect(planMove(item('item:later'), 'progress', null, ctx)).toEqual({
+    expect(planMove(item('item:later'), 'progress', null, WED)).toEqual({
       kind: 'place',
       row: {
         uid: 'later',
@@ -303,12 +325,12 @@ describe('planMove', () => {
       },
       nudge: true,
     });
-    expect(planMove(item('item:next'), 'done', null, ctx)).toMatchObject({ kind: 'place', row: { uid: 'next', text: 'Follow up', done: true }, nudge: false });
-    expect(planMove(left, 'progress', null, ctx)).toMatchObject({ kind: 'place', row: { uid: 'left', categoryUid: 'cafe00000002' }, nudge: true });
+    expect(planMove(item('item:next'), 'done', null, WED)).toMatchObject({ kind: 'place', row: { uid: 'next', text: 'Follow up', done: true }, nudge: false });
+    expect(planMove(left, 'progress', null, WED)).toMatchObject({ kind: 'place', row: { uid: 'left', categoryUid: 'cafe00000002' }, nudge: true });
   });
 
   it('pulls a task done on an earlier day into In progress, the same task again', () => {
-    expect(planMove(item('item:doneTue'), 'progress', null, ctx)).toMatchObject({
+    expect(planMove(item('item:doneTue'), 'progress', null, WED)).toMatchObject({
       kind: 'place',
       row: { uid: 'doneTue', text: 'Shipped', done: false, listed: 1, logged: 1500 },
       nudge: true,
@@ -316,7 +338,7 @@ describe('planMove', () => {
   });
 
   it("puts an earlier day's routine tick back on today as the same recurring priority, with that row's counts", () => {
-    expect(planMove(routineTicked, 'progress', null, ctx)).toEqual({
+    expect(planMove(routineTicked, 'progress', null, WED)).toEqual({
       kind: 'place',
       row: {
         uid: 'rcur00000002',
@@ -335,58 +357,71 @@ describe('planMove', () => {
   });
 
   it("ticks and unticks today's rows between In progress and Done", () => {
-    expect(planMove(open, 'done', null, ctx)).toEqual({ kind: 'tick', uid: rowUid(1), done: true });
-    expect(planMove(ticked, 'progress', null, ctx)).toEqual({ kind: 'tick', uid: rowUid(2), done: false });
-    expect(planMove(recurring, 'done', null, ctx)).toEqual({ kind: 'tick', uid: 'rcur00000001', done: true });
+    expect(planMove(open, 'done', null, WED)).toEqual({ kind: 'tick', uid: rowUid(1), done: true });
+    expect(planMove(ticked, 'progress', null, WED)).toEqual({ kind: 'tick', uid: rowUid(2), done: false });
+    expect(planMove(recurring, 'done', null, WED)).toEqual({ kind: 'tick', uid: 'rcur00000001', done: true });
   });
 
   it("parks today's open row in Later or Next", () => {
-    expect(planMove(open, 'later', 'later', ctx)).toEqual({ kind: 'park', uid: rowUid(1), lane: 'later', before: 'later' });
-    expect(planMove(open, 'next', null, ctx)).toEqual({ kind: 'park', uid: rowUid(1), lane: 'next', before: null });
+    expect(planMove(open, 'later', 'later', WED)).toEqual({ kind: 'park', uid: rowUid(1), lane: 'later', before: 'later' });
+    expect(planMove(open, 'next', null, WED)).toEqual({ kind: 'park', uid: rowUid(1), lane: 'next', before: null });
   });
 
   it("parks today's row whose task a later day's list holds in Next only, where it stays planned", () => {
-    expect(planMove(carried, 'next', null, ctx)).toEqual({ kind: 'park', uid: 'carried', lane: 'next', before: null });
-    expect(planMove(carried, 'later', null, ctx)).toEqual({ kind: 'refuse', message: BOARD.planned('Carried', 'tomorrow') });
+    expect(planMove(carried, 'next', null, WED)).toEqual({ kind: 'park', uid: 'carried', lane: 'next', before: null });
+    expect(planMove(carried, 'later', null, WED)).toEqual({ kind: 'refuse', message: BOARD.planned('Carried', 'tomorrow') });
   });
 
   it("keeps a done item done: today's ticked row and a task done earlier moved to Later or Next give the notice, with where it was dropped and its category", () => {
-    expect(planMove(ticked, 'later', 'later', ctx)).toEqual({ kind: 'doneStays', title: 'Ticked', categoryUid: null, lane: 'later', before: 'later' });
-    expect(planMove(item('item:doneTue'), 'next', null, ctx)).toEqual({ kind: 'doneStays', title: 'Shipped', categoryUid: null, lane: 'next', before: null });
+    expect(planMove(ticked, 'later', 'later', WED)).toEqual({ kind: 'doneStays', title: 'Ticked', categoryUid: null, lane: 'later', before: 'later' });
+    expect(planMove(item('item:doneTue'), 'next', null, WED)).toEqual({ kind: 'doneStays', title: 'Shipped', categoryUid: null, lane: 'next', before: null });
   });
 
   it('refuses a recurring row in Later or Next, ticked or not, and any move of a planned task', () => {
-    expect(planMove(recurring, 'later', null, ctx)).toEqual({ kind: 'refuse', message: BOARD.recurringStays('Monitor the queue') });
-    expect(planMove(routineTicked, 'next', null, ctx)).toEqual({ kind: 'refuse', message: BOARD.recurringStays('Follow-ups') });
+    expect(planMove(recurring, 'later', null, WED)).toEqual({ kind: 'refuse', message: BOARD.recurringStays('Monitor the queue') });
+    expect(planMove(routineTicked, 'next', null, WED)).toEqual({ kind: 'refuse', message: BOARD.recurringStays('Follow-ups') });
     for (const to of ['later', 'next', 'progress', 'done'] as const) {
-      expect(planMove(item('item:planned'), to, null, ctx)).toEqual({ kind: 'refuse', message: BOARD.planned('Plan B', 'tomorrow') });
+      expect(planMove(item('item:planned'), to, null, WED)).toEqual({ kind: 'refuse', message: BOARD.planned('Plan B', 'tomorrow') });
     }
   });
 
+  it("refuses an earlier day's tick of a removed recurring priority on today's list, archived or gone from Settings, and still ticks today's row of one", () => {
+    const archived = makeDay(TUE, { priorities: [{ ...tuesday.priorities[0]!, archived: true }] });
+    const removedToday = row(5, 'Old routine', { uid: 'rcur00000003', recurring: true, archived: true });
+    const gone = columns({ cards, todayRows: [removedToday], earlierDays: [tuesday], recurring: [routines[0]!] });
+    const stale = columns({ cards, earlierDays: [archived], recurring: routines });
+    for (const c of [gone, stale]) {
+      const tick = findItem(c, `row:${TUE}:rcur00000002`)!.item;
+      expect(planMove(tick, 'progress', null, WED)).toEqual({ kind: 'refuse', message: BOARD.removed('Follow-ups') });
+      expect(moveTargets(tick, WED)).toEqual([]);
+    }
+    const todays = findItem(gone, `row:${WED}:rcur00000003`)!.item;
+    expect(planMove(todays, 'done', null, WED)).toEqual({ kind: 'tick', uid: 'rcur00000003', done: true });
+    expect(moveTargets(todays, WED)).toEqual(['done']);
+  });
+
   it('does nothing for a drop where the item already is in In progress or Done', () => {
-    expect(planMove(open, 'progress', null, ctx)).toBeNull();
-    expect(planMove(ticked, 'done', null, ctx)).toBeNull();
-    expect(planMove(item('item:doneTue'), 'done', null, ctx)).toBeNull();
-    expect(planMove(routineTicked, 'done', null, ctx)).toBeNull();
+    expect(planMove(open, 'progress', null, WED)).toBeNull();
+    expect(planMove(ticked, 'done', null, WED)).toBeNull();
+    expect(planMove(item('item:doneTue'), 'done', null, WED)).toBeNull();
+    expect(planMove(routineTicked, 'done', null, WED)).toBeNull();
   });
 
   it('offers every other column, Next for a task left open, none for a planned task, and no Later or Next for a recurring row', () => {
-    expect(moveTargets(item('item:later'))).toEqual(['next', 'progress', 'done']);
-    expect(moveTargets(open)).toEqual(['later', 'next', 'done']);
-    expect(moveTargets(left)).toEqual(['later', 'next', 'progress', 'done']);
+    expect(moveTargets(item('item:later'), WED)).toEqual(['next', 'progress', 'done']);
+    expect(moveTargets(open, WED)).toEqual(['later', 'next', 'done']);
+    expect(moveTargets(left, WED)).toEqual(['later', 'next', 'progress', 'done']);
     // Done items and today's row planned later keep Later and Next, which answer with the notice.
-    expect(moveTargets(ticked)).toEqual(['later', 'next', 'progress']);
-    expect(moveTargets(item('item:doneTue'))).toEqual(['later', 'next', 'progress']);
-    expect(moveTargets(carried)).toEqual(['later', 'next', 'done']);
-    expect(moveTargets(recurring)).toEqual(['done']);
-    expect(moveTargets(routineTicked)).toEqual(['progress']);
-    expect(moveTargets(item('item:planned'))).toEqual([]);
+    expect(moveTargets(ticked, WED)).toEqual(['later', 'next', 'progress']);
+    expect(moveTargets(item('item:doneTue'), WED)).toEqual(['later', 'next', 'progress']);
+    expect(moveTargets(carried, WED)).toEqual(['later', 'next', 'done']);
+    expect(moveTargets(recurring, WED)).toEqual(['done']);
+    expect(moveTargets(routineTicked, WED)).toEqual(['progress']);
+    expect(moveTargets(item('item:planned'), WED)).toEqual([]);
   });
 });
 
 describe('dragging', () => {
-  const ctx = { today: WED };
-  const NAMES: Record<ColumnId, string> = { later: 'Later', next: 'Next', progress: 'In progress', done: 'Done' };
   const cards: BoardCard[] = [
     makeCard('a', 'A'),
     makeCard('b', 'B', { position: 2 }),
@@ -495,22 +530,22 @@ describe('dragging', () => {
   });
 
   it('says how a drop ended: stayed, moved, turned down, or done and staying done', () => {
-    expect(moveAnnouncement(null, item('item:a'), 'later', NAMES)).toBe(BOARD_DRAG.stays('A', 'Later'));
-    expect(moveAnnouncement(null, item(open), 'progress', NAMES)).toBe(BOARD_DRAG.stays('Open', 'In progress'));
-    expect(moveAnnouncement(planMove(item('item:a'), 'next', 'd', ctx), item('item:a'), 'next', NAMES)).toBe(BOARD_DRAG.moved('A', 'Next'));
-    expect(moveAnnouncement(planMove(item(open), 'done', null, ctx), item(open), 'done', NAMES)).toBe(BOARD_DRAG.moved('Open', 'Done'));
-    expect(moveAnnouncement(planMove(item(ticked), 'next', null, ctx), item(ticked), 'next', NAMES)).toBe(DONE_STAYS.announce('Ticked', 'Next'));
+    expect(moveAnnouncement(null, item('item:a'), 'later')).toBe(BOARD_DRAG.stays('A', 'Later'));
+    expect(moveAnnouncement(null, item(open), 'progress')).toBe(BOARD_DRAG.stays('Open', 'In progress'));
+    expect(moveAnnouncement(planMove(item('item:a'), 'next', 'd', WED), item('item:a'), 'next')).toBe(BOARD_DRAG.moved('A', 'Next'));
+    expect(moveAnnouncement(planMove(item(open), 'done', null, WED), item(open), 'done')).toBe(BOARD_DRAG.moved('Open', 'Done'));
+    expect(moveAnnouncement(planMove(item(ticked), 'next', null, WED), item(ticked), 'next')).toBe(DONE_STAYS.announce('Ticked', 'Next'));
     const carried = item('item:carried');
-    expect(moveAnnouncement(planMove(carried, 'later', null, ctx), carried, 'later', NAMES)).toBe(BOARD.planned('Carried', 'tomorrow'));
+    expect(moveAnnouncement(planMove(carried, 'later', null, WED), carried, 'later')).toBe(BOARD.planned('Carried', 'tomorrow'));
     const recurring = item(`row:${WED}:rcur00000001`);
-    expect(moveAnnouncement(planMove(recurring, 'next', null, ctx), recurring, 'next', NAMES)).toBe(BOARD.recurringStays('Monitor the queue'));
+    expect(moveAnnouncement(planMove(recurring, 'next', null, WED), recurring, 'next')).toBe(BOARD.recurringStays('Monitor the queue'));
   });
 
   it('says where a dragged item would land: the column, and in Later or Next before which task, or back where it started', () => {
-    expect(overAnnouncement(null, item('item:a'), c, NAMES)).toBe(BOARD_DRAG.overStart('A', 'Later'));
-    expect(overAnnouncement({ to: 'progress', before: null }, item('item:a'), c, NAMES)).toBe(BOARD_DRAG.over('A', 'In progress'));
-    expect(overAnnouncement({ to: 'next', before: 'd' }, item('item:a'), c, NAMES)).toBe(BOARD_DRAG.overBefore('A', 'Next', 'D'));
-    expect(overAnnouncement({ to: 'next', before: null }, item('item:a'), c, NAMES)).toBe(BOARD_DRAG.overEnd('A', 'Next'));
+    expect(overAnnouncement(null, item('item:a'), c)).toBe(BOARD_DRAG.overStart('A', 'Later'));
+    expect(overAnnouncement({ to: 'progress', before: null }, item('item:a'), c)).toBe(BOARD_DRAG.over('A', 'In progress'));
+    expect(overAnnouncement({ to: 'next', before: 'd' }, item('item:a'), c)).toBe(BOARD_DRAG.overBefore('A', 'Next', 'D'));
+    expect(overAnnouncement({ to: 'next', before: null }, item('item:a'), c)).toBe(BOARD_DRAG.overEnd('A', 'Next'));
   });
 });
 
