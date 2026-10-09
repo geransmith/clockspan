@@ -4,11 +4,13 @@ import { useFollowedDraft } from '../../hooks/useFollowedDraft';
 import { categoryOf, COLUMN_NAMES, moveTargets, type BoardItem, type CategoryPick, type ColumnId } from '../../lib/board';
 import { BOARD } from '../../lib/copy';
 import { dayName } from '../../lib/format';
-import type { Category } from '../../types';
+import type { Category, Session } from '../../types';
 import { CategoryChip } from '../CategoryChip';
 import { CategoryDot } from '../CategoryDot';
 import { Grip } from '../Icons';
 import { RepeatMark } from '../RepeatMark';
+import { RunningMark } from '../RunningMark';
+import { TimerLengths } from '../TimerLengths';
 
 interface Props {
   item: BoardItem;
@@ -33,6 +35,10 @@ interface Props {
   onRemove?: () => void;
   /** The line under the title: where a task done earlier is unticked. */
   note?: string;
+  /** The editor's Start timer, the timer card's length buttons; none where no timer can start on it (`Board`). */
+  start?: { disabled: boolean; onStart: (minutes: number) => void };
+  /** The session running on it: the meta line starts with the day log's pill, which the title names. */
+  running?: Session;
   /** Drag and drop; an item without it has no grip. */
   drag?: ItemDrag;
 }
@@ -46,10 +52,11 @@ export interface ItemDrag {
 
 /**
  * A task on the board: its tick, its number on today's list, its title (a button that opens the
- * editor), and a line with its category, the Repeats mark of a recurring row, and the day a later
- * list holds it or it was left open on. The editor renames it, sets its category, moves it to
- * another column (Move to, the way to move without dragging), and deletes it; a planned item's
- * offers no Move to, since that day's list decides where it shows.
+ * editor), and a line with the timer running on it, its category, the Repeats mark of a recurring
+ * row, and the day a later list holds it or it was left open on. The editor renames it, sets its
+ * category, starts the focus timer on it, moves it to another column (Move to, the way to move
+ * without dragging), and deletes it; a planned item's offers no Move to, since that day's list
+ * decides where it shows.
  */
 export function BoardCardView({
   item,
@@ -66,11 +73,14 @@ export function BoardCardView({
   onDelete,
   onRemove,
   note,
+  start,
+  running,
   drag,
 }: Props) {
   const targets = moveTargets(item, today);
   const category = categoryOf(pick.categories, item.categoryUid);
   const editorId = `editor-${item.id}`;
+  const markId = `running-${item.id}`;
   return (
     <li ref={drag?.nodeRef} style={drag?.style} className={`board-card${item.column === 'done' ? ' is-done' : ''}`}>
       <div className="board-card-row">
@@ -97,12 +107,20 @@ export function BoardCardView({
             {item.row.position}
           </span>
         )}
-        <button ref={titleRef} className="board-card-open" aria-expanded={open} aria-controls={open ? editorId : undefined} onClick={onToggle}>
+        <button
+          ref={titleRef}
+          className="board-card-open"
+          aria-expanded={open}
+          aria-controls={open ? editorId : undefined}
+          aria-describedby={running ? markId : undefined}
+          onClick={onToggle}
+        >
           <span className="board-card-title">{item.title}</span>
         </button>
       </div>
-      {(category != null || item.planned != null || item.leftOpen != null || item.recurring) && (
+      {(running != null || category != null || item.planned != null || item.leftOpen != null || item.recurring) && (
         <p className="board-card-meta muted small">
+          {running && <RunningMark paused={running.pausedAt != null} id={markId} />}
           {category && <CategoryTag category={category} />}
           {item.recurring && <RepeatMark />}
           {item.planned && <span>Planned for {dayName(item.planned, today, true)}</span>}
@@ -116,6 +134,14 @@ export function BoardCardView({
           {onCategory && (
             <div className="board-editor-category">
               <CategoryChip value={item.categoryUid} onChange={onCategory} pick={pick} label={`Category for ${item.title}`} />
+            </div>
+          )}
+          {start && (
+            <div className="board-start" role="group" aria-labelledby={`${editorId}-start`}>
+              <span id={`${editorId}-start`} className="muted small">
+                Start timer
+              </span>
+              <TimerLengths onStart={start.onStart} disabled={start.disabled} />
             </div>
           )}
           {item.planned ? (

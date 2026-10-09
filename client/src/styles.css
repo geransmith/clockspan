@@ -2698,12 +2698,30 @@ button.log-label:hover {
 .board-editor-title {
   overflow-wrap: anywhere;
 }
-.board-move {
+.board-move,
+.board-start {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 4px 8px;
+}
+/* The timer card's length buttons, a line high: beside their label where they fit, wrapping in a
+   narrow column (the card's one-row grid can't shrink below its buttons). */
+.board-start .timer-quick {
+  display: flex;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  gap: 6px;
+}
+.board-start .btn-quick {
+  flex: 1 0 auto;
+  min-height: 44px;
+  flex-direction: row;
+  gap: 4px;
+}
+.board-start .timer-quick-num {
+  font-size: 1rem;
 }
 .board-move-select {
   max-width: 100%;

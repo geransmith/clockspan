@@ -246,7 +246,7 @@ export const ALARM_ACTIONS = {
 /** Banner when a start finds a timer already running, started on another device. */
 export const TIMER_ELSEWHERE = {
   title: 'A timer is already running',
-  body: 'It was started on another device. This sheet now shows that one.',
+  body: 'It was started on another device. This page now shows that one.',
 } as const;
 
 /** Above the banner stack when more are raised than it draws; closing one brings the next back. */

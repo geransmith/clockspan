@@ -264,6 +264,38 @@ describe('start', () => {
     expect(result.current.timer.running?.priorityUid).toBe('u1');
   });
 
+  it('counts a start as out from its call to its answer, waiting first for a promised uid and starting on it', async () => {
+    const { result } = await renderRunning(null);
+    const uid = deferred<string | null>();
+    const answer = deferred<SessionResponse>();
+    vi.mocked(api.startSession).mockReturnValueOnce(answer.promise);
+    expect(result.current.timer.starting).toBe(false);
+    const started = begin(() => result.current.timer.start(TODAY, 1500, 'Write the report', uid.promise));
+    await settle();
+    expect(result.current.timer.starting).toBe(true);
+    // A row whose save is still out: the server would refuse a uid it hasn't stored.
+    expect(api.startSession).not.toHaveBeenCalled();
+    uid.resolve('u1');
+    await settle();
+    expect(api.startSession).toHaveBeenCalledExactlyOnceWith(TODAY, 1500, 'Write the report', 'u1');
+    expect(result.current.timer.starting).toBe(true);
+    answer.resolve({ session: makeSession({ priorityUid: 'u1' }) });
+    await act(() => started);
+    expect(result.current.timer.starting).toBe(false);
+    expect(result.current.timer.running?.priorityUid).toBe('u1');
+  });
+
+  it("rethrows a promised uid's failure as the start's, sending no start", async () => {
+    const { result } = await renderRunning(null);
+    const uid = deferred<string | null>();
+    const started = begin(() => result.current.timer.start(TODAY, 1500, 'Write the report', uid.promise));
+    uid.reject(new Error('The list is full.'));
+    await act(() => expect(started).rejects.toThrow('The list is full.'));
+    expect(api.startSession).not.toHaveBeenCalled();
+    expect(result.current.timer.starting).toBe(false);
+    expect(result.current.timer.running).toBeNull();
+  });
+
   it('rethrows any other failure for the card to show', async () => {
     const { result } = await renderRunning(null);
     vi.mocked(api.startSession).mockRejectedValueOnce(apiError(400, { error: 'bad' }));

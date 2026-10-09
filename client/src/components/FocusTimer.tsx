@@ -5,7 +5,6 @@ import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { useSubmit } from '../hooks/useSubmit';
 import { useTimer } from '../hooks/useTimer';
-import { dismissByTag, unlockAudio } from '../lib/alerts';
 import type { CategoryPick } from '../lib/board';
 import { BREAK, TIMER_DUE } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
@@ -16,6 +15,7 @@ import type { Priority, Session } from '../types';
 import { CategoryChip } from './CategoryChip';
 import { SessionLabel } from './SessionLabel';
 import { TimerControls } from './TimerControls';
+import { TimerLengths } from './TimerLengths';
 import { ErrorLine } from './ErrorLine';
 
 interface Props {
@@ -37,19 +37,18 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
   const [addAsPriority, setAddAsPriority] = useState(false);
   // The new row's category, offered beside "Also add to today's priorities" while it is ticked.
   const [category, setCategory] = useState<string | null>(null);
-  // A start (of a timer or a break) is out: the start and break buttons are disabled until it
-  // answers. A second start would add the priority twice and meet the first timer as a 409,
-  // which reads as one started on another device. A break goes out on the day store's queue,
-  // not the timer's, so the two could reach the server in either order: a new break would meet
-  // the running timer (409, "Change not saved"), a timer started behind a break start could
-  // land first, and an end would find the break the start already ended. The break banners,
-  // whose Start break the disabled buttons don't reach, go in the timer start's tap.
-  const { busy: starting, error, run } = useSubmit();
+  // A start (of a timer or a break) is out, here or on the board (`timer.starting`): the start
+  // and break buttons are disabled until it answers. A second start would add the priority twice
+  // and meet the first timer as a 409, which reads as one started on another device. A break goes
+  // out on the day store's queue, not the timer's, so the two could reach the server in either
+  // order: a new break would meet the running timer (409, "Change not saved"), a timer started
+  // behind a break start could land first, and an end would find the break the start already
+  // ended. The break banners, whose Start break the disabled buttons don't reach, go in the
+  // timer start's tap (`TimerLengths`).
+  const { busy, error, run } = useSubmit();
+  const held = busy || timer.starting;
 
   if (timer.running) return <Running session={timer.running} />;
-
-  // Shortest first, and a length set twice is one button.
-  const lengths = [...new Set(settings.timerMinutes)].sort((a, b) => a - b);
 
   // Open rows only: a done priority isn't something to start a session for.
   const open = priorities.filter((p) => isTaskRow(p) && !p.done);
@@ -73,21 +72,21 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
   };
 
   const start = (minutes: number) => {
-    // Here, in the tap and before any await: iOS counts only the tap as the gesture, and with
-    // "Also add to today's priorities" ticked the new row is saved before the timer starts, so
-    // the completion chime would stay silent otherwise.
-    unlockAudio();
-    dismissByTag('break');
     run(async () => {
-      let uid = linkedStillOpen ? linked : (named?.uid ?? null);
-      if (offerAdd && addAsPriority) {
-        // With the board off there is no chip, and a category picked before it went off isn't shown.
-        uid = await addPriority(date, trimmed, pick ? category : null);
-        // Linked from here on, so a retry after a failed start uses this row instead of adding another.
-        setLinked(uid);
-        setAddAsPriority(false);
-        setCategory(null);
-      }
+      // The new row's save goes in as the start's uid, so the timer counts the start as out from the tap.
+      const uid =
+        offerAdd && addAsPriority
+          ? // With the board off there is no chip, and a category picked before it went off isn't shown.
+            addPriority(date, trimmed, pick ? category : null).then((added) => {
+              // Linked from here on, so a retry after a failed start uses this row instead of adding another.
+              setLinked(added);
+              setAddAsPriority(false);
+              setCategory(null);
+              return added;
+            })
+          : linkedStillOpen
+            ? linked
+            : (named?.uid ?? null);
       // Back to work: the server ends a running break as the session starts, so nothing to send here.
       await timer.start(date, minutes * 60, trimmed, uid);
       setLabel('');
@@ -143,21 +142,14 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
             {/* A timer, like the focus ring's: a live region would read it out every second. */}
             <strong role="timer">{formatCountdown(breakTimer.remainingSeconds)}</strong>
           </span>
-          <button className="btn btn-ghost" onClick={breakTimer.end} disabled={starting}>
+          <button className="btn btn-ghost" onClick={breakTimer.end} disabled={held}>
             {BREAK.end}
           </button>
         </div>
       )}
-      <div className="timer-quick">
-        {lengths.map((m) => (
-          <button key={m} className="btn btn-quick" onClick={() => start(m)} disabled={!isToday || starting}>
-            <span className="timer-quick-num">{m}</span>
-            <span className="timer-quick-unit">min</span>
-          </button>
-        ))}
-      </div>
+      <TimerLengths onStart={start} disabled={!isToday || held} />
       {isToday && breakTimer.endsAt == null && (
-        <button className="btn btn-ghost timer-break-start" onClick={() => run(() => breakTimer.start(breakTimer.next.minutes))} disabled={starting}>
+        <button className="btn btn-ghost timer-break-start" onClick={() => run(() => breakTimer.start(breakTimer.next.minutes))} disabled={held}>
           {BREAK.start(breakTimer.next.minutes, breakTimer.next.long)}
         </button>
       )}

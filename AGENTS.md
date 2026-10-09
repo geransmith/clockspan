@@ -155,8 +155,10 @@ client/                 Vite root → dist/client
   src/components/       the cards, History (Calendar + Review), Banners, FinishChoice, RemoveTask (×'s Off
                         this day / Delete everywhere), TodayOffer (Top priorities' morning notice), and
                         the pieces several of them share (Folded: a long list's Show all; CategoryChip
-                        and CategoryDot; RepeatMark, a recurring row's mark, kept here so the sheet can
-                        show it); settings/ holds SettingsDialog (the shell and tabs), a file per
+                        and CategoryDot; RepeatMark, a recurring row's mark, and RunningMark, the
+                        running session's pill, kept here so the sheet can show them; TimerLengths,
+                        the timer's length buttons and their tap, on the timer card and a board
+                        item's editor); settings/ holds SettingsDialog (the shell and tabs), a file per
                         tab (BoardTab: the categories and recurring priorities, shown while the
                         board is on), and controls.tsx; board/ holds the Board page (Board,
                         BoardCard, Capture: a column's box, opened by the + in its head, ClockBar:
@@ -391,8 +393,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **All user-facing alerts go through `client/src/lib/alerts.ts`** (`alert()`, `playSound()`,
   banners). Never call `new Notification(...)` or `showNotification()` (its fallback where the
   constructor is refused, Chrome on Android), create an `AudioContext` or fetch a clip anywhere
-  else. `unlockAudio()` must be called from a user gesture (the timer card's start buttons,
-  `useBreak`'s `start` and every punch commit do this) for iOS. What plays is
+  else. `unlockAudio()` must be called from a user gesture (the timer's length buttons,
+  `TimerLengths`, on the timer card and a board item's editor, `useBreak`'s `start` and every
+  punch commit do this) for iOS. What plays is
   `settings.sounds[event]`, an id from the catalog in `shared/sounds.ts`; `settings.sound` is the
   master switch over all of them, and `none` is the per-event off. A celebration (day complete and
   work week reached in `Timeclock.tsx`, a priority ticked in `Priorities.tsx` or on the board (its
@@ -504,10 +507,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   mirrors both rules with `endBreaksAt` (in `useDay`'s break writes and `applySession`, which ends a
   running break on any loaded day, since one started before midnight sits on the day before), so it
   never sends an end after a session start: the break may already be gone. The timer card disables
-  its start and break buttons while a timer or break start is out (one `useSubmit`), since a break
+  its start and break buttons while a timer or break start is out (one `useSubmit`, and
+  `useTimer().starting` for a start from the board, whose Start holds on it too), since a break
   write goes out on the day store's queue, not the timer's, and the two could reach the server in
   either order; for the same reason a session start takes the break banners down in its tap
-  (`dismissByTag('break')`), whose Start break those buttons don't cover.
+  (`dismissByTag('break')`, in `TimerLengths`), whose Start break those buttons don't cover.
 - **Saves reach the server in the order they were made**, each store's on its own queue (`serial()`
   in `lib/optimistic.ts`, made by `useTracked`). In the day store, `setPunches` and `setPriorities`
   send a whole list, so one PUT per list and day is in flight and only the newest waiting list
@@ -522,22 +526,24 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   after another (`inOrder`). `useTimer` sends the running session's writes one at a time on its own
   queue: start, adjust, edit, pause, resume, finish and cancel, the log's edits of the running row
   included. That queue is not ordered against the day store's `session:<id>` queue, which carries
-  the other rows' edits and deletes. Two jobs wait across queues: a session start or edit that names
-  a priority's uid first waits, inside its own queue's job, for that day's priorities save still out
-  (`prioritiesSaved`), since the server refuses a task that day's list doesn't hold yet; and a board
-  job that changes a day's list waits for that save (below). `useSettings` sends its PUTs and resets
-  one at a time. The board (`useBoard`) sends each write as one job on its own queue, its change to
-  the tasks shown from the moment it is made; a job that changes today's list (a pull, a row typed
-  in In progress's box, a tick, a rename or category of today's row, Remove from today, which leaves
-  a free row as × does, `takeOffRow`) goes through `editPriorities`, and so on the day store's list
-  sends, and awaits that save inside the job. A park waits for today's save still out, PATCHes the
-  task's lane, then takes its row off today's list and reads the board again; Delete (`deleteItem`,
-  the board's and the sheet's) waits for today's save, then sends `DELETE /items/:uid`, which takes
-  every day's entry and leaves the tombstone. `useBoard.tsx` says why each goes in that order. A
-  board PATCH of a task off today's list needs no wait: the board read that task from the server. A
-  new edit of a day's rows, the settings, the timer or the board goes through one of these, never
-  straight to `api`. Reads are not queued, and in every store a read's answer never replaces a
-  change still on its way.
+  the other rows' edits and deletes. Three jobs wait across queues: a session start or edit that
+  names a priority's uid first waits, inside its own queue's job, for that day's priorities save
+  still out (`prioritiesSaved`), since the server refuses a task that day's list doesn't hold yet; a
+  board job that changes a day's list waits for that save (below); and a timer start whose uid is a
+  promise awaits it first inside its job (the timer card's Also add hands it the new row's save, a
+  board item's Start its pull), so it names the task once today's list holds it. `useSettings`
+  sends its PUTs and resets one at a time. The board (`useBoard`) sends each write as one job on its own
+  queue, its change to the tasks shown from the moment it is made; a job that changes today's list
+  (a pull, a row typed in In progress's box, a tick, a rename or category of today's row, Remove
+  from today, which leaves a free row as × does, `takeOffRow`) goes through `editPriorities`, and so
+  on the day store's list sends, and awaits that save inside the job. A park waits for today's save
+  still out, PATCHes the task's lane, then takes its row off today's list and reads the board again;
+  Delete (`deleteItem`, the board's and the sheet's) waits for today's save, then sends
+  `DELETE /items/:uid`, which takes every day's entry and leaves the tombstone. `useBoard.tsx` says
+  why each goes in that order. A board PATCH of a task off today's list needs no wait: the board
+  read that task from the server. A new edit of a day's rows, the settings, the timer or the board
+  goes through one of these, never straight to `api`. Reads are not queued, and in every store a
+  read's answer never replaces a change still on its way.
 - **Punch positions are fixed**: 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in pairs,
   and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches` enforces
   it). Kind is parity (`kindForPosition`, `shared/punches.ts`). The math evaluates *set* punches
@@ -796,7 +802,18 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   work on again; taken off today again (a park included), it is done again. The editor's title and
   category chip rename or file the task on every day: today's row through the row (`editRow`), any
   other task through a PATCH (`editItem`). Delete is the full delete (`deleteItem`) on every one-off
-  task, and today's recurring row has Remove from today (`removeFromToday`) in its place. The + at
+  task, and today's recurring row has Remove from today (`removeFromToday`) in its place. The
+  editor's Start timer (`TimerLengths`) is on today's open rows, recurring ones included, and on
+  the unplanned cards of Later and Next, left-open ones included: none in Done, on a planned task or
+  an item whose move is on its way, or while any timer runs, and held while a start is out
+  (`starting`). `Board` takes `running`, `start` and `starting` from `Shell` as props, since the
+  timer's context changes every second. A row's Start closes the editor, the focus on the title,
+  and starts on its task; a card's is a pull first (`run` with `minutes`: the nudge asks as Move
+  to's does, Add anyway pulls and starts, Keep it short does neither), whose promise of the task's
+  uid the start awaits, so a refused pull starts nothing and shows one banner. A start the server
+  refuses (the task taken off the list meanwhile) is the save banner, and a 409 is adopted
+  (`TIMER_ELSEWHERE`). The item the running session is on, on its day, starts its meta line with
+  the day log's pill (`RunningMark`), which its title is `aria-describedby`. The + at
   the end of Later's, Next's and In progress's head opens that column's box (`Capture`: a field and
   the category chip; `openAdd`, which also shows the column on a phone). Enter adds and keeps the
   box open; an empty Enter or Escape closes it with the focus back on the +, Escape dropping the
@@ -922,12 +939,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `components/board/` loads only through `Board`'s chunk; what other views share with it
   (`lib/board.ts` and `hooks/useBoard.tsx` with the sheet, the settings and History's Review,
   `Folded` with Review, the category pieces (`CategoryChip`, `CategoryDot`, which Review uses
-  too, and `lib/popover.ts`) and `RepeatMark`, kept out so the sheet can show it) stays out of
-  that folder and imports no dnd-kit. The sheet renders plain `CardFrame`s until the first
-  Customize and stays on `SortableCards` after it, since swapping lists remounts the cards. A
-  chunk that fails to load (an upgrade while the page was open) reloads the page once a minute
-  at most (`vite:preloadError` in `main.tsx`, `lib/reload.ts`); the `ErrorBoundary` card shows
-  until the reload lands, and stays when no reload is made.
+  too, and `lib/popover.ts`), `RepeatMark`, `RunningMark` and `TimerLengths`, kept out so the sheet
+  can show them) stays out of that folder and imports no dnd-kit. The sheet renders plain
+  `CardFrame`s until the first Customize and stays on `SortableCards` after it, since swapping lists
+  remounts the cards. A chunk that fails to load (an upgrade while the page was open) reloads the
+  page once a minute at most (`vite:preloadError` in `main.tsx`, `lib/reload.ts`); the
+  `ErrorBoundary` card shows until the reload lands, and stays when no reload is made.
 - **A page left open across an update asks to be reloaded.** Every answer of the data routes, a
   refusal included, names the server's version in `Clockspan-Version` (`VERSION_HEADER`,
   `shared/api.ts`), set in `app.ts` on the `api` router after `requireAuth` and
@@ -1193,7 +1210,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   button that sends one calls its `run`: one send at a time with the button disabled, and one
   error line (`ErrorLine`), cleared when a send starts and filled with what it throws (a
   mismatched confirmation throws too). A store write that shows at once (a lane's box, a card's
-  Move to) is not a form send: it goes through its store, and a failure is the banner.
+  Move to), or a board item's Start timer, whose editor closes, is not a form send: it goes
+  through its store, and a failure is the banner.
 - Comments explain *why* (browser quirks, math), not what.
 - No new dependency (a server one or a client library the bundle carries) without stating the
   reason in the PR body, which becomes the squash commit's message on `main`.
@@ -1348,7 +1366,10 @@ The browser pass for each surface (the logic under it is already tested):
   time over line on a phone; Overtime approved, Overtime off and the meal periods off (no Lunch
   by, and the switch's hint drops the lunch deadline) change it as they change the sheet's tiles;
   Settings → Timeclock → Times on the board off hides it, and with the board off the switch isn't
-  there. Categories (with about 30 added by `curl` to `/api/board/categories` for a long list): a
+  there. Start timer, at 1440, 1000 (the lengths wrap under their label) and 375: a row's Start (the
+  bar shows the timer, the row's meta line `running`, then `paused`), a Next card's with three rows
+  open (the nudge, then Add anyway pulls and starts), and with a timer running no editor offers it.
+  Categories (with about 30 added by `curl` to `/api/board/categories` for a long list): a
   box's chip (a pick, New category, kept after a reload and in the other boxes), a card editor's
   chip with its list scrolling inside and the box in view, the cards' dot and name (a long name at
   1000), and Settings → Board (a rename, a name in use, the swatches wrapping at 375, Remove, the
