@@ -597,18 +597,20 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   task) or a recurring priority (`weekdays`), never both; a uid that exists answers the board as it
   is (a retry), and an archived or deleted task's is a 404. The cap of 300
   (`BOARD_LIMITS.openCards`) counts the tasks in Later or Next whose latest entry isn't ticked; only
-  board writes reach it, refused with `BOARD.full`. A task's row is deleted in two places only:
-  `collectItems`, which deletes the tasks no entry or session names that are a one-off in no lane,
-  or, in the prune alone, archived (the list PUT runs it on the tasks it took off, a session delete,
-  cancel or relink on the task the session left, the prune over everything), and the prune's
-  tombstone step. So a task typed and taken off again leaves nothing, a task in a lane stays, and a
-  task carried to a new day and taken off there keeps its earlier day. A cancel takes its session
-  off the task too, since a cancelled session counts nowhere. Archived (`archived_at`) is a
-  recurring priority removed in Settings, or a task the migration archived: it still shows wherever
-  an entry or session names it (`Priority.archived`), is never in a lane or offered, and nothing
-  unarchives it. A lane or an edit on it is a 404, and so is a second Remove of an archived routine;
-  a full delete of an archived one-off still goes through. It stays until the prune, so a stale
-  offer that adds it finds it archived and can't make a one-off under its uid.
+  board writes reach it (`POST /items` with a lane, a PATCH giving a lane to a task in none),
+  refused with a 400 (`FULL`, `routes/items.ts`), and the board checks it first (`BOARD.full`). A
+  task's row is deleted in two places only: `collectItems`, which deletes the tasks no entry or
+  session names that are a one-off in no lane, or, in the prune alone, archived (the list PUT runs
+  it on the tasks it took off, a session delete, cancel or relink on the task the session left, the
+  prune over everything), and the prune's tombstone step. So a task typed and taken off again leaves
+  nothing, a task in a lane stays, and a task carried to a new day and taken off there keeps its
+  earlier day. A cancel takes its session off the task too, since a cancelled session counts
+  nowhere. Archived (`archived_at`) is a recurring priority removed in Settings, or a task the
+  migration archived: it still shows wherever an entry or session names it (`Priority.archived`), is
+  never in a lane or offered, and nothing unarchives it. A lane or an edit on it is a 404, and so is
+  a second Remove of an archived routine; a full delete of an archived one-off still goes through.
+  It stays until the prune, so a stale offer that adds it finds it archived and can't make a one-off
+  under its uid.
 - **A deleted task is a tombstone until the prune.** Delete, the board's and the sheet's × → Delete
   everywhere, is `DELETE /items/:uid` on a one-off task, `deleteItem` in one transaction: every
   session on it stays on its day as unplanned time, with the task's name (cut to
@@ -839,17 +841,18 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **A session is named and filed by its task.** `sessionName(s, rows)` and
   `sessionCategory(s, rows)` (`lib/retro.ts`) read the written row its task is on its day
   (`sessionRow`), so a rename or a chip changed on the sheet shows at once, else the server's
-  `Session.title` (the task's current name, once the task has left that day; with no task, its
-  `label`) and `Session.categoryUid` (the task's, else the session's own). Every surface names a
-  session through them or `useTimer().name`: the day log, the timer card, the running bar, the tab
-  title, the timer's alerts as they are raised (a "Time's up" banner already up keeps its name: see
-  the timer rule), the retro's Not on the plan and Review's Off the plan (grouped by task, else by
-  label). A label typed at Start with an open row's text (`sameText`) starts linked to that row, as
-  its chip does. A session with a task has no name or category of its own to edit until it is set to
-  Unplanned, and `editedSession` shows an edit as the server will store it while it is out; the day
-  log picks a category only for a session not on a written row of its day (`sessionCategoryEdit`),
-  and shows it as a `CategoryDot` named by its `label`, the one dot drawn without its name beside
-  it. The functions' docs and `SessionLog`'s comments have the UI details.
+  `Session.title` (the task's current name, once the task has left that day; null with no task, so
+  the name is its `label`) and `Session.categoryUid` (the task's, else the session's own). Every
+  surface names a session through them or `useTimer().name`: the day log, the timer card, the
+  running bar, the tab title, the timer's alerts as they are raised (a "Time's up" banner already up
+  keeps its name: see the timer rule), the retro's Not on the plan and Review's Off the plan
+  (grouped by task, else by label). A label typed at Start with an open row's text (`sameText`)
+  starts linked to that row, as its chip does. A session with a task has no name or category of its
+  own to edit until it is set to Unplanned, and `editedSession` shows an edit as the server will
+  store it while it is out; the day log picks a category only for a session not on a written row of
+  its day (`sessionCategoryEdit`), and shows it as a `CategoryDot` named by its `label`, the one dot
+  drawn without its name beside it. The functions' docs and `SessionLog`'s comments have the UI
+  details.
 - **History opens on the route's date** (`route.date ?? today`), with that day picked. The
   calendar holds its month by its first day (`startOfMonth`) and Review its period by `from`,
   so neither moves at midnight. "Open day" first records the picked day (and the Review period,
@@ -1067,13 +1070,14 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `editRow`'s patch, so the held days that show it are read again → its value on
   every row the client builds: `emptyRow` and `newTaskRow` (`lib/priorities.ts`), and, taken
   from the source, `planNext`'s row and `PrioritySeed` (`lib/plan.ts`), `recurringRow`
-  (`lib/recurring.ts`) and `planMove`'s pull (`lib/board.ts`) → the seed (`insertItems`' INSERT,
-  which typecheck doesn't check) → `makePriority` and `makeCard`
-  (`client/src/test/fixtures.ts`). A field the server works out (like `recurring` or `listed`)
-  is read only: it goes in `ReadOnlyField` (`shared/priorities.ts`), never in `MERGED` or
-  `parsePriorityRows`, which neither reads nor refuses it; in the seed the row builders set it
-  (`recurring` in `oneOff` and `routineRows`, `archived` in `UNCOUNTED`), or `withCounts` fills it
-  once the days are built (`listed`, `earlier`, `logged`).
+  (`lib/recurring.ts`) and `planMove`'s pull (`lib/board.ts`) → the seed (its rows and
+  `SEEDED_RECURRING`, which typecheck asks for; `insertItems`' INSERT, which it doesn't) →
+  `makePriority`, `makeCard` and `makeRecurring` (`client/src/test/fixtures.ts`). A field the server
+  works out (like `recurring` or `listed`) is read only: it goes in `ReadOnlyField`
+  (`shared/priorities.ts`), never in `MERGED` or `parsePriorityRows`, which neither reads nor
+  refuses it; in the seed the row builders set it (`recurring` in `oneOff` and `routineRows`,
+  `archived` in `UNCOUNTED`), or `withCounts` fills it once the days are built (`listed`, `earlier`,
+  `logged`).
 - **An entry field** (like `done` or `addedAt`: a fact of one day's list): append a migration
   adding the column to `priorities` → the column in `ENTRIES` and `EntryRow`, read in
   `priorityJson` and written in the PUT's INSERT (`routes/days.ts`) → the field on `Priority`
@@ -1104,7 +1108,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `res.json(… satisfies <Type>)` and the client's `request<Type>` both name it) → cover it in
   that router's `*.test.ts`: happy path, each 400, and that another user gets a 404/empty
   result (the scoping test is not optional). A new `/:date` route also gets a row in the
-  bad-date table at the end of `server/routes/days.test.ts`.
+  bad-date table near the end of `server/routes/days.test.ts`, and a write route one in the
+  distance table after it.
 - **A schema change**: append to `MIGRATIONS` in `db.ts` and never edit an entry (see
   "Migrations are append-only"); a function migration's `db.test.ts` cases call
   `migrate(db, upTo)` to stop at the version before it, write the old rows, then run it. A new
@@ -1224,8 +1229,9 @@ Prove a change at the cheapest level that can show it, and stop there:
 3. One-off looks at live data: `curl` against the seeded dev DB (see "Dev data is disposable").
 4. The browser, only for what tests cannot show: how a card renders, drag/drop, banners, the
    timer bar, light/dark, the desktop and phone widths. Seed first (`--running` for timer work),
-   scope it to the surface you touched, and make one pass at desktop width, then one at the
-   375 px mobile preset, each in light and dark. Do not re-walk flows a test already covers.
+   scope it to the surface you touched, and make one pass at 1280 px (or the desktop widths the
+   surface's line below names), then one at the 375 px mobile preset, each in light and dark. Do not
+   re-walk flows a test already covers.
 
 Every test, client or server, writes time spans with `MINUTE_MS`, `HOUR_MS` and `DAY_MS` from
 `shared/dates.js`.
@@ -1263,13 +1269,10 @@ The browser pass for each surface (the logic under it is already tested):
   clock-out at +10. The work day must be longer than the lunch window, or lunch reads "Not
   needed today" and never rings, and longer than the second-meal threshold, or that alarm
   waits for the day to run over or for overtime approval. At the mobile preset each target's
-  banner shows at once. "Overtime approved" (on the card or the clock-out banner) stops the
-  clock-out alarm, while the lunch and second-meal banners still fire. When done,
+  banner shows at once, the clock-out banner with its "Overtime approved" button. When done,
   `npm run seed -- --fresh` or `curl -X DELETE localhost:3000/api/settings` puts the default
   settings back.
-- **Sounds**: Settings → Alarms → Sounds. Test on a clip row fetches the file once (the network
-  list); a second Test fetches nothing. A clock-out set today plays the day-complete sound once,
-  and not again on reload.
+- **Sounds**: Settings → Alarms → Sounds. Test on a clip row plays the clip.
 - **The update banner**: in the page, wrap `window.fetch` so each answer that has a
   `Clockspan-Version` header names another version (a new `Response` over the same body, with
   that header changed), then switch views, and look at the info banner with its Reload button.
@@ -1281,34 +1284,26 @@ The browser pass for each surface (the logic under it is already tested):
   the browser pane send single `key` presses; the `type` action pastes the whole string into one
   segment.
 - **Priorities or the timer card**: tick one row and press Add priority (the notice lists the
-  ticked row); tap a chip, start, and the log row shows the number; rename that row and the bar,
-  the card, the tab title and the log row take the new text, with no label box in the bar or
-  the log row's edit (the name is text there, with no hover), and set the log row to Unplanned
-  and it keeps the name as its label, which the log row's edit then edits; "Also add to today's
-  priorities" fills the first free row; a log row's select reassigns it. Empty a written row's
-  box and retype the carried row's name: where the notes under them sit (at 375 with the board on,
-  under the row's own chip, nearer it than the next row). × on the carried row: how "Remove …"
-  renders, a long name included. With the board on: pick a category on a row (an empty chip shows
-  only on the row's hover or focus with a mouse, always on a phone; a long name ends in an ellipsis;
-  at 375 the chip sits under the field, nearer it than the next row's, and the field keeps the row's
-  width, beside the ×; from 640 it sits beside the field, which ends in the same place written or
-  empty), tick Also add and pick one for the new row (the chip beside it wraps under it at 375),
-  give an unplanned log session one (its dot before the label) and a Plan tomorrow row one, then the
-  same at 1280 in the split's columns.
+  ticked row); tap a chip, start, and the log row shows the number; the log row's edit of a session
+  on a written row shows its name as text, with no hover. Empty a written row's box and retype the
+  carried row's name: where the notes under them sit (at 375 with the board on, under the row's own
+  chip, nearer it than the next row). × on the carried row: how "Remove …" renders, a long name
+  included. With the board on: pick a category on a row (an empty chip shows only on the row's hover
+  or focus with a mouse, always on a phone; a long name ends in an ellipsis; at 375 the chip sits
+  under the field, nearer it than the next row's, and the field keeps the row's width, beside the ×;
+  from 640 it sits beside the field, which ends in the same place written or empty), tick Also add
+  and pick one for the new row (the chip beside it wraps under it at 375), give an unplanned log
+  session one (its dot before the label) and a Plan tomorrow row one, then the same at 1280 in the
+  split's columns.
 - **Recurring priorities**: with the board on, Settings → Board → Recurring priorities: Recurring
   rows per day with its hint beside the box; Add recurring priority; a rename; a category from
   the row's chip, where Escape closes only the list and the dialog stays open; the days (on a
   touch screen each takes 44 × 44 px). At 375 the rows wrap and the seven days fit on one line.
-  On the board, a recurring row's meta line has the Repeats mark, and a rename or a category in
-  the editor of today's row, and of an earlier day's tick in Done, shows at once on its other ticks
-  in Done and in Settings → Board, and on the routine's other days' sheets. On the sheet, with a
-  routine due today (see "Dev data is disposable" for both groups): the morning notice with "Still
-  open from …" and "Repeats today", the routines ticked up to Recurring rows per day and the line
-  once more are ticked, Add to today putting the routines after the padded rows with the mark before
-  the chip, and Not today holding after a reload; a rename typed on a routine's row shows in
-  Settings → Board and on its past days; × on a routine's row takes it off that day without asking;
-  at 1280 and 1000 the mark and a long category in the chip's column, and at 375 the mark before the
-  chip under the field.
+  On the board, a recurring row's meta line has the Repeats mark. On the sheet, with a routine due
+  today (see "Dev data is disposable" for both groups): the morning notice with "Still open from …",
+  "Repeats today" and the line once more routines are ticked than Recurring rows per day; after Add
+  to today, the mark before the chip on a routine's row; at 1280 and 1000 the mark and a long
+  category in the chip's column, and at 375 the mark before the chip under the field.
 - **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
   Month / Quarter). With the board on (`PUT /api/settings {"board":true}`), By category in
   Review → Week and Month (solid and striped bars, No category last), in light and dark. For
@@ -1321,8 +1316,9 @@ The browser pass for each surface (the logic under it is already tested):
   from …" in Next, Move to from each column (a done item's notice), a park of a task typed seconds
   ago, a done-earlier task's editor, and this week's routine ticks in Done. At 1000, where the
   columns are narrowest: titles clamp to two lines, meta lines wrap, the Move to select
-  fits. At 375: the switch shows one column, the notice wraps, and with sign-in on
-  (`web-local`) the sheet's five header buttons fit with the brand's name gone. Light and dark.
+  fits. At 375: the switch shows one column, the notice wraps, and with sign-in on (`web-local`,
+  `npm run seed -- --auth local --sessions`, the printed cookie set and the board turned on in
+  Settings → Sheet) the sheet's five header buttons fit with the brand's name gone. Light and dark.
   The drag pass: at 1440, drag with the mouse between each pair of columns (Later and Next take
   the card where it is dropped), a done row onto Later (the notice), then by keyboard (Tab to a
   grip, Space, arrows, Space) with a screen reader, which hears where the card is and the
@@ -1330,17 +1326,16 @@ The browser pass for each surface (the logic under it is already tested):
   under the pointer isn't clipped; at 375 a card sorts within the column shown, In progress and Done
   show no grip, and Move to still moves. Categories (with about 30 added by `curl` to
   `/api/board/categories` for a long list): the capture chip (a pick, New category, kept after a
-  reload), a card editor's chip by keyboard (the arrows, Home/End, Enter, Escape) with its list
-  scrolling inside and the box in view, the cards' dot and name (a long name at 1000), and Settings
-  → Board (a rename, a name in use, the swatches wrapping at 375, Remove, the touch areas).
+  reload), a card editor's chip with its list scrolling inside and the box in view, the cards' dot
+  and name (a long name at 1000), and Settings → Board (a rename, a name in use, the swatches
+  wrapping at 375, Remove, the touch areas).
 - **The History calendar**: one month at the mobile preset: ◀ to a seeded month, tap a day,
   **Open day**, browser Back lands on that month with the day picked, and back through the
-  header, **Review this week** lands on that week. Review → Month → ◀ → a row → Back lands on
-  that month's review; ◀ on Days, tap a day, Review, Days keeps the month and the pick. With
-  the sticker chart on (`PUT /api/settings {"stickers":true}`), a chip narrows the grid to one
-  sticker and a second tap clears it; with Show weekends off, five columns.
+  header, **Review this week** lands on that week. Review → Month → ◀ → a row → Back lands on that
+  month's review. With the sticker chart on (`PUT /api/settings {"stickers":true}`), a chip narrows
+  the grid to one sticker and a second tap clears it; with Show weekends off, five columns.
 - **Retention**: one look at Settings → Data (count line, toggle saves); drive the delete with
-  curl (`POST /api/days/prune`) because of the confirm dialog.
+  curl (`POST /api/days/prune` with `{"before":"YYYY-MM-DD"}`) because of the confirm dialog.
 - **Auth**: no browser pass; the tests in `server/auth/` (`*.test.ts`) cover local and OIDC
   sign-in, cookie sessions, passwords, the limiter, user management and the reset-password
   command.
