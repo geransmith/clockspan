@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { CONFIRM } from '../lib/copy';
@@ -31,15 +32,24 @@ vi.mock('../api');
 vi.mock('../lib/alerts');
 
 const PLANNED = [makePriority(1, 'Ship the fix', { uid: 'abcdef123456' })];
-const DONE = endSession(makeSession(), { endedAt: T0 + 25 * MINUTE_MS, durationSeconds: 25 * 60 });
+const DONE = endSession(makeSession());
 const RUNNING = makeSession({ id: 2, label: 'Still going', startedAt: T0 + 26 * MINUTE_MS });
 
 /** The log on today's day store, wired as the sheet wires it, so an edit shows as the store lays it on. */
 function LogOnStore({ pick }: { pick: CategoryPick | null }) {
   const { day } = useDay(TODAY);
-  return day ? (
-    <SessionLog date={TODAY} isToday sessions={day.sessions} breaks={day.breaks} priorities={day.priorities} pick={pick} now={T0 + 30 * MINUTE_MS} />
-  ) : null;
+  return day ? <SessionLog date={TODAY} isToday sessions={day.sessions} breaks={day.breaks} priorities={day.priorities} pick={pick} /> : null;
+}
+
+/** The log on the store, with `extra` beside it (a read again button, the bar's name). */
+async function renderOnStore(pick: CategoryPick | null, extra?: ReactNode) {
+  render(
+    <AppProviders>
+      {extra}
+      <LogOnStore pick={pick} />
+    </AppProviders>,
+  );
+  await settle();
 }
 
 /** Reads today again, as the refresh loop does: how another device's rename reaches this one. */
@@ -62,7 +72,7 @@ async function renderLog(
   render(
     <AppProviders>
       <BarLabel />
-      <SessionLog date={date} isToday={date === TODAY} sessions={sessions} breaks={breaks} priorities={priorities} pick={pick} now={T0 + 30 * MINUTE_MS} />
+      <SessionLog date={date} isToday={date === TODAY} sessions={sessions} breaks={breaks} priorities={priorities} pick={pick} />
       <button>Elsewhere</button>
     </AppProviders>,
   );
@@ -176,10 +186,7 @@ describe('SessionLog', () => {
 
   describe("a session's name", () => {
     const fix = PLANNED[0]!;
-    const onFix = endSession(makeSession({ label: 'Started as this', priorityUid: fix.uid, title: 'Ship the fix' }), {
-      endedAt: T0 + 25 * MINUTE_MS,
-      durationSeconds: 25 * 60,
-    });
+    const onFix = endSession(makeSession({ label: 'Started as this', priorityUid: fix.uid, title: 'Ship the fix' }));
     const named = () => screen.getByRole('button', { name: /Ship the fix/ });
 
     it("is the current text of its task's row, the task's name once the task left the day, and its label with no task", async () => {
@@ -228,12 +235,7 @@ describe('SessionLog', () => {
       vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: PLANNED, sessions: [onFix] }));
       // As the server answers: the task's name becomes the label.
       vi.mocked(api.patchSession).mockImplementation((_id, patch) => Promise.resolve({ session: { ...onFix, ...patch, title: null, label: 'Ship the fix' } }));
-      render(
-        <AppProviders>
-          <LogOnStore pick={null} />
-        </AppProviders>,
-      );
-      await settle();
+      await renderOnStore(null);
       fireEvent.click(named());
       fireEvent.change(planSelect(), { target: { value: '' } });
       await settle();
@@ -255,13 +257,7 @@ describe('SessionLog', () => {
       const unplanned = { ...onFix, priorityUid: null, title: null };
       const reads = (session: Session) => makeDay(TODAY, { priorities: PLANNED, sessions: [session] });
       vi.mocked(api.getDay).mockResolvedValue(reads(unplanned));
-      render(
-        <AppProviders>
-          <ReadAgain />
-          <LogOnStore pick={null} />
-        </AppProviders>,
-      );
-      await settle();
+      await renderOnStore(null, <ReadAgain />);
       const readAgain = async (session: Session) => {
         vi.mocked(api.getDay).mockResolvedValue(reads(session));
         fireEvent.click(screen.getByRole('button', { name: 'Read today again' }));
@@ -294,13 +290,7 @@ describe('SessionLog', () => {
       vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: PLANNED, sessions: [RUNNING] }));
       const answer = deferred<SessionResponse>();
       vi.mocked(api.patchSession).mockReturnValue(answer.promise);
-      render(
-        <AppProviders>
-          <BarLabel />
-          <LogOnStore pick={null} />
-        </AppProviders>,
-      );
-      await settle();
+      await renderOnStore(null, <BarLabel />);
       expect(bar()).toBe('Still going');
       fireEvent.click(screen.getByRole('button', { name: /Still going/ }));
       fireEvent.change(planSelect(), { target: { value: fix.uid } });
@@ -399,12 +389,7 @@ describe('SessionLog', () => {
       vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: ROWS, sessions: [left] }));
       // As the server answers an unlink with no label: the task's name becomes the label.
       vi.mocked(api.patchSession).mockImplementation((_id, patch) => Promise.resolve({ session: { ...left, ...patch, title: null, label: 'Left the day' } }));
-      render(
-        <AppProviders>
-          <LogOnStore pick={PICK} />
-        </AppProviders>,
-      );
-      await settle();
+      await renderOnStore(PICK);
       expect(dot('Admin')).toBeTruthy();
       edit(/Left the day/);
       fireEvent.click(chip()!);
@@ -425,12 +410,7 @@ describe('SessionLog', () => {
         stored = { ...stored, ...patch, ...(patch.priorityUid ? { categoryUid: null } : {}) };
         return Promise.resolve({ session: stored });
       });
-      render(
-        <AppProviders>
-          <LogOnStore pick={PICK} />
-        </AppProviders>,
-      );
-      await settle();
+      await renderOnStore(PICK);
       expect(dot('Admin')).toBeTruthy();
       edit(/Picked/);
       fireEvent.change(planSelect(), { target: { value: 'abcdef123456' } });
@@ -505,7 +485,7 @@ describe('SessionLog', () => {
     const confirm = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
     vi.stubGlobal('confirm', confirm);
     await renderLog([DONE, RUNNING]);
-    const [done, running] = screen.getAllByRole('button', { name: 'Delete session' }) as HTMLButtonElement[];
+    const [done, running] = screen.getAllByRole('button', { name: /^Delete session at / }) as HTMLButtonElement[];
     expect(running!.disabled).toBe(true);
     fireEvent.click(done!);
     await settle();
@@ -553,7 +533,7 @@ describe('SessionLog', () => {
     const confirm = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
     vi.stubGlobal('confirm', confirm);
     await renderLog([DONE], [breakAt(7, 25, 3), breakAt(8, 29, 5)]);
-    const [over, running] = screen.getAllByRole('button', { name: 'Delete break' }) as HTMLButtonElement[];
+    const [over, running] = screen.getAllByRole('button', { name: /^Delete break at / }) as HTMLButtonElement[];
     expect(running!.disabled).toBe(true);
     fireEvent.click(over!);
     await settle();

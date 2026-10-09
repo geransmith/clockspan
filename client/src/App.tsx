@@ -58,8 +58,8 @@ function Shell() {
     setJumpTo('retro');
   }, [navigate]);
   const onJumped = useCallback(() => setJumpTo(null), []);
-  // History shows nothing finer than a minute. Handed the clock floored to the minute (and
-  // memoized), it renders once a minute instead of redoing the month or quarter every second.
+  // History and the sheet show nothing finer than a minute. Handed the clock floored to the
+  // minute (and memoized), they render once a minute instead of every second.
   const minute = floorToMinute(now);
   // The calendar's month and picked day are its own state and don't survive the unmount, so
   // the opened day is written onto the History entry first and Back reopens the calendar on
@@ -82,7 +82,7 @@ function Shell() {
   const page = () => {
     switch (view) {
       case 'sheet':
-        return <Sheet date={date} today={today} now={now} customize={customize} jumpTo={jumpTo} onJumped={onJumped} onPunchEditing={setEditingPunches} />;
+        return <Sheet date={date} today={today} now={minute} customize={customize} jumpTo={jumpTo} onJumped={onJumped} onPunchEditing={setEditingPunches} />;
       case 'history':
         return (
           <Suspense fallback={loading}>

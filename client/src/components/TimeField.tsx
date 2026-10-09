@@ -51,7 +51,7 @@ function Field({
   useEffect(() => {
     if (value == null) periodTouched.current = false;
   }, [value]);
-  // A fresh Time per render would read as a new value and wipe the draft every second.
+  // A fresh Time per render would read as a new value and wipe the draft on each re-render.
   const time = useMemo(() => msToTime(value), [value]);
   const fieldProps = {
     'aria-label': `${label} time`,

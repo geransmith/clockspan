@@ -6,6 +6,9 @@ import { PRIORITY_WARNINGS } from './copy';
 /** A row with text that isn't ticked: what the planner, the left-open offer and the timer's chips work from. */
 export const isOpen = (p: Priority) => hasText(p) && !p.done;
 
+/** A row with a task on it and its name written: what the board shows of a day's list, and what a session can be linked to. */
+export const isTaskRow = (p: Priority): p is Priority & { uid: string } => p.uid != null && hasText(p);
+
 /**
  * A one-off written on a list: a row with text that isn't a recurring priority's. A list with
  * none has no plan yet, so the left-open offer shows on it, and only these count toward the nudge.

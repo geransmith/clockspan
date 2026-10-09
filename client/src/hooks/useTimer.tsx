@@ -56,6 +56,8 @@ interface TimerCtx extends Pick<TimerView, 'countdownSeconds' | 'elapsedSeconds'
    * a forgotten pause, or on another device: its user wasn't here to take a break after it.
    */
   finished: Session | null;
+  /** Asks the server for the running session now: for a caller whose write was refused, perhaps by a timer another device started. */
+  resync: () => Promise<unknown>;
 }
 
 const Ctx = createContext<TimerCtx | null>(null);
@@ -458,6 +460,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       dismissFinishChoice,
       cancel,
       finished,
+      resync: syncNow,
     }),
     [
       running,
@@ -481,6 +484,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       dismissFinishChoice,
       cancel,
       finished,
+      syncNow,
     ],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

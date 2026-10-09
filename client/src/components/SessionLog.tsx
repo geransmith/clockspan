@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SessionEdit } from '../api';
+import { useClock } from '../hooks/useClock';
 import { useDayStore } from '../hooks/useDay';
 import { useTimer } from '../hooks/useTimer';
 import { categoryOf, type CategoryPick } from '../lib/board';
@@ -7,8 +8,8 @@ import { CONFIRM } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { breakSeconds } from '../lib/breaks';
 import { counted, formatDuration } from '../lib/format';
-import { hasText } from '../../../shared/priorities.js';
-import { focusOf, sessionCategory, sessionCategoryEdit, sessionName } from '../lib/retro';
+import { isTaskRow } from '../lib/priorities';
+import { focusOf, sessionCategory, sessionCategoryEdit, sessionName, sessionRow } from '../lib/retro';
 import { timerView } from '../lib/timer';
 import type { Break, Priority, Session } from '../types';
 import { CategoryChip } from './CategoryChip';
@@ -23,18 +24,19 @@ interface Props {
   breaks: Break[];
   priorities: Priority[];
   /** The category chip's data: a session on no written row can be given a category. Null (the board off) shows none. */
-  pick?: CategoryPick | null;
-  now: number;
+  pick: CategoryPick | null;
 }
 
 type Entry = { at: number; session: Session } | { at: number; brk: Break };
 
-export function SessionLog({ date, isToday, sessions, breaks, priorities, pick = null, now }: Props) {
+export function SessionLog({ date, isToday, sessions, breaks, priorities, pick }: Props) {
   const store = useDayStore();
   const { running, edit } = useTimer();
+  // The log's own clock, to the second: a running break and session count here, while the sheet gets the minute.
+  const now = useClock();
   const focus = focusOf(sessions);
   const rested = breaks.reduce((sum, b) => sum + breakSeconds(b, now), 0);
-  const planned = priorities.filter((p) => p.uid && hasText(p));
+  const planned = priorities.filter(isTaskRow);
   // The running session's row is the timer's copy, and its edits go through the timer: one queue
   // for the session's writes, and an edit or a pause shows here and in the bar at once.
   const live = (s: Session) => s.status === 'running' && s.id === running?.id;
@@ -118,7 +120,7 @@ function BreakRow({ brk: b, now, onDelete }: { brk: Break; now: number; onDelete
       <span className="log-duration">
         {running && <span className="pill pill--ok">on break</span>} {formatDuration(breakSeconds(b, now))}
       </span>
-      <DeleteButton label="Delete break" question={CONFIRM.deleteBreak} disabled={running} onDelete={onDelete} />
+      <DeleteButton label={`Delete break at ${formatTime(b.startedAt)}`} question={CONFIRM.deleteBreak} disabled={running} onDelete={onDelete} />
     </li>
   );
 }
@@ -134,7 +136,7 @@ function Row({
 }: {
   session: Session;
   now: number;
-  planned: Priority[];
+  planned: (Priority & { uid: string })[];
   /** The day's rows: what the session's name and category are read from. */
   rows: Priority[];
   pick: CategoryPick | null;
@@ -157,7 +159,7 @@ function Row({
   // A running row counts its focus so far, which holds still while paused.
   const seconds = running ? timerView(s, now).elapsedSeconds : s.durationSeconds;
   // On the plan: its task is a written row of the day.
-  const linked = s.priorityUid ? planned.find((p) => p.uid === s.priorityUid) : undefined;
+  const linked = sessionRow(s, rows);
   const hasTask = s.priorityUid != null;
   // What it is called: its task's current name, else its label.
   const name = sessionName(s, rows);
@@ -227,7 +229,7 @@ function Row({
               {/* A task taken off the day still names the session; Unplanned gives it a name of its own. */}
               {hasTask && !linked && <option value={s.priorityUid!}>{name}</option>}
               {planned.map((p) => (
-                <option key={p.uid} value={p.uid!}>
+                <option key={p.uid} value={p.uid}>
                   {p.position} · {p.text}
                 </option>
               ))}
@@ -280,7 +282,7 @@ function Row({
       <span className="log-duration">
         {running && <span className={`pill ${paused ? 'pill--warn' : 'pill--ok'}`}>{paused ? 'paused' : 'running'}</span>} {formatDuration(seconds)}
       </span>
-      <DeleteButton label="Delete session" question={CONFIRM.deleteSession} disabled={running} onDelete={onDelete} />
+      <DeleteButton label={`Delete session at ${formatTime(s.startedAt)}`} question={CONFIRM.deleteSession} disabled={running} onDelete={onDelete} />
     </li>
   );
 }

@@ -14,10 +14,10 @@
 import type { CategoryPatch, ItemPatch, NewCategory, NewItem } from '../api';
 import { BOARD_LIMITS, CATEGORY_COLORS, LOOKBACK_DAYS, OPEN_LANES } from '../../../shared/api.js';
 import { addDays, startOfWeek } from '../../../shared/dates.js';
-import { hasText } from '../../../shared/priorities.js';
 import { categoryName, sameText } from '../../../shared/text.js';
 import type { Board, BoardCard, Category, CategoryColor, Day, OpenLane, Priority, Recurring } from '../types';
 import { BOARD, BOARD_DRAG, DONE_STAYS } from './copy';
+import { isTaskRow } from './priorities';
 import { dayName } from './format';
 import type { PrioritySeed } from './plan';
 
@@ -92,9 +92,6 @@ export function laneStart(columns: BoardColumns, lane: OpenLane): string | null 
 }
 
 const byPosition = (a: BoardCard, b: BoardCard) => a.position - b.position;
-
-/** A row with a task on it and its name written: what the board shows of a day's list. */
-const isTaskRow = (p: Priority): p is Priority & { uid: string } => p.uid != null && hasText(p);
 
 export interface ColumnsInput {
   /** The board's one-off tasks. */

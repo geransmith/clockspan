@@ -20,7 +20,6 @@ describe('suggestBreak', () => {
   it('has nothing to size before a session is completed', () => {
     expect(suggestBreak([])).toBeNull();
     expect(suggestBreak([makeSession()])).toBeNull();
-    expect(suggestBreak([session(1, T0, 25, { status: 'cancelled' })])).toBeNull();
   });
 
   it('gives a fifth of the session, as 25 minutes earn 5', () => {
@@ -76,11 +75,11 @@ describe('suggestBreak', () => {
     expect(suggestBreak([...before, justUnder])).toMatchObject({ minutes: 20, long: true });
   });
 
-  it('reads the sessions in the order they ran, and skips a cancelled one', () => {
+  it('reads the sessions in the order they ran, and skips one still running', () => {
     const [a, b, c, d] = inARow([25, 25, 25, 25]);
     expect(suggestBreak([d!, b!, a!, c!])).toMatchObject({ long: true, position: 4 });
-    // The latest completed one is b: a cancelled session earns nothing.
-    expect(suggestBreak([a!, b!, { ...c!, status: 'cancelled' }])).toMatchObject({ long: false, position: 2 });
+    // The latest completed one is b: a session still running has earned nothing yet.
+    expect(suggestBreak([a!, b!, makeSession({ id: 3, startedAt: c!.startedAt })])).toMatchObject({ long: false, position: 2 });
   });
 });
 
