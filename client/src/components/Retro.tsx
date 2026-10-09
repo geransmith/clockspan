@@ -19,7 +19,7 @@ interface Props {
   note: string;
   reviewedAt: number | null;
   /** The category chip's data, for Plan tomorrow's rows typed in. Null (the board off) shows none. */
-  pick?: CategoryPick | null;
+  pick: CategoryPick | null;
   onChange: (patch: RetroPatch) => Promise<boolean>;
 }
 
@@ -30,7 +30,7 @@ interface Props {
  * "Mark reviewed" ticks the day once the note has saved. Keyed by date in the sheet, so a
  * new day mounts with its own note.
  */
-export function Retro({ date, today, priorities, sessions, note, reviewedAt, pick = null, onChange }: Props) {
+export function Retro({ date, today, priorities, sessions, note, reviewedAt, pick, onChange }: Props) {
   const { formatTime } = useTimeFormat();
   const review = reviewDay(priorities, sessions);
   // A note typed back to `note` is sent too: `note` can hold a save still out, and a box let go

@@ -21,14 +21,14 @@ interface Props {
   /** That day's priorities: the unticked one-offs are offered for the next day. A routine comes back on its own weekdays. */
   priorities: Priority[];
   /** The category chip's data: each row typed in gets a chip. Null (the board off) shows none. */
-  pick?: CategoryPick | null;
+  pick: CategoryPick | null;
 }
 
 /**
  * The end of the retrospective: put what's left, and anything new, on the next work day's
  * list tonight, while it's fresh. The day only loads once the planner opens.
  */
-export function PlanNext({ today, priorities, pick = null }: Props) {
+export function PlanNext({ today, priorities, pick }: Props) {
   const { settings } = useSettings();
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<string | null>(null);

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, memo, Suspense, useEffect, useState } from 'react';
 import { useBoardState, useBoardStore, useCategoryPick } from '../hooks/useBoard';
 import { useDay } from '../hooks/useDay';
 import { useLeftOpen } from '../hooks/useLeftOpen';
@@ -33,6 +33,7 @@ const OTHER_SIDE: Record<CardSide, CardSide> = { left: 'right', right: 'left' };
 interface Props {
   date: string;
   today: string;
+  /** The clock floored to the minute: nothing the sheet shows is finer, and the day log keeps its own clock. */
   now: number;
   customize: boolean;
   /** A card to scroll into view once the sheet has rendered (a banner's "Open …" button). */
@@ -42,7 +43,8 @@ interface Props {
   onPunchEditing: (editing: boolean) => void;
 }
 
-export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEditing }: Props) {
+/** Memoized: App re-renders every second, and the sheet renders once a minute on the minute it is handed. */
+export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEditing }: Props) {
   const { settings, update } = useSettings();
   const { day, failed, store } = useDay(date);
   const isToday = date === today;
@@ -164,17 +166,9 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
           />
         );
       case 'timer':
-        return (
-          <FocusTimer
-            date={date}
-            isToday={isToday}
-            priorities={day.priorities}
-            pick={pick}
-            onAddPriority={(text, categoryUid) => store.addPriority(date, text, categoryUid)}
-          />
-        );
+        return <FocusTimer date={date} isToday={isToday} priorities={day.priorities} pick={pick} />;
       case 'log':
-        return <SessionLog date={date} isToday={isToday} sessions={day.sessions} breaks={day.breaks} priorities={day.priorities} pick={pick} now={now} />;
+        return <SessionLog date={date} isToday={isToday} sessions={day.sessions} breaks={day.breaks} priorities={day.priorities} pick={pick} />;
       case 'retro':
         return (
           <Retro
@@ -243,7 +237,7 @@ export function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEd
       {visible.length === 0 && !customize && <p className="muted center">All cards are hidden. Use Customize to show them.</p>}
     </div>
   );
-}
+});
 
 function StatePill({ state, isToday }: { state: TimeclockState; isToday: boolean }) {
   // A past day is judged at its end, so one still "working" there was never clocked out.

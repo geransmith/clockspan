@@ -31,7 +31,7 @@ interface Props {
   /** Deletes a task everywhere (the board store's `deleteItem`), for ×'s Delete everywhere; rejects when that fails. */
   onDeleteTask: (uid: string) => Promise<void>;
   /** The category chip's data: each row with text gets a chip. Null (the board off) shows none. */
-  pick?: CategoryPick | null;
+  pick: CategoryPick | null;
   /**
    * Today's morning notice: the leftovers while the list has no one-off written (a routine on it
    * doesn't count), and the routines due today that no row holds yet.
@@ -70,7 +70,7 @@ interface Asked {
  * keystroke; checkboxes, add and remove save immediately. Keyed by date in the sheet, so a
  * new day mounts fresh instead of carrying drafts over.
  */
-export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick = null, offer }: Props) {
+export function Priorities({ priorities, sessions, onChange, onDeleteTask, pick, offer }: Props) {
   const { settings } = useSettings();
   const count = settings.priorityCount;
   // The rows Add priority put past the stored list: the server keeps no free row, so the card pads

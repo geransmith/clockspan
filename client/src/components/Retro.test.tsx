@@ -19,7 +19,7 @@ async function renderCard(note = '', reviewedAt: number | null = null, prioritie
   const onChange = vi.fn<(patch: api.RetroPatch) => Promise<boolean>>(() => Promise.resolve(true));
   const card = (n: string, r: number | null) => (
     <SettingsProvider>
-      <Retro date={date} today={TODAY} priorities={priorities} sessions={sessions} note={n} reviewedAt={r} onChange={onChange} />
+      <Retro date={date} today={TODAY} priorities={priorities} sessions={sessions} note={n} reviewedAt={r} pick={null} onChange={onChange} />
     </SettingsProvider>
   );
   const view = render(card(note, reviewedAt));

@@ -8,6 +8,7 @@ import { readStored, USER_KEYS, writeStored } from '../lib/storage';
 import { useDays, useDayStore } from './useDay';
 import { useLatest } from './useLatest';
 import { useClock } from './useClock';
+import { useRefreshLoop } from './useRefreshLoop';
 import { useSettings } from './useSettings';
 import { useTimer } from './useTimer';
 
@@ -20,8 +21,11 @@ interface BreakCtx {
    * earned (`suggestBreak`); otherwise, or before a session is logged, `settings.breakMinutes`.
    */
   next: { minutes: number; long: boolean };
-  /** A break of `minutes` from now, logged on today's sheet. Call it from a tap: it unlocks audio for the Break over sound. */
-  start: (minutes: number) => void;
+  /**
+   * A break of `minutes` from now, logged on today's sheet; resolves once the server has answered.
+   * Call it from a tap: it unlocks audio for the Break over sound.
+   */
+  start: (minutes: number) => Promise<void>;
   /** Back early: the break ends now without an alert (dropped if it ran under a minute), and a suggestion still up goes. */
   end: () => void;
 }
@@ -50,9 +54,9 @@ const STALE_MS = 10 * MINUTE_MS;
  */
 export function BreakProvider({ children }: { children: ReactNode }) {
   const { settings, loaded } = useSettings();
-  const { finished, running } = useTimer();
+  const { finished, running, resync } = useTimer();
   const { days } = useDays();
-  const { startBreak, endBreak } = useDayStore();
+  const { startBreak, endBreak, refresh } = useDayStore();
   const now = useClock();
   const date = todayKey(now);
   const today = days[date];
@@ -60,24 +64,38 @@ export function BreakProvider({ children }: { children: ReactNode }) {
   // was today's sheet), so it keeps counting down, can be ended and rings after midnight. Only
   // until something starts today: the server ended it then, and `applySession` ends it in the
   // store too, so a session cancelled afterwards doesn't bring it back.
-  const breaks = (today?.breaks.length || today?.sessions.length ? today : days[addDays(date, -1)])?.breaks ?? [];
+  const breakDate = today?.breaks.length || today?.sessions.length ? date : addDays(date, -1);
+  const breaks = days[breakDate]?.breaks ?? [];
   const current = runningBreak(breaks, now);
+  const last = breaks.at(-1);
   // The start of the last break dealt with here (see OVER_KEY).
   const dealtWith = useRef(0);
+
+  // The day the break is read from is read again every minute and when the tab comes back, so an
+  // End break or a timer started on another device reaches this one, also for a break from before
+  // midnight, which no other loop reads. Yesterday only while its last break can still count down
+  // or ring; a day the store doesn't hold is never asked for.
+  const watched = breakDate === date || (last != null && now - last.endedAt <= STALE_MS);
+  const { pending: refreshing } = useRefreshLoop(() => (watched ? refresh(breakDate) : Promise.resolve()));
 
   // A start is out: a second tap before it answers would log a second break that ends the first at once.
   const starting = useRef(false);
   const start = useCallback(
     (minutes: number) => {
       unlockAudio(); // a tap: lets the Break over sound play later on iOS
-      if (starting.current) return;
+      if (starting.current) return Promise.resolve();
       starting.current = true;
       dismissByTag('break');
-      void startBreak(todayKey(Date.now()), minutes * 60).finally(() => {
-        starting.current = false;
-      });
+      return startBreak(todayKey(Date.now()), minutes * 60)
+        .then((saved) => {
+          // The server refuses a break while a timer runs: one started on another device shows at once.
+          if (!saved) void resync();
+        })
+        .finally(() => {
+          starting.current = false;
+        });
     },
-    [startBreak],
+    [startBreak, resync],
   );
   const end = useCallback(() => {
     dismissByTag('break');
@@ -112,7 +130,7 @@ export function BreakProvider({ children }: { children: ReactNode }) {
       tag: 'break',
       action: {
         label: BREAK_SUGGESTION.start,
-        run: () => start(earned.minutes),
+        run: () => void start(earned.minutes),
       },
       sound: false,
       notifications: false,
@@ -121,10 +139,11 @@ export function BreakProvider({ children }: { children: ReactNode }) {
 
   // Dealt with once per break, when it ends: a break that ran its full length is announced
   // (also on a load inside STALE_MS of the end, the page having been closed then). One that
-  // ended early was ended by hand or by a focus timer starting, so there is nothing to say.
-  const last = breaks.at(-1);
+  // ended early was ended by hand or by a focus timer starting, so there is nothing to say. It
+  // waits for the read the tab's coming back sent, since the copy may miss an end made on another
+  // device meanwhile, and says nothing while a timer runs: the server ended the break as it started.
   useEffect(() => {
-    if (!last || !loaded || now < last.endedAt || last.startedAt <= dealtWith.current) return;
+    if (!last || !loaded || refreshing || working || now < last.endedAt || last.startedAt <= dealtWith.current) return;
     dealtWith.current = last.startedAt;
     // Nothing stored reads as 0, and anything unreadable as NaN: both let the break through.
     if (Number(readStored(OVER_KEY)) >= last.startedAt) return;
@@ -139,7 +158,7 @@ export function BreakProvider({ children }: { children: ReactNode }) {
       sound: settings.sound,
       notifications: settings.notifications,
     });
-  }, [last, loaded, now, settings.sound, settings.sounds.breakDone, settings.notifications]);
+  }, [last, loaded, refreshing, working, now, settings.sound, settings.sounds.breakDone, settings.notifications]);
 
   const endsAt = current?.endedAt ?? null;
   const remainingSeconds = endsAt == null ? 0 : Math.ceil((endsAt - now) / 1000);

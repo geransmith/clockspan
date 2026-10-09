@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { LIMITS } from '../../../shared/api.js';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { completedSession, makeDay, makePriority, makeSession, punchesAt, rowUid } from '../test/fixtures';
 import type { Day } from '../types';
@@ -128,6 +129,11 @@ describe("a session's category", () => {
       expect(editedSession(linked(), { priorityUid: null, label: 'Mine' })).toMatchObject({ label: 'Mine', categoryUid: null });
       expect(editedSession(linked(), { priorityUid: null, categoryUid: ADMIN })).toMatchObject({ label: 'Report', categoryUid: ADMIN });
       expect(editedSession(linked({ title: null }), { priorityUid: null })).toMatchObject({ label: 'Started' });
+    });
+
+    it("cuts a long task name to a label's length, as the server does", () => {
+      const title = 'x'.repeat(LIMITS.priorityText);
+      expect(editedSession(linked({ title }), { priorityUid: null }).label).toBe(title.slice(0, LIMITS.sessionLabel));
     });
   });
 });

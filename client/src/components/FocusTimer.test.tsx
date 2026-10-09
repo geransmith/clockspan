@@ -28,19 +28,11 @@ import { FocusTimer } from './FocusTimer';
 vi.mock('../api');
 vi.mock('../lib/alerts');
 
-/** The card as the sheet wires it: today's priorities from the store, and the store's addPriority. */
+/** The card as the sheet wires it: today's priorities from the store. */
 function Card({ pick }: { pick: CategoryPick | null }) {
-  const { day, store } = useDay(TODAY);
+  const { day } = useDay(TODAY);
   if (!day) return null;
-  return (
-    <FocusTimer
-      date={TODAY}
-      isToday
-      priorities={day.priorities}
-      pick={pick}
-      onAddPriority={(text, categoryUid) => store.addPriority(TODAY, text, categoryUid)}
-    />
-  );
+  return <FocusTimer date={TODAY} isToday priorities={day.priorities} pick={pick} />;
 }
 
 /** `n` priority rows, all ticked. */
@@ -94,7 +86,20 @@ describe('FocusTimer', () => {
     expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Write the report', null);
     answer.resolve(started(makeSession({ label: 'Write the report' })));
     await settle();
-    expect(screen.getByRole('timer')).toBeTruthy();
+    expect(screen.getByRole('timer', { name: 'Time remaining' })).toBeTruthy();
+  });
+
+  it('holds the start buttons while a break start is out', async () => {
+    const answer = deferred<{ break: Break }>();
+    vi.mocked(api.startBreak).mockReturnValue(answer.promise);
+    await renderCard();
+    fireEvent.click(screen.getByRole('button', { name: /^Break · / }));
+    // A start would race the break on another queue, so it waits for the break's answer.
+    expect(disabled(/^25\s*min$/)).toBe(true);
+    answer.resolve({ break: makeBreak({ startedAt: T0, endedAt: T0 + 5 * 60_000 }) });
+    await settle();
+    expect(disabled(/^25\s*min$/)).toBe(false);
+    expect(screen.getByRole('button', { name: BREAK.end })).toBeTruthy();
   });
 
   it("takes the break banners down in the start's tap, so their Start break can't race it", async () => {
@@ -149,6 +154,20 @@ describe('FocusTimer', () => {
     const rows = vi.mocked(api.putPriorities).mock.lastCall![1];
     expect(rows[0]).toMatchObject({ text: 'Call the vendor', done: false });
     expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Call the vendor', rows[0]!.uid);
+  });
+
+  it('does not offer to add text an open row already has, as when a chip is unlinked', async () => {
+    await renderCard([makePriority(1, 'Ship the fix'), makePriority(2, 'Email', { done: true })]);
+    const chip = screen.getByRole('button', { name: /Ship the fix/ });
+    fireEvent.click(chip);
+    fireEvent.click(chip);
+    expect(screen.getByLabelText<HTMLInputElement>('Session label').value).toBe('Ship the fix');
+    expect(alsoAdd()).toBeNull();
+    typeLabel('  ship THE fix ');
+    expect(alsoAdd()).toBeNull();
+    // A ticked row's text is new work again.
+    typeLabel('Email');
+    expect(alsoAdd()).not.toBeNull();
   });
 
   it('does not offer to add typed work to a full list', async () => {
@@ -282,8 +301,9 @@ describe('FocusTimer', () => {
       fireEvent.click(start25());
       await settle();
       expect(vi.mocked(api.putPriorities).mock.lastCall![1][0]).toMatchObject({ text: 'Call the vendor', categoryUid: TICKETS.uid });
-      // The start failed after the row went on the list, linked: unlinked, the label offers Also add again.
+      // The start failed after the row went on the list, linked: unlinked, new text offers Also add again.
       fireEvent.click(screen.getByRole('button', { name: /Call the vendor/, pressed: true }));
+      typeLabel('Email the vendor');
       fireEvent.click(alsoAdd()!);
       expect(chip()!.getAttribute('aria-label')).toBe('Category for the new priority: none');
     });

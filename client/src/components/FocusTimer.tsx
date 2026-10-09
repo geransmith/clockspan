@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useBreak } from '../hooks/useBreak';
+import { useDayStore } from '../hooks/useDay';
 import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { useSubmit } from '../hooks/useSubmit';
@@ -8,8 +9,9 @@ import { dismissByTag, unlockAudio } from '../lib/alerts';
 import type { CategoryPick } from '../lib/board';
 import { BREAK, TIMER_DUE } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
-import { hasRoom, isOpen } from '../lib/priorities';
+import { hasRoom, isTaskRow } from '../lib/priorities';
 import { LIMITS } from '../../../shared/api.js';
+import { sameText } from '../../../shared/text.js';
 import type { Priority, Session } from '../types';
 import { CategoryChip } from './CategoryChip';
 import { SessionLabel } from './SessionLabel';
@@ -20,15 +22,14 @@ interface Props {
   date: string;
   isToday: boolean;
   priorities: Priority[];
-  /** Adds a row to today's priorities, in that category, and resolves to its uid. */
-  onAddPriority: (text: string, categoryUid: string | null) => Promise<string>;
   /** The category chip's data: "Also add to today's priorities" offers a category for the row. Null (the board off) shows none. */
-  pick?: CategoryPick | null;
+  pick: CategoryPick | null;
 }
 
-export function FocusTimer({ date, isToday, priorities, onAddPriority, pick = null }: Props) {
+export function FocusTimer({ date, isToday, priorities, pick }: Props) {
   const timer = useTimer();
   const breakTimer = useBreak();
+  const { addPriority } = useDayStore();
   const { settings } = useSettings();
   const { formatTime } = useTimeFormat();
   const [label, setLabel] = useState('');
@@ -36,12 +37,13 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority, pick = nu
   const [addAsPriority, setAddAsPriority] = useState(false);
   // The new row's category, offered beside "Also add to today's priorities" while it is ticked.
   const [category, setCategory] = useState<string | null>(null);
-  // A start is out: the start and break buttons are disabled until it answers. A second start
-  // would add the priority twice and meet the first timer as a 409, which reads as one started
-  // on another device. A break tap goes out on the day store's queue, not the timer's, so it
-  // could reach the server after the start: a new break would meet the running timer (409,
-  // "Change not saved"), and an end would find the break the start already ended. The break
-  // banners, whose Start break the disabled buttons don't reach, go in the start's tap.
+  // A start (of a timer or a break) is out: the start and break buttons are disabled until it
+  // answers. A second start would add the priority twice and meet the first timer as a 409,
+  // which reads as one started on another device. A break goes out on the day store's queue,
+  // not the timer's, so the two could reach the server in either order: a new break would meet
+  // the running timer (409, "Change not saved"), a timer started behind a break start could
+  // land first, and an end would find the break the start already ended. The break banners,
+  // whose Start break the disabled buttons don't reach, go in the timer start's tap.
   const { busy: starting, error, run } = useSubmit();
 
   if (timer.running) return <Running session={timer.running} />;
@@ -50,12 +52,15 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority, pick = nu
   const lengths = [...new Set(settings.timerMinutes)].sort((a, b) => a - b);
 
   // Open rows only: a done priority isn't something to start a session for.
-  const open = priorities.filter((p) => p.uid && isOpen(p));
+  const open = priorities.filter((p) => isTaskRow(p) && !p.done);
   const linkedStillOpen = linked != null && open.some((p) => p.uid === linked);
   const trimmed = label.trim();
   // New work typed in, not tied to a row: offer to put it on the plan as well, while the plan
-  // has a row for it. On a full list the tick would only earn an error at Start.
-  const offerAdd = isToday && trimmed !== '' && !linkedStillOpen && hasRoom(priorities, settings.priorityCount);
+  // has a row for it. On a full list the tick would only earn an error at Start. Text an open
+  // row already has (a chip unlinked, its row's name typed) is on the plan already, as Plan
+  // tomorrow judges it (`sameItem`).
+  const offerAdd =
+    isToday && trimmed !== '' && !linkedStillOpen && !open.some((p) => sameText(p.text) === sameText(trimmed)) && hasRoom(priorities, settings.priorityCount);
 
   const toggleLink = (p: Priority) => {
     if (linked === p.uid) {
@@ -77,7 +82,7 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority, pick = nu
       let uid = linkedStillOpen ? linked : null;
       if (offerAdd && addAsPriority) {
         // With the board off there is no chip, and a category picked before it went off isn't shown.
-        uid = await onAddPriority(trimmed, pick ? category : null);
+        uid = await addPriority(date, trimmed, pick ? category : null);
         // Linked from here on, so a retry after a failed start uses this row instead of adding another.
         setLinked(uid);
         setAddAsPriority(false);
@@ -152,7 +157,7 @@ export function FocusTimer({ date, isToday, priorities, onAddPriority, pick = nu
         ))}
       </div>
       {isToday && breakTimer.endsAt == null && (
-        <button className="btn btn-ghost timer-break-start" onClick={() => breakTimer.start(breakTimer.next.minutes)} disabled={starting}>
+        <button className="btn btn-ghost timer-break-start" onClick={() => run(() => breakTimer.start(breakTimer.next.minutes))} disabled={starting}>
           {BREAK.start(breakTimer.next.minutes, breakTimer.next.long)}
         </button>
       )}
@@ -177,7 +182,7 @@ function Running({ session }: { session: Session }) {
           <circle className="ring-fill" cx="60" cy="60" r={r} strokeDasharray={circ} strokeDashoffset={circ * (1 - progress)} />
         </svg>
         <div className="ring-center">
-          <div className="countdown" role="timer">
+          <div className="countdown" role="timer" aria-label={due ? 'Time over' : 'Time remaining'}>
             {formatCountdown(countdownSeconds)}
           </div>
           <div className="muted small">{subline}</div>
