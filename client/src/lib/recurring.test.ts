@@ -105,13 +105,28 @@ describe('acceptOffer', () => {
     ]);
   });
 
-  it('brings the leftovers through planNext, which drops the free rows and keeps the written ones ahead of them', () => {
-    const list = acceptOffer([emptyRow(1), makePriority(2, 'Ship it')], 3, [leftover], [], T0);
-    expect(list.map((p) => [p.position, p.text])).toEqual([
+  it('puts each leftover in the first free row, so routines added on another device keep their place', () => {
+    // Another device added the routines after the padded rows; the server stores only rows with a task.
+    const stored = [routine(4), routine(5, FOLLOW_UPS)];
+    expect(acceptOffer(stored, 3, [leftover], [], T0).map((p) => [p.position, p.text])).toEqual([
+      [1, 'Review the PR'],
+      [2, ''],
+      [3, ''],
+      [4, 'Monitor the queue'],
+      [5, 'Follow-ups'],
+    ]);
+    expect(acceptOffer([makePriority(1, 'Ship it'), emptyRow(2)], 3, [leftover], [], T0).map((p) => [p.position, p.text])).toEqual([
       [1, 'Ship it'],
       [2, 'Review the PR'],
       [3, ''],
     ]);
+  });
+
+  it('skips a leftover the list holds already, under any name, and one that does not fit', () => {
+    const rows = [makePriority(1, 'Renamed', { uid: leftover.uid })];
+    expect(acceptOffer(rows, 1, [leftover], [], T0).map((p) => p.text)).toEqual(['Renamed']);
+    const full = Array.from({ length: MAX_PRIORITIES }, (_, i) => makePriority(i + 1, `p${i + 1}`));
+    expect(acceptOffer(full, 3, [leftover], [], T0)).toEqual(full);
   });
 
   it('with no leftovers, leaves a free row between written ones where it is', () => {

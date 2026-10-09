@@ -797,9 +797,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (`offerPicks`), the rest unticked, and a box pressed keeps its answer while the groups change.
   Ticking past the number says so (`TODAY_OFFER.over`, a live region always there under the group),
   and Add to today adds them all the same. Add runs `acceptOffer` through the card's draft, so what
-  is typed goes out in the same save: the leftovers through `planNext`, then each routine through
-  `placePriority` with `end`, after every row of the padded list, so the free rows stay for
-  one-offs, and a routine that doesn't fit is skipped. Add and Not today (Start fresh while no
+  is typed goes out in the same save: each leftover through `placePriority`, in the first free
+  row, then each routine through `placePriority` with `end`, after every row of the padded list,
+  so the free rows stay for one-offs and no written row moves, and one that doesn't fit is
+  skipped. Add and Not today (Start fresh while no
   routine shows) record every routine shown, ticked or not, under `USER_KEYS.recurringAnswered`
   (`useRecurringAnswered`: per item, day and device, so another device still offers it and a new day
   starts with none; an answer joins what is stored when it is given, so another tab's answers stay),
@@ -1164,8 +1165,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `priorityJson` and written in the PUT's INSERT (`routes/days.ts`) → the field on `Priority`
   (`shared/api.ts`) and its `MERGED` entry (`shared/priorities.ts`, which typecheck asks for) →
   its rule in `parsePriorityRows` for a value of the wrong kind and for one left out → its
-  default in `emptyRow` and `newTaskRow` (`lib/priorities.ts`), `planNext`'s row (`lib/plan.ts`),
-  `recurringRow` (`lib/recurring.ts`) and `planMove`'s pull (`lib/board.ts`) → the seed
+  default in `emptyRow` and `newTaskRow` (`lib/priorities.ts`; `planNext`'s row and
+  `recurringRow` start from `newTaskRow`) and `planMove`'s pull (`lib/board.ts`) → the seed
   (`server/dev/seed.ts`: its rows, typecheck asks; `insertDay`'s INSERT, it doesn't) →
   `makePriority` (`client/src/test/fixtures.ts`) → the padded-rows case in
   `server/routes/days.test.ts` ("takes the web app's rows as it pads and sends them").

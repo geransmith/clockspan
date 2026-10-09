@@ -267,17 +267,22 @@ describe('PlanNext', () => {
     expect(document.querySelector('.burst')).toBeNull();
   });
 
-  it('stays open with the rows still offered when the save fails', async () => {
+  it('locks what it sends while the save is out, and stays open with the rows still offered when it fails', async () => {
     const answer = deferred<{ priorities: Priority[] }>();
     vi.mocked(api.putPriorities).mockReturnValue(answer.promise);
     await renderPlan();
     await open();
+    fireEvent.click(box('Call the bank'));
     fireEvent.click(saveButton());
     await settle();
-    expect(saveButton().disabled).toBe(true);
+    // The row left unticked is still offered: nothing typed, ticked or cancelled now would go out
+    // with the save whose answer closes the planner.
+    const cancel = screen.getByRole('button', { name: 'Cancel' }) as HTMLButtonElement;
+    const locked = () => [saveButton(), draft(), box('Call the bank'), cancel].map((el) => el.disabled);
+    expect(locked()).toEqual([true, true, true, true]);
     answer.reject(new Error('Request failed (500)'));
     await settle();
-    expect(saveButton().disabled).toBe(false);
+    expect(locked()).toEqual([false, false, false, false]);
     expect(box('Review the PR').checked).toBe(true);
     expect(status()).toBe('');
     expect(playSound).not.toHaveBeenCalled();

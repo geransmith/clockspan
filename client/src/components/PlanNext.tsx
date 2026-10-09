@@ -104,6 +104,7 @@ function Planner({
   // The rows typed in, each with the category its chip set.
   const [extra, setExtra] = useState<{ text: string; categoryUid: string | null }[]>([]);
   const [draft, setDraft] = useState('');
+  // While the save is out nothing more can be typed, ticked or cancelled: its answer closes the planner.
   const [busy, setBusy] = useState(false);
   const onList = day?.priorities.filter(hasText) ?? [];
   const already = onList.length;
@@ -156,6 +157,7 @@ function Planner({
                   type="checkbox"
                   className="checkbox"
                   checked={picked.has(p.uid)}
+                  disabled={busy}
                   onChange={(e) =>
                     setPicked((s) => {
                       const nextSet = new Set(s);
@@ -180,6 +182,7 @@ function Planner({
       <input
         className="input"
         value={draft}
+        disabled={busy}
         autoFocus
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={onKey}
@@ -191,7 +194,7 @@ function Planner({
         <button className="btn btn-primary" onClick={() => void save()} disabled={busy || !day}>
           {PLAN_NEXT.save(name)}
         </button>
-        <button className="btn btn-ghost" onClick={onCancel}>
+        <button className="btn btn-ghost" onClick={onCancel} disabled={busy}>
           Cancel
         </button>
       </div>

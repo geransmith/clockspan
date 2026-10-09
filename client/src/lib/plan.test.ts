@@ -83,10 +83,3 @@ describe('planNext', () => {
     expect(rows).toHaveLength(MAX_PRIORITIES);
   });
 });
-
-describe('textSeed', () => {
-  it('is a priority typed new: no task yet, its text, and the category given or none', () => {
-    expect(textSeed('Pay rent')).toEqual({ uid: null, text: 'Pay rent', categoryUid: null });
-    expect(textSeed('Pay rent', 'cat000000001')).toEqual({ uid: null, text: 'Pay rent', categoryUid: 'cat000000001' });
-  });
-});
