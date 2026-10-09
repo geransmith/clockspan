@@ -6,4 +6,5 @@ data/
 *.log
 .DS_Store
 .claude/settings.local.json
+CLAUDE.local.md
 .claude/worktrees/
