@@ -51,15 +51,15 @@
     "@testing-library/react": "16.3.3",
     "@types/better-sqlite3": "9.6.0",
     "@types/express": "5.0.6",
-    "@types/node": "24.13.6",
+    "@types/node": "24.19.1",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",
-    "@vitest/coverage-v8": "5.0.1",
+    "@vitest/coverage-v8": "5.0.3",
     "concurrently": "10.0.5",
     "happy-dom": "20.14.5",
-    "oxlint": "1.85.0",
-    "oxlint-tsgolint": "7.0.2002",
+    "oxlint": "1.86.0",
+    "oxlint-tsgolint": "7.0.2003",
     "prettier": "3.9.9",
     "react": "19.3.0",
     "react-aria": "3.52.1",
@@ -67,8 +67,8 @@
     "react-stately": "3.50.0",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
-    "vite": "8.3.0",
-    "vitest": "5.0.1"
+    "vite": "8.3.2",
+    "vitest": "5.0.3"
   },
   "overrides": {
     "shell-quote": "1.12.0"
