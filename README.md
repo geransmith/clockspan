@@ -339,6 +339,8 @@ The whole state is one file: `focus.db` (plus `-wal`/`-shm` while running). Eith
 sqlite3 /path/on/host/focus.db ".backup /path/to/backups/focus-$(date +%F).db"
 ```
 
+A page left open while you restore a backup shows *Restored from a backup* with a **Reload** button the next time it hears from the server; reload it to see the restored data.
+
 Deleting old days (Settings → Data, or `RETENTION_DAYS`) or a user (Settings → Account) is permanent and compacts the file afterwards, so take a backup first if you might want them back.
 
 ## Development notes

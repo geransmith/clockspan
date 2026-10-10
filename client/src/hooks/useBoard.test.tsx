@@ -119,8 +119,8 @@ describe('reading the board', () => {
     expect(shownTexts(result.current.board)).toEqual(['Write a KB', 'Follow up']);
   });
 
-  it('reads every minute and when the tab comes back, and a load shares a read already out', async () => {
-    const { result } = renderBoard();
+  it('reads every minute and when the tab comes back', async () => {
+    renderBoard();
     await settle();
     expect(api.getBoard).toHaveBeenCalledTimes(1);
     await settle(MINUTE_MS);
@@ -130,36 +130,6 @@ describe('reading the board', () => {
     act(() => setVisibility('visible'));
     expect(api.getBoard).toHaveBeenCalledTimes(3);
     await settle();
-
-    const answer = deferredAnswer<Board>();
-    vi.mocked(api.getBoard).mockReturnValueOnce(answer.promise);
-    let a!: Promise<void>, b!: Promise<void>;
-    act(() => {
-      a = result.current.store.load();
-      b = result.current.store.load();
-    });
-    expect(a).toBe(b);
-    answer.resolve(onServer);
-    await act(() => a);
-    expect(api.getBoard).toHaveBeenCalledTimes(4);
-  });
-
-  it('sends a fresh load after the read out, or at once when none is', async () => {
-    const { result } = renderBoard();
-    await settle();
-    await act(() => result.current.store.load({ fresh: true }));
-    expect(api.getBoard).toHaveBeenCalledTimes(2);
-    const out = deferredAnswer<Board>();
-    vi.mocked(api.getBoard).mockReturnValueOnce(out.promise);
-    let fresh!: Promise<void>;
-    act(() => {
-      void result.current.store.load();
-      fresh = result.current.store.load({ fresh: true });
-    });
-    expect(api.getBoard).toHaveBeenCalledTimes(3);
-    out.resolve(onServer);
-    await act(() => fresh);
-    expect(api.getBoard).toHaveBeenCalledTimes(4);
   });
 
   it('marks a failed first read, keeps the board through a later one, and Try again clears it', async () => {
@@ -187,6 +157,7 @@ describe('reading the board', () => {
     vi.mocked(api.getBoard).mockReturnValueOnce(old.promise);
     act(() => void result.current.store.load());
     const stale = onServer;
+    vi.mocked(api.addItem).mockImplementationOnce((item) => Promise.resolve(answered((onServer = withItem(onServer, item, T0)), 1)));
     await act(() => result.current.store.addItem({ uid: 'new000000001', title: 'Captured', categoryUid: null, lane: 'later', before: null }));
     old.resolve(stale);
     await settle();
@@ -652,7 +623,7 @@ describe('deleteItem', () => {
     const old = deferredAnswer<Board>();
     vi.mocked(api.getBoard).mockReturnValueOnce(old.promise);
     act(() => void result.current.store.load());
-    vi.mocked(api.deleteItem).mockRejectedValueOnce(apiError(404));
+    vi.mocked(api.deleteItem).mockRejectedValueOnce(apiError(404, 1));
     await act(() => result.current.store.deleteItem('later0000001'));
     old.resolve(onServer);
     await settle();
@@ -738,6 +709,25 @@ describe('categories', () => {
     await expect(act(() => result.current.store.editCategory('cat000000001', { name: 'Tix' }))).rejects.toThrow('offline');
     expect(names(result.current.board)).toEqual(['Tickets']);
     expect(api.getBoard).toHaveBeenCalledTimes(2);
+  });
+
+  it('read the board again after a refused write, beside a read already out, so a name another device took shows', async () => {
+    const { result } = renderBoard();
+    await settle();
+    // The minute's read is out when the create is refused: another device took the name.
+    const minute = deferredAnswer<Board>();
+    const theirs = withCategory(onServer, { uid: 'cat000000009', name: 'KB', color: 'teal' });
+    vi.mocked(api.getBoard).mockReturnValueOnce(minute.promise).mockResolvedValueOnce(answered(theirs, 2));
+    await settle(MINUTE_MS);
+    vi.mocked(api.addCategory).mockRejectedValueOnce(apiError(400, 2));
+    await expect(act(() => result.current.store.addCategory({ uid: 'cat000000002', name: 'KB', color: 'teal' }))).rejects.toThrow('Request failed (400)');
+    expect(api.getBoard).toHaveBeenCalledTimes(3);
+    await settle();
+    expect(names(result.current.board)).toEqual(['Tickets', 'KB']);
+    // The read out from before answers lower, and is dropped.
+    minute.resolve(onServer, 1);
+    await settle();
+    expect(names(result.current.board)).toEqual(['Tickets', 'KB']);
   });
 
   describe('useCategoryPick', () => {
@@ -895,7 +885,7 @@ describe('recurring priorities', () => {
     const old = deferredAnswer<Board>();
     vi.mocked(api.getBoard).mockReturnValueOnce(old.promise);
     act(() => void result.current.store.load());
-    vi.mocked(api.deleteItem).mockRejectedValueOnce(apiError(404));
+    vi.mocked(api.deleteItem).mockRejectedValueOnce(apiError(404, 1));
     await act(() => result.current.store.removeRecurring('rcur00000001'));
     old.resolve(onServer);
     await settle();

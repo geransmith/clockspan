@@ -136,10 +136,29 @@ describe('refresh', () => {
     // The next refresh was read before the next save, and answers after it.
     const late = deferredAnswer<Settings>();
     vi.mocked(api.getSettings).mockReturnValueOnce(late.promise);
-    vi.mocked(api.putSettings).mockResolvedValueOnce(answered(makeSettings({ workMinutes: 600 })));
+    vi.mocked(api.putSettings).mockResolvedValueOnce(answered(makeSettings({ workMinutes: 600 }), 2));
     await settle(MINUTE_MS);
     await act(() => result.current.update({ workMinutes: 600 }));
-    late.resolve(makeSettings({ workMinutes: 540 }));
+    late.resolve(makeSettings({ workMinutes: 540 }), 1);
+    await settle();
+    expect(result.current.settings.workMinutes).toBe(600);
+  });
+
+  it('keeps the newer of two reads out at once, whichever answers last', async () => {
+    vi.mocked(api.getSettings).mockResolvedValueOnce(answered(makeSettings(), 1));
+    const { result } = render();
+    await settle();
+    const minute = deferredAnswer<Settings>();
+    vi.mocked(api.getSettings).mockReturnValueOnce(minute.promise);
+    await settle(MINUTE_MS);
+    // The tab comes back while the minute's read is out, and asks beside it.
+    vi.mocked(api.getSettings).mockResolvedValueOnce(answered(makeSettings({ workMinutes: 600 }), 3));
+    await settle(10_000);
+    act(() => setVisibility('visible'));
+    await settle();
+    expect(api.getSettings).toHaveBeenCalledTimes(3);
+    expect(result.current.settings.workMinutes).toBe(600);
+    minute.resolve(makeSettings({ workMinutes: 540 }), 2);
     await settle();
     expect(result.current.settings.workMinutes).toBe(600);
   });
@@ -248,7 +267,7 @@ describe('update', () => {
   it("takes a save's answer as loaded, and drops the first load when it answers later", async () => {
     const first = deferredAnswer<Settings>();
     vi.mocked(api.getSettings).mockReturnValueOnce(first.promise);
-    vi.mocked(api.putSettings).mockResolvedValue(answered(makeSettings({ workMinutes: 500 })));
+    vi.mocked(api.putSettings).mockResolvedValue(answered(makeSettings({ workMinutes: 500 }), 1));
     const { result } = render();
     await result.current.update({ workMinutes: 500 });
     await settle();

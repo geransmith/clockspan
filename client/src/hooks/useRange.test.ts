@@ -61,12 +61,13 @@ it('reads as loading straight away on a new range, and drops the answer for the 
 });
 
 it("takes the store's copy of a day it holds, in date order, and follows an edit made since", async () => {
-  // TODAY is a Monday; the range runs to Wednesday. The store holds Wednesday (answered too),
-  // Tuesday (stored since the range was asked for), and two days outside the range.
+  // TODAY is a Monday; the range runs to Wednesday. The store holds Wednesday (answered too) and
+  // Tuesday (stored since the range was read), each from a read newer than the range, and two
+  // days outside the range.
   const tue = '2026-09-29';
   const wed = '2026-09-30';
   vi.mocked(api.getRange).mockResolvedValue(answered({ days: [makeDay(TODAY, { retroNote: 'fetched' }), makeDay(wed, { retroNote: 'fetched' })] }));
-  vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(answered(makeDay(date, { retroNote: 'held' }))));
+  vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(answered(makeDay(date, { retroNote: 'held' }), 1)));
   vi.mocked(api.putRetro).mockResolvedValue(answered({ retroNote: 'edited', retroAt: null }));
   const { result } = renderHook(
     () => {
@@ -127,7 +128,7 @@ describe('held days', () => {
     vi.mocked(api.getRange)
       .mockResolvedValueOnce(answered({ days: [] }))
       .mockReturnValueOnce(answer.promise);
-    vi.mocked(api.putRetro).mockResolvedValue(answered({ retroNote: 'edited', retroAt: null }));
+    vi.mocked(api.putRetro).mockResolvedValue(answered({ retroNote: 'edited', retroAt: null }, 1));
     const { result, rerender } = await renderHeld();
     rerender({ from: TODAY, to: tue });
     await act(() => result.current.store.setRetro(TODAY, { note: 'edited' }));

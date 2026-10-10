@@ -30,7 +30,7 @@ import type {
 import { REVISION_HEADER, VERSION_HEADER } from '../../shared/api.js';
 import { alert } from './lib/alerts';
 import { ApiError } from './lib/apiError';
-import { REQUEST_FAILED, REQUEST_TIMEOUT, UNREADABLE_ANSWER, UPDATED } from './lib/copy';
+import { REQUEST_FAILED, REQUEST_TIMEOUT, RESTORED, UNREADABLE_ANSWER, UPDATED } from './lib/copy';
 
 export const UNAUTHENTICATED_EVENT = 'focus:unauthenticated';
 
@@ -47,6 +47,22 @@ const timedOut = (err: unknown): boolean => err instanceof DOMException && err.n
 
 /** The server version the update banner was raised for, so a closed banner stays closed until the server moves again. */
 let announced: string | null = null;
+/** The highest revision an answer has named (`noticeRestore`). */
+let seen = 0;
+
+/** The quiet banner that asks for a reload: info, kept until closed, no chime and no notification. */
+function askReload(text: { title: string; body: string; reload: string }, tag: string): void {
+  alert({
+    title: text.title,
+    body: text.body,
+    tone: 'info',
+    tag,
+    sticky: true,
+    action: { label: text.reload, run: () => window.location.reload() },
+    sound: false,
+    notifications: false,
+  });
+}
 
 /**
  * Every signed-in data answer names the server's version (`VERSION_HEADER`). One that isn't
@@ -58,16 +74,21 @@ let announced: string | null = null;
 function noticeVersion(version: string | null): void {
   if (version === null || version === __APP_VERSION__ || version === announced) return;
   announced = version;
-  alert({
-    title: UPDATED.title,
-    body: UPDATED.body,
-    tone: 'info',
-    tag: 'updated',
-    sticky: true,
-    action: { label: UPDATED.reload, run: () => window.location.reload() },
-    sound: false,
-    notifications: false,
-  });
+  askReload(UPDATED, 'updated');
+}
+
+/**
+ * On a running server, an answer to a request sent after revision R arrived names R or more, so a
+ * lower one means the database went back: a backup restored under the open page. Every store
+ * would then drop the server's answers as older than its own copy, so the page asks for a reload
+ * as an update does, and counts on from the lower number, so a closed banner stays closed and a
+ * second restore is caught too. An answer that names none (0) says nothing.
+ */
+function noticeRestore(revision: number, before: number): void {
+  if (revision === 0) return;
+  const back = revision < before;
+  if (back) askReload(RESTORED, 'restored');
+  seen = back ? revision : Math.max(seen, revision);
 }
 
 /** A data route's answer: its body, and the user's revision the server numbered it with (`REVISION_HEADER`). */
@@ -77,6 +98,7 @@ export interface Answer<T> {
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<Answer<T>> {
+  const before = seen;
   let res: Response;
   try {
     res = await fetch(path, {
@@ -91,6 +113,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   noticeVersion(res.headers.get(VERSION_HEADER));
   // An answer that names none (an auth route, a 401 before the data routes, a proxy's page) reads as 0.
   const revision = Number(res.headers.get(REVISION_HEADER));
+  noticeRestore(revision, before);
   let data: unknown = null;
   try {
     data = await res.json();

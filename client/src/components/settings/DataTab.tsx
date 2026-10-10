@@ -84,8 +84,9 @@ function DeleteOldDays() {
     setDone(null);
     run(async () => {
       const { deleted } = await pruneBefore(before);
-      // Fresh: a read already out may have left before the prune. Nothing while the board is off.
-      void board.load({ fresh: true });
+      // A read still out from before the prune answers lower than this one and is dropped. Nothing
+      // while the board is off.
+      void board.load();
       setDone(DAYS_DELETED(deleted));
       setLoaded(null);
     });

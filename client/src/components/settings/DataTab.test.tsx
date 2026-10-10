@@ -96,7 +96,7 @@ describe('DataTab', () => {
     expect(button.disabled).toBe(false);
   });
 
-  it('reads the board again after a delete, once a read still out has answered', async () => {
+  it('reads the board again after a delete, beside a read still out', async () => {
     vi.mocked(api.pruneDays).mockResolvedValue(answered({ deleted: 2 }));
     vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ board: true })));
     // The read the board sent as it came on is still out when the delete lands, and may be older.
@@ -108,10 +108,9 @@ describe('DataTab', () => {
     fireEvent.click(button);
     await settle();
     expect(api.pruneDays).toHaveBeenCalledTimes(1);
-    expect(api.getBoard).toHaveBeenCalledTimes(1);
+    expect(api.getBoard).toHaveBeenCalledTimes(2);
     first.resolve(makeBoard());
     await settle();
-    expect(api.getBoard).toHaveBeenCalledTimes(2);
   });
 
   it('keeps the result when the count after a delete fails, with Delete off', async () => {

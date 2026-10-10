@@ -1,9 +1,9 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import type { CategoryPatch, ItemPatch, NewCategory, NewItem } from '../api';
 import { todayKey } from '../../../shared/dates.js';
 import type { Board, Priority, Recurring } from '../types';
-import { unlessGone } from '../lib/apiError';
+import { goneAt } from '../lib/apiError';
 import { warnSaveFailed } from '../lib/alerts';
 import {
   addsToLanes,
@@ -22,7 +22,7 @@ import {
   type StoreMove,
 } from '../lib/board';
 import { ADD_PRIORITY_FAILED, BOARD, SAVE_FAILED } from '../lib/copy';
-import { addPending, fetched, settle, settleWith, shown, untracked, type Tracked } from '../lib/optimistic';
+import { addPending, confirm, fetched, settle, settleWith, shown, untracked, type Tracked } from '../lib/optimistic';
 import { newUid, patchRow, placePriority, takeOffRow } from '../lib/priorities';
 import { useDayStore } from './useDay';
 import { useLatest } from './useLatest';
@@ -54,12 +54,8 @@ export interface BoardState {
  * identity for the provider's life.
  */
 export interface BoardStore {
-  /**
-   * Reads the board, sharing a read already out; nothing while the board is off. Never rejects.
-   * `fresh` is for a caller that has just changed what the server holds (a prune): a read out now
-   * may have left before that, so a new one goes after it.
-   */
-  load(opts?: { fresh?: boolean }): Promise<void>;
+  /** Reads the board; nothing while the board is off. Never rejects. */
+  load(): Promise<void>;
   /**
    * A new task in a lane (a column's +, or a done item's new task), refused at the lanes' cap
    * before it is sent, or a new recurring priority made in Settings → Board.
@@ -118,36 +114,21 @@ export function BoardProvider({ children }: { children: ReactNode }) {
   const onRef = useLatest(on);
   const priorityCount = useLatest(settings.priorityCount);
   const dayStore = useDayStore();
-  const inflight = useRef<Promise<void> | null>(null);
 
-  const read = useCallback((): Promise<void> => {
+  // Never shared: a read sent after a change (a refused write, a prune, a park) answers for it,
+  // and one still out from before answers lower and is dropped.
+  const load = useCallback((): Promise<void> => {
     if (!onRef.current) return Promise.resolve();
-    if (inflight.current) return inflight.current;
-    const sentAt = current().version;
-    const out = api
+    return api
       .getBoard()
-      .then(({ value }) => {
-        change((t) => fetched(t, sentAt, value).next);
+      .then(({ value, revision }) => {
+        change((t) => fetched(t, value, revision).next);
         setFailed(false);
       })
       .catch(() => {
         if (current().confirmed === undefined) setFailed(true);
-      })
-      .finally(() => {
-        inflight.current = null;
       });
-    inflight.current = out;
-    return out;
   }, [onRef, current, change]);
-
-  // A fresh read goes once the one out has answered: it then starts one, or shares one sent since.
-  const load = useCallback(
-    ({ fresh = false }: { fresh?: boolean } = {}): Promise<void> => {
-      const out = inflight.current;
-      return fresh && out ? out.then(read) : read();
-    },
-    [read],
-  );
 
   // A board change shown from now until the server has answered for it.
   const pend = useCallback(
@@ -160,13 +141,13 @@ export function BoardProvider({ children }: { children: ReactNode }) {
   );
 
   // The server's answer for change `id`: its board laid on while the board is on (null: confirmed
-  // as shown, a delete answered 404). A failure takes the change off, reads the board again and
-  // rejects.
+  // as shown, a delete answered 404 or a row saved through the day store). A failure takes the
+  // change off, reads the board again and rejects.
   const answer = useCallback(
-    async (id: number, apply: (b: Board) => Board, run: () => Promise<api.Answer<Board> | null>): Promise<void> => {
+    async (id: number, apply: (b: Board) => Board, run: () => Promise<api.Answer<Board | null>>): Promise<void> => {
       try {
-        const saved = (await run())?.value;
-        change((t) => (saved && onRef.current ? settleWith(t, [id], saved) : settle(t, [id], apply)));
+        const { value: saved, revision } = await run();
+        change((t) => (saved && onRef.current ? settleWith(t, [id], saved, revision) : confirm(settle(t, [id]), apply, revision)));
       } catch (err) {
         change((t) => settle(t, [id]));
         void load();
@@ -178,7 +159,7 @@ export function BoardProvider({ children }: { children: ReactNode }) {
 
   // One job on the board queue whose change shows at once, even while an earlier job is out.
   const write = useCallback(
-    (apply: (b: Board) => Board, run: () => Promise<api.Answer<Board> | null>) => {
+    (apply: (b: Board) => Board, run: () => Promise<api.Answer<Board | null>>) => {
       const id = pend(apply);
       return queue(() => answer(id, apply, run));
     },
@@ -212,7 +193,7 @@ export function BoardProvider({ children }: { children: ReactNode }) {
   const patchItem = useCallback(
     async (uid: string, patch: ItemPatch) => {
       const saved = await api.editItem(uid, patch);
-      if (patch.title !== undefined || patch.categoryUid !== undefined || patch.note !== undefined) dayStore.taskChanged(uid);
+      if (patch.title !== undefined || patch.categoryUid !== undefined || patch.note !== undefined) dayStore.taskChanged(uid, saved.revision);
       return saved;
     },
     [dayStore],
@@ -256,7 +237,7 @@ export function BoardProvider({ children }: { children: ReactNode }) {
       const itemPatch = itemPatchOf(patch);
       return write(
         (b) => withItemPatch(b, uid, itemPatch),
-        async () => ((await setRow(today, uid, patch)) === 'skipped' ? patchItem(uid, itemPatch) : null),
+        async () => ((await setRow(today, uid, patch)) === 'skipped' ? patchItem(uid, itemPatch) : { value: null, revision: 0 }),
       );
     },
     [write, setRow, patchItem],
@@ -296,7 +277,7 @@ export function BoardProvider({ children }: { children: ReactNode }) {
       const apply = (b: Board) => withItemPatch(b, uid, patch);
       await answer(pend(apply), apply, () => api.editItem(uid, patch));
       await offToday(today, uid);
-      void load({ fresh: true });
+      void load();
     },
     [dayStore, full, pend, answer, offToday, load],
   );
@@ -337,8 +318,8 @@ export function BoardProvider({ children }: { children: ReactNode }) {
         (b) => withoutItem(b, uid),
         async () => {
           await dayStore.prioritiesSaved(today);
-          const saved = await unlessGone(api.deleteItem(uid));
-          dayStore.taskChanged(uid);
+          const saved = await goneAt(api.deleteItem(uid));
+          dayStore.taskChanged(uid, saved.revision);
           return saved;
         },
       );
@@ -350,7 +331,7 @@ export function BoardProvider({ children }: { children: ReactNode }) {
     (uid: string) =>
       write(
         (b) => withoutItem(b, uid),
-        () => unlessGone(api.deleteItem(uid)),
+        () => goneAt(api.deleteItem(uid)),
       ),
     [write],
   );

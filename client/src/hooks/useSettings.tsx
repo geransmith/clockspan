@@ -32,9 +32,9 @@ function fromServer(s: Settings): Settings {
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const { tracked, current, change, nextId, queue } = useTracked<Tracked<Settings>>(untracked);
 
-  // A read's answer. A save answered while it was out already brought all the settings, newer
-  // than these (`fetched`).
-  const land = useCallback((sentAt: number, { value }: api.Answer<Settings>) => change((t) => fetched(t, sentAt, fromServer(value)).next), [change]);
+  // A read's answer, dropped below the revision held (`fetched`), so neither a save answered while
+  // it was out nor a newer read that landed first is undone.
+  const land = useCallback(({ value, revision }: api.Answer<Settings>) => change((t) => fetched(t, fromServer(value), revision).next), [change]);
 
   // A failed fetch is asked again rather than settled with the defaults: `loaded` is what holds
   // the alarms and the timer's alerts, and judged against the defaults they would ring at the
@@ -44,11 +44,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     let retry: number | undefined;
     let delay = 0;
     const fetchSettings = () => {
-      const sentAt = current().version;
       api
         .getSettings()
         .then((s) => {
-          if (!cancelled) land(sentAt, s);
+          if (!cancelled) land(s);
         })
         .catch(() => {
           if (cancelled) return;
@@ -61,18 +60,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       window.clearTimeout(retry);
     };
-  }, [current, land]);
+  }, [land]);
 
   // Then kept in step like today's day (every minute and when the tab comes back), since
   // another device may change them: a work day made longer on the phone must not ring this
   // tab's clock-out alarm at the old length. Until the first answer the retries above own the
   // fetch; a failed refresh keeps the copy shown.
   const refresh = useCallback(() => {
-    const { confirmed, version: sentAt } = current();
-    if (confirmed === undefined) return Promise.resolve();
+    if (current().confirmed === undefined) return Promise.resolve();
     return api
       .getSettings()
-      .then((s) => land(sentAt, s))
+      .then(land)
       .catch(() => {});
   }, [current, land]);
   useRefreshLoop(refresh);
@@ -82,8 +80,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       const id = nextId();
       change((t) => addPending(t, id, (s) => applySettingsPatch(s, patch)));
       try {
-        const { value } = await queue(() => api.putSettings(patch));
-        change((t) => settleWith(t, [id], fromServer(value)));
+        const { value, revision } = await queue(() => api.putSettings(patch));
+        change((t) => settleWith(t, [id], fromServer(value), revision));
       } catch (err) {
         change((t) => settle(t, [id]));
         throw err;
@@ -95,8 +93,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // Not optimistic: the server's answer is the copy of the defaults that counts. A change made
   // after it is still pending and stays on top.
   const reset = useCallback(async () => {
-    const { value } = await queue(() => api.resetSettings());
-    change((t) => settleWith(t, [], fromServer(value)));
+    const { value, revision } = await queue(() => api.resetSettings());
+    change((t) => settleWith(t, [], fromServer(value), revision));
   }, [change, queue]);
 
   // Kept by identity between changes: the alarms and the sheet key their work on it. Until the

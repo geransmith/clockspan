@@ -5,7 +5,7 @@ import { mergePriorities } from '../../../shared/priorities.js';
 import { mergePunches } from '../../../shared/punches.js';
 import type { Day, Priority, PruneResult, Punch, Session } from '../types';
 import { dismissByTag, warnQuietly, warnSaveFailed } from '../lib/alerts';
-import { unlessGone } from '../lib/apiError';
+import { ApiError, goneAt } from '../lib/apiError';
 import { ADD_PRIORITY_FAILED, LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
 import { endBreaksAt } from '../lib/breaks';
 import { addPending, confirm, fetched, settle, shown, untracked, whileUnsettled, type Tracked } from '../lib/optimistic';
@@ -59,9 +59,9 @@ interface DayStore {
    */
   refresh: (date: string) => Promise<void>;
   /**
-   * `GET /days/range`, whose answer also lands on each day in it the store held when it went
-   * out (as an empty day where the answer has none), unless the server confirmed a change to
-   * that day meanwhile. Rejects on a failure, without a banner.
+   * `GET /days/range`, whose answer also lands on each day in it the store holds loaded when it
+   * answers (as an empty day where the answer has none), unless that day holds a newer answer.
+   * Rejects on a failure, without a banner.
    */
   readRange: (from: string, to: string) => Promise<Day[]>;
   /**
@@ -74,9 +74,9 @@ interface DayStore {
    * `editItem` renamed it or gave it a category, `deleteItem` deleted it): every held day whose list
    * or log names it is read again, so its lists and sessions show the new name and category, or drop
    * it and show its time unplanned, and `generation` moves, so no range on screen shows it from an
-   * older answer.
+   * older answer. `revision` is the write's: a read of those days already out answers below it.
    */
-  taskChanged: (uid: string) => void;
+  taskChanged: (uid: string, revision: number) => void;
   /**
    * A day's punches, built on the rows the store shows now. The server keeps a punch another device
    * saved since (`mergePunches`), and until it answers the day shows the same merge.
@@ -113,8 +113,8 @@ interface DayStore {
   /** The day's own work-day length in minutes; null goes back to the usual one. */
   setWorkMinutes: (date: string, minutes: number | null) => Promise<boolean>;
   setRetro: (date: string, patch: api.RetroPatch) => Promise<boolean>;
-  /** A session the server has just confirmed (the timer started, finished, paused or cancelled it). */
-  applySession: (session: Session) => void;
+  /** A session the server has just confirmed at `revision` (the timer started, finished, paused or cancelled it). */
+  applySession: (session: Session, revision: number) => void;
   removeSession: (date: string, id: number) => Promise<boolean>;
   updateSession: (date: string, id: number, patch: api.SessionEdit) => Promise<boolean>;
   /** Start a break now. Shown once the server has it, since the server may end another as it starts. */
@@ -218,15 +218,17 @@ export function DayProvider({ children }: { children: ReactNode }) {
     function fetchDay(date: string, quiet = false): Promise<void> {
       const out = inflight.current.get(date);
       if (out) return out;
-      const sentAt = (current().days[date] ?? untracked<Day>()).version;
+      const sentAt = (current().days[date] ?? untracked<Day>()).revision;
       let stale = false;
       const p = api
         .getDay(date)
-        .then(({ value }) => {
+        .then(({ value, revision }) => {
           const day = normalizeDay(value);
           update(date, (t) => {
-            const answer = fetched(t, sentAt, day);
-            stale = answer.stale;
+            const answer = fetched(t, day, revision);
+            // Below what the store knew as the read left, the server's count went back (a
+            // restored backup), and asking again would loop.
+            stale = answer.stale && revision >= sentAt;
             return answer.next;
           });
           change((s) => {
@@ -250,10 +252,10 @@ export function DayProvider({ children }: { children: ReactNode }) {
         })
         .finally(() => {
           inflight.current.delete(date);
-          // The server confirmed a change after this went out, so the answer was dropped (or, on
-          // a day never loaded, taken as the best there is) and may miss another device's
-          // change: ask again, whoever sent it. Only a change confirmed while a read is out does
-          // this, so it stops when the writes do.
+          // A change with a higher revision was laid on after this went out, so the answer was
+          // dropped (or, on a day never loaded, taken as the best there is) and may miss another
+          // device's change: ask again, whoever sent it. Only a change confirmed while a read is
+          // out does this, so it stops when the writes do.
           if (stale) void fetchDay(date, true);
         });
       inflight.current.set(date, p);
@@ -274,12 +276,12 @@ export function DayProvider({ children }: { children: ReactNode }) {
     [current, fetchDay],
   );
 
-  // A held day the server changed through another write (one for another day, a task's, a prune):
-  // counted as a change it confirmed, so a read already out, which predates it, is dropped and the
-  // day asked for again.
+  // A held day the server changed through another write at `revision` (one for another day, a
+  // task's, a prune): the day's copy is raised to it, so a read already out, which answers below
+  // it, is dropped and the day asked for again.
   const reread = useCallback(
-    (date: string) => {
-      update(date, (t) => confirm(t, (d) => d));
+    (date: string, revision: number) => {
+      update(date, (t) => confirm(t, (d) => d, revision));
       void refresh(date);
     },
     [update, refresh],
@@ -287,18 +289,18 @@ export function DayProvider({ children }: { children: ReactNode }) {
 
   // Reads again each held day `picks`.
   const readAgain = useCallback(
-    (picks: (day: Day, date: string) => boolean) => {
+    (picks: (day: Day, date: string) => boolean, revision: number) => {
       for (const [date, t] of Object.entries(current().days)) {
         const day = shownDay(t);
-        if (day && picks(day, date)) reread(date);
+        if (day && picks(day, date)) reread(date, revision);
       }
     },
     [current, reread],
   );
 
   const taskChanged = useCallback(
-    (uid: string) => {
-      readAgain((day) => day.priorities.some((p) => p.uid === uid) || day.sessions.some((s) => s.priorityUid === uid));
+    (uid: string, revision: number) => {
+      readAgain((day) => day.priorities.some((p) => p.uid === uid) || day.sessions.some((s) => s.priorityUid === uid), revision);
       setGeneration((g) => g + 1);
     },
     [readAgain],
@@ -308,16 +310,17 @@ export function DayProvider({ children }: { children: ReactNode }) {
   // answer becomes the stored copy. Not saved: they leave it all the same, so the screen is back
   // on the stored copy at once, a banner says so (the edit vanishing on its own would look like
   // the app losing data), and the day is asked for again in case the server moved on (another
-  // device deleted the row being edited). That shares a load already out, and a load whose
-  // answer comes back stale asks again itself.
+  // device deleted the row being edited). That shares a load already out: a refusal names the
+  // server's revision, which the day's copy is raised to, so a load that left before it comes
+  // back stale and asks again itself. A failure with no answer (offline) raises nothing.
   const persist = useCallback(
-    async (date: string, ids: readonly number[], run: () => Promise<Commit>): Promise<boolean> => {
+    async (date: string, ids: readonly number[], run: () => Promise<api.Answer<Commit>>): Promise<boolean> => {
       try {
-        const commit = await run();
-        update(date, (t) => settle(t, ids, commit));
+        const { value: commit, revision } = await run();
+        update(date, (t) => confirm(settle(t, ids), commit, revision));
         return true;
-      } catch {
-        update(date, (t) => settle(t, ids));
+      } catch (err) {
+        update(date, (t) => confirm(settle(t, ids), (d) => d, err instanceof ApiError ? err.revision : 0));
         warnSaveFailed();
         void fetchDay(date, true);
         return false;
@@ -343,7 +346,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       field: F,
       date: string,
       list: Day[F],
-      send: (list: Day[F], base: Day[F]) => Promise<Day[F]>,
+      send: (list: Day[F], base: Day[F]) => Promise<api.Answer<Day[F]>>,
       base: Day[F],
       show: (rows: Day[F]) => Day[F],
     ): Promise<boolean> => {
@@ -365,9 +368,9 @@ export function DayProvider({ children }: { children: ReactNode }) {
           while (q.sent < q.ids.length) {
             q.sent = q.ids.length;
             const { list: sending, base: builtOn } = q;
-            const run = async (): Promise<Commit> => {
-              const saved = await send(sending, builtOn);
-              return (d) => ({ ...d, [field]: saved });
+            const run = async (): Promise<api.Answer<Commit>> => {
+              const { value: saved, revision } = await send(sending, builtOn);
+              return { value: (d) => ({ ...d, [field]: saved }), revision };
             };
             if (!(await persist(date, [...q.ids], run))) {
               update(date, (t) => settle(t, q.ids));
@@ -389,7 +392,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
   // before them on the same key, so the server ends where the screen does. `apply` shows the
   // change at once; without one it shows when the server has it.
   const inOrder = useCallback(
-    (key: string, date: string, apply: ((d: Day) => Day) | null, run: () => Promise<Commit>): Promise<boolean> => {
+    (key: string, date: string, apply: ((d: Day) => Day) | null, run: () => Promise<api.Answer<Commit>>): Promise<boolean> => {
       const id = nextId();
       if (apply) update(date, (t) => addPending(t, id, apply));
       return queue(() => persist(date, [id], run), key);
@@ -402,8 +405,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const putDayFields = useCallback(
     (date: string, apply: (d: Day) => Day, send: () => Promise<api.Answer<Partial<Day>>>) =>
       inOrder(`day:${date}`, date, apply, async () => {
-        const saved = (await send()).value;
-        return (d) => ({ ...d, ...saved });
+        const { value: saved, revision } = await send();
+        return { value: (d) => ({ ...d, ...saved }), revision };
       }),
     [inOrder],
   );
@@ -420,7 +423,10 @@ export function DayProvider({ children }: { children: ReactNode }) {
         'punches',
         date,
         list,
-        async (p, b) => normalizePunches((await api.putPunches(date, p, b)).value.punches),
+        async (p, b) => {
+          const { value, revision } = await api.putPunches(date, p, b);
+          return { value: normalizePunches(value.punches), revision };
+        },
         base,
         (rows) => mergePunches(rows, base, list),
       );
@@ -442,16 +448,19 @@ export function DayProvider({ children }: { children: ReactNode }) {
         date,
         priorities,
         async (p, b) => {
-          const saved = (await api.putPriorities(date, p, b)).value.priorities;
+          const {
+            value: { priorities: saved },
+            revision,
+          } = await api.putPriorities(date, p, b);
           const moved = (uid: string | null) => uid != null && b.some((q) => q.uid === uid) !== saved.some((q) => q.uid === uid);
-          readAgain((day, d) => d !== date && day.priorities.some((q) => moved(q.uid)));
+          readAgain((day, d) => d !== date && day.priorities.some((q) => moved(q.uid)), revision);
           const before = new Map(b.map((q) => [q.uid, q]));
           for (const q of p) {
             const was = q.uid == null ? undefined : before.get(q.uid);
             const elsewhere = was && (was.listed > 1 || was.logged > 0);
-            if (elsewhere && (was.text.trim() !== q.text.trim() || was.categoryUid !== q.categoryUid || was.note !== q.note)) taskChanged(q.uid!);
+            if (elsewhere && (was.text.trim() !== q.text.trim() || was.categoryUid !== q.categoryUid || was.note !== q.note)) taskChanged(q.uid!, revision);
           }
-          return saved;
+          return { value: saved, revision };
         },
         base,
         (rows) => mergePriorities(rows, base, priorities),
@@ -527,9 +536,9 @@ export function DayProvider({ children }: { children: ReactNode }) {
   // its day (one started before midnight sits on the day before), so a loaded day still showing
   // one running past the start takes the same end.
   const endRunningBreaks = useCallback(
-    (at: number) => {
+    (at: number, revision: number) => {
       for (const [date, t] of Object.entries(current().days)) {
-        if (t.confirmed?.breaks.some((b) => b.endedAt > at)) update(date, (u) => confirm(u, (d) => ({ ...d, breaks: endBreaksAt(d.breaks, at) })));
+        if (t.confirmed?.breaks.some((b) => b.endedAt > at)) update(date, (u) => confirm(u, (d) => ({ ...d, breaks: endBreaksAt(d.breaks, at) }), revision));
       }
     },
     [update, current],
@@ -538,9 +547,9 @@ export function DayProvider({ children }: { children: ReactNode }) {
   // Confirmed already: straight into the stored copy. On a day not loaded yet, a load already
   // out predates it, so its answer is taken and the day asked for again (`fetchDay`).
   const applySession = useCallback(
-    (session: Session) => {
-      update(session.date, (t) => confirm(t, (d) => withSession(d, session)));
-      if (session.status === 'running') endRunningBreaks(session.startedAt);
+    (session: Session, revision: number) => {
+      update(session.date, (t) => confirm(t, (d) => withSession(d, session), revision));
+      if (session.status === 'running') endRunningBreaks(session.startedAt, revision);
     },
     [update, endRunningBreaks],
   );
@@ -549,8 +558,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
     (date: string, id: number) => {
       const without = (d: Day) => ({ ...d, sessions: d.sessions.filter((s) => s.id !== id) });
       return inOrder(`session:${id}`, date, without, async () => {
-        await unlessGone(api.deleteSession(id));
-        return without;
+        const { revision } = await goneAt(api.deleteSession(id));
+        return { value: without, revision };
       });
     },
     [inOrder],
@@ -564,8 +573,11 @@ export function DayProvider({ children }: { children: ReactNode }) {
         (d) => ({ ...d, sessions: d.sessions.map((s) => (s.id === id ? editedSession(s, patch) : s)) }),
         async () => {
           if (patch.priorityUid) await prioritiesSaved(date);
-          const { session } = (await api.patchSession(id, patch)).value;
-          return (d) => withSession(d, session);
+          const {
+            value: { session },
+            revision,
+          } = await api.patchSession(id, patch);
+          return { value: (d) => withSession(d, session), revision };
         },
       ),
     [inOrder, prioritiesSaved],
@@ -575,11 +587,14 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const startBreak = useCallback(
     (date: string, plannedSeconds: number) =>
       inOrder('breaks', date, null, async () => {
-        const { break: saved } = (await api.startBreak(date, plannedSeconds)).value;
+        const {
+          value: { break: saved },
+          revision,
+        } = await api.startBreak(date, plannedSeconds);
         // The server ended the one still running when this one started; the same here. By id: a
         // read may have brought this break in already, and a new break can take a deleted one's id.
-        endRunningBreaks(saved.startedAt);
-        return (d) => ({ ...d, breaks: replaceById(d.breaks, saved.id, saved) });
+        endRunningBreaks(saved.startedAt, revision);
+        return { value: (d) => ({ ...d, breaks: replaceById(d.breaks, saved.id, saved) }), revision };
       }),
     [inOrder, endRunningBreaks],
   );
@@ -596,8 +611,9 @@ export function DayProvider({ children }: { children: ReactNode }) {
         date,
         (d) => ({ ...d, breaks: d.breaks.flatMap((b) => (b.id === id ? endBreaksAt([b], now) : [b])) }),
         async () => {
-          const saved = (await unlessGone(api.endBreak(id)))?.value.break ?? null;
-          return (d) => ({ ...d, breaks: replaceById(d.breaks, id, saved) });
+          const { value, revision } = await goneAt(api.endBreak(id));
+          const saved = value?.break ?? null;
+          return { value: (d) => ({ ...d, breaks: replaceById(d.breaks, id, saved) }), revision };
         },
       );
     },
@@ -608,8 +624,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
     (date: string, id: number) => {
       const without = (d: Day) => ({ ...d, breaks: d.breaks.filter((b) => b.id !== id) });
       return inOrder('breaks', date, without, async () => {
-        await unlessGone(api.deleteBreak(id));
-        return without;
+        const { revision } = await goneAt(api.deleteBreak(id));
+        return { value: without, revision };
       });
     },
     [inOrder],
@@ -617,14 +633,15 @@ export function DayProvider({ children }: { children: ReactNode }) {
 
   const readRange = useCallback(
     async (from: string, to: string) => {
-      // Only the days held when it went out: one loaded since has a newer answer of its own.
-      const sent = Object.entries(current().days)
-        .filter(([date, t]) => date >= from && date <= to && t.confirmed !== undefined)
-        .map(([date, t]) => [date, t.version] as const);
-      const days = (await api.getRange(from, to)).value.days.map(normalizeDay);
+      const { value, revision } = await api.getRange(from, to);
+      const days = value.days.map(normalizeDay);
       const byDate = new Map(days.map((d) => [d.date, d]));
-      // A day the answer leaves out has no row on the server: `GET /days/:date` answers it as empty.
-      for (const [date, sentAt] of sent) update(date, (t) => fetched(t, sentAt, byDate.get(date) ?? normalizeDay(emptyDay(date))).next);
+      // Every day held loaded in the range now; one whose own answer is newer drops it. A day the
+      // answer leaves out has no row on the server: `GET /days/:date` answers it as empty.
+      for (const [date, t] of Object.entries(current().days)) {
+        if (date >= from && date <= to && t.confirmed !== undefined)
+          update(date, (u) => fetched(u, byDate.get(date) ?? normalizeDay(emptyDay(date)), revision).next);
+      }
       return days;
     },
     [current, update],
@@ -636,8 +653,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
   // and re-create that day, which the read after it shows.
   const pruneBefore = useCallback(
     async (before: string) => {
-      const result = (await api.pruneDays(before)).value;
-      for (const date of Object.keys(current().days)) if (date < before) reread(date);
+      const { value: result, revision } = await api.pruneDays(before);
+      for (const date of Object.keys(current().days)) if (date < before) reread(date, revision);
       setGeneration((g) => g + 1);
       return result;
     },
