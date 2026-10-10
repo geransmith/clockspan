@@ -104,7 +104,12 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
   };
   if (clockIn == null) return empty;
 
-  const typed = punches.filter((p): p is Punch & { at: number } => p.at != null).sort((a, b) => a.at - b.at || a.position - b.position);
+  // Rows at the same minute (Now pressed twice) go in the order they can have happened: an In
+  // that ends an earlier break, then an Out and its own In (a break of no time), then an Out.
+  const tieRank = (p: Punch & { at: number }) => (byPos.get(p.position + (p.kind === 'in' ? -1 : 1)) === p.at ? 1 : p.kind === 'in' ? 0 : 2);
+  const typed = punches
+    .filter((p): p is Punch & { at: number } => p.at != null)
+    .sort((a, b) => a.at - b.at || tieRank(a) - tieRank(b) || a.position - b.position);
   // Order is checked over every time typed, so a slip in one still ahead shows as it is typed.
   const outOfOrder = orderSlip(typed, byPos, finalPos);
   const set = typed.filter((p) => p.at <= upTo);

@@ -155,12 +155,28 @@ describe('computeTimeclock', () => {
     expect(computeTimeclock(p, settings, T0 + 8.5 * HOUR_MS + 5 * MINUTE_MS).state).toBe('on-break');
   });
 
-  it('orders two punches at the same minute by row, whatever order the rows arrive in', () => {
+  it('reads an Out and its own In at the same minute as a break of no time, whatever order the rows arrive in', () => {
     // Lunch out and back in at the same instant: a zero-length lunch, not out of order.
     const r = computeTimeclock(punches([T0, T0 + 4 * HOUR_MS, T0 + 4 * HOUR_MS, null]).reverse(), settings, T0 + 5 * HOUR_MS);
     expect(r.outOfOrder).toBeNull();
     expect(r.state).toBe('working');
     expect(r.workedSeconds).toBe(5 * 3600);
+  });
+
+  it('reads an In and an Out at the same minute on rows apart in the order they happened', () => {
+    const at = (hours: number) => T0 + hours * HOUR_MS;
+    // Out 1 at 11:00, back with In 1 at 11:45 and Now again for Lunch out, Lunch in at 12:15.
+    const r = computeTimeclock(punches([at(0), at(3.75), at(4.25), at(3), at(3.75), null]), settings, at(5) + MINUTE_MS);
+    expect(r.outOfOrder).toBeNull();
+    expect(r.workedSeconds).toBe(3 * 3600 + 46 * 60);
+    // Three rows at 11:45: a lunch of no time after the break, then a break of no time before lunch.
+    for (const times of [
+      [at(0), at(3.75), at(3.75), at(3), at(3.75), null],
+      [at(0), at(3.75), at(4.25), at(3.75), at(3.75), null],
+    ]) {
+      expect(computeTimeclock(punches(times), settings, at(5)).outOfOrder).toBeNull();
+      expect(computeTimeclock(punches(times).reverse(), settings, at(5)).outOfOrder).toBeNull();
+    }
   });
 
   it('ends the day at an explicit Clock out even when short of the target', () => {
