@@ -1,10 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from 'react';
+import { createContext, useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import * as api from '../api';
 import type { Settings } from '../types';
 import { nextBackoff } from '../../../shared/backoff.js';
 import { DEFAULT_SETTINGS, normalizeLayout } from '../../../shared/settings.js';
 import { addPending, fetched, settle, settleWith, shown, untracked, type Tracked } from '../lib/optimistic';
 import { applySettingsPatch } from '../lib/settings';
+import { useProvided } from './useProvided';
 import { useRefreshLoop } from './useRefreshLoop';
 import { useTracked } from './useTracked';
 
@@ -107,7 +108,5 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 }
 
 export function useSettings(): SettingsCtx {
-  const v = useContext(Ctx);
-  if (!v) throw new Error('useSettings outside SettingsProvider');
-  return v;
+  return useProvided(Ctx, 'useSettings');
 }

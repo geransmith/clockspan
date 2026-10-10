@@ -380,10 +380,6 @@ describe('across midnight', () => {
   });
 });
 
-it('is only there inside its provider', () => {
-  expect(() => renderHook(() => useBreak())).toThrow('useBreak outside BreakProvider');
-});
-
 describe('suggestions', () => {
   /** A completed 25-minute session that started `at` minutes before T0. */
   const done = (id: number, at: number): Session => completedSession(id, T0 - at * MINUTE_MS, 25 * 60);

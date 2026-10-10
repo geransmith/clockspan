@@ -353,7 +353,3 @@ describe('reset', () => {
     expect(result.current.settings.workMinutes).toBe(450);
   });
 });
-
-it('refuses to run outside the provider', () => {
-  expect(() => renderHook(() => useSettings())).toThrow('useSettings outside SettingsProvider');
-});

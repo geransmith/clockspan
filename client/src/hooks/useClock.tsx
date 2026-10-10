@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useEffect, useState, type ReactNode } from 'react';
+import { useProvided } from './useProvided';
 
 const Ctx = createContext<number | null>(null);
 
@@ -27,7 +28,5 @@ export function ClockProvider({ children }: { children: ReactNode }) {
 
 /** The time as of this second's tick. */
 export function useClock(): number {
-  const now = useContext(Ctx);
-  if (now == null) throw new Error('useClock outside ClockProvider');
-  return now;
+  return useProvided(Ctx, 'useClock');
 }
