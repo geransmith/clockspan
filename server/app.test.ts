@@ -7,9 +7,9 @@ import { HOUR_MS, MINUTE_MS } from '../shared/dates.js';
 import { createApp, startBackgroundJobs } from './app.js';
 import { loadConfig } from './config.js';
 import { ensureDefaultUser, openDatabase } from './db.js';
-import { countRows, SEED_TODAY, startTestApp, tempClientBuild, writeClientBuild, type TestApp } from './dev/harness.js';
+import { countRows, SEED_TODAY, startTestApp, tempClientBuild, writeClientBuild, type ApiResponse, type TestApp } from './dev/harness.js';
 import { Discovery } from './auth/oidc.js';
-import { VERSION_HEADER } from '../shared/api.js';
+import { REVISION_HEADER, VERSION_HEADER } from '../shared/api.js';
 
 describe('response headers', () => {
   let app: TestApp;
@@ -93,6 +93,36 @@ describe('the version header', () => {
     const blocked = await b.get('/api/settings');
     expect(blocked.status).toBe(403);
     expect(blocked.headers.get(VERSION_HEADER)).toBeNull();
+  });
+});
+
+describe('the revision header', () => {
+  let app: TestApp;
+  afterEach(() => app.close());
+
+  // As a string, so a missing header fails rather than reading as 0.
+  const revision = (res: ApiResponse) => res.headers.get(REVISION_HEADER);
+
+  it("numbers the user's changes on every data answer: a write moves it on, a refused one too, and a read says where it stands", async () => {
+    app = await startTestApp();
+    expect(revision(await app.api.get('/api/settings'))).toBe('0');
+    expect(revision(await app.api.put('/api/settings', {}))).toBe('1');
+    const refused = await app.api.put('/api/days/not-a-date/priorities', { priorities: [] });
+    expect(refused.status).toBe(400);
+    expect(revision(refused)).toBe('2');
+    // Read from the table: under AUTH_MODE=none req.user is the row read at boot.
+    expect(revision(await app.api.get('/api/settings'))).toBe('2');
+  });
+
+  it("keeps each user's count apart, and gives it to no one who has not signed in", async () => {
+    app = await startTestApp({ authMode: 'local' });
+    const lost = await app.api.get('/api/settings');
+    expect(lost.status).toBe(401);
+    expect(revision(lost)).toBeNull();
+    // Signing in is an auth route, which moves nothing.
+    const { a, b } = await app.twoUsers();
+    expect(revision(await a.put('/api/settings', {}))).toBe('1');
+    expect(revision(await b.get('/api/settings'))).toBe('0');
   });
 });
 
@@ -280,7 +310,7 @@ describe('bad request bodies', () => {
 
   it('answers an unexpected failure with a fixed 500 message and logs the cause', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
-    app.db.close(); // every query now throws inside the handler
+    app.db.close(); // every query now throws, the revision read first
     const res = await app.api.get('/api/settings');
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ error: 'Internal error.' });

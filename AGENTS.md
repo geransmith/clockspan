@@ -52,7 +52,8 @@ shared/                 imported by both sides, always with a `.js` suffix
                         the input limits both sides check (LIMITS, USERNAME, PASSWORD_LENGTH), the board's
                         open lanes (OPEN_LANES, OpenLane), how far back a task left open is offered and
                         shown (LOOKBACK_DAYS), the server's caps on the board (BOARD_LIMITS), the category
-                        colours (CATEGORY_COLORS) and the header naming the server's version (VERSION_HEADER)
+                        colours (CATEGORY_COLORS) and the headers naming the server's version
+                        (VERSION_HEADER) and the user's revision (REVISION_HEADER)
   sounds.ts             the sound catalog (SOUNDS, SOUND_EVENTS)
   dates.ts, timer.ts    date keys, the time spans (MINUTE_MS, HOUR_MS, DAY_MS) and cutoffKey (the server's
                         own date bounds); pause-aware session timing (activeMs, plannedEndAt,
@@ -74,12 +75,14 @@ shared/                 imported by both sides, always with a `.js` suffix
   backoff.ts            nextBackoff: the wait between retries of a request that must answer
 server/                 Express API → dist/server
   app.ts                createApp(): headers, /api/health, /api/auth/me for every mode, auth routers,
-                        data routers behind requireAuth (each answer naming the server's version),
-                        static files and the SPA fallback;
+                        data routers behind requireAuth (each answer naming the server's version
+                        and the user's revision), static files and the SPA fallback;
                         startBackgroundJobs() (the login purge, the retention schedule and, under
                         OIDC, warming the `Discovery` index.ts passes in; started by index.ts only)
-  security.ts           every security header, rejectCrossSiteWrites and rejectUnknownHosts
-  config.ts, db.ts      env parsing (throws on bad config); pragmas, MIGRATIONS and migrate, the default user
+  security.ts           every security header, rejectCrossSiteWrites (READ_METHODS: what isn't a write)
+                        and rejectUnknownHosts
+  config.ts, db.ts      env parsing (throws on bad config); pragmas, MIGRATIONS and migrate, the default user,
+                        a user's revision (readRevision, bumpRevision)
   migrations/           the migrations that need code, frozen: oneItem.ts (13: each task stored once,
                         items backfilled from the cards, recurring priorities and per-day rows)
   settings.ts           mergeSettings (defaults + validation on every read and write), loadSettings
@@ -316,8 +319,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   under `AUTH_MODE=none` only, on `/api` after `/api/health`, and reads the raw `Host` header,
   never `req.hostname`. Headers that describe one answer stay with the code that sends it: the
   static files' `Cache-Control` in `app.ts` and `Retry-After` in `refuseTooMany`
-  (`auth/limiter.ts`). `Clockspan-Version`, which guards nothing, is set in `app.ts` on the data
-  router (see "A page left open across an update asks to be reloaded").
+  (`auth/limiter.ts`). `Clockspan-Version` and `Clockspan-Revision`, which guard nothing, are set
+  in `app.ts` on the data router (see "A page left open across an update asks to be reloaded" and
+  "Every data answer numbers the user's changes").
 - **Cookies, sessions and passwords stay in `server/auth/`.** A request's cookies are read only
   through `readCookie()` (`auth/session.ts`), and `Set-Cookie` is written only through
   `cookieHeader()` there; outside `server/dev/` (the test harness's cookie jar) no other module
@@ -1038,6 +1042,19 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   PUT carrying `cards` or `touched`, or a row carrying `cardUid` or `recurringUid` (`staleShape`),
   and any request under `/board/cards` or `/board/recurring`. Its saves fail until it is reloaded,
   which the banner asks for, and none is read as done or applied in part.
+- **Every data answer numbers the user's changes, so no data handler awaits.** `users.revision`
+  (migration 15) goes out as `Clockspan-Revision` (`REVISION_HEADER`, `shared/api.ts`) on every
+  answer of the data routes, a refusal included, from the middleware in `app.ts` that names the
+  version. A write (a method not in `READ_METHODS`, `security.ts`) moves it on by one before its
+  handler runs (`bumpRevision`, `db.ts`), whatever the handler answers; a read answers it as it
+  stands (`readRevision`), read from the table and never from `req.user`, which is read before the
+  write moves it on, and once at boot under `AUTH_MODE=none`; `UserRow` leaves the column out. The
+  number describes what the handler wrote or read only because nothing runs in between: every
+  handler, param handler and middleware on the `api` router is synchronous, never `await`s and
+  never answers from a callback or a timer. A route that must wait lives outside that router, or
+  this rule changes first. Anything else that changes a user's rows while the server runs moves
+  their number too: `runRetention` does, for each user its prune deleted something for (the Data
+  tab's prune is a write already). The seed and the README's handover script write without it.
 - **A wide window shows the sheet in two columns, chosen when the sheet mounts.** Each layout
   entry has a `side` (`'left' | 'right'`), which `normalizeLayout` keeps or sets to the card's
   `DEFAULT_SIDE` (`shared/settings.ts`), so a layout saved before the columns needs no
@@ -1224,7 +1241,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   validate input (`app.ts` makes a missing or non-JSON body `{}`, so a route reads fields
   straight off `req.body as { field?: unknown }`, with no `?? {}` or `?.`, and checks each one;
   the `no-unsafe-*` lint refuses reading it as `any`), refuse with
-  `return refuse(res, status, message)` → add the call to `client/src/api.ts` (a request
+  `return refuse(res, status, message)`, and never `await` (see "Every data answer numbers the
+  user's changes") → add the call to `client/src/api.ts` (a request
   body the client builds in more than one place gets its type there, at the head of the section
   whose calls send it, as `RetroPatch` and `SessionEdit` do: the server reads every body as `unknown`), with a
   row in `client/src/api.test.ts`'s `ROUTES` table for its method, path and body (the coverage

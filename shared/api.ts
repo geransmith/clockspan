@@ -327,6 +327,12 @@ export interface OkResponse {
  */
 export const VERSION_HEADER = 'Clockspan-Version';
 
+/**
+ * The header on every signed-in data answer that numbers the user's changes: a write moves it
+ * on by one, a refused one too, and a read says where it stands.
+ */
+export const REVISION_HEADER = 'Clockspan-Revision';
+
 export const AUTH_MODES = ['none', 'local', 'oidc'] as const;
 export type AuthMode = (typeof AUTH_MODES)[number];
 
