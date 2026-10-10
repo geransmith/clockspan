@@ -724,7 +724,7 @@ describe('priorities', () => {
     onServer = [...onServer, makePriority(2, 'From the phone', { uid: 'phone0000000' })];
     // The card types a row on the copy it shows; that list waits.
     act(() => void result.current.setPriorities(TODAY, [...shown(), makePriority(2, 'Email')], shown()));
-    // The timer's Also add builds on the copy shown now and takes the waiting list's place.
+    // A timer start on a new name builds on the copy shown now and takes the waiting list's place.
     const added = begin(() => result.current.addPriority(TODAY, 'From the timer'));
     gate.resolve();
     await act(() => added);

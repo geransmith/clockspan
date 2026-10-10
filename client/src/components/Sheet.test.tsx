@@ -555,8 +555,7 @@ describe("Sheet: a category's chip", () => {
     expect(chips()).toEqual(['Category for priority 1: Tickets']);
     expect(screen.getByRole('img', { name: 'Admin' })).toBeTruthy();
 
-    fireEvent.change(screen.getByRole('textbox', { name: 'Session label' }), { target: { value: 'Call the vendor' } });
-    fireEvent.click(screen.getByRole('checkbox', { name: "Also add to today's priorities" }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Session label' }), { target: { value: 'Call the vendor' } });
     fireEvent.click(screen.getByRole('button', { name: 'Category for the new priority: none' }));
     fireEvent.click(screen.getByRole('option', { name: 'Admin' }));
     vi.mocked(api.startSession).mockReturnValue(new Promise(() => {}));

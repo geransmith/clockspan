@@ -1,7 +1,8 @@
 /**
- * Where a small list opened from a control goes on screen: the category chip's list, which is
- * `position: fixed` so a card's or a dialog's overflow can't clip it. Pure, so the flip and the
- * edges are tested without a layout engine; the chip measures and calls it.
+ * Where a small list opened from a control goes on screen: the category chip's list and the
+ * timer's label suggestions, which are `position: fixed` so a card's or a dialog's overflow can't
+ * clip them. Pure, so the flip and the edges are tested without a layout engine; `placeList`
+ * (`CategoryChip.tsx`) measures and calls it.
  */
 
 /** A box on screen in viewport pixels, as `getBoundingClientRect()` gives it. */

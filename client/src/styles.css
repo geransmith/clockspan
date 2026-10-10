@@ -587,8 +587,9 @@ button {
   overflow-wrap: anywhere;
   color: var(--text-2);
 }
-/* The chip's list: fixed on the screen, so a card's or a dialog's overflow can't clip it, and
-   placed by script (CategoryChip, lib/popover.ts) over the running bar. */
+/* The chip's list, and the timer's label suggestions: fixed on the screen, so a card's or a
+   dialog's overflow can't clip it, and placed by script (CategoryChip, lib/popover.ts) over the
+   running bar. */
 .category-pop {
   position: fixed;
   top: 0;
@@ -1448,14 +1449,31 @@ button {
 }
 
 /* ---------- focus timer ---------- */
-/* Open priorities as chips under the label: tap one to link the next session to it. */
-.timer-priorities {
+/* The label box and, while the name typed matches no open row, the new row's category chip. */
+.timer-label {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
 }
-.timer-priorities .chip {
-  max-width: 100%;
+.timer-label-box {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+.timer-label-box > .input {
+  flex: 1;
+  min-width: 0;
+}
+/* The label box's suggestions: the category list's look at the box's width (set by script). */
+.timer-suggest {
+  min-width: 0;
+  max-width: none;
+}
+/* The option the keys moved to, drawn with the focus ring, since the focus stays in the box. */
+.timer-suggest .category-option[aria-selected='true'] {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  font-weight: inherit;
 }
 .chip-num,
 .log-plan {
@@ -1477,39 +1495,15 @@ button {
   background: var(--accent);
   color: var(--accent-text);
 }
-.chip-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.timer-add-priority {
-  font-size: 0.92rem;
-  min-height: 32px;
-}
-/* "Also add to today's priorities" and, while it is ticked, the new row's category chip. The
-   chip keeps the check's 32 px line when it wraps under it, so their touch areas (the coarse
-   block) meet halfway across the gap. */
-.timer-add {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px 10px;
-}
-/* Alone, the check spans the card, so a press anywhere along it ticks the box. */
-.timer-add > .timer-add-priority:only-child {
-  flex: auto;
-}
-.timer-add > .category-wrap {
-  align-items: center;
-  min-height: 32px;
-}
-/* A break in progress: when it ends and what's left, with a way back early. */
+/* A break in progress: when it ends and what's left, with a way back early. As tall as End break
+   (its two lines, set tighter, fit in it), which is as tall as the Break button it takes the place
+   of, so the card keeps its height. */
 .timer-break {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 6px 6px 6px 12px;
+  padding: 0 6px 0 12px;
   border-radius: var(--radius-sm);
   background: var(--accent-soft);
   font-size: 0.92rem;
@@ -1517,6 +1511,7 @@ button {
 .timer-break-text {
   display: flex;
   flex-direction: column;
+  line-height: 1.25;
 }
 .timer-break-text strong {
   font-size: 1.1rem;
@@ -3075,7 +3070,6 @@ kbd {
   .banner-action,
   .log-delete,
   .punch-pair .punch-remove,
-  .timer-add-priority,
   .about-link,
   .priority-tick,
   .board-grip,
@@ -3094,7 +3088,6 @@ kbd {
   .banner-action::after,
   .log-delete::after,
   .punch-pair .punch-remove::after,
-  .timer-add-priority::after,
   .about-link::after,
   .priority-tick::after,
   .board-grip::after,
@@ -3117,12 +3110,11 @@ kbd {
   .weekdays .chip {
     --hit-inset: -5px -4px;
   }
-  /* 28 px, centred in a row 44 px tall (beside a board column's field, or under it on a 44 px
-     line of its own in a narrow column; from 640 px, beside a priority's field; on a row of its
-     own in the board's editor and a log row's edit), 6 px or more
-     from the control beside it: 44 px tall, reaching half that gap at most. Beside the timer's
-     Also add, on a 32 px line 12 px from the next, it reaches 6 px past it, half that gap too.
-     Under a priority's field it reaches 4 px up and 12 px down (further on). */
+  /* 28 px, centred in a row 44 px tall (beside the timer's label box; beside a board column's
+     field, or under it on a 44 px line of its own in a narrow column; from 640 px, beside a
+     priority's field; on a row of its own in the board's editor and a log row's edit), 6 px or
+     more from the control beside it: 44 px tall, reaching half that gap at most. Under a
+     priority's field it reaches 4 px up and 12 px down (further on). */
   .category-chip {
     --hit-inset: -9px -4px;
   }
@@ -3167,10 +3159,6 @@ kbd {
   /* 36 px, 6 px above the pair's first row: 42 px. */
   .punch-pair .punch-remove {
     --hit-inset: -4px -1px;
-  }
-  /* 32 px, 12 px from the chips above and the quick buttons below: 44 px. */
-  .timer-add-priority {
-    --hit-inset: -6px 0;
   }
   /* 16 px of text, 43 px under the Reset button when the line wraps and off to its side when
      it doesn't, 26 px above the panel's foot: 44 px. */
@@ -3335,7 +3323,8 @@ kbd {
   [aria-selected='true'] * {
     color: inherit !important;
   }
-  [aria-pressed='true'] .chip-num {
+  [aria-pressed='true'] .chip-num,
+  [aria-selected='true'] .chip-num {
     background: HighlightText !important;
     color: Highlight !important;
   }

@@ -30,8 +30,9 @@ export interface TimerCtx extends Pick<TimerView, 'countdownSeconds' | 'elapsedS
   linked: boolean;
   /**
    * Leaves `unlockAudio()` to the caller, in its tap (`TimerLengths`). `priorityUid` may be a
-   * promise, awaited first on the queue: the uid of a row whose save is still out (the timer card's
-   * Also add, a board item's pull), so the start is out from the tap on. Its failure is the start's.
+   * promise, awaited first on the queue: the uid of a row whose save is still out (a new name typed
+   * on the timer card, a board item's pull), so the start is out from the tap on. Its failure is
+   * the start's.
    */
   start: (date: string, plannedSeconds: number, label: string, priorityUid?: string | null | Promise<string | null>) => Promise<void>;
   /**
@@ -263,7 +264,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
           revision,
         } = await queue(async () => {
           const uid = await priorityUid;
-          // A chip can link a row whose priorities save is still out.
+          // A row picked or named in the label box, or a board row's Start, can be one whose
+          // priorities save is still out.
           if (uid) await prioritiesSaved(date);
           return api.startSession(date, plannedSeconds, label, uid);
         });

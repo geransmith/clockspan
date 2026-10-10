@@ -21,11 +21,11 @@ interface Option {
   color: CategoryColor | null;
 }
 
-/** Puts the list where `placePopover` says, measured as the chip and the list are now. */
-function place(chip: HTMLElement | null, list: HTMLElement | null): void {
-  if (!chip || !list) return;
+/** Puts a list where `placePopover` says, measured as its control and the list are now: the chip's, and the timer's suggestions. */
+export function placeList(anchor: HTMLElement | null, list: HTMLElement | null): void {
+  if (!anchor || !list) return;
   const { top, left } = placePopover(
-    chip.getBoundingClientRect(),
+    anchor.getBoundingClientRect(),
     { width: list.offsetWidth, height: list.offsetHeight },
     { width: document.documentElement.clientWidth, height: document.documentElement.clientHeight },
   );
@@ -79,11 +79,11 @@ export function CategoryChip({ value, onChange, pick, label }: Props) {
 
   // After every render while open, since the re-read can grow the list, and on any scroll or resize.
   useLayoutEffect(() => {
-    if (open) place(chip.current, pop.current);
+    if (open) placeList(chip.current, pop.current);
   });
   useEffect(() => {
     if (!open) return;
-    const follow = () => place(chip.current, pop.current);
+    const follow = () => placeList(chip.current, pop.current);
     const outside = (e: PointerEvent) => {
       if (wrap.current?.contains(e.target as Node)) return;
       // The list goes before the press's mousedown moves the focus, and the focused option with

@@ -204,7 +204,7 @@ describe('removePriority', () => {
 });
 
 describe('placePriority', () => {
-  /** The row placed, as the timer's Also add builds it: a fresh uid, stamped now, unless patched. */
+  /** The row placed, as a timer start on a new name builds it: a fresh uid, stamped now, unless patched. */
   const placed = (text: string, patch: Partial<Priority> = {}) => makePriority(0, text, { uid: 'abcdef123456', addedAt: 100, ...patch });
 
   it('fills the first free row, padding first', () => {

@@ -292,9 +292,9 @@ export const SAVE_FAILED = {
 } as const;
 
 /**
- * Under the timer's Start buttons when "Also add to today's priorities" can't add the row, the
- * board's banner when the store refuses a move onto today's list (`MoveRefused`), and `full` the
- * line under In progress's + while it is shut on a full list.
+ * Under the timer's Start buttons when a new name's row can't be added, the board's banner when
+ * the store refuses a move onto today's list (`MoveRefused`), and `full` the line under In
+ * progress's + while it is shut on a full list.
  */
 export const ADD_PRIORITY_FAILED = {
   full: 'The priorities list is full.',
