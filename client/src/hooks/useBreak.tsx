@@ -123,7 +123,7 @@ export function BreakProvider({ children }: { children: ReactNode }) {
     alert({
       kicker: BREAK_SUGGESTION.kicker(earned.position, SET_SIZE),
       title: BREAK_SUGGESTION.title(earned.minutes, earned.long),
-      body: BREAK_SUGGESTION.body(formatDuration(earned.focusSeconds), earned.long, SET_SIZE),
+      body: BREAK_SUGGESTION.body(formatDuration(earned.focusSeconds), earned.long),
       tone: 'info',
       sticky: true,
       tag: 'break',

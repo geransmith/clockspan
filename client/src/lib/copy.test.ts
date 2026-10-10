@@ -101,11 +101,13 @@ describe('copy builders', () => {
   });
 
   it('offers the break a session earned and says what it was sized on', () => {
-    expect(BREAK_SUGGESTION.kicker(2, 4)).toBe('Session 2 of 4');
+    expect(BREAK_SUGGESTION.kicker(2, 4)).toBe('Long break after 2 more sessions');
+    expect(BREAK_SUGGESTION.kicker(3, 4)).toBe('Long break after 1 more session');
+    expect(BREAK_SUGGESTION.kicker(4, 4)).toBe('4 sessions in a row');
     expect(BREAK_SUGGESTION.title(5, false)).toBe('Take a 5 min break');
     expect(BREAK_SUGGESTION.title(20, true)).toBe('Take a long break, 20 min');
-    expect(BREAK_SUGGESTION.body('25m', false, 4)).toBe('For the 25m you just logged.');
-    expect(BREAK_SUGGESTION.body('1h 40m', true, 4)).toBe('For the 1h 40m logged over all 4.');
+    expect(BREAK_SUGGESTION.body('25m', false)).toBe('For the 25m you just logged.');
+    expect(BREAK_SUGGESTION.body('1h 40m', true)).toBe('For the 1h 40m logged across them.');
   });
 
   it('says when the second meal period is or was due', () => {
