@@ -1704,11 +1704,14 @@ button.running-label:hover {
   transform-origin: left;
   transition: transform 0.9s linear;
 }
-/* On a phone the bar has no room for Cancel; the timer card has it. */
+/* On a phone the bar has no room for − or Cancel beside Done and the session's name; the timer
+   card has both. */
+.running-minus,
 .running-cancel {
   display: none;
 }
 @media (min-width: 640px) {
+  .running-minus,
   .running-cancel {
     display: inline-flex;
   }
