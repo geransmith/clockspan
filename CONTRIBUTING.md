@@ -124,11 +124,11 @@ Then the image is built once and pushed as `ghcr.io/geransmith/clockspan:edge`, 
 tag `vX.Y.Z` and the GitHub Release are created on that commit with generated notes. No tag is
 pushed by hand, and the tag CI creates starts no second run.
 
-**If the run fails.** `check` failed: nothing was published. A failure that passes on a second
-try (a network error, a flaky test) is re-run as below: the re-run still sees the version change
-and no tag, so the same version publishes. A real one is fixed through a normal PR and a new
-bump (the skipped version stays unused). `image` or `release` failed: re-run the failed jobs,
-which is safe to repeat:
+**If the run fails.** `check` failed: nothing was published. A failure that isn't the code's (a
+network error, a flaky test) is re-run as below: the re-run still sees the version change and no
+tag, so the same version publishes. A real one (the code's, or one that fails again) is fixed
+through a normal PR and a new bump (the skipped version stays unused). `image` or `release`
+failed: re-run the failed jobs, which is safe to repeat:
 
 ```bash
 gh run rerun <run-id> --failed
