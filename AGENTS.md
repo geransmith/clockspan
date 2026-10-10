@@ -1287,7 +1287,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `useShortcut(id, run)` in the component that renders its button, before any early return, with
   `run` null whenever the button wouldn't act, and the hook's answer on the button's
   `aria-keyshortcuts` → a case in that component's test, with `ShortcutKeys` in its wrapper and
-  `pressKey` (`test/hooks.tsx`) → the key in the README's Keyboard bullet.
+  `pressKey` (`test/hooks.tsx`) → the key in the README's Keyboard paragraph (Features).
 - **A category colour** (the palette is eight on purpose, and colours repeat past that): add the
   id to `CATEGORY_COLORS` in `shared/api.ts` (the server's `isOneOf` check, `nextColor` and the
   swatches read it) → its `--cat-<id>` token in all three token blocks of `styles.css`, at 3:1 or
