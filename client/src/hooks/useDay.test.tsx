@@ -887,7 +887,7 @@ describe('editPriorities', () => {
     const edited = begin(() => result.current.editPriorities(TODAY, seen));
     expect(seen.mock.calls[0]![0].map((p) => p.text)).toEqual(['Report', 'Email', '']);
     first.resolve({ priorities: [makePriority(1, 'Report')] });
-    await act(async () => expect((await edited).value).toBe('saved'));
+    await act(async () => expect(await edited).toEqual({ value: 'saved', revision: 0 }));
     expect(vi.mocked(api.putPriorities).mock.lastCall![1].map((p) => [p.text, p.done])).toEqual([
       ['Report', false],
       ['Email', true],
