@@ -808,7 +808,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   one-off on other days (`p.listed > 1`), with time logged (`p.logged`, the other days', plus the
   day's log, `loggedByUid`, which counts a timer running on it) or with a note (`hasNote`; asked
   for the note alone, Off This Day deletes the task too, `collectItems`, unless it has a lane, as
-  `REMOVE_TASK.body` says) asks first in `RemoveTask` (built like `FinishChoice`:
+  `REMOVE_TASK.body` says) asks first in `RemoveTask` (a `QuestionDialog`, as `FinishChoice` is:
   `useModalDialog`, the focus on the frame; `REMOVE_TASK`): Off This Day (the × path), Delete
   Everywhere (the × path, then the board store's `deleteItem`; its failure raises the "Change Not
   Saved" banner and leaves the task off that day only), or Cancel, which puts the focus back on ×.

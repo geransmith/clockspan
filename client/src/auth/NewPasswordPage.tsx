@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import * as api from '../api';
-import { HiddenUsername, NewPasswordFields } from '../components/NewPasswordFields';
+import { HiddenUsername, NewPasswordFields, useNewPassword } from '../components/NewPasswordFields';
 import { useSubmit } from '../hooks/useSubmit';
-import { NEW_PASSWORD, PASSWORD_MISMATCH, SIGN_OUT_FAILED } from '../lib/copy';
+import { NEW_PASSWORD, SIGN_OUT_FAILED } from '../lib/copy';
 import type { AuthInfo, PublicUser } from '../types';
 import { ErrorLine } from '../components/ErrorLine';
 
@@ -20,13 +20,11 @@ interface Props {
  */
 export function NewPasswordPage({ user, onDone, onSignOut }: Props) {
   const [current, setCurrent] = useState('');
-  const [next, setNext] = useState('');
-  const [confirm, setConfirm] = useState('');
+  const next = useNewPassword();
   const { busy, error, setError, onSubmit } = useSubmit();
 
   const submit = onSubmit(async () => {
-    if (next !== confirm) throw new Error(PASSWORD_MISMATCH);
-    await api.changePassword(current, next);
+    await api.changePassword(current, next.checked());
     await onDone();
   });
 
@@ -48,7 +46,7 @@ export function NewPasswordPage({ user, onDone, onSignOut }: Props) {
             autoFocus
           />
         </label>
-        <NewPasswordFields value={next} confirm={confirm} onValue={setNext} onConfirm={setConfirm} />
+        <NewPasswordFields {...next.fields} />
         <ErrorLine error={error} />
         <button className="btn btn-primary btn-lg" type="submit" disabled={busy}>
           {busy ? 'Saving…' : 'Set Password'}

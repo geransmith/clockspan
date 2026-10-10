@@ -1,6 +1,5 @@
-import { useId } from 'react';
-import { useModalDialog } from '../hooks/useModalDialog';
 import { REMOVE_TASK } from '../lib/copy';
+import { QuestionDialog } from './QuestionDialog';
 
 interface Props {
   /** The task's name. */
@@ -20,37 +19,18 @@ interface Props {
 /**
  * Asked by × on a Top Priorities row whose task is on other days, has time logged on it or has a
  * note: take it off this day, or delete it everywhere. `window.confirm` offers one action, so this
- * is a dialog. Its parent shows it by mounting it (`useModalDialog`).
+ * is a dialog. Its parent shows it by mounting it.
  */
 export function RemoveTask({ name, otherDays, logged, note, onOffDay, onEverywhere, onCancel }: Props) {
-  // Focus on the frame, as in FinishChoice, so Enter can't fire a button before the question is read.
-  const dialog = useModalDialog(onCancel);
-  const titleId = useId();
-  // The body holds what decides the answer, so it is read with the title.
-  const bodyId = useId();
   return (
-    <dialog {...dialog} className="dialog remove-task" aria-labelledby={titleId} aria-describedby={bodyId}>
-      <div className="dialog-inner">
-        <header className="dialog-head">
-          <h2 id={titleId}>{REMOVE_TASK.title(name)}</h2>
-        </header>
-        <div className="dialog-body">
-          <p id={bodyId} className="muted">
-            {REMOVE_TASK.body(otherDays, logged, note)}
-          </p>
-        </div>
-        <footer className="dialog-foot">
-          <button className="btn btn-ghost" onClick={onCancel}>
-            {REMOVE_TASK.cancel}
-          </button>
-          <button className="btn btn-primary" onClick={onOffDay}>
-            {REMOVE_TASK.offDay}
-          </button>
-          <button className="btn" onClick={onEverywhere}>
-            {REMOVE_TASK.everywhere}
-          </button>
-        </footer>
-      </div>
-    </dialog>
+    <QuestionDialog
+      className="remove-task"
+      title={REMOVE_TASK.title(name)}
+      body={REMOVE_TASK.body(otherDays, logged, note)}
+      cancel={REMOVE_TASK.cancel}
+      onCancel={onCancel}
+      primary={{ label: REMOVE_TASK.offDay, onClick: onOffDay }}
+      secondary={{ label: REMOVE_TASK.everywhere, onClick: onEverywhere }}
+    />
   );
 }
