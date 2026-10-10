@@ -3,7 +3,8 @@
  * rows shows in (`boardColumns`), what a move does and which store it writes (`planMove`), a
  * write's failure as a banner (`saved`, which the sheet's note uses too), where a
  * drop lands and what a drag says (`dropTarget`, `withDrag`, `moveAnnouncement`), the leftovers
- * the left-open offer brings back (`offeredLeftovers`), what New category makes of a name
+ * the left-open offer brings back (`offeredLeftovers`) and the top of Next it offers after them
+ * (`topOfNext`), what New category makes of a name
  * (`categoryForName`, `nextColor`), and the board as a write shows it before the server answers
  * (`withItem`, `withItemPatch`, `withoutItem`, `withCategory`, `withCategoryPatch`,
  * `withoutCategory`).
@@ -431,6 +432,20 @@ export function offeredLeftovers(rows: Priority[], cards: BoardCard[] | undefine
     const card = byUid.get(p.uid!);
     return card?.lane !== 'later' && !card?.listDone;
   });
+}
+
+/**
+ * Up next on the morning offer: Next's own tasks that aren't done, in the board's order, less those
+ * on the last plan's list (`planned`), the first `count` of them. That list holds the leftovers
+ * offered, and a task ticked there since this copy of the board was read, which the copy still has
+ * open. It is offered only while today's list has no one-off, so no task of Next is on it.
+ */
+export function topOfNext(cards: BoardCard[], planned: ReadonlySet<string | null>, count: number): PrioritySeed[] {
+  return cards
+    .filter((c) => c.lane === 'next' && !c.listDone && !planned.has(c.uid))
+    .sort(byPosition)
+    .slice(0, count)
+    .map(({ uid, title, categoryUid, note, listed, logged }) => ({ uid, text: title, categoryUid, note, listed, earlier: 0, logged }));
 }
 
 /**

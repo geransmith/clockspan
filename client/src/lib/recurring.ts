@@ -51,15 +51,16 @@ export function recurringRow(item: Recurring, now: number): Omit<Priority, 'posi
 }
 
 /**
- * The list after Add to today: each leftover through `placePriority` (`seedRow`), in the first
- * free row of the list padded to `count`, then each routine through `placePriority` with `end`,
- * after every row of the padded list, so the free base rows stay for one-offs. Nothing written
- * moves, so routines another device added after the free rows stay there. Either skips a task a
- * row of the list is already, and one that doesn't fit (a full list).
+ * The list after Add to today: each seed (the leftovers, then the tasks from Up next) through
+ * `placePriority` (`seedRow`), in the first free row of the list padded to `count`, then each
+ * routine through `placePriority` with `end`, after every row of the padded list, so the free base
+ * rows stay for one-offs. Nothing written moves, so routines another device added after the free
+ * rows stay there. Either skips a task a row of the list is already, and one that doesn't fit (a
+ * full list).
  */
-export function acceptOffer(rows: Priority[], count: number, leftovers: PrioritySeed[], recurring: Recurring[], now: number): Priority[] {
+export function acceptOffer(rows: Priority[], count: number, seeds: PrioritySeed[], recurring: Recurring[], now: number): Priority[] {
   let list = padPriorities(rows, count);
-  for (const seed of leftovers) list = placePriority(list, count, seedRow(seed, now)) ?? list;
+  for (const seed of seeds) list = placePriority(list, count, seedRow(seed, now)) ?? list;
   for (const item of recurring) list = placePriority(list, count, recurringRow(item, now), { end: true }) ?? list;
   return list;
 }

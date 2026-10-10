@@ -40,8 +40,8 @@ interface Props {
   /** The category chip's data: each row with text gets a chip. Null (before the board's first read) shows none. */
   pick: CategoryPick | null;
   /**
-   * Today's morning notice: the leftovers while the list has no one-off written (a routine on it
-   * doesn't count), and the routines due today that no row holds yet.
+   * Today's morning notice: the leftovers and the top of Next while the list has no one-off
+   * written (a routine on it doesn't count), and the routines due today that no row holds yet.
    */
   offer?: MorningOffer | null;
 }
@@ -136,10 +136,12 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
   const done = doneRows.length;
   // A blank box is still its task's row, so it counts as one, ticked or not.
   const total = local.filter((p) => p.uid != null).length;
-  // The leftovers are offered while no one-off is written: a routine on the list is no plan.
-  // The morning notice's groups, judged again on the draft (the sheet judged the stored list), so
-  // a row typed or a save already sent counts at once.
-  const offerLeftovers = offer?.leftovers && !local.some(isOneOff) ? offer.leftovers : null;
+  // The leftovers and Up next are offered while no one-off is written: a routine on the list is
+  // no plan. The morning notice's groups, judged again on the draft (the sheet judged the stored
+  // list), so a row typed or a save already sent counts at once.
+  const noOneOff = !local.some(isOneOff);
+  const offerLeftovers = offer?.leftovers && noOneOff ? offer.leftovers : null;
+  const offerUpNext = offer && noOneOff ? offer.upNext : [];
   const offerRecurring = offer ? notOnList(offer.recurring, local) : [];
 
   const addRow = (force = false) => {
@@ -200,12 +202,12 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
   const answerOffer = (offer: MorningOffer) =>
     offer.answer(
       offerRecurring.map((r) => r.uid),
-      offerLeftovers !== null,
+      offerLeftovers !== null || offerUpNext.length > 0,
     );
-  // Each leftover brings its own task over, added to today now, so the retro counts it as planned
-  // unless a session ran first; the routines go after the padded rows, which stay free for
-  // one-offs (`acceptOffer`). The answer waits for the save: a failed one puts the list back, and
-  // the notice with it.
+  // Each leftover, then each task from Up next, brings its own task over, added to today now, so
+  // the retro counts it as planned unless a session ran first; the routines go after the padded
+  // rows, which stay free for one-offs (`acceptOffer`). The answer waits for the save: a failed one
+  // puts the list back, and the notice with it.
   const acceptToday = (offer: MorningOffer, seeds: PrioritySeed[], recurring: Recurring[]) => {
     setAdding(true);
     fill(acceptOffer(local, count, seeds, recurring, Date.now()));
@@ -264,9 +266,11 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
 
   return (
     <div className="priorities">
-      {offer && !adding && (offerLeftovers || offerRecurring.length > 0) && (
+      {offer && !adding && (offerLeftovers || offerUpNext.length > 0 || offerRecurring.length > 0) && (
         <TodayOffer
           leftovers={offerLeftovers}
+          upNext={offerUpNext}
+          rowsPerDay={count}
           recurring={offerRecurring}
           rows={local}
           perDay={settings.recurringPerDay}

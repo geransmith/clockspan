@@ -71,7 +71,7 @@ export const USER_KEYS = {
    * earlier version kept.
    */
   alarms: 'focus:alarms',
-  /** The date Start fresh was pressed: another user's would hide this one's "Still open from …". */
+  /** The date Start fresh was pressed: another user's would hide this one's "Still open from …" and "Up next". */
   leftOpenDismissed: 'focus:left-open-dismissed',
   /** The start of the break whose "Break's over" rang: another user's would silence this one's. */
   breakOver: 'focus:break-over',

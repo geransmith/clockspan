@@ -162,10 +162,11 @@ export const LEFT_OPEN = {
 };
 
 /**
- * The morning notice's recurring group: its heading, the button that answers
- * it, and the line when more are ticked than Recurring rows per day.
+ * The morning notice past the leftovers: Up next's heading, and the recurring group's heading, the
+ * button that answers it, and the line when more are ticked than Recurring rows per day.
  */
 export const TODAY_OFFER = {
+  upNext: 'Up next',
   recurring: 'Repeats today',
   notToday: 'Not today',
   over: (n: number) => `More than ${counted(n, 'recurring row')} today.`,

@@ -26,10 +26,19 @@ beforeEach(() => {
 it("offers the last planned day's unticked rows from the two weeks before today", async () => {
   vi.mocked(api.getRange).mockResolvedValue(answered({ days: [friday] }));
   const { result } = render();
-  expect(result.current.leftOpen).toBeNull();
+  expect(result.current).toMatchObject({ leftOpen: null, planned: null });
   await settle();
   expect(api.getRange).toHaveBeenCalledWith('2026-09-14', '2026-09-27');
   expect(result.current.leftOpen).toEqual({ date: '2026-09-25', rows: [makePriority(2, 'Review the PR')] });
+  // Every task on that list, ticked or not, for Up next to leave out.
+  expect(result.current.planned).toEqual(new Set([friday.priorities[0]!.uid, friday.priorities[1]!.uid]));
+});
+
+it('names no planned task once the read answers with no plan, so Up next can show alone', async () => {
+  vi.mocked(api.getRange).mockResolvedValue(answered({ days: [] }));
+  const { result } = render();
+  await settle();
+  expect(result.current).toMatchObject({ leftOpen: null, planned: new Set() });
 });
 
 it('asks nothing while not wanted, and only once a day once it is', async () => {
@@ -40,7 +49,7 @@ it('asks nothing while not wanted, and only once a day once it is', async () => 
   rerender({ today: TODAY, wanted: true });
   await settle();
   rerender({ today: TODAY, wanted: false });
-  expect(result.current.leftOpen).toBeNull();
+  expect(result.current).toMatchObject({ leftOpen: null, planned: null });
   rerender({ today: TODAY, wanted: true });
   await settle();
   expect(api.getRange).toHaveBeenCalledTimes(1);
@@ -56,7 +65,7 @@ it('offers nothing when the fetch fails', async () => {
   vi.mocked(api.getRange).mockRejectedValue(new Error('Request failed (500)'));
   const { result } = render();
   await settle();
-  expect(result.current.leftOpen).toBeNull();
+  expect(result.current).toMatchObject({ leftOpen: null, planned: null });
 });
 
 it('drops an answer that arrives after the offer stopped being wanted', async () => {
@@ -80,11 +89,11 @@ it('keeps "Start fresh" for the rest of the day, across a reload', async () => {
   await settle();
   act(() => result.current.dismiss());
   rerender({ today: TODAY, wanted: true });
-  expect(result.current.leftOpen).toBeNull();
+  expect(result.current).toMatchObject({ leftOpen: null, planned: null });
   unmount();
   const again = render();
   await settle();
-  expect(again.result.current.leftOpen).toBeNull();
+  expect(again.result.current).toMatchObject({ leftOpen: null, planned: null });
   expect(api.getRange).toHaveBeenCalledTimes(1);
   // The next day offers again.
   again.rerender({ today: '2026-09-29', wanted: true });

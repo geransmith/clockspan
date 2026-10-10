@@ -167,14 +167,19 @@ export interface LeftOpen {
  */
 export const carriesOver = (p: Priority) => isOpen(p) && !p.recurring && !p.archived;
 
-/**
- * The latest day with a one-off priority written, and its rows that carry over (`carriesOver`). A
- * day that held only routines isn't a plan. Null when no day had a plan, or the last one has
- * nothing left to carry.
- */
-export function leftOpen(days: Day[]): LeftOpen | null {
+/** The latest day with a one-off priority written (a day that held only routines isn't a plan), null when none had one. */
+export function lastPlan(days: Day[]): Day | null {
   let last: Day | null = null;
   for (const d of days) if (d.priorities.some(isOneOff) && (!last || d.date > last.date)) last = d;
+  return last;
+}
+
+/**
+ * The last plan's rows that carry over (`lastPlan`, `carriesOver`). Null when no day had a plan,
+ * or the last one has nothing left to carry.
+ */
+export function leftOpen(days: Day[]): LeftOpen | null {
+  const last = lastPlan(days);
   if (!last) return null;
   const rows = last.priorities.filter(carriesOver);
   return rows.length ? { date: last.date, rows } : null;

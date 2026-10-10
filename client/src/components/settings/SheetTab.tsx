@@ -27,7 +27,7 @@ export function SheetTab({ settings, set }: TabProps) {
           unit="rows"
           value={settings.priorityCount}
           {...SETTING_LIMITS.priorityCount}
-          hint="New days start with this many rows. Add more on the sheet any time."
+          hint="New days start with this many rows, and the morning notice ticks the top of Next to fill them. Add more on the sheet any time."
           onCommit={(m) => set({ priorityCount: m })}
         />
       </Section>

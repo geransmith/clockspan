@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 import * as api from '../api';
 import type { CategoryPatch, ItemPatch, NewCategory, NewItem } from '../api';
 import { todayKey } from '../../../shared/dates.js';
-import type { Board, Priority, Recurring } from '../types';
+import type { Board, BoardCard, Priority, Recurring } from '../types';
 import { goneAt } from '../lib/apiError';
 import { warnSaveFailed } from '../lib/alerts';
 import {
@@ -39,6 +39,12 @@ export interface BoardState {
    * one-off. Undefined until the first read.
    */
   confirmedRecurring: Recurring[] | undefined;
+  /**
+   * The cards shown that the server has confirmed, which the morning offer's Up next takes from:
+   * never one whose create is still on its way, which a list save would make with no lane.
+   * Undefined until the first read.
+   */
+  confirmedCards: BoardCard[] | undefined;
   /** The first read failed (Try again is `load`); a later failed read keeps the board shown. */
   failed: boolean;
 }
@@ -368,7 +374,11 @@ export function BoardProvider({ children }: { children: ReactNode }) {
     const confirmed = new Set(tracked.confirmed?.recurring.map((r) => r.uid));
     return board?.recurring.filter((r) => confirmed.has(r.uid));
   }, [board, tracked.confirmed]);
-  const state = useMemo(() => ({ board, confirmedRecurring, failed }), [board, confirmedRecurring, failed]);
+  const confirmedCards = useMemo(() => {
+    const confirmed = new Set(tracked.confirmed?.cards.map((c) => c.uid));
+    return board?.cards.filter((c) => confirmed.has(c.uid));
+  }, [board, tracked.confirmed]);
+  const state = useMemo(() => ({ board, confirmedRecurring, confirmedCards, failed }), [board, confirmedRecurring, confirmedCards, failed]);
   const store = useMemo(
     () => ({ load, addItem, editItem, deleteItem, removeRecurring, removeFromToday, editRow, move, addCategory, editCategory, removeCategory }),
     [load, addItem, editItem, deleteItem, removeRecurring, removeFromToday, editRow, move, addCategory, editCategory, removeCategory],

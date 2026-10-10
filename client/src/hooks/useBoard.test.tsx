@@ -159,11 +159,31 @@ describe('reading the board', () => {
     expect(result.current.confirmedRecurring?.map((r) => r.title)).toEqual(['Watch the queue', 'Timesheet']);
   });
 
-  it('offers no recurring priority before the first read', async () => {
+  it('offers Up next the cards the server has confirmed, never one whose create is still out', async () => {
+    const { result } = renderBoard();
+    await settle();
+    expect(result.current.confirmedCards).toEqual(onServer.cards);
+    const created = deferredAnswer<Board>();
+    vi.mocked(api.addItem).mockReturnValueOnce(created.promise);
+    const rota = { uid: 'next00000002', title: 'Draft the rota', categoryUid: null, lane: 'next' as const, before: null };
+    act(() => {
+      void result.current.store.addItem(rota);
+      void result.current.store.editItem('next00000001', { title: 'Follow up on the SLA' });
+    });
+    expect(shownTexts(result.current.board)).toEqual(['Write a KB', 'Follow up on the SLA', 'Draft the rota']);
+    // A rename on its way shows; a card the server doesn't hold yet isn't offered.
+    expect(result.current.confirmedCards?.map((c) => c.title)).toEqual(['Write a KB', 'Follow up on the SLA']);
+    created.resolve((onServer = withItem(onServer, rota, T0)));
+    await settle();
+    expect(result.current.confirmedCards?.map((c) => c.title)).toEqual(['Write a KB', 'Follow up on the SLA', 'Draft the rota']);
+  });
+
+  it('offers no recurring priority or card before the first read', async () => {
     vi.mocked(api.getBoard).mockReturnValueOnce(new Promise(() => {}));
     const { result } = renderBoard();
     await settle();
     expect(result.current.confirmedRecurring).toBeUndefined();
+    expect(result.current.confirmedCards).toBeUndefined();
   });
 });
 
