@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { useDay } from '../hooks/useDay';
 import { useTimer } from '../hooks/useTimer';
-import { BREAK } from '../lib/copy';
+import { warnSaveFailed } from '../lib/alerts';
+import { BREAK, SAVE_FAILED } from '../lib/copy';
 import type { CategoryPick } from '../lib/board';
 import {
   answered,
@@ -514,6 +515,17 @@ describe('FocusTimer', () => {
     expect(api.putPriorities).toHaveBeenCalledTimes(1);
     const uid = vi.mocked(api.putPriorities).mock.lastCall![1][0]!.uid;
     expect(vi.mocked(api.startSession).mock.calls.map((c) => c[3])).toEqual([uid, uid]);
+  });
+
+  it("leaves a new row's failed save to the banner, with nothing under the start buttons", async () => {
+    vi.mocked(api.putPriorities).mockRejectedValueOnce(new Error('Request failed (502)'));
+    await renderCard();
+    typeLabel('Call the vendor');
+    fireEvent.click(start25());
+    await settle();
+    expect(warnSaveFailed).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(SAVE_FAILED.title)).toBeNull();
+    expect(api.startSession).not.toHaveBeenCalled();
   });
 
   describe('the focus, as the control pressed goes', () => {

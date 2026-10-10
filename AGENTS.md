@@ -508,8 +508,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   server's copy of the punches, not one from hours ago; they wait while a come-back refresh is out.
   Break's over waits the same way on `useBreak`'s own loop, which reads the day the break is on
   (yesterday's for a break from before midnight, while it can still ring). A today whose first load
-  failed is loaded again on the same ticks (no second banner), so its alarms come back with the
-  server. Any day the store holds is also read again each time a view shows it (`useDay`; one whose
+  failed is loaded again on the same ticks, so its alarms come back with the server. The sheet on
+  today and the board show that failure in place with Try again; any other view gets the banner
+  `useTodayAlarms` raises (`todayShown`, from `Shell`), which goes once today loads or a view shows
+  it. No load raises a banner itself, so a failure is said once. Any day the store holds is also read again each time a view shows it (`useDay`; one whose
   first load failed is asked for again then, quietly), and a range read (`store.readRange`) lands on
   every day it holds loaded in the range when it answers, under the same `revision` rule (below). A
   change saved elsewhere also raises every held day's floor to its revision, so a read out from
@@ -1320,11 +1322,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   over `ALARM_IDS`, so neither needs a line); its settings also go in `TEST_SETTINGS.alarms`
   (`client/src/test/fixtures.ts`), and the type makes a missing one an error → add an
   `AlarmEditor` in `settings/AlarmsTab.tsx`, and its name in that Alarms section's hint (both
-  variants) → its name in `ALARM_NAMES` and a `case` in `describeEvent()` (both in
-  `lib/alarms.ts`; the type makes a missing name an error, and typecheck and the
-  `switch-exhaustiveness-check` lint refuse a missing case), with a title and a body for each kind
-  that say where the deadline came from (widen `EventContext`'s `Pick` if it needs another
-  setting). A banner can
+  variants) → its name in `ALARM_NAMES`, which is the banner's whole kicker, and a `case` in
+  `describeEvent()` (both in `lib/alarms.ts`; the type makes a missing name an error, and
+  typecheck and the `switch-exhaustiveness-check` lint refuse a missing case), with a title for
+  each kind that says when (how long is left, that it is now, or how long past) and a body that
+  says where the deadline came from, leaving out a time another banner raised beside it already
+  gives (widen `EventContext`'s `Pick` if it needs another setting). A banner can
   carry one `action` button (see the clock-out alarm's "Overtime approved" and the retro alarm's
   "Open retrospective", chosen in `useAlarms` from the `AlarmDayState` callbacks).
 - **A per-day field** (like `overtimeApproved`, `retroNote`/`retroAt`): append a migration
@@ -1487,7 +1490,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - A form that sends a request submits through `useSubmit()` (`hooks/useSubmit.ts`), and a
   button that sends one calls its `run`: one send at a time with the button disabled, and one
   error line (`ErrorLine`), cleared when a send starts and filled with what it throws (a
-  mismatched confirmation throws too). A store write that shows at once (a lane's box, a card's
+  mismatched confirmation throws too), less a failed save the "Change not saved" banner has
+  already said (the timer card's new row). A store write that shows at once (a lane's box, a card's
   Move to), or a board item's Start timer, whose dialog closes, is not a form send: it goes
   through its store, and a failure is the banner.
 - A press that takes its own control off the page (its row or card goes, another control shows

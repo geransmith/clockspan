@@ -11,7 +11,7 @@ export type Tone = 'info' | 'warn' | 'danger' | 'success';
 
 export interface Banner {
   id: number;
-  /** Small line above the title naming the source, e.g. "Clock-out alarm · 15 min warning". */
+  /** Small line above the title naming the source, e.g. "Clock-out alarm". */
   kicker?: string;
   title: string;
   body?: string;

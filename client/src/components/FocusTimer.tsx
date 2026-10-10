@@ -7,7 +7,7 @@ import { useTimeFormat } from '../hooks/useTimeFormat';
 import { useSubmit } from '../hooks/useSubmit';
 import { useTimer } from '../hooks/useTimer';
 import type { CategoryPick } from '../lib/board';
-import { BREAK, TIMER_DUE } from '../lib/copy';
+import { BREAK, SAVE_FAILED, TIMER_DUE } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
 import { hasRoom, isTaskRow } from '../lib/priorities';
 import { LIMITS } from '../../../shared/api.js';
@@ -154,7 +154,8 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
         </button>
       )}
       {!isToday && <p className="muted center">Timers can only be started on today's sheet.</p>}
-      <ErrorLine error={error} />
+      {/* A new row's failed save is the "Change not saved" banner's to say; the list full or not loaded, and the start's own errors, show here. */}
+      <ErrorLine error={error === SAVE_FAILED.title ? null : error} />
     </div>
   );
 }

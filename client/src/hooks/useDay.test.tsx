@@ -2,7 +2,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
-import { dismissByTag, warnQuietly, warnSaveFailed } from '../lib/alerts';
+import { warnQuietly, warnSaveFailed } from '../lib/alerts';
 import { ADD_PRIORITY_FAILED, SAVE_FAILED } from '../lib/copy';
 import { normalizePunches } from '../lib/timeclock';
 import { mergePriorities } from '../../../shared/priorities.js';
@@ -100,7 +100,6 @@ describe('load', () => {
     const { result } = renderStore();
     await settle();
     expect(result.current.failed.has(TODAY)).toBe(true);
-    expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ tag: 'load-failed' }));
 
     vi.mocked(api.getDay).mockResolvedValueOnce(answered(makeDay()));
     await act(() => result.current.load(TODAY));
@@ -109,29 +108,13 @@ describe('load', () => {
     expect(result.current.days[TODAY]).toBeDefined();
   });
 
-  it("takes down the load-failed banner when the day that raised it loads, not another day's", async () => {
-    vi.mocked(api.getDay).mockResolvedValueOnce(answered(makeDay())).mockRejectedValueOnce(new Error('offline'));
-    const { result } = renderStore();
-    await settle();
-    await act(() => result.current.load(OTHER));
-    expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ tag: 'load-failed' }));
-    // Today's minute refresh: the other day still failed, so its banner stays.
-    vi.mocked(api.getDay).mockResolvedValueOnce(answered(makeDay()));
-    await act(() => result.current.refresh(TODAY));
-    expect(dismissByTag).not.toHaveBeenCalled();
-
-    vi.mocked(api.getDay).mockResolvedValueOnce(answered(makeDay(OTHER)));
-    await act(() => result.current.load(OTHER));
-    expect(dismissByTag).toHaveBeenCalledWith('load-failed');
-  });
-
-  it('records a failed first load, raises the banner, and waits for Try again', async () => {
+  it('records a failed first load, raises no banner (the view shows it), and waits for Try again', async () => {
     vi.mocked(api.getDay).mockRejectedValueOnce(new Error('Request failed (502)'));
     const { result } = renderStore();
     await settle();
     expect(result.current.failed.has(TODAY)).toBe(true);
     expect(result.current.days[TODAY]).toBeUndefined();
-    expect(warnQuietly).toHaveBeenCalledWith(expect.objectContaining({ tag: 'load-failed' }));
+    expect(warnQuietly).not.toHaveBeenCalled();
     // useDay does not ask again on its own: the failure is on screen with a Try again button.
     await settle(5 * MINUTE_MS);
     expect(api.getDay).toHaveBeenCalledTimes(1);
@@ -187,7 +170,7 @@ describe('a day shown again', () => {
     await settle();
     expect(api.getDay).toHaveBeenCalledTimes(3);
     expect(result.current.failed).toBe(true);
-    expect(warnQuietly).toHaveBeenCalledTimes(1);
+    expect(warnQuietly).not.toHaveBeenCalled();
   });
 });
 
@@ -454,23 +437,21 @@ describe('refresh', () => {
 });
 
 describe('refresh after a failed first load', () => {
-  it('asks again quietly: no second banner while the server is down, the day once it answers', async () => {
+  it('asks again on each refresh while the server is down, and shows the day once it answers', async () => {
     vi.mocked(api.getDay).mockRejectedValueOnce(new Error('Request failed (502)'));
     const { result } = renderStore();
     await settle();
-    expect(warnQuietly).toHaveBeenCalledTimes(1);
 
     vi.mocked(api.getDay).mockRejectedValueOnce(new Error('Request failed (504)'));
     await act(() => result.current.refresh(TODAY));
     expect(api.getDay).toHaveBeenCalledTimes(2);
     expect(result.current.failed.has(TODAY)).toBe(true);
-    expect(warnQuietly).toHaveBeenCalledTimes(1);
 
     vi.mocked(api.getDay).mockResolvedValueOnce(answered(makeDay(TODAY, { retroNote: 'back' })));
     await act(() => result.current.refresh(TODAY));
     expect(result.current.failed.size).toBe(0);
     expect(result.current.days[TODAY]?.retroNote).toBe('back');
-    expect(dismissByTag).toHaveBeenCalledWith('load-failed');
+    expect(warnQuietly).not.toHaveBeenCalled();
   });
 
   it('asks again when the refresh comes before the failure has rendered', async () => {

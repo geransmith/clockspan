@@ -126,7 +126,7 @@ export type EventContext = Pick<TimeclockSettings, 'workMinutes' | 'lunchDeadlin
 };
 
 export interface EventCopy {
-  /** Which alarm and which rule fired, e.g. "Clock-out alarm · 15 min warning". */
+  /** Which alarm, e.g. "Clock-out alarm"; the title says how long is left or past. */
   kicker: string;
   title: string;
   /** Why: the computed deadline and how it was derived. */
@@ -137,7 +137,7 @@ export interface EventCopy {
 /** Starts the tag of every alarm banner, one per target (`ALARM_TAG + id`): a newer banner replaces its target's last one. */
 export const ALARM_TAG = 'alarm:';
 
-/** The kicker's first words, naming the alarm; a new `AlarmId` without one is a type error. */
+/** Each alarm's kicker, its name; a new `AlarmId` without one is a type error. */
 const ALARM_NAMES: Record<AlarmId, string> = {
   lunchBy: 'Lunch alarm',
   clockOut: 'Clock-out alarm',
@@ -147,21 +147,20 @@ const ALARM_NAMES: Record<AlarmId, string> = {
 
 /**
  * Human copy for an event. A chime on its own just says "something happened"; the banner
- * has to answer which alarm, which rule, and where the deadline came from.
+ * has to answer which alarm (the kicker), how long is left or past (the title) and where the
+ * deadline came from (the body).
  */
 export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
   const target = formatTime(e.target, ctx.hour12);
   const clockIn = formatTime(ctx.clockIn, ctx.hour12);
   const day = formatMinutes(ctx.workMinutes);
-  const alarm = ALARM_NAMES[e.id];
+  const kicker = ALARM_NAMES[e.id];
   const mealHours = formatMinutes(ctx.secondMealAfterMinutes);
-  // The kicker names the rule that fired. A warning seen after its deadline (the phone was asleep,
-  // or the clock-in was typed in late) has no time left to give, so it takes the due copy; one seen
-  // late but before the deadline says how long is left now.
+  // A warning seen after its deadline (the phone was asleep, or the clock-in was typed in late) has
+  // no time left to give, so it takes the due copy; one seen late but before the deadline says how
+  // long is left now.
   const kind = e.kind === 'lead' && ctx.now >= e.target ? 'due' : e.kind;
   const left = formatMinutes(Math.min(e.minutes, Math.ceil((e.target - ctx.now) / MINUTE_MS)));
-  const rule = e.kind === 'lead' ? `${formatMinutes(e.minutes)} warning` : e.kind === 'due' ? "time's up" : `${formatMinutes(e.minutes)} overdue`;
-  const kicker = `${alarm} · ${rule}`;
 
   // A due event can be seen late too (the app opened after the target, with repeats off), so a
   // due body gives the target's time and never says that it is that time now.
@@ -171,15 +170,16 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
       // stays at "warn" throughout.
       if (kind === 'lead') {
         return {
-          kicker: `${alarm} · ${formatMinutes(e.minutes)} before clock-out`,
+          kicker,
           title: 'Look back before you clock out',
-          body: `Your day ends at ${target}. Compare what you planned with what you did while it's fresh.`,
+          // The end time is the clock-out warning's and the Clock out at tile's.
+          body: "Compare what you planned with what you did while it's fresh.",
           tone: 'warn',
         };
       }
       if (kind === 'due') {
         return {
-          kicker: `${alarm} · clock-out`,
+          kicker,
           title: 'Clocking out? Do the retrospective first.',
           body: `You reached your ${day} at ${target}. Two minutes on what went to plan and what didn't.`,
           tone: 'warn',

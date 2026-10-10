@@ -1810,7 +1810,7 @@ button.running-label:hover {
   gap: 2px;
   font-size: 0.92rem;
 }
-/* The time drops to its own line rather than breaking the kicker mid-rule on phones. */
+/* The time drops to its own line rather than breaking the kicker on phones. */
 .banner-meta {
   display: flex;
   flex-wrap: wrap;

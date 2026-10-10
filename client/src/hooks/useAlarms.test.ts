@@ -58,14 +58,14 @@ describe('firing', () => {
         action: undefined,
       }),
     );
-    expect(vi.mocked(alert).mock.calls[0]![0].kicker).toMatch(/15 min/);
+    expect(vi.mocked(alert).mock.calls[0]![0].title).toBe('Lunch in 14 min');
     rerender({ date: TODAY, tc: lunchSoon, now: T0 + 1000, day: NO_DAY, settings });
     expect(alert).toHaveBeenCalledTimes(1);
 
     const later = T0 + 10 * MINUTE_MS;
     rerender({ date: TODAY, tc: tcAt(later, T0 - 286 * MINUTE_MS), now: later, day: NO_DAY, settings });
     expect(alert).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(alert).mock.calls[1]![0].kicker).toMatch(/5 min/);
+    expect(vi.mocked(alert).mock.calls[1]![0].title).toBe('Lunch in 4 min');
   });
 
   it("remembers what fired across a reload, under today's date", () => {

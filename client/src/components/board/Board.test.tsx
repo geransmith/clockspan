@@ -794,6 +794,7 @@ describe('Board', () => {
     vi.mocked(api.getDay).mockRejectedValueOnce(new Error('offline'));
     await renderBoard();
     expect(screen.getByText(new RegExp(LOAD_FAILED.title))).toBeTruthy();
+    expect(warnQuietly).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await settle();
     expect(titlesIn('In progress')).toEqual(['Report']);

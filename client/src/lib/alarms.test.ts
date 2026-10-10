@@ -216,12 +216,12 @@ describe('describeEvent', () => {
     target,
   });
 
-  it('names the alarm and the rule that fired in the kicker', () => {
-    expect(describeEvent(ev('clockOut', 'lead', 15, T), ctx).kicker).toBe('Clock-out alarm · 15 min warning');
-    expect(describeEvent(ev('clockOut', 'due', 0, T), ctx).kicker).toBe("Clock-out alarm · time's up");
-    expect(describeEvent(ev('clockOut', 'overdue', 10, T), ctx).kicker).toBe('Clock-out alarm · 10 min overdue');
-    expect(describeEvent(ev('lunchBy', 'lead', 5, T), ctx).kicker).toBe('Lunch alarm · 5 min warning');
-    expect(describeEvent(ev('lunchBy', 'overdue', 65, T), ctx).kicker).toBe('Lunch alarm · 1h 5m overdue');
+  it('names only the alarm in the kicker, whatever fired: the title says how long', () => {
+    expect(describeEvent(ev('clockOut', 'lead', 15, T), ctx).kicker).toBe('Clock-out alarm');
+    expect(describeEvent(ev('clockOut', 'due', 0, T), ctx).kicker).toBe('Clock-out alarm');
+    expect(describeEvent(ev('clockOut', 'overdue', 10, T), ctx).kicker).toBe('Clock-out alarm');
+    expect(describeEvent(ev('lunchBy', 'lead', 5, T), ctx).kicker).toBe('Lunch alarm');
+    expect(describeEvent(ev('lunchBy', 'overdue', 65, T), ctx).kicker).toBe('Lunch alarm');
   });
 
   it('explains where the clock-out deadline came from', () => {
@@ -243,9 +243,9 @@ describe('describeEvent', () => {
 
   it('frames the retrospective as a nudge before clock-out, never a deadline', () => {
     const lead = describeEvent(ev('retro', 'lead', 30, T), ctx);
-    expect(lead.kicker).toBe('Retrospective · 30 min before clock-out');
+    expect(lead.kicker).toBe('Retrospective');
     expect(lead.title).toBe('Look back before you clock out');
-    expect(lead.body).toContain('1:00');
+    expect(lead.body).toBe("Compare what you planned with what you did while it's fresh.");
     expect(lead.tone).toBe('warn');
     expect(describeEvent(ev('retro', 'due', 0, T), ctx).tone).toBe('warn');
     expect(describeEvent(ev('retro', 'overdue', 10, T), ctx).title).toBe('Retrospective is 10 min overdue');
@@ -265,7 +265,7 @@ describe('describeEvent', () => {
 
   it('explains the second meal period rule', () => {
     const lead = describeEvent(ev('secondMeal', 'lead', 15, T), ctx);
-    expect(lead.kicker).toBe('Second meal alarm · 15 min warning');
+    expect(lead.kicker).toBe('Second meal alarm');
     expect(lead.title).toBe('Second meal period in 15 min');
     expect(lead.body).toBe(`Your 10h of work ends at ${formatTime(T, true)}. A second meal period is due before then.`);
     expect(describeEvent(ev('secondMeal', 'due', 0, T), ctx).title).toBe('Take your second meal period');
@@ -275,10 +275,10 @@ describe('describeEvent', () => {
     expect(over.tone).toBe('danger');
   });
 
-  it('says the time actually left when a warning is seen late, and keeps the rule in the kicker', () => {
+  it('says the time actually left when a warning is seen late', () => {
     // The phone was asleep through the 15-minute mark and wakes 8 min before clock-out.
     const late = describeEvent(ev('clockOut', 'lead', 15, T), { ...ctx, now: T - 8 * MINUTE_MS - 20_000 });
-    expect(late.kicker).toBe('Clock-out alarm · 15 min warning');
+    expect(late.kicker).toBe('Clock-out alarm');
     expect(late.title).toBe('Clock out in 9 min');
     expect(describeEvent(ev('lunchBy', 'lead', 15, T), { ...ctx, now: T - 3 * MINUTE_MS }).title).toBe('Lunch in 3 min');
     expect(describeEvent(ev('secondMeal', 'lead', 15, T), { ...ctx, now: T - 5 * MINUTE_MS }).title).toBe('Second meal period in 5 min');
@@ -298,16 +298,16 @@ describe('describeEvent', () => {
     );
   });
 
-  it('gives a warning seen after its deadline the due copy, with the retro kicker in its due form too', () => {
+  it('gives a warning seen after its deadline the due copy', () => {
     // The clock-in was typed in after the end of the day, or the phone slept through it, with the
     // due event and repeats off: the latest warning is what fires.
     const late = { ...ctx, now: T + 45 * MINUTE_MS };
     const clockOut = describeEvent(ev('clockOut', 'lead', 15, T), late);
-    expect(clockOut.kicker).toBe('Clock-out alarm · 15 min warning');
+    expect(clockOut.kicker).toBe('Clock-out alarm');
     expect(clockOut.title).toBe('Time to clock out');
     expect(clockOut.body).toBe(`You reached your 8h for today at ${formatTime(T, true)}. Punch out now.`);
     const retro = describeEvent(ev('retro', 'lead', 30, T), late);
-    expect(retro.kicker).toBe('Retrospective · clock-out');
+    expect(retro.kicker).toBe('Retrospective');
     expect(retro.title).toBe('Clocking out? Do the retrospective first.');
     expect(retro.body).toBe(`You reached your 8h at ${formatTime(T, true)}. Two minutes on what went to plan and what didn't.`);
     expect(describeEvent(ev('lunchBy', 'lead', 5, T), { ...ctx, now: T }).title).toBe('Take lunch now');
