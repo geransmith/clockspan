@@ -1,28 +1,11 @@
-import {
-  DndContext,
-  DragOverlay,
-  KeyboardSensor,
-  PointerSensor,
-  useDraggable,
-  useDroppable,
-  useSensor,
-  useSensors,
-  type Announcements,
-  type DragCancelEvent,
-  type DragEndEvent,
-  type DragOverEvent,
-  type DragStartEvent,
-  type UniqueIdentifier,
-} from '@dnd-kit/core';
-import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { DndContext, DragOverlay, useDroppable } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { addDays, startOfWeek } from '../../../../shared/dates.js';
 import { useBoardState, useBoardStore, useCategoryPick } from '../../hooks/useBoard';
 import { useCelebration, type Moment } from '../../hooks/useCelebration';
 import { useDay } from '../../hooks/useDay';
-import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useRange } from '../../hooks/useRange';
 import { useSettings } from '../../hooks/useSettings';
 import { useShortcut } from '../../hooks/useShortcuts';
@@ -35,7 +18,6 @@ import {
   columnDropId,
   COLUMN_NAMES,
   COLUMNS,
-  dropTarget,
   findItem,
   isLane,
   itemPatchOf,
@@ -43,10 +25,8 @@ import {
   laneStart,
   moveAnnouncement,
   onToday,
-  overAnnouncement,
   planMove,
   saved,
-  withDrag,
   type BoardItem,
   type ColumnId,
   type DropTarget,
@@ -54,20 +34,20 @@ import {
   type RowPatch,
   type StoreMove,
 } from '../../lib/board';
-import { ADD_PRIORITY_FAILED, BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, WARNING_ACTIONS } from '../../lib/copy';
+import { ADD_PRIORITY_FAILED, BOARD, CONFIRM, DONE_STAYS, LOAD_FAILED, WARNING_ACTIONS } from '../../lib/copy';
 import { dayName, formatDurationCeil } from '../../lib/format';
 import { hasRoom, newTaskRow, newUid, nudgeFor, pickWarning, placePriority, type WarningKind } from '../../lib/priorities';
 import { loggedByUid } from '../../lib/retro';
 import { readStored, USER_KEYS, writeStored } from '../../lib/storage';
-import type { Category, OpenLane, Priority } from '../../types';
+import type { OpenLane, Priority } from '../../types';
 import { Burst } from '../Burst';
 import { Folded } from '../Folded';
-import { Grip, Plus } from '../Icons';
+import { Plus } from '../Icons';
 import { LoadFailed } from '../LoadFailed';
-import { BoardCardView, CategoryTag, type ItemDrag } from './BoardCard';
+import { BoardCardView, type ItemDrag } from './BoardCard';
 import { Capture } from './Capture';
 import { ClockBar } from './ClockBar';
-import { boardCollision, boardKeyboardCoordinates } from './dnd';
+import { canDrag, DraggableEntry, Lifted, SortableEntry, useBoardDrag } from './useBoardDrag';
 
 /** The columns with a + in their head. */
 type AddColumn = Exclude<ColumnId, 'done'>;
@@ -91,16 +71,10 @@ type Notice =
    */
   | (Extract<Move, { kind: 'doneStays' | 'refuse' }> & { item: BoardItem });
 
-/** The dragged item's place in its list while the copy under the pointer moves. */
-const DRAGGED_OPACITY = 0.4;
-
 /** A board write sent and let go, its failure a banner. */
 function report(write: Promise<void>): void {
   void saved(write);
 }
-
-/** Planned items (their day's list decides them) and recurring rows (they stay on today's list) have no grip. */
-const canDrag = (item: BoardItem) => !item.planned && !item.recurring;
 
 /**
  * The Board page: Later, Next, In progress and Done. In progress is today's list, the sheet's
@@ -156,21 +130,6 @@ export const Board = memo(function Board({
   const focusTo = useRef<string | null>(null);
   const focusGrip = useRef(false);
 
-  // The item being dragged and, while it is over another column, where it would land there.
-  const [dragged, setDragged] = useState<string | null>(null);
-  const [preview, setPreview] = useState<DropTarget | null>(null);
-  // What the drag says as it ends: worked out by the drop, which dnd-kit asks for once its handler has run.
-  const dropLine = useRef<string | undefined>(undefined);
-  // Whether the drag has said what it is over yet: the first time, it is where it was picked up.
-  const overSaid = useRef(false);
-  // The page's own reduced-motion rule stops the transitions; the drop's glide runs in script.
-  const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
-  const sensors = useSensors(
-    // Covers touch too (see SortableCards); the grip's touch-action: none keeps a finger on it from scrolling the page.
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: boardKeyboardCoordinates }),
-  );
-
   const columns = useMemo(
     () =>
       board && day
@@ -185,8 +144,7 @@ export const Board = memo(function Board({
         : null,
     [board, day, earlierDays, today, moving],
   );
-  // The columns as the drag shows them.
-  const shown = useMemo(() => (columns && dragged && preview ? withDrag(columns, dragged, preview) : columns), [columns, dragged, preview]);
+  const { shown, over, lifted, dropAnimation, context, onDragEnd, onDragCancel } = useBoardDrag(columns);
 
   // The focus on an item: on its grip when asked and it has one that takes the focus (none on a
   // planned card or a recurring row; hidden on a phone in In progress and Done), else its title.
@@ -382,67 +340,14 @@ export const Board = memo(function Board({
     report(store.removeFromToday(item.uid));
   };
 
-  const find = (id: UniqueIdentifier) => findItem(shown, String(id));
-  const onDragStart = ({ active }: DragStartEvent) => {
-    setDragged(String(active.id));
-    setPreview(null);
-    dropLine.current = undefined;
-    overSaid.current = false;
-  };
-  // Over another column the item shows there, where it would land; back over its own column, where
-  // it started. Its place among the cards of the column it shows in is the sortable list's to show.
-  const onDragOver = ({ active, over }: DragOverEvent) => {
-    const found = find(active.id);
-    if (!found || !over) return;
-    const target = dropTarget(String(over.id), found.item.id, shown);
-    const to = target?.to ?? found.item.column;
-    if (to !== found.column) setPreview(target && to !== found.item.column ? target : null);
-  };
-  // dnd-kit's own focus return is off (it would take the focus from the notice a drop brings), so
-  // a keyboard drag gets it back here: on the item's grip, where the move sends the item or where
-  // it stays.
-  const endDrag = (item: BoardItem | undefined, activatorEvent: Event | null) => {
-    setDragged(null);
-    setPreview(null);
-    if (!item || !(activatorEvent instanceof globalThis.KeyboardEvent)) return;
-    focusTo.current ??= item.id;
-    focusGrip.current = true;
-  };
-  const onDragEnd = ({ active, over, activatorEvent }: DragEndEvent) => {
-    const item = find(active.id)?.item;
-    focusTo.current = null;
-    if (item) {
-      // The tick's burst starts where the card was let go.
-      const r = active.rect.current.translated;
-      const at = r ? new DOMRect(r.left, r.top, r.width, r.height) : undefined;
-      const target = dropTarget(over ? String(over.id) : null, item.id, shown);
-      dropLine.current = target ? run(item, target.to, target.before, { at }) : moveAnnouncement(null, item, item.column);
-    }
-    endDrag(item, activatorEvent);
-  };
-  const onDragCancel = ({ active, activatorEvent }: DragCancelEvent) => {
-    focusTo.current = null;
-    endDrag(find(active.id)?.item, activatorEvent);
-  };
-  // What a screen reader hears: dnd-kit's own lines read the raw ids.
-  const announcements: Announcements = {
-    onDragStart: ({ active }) => {
-      const item = find(active.id)?.item;
-      return item && BOARD_DRAG.pickedUp(item.title, COLUMN_NAMES[item.column]);
+  // A drop's move first drops a focus left for an earlier move, and a keyboard drag ends on the item's grip.
+  const dragFocus = {
+    clear: () => {
+      focusTo.current = null;
     },
-    // Back where it started, it says so, but not the first time: "Picked up" has said where it is.
-    onDragOver: ({ active, over }) => {
-      const item = find(active.id)?.item;
-      const first = !overSaid.current;
-      overSaid.current = true;
-      if (!item || !over) return undefined;
-      const target = dropTarget(String(over.id), item.id, shown);
-      return target || !first ? overAnnouncement(target, item, shown) : undefined;
-    },
-    onDragEnd: () => dropLine.current,
-    onDragCancel: ({ active }) => {
-      const item = find(active.id)?.item;
-      return item && BOARD_DRAG.cancelled(item.title, COLUMN_NAMES[item.column]);
+    afterKeyboard: (id: string) => {
+      focusTo.current ??= id;
+      focusGrip.current = true;
     },
   };
 
@@ -540,7 +445,6 @@ export const Board = memo(function Board({
     </SortableContext>
   );
   const done = shown.doneToday.length + shown.doneEarlier.length;
-  const lifted = dragged ? find(dragged)?.item : undefined;
   const headRef = (id: ColumnId) => (el: HTMLElement | null) => {
     if (el) heads.current.set(id, el);
     else heads.current.delete(id);
@@ -640,20 +544,12 @@ export const Board = memo(function Board({
           </button>
         ))}
       </div>
-      <DndContext
-        sensors={sensors}
-        collisionDetection={boardCollision}
-        accessibility={{ announcements, restoreFocus: false }}
-        onDragStart={onDragStart}
-        onDragOver={onDragOver}
-        onDragEnd={onDragEnd}
-        onDragCancel={onDragCancel}
-      >
+      <DndContext {...context} onDragEnd={(e) => onDragEnd(e, run, dragFocus)} onDragCancel={(e) => onDragCancel(e, dragFocus)}>
         <div className="board-cols">
           <Column
             id="later"
             shown={shownColumn}
-            over={preview?.to}
+            over={over}
             count={shown.later.length}
             headRef={headRef('later')}
             add={add('later', lanesFull, addCard('later'))}
@@ -669,20 +565,13 @@ export const Board = memo(function Board({
               <Empty>Nothing parked.</Empty>
             )}
           </Column>
-          <Column
-            id="next"
-            shown={shownColumn}
-            over={preview?.to}
-            count={shown.next.length}
-            headRef={headRef('next')}
-            add={add('next', lanesFull, addCard('next'))}
-          >
+          <Column id="next" shown={shownColumn} over={over} count={shown.next.length} headRef={headRef('next')} add={add('next', lanesFull, addCard('next'))}>
             {shown.next.length > 0 ? sorted('next', shown.next, list(shown.next, 'next')) : <Empty>Nothing lined up.</Empty>}
           </Column>
           <Column
             id="progress"
             shown={shownColumn}
-            over={preview?.to}
+            over={over}
             count={shown.progress.length}
             sub="Today's top priorities"
             headRef={headRef('progress')}
@@ -690,7 +579,7 @@ export const Board = memo(function Board({
           >
             {shown.progress.length > 0 ? list(shown.progress, 'progress') : <Empty>Nothing open on today's list.</Empty>}
           </Column>
-          <Column id="done" shown={shownColumn} over={preview?.to} count={done} headRef={headRef('done')}>
+          <Column id="done" shown={shownColumn} over={over} count={done} headRef={headRef('done')}>
             {done === 0 && <Empty>Nothing done this week.</Empty>}
             {shown.doneToday.length > 0 && list(shown.doneToday, 'done')}
             {shown.doneEarlier.length > 0 && (
@@ -705,7 +594,7 @@ export const Board = memo(function Board({
         </div>
         {/* On the page's body, so no column clips it; without the glide back when motion is reduced. */}
         {createPortal(
-          <DragOverlay dropAnimation={reduceMotion ? null : undefined}>
+          <DragOverlay dropAnimation={dropAnimation}>
             {lifted && <Lifted item={lifted} category={categoryOf(pick.categories, lifted.categoryUid)} />}
           </DragOverlay>,
           document.body,
@@ -788,41 +677,6 @@ function Column({
       )}
       {children}
     </section>
-  );
-}
-
-/** A card of Later or Next: the others in its lane make room as it is dragged among them. `held`: not picked up meanwhile (`entry`). */
-function SortableEntry({ id, held, render }: { id: string; held: boolean; render: (drag: ItemDrag) => ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: { draggable: held, droppable: false } });
-  return render({
-    nodeRef: setNodeRef,
-    style: { transform: CSS.Translate.toString(transform), transition, opacity: isDragging ? DRAGGED_OPACITY : undefined },
-    handleProps: { ...attributes, ...listeners },
-  });
-}
-
-/** A row or card of In progress or Done, which neither sorts: `column` tells the keyboard where it shows (`boardKeyboardCoordinates`); `held` as above. */
-function DraggableEntry({ id, column, held, render }: { id: string; column: ColumnId; held: boolean; render: (drag: ItemDrag) => ReactNode }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id, data: { column }, disabled: held });
-  return render({ nodeRef: setNodeRef, style: { opacity: isDragging ? DRAGGED_OPACITY : undefined }, handleProps: { ...attributes, ...listeners } });
-}
-
-/** The card under the pointer as it is dragged: its title and category, with the grip it was picked up by. */
-function Lifted({ item, category }: { item: BoardItem; category?: Category }) {
-  return (
-    <div className={`board-card board-card--lifted${item.column === 'done' ? ' is-done' : ''}`}>
-      <div className="board-card-row">
-        <span className="board-grip" aria-hidden="true">
-          <Grip />
-        </span>
-        <span className="board-card-title">{item.title}</span>
-      </div>
-      {category && (
-        <p className="board-card-meta muted small">
-          <CategoryTag category={category} />
-        </p>
-      )}
-    </div>
   );
 }
 
