@@ -38,7 +38,7 @@ interface Props {
   /** The clock floored to the minute: nothing the sheet shows is finer, and the day log keeps its own clock. */
   now: number;
   customize: boolean;
-  /** A card to scroll into view once the sheet has rendered (a banner's "Open …" button). */
+  /** A card to scroll into view once the sheet has rendered (a banner's "Open …" button), opening a folded retrospective. */
   jumpTo: CardId | null;
   onJumped: () => void;
   /** See `Timeclock.onEditingChange`. */
@@ -197,6 +197,9 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
             sessions={day.sessions}
             note={day.retroNote}
             reviewedAt={day.retroAt}
+            // Today's card is one line until the day is clocked out. The jump opens it in this render,
+            // so its note box is there for the jump's effect.
+            open={!isToday || tc.state === 'done' || jumpTo === 'retro'}
             onChange={(patch) => store.setRetro(date, patch)}
           />
         );

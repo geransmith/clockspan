@@ -340,7 +340,7 @@ function LabelBox({
 }
 
 /** A block that calls `onLeave` as it leaves the page with the focus inside it. */
-function PassFocusOnLeave({ className, onLeave, children }: { className: string; onLeave: () => void; children: ReactNode }) {
+export function PassFocusOnLeave({ className, onLeave, children }: { className: string; onLeave: () => void; children: ReactNode }) {
   const root = useRef<HTMLDivElement>(null);
   // A layout cleanup runs while the block is still in the page, so it can tell where the focus was.
   useLayoutEffect(() => {

@@ -5,13 +5,13 @@
 A self-hosted, single-day **focus sheet** for working through a workday with ADHD: a punch-style
 timeclock (lunch deadline, end of day, celebration), top priorities (default three, with a
 nudge when the list grows), a focus timer that logs what was done and for which priority, a
-retrospective card (plan vs. log, a "why" note, a nudge before clock-out), a week / month /
-quarter review, alarms for lunch, clock-out and the second meal period, and a Board page for
-tasks that aren't for today (its In progress column is today's Top priorities; tasks carry
-categories, made from a chip or in Settings → Board, and recurring priorities, set up in
-Settings → Board and offered on Top priorities on their weekdays). Each task (a priority, a
-board card, a recurring priority) is stored once, with one name, one category and one note; a
-day's list names the tasks on it.
+retrospective card (plan vs. log, a "why" note, a nudge before clock-out; one line of totals
+until the day is clocked out), a week / month / quarter review, alarms for lunch, clock-out and
+the second meal period, and a Board page for tasks that aren't for today (its In progress column
+is today's Top priorities; tasks carry categories, made from a chip or in Settings → Board, and
+recurring priorities, set up in Settings → Board and offered on Top priorities on their
+weekdays). Each task (a priority, a board card, a recurring priority) is stored once, with one
+name, one category and one note; a day's list names the tasks on it.
 "Overtime approved" silences the clock-out alarm only. Every day is persisted; old days can be
 pruned. Data is **per user**; auth is optional (`AUTH_MODE=none | local | oidc`). One Docker
 container, SQLite on `/data`. A PWA used mostly on a laptop or desktop and laid out for phones
@@ -1030,7 +1030,14 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **The `retro` alarm target is the clock-out instant** ("warn before" = minutes before the
   end of the day) and is **not** silenced by overtime approval; marking the day reviewed
   (`days.retro_at`), or hiding the retrospective card under Customize (`alarmTargets` reads
-  `settings.layout`), disarms it. Its banner button jumps to the card (`jumpTo` in `App.tsx`).
+  `settings.layout`), disarms it. Its banner button jumps to the card and opens it (`jumpTo` in
+  `App.tsx`). Today's card is folded to one line (the rows planned and ticked and the completed
+  focus, from the `reviewDay` it shows) and an Open button, which puts the focus in the note box,
+  until the day is clocked out (`tc.state === 'done'`: the Clock out reached; punches out of order
+  read as working). `Sheet` passes `open` for another day, a Clock out reached or the jump, and
+  once open, `Retro` stays open until it mounts again (it is keyed by date, so a new day starts
+  folded). A Clock out reached while Open has the focus hands it to the note box too
+  (`PassFocusOnLeave`).
 - **Alarm event keys embed the target minute** (`eventKey`), so a moved target re-arms and a reload
   never re-fires. Today's fired keys live in `localStorage` under `focus:alarms`, one set for one
   date (`readDaySet`, `addToDaySet` in `lib/storage.ts`), so a new day starts with none.
@@ -1573,11 +1580,14 @@ The browser pass for each surface (the logic under it is already tested):
   on the board, and the mark before the chip on a routine's row; at 1280 and 1000 the mark and a long
   category in the chip's column, and at 375 the mark before the chip under the field.
 - **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
-  Month / Quarter). By category in Review → Week and Month (solid and striped bars, No category
-  last), in light and dark. For Added mid-day's "mostly …", give the last weekday's "Reply to the
-  recruiter" row a category with its chip (the seed files that task under none) and open the Week
-  that holds that day (◀ on a Monday): it is one task on every day the seed adds it mid-day, so the
-  category reaches each of them, and any period holding one of those days names it.
+  Month / Quarter). Today's card folded to its line at 1280, 1000 and 375: Open shows it with the
+  focus in the note box, Now on Clock out opens it, and with the alarm recipe (see "Alarms") the
+  retro alarm's Open retrospective lands on it opened, the focus in the note box. By category in
+  Review → Week and Month (solid and striped bars, No category last), in light and dark. For
+  Added mid-day's "mostly …", give the last weekday's "Reply to the recruiter" row a category with
+  its chip (the seed files that task under none) and open the Week that holds that day (◀ on a
+  Monday): it is one task on every day the seed adds it mid-day, so the category reaches each of
+  them, and any period holding one of those days names it.
 - **The board**: after `npm run seed`, press Board. At 1440: the four columns; each +'s box (Later's
   card at the top, Next's at the end, In progress's row on today's sheet and asking past three rows;
   Enter keeps the box, an empty Enter or Escape closes it, one with text stays open when left); a
