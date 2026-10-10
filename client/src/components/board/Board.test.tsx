@@ -924,6 +924,20 @@ describe('adding from a column', () => {
     expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Call the vendor'] }]);
   });
 
+  it('stops counting a row toward the nudge once its save fails', async () => {
+    lists[WED] = [row(1, 'Report'), row(2, 'Email')];
+    vi.mocked(api.putPriorities).mockRejectedValueOnce(new Error('offline'));
+    await renderBoard();
+    fireEvent.click(plus('In progress'));
+    const box = field('New priority for today');
+    enter(box, 'Call the vendor');
+    expect(notice().textContent).toBe('');
+    await settle();
+    // Row 3 is free again.
+    enter(box, 'Book the room');
+    expect(notice().textContent).toBe('');
+  });
+
   it("asks first from In progress's box past the nudge: Keep it short leaves the text in the box, Add anyway adds it, closes the box and focuses the new row", async () => {
     lists[WED] = [row(1, 'Report'), row(2, 'Email'), row(3, 'Invoices')];
     await renderBoard();
