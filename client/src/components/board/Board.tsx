@@ -660,11 +660,10 @@ export const Board = memo(function Board({
             shown={shownColumn}
             over={over}
             count={shown.progress.length}
-            sub="Today's top priorities"
             headRef={headRef('progress')}
             add={add('progress', listFull, addRow)}
           >
-            {shown.progress.length > 0 ? list(shown.progress, 'progress') : <Empty>Nothing open on today's list.</Empty>}
+            {shown.progress.length > 0 ? list(shown.progress, 'progress') : <Empty>Nothing open on today's top priorities.</Empty>}
           </Column>
           <Column id="done" shown={shownColumn} over={over} count={done} headRef={headRef('done')}>
             {/* Not while the earlier days are unread: a routine ticked then may be all Done has. */}
@@ -723,7 +722,6 @@ function Column({
   shown,
   over,
   count,
-  sub,
   headRef,
   add,
   children,
@@ -732,7 +730,6 @@ function Column({
   shown: ColumnId;
   over?: ColumnId;
   count: number;
-  sub?: string;
   /** Where the focus goes when Delete or Remove from today takes the column's last item: its +, else its heading. */
   headRef: (el: HTMLElement | null) => void;
   add?: ColumnAdd;
@@ -770,7 +767,6 @@ function Column({
           </button>
         )}
       </header>
-      {sub && <p className="muted small board-col-sub">{sub}</p>}
       {add?.shut ? (
         <p className="muted small" id={shut}>
           {add.shut}
