@@ -410,7 +410,7 @@ describe('suggestions', () => {
     expect(suggested()).toMatchObject({
       kicker: BREAK_SUGGESTION.kicker(1, 4),
       title: BREAK_SUGGESTION.title(4, false),
-      body: BREAK_SUGGESTION.body('20m', false, 4),
+      body: BREAK_SUGGESTION.body('20m', false),
       tag: 'break',
       sticky: true,
       sound: false,
@@ -431,7 +431,7 @@ describe('suggestions', () => {
     expect(suggested()).toMatchObject({
       kicker: BREAK_SUGGESTION.kicker(4, 4),
       title: BREAK_SUGGESTION.title(20, true),
-      body: BREAK_SUGGESTION.body('1h 40m', true, 4),
+      body: BREAK_SUGGESTION.body('1h 40m', true),
     });
     expect(result.current.next).toMatchObject({ minutes: 20, long: true });
   });

@@ -236,12 +236,13 @@ export const BREAK = {
 
 /**
  * With Suggest breaks on, the banner after a session is finished by hand: the break it earned
- * (`lib/breaks.ts`) and a button that starts it. `of` is the number of sessions in a set.
+ * (`lib/breaks.ts`) and a button that starts it. `of` is the number of sessions in a set; the
+ * kicker counts down to the set's last, which earns the long break.
  */
 export const BREAK_SUGGESTION = {
-  kicker: (position: number, of: number) => `Session ${position} of ${of}`,
+  kicker: (position: number, of: number) => (position < of ? `Long break after ${counted(of - position, 'more session')}` : `${of} sessions in a row`),
   title: (minutes: number, long: boolean) => (long ? `Take a long break, ${minutes} min` : `Take a ${minutes} min break`),
-  body: (focus: string, long: boolean, of: number) => (long ? `For the ${focus} logged over all ${of}.` : `For the ${focus} you just logged.`),
+  body: (focus: string, long: boolean) => (long ? `For the ${focus} logged across them.` : `For the ${focus} you just logged.`),
   start: 'Start break',
 } as const;
 
