@@ -72,7 +72,7 @@ function DeleteOldDays() {
     let cancelled = false;
     api
       .getPruneInfo(before)
-      .then((r) => !cancelled && setLoaded(r))
+      .then(({ value }) => !cancelled && setLoaded(value))
       .catch((err: unknown) => !cancelled && setError((err as Error).message));
     return () => {
       cancelled = true;

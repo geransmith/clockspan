@@ -10,9 +10,10 @@ import { MoveRefused, withCategory, withCategoryPatch, withItem, withItemPatch, 
 import { ADD_PRIORITY_FAILED, BOARD, SAVE_FAILED } from '../lib/copy';
 import { applySettingsPatch } from '../lib/settings';
 import {
+  answered,
   apiError,
   begin,
-  deferred,
+  deferredAnswer,
   makeBoard,
   makeCard,
   makeCategory,
@@ -73,23 +74,23 @@ beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
   onServer = makeBoard(makeCard('later0000001', 'Write a KB'), makeCard('next00000001', 'Follow up', { lane: 'next' }));
   lists = {};
-  vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ board: true }));
-  vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(applySettingsPatch(makeSettings({ board: true }), patch)));
-  vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(makeDay(date, { priorities: lists[date] ?? [] })));
-  vi.mocked(api.putPriorities).mockImplementation((date, list) => Promise.resolve({ priorities: (lists[date] = list) }));
-  vi.mocked(api.getBoard).mockImplementation(() => Promise.resolve(onServer));
-  vi.mocked(api.addItem).mockImplementation((item) => Promise.resolve((onServer = withItem(onServer, item, T0))));
-  vi.mocked(api.editItem).mockImplementation((uid, patch) => Promise.resolve((onServer = withItemPatch(onServer, uid, patch))));
-  vi.mocked(api.deleteItem).mockImplementation((uid) => Promise.resolve((onServer = withoutItem(onServer, uid))));
-  vi.mocked(api.addCategory).mockImplementation((c) => Promise.resolve((onServer = withCategory(onServer, c))));
-  vi.mocked(api.patchCategory).mockImplementation((uid, patch) => Promise.resolve((onServer = withCategoryPatch(onServer, uid, patch))));
-  vi.mocked(api.deleteCategory).mockImplementation((uid) => Promise.resolve((onServer = withoutCategory(onServer, uid))));
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ board: true })));
+  vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(answered(applySettingsPatch(makeSettings({ board: true }), patch))));
+  vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(answered(makeDay(date, { priorities: lists[date] ?? [] }))));
+  vi.mocked(api.putPriorities).mockImplementation((date, list) => Promise.resolve(answered({ priorities: (lists[date] = list) })));
+  vi.mocked(api.getBoard).mockImplementation(() => Promise.resolve(answered(onServer)));
+  vi.mocked(api.addItem).mockImplementation((item) => Promise.resolve(answered((onServer = withItem(onServer, item, T0)))));
+  vi.mocked(api.editItem).mockImplementation((uid, patch) => Promise.resolve(answered((onServer = withItemPatch(onServer, uid, patch)))));
+  vi.mocked(api.deleteItem).mockImplementation((uid) => Promise.resolve(answered((onServer = withoutItem(onServer, uid)))));
+  vi.mocked(api.addCategory).mockImplementation((c) => Promise.resolve(answered((onServer = withCategory(onServer, c)))));
+  vi.mocked(api.patchCategory).mockImplementation((uid, patch) => Promise.resolve(answered((onServer = withCategoryPatch(onServer, uid, patch)))));
+  vi.mocked(api.deleteCategory).mockImplementation((uid) => Promise.resolve(answered((onServer = withoutCategory(onServer, uid)))));
 });
 
 describe('reading the board', () => {
   it('sends nothing while the board is off or the settings have not loaded, and nothing ticks', async () => {
-    const settings = deferred<ReturnType<typeof makeSettings>>();
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings()).mockReturnValueOnce(settings.promise);
+    const settings = deferredAnswer<ReturnType<typeof makeSettings>>();
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings())).mockReturnValueOnce(settings.promise);
     const { result } = renderBoard();
     await settle();
     expect(result.current.on).toBe(false);
@@ -102,7 +103,7 @@ describe('reading the board', () => {
   });
 
   it('reads at once when switched on, once under StrictMode, and keeps the board when switched off', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
     const { result } = renderBoard({ strict: true });
     await settle();
     expect(api.getBoard).not.toHaveBeenCalled();
@@ -130,7 +131,7 @@ describe('reading the board', () => {
     expect(api.getBoard).toHaveBeenCalledTimes(3);
     await settle();
 
-    const answer = deferred<Board>();
+    const answer = deferredAnswer<Board>();
     vi.mocked(api.getBoard).mockReturnValueOnce(answer.promise);
     let a!: Promise<void>, b!: Promise<void>;
     act(() => {
@@ -148,7 +149,7 @@ describe('reading the board', () => {
     await settle();
     await act(() => result.current.store.load({ fresh: true }));
     expect(api.getBoard).toHaveBeenCalledTimes(2);
-    const out = deferred<Board>();
+    const out = deferredAnswer<Board>();
     vi.mocked(api.getBoard).mockReturnValueOnce(out.promise);
     let fresh!: Promise<void>;
     act(() => {
@@ -182,7 +183,7 @@ describe('reading the board', () => {
     await act(() => result.current.store.load());
     expect(result.current.board).toBe(before);
 
-    const old = deferred<Board>();
+    const old = deferredAnswer<Board>();
     vi.mocked(api.getBoard).mockReturnValueOnce(old.promise);
     act(() => void result.current.store.load());
     const stale = onServer;
@@ -198,7 +199,7 @@ describe('reading the board', () => {
     const { result } = renderBoard();
     await settle();
     expect(result.current.confirmedRecurring).toEqual([queue]);
-    const created = deferred<Board>();
+    const created = deferredAnswer<Board>();
     vi.mocked(api.addItem).mockReturnValueOnce(created.promise);
     const timesheet = { uid: 'rcur00000002', title: 'Timesheet', categoryUid: null, weekdays: [5] };
     act(() => {
@@ -223,7 +224,7 @@ describe('reading the board', () => {
 
 describe('task writes', () => {
   it('show at once and go out one after another', async () => {
-    const first = deferred<Board>();
+    const first = deferredAnswer<Board>();
     vi.mocked(api.addItem).mockReturnValueOnce(first.promise);
     const { result } = renderBoard();
     await settle();
@@ -318,7 +319,7 @@ describe('task writes', () => {
 
 describe('with the board off', () => {
   beforeEach(() => {
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
   });
 
   it('sends a write, keeps no board from its answer, and reads none after a failure', async () => {
@@ -345,7 +346,7 @@ describe('moves', () => {
     lists[TODAY] = [makePriority(1, 'Report')];
     const { result } = renderBoard();
     await settle();
-    const save = deferred<{ priorities: Priority[] }>();
+    const save = deferredAnswer<{ priorities: Priority[] }>();
     vi.mocked(api.putPriorities).mockReturnValueOnce(save.promise);
     act(() => {
       void result.current.store.move({ kind: 'place', row: pulled('later0000001', 'Write a KB'), nudge: true });
@@ -445,7 +446,7 @@ describe('moves', () => {
     const { result } = renderBoard();
     await settle();
     const uid = lists[TODAY]![0]!.uid!;
-    const first = deferred<{ priorities: Priority[] }>();
+    const first = deferredAnswer<{ priorities: Priority[] }>();
     vi.mocked(api.putPriorities).mockReturnValueOnce(first.promise);
     act(() => {
       void result.current.store.move({ kind: 'place', row: pulled('later0000001', 'Write a KB'), nudge: true });
@@ -487,7 +488,7 @@ describe('moves', () => {
       await settle();
       // Typed a moment ago: the save that makes the task is still out.
       const typed = makePriority(2, 'Email', { uid: 'typed0000001', listed: 0 });
-      const save = deferred<{ priorities: Priority[] }>();
+      const save = deferredAnswer<{ priorities: Priority[] }>();
       vi.mocked(api.putPriorities).mockReturnValueOnce(save.promise);
       act(() => void result.current.days.setPriorities(TODAY, [lists[TODAY]![0]!, typed], lists[TODAY]!));
       const parked = begin(() => result.current.store.move({ kind: 'park', uid: 'typed0000001', lane: 'later', before: 'later0000001' }));
@@ -495,7 +496,7 @@ describe('moves', () => {
       expect(api.editItem).not.toHaveBeenCalled();
       onServer = makeBoard(...onServer.cards, makeCard('typed0000001', 'Email', { lane: null, listDate: TODAY }));
       await act(() => result.current.store.load());
-      const placed = deferred<Board>();
+      const placed = deferredAnswer<Board>();
       vi.mocked(api.editItem).mockReturnValueOnce(placed.promise);
       save.resolve({ priorities: (lists[TODAY] = vi.mocked(api.putPriorities).mock.calls[0]![1]) });
       await settle();
@@ -561,7 +562,7 @@ describe('moves', () => {
       await settle();
       vi.mocked(api.putPriorities).mockImplementationOnce((date, list) => {
         onServer = makeBoard(...onServer.cards.map((c) => (c.uid === done.uid ? { ...c, listDate: YESTERDAY, listDone: true } : c)));
-        return Promise.resolve({ priorities: (lists[date] = list) });
+        return Promise.resolve(answered({ priorities: (lists[date] = list) }));
       });
       await move(result, { kind: 'park', uid: done.uid, lane: 'next', before: null });
       await settle();
@@ -589,7 +590,7 @@ describe('deleteItem', () => {
     await act(() => result.current.days.load(YESTERDAY));
     await act(() => result.current.days.load(TOMORROW));
     // A task typed a moment ago: today's save is still out.
-    const save = deferred<{ priorities: Priority[] }>();
+    const save = deferredAnswer<{ priorities: Priority[] }>();
     vi.mocked(api.putPriorities).mockReturnValueOnce(save.promise);
     act(() => void result.current.days.setPriorities(TODAY, [report, makePriority(2, 'Email')], [report]));
     const deleted = begin(() => result.current.store.deleteItem('later0000001'));
@@ -621,7 +622,7 @@ describe('deleteItem', () => {
     lists[TODAY] = [makePriority(1, 'Report', { uid: 'task00000001', listed: 2 })];
     const { result } = renderBoard();
     await settle();
-    const save = deferred<{ priorities: Priority[] }>();
+    const save = deferredAnswer<{ priorities: Priority[] }>();
     vi.mocked(api.putPriorities).mockReturnValueOnce(save.promise);
     // Delete everywhere on the sheet: its × save first, then the job.
     act(() => void result.current.days.setPriorities(TODAY, [], lists[TODAY]!));
@@ -648,7 +649,7 @@ describe('deleteItem', () => {
     const { result } = renderBoard();
     await settle();
     // A read that still has the task, sent before the delete was answered, doesn't bring it back.
-    const old = deferred<Board>();
+    const old = deferredAnswer<Board>();
     vi.mocked(api.getBoard).mockReturnValueOnce(old.promise);
     act(() => void result.current.store.load());
     vi.mocked(api.deleteItem).mockRejectedValueOnce(apiError(404));
@@ -711,7 +712,7 @@ describe('categories', () => {
   });
 
   it('show a new, renamed or removed category at once, and go out one after another', async () => {
-    const first = deferred<Board>();
+    const first = deferredAnswer<Board>();
     vi.mocked(api.addCategory).mockReturnValueOnce(first.promise);
     const { result } = renderBoard();
     await settle();
@@ -747,8 +748,8 @@ describe('categories', () => {
     }
 
     it('is null while the board is off, and until its first read lands', async () => {
-      vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
-      const read = deferred<Board>();
+      vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
+      const read = deferredAnswer<Board>();
       vi.mocked(api.getBoard).mockReturnValueOnce(read.promise);
       const { result } = renderPick();
       await settle();
@@ -837,7 +838,7 @@ describe('recurring priorities', () => {
   });
 
   it('show a new, edited or removed item at once, and go out one after another', async () => {
-    const first = deferred<Board>();
+    const first = deferredAnswer<Board>();
     vi.mocked(api.addItem).mockReturnValueOnce(first.promise);
     const { result } = renderBoard();
     await settle();
@@ -891,7 +892,7 @@ describe('recurring priorities', () => {
     const { result } = renderBoard();
     await settle();
     // A read that still has it, sent before the remove was answered, doesn't bring it back.
-    const old = deferred<Board>();
+    const old = deferredAnswer<Board>();
     vi.mocked(api.getBoard).mockReturnValueOnce(old.promise);
     act(() => void result.current.store.load());
     vi.mocked(api.deleteItem).mockRejectedValueOnce(apiError(404));

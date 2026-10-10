@@ -5,7 +5,7 @@ import { MINUTE_MS } from '../../../shared/dates.js';
 import * as api from '../api';
 import { CHECK_PUNCHES, LOAD_FAILED } from '../lib/copy';
 import { formatMonth } from '../lib/format';
-import { makeDay, makeSettings, punchesAt, serveRange, SettingsAndDays, settle } from '../test/hooks';
+import { answered, makeDay, makeSettings, punchesAt, serveRange, SettingsAndDays, settle } from '../test/hooks';
 import { Calendar } from './Calendar';
 
 vi.mock('../api');
@@ -29,7 +29,7 @@ const picked = () => screen.getByRole('button', { pressed: true });
 
 beforeEach(() => {
   vi.useFakeTimers({ now: LAST_EVENING });
-  vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
 });
 
 describe('Calendar', () => {
@@ -117,7 +117,7 @@ describe('Calendar', () => {
   });
 
   it('drops a sticker filter whose reason leaves the legend', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ stickers: true }));
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ stickers: true })));
     const at = (h: number, m = 0) => new Date(2026, 8, 29, h, m).getTime();
     serveRange([makeDay('2026-09-29', { punches: punchesAt(at(8), at(12), at(12, 30), at(16, 30)) })]);
     const view = render(calendar(LAST, LAST_EVENING));
@@ -128,7 +128,7 @@ describe('Calendar', () => {
     expect(cell()).toMatch(/, Clocked out$/);
 
     // Show hours turned off elsewhere: the next settings refresh takes the Clocked out chip away.
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ stickers: true, trackHours: false }));
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ stickers: true, trackHours: false })));
     await settle(MINUTE_MS);
     expect(screen.queryByRole('button', { name: /^Clocked out/ })).toBeNull();
     expect(cell()).toMatch(/, Lunch taken$/);

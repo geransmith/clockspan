@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { formatDateLong, formatMonth } from '../lib/format';
 import type { ReviewPeriod } from '../lib/review';
-import { makeDay, makeSettings, serveRange, SettingsAndDays, settle } from '../test/hooks';
+import { answered, makeDay, makeSettings, serveRange, SettingsAndDays, settle } from '../test/hooks';
 import { History } from './History';
 
 vi.mock('../api');
@@ -27,7 +27,7 @@ async function history(date: string, review: ReviewPeriod | null = null) {
 
 beforeEach(() => {
   vi.useFakeTimers({ now: NOW });
-  vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
   serveRange([AUGUST_DAY, JULY_DAY]);
 });
 

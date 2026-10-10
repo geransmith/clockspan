@@ -27,7 +27,7 @@ import type {
   UserResponse,
   UsersResponse,
 } from './types';
-import { VERSION_HEADER } from '../../shared/api.js';
+import { REVISION_HEADER, VERSION_HEADER } from '../../shared/api.js';
 import { alert } from './lib/alerts';
 import { ApiError } from './lib/apiError';
 import { REQUEST_FAILED, REQUEST_TIMEOUT, UNREADABLE_ANSWER, UPDATED } from './lib/copy';
@@ -70,7 +70,13 @@ function noticeVersion(version: string | null): void {
   });
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+/** A data route's answer: its body, and the user's revision the server numbered it with (`REVISION_HEADER`). */
+export interface Answer<T> {
+  value: T;
+  revision: number;
+}
+
+async function request<T>(method: string, path: string, body?: unknown): Promise<Answer<T>> {
   let res: Response;
   try {
     res = await fetch(path, {
@@ -83,6 +89,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     throw timedOut(err) ? new Error(REQUEST_TIMEOUT) : err;
   }
   noticeVersion(res.headers.get(VERSION_HEADER));
+  // An answer that names none (an auth route, a 401 before the data routes, a proxy's page) reads as 0.
+  const revision = Number(res.headers.get(REVISION_HEADER));
   let data: unknown = null;
   try {
     data = await res.json();
@@ -101,22 +109,25 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     // makes AuthGate ask /api/auth/me again, which the app never answers with a 401: one from
     // there comes from a proxy in front, and announcing it would ask /me again, forever.
     if (res.status === 401 && path !== '/api/auth/login' && path !== '/api/auth/me') window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT));
-    throw new ApiError(res.status, message, data);
+    throw new ApiError(res.status, message, data, revision);
   }
-  return data as T;
+  return { value: data as T, revision };
 }
 
 // ----- auth -----
-export const getAuth = () => request<AuthInfo>('GET', '/api/auth/me');
+// The auth routes sit outside the data routes and name no revision, so their answer is the body alone.
+const auth = async <T>(method: string, path: string, body?: unknown): Promise<T> => (await request<T>(method, path, body)).value;
+
+export const getAuth = () => auth<AuthInfo>('GET', '/api/auth/me');
 export const setup = (setupCode: string, username: string, password: string) =>
-  request<UserResponse>('POST', '/api/auth/setup', { setupCode, username, password });
-export const login = (username: string, password: string) => request<UserResponse>('POST', '/api/auth/login', { username, password });
-export const logout = () => request<LogoutResponse>('POST', '/api/auth/logout');
+  auth<UserResponse>('POST', '/api/auth/setup', { setupCode, username, password });
+export const login = (username: string, password: string) => auth<UserResponse>('POST', '/api/auth/login', { username, password });
+export const logout = () => auth<LogoutResponse>('POST', '/api/auth/logout');
 export const changePassword = (currentPassword: string, newPassword: string) =>
-  request<OkResponse>('POST', '/api/auth/password', { currentPassword, newPassword });
-export const listUsers = () => request<UsersResponse>('GET', '/api/auth/users');
-export const addUser = (username: string, password: string) => request<UserResponse>('POST', '/api/auth/users', { username, password });
-export const deleteUser = (id: number) => request<OkResponse>('DELETE', `/api/auth/users/${id}`);
+  auth<OkResponse>('POST', '/api/auth/password', { currentPassword, newPassword });
+export const listUsers = () => auth<UsersResponse>('GET', '/api/auth/users');
+export const addUser = (username: string, password: string) => auth<UserResponse>('POST', '/api/auth/users', { username, password });
+export const deleteUser = (id: number) => auth<OkResponse>('DELETE', `/api/auth/users/${id}`);
 
 // ----- settings -----
 /**

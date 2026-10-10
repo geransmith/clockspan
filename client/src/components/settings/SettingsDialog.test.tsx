@@ -8,7 +8,7 @@ import { notificationPermission, requestNotificationPermission } from '../../lib
 import { LOAD_FAILED, SAVE_STATUS } from '../../lib/copy';
 import { applySettingsPatch } from '../../lib/settings';
 import { SOUND_EVENT_LABELS } from '../../lib/sounds';
-import { DEFAULT_USER, deferred, makeAuth, makeBoard, makeCategory, makeSettings, makeUser, settle, SettingsAndDays } from '../../test/hooks';
+import { answered, DEFAULT_USER, deferredAnswer, makeAuth, makeBoard, makeCategory, makeSettings, makeUser, settle, SettingsAndDays } from '../../test/hooks';
 import type { AuthInfo, Settings } from '../../types';
 import { SettingsDialog } from './SettingsDialog';
 
@@ -42,9 +42,11 @@ const openTab = async (name: string) => {
 beforeEach(() => {
   vi.useFakeTimers();
   localStorage.clear();
-  vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
-  vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(applySettingsPatch(makeSettings(), patch)));
-  vi.mocked(api.getPruneInfo).mockImplementation((before) => Promise.resolve({ before, matching: 0, total: 4, oldest: '2026-09-01', serverMaxDays: null }));
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
+  vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(answered(applySettingsPatch(makeSettings(), patch))));
+  vi.mocked(api.getPruneInfo).mockImplementation((before) =>
+    Promise.resolve(answered({ before, matching: 0, total: 4, oldest: '2026-09-01', serverMaxDays: null })),
+  );
   vi.mocked(api.listUsers).mockResolvedValue({ users: [ADMIN] });
 });
 
@@ -135,9 +137,9 @@ describe('SettingsDialog', () => {
     expect(screen.queryByRole('switch', { name: 'Times on the board', hidden: true })).toBeNull();
     // The board is switched on on another device: the settings' next read brings the switch.
     const boardOn = makeSettings({ board: true });
-    vi.mocked(api.getSettings).mockResolvedValue(boardOn);
-    vi.mocked(api.getBoard).mockResolvedValue(makeBoard());
-    vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(applySettingsPatch(boardOn, patch)));
+    vi.mocked(api.getSettings).mockResolvedValue(answered(boardOn));
+    vi.mocked(api.getBoard).mockResolvedValue(answered(makeBoard()));
+    vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(answered(applySettingsPatch(boardOn, patch))));
     await settle(MINUTE_MS);
     expect(hint('Times on the board')).toBe("Today's clock in, lunch deadline and clock out time, in a row above the board's columns.");
     fireEvent.click(toggle('Meal periods'));
@@ -172,7 +174,7 @@ describe('SettingsDialog', () => {
   });
 
   it('switches the board on from the Sheet tab, and says what it adds', async () => {
-    vi.mocked(api.getBoard).mockResolvedValue(makeBoard());
+    vi.mocked(api.getBoard).mockResolvedValue(answered(makeBoard()));
     await renderDialog();
     await openTab('Sheet');
     expect(hint('Board page')).toBe(
@@ -187,9 +189,9 @@ describe('SettingsDialog', () => {
   });
 
   it('saves a category change on the Board tab through the header, and shows Timeclock once the board is switched off', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ board: true }));
-    vi.mocked(api.getBoard).mockResolvedValue({ ...makeBoard(), categories: [makeCategory('cat000000001', 'Tickets')] });
-    vi.mocked(api.patchCategory).mockResolvedValue({ ...makeBoard(), categories: [makeCategory('cat000000001', 'Tickets', { color: 'pink' })] });
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ board: true })));
+    vi.mocked(api.getBoard).mockResolvedValue(answered({ ...makeBoard(), categories: [makeCategory('cat000000001', 'Tickets')] }));
+    vi.mocked(api.patchCategory).mockResolvedValue(answered({ ...makeBoard(), categories: [makeCategory('cat000000001', 'Tickets', { color: 'pink' })] }));
     await renderDialog();
     await openTab('Board');
     fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Colour of Tickets', hidden: true })).getByRole('radio', { name: 'Pink', hidden: true }));
@@ -203,7 +205,7 @@ describe('SettingsDialog', () => {
     expect(screen.getByRole('status', { hidden: true }).textContent).toBe(SAVE_STATUS.failed);
 
     // Another device switches the board off: the settings' next read takes the tab away.
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
     await settle(MINUTE_MS);
     expect(tabNames()).toEqual(['Timeclock', 'Alarms', 'Sheet', 'Data', 'Account']);
     expect(screen.getByRole('tab', { name: 'Timeclock', hidden: true }).getAttribute('aria-selected')).toBe('true');
@@ -213,9 +215,11 @@ describe('SettingsDialog', () => {
   });
 
   it('hands the Board tab the settings, and saves its number through the header', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ board: true, recurringPerDay: 4 }));
-    vi.mocked(api.getBoard).mockResolvedValue(makeBoard());
-    vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(applySettingsPatch(makeSettings({ board: true, recurringPerDay: 4 }), patch)));
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ board: true, recurringPerDay: 4 })));
+    vi.mocked(api.getBoard).mockResolvedValue(answered(makeBoard()));
+    vi.mocked(api.putSettings).mockImplementation((patch) =>
+      Promise.resolve(answered(applySettingsPatch(makeSettings({ board: true, recurringPerDay: 4 }), patch))),
+    );
     await renderDialog();
     await openTab('Board');
     const perDay = screen.getByRole('textbox', { name: 'Recurring rows per day', hidden: true }) as HTMLInputElement;
@@ -229,11 +233,11 @@ describe('SettingsDialog', () => {
   });
 
   it('hands the focus to the Board tab when its Try again is pressed, since it goes once the board loads', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ board: true }));
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ board: true })));
     vi.mocked(api.getBoard).mockRejectedValue(new Error('Request failed (502)'));
     await renderDialog();
     await openTab('Board');
-    vi.mocked(api.getBoard).mockResolvedValue(makeBoard());
+    vi.mocked(api.getBoard).mockResolvedValue(answered(makeBoard()));
     const retry = screen.getByRole('button', { name: LOAD_FAILED.retry, hidden: true });
     retry.focus();
     fireEvent.click(retry);
@@ -283,9 +287,9 @@ describe('SettingsDialog', () => {
   });
 
   it('holds the panel until the settings have loaded, then opens on the stored tab the settings offer', async () => {
-    const answer = deferred<Settings>();
+    const answer = deferredAnswer<Settings>();
     vi.mocked(api.getSettings).mockReturnValue(answer.promise);
-    vi.mocked(api.getBoard).mockResolvedValue(makeBoard());
+    vi.mocked(api.getBoard).mockResolvedValue(answered(makeBoard()));
     localStorage.setItem('focus:settingsTab', 'board');
     await renderDialog();
     // The defaults stand in: their start buttons are not the user's, so no box shows them.

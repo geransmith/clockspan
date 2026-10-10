@@ -126,8 +126,8 @@ export function BoardProvider({ children }: { children: ReactNode }) {
     const sentAt = current().version;
     const out = api
       .getBoard()
-      .then((b) => {
-        change((t) => fetched(t, sentAt, b).next);
+      .then(({ value }) => {
+        change((t) => fetched(t, sentAt, value).next);
         setFailed(false);
       })
       .catch(() => {
@@ -163,9 +163,9 @@ export function BoardProvider({ children }: { children: ReactNode }) {
   // as shown, a delete answered 404). A failure takes the change off, reads the board again and
   // rejects.
   const answer = useCallback(
-    async (id: number, apply: (b: Board) => Board, run: () => Promise<Board | null>): Promise<void> => {
+    async (id: number, apply: (b: Board) => Board, run: () => Promise<api.Answer<Board> | null>): Promise<void> => {
       try {
-        const saved = await run();
+        const saved = (await run())?.value;
         change((t) => (saved && onRef.current ? settleWith(t, [id], saved) : settle(t, [id], apply)));
       } catch (err) {
         change((t) => settle(t, [id]));
@@ -178,7 +178,7 @@ export function BoardProvider({ children }: { children: ReactNode }) {
 
   // One job on the board queue whose change shows at once, even while an earlier job is out.
   const write = useCallback(
-    (apply: (b: Board) => Board, run: () => Promise<Board | null>) => {
+    (apply: (b: Board) => Board, run: () => Promise<api.Answer<Board> | null>) => {
       const id = pend(apply);
       return queue(() => answer(id, apply, run));
     },

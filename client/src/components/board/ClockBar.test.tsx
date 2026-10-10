@@ -6,7 +6,7 @@ import * as api from '../../api';
 import { SettingsProvider } from '../../hooks/useSettings';
 import { CHECK_PUNCHES } from '../../lib/copy';
 import { formatTime } from '../../lib/format';
-import { makeDay, makeSettings, punchesAt, settle, T0, TODAY } from '../../test/hooks';
+import { answered, makeDay, makeSettings, punchesAt, settle, T0, TODAY } from '../../test/hooks';
 import type { Day } from '../../types';
 import { ClockBar } from './ClockBar';
 
@@ -32,7 +32,7 @@ const items = () => [...document.querySelectorAll('.clock-bar dl > div')].map((d
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-  vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ timeFormat: '24h' }));
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ timeFormat: '24h' })));
 });
 
 describe('ClockBar', () => {
@@ -61,7 +61,7 @@ describe('ClockBar', () => {
   });
 
   it('follows the Meal periods and Overtime settings', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ timeFormat: '24h', mealRules: false, overtimeApproval: false }));
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ timeFormat: '24h', mealRules: false, overtimeApproval: false })));
     // A punched lunch still moves the clock out, with no Lunch by; time past the day isn't overtime.
     await renderBar(makeDay(TODAY, { punches: punchesAt(at(8), at(12), at(12, 30)) }), at(17));
     expect(items()).toEqual([

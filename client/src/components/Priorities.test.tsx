@@ -14,6 +14,7 @@ import type { PrioritySeed } from '../lib/plan';
 import { emptyRow } from '../lib/priorities';
 import type { CategoryPick } from '../lib/board';
 import {
+  answered,
   completedSession,
   deferred,
   makeBoard,
@@ -88,12 +89,12 @@ function OnTheStore({ pick = null }: { pick?: CategoryPick | null }) {
 async function renderOnStore(rows: Priority[], pick: CategoryPick | null = null) {
   let onServer = rows;
   const gate = deferred<void>();
-  vi.mocked(api.getDay).mockImplementation(() => Promise.resolve(makeDay(TODAY, { priorities: onServer })));
+  vi.mocked(api.getDay).mockImplementation(() => Promise.resolve(answered(makeDay(TODAY, { priorities: onServer }))));
   vi.mocked(api.putPriorities).mockImplementation(async (_date, list, base) => {
     onServer = mergePriorities(onServer, base ?? onServer, list).filter((p) => p.uid != null);
     const priorities = onServer;
     await gate.promise;
-    return { priorities };
+    return answered({ priorities });
   });
   render(
     <SettingsAndDays>
@@ -115,7 +116,7 @@ const tick = (n: number) => screen.getByLabelText(`Priority ${n} done`) as HTMLI
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-  vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
 });
 
 describe('Priorities', () => {
@@ -176,7 +177,7 @@ describe('Priorities', () => {
   });
 
   it('celebrates a tick from its box with the priority sound, and not an untick', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ sounds: { ...makeSettings().sounds, priorityDone: 'pop' } }));
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ sounds: { ...makeSettings().sounds, priorityDone: 'pop' } })));
     await renderCard([makePriority(1, 'Report'), makePriority(2, 'Invoices', { done: true })]);
     fireEvent.click(tick(1));
     // The sound plays after the render, so the tap unlocks audio for iOS first.
@@ -273,7 +274,7 @@ describe('Priorities', () => {
   });
 
   it('keeps focus on a remove button when a row before the last is removed', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ priorityCount: 1 }));
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ priorityCount: 1 })));
     const { saved } = await renderCard([makePriority(1, 'A'), makePriority(2, 'B'), makePriority(3, 'C')]);
     const remove2 = screen.getByRole('button', { name: 'Remove priority 2' });
     remove2.focus();
@@ -446,7 +447,7 @@ describe('Priorities: the morning offer', () => {
   const box = (name: string) => screen.getByRole('checkbox', { name }) as HTMLInputElement;
   const ticks = (...names: string[]) => names.map((n) => box(n).checked);
   const over = () => document.querySelector('.today-offer [role="status"]')!.textContent;
-  const perDay = (n: number) => vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ recurringPerDay: n }));
+  const perDay = (n: number) => vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ recurringPerDay: n })));
   const shown = () => [...document.querySelectorAll('.today-offer li')].map((li) => li.textContent);
 
   it('shows the leftovers and the routines due in one notice, the leftovers ticked and the routines up to Recurring rows per day', async () => {
@@ -897,7 +898,7 @@ describe('Priorities: ×', () => {
   });
 
   it('removes a row past Rows per day with Off this day', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ priorityCount: 1 }));
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ priorityCount: 1 })));
     const { saved } = await renderCard([makePriority(1, 'Report'), makePriority(2, 'Email', { listed: 2 })]);
     fireEvent.click(x(2));
     offDay();
@@ -942,7 +943,7 @@ describe('Priorities: ×', () => {
 
 describe('Priorities on the day store', () => {
   it('keeps a row Add priority put past Rows per day, with the focus in it, once the server answers without it, and saves it once typed in', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ priorityCount: 1 }));
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ priorityCount: 1 })));
     const { stored, answer } = await renderOnStore([makePriority(1, 'Report')]);
     fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
     expect(document.activeElement).toBe(textbox(2));
@@ -1004,7 +1005,7 @@ describe('Priorities on the day store', () => {
   });
 
   it('sends the list without the row, then deletes the task everywhere, with Delete everywhere', async () => {
-    vi.mocked(api.deleteItem).mockResolvedValue(makeBoard());
+    vi.mocked(api.deleteItem).mockResolvedValue(answered(makeBoard()));
     const { stored, answer } = await renderOnStore([makePriority(1, 'Report'), makePriority(2, 'Email', { listed: 3 })]);
     fireEvent.click(screen.getByRole('button', { name: 'Remove priority 2' }));
     fireEvent.click(screen.getByRole('button', { name: REMOVE_TASK.everywhere }));

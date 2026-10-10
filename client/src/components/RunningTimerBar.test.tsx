@@ -7,7 +7,7 @@ import { formatCountdown } from '../lib/format';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { useDay } from '../hooks/useDay';
 import { useTimer } from '../hooks/useTimer';
-import { AppProviders, endSession, makeDay, makePriority, makeSession, makeSettings, setVisibility, settle, T0, TODAY } from '../test/hooks';
+import { answered, AppProviders, endSession, makeDay, makePriority, makeSession, makeSettings, setVisibility, settle, T0, TODAY } from '../test/hooks';
 import type { Session } from '../types';
 import { RunningTimerBar } from './RunningTimerBar';
 
@@ -30,7 +30,7 @@ function Bar() {
 }
 
 async function renderBar(session: Session) {
-  vi.mocked(api.getRunning).mockResolvedValue({ session });
+  vi.mocked(api.getRunning).mockResolvedValue(answered({ session }));
   render(
     <AppProviders>
       <HoldToday />
@@ -45,8 +45,8 @@ const input = () => screen.getByRole('textbox', { name: 'Session label' }) as HT
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 + 5 * MINUTE_MS });
-  vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
-  vi.mocked(api.getDay).mockResolvedValue(makeDay());
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
+  vi.mocked(api.getDay).mockResolvedValue(answered(makeDay()));
 });
 
 describe('RunningTimerBar', () => {
@@ -61,8 +61,8 @@ describe('RunningTimerBar', () => {
 
   it('gives the focus to the brand once Finish takes the bar away', async () => {
     const session = makeSession();
-    vi.mocked(api.getRunning).mockResolvedValue({ session });
-    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(session) });
+    vi.mocked(api.getRunning).mockResolvedValue(answered({ session }));
+    vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(session) }));
     render(
       <AppProviders>
         {/* The header's brand, which sits just under the bar. */}
@@ -91,7 +91,7 @@ describe('RunningTimerBar', () => {
     };
 
     beforeEach(() => {
-      vi.mocked(api.patchSession).mockImplementation((id, patch) => Promise.resolve({ session: { ...session, id, ...patch } }));
+      vi.mocked(api.patchSession).mockImplementation((id, patch) => Promise.resolve(answered({ session: { ...session, id, ...patch } })));
     });
 
     it('opens on the current label and saves the new one on Enter, trimmed, once', async () => {
@@ -157,14 +157,14 @@ describe('RunningTimerBar', () => {
     const session = makeSession({ priorityUid: 'u1' });
     const today = (text: string) => makeDay(TODAY, { priorities: [makePriority(1, text, { uid: 'u1' })] });
     const readToday = async (text: string) => {
-      vi.mocked(api.getDay).mockResolvedValue(today(text));
+      vi.mocked(api.getDay).mockResolvedValue(answered(today(text)));
       fireEvent.click(screen.getByRole('button', { name: 'Read today again' }));
       await settle();
     };
 
     beforeEach(() => {
-      vi.mocked(api.getDay).mockResolvedValue(today('Ship the fix'));
-      vi.mocked(api.patchSession).mockImplementation((id, patch) => Promise.resolve({ session: { ...session, id, ...patch } }));
+      vi.mocked(api.getDay).mockResolvedValue(answered(today('Ship the fix')));
+      vi.mocked(api.patchSession).mockImplementation((id, patch) => Promise.resolve(answered({ session: { ...session, id, ...patch } })));
     });
 
     it("shows the row's current text as plain text, with no label to edit", async () => {
@@ -182,7 +182,7 @@ describe('RunningTimerBar', () => {
       fireEvent.click(label());
       fireEvent.change(input(), { target: { value: 'Typed meanwhile' } });
       // The timer's sync as the tab comes back finds it linked to the row.
-      vi.mocked(api.getRunning).mockResolvedValue({ session: { ...session, title: 'Ship the fix' } });
+      vi.mocked(api.getRunning).mockResolvedValue(answered({ session: { ...session, title: 'Ship the fix' } }));
       await settle(6000);
       setVisibility('visible');
       await settle();

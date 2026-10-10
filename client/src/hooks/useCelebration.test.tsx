@@ -5,7 +5,7 @@ import * as api from '../api';
 import { playSound } from '../lib/alerts';
 import { BURST_MS } from '../lib/celebrate';
 import { applySettingsPatch } from '../lib/settings';
-import { makeSettings, settle, T0 } from '../test/hooks';
+import { answered, makeSettings, settle, T0 } from '../test/hooks';
 import type { Settings } from '../types';
 import { useBecameTrue, useCelebration, type Moment } from './useCelebration';
 import { SettingsProvider, useSettings } from './useSettings';
@@ -54,8 +54,8 @@ describe('useCelebration', () => {
   const anchorEl = () => Object.assign(document.createElement('div'), { getBoundingClientRect: () => rect });
 
   async function render(settings: Partial<Settings>, withAnchor = true) {
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings(settings));
-    vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(applySettingsPatch(makeSettings(settings), patch)));
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings(settings)));
+    vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(answered(applySettingsPatch(makeSettings(settings), patch))));
     const hook = renderHook(({ moment }: { moment: Moment | null }) => ({ c: useCelebration<HTMLDivElement>(moment, 'weekDone'), s: useSettings() }), {
       initialProps: { moment: null as Moment | null },
       wrapper: SettingsProvider,
@@ -108,7 +108,7 @@ describe('useCelebration', () => {
 
   it('drops a moment raised before the settings have loaded, and their answer replays nothing', async () => {
     let answer!: (s: Settings) => void;
-    vi.mocked(api.getSettings).mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    vi.mocked(api.getSettings).mockReturnValue(new Promise((resolve) => (answer = (s) => resolve(answered(s)))));
     const { result, rerender } = renderHook(({ moment }: { moment: Moment | null }) => useCelebration(moment, 'weekDone'), {
       initialProps: { moment: null as Moment | null },
       wrapper: SettingsProvider,

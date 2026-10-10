@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { CARD_IDS, DEFAULT_SETTINGS } from '../../../shared/settings.js';
-import { deferred, makeSettings, settle, setVisibility, T0 } from '../test/hooks';
+import { answered, deferredAnswer, makeSettings, settle, setVisibility, T0 } from '../test/hooks';
 import type { Settings } from '../types';
 import { SettingsProvider, useSettings } from './useSettings';
 
@@ -18,7 +18,7 @@ beforeEach(() => {
 
 describe('loading', () => {
   it('holds the defaults with loaded false until the server answers', async () => {
-    const answer = deferred<Settings>();
+    const answer = deferredAnswer<Settings>();
     vi.mocked(api.getSettings).mockReturnValue(answer.promise);
     const { result } = render();
     expect(result.current.loaded).toBe(false);
@@ -46,7 +46,7 @@ describe('loading', () => {
     expect(api.getSettings).toHaveBeenCalledTimes(gaps.length + 1);
     expect(result.current.loaded).toBe(false);
 
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ lunchDeadlineMinutes: 60 }));
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ lunchDeadlineMinutes: 60 })));
     await settle(MINUTE_MS);
     expect(result.current.loaded).toBe(true);
     expect(result.current.settings.lunchDeadlineMinutes).toBe(60);
@@ -55,10 +55,10 @@ describe('loading', () => {
   it('drops the answer or the retry of a fetch whose effect was cleaned up (StrictMode, unmount)', async () => {
     // StrictMode runs the effect twice, cleaning up the first run the way an unmount would. Its
     // answer lands after the second run's and is older, so it must not show.
-    const late = deferred<Settings>();
+    const late = deferredAnswer<Settings>();
     vi.mocked(api.getSettings)
       .mockReturnValueOnce(late.promise)
-      .mockResolvedValueOnce(makeSettings({ workMinutes: 540 }));
+      .mockResolvedValueOnce(answered(makeSettings({ workMinutes: 540 })));
     const strict = renderHook(() => useSettings(), { wrapper: SettingsProvider, reactStrictMode: true });
     await settle();
     expect(api.getSettings).toHaveBeenCalledTimes(2);
@@ -68,7 +68,7 @@ describe('loading', () => {
     strict.unmount();
 
     // Unmounted with the fetch still out (the root ErrorBoundary taking the app down, a test): its failure schedules no retry.
-    const failing = deferred<Settings>();
+    const failing = deferredAnswer<Settings>();
     vi.mocked(api.getSettings).mockReset().mockReturnValue(failing.promise);
     const second = render();
     await settle();
@@ -90,10 +90,10 @@ describe('loading', () => {
 describe('refresh', () => {
   it('reads the settings again every minute and when the tab comes back, and keeps them on a failure', async () => {
     vi.mocked(api.getSettings)
-      .mockResolvedValueOnce(makeSettings())
-      .mockResolvedValueOnce(makeSettings({ workMinutes: 540 }))
+      .mockResolvedValueOnce(answered(makeSettings()))
+      .mockResolvedValueOnce(answered(makeSettings({ workMinutes: 540 })))
       .mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValueOnce(makeSettings({ workMinutes: 600 }));
+      .mockResolvedValueOnce(answered(makeSettings({ workMinutes: 600 })));
     const { result } = render();
     await settle();
     // The work day was made longer on the phone.
@@ -111,7 +111,7 @@ describe('refresh', () => {
   });
 
   it('keeps the same settings object when the answer has not changed', async () => {
-    vi.mocked(api.getSettings).mockImplementation(() => Promise.resolve(makeSettings({ workMinutes: 540 })));
+    vi.mocked(api.getSettings).mockImplementation(() => Promise.resolve(answered(makeSettings({ workMinutes: 540 }))));
     const { result } = render();
     await settle();
     const before = result.current.settings;
@@ -121,8 +121,8 @@ describe('refresh', () => {
   });
 
   it('never hides a save on its way, nor undoes one that answered after the refresh went out', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ workMinutes: 480 }));
-    const saved = deferred<Settings>();
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ workMinutes: 480 })));
+    const saved = deferredAnswer<Settings>();
     vi.mocked(api.putSettings).mockReturnValueOnce(saved.promise);
     const { result } = render();
     await settle();
@@ -134,9 +134,9 @@ describe('refresh', () => {
     await done;
 
     // The next refresh was read before the next save, and answers after it.
-    const late = deferred<Settings>();
+    const late = deferredAnswer<Settings>();
     vi.mocked(api.getSettings).mockReturnValueOnce(late.promise);
-    vi.mocked(api.putSettings).mockResolvedValueOnce(makeSettings({ workMinutes: 600 }));
+    vi.mocked(api.putSettings).mockResolvedValueOnce(answered(makeSettings({ workMinutes: 600 })));
     await settle(MINUTE_MS);
     await act(() => result.current.update({ workMinutes: 600 }));
     late.resolve(makeSettings({ workMinutes: 540 }));
@@ -148,7 +148,7 @@ describe('refresh', () => {
 describe('update', () => {
   it('shows a change made before the first answer over the defaults, with loaded still false', async () => {
     vi.mocked(api.getSettings).mockRejectedValue(new Error('offline'));
-    const saved = deferred<Settings>();
+    const saved = deferredAnswer<Settings>();
     vi.mocked(api.putSettings).mockReturnValueOnce(saved.promise);
     const { result } = render();
     await settle();
@@ -164,8 +164,8 @@ describe('update', () => {
   });
 
   it('shows the change at once and adopts what the server stored', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
-    const saved = deferred<Settings>();
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
+    const saved = deferredAnswer<Settings>();
     vi.mocked(api.putSettings).mockReturnValue(saved.promise);
     const { result } = render();
     await settle();
@@ -180,9 +180,9 @@ describe('update', () => {
   });
 
   it('shows the stored settings after two saves in a row fail, not the first guess', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ workMinutes: 480 }));
-    const first = deferred<Settings>();
-    const second = deferred<Settings>();
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ workMinutes: 480 })));
+    const first = deferredAnswer<Settings>();
+    const second = deferredAnswer<Settings>();
     vi.mocked(api.putSettings).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
     const { result } = render();
     await settle();
@@ -206,9 +206,9 @@ describe('update', () => {
     const stored = makeSettings();
     const elsewhere = { ...stored.alarms, clockOut: { ...stored.alarms.clockOut, leadMinutes: [30] } };
     vi.mocked(api.getSettings)
-      .mockResolvedValueOnce(stored)
-      .mockResolvedValue(makeSettings({ alarms: elsewhere }));
-    const saved = deferred<Settings>();
+      .mockResolvedValueOnce(answered(stored))
+      .mockResolvedValue(answered(makeSettings({ alarms: elsewhere })));
+    const saved = deferredAnswer<Settings>();
     vi.mocked(api.putSettings).mockReturnValueOnce(saved.promise);
     const { result } = render();
     await settle();
@@ -224,9 +224,9 @@ describe('update', () => {
   });
 
   it('drops only the failed one of two saves to different alarms, and sends the other alone', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
-    const first = deferred<Settings>();
-    const second = deferred<Settings>();
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
+    const first = deferredAnswer<Settings>();
+    const second = deferredAnswer<Settings>();
     vi.mocked(api.putSettings).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
     const { result } = render();
     await settle();
@@ -246,9 +246,9 @@ describe('update', () => {
   });
 
   it("takes a save's answer as loaded, and drops the first load when it answers later", async () => {
-    const first = deferred<Settings>();
+    const first = deferredAnswer<Settings>();
     vi.mocked(api.getSettings).mockReturnValueOnce(first.promise);
-    vi.mocked(api.putSettings).mockResolvedValue(makeSettings({ workMinutes: 500 }));
+    vi.mocked(api.putSettings).mockResolvedValue(answered(makeSettings({ workMinutes: 500 })));
     const { result } = render();
     await result.current.update({ workMinutes: 500 });
     await settle();
@@ -262,9 +262,9 @@ describe('update', () => {
   });
 
   it('sends overlapping saves one at a time, and lets only the newest settle the state', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ workMinutes: 480 }));
-    const first = deferred<Settings>();
-    const second = deferred<Settings>();
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ workMinutes: 480 })));
+    const first = deferredAnswer<Settings>();
+    const second = deferredAnswer<Settings>();
     vi.mocked(api.putSettings).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
     const { result } = render();
     await settle();
@@ -285,8 +285,8 @@ describe('update', () => {
     second.resolve(makeSettings({ workMinutes: 520 }));
     await b;
 
-    const third = deferred<Settings>();
-    const fourth = deferred<Settings>();
+    const third = deferredAnswer<Settings>();
+    const fourth = deferredAnswer<Settings>();
     vi.mocked(api.putSettings).mockReturnValueOnce(third.promise).mockReturnValueOnce(fourth.promise);
     const c = result.current.update({ workMinutes: 540 });
     await settle();
@@ -305,8 +305,8 @@ describe('update', () => {
 
 describe('reset', () => {
   it("adopts the server's defaults unless a save was sent after it", async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ workMinutes: 600 }));
-    vi.mocked(api.resetSettings).mockResolvedValueOnce(makeSettings());
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ workMinutes: 600 })));
+    vi.mocked(api.resetSettings).mockResolvedValueOnce(answered(makeSettings()));
     const { result } = render();
     await settle();
     await result.current.reset();
@@ -314,8 +314,8 @@ describe('reset', () => {
     expect(result.current.settings.workMinutes).toBe(makeSettings().workMinutes);
 
     // A save made while the reset is out goes after it, and its answer is the one that counts.
-    const reset = deferred<Settings>();
-    const saved = deferred<Settings>();
+    const reset = deferredAnswer<Settings>();
+    const saved = deferredAnswer<Settings>();
     vi.mocked(api.resetSettings).mockReturnValueOnce(reset.promise);
     vi.mocked(api.putSettings).mockReturnValueOnce(saved.promise);
     const r = result.current.reset();

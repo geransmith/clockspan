@@ -141,7 +141,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     const sentAt = current().version;
     return api
       .getRunning()
-      .then(({ session }) => {
+      .then(({ value: { session } }) => {
         const held = current();
         const prev = shown(held) ?? null;
         const { next } = fetched(held, sentAt, session);
@@ -160,10 +160,10 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // the day's log takes the row. Unless a sync has meanwhile shown a session another device
   // started: the answer is about the one before it, and the new one keeps running.
   const end = useCallback(
-    async (send: () => Promise<SessionResponse>) => {
+    async (send: () => Promise<api.Answer<SessionResponse>>) => {
       completing.current = true;
       try {
-        const { session } = await queue(send);
+        const { session } = (await queue(send)).value;
         change((t) => (t.confirmed && t.confirmed.id !== session.id ? t : settleWith(t, [], null)));
         applySession(session);
         return session;
@@ -274,7 +274,9 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     async (date: string, plannedSeconds: number, label: string, priorityUid: string | null | Promise<string | null> = null) => {
       setStartsOut((n) => n + 1);
       try {
-        const { session } = await queue(async () => {
+        const {
+          value: { session },
+        } = await queue(async () => {
           const uid = await priorityUid;
           // A chip can link a row whose priorities save is still out.
           if (uid) await prioritiesSaved(date);
@@ -325,11 +327,11 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // while the press waited, the answer only says what became of this row: the timer keeps what
   // the sync showed, and a running answer is older than the sync, so the log doesn't take it.
   const press = useCallback(
-    async (cur: Session, apply: (s: Session) => Session, send: () => Promise<SessionResponse>) => {
+    async (cur: Session, apply: (s: Session) => Session, send: () => Promise<api.Answer<SessionResponse>>) => {
       const id = nextId();
       change((t) => addPending(t, id, (s) => (s && s.id === cur.id ? apply(s) : s)));
       try {
-        const { session } = await queue(send);
+        const { session } = (await queue(send)).value;
         const same = current().confirmed?.id === cur.id;
         change((t) => (same ? settleWith(t, [id], session.status === 'running' ? session : null) : settle(t, [id])));
         if (same || session.status !== 'running') applySession(session);

@@ -2,7 +2,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import * as api from '../api';
-import { deferred, makeDay, makePriority, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
+import { answered, deferredAnswer, makeDay, makePriority, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
 import type { Day } from '../types';
 import { useDayStore } from './useDay';
 import { useLeftOpen } from './useLeftOpen';
@@ -20,11 +20,11 @@ const render = (today = TODAY, wanted = true) =>
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
   localStorage.clear();
-  vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
 });
 
 it("offers the last planned day's unticked rows from the two weeks before today", async () => {
-  vi.mocked(api.getRange).mockResolvedValue({ days: [friday] });
+  vi.mocked(api.getRange).mockResolvedValue(answered({ days: [friday] }));
   const { result } = render();
   expect(result.current.leftOpen).toBeNull();
   await settle();
@@ -33,7 +33,7 @@ it("offers the last planned day's unticked rows from the two weeks before today"
 });
 
 it('asks nothing while not wanted, and only once a day once it is', async () => {
-  vi.mocked(api.getRange).mockResolvedValue({ days: [friday] });
+  vi.mocked(api.getRange).mockResolvedValue(answered({ days: [friday] }));
   const { result, rerender } = render(TODAY, false);
   await settle();
   expect(api.getRange).not.toHaveBeenCalled();
@@ -60,8 +60,10 @@ it('offers nothing when the fetch fails', async () => {
 });
 
 it('drops an answer that arrives after the offer stopped being wanted', async () => {
-  const late = deferred<{ days: Day[] }>();
-  vi.mocked(api.getRange).mockReturnValueOnce(late.promise).mockResolvedValueOnce({ days: [] });
+  const late = deferredAnswer<{ days: Day[] }>();
+  vi.mocked(api.getRange)
+    .mockReturnValueOnce(late.promise)
+    .mockResolvedValueOnce(answered({ days: [] }));
   const { result, rerender } = render();
   rerender({ today: TODAY, wanted: false });
   late.resolve({ days: [friday] });
@@ -73,7 +75,7 @@ it('drops an answer that arrives after the offer stopped being wanted', async ()
 });
 
 it('keeps "Start fresh" for the rest of the day, across a reload', async () => {
-  vi.mocked(api.getRange).mockResolvedValue({ days: [friday] });
+  vi.mocked(api.getRange).mockResolvedValue(answered({ days: [friday] }));
   const { result, rerender, unmount } = render();
   await settle();
   act(() => result.current.dismiss());
@@ -91,9 +93,9 @@ it('keeps "Start fresh" for the rest of the day, across a reload', async () => {
 });
 
 it("follows a row ticked on that day's sheet since, with no second fetch", async () => {
-  vi.mocked(api.getRange).mockResolvedValue({ days: [friday] });
-  vi.mocked(api.getDay).mockResolvedValue(friday);
-  vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve({ priorities }));
+  vi.mocked(api.getRange).mockResolvedValue(answered({ days: [friday] }));
+  vi.mocked(api.getDay).mockResolvedValue(answered(friday));
+  vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities })));
   const { result } = render();
   await settle();
   expect(result.current.leftOpen?.rows).toEqual([makePriority(2, 'Review the PR')]);
@@ -111,9 +113,9 @@ it("follows a row ticked on that day's sheet since, with no second fetch", async
 
 it('looks again after a prune', async () => {
   vi.mocked(api.getRange)
-    .mockResolvedValueOnce({ days: [friday] })
-    .mockResolvedValueOnce({ days: [] });
-  vi.mocked(api.pruneDays).mockResolvedValue({ deleted: 1 });
+    .mockResolvedValueOnce(answered({ days: [friday] }))
+    .mockResolvedValueOnce(answered({ days: [] }));
+  vi.mocked(api.pruneDays).mockResolvedValue(answered({ deleted: 1 }));
   const { result } = render();
   await settle();
   expect(result.current.leftOpen?.date).toBe('2026-09-25');

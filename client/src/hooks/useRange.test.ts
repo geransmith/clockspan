@@ -2,7 +2,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
-import { deferred, makeDay, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
+import { answered, deferredAnswer, makeDay, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
 import type { Day } from '../types';
 import { useDay, useDays, useDayStore } from './useDay';
 import { useRange } from './useRange';
@@ -14,11 +14,11 @@ const render = (from: string, to: string) =>
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-  vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
 });
 
 it('loads the days of a range', async () => {
-  vi.mocked(api.getRange).mockResolvedValue({ days: [makeDay('2026-09-21')] });
+  vi.mocked(api.getRange).mockResolvedValue(answered({ days: [makeDay('2026-09-21')] }));
   const { result } = render('2026-09-21', '2026-09-27');
   expect(result.current).toMatchObject({ days: null, failed: false });
   await settle();
@@ -29,7 +29,7 @@ it('loads the days of a range', async () => {
 it('reads a failure as failed, and retry asks again at once', async () => {
   vi.mocked(api.getRange)
     .mockRejectedValueOnce(new Error('Request failed (500)'))
-    .mockResolvedValueOnce({ days: [makeDay('2026-09-21')] });
+    .mockResolvedValueOnce(answered({ days: [makeDay('2026-09-21')] }));
   const { result } = render('2026-09-21', '2026-09-27');
   await settle();
   expect(result.current).toMatchObject({ days: null, failed: true });
@@ -41,13 +41,13 @@ it('reads a failure as failed, and retry asks again at once', async () => {
 });
 
 it('reads as loading straight away on a new range, and drops the answer for the old one', async () => {
-  const old = deferred<{ days: Day[] }>();
-  const failing = deferred<{ days: Day[] }>();
+  const old = deferredAnswer<{ days: Day[] }>();
+  const failing = deferredAnswer<{ days: Day[] }>();
   vi.mocked(api.getRange)
-    .mockResolvedValueOnce({ days: [makeDay('2026-09-21')] })
+    .mockResolvedValueOnce(answered({ days: [makeDay('2026-09-21')] }))
     .mockReturnValueOnce(old.promise)
     .mockReturnValueOnce(failing.promise)
-    .mockResolvedValueOnce({ days: [makeDay('2026-10-05')] });
+    .mockResolvedValueOnce(answered({ days: [makeDay('2026-10-05')] }));
   const { result, rerender } = render('2026-09-21', '2026-09-27');
   await settle();
   rerender({ from: '2026-09-28', to: '2026-10-04' });
@@ -65,9 +65,9 @@ it("takes the store's copy of a day it holds, in date order, and follows an edit
   // Tuesday (stored since the range was asked for), and two days outside the range.
   const tue = '2026-09-29';
   const wed = '2026-09-30';
-  vi.mocked(api.getRange).mockResolvedValue({ days: [makeDay(TODAY, { retroNote: 'fetched' }), makeDay(wed, { retroNote: 'fetched' })] });
-  vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(makeDay(date, { retroNote: 'held' })));
-  vi.mocked(api.putRetro).mockResolvedValue({ retroNote: 'edited', retroAt: null });
+  vi.mocked(api.getRange).mockResolvedValue(answered({ days: [makeDay(TODAY, { retroNote: 'fetched' }), makeDay(wed, { retroNote: 'fetched' })] }));
+  vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(answered(makeDay(date, { retroNote: 'held' }))));
+  vi.mocked(api.putRetro).mockResolvedValue(answered({ retroNote: 'edited', retroAt: null }));
   const { result } = renderHook(
     () => {
       const { store } = useDay(wed);
@@ -107,10 +107,10 @@ describe('held days', () => {
   }
 
   it("take the range's copy, and a day the answer leaves out (deleted since) shows as empty", async () => {
-    vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(makeDay(date, { retroNote: 'held' })));
+    vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(answered(makeDay(date, { retroNote: 'held' }))));
     vi.mocked(api.getRange)
-      .mockResolvedValueOnce({ days: [] })
-      .mockResolvedValueOnce({ days: [makeDay(TODAY, { retroNote: 'from the phone' })] });
+      .mockResolvedValueOnce(answered({ days: [] }))
+      .mockResolvedValueOnce(answered({ days: [makeDay(TODAY, { retroNote: 'from the phone' })] }));
     const { result, rerender } = await renderHeld();
     rerender({ from: TODAY, to: tue });
     await settle();
@@ -122,10 +122,12 @@ describe('held days', () => {
   });
 
   it('keep a save the server confirmed while the range was out', async () => {
-    const answer = deferred<{ days: Day[] }>();
-    vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(makeDay(date)));
-    vi.mocked(api.getRange).mockResolvedValueOnce({ days: [] }).mockReturnValueOnce(answer.promise);
-    vi.mocked(api.putRetro).mockResolvedValue({ retroNote: 'edited', retroAt: null });
+    const answer = deferredAnswer<{ days: Day[] }>();
+    vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(answered(makeDay(date))));
+    vi.mocked(api.getRange)
+      .mockResolvedValueOnce(answered({ days: [] }))
+      .mockReturnValueOnce(answer.promise);
+    vi.mocked(api.putRetro).mockResolvedValue(answered({ retroNote: 'edited', retroAt: null }));
     const { result, rerender } = await renderHeld();
     rerender({ from: TODAY, to: tue });
     await act(() => result.current.store.setRetro(TODAY, { note: 'edited' }));
@@ -138,9 +140,9 @@ describe('held days', () => {
 
 it('asks again after a prune, whose deleted days the answer on screen still holds', async () => {
   vi.mocked(api.getRange)
-    .mockResolvedValueOnce({ days: [makeDay('2026-09-22')] })
-    .mockResolvedValueOnce({ days: [] });
-  vi.mocked(api.pruneDays).mockResolvedValue({ deleted: 1 });
+    .mockResolvedValueOnce(answered({ days: [makeDay('2026-09-22')] }))
+    .mockResolvedValueOnce(answered({ days: [] }));
+  vi.mocked(api.pruneDays).mockResolvedValue(answered({ deleted: 1 }));
   const { result } = renderHook(() => ({ range: useRange('2026-09-21', '2026-09-27'), store: useDayStore() }), { wrapper: SettingsAndDays });
   await settle();
   expect(result.current.range.days?.map((d) => d.date)).toEqual(['2026-09-22']);

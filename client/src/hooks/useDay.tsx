@@ -222,8 +222,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
       let stale = false;
       const p = api
         .getDay(date)
-        .then((d) => {
-          const day = normalizeDay(d);
+        .then(({ value }) => {
+          const day = normalizeDay(value);
           update(date, (t) => {
             const answer = fetched(t, sentAt, day);
             stale = answer.stale;
@@ -400,9 +400,9 @@ export function DayProvider({ children }: { children: ReactNode }) {
   // A per-day field's PUT on the day's queue: shown at once, and the fields the server answers
   // with (as stored) laid on the stored copy.
   const putDayFields = useCallback(
-    (date: string, apply: (d: Day) => Day, send: () => Promise<Partial<Day>>) =>
+    (date: string, apply: (d: Day) => Day, send: () => Promise<api.Answer<Partial<Day>>>) =>
       inOrder(`day:${date}`, date, apply, async () => {
-        const saved = await send();
+        const saved = (await send()).value;
         return (d) => ({ ...d, ...saved });
       }),
     [inOrder],
@@ -420,7 +420,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
         'punches',
         date,
         list,
-        async (p, b) => normalizePunches((await api.putPunches(date, p, b)).punches),
+        async (p, b) => normalizePunches((await api.putPunches(date, p, b)).value.punches),
         base,
         (rows) => mergePunches(rows, base, list),
       );
@@ -442,7 +442,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
         date,
         priorities,
         async (p, b) => {
-          const saved = (await api.putPriorities(date, p, b)).priorities;
+          const saved = (await api.putPriorities(date, p, b)).value.priorities;
           const moved = (uid: string | null) => uid != null && b.some((q) => q.uid === uid) !== saved.some((q) => q.uid === uid);
           readAgain((day, d) => d !== date && day.priorities.some((q) => moved(q.uid)));
           const before = new Map(b.map((q) => [q.uid, q]));
@@ -564,7 +564,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
         (d) => ({ ...d, sessions: d.sessions.map((s) => (s.id === id ? editedSession(s, patch) : s)) }),
         async () => {
           if (patch.priorityUid) await prioritiesSaved(date);
-          const { session } = await api.patchSession(id, patch);
+          const { session } = (await api.patchSession(id, patch)).value;
           return (d) => withSession(d, session);
         },
       ),
@@ -575,7 +575,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const startBreak = useCallback(
     (date: string, plannedSeconds: number) =>
       inOrder('breaks', date, null, async () => {
-        const { break: saved } = await api.startBreak(date, plannedSeconds);
+        const { break: saved } = (await api.startBreak(date, plannedSeconds)).value;
         // The server ended the one still running when this one started; the same here. By id: a
         // read may have brought this break in already, and a new break can take a deleted one's id.
         endRunningBreaks(saved.startedAt);
@@ -596,7 +596,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
         date,
         (d) => ({ ...d, breaks: d.breaks.flatMap((b) => (b.id === id ? endBreaksAt([b], now) : [b])) }),
         async () => {
-          const saved = (await unlessGone(api.endBreak(id)))?.break ?? null;
+          const saved = (await unlessGone(api.endBreak(id)))?.value.break ?? null;
           return (d) => ({ ...d, breaks: replaceById(d.breaks, id, saved) });
         },
       );
@@ -621,7 +621,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       const sent = Object.entries(current().days)
         .filter(([date, t]) => date >= from && date <= to && t.confirmed !== undefined)
         .map(([date, t]) => [date, t.version] as const);
-      const days = (await api.getRange(from, to)).days.map(normalizeDay);
+      const days = (await api.getRange(from, to)).value.days.map(normalizeDay);
       const byDate = new Map(days.map((d) => [d.date, d]));
       // A day the answer leaves out has no row on the server: `GET /days/:date` answers it as empty.
       for (const [date, sentAt] of sent) update(date, (t) => fetched(t, sentAt, byDate.get(date) ?? normalizeDay(emptyDay(date))).next);
@@ -636,7 +636,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
   // and re-create that day, which the read after it shows.
   const pruneBefore = useCallback(
     async (before: string) => {
-      const result = await api.pruneDays(before);
+      const result = (await api.pruneDays(before)).value;
       for (const date of Object.keys(current().days)) if (date < before) reread(date);
       setGeneration((g) => g + 1);
       return result;

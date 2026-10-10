@@ -6,7 +6,7 @@ import * as api from '../api';
 import { AuthGate } from '../auth/AuthGate';
 import { VIEWS, type Route } from '../hooks/useRoute';
 import { SettingsProvider } from '../hooks/useSettings';
-import { DEFAULT_USER, deferred, makeAuth, makeSettings, pressKey, settle, ShortcutKeys, TODAY, YESTERDAY } from '../test/hooks';
+import { answered, DEFAULT_USER, deferredAnswer, makeAuth, makeSettings, pressKey, settle, ShortcutKeys, TODAY, YESTERDAY } from '../test/hooks';
 import type { Settings } from '../types';
 import { Header } from './Header';
 
@@ -47,7 +47,7 @@ function setShowPicker(value: (() => void) | undefined) {
 
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
 });
 afterEach(() => {
   cleanup();
@@ -130,7 +130,7 @@ describe('Header', () => {
 
   // Until the settings answer, the sheet shows the default layout, and any change would save it whole.
   it("keeps Customize disabled until the settings have loaded, so a press before that can't change the layout", async () => {
-    const settings = deferred<Settings>();
+    const settings = deferredAnswer<Settings>();
     vi.mocked(api.getSettings).mockReturnValue(settings.promise);
     const onToggleCustomize = vi.fn();
     await renderHeader(TODAY, 'sheet', { onToggleCustomize });

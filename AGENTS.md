@@ -115,9 +115,12 @@ client/                 Vite root → dist/client
   src/App.tsx           Shell (route, settings dialog) inside AppProviders (hooks/AppProviders.tsx); today's
                         alarms are hooks/useTodayAlarms.ts
   src/api.ts            fetch wrapper (30 s timeout; UNAUTHENTICATED_EVENT on a 401 from anything but login and
-                        /me; the reload banner when an answer names another version; throws
-                        lib/apiError.ts's ApiError, which a caller checks with instanceof, and beside
-                        it unlessGone counts a delete answered 404 as done);
+                        /me; the reload banner when an answer names another version; a data call answers
+                        Answer<T>, its body as `value` and the user's revision the server named as
+                        `revision` (REVISION_HEADER; 0 when an answer names none), an auth call the body
+                        alone (auth()); throws lib/apiError.ts's ApiError (with the refusal's
+                        `revision`), which a caller checks with instanceof, and beside it unlessGone
+                        counts a delete answered 404 as done);
                         src/types.ts re-exports the shared types (types only)
   src/lib/              logic with no React, a test beside each file (the browser-facing ones stub the
                         globals, as alerts.ts does; apiError is covered through api.test)
@@ -158,7 +161,9 @@ client/                 Vite root → dist/client
                         keeps the recurring priorities the morning offer was answered for today on this
                         device; useShortcuts binds a key beside its button (useShortcut) and is the one
                         keydown listener (useShortcutListener).
-                        src/test/fixtures.ts has the plain factories and TEST_SETTINGS (no React);
+                        src/test/fixtures.ts has the plain factories and TEST_SETTINGS (no React), and a
+                        mocked data call's answer (answered(value, revision = 0), and deferredAnswer<T>()
+                        for one a case resolves by hand);
                         src/test/hooks.tsx re-exports fixtures.ts and AppProviders and has
                         SettingsAndDays, serveRange (a mocked getRange that answers from a list of
                         days), ShortcutKeys and pressKey (the key listener, and a key pressed where
@@ -1247,9 +1252,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   whose calls send it, as `RetroPatch` and `SessionEdit` do: the server reads every body as `unknown`), with a
   row in `client/src/api.test.ts`'s `ROUTES` table for its method, path and body (the coverage
   gate needs it), and the response type to `shared/api.ts` (the route's
-  `res.json(… satisfies <Type>)` and the client's `request<Type>` both name it) → cover it in
-  that router's `*.test.ts`: happy path, each 400, and that another user gets a 404/empty
-  result (the scoping test is not optional). A new `/:date` route also gets a row in the
+  `res.json(… satisfies <Type>)` and the client's `request<Type>` both name it; a data call
+  answers `Answer<Type>`, so its store reads `.value`, and a hook or component test mocks it
+  with `answered(…)` or `deferredAnswer<Type>()`; an auth route goes through `auth<Type>`) →
+  cover it in that router's `*.test.ts`: happy path, each 400, and that another user gets a
+  404/empty result (the scoping test is not optional). A new `/:date` route also gets a row in the
   bad-date table near the end of `server/routes/days.test.ts`, and a write route one in the
   distance table after it.
 - **A schema change**: append to `MIGRATIONS` in `db.ts` and never edit an entry (see
@@ -1352,9 +1359,10 @@ Prove a change at the cheapest level that can show it, and stop there:
    it with the API mocked (`vi.mock('../api')`), fake timers for polls, retries and races, and
    the fixtures and provider stack from `client/src/test/hooks.tsx`. `client/src/api.ts`:
    `client/src/api.test.ts` checks every call's method, path and body against a stubbed
-   `fetch`. A component's own logic (when a draft saves, what a click sends, which page shows):
-   a test beside it with `@testing-library/react` and the same fixtures and providers. Its
-   looks stay a browser matter.
+   `fetch`, and that a data call answers the server's revision and an auth call the body alone.
+   A component's own logic (when a draft saves, what a click sends, which page shows): a test
+   beside it with `@testing-library/react` and the same fixtures and providers. Its looks stay a
+   browser matter.
    - The client's lib, hook and component tests build their settings from `TEST_SETTINGS`
      (`makeSettings(patch)` in hook and component tests), never `DEFAULT_SETTINGS`, so a
      changed default moves no expectation. Only a test of the defaults themselves reads

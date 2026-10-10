@@ -7,8 +7,10 @@ import { useTimer } from '../hooks/useTimer';
 import { BREAK } from '../lib/copy';
 import type { CategoryPick } from '../lib/board';
 import {
+  answered,
   AppProviders,
   deferred,
+  deferredAnswer,
   endSession,
   makeBreak,
   makeCategory,
@@ -55,7 +57,7 @@ function Card({ pick, isToday = true }: { pick: CategoryPick | null; isToday?: b
 const ticked = (n: number) => Array.from({ length: n }, (_, i) => makePriority(i + 1, `Row ${i + 1}`, { done: true }));
 
 async function renderCard(priorities: Priority[] = [], breaks: Break[] = [], pick: CategoryPick | null = null, { isToday = true } = {}) {
-  vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities, breaks }));
+  vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities, breaks })));
   const view = render(
     <AppProviders>
       <ShortcutKeys />
@@ -90,14 +92,14 @@ const press = (el: HTMLElement) => {
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
   elsewhere = deferred<string | null>();
-  vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
-  vi.mocked(api.getRunning).mockResolvedValue({ session: null });
-  vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve({ priorities }));
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
+  vi.mocked(api.getRunning).mockResolvedValue(answered({ session: null }));
+  vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities })));
 });
 
 describe('FocusTimer', () => {
   it('sends one start for a second tap while the first is out', async () => {
-    const answer = deferred<SessionResponse>();
+    const answer = deferredAnswer<SessionResponse>();
     vi.mocked(api.startSession).mockReturnValue(answer.promise);
     await renderCard();
     typeLabel('Write the report');
@@ -115,7 +117,7 @@ describe('FocusTimer', () => {
   });
 
   it('holds the start buttons while a break start is out', async () => {
-    const answer = deferred<{ break: Break }>();
+    const answer = deferredAnswer<{ break: Break }>();
     vi.mocked(api.startBreak).mockReturnValue(answer.promise);
     await renderCard();
     fireEvent.click(screen.getByRole('button', { name: /^Break · / }));
@@ -128,7 +130,7 @@ describe('FocusTimer', () => {
   });
 
   it('starts a break on R as the Break button does, naming R on it, and holds the start buttons the same way', async () => {
-    const answer = deferred<{ break: Break }>();
+    const answer = deferredAnswer<{ break: Break }>();
     vi.mocked(api.startBreak).mockReturnValue(answer.promise);
     await renderCard();
     const keys = () => screen.queryByRole('button', { name: /^Break · / })?.getAttribute('aria-keyshortcuts');
@@ -147,7 +149,7 @@ describe('FocusTimer', () => {
   });
 
   it('leaves R alone while a start made off the card is out, as the Break button is held', async () => {
-    vi.mocked(api.startSession).mockResolvedValue(started(makeSession({ label: 'Board task' })));
+    vi.mocked(api.startSession).mockResolvedValue(answered(started(makeSession({ label: 'Board task' }))));
     await renderCard();
     fireEvent.click(screen.getByRole('button', { name: 'Start elsewhere' }));
     await settle();
@@ -167,7 +169,7 @@ describe('FocusTimer', () => {
   });
 
   it('leaves R alone while a timer runs', async () => {
-    vi.mocked(api.getRunning).mockResolvedValue({ session: makeSession() });
+    vi.mocked(api.getRunning).mockResolvedValue(answered({ session: makeSession() }));
     await renderCard();
     expect(screen.getByRole('timer', { name: 'Time remaining' })).toBeTruthy();
     expect(pressKey('r')).toBe(true);
@@ -175,7 +177,7 @@ describe('FocusTimer', () => {
   });
 
   it('holds End break while a start is out', async () => {
-    const answer = deferred<SessionResponse>();
+    const answer = deferredAnswer<SessionResponse>();
     vi.mocked(api.startSession).mockReturnValue(answer.promise);
     // A break that started half a minute ago and runs five minutes.
     await renderCard([], [makeBreak({ startedAt: T0 - 30_000, endedAt: T0 + 270_000 })]);
@@ -190,7 +192,7 @@ describe('FocusTimer', () => {
   });
 
   it('holds the start and break buttons while a start made off the card is out', async () => {
-    vi.mocked(api.startSession).mockResolvedValue(started(makeSession({ label: 'Board task' })));
+    vi.mocked(api.startSession).mockResolvedValue(answered(started(makeSession({ label: 'Board task' }))));
     await renderCard([], [makeBreak({ startedAt: T0 - 30_000, endedAt: T0 + 270_000 })]);
     expect(disabled(/^25\s*min$/)).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Start elsewhere' }));
@@ -204,7 +206,7 @@ describe('FocusTimer', () => {
   });
 
   it('links a session to the chip that was picked', async () => {
-    vi.mocked(api.startSession).mockResolvedValue(started());
+    vi.mocked(api.startSession).mockResolvedValue(answered(started()));
     await renderCard([makePriority(1, 'Ship the fix', { uid: 'abcdef123456' })]);
     fireEvent.click(screen.getByRole('button', { name: /Ship the fix/ }));
     // A picked row needs no "also add": it is on the plan already.
@@ -215,14 +217,14 @@ describe('FocusTimer', () => {
   });
 
   it("names the running session by its row's current text, not the label it started with", async () => {
-    vi.mocked(api.getRunning).mockResolvedValue({ session: makeSession({ label: 'Started as this', priorityUid: 'abcdef123456' }) });
+    vi.mocked(api.getRunning).mockResolvedValue(answered({ session: makeSession({ label: 'Started as this', priorityUid: 'abcdef123456' }) }));
     await renderCard([makePriority(1, 'Ship the fix', { uid: 'abcdef123456' })]);
     expect(screen.getByText('Ship the fix').className).toBe('timer-running-label');
     expect(screen.queryByText('Started as this')).toBeNull();
   });
 
   it('adds typed work to the plan and starts linked to the new row', async () => {
-    vi.mocked(api.startSession).mockResolvedValue(started());
+    vi.mocked(api.startSession).mockResolvedValue(answered(started()));
     await renderCard();
     typeLabel('Call the vendor');
     fireEvent.click(alsoAdd()!);
@@ -248,7 +250,7 @@ describe('FocusTimer', () => {
   });
 
   it('starts linked to the open row whose name was typed, as its chip would', async () => {
-    vi.mocked(api.startSession).mockResolvedValue(started());
+    vi.mocked(api.startSession).mockResolvedValue(answered(started()));
     await renderCard([makePriority(1, 'Ship the fix', { uid: 'abcdef123456' })]);
     typeLabel('  ship THE fix ');
     fireEvent.click(start25());
@@ -257,7 +259,7 @@ describe('FocusTimer', () => {
   });
 
   it("starts unplanned under a ticked row's name", async () => {
-    vi.mocked(api.startSession).mockResolvedValue(started());
+    vi.mocked(api.startSession).mockResolvedValue(answered(started()));
     await renderCard([makePriority(1, 'Email', { uid: 'abcdef123456', done: true })]);
     typeLabel('Email');
     fireEvent.click(start25());
@@ -272,7 +274,7 @@ describe('FocusTimer', () => {
   });
 
   it('adds typed work in the first free row, between written ones', async () => {
-    vi.mocked(api.startSession).mockResolvedValue(started());
+    vi.mocked(api.startSession).mockResolvedValue(answered(started()));
     await renderCard([makePriority(1, 'Report'), makePriority(3, 'Email')]);
     typeLabel('Call the vendor');
     fireEvent.click(alsoAdd()!);
@@ -284,9 +286,9 @@ describe('FocusTimer', () => {
   });
 
   it("counts the start as out from the tap while Also add's row is saved, so the board holds its Start too", async () => {
-    const saved = deferred<{ priorities: Priority[] }>();
+    const saved = deferredAnswer<{ priorities: Priority[] }>();
     vi.mocked(api.putPriorities).mockReturnValueOnce(saved.promise);
-    vi.mocked(api.startSession).mockResolvedValue(started());
+    vi.mocked(api.startSession).mockResolvedValue(answered(started()));
     await renderCard();
     typeLabel('Call the vendor');
     fireEvent.click(alsoAdd()!);
@@ -308,7 +310,7 @@ describe('FocusTimer', () => {
     const chip = () => screen.queryByRole('button', { name: /^Category for the new priority:/ });
 
     it('offers a chip only while Also add is ticked, and adds the row in the category picked', async () => {
-      vi.mocked(api.startSession).mockResolvedValue(started());
+      vi.mocked(api.startSession).mockResolvedValue(answered(started()));
       await renderCard([], [], makePick([TICKETS, ADMIN]));
       typeLabel('Call the vendor');
       expect(chip()).toBeNull();
@@ -332,8 +334,8 @@ describe('FocusTimer', () => {
     });
 
     it('starts the next session with no category, as the label starts empty', async () => {
-      vi.mocked(api.startSession).mockResolvedValue(started());
-      vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(makeSession({ label: 'Call the vendor' })) });
+      vi.mocked(api.startSession).mockResolvedValue(answered(started()));
+      vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(makeSession({ label: 'Call the vendor' })) }));
       await renderCard([], [], makePick([TICKETS]));
       typeLabel('Call the vendor');
       fireEvent.click(alsoAdd()!);
@@ -351,8 +353,8 @@ describe('FocusTimer', () => {
 
     it('starts the next session with no category after a start linked to an open row, which adds none', async () => {
       const row = makePriority(1, 'Ship the fix');
-      vi.mocked(api.startSession).mockResolvedValue(started(makeSession({ label: 'Ship the fix', priorityUid: row.uid })));
-      vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(makeSession({ label: 'Ship the fix', priorityUid: row.uid })) });
+      vi.mocked(api.startSession).mockResolvedValue(answered(started(makeSession({ label: 'Ship the fix', priorityUid: row.uid }))));
+      vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(makeSession({ label: 'Ship the fix', priorityUid: row.uid })) }));
       await renderCard([row], [], makePick([TICKETS]));
       typeLabel('Call the vendor');
       fireEvent.click(alsoAdd()!);
@@ -373,8 +375,8 @@ describe('FocusTimer', () => {
     });
 
     it('starts the next session with no category after a start with Also add unticked', async () => {
-      vi.mocked(api.startSession).mockResolvedValue(started());
-      vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(makeSession({ label: 'Call the vendor' })) });
+      vi.mocked(api.startSession).mockResolvedValue(answered(started()));
+      vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(makeSession({ label: 'Call the vendor' })) }));
       await renderCard([], [], makePick([TICKETS]));
       typeLabel('Call the vendor');
       fireEvent.click(alsoAdd()!);
@@ -410,7 +412,7 @@ describe('FocusTimer', () => {
     });
 
     it('adds the row with no category with the board off, a pick made before it went off included', async () => {
-      vi.mocked(api.startSession).mockResolvedValue(started());
+      vi.mocked(api.startSession).mockResolvedValue(answered(started()));
       const { boardOff } = await renderCard([], [], makePick([TICKETS]));
       typeLabel('Call the vendor');
       fireEvent.click(alsoAdd()!);
@@ -425,7 +427,7 @@ describe('FocusTimer', () => {
   });
 
   it('retries a failed start against the row it already added, not a second copy', async () => {
-    vi.mocked(api.startSession).mockRejectedValueOnce(new Error('The server did not answer in time.')).mockResolvedValueOnce(started());
+    vi.mocked(api.startSession).mockRejectedValueOnce(new Error('The server did not answer in time.')).mockResolvedValueOnce(answered(started()));
     await renderCard();
     typeLabel('Call the vendor');
     fireEvent.click(alsoAdd()!);
@@ -444,7 +446,7 @@ describe('FocusTimer', () => {
 
   describe('the focus, as the control pressed goes', () => {
     it("goes to the running card's Pause once a start from the card lands", async () => {
-      vi.mocked(api.startSession).mockResolvedValue(started());
+      vi.mocked(api.startSession).mockResolvedValue(answered(started()));
       await renderCard();
       press(start25());
       await settle();
@@ -454,7 +456,7 @@ describe('FocusTimer', () => {
     it('is not handed on after a start that failed, to a timer started later elsewhere', async () => {
       vi.mocked(api.startSession)
         .mockRejectedValueOnce(new Error('The server did not answer in time.'))
-        .mockResolvedValueOnce(started(makeSession({ label: 'Board task' })));
+        .mockResolvedValueOnce(answered(started(makeSession({ label: 'Board task' }))));
       await renderCard();
       press(start25());
       await settle();
@@ -466,8 +468,8 @@ describe('FocusTimer', () => {
     });
 
     it("goes to the label box once the running card's Finish ends the session", async () => {
-      vi.mocked(api.getRunning).mockResolvedValueOnce({ session: makeSession() });
-      vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(makeSession()) });
+      vi.mocked(api.getRunning).mockResolvedValueOnce(answered({ session: makeSession() }));
+      vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(makeSession()) }));
       await renderCard();
       press(screen.getByRole('button', { name: 'Finish' }));
       await settle();
@@ -475,8 +477,8 @@ describe('FocusTimer', () => {
     });
 
     it('goes from Break to End break and back, as each takes the place of the other', async () => {
-      vi.mocked(api.startBreak).mockResolvedValue({ break: makeBreak({ startedAt: T0, endedAt: T0 + 5 * MINUTE_MS }) });
-      vi.mocked(api.endBreak).mockResolvedValue({ break: null });
+      vi.mocked(api.startBreak).mockResolvedValue(answered({ break: makeBreak({ startedAt: T0, endedAt: T0 + 5 * MINUTE_MS }) }));
+      vi.mocked(api.endBreak).mockResolvedValue(answered({ break: null }));
       await renderCard();
       press(screen.getByRole('button', { name: /^Break · / }));
       await settle();
@@ -489,7 +491,7 @@ describe('FocusTimer', () => {
     // The end stamps `Date.now()`, which the card's one-second clock reaches only at its next tick.
     it('goes to Break when a break ended by hand leaves only at the next tick', async () => {
       const running = makeBreak({ startedAt: T0 - 3 * MINUTE_MS, endedAt: T0 + 2 * MINUTE_MS });
-      vi.mocked(api.endBreak).mockResolvedValue({ break: { ...running, endedAt: T0 + 400 } });
+      vi.mocked(api.endBreak).mockResolvedValue(answered({ break: { ...running, endedAt: T0 + 400 } }));
       await renderCard([], [running]);
       vi.setSystemTime(T0 + 400);
       press(screen.getByRole('button', { name: BREAK.end }));
