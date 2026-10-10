@@ -1,6 +1,6 @@
 {
   "name": "clockspan",
-  "version": "2.8.0",
+  "version": "2.9.0",
   "private": true,
   "license": "MIT",
   "description": "A self-hosted, single-day focus sheet for getting through a workday with ADHD.",
