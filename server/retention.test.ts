@@ -97,10 +97,7 @@ describe('runRetention', () => {
 // it, and any task nothing names.
 describe('pruning tasks', () => {
   let app: TestApp;
-  afterEach(async () => {
-    vi.useRealTimers();
-    await app.close();
-  });
+  afterEach(() => app.close());
 
   const OLD = '2026-01-12';
   const KEPT = '2026-02-02';

@@ -10,14 +10,9 @@ const YESTERDAY = addDays(TODAY, -1);
 
 let app: TestApp;
 beforeEach(async () => {
-  // Only Date, so createdAt and the board's window are known: HTTP keeps its real timers.
-  vi.useFakeTimers({ now: SEED_NOW, toFake: ['Date'] });
-  app = await startTestApp();
+  app = await startTestApp({ now: SEED_NOW });
 });
-afterEach(async () => {
-  vi.useRealTimers();
-  await app.close();
-});
+afterEach(() => app.close());
 
 const board = async () => (await app.api.get('/api/board')).body.cards as BoardCard[];
 

@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { parseSetCookie, stringifyCookie } from 'cookie';
+import { vi } from 'vitest';
 import { createApp } from '../app.js';
 import type { Discovery } from '../auth/oidc.js';
 import { changeFeed, type ChangeFeed } from '../changes.js';
@@ -64,6 +65,8 @@ export interface TestApp {
   api: Client;
   /** A client with its own cookie jar, e.g. a second user. */
   client(): Client;
+  /** A plain fetch that leaves a redirect unfollowed, sending `cookie` when given: the OIDC routes answer redirects and pages. */
+  raw(path: string, cookie?: string): Promise<Response>;
   /** Set when started with `seed`. */
   seeded?: SeedManifest;
   /** Rows in `table`, or those matching `where` (SQL, with `?` for each of `params`): `countRows` on this app's DB. */
@@ -82,7 +85,7 @@ export interface TestApp {
   close(): Promise<void>;
 }
 
-export interface StartOptions {
+interface StartOptions {
   /**
    * `oidc` points discovery at a port nothing listens on: the routes that don't need the provider
    * can still be tested. Port 2, since fetch refuses 1 and 9 itself ("bad port") without connecting.
@@ -96,6 +99,11 @@ export interface StartOptions {
   clientDir?: string;
   /** The OIDC lookup the app should use, as the entrypoint passes the one it warms; by default the app makes its own. */
   discovery?: Discovery;
+  /**
+   * Fakes only `Date`, at this time, before the app starts, so HTTP keeps its real timers; a test
+   * steps it with `vi.setSystemTime`, and the shared teardown puts the real clock back.
+   */
+  now?: number;
 }
 
 /** Every test app's first-run setup code (AUTH_MODE=local), so a test can post it with the form. */
@@ -189,6 +197,7 @@ function makeClient(baseUrl: string): Client {
 }
 
 export async function startTestApp(opts: StartOptions = {}): Promise<TestApp> {
+  if (opts.now !== undefined) vi.useFakeTimers({ now: opts.now, toFake: ['Date'] });
   const authMode = opts.authMode ?? 'none';
   const oidcEnv =
     authMode === 'oidc' ? { OIDC_ISSUER: 'https://127.0.0.1:2/', OIDC_CLIENT_ID: 'clockspan', OIDC_CLIENT_SECRET: 'secret', APP_URL: 'http://localhost' } : {};
@@ -227,6 +236,7 @@ export async function startTestApp(opts: StartOptions = {}): Promise<TestApp> {
     changes,
     api,
     client: () => makeClient(url),
+    raw: (p, cookie) => fetch(url + p, { redirect: 'manual', headers: cookie ? { cookie } : {} }),
     seeded,
     count: (table, where, ...params) => countRows(db, table, where, ...params),
     item: (uid) => db.prepare(`SELECT * FROM items WHERE uid = ?`).get(uid) as ItemRow | undefined,

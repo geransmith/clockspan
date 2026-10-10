@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import Database from 'better-sqlite3';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MIGRATIONS, ensureDefaultUser, migrate, openDatabase, type DB } from './db.js';
 import { countRows } from './dev/harness.js';
 import type { ItemRow as SharedItemRow } from './routes/shared.js';
@@ -126,9 +126,6 @@ describe('migration 13: each task stored once', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(NOW);
-  });
-  afterEach(() => {
-    vi.useRealTimers();
   });
 
   interface OldRow {

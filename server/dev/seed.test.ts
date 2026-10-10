@@ -331,7 +331,6 @@ describe('seedDatabase', () => {
       expect((await a.get('/api/board')).body).toEqual(m.board);
     } finally {
       await app.close();
-      vi.useRealTimers();
     }
   });
 
