@@ -206,6 +206,7 @@ function NewCategory({ categories, save, onDone }: { categories: Category[]; sav
   const [error, setError] = useState<string | null>(null);
   // True when the category went out (or the box was blank), so the box can be emptied or closed.
   const add = () => {
+    setError(null);
     const made = categoryForName(categories, draft, newUid());
     if (!made) return true;
     if (!made.send) {
@@ -213,7 +214,6 @@ function NewCategory({ categories, save, onDone }: { categories: Category[]; sav
       return false;
     }
     const { send } = made;
-    setError(null);
     void save(() => store.addCategory(send));
     return true;
   };
