@@ -145,6 +145,21 @@ describe('useRefreshLoop', () => {
     expect(run).toHaveBeenCalledTimes(2);
   });
 
+  it('queues again for a change heard while the queued run is out', async () => {
+    const first = deferred<void>();
+    const second = deferred<void>();
+    const run = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise).mockResolvedValue(undefined);
+    renderHook(() => useRefreshLoop(run, true));
+    act(() => changedElsewhere());
+    first.resolve();
+    await settle();
+    expect(run).toHaveBeenCalledTimes(2);
+    act(() => changedElsewhere());
+    second.resolve();
+    await settle();
+    expect(run).toHaveBeenCalledTimes(3);
+  });
+
   it('uses the newest run and stops on unmount', async () => {
     const first = vi.fn(() => Promise.resolve());
     const second = vi.fn(() => Promise.resolve());
