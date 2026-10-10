@@ -1485,13 +1485,15 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   keeps its drawn size and gets the rest from the `@media (pointer: coarse)` block at the end of
   `styles.css`, an empty `::after` reaching past its edge (a control that clips its overflow grows
   its padding instead). Where two controls sit closer than that, each reaches half the gap. A new
-  compact control joins that block. A toggle's on state is styled from its ARIA attribute
-  (`[aria-pressed='true']`, `[aria-selected='true']`), never a parallel `is-on` / `is-active` class.
-  Inputs are 16 px so iOS doesn't zoom. No external fonts or assets (the CSP would block them
-  anyway). Safe-area insets via `--safe-top`, `--safe-bottom`, `--safe-left` and `--safe-right` (a
-  phone held sideways puts the notch on a side). Words in a tone's colour use its `-ink` token
-  (`--accent-ink`, `--ok-ink`, `--warn-ink`, `--danger-ink`), which keeps light-mode text at 4.5:1
-  and up; the tone itself is for fills, borders, icons and bars. A category's colour (`--cat-<id>`,
+  compact control joins that block and sets its `--hit-inset` there (`theme-css.test.ts` checks).
+  A toggle's on state is styled from its ARIA attribute (`[aria-pressed='true']`,
+  `[aria-selected='true']`), never a parallel `is-on` / `is-active` class (`theme-css.test.ts`
+  checks). Inputs are 16 px so iOS doesn't zoom. No external fonts or assets (the CSP would block
+  them anyway). Safe-area insets via `--safe-top`, `--safe-bottom`, `--safe-left` and
+  `--safe-right` (a phone held sideways puts the notch on a side). Words in a tone's colour use its
+  `-ink` token (`--accent-ink`, `--ok-ink`, `--warn-ink`, `--danger-ink`), which keeps light-mode
+  text at 4.5:1 and up (`theme-css.test.ts` checks); the tone itself is for fills, borders, icons
+  and bars. A category's colour (`--cat-<id>`,
   picked by `data-color`) is a fill only (see "A category colour" for its contrast): a dot, and
   Review's By Category bars, solid for the time on a priority and striped in the same colour for the
   time off the plan (No category's bar is `--text-2`, not in the test). A category's name is never

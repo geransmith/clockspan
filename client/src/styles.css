@@ -2230,7 +2230,6 @@ button.log-label:hover {
 .calendar-day.is-full {
   background: var(--accent-soft);
   border-color: var(--accent);
-  opacity: 1;
 }
 .calendar-day[aria-pressed='true'] {
   border-color: var(--accent);

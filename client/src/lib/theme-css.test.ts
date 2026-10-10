@@ -124,7 +124,8 @@ describe('styles.css', () => {
   });
 
   // The coarse block's one ::after rule takes its inset from --hit-inset, which each control sets in
-  // a rule of its own; one left without it has an inset that resolves to nothing, and no touch area.
+  // a rule of its own (or in a rule for the only parent it sits in, as the note button's); one left
+  // without it has an inset that resolves to nothing, and no touch area.
   it('gives every touch area its inset', () => {
     const start = css.indexOf('@media (pointer: coarse) {');
     const block = css.slice(start, css.indexOf('\n}\n', start)).replace(/\/\*[\s\S]*?\*\//g, '');
