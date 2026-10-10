@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MINUTE_MS } from '../../../../shared/dates.js';
 import * as api from '../../api';
 import { AuthGate } from '../../auth/AuthGate';
 import { notificationPermission, requestNotificationPermission } from '../../lib/alerts';
@@ -53,12 +52,12 @@ beforeEach(() => {
 describe('SettingsDialog', () => {
   it('shows the Account tab only with local accounts', async () => {
     await renderDialog();
-    expect(tabNames()).toEqual(['Timeclock', 'Alarms', 'Sheet', 'Data', 'Account']);
+    expect(tabNames()).toEqual(['Timeclock', 'Alarms', 'Sheet', 'Board', 'Data', 'Account']);
     cleanup();
     // Account was used last, but isn't offered now: Timeclock opens, and Account stays stored.
     localStorage.setItem('focus:settingsTab', 'account');
     await renderDialog(makeAuth({ mode: 'none', user: DEFAULT_USER }));
-    expect(tabNames()).toEqual(['Timeclock', 'Alarms', 'Sheet', 'Data']);
+    expect(tabNames()).toEqual(['Timeclock', 'Alarms', 'Sheet', 'Board', 'Data']);
     expect(screen.getByRole('tab', { name: 'Timeclock', hidden: true }).getAttribute('aria-selected')).toBe('true');
     expect(localStorage.getItem('focus:settingsTab')).toBe('account');
   });
@@ -132,15 +131,8 @@ describe('SettingsDialog', () => {
     expect(api.putSettings).toHaveBeenLastCalledWith({ lunchPunches: false });
   });
 
-  it('offers Times on the board only with the board on, and drops the lunch deadline from its hint with the meal periods off', async () => {
+  it("drops the lunch deadline from Times on the board's hint with the meal periods off", async () => {
     await renderDialog();
-    expect(screen.queryByRole('switch', { name: 'Times on the board', hidden: true })).toBeNull();
-    // The board is switched on on another device: the settings' next read brings the switch.
-    const boardOn = makeSettings({ board: true });
-    vi.mocked(api.getSettings).mockResolvedValue(answered(boardOn));
-    vi.mocked(api.getBoard).mockResolvedValue(answered(makeBoard()));
-    vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(answered(applySettingsPatch(boardOn, patch))));
-    await settle(MINUTE_MS);
     expect(hint('Times on the board')).toBe("Today's clock in, lunch deadline and clock out time, in a row above the board's columns.");
     fireEvent.click(toggle('Meal periods'));
     await settle();
@@ -173,23 +165,7 @@ describe('SettingsDialog', () => {
     expect(hint('Sticker chart')).not.toContain('clocked out');
   });
 
-  it('switches the board on from the Sheet tab, and says what it adds', async () => {
-    vi.mocked(api.getBoard).mockResolvedValue(answered(makeBoard()));
-    await renderDialog();
-    await openTab('Sheet');
-    expect(hint('Board page')).toBe(
-      "Adds a Board button (a page for tasks that aren't for today), categories and recurring priorities, set up in the Board tab.",
-    );
-    expect(tabNames()).toEqual(['Timeclock', 'Alarms', 'Sheet', 'Data', 'Account']);
-    fireEvent.click(toggle('Board page'));
-    await settle();
-    expect(api.putSettings).toHaveBeenCalledWith({ board: true });
-    expect((toggle('Board page') as HTMLInputElement).checked).toBe(true);
-    expect(tabNames()).toEqual(['Timeclock', 'Alarms', 'Sheet', 'Board', 'Data', 'Account']);
-  });
-
-  it('saves a category change on the Board tab through the header, and shows Timeclock once the board is switched off', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ board: true })));
+  it('saves a category change on the Board tab through the header', async () => {
     vi.mocked(api.getBoard).mockResolvedValue(answered({ ...makeBoard(), categories: [makeCategory('cat000000001', 'Tickets')] }));
     vi.mocked(api.patchCategory).mockResolvedValue(answered({ ...makeBoard(), categories: [makeCategory('cat000000001', 'Tickets', { color: 'pink' })] }));
     await renderDialog();
@@ -203,23 +179,11 @@ describe('SettingsDialog', () => {
     fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Colour of Tickets', hidden: true })).getByRole('radio', { name: 'Teal', hidden: true }));
     await settle();
     expect(screen.getByRole('status', { hidden: true }).textContent).toBe(SAVE_STATUS.failed);
-
-    // Another device switches the board off: the settings' next read takes the tab away.
-    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
-    await settle(MINUTE_MS);
-    expect(tabNames()).toEqual(['Timeclock', 'Alarms', 'Sheet', 'Data', 'Account']);
-    expect(screen.getByRole('tab', { name: 'Timeclock', hidden: true }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByLabelText('Work day hours')).toBeTruthy();
-    // Board stays the tab picked last, for when the board is back.
-    expect(localStorage.getItem('focus:settingsTab')).toBe('board');
   });
 
   it('hands the Board tab the settings, and saves its number through the header', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ board: true, recurringPerDay: 4 })));
-    vi.mocked(api.getBoard).mockResolvedValue(answered(makeBoard()));
-    vi.mocked(api.putSettings).mockImplementation((patch) =>
-      Promise.resolve(answered(applySettingsPatch(makeSettings({ board: true, recurringPerDay: 4 }), patch))),
-    );
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ recurringPerDay: 4 })));
+    vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(answered(applySettingsPatch(makeSettings({ recurringPerDay: 4 }), patch))));
     await renderDialog();
     await openTab('Board');
     const perDay = screen.getByRole('textbox', { name: 'Recurring rows per day', hidden: true }) as HTMLInputElement;
@@ -233,7 +197,6 @@ describe('SettingsDialog', () => {
   });
 
   it('hands the focus to the Board tab when its Try again is pressed, since it goes once the board loads', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ board: true })));
     vi.mocked(api.getBoard).mockRejectedValue(new Error('Request failed (502)'));
     await renderDialog();
     await openTab('Board');
@@ -286,16 +249,15 @@ describe('SettingsDialog', () => {
     expect(api.putSettings).toHaveBeenLastCalledWith({ sounds: { timer: 'bell' } });
   });
 
-  it('holds the panel until the settings have loaded, then opens on the stored tab the settings offer', async () => {
+  it('holds the panel until the settings have loaded, then opens on the stored tab', async () => {
     const answer = deferredAnswer<Settings>();
     vi.mocked(api.getSettings).mockReturnValue(answer.promise);
-    vi.mocked(api.getBoard).mockResolvedValue(answered(makeBoard()));
     localStorage.setItem('focus:settingsTab', 'board');
     await renderDialog();
     // The defaults stand in: their start buttons are not the user's, so no box shows them.
     expect(screen.queryByLabelText('Work day hours')).toBeNull();
     expect(document.querySelector('[role="tabpanel"] .loading')).toBeTruthy();
-    answer.resolve(makeSettings({ board: true }));
+    answer.resolve(makeSettings());
     await settle();
     expect(screen.getByRole('tab', { name: 'Board', hidden: true }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('textbox', { name: 'Recurring rows per day', hidden: true })).toBeTruthy();
@@ -304,7 +266,7 @@ describe('SettingsDialog', () => {
   it('points only the shown tab at its panel', async () => {
     await renderDialog();
     const controls = screen.getAllByRole('tab', { hidden: true }).map((t) => t.getAttribute('aria-controls'));
-    expect(controls).toEqual(['panel-timeclock', null, null, null, null]);
+    expect(controls).toEqual(['panel-timeclock', null, null, null, null, null]);
     expect(document.getElementById('panel-timeclock')).toBeTruthy();
   });
 

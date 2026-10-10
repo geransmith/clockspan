@@ -6,12 +6,12 @@ A self-hosted, single-day **focus sheet** for working through a workday with ADH
 timeclock (lunch deadline, end of day, celebration), top priorities (default three, with a
 nudge when the list grows), a focus timer that logs what was done and for which priority, a
 retrospective card (plan vs. log, a "why" note, a nudge before clock-out), a week / month /
-quarter review, alarms for lunch, clock-out and the second meal period, and an optional Board
-page for tasks that aren't for today (off by default; its In progress column is today's Top
-priorities, and tasks carry categories, made from a chip or in Settings → Board; the same switch
-brings recurring priorities, set up in Settings → Board and offered on Top priorities on their
-weekdays). Each task (a priority, a board card, a recurring priority) is stored once, with one
-name, one category and one note; a day's list names the tasks on it.
+quarter review, alarms for lunch, clock-out and the second meal period, and a Board page for
+tasks that aren't for today (its In progress column is today's Top priorities; tasks carry
+categories, made from a chip or in Settings → Board, and recurring priorities, set up in
+Settings → Board and offered on Top priorities on their weekdays). Each task (a priority, a
+board card, a recurring priority) is stored once, with one name, one category and one note; a
+day's list names the tasks on it.
 "Overtime approved" silences the clock-out alarm only. Every day is persisted; old days can be
 pruned. Data is **per user**; auth is optional (`AUTH_MODE=none | local | oidc`). One Docker
 container, SQLite on `/data`. A PWA used mostly on a laptop or desktop and laid out for phones
@@ -184,7 +184,9 @@ client/                 Vite root → dist/client
                         SettingsAndDays, serveRange (a mocked getRange that answers from a list of
                         days), refused(status, revision) (a mocked write refused 404 or 409 the way
                         request() refuses it, CHANGED_ELSEWHERE first), ShortcutKeys and pressKey (the
-                        key listener, and a key pressed where the focus is) and the act() helpers
+                        key listener, and a key pressed where the focus is) and the act() helpers;
+                        before each test of a file that mocks api, it answers getBoard with an
+                        empty board
   src/components/       the cards, History (Calendar + Review), Banners, FinishChoice, RemoveTask (×'s Off
                         this day / Delete everywhere), TodayOffer (Top priorities' morning notice),
                         Shortcuts (the key listener, and ? for the list of keys), and
@@ -194,13 +196,13 @@ client/                 Vite root → dist/client
                         note button and box, on a priority row and a board card; TimerLengths,
                         the timer's length buttons and their tap, on the timer card and a board
                         item's editor); settings/ holds SettingsDialog (the shell and tabs), a file per
-                        tab (BoardTab: the categories and recurring priorities, shown while the
-                        board is on), and controls.tsx; board/ holds the Board page (Board,
-                        BoardCard, Capture: a column's box, opened by the + in its head, ClockBar:
-                        today's times above the columns, useBoardDrag: the drag (what is dragged
-                        and where it would land, its handlers, what a screen reader hears, the
-                        grips and the copy under the pointer), and dnd.ts: its collision and
-                        keyboard settings for dnd-kit), its own lazy chunk
+                        tab (BoardTab: the categories and recurring priorities), and controls.tsx;
+                        board/ holds the Board page (Board, BoardCard, Capture: a column's box,
+                        opened by the + in its head, ClockBar: today's times above the columns,
+                        useBoardDrag: the drag (what is dragged and where it would land, its
+                        handlers, what a screen reader hears, the grips and the copy under the
+                        pointer), and dnd.ts: its collision and keyboard settings for dnd-kit), its
+                        own lazy chunk
   src/auth/             AuthGate and the setup / login / new-password pages
   src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
   src/styles.css        design tokens and all component CSS
@@ -281,17 +283,15 @@ four were captured on the board, three in Later and "Follow up on the Acme SLA" 
 have a note (`NOTE_OF`): "Write a KB for the SSO reset", in Later, and today's row 3, "Answer the
 two open support threads", on two lines. The board has four categories (`SEEDED_CATEGORIES`) and
 two recurring priorities (`SEEDED_RECURRING`: "Monitor the queue" Monday to Friday, "Follow-ups"
-Monday, Wednesday and Friday), listed on each past weekday they are due and never today. With the
-board on, today's sheet offers them on a weekday (`--today` a weekday if needed); today's seeded
-one-off rows hide "Still open from …", so for both groups take those rows off today's list and
-reload: × on today's sheet (Off this day where it asks), or, since today lists no routine,
+Monday, Wednesday and Friday), listed on each past weekday they are due and never today. Today's
+sheet offers them on a weekday (`--today` a weekday if needed); today's seeded one-off rows hide
+"Still open from …", so for both groups take those rows off today's list and reload: × on today's
+sheet (Off this day where it asks), or, since today lists no routine,
 `curl -X PUT localhost:3000/api/days/<today>/priorities -H 'content-type: application/json' -d '{"priorities":[]}'`.
 A reseed leaves this device's answers to the offer, so if it was answered today, first run
 `localStorage.removeItem('focus:recurring-answered'); localStorage.removeItem('focus:left-open-dismissed')`
 in the page. The carried task stays on the last weekday's list, open (the board shows it in Next
-as left open), so "Still open from …" offers it. The seed writes no settings, so the board is off
-on a new dev DB or after `--fresh`; this turns it on:
-`curl -X PUT localhost:3000/api/settings -H 'content-type: application/json' -d '{"board":true}'`.
+as left open), so "Still open from …" offers it.
 
 `--running` leaves a 25-minute timer running, started ten minutes before *now*, for timer work;
 `--quarter` seeds every weekday since the start of last quarter, for Month / Quarter review
@@ -388,9 +388,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `RETENTION_DAYS` cap only Delete old days now prunes, so tombstones and removed recurring
   priorities stay until then. It answers both counts (`Pruned`: days and tasks, tombstones
   included), and `POST /days/prune` reports the days; the Data tab reads the board again after its
-  delete while the board is on. `reclaimSpace` (VACUUM + WAL checkpoint) runs after a prune that
-  deleted a day or a task and after an admin deletes a user (`DELETE /api/auth/users/:id`), so the
-  file shrinks and deleted text does not stay in free pages; it must not run inside a transaction.
+  delete. `reclaimSpace` (VACUUM + WAL checkpoint) runs after a prune that deleted a day or a task
+  and after an admin deletes a user (`DELETE /api/auth/users/:id`), so the file shrinks and deleted
+  text does not stay in free pages; it must not run inside a transaction.
 - **Every data query is scoped by `req.user.id`** (`currentUser(req)`). In `AUTH_MODE=none` that is
   the single `kind='default'` user. Never add a data route outside the `requireAuth` router in
   `app.ts`. Every `/:date` route sits on the days router (`routes/days.ts`), whose `date` param
@@ -780,9 +780,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   for the note alone, Off this day deletes the task too, `collectItems`, unless it has a lane, as
   `REMOVE_TASK.body` says) asks first in `RemoveTask` (built like `FinishChoice`:
   `useModalDialog`, the focus on the frame; `REMOVE_TASK`): Off this day (the × path), Delete
-  everywhere (the × path, then the board store's `deleteItem`, which works with the board off; its
-  failure raises the "Change not saved" banner and leaves the task off that day only), or Cancel,
-  which puts the focus back on ×.
+  everywhere (the × path, then the board store's `deleteItem`; its failure raises the "Change not
+  saved" banner and leaves the task off that day only), or Cancel, which puts the focus back on ×.
 - **A task's note shows only when its button opens it** (`components/Note.tsx`). `NoteToggle` is
   the one sign a note is there: drawn filled with one, and quiet with none (see Conventions), with
   `aria-expanded` and `aria-controls`, named "Note for …" or "Add a note to …", so a screen reader
@@ -791,22 +790,21 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   lines and then scrolls, Enter adds a line, and a ticked row's isn't struck through. `NoteField`
   stays mounted while closed, so a note whose save failed stays in its box, open or not, and goes
   again on the next edit, blur or unmount; where the title can't be edited the note is plain text.
-  On the sheet (`Priorities`) the button sits in a written row's end cell before the chip (with
-  the board off the cell holds it alone) and the box under the row, after its hint; each row's
-  note is a draft of its own, keyed by the task, apart from the list's, and saves 400 ms after the
-  last key through `onNote`, the day store's `editPriorities` (`Sheet.tsx`), whose `'failed'`
-  keeps it. On the board (`BoardCard`) the button ends the title row of every card the board
-  edits, or that has a note, and the box opens under the card's text, apart from the editor, saving
-  800 ms after the last key; `onNote` takes the path `onRename` does (`editRow` for today's row,
-  `editItem` for any other the board edits, none for an earlier day's row of a recurring priority
-  removed in Settings), and `saved` (`lib/board.ts`) raises the banner and answers false. A routine's
-  note is one on every day it is on. Nothing else shows a note: not Retro, Review, the morning
-  notice, the timer, the day log or History. A note of spaces and line breaks alone,
-  stored untrimmed, counts as none (`hasNote`, `shared/text.ts`): its button is quiet and × doesn't
-  ask for it. On the sheet, a row gone from the list before its note's save (another device took it
-  off, or × did before the box saved) sends the note to the task through the board store's
-  `editItem`, as `editRow` does: a 404 (the task went with the row) counts as done
-  (`unlessGone`), and any other failure is the banner (`saved`).
+  On the sheet (`Priorities`) the button sits in a written row's end cell before the chip and the
+  box under the row, after its hint; each row's note is a draft of its own, keyed by the task, apart
+  from the list's, and saves 400 ms after the last key through `onNote`, the day store's
+  `editPriorities` (`Sheet.tsx`), whose `'failed'` keeps it. On the board (`BoardCard`) the button
+  ends the title row of every card the board edits, or that has a note, and the box opens under the
+  card's text, apart from the editor, saving 800 ms after the last key; `onNote` takes the path
+  `onRename` does (`editRow` for today's row, `editItem` for any other the board edits, none for an
+  earlier day's row of a recurring priority removed in Settings), and `saved` (`lib/board.ts`)
+  raises the banner and answers false. A routine's note is one on every day it is on. Nothing else
+  shows a note: not Retro, Review, the morning notice, the timer, the day log or History. A note of
+  spaces and line breaks alone, stored untrimmed, counts as none (`hasNote`, `shared/text.ts`): its
+  button is quiet and × doesn't ask for it. On the sheet, a row gone from the list before its note's
+  save (another device took it off, or × did before the box saved) sends the note to the task
+  through the board store's `editItem`, as `editRow` does: a 404 (the task went with the row) counts
+  as done (`unlessGone`), and any other failure is the banner (`saved`).
 - **A category is a row of its own, named by its uid** (`categories`, routes in `routes/board.ts`,
   answered in `Board.categories`). Tasks and sessions point at one by `categoryUid`, a soft link
   checked for shape only, so a category made on this device can reach the server after the row that
@@ -823,13 +821,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   delete. A `PATCH /sessions/:id` that links a session to a task drops a category of its own, and a
   category sent for a session that keeps its task is refused (400); the day store and the timer show
   an edit as the server will store it while it is out (`editedSession`). On the client
-  `CategoryChip` is the one way a category is picked, fed by `useCategoryPick` (null while the board
-  is off or before its first read, and then no chip shows), which the board page, the sheet and
-  Settings → Board each call once and pass down as `pick`: the sheet's goes to Top priorities (a
-  written row's chip, which saves at once), the timer (the row Also add makes,
-  `addPriority(date, text, categoryUid)`) and the day log (a session on no written row, in the
-  edit's one PATCH); Settings → Board's goes to its recurring priorities' rows, with `report`
-  going to the dialog's `save`. A press on the chip
+  `CategoryChip` is the one way a category is picked, fed by `useCategoryPick` (null before the
+  board's first read, and then no chip shows), which the board page, the sheet and Settings → Board
+  each call once and pass down as `pick`: the sheet's goes to Top priorities (a written row's chip,
+  which saves at once), the timer (the row Also add makes, `addPriority(date, text, categoryUid)`)
+  and the day log (a session on no written row, in the edit's one PATCH); Settings → Board's goes to
+  its recurring priorities' rows, with `report` going to the dialog's `save`. A press on the chip
   keeps the focus where it is until the list takes it, so the day log's edit doesn't end (the
   browser reasons are in `CategoryChip`'s comments). Its New category box runs `categoryForName`
   (`lib/board.ts`): the category in use by that name, else a removed one brought back under its own
@@ -839,9 +836,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   took the name, a cap) is taken off with the "Change not saved" banner (in Settings → Board, the
   header's Not saved), so what picked it reads as no category. The board columns' boxes share one
   category, the last picked on the device (`USER_KEYS.captureCategory`; a removed or unknown one
-  reads as none). Settings → Board (`BoardTab`, shown while the board is on) adds (`categoryForName`
-  again), renames (refusing a name in use, `categoryNameTaken`), recolours and removes categories,
-  each through the dialog's `save`; a category's Remove archives it and doesn't ask.
+  reads as none). Settings → Board (`BoardTab`) adds (`categoryForName` again), renames (refusing a
+  name in use, `categoryNameTaken`), recolours and removes categories, each through the dialog's
+  `save`; a category's Remove archives it and doesn't ask.
 - **A recurring priority is a task with weekdays** (`items.weekdays`, made and edited through
   `/items` from Settings → Board, answered in `Board.recurring` in the order they were made,
   archived ones left out): a title, a category and the weekdays it is offered on, ISO 1 (Monday) to
@@ -858,15 +855,16 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   done (an archived routine is one), and only the prune deletes it, once nothing names it. The
   server caps them at 100 in use (`BOARD_LIMITS`), a sanity cap with no product limit behind it, and
   the prune never takes one in use.
-- **Today's sheet offers what the last planned day left open and, with the board on, the recurring
-  priorities due** (`client/src/lib/recurring.ts`, `components/TodayOffer.tsx`), in one morning
-  notice on Top priorities, worked out on the client, board on or off. "Still open from …" (the
-  leftovers: `leftOpen`'s rows, over the same `LOOKBACK_DAYS` the board's left-open group reads)
-  shows while no one-off row has text (`useLeftOpen`'s `wanted`, which a routine on the list doesn't
-  count). With the board on they are `offeredLeftovers`', which drops one whose task the board's
-  copy has in Later or done (`listDone`) and offers one the copy doesn't hold (a read behind), so
-  nothing is offered until the board has loaded; a leftover in no lane shows in Next as left open
-  too until it is brought back. "Repeats today", with the board on, lists the items due
+- **Today's sheet offers what the last planned day left open and the recurring priorities due**
+  (`client/src/lib/recurring.ts`, `components/TodayOffer.tsx`), in one morning notice on Top
+  priorities, worked out on the client. "Still open from …" (the leftovers: `leftOpen`'s rows, over
+  the same `LOOKBACK_DAYS` the board's left-open group reads) shows while no one-off row has text
+  (`useLeftOpen`'s `wanted`, which a routine on the list doesn't count). They are
+  `offeredLeftovers`', which drops one whose task the board's copy has in Later or done (`listDone`)
+  and offers one the copy doesn't hold (a read behind), so nothing is offered until the board has
+  loaded (a failed read offers nothing until a later one lands; the board's refresh asks again every
+  minute, when the tab comes back and on a change saved elsewhere); a leftover in no lane shows in
+  Next as left open too until it is brought back. "Repeats today" lists the items due
   (`dueRecurring`: the date's ISO weekday, `isoWeekday` in `shared/dates.ts`, computed in UTC from
   the key; no row of the list is its task, `notOnList`, a row whose box is blank included; not
   answered on this device today), in Settings order, taken from the recurring priorities the server
@@ -887,13 +885,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   starts with none; an answer joins what is stored when it is given, so another tab's answers stay),
   and leftovers shown hold Start fresh (`leftOpenDismissed`), so removing a row the notice added
   brings nothing back.
-- **In progress is today's list** (`client/src/lib/board.ts`, `hooks/useBoard.tsx`). The board (on
-  with the `board` setting, off by default) shows the tasks `GET /board` sends (`boardJson`: the
-  one-off tasks in Later or Next that aren't done, then every other one whose latest entry is from
-  `LIST_WINDOW_DAYS` back to `PLANNED_WINDOW_DAYS` ahead; archived and deleted ones left out) and
-  today's rows from the day store, matched by uid. Nothing about In progress or Done is stored, so
-  the board and the sheet show one list, and turning the board on shows today's list and the tasks
-  left open at once. Which column an item is in comes only from `boardColumns` (its doc has the
+- **In progress is today's list** (`client/src/lib/board.ts`, `hooks/useBoard.tsx`). The board
+  shows the tasks `GET /board` sends (`boardJson`: the one-off tasks in Later or Next that aren't
+  done, then every other one whose latest entry is from `LIST_WINDOW_DAYS` back to
+  `PLANNED_WINDOW_DAYS` ahead; archived and deleted ones left out) and today's rows from the day
+  store, matched by uid. Nothing about In progress or Done is stored, so the board and the sheet
+  show one list. Which column an item is in comes only from `boardColumns` (its doc has the
   rules in order); a one-off's item id is `item:<uid>` in every column and a recurring row's
   `row:<date>:<uid>`. Every Move to and every drop goes through `planMove`, which says what it
   writes: a task's lane or place (`editItem`, a PATCH), today's list through the day store's
@@ -982,9 +979,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   time. A uid outside `known` (the board's categories, removed ones included) counts as none, there
   and in `midDay`. Most time first, then most ticks, none last; a category with neither is left out.
   Review shows By category only while a listed bucket has a category. Review passes `known` and
-  `laned` (the uids of the tasks the board holds in Later or Next) from `useBoardState()` while the
-  board is on and has loaded, and empty ones otherwise, so with the board off nothing is grouped by
-  category and no task counts as laned in Not done.
+  `laned` (the uids of the tasks the board holds in Later or Next) from `useBoardState()` once the
+  board has loaded, and empty ones before, so until then nothing is grouped by category and no task
+  counts as laned in Not done.
 - **A session is named and filed by its task.** `sessionName(s, rows)` and
   `sessionCategory(s, rows)` (`lib/retro.ts`) read the written row its task is on its day
   (`sessionRow`), so a rename or a chip changed on the sheet shows at once, else the server's
@@ -1162,37 +1159,30 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **A view** (a page shown in place of the sheet, like History): add its id to `VIEWS` in
   `hooks/useRoute.ts`, which reads it from `?view=` and writes it back (the sheet is the
   default and the one view the URL leaves out; `review` is kept on History only) → a `case` in
-  the `switch (view)` in `App.tsx`'s `Shell` (the `switch-exhaustiveness-check` lint refuses a
+  the `switch (route.view)` in `App.tsx`'s `Shell` (the `switch-exhaustiveness-check` lint refuses a
   missing one) that renders the page through `lazy()` inside a `Suspense`, as History is, with
   the page named in the lazy-chunk rule under "Architecture rules" and in the comment above
   `App.tsx`'s `lazy` consts → a toggle in `Header.tsx` that goes to the view, and back to the
   sheet from it, pressed only there (`aria-pressed={view === '<id>'}`), its name fixed; then
   revisit Header's `crowded` (the 375 px header holds five buttons; every view takes the same
   rule) and check the header at 375. The page sits in the one frame (Conventions, CSS) and sets
-  no `--page-w`; one that reads better narrower caps its own width, as History does. A view
-  behind a setting,
-  as the board is, also needs: the `view` const in `Shell` showing the sheet while the setting
-  is off (a link opened then, or the setting switched off on another device), its `case`
-  showing the loading block until the settings have loaded, and its Header toggle rendered only
-  with the setting on (a prop, as `board` is). `useRoute.test.ts` reads and writes every id in
-  `VIEWS`, and `Header.test.tsx` checks History's toggle on each view; the new toggle gets its
-  own case there.
+  no `--page-w`; one that reads better narrower caps its own width, as History does.
+  `useRoute.test.ts` reads and writes every id in `VIEWS`, and `Header.test.tsx` checks History's
+  toggle on each view; the new toggle gets its own case there.
 - **A per-user setting**: add it to the `Settings` type and `DEFAULT_SETTINGS` in
   `shared/settings.ts`, and a number's bounds to `SETTING_LIMITS` there → validate it in
   `mergeSettings()` (`server/settings.ts`; `flag(key)` takes a switch, `limited(key)` checks a
   number against its bounds) → add the control to its tab in `client/src/components/settings/`
-  (`TimeclockTab`, `AlarmsTab`, `SheetTab`, `DataTab`, and `BoardTab`, shown while the board is
-  on, which takes `TabProps` and the dialog's `save`, for its board writes; the Sheet tab's
-  "History" section holds the calendar's switches, and its "Board" section the board's, but for
-  Times on the board (`clockBar`), which sits with the timeclock's switches after Overtime and
-  shows while the board is on): a `DurationField` (`components/DurationField.tsx`) for hours and
-  minutes or a `NumberField` (`settings/controls.tsx`) for one number, each with
-  `{...SETTING_LIMITS.<key>}` for `min` and `max`; a `SelectField` (`settings/controls.tsx`) for
-  one choice from a fixed list; a `Toggle` for a switch.
-  `NumberInput` on its own puts several numbers on one row, like the timer's start buttons. The
-  new setting also goes in `TEST_SETTINGS` (`client/src/test/fixtures.ts`), and the type makes a
-  missing one an error. A setting that is an object edited a field at a time is merged field by
-  field in `mergeSettings` (as `mergeRetention` does), and gets a partial entry in
+  (`TimeclockTab`, `AlarmsTab`, `SheetTab`, `DataTab`, and `BoardTab`, which takes `TabProps` and
+  the dialog's `save`, for its board writes; the Sheet tab's "History" section holds the calendar's
+  switches, and Times on the board (`clockBar`) sits with the timeclock's switches after Overtime):
+  a `DurationField` (`components/DurationField.tsx`) for hours and minutes or a `NumberField`
+  (`settings/controls.tsx`) for one number, each with `{...SETTING_LIMITS.<key>}` for `min` and
+  `max`; a `SelectField` (`settings/controls.tsx`) for one choice from a fixed list; a `Toggle` for
+  a switch. `NumberInput` on its own puts several numbers on one row, like the timer's start
+  buttons. The new setting also goes in `TEST_SETTINGS` (`client/src/test/fixtures.ts`), and the
+  type makes a missing one an error. A setting that is an object edited a field at a time is merged
+  field by field in `mergeSettings` (as `mergeRetention` does), and gets a partial entry in
   `SettingsPatch` (`client/src/api.ts`) and a merge in `applySettingsPatch`
   (`client/src/lib/settings.ts`). Nothing else to mirror.
 - **A keyboard shortcut**: add its id to `ShortcutId` and its key and group to `SHORTCUTS`
@@ -1508,9 +1498,10 @@ The browser pass for each surface (the logic under it is already tested):
   that header changed), then switch views, and look at the info banner with its Reload button.
   That it shows once, stays, stays closed and reloads is `api.test.ts`'s.
 - **Live updates**: after `npm run seed`, the sheet at 1280 in two windows side by side (or one
-  window and `curl`). Turning the board on (`curl -X PUT localhost:3000/api/settings -H
-  'content-type: application/json' -d '{"board":true}'`) shows Board in the header within a second;
-  a row ticked, and a timer started and finished, in one window show in the other within a second.
+  window and `curl`). A settings save (`curl -X PUT localhost:3000/api/settings -H
+  'content-type: application/json' -d '{"theme":"dark"}'`) turns the other window dark within a
+  second, and `-d '{"theme":"auto"}'` puts it back; a row ticked, and a timer started and
+  finished, in one window show in the other within a second.
   A tick in the page sends its PUT and no GET of `/api/days`, `/settings`, `/sessions/running` or
   `/board` after it, with one `/api/changes` pending in the Network panel. Switching to another tab
   ends its `/api/changes`, and coming back opens exactly one; a row ticked in the other window
@@ -1527,21 +1518,19 @@ The browser pass for each surface (the logic under it is already tested):
 - **Priorities or the timer card**: tick one row and press Add priority (the notice lists the
   ticked row); tap a chip, start, and the log row shows the number; the log row's edit of a session
   on a written row shows its name as text, with no hover. Empty a written row's box and retype the
-  carried row's name: where the hints under them sit (at 375 with the board on, under the row's own
-  chip, nearer it than the next row). × on the carried row: how "Remove …" renders, a long name
-  included. Notes, board off and on: row 3's note button drawn filled and the others' quiet (shown
-  on the row's hover or focus with a mouse, always on a phone); open row 3's note under the row,
-  after any hint, lined up with the field; type past eight lines (it grows, then scrolls); a ticked
-  row's note isn't struck through; with the board off at 375 the button's line under the field,
-  and from 640 its column beside the field. With the board on: pick a category on a row (an empty
-  chip shows only on the row's hover or focus with a mouse, always on a phone; a long name ends in
-  an ellipsis; at 375 the chip sits under the field, nearer it than the next row's, and the field
-  keeps the row's width, beside the ×; from 640 it sits beside the field, which ends in the same
-  place written or empty), tick Also add and pick one for the new row (the chip beside it wraps
-  under it at 375) and give an unplanned log session one (its dot before the label), then the same
-  at 1280 in the split's columns.
-- **Recurring priorities**: with the board on, Settings → Board → Recurring priorities: Recurring
-  rows per day with its hint beside the box; Add recurring priority; a rename; a category from
+  carried row's name: where the hints under them sit (at 375, under the row's own chip, nearer it
+  than the next row). × on the carried row: how "Remove …" renders, a long name included. Notes: row
+  3's note button drawn filled and the others' quiet (shown on the row's hover or focus with a
+  mouse, always on a phone); open row 3's note under the row, after any hint, lined up with the
+  field; type past eight lines (it grows, then scrolls); a ticked row's note isn't struck through.
+  Categories: pick a category on a row (an empty chip shows only on the row's hover or focus with a
+  mouse, always on a phone; a long name ends in an ellipsis; at 375 the chip sits under the field,
+  nearer it than the next row's, and the field keeps the row's width, beside the ×; from 640 it sits
+  beside the field, which ends in the same place written or empty), tick Also add and pick one for
+  the new row (the chip beside it wraps under it at 375) and give an unplanned log session one (its
+  dot before the label), then the same at 1280 in the split's columns.
+- **Recurring priorities**: Settings → Board → Recurring priorities: Recurring rows per day with
+  its hint beside the box; Add recurring priority; a rename; a category from
   the row's chip, where Escape closes only the list and the dialog stays open; the days (on a
   touch screen each takes 44 × 44 px). At 375 the rows wrap and the seven days fit on one line.
   On the board, a recurring row's meta line has the Repeats mark. On the sheet, with a routine due
@@ -1550,22 +1539,20 @@ The browser pass for each surface (the logic under it is already tested):
   to today, the mark before the chip on a routine's row; at 1280 and 1000 the mark and a long
   category in the chip's column, and at 375 the mark before the chip under the field.
 - **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
-  Month / Quarter). With the board on (`PUT /api/settings {"board":true}`), By category in
-  Review → Week and Month (solid and striped bars, No category last), in light and dark. For
-  Added mid-day's "mostly …", give the last weekday's "Reply to the recruiter" row a category
-  with its chip (the seed files that task under none) and open the Week that holds that day (◀
-  on a Monday): it is one task on every day the seed adds it mid-day, so the category reaches
-  each of them, and any period holding one of those days names it.
-- **The board**: after `npm run seed`, turn it on (`PUT /api/settings {"board":true}`, see "Dev
-  data is disposable") and press Board. At 1440: the four columns; each +'s box (Later's card at the
-  top, Next's at the end, In progress's row on today's sheet and asking past three rows; Enter keeps
-  the box, an empty Enter or Escape closes it, one with text stays open when left); a left-open
-  task's "Left open from …" in Next, Move to from each column (a done item's notice), a park of a
-  task typed seconds ago, a done-earlier task's editor, and this week's routine ticks in Done. At
-  1000, where the columns are narrowest: titles clamp to two lines, meta lines wrap, Move to's
-  buttons wrap under their label (four on a left-open task). At 375: the switch shows one column,
-  the notice wraps, and with sign-in on (`web-local`, `npm run seed -- --auth local --sessions`,
-  the printed cookie set and the board turned on in Settings → Sheet) the sheet's five header
+  Month / Quarter). By category in Review → Week and Month (solid and striped bars, No category
+  last), in light and dark. For Added mid-day's "mostly …", give the last weekday's "Reply to the
+  recruiter" row a category with its chip (the seed files that task under none) and open the Week
+  that holds that day (◀ on a Monday): it is one task on every day the seed adds it mid-day, so the
+  category reaches each of them, and any period holding one of those days names it.
+- **The board**: after `npm run seed`, press Board. At 1440: the four columns; each +'s box (Later's
+  card at the top, Next's at the end, In progress's row on today's sheet and asking past three rows;
+  Enter keeps the box, an empty Enter or Escape closes it, one with text stays open when left); a
+  left-open task's "Left open from …" in Next, Move to from each column (a done item's notice), a
+  park of a task typed seconds ago, a done-earlier task's editor, and this week's routine ticks in
+  Done. At 1000, where the columns are narrowest: titles clamp to two lines, meta lines wrap, Move
+  to's buttons wrap under their label (four on a left-open task). At 375: the switch shows one
+  column, the notice wraps, and with sign-in on (`web-local`,
+  `npm run seed -- --auth local --sessions`, the printed cookie set) the sheet's five header
   buttons fit with the brand's name gone, and the board's header is the same.
   Light and dark. The drag pass: at 1440, drag with the mouse between each pair of columns (Later
   and Next take the card where it is dropped), a done row onto Later (the notice), then by keyboard
@@ -1576,8 +1563,8 @@ The browser pass for each surface (the logic under it is already tested):
   and the columns with the seeded times and the time left, one line from 640 px and label over
   time over line on a phone; Overtime approved, Overtime off and the meal periods off (no Lunch
   by, and the switch's hint drops the lunch deadline) change it as they change the sheet's tiles;
-  Settings → Timeclock → Times on the board off hides it, and with the board off the switch isn't
-  there. Start timer, at 1440, 1000 (the lengths wrap under their label) and 375: a row's Start (the
+  Settings → Timeclock → Times on the board off hides it.
+  Start timer, at 1440, 1000 (the lengths wrap under their label) and 375: a row's Start (the
   bar shows the timer, the row's meta line `running`, then `paused`), a Next card's with three rows
   open (the nudge, then Add anyway pulls and starts), and with a timer running no editor offers it.
   Notes, at 1440, 1000 and 375: the SSO card's note button drawn filled at the end of its title
@@ -1591,7 +1578,7 @@ The browser pass for each surface (the logic under it is already tested):
   chip with its list scrolling inside and the box in view, the cards' dot and name (a long name at
   1000), and Settings → Board (a rename, a name in use, the swatches wrapping at 375, Remove, the
   touch areas).
-- **Keyboard shortcuts**: after `npm run seed -- --running` with the board on, at 1280: ? opens
+- **Keyboard shortcuts**: after `npm run seed -- --running`, at 1280: ? opens
   the list with the focus on it, ? again does nothing and Escape gives the focus back; P pauses
   and resumes, + adds the step, and once the timer is a minute or more past its end (see "The
   timer") F opens "How much to log?", where keys do nothing; after the finish, R starts a break and
@@ -1615,8 +1602,7 @@ The browser pass for each surface (the logic under it is already tested):
   sign-in, cookie sessions, passwords, the limiter, user management and the reset-password
   command.
 - **Anything a README screenshot or the Unraid listing shows** (sheet, retro, history, review,
-  settings, the board): `npm run screenshots`, then CONTRIBUTING's screenshot step. The board's
-  shot comes last and turns the board on first, so every other shot is taken with it off.
+  settings, the board): `npm run screenshots`, then CONTRIBUTING's screenshot step.
 
 ## Gotchas
 
@@ -1656,11 +1642,10 @@ The browser pass for each surface (the logic under it is already tested):
   `changes.end()` first. A proxy's idle cut is kept off by the ping (`PING_MS`, under nginx's 60 s
   and Cloudflare's 100 s) and its buffering by `X-Accel-Buffering: no`. A dev-server restart ends
   the stream, and the browser or `nextBackoff` opens it again.
-- The board's refresh lives in `BoardRefresh` (`hooks/useBoard.tsx`), a child the provider
-  mounts only while the board is on: switching it on reads at once (StrictMode's second mount
-  lands inside the loop's throttle), and nothing ticks while it is off. So the test files that
-  render `AppProviders` with `api` automocked need nothing for the board: `TEST_SETTINGS.board`
-  is false, and the provider sends nothing.
+- `BoardProvider` reads the board at once and on `useRefreshLoop` in every provider stack, so
+  `test/hooks.tsx` answers an automocked `getBoard` with an empty board before each test; a file
+  or test that needs another board mocks it itself, which runs after. The hook is registered once
+  per file because Vitest isolates each file (`isolate`, on by default).
 - A keydown inside a native modal `<dialog>` still bubbles to `window`, so the shortcut guard
   checks for `dialog[open]` itself. Its drag check reads the `aria-pressed` dnd-kit sets on a grip
   (beside `aria-roledescription`) while it drags; a dnd-kit upgrade that drops it lets keys

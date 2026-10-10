@@ -32,7 +32,7 @@ const save = vi.fn((run: () => Promise<void>) =>
 /** The dialog's settings setter. */
 const set = vi.fn();
 
-async function renderTab(settings = makeSettings({ board: true })) {
+async function renderTab(settings = makeSettings()) {
   render(
     <SettingsAndDays>
       <BoardTab settings={settings} set={set} save={save} />
@@ -51,7 +51,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   notSaved = 0;
   onServer = { ...makeBoard(), categories: [TICKETS, ADMIN, OLD] };
-  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ board: true })));
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
   vi.mocked(api.getBoard).mockImplementation(() => Promise.resolve(answered(onServer)));
   vi.mocked(api.addCategory).mockImplementation((c) => Promise.resolve(answered((onServer = withCategory(onServer, c)))));
   vi.mocked(api.patchCategory).mockImplementation((uid, patch) => Promise.resolve(answered((onServer = withCategoryPatch(onServer, uid, patch)))));
@@ -231,7 +231,8 @@ describe('BoardTab', () => {
   });
 
   it('reads the board as it opens, and offers Try again when it could not', async () => {
-    vi.mocked(api.getBoard).mockRejectedValueOnce(new Error('offline'));
+    // The tab's read and the provider's, both as it mounts.
+    vi.mocked(api.getBoard).mockRejectedValueOnce(new Error('offline')).mockRejectedValueOnce(new Error('offline'));
     await renderTab();
     expect(screen.getByText(new RegExp(LOAD_FAILED.board))).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
@@ -262,7 +263,7 @@ describe('BoardTab: recurring priorities', () => {
   });
 
   it('says how many recurring rows the morning offer ticks, described by its hint, and saves a change through set', async () => {
-    await renderTab(makeSettings({ board: true, recurringPerDay: 4 }));
+    await renderTab(makeSettings({ recurringPerDay: 4 }));
     expect(screen.getByText('Offered on Top priorities on these days. Nothing is added until you tap Add to today.')).toBeTruthy();
     const perDay = screen.getByRole('textbox', { name: 'Recurring rows per day' }) as HTMLInputElement;
     expect(perDay.value).toBe('4');

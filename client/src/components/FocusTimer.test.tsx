@@ -58,23 +58,13 @@ const ticked = (n: number) => Array.from({ length: n }, (_, i) => makePriority(i
 
 async function renderCard(priorities: Priority[] = [], breaks: Break[] = [], pick: CategoryPick | null = null, { isToday = true } = {}) {
   vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities, breaks })));
-  const view = render(
+  render(
     <AppProviders>
       <ShortcutKeys />
       <Card pick={pick} isToday={isToday} />
     </AppProviders>,
   );
   await settle();
-  return {
-    /** The board goes off (on another device): the sheet passes no chip data. */
-    boardOff: () =>
-      view.rerender(
-        <AppProviders>
-          <ShortcutKeys />
-          <Card pick={null} />
-        </AppProviders>,
-      ),
-  };
 }
 
 const start25 = () => screen.getByRole('button', { name: /^25\s*min$/ });
@@ -409,20 +399,6 @@ describe('FocusTimer', () => {
       typeLabel('Email the vendor');
       fireEvent.click(alsoAdd()!);
       expect(chip()!.getAttribute('aria-label')).toBe('Category for the new priority: none');
-    });
-
-    it('adds the row with no category with the board off, a pick made before it went off included', async () => {
-      vi.mocked(api.startSession).mockResolvedValue(answered(started()));
-      const { boardOff } = await renderCard([], [], makePick([TICKETS]));
-      typeLabel('Call the vendor');
-      fireEvent.click(alsoAdd()!);
-      fireEvent.click(chip()!);
-      fireEvent.click(screen.getByRole('option', { name: 'Tickets' }));
-      boardOff();
-      expect(chip()).toBeNull();
-      fireEvent.click(start25());
-      await settle();
-      expect(vi.mocked(api.putPriorities).mock.lastCall![1][0]).toMatchObject({ text: 'Call the vendor', categoryUid: null });
     });
   });
 

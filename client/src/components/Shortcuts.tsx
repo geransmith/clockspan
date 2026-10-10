@@ -23,7 +23,7 @@ function Help({ onClose }: { onClose: () => void }) {
   const titleId = useId();
   const { settings } = useSettings();
   const labels: Record<ShortcutId, string> = {
-    new: settings.board ? 'New priority on the sheet, new card in Later on the board' : 'New priority',
+    new: 'New priority on the sheet, new card in Later on the board',
     sheet: "Today's sheet",
     board: 'Board, or back to the sheet',
     history: 'History, or back to the sheet',
@@ -33,7 +33,7 @@ function Help({ onClose }: { onClose: () => void }) {
     more: `Add ${settings.adjustStepMinutes} minutes`,
     rest: 'Start a break from the timer card',
   };
-  const ids = (Object.keys(SHORTCUTS) as ShortcutId[]).filter((id) => id !== 'board' || settings.board);
+  const ids = Object.keys(SHORTCUTS) as ShortcutId[];
   return (
     <dialog {...dialog} className="dialog shortcuts-help" aria-labelledby={titleId}>
       <div className="dialog-inner">

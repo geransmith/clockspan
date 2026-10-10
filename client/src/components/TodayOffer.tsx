@@ -12,13 +12,13 @@ interface Leftovers {
 
 /**
  * Today's morning notice on Top priorities, as the sheet hands it down: what the last planned day
- * left unticked and, with the board on, the recurring priorities due today. The card shows each
- * group while its list doesn't hold it yet.
+ * left unticked and the recurring priorities due today. The card shows each group while its list
+ * doesn't hold it yet.
  */
 export interface MorningOffer {
-  /** The leftovers as seeds (`offeredLeftovers` with the board on), null with none. */
+  /** The leftovers as seeds (`offeredLeftovers`), null with none. */
   leftovers: Leftovers | null;
-  /** The recurring priorities due today and not answered on this device yet, in Settings order (`dueRecurring`); none with the board off. */
+  /** The recurring priorities due today and not answered on this device yet, in Settings order (`dueRecurring`); none before the board's first read. */
   recurring: Recurring[];
   /**
    * Records what the notice showed once Add to today, Not today or Start fresh is pressed: the

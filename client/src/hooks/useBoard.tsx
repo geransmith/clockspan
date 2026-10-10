@@ -41,8 +41,6 @@ export interface BoardState {
   confirmedRecurring: Recurring[] | undefined;
   /** The first read failed (Try again is `load`); a later failed read keeps the board shown. */
   failed: boolean;
-  /** The settings have loaded with the board switched on. While off, nothing is read and no answer is kept. */
-  on: boolean;
 }
 
 /**
@@ -54,7 +52,7 @@ export interface BoardState {
  * identity for the provider's life.
  */
 export interface BoardStore {
-  /** Reads the board; nothing while the board is off. Never rejects. */
+  /** Reads the board. Never rejects. */
   load(): Promise<void>;
   /**
    * A new task in a lane (a column's +, or a done item's new task), refused at the lanes' cap
@@ -73,7 +71,7 @@ export interface BoardStore {
    * then, once today's saves are in (so a task typed seconds ago exists or never went),
    * `DELETE /items/:uid`, which takes it off every day, today's list included, and leaves its
    * tombstone (a 404 counts as done: another device deleted it already), then every held day that
-   * named it read again and the ranges on screen with them (`taskChanged`). Works with the board off.
+   * named it read again and the ranges on screen with them (`taskChanged`).
    */
   deleteItem(uid: string): Promise<void>;
   /** A recurring priority removed in Settings → Board: it stops repeating, and the days it was on keep it (a 404 counts as done). */
@@ -102,23 +100,19 @@ const StoreCtx = createContext<BoardStore | null>(null);
 
 /**
  * The board: the server's tasks plus the writes not confirmed yet (`lib/optimistic.ts`), like the
- * settings. While on, `BoardRefresh` reads it every minute and when the tab comes back. While off
- * nothing is read and a write's answer isn't kept, but the writes the sheet makes through it (a
- * task deleted everywhere) still go out.
+ * settings, read at once, every minute and when the tab comes back (`useRefreshLoop`; StrictMode's
+ * second mount lands inside its throttle).
  */
 export function BoardProvider({ children }: { children: ReactNode }) {
   const { tracked, current, change, nextId, queue } = useTracked<Tracked<Board>>(untracked);
   const [failed, setFailed] = useState(false);
-  const { settings, loaded } = useSettings();
-  const on = loaded && settings.board;
-  const onRef = useLatest(on);
+  const { settings } = useSettings();
   const priorityCount = useLatest(settings.priorityCount);
   const dayStore = useDayStore();
 
   // Never shared: a read sent after a change (a refused write, a prune, a park) answers for it,
   // and one still out from before answers lower and is dropped.
   const load = useCallback((): Promise<void> => {
-    if (!onRef.current) return Promise.resolve();
     return api
       .getBoard()
       .then(({ value, revision }) => {
@@ -128,7 +122,8 @@ export function BoardProvider({ children }: { children: ReactNode }) {
       .catch(() => {
         if (current().confirmed === undefined) setFailed(true);
       });
-  }, [onRef, current, change]);
+  }, [current, change]);
+  useRefreshLoop(load, true);
 
   // A board change shown from now until the server has answered for it.
   const pend = useCallback(
@@ -140,21 +135,21 @@ export function BoardProvider({ children }: { children: ReactNode }) {
     [nextId, change],
   );
 
-  // The server's answer for change `id`: its board laid on while the board is on (null: confirmed
-  // as shown, a delete answered 404 or a row saved through the day store). A failure takes the
-  // change off, reads the board again and rejects.
+  // The server's answer for change `id`: its board laid on (null: confirmed as shown, a delete
+  // answered 404 or a row saved through the day store). A failure takes the change off, reads the
+  // board again and rejects.
   const answer = useCallback(
     async (id: number, apply: (b: Board) => Board, run: () => Promise<api.Answer<Board | null>>): Promise<void> => {
       try {
         const { value: saved, revision } = await run();
-        change((t) => (saved && onRef.current ? settleWith(t, [id], saved, revision) : confirm(settle(t, [id]), apply, revision)));
+        change((t) => (saved ? settleWith(t, [id], saved, revision) : confirm(settle(t, [id]), apply, revision)));
       } catch (err) {
         change((t) => settle(t, [id]));
         void load();
         throw err;
       }
     },
-    [change, onRef, load],
+    [change, load],
   );
 
   // One job on the board queue whose change shows at once, even while an earlier job is out.
@@ -373,29 +368,16 @@ export function BoardProvider({ children }: { children: ReactNode }) {
     const confirmed = new Set(tracked.confirmed?.recurring.map((r) => r.uid));
     return board?.recurring.filter((r) => confirmed.has(r.uid));
   }, [board, tracked.confirmed]);
-  const state = useMemo(() => ({ board, confirmedRecurring, failed, on }), [board, confirmedRecurring, failed, on]);
+  const state = useMemo(() => ({ board, confirmedRecurring, failed }), [board, confirmedRecurring, failed]);
   const store = useMemo(
     () => ({ load, addItem, editItem, deleteItem, removeRecurring, removeFromToday, editRow, move, addCategory, editCategory, removeCategory }),
     [load, addItem, editItem, deleteItem, removeRecurring, removeFromToday, editRow, move, addCategory, editCategory, removeCategory],
   );
   return (
     <StateCtx.Provider value={state}>
-      <StoreCtx.Provider value={store}>
-        {on && <BoardRefresh refresh={load} />}
-        {children}
-      </StoreCtx.Provider>
+      <StoreCtx.Provider value={store}>{children}</StoreCtx.Provider>
     </StateCtx.Provider>
   );
-}
-
-/**
- * The board kept in step while it is on (`useRefreshLoop`: at once, every minute and when the tab
- * comes back). Mounted only while on, so switching the board on reads it at once, and StrictMode's
- * second mount lands inside the loop's throttle and sends nothing more.
- */
-function BoardRefresh({ refresh }: { refresh: () => Promise<void> }) {
-  useRefreshLoop(refresh, true);
-  return null;
 }
 
 export function useBoardState(): BoardState {
@@ -417,19 +399,19 @@ function bannerOnFailure(saved: Promise<void>): void {
 
 /**
  * The category chip's data, for a view that offers the chip and passes it down (the board page,
- * the sheet, Settings → Board); null while the board is off or before its first read. `create`
- * gives the uid to set at once (`categoryForName`): a category is a soft link, so the row or card
- * that takes it needs no wait. A new or removed category goes out as an optimistic `addCategory`,
- * and its failure (a stale copy whose name another device took, or a server cap) takes it off,
- * reads the board again and goes to `report`, the banner by default (Settings → Board passes the
- * dialog's save, whose header says Not saved); what picked it then reads as no category.
- * `refresh` reads the board, as the chip's list does when it opens.
+ * the sheet, Settings → Board); null before the board's first read. `create` gives the uid to set
+ * at once (`categoryForName`): a category is a soft link, so the row or card that takes it needs
+ * no wait. A new or removed category goes out as an optimistic `addCategory`, and its failure (a
+ * stale copy whose name another device took, or a server cap) takes it off, reads the board again
+ * and goes to `report`, the banner by default (Settings → Board passes the dialog's save, whose
+ * header says Not saved); what picked it then reads as no category. `refresh` reads the board, as
+ * the chip's list does when it opens.
  */
 export function useCategoryPick(report: (saved: Promise<void>) => void = bannerOnFailure): CategoryPick | null {
-  const { board, on } = useBoardState();
+  const { board } = useBoardState();
   const store = useBoardStore();
   return useMemo(() => {
-    if (!on || !board) return null;
+    if (!board) return null;
     const { categories } = board;
     return {
       categories,
@@ -440,5 +422,5 @@ export function useCategoryPick(report: (saved: Promise<void>) => void = bannerO
       },
       refresh: () => void store.load(),
     };
-  }, [on, board, store, report]);
+  }, [board, store, report]);
 }

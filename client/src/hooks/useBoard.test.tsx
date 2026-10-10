@@ -8,7 +8,6 @@ import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { warnSaveFailed } from '../lib/alerts';
 import { MoveRefused, withCategory, withCategoryPatch, withItem, withItemPatch, withoutCategory, withoutItem, type StoreMove } from '../lib/board';
 import { ADD_PRIORITY_FAILED, BOARD, SAVE_FAILED } from '../lib/copy';
-import { applySettingsPatch } from '../lib/settings';
 import {
   answered,
   apiError,
@@ -33,14 +32,13 @@ import type { Board, Priority } from '../types';
 import { useBoardState, useBoardStore, useCategoryPick } from './useBoard';
 import { useDay, useDays, useDayStore } from './useDay';
 import { useLeftOpen } from './useLeftOpen';
-import { useSettings } from './useSettings';
 
 vi.mock('../api');
 vi.mock('../lib/alerts');
 
 const TOMORROW = '2026-09-29';
 
-/** The board, its store, the day store and the settings' update, with today loaded as the board view loads it. */
+/** The board, its store and the day store, with today loaded as the board view loads it. */
 function renderBoard({ strict = false, today = true } = {}) {
   return renderHook(
     () => {
@@ -51,7 +49,6 @@ function renderBoard({ strict = false, today = true } = {}) {
         days: useDayStore(),
         heldDays: useDays().days,
         generation: useDays().generation,
-        updateSettings: useSettings().update,
       };
     },
     { wrapper: SettingsAndDays, reactStrictMode: strict },
@@ -74,8 +71,7 @@ beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
   onServer = makeBoard(makeCard('later0000001', 'Write a KB'), makeCard('next00000001', 'Follow up', { lane: 'next' }));
   lists = {};
-  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ board: true })));
-  vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(answered(applySettingsPatch(makeSettings({ board: true }), patch))));
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
   vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(answered(makeDay(date, { priorities: lists[date] ?? [] }))));
   vi.mocked(api.putPriorities).mockImplementation((date, list) => Promise.resolve(answered({ priorities: (lists[date] = list) })));
   vi.mocked(api.getBoard).mockImplementation(() => Promise.resolve(answered(onServer)));
@@ -88,34 +84,12 @@ beforeEach(() => {
 });
 
 describe('reading the board', () => {
-  it('sends nothing while the board is off or the settings have not loaded, and nothing ticks', async () => {
-    const settings = deferredAnswer<ReturnType<typeof makeSettings>>();
-    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings())).mockReturnValueOnce(settings.promise);
-    const { result } = renderBoard();
-    await settle();
-    expect(result.current.on).toBe(false);
-    settings.resolve(makeSettings());
-    await settle(5 * MINUTE_MS);
-    await act(() => result.current.store.load());
-    expect(result.current.on).toBe(false);
-    expect(api.getBoard).not.toHaveBeenCalled();
-    expect(result.current.board).toBeUndefined();
-  });
-
-  it('reads at once when switched on, once under StrictMode, and keeps the board when switched off', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
+  it('reads at once without waiting for the settings, and once under StrictMode', async () => {
+    vi.mocked(api.getSettings).mockReturnValue(deferredAnswer<ReturnType<typeof makeSettings>>().promise);
     const { result } = renderBoard({ strict: true });
     await settle();
-    expect(api.getBoard).not.toHaveBeenCalled();
-    await act(() => result.current.updateSettings({ board: true }));
-    await settle();
     expect(api.getBoard).toHaveBeenCalledTimes(1);
-    expect(result.current).toMatchObject({ on: true, failed: false });
-    expect(shownTexts(result.current.board)).toEqual(['Write a KB', 'Follow up']);
-
-    await act(() => result.current.updateSettings({ board: false }));
-    await settle(5 * MINUTE_MS);
-    expect(api.getBoard).toHaveBeenCalledTimes(1);
+    expect(result.current.failed).toBe(false);
     expect(shownTexts(result.current.board)).toEqual(['Write a KB', 'Follow up']);
   });
 
@@ -285,26 +259,6 @@ describe('task writes', () => {
     await settle();
     expect(reads()).toEqual([YESTERDAY, TODAY]);
     expect(result.current.generation).toBe(3);
-  });
-});
-
-describe('with the board off', () => {
-  beforeEach(() => {
-    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
-  });
-
-  it('sends a write, keeps no board from its answer, and reads none after a failure', async () => {
-    lists[TODAY] = [makePriority(1, 'Report', { uid: 'task00000001', listed: 2 })];
-    const { result } = renderBoard();
-    await settle();
-    await act(() => result.current.store.deleteItem('task00000001'));
-    expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith('task00000001');
-    expect(result.current.board).toBeUndefined();
-    vi.mocked(api.deleteItem).mockRejectedValueOnce(apiError(500));
-    await expect(act(() => result.current.store.deleteItem('task00000002'))).rejects.toThrow('Request failed (500)');
-    await settle();
-    expect(result.current.board).toBeUndefined();
-    expect(api.getBoard).not.toHaveBeenCalled();
   });
 });
 
@@ -749,19 +703,14 @@ describe('categories', () => {
 
   describe('useCategoryPick', () => {
     function renderPick(report?: (saved: Promise<void>) => void) {
-      return renderHook(() => ({ pick: useCategoryPick(report), board: useBoardState().board, updateSettings: useSettings().update }), {
-        wrapper: SettingsAndDays,
-      });
+      return renderHook(() => ({ pick: useCategoryPick(report), board: useBoardState().board }), { wrapper: SettingsAndDays });
     }
 
-    it('is null while the board is off, and until its first read lands', async () => {
-      vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
+    it("is null until the board's first read lands", async () => {
       const read = deferredAnswer<Board>();
       vi.mocked(api.getBoard).mockReturnValueOnce(read.promise);
       const { result } = renderPick();
       await settle();
-      expect(result.current.pick).toBeNull();
-      await act(() => result.current.updateSettings({ board: true }));
       expect(result.current.pick).toBeNull();
       read.resolve(onServer);
       await settle();

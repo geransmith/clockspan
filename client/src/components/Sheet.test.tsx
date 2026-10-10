@@ -248,9 +248,8 @@ describe("Sheet: the timeclock card's state", () => {
   });
 });
 
-describe('Sheet: what the last day left open, with the board on', () => {
+describe('Sheet: what the last day left open', () => {
   it('offers a task in Next or on no lane in the morning notice, leaves one parked in Later where it is, and waits for the board', async () => {
-    stored = makeSettings({ board: true });
     serveRange([
       makeDay(YESTERDAY, {
         priorities: [
@@ -272,12 +271,21 @@ describe('Sheet: what the last day left open, with the board on', () => {
   });
 
   it('offers nothing when every row it would bring back was moved off Next', async () => {
-    stored = makeSettings({ board: true });
     serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Parked', { uid: 'later0000001' })] })]);
     vi.mocked(api.getBoard).mockResolvedValue(answered(makeBoard(makeCard('later0000001', 'Parked'))));
     await renderSheet();
     expect(screen.queryByText(LEFT_OPEN.title('yesterday'))).toBeNull();
     expect(document.querySelector('.left-open')).toBeNull();
+  });
+
+  // Without the board's copy, a task parked in Later or done there would be offered again.
+  it('offers nothing while the board read fails, and the leftovers once a later read lands', async () => {
+    serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Invoices')] })]);
+    vi.mocked(api.getBoard).mockRejectedValueOnce(new Error('offline'));
+    await renderSheet();
+    expect(screen.queryByText(LEFT_OPEN.title('yesterday'))).toBeNull();
+    await settle(MINUTE_MS);
+    expect(screen.getByText(LEFT_OPEN.title('yesterday'))).toBeTruthy();
   });
 });
 
@@ -293,7 +301,6 @@ describe('Sheet: the recurring priorities due today', () => {
 
   beforeEach(() => {
     localStorage.clear();
-    stored = makeSettings({ board: true });
     vi.mocked(api.getBoard).mockResolvedValue(answered({ ...makeBoard(), recurring: [SATURDAY, QUEUE] }));
     vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities })));
   });
@@ -370,19 +377,7 @@ describe('Sheet: the recurring priorities due today', () => {
     expect(document.querySelector('.today-offer')).toBeNull();
   });
 
-  it('takes the routines away once the board is switched off on another device, and offers the leftovers alone', async () => {
-    serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Invoices')] })]);
-    await renderSheet();
-    expect(offered()).toEqual(['Invoices', 'Monitor the queue']);
-    stored = makeSettings();
-    // The settings are read again each minute; the board keeps its last copy.
-    await settle(MINUTE_MS);
-    expect(offered()).toEqual(['Invoices']);
-    expect(screen.queryByText(TODAY_OFFER.recurring)).toBeNull();
-  });
-
-  it('offers no routine with the board off, and still offers the leftovers while the list holds only a routine', async () => {
-    stored = makeSettings();
+  it('still offers the leftovers while the list holds only a routine, and not the routine it holds', async () => {
     vi.mocked(api.getDay).mockResolvedValue(
       answered(makeDay(TODAY, { priorities: [makePriority(1, 'Monitor the queue', { uid: QUEUE.uid, recurring: true })] }), 1),
     );
@@ -390,11 +385,10 @@ describe('Sheet: the recurring priorities due today', () => {
     await renderSheet();
     expect(offered()).toEqual(['Invoices']);
     expect(screen.queryByText(TODAY_OFFER.recurring)).toBeNull();
-    expect(api.getBoard).not.toHaveBeenCalled();
   });
 
-  it("with the board off, doesn't offer the leftovers again once a row Add to today brought over is removed", async () => {
-    stored = makeSettings();
+  it("doesn't offer the leftovers again once a row Add to today brought over is removed", async () => {
+    vi.mocked(api.getBoard).mockResolvedValue(answered(makeBoard()));
     serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Invoices')] })]);
     await renderSheet();
     fireEvent.click(button(LEFT_OPEN.add));
@@ -409,7 +403,7 @@ describe('Sheet: the recurring priorities due today', () => {
 });
 
 describe('Sheet: × on a task on other days', () => {
-  it('deletes it everywhere through the board store, with the board off too', async () => {
+  it('deletes it everywhere through the board store', async () => {
     const email = makePriority(1, 'Email', { listed: 3 });
     vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: [email] }), 1));
     vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities: priorities.filter((p) => p.uid != null) })));
@@ -420,7 +414,6 @@ describe('Sheet: × on a task on other days', () => {
     await settle();
     expect(vi.mocked(api.putPriorities).mock.lastCall![1].some((p) => p.uid === email.uid)).toBe(false);
     expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith(email.uid);
-    expect(api.getBoard).not.toHaveBeenCalled();
   });
 });
 
@@ -492,7 +485,7 @@ describe("Sheet: a row's note", () => {
   });
 });
 
-describe("Sheet: a category's chip, with the board on", () => {
+describe("Sheet: a category's chip", () => {
   const TICKETS = makeCategory('cat000000001', 'Tickets');
   const ADMIN = makeCategory('cat000000002', 'Admin', { color: 'teal' });
   const day = makeDay(TODAY, {
@@ -508,7 +501,6 @@ describe("Sheet: a category's chip, with the board on", () => {
   });
 
   it("gives a priority row, the timer's new row and the log the board's categories", async () => {
-    stored = makeSettings({ board: true });
     await renderSheet();
     expect(chips()).toEqual(['Category for priority 1: Tickets']);
     expect(screen.getByRole('img', { name: 'Admin' })).toBeTruthy();
@@ -521,12 +513,5 @@ describe("Sheet: a category's chip, with the board on", () => {
     fireEvent.click(screen.getByRole('button', { name: /^25\s*min$/ }));
     await settle();
     expect(vi.mocked(api.putPriorities).mock.lastCall![1][1]).toMatchObject({ text: 'Call the vendor', categoryUid: ADMIN.uid });
-  });
-
-  it('shows none of them with the board off', async () => {
-    await renderSheet();
-    expect(chips()).toEqual([]);
-    expect(screen.queryByRole('img', { name: 'Admin' })).toBeNull();
-    expect(api.getBoard).not.toHaveBeenCalled();
   });
 });

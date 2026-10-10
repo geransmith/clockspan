@@ -15,7 +15,7 @@ vi.mock('../api');
 async function renderHeader(
   date: string,
   view: Route['view'] = 'sheet',
-  { board = false, auth = makeAuth({ mode: 'none', user: DEFAULT_USER }), customize = false, onToggleCustomize = vi.fn() } = {},
+  { auth = makeAuth({ mode: 'none', user: DEFAULT_USER }), customize = false, onToggleCustomize = vi.fn() } = {},
 ) {
   const onNavigate = vi.fn();
   vi.mocked(api.getAuth).mockResolvedValue(auth);
@@ -27,7 +27,6 @@ async function renderHeader(
           view={view}
           date={date}
           today={TODAY}
-          board={board}
           customize={customize}
           onNavigate={onNavigate}
           onToggleCustomize={onToggleCustomize}
@@ -75,12 +74,9 @@ describe('Header', () => {
     }
   });
 
-  it('shows the Board button only with the board on, pressed on the board, going there from every other view and back to the sheet', async () => {
-    await renderHeader(TODAY);
-    expect(screen.queryByRole('button', { name: 'Board' })).toBeNull();
-    cleanup();
+  it('presses Board on the board only, and goes there from every other view and back to the sheet from it', async () => {
     for (const view of VIEWS) {
-      const onNavigate = await renderHeader(TODAY, view, { board: true });
+      const onNavigate = await renderHeader(TODAY, view);
       const button = screen.getByRole('button', { name: 'Board' });
       expect(button.getAttribute('aria-pressed'), view).toBe(String(view === 'board'));
       fireEvent.click(button);
@@ -90,25 +86,24 @@ describe('Header', () => {
   });
 
   // The control the focus was on may go with the page, so the focus moves to the button, as a click leaves it.
-  it('binds S to the brand, H to History and B to Board while the board is on, each button naming its key and taking the focus', async () => {
+  it('binds S to the brand, H to History and B to Board, each button naming its key and taking the focus', async () => {
     let onNavigate = await renderHeader(YESTERDAY, 'history');
     const button = (name: string) => screen.getByRole('button', { name });
     const keys = (name: string) => button(name).getAttribute('aria-keyshortcuts');
     expect([keys('Clockspan'), keys('History')]).toEqual(['S', 'H']);
-    expect(pressKey('b')).toBe(true);
     pressKey('h');
     expect(onNavigate).toHaveBeenLastCalledWith({ view: 'sheet' });
     pressKey('s');
     expect(onNavigate).toHaveBeenLastCalledWith({ view: 'sheet', date: null });
     expect(document.activeElement).toBe(button('Clockspan'));
     cleanup();
-    onNavigate = await renderHeader(TODAY, 'board', { board: true });
+    onNavigate = await renderHeader(TODAY, 'board');
     expect(keys('Board')).toBe('B');
     pressKey('b');
     expect(onNavigate).toHaveBeenLastCalledWith({ view: 'sheet' });
     expect(onNavigate).toHaveBeenCalledOnce();
     cleanup();
-    onNavigate = await renderHeader(TODAY, 'sheet', { board: true });
+    onNavigate = await renderHeader(TODAY, 'sheet');
     pressKey('h');
     expect(onNavigate).toHaveBeenLastCalledWith({ view: 'history' });
     expect(document.activeElement).toBe(button('History'));
@@ -147,23 +142,16 @@ describe('Header', () => {
 
   // Customize, Board, History, Settings and Sign out leave no room on a phone for the brand's name;
   // every view keeps the same header, so a page switch moves nothing.
-  it('marks the row crowded on every view with the board on and someone signed in; the brand keeps its name', async () => {
-    const signedIn = makeAuth({ user: DEFAULT_USER });
+  it('marks the row crowded on every view with someone signed in; the brand keeps its name', async () => {
     const crowded = () => document.querySelector('.topbar-row--crowded') !== null;
     for (const view of VIEWS) {
-      await renderHeader(TODAY, view, { board: true, auth: signedIn });
+      await renderHeader(TODAY, view, { auth: makeAuth({ user: DEFAULT_USER }) });
       expect(crowded(), view).toBe(true);
       expect(screen.getByRole('button', { name: 'Clockspan' })).toBeTruthy();
       cleanup();
     }
-    for (const [board, auth] of [
-      [false, signedIn],
-      [true, makeAuth({ mode: 'none', user: DEFAULT_USER })],
-    ] as const) {
-      await renderHeader(TODAY, 'sheet', { board, auth });
-      expect(crowded(), `${String(board)} ${auth.mode}`).toBe(false);
-      cleanup();
-    }
+    await renderHeader(TODAY, 'sheet');
+    expect(crowded()).toBe(false);
   });
 
   it('sends Today to the null route, handing the focus to Previous day as Today goes', async () => {

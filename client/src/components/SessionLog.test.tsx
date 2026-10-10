@@ -366,7 +366,7 @@ describe('SessionLog', () => {
       expect(dot('Old project')).toBeTruthy();
     });
 
-    it('shows no dot and no chip with the board off', async () => {
+    it("shows no dot and no chip before the board's first read", async () => {
       await renderLog([at(1, 'Picked', { categoryUid: ADMIN.uid })], [], TODAY, { priorities: ROWS });
       expect(dot('Admin')).toBeNull();
       edit(/Picked/);

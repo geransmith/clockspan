@@ -162,7 +162,7 @@ export const LEFT_OPEN = {
 };
 
 /**
- * The morning notice's recurring group (with the board on): its heading, the button that answers
+ * The morning notice's recurring group: its heading, the button that answers
  * it, and the line when more are ticked than Recurring rows per day.
  */
 export const TODAY_OFFER = {

@@ -1,13 +1,13 @@
 import { act, fireEvent } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { vi } from 'vitest';
+import { beforeEach, vi } from 'vitest';
 import * as api from '../api';
 import { BoardProvider } from '../hooks/useBoard';
 import { DayProvider } from '../hooks/useDay';
 import { SettingsProvider } from '../hooks/useSettings';
 import { useShortcutListener } from '../hooks/useShortcuts';
 import type { Day } from '../types';
-import { answered, apiError } from './fixtures';
+import { answered, apiError, makeBoard } from './fixtures';
 
 export * from './fixtures';
 export { AppProviders } from '../hooks/AppProviders';
@@ -19,7 +19,14 @@ export { AppProviders } from '../hooks/AppProviders';
  * with no React; this module re-exports them, so a happy-dom test imports one module, while a
  * lib test (`node`) imports `fixtures.ts`. Each test file mocks the `api` module (and
  * `lib/alerts` where banners matter) itself: `vi.mock` only applies in the file that calls it.
+ * Before each test of a file that mocks `api`, an automocked `getBoard` answers an empty board.
  */
+
+// Every provider stack reads the board (BoardProvider), and an automocked call answers undefined.
+// A file's own beforeEach runs after this one, so a file or test that needs another board mocks it.
+beforeEach(() => {
+  if (vi.isMockFunction(api.getBoard)) vi.mocked(api.getBoard).mockResolvedValue(answered(makeBoard()));
+});
 
 /** Moves the fake clock (0 = just the pending promises) and lets React render what changed. */
 export async function settle(ms = 0): Promise<void> {

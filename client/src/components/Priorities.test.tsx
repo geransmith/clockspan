@@ -298,10 +298,10 @@ describe("Priorities: a row's category", () => {
   const ADMIN = makeCategory('cat000000002', 'Admin', { color: 'teal' });
   const chip = (n: number) => screen.queryByRole('button', { name: new RegExp(`^Category for priority ${n}:`) });
   const option = (name: string) => screen.getByRole('option', { name });
-  /** The card with the board on: the chip's data over Tickets and Admin, unless given. */
+  /** The card with the chip's data, over Tickets and Admin unless given. */
   const withPick = (rows: Priority[], pick: CategoryPick = makePick([TICKETS, ADMIN])) => renderCard(rows, [], pick);
 
-  it('puts a chip at the end of each row with text while the board is on, and none on an empty row', async () => {
+  it('puts a chip at the end of each row with text, and none on an empty row', async () => {
     await withPick([makePriority(1, 'Report', { categoryUid: TICKETS.uid }), makePriority(2, 'Email')]);
     expect(chip(1)!.getAttribute('aria-label')).toBe('Category for priority 1: Tickets');
     expect(chip(2)!.getAttribute('aria-label')).toBe('Category for priority 2: none');
@@ -317,7 +317,7 @@ describe("Priorities: a row's category", () => {
     ]);
   });
 
-  it("gives every row the chip's column while the board is on, an empty one with no chip included", async () => {
+  it("gives every row the chip's column, an empty one with no chip included", async () => {
     const rows = [makePriority(1, 'A'), makePriority(2, 'B'), makePriority(3, 'C'), emptyRow(4)];
     await withPick(rows);
     const shown = [...document.querySelectorAll('.priority-row')];
@@ -328,7 +328,7 @@ describe("Priorities: a row's category", () => {
     expect(screen.getByRole('button', { name: 'Remove priority 4' })).toBeTruthy();
   });
 
-  it("shows no chip and no chip column with the board off, and a written row's end holds its note button alone", async () => {
+  it("shows no chip and no chip column before the board's first read, and a written row's end holds its note button alone", async () => {
     await renderCard([makePriority(1, 'Report', { categoryUid: TICKETS.uid }), emptyRow(2), emptyRow(3), emptyRow(4)]);
     expect(chip(1)).toBeNull();
     expect(document.querySelectorAll('.priority-row')).toHaveLength(4);
@@ -554,7 +554,7 @@ describe('Priorities: the morning offer', () => {
     expect(shown()).toEqual(['Invoices', 'Monitor the queue']);
   });
 
-  it('with the board off shows the leftovers alone, each a ticked box, and brings each over as its own task, in its category, added now', async () => {
+  it('with no routine due shows the leftovers alone, each a ticked box, and brings each over as its own task, in its category, added now', async () => {
     const answer = vi.fn();
     const seeds = [seed('Invoices', { listed: 1, logged: 600 }), seed('Call the bank', { categoryUid: 'cafe00000001' })];
     const { saved } = await withOffer([], offerOf({ leftovers: left(seeds), answer }));
@@ -658,7 +658,7 @@ describe('Priorities: routines on the list', () => {
     expect(document.activeElement).toBe(textbox(6));
   });
 
-  it('marks a written routine row before its chip while the board is on, ticked or not, and no other row', async () => {
+  it('marks a written routine row before its chip, ticked or not, and no other row', async () => {
     const rows = [routineRow(1, QUEUE), routineRow(2, FOLLOW_UPS, { done: true }), makePriority(3, 'Report'), emptyRow(4)];
     await renderCard(rows, [], makePick());
     const ends = [...document.querySelectorAll('.priority-row')].map((r) =>
@@ -673,7 +673,7 @@ describe('Priorities: routines on the list', () => {
     expect(screen.getAllByRole('img', { name: 'Repeats' })).toHaveLength(2);
   });
 
-  it('shows no mark with the board off', async () => {
+  it("shows no mark before the board's first read", async () => {
     await renderCard([routineRow(1, QUEUE)]);
     expect(screen.queryByRole('img', { name: 'Repeats' })).toBeNull();
   });
