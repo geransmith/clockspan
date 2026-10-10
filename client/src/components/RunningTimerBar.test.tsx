@@ -191,6 +191,31 @@ describe('RunningTimerBar', () => {
       expect(api.patchSession).not.toHaveBeenCalled();
     });
 
+    it('leaves the focus where it is when the label comes back after an edit ended by Enter', async () => {
+      const unplanned = makeSession();
+      vi.mocked(api.patchSession).mockImplementation((id, patch) => Promise.resolve(answered({ session: { ...unplanned, id, ...patch } })));
+      await renderBar(unplanned);
+      fireEvent.click(label());
+      fireEvent.change(input(), { target: { value: 'Renamed' } });
+      fireEvent.keyDown(input(), { key: 'Enter' });
+      await settle();
+      const elsewhere = screen.getByRole('button', { name: 'Read today again' });
+      act(() => elsewhere.focus());
+      // Another device links the session to a row, then sets it back to unplanned.
+      const sync = async (priorityUid: string | null) => {
+        vi.mocked(api.getRunning).mockResolvedValue(
+          answered({ session: { ...unplanned, label: 'Renamed', priorityUid, title: priorityUid && 'Ship the fix' } }),
+        );
+        await settle(6000);
+        setVisibility('visible');
+        await settle();
+      };
+      await sync('u1');
+      await sync(null);
+      expect(label().textContent).toBe('Renamed');
+      expect(document.activeElement).toBe(elsewhere);
+    });
+
     it("names a session whose task left the day by the task's name, with no label to edit", async () => {
       await renderBar(makeSession({ priorityUid: 'gone00000001', title: 'Left the day' }));
       expect(screen.getByText('Left the day').className).toBe('running-label');

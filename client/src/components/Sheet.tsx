@@ -18,7 +18,7 @@ import { isOneOff, patchRow } from '../lib/priorities';
 import { dueRecurring } from '../lib/recurring';
 import { CARD_SIDES } from '../../../shared/settings.js';
 import { focusOf } from '../lib/retro';
-import { clampToDay, dayTimeclock, punchLabel, type TimeclockResult, type TimeclockState } from '../lib/timeclock';
+import { clampToDay, dayTimeclock, punchLabel, type ExtraPair, type TimeclockResult, type TimeclockState } from '../lib/timeclock';
 import { weekHours } from '../lib/week';
 import type { CardId, CardSide, Punch } from '../types';
 import { CardFrame, type SheetCard } from './CardFrame';
@@ -28,7 +28,7 @@ import { LoadFailed } from './LoadFailed';
 import { Priorities } from './Priorities';
 import { Retro } from './Retro';
 import { SessionLog } from './SessionLog';
-import { Timeclock } from './Timeclock';
+import { shownPairs, Timeclock, type PairTyping } from './Timeclock';
 
 const SortableCards = lazy(() => import('./SortableCards').then((m) => ({ default: m.SortableCards })));
 
@@ -60,6 +60,10 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
   const week = weekDays ? weekHours(weekDays, settings, today, now) : null;
   const focus = focusOf(day?.sessions ?? []);
   const orderNotice = useId();
+  // The pair being typed in on the timeclock card, which the notice names as the card does. Kept
+  // with its date: a new date mounts the card again with no blur to let it go.
+  const [typing, setTyping] = useState<(PairTyping & { date: string }) | null>(null);
+  const pin = typing?.date === date ? typing : null;
   // Today's list with no one-off written yet (a routine on it is no plan) offers, in the morning
   // notice, what the last planned day left unticked, the top of Next and the recurring priorities
   // due today. A leftover the board holds in Later or as done stays there. Up Next waits for the
@@ -136,7 +140,18 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
     return (
       <div className={sheetClass}>
         {dateNav}
-        {failed ? <LoadFailed title={LOAD_FAILED.title} onRetry={() => void store.load(date)} /> : <div className="loading" aria-busy="true" />}
+        {failed ? (
+          <LoadFailed
+            title={LOAD_FAILED.title}
+            onRetry={() => {
+              // Try Again goes as the loading block takes its place: Previous day takes the focus.
+              document.querySelector<HTMLElement>('.datenav [aria-label="Previous day"]')?.focus();
+              void store.load(date);
+            }}
+          />
+        ) : (
+          <div className="loading" aria-busy="true" />
+        )}
       </div>
     );
 
@@ -160,6 +175,8 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
             onWorkMinutesChange={(m) => void store.setWorkMinutes(date, m)}
             onEditingChange={onPunchEditing}
             orderNotice={orderNotice}
+            typing={pin}
+            onTyping={(t) => setTyping(t && { ...t, date })}
           />
         );
       case 'priorities':
@@ -264,7 +281,7 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
       {dateNav}
       {/* A live region already on the page when the notice appears, or a screen reader may not read it. */}
       <div className="punch-order" role="status">
-        {tc.outOfOrder && <PunchOrder id={orderNotice} punches={day.punches} slip={tc.outOfOrder} />}
+        {tc.outOfOrder && <PunchOrder id={orderNotice} punches={day.punches} pairs={shownPairs(day.punches, pin)} slip={tc.outOfOrder} />}
       </div>
       {columns
         ? CARD_SIDES.map((side) => (
@@ -289,7 +306,7 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
 });
 
 /** The punch out of place and the one it should come after, named and timed as the card shows them. */
-function PunchOrder({ id, punches, slip }: { id: string; punches: Punch[]; slip: NonNullable<TimeclockResult['outOfOrder']> }) {
+function PunchOrder({ id, punches, pairs, slip }: { id: string; punches: Punch[]; pairs: ExtraPair[]; slip: NonNullable<TimeclockResult['outOfOrder']> }) {
   const { formatTime } = useTimeFormat();
   const time = (position: number) => {
     const at = punches.find((p) => p.position === position)?.at;
@@ -297,7 +314,7 @@ function PunchOrder({ id, punches, slip }: { id: string; punches: Punch[]; slip:
   };
   return (
     <div id={id} className="notice notice--danger">
-      {PUNCH_ORDER(punchLabel(punches, slip.position), time(slip.position)!, punchLabel(punches, slip.after), time(slip.after))}
+      {PUNCH_ORDER(punchLabel(punches, slip.position, pairs), time(slip.position)!, punchLabel(punches, slip.after, pairs), time(slip.after))}
     </div>
   );
 }

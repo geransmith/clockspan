@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, renderHook, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
+import { DAY_MS, HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import * as api from '../api';
 import { useDayStore } from '../hooks/useDay';
 import { warnQuietly, warnSaveFailed } from '../lib/alerts';
@@ -230,6 +230,17 @@ describe('Sheet', () => {
     expect(document.activeElement).toBe(previous);
   });
 
+  it('gives the focus to Previous day as Try Again loads the day in place of its notice', async () => {
+    vi.mocked(api.getDay).mockRejectedValueOnce(new ApiError(500, 'Server error', 0));
+    await renderSheet();
+    const retry = button(LOAD_FAILED.retry);
+    act(() => retry.focus());
+    fireEvent.click(retry);
+    await settle();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(document.activeElement).toBe(button('Previous day'));
+  });
+
   it('steps a card up and down within its own column', async () => {
     await renderSheet(true);
     // Third in the layout, but first in the right column.
@@ -313,6 +324,67 @@ describe("Sheet: the timeclock card's state", () => {
       expect(s.getAttribute('aria-describedby')?.split(' ')).toContain(notice.id);
     }
     expect(segments('Lunch out').some((s) => s.hasAttribute('aria-invalid'))).toBe(false);
+  });
+});
+
+describe('Sheet: the punch-order notice while a pair is typed in', () => {
+  // Clocked in at 8:00, lunch from 12:00 to 12:30, a break from 10:00 to 10:15 (Out 1 / In 1, before
+  // lunch) and, in the rows before it, an empty pair after lunch (Out 2 / In 2). Its Out typed as
+  // 11:00 belongs before lunch, and leaves Lunch out with no In before it.
+  const punches = (out2: number | null) => punchesAt(T0 - HOUR_MS, T0 + 3 * HOUR_MS, T0 + 3.5 * HOUR_MS, out2, null, T0 + HOUR_MS, T0 + 1.25 * HOUR_MS);
+  const labels = () => [...document.querySelectorAll('.punch-label')].map((l) => l.textContent);
+  const focusOut2 = () =>
+    act(() =>
+      within(screen.getByRole('group', { name: 'Out 2 time' }))
+        .getAllByRole('spinbutton')[0]!
+        .focus(),
+    );
+
+  it('names the rows as the card does, which keeps that pair in its place until the focus leaves it', async () => {
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { punches: punches(null) }), 1));
+    // The day store the sheet uses, to bring the typed time back as the save would.
+    const { result } = renderHook(() => useDayStore(), {
+      wrapper: ({ children }) => (
+        <AppProviders>
+          <SheetAt />
+          {children}
+        </AppProviders>
+      ),
+    });
+    await settle();
+    focusOut2();
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { punches: punches(T0 + 2 * HOUR_MS) }), 1));
+    await act(() => result.current.refresh(TODAY));
+    await settle();
+    expect(labels()).toEqual(['Clock in', 'Out 1', 'In 1', 'Lunch out', 'Lunch in', 'Out 2', 'In 2', 'Clock out']);
+    expect(screen.getByText(PUNCH_ORDER('Lunch out', '12:00 PM', 'In 2', null))).toBeTruthy();
+    act(() => button('Now: Clock in').focus());
+    expect(labels()).toEqual(['Clock in', 'Out 1', 'In 1', 'Out 2', 'In 2', 'Lunch out', 'Lunch in', 'Clock out']);
+    expect(screen.getByText(PUNCH_ORDER('Lunch out', '12:00 PM', 'In 1', null))).toBeTruthy();
+  });
+
+  it("lets the pair go when another day's sheet takes the card's place", async () => {
+    vi.mocked(api.getDay).mockImplementation((d) =>
+      Promise.resolve(
+        answered(makeDay(d, { punches: d === TODAY ? punches(null) : punches(T0 + 2 * HOUR_MS).map((p) => ({ ...p, at: p.at && p.at - DAY_MS })) }), 1),
+      ),
+    );
+    const { rerender } = render(
+      <AppProviders>
+        <SheetAt />
+      </AppProviders>,
+    );
+    await settle();
+    focusOut2();
+    // A new date mounts the card again, with no blur from the field that went.
+    rerender(
+      <AppProviders>
+        <SheetAt date={YESTERDAY} />
+      </AppProviders>,
+    );
+    await settle();
+    expect(labels()).toEqual(['Clock in', 'Out 1', 'In 1', 'Out 2', 'In 2', 'Lunch out', 'Lunch in', 'Clock out']);
+    expect(screen.getByText(PUNCH_ORDER('Lunch out', '12:00 PM', 'In 1', null))).toBeTruthy();
   });
 });
 

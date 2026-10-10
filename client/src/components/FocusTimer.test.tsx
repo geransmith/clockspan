@@ -576,6 +576,15 @@ describe('FocusTimer', () => {
       expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Break · / }));
     });
 
+    it('goes from Break to End Break on R too', async () => {
+      vi.mocked(api.startBreak).mockResolvedValue(answered({ break: makeBreak({ startedAt: T0, endedAt: T0 + 5 * MINUTE_MS }) }));
+      await renderCard();
+      act(() => screen.getByRole('button', { name: /^Break · / }).focus());
+      pressKey('r');
+      await settle();
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: BREAK.end }));
+    });
+
     // The end stamps `Date.now()`, which the card's one-second clock reaches only at its next tick.
     it('goes to Break when a break ended by hand leaves only at the next tick', async () => {
       const running = makeBreak({ startedAt: T0 - 3 * MINUTE_MS, endedAt: T0 + 2 * MINUTE_MS });

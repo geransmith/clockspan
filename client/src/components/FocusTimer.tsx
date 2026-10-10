@@ -48,9 +48,6 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
   // timer start's tap (`TimerLengths`).
   const { busy, error, run } = useSubmit();
   const held = busy || timer.starting;
-  // R is the Break button, so a break it starts holds the start buttons as a tap does.
-  const startBreak = () => run(() => breakTimer.start(breakTimer.next.minutes));
-  const breakKey = useShortcut('rest', !timer.running && isToday && breakTimer.endsAt == null && !held ? startBreak : null);
   // A control the answer takes away hands the focus to the control that mounts in its place: a
   // start or Break sets the flag in its tap, and the running card and the break's row as they
   // leave with the focus inside (`PassFocusOnLeave`), since an End break's row goes only once the
@@ -70,6 +67,13 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
   useEffect(() => {
     if (!held) handOff.current = false;
   });
+  // R is the Break button, so a break it starts holds the start buttons and hands the focus to
+  // End Break as a tap does.
+  const pressBreak = () => {
+    passFocus();
+    run(() => breakTimer.start(breakTimer.next.minutes));
+  };
+  const breakKey = useShortcut('rest', !timer.running && isToday && breakTimer.endsAt == null && !held ? pressBreak : null);
 
   if (timer.running) return <Running session={timer.running} takeFocus={takeFocus} onLeave={passFocus} />;
 
@@ -140,16 +144,7 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
       )}
       <TimerLengths onStart={start} disabled={!isToday || held} />
       {isToday && breakTimer.endsAt == null && (
-        <button
-          className="btn btn-ghost timer-break-start"
-          onClick={() => {
-            passFocus();
-            startBreak();
-          }}
-          disabled={held}
-          aria-keyshortcuts={breakKey}
-          ref={takeFocus}
-        >
+        <button className="btn btn-ghost timer-break-start" onClick={pressBreak} disabled={held} aria-keyshortcuts={breakKey} ref={takeFocus}>
           {BREAK.start(breakTimer.next.minutes, breakTimer.next.long)}
         </button>
       )}

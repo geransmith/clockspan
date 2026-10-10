@@ -58,9 +58,11 @@ export function RunningTimerBar({ session }: { session: Session }) {
           <button
             className="running-label"
             autoFocus={returnFocus}
+            // Once it has the focus back the flag is spent, or a label button mounting later (the
+            // session unlinked on another device) would take the focus from wherever it is.
+            onFocus={() => setReturnFocus(false)}
             onClick={() => {
               setDraft(session.label);
-              setReturnFocus(false);
               setEditing(true);
             }}
             title="Edit label"
