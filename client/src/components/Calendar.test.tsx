@@ -77,7 +77,7 @@ describe('Calendar', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Previous month' }));
   });
 
-  it('shows a failed load with Try again, which loads the month', async () => {
+  it('shows a failed load with Try again, which loads the month and hands the focus to Previous month', async () => {
     serveRange([clockedIn]);
     vi.mocked(api.getRange).mockRejectedValueOnce(new Error('Request failed (502)'));
     render(calendar(LAST, LAST_EVENING));
@@ -88,6 +88,7 @@ describe('Calendar', () => {
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByRole('group', { name: formatMonth(LAST) })).toBeTruthy();
     expect(api.getRange).toHaveBeenCalledTimes(2);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Previous month' }));
   });
 
   it('reads a picked day with nothing on it as nothing recorded', async () => {

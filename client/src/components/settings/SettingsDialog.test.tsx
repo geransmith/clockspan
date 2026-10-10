@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MINUTE_MS } from '../../../../shared/dates.js';
 import * as api from '../../api';
 import { AuthGate } from '../../auth/AuthGate';
-import { SAVE_STATUS } from '../../lib/copy';
+import { notificationPermission, requestNotificationPermission } from '../../lib/alerts';
+import { LOAD_FAILED, SAVE_STATUS } from '../../lib/copy';
 import { applySettingsPatch } from '../../lib/settings';
 import { SOUND_EVENT_LABELS } from '../../lib/sounds';
 import { DEFAULT_USER, deferred, makeAuth, makeBoard, makeCategory, makeSettings, makeUser, settle, SettingsAndDays } from '../../test/hooks';
@@ -225,6 +226,36 @@ describe('SettingsDialog', () => {
     expect(api.putSettings).toHaveBeenCalledWith({ recurringPerDay: 6 });
     expect(perDay.value).toBe('6');
     expect(screen.getByRole('status', { hidden: true }).textContent).toContain(SAVE_STATUS.saved);
+  });
+
+  it('hands the focus to the Board tab when its Try again is pressed, since it goes once the board loads', async () => {
+    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ board: true }));
+    vi.mocked(api.getBoard).mockRejectedValue(new Error('Request failed (502)'));
+    await renderDialog();
+    await openTab('Board');
+    vi.mocked(api.getBoard).mockResolvedValue(makeBoard());
+    const retry = screen.getByRole('button', { name: LOAD_FAILED.retry, hidden: true });
+    retry.focus();
+    fireEvent.click(retry);
+    await settle();
+    expect(screen.getByRole('textbox', { name: 'Recurring rows per day', hidden: true })).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Board', hidden: true }));
+  });
+
+  it('moves the focus from Allow to the notifications switch once the browser answers, and leaves it on Allow when the prompt is dismissed', async () => {
+    vi.mocked(notificationPermission).mockReturnValue('default');
+    vi.mocked(requestNotificationPermission).mockResolvedValueOnce('default').mockResolvedValueOnce('granted');
+    await renderDialog();
+    await openTab('Alarms');
+    const allow = screen.getByRole('button', { name: 'Allow', hidden: true });
+    allow.focus();
+    fireEvent.click(allow);
+    await settle();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Allow', hidden: true }));
+    fireEvent.click(allow);
+    await settle();
+    expect(screen.queryByRole('button', { name: 'Allow', hidden: true })).toBeNull();
+    expect(document.activeElement).toBe(toggle('Browser notifications'));
   });
 
   it('drops the overtime clause from the retrospective hint when Overtime is off', async () => {

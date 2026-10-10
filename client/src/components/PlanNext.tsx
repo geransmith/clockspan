@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from 'react';
+import { useRef, useState, type KeyboardEvent } from 'react';
 import { useCelebration, type Moment } from '../hooks/useCelebration';
 import { useDay } from '../hooks/useDay';
 import { useSettings } from '../hooks/useSettings';
@@ -106,6 +106,7 @@ function Planner({
   // The rows typed in, each with the category its chip set.
   const [extra, setExtra] = useState<{ text: string; categoryUid: string | null }[]>([]);
   const [draft, setDraft] = useState('');
+  const box = useRef<HTMLInputElement>(null);
   // While the save is out nothing more can be typed, ticked, filed or cancelled: its answer closes the planner.
   const [busy, setBusy] = useState(false);
   const onList = day?.priorities.filter(hasText) ?? [];
@@ -149,7 +150,16 @@ function Planner({
       <h3 className="section-heading">
         {PLAN_NEXT.title(name)} {already > 0 && <span className="muted">{PLAN_NEXT.already(already)}</span>}
       </h3>
-      {failed && <LoadFailed title={LOAD_FAILED.title} onRetry={() => void store.load(date)} />}
+      {failed && (
+        <LoadFailed
+          title={LOAD_FAILED.title}
+          onRetry={() => {
+            // Try again goes once the day loads: the focus moves to the box first.
+            box.current?.focus();
+            void store.load(date);
+          }}
+        />
+      )}
       {offered.length + extra.length > 0 && (
         <ul className="plan-next-list">
           {offered.map((p) => (
@@ -182,6 +192,7 @@ function Planner({
         </ul>
       )}
       <input
+        ref={box}
         className="input"
         value={draft}
         disabled={busy}

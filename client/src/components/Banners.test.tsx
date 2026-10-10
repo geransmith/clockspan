@@ -53,14 +53,38 @@ describe('Banners', () => {
     expect(screen.queryByText(BANNERS_MORE(1))).toBeNull();
   });
 
-  it("runs a banner's action once and closes that banner", async () => {
+  it("hands the focus to the next banner's close when one is closed, else to the one before", async () => {
+    for (const title of ['Lunch', 'Clock out', 'Retrospective']) raise(title);
+    await renderBanners();
+    const close = (title: string) => banner(title).getByRole('button', { name: `Dismiss: ${title}` });
+    close('Clock out').focus();
+    fireEvent.click(close('Clock out'));
+    expect(document.activeElement).toBe(close('Retrospective'));
+    fireEvent.click(close('Retrospective'));
+    expect(document.activeElement).toBe(close('Lunch'));
+  });
+
+  it("runs a banner's action once and closes that banner, the focus going on unless the action moved it", async () => {
     const run = vi.fn();
     raise('Clock out', { label: 'Overtime approved', run });
     raise('Retrospective');
     await renderBanners();
-    fireEvent.click(banner('Clock out').getByRole('button', { name: 'Overtime approved' }));
+    const approve = banner('Clock out').getByRole('button', { name: 'Overtime approved' });
+    approve.focus();
+    fireEvent.click(approve);
     expect(run).toHaveBeenCalledOnce();
     expect(screen.queryByText('Clock out')).toBeNull();
     expect(screen.getByText('Retrospective')).toBeTruthy();
+    expect(document.activeElement).toBe(banner('Retrospective').getByRole('button', { name: 'Dismiss: Retrospective' }));
+
+    // Like Open retrospective, which takes the focus to the note box.
+    const note = document.body.appendChild(document.createElement('textarea'));
+    raise('Review the day', { label: 'Open', run: () => note.focus() });
+    await settle();
+    const open = banner('Review the day').getByRole('button', { name: 'Open' });
+    open.focus();
+    fireEvent.click(open);
+    expect(document.activeElement).toBe(note);
+    note.remove();
   });
 });
