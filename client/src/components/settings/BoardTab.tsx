@@ -39,12 +39,12 @@ const WEEKDAYS = [
 ] as const;
 
 /**
- * Settings → Board, shown while the board is on: the categories, each renamed, recoloured or
- * removed in place, and Add category; then the recurring priorities, each renamed, given a
- * category or other days, or removed in place, Add recurring priority, and how many recurring
- * rows the morning offer ticks. Each board change is a board write (`useBoard`) through the
- * dialog's `save`, so it shows at once and the header says whether it was saved, a category made
- * from a recurring priority's chip included. The board is read as the tab opens.
+ * Settings → Board: the categories, each renamed, recoloured or removed in place, and Add
+ * category; then the recurring priorities, each renamed, given a category or other days, or
+ * removed in place, Add recurring priority, and how many recurring rows the morning offer ticks.
+ * Each board change is a board write (`useBoard`) through the dialog's `save`, so it shows at once
+ * and the header says whether it was saved, a category made from a recurring priority's chip
+ * included. The board is read as the tab opens.
  */
 export function BoardTab({ settings, set, save }: TabProps & { save: Save }) {
   const { board, failed } = useBoardState();

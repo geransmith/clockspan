@@ -61,7 +61,7 @@ describe('mergeSettings', () => {
   it('takes every switch only as true or false, flipped from its default', () => {
     const switches = (Object.keys(DEFAULT_SETTINGS) as (keyof typeof DEFAULT_SETTINGS)[]).filter((k) => typeof DEFAULT_SETTINGS[k] === 'boolean');
     // Every top-level boolean default is a switch, so a new one is covered here with no edit; this only proves the filter finds them.
-    expect(switches).toEqual(expect.arrayContaining(['sound', 'board']));
+    expect(switches).toEqual(expect.arrayContaining(['sound', 'clockBar']));
     for (const key of switches) {
       const flipped = !DEFAULT_SETTINGS[key];
       const stored = { ...DEFAULT_SETTINGS, [key]: flipped };

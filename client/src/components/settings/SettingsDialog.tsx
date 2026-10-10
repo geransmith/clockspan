@@ -29,12 +29,11 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const { settings, loaded, update, reset } = useSettings();
   const { auth } = useAuth();
   const { saveState, save } = useSaveStatus();
-  // Account holds password + users, which only exist with local accounts; Board, the board's
-  // categories and recurring priorities, only while the board is on.
-  const tabs = TABS.filter((t) => (t.id !== 'account' || auth.mode === 'local') && (t.id !== 'board' || settings.board));
+  // Account holds password + users, which only exist with local accounts.
+  const tabs = TABS.filter((t) => t.id !== 'account' || auth.mode === 'local');
   // The tab picked last time, so reopening to tweak the same thing doesn't start over. It is saved
-  // when picked, never on open. A tab not offered now (Account once local accounts are gone, Board
-  // while the board is off) shows Timeclock and stays picked for when it is back.
+  // when picked, never on open. A tab not offered now (Account once local accounts are gone) shows
+  // Timeclock and stays picked for when it is back.
   const [tab, setTabState] = useState(() => readStored(TAB_STORAGE_KEY));
   const shown = tabs.find((t) => t.id === tab)?.id ?? 'timeclock';
   const setTab = (next: TabId) => {

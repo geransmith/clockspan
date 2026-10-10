@@ -37,7 +37,7 @@ interface Props {
   onDeleteTask: (uid: string) => Promise<void>;
   /** Saves a row's note on its task, apart from the list's draft; resolves to whether it saved. */
   onNote: (uid: string, note: string) => Promise<boolean>;
-  /** The category chip's data: each row with text gets a chip. Null (the board off) shows none. */
+  /** The category chip's data: each row with text gets a chip. Null (before the board's first read) shows none. */
   pick: CategoryPick | null;
   /**
    * Today's morning notice: the leftovers while the list has no one-off written (a routine on it

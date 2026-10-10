@@ -77,12 +77,10 @@ function Shell() {
     [navigate],
   );
   const { setEditingPunches } = useTodayAlarms(today, now, openRetro);
-  // A board link opened with the board off (switched off here or on another device) shows the sheet.
-  const view = route.view === 'board' && loaded && !settings.board ? 'sheet' : route.view;
   const loading = <div className="loading" aria-busy="true" />;
 
   const page = () => {
-    switch (view) {
+    switch (route.view) {
       case 'sheet':
         return <Sheet date={date} today={today} now={minute} customize={customize} jumpTo={jumpTo} onJumped={onJumped} onPunchEditing={setEditingPunches} />;
       case 'history':
@@ -92,7 +90,7 @@ function Shell() {
           </Suspense>
         );
       case 'board':
-        // Until the settings answer, whether the board is on isn't known.
+        // Until the settings answer, the defaults would draw the clock bar for someone who turned it off.
         return loaded ? (
           <Suspense fallback={loading}>
             <Board today={today} now={minute} running={running} start={start} starting={starting} />
@@ -109,10 +107,9 @@ function Shell() {
       {running && <RunningTimerBar key={running.id} session={running} />}
       <Banners />
       <Header
-        view={view}
+        view={route.view}
         date={date}
         today={today}
-        board={settings.board}
         customize={customize}
         onNavigate={navigate}
         onToggleCustomize={() => setCustomize((c) => !c)}

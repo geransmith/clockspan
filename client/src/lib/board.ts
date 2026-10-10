@@ -419,10 +419,10 @@ export function overAnnouncement(target: DropTarget | null, item: BoardItem, col
 }
 
 /**
- * The left-open rows the offer brings back while the board is on: each row's own task, under its
- * current name, unless this copy of the board has the task in Later or done (its latest entry
- * ticked), where the board put it. A task the copy doesn't have (a read behind) is offered. Null
- * while the board hasn't loaded.
+ * The left-open rows the offer brings back: each row's own task, under its current name, unless
+ * this copy of the board has the task in Later or done (its latest entry ticked), where the board
+ * put it. A task the copy doesn't have (a read behind) is offered. Null while the board hasn't
+ * loaded.
  */
 export function offeredLeftovers(rows: Priority[], cards: BoardCard[] | undefined): PrioritySeed[] | null {
   if (!cards) return null;

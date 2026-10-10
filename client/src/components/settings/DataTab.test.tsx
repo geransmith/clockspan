@@ -98,8 +98,7 @@ describe('DataTab', () => {
 
   it('reads the board again after a delete, beside a read still out', async () => {
     vi.mocked(api.pruneDays).mockResolvedValue(answered({ deleted: 2 }));
-    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ board: true })));
-    // The read the board sent as it came on is still out when the delete lands, and may be older.
+    // The read the board sent as it mounted is still out when the delete lands, and may be older.
     const first = deferredAnswer<Board>();
     vi.mocked(api.getBoard).mockReturnValueOnce(first.promise).mockResolvedValue(answered(makeBoard()));
     vi.stubGlobal('confirm', () => true);

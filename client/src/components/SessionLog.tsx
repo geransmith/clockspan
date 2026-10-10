@@ -25,7 +25,7 @@ interface Props {
   sessions: Session[];
   breaks: Break[];
   priorities: Priority[];
-  /** The category chip's data: a session on no written row can be given a category. Null (the board off) shows none. */
+  /** The category chip's data: a session on no written row can be given a category. Null (before the board's first read) shows none. */
   pick: CategoryPick | null;
 }
 

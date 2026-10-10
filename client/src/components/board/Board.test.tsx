@@ -63,11 +63,7 @@ const start = vi.fn<TimerCtx['start']>();
  * Renders the board at `now`, the minute App hands it, with the timer App hands it (none running,
  * no start out); the answer renders it again at another minute.
  */
-async function renderBoard(
-  settings = makeSettings({ board: true }),
-  now = NOW,
-  { running = null, starting = false }: { running?: Session | null; starting?: boolean } = {},
-) {
+async function renderBoard(settings = makeSettings(), now = NOW, { running = null, starting = false }: { running?: Session | null; starting?: boolean } = {}) {
   vi.mocked(api.getSettings).mockResolvedValue(answered(settings));
   const page = (at: number) => (
     <SettingsAndDays>
@@ -152,7 +148,7 @@ describe('Board', () => {
     const board = document.querySelector('.board')!;
     expect(board.firstElementChild).toBe(screen.getByRole('region', { name: 'Timeclock' }));
     cleanup();
-    await renderBoard(makeSettings({ board: true, clockBar: false }));
+    await renderBoard(makeSettings({ clockBar: false }));
     expect(screen.queryByRole('region', { name: 'Timeclock' })).toBeNull();
   });
 

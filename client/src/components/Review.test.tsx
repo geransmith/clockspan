@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { atTime, MINUTE_MS } from '../../../shared/dates.js';
+import { atTime } from '../../../shared/dates.js';
 import * as api from '../api';
 import { LOAD_FAILED } from '../lib/copy';
 import type { ReviewPeriod } from '../lib/review';
@@ -232,7 +232,6 @@ describe('Review', () => {
     expect(rows('Not done')).toEqual([['email bob', 'Mon, Tue', 'no time']]);
     cleanup();
 
-    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ board: true })));
     vi.mocked(api.getBoard).mockResolvedValue(answered(makeBoard(makeCard('emailtue0001', 'email bob', { lane: 'next' }))));
     await review({ kind: 'week', from: MON });
     expect(rows('Not done')).toEqual([
@@ -340,23 +339,13 @@ describe('Review: By category', () => {
     ],
   });
   const board: Board = { ...makeBoard(), categories: [TICKETS, ADMIN, KB] };
-  const boardOn = () => vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ board: true })));
 
   beforeEach(() => {
     serveRange([day]);
     vi.mocked(api.getBoard).mockResolvedValue(answered(board));
   });
 
-  it('shows nothing by category with the board off', async () => {
-    await review({ kind: 'week', from: MON });
-    expect(sections()).toEqual(['Off the plan', 'Routines', 'Not done', 'Why']);
-    expect(document.querySelector('.review-category')).toBeNull();
-    expect(facts()[0]).toBe('Added mid-day: 1 · 0 done');
-    expect(api.getBoard).not.toHaveBeenCalled();
-  });
-
   it('lists the time and ticks by category after the facts, its bar solid on plan and striped off it, no category last', async () => {
-    boardOn();
     await review({ kind: 'week', from: MON });
     expect(sections()).toEqual(['By category', 'Off the plan', 'Routines', 'Not done', 'Why']);
     expect(document.querySelector('.tiles + .review-facts + .review-section .review-category')).not.toBeNull();
@@ -382,13 +371,11 @@ describe('Review: By category', () => {
   });
 
   it('names the category most rows added mid-day had', async () => {
-    boardOn();
     await review({ kind: 'week', from: MON });
     expect(facts()[0]).toBe('Added mid-day: 1 · 0 done · mostly Tickets');
   });
 
   it('leaves out an off-plan part under a minute, and the parts line with nothing in it', async () => {
-    boardOn();
     const offFor = (seconds: number, done = false) =>
       makeDay(MON, {
         priorities: [makePriority(1, 'Ship it', { categoryUid: TICKETS.uid, done, addedAt: 0 })],
@@ -414,7 +401,6 @@ describe('Review: By category', () => {
   });
 
   it("sizes each bar against the largest category's time, no category's included", async () => {
-    boardOn();
     serveRange([
       makeDay(MON, {
         priorities: [makePriority(1, 'Ship it', { categoryUid: TICKETS.uid, addedAt: 0 }), makePriority(2, 'Call the bank', { addedAt: 0 })],
@@ -434,15 +420,13 @@ describe('Review: By category', () => {
   });
 
   it('shows no section when nothing in the period has a category', async () => {
-    boardOn();
     serveRange([mon, tue]);
     await review({ kind: 'week', from: MON });
     expect(sections()).toEqual(['Off the plan', 'Not done', 'Why']);
     expect(facts()[0]).toBe('Added mid-day: 1 · 0 done');
   });
 
-  it("waits for the board's first read, and shows what the board off shows when that read fails", async () => {
-    boardOn();
+  it("waits for the board's first read, and shows no category when that read fails", async () => {
     const read = deferredAnswer<Board>();
     vi.mocked(api.getBoard).mockReturnValue(read.promise);
     await review({ kind: 'week', from: MON });
@@ -461,19 +445,7 @@ describe('Review: By category', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('goes back to no categories once the board is switched off, though the board is still held', async () => {
-    boardOn();
-    await review({ kind: 'week', from: MON });
-    expect(sections()[0]).toBe('By category');
-    // Switched off on another device: the settings are read again a minute later.
-    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
-    await settle(MINUTE_MS);
-    expect(sections()).toEqual(['Off the plan', 'Routines', 'Not done', 'Why']);
-    expect(facts()[0]).toBe('Added mid-day: 1 · 0 done');
-  });
-
   it('folds a long list after eight rows', async () => {
-    boardOn();
     const categories = Array.from({ length: 10 }, (_, i) => makeCategory(`cat00000000${i}`, `Category ${i}`));
     vi.mocked(api.getBoard).mockResolvedValue(answered({ ...board, categories }));
     serveRange([makeDay(MON, { priorities: categories.map((c, i) => makePriority(i + 1, `Row ${i}`, { categoryUid: c.uid, done: true, addedAt: 0 })) })]);

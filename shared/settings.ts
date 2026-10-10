@@ -121,11 +121,6 @@ export interface Settings {
   stickers: boolean;
   /** Saturday and Sunday columns on the History calendar. Off drops them and their stickers from the counts. */
   showWeekends: boolean;
-  /**
-   * The Board page, for tasks that aren't for today, and its button in the header, and with them
-   * the categories and recurring priorities (Settings → Board, the morning offer).
-   */
-  board: boolean;
   /** Today's clock in, lunch deadline and clock out time in a row above the board's columns. */
   clockBar: boolean;
   /** Recurring rows the morning offer ticks; more can be ticked. */
@@ -215,7 +210,6 @@ export const DEFAULT_SETTINGS: Settings = deepFreeze({
   celebrations: true,
   stickers: false,
   showWeekends: true,
-  board: false,
   clockBar: true,
   recurringPerDay: 3,
   alarms: { lunchBy: { ...DEFAULT_ALARM }, clockOut: { ...DEFAULT_ALARM }, secondMeal: { ...DEFAULT_ALARM }, retro: { ...DEFAULT_RETRO_ALARM } },

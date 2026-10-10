@@ -82,7 +82,6 @@ export const TEST_SETTINGS: Settings = {
   celebrations: true,
   stickers: false,
   showWeekends: true,
-  board: false,
   clockBar: true,
   recurringPerDay: 3,
   alarms: {

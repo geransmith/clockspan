@@ -725,8 +725,8 @@ button {
 .left-open-list li {
   overflow-wrap: anywhere;
 }
-/* With the board on, the same notice holds the leftovers and the routines due today, each a box
-   to tick: a title that wraps keeps its box at the top. */
+/* The same notice holds the leftovers and the routines due today, each a box to tick: a title
+   that wraps keeps its box at the top. */
 .today-offer .inline-check {
   align-items: flex-start;
   min-height: 32px;
@@ -1348,10 +1348,10 @@ button {
 .priority-tick .checkbox {
   margin: 0;
 }
-/* A written row's note button, and with the board on its category chip after it, sit on a line
-   of their own under the field, so the field keeps the row's width beside the ×, and they are
-   nearer their own field than the next row's. An empty row has neither and keeps one line. A
-   routine's row has its repeat mark first on that line, 6 px before the button. */
+/* A written row's note button, and its category chip after it, sit on a line of their own under
+   the field, so the field keeps the row's width beside the ×, and they are nearer their own field
+   than the next row's. An empty row has neither and keeps one line. A routine's row has its
+   repeat mark first on that line, 6 px before the button. */
 .priority-end {
   grid-column: 3;
   grid-row: 2;
@@ -1370,9 +1370,10 @@ button {
 }
 /* From 640 px the button is beside the field, in a column every row of the list keeps, written or
    empty, so a field ends in the same place either way: the first letter typed doesn't narrow it.
-   With the board on (.priority-row--chip) the chip shares it, after the button's 28 px and 6 px:
-   10rem holds the widest chip, a name stopped at 9em of the chip's 0.82rem, plus 38 px of dot,
-   gap, padding and border, is 156 px at a 16 px root font, with more to spare at a larger one.
+   Once the board has loaded (.priority-row--chip) the chip shares it, after the button's 28 px
+   and 6 px: 10rem holds the widest chip, a name stopped at 9em of the chip's 0.82rem, plus 38 px
+   of dot, gap, padding and border, is 156 px at a 16 px root font, with more to spare at a larger
+   one.
    A routine's repeat mark shares the column too, first: the cell takes the column's whole width
    (not its content's, which would push past it), so the chip shrinks and a long name ends in its
    ellipsis sooner. */
@@ -2822,8 +2823,8 @@ dialog.dialog::backdrop {
   border-bottom: 1px solid var(--border);
   overflow-x: auto;
 }
-/* Sized so the five tabs (local accounts add Account) fit a 375 px phone; a sixth (Board, while
-   it is on) scrolls the strip. */
+/* Sized so the five tabs fit a 375 px phone; a sixth (Account, with local accounts) scrolls the
+   strip. */
 .tab {
   min-height: 44px;
   padding: 0 9px;

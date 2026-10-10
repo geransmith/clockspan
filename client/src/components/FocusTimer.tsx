@@ -23,7 +23,7 @@ interface Props {
   date: string;
   isToday: boolean;
   priorities: Priority[];
-  /** The category chip's data: "Also add to today's priorities" offers a category for the row. Null (the board off) shows none. */
+  /** The category chip's data: "Also add to today's priorities" offers a category for the row. Null (before the board's first read) shows none. */
   pick: CategoryPick | null;
 }
 
@@ -101,8 +101,7 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
       // The new row's save goes in as the start's uid, so the timer counts the start as out from the tap.
       const uid =
         offerAdd && addAsPriority
-          ? // With the board off there is no chip, and a category picked before it went off isn't shown.
-            addPriority(date, trimmed, pick ? category : null).then((added) => {
+          ? addPriority(date, trimmed, category).then((added) => {
               // Linked from here on, so a retry after a failed start uses this row instead of adding another.
               setLinked(added);
               setAddAsPriority(false);

@@ -14,15 +14,13 @@ interface Props {
   /** The date on screen (today when the route holds none). */
   date: string;
   today: string;
-  /** The board is switched on: its button joins the header. */
-  board: boolean;
   customize: boolean;
   onNavigate: (next: Partial<Route>, opts?: { replace?: boolean }) => void;
   onToggleCustomize: () => void;
   onOpenSettings: () => void;
 }
 
-export function Header({ view, date, today, board, customize, onNavigate, onToggleCustomize, onOpenSettings }: Props) {
+export function Header({ view, date, today, customize, onNavigate, onToggleCustomize, onOpenSettings }: Props) {
   const { auth, signOut } = useAuth();
   const { loaded } = useSettings();
   // Typing a date fires a change with a whole date per digit (a year goes 0002, 0020, 0202, 2026),
@@ -46,7 +44,7 @@ export function Header({ view, date, today, board, customize, onNavigate, onTogg
   // a 375 px phone, so the name goes there (styles.css) and the logo stays; the buttons' words
   // come back from 760 px rather than 640. Every view takes the same rule, so a page switch leaves
   // the header as it was.
-  const crowded = board && auth.mode !== 'none';
+  const crowded = auth.mode !== 'none';
   const toToday = () => onNavigate({ view: 'sheet', date: null });
   const toggleBoard = () => onNavigate({ view: onBoard ? 'sheet' : 'board' });
   const toggleHistory = () => onNavigate({ view: onHistory ? 'sheet' : 'history' });
@@ -54,15 +52,10 @@ export function Header({ view, date, today, board, customize, onNavigate, onTogg
     brandButton.current?.focus();
     toToday();
   });
-  const boardKey = useShortcut(
-    'board',
-    board
-      ? () => {
-          boardButton.current?.focus();
-          toggleBoard();
-        }
-      : null,
-  );
+  const boardKey = useShortcut('board', () => {
+    boardButton.current?.focus();
+    toggleBoard();
+  });
   const historyKey = useShortcut('history', () => {
     historyButton.current?.focus();
     toggleHistory();
@@ -83,12 +76,10 @@ export function Header({ view, date, today, board, customize, onNavigate, onTogg
               <span className="btn-text">Customize</span>
             </button>
           )}
-          {board && (
-            <button ref={boardButton} className="btn btn-icon" onClick={toggleBoard} aria-pressed={onBoard} title="Board" aria-keyshortcuts={boardKey}>
-              <Columns />
-              <span className="btn-text">Board</span>
-            </button>
-          )}
+          <button ref={boardButton} className="btn btn-icon" onClick={toggleBoard} aria-pressed={onBoard} title="Board" aria-keyshortcuts={boardKey}>
+            <Columns />
+            <span className="btn-text">Board</span>
+          </button>
           <button ref={historyButton} className="btn btn-icon" onClick={toggleHistory} aria-pressed={onHistory} title="History" aria-keyshortcuts={historyKey}>
             <List />
             <span className="btn-text">History</span>

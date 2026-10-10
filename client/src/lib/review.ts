@@ -155,7 +155,7 @@ export interface RangeReview {
  * after today is left out: none of it has happened yet. A day with nothing on it (`hasContent`)
  * is left out too, even with a break logged. A recurring priority's rows count as priorities in
  * every total and go to `routines` rather than Not done. `known` is the uids of the board's
- * categories, removed ones included: a category outside it (none while the board is off)
+ * categories, removed ones included: a category outside it (none before the board's first read)
  * counts as none, in `byCategory` and in `midDay`. `laned` is the uids of the tasks the board
  * holds in Later or Next, which Not done never joins to another task by its text.
  */

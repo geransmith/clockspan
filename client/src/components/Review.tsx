@@ -31,8 +31,8 @@ interface Props {
 
 /**
  * The daily retrospectives rolled up: how the period's time split between the plan and
- * everything else (and by category, with the board on), how often each routine got done, which
- * one-offs never did, and each day's note on why.
+ * everything else (and by category), how often each routine got done, which one-offs never did,
+ * and each day's note on why.
  */
 export function Review({ today, now, period: { kind, from }, onPeriod, onOpen }: Props) {
   const period = periodRange(kind, from, 0);
@@ -70,15 +70,14 @@ export function Review({ today, now, period: { kind, from }, onPeriod, onOpen }:
 
 function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; now: number; kind: PeriodKind; onOpen: (date: string) => void }) {
   const { settings } = useSettings();
-  const { board, on } = useBoardState();
-  // With the board off, or before its first read answers, nothing is counted under a category,
-  // and Not done knows no task's lane. A removed category stays known, so the time logged under
-  // it keeps its name. A done task keeps its lane but shows in Done, and the board stops sending
-  // it after a while, so only the open ones count as laned.
-  const shown = on ? board : undefined;
-  const categories = shown?.categories ?? [];
+  const { board } = useBoardState();
+  // Before the board's first read answers, nothing is counted under a category, and Not done
+  // knows no task's lane. A removed category stays known, so the time logged under it keeps its
+  // name. A done task keeps its lane but shows in Done, and the board stops sending it after a
+  // while, so only the open ones count as laned.
+  const categories = board?.categories ?? [];
   const known = new Set(categories.map((c) => c.uid));
-  const laned = new Set(shown?.cards.filter((c) => c.lane != null && !c.listDone).map((c) => c.uid));
+  const laned = new Set(board?.cards.filter((c) => c.lane != null && !c.listDone).map((c) => c.uid));
   const r = reviewRange(days, settings, today, now, known, laned);
   if (r.days === 0) return <p className="muted center review-empty">Nothing recorded.</p>;
   // A row merged across days names them in a week and counts them in a longer period; it
