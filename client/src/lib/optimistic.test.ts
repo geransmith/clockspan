@@ -176,7 +176,8 @@ describe('serial', () => {
   });
 
   it('forgets a key once its last job has settled, and not while a later one is on it', async () => {
-    // The queue's own map, caught as the first job is queued: nothing else shows what it holds.
+    // The queue's own Map, caught as the first job is queued: nothing else shows what it holds. A
+    // serial() that keeps its jobs another way rewrites or drops this test.
     const set = vi.spyOn(Map.prototype, 'set');
     const queue = serial();
     const a = deferred<string>();

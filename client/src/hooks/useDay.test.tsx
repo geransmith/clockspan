@@ -589,23 +589,28 @@ describe('priorities', () => {
   it("tells each caller whether the PUT carrying its own list was saved, whatever a later one's did", async () => {
     vi.mocked(api.getDay).mockResolvedValue(answered(makeDay()));
     const first = deferredAnswer<{ priorities: Priority[] }>();
-    vi.mocked(api.putPriorities).mockReturnValueOnce(first.promise).mockRejectedValueOnce(new Error('offline'));
+    const second = deferredAnswer<{ priorities: Priority[] }>();
+    vi.mocked(api.putPriorities)
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+      .mockRejectedValueOnce(new Error('offline'));
     const { result } = renderStore();
     await settle();
-    // A timer start's new row goes out; a tick made meanwhile waits behind it, and its PUT fails.
+    // A timer start's new row goes out and a tick made meanwhile waits behind it, then goes out
+    // itself; an untick made while the tick is out waits behind that, and its PUT fails.
     const added = begin(() => result.current.addPriority(TODAY, 'Call the bank'));
     const sent = vi.mocked(api.putPriorities).mock.calls[0]![1];
-    const ticked = begin(() =>
-      result.current.setPriorities(
-        TODAY,
-        sent.map((p) => ({ ...p, done: p.uid != null })),
-        sent,
-      ),
-    );
-    first.resolve({ priorities: sent.filter((p) => p.uid != null) }, 4);
-    await expect(act(() => added)).resolves.toBe(sent[0]!.uid);
-    await expect(act(() => ticked)).resolves.toBe(false);
+    const tick = sent.map((p) => ({ ...p, done: p.uid != null }));
+    const ticked = begin(() => result.current.setPriorities(TODAY, tick, sent));
+    first.resolve({ priorities: sent.filter((p) => p.uid != null) });
+    await settle();
     expect(api.putPriorities).toHaveBeenCalledTimes(2);
+    const unticked = begin(() => result.current.setPriorities(TODAY, sent, tick));
+    second.resolve({ priorities: tick.filter((p) => p.uid != null) });
+    await expect(act(() => added)).resolves.toBe(sent[0]!.uid);
+    await expect(act(() => ticked)).resolves.toBe(true);
+    await expect(act(() => unticked)).resolves.toBe(false);
+    expect(api.putPriorities).toHaveBeenCalledTimes(3);
   });
 
   it('sends each list with the list it was built on, and nothing else', async () => {
