@@ -352,24 +352,34 @@ export const Board = memo(function Board({
     setNotice(null);
   };
 
+  // The item goes with the button pressed (Delete, Remove from today), and the focus would fall to
+  // the page: the next item in its column takes it, else the one before, else the column's + (Done's
+  // heading, which has none).
+  const focusNear = (item: BoardItem) => {
+    const found = findItem(shown, item.id);
+    const items = found ? itemsIn(shown, found.column) : [];
+    const at = items.findIndex((i) => i.id === item.id);
+    const near = [items[at + 1], items[at - 1]].map((i) => i && titles.current.get(i.id)).find((el) => el != null);
+    (near ?? (found && heads.current.get(found.column)))?.focus();
+  };
   // The full delete, which asks with the days the task is on and the time logged on it: today's
   // row has the counts as the day was last read, its other days' time to which today's log adds
   // (a timer running on it included, as × on the sheet counts it), and any other item the board's.
-  // The item goes with its Delete button, and the focus would fall to the page: the next item in
-  // its column takes it, else the one before, else the column's + (Done's heading, which has none).
   const confirmDelete = (item: BoardItem) => {
     const listedToday = onToday(item, today);
     const { listed, logged: counted } = (listedToday ? item.row : item.card)!;
     const todays = listedToday ? (loggedByUid(day.sessions, now).get(item.uid) ?? 0) : 0;
     const logged = counted + todays;
     if (!window.confirm(CONFIRM.deleteTask(listed, logged > 0 ? formatDurationCeil(logged) : null))) return;
-    const found = findItem(shown, item.id);
-    const items = found ? itemsIn(shown, found.column) : [];
-    const at = items.findIndex((i) => i.id === item.id);
-    const near = [items[at + 1], items[at - 1]].map((i) => i && titles.current.get(i.id)).find((el) => el != null);
-    (near ?? (found && heads.current.get(found.column)))?.focus();
+    focusNear(item);
     setOpen(null);
     report(store.deleteItem(item.uid));
+  };
+  // The editor closes, so a remove that fails brings the row back closed.
+  const removeFromToday = (item: BoardItem) => {
+    focusNear(item);
+    setOpen(null);
+    report(store.removeFromToday(item.uid));
   };
 
   const find = (id: UniqueIdentifier) => findItem(shown, String(id));
@@ -498,7 +508,7 @@ export const Board = memo(function Board({
         onNote={editTask ? (note) => saved(editTask({ note })) : undefined}
         // A recurring priority is removed in Settings → Board, so its row only comes off today's list.
         onDelete={item.recurring ? undefined : () => confirmDelete(item)}
-        onRemove={item.recurring && throughRow ? () => report(store.removeFromToday(item.uid)) : undefined}
+        onRemove={item.recurring && throughRow ? () => removeFromToday(item) : undefined}
         hint={hint}
         start={startable ? { disabled: starting, onStart } : undefined}
         // A recurring task's rows are told apart by their day; a card, which has none, by its task.
@@ -731,7 +741,7 @@ function Column({
   over?: ColumnId;
   count: number;
   sub?: string;
-  /** Where the focus goes when Delete takes the column's last item: its +, else its heading. */
+  /** Where the focus goes when Delete or Remove from today takes the column's last item: its +, else its heading. */
   headRef: (el: HTMLElement | null) => void;
   add?: ColumnAdd;
   children: ReactNode;

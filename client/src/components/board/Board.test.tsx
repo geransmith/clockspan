@@ -408,15 +408,28 @@ describe('Board', () => {
     });
   });
 
-  it("offers a recurring row no Later or Next, only Remove from today, which takes it off today's list", async () => {
+  it("offers a recurring row no Later or Next, only Remove from today, which takes it off today's list, closing its editor with the focus near it, a failed remove too", async () => {
     lists[WED] = [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true })];
     await renderBoard();
     openEditor('Monitor the queue');
     expect(moveOptions()).toEqual(['Done']);
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
+    vi.mocked(api.putPriorities).mockRejectedValueOnce(new Error('offline'));
     fireEvent.click(screen.getByRole('button', { name: 'Remove from today' }));
     await settle();
-    expect(putLists()).toEqual([{ date: WED, texts: ['', '', ''] }]);
+    // The day store put the row back and read the day again.
+    expect(titlesIn('In progress')).toEqual(['Monitor the queue']);
+    expect(screen.getByRole('button', { name: 'Monitor the queue' }).getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(plus('In progress'));
+    openEditor('Monitor the queue');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from today' }));
+    await settle();
+    expect(putLists()).toEqual([
+      { date: WED, texts: ['', '', ''] },
+      { date: WED, texts: ['', '', ''] },
+    ]);
+    expect(titlesIn('In progress')).toEqual([]);
+    expect(document.activeElement).toBe(plus('In progress'));
     expect(api.deleteItem).not.toHaveBeenCalled();
   });
 
@@ -862,7 +875,7 @@ describe('adding from a column', () => {
     expect(plus('Later').getAttribute('aria-disabled')).toBeNull();
   });
 
-  it("closes a box as its + shuts, so it doesn't open again by itself when the + opens", async () => {
+  it("closes a box as its + shuts, with the focus on the +, so it doesn't open again by itself when the + opens", async () => {
     vi.stubGlobal('confirm', () => true);
     onServer = makeBoard(...fullBoard().slice(1));
     await renderBoard();
@@ -870,6 +883,7 @@ describe('adding from a column', () => {
     enter(field('New card for Later'), 'One more');
     expect(plus('Later').getAttribute('aria-disabled')).toBe('true');
     expect(isOpen('New card for Later')).toBe(false);
+    expect(document.activeElement).toBe(plus('Later'));
     await settle();
     openEditor('One more');
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
