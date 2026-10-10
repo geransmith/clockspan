@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { punchesKey } from '../../../shared/punches.js';
+import { dismissByTag, warnQuietly } from '../lib/alerts';
+import { LOAD_FAILED } from '../lib/copy';
 import { daySettings, dayTimeclock, overtimeOn } from '../lib/timeclock';
 import { useAlarms } from './useAlarms';
 import { useDay, useRefreshDay } from './useDay';
@@ -24,11 +26,13 @@ const HOLD_MS = 5 * MINUTE_MS;
  * minute, and the alarms sit out a come-back refresh (and the settle after its answer) rather
  * than fire on a lunch this tab never saw taken. They also wait for the settings, like the
  * timer's alerts: judged against the defaults, a longer work day would ring the clock-out alarm
- * on load, with the default sound.
+ * on load, with the default sound. Today's failed first load (no punches, so no alarm can ring)
+ * is a banner while the page doesn't show today (`todayShown`); the sheet on today and the board
+ * show it in place with Try again.
  */
-export function useTodayAlarms(today: string, now: number, openRetro: () => void): { setEditingPunches: (editing: boolean) => void } {
+export function useTodayAlarms(today: string, now: number, openRetro: () => void, todayShown: boolean): { setEditingPunches: (editing: boolean) => void } {
   const { settings, loaded } = useSettings();
-  const { day, store } = useDay(today);
+  const { day, failed, store } = useDay(today);
   const refreshing = useRefreshDay(today);
   const [editingPunches, setEditingPunches] = useState(false);
   const key = day ? punchesKey(day.punches) : null;
@@ -44,5 +48,12 @@ export function useTodayAlarms(today: string, now: number, openRetro: () => void
     approveOvertime: settings.overtimeApproval ? () => void store.setOvertimeApproved(today, true) : undefined,
     openRetro,
   });
+  // Up while the failure is out of sight: it goes once today loads, a view shows it, or the date changes.
+  const unseen = failed && !todayShown;
+  useEffect(() => {
+    if (!unseen) return;
+    warnQuietly({ title: LOAD_FAILED.today, body: LOAD_FAILED.body, tag: 'load-failed' });
+    return () => dismissByTag('load-failed');
+  }, [unseen]);
   return { setEditingPunches };
 }

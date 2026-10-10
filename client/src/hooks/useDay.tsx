@@ -4,9 +4,9 @@ import { emptyDay } from '../../../shared/api.js';
 import { mergePriorities } from '../../../shared/priorities.js';
 import { mergePunches } from '../../../shared/punches.js';
 import type { Day, Priority, PruneResult, Punch, Session } from '../types';
-import { dismissByTag, warnQuietly, warnSaveFailed } from '../lib/alerts';
+import { warnSaveFailed } from '../lib/alerts';
 import { ApiError, goneAt } from '../lib/apiError';
-import { ADD_PRIORITY_FAILED, LOAD_FAILED, SAVE_FAILED } from '../lib/copy';
+import { ADD_PRIORITY_FAILED, SAVE_FAILED } from '../lib/copy';
 import { endBreaksAt } from '../lib/breaks';
 import { addPending, confirm, fetched, settle, shown, untracked, whileUnsettled, type Tracked } from '../lib/optimistic';
 import { newTaskRow, padPriorities, placePriority } from '../lib/priorities';
@@ -47,15 +47,15 @@ interface DayState {
  */
 interface DayStore {
   /**
-   * Fetch a day. Never rejects: a failure on a day not loaded yet is recorded in `failed` and
-   * raised as a banner; a loaded day keeps its copy and says nothing.
+   * Fetch a day. Never rejects: a failure on a day not loaded yet is recorded in `failed` (the
+   * sheet and the board show it with Try again; `useTodayAlarms` raises the banner for today
+   * elsewhere); a loaded day keeps its copy and says nothing.
    */
   load: (date: string) => Promise<void>;
   /**
    * Fetch a day the store holds again, since another device may have changed it, or one whose
-   * first load failed; a day it doesn't hold is left to its first load. Quiet: a failure keeps
-   * the copy (or the error) shown without another banner. Resolves when the answer is in,
-   * sharing a fetch already out.
+   * first load failed; a day it doesn't hold is left to its first load. A failure keeps the copy
+   * (or the error) shown. Resolves when the answer is in, sharing a fetch already out.
    */
   refresh: (date: string) => Promise<void>;
   /**
@@ -194,8 +194,6 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const { settings } = useSettings();
   const priorityCount = useLatest(settings.priorityCount);
   const inflight = useRef(new Map<string, Promise<void>>());
-  // The date whose failed load raised the banner (one at a time: a newer one replaces it).
-  const bannerFor = useRef<string | null>(null);
   // Each list's save on its way, by date.
   const listSaves = useRef<ListSaves>({ punches: new Map(), priorities: new Map() });
   const [generation, setGeneration] = useState(0);
@@ -212,12 +210,11 @@ export function DayProvider({ children }: { children: ReactNode }) {
     [change],
   );
 
-  // `quiet`: a refresh, or asking again after a failed save or first load. A first load that
-  // fails is recorded (the sheet and the board show it with Try again) and, unless quiet,
-  // raised as a banner; a day already shown keeps its copy, and a failed save has already said
-  // the server is down. An answer that isn't a day fails the same way. Never rejects.
+  // A first load that fails is recorded (the sheet and the board show it with Try again, and
+  // `useTodayAlarms` raises a banner for today where neither does); a day already shown keeps its
+  // copy. An answer that isn't a day fails the same way. Never rejects.
   const fetchDay = useCallback(
-    function fetchDay(date: string, quiet = false): Promise<void> {
+    function fetchDay(date: string): Promise<void> {
       const out = inflight.current.get(date);
       if (out) return out;
       const sentAt = (current().days[date] ?? untracked<Day>()).revision;
@@ -239,18 +236,10 @@ export function DayProvider({ children }: { children: ReactNode }) {
             failed.delete(date);
             return { ...s, failed };
           });
-          if (bannerFor.current === date) {
-            bannerFor.current = null;
-            dismissByTag('load-failed');
-          }
         })
         .catch(() => {
           if (shownDay(current().days[date])) return;
           change((s) => (s.failed.has(date) ? s : { ...s, failed: new Set(s.failed).add(date) }));
-          if (!quiet) {
-            bannerFor.current = date;
-            warnQuietly({ title: LOAD_FAILED.title, body: LOAD_FAILED.body, tag: 'load-failed' });
-          }
         })
         .finally(() => {
           inflight.current.delete(date);
@@ -258,14 +247,14 @@ export function DayProvider({ children }: { children: ReactNode }) {
           // dropped (or, on a day never loaded, taken as the best there is) and may miss another
           // device's change: ask again, whoever sent it. Only a change confirmed while a read is
           // out does this, so it stops when the writes do.
-          if (stale) void fetchDay(date, true);
+          if (stale) void fetchDay(date);
         });
       inflight.current.set(date, p);
       return p;
     },
     [current, change, update],
   );
-  const load = useCallback((date: string) => fetchDay(date), [fetchDay]);
+  const load = fetchDay;
 
   const refresh = useCallback(
     async (date: string) => {
@@ -273,7 +262,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       // Not loaded yet: useDay's first fetch owns that. If it failed, asking again here brings
       // today's alarms back once the server answers, without anyone pressing Try again.
       if (!shownDay(days[date]) && !failed.has(date)) return;
-      await fetchDay(date, true);
+      await fetchDay(date);
     },
     [current, fetchDay],
   );
@@ -336,7 +325,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         update(date, (t) => confirm(settle(t, ids), (d) => d, err instanceof ApiError ? err.revision : 0));
         warnSaveFailed();
-        void fetchDay(date, true);
+        void fetchDay(date);
         return false;
       }
     },

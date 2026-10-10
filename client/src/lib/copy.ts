@@ -393,11 +393,13 @@ export const RESTORED = {
 } as const;
 
 /**
- * In place of what could not be fetched, and the banner a failed day load raises; the button
- * asks again. Covers a refusal too, like `SAVE_FAILED`.
+ * In place of what could not be fetched; the button asks again. `today` is the banner
+ * `useTodayAlarms` raises for today's failed load where the page doesn't show it. Covers a
+ * refusal too, like `SAVE_FAILED`.
  */
 export const LOAD_FAILED = {
   title: 'Could not load this day',
+  today: 'Could not load today',
   range: 'Could not load these days',
   board: 'Could not load the board',
   body: 'The server refused the request or did not answer.',

@@ -2,7 +2,8 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
-import { alert } from '../lib/alerts';
+import { alert, dismissByTag, warnQuietly } from '../lib/alerts';
+import { LOAD_FAILED } from '../lib/copy';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { answered, deferred, makeDay, makeSettings, punchesAt, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
 import type { Day, Settings } from '../types';
@@ -28,7 +29,7 @@ const tags = () => alerted().map((a) => a.tag);
 function render(settings: Settings | Promise<Settings>, day: Day) {
   vi.mocked(api.getSettings).mockReturnValue(Promise.resolve(settings).then(answered));
   vi.mocked(api.getDay).mockResolvedValue(answered(day));
-  return renderHook(() => ({ alarms: useTodayAlarms(TODAY, Date.now(), vi.fn()), store: useDayStore() }), { wrapper: SettingsAndDays });
+  return renderHook(() => ({ alarms: useTodayAlarms(TODAY, Date.now(), vi.fn(), true), store: useDayStore() }), { wrapper: SettingsAndDays });
 }
 
 /** Another device, from scratch: the alarms already fired here are remembered in storage. */
@@ -44,6 +45,34 @@ beforeEach(() => {
 });
 
 describe('useTodayAlarms', () => {
+  it("raises a banner for today's failed load only while the page doesn't show today, and takes it down once today loads", async () => {
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
+    vi.mocked(api.getDay).mockRejectedValue(new Error('offline'));
+    const { result, rerender } = renderHook(
+      (p: { shown: boolean }) => ({ alarms: useTodayAlarms(TODAY, Date.now(), vi.fn(), p.shown), store: useDayStore() }),
+      {
+        initialProps: { shown: true },
+        wrapper: SettingsAndDays,
+      },
+    );
+    await settle();
+    // The sheet on today or the board says it in place.
+    expect(warnQuietly).not.toHaveBeenCalled();
+    const takenDown = () => vi.mocked(dismissByTag).mock.calls.filter(([tag]) => tag === 'load-failed').length;
+
+    rerender({ shown: false });
+    expect(warnQuietly).toHaveBeenCalledWith({ title: LOAD_FAILED.today, body: LOAD_FAILED.body, tag: 'load-failed' });
+    rerender({ shown: true });
+    expect(takenDown()).toBe(1);
+
+    rerender({ shown: false });
+    expect(warnQuietly).toHaveBeenCalledTimes(2);
+    vi.mocked(api.getDay).mockResolvedValue(answered(overDay()));
+    await act(() => result.current.store.refresh(TODAY));
+    expect(takenDown()).toBe(2);
+    expect(warnQuietly).toHaveBeenCalledTimes(2);
+  });
+
   it('waits for the settings, and judges the day by them rather than the defaults', async () => {
     const settings = deferred<Settings>();
     render(settings.promise, overDay());

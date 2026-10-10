@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import * as api from '../api';
 import { useDayStore } from '../hooks/useDay';
-import { warnSaveFailed } from '../lib/alerts';
+import { warnQuietly, warnSaveFailed } from '../lib/alerts';
 import { ApiError } from '../lib/apiError';
 import { LEFT_OPEN, LOAD_FAILED, PUNCH_ORDER, REMOVE_TASK, TODAY_OFFER } from '../lib/copy';
 import { SPLIT_QUERY } from '../lib/layout';
@@ -224,6 +224,8 @@ describe('Sheet', () => {
     yesterday.reject(new ApiError(500, 'Server error', 0));
     await settle();
     expect(screen.getByRole('alert').textContent).toContain(LOAD_FAILED.title);
+    // The notice is the one copy: no banner says it again.
+    expect(warnQuietly).not.toHaveBeenCalled();
     expect(button('Previous day')).toBe(previous);
     expect(document.activeElement).toBe(previous);
   });
