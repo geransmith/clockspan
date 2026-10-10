@@ -1378,10 +1378,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (`migrate(db, n)`) → `ItemRow` (`routes/shared.ts`) → the field on `Priority` (`shared/api.ts`;
   the column in `ENTRIES`' join and `EntryRow`, read in `priorityJson`, `routes/days.ts`), on
   `BoardCard` (`boardJson`, `server/board.ts`) and on `Recurring` (`recurringJson` there), where
-  each reader needs it, and on `BoardItem` (`lib/board.ts`: `rowItem`, `cardItem`, and in
-  `boardColumns` the earlier day's routine row and the cards of Later's Repeats, which take their
-  recurring priority's) → if the user wrote it, `deleteItem`'s tombstone UPDATE (`server/board.ts`)
-  clears it → if the sheet edits it, its `MERGED` entry (`shared/priorities.ts`; typecheck asks for
+  each reader needs it, and on `BoardItem` (`lib/board.ts`: in `boardColumns`, `taskItem`, which
+  every item is built on, and the earlier day's routine row, which takes its recurring priority's)
+  → if the user wrote it, `deleteItem`'s tombstone UPDATE (`server/board.ts`) clears it
+  → if the sheet edits it, its `MERGED` entry (`shared/priorities.ts`; typecheck asks for
   it there or in `ReadOnlyField`), its rule in `parsePriorityRows` for a value of the wrong kind and
   for one left out (read as unchanged: its uids in `unsaid`, filled from the base), its write in the
   PUT beside the rename: on the task a uid new to the user makes, and otherwise only where this

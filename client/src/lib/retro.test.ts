@@ -3,7 +3,7 @@ import { LIMITS } from '../../../shared/api.js';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { completedSession, makeDay, makePriority, makeSession, punchesAt, rowUid } from '../test/fixtures';
 import type { Day } from '../types';
-import { editedSession, focusOf, hasContent, loggedByUid, reviewDay, sessionCategory, sessionCategoryEdit, sessionName, sessionRow } from './retro';
+import { editedSession, focusOf, hasContent, loggedByUid, reviewDay, sessionCategory, sessionCategoryEdit, sessionName, sessionRow, taskLogged } from './retro';
 
 describe('focusOf', () => {
   it('counts completed sessions only', () => {
@@ -43,6 +43,18 @@ describe('loggedByUid', () => {
     const running = makeSession({ id: 1, startedAt: 5000, plannedSeconds: 900, priorityUid: 'cccccccccccc' });
     expect(loggedByUid([running], 5000).get('cccccccccccc')).toBe(1);
     expect(loggedByUid([running], 4000).get('cccccccccccc')).toBe(1);
+  });
+});
+
+describe('taskLogged', () => {
+  it("adds the task's own sessions of the day, a running one's time so far included, to its other days' time", () => {
+    const sessions = [
+      completedSession(1, 0, 600, { priorityUid: 'aaaaaaaaaaaa' }),
+      completedSession(2, 1, 300, { priorityUid: 'bbbbbbbbbbbb' }),
+      makeSession({ id: 3, startedAt: 0, plannedSeconds: 900, priorityUid: 'aaaaaaaaaaaa' }),
+    ];
+    expect(taskLogged('aaaaaaaaaaaa', 1000, sessions, 2 * MINUTE_MS)).toBe(1000 + 600 + 120);
+    expect(taskLogged('cccccccccccc', 1000, sessions, 2 * MINUTE_MS)).toBe(1000);
   });
 });
 

@@ -19,6 +19,12 @@ export const CARD_TITLES: Record<CardId, string> = {
 export const SPLIT_QUERY = '(min-width: 1100px)';
 
 /**
+ * The window width from which the board's four columns sit side by side; below it one shows at a
+ * time. `styles.css` lays them out under the same media query (`theme-css.test.ts` checks).
+ */
+export const BOARD_COLUMNS_QUERY = '(min-width: 900px)';
+
+/**
  * The layout with the visible card at `from` moved to `to`, both counted among the visible cards
  * of `side`'s column, or among all of them for one list (the order the sheet shows); the hidden
  * cards follow them. A column's cards take back the places they held among the visible ones, so
