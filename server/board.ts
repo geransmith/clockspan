@@ -12,6 +12,7 @@ import type { DB } from './db.js';
 import type { CategoryRow, ItemRow } from './routes/shared.js';
 import { cutoffKey } from '../shared/dates.js';
 import { activeMs } from '../shared/timer.js';
+import { cutText } from '../shared/text.js';
 import { LIMITS, LOOKBACK_DAYS, type Board, type BoardCard, type Category, type OpenLane, type Recurring } from '../shared/api.js';
 
 /** A list of ids or uids as one bound parameter, read in SQL as `IN (SELECT value FROM json_each(?))`. */
@@ -115,7 +116,7 @@ export function collectItems(db: DB, userId: number, only?: readonly number[], a
  */
 export function deleteItem(db: DB, userId: number, item: ItemRow, now: number): void {
   db.prepare(`UPDATE sessions SET label = ?, category_uid = ?, item_id = NULL WHERE user_id = ? AND item_id = ?`).run(
-    item.title.slice(0, LIMITS.sessionLabel),
+    cutText(item.title, LIMITS.sessionLabel),
     item.category_uid,
     userId,
     item.id,

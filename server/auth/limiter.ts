@@ -4,6 +4,7 @@ import type { Config } from '../config.js';
 import { refuse } from '../refuse.js';
 import { USERNAME } from '../../shared/api.js';
 import { MINUTE_MS } from '../../shared/dates.js';
+import { cutText } from '../../shared/text.js';
 
 /**
  * The sign-in limits: failures per address (an IPv6 client by its /64) and per account name, and
@@ -90,7 +91,7 @@ export function limiterKey(ip: string): string {
  * address's five attempts can't park megabytes of made-up names in the limiter.
  */
 export function accountKey(username: unknown): string {
-  return typeof username === 'string' ? username.trim().toLowerCase().slice(0, USERNAME.max) : '';
+  return typeof username === 'string' ? cutText(username.trim().toLowerCase(), USERNAME.max) : '';
 }
 
 /**

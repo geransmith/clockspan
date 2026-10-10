@@ -131,9 +131,11 @@ describe("a session's category", () => {
       expect(editedSession(linked({ title: null }), { priorityUid: null })).toMatchObject({ label: 'Started' });
     });
 
-    it("cuts a long task name to a label's length, as the server does", () => {
+    it("cuts a long task name to a label's length, keeping whole characters, as the server does", () => {
       const title = 'x'.repeat(LIMITS.priorityText);
       expect(editedSession(linked({ title }), { priorityUid: null }).label).toBe(title.slice(0, LIMITS.sessionLabel));
+      const split = `${'x'.repeat(LIMITS.sessionLabel - 1)}😀`;
+      expect(editedSession(linked({ title: split }), { priorityUid: null }).label).toBe(`${'x'.repeat(LIMITS.sessionLabel - 1)}�`);
     });
   });
 });

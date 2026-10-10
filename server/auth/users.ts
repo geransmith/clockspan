@@ -1,5 +1,6 @@
 import type { DB, UserRow } from '../db.js';
 import { USERNAME, type PublicUser } from '../../shared/api.js';
+import { cutText } from '../../shared/text.js';
 
 /** A user as the client sees it (`/auth/me`, the admin's user list); every auth mode answers with this. */
 export function publicUser(u: UserRow): PublicUser {
@@ -19,7 +20,7 @@ export function publicUser(u: UserRow): PublicUser {
  * out household member gets noticed.
  */
 export function logName(name: unknown): string {
-  return JSON.stringify(typeof name === 'string' ? name.slice(0, USERNAME.max) : '');
+  return JSON.stringify(typeof name === 'string' ? cutText(name, USERNAME.max) : '');
 }
 
 /**

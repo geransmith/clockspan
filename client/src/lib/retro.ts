@@ -3,6 +3,7 @@ import type { CompletedSession, Day, Priority, Session } from '../types';
 import { LIMITS } from '../../../shared/api.js';
 import { hasText } from '../../../shared/priorities.js';
 import { activeMs } from '../../../shared/timer.js';
+import { cutText } from '../../../shared/text.js';
 
 export interface PriorityReview {
   priority: Priority;
@@ -104,7 +105,7 @@ export function editedSession(s: Session, patch: SessionEdit): Session {
   const next = { ...s, ...patch };
   if (patch.priorityUid === undefined || patch.priorityUid === s.priorityUid) return next;
   if (patch.priorityUid != null) return { ...next, title: null, categoryUid: null };
-  return { ...next, title: null, label: patch.label ?? s.title?.slice(0, LIMITS.sessionLabel) ?? s.label, categoryUid: patch.categoryUid ?? null };
+  return { ...next, title: null, label: patch.label ?? cutText(s.title ?? s.label, LIMITS.sessionLabel), categoryUid: patch.categoryUid ?? null };
 }
 
 /**
