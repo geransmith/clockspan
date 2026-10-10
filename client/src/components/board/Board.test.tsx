@@ -850,6 +850,25 @@ describe('Board', () => {
     await settle();
     expect(titlesIn('Later')).toEqual(['Write a KB']);
   });
+
+  it("shows a Try again in Done for this week's earlier days that could not be read, which reads them again and hands the focus to Done's heading", async () => {
+    onServer = makeBoard();
+    lists = {};
+    serveRange([]);
+    vi.mocked(api.getRange).mockRejectedValueOnce(new Error('offline'));
+    await renderBoard();
+    const done = within(column('Done'));
+    expect(done.getByRole('alert').textContent).toContain(LOAD_FAILED.range);
+    // A routine ticked on those days may be all Done has, so it doesn't say there is nothing.
+    expect(done.queryByText('Nothing done this week.')).toBeNull();
+    expect(warnQuietly).not.toHaveBeenCalled();
+    fireEvent.click(done.getByRole('button', { name: LOAD_FAILED.retry }));
+    expect(document.activeElement).toBe(done.getByRole('heading', { name: 'Done' }));
+    await settle();
+    expect(done.queryByRole('alert')).toBeNull();
+    expect(done.getByText('Nothing done this week.')).toBeTruthy();
+    expect(api.getRange).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('adding from a column', () => {

@@ -959,8 +959,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   shows the tasks `GET /board` sends (`boardJson`: the one-off tasks in Later or Next that aren't
   done, then every other one whose latest entry is from `LIST_WINDOW_DAYS` back to
   `PLANNED_WINDOW_DAYS` ahead; archived and deleted ones left out) and today's rows from the day
-  store, matched by uid. Nothing about In progress or Done is stored, so the board and the sheet
-  show one list. Which column an item is in comes only from `boardColumns` (its doc has the
+  store, matched by uid, and for Done the routines ticked on this week's earlier days (`useRange`,
+  none on a Monday). A failed read of those ends Done with `LoadFailed` (`LOAD_FAILED.range`, and
+  no "Nothing done this week." meanwhile), read again by its Try again (the focus to Done's
+  heading, as History's goes to ◀), a new day, the board opening again or `generation` moving
+  (`pruneBefore`, `taskChanged`). Nothing about In
+  progress or Done is stored, so the board and the sheet show one list. Which column an item is in comes only from `boardColumns` (its doc has the
   rules in order). Later ends with Repeats (`BoardColumns.repeats`, joined after Later's own cards
   by `itemsIn`, as Done joins its two lists (today's, then Earlier this week, folded, whose button
   counts its cards only while today's show above it); the column's count holds both, and "Nothing
@@ -1706,7 +1710,9 @@ The browser pass for each surface (the logic under it is already tested):
   each with its day ("Done yesterday"), the fold's number gone while nothing is done today, and a
   task ticked on a later day with today's, its dialog naming that day (in a second tab, DevTools →
   Sensors → Location, Timezone ID Pacific/Kiritimati: Move to Done on a Next card, then reload the
-  first tab). The dialog: a click on a card's title, its meta line or its padding opens it, and so does
+  first tab); with the earlier days' read failing (wrap `window.fetch` so `GET /api/days/range`
+  rejects, then press Board), Done ends with "Could not load these days" and Try again, and no
+  banner. The dialog: a click on a card's title, its meta line or its padding opens it, and so does
   Enter; the tick ticks and opens nothing. Enter in the title saves and closes, and the dialog stays
   closed; Escape drops the edit; leaving the box saves. Move to from every column, Start timer,
   Delete's confirm (Cancel keeps the dialog) and Remove from today on a routine's row each leave the

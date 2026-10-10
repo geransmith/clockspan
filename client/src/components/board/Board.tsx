@@ -103,8 +103,9 @@ export const Board = memo(function Board({
   const { settings } = useSettings();
   const { day, failed: dayFailed, store: dayStore } = useDay(today);
   const weekStart = startOfWeek(today);
-  // Done holds the week: the days before today (none on a Monday) give the rows ticked on them.
-  const { days: earlierDays } = useRange(weekStart, addDays(today, -1), today !== weekStart);
+  // Done holds the week: the days before today (none on a Monday) give the rows ticked on them; a
+  // failed read says so in Done, with Try again.
+  const { days: earlierDays, failed: earlierFailed, retry: retryEarlier } = useRange(weekStart, addDays(today, -1), today !== weekStart);
   const pick = useCategoryPick();
   useEffect(() => void store.load(), [store]);
 
@@ -666,7 +667,8 @@ export const Board = memo(function Board({
             {shown.progress.length > 0 ? list(shown.progress, 'progress') : <Empty>Nothing open on today's list.</Empty>}
           </Column>
           <Column id="done" shown={shownColumn} over={over} count={done} headRef={headRef('done')}>
-            {done === 0 && <Empty>Nothing done this week.</Empty>}
+            {/* Not while the earlier days are unread: a routine ticked then may be all Done has. */}
+            {done === 0 && !earlierFailed && <Empty>Nothing done this week.</Empty>}
             {shown.doneToday.length > 0 && list(shown.doneToday, 'done')}
             {shown.doneEarlier.length > 0 && (
               <>
@@ -676,6 +678,17 @@ export const Board = memo(function Board({
                 </button>
                 {earlierOpen && list(shown.doneEarlier, 'done')}
               </>
+            )}
+            {/* In place of the routines ticked earlier this week. Try again goes as the read starts
+                again, so Done's heading takes the focus, as History's ◀ does. */}
+            {earlierFailed && (
+              <LoadFailed
+                title={LOAD_FAILED.range}
+                onRetry={() => {
+                  heads.current.get('done')?.focus();
+                  retryEarlier();
+                }}
+              />
             )}
           </Column>
         </div>
