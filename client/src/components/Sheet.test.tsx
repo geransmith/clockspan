@@ -113,12 +113,6 @@ describe('Sheet', () => {
     ]);
   });
 
-  it('keeps the wide page while a day loads, so ◀ and ▶ leave the width alone', async () => {
-    vi.mocked(api.getDay).mockReturnValue(new Promise(() => {}));
-    await renderSheet();
-    expect(document.querySelector('.sheet--split .loading')).not.toBeNull();
-  });
-
   it('keeps a narrow window to one list, in the layout order', async () => {
     media.delete(SPLIT_QUERY);
     await renderSheet();

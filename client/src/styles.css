@@ -46,8 +46,9 @@
   --shadow: 0 1px 2px rgba(20, 24, 40, 0.04), 0 6px 20px rgba(20, 24, 40, 0.06);
   --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --bar-h: 56px;
-  /* The page and the running bar's contents line up at this width. */
-  --page-w: 860px;
+  /* One frame for every view: the header, the page and the running bar's contents keep their
+     place when the view changes. */
+  --page-w: 1240px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   /* A phone held sideways puts the notch or camera cutout on one of these sides. */
@@ -139,6 +140,9 @@
 }
 html {
   -webkit-text-size-adjust: 100%;
+  /* A page too short to scroll, or one under a dialog's scroll lock (body.no-scroll), keeps a
+     classic scrollbar's room, so nothing shifts sideways. */
+  scrollbar-gutter: stable;
 }
 body {
   margin: 0;
@@ -814,6 +818,13 @@ button {
 .app--has-bar {
   padding-top: calc(var(--bar-h) + var(--safe-top));
 }
+/* History and the one-column sheet keep today's reading width, centred in the frame; the split
+   sheet and the board take all of it. */
+.sheet,
+.history-view {
+  max-width: 828px;
+  margin-inline: auto;
+}
 .sheet {
   display: flex;
   flex-direction: column;
@@ -828,14 +839,11 @@ button {
   min-width: 0;
 }
 /* SPLIT_QUERY in lib/layout.ts, which the sheet asks when it mounts; theme-css.test.ts checks
-   the two agree. The page widens for the two columns, and the header (inside .app) and the
-   running bar's contents (which read --page-w) with it. The punch-order notice and the
+   the two agree. The two columns take the whole frame; the punch-order notice and the
    hidden-cards strip span both. */
 @media (min-width: 1100px) {
-  .app:has(.sheet--split) {
-    --page-w: 1240px;
-  }
   .sheet--split {
+    max-width: none;
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     align-items: start;
@@ -2490,8 +2498,7 @@ button.log-label:hover {
 }
 
 /* ---------- board ---------- */
-/* Built for a desktop window: from 900 px the four columns sit side by side on a page wider than
-   the sheet's, which the header and the running bar's contents follow (they read --page-w). The
+/* Built for a desktop window: from 900 px the four columns sit side by side across the frame. The
    base rules are the phone's, one column at a time behind the switch (Board.tsx). The columns
    are not .card, whose overflow: hidden would clip a dragged card. */
 .board {
@@ -2768,9 +2775,6 @@ button.log-label:hover {
   color: var(--text-2);
 }
 @media (min-width: 900px) {
-  .app:has(.board) {
-    --page-w: 1440px;
-  }
   .board-switch {
     display: none;
   }

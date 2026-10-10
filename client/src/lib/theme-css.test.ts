@@ -85,4 +85,10 @@ describe('styles.css', () => {
   it('lays the two-column sheet out under the query the sheet picks it with', () => {
     expect(css).toContain(`@media ${SPLIT_QUERY} {`);
   });
+
+  // Every view sits in the one frame, so a page switch leaves the header and the running bar where they were.
+  it("sets the page width once, for every view, and keeps the scrollbar's room", () => {
+    expect(css.match(/--page-w: .+;/g)).toEqual(['--page-w: 1240px;']);
+    expect(css).toContain('scrollbar-gutter: stable;');
+  });
 });

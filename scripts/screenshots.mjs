@@ -32,8 +32,6 @@ const PHONE = { width: 375, height: 812, deviceScaleFactor: 2, mobile: true };
 /** Taller than a phone so the sheet shots reach the priorities card. */
 const PHONE_TALL = { ...PHONE, height: 1000 };
 const DESKTOP = { width: 1280, height: 900, deviceScaleFactor: 2, mobile: false };
-/** The board's page at its full width (1440 px). */
-const WIDE = { ...DESKTOP, width: 1440 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (msg) => console.log(`[screenshots] ${msg}`);
@@ -253,7 +251,7 @@ const SHOTS = [
   { name: 'settings-alarms', url: '/', device: PHONE, scheme: 'dark', ready: READY_SHEET, steps: openSettings('alarms') },
   { name: 'settings-data', url: '/', device: PHONE, scheme: 'dark', ready: READY_SHEET, steps: openSettings('data') },
   // Last, with its own setup: every shot above is taken with the board off, as it is by default.
-  { name: 'board-desktop', url: '/?view=board', device: WIDE, scheme: 'dark', ready: '.board-col .board-card', setup: enableBoard, fullPage: true },
+  { name: 'board-desktop', url: '/?view=board', device: DESKTOP, scheme: 'dark', ready: '.board-col .board-card', setup: enableBoard, fullPage: true },
 ];
 
 async function main() {
