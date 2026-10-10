@@ -60,6 +60,16 @@ describe('computeTimeclock', () => {
     expect(r.lunchStatus).toBe('overdue');
   });
 
+  it('leaves a lunch not taken by its deadline out of the clock-out time, and plans it again once taken', () => {
+    const none = punches([T0, null, null, null]);
+    for (const h of [5, 6.5, 8]) expect(computeTimeclock(none, settings, T0 + h * HOUR_MS).clockOutAt).toBe(T0 + 8 * HOUR_MS);
+    // Lunch out an hour late: the 30 minutes are back, at lunch and after it.
+    const out = punches([T0, T0 + 6 * HOUR_MS, null, null]);
+    expect(computeTimeclock(out, settings, T0 + 6 * HOUR_MS + 10 * MINUTE_MS).clockOutAt).toBe(T0 + 8.5 * HOUR_MS);
+    const back = punches([T0, T0 + 6 * HOUR_MS, T0 + 6.5 * HOUR_MS, null]);
+    expect(computeTimeclock(back, settings, T0 + 7 * HOUR_MS).clockOutAt).toBe(T0 + 8.5 * HOUR_MS);
+  });
+
   it('tracks a lunch in progress and keeps the 30m assumption until it runs long', () => {
     const p = punches([T0, T0 + 4 * HOUR_MS, null]);
     const early = computeTimeclock(p, settings, T0 + 4 * HOUR_MS + 10 * MINUTE_MS);

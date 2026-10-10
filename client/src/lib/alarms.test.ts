@@ -118,6 +118,29 @@ describe('alarmTargets', () => {
     expect(armed(alarmTargets(tc(IN + 5 * HOUR_MS + 10 * MINUTE_MS, IN), s, day)).lunchBy).toBe(true);
   });
 
+  it('rings the clock-out warnings before the end of a day whose lunch was never taken', () => {
+    const fired = new Set<string>();
+    const rang: AlarmEvent[] = [];
+    for (let now = IN + 4 * HOUR_MS; now <= IN + 8 * HOUR_MS; now += MINUTE_MS) {
+      // The lunch alarm repeats all afternoon.
+      const r = dueEvents(
+        alarmTargets(tc(now, IN), s, day).filter((t) => t.id !== 'lunchBy'),
+        s.alarms,
+        fired,
+        now,
+      );
+      r.crossed.forEach((k) => fired.add(k));
+      rang.push(...r.fire);
+    }
+    expect(rang.map((e) => [e.id, e.kind, e.minutes])).toEqual([
+      ['retro', 'lead', 30],
+      ['clockOut', 'lead', 15],
+      ['clockOut', 'lead', 5],
+      ['clockOut', 'lead', 1],
+      ['clockOut', 'due', 0],
+    ]);
+  });
+
   it('has no lunch alarm on a day short enough to need no lunch', () => {
     // A 4 h day, 50 min over, is still inside the 5 h lunch window; being over brings the second meal in.
     const half = { ...s, workMinutes: 240 };
