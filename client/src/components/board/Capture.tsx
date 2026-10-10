@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { LIMITS } from '../../../../shared/api.js';
+import { useLatest } from '../../hooks/useLatest';
 import { activeCategories, COLUMN_NAMES, type CategoryPick, type ColumnId } from '../../lib/board';
 import { CategoryChip } from '../CategoryChip';
 
@@ -36,8 +37,19 @@ export function Capture({
   const [text, setText] = useState('');
   const category = activeCategories(pick.categories).some((c) => c.uid === remembered) ? remembered : null;
   const today = to === 'progress';
+  // A box that goes with the focus in it (its + shut at the cap or on a full list) hears no blur,
+  // so the focus goes back to the +. A layout cleanup runs while the box is still in the page.
+  const box = useRef<HTMLDivElement>(null);
+  const close = useLatest(onClose);
+  useLayoutEffect(
+    () => () => {
+      if (box.current!.contains(document.activeElement)) close.current(true);
+    },
+    [close],
+  );
   return (
     <div
+      ref={box}
       className="board-add-box"
       // Its handlers only hear the field's and the chip's keys and focus as they bubble, so the
       // wrapper is presentation to a screen reader. The chip's list stops its own Escape, so Escape

@@ -873,18 +873,19 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   and focuses the new row. An edit of the box's text or category drops the question, and the next
   Enter asks again. Later's and Next's + is `aria-disabled` at the cap (`boardFull`, `BOARD.full`
   under it), and In progress's only on a full list (`hasRoom`, `ADD_PRIORITY_FAILED.full`), since
-  its task has no lane; a box open as its + shuts closes. A Delete that empties a column puts the
-  focus on its +, or on Done's heading. One `role="status"` slot above the columns holds the board
-  notice (a pull's or a typed row's nudge, the done-item notice or a refusal): its first button
-  takes the focus, and an Enter or Space still held from the press that raised it presses nothing.
-  What the store refuses once a move is under way (`MoveRefused`) is a banner. A drag (`Board.tsx`,
-  with dnd-kit's settings in `components/board/dnd.ts`) starts at an item's grip; a planned task and
-  a recurring row have none, and an item whose move is on its way can't be picked up until the move
-  lands. Where a drop lands is `dropTarget`'s (see its doc), and what a screen reader hears comes
-  from `BOARD_DRAG`, `overAnnouncement` and `moveAnnouncement`. dnd-kit's own focus return is off,
-  since it would take the focus from the notice a drop brings: a keyboard drag puts it back on the
-  item's grip, and so does closing the notice (on the title where the grip is hidden or missing; for
-  a row typed in In progress's box, back in that box, which still holds the text).
+  its task has no lane; a box open as its + shuts closes, giving the focus it had to the +. A Delete
+  or a Remove from today that empties a column puts the focus on its +, or on Done's heading. One
+  `role="status"` slot above the columns holds the board notice (a pull's or a typed row's nudge,
+  the done-item notice or a refusal): its first button takes the focus, and an Enter or Space still
+  held from the press that raised it presses nothing. What the store refuses once a move is under
+  way (`MoveRefused`) is a banner. A drag (`Board.tsx`, with dnd-kit's settings in
+  `components/board/dnd.ts`) starts at an item's grip; a planned task and a recurring row have none,
+  and an item whose move is on its way can't be picked up until the move lands. Where a drop lands
+  is `dropTarget`'s (see its doc), and what a screen reader hears comes from `BOARD_DRAG`,
+  `overAnnouncement` and `moveAnnouncement`. dnd-kit's own focus return is off, since it would take
+  the focus from the notice a drop brings: a keyboard drag puts it back on the item's grip, and so
+  does closing the notice (on the title where the grip is hidden or missing; for a row typed in In
+  progress's box, back in that box, which still holds the text).
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started — one
   rule, no clock-in fallback. `GET /days/range` returns full days and the client does the rollup
