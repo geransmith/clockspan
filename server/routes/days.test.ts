@@ -454,9 +454,6 @@ describe('PUT /api/days/:date/priorities: the tasks', () => {
     // Only Date, so createdAt can be compared: HTTP keeps its real timers.
     vi.useFakeTimers({ now: SEED_NOW, toFake: ['Date'] });
   });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
 
   it('makes a task for a uid new to the user, with its trimmed name, its category and its note, in no lane', async () => {
     const r = await app.saveList(MON, [row('  Write the report  ', 'aaaaaaaaaaa1', { categoryUid: 'cat000000001', note: 'Steps:\n' })]);
@@ -934,18 +931,14 @@ describe('the date check on every /:date route', () => {
 describe('the distance check on every /:date write', () => {
   it('refuses a write more than 400 days past the server date, and reads it', async () => {
     vi.useFakeTimers({ now: SEED_NOW, toFake: ['Date'] });
-    try {
-      const far = '2027-10-22';
-      const day = `/api/days/${far}`;
-      for (const [method, path, body] of writes(day)) {
-        const r = await app.api[method](path, body);
-        expect([path, r.status, r.body]).toEqual([path, 400, { error: 'That date is too far ahead.' }]);
-      }
-      expect(app.count('days', 'date = ?', far)).toBe(0);
-      expect((await app.api.get(day)).status).toBe(200);
-      expect((await app.api.put('/api/days/2027-10-21/overtime', { approved: true })).status).toBe(200);
-    } finally {
-      vi.useRealTimers();
+    const far = '2027-10-22';
+    const day = `/api/days/${far}`;
+    for (const [method, path, body] of writes(day)) {
+      const r = await app.api[method](path, body);
+      expect([path, r.status, r.body]).toEqual([path, 400, { error: 'That date is too far ahead.' }]);
     }
+    expect(app.count('days', 'date = ?', far)).toBe(0);
+    expect((await app.api.get(day)).status).toBe(200);
+    expect((await app.api.put('/api/days/2027-10-21/overtime', { approved: true })).status).toBe(200);
   });
 });

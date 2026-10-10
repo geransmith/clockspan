@@ -1598,10 +1598,12 @@ Prove a change at the cheapest level that can show it, and stop there:
      router's `*.test.ts`. `startTestApp()` (`server/dev/harness.ts`) boots the real app on an
      in-memory DB, and the test calls it over HTTP (`app.api`, a `fetch` client). `seed: true`
      adds the sample days and their manifest (`app.seeded`). `app.db` sets up what the API
-     can't, such as an expired login. One app per test. To move time, fake only `Date`
-     (`vi.useFakeTimers({ toFake: ['Date'] })`, so HTTP keeps its real timers) and step it with
-     `vi.setSystemTime`. An event stream is read with a client's `stream(path)`, whose `next()`
-     gives one event; the harness closes every connection, streams included, when it closes.
+     can't, such as an expired login. One app per test. To move time, fake only `Date`, so HTTP
+     keeps its real timers (`now` starts the app with it faked at that time; mid-test,
+     `vi.useFakeTimers({ toFake: ['Date'] })`), and step it with `vi.setSystemTime`; the shared
+     teardown (`client/src/test/setup.ts`) puts the real clock back. An event stream is read
+     with a client's `stream(path)`, whose `next()` gives one event; the harness closes every
+     connection, streams included, when it closes.
    - Code with no route (`mergeSettings`, config, passwords, the limiter) is unit-tested
      directly.
    - The database is `openDatabase(':memory:')`, never a file. The static-file tests write a

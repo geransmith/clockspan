@@ -20,8 +20,6 @@ describe('AUTH_MODE=oidc', () => {
     await app.close();
   });
 
-  const raw = (path: string, cookie?: string) => fetch(app.url + path, { redirect: 'manual', headers: cookie ? { cookie } : {} });
-
   it('reports the mode with no user and keeps the data routes closed', async () => {
     expect((await app.api.get('/api/auth/me')).body).toEqual({ mode: 'oidc', setupRequired: false, user: null, cookieSecure: false });
     expect((await app.api.get('/api/settings')).status).toBe(401);
@@ -33,7 +31,7 @@ describe('AUTH_MODE=oidc', () => {
   });
 
   it('answers 503 on /auth/login while the provider is unreachable, with the cause in the log only', async () => {
-    const r = await raw('/auth/login');
+    const r = await app.raw('/auth/login');
     expect(r.status).toBe(503);
     expect(await r.text()).toBe('Identity provider is unreachable. <a href="/auth/login">Try again</a>.');
     expect(r.headers.getSetCookie()).toEqual([]);
@@ -42,13 +40,13 @@ describe('AUTH_MODE=oidc', () => {
   });
 
   it('refuses a callback without the flow cookie', async () => {
-    const r = await raw('/auth/callback?code=abc&state=xyz');
+    const r = await app.raw('/auth/callback?code=abc&state=xyz');
     expect(r.status).toBe(400);
     expect(await r.text()).toBe('Sign-in session expired. <a href="/auth/login">Try again</a>.');
   });
 
   it('clears the flow cookie and shows fixed text when the callback cannot complete', async () => {
-    const r = await raw('/auth/callback?code=abc&state=xyz', 'fs_oidc=not-json');
+    const r = await app.raw('/auth/callback?code=abc&state=xyz', 'fs_oidc=not-json');
     expect(r.status).toBe(400);
     // What went wrong (here a JSON parse error) is logged, not shown.
     expect(await r.text()).toBe('Sign-in failed. <a href="/auth/login">Try again</a>.');
