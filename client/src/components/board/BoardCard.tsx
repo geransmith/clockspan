@@ -43,14 +43,17 @@ export interface ItemDrag {
 /**
  * A task on the board: its tick, its number on today's list, its title, and a line with the timer
  * running on it, its category, the Repeats mark of a recurring priority (and its days in Later's
- * Repeats), a mark for a note, and the day it was left open on. The title's button reaches over
- * the whole card (styles.css): a click or Enter opens the dialog, and it is what a mouse, a
- * finger's hold or Space drags; its title is a note's start, else "Repeats" on a recurring task.
+ * Repeats), a mark for a note, the day it was left open on, and, on a routine's earlier tick, the
+ * day it was done. The title's button reaches over the whole card (styles.css): a click or Enter
+ * opens the dialog, and it is what a mouse, a finger's hold or Space drags; its title is a note's
+ * start, else "Repeats" on a recurring task.
  */
 export function BoardCardView({ item, today, pick, onOpen, titleRef, tick, running, days, drag }: Props) {
   const category = categoryOf(pick.categories, item.categoryUid);
   const markId = `running-${item.id}`;
   const noted = hasNote(item.note);
+  // Only a routine's tick on an earlier day is a row of another day's; its cards would read alike.
+  const doneOn = item.column === 'done' && item.date != null && item.date !== today ? item.date : null;
   return (
     <li ref={drag?.nodeRef} style={drag?.style} className={`board-card${item.column === 'done' ? ' is-done' : ''}`}>
       <div className="board-card-row">
@@ -102,7 +105,7 @@ export function BoardCardView({ item, today, pick, onOpen, titleRef, tick, runni
           <span className="board-card-title">{item.title}</span>
         </button>
       </div>
-      {(running != null || category != null || item.recurring || noted || item.leftOpen != null) && (
+      {(running != null || category != null || item.recurring || noted || item.leftOpen != null || doneOn != null) && (
         <p className="board-card-meta muted small">
           {running && <RunningMark paused={running.pausedAt != null} id={markId} />}
           {category && <CategoryTag category={category} />}
@@ -114,6 +117,7 @@ export function BoardCardView({ item, today, pick, onOpen, titleRef, tick, runni
             </span>
           )}
           {item.leftOpen && <span>Left open from {dayName(item.leftOpen, today, true)}</span>}
+          {doneOn && <span>Done {dayName(doneOn, today, true)}</span>}
         </p>
       )}
     </li>

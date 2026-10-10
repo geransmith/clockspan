@@ -310,8 +310,9 @@ export const ADD_PRIORITY_FAILED = {
  * `close` its button. `full` is also the line under Later's and Next's + while they are shut at
  * the cap.
  * `nameTaken` is Settings → Board's line under a category named like another in use. `doneOn` is
- * a card dialog's line on a task ticked on an earlier day, which the board doesn't untick; `when`
- * is `dayName`'s in-sentence word or date.
+ * a card dialog's line on a task ticked on an earlier day, which the board doesn't untick, and
+ * `doneAhead` its line on one ticked on a later day's list, whose sheet opens only once that day
+ * comes; `when` is `dayName`'s in-sentence word or date.
  */
 export const BOARD = {
   full: `Later and Next hold ${BOARD_LIMITS.openCards} cards at most.`,
@@ -320,6 +321,7 @@ export const BOARD = {
   close: 'Close',
   nameTaken: 'There is already a category with that name.',
   doneOn: (when: string) => `Done ${when}. Untick it on that day's sheet.`,
+  doneAhead: (when: string) => `Ticked on the list for ${when}. Untick it on that day's sheet once the day comes.`,
 } as const;
 
 /**

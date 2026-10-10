@@ -403,11 +403,13 @@ export const Board = memo(function Board({
   );
 
   const cardDialog = (item: BoardItem) => {
-    // A task off today's list as the board has it: in a lane, left open, or done earlier.
+    // A task off today's list as the board has it: in a lane, left open, or done on another day.
     const cardOnly = item.card != null && item.row == null;
-    // Ticked on an earlier day: that day's sheet unticks it, since the board would rewrite a past
-    // day; Move to In progress puts it on today's list to work on again.
-    const hint = cardOnly && item.card!.listDone ? BOARD.doneOn(dayName(item.card!.listDate!, today, true)) : undefined;
+    // Ticked on another day: that day's sheet unticks it, since the board would rewrite another
+    // day's list, and a later day's sheet opens only once that day comes; Move to In progress puts
+    // it on today's list to work on again.
+    const doneDay = cardOnly && item.card!.listDone ? item.card!.listDate! : null;
+    const hint = doneDay == null ? undefined : (doneDay > today ? BOARD.doneAhead : BOARD.doneOn)(dayName(doneDay, today, true));
     // The recurring priority as the board has it, a task given its first day included: none for a
     // one-off, or one that stopped repeating.
     const routine = board.recurring.find((r) => r.uid === item.uid);
@@ -668,8 +670,9 @@ export const Board = memo(function Board({
             {shown.doneToday.length > 0 && list(shown.doneToday, 'done')}
             {shown.doneEarlier.length > 0 && (
               <>
+                {/* With nothing above it, the fold's count is the column's. */}
                 <button className="btn btn-ghost board-earlier" aria-expanded={earlierOpen} onClick={() => setEarlierOpen((o) => !o)}>
-                  Earlier this week · {shown.doneEarlier.length}
+                  Earlier this week{shown.doneToday.length > 0 && ` · ${shown.doneEarlier.length}`}
                 </button>
                 {earlierOpen && list(shown.doneEarlier, 'done')}
               </>

@@ -9,6 +9,7 @@ import type { TimerCtx } from '../../hooks/useTimer';
 import { dismissByTag, unlockAudio, warnQuietly, warnSaveFailed } from '../../lib/alerts';
 import { COLUMN_NAMES, withCategory, withItem, withItemPatch, withoutItem, type ColumnId } from '../../lib/board';
 import { ADD_PRIORITY_FAILED, BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, PRIORITY_WARNINGS, WARNING_ACTIONS } from '../../lib/copy';
+import { dayName } from '../../lib/format';
 import { USER_KEYS } from '../../lib/storage';
 import {
   answered,
@@ -152,6 +153,23 @@ describe('Board', () => {
     expect(screen.getByRole('button', { name: 'Earlier this week · 2' }).getAttribute('aria-expanded')).toBe('true');
   });
 
+  it("names the day on a routine's earlier ticks, which read alike, and counts the fold only beside today's done items", async () => {
+    serveRange([makeDay(TUE, { priorities: [tuesdayRoutine()] }), makeDay(MON, { priorities: [tuesdayRoutine()] })]);
+    await renderBoard();
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 3' }));
+    const cards = [...column('Done').querySelectorAll('.board-card')];
+    expect(cards.map((c) => [c.querySelector('.board-card-title')?.textContent, c.querySelector('.board-card-meta')?.textContent ?? null])).toEqual([
+      ['Email', null],
+      ['Shipped', null],
+      ['Tuesday row', 'Done yesterday'],
+      ['Tuesday row', `Done ${dayName(MON, WED, true)}`],
+    ]);
+    // With nothing done today, the fold's count would be the column's.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Email done' }));
+    await settle();
+    expect(titlesIn('Done')).toEqual(['Earlier this week', 'Shipped', 'Tuesday row', 'Tuesday row']);
+  });
+
   it("puts today's times above the notice and the columns, only with Times on the board on", async () => {
     await renderBoard();
     const board = document.querySelector('.board')!;
@@ -233,6 +251,16 @@ describe('Board', () => {
     await settle();
     expect(lists[WED]![1]!.done).toBe(false);
     expect(unlockAudio).toHaveBeenCalledTimes(1);
+  });
+
+  it("puts a task ticked on a later day with today's in Done, with no tick, its dialog saying when its sheet can untick it", async () => {
+    onServer = makeBoard(...onServer.cards, makeCard('ahead0000001', 'Ticked ahead', { lane: null, listDate: THU, listDone: true, listed: 1 }));
+    await renderBoard();
+    expect(titlesIn('Done')).toEqual(['Email', 'Ticked ahead', 'Earlier this week · 2']);
+    expect(screen.queryByRole('checkbox', { name: 'Ticked ahead done' })).toBeNull();
+    openCard('Ticked ahead');
+    expect(within(dialog()).getByText(BOARD.doneAhead('tomorrow'))).toBeTruthy();
+    expect(moveOptions()).toEqual(['Later', 'Next', 'In progress']);
   });
 
   it('gives a task done on an earlier day no tick, saying where to untick it, and Move to brings it back', async () => {
@@ -476,8 +504,9 @@ describe('Board', () => {
     expect(putLists()).toEqual([{ date: WED, texts: ['Watch the queue', 'Report', ''] }]);
     expect(api.editItem).not.toHaveBeenCalled();
     // Tuesday's tick shows its recurring priority's new name, and the days on screen are read again.
-    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
-    expect(titlesIn('Done')).toEqual(['Earlier this week · 2', 'Shipped', 'Watch the queue']);
+    // Nothing is done today, so the fold doesn't repeat the column's count.
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week' }));
+    expect(titlesIn('Done')).toEqual(['Earlier this week', 'Shipped', 'Watch the queue']);
     expect(vi.mocked(api.getRange)).toHaveBeenCalledTimes(2);
   });
 
@@ -640,7 +669,7 @@ describe('Board', () => {
     openCard('Email');
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     await settle();
-    expect(titlesIn('Done')).toEqual(['Earlier this week · 2']);
+    expect(titlesIn('Done')).toEqual(['Earlier this week']);
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Done' }));
     // happy-dom focuses any heading; a browser only one with a tabindex.
     expect(screen.getByRole('heading', { name: 'Done' }).getAttribute('tabindex')).toBe('-1');
@@ -2149,7 +2178,7 @@ describe('categories', () => {
     await settle();
     expect(api.editItem).toHaveBeenCalledExactlyOnceWith('planned00001', { categoryUid: ADMIN.uid });
     closeCard();
-    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week' }));
     openCard('Tuesday row', 'Done');
     fireEvent.click(screen.getByRole('button', { name: 'Category for Tuesday row: none' }));
     pickOption('Tickets');
@@ -2161,7 +2190,7 @@ describe('categories', () => {
     onServer = { ...onServer, recurring: [] };
     serveRange([makeDay(TUE, { priorities: [{ ...tuesdayRoutine(), categoryUid: TICKETS.uid }] }), makeDay(MON)]);
     await renderBoard();
-    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week' }));
     openCard('Tuesday row');
     // Its category shows as text, as its title does.
     expect(screen.queryByRole('button', { name: /^Category for Tuesday row/ })).toBeNull();

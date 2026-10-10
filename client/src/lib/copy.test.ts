@@ -166,6 +166,7 @@ describe('copy builders', () => {
     expect(BOARD.removed('Follow-ups')).toBe('Follow-ups stopped repeating.');
     expect(BOARD.doneOn('yesterday')).toBe("Done yesterday. Untick it on that day's sheet.");
     expect(BOARD.doneOn('Mon, Oct 5')).toBe("Done Mon, Oct 5. Untick it on that day's sheet.");
+    expect(BOARD.doneAhead('tomorrow')).toBe("Ticked on the list for tomorrow. Untick it on that day's sheet once the day comes.");
   });
 
   it('says a done item stays done and offers a new card in the lane it was moved to', () => {
