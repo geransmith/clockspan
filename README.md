@@ -13,9 +13,9 @@
 
 ## Features
 
-**Timeclock.** Tap *Now* on *Clock in* and the sheet works out when lunch must start (default: within 5 hours) and when your day ends (default: 8 hours worked plus a 30-minute lunch), and re-plans if lunch runs long, or leaves it out once the deadline passes without one. A day with no more work than the lunch window (5 hours by default) needs no lunch, so none is planned or alarmed. The *Now* for the next punch is the highlighted one. Forgot to punch? Type the time. Extra out/in pairs cover appointments before or after lunch. The day ends at the *Clock out* once the clock reaches it, early or not, with a small celebration. **Work day → Change** gives one day its own length (a half day, a long one), and the clock-out time, alarms and History follow it. *This week* under the tiles adds up the week against your work week (40 hours by default). Punches out of order are pointed out, and that day counts in no totals until they're fixed. A shift past midnight is two days: clock out at 11:59 PM, clock in at 12:00 AM. Times follow the browser's 12- or 24-hour clock unless you pick one.
+**Timeclock.** Tap *Now* on *Clock in* and the sheet works out when lunch must start (default: within 5 hours) and when your day ends (default: 8 hours worked plus a 30-minute lunch), and re-plans if lunch runs long, or leaves it out once the deadline passes without one. A day with no more work than the lunch window (5 hours by default) needs no lunch, so none is planned or alarmed. The *Now* for the next punch is the highlighted one. Forgot to punch? Type the time. Extra out/in pairs cover appointments before or after lunch. The day ends at the *Clock out* once the clock reaches it, early or not, with a small celebration. **Work day → Change** gives one day its own length (a half day, a long one), and the clock-out time, alarms and History follow it. *This week* under the tiles adds up the week against your work week (40 hours by default). Punches out of order are pointed out, and that day is left out of the hours totals until they're fixed. A shift past midnight is two days: clock out at 11:59 PM, clock in at 12:00 AM. Times follow the browser's 12- or 24-hour clock unless you pick one.
 
-**Priorities.** New days start with three rows (adjustable). You can add more; past three one-off rows (or your Rows per day, if higher), the sheet asks first: the nudge changes once some rows are ticked, and again once they all are. Rows can only be ticked once they have text. A task has one name, one category and a plain-text note that stays hidden until you open it: change any of them on any day, or on the board, and it changes on every day it is on. × takes a task off the day; when it is on other days, has time logged or has a note, it asks whether to take it off this day only or delete it everywhere, and logged time stays in the day log either way. A new day's empty list offers whatever the last day left unticked and the top of the board's *Next*, in one tap, as the same tasks. With the sheet open on a laptop and a phone at once, the two merge their edits row by row.
+**Priorities.** New days start with three rows (adjustable). You can add more; past three one-off rows (or your Rows per day, if higher), the sheet asks first: the nudge changes once some rows are ticked, and again once they all are. Rows can only be ticked once they have text. A task has one name, one category and a plain-text note that stays hidden until you open it: change any of them on any day, or on the board, and it changes on every day it is on. × takes a task off the day; for a one-off task that is on other days, has time logged or has a note, it asks first whether to take it off this day only or delete it everywhere, and logged time stays in the day log either way. A new day's empty list offers the one-off tasks the last planned day of the past two weeks left unticked, and the top of the board's *Next*, in one tap, as the same tasks.
 
 **Focus timer.** 15, 25 or 50-minute sessions (or three lengths of your own) you can stretch, shorten or pause (paused time isn't logged). When one runs out it chimes and waits for you to add time or finish; a minute or more over, it asks whether to log the planned length or the time you worked, and after ten minutes with no answer it logs the plan. A pause left for an hour ends the session where the pause began. Link a session to one of your open priorities, or type a new task and it goes on today's list as the session starts. **Done** finishes the session and ticks its priority. The running timer stays at the top of every view, and since its start time lives on the server it survives reloads and phone sleep. Between sessions, **Break** counts down a short break (5 minutes by default), says when it's over, and logs it in the day log. A break lives on the server like a timer, so it counts down on every device and survives a reload; starting a session ends it. One ended within its first minute (Break pressed by mistake) isn't logged. Turn on *Suggest a break after each session* and finishing a session offers a break sized to it, Pomodoro style: a fifth of the session (25 minutes earn 5), and after four sessions in a row a long break of a fifth of all four, up to 30 minutes.
 
@@ -33,11 +33,9 @@
   <img src="docs/screenshots/review.png" width="300" alt="History → Review → Month: days and hours worked against the target, focused time with the number of sessions and how much was on plan, rows added mid-day, breaks and a typical day, what went off the plan, each routine with the days it was ticked, what never got done, and the days' notes">
 </p>
 
-**History.** A month calendar with each day's hours on it and a thin bar for how much of the work day that was, green once the target was met (or its stickers instead); step back as far as your data goes. Tap a day for its worked, focused and priorities numbers, a tick once reviewed, and its note, then **Open day** or **Review this week**.
+**History.** A month calendar with each day's hours on it and a thin bar for how much of the work day that was, green once the target was met; step back as far as your data goes. Tap a day for its worked, focused and priorities numbers, a tick once reviewed, and its note, then **Open day** or **Review this week**. Turn on the sticker chart and each day shows a sticker instead for each thing it did (clocked out, lunch taken, all priorities done, a focus session logged, retrospective reviewed), with a legend counting them for the month.
 
-**Sticker chart.** Off by default. With it on, every day on the History calendar wears a little creature for each thing it did: clocked out, lunch taken, all priorities done, a focus session logged, retrospective reviewed. A legend counts them for the month.
-
-**Week / month / quarter review.** History → **Review** rolls the days up: hours worked against a target, focused time and how much of it was on plan, breaks, rows added mid-day, where the off-plan time went, the time under each category, how often each recurring priority got ticked, which priorities never got done, and every day's note. Repeated rows are merged, so a chore that came back on five days is one row with its total, and long lists fold after eight rows. Tap a row to open that day (the latest one, for a merged row).
+**Week / month / quarter review.** History → **Review** rolls the days up: hours worked against a target, focused time and how much of it was on plan, breaks, rows added mid-day, where the off-plan time went, the time under each category, how often each recurring priority got ticked, which priorities never got done, and every day's note. Repeated rows are merged, so a chore that came back on five days is one row with its total, and long lists fold to their first eight rows. Tap a row (outside *By category*) to open its day, the latest one for a merged row.
 
 <p align="center">
   <img src="docs/screenshots/board-desktop.png" width="720" alt="The Board page on a desktop, dark mode: the running timer's bar across the top, a row of today's clock times, then Later, with two recurring priorities and their days under Repeats at its end, Next with the tasks left open on earlier days, In progress (today's priorities) and Done side by side, a + on each column but Done, cards marked with their category, the one the timer runs on marked running, and a note mark on the two cards that have a note">
@@ -51,17 +49,17 @@
   <img src="docs/screenshots/settings-data.png" width="300" alt="Settings → Data: delete old days automatically after N days, or delete everything before a date">
 </p>
 
-**Alarms.** Sound, browser notification and in-app banner as lunch, clock-out and (on long days) the second meal period approach, each with its own warn-before, when-reached and repeat rules, and a sound per kind of event. The second meal period alarm comes before the 10th hour on a day heading past it. An *Overtime approved* switch silences that day's clock-out alarm only; meal alarms stay on. Finishing the day, reaching the work week and ticking a priority get a burst of emoji and a sound, each of which can be turned off. The defaults (lunch within 5 hours, a second meal after 10, meal alarms on during overtime) follow California rules, where the author works; everything is adjustable, and pull requests with rules for other places are welcome.
+**Alarms.** Sound, browser notification and in-app banner as lunch, clock-out and (on long days) the second meal period approach, each with its own warn-before, when-reached and repeat rules, and a sound per kind of event. On a day heading past 10 hours of work, the second meal period alarm warns before the 10th hour ends. An *Overtime approved* switch silences that day's clock-out alarm only; meal alarms stay on. Finishing the day, reaching the work week and ticking a priority get a burst of emoji (one switch turns them off) and the sound picked for that event (none for a tick, until you pick one). The defaults (lunch within 5 hours, a second meal after 10, meal alarms on during overtime) follow California rules, where the author works; everything is adjustable, and pull requests with rules for other places are welcome.
 
-**Salaried or exempt.** *Settings → Timeclock* has a switch for each part that may not apply: *Meal periods* (and *Lunch punches* with them), *Overtime* and *Show hours*. If you don't punch at all, hide the timeclock card; the rest of the sheet works without it.
+**Salaried or exempt.** *Settings → Timeclock* has a switch for each part that may not apply: *Meal periods* (then *Lunch punches* to hide the lunch rows too), *Overtime* and *Show hours*. If you don't punch at all, hide the timeclock card; the rest of the sheet works without it.
 
 **Two devices.** With the app open on a laptop and a phone, a change saved on one shows on the other within a second. Priority lists merge row by row; for a task's name, category or note the later change wins. There is one timer, and each device raises its own alarms.
 
-**Sign-in and data.** Per-user sheets, history, boards, settings and layout. Sign-in is optional: run it open on your LAN, create local accounts, or sign in through Authentik (OIDC). Old days can be deleted by hand or pruned automatically after a number of days you choose, with an optional server-wide ceiling (`RETENTION_DAYS`). *Reset all settings* puts the settings back and leaves days and the board alone.
+**Sign-in and data.** Per-user sheets, history, boards, settings and layout. Sign-in is optional: run it open on your LAN, create local accounts, or sign in through an OIDC provider such as Authentik. Old days can be deleted by hand or pruned automatically after a number of days you choose, with an optional server-wide ceiling (`RETENTION_DAYS`). *Reset all settings* puts the settings back and leaves days and the board alone.
 
 **Layout.** Each user can reorder or hide the sheet's cards. A window 1100 px wide or more shows them in two columns, and any card can move to the other one.
 
-**Keyboard.** Outside a text box: `N` adds a priority (on the board, a card in *Later*), `S`, `B` and `H` go to the sheet, the board and History, `P` pauses or resumes the timer, `+` adds time, `F` finishes it once time's up, and `R` starts a break. `?` lists them, and one switch turns them off.
+**Keyboard.** Outside a text box: `N` adds a priority (on the board, a card in *Later*), `S`, `B` and `H` go to the sheet, the board and History, `P` pauses or resumes the timer until time's up, `+` adds time, `F` finishes it once time's up, and `R` starts a break. `?` lists them, and one switch turns them off.
 
 **Phones.** Mobile layout, 44 px touch targets, installable (Android *Install app*, iOS *Add to Home Screen*; iOS shows notifications only from the installed app), a *keep screen awake* option so the countdown and chime stay live, and a light or dark theme that follows the device unless you pick one in Settings.
 
@@ -79,7 +77,7 @@ npm run dev
 - Web app with hot reload: <http://localhost:5173>
 - API: <http://localhost:3000> (Vite proxies `/api` and `/auth` to it)
 - Vite answers on this machine only, but the API on :3000 listens on every network interface: under the default `AUTH_MODE=none`, anyone on the same network can read and change the dev database through it. To try the app from a phone on the same network, run `npm run dev:server` and `npm run dev:client -- --host` in two terminals and open the network address Vite prints.
-- Database: `./data/focus.db` (gitignored). Delete the file to start fresh.
+- Database: `./data/focus.db` (gitignored). To start fresh, stop the dev server and delete `data/focus.db*` (the `-wal` file too).
 
 Other commands:
 
@@ -129,7 +127,10 @@ npm run seed -- --now 10:30       # pin the time of day: clock-in two hours befo
 ```bash
 AUTH_MODE=local npm run dev       # first visit shows the "create account" page; its setup code is in the terminal
 AUTH_MODE=local npm run seed      # creates users "admin" (admin) and "sam", password
-                                  # clockspan-dev, each with their own sample days
+                                  # clockspan-dev, each with their own sample days (an
+                                  # existing "admin" keeps its own password)
+npm run seed -- --auth local --sessions   # also prints a document.cookie line per user:
+                                          # run it in the page and reload to be signed in
 ```
 
 For OIDC you need a reachable provider; see [Authentik](#authentik-oidc) below and run with the `OIDC_*` and `APP_URL` variables set (`APP_URL=http://localhost:5173` while developing).
@@ -147,14 +148,14 @@ Images are published to GitHub Container Registry for `linux/amd64` and `linux/a
 | `ghcr.io/geransmith/clockspan:X.Y.Z`, `:X.Y` | a specific release (`:X.Y` follows its patch releases) |
 | `ghcr.io/geransmith/clockspan:edge` | built from `main` after each merge; it has passed CI and nothing else. When two merges land close together their builds race, and `:edge` can stay on the earlier one until the next merge |
 
-Versions follow [Semantic Versioning](https://semver.org) from 1.0.0. A major release (2.0.0) is the only kind that can need something from you, such as a changed variable; its release notes open with a *Breaking changes* section that says what to do. [CONTRIBUTING.md](CONTRIBUTING.md#releases) has the full rule.
+Versions follow [Semantic Versioning](https://semver.org) from 1.0.0. A major release (2.0.0) is the only kind that can need something from you, such as a changed variable; its release notes list *Breaking changes* first and say what to do. [CONTRIBUTING.md](CONTRIBUTING.md#releases) has the full rule.
 
 ```bash
 cp .env.example .env   # optional: sign-in mode, public URL, OIDC; without it there is no sign-in
 docker compose up -d
 ```
 
-Then open <http://localhost:8080>. The database is in `./data` next to the compose file (`DATA_PATH` in `.env` moves it). Equivalent `docker run`:
+Then open <http://localhost:8080>. The database is in `./data` next to the compose file (`DATA_PATH` in `.env` moves it). Or with `docker run`, here with local accounts:
 
 ```bash
 docker run -d --name clockspan -p 8080:8080 -v /path/on/host:/data \
@@ -173,7 +174,7 @@ The database stays in the mounted volume. A new release migrates it forward when
 
 ### Unraid
 
-The Unraid template, [`unraid/clockspan.xml`](unraid/clockspan.xml), keeps the database in `/mnt/user/appdata/clockspan`, runs the app as `99:100` (`PUID`/`PGID`) and serves it on port 8080. Every variable below is a field on its form except `PORT` and `DATA_DIR`, which the image sets, and `DATA_PATH`, whose place the *Data* path takes. The sign-in mode (a dropdown) and the App URL are on the form itself; the rest are under *Show more settings*. Fields left blank take the defaults.
+The Unraid template, [`unraid/clockspan.xml`](unraid/clockspan.xml), keeps the database in `/mnt/user/appdata/clockspan`, runs the app as `99:100` (`PUID`/`PGID`) and serves it on port 8080. Every variable below is a field on its form except `PORT` and `DATA_DIR`, which the image sets, and `DATA_PATH`, whose place the *Data* path takes. The sign-in mode (a dropdown) and the App URL are on the form itself; the rest are under *Show more settings*. Fields left blank take the app's defaults, so a blank `PUID` or `PGID` means 1000, not Unraid's 99:100.
 
 Install it from the **Apps** tab (search *Clockspan*). Without the Community Applications plugin, add the template by hand from the Unraid terminal, then pick **clockspan** under *Docker → Add Container → Template*:
 
@@ -212,9 +213,7 @@ Set these in `.env` (start from `.env.example`, which documents each one) or in 
 | `local` | Accounts you create | username + password | first account is admin; admin adds/removes users in **Settings → Account** |
 | `oidc` | Whoever your provider admits | redirect to the provider | created automatically on first sign-in |
 
-Each user has their own sheet, history, board, settings and layout.
-
-**No sign-in (`none`).** Meant for a network you trust: anyone who can reach the port can read and change the data. A web page from another site, open in a browser on that network, can't: the browser won't let it read the API, and the app refuses its writes. That site could still point one of its own names at the server's address (DNS rebinding) and pass as the app, so the app answers only names no outside site can use, plus the ones you list. IP addresses (`http://192.168.1.10:8080`), `localhost`, one-word names (`http://tower:8080`), `.local`, `.home.arpa` and `.internal` names and `APP_URL`'s name always work. Reach the app by another name, such as a domain on your reverse proxy or a `.lan` name? Set `APP_URL` to it, or list it in `ALLOWED_HOSTS`; until then the page says *Can't reach the server* and names the host to add.
+**No sign-in (`none`).** Meant for a network you trust: anyone who can reach the port can read and change the data. A web page from another site, open in a browser on that network, can't: the browser won't let it read the API, and the app refuses its writes. That site could still point one of its own names at the server's address (DNS rebinding) and pass as the app, so the app answers only names no outside site can use, plus the ones you list. IP addresses (`http://192.168.1.10:8080`), `localhost`, one-word names (`http://tower:8080`), `.localhost`, `.local`, `.home.arpa` and `.internal` names and `APP_URL`'s name always work. Reach the app by another name, such as a domain on your reverse proxy or a `.lan` name? Set `APP_URL` to it, or list it in `ALLOWED_HOSTS`; until then the page says *Can't reach the server* and names the host to add.
 
 **Local mode.** The first visit shows a *create account* page; that account is the admin. The page asks for a setup code, which the server prints in its log when it starts with no account yet (`docker logs clockspan`, or the container's log in Unraid): someone who finds a fresh install before you can't claim it. A restart prints a new code. The admin adds users in **Settings → Account** with a temporary password; a new user has to choose their own the first time they sign in, before the sheet opens. Passwords are hashed with scrypt. Change your password in **Settings → Account**. Forgot it?
 
@@ -280,8 +279,8 @@ The app is built to sit behind a reverse proxy on a host name of its own (`focus
 
 - **Use `AUTH_MODE=local` or `oidc`.** `none` means anyone who reaches the port owns the data; the server logs a warning at startup when it's running that way. The exception is a proxy that signs people in itself (forward auth from Authelia or Authentik, for example), and only if the container's port can't be reached from the internet except through that proxy. Docker's `-p 8080:8080` listens on every interface and gets past ufw, so on a public server publish `127.0.0.1:8080:8080` or put the proxy on the container's Docker network and drop the port.
 - **Terminate HTTPS at the proxy** and set `APP_URL=https://your.domain`. That marks the session cookie `Secure` and turns on HSTS.
-- **Set `TRUST_PROXY` to the number of proxies** between the internet and the container, usually `1`. With `true`, Express believes whatever `X-Forwarded-For` a client sends, which lets an attacker dodge the login rate limit.
-- **Finish setup first.** In `local` mode the admin account is created on the first visit, with the setup code from the server log; do that before the proxy is open to the internet anyway. Once `APP_URL` is https the session cookie is Secure and only an https page can keep it, so sign in through the proxy's https address (the sign-in page says so when it is opened over plain http); for a one-off LAN setup, start with `COOKIE_SECURE=false` (which also turns HSTS off) and remove it afterwards.
+- **Set `TRUST_PROXY` to the number of proxies** between the internet and the container, usually `1`, so the login limit sees each client's own address (never `true`; see the variables table).
+- **Finish setup first.** Create the `local` admin account before the proxy is open to the internet. Once `APP_URL` is https the session cookie is Secure and only an https page can keep it, so sign in through the proxy's https address (the sign-in page says so when it is opened over plain http); for a one-off LAN setup, start with `COOKIE_SECURE=false` (which also turns HSTS off) and remove it afterwards.
 - Keep `/data` backed up (below).
 - **Live updates** come over `/api/changes`, a server-sent event stream: one long answer with a comment every 25 s and `X-Accel-Buffering: no`. nginx, Caddy, Traefik and Cloudflare Tunnel pass it as it is. A proxy that buffers or compresses it leaves each device picking up the other's changes every minute instead. Over plain HTTP/1.1 a browser opens at most six connections to a host and each tab on screen keeps one, so with several tabs open serve the app over HTTPS, which proxies usually give HTTP/2.
 
