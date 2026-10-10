@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CARD_IDS } from '../../../shared/settings.js';
 import { TEST_SETTINGS } from '../test/fixtures';
 import type { Settings } from '../types';
-import { CARD_TITLES, moveCard, setCardSide, setCardVisible, splitColumns } from './layout';
+import { CARD_TITLES, moveCard, patchCard, splitColumns } from './layout';
 
 it('names every card, each once', () => {
   const titles = CARD_IDS.map((id) => CARD_TITLES[id]);
@@ -60,16 +60,14 @@ describe('moveCard', () => {
   });
 });
 
-describe('setCardVisible', () => {
+describe('patchCard', () => {
   it('shows or hides one card where it stands', () => {
-    expect(setCardVisible([...LAYOUT], 'priorities', true)[1]).toEqual({ id: 'priorities', visible: true, side: 'left' });
-    expect(setCardVisible([...LAYOUT], 'log', false).map((l) => l.visible)).toEqual([true, false, true, false, true]);
+    expect(patchCard([...LAYOUT], 'priorities', { visible: true })[1]).toEqual({ id: 'priorities', visible: true, side: 'left' });
+    expect(patchCard([...LAYOUT], 'log', { visible: false }).map((l) => l.visible)).toEqual([true, false, true, false, true]);
   });
-});
 
-describe('setCardSide', () => {
   it('moves one card to a column and keeps its place in the one-column order', () => {
-    const next = setCardSide([...LAYOUT], 'timer', 'left');
+    const next = patchCard([...LAYOUT], 'timer', { side: 'left' });
     expect(next.map((l) => [l.id, l.side])).toEqual([
       ['timeclock', 'left'],
       ['priorities', 'left'],
@@ -90,7 +88,7 @@ describe('splitColumns', () => {
   });
 
   it('answers null when a column would have no visible card, so the sheet stays one list', () => {
-    expect(splitColumns(setCardVisible(LAYOUT, 'timeclock', false))).toBeNull();
+    expect(splitColumns(patchCard(LAYOUT, 'timeclock', { visible: false }))).toBeNull();
     expect(splitColumns(LAYOUT.map((l) => ({ ...l, side: 'left' as const })))).toBeNull();
   });
 });

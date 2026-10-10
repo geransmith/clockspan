@@ -1,6 +1,7 @@
 /** The settings tabs' building blocks: their props, a titled section and its number and select rows (the switch is `../Toggle`). */
-import { useId, useState, type ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import type { SettingsPatch } from '../../api';
+import { useFollowedDraft } from '../../hooks/useFollowedDraft';
 import type { Settings } from '../../types';
 
 /** What the dialog hands every tab: the settings and a setter that takes only what changed. */
@@ -110,12 +111,7 @@ export function NumberInput({
   describedBy?: string;
   onCommit: (n: number) => void;
 }) {
-  const [v, setV] = useState(String(value));
-  const [seen, setSeen] = useState(value);
-  if (value !== seen) {
-    setSeen(value);
-    setV(String(value));
-  }
+  const [v, setV] = useFollowedDraft(String(value));
   const commit = () => {
     const typed = v.trim() === '' ? NaN : Number(v);
     const n = Number.isFinite(typed) ? Math.max(min, Math.min(max, Math.round(typed))) : value;

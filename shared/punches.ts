@@ -17,11 +17,6 @@ export function punchesKey(punches: readonly Punch[]): string {
   return punches.map((p) => `${p.position}:${p.at ?? ''}`).join();
 }
 
-/** The same rows at the same times (`punchesKey`). */
-export function samePunches(a: readonly Punch[], b: readonly Punch[]): boolean {
-  return punchesKey(a) === punchesKey(b);
-}
-
 /**
  * A punch save laid onto the stored rows as the changes made since `base`, the rows the sender
  * built `list` on: each row takes the sent time where it differs from the base and the stored one

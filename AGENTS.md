@@ -58,9 +58,9 @@ shared/                 imported by both sides, always with a `.js` suffix
                         own date bounds); pause-aware session timing (activeMs, plannedEndAt,
                         pausedSecondsAfter, PLANNED_SECONDS)
   punches.ts            kindForPosition: a punch row's kind is its position's parity; punchesKey: a list's
-                        rows and times as one string; samePunches compares two lists by it;
-                        mergePunches: a punch save laid onto the stored list as the times changed since
-                        its base; MAX_PUNCHES (the server's row cap; the card hides Add extra out / in at it)
+                        rows and times as one string, which two lists are compared by; mergePunches: a
+                        punch save laid onto the stored list as the times changed since its base;
+                        MAX_PUNCHES (the server's row cap; the card hides Add extra out / in at it)
   priorities.ts         hasText; isFree (a row no task is on: the client pads a list with these, and a new
                         priority goes into one); mergePriorities: a priorities save laid onto the stored
                         list as the changes made since its base, rows matched by their task's uid, field by
@@ -151,9 +151,9 @@ client/                 Vite root → dist/client
                         board's store (BoardProvider and its refresh; its deleteItem is also the sheet's
                         Delete everywhere) and useCategoryPick, the category chip's data and inline
                         create; useMediaQuery follows a media query for behaviour; useFollowedDraft is a
-                        text box's draft that follows the stored name; useRecurringAnswered keeps the
-                        recurring priorities the morning offer was answered for today on this device;
-                        useShortcuts binds a key beside its button (useShortcut) and is the one
+                        text box's draft that follows the stored name or number; useRecurringAnswered
+                        keeps the recurring priorities the morning offer was answered for today on this
+                        device; useShortcuts binds a key beside its button (useShortcut) and is the one
                         keydown listener (useShortcutListener).
                         src/test/fixtures.ts has the plain factories and TEST_SETTINGS (no React);
                         src/test/hooks.tsx re-exports fixtures.ts and AppProviders and has
@@ -964,22 +964,22 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   keeps a day already done from reading as one becoming done: `useBecameTrue` compares with the last
   render, and moving between two days the store already holds would otherwise leave the card
   mounted. Local drafts that mirror a prop use the "adjust state while rendering" form
-  (`useFollowedDraft` for a text box's name; `DurationField` for a draft mapped from its value), not
-  a `useEffect` + `setState`, unless the draft is gated by a dirty flag: a ref can't be read during
-  render, so there the effect form is the one the react-hooks rules allow. A typed draft that saves
-  on a timer is `useDebouncedDraft(stored, save, ms)` (`Priorities`, `Retro`, `NoteField`): it saves
-  after the wait, at once on `flush()` or an edit made now, and on unmount, so a day left
-  mid-sentence still saves. `save(value, base)` gets as `base` what the edits were made on: the
-  value it last saved, or the `stored` value the draft last took up once that has rendered,
-  whichever came later. `Priorities` hands it to the store for the merge, and `Retro` and
+  (`useFollowedDraft` for a text box's name or number; `DurationField` for a draft mapped from its
+  value), not a `useEffect` + `setState`, unless the draft is gated by a dirty flag: a ref can't be
+  read during render, so there the effect form is the one the react-hooks rules allow. A typed draft
+  that saves on a timer is `useDebouncedDraft(stored, save, ms)` (`Priorities`, `Retro`,
+  `NoteField`): it saves after the wait, at once on `flush()` or an edit made now, and on unmount,
+  so a day left mid-sentence still saves. `save(value, base)` gets as `base` what the edits were
+  made on: the value it last saved, or the `stored` value the draft last took up once that has
+  rendered, whichever came later. `Priorities` hands it to the store for the merge, and `Retro` and
   `NoteField` ignore it. `save` says whether the draft can be let go: `Retro` and `NoteField` pass
   the store's answer, so a note whose save fails stays in its box, unsaved, though the store has
   dropped the change, and goes again on the next edit, blur or unmount; `Priorities` lets its list
   go once sent, because a list held after a failure would stop the card following the stored list
-  (rows and ticks saved elsewhere) until a save went through, and holds it only while a box is
-  blank (see "A blank name is never saved"), so a stored change doesn't put the name back while
-  that box has the focus. Callbacks that must read the latest value use `useLatest()`, never a ref
-  written in render (the react-hooks lint enforces both).
+  (rows and ticks saved elsewhere) until a save went through, and holds it only while a box is blank
+  (see "A blank name is never saved"), so a stored change doesn't put the name back while that box
+  has the focus. Callbacks that must read the latest value use `useLatest()`, never a ref written in
+  render (the react-hooks lint enforces both).
 - Static assets are public; **all data is behind `/api/*`**. `/assets/*` is fingerprinted and
   cached immutable. The SPA fallback serves `index.html` for any other non-API path; a miss
   under `/assets` is a 404 (a page from before an upgrade asking for an old chunk).
@@ -1044,7 +1044,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   follows a resize. A split renders `.sheet--split` with one `.sheet-col` per side
   (`splitColumns`, null while a side has no visible card, which keeps one list), so the tab
   order is the order seen. One column shows the whole layout in its order, which a move to the
-  other column (`setCardSide`) leaves alone. ↑/↓ and drag and drop stay inside a column
+  other column (`patchCard`) leaves alone. ↑/↓ and drag and drop stay inside a column
   (`moveCard(…, side)`); moving across is Customize's arrow button, offered while the sheet
   was mounted wide. The moved card mounts again in its new column (and every card does when
   the move empties a side or fills an empty one), so the sheet puts the focus on its arrow

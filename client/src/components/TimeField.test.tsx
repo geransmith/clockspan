@@ -1,9 +1,8 @@
 // @vitest-environment happy-dom
-import { Time } from '@internationalized/date';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { timeToMs } from '../lib/timefield';
+import { atTime } from '../../../shared/dates.js';
 import { TODAY } from '../test/hooks';
 import { TimeField } from './TimeField';
 
@@ -23,7 +22,7 @@ function renderField(props: FieldProps = {}) {
   return { onCommit, again };
 }
 
-const at = (hour: number, minute: number) => timeToMs(new Time(hour, minute), TODAY);
+const at = (hour: number, minute: number) => atTime(TODAY, hour, minute);
 const group = () => screen.getByRole('group', { name: 'Clock in time' });
 const segment = (name: 'hour' | 'minute' | 'AM/PM') => screen.getByRole('spinbutton', { name: `${name}, Clock in time` });
 const focus = (el: HTMLElement) => act(() => el.focus());

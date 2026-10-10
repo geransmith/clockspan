@@ -3,7 +3,7 @@ import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import { punchesAt, TEST_SETTINGS } from '../test/fixtures';
 import { alarmTargets, describeEvent, dueEvents, eventKey, type AlarmEvent, type AlarmTarget } from './alarms';
 import { formatTime } from './format';
-import { setCardVisible } from './layout';
+import { patchCard } from './layout';
 import { computeTimeclock } from './timeclock';
 import type { AlarmId, AlarmSettings } from '../types';
 
@@ -184,7 +184,7 @@ describe('alarmTargets', () => {
   });
 
   it('disarms the retrospective while its card is hidden', () => {
-    const hidden = { ...s, layout: setCardVisible(s.layout, 'retro', false) };
+    const hidden = { ...s, layout: patchCard(s.layout, 'retro', { visible: false }) };
     expect(armed(alarmTargets(tc(IN + 2 * HOUR_MS, IN), hidden, day))).toEqual({ lunchBy: true, clockOut: true, secondMeal: false, retro: false });
   });
 

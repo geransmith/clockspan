@@ -10,11 +10,6 @@ export function msToTime(ms: number | null): Time | null {
   return new Time(d.getHours(), d.getMinutes());
 }
 
-/** The instant for a time field's value on the given local date (see `atTime`). */
-export function timeToMs(t: Time, dateKey: string): number {
-  return atTime(dateKey, t.hour, t.minute);
-}
-
 /**
  * The likely period for an hour typed without one. Working hours read as a day job: 5 to
  * 11 is morning, 12 and 1 to 4 is afternoon. When the day's clock-in is known (`anchorAt`)

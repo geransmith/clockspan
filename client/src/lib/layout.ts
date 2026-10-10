@@ -34,18 +34,13 @@ export function moveCard(layout: Layout, from: number, to: number, side?: CardSi
   return [...visible.map((l) => (inStack(l) ? stack[next++]! : l)), ...layout.filter((l) => !l.visible)];
 }
 
-/** The layout with one card shown or hidden, in place. */
-export function setCardVisible(layout: Layout, id: CardId, visible: boolean): Layout {
-  return layout.map((l) => (l.id === id ? { ...l, visible } : l));
-}
-
 /**
- * The layout with one card in the given column. It keeps its place in the order, so the
- * one-column sheet (a phone) doesn't change, and it lands among the other column's cards where
- * that order puts it.
+ * The layout with one card's fields changed in place: shown or hidden, or moved to the other
+ * column. A moved card keeps its place in the order, so the one-column sheet (a phone) doesn't
+ * change, and it lands among the other column's cards where that order puts it.
  */
-export function setCardSide(layout: Layout, id: CardId, side: CardSide): Layout {
-  return layout.map((l) => (l.id === id ? { ...l, side } : l));
+export function patchCard(layout: Layout, id: CardId, patch: Partial<Entry>): Layout {
+  return layout.map((l) => (l.id === id ? { ...l, ...patch } : l));
 }
 
 /** Each column's visible cards in the layout's order; null when one would be empty, so the sheet stays one list. */
