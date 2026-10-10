@@ -5,7 +5,7 @@ import * as api from '../api';
 import { alert, dismissByTag, warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED } from '../lib/copy';
 import { MINUTE_MS } from '../../../shared/dates.js';
-import { answered, deferred, makeDay, makeSettings, punchesAt, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
+import { answered, deferred, deferredAnswer, makeDay, makeSettings, punchesAt, setVisibility, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
 import type { Day, Settings } from '../types';
 import { useDayStore } from './useDay';
 import { useTodayAlarms } from './useTodayAlarms';
@@ -113,6 +113,26 @@ describe('useTodayAlarms', () => {
     vi.mocked(api.putOvertime).mockResolvedValue(answered({ overtimeApproved: true }));
     await act(async () => action.run());
     expect(api.putOvertime).toHaveBeenCalledWith(TODAY, true);
+  });
+
+  it("waits for a come-back's refresh rather than ring on a copy from before the tab was hidden", async () => {
+    // Clocked in 4 h 50 m ago with no lunch: lunch is due in 10 min.
+    const clockIn = T0 - 290 * MINUTE_MS;
+    render(makeSettings(), makeDay(TODAY, { punches: punchesAt(clockIn) }));
+    await judged();
+    setVisibility('hidden');
+    vi.setSystemTime(T0 + 30 * MINUTE_MS);
+    vi.mocked(alert).mockClear();
+    const refreshed = deferredAnswer<Day>();
+    vi.mocked(api.getDay).mockReturnValue(refreshed.promise);
+    // Back half an hour later, with lunch 20 min overdue on the copy this tab holds.
+    setVisibility('visible');
+    await settle();
+    expect(tags()).not.toContain('alarm:lunchBy');
+    // Lunch was taken on the phone meanwhile.
+    refreshed.resolve(makeDay(TODAY, { punches: punchesAt(clockIn, T0) }));
+    await judged();
+    expect(tags()).not.toContain('alarm:lunchBy');
   });
 
   it('holds while a punch is being typed, and judges the punches three seconds after', async () => {

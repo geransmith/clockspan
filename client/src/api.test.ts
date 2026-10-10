@@ -392,6 +392,22 @@ describe('a restored backup', () => {
     expect(restored()).toEqual([]);
   });
 
+  it('says nothing when an answer names the revision heard before its request left: nothing changed meanwhile', async () => {
+    answerAt(160);
+    await api.getSettings();
+    answerAt(160);
+    await api.getDay(TODAY);
+    expect(restored()).toEqual([]);
+  });
+
+  it('says nothing when an answer names no revision, as an auth route answers', async () => {
+    answerAt(170);
+    await api.getSettings();
+    answer(200, { mode: 'none' });
+    await api.getAuth();
+    expect(restored()).toEqual([]);
+  });
+
   it('asks for a reload when an answer names revision 0, as a backup from before revisions restores', async () => {
     answerAt(200);
     await api.getSettings();
