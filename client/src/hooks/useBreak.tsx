@@ -86,7 +86,7 @@ export function BreakProvider({ children }: { children: ReactNode }) {
       if (starting.current) return Promise.resolve();
       starting.current = true;
       dismissByTag('break');
-      // The server refuses a break while a timer runs (409), and the sync every refused write brings
+      // The server refuses a break while a timer runs (409), and the sync a write's 409 brings
       // shows one started on another device.
       return startBreak(todayKey(Date.now()), minutes * 60)
         .then(() => {})

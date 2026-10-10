@@ -459,7 +459,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   auto-finish (which chimes only if nothing has for that end). The auto-finish and the banner wait
   while a come-back sync is out (`syncing`), as the alarms do, and the auto-finish sends the plan
   and pause it judged by: the server refuses a session another device changed (409) or deleted (404)
-  since, and the refusal syncs the timer, as every refused write does (`api.ts`). The banner goes
+  since, and the refusal syncs the timer, as any write's 404 or 409 does (`api.ts`). The banner goes
   while a press that took it away is on its way, and comes back, quietly, if that press fails. Plans
   are whole minutes: `adjust` rounds the new plan up to one and stops at `PLANNED_SECONDS.max`
   (8 h), where `canAdd` turns false, + is disabled and the "Time's up" banner is raised again,
