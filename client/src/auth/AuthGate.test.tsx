@@ -139,6 +139,39 @@ describe('AuthGate', () => {
     expect(reload).not.toHaveBeenCalled();
   });
 
+  const signIn = async () => {
+    type('Username', 'sam');
+    type('Password', 'pass-1');
+    vi.mocked(api.login).mockResolvedValue({ user: USER });
+    fireEvent.submit(screen.getByRole('button', { name: 'Sign In' }).closest('form')!);
+    await settle();
+  };
+
+  it('opens the app once the sign-in is answered and /me names the user', async () => {
+    await renderGate(makeAuth());
+    vi.mocked(api.getAuth).mockResolvedValue(makeAuth({ user: USER }));
+    await signIn();
+    expect(api.login).toHaveBeenCalledWith('sam', 'pass-1');
+    expect(screen.getByText('Sheet for sam')).toBeTruthy();
+  });
+
+  it('says the browser dropped the session when /me names no one after a sign-in went through', async () => {
+    await renderGate(makeAuth());
+    await signIn();
+    expect(screen.getByRole('alert').textContent).toBe(HTTPS_ONLY.notKept);
+    expect(screen.getByRole('button', { name: 'Sign In' })).toBeTruthy();
+  });
+
+  it('checks the setup password was typed the same twice before sending it', async () => {
+    await renderGate(makeAuth({ setupRequired: true }));
+    type('Password', 'pass-1');
+    type('Confirm password', 'pass-2');
+    fireEvent.submit(screen.getByRole('button', { name: 'Create Account' }).closest('form')!);
+    await settle();
+    expect(screen.getByRole('alert').textContent).toBe(PASSWORD_MISMATCH);
+    expect(api.setup).not.toHaveBeenCalled();
+  });
+
   it('offers a retry, not the form again, when the read after a saved new password fails', async () => {
     await renderGate(makeAuth({ user: TEMPORARY }));
     type('Temporary password', 'temp-pass-1');
