@@ -18,12 +18,11 @@ createRoot(document.getElementById('root')!).render(
 );
 
 // The lazy chunks (see App.tsx and Sheet.tsx) load on demand. After an upgrade an open page
-// asks for the old build's files; reloading gets the new one. Vite still throws the failed import, so
-// the ErrorBoundary's card can show until the reload lands, and when no reload is made (one a
-// moment ago, or offline) its Reload button is the way out.
-window.addEventListener('vite:preloadError', () => {
-  reloadForNewBuild(Date.now(), () => window.location.reload(), navigator.onLine);
-});
+// asks for the old build's files; reloading gets the new one, once the saves still on their way
+// have settled. Vite still throws the failed import, so the ErrorBoundary's card can show until
+// the reload lands, and when no reload is made (one a moment ago, or offline) its Reload button
+// is the way out.
+window.addEventListener('vite:preloadError', () => void reloadForNewBuild(() => window.location.reload()));
 
 // The service worker caches nothing; alerts.ts shows notifications through it where the
 // browser refuses `new Notification()` (Chrome on Android).

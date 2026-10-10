@@ -73,6 +73,8 @@ describe('adjustedPlan', () => {
   it('plans whole minutes, so a minute over the new end is a whole minute', () => {
     // 25 min 37 s into a 25 min plan, after its end: five minutes from now, up to 31:00, not 30:37.
     expect(adjustedPlan(makeSession(), T0 + 1537 * 1000, 300)).toBe(31 * 60);
+    // Up, never to the nearest: from 25:10, 30:00 would leave under five minutes.
+    expect(adjustedPlan(makeSession(), T0 + 25 * MINUTE_MS + 10_000, 300)).toBe(31 * 60);
   });
 
   it('adds to the time worked once the plan is used up', () => {

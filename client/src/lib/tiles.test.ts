@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { atTime, pad2 } from '../../../shared/dates.js';
+import { atTime, MINUTE_MS, pad2 } from '../../../shared/dates.js';
 import { punchesAt, TEST_SETTINGS } from '../test/fixtures';
 import { CHECK_PUNCHES } from './copy';
 import type { Punch, Settings } from '../types';
@@ -80,10 +80,13 @@ describe('Lunch by', () => {
 
   it("warns from the alarm's largest lead, or 15 minutes when the alarm is off or has no warnings", () => {
     const lunchBy = (enabled: boolean, leadMinutes: number[]) => ({ ...TEST_SETTINGS.alarms.lunchBy, enabled, leadMinutes });
-    const twentyLeft = (alarm: ReturnType<typeof lunchBy>) => tiles(clockedIn, at(12, 40), { alarms: { ...TEST_SETTINGS.alarms, lunchBy: alarm } }).lunch.tone;
-    expect(twentyLeft(lunchBy(true, [30, 5]))).toBe('tile--warn');
-    expect(twentyLeft(lunchBy(false, [30, 5]))).toBe('');
-    expect(twentyLeft(lunchBy(true, []))).toBe('');
+    const tone = (alarm: ReturnType<typeof lunchBy>, minutesLeft: number) =>
+      tiles(clockedIn, at(13) - minutesLeft * MINUTE_MS, { alarms: { ...TEST_SETTINGS.alarms, lunchBy: alarm } }).lunch.tone;
+    expect(tone(lunchBy(true, [30, 5]), 20)).toBe('tile--warn');
+    for (const alarm of [lunchBy(false, [30, 5]), lunchBy(true, [])]) {
+      expect(tone(alarm, 20)).toBe('');
+      expect(tone(alarm, 14)).toBe('tile--warn');
+    }
   });
 
   it('says when it was taken, when none is needed, and when a finished day went without', () => {
@@ -134,11 +137,12 @@ describe('Clock out at', () => {
     expect(tiles(afterLunch, at(17) + 30_000, { overtimeApproval: false }).clockOut.sub).toBe('30m past your day');
   });
 
-  it('says On target, not over by 0m, on a break taken at the target and for the first minute past it', () => {
+  it('says On target, not over by 0m, on a break taken at the target and for the first minute past it, then Over by 1m', () => {
     const onTarget = { value: '16:30', sub: 'On target', tone: 'tile--accent' };
     expect(tiles(addPunchPair(punchesAt(at(8), at(12), at(12, 30), at(16, 30))), at(16, 40)).clockOut).toEqual(onTarget);
     expect(tiles(afterLunch, at(16, 30) + 30_000).clockOut).toEqual(onTarget);
     expect(tiles(afterLunch, at(16, 30) + 30_000, { overtimeApproval: false }).clockOut).toEqual(onTarget);
+    expect(tiles(afterLunch, at(16, 31)).clockOut).toEqual({ value: '16:30', sub: 'Over by 1m', tone: 'tile--danger' });
     // A half day's Lunch out at its 4 h: at lunch, with nothing left to work.
     expect(tiles(punchesAt(at(8), at(12)), at(12, 10), {}, { workMinutes: 240 }).clockOut).toEqual({
       value: '12:00',
