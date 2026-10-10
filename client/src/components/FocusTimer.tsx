@@ -42,9 +42,9 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
   // and break buttons are disabled until it answers. A second start would add the priority twice
   // and meet the first timer as a 409, which reads as one started on another device. A break goes
   // out on the day store's queue, not the timer's, so the two could reach the server in either
-  // order: a new break would meet the running timer (409, "Change not saved"), a timer started
+  // order: a new break would meet the running timer (409, "Change Not Saved"), a timer started
   // behind a break start could land first, and an end would find the break the start already
-  // ended. The break banners, whose Start break the disabled buttons don't reach, go in the
+  // ended. The break banners, whose Start Break the disabled buttons don't reach, go in the
   // timer start's tap (`TimerLengths`).
   const { busy, error, run } = useSubmit();
   const held = busy || timer.starting;
@@ -154,7 +154,7 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
         </button>
       )}
       {!isToday && <p className="muted center">Timers can only be started on today's sheet.</p>}
-      {/* A new row's failed save is the "Change not saved" banner's to say; the list full or not loaded, and the start's own errors, show here. */}
+      {/* A new row's failed save is the "Change Not Saved" banner's to say; the list full or not loaded, and the start's own errors, show here. */}
       <ErrorLine error={error === SAVE_FAILED.title ? null : error} />
     </div>
   );

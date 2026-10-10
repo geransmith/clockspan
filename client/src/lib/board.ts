@@ -466,7 +466,7 @@ export function offeredLeftovers(rows: Priority[], cards: BoardCard[] | undefine
 }
 
 /**
- * Up next on the morning offer: Next's own tasks that aren't done, in the board's order, less those
+ * Up Next on the morning offer: Next's own tasks that aren't done, in the board's order, less those
  * on the last plan's list (`planned`), the first `count` of them. That list holds the leftovers
  * offered, and a task ticked there since this copy of the board was read, which the copy still has
  * open. It is offered only while today's list has no one-off, so no task of Next is on it.

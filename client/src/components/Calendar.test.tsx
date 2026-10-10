@@ -123,15 +123,20 @@ describe('Calendar', () => {
     const view = render(calendar(LAST, LAST_EVENING));
     await settle();
     const cell = () => view.container.querySelector('[data-date="2026-09-29"]')!.getAttribute('aria-label');
-    expect(cell()).toMatch(/, Clocked Out, Lunch Taken$/);
+    expect(cell()).toMatch(/, clocked out, lunch taken$/);
+    // The chips name a sticker in Title Case; its tooltip says it in sentence case.
+    expect([...view.container.querySelectorAll('[data-date="2026-09-29"] [title]')].map((s) => s.getAttribute('title'))).toEqual([
+      'Clocked out',
+      'Lunch taken',
+    ]);
     fireEvent.click(screen.getByRole('button', { name: /^Clocked Out/ }));
-    expect(cell()).toMatch(/, Clocked Out$/);
+    expect(cell()).toMatch(/, clocked out$/);
 
     // Show hours turned off elsewhere: the next settings refresh takes the Clocked Out chip away.
     vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ stickers: true, trackHours: false })));
     await settle(MINUTE_MS);
     expect(screen.queryByRole('button', { name: /^Clocked Out/ })).toBeNull();
-    expect(cell()).toMatch(/, Lunch Taken$/);
+    expect(cell()).toMatch(/, lunch taken$/);
     expect(screen.getByRole('button', { name: /^Lunch Taken/ }).getAttribute('aria-pressed')).toBe('false');
   });
 });

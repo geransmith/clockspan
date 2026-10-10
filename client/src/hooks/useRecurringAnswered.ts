@@ -5,8 +5,8 @@ const NONE: ReadonlySet<string> = new Set();
 
 /**
  * The recurring priorities the morning offer was answered for today on this device (Add to Today
- * or Not today, ticked or not), kept in `USER_KEYS.recurringAnswered` so a reload doesn't offer
- * them again. Per device, as Start fresh is: another device still offers them. Read once; the set
+ * or Not Today, ticked or not), kept in `USER_KEYS.recurringAnswered` so a reload doesn't offer
+ * them again. Per device, as Start Fresh is: another device still offers them. Read once; the set
  * is today's only, so a sheet left open over midnight starts the new day with none. An answer is
  * added to what is stored when it is given (`addToDaySet`), so another tab's answers stay.
  */

@@ -33,7 +33,7 @@ interface Props {
   now: number;
   /** `base`: the rows the edits were made on, the list the card last sent or last took up from `priorities`. Resolves to whether it saved. */
   onChange: (priorities: Priority[], base: Priority[]) => Promise<boolean>;
-  /** Deletes a task everywhere (the board store's `deleteItem`), for ×'s Delete everywhere; rejects when that fails. */
+  /** Deletes a task everywhere (the board store's `deleteItem`), for ×'s Delete Everywhere; rejects when that fails. */
   onDeleteTask: (uid: string) => Promise<void>;
   /** Saves a row's note on its task, apart from the list's draft; resolves to whether it saved. */
   onNote: (uid: string, note: string) => Promise<boolean>;
@@ -138,7 +138,7 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
   const total = local.filter((p) => p.uid != null).length;
   // A nudge past a ticked row heads with this count, so the foot leaves it to the nudge while it shows.
   const nudgeCounts = warning != null && warning.kind !== 'fresh';
-  // The leftovers and Up next are offered while no one-off is written: a routine on the list is
+  // The leftovers and Up Next are offered while no one-off is written: a routine on the list is
   // no plan. The morning notice's groups, judged again on the draft (the sheet judged the stored
   // list), so a row typed or a save already sent counts at once.
   const noOneOff = !local.some(isOneOff);
@@ -206,7 +206,7 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
       offerRecurring.map((r) => r.uid),
       offerLeftovers !== null || offerUpNext.length > 0,
     );
-  // Each leftover, then each task from Up next, brings its own task over, added to today now, so
+  // Each leftover, then each task from Up Next, brings its own task over, added to today now, so
   // the retro counts it as planned unless a session ran first; the routines go after the padded
   // rows, which stay free for one-offs (`acceptOffer`). The answer waits for the save: a failed one
   // puts the list back, and the notice with it.
@@ -234,7 +234,7 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
     else if (position === local.length) addButton.current?.focus();
   };
   // × asks first when the task is on other days or has time logged on it, a timer running on it
-  // included, since Delete everywhere is then a different answer, or when it has a note, which a
+  // included, since Delete Everywhere is then a different answer, or when it has a note, which a
   // delete takes with it; a recurring priority's row never asks (Stop Repeating on the board ends those).
   const remove = (p: Priority) => {
     // `logged` is the other days' time, so the day's own log, a running timer included, adds to it.

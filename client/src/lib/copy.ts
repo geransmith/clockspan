@@ -162,7 +162,7 @@ export const LEFT_OPEN = {
 };
 
 /**
- * The morning notice past the leftovers: Up next's heading, and the recurring group's heading, the
+ * The morning notice past the leftovers: Up Next's heading, and the recurring group's heading, the
  * button that answers it, and the line when more are ticked than Recurring rows per day.
  */
 export const TODAY_OFFER = {
@@ -272,7 +272,7 @@ export const SECOND_MEAL_NOTE = (overdue: boolean, at: string, worked: string) =
 export const PUNCH_ORDER = (row: string, at: string, after: string, afterAt: string | null) =>
   afterAt == null ? `${row} (${at}) has no ${after} before it.` : `${row} (${at}) is earlier than ${after} (${afterAt}).`;
 
-/** The Worked and Clock out at tiles' line while the punches are out of order, where any number would be a guess. */
+/** The Worked and Clock Out At tiles' line while the punches are out of order, where any number would be a guess. */
 export const CHECK_PUNCHES = 'Check punches';
 
 /** A session logged without a label, wherever sessions are listed. */
@@ -283,7 +283,7 @@ export const RETRO_PROMPT = 'What got in the way? What went to plan?';
 
 /**
  * Banner when a punch, priority, note, log edit, timer action, layout change, board move, new
- * category, Delete everywhere or settings save isn't saved.
+ * category, Delete Everywhere or settings save isn't saved.
  * One banner covers a request that got no answer and one the server turned down (a break
  * started while a timer runs, a session another device deleted), so the body names both.
  * It says nothing of what the sheet shows: the change is gone from it, except a retro note or a

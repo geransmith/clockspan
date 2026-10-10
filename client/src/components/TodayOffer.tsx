@@ -23,9 +23,9 @@ export interface MorningOffer {
   /** The recurring priorities due today and not answered on this device yet, in the order they were made (`dueRecurring`); none before the board's first read. */
   recurring: Recurring[];
   /**
-   * Records what the notice showed once Add to Today, Not today or Start fresh is pressed: the
+   * Records what the notice showed once Add to Today, Not Today or Start Fresh is pressed: the
    * routines shown, ticked or not, are answered for today on this device, and leftovers or Up
-   * next shown hold Start fresh for the day.
+   * next shown hold Start Fresh for the day.
    */
   answer: (shownRecurring: string[], oneOffsShown: boolean) => void;
 }
@@ -33,9 +33,9 @@ export interface MorningOffer {
 interface Props {
   /** The leftovers group, null while it isn't shown. */
   leftovers: Leftovers | null;
-  /** The Up next group, empty while it isn't shown. */
+  /** The Up Next group, empty while it isn't shown. */
   upNext: PrioritySeed[];
-  /** Rows per day: the leftovers, all ticked, and then Up next's first boxes fill it. */
+  /** Rows per day: the leftovers, all ticked, and then Up Next's first boxes fill it. */
   rowsPerDay: number;
   /** The routines shown, in the order they were made. */
   recurring: Recurring[];
@@ -43,19 +43,19 @@ interface Props {
   rows: Priority[];
   /** Recurring rows per day: how many routines the notice ticks, less those on `rows`. */
   perDay: number;
-  /** Add to Today, with the items ticked: the leftovers and then Up next's, as `seeds`. */
+  /** Add to Today, with the items ticked: the leftovers and then Up Next's, as `seeds`. */
   onAdd: (seeds: PrioritySeed[], recurring: Recurring[]) => void;
-  /** Not today, or Start fresh with no routine shown. */
+  /** Not Today, or Start Fresh with no routine shown. */
   onSkip: () => void;
 }
 
-/** A leftover's or Up next's key: its task (a day's list holds a task once, so each is one box). */
+/** A leftover's or Up Next's key: its task (a day's list holds a task once, so each is one box). */
 const leftoverKey = (seed: PrioritySeed) => `task:${seed.uid ?? seed.text}`;
 const recurringKey = (item: Recurring) => `rcur:${item.uid}`;
 
 /**
- * One calm notice with three groups, "Still open from …", "Up next" and "Repeats today", each item
- * a box to tick. Leftovers start ticked; Up next up to `rowsPerDay` less the leftovers; routines up
+ * One calm notice with three groups, "Still Open From …", "Up Next" and "Repeats Today", each item
+ * a box to tick. Leftovers start ticked; Up Next up to `rowsPerDay` less the leftovers; routines up
  * to `perDay` less those already on the list (`offerPicks`), and the rest unticked. A box pressed
  * keeps its answer while the groups change around it (an item read from the board later still
  * starts as it should). Ticking more routines than `perDay` says so, and Add to Today adds them

@@ -153,7 +153,7 @@ export interface Board {
 }
 
 /**
- * How many days back a task left open still comes back: the morning's "Still open from …" reads
+ * How many days back a task left open still comes back: the morning's "Still Open From …" reads
  * this many days before today, and the board shows a task left open in Next for as long.
  */
 export const LOOKBACK_DAYS = 14;

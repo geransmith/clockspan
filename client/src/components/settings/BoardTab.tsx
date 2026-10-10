@@ -40,7 +40,7 @@ export function BoardTab({ settings, set, save }: TabProps & { save: Save }) {
       <LoadFailed
         title={LOAD_FAILED.board}
         onRetry={() => {
-          // Try again goes once the board loads: the focus moves to the tab, the control before it.
+          // Try Again goes once the board loads: the focus moves to the tab, the control before it.
           document.getElementById('tab-board')?.focus();
           void store.load();
         }}

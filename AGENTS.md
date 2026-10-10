@@ -597,7 +597,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   start ends a running break and is refused (409) while a focus timer runs, and a session start ends
   a running break (`endRunningBreak`, `routes/shared.ts`). However a break ends, one that ran under
   `MIN_BREAK_MS` is deleted, not logged (`POST /breaks/:id/end` answers `{ break: null }`). End
-  break goes through `endRunningBreak` too, so the server has one copy of that rule. The client
+  Break goes through `endRunningBreak` too, so the server has one copy of that rule. The client
   mirrors both rules with `endBreaksAt` (in `useDay`'s break writes and `applySession`, which ends a
   running break on any loaded day, since one started before midnight sits on the day before), so it
   never sends an end after a session start: the break may already be gone. The timer card disables
@@ -676,7 +676,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   its threshold: `secondMealApplies` counts an approved day as one that will pass it, so the
   alarm and the card's note start when the switch is set, not when the day runs over. The
   setting `overtimeApproval` shows/hides the switch and banner button, and with it off the
-  Clock out tile (and the board's clock bar, which takes its words) reads time past the day as
+  Clock Out At tile (and the board's clock bar, which takes its words) reads time past the day as
   "past your day" rather than a red "Over by" (the sheet's tile leaves its line to the card's pill
   once the day is done or a past day was never clocked out; the bar keeps "Day complete"); a
   flagged day counts only while the setting is on: `overtimeOn` (`lib/timeclock.ts`) decides, which `Timeclock` (the tiles get the flag from
@@ -809,8 +809,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   for the note alone, Off This Day deletes the task too, `collectItems`, unless it has a lane, as
   `REMOVE_TASK.body` says) asks first in `RemoveTask` (built like `FinishChoice`:
   `useModalDialog`, the focus on the frame; `REMOVE_TASK`): Off This Day (the × path), Delete
-  Everywhere (the × path, then the board store's `deleteItem`; its failure raises the "Change not
-  saved" banner and leaves the task off that day only), or Cancel, which puts the focus back on ×.
+  Everywhere (the × path, then the board store's `deleteItem`; its failure raises the "Change Not
+  Saved" banner and leaves the task off that day only), or Cancel, which puts the focus back on ×.
 - **A task's note shows in full only when it is opened** (`components/Note.tsx`): by its button on
   the sheet, and in its card's dialog on the board. Before that, a mouse over it shows its start as
   a title (`noteStart`, `shared/text.ts`: trimmed, its first eight lines, cut to 200 characters,
@@ -894,7 +894,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   Cancel sends nothing), then goes out as `editItem` with `weekday` (see "A task is stored once" for
   the server's side); a day of a routine is set or cleared at once, and the last day on stays on
   (`aria-disabled`, sending nothing; `LAST_WEEKDAY` is the server's backstop). The Repeat row, Stop
-  repeating, Delete's absence and the repeat mark follow the board's copy, so they change at once:
+  Repeating, Delete's absence and the repeat mark follow the board's copy, so they change at once:
   `boardColumns` reads today's row of a task the board holds in `recurring` as recurring before the
   day is read again, and a row whose task the board hasn't read yet (one typed since) is made one
   from the item the dialog shows (`editItem`'s `task`). The first day (never a day toggled on a routine) waits for today's saves still
@@ -1021,7 +1021,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   goes at the top and Next's at the end (`laneStart`, `addItem`). In Progress's text is a new task
   on today's list, a `place` move of `newTaskRow` through `move`, so on the board's queue, where it
   shows once its job starts (it has no item for `moving` to show); past the nudge it asks as Add
-  priority does (this nudge and a pull's count the rows still waiting on the board's queue, as the
+  Priority does (this nudge and a pull's count the rows still waiting on the board's queue, as the
   sheet counts its draft), the text staying in the box until Add Anyway, which closes the box and
   focuses the new row. An edit of the box's text or category drops the question, and the next Enter
   asks again. Later's and Next's + is `aria-disabled` at the cap (`boardFull`, `BOARD.full` under
@@ -1363,7 +1363,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   calls `putDayFields(date, apply, send)`: the change shows at once, goes out on the day's
   `day:<date>` queue, and the route's answer (a `Pick<Day, …>` in `shared/api.ts`) is laid on
   the stored copy (mirror `setOvertimeApproved`; a failure drops the change, raises the "Change
-  not saved" banner and reloads the day, so the setter resolves false and never rejects) → pass
+  Not Saved" banner and reloads the day, so the setter resolves false and never rejects) → pass
   it from `Sheet.tsx` to the card, and from `useTodayAlarms` into `useAlarms` if alarms depend
   on it. The seed's manifest types (`SeededDay` and the aliases beside it in
   `server/dev/seed.ts`) are built from `Day`, `Session`, `Priority` and `Break`, so `typecheck`
@@ -1664,8 +1664,8 @@ The browser pass for each surface (the logic under it is already tested):
   tick in two windows leaves the console free of CSP violations, and `curl -sN
   localhost:8090/api/changes` prints `data: N` at once and `: ping` within 25 s. No width or theme
   pass: nothing new is drawn.
-- **Punches**: a pair added before lunch, an early Clock out (done, celebration), "Add extra
-  out / in" after it (the old Clock out becomes Out N) and removing that pair. In the time
+- **Punches**: a pair added before lunch, an early Clock out (done, celebration), "Add Extra
+  Out / In" after it (the old Clock out becomes Out N) and removing that pair. In the time
   field: clear Clock in and press `0` `7` `3` `0` (the hour advances, the period fills, the
   tiles move with no further key), `p` flips the period and ↑/↓ on a segment saves each step. In
   the browser pane send single `key` presses; the `type` action pastes the whole string into one
@@ -1702,7 +1702,7 @@ The browser pass for each surface (the logic under it is already tested):
   notice. Stop Repeating on a card of Repeats (the focus on the next card) and on today's row (the
   row stays, its Repeat row gone). At 1000 the days and the mark wrap on the meta line; at 375, in
   the bottom sheet, the seven days fit on one line, each 44 × 44 px on a touch screen, with Stop
-  repeating under them. A screen reader hears the Repeat group, each day's name and pressed state,
+  Repeating under them. A screen reader hears the Repeat group, each day's name and pressed state,
   the last day as unavailable, and a card of Repeats' "Repeats" and its days (check how "Mon–Fri"
   reads). A recurring row's meta line has the Repeats mark, and at 1440 and 1000 a mouse anywhere
   on a recurring card but its tick, the mark included, shows "Repeats" (its note's start once it

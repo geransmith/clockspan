@@ -79,7 +79,7 @@ export function recurringRow(item: Recurring, now: number): Omit<Priority, 'posi
 }
 
 /**
- * The list after Add to Today: each seed (the leftovers, then the tasks from Up next) through
+ * The list after Add to Today: each seed (the leftovers, then the tasks from Up Next) through
  * `placePriority` (`seedRow`), in the first free row of the list padded to `count`, then each
  * routine through `placePriority` with `end`, after every row of the padded list, so the free base
  * rows stay for one-offs. Nothing written moves, so routines another device added after the free

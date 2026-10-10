@@ -240,7 +240,7 @@ export function warnQuietly(o: { title: string; body?: string; tag: string }): v
   alert({ ...o, tone: 'danger', sound: false, notifications: false });
 }
 
-/** A write failed: the "Change not saved" banner, under the one tag every save shares so a newer one replaces it. */
+/** A write failed: the "Change Not Saved" banner, under the one tag every save shares so a newer one replaces it. */
 export function warnSaveFailed(): void {
   warnQuietly({ ...SAVE_FAILED, tag: 'save-failed' });
 }

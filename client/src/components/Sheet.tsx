@@ -62,7 +62,7 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
   const orderNotice = useId();
   // Today's list with no one-off written yet (a routine on it is no plan) offers, in the morning
   // notice, what the last planned day left unticked, the top of Next and the recurring priorities
-  // due today. A leftover the board holds in Later or as done stays there. Up next waits for the
+  // due today. A leftover the board holds in Later or as done stays there. Up Next waits for the
   // leftovers' read and leaves out the last plan's tasks, so no task is offered twice, and takes
   // only the tasks the server has confirmed, as the routines do; until the board has loaded,
   // nothing is offered.

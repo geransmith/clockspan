@@ -13,9 +13,9 @@ import { useRange } from './useRange';
  * filled list costs no request: once a day, and again after a prune or a task deleted
  * everywhere. A day the day store holds replaces its fetched copy, so a row ticked on that day's
  * sheet since leaves the offer with no second fetch. `planned` is the tasks on the last plan's
- * list, ticked or not, once the read has answered while wanted (null before): Up next waits for it
+ * list, ticked or not, once the read has answered while wanted (null before): Up Next waits for it
  * and leaves them out, so a task left open is never offered there first, nor one ticked there
- * since the board was read. "Start fresh" holds both for the rest of the day. A failed fetch
+ * since the board was read. "Start Fresh" holds both for the rest of the day. A failed fetch
  * offers nothing: the offer is a shortcut, not worth a banner.
  */
 export function useLeftOpen(today: string, wanted: boolean): { leftOpen: LeftOpen | null; planned: ReadonlySet<string | null> | null; dismiss: () => void } {

@@ -28,7 +28,7 @@ function warnFromSeconds(alarm: AlarmSettings): number {
   return alarm.enabled && alarm.leadMinutes.length ? Math.max(...alarm.leadMinutes) * 60 : 15 * 60;
 }
 
-/** The Lunch by, Worked and Clock out at tiles for a day's timeclock. */
+/** The Lunch by, Worked and Clock Out At tiles for a day's timeclock. */
 export function timeclockTiles(tc: TimeclockResult, o: TileOptions): { lunch: TileView; worked: TileView; clockOut: TileView } {
   const lunch: TileView = { value: '—', sub: 'Clock in to see your deadline', tone: '' };
   if (tc.lunchBy != null) {
@@ -116,9 +116,9 @@ export function timeclockTiles(tc: TimeclockResult, o: TileOptions): { lunch: Ti
 export type ClockBarItem = TileView & { id: 'clockIn' | 'lunch' | 'clockOut' };
 
 /**
- * The board's clock bar: Clock in, Lunch by and Clock out at, whose line is the time left, in the
+ * The board's clock bar: Clock in, Lunch by and Clock Out At, whose line is the time left, in the
  * tiles' words. Lunch by shows with the meal periods on, once clocked in, while a lunch is planned
- * or taken; a lunch punched with them off still moves Clock out at, as on the card.
+ * or taken; a lunch punched with them off still moves Clock Out At, as on the card.
  */
 export function clockBarItems(tc: TimeclockResult, o: TileOptions & { mealRules: boolean }): ClockBarItem[] {
   const { lunch, clockOut } = timeclockTiles(tc, o);

@@ -28,7 +28,7 @@ const HOLD_MS = 5 * MINUTE_MS;
  * timer's alerts: judged against the defaults, a longer work day would ring the clock-out alarm
  * on load, with the default sound. Today's failed first load (no punches, so no alarm can ring)
  * is a banner while the page doesn't show today (`todayShown`); the sheet on today and the board
- * show it in place with Try again.
+ * show it in place with Try Again.
  */
 export function useTodayAlarms(today: string, now: number, openRetro: () => void, todayShown: boolean): { setEditingPunches: (editing: boolean) => void } {
   const { settings, loaded } = useSettings();

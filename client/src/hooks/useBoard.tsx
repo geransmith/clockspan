@@ -40,12 +40,12 @@ export interface BoardState {
    */
   confirmedRecurring: Recurring[] | undefined;
   /**
-   * The cards shown that the server has confirmed, which the morning offer's Up next takes from:
+   * The cards shown that the server has confirmed, which the morning offer's Up Next takes from:
    * never one whose create is still on its way, which a list save would make with no lane.
    * Undefined until the first read.
    */
   confirmedCards: BoardCard[] | undefined;
-  /** The first read failed (Try again is `load`); a later failed read keeps the board shown. */
+  /** The first read failed (Try Again is `load`); a later failed read keeps the board shown. */
   failed: boolean;
 }
 
@@ -414,7 +414,7 @@ export function useBoardStore(): BoardStore {
  * (`categoryForName`): a category is a soft link, so the row or card that takes it needs no wait.
  * A new or removed category goes out as an optimistic `addCategory`, and its failure (a stale copy
  * whose name another device took, or a server cap) takes it off, reads the board again and raises
- * the "Change not saved" banner; what picked it then reads as no category. `refresh` reads the
+ * the "Change Not Saved" banner; what picked it then reads as no category. `refresh` reads the
  * board, as the chip's list does when it opens.
  */
 export function useCategoryPick(): CategoryPick | null {
