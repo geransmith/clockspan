@@ -808,7 +808,7 @@ describe('recurring priorities', () => {
     act(() => {
       void result.current.store.editItem('next00000001', friday);
       void result.current.store.editItem('next00000001', monday);
-      void result.current.store.removeRecurring('rcur00000001');
+      void result.current.store.removeRecurring(QUEUE.uid);
     });
     expect(titles(result.current.board)).toEqual(['Follow-ups 15']);
     expect(shownTexts(result.current.board)).toEqual(['Write a KB']);
@@ -818,7 +818,7 @@ describe('recurring priorities', () => {
     first.resolve((onServer = withItemPatch(onServer, 'next00000001', friday)));
     await settle();
     expect(api.editItem).toHaveBeenLastCalledWith('next00000001', monday);
-    expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith('rcur00000001');
+    expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith(QUEUE.uid);
     expect(callOrder(api.editItem, 1)).toBeLessThan(callOrder(api.deleteItem));
     expect(result.current.board).toEqual(onServer);
     expect(titles(result.current.board)).toEqual(['Follow-ups 15']);
@@ -860,7 +860,7 @@ describe('recurring priorities', () => {
     const { result } = renderBoard();
     await settle();
     vi.mocked(api.editItem).mockRejectedValueOnce(new Error('offline'));
-    await expect(act(() => result.current.store.editItem('rcur00000001', { title: 'Queue' }))).rejects.toThrow('offline');
+    await expect(act(() => result.current.store.editItem(QUEUE.uid, { title: 'Queue' }))).rejects.toThrow('offline');
     expect(titles(result.current.board)).toEqual(['Monitor the queue 12345']);
     expect(api.getBoard).toHaveBeenCalledTimes(2);
 
@@ -871,7 +871,7 @@ describe('recurring priorities', () => {
     expect(shownTexts(result.current.board)).toEqual(['Write a KB', 'Follow up']);
 
     vi.mocked(api.deleteItem).mockRejectedValueOnce(apiError(500));
-    await expect(act(() => result.current.store.removeRecurring('rcur00000001'))).rejects.toThrow('Request failed (500)');
+    await expect(act(() => result.current.store.removeRecurring(QUEUE.uid))).rejects.toThrow('Request failed (500)');
     expect(titles(result.current.board)).toEqual(['Monitor the queue 12345']);
     expect(api.getBoard).toHaveBeenCalledTimes(4);
   });
@@ -884,7 +884,7 @@ describe('recurring priorities', () => {
     vi.mocked(api.getBoard).mockReturnValueOnce(old.promise);
     act(() => void result.current.store.load());
     vi.mocked(api.deleteItem).mockRejectedValueOnce(apiError(404, 1));
-    await act(() => result.current.store.removeRecurring('rcur00000001'));
+    await act(() => result.current.store.removeRecurring(QUEUE.uid));
     old.resolve(onServer);
     await settle();
     expect(titles(result.current.board)).toEqual([]);

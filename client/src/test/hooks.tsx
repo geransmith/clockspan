@@ -18,9 +18,8 @@ export { AppProviders } from '../hooks/AppProviders';
  * under happy-dom with fake timers. The plain factories and TEST_SETTINGS live in `fixtures.ts`,
  * with no React; this module re-exports them, so a happy-dom test imports one module, while a
  * lib test (`node`) imports `fixtures.ts`. Each test file mocks the `api` module (and
- * `lib/alerts` where banners matter) itself: `vi.mock` only applies in the file that calls it.
- * Before each test of a file that mocks `api`, the automocked `getSettings` answers
- * `makeSettings()`, `getRunning` no session and `getBoard` an empty board.
+ * `lib/alerts` where banners matter) itself: `vi.mock` only applies in the file that calls it,
+ * and the beforeEach below answers the provider stacks' reads in a file that does.
  */
 
 // Every provider stack reads the settings and the board, and AppProviders the running session,

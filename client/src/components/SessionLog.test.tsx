@@ -16,7 +16,6 @@ import {
   completedSession,
   deferredAnswer,
   endSession,
-  TICKETS,
   type EndPatch,
   makeCategory,
   makeDay,
@@ -25,6 +24,7 @@ import {
   makeSession,
   settle,
   T0,
+  TICKETS,
   TODAY,
 } from '../test/hooks';
 import type { Break, Priority, Session, SessionResponse } from '../types';

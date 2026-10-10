@@ -89,7 +89,7 @@ describe('boardColumns', () => {
   });
 
   it("shows today's recurring row as its task, and the recurring priorities off today's list in Later's Repeats, in the order given", () => {
-    const todayRows = [makePriority(1, 'Monitor the queue', ROUTINE), makePriority(2, 'Follow-ups', { uid: 'rcur00000002', recurring: true, done: true })];
+    const todayRows = [makePriority(1, 'Monitor the queue', ROUTINE), makePriority(2, 'Follow-ups', { uid: FOLLOW_UPS.uid, recurring: true, done: true })];
     const recurring = [
       makeRecurring('rcur00000003', 'Water the plants', { categoryUid: 'cafe00000001', note: 'The fern too', weekdays: [6] }),
       QUEUE,
@@ -167,7 +167,7 @@ describe('boardColumns', () => {
       makeCard('lastWeek', 'Last week', { lane: 'later', listDate: '2026-09-27', listDone: true }),
     ];
     const tuesday = makeDay(TUE, {
-      priorities: [makePriority(1, 'Monitor the queue', { ...ROUTINE, done: true }), makePriority(2, 'Follow-ups', { uid: 'rcur00000002', recurring: true })],
+      priorities: [makePriority(1, 'Monitor the queue', { ...ROUTINE, done: true }), makePriority(2, 'Follow-ups', { uid: FOLLOW_UPS.uid, recurring: true })],
     });
     const monday = makeDay(MON, {
       priorities: [makePriority(1, 'Monitor the queue', { ...ROUTINE, done: true }), makePriority(2, 'Monday task', { uid: 'mon', done: true })],
@@ -331,9 +331,9 @@ describe('planMove', () => {
     makePriority(4, 'Carried', { uid: 'carried' }),
   ];
   const tuesday = makeDay(TUE, {
-    priorities: [makePriority(1, 'Follow-ups', { uid: 'rcur00000002', recurring: true, done: true, categoryUid: 'cafe00000004', listed: 5, logged: 300 })],
+    priorities: [makePriority(1, 'Follow-ups', { uid: FOLLOW_UPS.uid, recurring: true, done: true, categoryUid: 'cafe00000004', listed: 5, logged: 300 })],
   });
-  const routines = [QUEUE, makeRecurring('rcur00000002', 'Follow-ups', { categoryUid: 'cafe00000004', note: 'Acme first' })];
+  const routines = [QUEUE, { ...FOLLOW_UPS, categoryUid: 'cafe00000004', note: 'Acme first' }];
   const c = columns({ cards, todayRows, earlierDays: [tuesday], recurring: routines });
   const item = (id: string) => findItem(c, id)!.item;
   const open = item(`item:${rowUid(1)}`);

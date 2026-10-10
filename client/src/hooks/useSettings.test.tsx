@@ -183,7 +183,6 @@ describe('update', () => {
   });
 
   it('shows the change at once and adopts what the server stored', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
     const saved = deferredAnswer<Settings>();
     vi.mocked(api.putSettings).mockReturnValue(saved.promise);
     const { result } = render();
@@ -243,7 +242,6 @@ describe('update', () => {
   });
 
   it('drops only the failed one of two saves to different alarms, and sends the other alone', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
     const first = deferredAnswer<Settings>();
     const second = deferredAnswer<Settings>();
     vi.mocked(api.putSettings).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
