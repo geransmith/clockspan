@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { SessionEdit } from '../api';
 import { useClock } from '../hooks/useClock';
 import { useDayStore } from '../hooks/useDay';
+import { useLatest } from '../hooks/useLatest';
 import { useTimer } from '../hooks/useTimer';
 import { categoryOf, type CategoryPick } from '../lib/board';
 import { CONFIRM } from '../lib/copy';
@@ -154,7 +155,7 @@ function Row({
   const [returnFocus, setReturnFocus] = useState(false);
   const editBox = useRef<HTMLSpanElement>(null);
   const blurCheck = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(blurCheck.current), []);
+  const deleted = useRef(false);
   const running = s.status === 'running';
   const paused = running && s.pausedAt != null;
   // A running row counts its focus so far, which holds still while paused.
@@ -177,6 +178,17 @@ function Row({
     const patch = { ...extra, ...(label !== s.label ? { label } : {}) };
     if (Object.keys(patch).length > 0) onEdit(patch);
   };
+  // A row that goes mid-edit (◀, Back, a swipe) gets no blur, or goes before a phone tap's blur
+  // check runs, so the unmount commits the edit; commit sends nothing for a closed box or an
+  // unchanged label. Not after the row's own delete: that PATCH would land after the DELETE.
+  const latestCommit = useLatest(commit);
+  useEffect(
+    () => () => {
+      clearTimeout(blurCheck.current);
+      if (!deleted.current) latestCommit.current();
+    },
+    [latestCommit],
+  );
   // Moving from the label input to the priority select or the category chip (and its list)
   // must not end the edit, and iOS doesn't always report relatedTarget, so check where focus
   // landed a tick later. Only the last check runs: a press outside an open category list moves
@@ -283,7 +295,15 @@ function Row({
       <span className="log-duration">
         {running && <RunningMark paused={paused} />} {formatDuration(seconds)}
       </span>
-      <DeleteButton label={`Delete session at ${formatTime(s.startedAt)}`} question={CONFIRM.deleteSession} disabled={running} onDelete={onDelete} />
+      <DeleteButton
+        label={`Delete session at ${formatTime(s.startedAt)}`}
+        question={CONFIRM.deleteSession}
+        disabled={running}
+        onDelete={() => {
+          deleted.current = true;
+          onDelete();
+        }}
+      />
     </li>
   );
 }

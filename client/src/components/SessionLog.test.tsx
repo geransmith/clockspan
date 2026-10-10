@@ -165,6 +165,23 @@ describe('SessionLog', () => {
     expect(api.patchSession).toHaveBeenCalledWith(1, { label: 'Relabeled' });
   });
 
+  it('saves a label typed into a row that goes before its blur check, once (◀ or Back tapped on a phone)', async () => {
+    const log = (sessions: Session[]) => (
+      <AppProviders>
+        <SessionLog date={TODAY} isToday sessions={sessions} breaks={[]} priorities={PLANNED} pick={null} />
+      </AppProviders>
+    );
+    const { rerender } = render(log([DONE]));
+    await settle();
+    openEdit();
+    fireEvent.change(labelInput(), { target: { value: ' Typed, then left ' } });
+    // The tap's blur: its check waits a tick, and the next day's log replaces the row first.
+    act(() => labelInput().blur());
+    rerender(log([]));
+    await settle();
+    expect(api.patchSession).toHaveBeenCalledExactlyOnceWith(1, { label: 'Typed, then left' });
+  });
+
   it('edits the running row through the timer, so the bar shows the edit too', async () => {
     vi.mocked(api.getRunning).mockResolvedValue({ session: RUNNING });
     const answer = deferred<SessionResponse>();
@@ -494,6 +511,19 @@ describe('SessionLog', () => {
     fireEvent.click(done!);
     await settle();
     expect(api.deleteSession).toHaveBeenCalledWith(1);
+  });
+
+  it('sends only the delete for a session deleted with its edit open', async () => {
+    vi.stubGlobal('confirm', () => true);
+    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: PLANNED, sessions: [DONE] }));
+    await renderOnStore(null);
+    openEdit();
+    fireEvent.change(labelInput(), { target: { value: 'Not kept' } });
+    // As a tap on a phone: the press doesn't take the focus from the box.
+    fireEvent.click(screen.getByRole('button', { name: /^Delete session at / }));
+    await settle();
+    expect(api.deleteSession).toHaveBeenCalledExactlyOnceWith(1);
+    expect(api.patchSession).not.toHaveBeenCalled();
   });
 
   it('lists breaks between the sessions they followed, with their own total', async () => {
