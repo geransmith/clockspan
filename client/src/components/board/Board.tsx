@@ -6,6 +6,7 @@ import { addDays, startOfWeek } from '../../../../shared/dates.js';
 import { useBoardState, useBoardStore, useCategoryPick } from '../../hooks/useBoard';
 import { useCelebration, type Moment } from '../../hooks/useCelebration';
 import { useDay } from '../../hooks/useDay';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useRange } from '../../hooks/useRange';
 import { useSettings } from '../../hooks/useSettings';
 import { useShortcut } from '../../hooks/useShortcuts';
@@ -46,6 +47,7 @@ import { Plus } from '../Icons';
 import { LoadFailed } from '../LoadFailed';
 import { BoardCardView, type ItemDrag } from './BoardCard';
 import { Capture } from './Capture';
+import { CardDialog } from './CardDialog';
 import { ClockBar } from './ClockBar';
 import { canDrag, DraggableEntry, Lifted, SortableEntry, useBoardDrag } from './useBoardDrag';
 
@@ -53,8 +55,8 @@ import { canDrag, DraggableEntry, Lifted, SortableEntry, useBoardDrag } from './
 type AddColumn = Exclude<ColumnId, 'done'>;
 
 /**
- * How a move was made: where a tick was (its burst starts there), and the length of the timer an
- * editor's Start starts on the task once its pull lands.
+ * How a move was made: where a tick was (its burst starts there), and the length of the timer a
+ * dialog's Start starts on the task once its pull lands.
  */
 type MoveOptions = { at?: DOMRect; minutes?: number };
 
@@ -78,15 +80,16 @@ function report(write: Promise<void>): void {
 
 /**
  * The Board page: Later, Next, In progress and Done. In progress is today's list, the sheet's
- * Top priorities, and Done holds this week. An item moves by its grip (a mouse, a finger or the
- * keyboard) or its editor's Move to, and both go through `planMove`; a move the board can't make
- * shows in the notice above the columns. The + in Later's, Next's and In progress's head opens a
- * box for a new item there. `now` is App's clock floored to the minute, the one the sheet gets,
- * for the clock bar's times and Delete's count of a timer running on the task: the page renders
- * once a minute, and the sheet's tiles and × count to the same minute. The move, add and delete
- * handlers are built in render, where the purity lint refuses Date.now() (the store stamps a
- * typed row's `addedAt`). The timer's `running`, `start` and `starting` come from App too: its
- * context changes every second, and these only when a timer starts, changes or ends.
+ * Top priorities, and Done holds this week. A card opens its dialog (`CardDialog`, one at a time).
+ * An item moves by being dragged (a mouse, a finger's hold or Space) or by its dialog's Move to,
+ * and both go through `planMove`; a move the board can't make shows in the notice above the
+ * columns. The + in Later's, Next's and In progress's head opens a box for a new item there.
+ * `now` is App's clock floored to the minute, the one the sheet gets, for the clock bar's times
+ * and Delete's count of a timer running on the task: the page renders once a minute, and the
+ * sheet's tiles and × count to the same minute. The move, add and delete handlers are built in
+ * render, where the purity lint refuses Date.now() (the store stamps a typed row's `addedAt`).
+ * The timer's `running`, `start` and `starting` come from App too: its context changes every
+ * second, and these only when a timer starts, changes or ends.
  */
 export const Board = memo(function Board({
   today,
@@ -107,9 +110,19 @@ export const Board = memo(function Board({
 
   const [moving, setMoving] = useState<ReadonlyMap<string, DropTarget>>(() => new Map());
   const [notice, setNotice] = useState<Notice | null>(null);
+  // The item whose dialog is open.
   const [open, setOpen] = useState<string | null>(null);
-  // Below 900 px one column shows at a time.
+  // Notes whose save failed as their dialog closed, by item, with the stored note each was typed
+  // over: the dialog's box starts from one, which goes once the item's note is no longer that.
+  const [notesKept, setNotesKept] = useState<ReadonlyMap<string, { text: string; over: string }>>(() => new Map());
+  // The title the open dialog's box saved last: Safari leaves the focus in the box as a button is
+  // pressed, so a move or start pressed there saves the rename only as the dialog closes, after the
+  // item was read, and today's row shows it only once its save starts.
+  const renamed = useRef<string | null>(null);
+  // Below 900 px one column shows at a time, so In progress and Done, whose items drag only to
+  // another column, don't drag there.
   const [shownColumn, setShownColumn] = useState<ColumnId>('progress');
+  const wide = useMediaQuery('(min-width: 900px)');
   const [earlierOpen, setEarlierOpen] = useState(false);
   const [ticked, setTicked] = useState<Moment | null>(null);
   const { burst } = useCelebration<HTMLElement>(ticked, 'priorityDone');
@@ -125,10 +138,9 @@ export const Board = memo(function Board({
   const heads = useRef(new Map<ColumnId, HTMLElement>());
   // The boxes' one category, remembered on this device (a removed or unknown one reads as none).
   const [boxCategory, setBoxCategory] = useState(() => readStored(USER_KEYS.captureCategory) || null);
-  // The item a sent move left focus for: its title once it shows under that id, or its grip after
-  // a keyboard drag, so Space picks it up again.
+  // The item a sent move left focus for: its card once it shows under that id, which a keyboard
+  // drag's Space picks up again.
   const focusTo = useRef<string | null>(null);
-  const focusGrip = useRef(false);
 
   const columns = useMemo(
     () =>
@@ -145,25 +157,20 @@ export const Board = memo(function Board({
     [board, day, earlierDays, today, moving],
   );
   const { shown, over, lifted, dropAnimation, context, onDragEnd, onDragCancel } = useBoardDrag(columns);
+  // An item that went (deleted, gone from a read, or a new day loading) closes its dialog for good,
+  // so it doesn't open again by itself if the item comes back.
+  const opened = open && columns ? findItem(columns, open)?.item : undefined;
+  if (open && !opened) setOpen(null);
 
-  // The focus on an item: on its grip when asked and it has one that takes the focus (none on a
-  // recurring row; hidden on a phone in In progress and Done), else its title.
-  const focusItem = (title: HTMLButtonElement, toGrip: boolean) => {
-    const grip = toGrip ? title.closest('li')?.querySelector<HTMLElement>('.board-grip') : null;
-    grip?.focus();
-    if (!grip || document.activeElement !== grip) title.focus();
-  };
   useEffect(() => {
     const id = focusTo.current;
     const title = id ? titles.current.get(id) : undefined;
     if (!title) return;
     focusTo.current = null;
-    const toGrip = focusGrip.current;
-    focusGrip.current = false;
-    // Only when the move left the focus nowhere (its control went with the editor or the item): a
+    // Only when the move left the focus nowhere (its control went with the dialog or the item): a
     // move that lands late finds the user typing elsewhere, and leaves them there.
     const at = document.activeElement;
-    if (at === null || at === document.body) focusItem(title, toGrip);
+    if (at === null || at === document.body) title.focus();
   });
   // A notice brought by a move takes the focus, so a keyboard user reaches its buttons.
   useEffect(() => {
@@ -201,15 +208,15 @@ export const Board = memo(function Board({
   // from where it was made (`at`, measured by the caller before the control goes with the item to
   // Done in this render, hidden there on a phone). The sound is unlocked in the tap that made it
   // (iOS). With no item, a row typed in In progress's box, whose field keeps the focus: nothing is
-  // focused for it once it lands. With `minutes`, a pull an editor's Start made: the timer starts on
-  // the task once the pull's save answers, and one banner says why if either fails.
+  // focused for it once it lands. With `minutes`, a pull a dialog's Start made: the timer starts on
+  // the task once the pull's save answers, and one banner says why if either fails. Every caller
+  // runs with no dialog open: a dialog closes before its move or start (`closeCard`).
   const send = (item: BoardItem | null, target: DropTarget, move: StoreMove, { at, minutes }: MoveOptions = {}) => {
     const ticks = (move.kind === 'tick' && move.done) || (move.kind === 'place' && move.row.done);
     if (ticks) {
       unlockAudio();
       setTicked({ at });
     }
-    setOpen(null);
     // Where the item will be once the move lands: a one-off task keeps its id wherever it shows, and
     // an earlier day's recurring row pulled onto today's list is today's row, while the earlier
     // one stays in Done.
@@ -255,7 +262,6 @@ export const Board = memo(function Board({
   const run = (item: BoardItem, to: ColumnId, before: string | null, options: MoveOptions = {}): string => {
     const move = planMove(item, to, before, today);
     setNotice(null);
-    focusGrip.current = false;
     if (move?.kind === 'refuse' || move?.kind === 'doneStays') setNotice({ ...move, item });
     else if (move) {
       const target = { to, before };
@@ -298,17 +304,23 @@ export const Board = memo(function Board({
     return true;
   };
 
-  // Closing the notice puts the focus back where it came from: on the item it was about, on its
-  // grip where it has one, or in In progress's box, which keeps the row it held (shown again on a
-  // phone, where the notice stays up while another column shows).
+  // Closing the notice puts the focus back where it came from: on the card it was about, or in In
+  // progress's box, which keeps the row it held (shown again on a phone, where the notice stays up
+  // while another column shows).
   const closeNotice = () => {
     const about = notice?.kind === 'nudge' ? notice.for : notice;
     if (about && 'row' in about) openAdd('progress');
-    else {
-      const title = about && titles.current.get(about.item.id);
-      if (title) focusItem(title, true);
-    }
+    else if (about) titles.current.get(about.item.id)?.focus();
     setNotice(null);
+  };
+  // The dialog closes before what it pressed runs, with the focus on its card. Blurring first saves
+  // a title or note being typed (React reports no blur for a box removed while focused), as the
+  // settings dialog does. It goes at once, since a modal leaves the page inert: the notice's
+  // button, the landed card or the next card couldn't take the focus.
+  const closeCard = (id: string) => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    flushSync(() => setOpen(null));
+    titles.current.get(id)?.focus();
   };
 
   // The item goes with the button pressed (Delete, Remove from today), and the focus would fall to
@@ -330,32 +342,57 @@ export const Board = memo(function Board({
     const todays = listedToday ? (loggedByUid(day.sessions, now).get(item.uid) ?? 0) : 0;
     const logged = counted + todays;
     if (!window.confirm(CONFIRM.deleteTask(listed, logged > 0 ? formatDurationCeil(logged) : null))) return;
+    closeCard(item.id);
     focusNear(item);
-    setOpen(null);
     report(store.deleteItem(item.uid));
   };
-  // The editor closes, so a remove that fails brings the row back closed.
+  // The dialog closes, so a remove that fails brings the row back with none open.
   const removeFromToday = (item: BoardItem) => {
+    closeCard(item.id);
     focusNear(item);
-    setOpen(null);
     report(store.removeFromToday(item.uid));
   };
 
-  // A drop's move first drops a focus left for an earlier move, and a keyboard drag ends on the item's grip.
+  // A drop's move first drops a focus left for an earlier move, and a keyboard drag ends on the item's card.
   const dragFocus = {
     clear: () => {
       focusTo.current = null;
     },
     afterKeyboard: (id: string) => {
       focusTo.current ??= id;
-      focusGrip.current = true;
     },
   };
 
-  const card = (item: BoardItem, drag?: ItemDrag) => {
-    // Today's row, edited through the list; one shown in a lane is on its way off it (a park), and
-    // its row's tick, title and category wait for the park to land.
-    const throughRow = onToday(item, today) && !isLane(item.column);
+  // Today's row, edited through the list; one shown in a lane is on its way off it (a park), and
+  // its row's tick, title and category wait for the park to land.
+  const throughRow = (item: BoardItem) => onToday(item, today) && !isLane(item.column);
+
+  const card = (item: BoardItem, drag?: ItemDrag) => (
+    <BoardCardView
+      key={item.id}
+      item={item}
+      today={today}
+      pick={pick}
+      onOpen={() => {
+        renamed.current = null;
+        setOpen(item.id);
+      }}
+      titleRef={(el) => {
+        if (el) titles.current.set(item.id, el);
+        else titles.current.delete(item.id);
+      }}
+      tick={
+        throughRow(item)
+          ? { checked: item.row!.done, onChange: (checked, el) => run(item, checked ? 'done' : 'progress', null, { at: el.getBoundingClientRect() }) }
+          : undefined
+      }
+      // A recurring task's rows are told apart by their day; a card, which has none, by its task.
+      running={running?.priorityUid === item.uid && (item.date ?? running.date) === running.date ? running : undefined}
+      drag={drag}
+    />
+  );
+
+  const cardDialog = (item: BoardItem) => {
     // A task off today's list as the board has it: in a lane, left open, or done earlier.
     const cardOnly = item.card != null && item.row == null;
     // Ticked on an earlier day: that day's sheet unticks it, since the board would rewrite a past
@@ -367,69 +404,80 @@ export const Board = memo(function Board({
     const editable = cardOnly || (item.recurring && board.recurring.some((r) => r.uid === item.uid));
     // The title, category and note are the task's, on every day: today's row through the list, the
     // sheet's write, which renames a recurring priority too; any other by a PATCH.
-    const editTask = throughRow
+    const editTask = throughRow(item)
       ? (patch: RowPatch) => store.editRow(item.uid, patch)
       : editable
         ? (patch: RowPatch) => store.editItem(item.uid, itemPatchOf(patch))
         : null;
-    const close = () => {
-      titles.current.get(item.id)?.focus();
-      setOpen(null);
+    // A note whose save failed is kept for the dialog to start from when it opens again, and one
+    // that saves drops it.
+    const keepNote = (ok: boolean, text: string, over: string) => {
+      setNotesKept((m) => {
+        if (ok && !m.has(item.id)) return m;
+        const next = new Map(m);
+        if (ok) next.delete(item.id);
+        else next.set(item.id, { text, over });
+        return next;
+      });
+      return ok;
+    };
+    // What a press in the dialog acts on once it has closed: the item under the title saved last.
+    const closeFor = () => {
+      closeCard(item.id);
+      return renamed.current === null ? item : { ...item, title: renamed.current };
     };
     // A timer starts on today's open row and on a card in Later or Next, which a pull puts on
     // today's list first, with no nudge: starting a timer never asks. None while a timer runs
     // (another device's too, once synced) or the item's move is on its way.
     const startable = !running && !moving.has(item.id) && item.column !== 'done';
     const onStart = (minutes: number) => {
-      if (!throughRow) {
-        run(item, 'progress', null, { minutes });
+      const acting = closeFor();
+      if (!throughRow(acting)) {
+        run(acting, 'progress', null, { minutes });
         return;
       }
       // As run() does: the newest press takes the notice's place.
       setNotice(null);
-      close();
-      report(start(today, minutes * 60, item.title, item.uid));
+      report(start(today, minutes * 60, acting.title, acting.uid));
     };
     return (
-      <BoardCardView
+      <CardDialog
         key={item.id}
         item={item}
         today={today}
-        open={open === item.id}
-        onToggle={() => setOpen((o) => (o === item.id ? null : item.id))}
-        onClose={close}
-        titleRef={(el) => {
-          if (el) titles.current.set(item.id, el);
-          else titles.current.delete(item.id);
+        pick={pick}
+        onClose={() => closeCard(item.id)}
+        onMove={(to, el) => {
+          // Measured first: the button goes with the dialog.
+          const at = el.getBoundingClientRect();
+          run(closeFor(), to, isLane(to) ? laneStart(columns, to) : null, { at });
         }}
-        tick={
-          throughRow
-            ? { checked: item.row!.done, onChange: (checked, el) => run(item, checked ? 'done' : 'progress', null, { at: el.getBoundingClientRect() }) }
+        onRename={
+          editTask
+            ? (text) => {
+                renamed.current = text;
+                report(editTask({ text }));
+              }
             : undefined
         }
-        onMove={(to, el) => run(item, to, isLane(to) ? laneStart(columns, to) : null, { at: el.getBoundingClientRect() })}
-        onRename={editTask ? (text) => report(editTask({ text })) : undefined}
-        pick={pick}
         onCategory={editTask ? (categoryUid) => report(editTask({ categoryUid })) : undefined}
-        onNote={editTask ? (note) => saved(editTask({ note })) : undefined}
+        onNote={editTask ? (note, base) => saved(editTask({ note })).then((ok) => keepNote(ok, note, base)) : undefined}
+        keptNote={notesKept.get(item.id)?.text}
         // A recurring priority is removed in Settings → Board, so its row only comes off today's list.
         onDelete={item.recurring ? undefined : () => confirmDelete(item)}
-        onRemove={item.recurring && throughRow ? () => removeFromToday(item) : undefined}
+        onRemove={item.recurring && throughRow(item) ? () => removeFromToday(item) : undefined}
         hint={hint}
         start={startable ? { disabled: starting, onStart } : undefined}
-        // A recurring task's rows are told apart by their day; a card, which has none, by its task.
-        running={running?.priorityUid === item.uid && (item.date ?? running.date) === running.date ? running : undefined}
-        drag={drag}
       />
     );
   };
 
-  // A card of Later or Next sorts among its lane's cards; an item of In progress or Done drags whole.
-  // An item whose move is on its way keeps its grip but isn't picked up until the move lands: it
+  // A card of Later or Next sorts among its lane's cards; an item of In progress or Done drags whole,
+  // on a wide window. An item whose move is on its way isn't picked up until the move lands: it
   // shows where the move takes it as the item it was (a parked row in Later, a pulled card in In
   // progress), and a move planned from that would be wrong.
   const entry = (item: BoardItem, column: ColumnId) => {
-    if (!canDrag(item)) return card(item);
+    if (!canDrag(item) || (!isLane(column) && !wide)) return card(item);
     const render = (drag: ItemDrag) => card(item, drag);
     const held = moving.has(item.id);
     return isLane(column) ? (
@@ -480,6 +528,10 @@ export const Board = memo(function Board({
     setAdding((a) => new Set([...a].filter((id) => !shutBoxes.includes(id))));
     if (shutBoxes.includes('progress')) dropHeldRow();
   }
+  // A kept note goes once its item's note isn't the one it was typed over: changed elsewhere, or
+  // its save on its way, whose failure keeps it again (an item not shown keeps it).
+  const staleNotes = [...notesKept].filter(([id, { over }]) => (findItem(columns, id)?.item.note ?? over) !== over).map(([id]) => id);
+  if (staleNotes.length > 0) setNotesKept((m) => new Map([...m].filter(([id]) => !staleNotes.includes(id))));
 
   return (
     <div className="board">
@@ -495,17 +547,14 @@ export const Board = memo(function Board({
                 run: () => {
                   const held = notice.for;
                   setNotice(null);
-                  // The button goes with the notice: the focus goes to the task once it lands, on its
-                  // grip for a pull, and for a typed row on its title, the box closing.
+                  // The button goes with the notice: the focus goes to the task's card once it lands,
+                  // a typed row's box closing.
                   if ('row' in held) {
                     closeAdd('progress', false);
                     setShownColumn('progress');
                     placeRow(held.row);
                     focusTo.current = `item:${held.row.uid}`;
-                  } else {
-                    send(held.item, held.target, held.move);
-                    focusGrip.current = true;
-                  }
+                  } else send(held.item, held.target, held.move);
                 },
               },
               { label: WARNING_ACTIONS[notice.warning].keep, run: closeNotice },
@@ -602,6 +651,9 @@ export const Board = memo(function Board({
         )}
       </DndContext>
       <Burst at={burst} />
+      {/* Outside the columns, so it stays mounted as its item changes column (a move made
+          elsewhere), and a press in it never reaches a card's drag. */}
+      {opened && cardDialog(opened)}
     </div>
   );
 });

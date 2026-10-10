@@ -19,28 +19,38 @@ import { useLatest } from './useLatest';
  * last took up, or the value it last saved, whichever came later. A store that merges a save
  * with changes made elsewhere (the priorities list) needs it to tell this device's changes from
  * those.
+ *
+ * `kept` starts the draft as an edit not saved yet, made on `stored`: one an earlier draft of the
+ * same value failed to save (a board card's note, whose box goes with its dialog). It waits for
+ * the next edit, flush or unmount like any other, and one that arrives while nothing waits (that
+ * earlier draft's save failing after this one mounted) is taken up the same way.
  */
 export function useDebouncedDraft<T>(
   stored: T,
   save: (value: T, base: T) => boolean | Promise<boolean>,
   ms: number,
+  kept?: T,
 ): { draft: T; edit: (value: T, now?: boolean) => void; flush: () => Promise<boolean> } {
-  const [draft, setDraft] = useState(stored);
+  const [draft, setDraft] = useState(kept === undefined ? stored : kept);
   const base = useRef(stored);
   // The `stored` value last taken up.
   const adopted = useRef(stored);
   // The edit waiting to be saved, boxed so any value (an empty string) counts as one, with its
   // save while that is out.
-  const unsaved = useRef<{ value: T; sent?: Promise<boolean> } | null>(null);
+  const unsaved = useRef<{ value: T; sent?: Promise<boolean> } | null>(kept === undefined ? null : { value: kept });
   const timer = useRef<number | undefined>(undefined);
   const latestSave = useLatest(save);
 
-  // A ref can't be read during render, so this is the effect form of adopting the prop.
+  // A ref can't be read during render, so this is the effect form of adopting the props.
   useEffect(() => {
     if (unsaved.current) return;
     adopted.current = stored;
-    setDraft(stored);
-  }, [stored]);
+    if (kept !== undefined) {
+      base.current = stored;
+      unsaved.current = { value: kept };
+    }
+    setDraft(unsaved.current ? unsaved.current.value : stored);
+  }, [stored, kept]);
 
   // A value taken up becomes the base once the draft holding it has rendered, not before: until
   // then a handler still builds on the draft before it. An edit made in that gap sets the draft

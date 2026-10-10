@@ -2,7 +2,7 @@ import { useSettings } from '../hooks/useSettings';
 import { dismissByTag, unlockAudio } from '../lib/alerts';
 
 /**
- * The focus timer's length buttons, on the timer card and a board item's editor: the lengths the
+ * The focus timer's length buttons, on the timer card and a board card's dialog: the lengths the
  * settings give, shortest first, a length set twice once. The tap unlocks the sound before
  * `onStart`, since iOS counts only the tap as the gesture and a start may wait on a save first
  * (a new name's row, a board pull). It also takes the break banners down: their Start break

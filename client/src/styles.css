@@ -351,8 +351,7 @@ button {
 /* The edit-in-place inputs, back at 44 px on a touch screen (the pointer: coarse block). */
 .running-label-input,
 .log-label-input,
-.log-plan-select,
-.board-title-input {
+.log-plan-select {
   min-height: 38px;
 }
 .checkbox {
@@ -513,13 +512,16 @@ button {
   min-width: 0;
   max-width: 100%;
 }
-/* A row added from a recurring priority: a small mark beside it, not a control. */
-.repeat-mark {
+/* A row added from a recurring priority, and a board card's note: a small mark beside it, not a
+   control. */
+.repeat-mark,
+.board-card-note {
   display: inline-flex;
   flex: none;
   color: var(--text-2);
 }
-.repeat-mark svg {
+.repeat-mark svg,
+.board-card-note svg {
   width: 16px;
   height: 16px;
 }
@@ -541,13 +543,12 @@ button {
   white-space: nowrap;
 }
 /* A sheet row's empty chip shows with the mouse over the row or the focus in it, so a list with
-   no categories set reads as plain text, and so does a sheet row's or a board card's note button
-   with no note, unless its box is open. They still take the focus and a press where they sit; a
-   touch screen, with no hover, always shows them. */
+   no categories set reads as plain text, and so does its note button with no note, unless its box
+   is open. They still take the focus and a press where they sit; a touch screen, with no hover,
+   always shows them. */
 @media (hover: hover) {
   .priority-row:not(:hover, :focus-within) .category-chip--empty,
-  .priority-row:not(:hover, :focus-within) .note-toggle--empty[aria-expanded='false'],
-  .board-card:not(:hover, :focus-within) .note-toggle--empty[aria-expanded='false'] {
+  .priority-row:not(:hover, :focus-within) .note-toggle--empty[aria-expanded='false'] {
     opacity: 0;
   }
 }
@@ -2576,6 +2577,7 @@ button.log-label:hover {
   gap: 8px;
 }
 .board-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -2589,31 +2591,6 @@ button.log-label:hover {
   align-items: flex-start;
   gap: 8px;
 }
-/* The drag handle, drawn small at the card's edge; its touch area is in the pointer: coarse block.
-   touch-action: none keeps a finger on it from scrolling the page. In progress and Done take a
-   drag only to another column, and a phone shows one column at a time: their grips show from
-   900 px. */
-.board-grip {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: none;
-  color: var(--text-3);
-  cursor: grab;
-  touch-action: none;
-}
-.board-grip:active {
-  cursor: grabbing;
-}
-.board-col:not([data-lane]) .board-grip {
-  display: none;
-}
 /* The column a dragged item shows in, away from its own. */
 .board-col[data-over] {
   border-color: var(--accent);
@@ -2624,11 +2601,11 @@ button.log-label:hover {
   box-shadow: var(--shadow);
   cursor: grabbing;
 }
-.board-card--lifted .board-grip {
-  cursor: inherit;
-}
-/* The tick's label is its touch area (the coarse block); the box sits on the title's first line. */
+/* The tick's label is its touch area (the coarse block); the box sits on the title's first line,
+   above the card's button. */
 .board-tick {
+  position: relative;
+  z-index: 1;
   display: flex;
   padding-top: 1px;
 }
@@ -2649,12 +2626,14 @@ button.log-label:hover {
   background: none;
   text-align: left;
 }
-/* The note button at the end of the title row, on the title's first 24 px line. */
-.board-card-row .note-toggle {
-  margin-block: -2px;
+/* The button reaches over the whole card, so a press anywhere on it opens or drags the card. */
+.board-card-open::before {
+  content: '';
+  position: absolute;
+  inset: 0;
 }
-/* Two lines at most in a narrow column; the editor shows the whole title. The drag copy (Lifted)
-   has this span without the button. */
+/* Two lines at most in a narrow column; the dialog shows it whole. The drag copy (Lifted) has
+   this span without the button. */
 .board-card-title {
   font-weight: 550;
   line-height: 24px;
@@ -2682,20 +2661,13 @@ button.log-label:hover {
   gap: 6px;
   min-width: 0;
 }
-.board-editor-category {
+/* A card's dialog: its title box beside the ×. */
+.card-dialog .dialog-head {
+  gap: 8px;
+}
+.card-dialog-category {
   display: flex;
   align-items: center;
-}
-.board-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 4px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-}
-.board-editor-title {
-  overflow-wrap: anywhere;
 }
 .board-move,
 .board-start {
@@ -2706,7 +2678,8 @@ button.log-label:hover {
   gap: 4px 8px;
 }
 /* The timer card's length buttons, a line high, and Move to's columns: beside their label where
-   they fit, wrapping in a narrow column (the card's one-row grid can't shrink below its buttons). */
+   they fit, wrapping under it on a phone (the timer card's one-row grid can't shrink below its
+   buttons). */
 .board-start .timer-quick,
 .board-move-targets {
   display: flex;
@@ -2724,12 +2697,6 @@ button.log-label:hover {
 .board-start .timer-quick-num {
   font-size: 1rem;
 }
-.board-editor-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 4px;
-}
 .board-earlier {
   align-self: flex-start;
   padding: 0 4px;
@@ -2746,9 +2713,6 @@ button.log-label:hover {
   }
   .board-cols .board-col {
     display: flex;
-  }
-  .board-col:not([data-lane]) .board-grip {
-    display: inline-flex;
   }
 }
 
@@ -3080,8 +3044,6 @@ kbd {
   .punch-pair .punch-remove,
   .about-link,
   .priority-tick,
-  .board-grip,
-  .board-tick,
   .board-add,
   .note-toggle,
   .brand,
@@ -3098,7 +3060,6 @@ kbd {
   .punch-pair .punch-remove::after,
   .about-link::after,
   .priority-tick::after,
-  .board-grip::after,
   .board-tick::after,
   .board-add::after,
   .note-toggle::after,
@@ -3120,18 +3081,11 @@ kbd {
   }
   /* 28 px, centred in a row 44 px tall (beside the timer's label box; beside a board column's
      field, or under it on a 44 px line of its own in a narrow column; from 640 px, beside a
-     priority's field; on a row of its own in the board's editor and a log row's edit), 6 px or
+     priority's field; on a row of its own in a card's dialog and a log row's edit), 6 px or
      more from the control beside it: 44 px tall, reaching half that gap at most. Under a
      priority's field it reaches 4 px up and 12 px down (further on). */
   .category-chip {
     --hit-inset: -9px -4px;
-  }
-  /* 28 px square at the end of a board card's title row, 8 px from the title: 44 × 44 px, through
-     the card's 8 px padding and 2 px into the gap to the next card as the title's does, half the
-     gap to the title, and on the right through the card's 10 px side padding and border into the
-     column's own, where nothing takes taps. */
-  .note-toggle {
-    --hit-inset: -9px -13px -9px -5px;
   }
   /* An open note box comes after its button, so positioned too it paints over the button's area
      where the two meet and takes the tap. */
@@ -3178,16 +3132,12 @@ kbd {
   .priority-tick {
     --hit-inset: -11px -5px -11px -17px;
   }
-  /* 22 px square 10 px in from a card's left edge, 8 px from the title (or the row's number, which
-     takes no taps) on its right, with cards 8 px apart: 36 × 44 px, half the gap to the title and
-     3 px into the gap between cards. */
+  /* 22 px square 10 px in from a card's left edge, 8 px from the title (or the row's number) on its
+     right, with cards 8 px apart: 36 × 44 px, half the gap to the number or title and 3 px into
+     the gap between cards. The rest of the card is the card's button (its ::before), which the
+     tick sits above. */
   .board-tick {
     --hit-inset: -11px -4px -11px -10px;
-  }
-  /* 20 × 24 px, 10 px in from a card's left edge in a column with 12 px of padding, 8 px from the
-     tick or the title on its right, with cards 8 px apart: 38 × 44 px, 2 px into the gap. */
-  .board-grip {
-    --hit-inset: -10px -4px -10px -14px;
   }
   /* 32 px square (30 inside the border) at the end of a column's head, in the column's 12 px
      padding, 8 px above the box or the first card, whose title reaches 2 px into that gap (In
@@ -3206,14 +3156,14 @@ kbd {
   /* A check with its words, and a list row, draw nothing around themselves: on a touch screen
      they take a whole 44 px instead, which only adds air. The Review rows touch each other, so
      an ::after has nowhere to go; the morning notice's rows and "When reached" are too close to
-     theirs. The category chip's row in a card's editor and in a log row's edit, its cell beside
+     theirs. The category chip's row in a card's dialog and in a log row's edit, its cell beside
      or under a priority's field, its line in a board column's box, and a category's swatches grow
      to 44 px so the hit areas of the controls inside them fit. */
   .today-offer .inline-check,
   .alarm-on-due,
   .review-row,
   .category-option,
-  .board-editor-category,
+  .card-dialog-category,
   .log-edit-category,
   .board-add-box > .category-wrap,
   .priority-end,
@@ -3247,8 +3197,7 @@ kbd {
   /* The edit-in-place inputs are drawn at 38 px to sit in their rows with a mouse. */
   .log-label-input,
   .log-plan-select,
-  .running-label-input,
-  .board-title-input {
+  .running-label-input {
     min-height: 44px;
   }
   /* The running label clips its overflow (a long label ends in an ellipsis), which would cut
@@ -3285,13 +3234,6 @@ kbd {
   }
   .priority-row:has(.priority-end) + .priority-hint {
     margin-block: -4px 0;
-  }
-}
-/* From 900 px a grip shows before the tick of In progress and Done: each reaches half the 8 px
-   gap between them, and the tick half the gap to the title. */
-@media (pointer: coarse) and (min-width: 900px) {
-  .board-grip + .board-tick {
-    --hit-inset: -11px -4px;
   }
 }
 
