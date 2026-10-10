@@ -18,7 +18,9 @@ import {
   punchLabel,
   removePunchPair,
   secondMealApplies,
+  shownPairs,
   targetFraction,
+  type PairTyping,
   type TimeclockSettings,
 } from './timeclock';
 import type { Punch } from '../types';
@@ -455,18 +457,10 @@ describe('punch rows', () => {
   it("names each row as the card does, the pairs numbered before lunch first, or in the card's own places", () => {
     // Lunch 12:00 to 12:30, a pair at 14:00 (rows 3-4) and one at 10:00 (rows 5-6).
     const p = punches([T0, T0 + 4 * HOUR_MS, T0 + 4.5 * HOUR_MS, T0 + 6 * HOUR_MS, T0 + 7 * HOUR_MS, T0 + 2 * HOUR_MS, T0 + 3 * HOUR_MS, null]);
-    const names = (pairs = extraPairs(p)) => p.map((r) => punchLabel(p, r.position, pairs));
-    expect(names()).toEqual(['Clock in', 'Lunch out', 'Lunch in', 'Out 2', 'In 2', 'Out 1', 'In 1', 'Clock out']);
-    expect(names(extraPairs(p).map((pair) => ({ ...pair, beforeLunch: true })))).toEqual([
-      'Clock in',
-      'Lunch out',
-      'Lunch in',
-      'Out 1',
-      'In 1',
-      'Out 2',
-      'In 2',
-      'Clock out',
-    ]);
+    const names = (typing: PairTyping | null) => p.map((r) => punchLabel(p, r.position, shownPairs(p, typing)));
+    expect(names(null)).toEqual(['Clock in', 'Lunch out', 'Lunch in', 'Out 2', 'In 2', 'Out 1', 'In 1', 'Clock out']);
+    // The 14:00 pair being typed in, the focus having come in while it sat before lunch.
+    expect(names({ out: 3, before: true })).toEqual(['Clock in', 'Lunch out', 'Lunch in', 'Out 1', 'In 1', 'Out 2', 'In 2', 'Clock out']);
   });
 });
 

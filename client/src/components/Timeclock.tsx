@@ -1,17 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useBecameTrue, useCelebration } from '../hooks/useCelebration';
 import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { unlockAudio } from '../lib/alerts';
 import { pickCelebration } from '../lib/celebrate';
 import { DAY_COMPLETE, SECOND_MEAL_NOTE } from '../lib/copy';
+import { focusNeighbour } from '../lib/focus';
 import { floorToMinute, formatDuration } from '../lib/format';
 import { focusTile, timeclockTiles } from '../lib/tiles';
 import {
   addPunchPair,
   clockOutPosition,
   daySettings,
-  extraPairs,
   lunchInPunchOrder,
   lunchRowsShown,
   nextPunchPosition,
@@ -19,7 +19,9 @@ import {
   punchLabel,
   removePunchPair,
   secondMealApplies,
+  shownPairs,
   type ExtraPair,
+  type PairTyping,
   type TimeclockResult,
 } from '../lib/timeclock';
 import { MAX_PUNCHES, punchesKey } from '../../../shared/punches.js';
@@ -53,6 +55,10 @@ interface Props {
   onEditingChange: (editing: boolean) => void;
   /** The id of the sheet's punch-order notice, which describes the punch out of place. */
   orderNotice: string;
+  /** The pair being typed in (`shownPairs`), held by the sheet, whose punch-order notice names the rows as this card does. */
+  typing: PairTyping | null;
+  /** Kept stable (a state setter): the card lets the pair go as it unmounts. */
+  onTyping: (typing: PairTyping | null) => void;
 }
 
 export function Timeclock({
@@ -70,6 +76,8 @@ export function Timeclock({
   onWorkMinutesChange,
   onEditingChange,
   orderNotice,
+  typing,
+  onTyping,
 }: Props) {
   const { settings, loaded } = useSettings();
   // The day's target and the settings its timeclock ran on (`daySettings`).
@@ -120,15 +128,12 @@ export function Timeclock({
     if (next.length + 2 > MAX_PUNCHES) refocus.current = `.punch-remove[data-out="${punches.length - 1}"]`;
     send(next);
   };
-  // The pair being typed in keeps the block it had when the focus came in: a time on its way
-  // (10:3 of 10:30) can sit on the other side of lunch, and a move remounts the fields.
-  const [typing, setTyping] = useState<{ out: number; before: boolean } | null>(null);
   const removePair = (outPosition: number) => {
     // Removing a pair can end the day (an Add undone, or a stray Out after the Clock out gone) or
     // reach the week's target (a removed break counts as worked again), so both clips need this
     // gesture.
     unlockAudio();
-    setTyping(null);
+    onTyping(null);
     refocus.current = '.punch-add';
     send(added && outPosition === added.length - 1 && punchesKey(addPunchPair(added)) === punchesKey(punches) ? added : removePunchPair(punches, outPosition));
   };
@@ -170,9 +175,13 @@ export function Timeclock({
   // Only today's sheet plans the second meal: a past day left clocked in is judged at its end.
   const secondMeal = isToday && secondMealApplies(tc, daySet, otOn) ? tc.secondMealBy : null;
 
+  // A remount (another date, a move to the other column) takes the field with no blur, so the pair
+  // being typed in is let go here.
+  useLayoutEffect(() => () => onTyping(null), [onTyping]);
+
   // ----- rows -----
   const byPos = new Map(punches.map((p) => [p.position, p]));
-  const pairs = extraPairs(punches).map((p) => (p.out.position === typing?.out ? { ...p, beforeLunch: typing.before } : p));
+  const pairs = shownPairs(punches, typing);
   const before = pairs.filter((p) => p.beforeLunch);
   const after = pairs.filter((p) => !p.beforeLunch);
   const clockOutPos = clockOutPosition(punches);
@@ -215,8 +224,8 @@ export function Timeclock({
             <div
               key={pair.out.position}
               className="punch-pair"
-              onFocus={() => setTyping({ out: pair.out.position, before: pair.beforeLunch })}
-              onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setTyping(null)}
+              onFocus={() => onTyping({ out: pair.out.position, before: pair.beforeLunch })}
+              onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && onTyping(null)}
             >
               <div className="punch-pair-rows">
                 {row(pair.out, out)}
@@ -409,7 +418,18 @@ function PunchRow({
       >
         Now
       </button>
-      <button className="btn btn-icon punch-clear" onClick={() => onSet(null)} disabled={punch.at == null} aria-label={`Clear ${label}`} title="Clear">
+      <button
+        className="btn btn-icon punch-clear"
+        onClick={(e) => {
+          // The press turns this button off: another row's × takes the focus, never a time
+          // field, which would hold today's alarms.
+          focusNeighbour(e.currentTarget, '.punches', '.punch-clear');
+          onSet(null);
+        }}
+        disabled={punch.at == null}
+        aria-label={`Clear ${label}`}
+        title="Clear"
+      >
         <X />
       </button>
     </div>

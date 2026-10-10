@@ -8,6 +8,7 @@ import { categoryOf, type CategoryPick } from '../lib/board';
 import { CONFIRM } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { breakSeconds } from '../lib/breaks';
+import { focusNeighbour } from '../lib/focus';
 import { counted, formatDuration } from '../lib/format';
 import { isTaskRow } from '../lib/priorities';
 import { focusOf, sessionCategory, sessionCategoryEdit, sessionName, sessionRow } from '../lib/retro';
@@ -104,9 +105,7 @@ function DeleteButton({ label, question, disabled, onDelete }: { label: string; 
         if (!window.confirm(question)) return;
         // The row goes with this button: the next row's delete takes the focus, else the one
         // before it, past a running row's, which can't hold it.
-        const all = [...e.currentTarget.closest('ul')!.querySelectorAll<HTMLButtonElement>('.log-delete')];
-        const at = all.indexOf(e.currentTarget);
-        [...all.slice(at + 1), ...all.slice(0, at).reverse()].find((b) => !b.disabled)?.focus();
+        focusNeighbour(e.currentTarget, 'ul', '.log-delete');
         onDelete();
       }}
       aria-label={label}

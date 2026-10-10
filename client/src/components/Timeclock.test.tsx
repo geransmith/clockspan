@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { type ComponentProps, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
 import { playSound, unlockAudio } from '../lib/alerts';
-import { addPunchPair, dayTimeclock, removePunchPair } from '../lib/timeclock';
+import { addPunchPair, dayTimeclock, removePunchPair, type PairTyping } from '../lib/timeclock';
 import { answered, makeSettings, punchesAt, settle, T0, TODAY, YESTERDAY } from '../test/hooks';
 import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import { MAX_PUNCHES } from '../../../shared/punches.js';
@@ -14,12 +15,18 @@ import { Timeclock } from './Timeclock';
 vi.mock('../api');
 vi.mock('../lib/alerts');
 
+/** The card with the pair being typed in held above it, as the sheet holds it. */
+function Card(props: Omit<ComponentProps<typeof Timeclock>, 'typing' | 'onTyping'>) {
+  const [typing, setTyping] = useState<PairTyping | null>(null);
+  return <Timeclock {...props} typing={typing} onTyping={setTyping} />;
+}
+
 async function renderCard(date = TODAY, punches: Punch[] = punchesAt()) {
   const onEditingChange = vi.fn<(editing: boolean) => void>();
   const onChange = vi.fn<(punches: Punch[]) => void>();
   const card = (p: Punch[], now = T0) => (
     <SettingsProvider>
-      <Timeclock
+      <Card
         date={date}
         isToday={date === TODAY}
         now={now}
@@ -159,6 +166,19 @@ describe('Timeclock', () => {
     again(withPair.map((p) => (p.position === 3 ? { ...p, at: T0 } : p)));
     fireEvent.click(screen.getByRole('button', { name: 'Remove Out 1 / In 1' }));
     expect(onChange.mock.lastCall![0].map((p) => p.at)).toEqual([T0 - HOUR_MS, null, null, null]);
+  });
+
+  it("gives the focus to the next row's × as × turns itself off, else the one before, never a time field", async () => {
+    const { onChange, again } = await renderCard(TODAY, punchesAt(T0 - HOUR_MS, T0 - 30 * MINUTE_MS, T0 - 15 * MINUTE_MS));
+    const clear = (label: string) => screen.getByRole('button', { name: `Clear ${label}` });
+    focus(clear('Lunch out'));
+    fireEvent.click(clear('Lunch out'));
+    again(onChange.mock.lastCall![0]);
+    expect(document.activeElement).toBe(clear('Lunch in'));
+    // Past the empty Clock out and Lunch out, which are off.
+    fireEvent.click(clear('Lunch in'));
+    again(onChange.mock.lastCall![0]);
+    expect(document.activeElement).toBe(clear('Clock in'));
   });
 
   it('gives the focus to Add Extra Out / In once Remove takes its pair away', async () => {

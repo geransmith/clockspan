@@ -146,6 +146,23 @@ describe('RunningTimerBar', () => {
       expect(api.patchSession).toHaveBeenCalledExactlyOnceWith(1, { label: '会議' });
     });
 
+    it('leaves the focus where it is when the label comes back after an edit ended by Enter', async () => {
+      await edit('Renamed', 'Enter');
+      const elsewhere = screen.getByRole('button', { name: 'Read today again' });
+      act(() => elsewhere.focus());
+      // Another device links the session to a row, then sets it back to unplanned.
+      const sync = async (priorityUid: string | null) => {
+        vi.mocked(api.getRunning).mockResolvedValue(answered({ session: { ...session, label: 'Renamed', priorityUid, title: priorityUid && 'Ship the fix' } }));
+        await settle(6000);
+        setVisibility('visible');
+        await settle();
+      };
+      await sync('u1');
+      await sync(null);
+      expect(label().textContent).toBe('Renamed');
+      expect(document.activeElement).toBe(elsewhere);
+    });
+
     it('saves a cleared label, which reads as untitled', async () => {
       await edit('   ', 'Enter');
       expect(api.patchSession).toHaveBeenCalledExactlyOnceWith(1, { label: '' });
