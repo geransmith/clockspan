@@ -52,7 +52,7 @@ export function BoardTab({ settings, set, save }: TabProps & { save: Save }) {
     <>
       <Categories categories={board.categories} save={save} />
       <Section
-        title="Recurring priorities"
+        title="Recurring Priorities"
         hint="A card set to repeat on the board is offered on Top Priorities on its days. Nothing is added until you tap Add to Today."
       >
         <NumberField
@@ -79,7 +79,7 @@ function Categories({ categories, save }: { categories: Category[]; save: Save }
   };
   const inUse = activeCategories(categories);
   // A row goes with its Remove button, and the focus would fall to the page: the next row's box
-  // takes it, else the one before, else Add category.
+  // takes it, else the one before, else Add Category.
   const remove = (uid: string) => {
     const at = inUse.findIndex((c) => c.uid === uid);
     const near = inUse[at + 1] ?? inUse[at - 1];
@@ -97,7 +97,7 @@ function Categories({ categories, save }: { categories: Category[]; save: Save }
       ) : (
         <div>
           <button ref={addButton} className="btn btn-ghost" onClick={() => setAdding(true)}>
-            Add category
+            Add Category
           </button>
         </div>
       )}
@@ -180,7 +180,7 @@ function CategoryRow({
 }
 
 /**
- * The row Add category opens, its name focused, its dot in the colour a new category gets. Enter
+ * The row Add Category opens, its name focused, its dot in the colour a new category gets. Enter
  * adds the category and leaves an empty row for the next; the focus leaving adds what is typed,
  * or closes the row when nothing is. A name in use stays in the box with the line saying so; a
  * removed category's name brings it back (`categoryForName`).

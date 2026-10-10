@@ -30,7 +30,7 @@
   --danger: #d12f2f;
   --danger-soft: #fde7e7;
   --danger-ink: #bd2a2a;
-  /* A category's colour (CategoryDot, the swatches, Review's By category bars): a fill only, 3:1
+  /* A category's colour (CategoryDot, the swatches, Review's By Category bars): a fill only, 3:1
      and up on --surface and --surface-2 in both themes (theme-css.test.ts checks). A category's
      name is never drawn in it, so these have no -ink. */
   --cat-blue: #2563eb;
@@ -471,7 +471,7 @@ button {
 /* ---------- categories ---------- */
 /* A category's colour is picked by its data-color (CategoryDot, the swatches, Review's By
    category bars), never an inline colour. It fills a dot that sits beside the category's name,
-   but for the day log's, which is named for a screen reader and on hover; a By category bar
+   but for the day log's, which is named for a screen reader and on hover; a By Category bar
    sits in the row that names its category. */
 [data-color='blue'] {
   --cat: var(--cat-blue);
@@ -2412,7 +2412,7 @@ button.log-label:hover {
   font-size: 0.92rem;
   line-height: 1.4;
 }
-/* By category: a row is the dot, the name, the parts (off the plan, done) and the time, with the
+/* By Category: a row is the dot, the name, the parts (off the plan, done) and the time, with the
    bar under them. On a phone the parts take a line of their own under the name, so a long name
    keeps its room. The row isn't a button, so it pads 8px 0 where .review-row pads 8px 6px inside
    a -6px margin, and the row starts where the other rows' text does. No category has no dot; its

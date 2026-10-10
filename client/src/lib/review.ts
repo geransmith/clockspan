@@ -10,6 +10,9 @@ import { dayTimeclock, daySettings, type TimeclockSettings } from './timeclock';
 export const PERIOD_KINDS = ['week', 'month', 'quarter'] as const;
 export type PeriodKind = (typeof PERIOD_KINDS)[number];
 
+/** Each kind's name on Review's chips and in a reset back to the current period ("This Week"). */
+export const PERIOD_LABELS: Record<PeriodKind, string> = { week: 'Week', month: 'Month', quarter: 'Quarter' };
+
 /** The period History → Review shows. */
 export interface ReviewPeriod {
   kind: PeriodKind;
@@ -62,7 +65,7 @@ export interface UnplannedWork {
 /**
  * A recurring priority's rows across the range: the days it was on the list and how many of them
  * it got ticked. Each day stands on its own, so a tick doesn't settle an earlier miss, and none of
- * its rows is a task left open in Not done.
+ * its rows is a task left open in Not Done.
  */
 export interface RoutineReview {
   uid: string;
@@ -154,10 +157,10 @@ export interface RangeReview {
  * (`breakSeconds`, a running break up to now); the plan and the focus reuse `reviewDay`. A day
  * after today is left out: none of it has happened yet. A day with nothing on it (`hasContent`)
  * is left out too, even with a break logged. A recurring priority's rows count as priorities in
- * every total and go to `routines` rather than Not done. `known` is the uids of the board's
+ * every total and go to `routines` rather than Not Done. `known` is the uids of the board's
  * categories, removed ones included: a category outside it (none before the board's first read)
  * counts as none, in `byCategory` and in `midDay`. `laned` is the uids of the tasks the board
- * holds in Later or Next, which Not done never joins to another task by its text.
+ * holds in Later or Next, which Not Done never joins to another task by its text.
  */
 export function reviewRange(
   days: Day[],
@@ -190,7 +193,7 @@ export function reviewRange(
   const unplanned = new Map<string, UnplannedWork>();
   const routines = new Map<string, RoutineReview>();
   const notDone = new Map<string, OpenPriority>();
-  // Each one-off task's group in Not done, by its uid: its own, or the one its text joined.
+  // Each one-off task's group in Not Done, by its uid: its own, or the one its text joined.
   const groupOf = new Map<string, string>();
   // Met first, first in the map: the sort keeps that order on a tie.
   const byCategory = new Map<string | null, CategoryTime>();
@@ -287,7 +290,7 @@ export function reviewRange(
 }
 
 /**
- * One day's one-off rows laid onto Not done, the tasks left open on the days before it, walked
+ * One day's one-off rows laid onto Not Done, the tasks left open on the days before it, walked
  * oldest first. A task's days are one entry, keyed by its uid, and a tick settles it. A task
  * retyped by hand on a later day is a task of its own, so one with no lane, on its first day
  * (`earlier === 0`), joins the latest open entry of its text (`sameText`) whose last day is at most

@@ -136,7 +136,7 @@ describe('BoardTab', () => {
     expect(confirm).not.toHaveBeenCalled();
   });
 
-  it('puts the focus on the next name a Remove leaves, else the one before, else Add category', async () => {
+  it('puts the focus on the next name a Remove leaves, else the one before, else Add Category', async () => {
     await renderTab();
     const remove = (name: string) => {
       const button = screen.getByRole('button', { name: `Remove ${name}` });
@@ -146,7 +146,7 @@ describe('BoardTab', () => {
     remove('Tickets');
     await settle();
     expect(document.activeElement).toBe(nameBox('Admin'));
-    fireEvent.click(screen.getByRole('button', { name: 'Add category' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Category' }));
     fireEvent.change(newBox(), { target: { value: 'Calls' } });
     fireEvent.keyDown(newBox(), { key: 'Enter' });
     fireEvent.blur(newBox());
@@ -156,12 +156,12 @@ describe('BoardTab', () => {
     expect(document.activeElement).toBe(nameBox('Admin'));
     remove('Admin');
     await settle();
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add category' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add Category' }));
   });
 
-  it('adds categories from Add category, in the next colour, until the row is left blank', async () => {
+  it('adds categories from Add Category, in the next colour, until the row is left blank', async () => {
     await renderTab();
-    fireEvent.click(screen.getByRole('button', { name: 'Add category' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Category' }));
     expect(document.activeElement).toBe(newBox());
     expect(newBox().parentElement!.querySelector('.cat-dot')?.getAttribute('data-color')).toBe('green');
     // Enter on a blank box does nothing.
@@ -183,7 +183,7 @@ describe('BoardTab', () => {
     expect(names()).toEqual(['Tickets', 'Admin', 'Knowledge base', 'Calls']);
     expect(screen.queryByRole('textbox', { name: 'New category' })).toBeNull();
     // Left blank, the row closes and sends nothing.
-    fireEvent.click(screen.getByRole('button', { name: 'Add category' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Category' }));
     fireEvent.blur(newBox());
     expect(screen.queryByRole('textbox', { name: 'New category' })).toBeNull();
     expect(api.addCategory).toHaveBeenCalledTimes(2);
@@ -192,7 +192,7 @@ describe('BoardTab', () => {
 
   it('refuses a name in use until the box is emptied, and brings a removed category back by its name', async () => {
     await renderTab();
-    fireEvent.click(screen.getByRole('button', { name: 'Add category' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Category' }));
     fireEvent.change(newBox(), { target: { value: 'admin' } });
     fireEvent.keyDown(newBox(), { key: 'Enter' });
     expect(screen.getByRole('alert').textContent).toBe(BOARD.nameTaken);
@@ -218,7 +218,7 @@ describe('BoardTab', () => {
     onServer = makeBoard();
     await renderTab();
     expect(screen.getByText('No categories yet.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Add category' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Category' }));
     expect(screen.queryByText('No categories yet.')).toBeNull();
   });
 

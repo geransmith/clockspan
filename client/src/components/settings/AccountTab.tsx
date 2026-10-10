@@ -58,7 +58,7 @@ function ChangePassword({ username }: { username: string }) {
       </p>
       <div>
         <button className="btn btn-primary" type="submit" disabled={busy}>
-          Change password
+          Change Password
         </button>
       </div>
     </form>
@@ -135,7 +135,7 @@ function Users({ me }: { me: PublicUser }) {
         />
         <NewPasswordInput placeholder="Temporary password" aria-label="Temporary password" value={password} onChange={(e) => setPassword(e.target.value)} />
         <button className="btn btn-primary" type="submit" disabled={busy}>
-          Add user
+          Add User
         </button>
       </form>
       <ErrorLine error={error} />

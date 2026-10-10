@@ -147,7 +147,7 @@ describe('Review', () => {
     expect(onPeriod).toHaveBeenLastCalledWith({ kind: 'week', from: '2026-07-20' });
     expect(document.activeElement).toBe(document.body);
     // The reset goes once pressed: the focus moves to Previous.
-    fireEvent.click(screen.getByRole('button', { name: 'This week' }));
+    fireEvent.click(screen.getByRole('button', { name: 'This Week' }));
     expect(onPeriod).toHaveBeenLastCalledWith({ kind: 'week', from: '2026-09-28' });
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Previous week' }));
     cleanup();
@@ -161,7 +161,7 @@ describe('Review', () => {
     // The current period has no next and no reset.
     await review({ kind: 'quarter', from: '2026-07-01' });
     expect((screen.getByRole('button', { name: 'Next quarter' }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.queryByRole('button', { name: 'This quarter' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'This Quarter' })).toBeNull();
   });
 
   it('holds a week to the Work week, counts its sessions and lists the facts under the tiles', async () => {
@@ -176,7 +176,7 @@ describe('Review', () => {
     // Straight after the tiles, before Off the plan.
     expect(document.querySelector('.tiles + .review-facts + .review-section')).not.toBeNull();
     // No routine on the lists, so no Routines section.
-    expect(sections()).toEqual(['Off the plan', 'Not done', 'Why']);
+    expect(sections()).toEqual(['Off the Plan', 'Not Done', 'Why']);
   });
 
   it('lists the routines between Off the plan and Not done, each as the days ticked of the days on the list', async () => {
@@ -195,14 +195,14 @@ describe('Review', () => {
     serveRange([routineMon, routineTue]);
     const onOpen = vi.fn();
     await review({ kind: 'week', from: MON }, onOpen);
-    expect(sections()).toEqual(['Off the plan', 'Routines', 'Not done', 'Why']);
+    expect(sections()).toEqual(['Off the Plan', 'Routines', 'Not Done', 'Why']);
     expect(screen.getByText('Routines').querySelector('.muted')?.textContent).toBe('2');
     expect(rows('Routines')).toEqual([
       ['Monitor the queue', '1 of 2 days', '50m'],
       ['Follow-ups', '0 of 1 day', 'no time'],
     ]);
     // The routines missed are not left open; the one-off is. The tile counts them all.
-    expect(rows('Not done')).toEqual([['Write the report', 'Tue', 'no time']]);
+    expect(rows('Not Done')).toEqual([['Write the report', 'Tue', 'no time']]);
     expect(screen.getByText('2/5')).toBeTruthy();
     // A routine opens its latest day.
     fireEvent.click(screen.getByRole('button', { name: /Monitor the queue/ }));
@@ -231,12 +231,12 @@ describe('Review', () => {
       makeDay(TUE, { priorities: [makePriority(1, 'email bob', { uid: 'emailtue0001' })] }),
     ]);
     await review({ kind: 'week', from: MON });
-    expect(rows('Not done')).toEqual([['email bob', 'Mon, Tue', 'no time']]);
+    expect(rows('Not Done')).toEqual([['email bob', 'Mon, Tue', 'no time']]);
     cleanup();
 
     vi.mocked(api.getBoard).mockResolvedValue(answered(makeBoard(makeCard('emailtue0001', 'email bob', { lane: 'next' }))));
     await review({ kind: 'week', from: MON });
-    expect(rows('Not done')).toEqual([
+    expect(rows('Not Done')).toEqual([
       ['Email Bob', 'Mon', 'no time'],
       ['email bob', 'Tue', 'no time'],
     ]);
@@ -283,15 +283,15 @@ describe('Review', () => {
 
     serveRange([makeDay(MON, { sessions: [completedSession(1, start, 1500, { date: MON, label: 'Inbox', endedAt: start, durationSeconds: 0 })] })]);
     await review({ kind: 'week', from: MON });
-    expect(rows('Off the plan')).toEqual([['Inbox', 'Mon', 'no time']]);
+    expect(rows('Off the Plan')).toEqual([['Inbox', 'Mon', 'no time']]);
   });
 
   it('folds a long list after eight rows, and Show 2 More hands the focus to the first row it shows', async () => {
     serveRange([makeDay(MON, { priorities: Array.from({ length: 10 }, (_, i) => makePriority(i + 1, `Row ${i + 1}`, { addedAt: 0 })) })]);
     await review({ kind: 'week', from: MON });
-    expect(rows('Not done')).toHaveLength(8);
+    expect(rows('Not Done')).toHaveLength(8);
     fireEvent.click(screen.getByRole('button', { name: 'Show 2 More' }));
-    expect(rows('Not done')).toHaveLength(10);
+    expect(rows('Not Done')).toHaveLength(10);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Row 9/ }));
   });
 
@@ -299,9 +299,9 @@ describe('Review', () => {
     const muted = (heading: string) => screen.getByText(heading).querySelector('.muted')?.textContent ?? null;
     serveRange([mon]);
     await review({ kind: 'week', from: MON });
-    expect(rows('Off the plan')).toHaveLength(1);
-    expect(muted('Off the plan')).toBeNull();
-    expect(muted('Not done')).toBe('1');
+    expect(rows('Off the Plan')).toHaveLength(1);
+    expect(muted('Off the Plan')).toBeNull();
+    expect(muted('Not Done')).toBe('1');
     cleanup();
 
     serveRange([
@@ -314,8 +314,8 @@ describe('Review', () => {
       }),
     ]);
     await review({ kind: 'week', from: MON });
-    expect(muted('Off the plan')).toBe('30m');
-    expect(muted('Not done')).toBeNull();
+    expect(muted('Off the Plan')).toBe('30m');
+    expect(muted('Not Done')).toBeNull();
   });
 
   it('drops the target with no Work week, the hours with Show hours off, the facts strip with nothing in it, and Off the plan with no sessions', async () => {
@@ -326,7 +326,7 @@ describe('Review', () => {
     expect(screen.getByText('no sessions')).toBeTruthy();
     expect(document.querySelector('.review-facts')).toBeNull();
     // The Focused tile says no sessions, so Off the plan doesn't say it again.
-    expect(sections()).toEqual(['Not done', 'Why']);
+    expect(sections()).toEqual(['Not Done', 'Why']);
     cleanup();
 
     vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ trackHours: false })));
@@ -373,7 +373,7 @@ describe('Review: By category', () => {
 
   it('lists the time and ticks by category after the facts, its bar solid on plan and striped off it, no category last', async () => {
     await review({ kind: 'week', from: MON });
-    expect(sections()).toEqual(['By category', 'Off the plan', 'Routines', 'Not done', 'Why']);
+    expect(sections()).toEqual(['By Category', 'Off the Plan', 'Routines', 'Not Done', 'Why']);
     expect(document.querySelector('.tiles + .review-facts + .review-section .review-category')).not.toBeNull();
     // Each bar against Tickets' hour; its parts against the bar.
     expect(categoryRows()).toEqual([
@@ -450,7 +450,7 @@ describe('Review: By category', () => {
   it('shows no section when nothing in the period has a category, or all of it has the same one', async () => {
     serveRange([mon, tue]);
     await review({ kind: 'week', from: MON });
-    expect(sections()).toEqual(['Off the plan', 'Not done', 'Why']);
+    expect(sections()).toEqual(['Off the Plan', 'Not Done', 'Why']);
     expect(facts()[0]).toBe('Added mid-day: 1 · 0 done');
     cleanup();
 
@@ -462,24 +462,24 @@ describe('Review: By category', () => {
       }),
     ]);
     await review({ kind: 'week', from: MON });
-    expect(sections()[0]).toBe('Off the plan');
+    expect(sections()[0]).toBe('Off the Plan');
   });
 
   it("waits for the board's first read, and shows no category when that read fails", async () => {
     const read = deferredAnswer<Board>();
     vi.mocked(api.getBoard).mockReturnValue(read.promise);
     await review({ kind: 'week', from: MON });
-    expect(sections()[0]).toBe('Off the plan');
+    expect(sections()[0]).toBe('Off the Plan');
     expect(facts()[0]).toBe('Added mid-day: 1 · 0 done');
     read.resolve(board);
     await settle();
-    expect(sections()[0]).toBe('By category');
+    expect(sections()[0]).toBe('By Category');
     expect(facts()[0]).toBe('Added mid-day: 1 · 0 done · mostly Tickets');
     cleanup();
 
     vi.mocked(api.getBoard).mockRejectedValue(new Error('Request failed (502)'));
     await review({ kind: 'week', from: MON });
-    expect(sections()).toEqual(['Off the plan', 'Routines', 'Not done', 'Why']);
+    expect(sections()).toEqual(['Off the Plan', 'Routines', 'Not Done', 'Why']);
     expect(facts()[0]).toBe('Added mid-day: 1 · 0 done');
     expect(screen.queryByRole('alert')).toBeNull();
   });

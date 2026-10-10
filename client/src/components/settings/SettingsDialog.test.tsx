@@ -66,13 +66,13 @@ describe('SettingsDialog', () => {
     await renderDialog();
     expect(screen.getByLabelText('Work day hours')).toBeTruthy();
     await openTab('Alarms');
-    expect(screen.getByText("How you're alerted")).toBeTruthy();
+    expect(screen.getByText("How You're Alerted")).toBeTruthy();
     await openTab('Sheet');
     expect(screen.getByLabelText('Rows per day')).toBeTruthy();
     await openTab('Data');
     expect(screen.getByText(/4 days stored/)).toBeTruthy();
     await openTab('Account');
-    expect(screen.getByText('Change password')).toBeTruthy();
+    expect(screen.getByText('Change Password')).toBeTruthy();
     expect(screen.getByText('(you)', { exact: false })).toBeTruthy();
 
     cleanup();

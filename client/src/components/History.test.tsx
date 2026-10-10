@@ -77,9 +77,9 @@ describe('History', () => {
     expect(onOpen).toHaveBeenCalledWith(AUGUST_DAY.date, { kind: 'month', from: '2026-08-01' });
   });
 
-  it("hands the focus to the Review switch from the calendar's Review this week, which Review hides", async () => {
+  it("hands the focus to the Review switch from the calendar's Review This Week, which Review hides", async () => {
     await history(AUGUST_DAY.date);
-    fireEvent.click(screen.getByRole('button', { name: 'Review this week' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review This Week' }));
     await settle();
     const reviewSwitch = screen.getByRole('button', { name: 'Review', pressed: true });
     expect(document.activeElement).toBe(reviewSwitch);
@@ -88,7 +88,7 @@ describe('History', () => {
 
   it('opens a day picked on Days with no review period', async () => {
     const onOpen = await history(AUGUST_DAY.date);
-    fireEvent.click(screen.getByRole('button', { name: 'Open day' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open Day' }));
     expect(onOpen).toHaveBeenCalledWith(AUGUST_DAY.date, null);
   });
 });
