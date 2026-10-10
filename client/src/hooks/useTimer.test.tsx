@@ -90,6 +90,10 @@ describe('sync with the server', () => {
     vi.mocked(api.getRunning).mockResolvedValueOnce(answered({ session: makeSession({ date: YESTERDAY }) }));
     await settle(MINUTE_MS);
     expect(result.current.timer.running).toBe(before);
+    // Given time on another device: the timer follows, and its day has nothing new to read.
+    vi.mocked(api.getRunning).mockResolvedValueOnce(answered({ session: makeSession({ date: YESTERDAY, plannedSeconds: 30 * 60 }) }));
+    await settle(MINUTE_MS);
+    expect(result.current.timer.running?.plannedSeconds).toBe(30 * 60);
     expect(api.getDay).toHaveBeenCalledTimes(1);
 
     vi.mocked(api.getRunning).mockResolvedValueOnce(answered({ session: null }));
@@ -849,6 +853,26 @@ describe('Done', () => {
     expect(result.current.timer.ticked).toEqual({ at: rect });
   });
 
+  it('ticks once when its question is answered twice before the finish is in', async () => {
+    const session = startedAgo(27, { priorityUid: 'u1' });
+    const finishing = deferredAnswer<SessionResponse>();
+    vi.mocked(api.finishSession)
+      .mockReturnValueOnce(finishing.promise)
+      .mockResolvedValue(answered({ session: endSession(session, { durationSeconds: 25 * 60 }) }));
+    const { result } = await renderOnRow(session);
+    act(() => result.current.timer.requestDone(rect));
+    // Planned, pressed twice: the second finish goes out behind the first.
+    act(() => {
+      void result.current.timer.finish();
+      void result.current.timer.finish();
+    });
+    finishing.resolve({ session: endSession(session, { durationSeconds: 25 * 60 }) });
+    await settle();
+    expect(api.finishSession).toHaveBeenCalledTimes(2);
+    expect(api.putPriorities).toHaveBeenCalledOnce();
+    expect(result.current.timer.ticked).toEqual({ at: rect });
+  });
+
   it('is not what Finish or − past the time worked does: both log without the tick', async () => {
     const session = startedAgo(5, { priorityUid: 'u1' });
     vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(session, { durationSeconds: 300 }) }));
@@ -1130,6 +1154,18 @@ describe("time's up", () => {
     await settle(1000);
     expect(api.finishSession).toHaveBeenCalledTimes(3);
     expect(result.current.timer.running).toBeNull();
+
+    // A later session's first failed auto-finish waits 2 s again, not the wait the last one grew to.
+    vi.mocked(api.getRunning).mockResolvedValue(answered({ session: startedAgo(45, { id: 2 }) }));
+    vi.mocked(api.finishSession).mockRejectedValueOnce(new Error('offline'));
+    act(() => void window.dispatchEvent(new CustomEvent(api.CHANGED_ELSEWHERE, { detail: 0 })));
+    await settle();
+    expect(api.finishSession).toHaveBeenCalledTimes(4);
+    vi.mocked(api.finishSession).mockResolvedValueOnce(answered({ session: endSession(startedAgo(45, { id: 2 }), { durationSeconds: 1500 }) }));
+    await settle(1000);
+    expect(api.finishSession).toHaveBeenCalledTimes(4);
+    await settle(1000);
+    expect(api.finishSession).toHaveBeenCalledTimes(5);
   });
 });
 

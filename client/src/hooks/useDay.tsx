@@ -35,8 +35,9 @@ interface DayState {
  * change shows at once, a failed save leaves the stored copy on screen (the banner says so), and
  * a day read from the server can never hide a change still on its way. Every setter but
  * `addPriority` and `editPriorities` (which answers a `PrioritiesEdit` with its save's revision)
- * resolves to whether the server saved it and never rejects, so `void store.x()` is a complete
- * call site; a caller that chains on a save reads the answer. `addPriority` resolves to the new
+ * resolves to whether the server saved it (a list: whether the PUT that carried it was stored,
+ * whatever a later list's did) and never rejects, so `void store.x()` is a complete call site; a
+ * caller that chains on a save reads the answer. `addPriority` resolves to the new
  * row's uid and rejects when it can't be saved. Saves reach the server in the order they were
  * made: punches and priorities go as whole lists with the list they were built on, which the
  * server merges with what it holds, so one PUT per list and day is out and only the newest
@@ -169,8 +170,8 @@ interface ListSave<T> {
   sent: number;
   /** The revision each of `ids` was saved at, once the PUT carrying it answered: `editPriorities` answers its own. */
   revisions: number[];
-  /** Whether the newest list was saved, once none is out or waiting. */
-  drained: Promise<boolean>;
+  /** Settles once none is out or waiting, saved or not. */
+  drained: Promise<void>;
 }
 type ListSaves = { [F in ListField]: Map<string, ListSave<Day[F]>> };
 
@@ -337,7 +338,9 @@ export function DayProvider({ children }: { children: ReactNode }) {
   // which goes out next. A failed save takes the waiting lists with it: they were built on the
   // one refused. `send` gets the list and its base and answers with the list as the server
   // stored it; `show` lays the list on the day's copy while it is on its way, as the server will
-  // merge it. Resolves to whether the newest list was saved; `whenIdle` waits for it too.
+  // merge it. Resolves, once none is out or waiting, to whether the PUT that carried this list was
+  // saved, whatever a later one's did, so a caller whose row the server holds (a timer start's
+  // new row) goes on. `whenIdle` waits for the lists too.
   //
   // The newest list goes with the base of the oldest list not sent yet, so it carries every
   // change made since. That needs every list that takes a waiting one's place to be built on
@@ -361,8 +364,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
         // None waits unsent behind the one out, so this list is the oldest not sent yet.
         if (waiting.sent === waiting.ids.length) waiting.base = base;
         waiting.list = list;
-        waiting.ids.push(id);
-        return waiting.drained;
+        const at = waiting.ids.push(id) - 1;
+        return waiting.drained.then(() => waiting.revisions.length > at);
       }
       const q = { list, base, ids: [id], sent: 0, revisions: [] as number[] };
       const drained = (async () => {
@@ -379,16 +382,15 @@ export function DayProvider({ children }: { children: ReactNode }) {
             };
             if (!(await persist(date, [...q.ids], run))) {
               update(date, (t) => settle(t, q.ids));
-              return false;
+              return;
             }
           }
-          return true;
         } finally {
           saves.delete(date);
         }
       })();
       saves.set(date, Object.assign(q, { drained }));
-      return whileUnsettled(drained);
+      return whileUnsettled(drained).then(() => q.revisions.length > 0);
     },
     [nextId, update, persist],
   );
