@@ -1,4 +1,5 @@
 import { useState, type FocusEvent, type KeyboardEvent } from 'react';
+import { boxNumber, committedNumber } from '../lib/numberBox';
 
 /** A length in minutes as the hours and minutes boxes show it. */
 const split = (minutes: number): [string, string] => [String(Math.floor(minutes / 60)), String(minutes % 60)];
@@ -34,9 +35,7 @@ export function DurationField({
   // into the past for a moment and fire it.
   const onBlur = (e: FocusEvent<HTMLSpanElement>) => {
     if (e.currentTarget.contains(e.relatedTarget)) return;
-    const hh = h.trim() === '' ? NaN : Number(h);
-    const mm = m.trim() === '' ? NaN : Number(m);
-    const total = Number.isFinite(hh) && Number.isFinite(mm) ? Math.max(min, Math.min(max, Math.round(hh * 60 + mm))) : minutes;
+    const total = committedNumber(boxNumber(h) * 60 + boxNumber(m), min, max, minutes);
     if (total !== minutes) onCommit(total);
     else setDraft(split(minutes));
   };

@@ -180,9 +180,9 @@ function weekdaysOf(mask: number): number[] {
 
 /** The user's recurring priorities not removed, in the order they were made, the order the offer lists them in. */
 function recurringJson(db: DB, userId: number): Recurring[] {
-  const rows = db
-    .prepare(`SELECT * FROM items WHERE user_id = ? AND weekdays IS NOT NULL AND archived_at IS NULL AND deleted_at IS NULL ORDER BY id`)
-    .all(userId) as (ItemRow & { weekdays: number })[];
+  const rows = db.prepare(`SELECT * FROM items WHERE user_id = ? AND weekdays IS NOT NULL AND archived_at IS NULL ORDER BY id`).all(userId) as (ItemRow & {
+    weekdays: number;
+  })[];
   return rows.map((r) => ({ uid: r.uid, title: r.title, categoryUid: r.category_uid, note: r.note, weekdays: weekdaysOf(r.weekdays) }));
 }
 

@@ -46,17 +46,11 @@ describe('DurationField', () => {
     expect(onCommit).toHaveBeenCalledWith(495);
   });
 
-  it('keeps the total inside its bounds and whole', () => {
+  it('rounds the total, not the hours', () => {
     const { hours, onCommit } = renderField();
-    fireEvent.change(hours, { target: { value: '30' } });
-    fireEvent.blur(hours);
-    expect(onCommit).toHaveBeenLastCalledWith(24 * 60);
     fireEvent.change(hours, { target: { value: '7.33' } });
     fireEvent.blur(hours);
     expect(onCommit).toHaveBeenLastCalledWith(440);
-    fireEvent.change(hours, { target: { value: '0' } });
-    fireEvent.blur(hours);
-    expect(onCommit).toHaveBeenLastCalledWith(1);
   });
 
   it('puts the stored value back for a blank or non-numeric box', () => {

@@ -1,6 +1,6 @@
 import { CELEBRATION_EMOJI, CELEBRATION_PHRASES } from './copy';
 
-export interface Celebration {
+interface Celebration {
   emoji: string;
   phrase: string;
 }
@@ -19,7 +19,7 @@ export function hash(n: number, salt: number): number {
 /** How long one burst lives; the parent drops it after this. */
 export const BURST_MS = 1800;
 
-export interface BurstPiece {
+interface BurstPiece {
   emoji: string;
   /** Sideways drift, -1..1 of the burst's reach. */
   dx: number;

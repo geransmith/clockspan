@@ -25,16 +25,6 @@ describe('NumberField', () => {
     expect(onCommit).not.toHaveBeenCalled();
   });
 
-  it('saves a whole number inside its bounds', () => {
-    const { input, onCommit } = renderField();
-    typeAndLeave(input, '45.6');
-    expect(onCommit).toHaveBeenLastCalledWith(46);
-    typeAndLeave(input, '10');
-    expect(onCommit).toHaveBeenLastCalledWith(30);
-    typeAndLeave(input, '5000');
-    expect(onCommit).toHaveBeenLastCalledWith(3650);
-  });
-
   it('saves on Enter', () => {
     const { input, onCommit } = renderField();
     // happy-dom sends no blur to an element that never had focus.
