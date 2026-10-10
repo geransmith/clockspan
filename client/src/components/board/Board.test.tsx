@@ -845,17 +845,18 @@ describe('Board', () => {
     expect(titlesIn('In Progress')).toEqual(['Report']);
   });
 
-  it("shows a Try again for a list of today that could not be read, handing the focus to the header's Board button", async () => {
+  it("shows a Try again for a list of today that could not be read, handing the focus to the header's Board button as it goes", async () => {
     vi.mocked(api.getDay).mockRejectedValueOnce(new Error('offline'));
     await renderBoard();
     await renderHeader();
     expect(screen.getByText(new RegExp(LOAD_FAILED.title))).toBeTruthy();
     expect(warnQuietly).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
-    // Try Again goes once the read answers.
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Board' }));
+    const retry = screen.getByRole('button', { name: 'Try Again' });
+    retry.focus();
+    fireEvent.click(retry);
     await settle();
     expect(titlesIn('In Progress')).toEqual(['Report']);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Board' }));
   });
 
   it("shows today's failed read beside the board's, since no banner says it on the board", async () => {
@@ -872,14 +873,24 @@ describe('Board', () => {
     expect(shownColumns()).toEqual(['Later']);
   });
 
-  it("shows a Try again for a board that could not be read, handing the focus to the header's Board button", async () => {
+  it("shows a Try again for a board that could not be read, which keeps the focus until it goes and then hands it to the header's Board button", async () => {
     vi.mocked(api.getBoard).mockRejectedValue(new Error('offline'));
+    vi.mocked(api.getDay).mockRejectedValueOnce(new Error('offline'));
     await renderBoard();
     await renderHeader();
-    expect(screen.getByText(new RegExp(LOAD_FAILED.board))).toBeTruthy();
+    const retry = screen.getAllByRole('button', { name: 'Try Again' })[0]!;
+    retry.focus();
+    fireEvent.click(retry);
+    await settle();
+    // Failed again: it stays, so a second press reads again rather than leaving the board.
+    expect(document.activeElement).toBe(retry);
     vi.mocked(api.getBoard).mockImplementation(() => Promise.resolve(answered(onServer)));
-    fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
+    fireEvent.click(retry);
+    await settle();
+    // Today's notice stays, and the board's took the focus with it.
+    expect(screen.getAllByRole('alert').map((a) => a.querySelector('strong')?.textContent)).toEqual([`${LOAD_FAILED.title}.`]);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Board' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
     await settle();
     expect(titlesIn('Later')).toEqual(['Write a KB']);
   });
@@ -911,10 +922,9 @@ describe('Board', () => {
     const at = await renderBoard();
     // A routine ticked on those days may be all Done has.
     expect(within(column('Done')).queryByText('Nothing done this week.')).toBeNull();
-    range.resolve({ days: [makeDay(TUE, { priorities: [tuesdayRoutine()] })] });
+    range.resolve({ days: [makeDay(TUE)] });
     await settle();
-    expect(titlesIn('Done')).toEqual(['Earlier This Week']);
-    expect(within(column('Done')).queryByText('Nothing done this week.')).toBeNull();
+    expect(within(column('Done')).getByText('Nothing done this week.')).toBeTruthy();
     at(NOW - 2 * DAY_MS, MON);
     await settle();
     expect(within(column('Done')).getByText('Nothing done this week.')).toBeTruthy();

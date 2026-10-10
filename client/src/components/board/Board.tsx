@@ -43,6 +43,7 @@ import { readStored, USER_KEYS, writeStored } from '../../lib/storage';
 import type { OpenLane, Priority } from '../../types';
 import { Burst } from '../Burst';
 import { Folded } from '../Folded';
+import { PassFocusOnLeave } from '../FocusTimer';
 import { Plus } from '../Icons';
 import { LoadFailed } from '../LoadFailed';
 import { BoardCardView, type ItemDrag } from './BoardCard';
@@ -72,6 +73,9 @@ type Notice =
    * done, and a new card can take its place), or a move refused before anything was sent.
    */
   | (Extract<Move, { kind: 'doneStays' | 'refuse' }> & { item: BoardItem });
+
+/** Where a failed read's Try Again leaves the focus as it goes: the header's Board button, which stays. */
+const toBoardButton = () => document.getElementById('header-board')?.focus();
 
 /** A board write sent and let go, its failure a banner. */
 function report(write: Promise<void>): void {
@@ -189,17 +193,21 @@ export const Board = memo(function Board({
   // N is Later's +, while that would open the box. A hook, so bound above the returns below.
   const laterKey = useShortcut('new', board && day && pick && !boardFull(board) ? () => openAdd('later') : null);
 
-  // Each failed read says so here, today's too, which no banner repeats on the board. Try Again goes
-  // once its read answers, so the focus moves first to the header's Board button, which stays.
-  const retry = (load: () => Promise<unknown>) => () => {
-    document.getElementById('header-board')?.focus();
-    void load();
-  };
+  // Each failed read says so here, today's too, which no banner repeats on the board. A Try Again
+  // stays until a read answers, its own or a refresh, so the focus moves only as it goes.
   if ((failed && !board) || (dayFailed && !day))
     return (
       <div className="board">
-        {failed && !board && <LoadFailed title={LOAD_FAILED.board} onRetry={retry(() => store.load())} />}
-        {dayFailed && !day && <LoadFailed title={LOAD_FAILED.title} onRetry={retry(() => dayStore.load(today))} />}
+        {failed && !board && (
+          <PassFocusOnLeave className="board-failed" onLeave={toBoardButton}>
+            <LoadFailed title={LOAD_FAILED.board} onRetry={() => void store.load()} />
+          </PassFocusOnLeave>
+        )}
+        {dayFailed && !day && (
+          <PassFocusOnLeave className="board-failed" onLeave={toBoardButton}>
+            <LoadFailed title={LOAD_FAILED.title} onRetry={() => void dayStore.load(today)} />
+          </PassFocusOnLeave>
+        )}
       </div>
     );
   if (!board || !day || !columns || !shown || !pick) return <div className="board loading" aria-busy="true" />;
