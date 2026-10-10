@@ -2592,9 +2592,6 @@ button.log-label:hover {
 .board-add-box > .category-wrap {
   align-items: center;
 }
-.board-col-sub {
-  margin-top: -6px;
-}
 .board-list {
   display: flex;
   flex-direction: column;
@@ -3164,8 +3161,7 @@ kbd {
     --hit-inset: -11px -4px -11px -10px;
   }
   /* 32 px square (30 inside the border) at the end of a column's head, in the column's 12 px
-     padding, 8 px above the box or the first card, whose title reaches 2 px into that gap (In
-     progress's sub line takes no taps): 44 px. */
+     padding, 8 px above the box or the first card, whose title reaches 2 px into that gap: 44 px. */
   .board-add {
     --hit-inset: -7px;
   }
