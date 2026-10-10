@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { UNTITLED_SESSION } from '../lib/copy';
@@ -7,7 +7,7 @@ import { formatCountdown } from '../lib/format';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { useDay } from '../hooks/useDay';
 import { useTimer } from '../hooks/useTimer';
-import { AppProviders, makeDay, makePriority, makeSession, makeSettings, setVisibility, settle, T0, TODAY } from '../test/hooks';
+import { AppProviders, endSession, makeDay, makePriority, makeSession, makeSettings, setVisibility, settle, T0, TODAY } from '../test/hooks';
 import type { Session } from '../types';
 import { RunningTimerBar } from './RunningTimerBar';
 
@@ -57,6 +57,26 @@ describe('RunningTimerBar', () => {
     // Two minutes past a 25-minute plan.
     await renderBar(makeSession({ startedAt: T0 - 22 * MINUTE_MS }));
     expect(screen.getByRole('timer', { name: 'Time over' }).textContent).toBe(formatCountdown(-120));
+  });
+
+  it('gives the focus to the brand once Finish takes the bar away', async () => {
+    const session = makeSession();
+    vi.mocked(api.getRunning).mockResolvedValue({ session });
+    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(session) });
+    render(
+      <AppProviders>
+        {/* The header's brand, which sits just under the bar. */}
+        <button className="brand">Go to today</button>
+        <Bar />
+      </AppProviders>,
+    );
+    await settle();
+    const finish = screen.getByRole('button', { name: 'Finish timer' });
+    act(() => finish.focus());
+    fireEvent.click(finish);
+    await settle();
+    expect(screen.queryByRole('timer')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Go to today' }));
   });
 
   describe('the label', () => {

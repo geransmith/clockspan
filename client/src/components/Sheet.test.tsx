@@ -181,10 +181,13 @@ describe('Sheet', () => {
     // Third in the layout, but first in the right column.
     expect(button('Move Focus timer up').disabled).toBe(true);
     expect(button('Move Top priorities down').disabled).toBe(true);
+    act(() => button('Move Day log up').focus());
     fireEvent.click(button('Move Day log up'));
     await settle();
     expect(savedLayout()).toEqual(['timeclock:left', 'priorities:left', 'log:right', 'timer:right', 'retro:right']);
     expect(columns()[1]).toEqual(['Day log', 'Focus timer', 'Retrospective']);
+    // At the top of its column the up arrow is off, so the down arrow has the focus.
+    expect(document.activeElement).toBe(button('Move Day log down'));
   });
 
   it('keeps a drop inside the column it was dragged in', async () => {

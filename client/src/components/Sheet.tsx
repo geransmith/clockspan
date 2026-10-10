@@ -94,8 +94,9 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
   };
   // Hide, Show and a move to the other column each unmount the button pressed (the card goes,
   // the chip goes, the card mounts again in its new column), so the focus goes to the button
-  // that undoes it: the card's Show chip, its Hide button, its arrow in the new place. A new
-  // object each press runs the effect again for the same card.
+  // that undoes it: the card's Show chip, its Hide button, its arrow in the new place. A step to
+  // either end of a column turns off the arrow pressed, which can't hold the focus, so its other
+  // arrow takes it. A new object each press runs the effect again for the same card.
   const [refocus, setRefocus] = useState<{ selector: string } | null>(null);
   const setVisible = (id: CardId, v: boolean) => {
     setRefocus({ selector: v ? `#card-${id} .card-tools [aria-label^="Hide"]` : `.hidden-strip [data-card="${id}"]` });
@@ -216,7 +217,12 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
       customize: customize
         ? {
             onHide: () => setVisible(l.id, false),
-            onMove: (dir) => reorder(i, i + dir, side),
+            onMove: (dir) => {
+              const to = i + dir;
+              if (to === 0 || to === entries.length - 1)
+                setRefocus({ selector: `#card-${l.id} [aria-label="Move ${CARD_TITLES[l.id]} ${dir < 0 ? 'down' : 'up'}"]` });
+              reorder(i, to, side);
+            },
             canUp: i > 0,
             canDown: i < entries.length - 1,
             swap: wide ? { to: OTHER_SIDE[l.side], onSwap: () => setSide(l.id, OTHER_SIDE[l.side]) } : undefined,

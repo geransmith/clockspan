@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useBecameTrue, useCelebration } from '../hooks/useCelebration';
 import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
@@ -101,9 +101,24 @@ export function Timeclock({
   // first Customize, a move to the other column, the sheet switching between one list and two)
   // ends the undo: the stored rows can't tell an Add from an Out typed later.
   const [added, setAdded] = useState<Punch[] | null>(null);
+  // A pair button that goes with its press hands the focus on once its target shows (the new list
+  // can come with the tap or after it): Remove to Add extra out / in, and an Add that reaches the
+  // row cap, which takes its own button away, to the new pair's Remove, which undoes it. Never to
+  // a time field, which would hold today's alarms.
+  const punchBox = useRef<HTMLDivElement>(null);
+  const refocus = useRef<string | null>(null);
+  useEffect(() => {
+    const el = refocus.current ? punchBox.current?.querySelector<HTMLElement>(refocus.current) : null;
+    if (!el) return;
+    refocus.current = null;
+    el.focus();
+  });
   const addPair = () => {
+    const next = addPunchPair(punches);
     setAdded(punches);
-    send(addPunchPair(punches));
+    // The new pair's Out is the old Clock out row.
+    if (next.length + 2 > MAX_PUNCHES) refocus.current = `.punch-remove[data-out="${punches.length - 1}"]`;
+    send(next);
   };
   // The pair being typed in keeps the block it had when the focus came in: a time on its way
   // (10:3 of 10:30) can sit on the other side of lunch, and a move remounts the fields.
@@ -114,6 +129,7 @@ export function Timeclock({
     // gesture.
     unlockAudio();
     setTyping(null);
+    refocus.current = '.punch-add';
     send(added && outPosition === added.length - 1 && samePunches(addPunchPair(added), punches) ? added : removePunchPair(punches, outPosition));
   };
 
@@ -208,6 +224,7 @@ export function Timeclock({
               </div>
               <button
                 className="btn btn-icon punch-remove"
+                data-out={pair.out.position}
                 onClick={() => removePair(pair.out.position)}
                 aria-label={`Remove ${out} / ${back}`}
                 title="Remove this out / in pair"
@@ -280,7 +297,7 @@ export function Timeclock({
         />
       )}
 
-      <div className="punches">
+      <div className="punches" ref={punchBox}>
         {fixedRow(0)}
         {pairBlock(before)}
         {lunchRows && fixedRow(1)}

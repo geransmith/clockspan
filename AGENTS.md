@@ -1300,6 +1300,15 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   mismatched confirmation throws too). A store write that shows at once (a lane's box, a card's
   Move to), or a board item's Start timer, whose editor closes, is not a form send: it goes
   through its store, and a failure is the banner.
+- A press that takes its own control off the page (its row or card goes, another control shows
+  in its place, or the arrow at a column's end turns off) moves the focus itself: to the control
+  in its place or the one that undoes the press, else the next control of its kind (the one
+  before it at the end). It falls to the page only where none is left (the last banner, the last
+  day log row). Where that control shows only once the server answers, a flag set in the tap is
+  taken by the control as it mounts (`FocusTimer`'s `takeFocus`); where the pressed control goes
+  later than the answer (End break's row, once the one-second clock reaches the end it stamped),
+  the flag is set as its block leaves with the focus inside (`PassFocusOnLeave`). A punch time
+  field never takes it, since that would hold today's alarms.
 - Comments explain *why* (browser quirks, math), not what.
 - No new dependency (a server one or a client library the bundle carries) without stating the
   reason in the PR body, which becomes the squash commit's message on `main`.

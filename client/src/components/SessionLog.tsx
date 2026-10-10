@@ -96,8 +96,14 @@ function DeleteButton({ label, question, disabled, onDelete }: { label: string; 
   return (
     <button
       className="btn btn-icon log-delete"
-      onClick={() => {
-        if (window.confirm(question)) onDelete();
+      onClick={(e) => {
+        if (!window.confirm(question)) return;
+        // The row goes with this button: the next row's delete takes the focus, else the one
+        // before it, past a running row's, which can't hold it.
+        const all = [...e.currentTarget.closest('ul')!.querySelectorAll<HTMLButtonElement>('.log-delete')];
+        const at = all.indexOf(e.currentTarget);
+        [...all.slice(at + 1), ...all.slice(0, at).reverse()].find((b) => !b.disabled)?.focus();
+        onDelete();
       }}
       aria-label={label}
       title="Delete"

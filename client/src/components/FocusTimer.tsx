@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useBreak } from '../hooks/useBreak';
 import { useDayStore } from '../hooks/useDay';
 import { useSettings } from '../hooks/useSettings';
@@ -51,8 +51,27 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
   // R is the Break button, so a break it starts holds the start buttons as a tap does.
   const startBreak = () => run(() => breakTimer.start(breakTimer.next.minutes));
   const breakKey = useShortcut('rest', !timer.running && isToday && breakTimer.endsAt == null && !held ? startBreak : null);
+  // A control the answer takes away hands the focus to the control that mounts in its place: a
+  // start or Break sets the flag in its tap, and the running card and the break's row as they
+  // leave with the focus inside (`PassFocusOnLeave`), since an End break's row goes only once the
+  // one-second clock reaches the end it stamped. A stable ref callback runs only on mount, where
+  // an inline one would run on every render and take the focus back. It acts only while the focus
+  // is on the page's body, so a focus moved meanwhile stays put, and a hand-off nothing took (a
+  // start that failed) is dropped once nothing is out.
+  const handOff = useRef(false);
+  const passFocus = useCallback(() => {
+    handOff.current = true;
+  }, []);
+  const takeFocus = useCallback((el: HTMLElement | null) => {
+    if (!el || !handOff.current || document.activeElement !== document.body) return;
+    el.focus();
+    if (document.activeElement === el) handOff.current = false;
+  }, []);
+  useEffect(() => {
+    if (!held) handOff.current = false;
+  });
 
-  if (timer.running) return <Running session={timer.running} />;
+  if (timer.running) return <Running session={timer.running} takeFocus={takeFocus} onLeave={passFocus} />;
 
   // Open rows only: a done priority isn't something to start a session for.
   const open = priorities.filter((p) => isTaskRow(p) && !p.done);
@@ -76,6 +95,8 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
   };
 
   const start = (minutes: number) => {
+    // Set before the send: the running card can mount before this continues.
+    passFocus();
     run(async () => {
       // The new row's save goes in as the start's uid, so the timer counts the start as out from the tap.
       const uid =
@@ -110,6 +131,7 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
         maxLength={LIMITS.sessionLabel}
         disabled={!isToday}
         aria-label="Session label"
+        ref={takeFocus}
       />
       {isToday && open.length > 0 && (
         <div className="timer-priorities">
@@ -140,20 +162,29 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
         </div>
       )}
       {breakTimer.endsAt != null && (
-        <div className="timer-break">
+        <PassFocusOnLeave className="timer-break" onLeave={passFocus}>
           <span className="timer-break-text">
             <span>{BREAK.running(formatTime(breakTimer.endsAt))}</span>
             {/* A timer, like the focus ring's: a live region would read it out every second. */}
             <strong role="timer">{formatCountdown(breakTimer.remainingSeconds)}</strong>
           </span>
-          <button className="btn btn-ghost" onClick={breakTimer.end} disabled={held}>
+          <button className="btn btn-ghost" onClick={breakTimer.end} disabled={held} ref={takeFocus}>
             {BREAK.end}
           </button>
-        </div>
+        </PassFocusOnLeave>
       )}
       <TimerLengths onStart={start} disabled={!isToday || held} />
       {isToday && breakTimer.endsAt == null && (
-        <button className="btn btn-ghost timer-break-start" onClick={startBreak} disabled={held} aria-keyshortcuts={breakKey}>
+        <button
+          className="btn btn-ghost timer-break-start"
+          onClick={() => {
+            passFocus();
+            startBreak();
+          }}
+          disabled={held}
+          aria-keyshortcuts={breakKey}
+          ref={takeFocus}
+        >
           {BREAK.start(breakTimer.next.minutes, breakTimer.next.long)}
         </button>
       )}
@@ -163,7 +194,16 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
   );
 }
 
-function Running({ session }: { session: Session }) {
+function Running({
+  session,
+  takeFocus,
+  onLeave,
+}: {
+  session: Session;
+  takeFocus: (el: HTMLElement | null) => void;
+  /** The card is leaving with the focus in it (Finish, Cancel, an end elsewhere): the label box takes it. */
+  onLeave: () => void;
+}) {
   const { name, countdownSeconds, progress, paused, due } = useTimer();
   const r = 54;
   const circ = 2 * Math.PI * r;
@@ -171,7 +211,7 @@ function Running({ session }: { session: Session }) {
   const subline = due ? TIMER_DUE.title : paused ? 'Paused' : `of ${formatDuration(session.plannedSeconds)}`;
 
   return (
-    <div className={`timer--running${paused ? ' is-paused' : ''}${due ? ' is-due' : ''}`}>
+    <PassFocusOnLeave className={`timer--running${paused ? ' is-paused' : ''}${due ? ' is-due' : ''}`} onLeave={onLeave}>
       <div className="ring-wrap">
         <svg className="ring" viewBox="0 0 120 120" aria-hidden="true">
           <circle className="ring-track" cx="60" cy="60" r={r} />
@@ -187,7 +227,24 @@ function Running({ session }: { session: Session }) {
       <div className="timer-running-label">
         <SessionLabel label={name} />
       </div>
-      <TimerControls />
+      <TimerControls takeFocus={takeFocus} />
+    </PassFocusOnLeave>
+  );
+}
+
+/** A block that calls `onLeave` as it leaves the page with the focus inside it. */
+function PassFocusOnLeave({ className, onLeave, children }: { className: string; onLeave: () => void; children: ReactNode }) {
+  const root = useRef<HTMLDivElement>(null);
+  // A layout cleanup runs while the block is still in the page, so it can tell where the focus was.
+  useLayoutEffect(() => {
+    const el = root.current!;
+    return () => {
+      if (el.contains(document.activeElement)) onLeave();
+    };
+  }, [onLeave]);
+  return (
+    <div ref={root} className={className}>
+      {children}
     </div>
   );
 }
