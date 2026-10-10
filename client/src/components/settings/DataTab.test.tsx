@@ -77,14 +77,16 @@ describe('DataTab', () => {
   });
 
   it('deletes nothing when the confirm is answered no', async () => {
-    vi.stubGlobal('confirm', () => false);
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal('confirm', confirm);
     const { button } = await renderTab();
     fireEvent.click(button);
     await settle();
+    expect(confirm).toHaveBeenCalled();
     expect(api.pruneDays).not.toHaveBeenCalled();
   });
 
-  it('puts the focus on the date once a delete leaves Delete off, and leaves a focus taken elsewhere', async () => {
+  it('puts the focus on the date when Delete held it through a delete, and leaves a focus taken elsewhere', async () => {
     vi.mocked(api.pruneDays).mockResolvedValue(answered({ deleted: 2 }));
     vi.stubGlobal('confirm', () => true);
     const { date, button } = await renderTab();

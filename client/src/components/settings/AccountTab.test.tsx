@@ -53,9 +53,11 @@ describe('AccountTab', () => {
 
   it('deletes no user when the confirm is answered no', async () => {
     vi.mocked(api.listUsers).mockResolvedValue({ users: [admin, sam] });
-    vi.stubGlobal('confirm', () => false);
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal('confirm', confirm);
     await renderTab();
     await deleteSam();
+    expect(confirm).toHaveBeenCalled();
     expect(api.deleteUser).not.toHaveBeenCalled();
   });
 
