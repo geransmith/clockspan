@@ -78,7 +78,6 @@ export const TEST_SETTINGS: Settings = {
     dayDone: 'yay',
     weekDone: 'tada',
     priorityDone: 'none',
-    planDone: 'none',
   },
   celebrations: true,
   stickers: false,

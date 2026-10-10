@@ -36,8 +36,8 @@ import { boardCollision, boardKeyboardCoordinates } from './dnd';
 /** The dragged item's place in its list while the copy under the pointer moves. */
 const DRAGGED_OPACITY = 0.4;
 
-/** Planned items (their day's list decides them) and recurring rows (they stay on today's list) have no grip. */
-export const canDrag = (item: BoardItem) => !item.planned && !item.recurring;
+/** Recurring rows have no grip: they stay on today's list. */
+export const canDrag = (item: BoardItem) => !item.recurring;
 
 /** The board's focus as a drag ends: `clear` drops one an earlier move left, and `afterKeyboard` sends it to the item's grip. */
 interface DragFocus {

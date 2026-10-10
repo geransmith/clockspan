@@ -74,7 +74,7 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
 
   // Drag and drop loads with the first Customize, and the sheet stays on it after that:
   // swapping lists remounts every card, which drops what is typed but not saved (a timer
-  // label, an open planner), so that happens once at most.
+  // label), so that happens once at most.
   const [sortable, setSortable] = useState(customize);
   if (customize && !sortable) setSortable(true);
 
@@ -190,13 +190,10 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
         return (
           <Retro
             key={date}
-            date={date}
-            today={today}
             priorities={day.priorities}
             sessions={day.sessions}
             note={day.retroNote}
             reviewedAt={day.retroAt}
-            pick={pick}
             onChange={(patch) => store.setRetro(date, patch)}
           />
         );

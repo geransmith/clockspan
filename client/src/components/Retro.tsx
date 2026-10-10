@@ -1,6 +1,5 @@
 import type { RetroPatch } from '../api';
 import { useDebouncedDraft } from '../hooks/useDebouncedDraft';
-import type { CategoryPick } from '../lib/board';
 import { RETRO_PROMPT } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { counted, formatDuration } from '../lib/format';
@@ -8,18 +7,13 @@ import { reviewDay, sessionName } from '../lib/retro';
 import { LIMITS } from '../../../shared/api.js';
 import type { Priority, Session } from '../types';
 import { Check } from './Icons';
-import { PlanNext } from './PlanNext';
 import { SessionLabel } from './SessionLabel';
 
 interface Props {
-  date: string;
-  today: string;
   priorities: Priority[];
   sessions: Session[];
   note: string;
   reviewedAt: number | null;
-  /** The category chip's data, for Plan tomorrow's rows typed in. Null (the board off) shows none. */
-  pick: CategoryPick | null;
   onChange: (patch: RetroPatch) => Promise<boolean>;
 }
 
@@ -30,7 +24,7 @@ interface Props {
  * "Mark reviewed" ticks the day once the note has saved. Keyed by date in the sheet, so a
  * new day mounts with its own note.
  */
-export function Retro({ date, today, priorities, sessions, note, reviewedAt, pick, onChange }: Props) {
+export function Retro({ priorities, sessions, note, reviewedAt, onChange }: Props) {
   const { formatTime } = useTimeFormat();
   const review = reviewDay(priorities, sessions);
   // A note typed back to `note` is sent too: `note` can hold a save still out, and a box let go
@@ -155,9 +149,6 @@ export function Retro({ date, today, priorities, sessions, note, reviewedAt, pic
           )}
         </button>
       </div>
-
-      {/* Only today's card offers a plan, since the next day is ahead. */}
-      {date === today && <PlanNext today={today} priorities={priorities} pick={pick} />}
     </div>
   );
 }

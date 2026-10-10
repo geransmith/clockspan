@@ -136,11 +136,10 @@ beforeEach(() => {
 });
 
 describe('Board', () => {
-  it("shows Later, Next with the planned task, today's open rows in progress and this week in Done", async () => {
+  it("shows Later, Next, today's open rows in progress and this week in Done", async () => {
     await renderBoard();
     expect(titlesIn('Later')).toEqual(['Write a KB']);
     expect(titlesIn('Next')).toEqual(['Follow up', 'Plan B']);
-    expect(within(column('Next')).getByText('Planned for tomorrow')).toBeTruthy();
     expect(titlesIn('In progress')).toEqual(['Report']);
     expect(titlesIn('Done')).toEqual(['Email', 'Earlier this week · 2']);
     fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
@@ -514,13 +513,12 @@ describe('Board', () => {
     expect(metas[0]!.closest('.board-card')?.querySelector('.board-card-title')?.textContent).toBe('Monitor the queue');
   });
 
-  it('renames a planned task by a PATCH and deletes it everywhere with a confirm that counts its days, offering no Move to', async () => {
+  it("treats a task a later day's list holds as any card: Move to, a rename by a PATCH, and Delete everywhere with a confirm that counts its days", async () => {
     const confirm = vi.fn(() => true);
     vi.stubGlobal('confirm', confirm);
     await renderBoard();
     openEditor('Plan B');
-    expect(screen.queryByRole('group', { name: 'Move to' })).toBeNull();
-    expect(editorLines('Next')).toEqual([BOARD.plannedSheet]);
+    expect(moveOptions()).toEqual(['Later', 'In progress', 'Done']);
     const title = screen.getByRole('textbox', { name: 'Title' });
     fireEvent.change(title, { target: { value: 'Plan C' } });
     fireEvent.blur(title);
@@ -642,17 +640,15 @@ describe('Board', () => {
     expect(screen.getByRole('button', { name: 'Category for Report: none' })).toBeTruthy();
   });
 
-  it("refuses to park today's row whose task a later day holds in Later, and parks it in Next", async () => {
+  it("parks today's row whose task a later day's list holds in Later, as any other", async () => {
     onServer = makeBoard(...onServer.cards.filter((c) => c.uid !== REPORT), makeCard(REPORT, 'Report', { lane: null, listDate: THU, listed: 2 }));
     await renderBoard();
     openEditor('Report');
     moveTo('later');
-    expect(notice().textContent).toContain(BOARD.planned('Report', 'tomorrow'));
-    fireEvent.click(screen.getByRole('button', { name: BOARD.close }));
-    expect(notice().textContent).toBe('');
-    moveTo('next');
     await settle();
-    expect(api.editItem).toHaveBeenCalledExactlyOnceWith(REPORT, { lane: 'next', before: null });
+    expect(api.editItem).toHaveBeenCalledExactlyOnceWith(REPORT, { lane: 'later', before: 'later0000001' });
+    expect(putLists()).toEqual([{ date: WED, texts: ['', 'Email', ''] }]);
+    expect(titlesIn('Later')).toEqual(['Report', 'Write a KB']);
   });
 
   it('renames a task off today or a row of today from the editor, and Escape puts the title back', async () => {
@@ -769,7 +765,7 @@ describe('adding from a column', () => {
       ['Call the vendor', null, 'next', null],
     ]);
     expect(titlesIn('Later')).toEqual(['Look into the export', 'Write a KB']);
-    // Plan B sits in Next at its place: planned for tomorrow, not moved.
+    // Plan B sits in Next at its place, not moved.
     expect(titlesIn('Next')).toEqual(['Follow up', 'Plan B', 'Call the vendor']);
     // Later's box, left with text, stays open.
     expect(field('New card for Later').value).toBe('Half typed');
@@ -1251,7 +1247,7 @@ describe('starting the focus timer', () => {
     expect(warnSaveFailed).not.toHaveBeenCalled();
   });
 
-  it("offers Start on today's recurring row too, and none in Done, on a planned task, or on an item whose move is on its way", async () => {
+  it("offers Start on today's recurring row and a card a later day's list holds too, and none in Done or on an item whose move is on its way", async () => {
     lists[WED] = [row(1, 'Report'), row(2, 'Email', { done: true }), row(3, 'Monitor the queue', { uid: 'rec000000001', recurring: true })];
     const placed = deferredAnswer<BoardData>();
     vi.mocked(api.editItem).mockReturnValueOnce(placed.promise);
@@ -1260,8 +1256,10 @@ describe('starting the focus timer', () => {
     expect(startGroup()).not.toBeNull();
     openEditor('Write a KB');
     expect(startGroup()).not.toBeNull();
+    openEditor('Plan B');
+    expect(startGroup()).not.toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
-    for (const title of ['Email', 'Shipped', 'Tuesday row', 'Plan B']) {
+    for (const title of ['Email', 'Shipped', 'Tuesday row']) {
       openEditor(title);
       expect(startGroup()).toBeNull();
     }
@@ -1530,11 +1528,11 @@ describe('dragging', () => {
     await press('Escape');
   });
 
-  it('gives no grip to a planned task or a recurring row, which stay where their lists put them', async () => {
+  it("gives no grip to a recurring row, which stays on today's list", async () => {
     lists[WED] = [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true }), row(2, 'Report')];
     await renderBoard();
-    expect(screen.queryByRole('button', { name: 'Drag to move Plan B' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Drag to move Monitor the queue' })).toBeNull();
+    expect(grip('Plan B')).toBeTruthy();
     expect(grip('Follow up')).toBeTruthy();
     expect(grip('Report')).toBeTruthy();
   });
@@ -1572,8 +1570,8 @@ describe('categories', () => {
     expect(meta('Later').map((m) => m.textContent)).toEqual(['Tickets']);
     expect(meta('Later')[0]!.querySelector('.cat-dot')?.getAttribute('data-color')).toBe('blue');
     expect(meta('In progress').map((m) => m.textContent)).toEqual(['Old work']);
-    // A card with none has no meta line, and a planned one says when.
-    expect(meta('Next').map((m) => m.textContent)).toEqual(['Planned for tomorrow']);
+    // A card with none has no meta line.
+    expect(meta('Next')).toEqual([]);
   });
 
   it("puts a recurring row's mark after its category", async () => {
@@ -1679,7 +1677,7 @@ describe('categories', () => {
     expect(screen.getByRole('button', { name: 'Category for Write a KB: Admin' })).toBe(document.activeElement);
   });
 
-  it("sets a planned task's category and an earlier day's recurring row's by a PATCH, and offers none once that recurring priority is removed", async () => {
+  it("sets a card's category and an earlier day's recurring row's by a PATCH, and offers none once that recurring priority is removed", async () => {
     onServer = { ...onServer, recurring: [makeRecurring('rec000000009', 'Tuesday row')] };
     await renderBoard();
     openEditor('Plan B');

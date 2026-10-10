@@ -547,8 +547,7 @@ button {
 @media (hover: hover) {
   .priority-row:not(:hover, :focus-within) .category-chip--empty,
   .priority-row:not(:hover, :focus-within) .note-toggle--empty[aria-expanded='false'],
-  .board-card:not(:hover, :focus-within) .note-toggle--empty[aria-expanded='false'],
-  .plan-next-extra:not(:hover, :focus-within) .category-chip--empty {
+  .board-card:not(:hover, :focus-within) .note-toggle--empty[aria-expanded='false'] {
     opacity: 0;
   }
 }
@@ -727,9 +726,8 @@ button {
   overflow-wrap: anywhere;
 }
 /* With the board on, the same notice holds the leftovers and the routines due today, each a box
-   to tick: a title that wraps keeps its box at the top, as in the planner. */
-.today-offer .inline-check,
-.plan-next-list .inline-check {
+   to tick: a title that wraps keeps its box at the top. */
+.today-offer .inline-check {
   align-items: flex-start;
   min-height: 32px;
 }
@@ -2075,47 +2073,6 @@ button.log-label:hover {
   align-items: center;
   gap: 10px;
 }
-.plan-next {
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-.plan-next-foot {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-}
-.plan-next-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.plan-next-editor .section-heading {
-  flex-wrap: wrap;
-  row-gap: 2px;
-}
-.plan-next-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  overflow-wrap: anywhere;
-}
-.plan-next-extra {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  color: var(--text-2);
-}
-.plan-next-extra svg {
-  width: 16px;
-  height: 16px;
-}
-/* The text takes the row, so each row's category chip sits at its end. */
-.plan-next-extra-text {
-  flex: 1;
-  min-width: 0;
-}
 @media (min-width: 640px) {
   .retro-row {
     grid-template-columns: auto 1fr auto;
@@ -3160,8 +3117,8 @@ kbd {
     --hit-inset: -5px -4px;
   }
   /* 28 px, centred in a row 44 px tall (beside a board column's field, or under it on a 44 px
-     line of its own in a narrow column; from 640 px, beside a priority's field; at the end of a
-     planner's row; on a row of its own in the board's editor and a log row's edit), 6 px or more
+     line of its own in a narrow column; from 640 px, beside a priority's field; on a row of its
+     own in the board's editor and a log row's edit), 6 px or more
      from the control beside it: 44 px tall, reaching half that gap at most. Beside the timer's
      Also add, on a 32 px line 12 px from the next, it reaches 6 px past it, half that gap too.
      Under a priority's field it reaches 4 px up and 12 px down (further on). */
@@ -3251,14 +3208,11 @@ kbd {
   }
   /* A check with its words, and a list row, draw nothing around themselves: on a touch screen
      they take a whole 44 px instead, which only adds air. The Review rows touch each other, so
-     an ::after has nowhere to go; the planner's rows, the morning notice's and "When reached" are
-     too close to theirs. The planner's typed rows, the category chip's row in a card's editor and
-     in a log row's edit, its cell beside or under a priority's field, its line in a board
-     column's box, and a category's swatches grow to 44 px so the hit areas of the controls inside
-     them fit. */
-  .plan-next-list .inline-check,
+     an ::after has nowhere to go; the morning notice's rows and "When reached" are too close to
+     theirs. The category chip's row in a card's editor and in a log row's edit, its cell beside
+     or under a priority's field, its line in a board column's box, and a category's swatches grow
+     to 44 px so the hit areas of the controls inside them fit. */
   .today-offer .inline-check,
-  .plan-next-extra,
   .alarm-on-due,
   .review-row,
   .category-option,

@@ -78,7 +78,7 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
   const linkedStillOpen = linked != null && open.some((p) => p.uid === linked);
   const trimmed = label.trim();
   // An open row whose text was typed (a chip unlinked, its row's name typed) is on the plan
-  // already, as Plan tomorrow judges it (`sameItem`): the session starts on it, as its chip would.
+  // already (`sameText`): the session starts on it, as its chip would.
   const named = open.find((p) => sameText(p.text) === sameText(trimmed));
   // New work typed in, not tied to a row: offer to put it on the plan as well, while the plan
   // has a row for it. On a full list the tick would only earn an error at Start.

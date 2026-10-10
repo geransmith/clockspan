@@ -82,9 +82,9 @@ export type OpenLane = (typeof OPEN_LANES)[number];
 
 /**
  * A one-off task as the board sees it. Where it shows is worked out from its latest entry
- * (`listDate`, `listDone`) and its lane: on today's list it is that row, a later day's list plans
- * it, a ticked latest entry is Done, and a task with no lane whose latest entry was left open
- * shows in Next for `LOOKBACK_DAYS`.
+ * (`listDate`, `listDone`) and its lane: on today's list it is that row, a ticked latest entry is
+ * Done, and a task with no lane whose latest entry was left open shows in Next for
+ * `LOOKBACK_DAYS`.
  */
 export interface BoardCard {
   uid: string;
@@ -97,7 +97,7 @@ export interface BoardCard {
   /** 1..n within its lane; 0 with none. */
   position: number;
   createdAt: number;
-  /** The latest day whose list holds it; null with none. After the client's today, the task is planned. */
+  /** The latest day whose list holds it; null with none. */
   listDate: string | null;
   /** That day's tick: the task is done. */
   listDone: boolean;

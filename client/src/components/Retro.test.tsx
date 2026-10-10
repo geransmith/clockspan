@@ -3,23 +3,21 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
-import { PLAN_NEXT, RETRO_PROMPT } from '../lib/copy';
-import { answered, completedSession, deferred, makePriority, makeSettings, settle, T0, TODAY } from '../test/hooks';
+import { RETRO_PROMPT } from '../lib/copy';
+import { answered, completedSession, deferred, makePriority, makeSettings, settle, T0 } from '../test/hooks';
 import type { Priority, Session } from '../types';
 import { Retro } from './Retro';
 
 vi.mock('../api');
 vi.mock('../lib/alerts');
 
-// A past day, so the "Plan tomorrow" part (today's card only) stays out of these tests.
-const DATE = '2026-09-25';
 const PRIORITIES: Priority[] = [makePriority(1, 'Report', { uid: 'abcdef123456' })];
 
-async function renderCard(note = '', reviewedAt: number | null = null, priorities = PRIORITIES, date = DATE, sessions: Session[] = []) {
+async function renderCard(note = '', reviewedAt: number | null = null, priorities = PRIORITIES, sessions: Session[] = []) {
   const onChange = vi.fn<(patch: api.RetroPatch) => Promise<boolean>>(() => Promise.resolve(true));
   const card = (n: string, r: number | null) => (
     <SettingsProvider>
-      <Retro date={date} today={TODAY} priorities={priorities} sessions={sessions} note={n} reviewedAt={r} pick={null} onChange={onChange} />
+      <Retro priorities={priorities} sessions={sessions} note={n} reviewedAt={r} onChange={onChange} />
     </SettingsProvider>
   );
   const view = render(card(note, reviewedAt));
@@ -40,14 +38,6 @@ beforeEach(() => {
 });
 
 describe('Retro', () => {
-  it("offers the next day's plan on today's card only", async () => {
-    await renderCard();
-    expect(screen.queryByRole('button', { name: PLAN_NEXT.open('tomorrow') })).toBeNull();
-    cleanup();
-    await renderCard('', null, PRIORITIES, TODAY);
-    expect(screen.getByRole('button', { name: PLAN_NEXT.open('tomorrow') })).toBeTruthy();
-  });
-
   it("counts the routines among the day's rows and on their own, and leaves them out of a day with none", async () => {
     await renderCard('', null, [
       makePriority(1, 'Report', { done: true }),
@@ -67,7 +57,7 @@ describe('Retro', () => {
       completedSession(2, T0 + 1, 600, { label: 'Started as this', priorityUid: 'leftday00001', title: 'Left the day' }),
       completedSession(3, T0 + 2, 600, { priorityUid: 'abcdef123456', title: 'Report' }),
     ];
-    await renderCard('', null, PRIORITIES, DATE, sessions);
+    await renderCard('', null, PRIORITIES, sessions);
     const section = screen.getByText('Not on the plan').closest('section')!;
     expect([...section.querySelectorAll('.retro-text')].map((el) => el.firstChild!.textContent)).toEqual(['Inbox', 'Left the day']);
   });

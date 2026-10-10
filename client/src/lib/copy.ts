@@ -274,17 +274,6 @@ export const CHECK_PUNCHES = 'Check punches';
 /** A session logged without a label, wherever sessions are listed. */
 export const UNTITLED_SESSION = 'Untitled session';
 
-/** The retrospective's planner for the next work day (`name` is "tomorrow" or a date). */
-export const PLAN_NEXT = {
-  open: (name: string) => `Plan ${name}`,
-  title: (name: string) => `Plan for ${name}`,
-  already: (n: number) => `${n} already on the list`,
-  placeholder: 'Something else for the list',
-  save: (name: string) => `Add to ${name}`,
-  done: (n: number, name: string) => `${counted(n, 'row')} added for ${name}.`,
-  nothing: 'Nothing new to add.',
-} as const;
-
 /** Placeholder for the day's retrospective note. */
 export const RETRO_PROMPT = 'What got in the way? What went to plan?';
 
@@ -313,23 +302,20 @@ export const ADD_PRIORITY_FAILED = {
 
 /**
  * The board's refusals: a banner when the store turns a move down (`full`), and the board
- * notice's lines for a move refused before anything is sent (`recurringStays`, `planned`,
- * `removed`), with `close` its button. `full` is also the line under Later's and Next's + while
- * they are shut at the cap.
+ * notice's lines for a move refused before anything is sent (`recurringStays`, `removed`), with
+ * `close` its button. `full` is also the line under Later's and Next's + while they are shut at
+ * the cap.
  * `nameTaken` is Settings → Board's line under a category named like another in use. `doneOn` is
  * the editor's line on a task ticked on an earlier day, which the board doesn't untick; `when`
- * is `dayName`'s in-sentence word or date. `plannedSheet` is the editor's line on a task a later
- * day's list holds, in place of Move to.
+ * is `dayName`'s in-sentence word or date.
  */
 export const BOARD = {
   full: `Later and Next hold ${BOARD_LIMITS.openCards} cards at most.`,
   recurringStays: (title: string) => `${title} stays on today's list. Use Remove from today.`,
-  planned: (title: string, when: string) => `${title} is planned for ${when}. Tick it or take it off on that day's sheet.`,
   removed: (title: string) => `${title} was removed from the recurring priorities.`,
   close: 'Close',
   nameTaken: 'There is already a category with that name.',
   doneOn: (when: string) => `Done ${when}. Untick it on that day's sheet.`,
-  plannedSheet: "Tick it or take it off on that day's sheet.",
 } as const;
 
 /**

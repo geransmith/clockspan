@@ -944,7 +944,7 @@ describe('a priorities save that puts a task on a list or takes one off', () => 
     for (const d of held) await act(() => result.current.load(d.date));
     const read = () => vi.mocked(api.getDay).mock.calls.map(([d]) => d);
     vi.mocked(api.getDay).mockClear();
-    // Plan tomorrow puts Report on tomorrow's list: today's copy has it on one day.
+    // A save puts Report on tomorrow's list: today's copy has it on one day.
     await act(() => result.current.setPriorities(TOMORROW, [report], []));
     await settle();
     expect(read()).toEqual([TODAY]);
