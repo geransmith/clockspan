@@ -68,6 +68,25 @@ describe('AccountTab', () => {
     expect(api.deleteUser).toHaveBeenCalledExactlyOnceWith(sam.id);
   });
 
+  it("puts the focus in the Username box once a deleted user's Delete is disabled and gone, and leaves a focus taken elsewhere", async () => {
+    const kim = makeUser({ id: 3, name: 'kim', username: 'kim' });
+    vi.mocked(api.listUsers)
+      .mockResolvedValueOnce({ users: [admin, sam, kim] })
+      .mockResolvedValueOnce({ users: [admin, kim] })
+      .mockResolvedValueOnce({ users: [admin] });
+    vi.mocked(api.deleteUser).mockResolvedValue({ ok: true });
+    await renderTab();
+    screen.getByRole('button', { name: 'Delete sam' }).focus();
+    await deleteSam();
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Username' }));
+    const current = screen.getByLabelText('Current password');
+    current.focus();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete kim' }));
+    await settle();
+    expect(screen.queryByRole('button', { name: 'Delete kim' })).toBeNull();
+    expect(document.activeElement).toBe(current);
+  });
+
   it('says the password changed in a live region that was there before the text', async () => {
     vi.mocked(api.listUsers).mockResolvedValue({ users: [admin] });
     vi.mocked(api.changePassword).mockResolvedValue({ ok: true });

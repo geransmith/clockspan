@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes } from 'react';
+import type { ComponentProps } from 'react';
 import { USERNAME } from '../../../shared/api.js';
 
 /**
@@ -6,7 +6,7 @@ import { USERNAME } from '../../../shared/api.js';
  * what the server would, with the characters it takes in the tooltip. The setup page and
  * Settings → Account both use it.
  */
-export function UsernameInput(props: Omit<InputHTMLAttributes<HTMLInputElement>, 'minLength' | 'maxLength' | 'pattern' | 'title' | 'required'>) {
+export function UsernameInput(props: Omit<ComponentProps<'input'>, 'minLength' | 'maxLength' | 'pattern' | 'title' | 'required'>) {
   return (
     <input
       className="input"

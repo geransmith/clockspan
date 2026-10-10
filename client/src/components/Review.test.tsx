@@ -107,7 +107,7 @@ beforeEach(() => {
 });
 
 describe('Review', () => {
-  it('shows a failed load with Try again, which loads the review', async () => {
+  it('shows a failed load with Try again, which loads the review and hands the focus to Previous week', async () => {
     vi.mocked(api.getRange).mockRejectedValueOnce(new Error('Request failed (502)'));
     await review({ kind: 'week', from: '2026-09-28' });
     expect(screen.getByRole('alert').textContent).toContain(LOAD_FAILED.range);
@@ -116,6 +116,7 @@ describe('Review', () => {
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByText('Nothing recorded.')).toBeTruthy();
     expect(api.getRange).toHaveBeenCalledTimes(2);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Previous week' }));
   });
 
   it('turns a past week into the month it ends in', async () => {

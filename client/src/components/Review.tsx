@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { useBoardState } from '../hooks/useBoard';
 import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
@@ -37,6 +37,12 @@ interface Props {
 export function Review({ today, now, period: { kind, from }, onPeriod, onOpen }: Props) {
   const period = periodRange(kind, from, 0);
   const { days, failed, retry } = useRange(period.from, period.to);
+  // Try again goes as the loading block takes its place: ◀ takes the focus.
+  const prevRef = useRef<HTMLButtonElement>(null);
+  const tryAgain = () => {
+    prevRef.current?.focus();
+    retry();
+  };
 
   // Another kind is taken around the period on screen, by its last day or today if that comes
   // first, so a past week becomes its month and the current period stays the current one.
@@ -54,9 +60,9 @@ export function Review({ today, now, period: { kind, from }, onPeriod, onOpen }:
           ))}
         </span>
       </header>
-      <PeriodNav kind={kind} label={period.label} from={period.from} today={today} onFrom={(f) => onPeriod({ kind, from: f })} />
+      <PeriodNav kind={kind} label={period.label} from={period.from} today={today} onFrom={(f) => onPeriod({ kind, from: f })} prevRef={prevRef} />
 
-      {failed ? <LoadFailed title={LOAD_FAILED.range} onRetry={retry} /> : !days && <div className="loading" aria-busy="true" />}
+      {failed ? <LoadFailed title={LOAD_FAILED.range} onRetry={tryAgain} /> : !days && <div className="loading" aria-busy="true" />}
       {days && <Body key={`${kind}:${period.from}`} days={days} today={today} now={now} kind={kind} onOpen={onOpen} />}
     </section>
   );

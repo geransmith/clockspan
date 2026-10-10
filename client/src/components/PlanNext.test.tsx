@@ -93,7 +93,7 @@ describe('PlanNext', () => {
     expect(status()).toBe('');
   });
 
-  it('shows a failed load of the next day with Try again, and can add once it loads', async () => {
+  it('shows a failed load of the next day with Try again, which hands the focus to the box, and can add once it loads', async () => {
     await renderPlan();
     vi.mocked(api.getDay).mockRejectedValueOnce(new Error('Request failed (502)'));
     await open();
@@ -101,9 +101,12 @@ describe('PlanNext', () => {
     expect(saveButton().disabled).toBe(true);
     expect(box('Review the PR').checked).toBe(true);
     fireEvent.click(box('Call the bank'));
-    fireEvent.click(screen.getByRole('button', { name: LOAD_FAILED.retry }));
+    const retry = screen.getByRole('button', { name: LOAD_FAILED.retry });
+    retry.focus();
+    fireEvent.click(retry);
     await settle();
     expect(screen.queryByRole('alert')).toBeNull();
+    expect(document.activeElement).toBe(draft());
     expect(saveButton().disabled).toBe(false);
     // The ticks made before the retry are still there.
     expect(box('Review the PR').checked).toBe(true);

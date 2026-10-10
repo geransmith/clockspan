@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as api from '../../api';
 import { useSubmit } from '../../hooks/useSubmit';
 import { unlessGone } from '../../lib/apiError';
@@ -69,6 +69,7 @@ function Users({ me }: { me: PublicUser }) {
   const [users, setUsers] = useState<PublicUser[] | null>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const usernameBox = useRef<HTMLInputElement>(null);
   // The list's load and delete share the add form's error line.
   const { busy, error, setError, run, onSubmit } = useSubmit();
   const load = useCallback(
@@ -96,6 +97,9 @@ function Users({ me }: { me: PublicUser }) {
       } finally {
         // Reload either way, so the list shows what the server holds.
         await load();
+        // Every Delete is disabled while this runs, and this one may go with its row: a focus that
+        // fell to the page, or is still on that button, moves to the add form.
+        if (document.activeElement?.matches('body, :disabled')) usernameBox.current?.focus();
       }
     });
   };
@@ -121,7 +125,14 @@ function Users({ me }: { me: PublicUser }) {
         ))}
       </ul>
       <form className="user-add" onSubmit={add}>
-        <UsernameInput placeholder="Username" aria-label="Username" autoComplete="off" value={username} onChange={(e) => setUsername(e.target.value)} />
+        <UsernameInput
+          ref={usernameBox}
+          placeholder="Username"
+          aria-label="Username"
+          autoComplete="off"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+        />
         <NewPasswordInput placeholder="Temporary password" aria-label="Temporary password" value={password} onChange={(e) => setPassword(e.target.value)} />
         <button className="btn btn-primary" type="submit" disabled={busy}>
           Add user

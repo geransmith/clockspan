@@ -36,10 +36,15 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
   const [month, setMonth] = useState(() => startOfMonth(date));
   const [selected, setSelected] = useState<string | null>(date);
   const [filter, setFilter] = useState<StickerId | null>(null);
-  // "This month" sits in the header, apart from the ◀ ▶ it hands the focus to.
+  // "This month" sits in the header, apart from the ◀ ▶ it hands the focus to. Try again hands it
+  // there too: the loading block takes its place at once.
   const prevRef = useRef<HTMLButtonElement>(null);
   const period = periodRange('month', month, 0);
   const { days: list, failed, retry } = useRange(period.from, period.to);
+  const tryAgain = () => {
+    prevRef.current?.focus();
+    retry();
+  };
   // The range lays the store's days over the answer, and one can be empty (today before a
   // punch): only a day with something on it counts, as in the review.
   const kept = useMemo(() => list?.filter(hasContent), [list]);
@@ -70,7 +75,7 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
         <PeriodReset kind="month" from={month} today={today} onFrom={step} prevRef={prevRef} />
       </header>
       <PeriodNav kind="month" label={period.label} from={month} today={today} onFrom={step} noReset prevRef={prevRef} />
-      {failed ? <LoadFailed title={LOAD_FAILED.range} onRetry={retry} /> : !weeks && <div className="loading" aria-busy="true" />}
+      {failed ? <LoadFailed title={LOAD_FAILED.range} onRetry={tryAgain} /> : !weeks && <div className="loading" aria-busy="true" />}
       {weeks && (
         <>
           {count && (

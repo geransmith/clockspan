@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { SOUND_EVENTS, SOUNDS } from '../../../../shared/sounds.js';
 import { notificationPermission, playSound, requestNotificationPermission } from '../../lib/alerts';
 import { SOUND_EVENT_LABELS } from '../../lib/sounds';
@@ -128,7 +128,13 @@ function SoundRow({ event, value, disabled, onChange }: { event: SoundEvent; val
 
 function NotificationsRow({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
   const [perm, setPerm] = useState(notificationPermission());
-  const request = async () => setPerm(await requestNotificationPermission());
+  const row = useRef<HTMLDivElement>(null);
+  const request = async () => {
+    const answer = await requestNotificationPermission();
+    // Allow goes once the browser has answered, so a focus still on it moves to the switch beside it.
+    if (answer !== 'default' && row.current?.contains(document.activeElement)) row.current.querySelector<HTMLElement>('[role="switch"]')?.focus();
+    setPerm(answer);
+  };
   const hint =
     perm === 'unsupported'
       ? 'Not supported in this browser (on iPhone, add the app to your Home Screen first).'
@@ -138,7 +144,7 @@ function NotificationsRow({ enabled, onChange }: { enabled: boolean; onChange: (
           ? 'Enabled in this browser.'
           : 'Browser permission needed.';
   return (
-    <div className="setting-row">
+    <div className="setting-row" ref={row}>
       <Toggle label="Browser notifications" hint={hint} checked={enabled} onChange={onChange} />
       {perm === 'default' && (
         <button className="btn btn-ghost" onClick={() => void request()}>

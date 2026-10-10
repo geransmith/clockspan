@@ -13,6 +13,18 @@ import { Bell, X } from './Icons';
  */
 const MAX_SHOWN = 3;
 
+/**
+ * The pressed button goes with its banner, so a focus still inside it (an action may have moved it
+ * on) goes to the close button of the banner after it, else the one before. The last banner has
+ * nowhere to send it.
+ */
+function closeBanner(id: number, pressed: HTMLElement) {
+  const banner = pressed.closest('.banner')!;
+  const near = banner.nextElementSibling ?? banner.previousElementSibling;
+  if (banner.contains(document.activeElement)) near?.querySelector<HTMLElement>('.banner-close')?.focus();
+  dismissBanner(id);
+}
+
 export function Banners() {
   const banners = useSyncExternalStore(subscribeBanners, getBanners, getBanners);
   const { formatTime } = useTimeFormat();
@@ -48,16 +60,16 @@ export function Banners() {
               {action && (
                 <button
                   className="btn btn-ghost banner-action"
-                  onClick={() => {
+                  onClick={(e) => {
                     action.run();
-                    dismissBanner(b.id);
+                    closeBanner(b.id, e.currentTarget);
                   }}
                 >
                   {action.label}
                 </button>
               )}
             </div>
-            <button className="btn btn-icon banner-close" onClick={() => dismissBanner(b.id)} aria-label={`Dismiss: ${b.title}`}>
+            <button className="btn btn-icon banner-close" onClick={(e) => closeBanner(b.id, e.currentTarget)} aria-label={`Dismiss: ${b.title}`}>
               <X />
             </button>
           </div>

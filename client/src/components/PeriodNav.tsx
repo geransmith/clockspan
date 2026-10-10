@@ -13,7 +13,7 @@ interface Props {
   onFrom: (from: string) => void;
   /** Leave the reset to the current period out; the caller shows `PeriodReset` somewhere roomier. */
   noReset?: boolean;
-  /** The ◀ button, for a caller whose own `PeriodReset` gives it the focus. */
+  /** The ◀ button, for a caller that gives it the focus (its own `PeriodReset`, a Try again). */
   prevRef?: RefObject<HTMLButtonElement | null>;
 }
 
