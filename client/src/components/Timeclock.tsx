@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useBecameTrue, useCelebration } from '../hooks/useCelebration';
 import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
@@ -12,7 +12,6 @@ import {
   addPunchPair,
   clockOutPosition,
   daySettings,
-  extraPairs,
   lunchInPunchOrder,
   lunchRowsShown,
   nextPunchPosition,
@@ -20,7 +19,9 @@ import {
   punchLabel,
   removePunchPair,
   secondMealApplies,
+  shownPairs,
   type ExtraPair,
+  type PairTyping,
   type TimeclockResult,
 } from '../lib/timeclock';
 import { MAX_PUNCHES, punchesKey } from '../../../shared/punches.js';
@@ -56,21 +57,8 @@ interface Props {
   orderNotice: string;
   /** The pair being typed in (`shownPairs`), held by the sheet, whose punch-order notice names the rows as this card does. */
   typing: PairTyping | null;
+  /** Kept stable (a state setter): the card lets the pair go as it unmounts. */
   onTyping: (typing: PairTyping | null) => void;
-}
-
-/** An extra pair the focus is in, by its Out's position, and the block it was in when the focus came in. */
-export interface PairTyping {
-  out: number;
-  before: boolean;
-}
-
-/**
- * The extra pairs as the card shows them. The pair being typed in keeps its block: a time on its
- * way (10:3 of 10:30) can sit on the other side of lunch, and a move remounts the fields.
- */
-export function shownPairs(punches: Punch[], typing: PairTyping | null): ExtraPair[] {
-  return extraPairs(punches).map((p) => (p.out.position === typing?.out ? { ...p, beforeLunch: typing.before } : p));
 }
 
 export function Timeclock({
@@ -186,6 +174,10 @@ export function Timeclock({
   );
   // Only today's sheet plans the second meal: a past day left clocked in is judged at its end.
   const secondMeal = isToday && secondMealApplies(tc, daySet, otOn) ? tc.secondMealBy : null;
+
+  // A remount (another date, a move to the other column) takes the field with no blur, so the pair
+  // being typed in is let go here.
+  useLayoutEffect(() => () => onTyping(null), [onTyping]);
 
   // ----- rows -----
   const byPos = new Map(punches.map((p) => [p.position, p]));

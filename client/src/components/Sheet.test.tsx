@@ -24,6 +24,7 @@ import {
   makeSettings,
   punchesAt,
   serveRange,
+  setVisibility,
   settle,
   stubMatchMedia,
   T0,
@@ -340,9 +341,12 @@ describe('Sheet: the punch-order notice while a pair is typed in', () => {
         .focus(),
     );
 
-  it('names the rows as the card does, which keeps that pair in its place until the focus leaves it', async () => {
+  const pinned = ['Clock in', 'Out 1', 'In 1', 'Lunch out', 'Lunch in', 'Out 2', 'In 2', 'Clock out'];
+  const unpinned = ['Clock in', 'Out 1', 'In 1', 'Out 2', 'In 2', 'Lunch out', 'Lunch in', 'Clock out'];
+
+  /** Today's sheet with the focus in Out 2 and 11:00 stored there, brought back as the save would by the day store the sheet uses. */
+  async function typeOut2() {
     vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { punches: punches(null) }), 1));
-    // The day store the sheet uses, to bring the typed time back as the save would.
     const { result } = renderHook(() => useDayStore(), {
       wrapper: ({ children }) => (
         <AppProviders>
@@ -356,17 +360,34 @@ describe('Sheet: the punch-order notice while a pair is typed in', () => {
     vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { punches: punches(T0 + 2 * HOUR_MS) }), 1));
     await act(() => result.current.refresh(TODAY));
     await settle();
-    expect(labels()).toEqual(['Clock in', 'Out 1', 'In 1', 'Lunch out', 'Lunch in', 'Out 2', 'In 2', 'Clock out']);
+  }
+
+  it('names the rows as the card does, which keeps that pair in its place until the focus leaves it', async () => {
+    await typeOut2();
+    expect(labels()).toEqual(pinned);
     expect(screen.getByText(PUNCH_ORDER('Lunch out', '12:00 PM', 'In 2', null))).toBeTruthy();
     act(() => button('Now: Clock in').focus());
-    expect(labels()).toEqual(['Clock in', 'Out 1', 'In 1', 'Out 2', 'In 2', 'Lunch out', 'Lunch in', 'Clock out']);
+    expect(labels()).toEqual(unpinned);
     expect(screen.getByText(PUNCH_ORDER('Lunch out', '12:00 PM', 'In 1', null))).toBeTruthy();
   });
 
-  it("lets the pair go when another day's sheet takes the card's place", async () => {
+  it('lets the pair go when the card mounts again in the other column, the field gone with no blur', async () => {
+    await typeOut2();
+    stored = makeSettings({ layout: stored.layout.map((l) => (l.id === 'timeclock' ? { ...l, side: 'right' } : l)) });
+    // Another device's move, which the settings read brings.
+    await settle(6000);
+    setVisibility('visible');
+    await settle();
+    expect(columns()[1]).toContain('Timeclock');
+    expect(labels()).toEqual(unpinned);
+    expect(screen.getByText(PUNCH_ORDER('Lunch out', '12:00 PM', 'In 1', null))).toBeTruthy();
+  });
+
+  it("lets the pair go when another day's sheet takes the card's place, and coming back finds it gone", async () => {
+    let todayOut2: number | null = null;
     vi.mocked(api.getDay).mockImplementation((d) =>
       Promise.resolve(
-        answered(makeDay(d, { punches: d === TODAY ? punches(null) : punches(T0 + 2 * HOUR_MS).map((p) => ({ ...p, at: p.at && p.at - DAY_MS })) }), 1),
+        answered(makeDay(d, { punches: d === TODAY ? punches(todayOut2) : punches(T0 + 2 * HOUR_MS).map((p) => ({ ...p, at: p.at && p.at - DAY_MS })) }), 1),
       ),
     );
     const { rerender } = render(
@@ -376,6 +397,7 @@ describe('Sheet: the punch-order notice while a pair is typed in', () => {
     );
     await settle();
     focusOut2();
+    todayOut2 = T0 + 2 * HOUR_MS;
     // A new date mounts the card again, with no blur from the field that went.
     rerender(
       <AppProviders>
@@ -383,7 +405,15 @@ describe('Sheet: the punch-order notice while a pair is typed in', () => {
       </AppProviders>,
     );
     await settle();
-    expect(labels()).toEqual(['Clock in', 'Out 1', 'In 1', 'Out 2', 'In 2', 'Lunch out', 'Lunch in', 'Clock out']);
+    expect(labels()).toEqual(unpinned);
+    expect(screen.getByText(PUNCH_ORDER('Lunch out', '12:00 PM', 'In 1', null))).toBeTruthy();
+    rerender(
+      <AppProviders>
+        <SheetAt />
+      </AppProviders>,
+    );
+    await settle();
+    expect(labels()).toEqual(unpinned);
     expect(screen.getByText(PUNCH_ORDER('Lunch out', '12:00 PM', 'In 1', null))).toBeTruthy();
   });
 });

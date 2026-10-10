@@ -18,7 +18,7 @@ import { isOneOff, patchRow } from '../lib/priorities';
 import { dueRecurring } from '../lib/recurring';
 import { CARD_SIDES } from '../../../shared/settings.js';
 import { focusOf } from '../lib/retro';
-import { clampToDay, dayTimeclock, punchLabel, type ExtraPair, type TimeclockResult, type TimeclockState } from '../lib/timeclock';
+import { clampToDay, dayTimeclock, punchLabel, shownPairs, type ExtraPair, type PairTyping, type TimeclockResult, type TimeclockState } from '../lib/timeclock';
 import { weekHours } from '../lib/week';
 import type { CardId, CardSide, Punch } from '../types';
 import { CardFrame, type SheetCard } from './CardFrame';
@@ -28,7 +28,7 @@ import { LoadFailed } from './LoadFailed';
 import { Priorities } from './Priorities';
 import { Retro } from './Retro';
 import { SessionLog } from './SessionLog';
-import { shownPairs, Timeclock, type PairTyping } from './Timeclock';
+import { Timeclock } from './Timeclock';
 
 const SortableCards = lazy(() => import('./SortableCards').then((m) => ({ default: m.SortableCards })));
 
@@ -60,10 +60,8 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
   const week = weekDays ? weekHours(weekDays, settings, today, now) : null;
   const focus = focusOf(day?.sessions ?? []);
   const orderNotice = useId();
-  // The pair being typed in on the timeclock card, which the notice names as the card does. Kept
-  // with its date: a new date mounts the card again with no blur to let it go.
-  const [typing, setTyping] = useState<(PairTyping & { date: string }) | null>(null);
-  const pin = typing?.date === date ? typing : null;
+  // The pair being typed in on the timeclock card, which the notice names as the card does.
+  const [typing, setTyping] = useState<PairTyping | null>(null);
   // Today's list with no one-off written yet (a routine on it is no plan) offers, in the morning
   // notice, what the last planned day left unticked, the top of Next and the recurring priorities
   // due today. A leftover the board holds in Later or as done stays there. Up Next waits for the
@@ -175,8 +173,8 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
             onWorkMinutesChange={(m) => void store.setWorkMinutes(date, m)}
             onEditingChange={onPunchEditing}
             orderNotice={orderNotice}
-            typing={pin}
-            onTyping={(t) => setTyping(t && { ...t, date })}
+            typing={typing}
+            onTyping={setTyping}
           />
         );
       case 'priorities':
@@ -281,7 +279,7 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
       {dateNav}
       {/* A live region already on the page when the notice appears, or a screen reader may not read it. */}
       <div className="punch-order" role="status">
-        {tc.outOfOrder && <PunchOrder id={orderNotice} punches={day.punches} pairs={shownPairs(day.punches, pin)} slip={tc.outOfOrder} />}
+        {tc.outOfOrder && <PunchOrder id={orderNotice} punches={day.punches} pairs={shownPairs(day.punches, typing)} slip={tc.outOfOrder} />}
       </div>
       {columns
         ? CARD_SIDES.map((side) => (

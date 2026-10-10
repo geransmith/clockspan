@@ -313,11 +313,26 @@ export function extraPairs(punches: Punch[]): ExtraPair[] {
   return pairs;
 }
 
+/** An extra pair the focus is in, by its Out's position, and the block it was in when the focus came in. */
+export interface PairTyping {
+  out: number;
+  before: boolean;
+}
+
+/**
+ * The extra pairs as the card shows them. The pair being typed in keeps its block: a time on its
+ * way (10:3 of 10:30) can sit on the other side of lunch, and a move remounts the fields.
+ */
+export function shownPairs(punches: Punch[], typing: PairTyping | null): ExtraPair[] {
+  return extraPairs(punches).map((p) => (p.out.position === typing?.out ? { ...p, beforeLunch: typing.before } : p));
+}
+
 /**
  * A row's name as the card shows it. The extra pairs are numbered in the card's order, those
- * before lunch first; the card passes its own `pairs`, which keep a pair being typed in its place.
+ * before lunch first; the card and the sheet's punch-order notice both pass `shownPairs`, which
+ * keep a pair being typed in its place.
  */
-export function punchLabel(punches: Punch[], position: number, pairs = extraPairs(punches)): string {
+export function punchLabel(punches: Punch[], position: number, pairs: ExtraPair[]): string {
   if (position === clockOutPosition(punches)) return 'Clock out';
   if (position <= LUNCH_IN_POSITION) return ['Clock in', 'Lunch out', 'Lunch in'][position]!;
   const n = [...pairs.filter((p) => p.beforeLunch), ...pairs.filter((p) => !p.beforeLunch)].findIndex(
