@@ -237,7 +237,6 @@ describe('host names under AUTH_MODE=none', () => {
 
   it('reads the Host header the browser sent, never a forwarded one, though the proxy is trusted', async () => {
     app = await startTestApp({ env: { TRUST_PROXY: '1' } });
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
     // req.hostname would read X-Forwarded-Host here, and a rebinding page's fetch can set it.
     expect((await as('rebind.example', '/api/settings', 'GET', { 'x-forwarded-host': 'tower' })).status).toBe(403);
   });

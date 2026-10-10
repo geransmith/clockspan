@@ -288,7 +288,7 @@ describe('an update while the page is open', () => {
     try {
       answerFrom(__APP_VERSION__);
       await api.getSettings();
-      answer(200);
+      answer(200, { mode: 'none' });
       await api.getAuth();
       expect(raised).not.toHaveBeenCalled();
     } finally {
@@ -403,7 +403,7 @@ describe('a restored backup', () => {
   it('says nothing when an answer names no revision, as an auth route answers', async () => {
     answerAt(170);
     await api.getSettings();
-    answer(200);
+    answer(200, { mode: 'none' });
     await api.getAuth();
     expect(restored()).toEqual([]);
   });
