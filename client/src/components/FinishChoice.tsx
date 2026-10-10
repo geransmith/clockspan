@@ -6,8 +6,8 @@ import { formatDuration } from '../lib/format';
 import type { Session } from '../types';
 
 /**
- * Asked when Finish is pressed after the timer ran out, once the planned and the worked length
- * differ in their whole minutes (`requestFinish`): log the planned
+ * Asked when Finish or Done is pressed after the timer ran out, once the planned and the worked
+ * length differ in their whole minutes (`requestFinish`, `requestDone`): log the planned
  * length (the default: a timer that runs out unattended logs the same) or the time worked.
  * Mounted once in App; it renders nothing until the timer asks.
  */

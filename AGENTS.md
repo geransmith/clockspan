@@ -434,11 +434,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   constructor is refused, Chrome on Android), create an `AudioContext` or fetch a clip anywhere
   else. `unlockAudio()` must be called from a user gesture (the timer's length buttons,
   `TimerLengths`, on the timer card and a board item's editor, `useBreak`'s `start`, every
-  punch commit and the shortcut listener, for a timer key, do this) for iOS. What plays is
-  `settings.sounds[event]`, an id from the catalog in `shared/sounds.ts`; `settings.sound` is the
-  master switch over all of them, and `none` is the per-event off. A celebration (day complete and
-  work week reached in `Timeclock.tsx`, a priority ticked in `Priorities.tsx` or on the board (its
-  checkbox, Move to Done, or a drop into Done)) is a `useCelebration(moment, event)`
+  punch commit, the timer's Done and the shortcut listener, for a timer key, do this) for iOS.
+  What plays is `settings.sounds[event]`, an id from the catalog in `shared/sounds.ts`;
+  `settings.sound` is the master switch over all of them, and `none` is the per-event off. A
+  celebration (day complete and work week reached in `Timeclock.tsx`, a priority ticked in
+  `Priorities.tsx`, on the board (its checkbox, Move to Done, or a drop into Done) or by the
+  timer's Done (`useTimer().ticked`, celebrated in `App.tsx`, since the bar and the card it is
+  pressed on go with the session)) is a `useCelebration(moment, event)`
   (`hooks/useCelebration.ts`): the sound under `settings.sound`, the
   burst under `settings.celebrations`. A state's moment comes from `useBecameTrue`, so it is the day
   *becoming* done while the card is mounted, never a done day opening. A moment raised before the
@@ -471,10 +473,15 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `FinishChoice` sheet (Planned · Nm / Worked · Mm / Back). A finish goes out behind any press still
   on its way. The choice belongs to the due end it was asked for (`finishChoiceFor`, a `dueKey`):
   once the timer is no longer due at that end (time added or a pause, here or on another device, or
-  the session ending however it ends), the sheet goes and stays gone. `useTimer` keeps the running
-  session the way the day store keeps a day: a press (adjust, edit, pause, resume) shows at once, a
-  failure drops only that press, and a sync's answer never hides a press still on its way. Keep that
-  pattern for new mutations.
+  the session ending however it ends), the sheet goes and stays gone. Done sits after Finish on the
+  bar and the card while the session's task has an open row on its day (`taskOpen`), and calls
+  `requestDone()`: the same finish, its question included, and once the server answers the session
+  completed, the task the answer names is ticked on the answer's day through `editPriorities` and
+  `ticked` is raised. A finish that fails or answers cancelled ticks nothing; Finish, the
+  auto-finish and − past the time worked never tick, and Done has no key. `useTimer` keeps the
+  running session the way the day store keeps a day: a press (adjust, edit, pause, resume) shows at
+  once, a failure drops only that press, and a sync's answer never hides a press still on its way.
+  Keep that pattern for new mutations.
 - **One running session per user is a schema invariant** (a unique partial index), and another
   device may own it: a 409 on start raises the `TIMER_ELSEWHERE` banner and the sync it brings
   shows the other device's session, a sync whose answer differs from the session shown refreshes
@@ -568,8 +575,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **Suggested break lengths come only from `client/src/lib/breaks.ts`** (`suggestBreak`, pure, over
   a day's sessions); with Suggest breaks off the Break button runs `settings.breakMinutes`. With
   `suggestBreaks` on, `useBreak` offers today's suggestion on the Break button and as a quiet banner
-  off `useTimer().finished`, which only a finish by hand sets (Finish, the finish choice, − past the
-  time worked), never the auto-finish or another device.
+  off `useTimer().finished`, which only a finish by hand sets (Finish, Done, the finish choice, −
+  past the time worked), never the auto-finish or another device.
 - **A break is a row in the day's log** (`breaks` table, `Day.breaks`), never device state.
   `ended_at` is the planned end from the start and moves back when the break is ended early
   (`POST /breaks/:id/end`), so nothing finishes a break that runs out: it is running while `endedAt`
@@ -610,7 +617,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   refuses a task that day's list doesn't hold yet; a board job that changes a day's list waits for
   that save (below); and a timer start whose uid is a promise awaits it first inside its job (a new
   name typed on the timer card hands it the new row's save, a board item's Start its pull), so it
-  names the task once today's list holds it. `useSettings` sends its PUTs and resets one at a time.
+  names the task once today's list holds it. Done's tick goes the other way, on the day store's list
+  sends once its finish on the timer's queue has answered. `useSettings` sends its PUTs and resets
+  one at a time.
   The board (`useBoard`) sends each write as one job on its own queue, its change to the tasks shown
   from the moment it is made; a job that changes today's list (a pull, a row typed in In progress's
   box, a tick, a rename, category or note of today's row, Remove from today, which leaves a free row
@@ -1496,7 +1505,10 @@ The browser pass for each surface (the logic under it is already tested):
   `ceil((elapsed + 30) / 60) * 60`, since plans are whole minutes, then reload so the client
   has the new plan). The bar and the card count below zero, the "Time's up" banner offers
   **Add 5 min**, and a minute or more over, **Finish** opens "How much to log?". Pause and
-  resume: the countdown holds and the log row's pill follows.
+  resume: the countdown holds and the log row's pill follows. Done, on the bar (the word from
+  640 px; at 375 the label keeps a readable start) and the card, on the seeded session's row 3:
+  the bar goes, the burst flies from Done (on the bar, from under it, whole on screen at 1280 and
+  375) and row 3 is ticked; a minute over, Done opens "How much to log?", and Back ticks nothing.
 - **Alarms**: after `npm run seed`, clear Clock in (×) on today's sheet. Set Lunch must start
   within 3 min, Lunch length 0, Work day 10 min and Second meal due after 6 min, in Settings →
   Timeclock or with

@@ -8,9 +8,11 @@ import { ApiError } from '../lib/apiError';
 import { TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
 import { addPending, fetched, settle, settleWith, shown, untracked, type Tracked } from '../lib/optimistic';
-import { editedSession, sessionName } from '../lib/retro';
+import { patchRow } from '../lib/priorities';
+import { editedSession, sessionName, sessionRow } from '../lib/retro';
 import { readStored, writeStored } from '../lib/storage';
 import { adjustedPlan, DUE_GRACE_SECONDS, dueKey, PAUSE_LIMIT_SECONDS, timerView, type TimerView } from '../lib/timer';
+import type { Moment } from './useCelebration';
 import { useDays, useDayStore } from './useDay';
 import { useClock } from './useClock';
 import { useRefreshLoop } from './useRefreshLoop';
@@ -28,6 +30,8 @@ export interface TimerCtx extends Pick<TimerView, 'countdownSeconds' | 'elapsedS
   name: string;
   /** The running session has a task, which names it: it has no name of its own to edit until it is set to Unplanned. */
   linked: boolean;
+  /** The running session's task has an open row on the session's day, so Done can tick it. */
+  taskOpen: boolean;
   /**
    * Leaves `unlockAudio()` to the caller, in its tap (`TimerLengths`). `priorityUid` may be a
    * promise, awaited first on the queue: the uid of a row whose save is still out (a new name typed
@@ -57,16 +61,27 @@ export interface TimerCtx extends Pick<TimerView, 'countdownSeconds' | 'elapsedS
    * length differ in their whole minutes, where `finishChoice` asks which one to log.
    */
   requestFinish: () => void;
+  /**
+   * The Done button: Finish's finish, the question included, and once the server answers the
+   * session completed, its task ticked and `ticked` raised from `at`. Leaves `unlockAudio()` to
+   * the tap.
+   */
+  requestDone: (at: DOMRect) => void;
   /** The running session while "How much to log?" is open for it; null otherwise. */
   finishChoice: Session | null;
   dismissFinishChoice: () => void;
   cancel: () => Promise<void>;
   /**
-   * The session last finished by hand on this device (Finish, the finish choice, or − past the
-   * time worked), a fresh object each time. Not one that finished on its own after the grace or
-   * a forgotten pause, or on another device: its user wasn't here to take a break after it.
+   * The session last finished by hand on this device (Finish, Done, the finish choice, or − past
+   * the time worked), a fresh object each time. Not one that finished on its own after the grace
+   * or a forgotten pause, or on another device: its user wasn't here to take a break after it.
    */
   finished: Session | null;
+  /**
+   * The last task Done ticked on this device, a fresh moment each time. App celebrates it, since
+   * the bar and the card Done is pressed on go with the session.
+   */
+  ticked: Moment | null;
 }
 
 const Ctx = createContext<TimerCtx | null>(null);
@@ -106,18 +121,23 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // its end moves (time added, a pause), it closes and never opens over the next one.
   const [finishChoiceFor, setFinishChoiceFor] = useState<string | null>(null);
   const [finished, setFinished] = useState<Session | null>(null);
+  const [ticked, setTicked] = useState<Moment | null>(null);
+  // Where Done was pressed, while the finish it asked for (at once, or once the question is
+  // answered) is still to come.
+  const doneAt = useRef<Moment | null>(null);
   const [startsOut, setStartsOut] = useState(0);
   const now = useClock();
   // `loaded` gates the two effects that alert: on a fresh load the running session can answer
   // before the settings do, and an alert then would use the default sounds and Sound switch
   // (`settings.sounds`, `settings.sound`).
   const { settings, loaded } = useSettings();
-  const { refresh, applySession, prioritiesSaved } = useDayStore();
+  const { refresh, applySession, prioritiesSaved, editPriorities } = useDayStore();
   // On a day the store doesn't hold (a session started before midnight, after a reload), the name the server gave.
   const { days } = useDays();
   const rows = running ? (days[running.date]?.priorities ?? []) : [];
   const name = running ? sessionName(running, rows) : '';
   const linked = running?.priorityUid != null;
+  const taskOpen = running != null && sessionRow(running, rows)?.done === false;
   // An end (a finish or a cancel, by hand or not) is out: the auto-finish waits for its answer.
   const completing = useRef(false);
   // After a failed finish (server unreachable) wait before trying again (`nextBackoff`). The
@@ -175,14 +195,21 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     [change, queue, applySession],
   );
 
-  // A finish by hand (Finish, the finish choice, − past the time worked), which `finished`
-  // reports. Finish is idempotent: a session cancelled elsewhere comes back as it is.
+  // A finish by hand (Finish, Done, the finish choice, − past the time worked), which `finished`
+  // reports. Finish is idempotent: a session cancelled elsewhere comes back as it is. Done's tick
+  // waits for the time to be logged, so a finish that fails leaves the task open with Done there
+  // to press again, and it goes to the task and day the server ended the session on.
   const finishNow = useCallback(
-    async (cur: Session, countOverrun = false) => {
+    async (cur: Session, countOverrun = false, done: Moment | null = null) => {
       const session = await end(() => api.finishSession(cur.id, countOverrun));
-      if (session.status === 'completed') setFinished(session);
+      if (session.status !== 'completed') return;
+      setFinished(session);
+      const uid = session.priorityUid;
+      if (!done || uid == null) return;
+      setTicked(done);
+      void editPriorities(session.date, (rows) => patchRow(rows, uid, { done: true }));
     },
-    [end],
+    [end, editPriorities],
   );
 
   const { elapsedSeconds, countdownSeconds, progress, endAt, paused, pausedForSeconds, due, overrunSeconds, canAdd } = running ? timerView(running, now) : IDLE;
@@ -378,18 +405,27 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     (countOverrun = false) =>
       attempt(async (cur) => {
         setFinishChoiceFor(null);
-        await finishNow(cur, countOverrun);
+        const done = doneAt.current;
+        doneAt.current = null;
+        await finishNow(cur, countOverrun, done);
       }),
     [attempt, finishNow],
   );
 
-  const requestFinish = useCallback(() => {
-    const cur = shown(current());
-    if (!cur) return;
-    const view = timerView(cur, Date.now());
-    if (view.asksLength) setFinishChoiceFor(dueKey(cur.id, view.endAt));
-    else void finish();
-  }, [current, finish]);
+  const ask = useCallback(
+    (done: Moment | null) => {
+      const cur = shown(current());
+      if (!cur) return;
+      doneAt.current = done;
+      const view = timerView(cur, Date.now());
+      if (view.asksLength) setFinishChoiceFor(dueKey(cur.id, view.endAt));
+      else void finish();
+    },
+    [current, finish],
+  );
+  // Two functions, not a flag: Finish is wired as `onClick={requestFinish}`, whose click event would pass for one.
+  const requestFinish = useCallback(() => ask(null), [ask]);
+  const requestDone = useCallback((at: DOMRect) => ask({ at }), [ask]);
   const dismissFinishChoice = useCallback(() => setFinishChoiceFor(null), []);
 
   const cancel = useCallback(
@@ -444,6 +480,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       running,
       name,
       linked,
+      taskOpen,
       countdownSeconds,
       elapsedSeconds,
       progress,
@@ -459,15 +496,18 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       resume,
       finish,
       requestFinish,
+      requestDone,
       finishChoice: choiceOpen ? running : null,
       dismissFinishChoice,
       cancel,
       finished,
+      ticked,
     }),
     [
       running,
       name,
       linked,
+      taskOpen,
       countdownSeconds,
       elapsedSeconds,
       progress,
@@ -483,10 +523,12 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       resume,
       finish,
       requestFinish,
+      requestDone,
       choiceOpen,
       dismissFinishChoice,
       cancel,
       finished,
+      ticked,
     ],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

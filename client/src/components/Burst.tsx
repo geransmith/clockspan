@@ -17,7 +17,8 @@ export function Burst({ at, big = false }: Props) {
   if (!at) return null;
   const reach = big ? 140 : 90;
   const { anchor } = at;
-  const style: CSSProperties = { left: anchor.left + anchor.width / 2, top: anchor.top + anchor.height / 2 };
+  // Never closer to the top of the window than the emoji rise, or one from the running bar's Done flies off screen.
+  const style: CSSProperties = { left: anchor.left + anchor.width / 2, top: Math.max(anchor.top + anchor.height / 2, reach) };
   return createPortal(
     <span key={at.seed} className={`burst${big ? ' burst--big' : ''}`} style={style} aria-hidden="true">
       {pickBurst(at.seed, big ? 14 : 8).map((p, i) => (
