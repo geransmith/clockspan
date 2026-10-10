@@ -10,7 +10,7 @@ import { useTimeFormat } from '../hooks/useTimeFormat';
 import { breakSeconds } from '../lib/breaks';
 import { counted, formatDuration } from '../lib/format';
 import { isTaskRow } from '../lib/priorities';
-import { focusOf, sessionCategory, sessionCategoryEdit, sessionName, sessionRow } from '../lib/retro';
+import { sessionCategory, sessionCategoryEdit, sessionName, sessionRow } from '../lib/retro';
 import { timerView } from '../lib/timer';
 import type { Break, Priority, Session } from '../types';
 import { CategoryChip } from './CategoryChip';
@@ -36,7 +36,6 @@ export function SessionLog({ date, isToday, sessions, breaks, priorities, pick }
   const { running, edit } = useTimer();
   // The log's own clock, to the second: a running break and session count here, while the sheet gets the minute.
   const now = useClock();
-  const focus = focusOf(sessions);
   const rested = breaks.reduce((sum, b) => sum + breakSeconds(b, now), 0);
   const planned = priorities.filter(isTaskRow);
   // The running session's row is the timer's copy, and its edits go through the timer: one queue
@@ -58,11 +57,6 @@ export function SessionLog({ date, isToday, sessions, breaks, priorities, pick }
 
   return (
     <div>
-      <div className="log-total">
-        <span className="muted">Total focused</span>
-        <strong>{formatDuration(focus.seconds)}</strong>
-        <span className="muted">· {counted(focus.count, 'session')}</span>
-      </div>
       {breaks.length > 0 && (
         <div className="log-total">
           <span className="muted">On breaks</span>

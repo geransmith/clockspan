@@ -1884,6 +1884,10 @@ button.running-label:hover {
   padding: 8px 0;
   border-top: 1px solid var(--border);
 }
+/* With no breaks line above them, the rows start under the card's title, with no rule there. */
+ul:first-child > .log-row:first-child {
+  border-top: 0;
+}
 .log-row.is-running {
   background: linear-gradient(90deg, var(--accent-soft), transparent);
   margin: 0 -16px;
@@ -2091,15 +2095,12 @@ button.log-label:hover {
   resize: vertical;
   line-height: 1.4;
 }
-/* The note's foot, and today's card folded to its totals line until clock-out. */
+/* The note's foot, and today's card folded to its Open button until clock-out. */
 .retro-foot,
 .retro-folded {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-.retro-folded {
-  justify-content: space-between;
 }
 @media (min-width: 640px) {
   .retro-row {

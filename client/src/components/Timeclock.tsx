@@ -242,7 +242,8 @@ export function Timeclock({
       <div className={settings.mealRules ? 'tiles tiles--four' : 'tiles'}>
         {settings.mealRules && <Tile label="Lunch by" {...tiles.lunch} />}
         <Tile label="Worked" {...tiles.worked} />
-        <Tile label="Clock out at" {...tiles.clockOut} />
+        {/* A done day's pill says so; the board's clock bar, with no pill, keeps "Day complete". */}
+        <Tile label="Clock out at" {...tiles.clockOut} sub={tc.state === 'done' ? '' : tiles.clockOut.sub} />
         <Tile label="Focused" {...focusTile(focus, isToday)} />
       </div>
 

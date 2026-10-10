@@ -567,6 +567,8 @@ describe('SessionLog', () => {
     cleanup();
     await renderLog();
     expect(screen.queryByText('On breaks')).toBeNull();
+    // The timeclock's Focused tile has the day's focus, so the log has no total of its own.
+    expect(document.querySelector('.log-total')).toBeNull();
   });
 
   it('says why the log is empty, today and on a past day', async () => {

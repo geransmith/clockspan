@@ -126,6 +126,18 @@ describe('Timeclock', () => {
     expect(playSound).not.toHaveBeenCalled();
   });
 
+  it("leaves the Clock out at line to the card's pill on a finished day and on a past day never clocked out", async () => {
+    const tile = () => screen.getByText('Clock out at').closest('.tile')!;
+    await renderCard(TODAY, punchesAt(T0 - 8 * HOUR_MS, T0 - 5 * HOUR_MS, T0 - 4.5 * HOUR_MS, T0));
+    expect(tile().classList.contains('tile--accent')).toBe(true);
+    expect(tile().querySelector('.tile-sub')).toBeNull();
+    cleanup();
+    await renderCard(YESTERDAY, punchesAt(T0 - 25 * HOUR_MS));
+    expect(tile().classList.contains('tile--warn')).toBe(true);
+    expect(tile().querySelector('.tile-value')!.textContent).toBe('—');
+    expect(tile().querySelector('.tile-sub')).toBeNull();
+  });
+
   it('undoes an Add removed before any punch changes', async () => {
     // Clocked out at 9:00, then "Add extra out / in": removing that pair gives the Clock out its 9:00 back.
     const day = punchesAt(T0 - HOUR_MS, null, null, T0);

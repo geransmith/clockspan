@@ -206,8 +206,8 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
             sessions={day.sessions}
             note={day.retroNote}
             reviewedAt={day.retroAt}
-            // Today's card is one line until the day is clocked out. The jump opens it in this render,
-            // so its note box is there for the jump's effect.
+            // Today's card is folded to its Open button until the day is clocked out. The jump opens
+            // it in this render, so its note box is there for the jump's effect.
             open={!isToday || tc.state === 'done' || jumpTo === 'retro'}
             onChange={(patch) => store.setRetro(date, patch)}
           />

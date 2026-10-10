@@ -136,6 +136,8 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
   const done = doneRows.length;
   // A blank box is still its task's row, so it counts as one, ticked or not.
   const total = local.filter((p) => p.uid != null).length;
+  // A nudge past a ticked row heads with this count, so the foot leaves it to the nudge while it shows.
+  const nudgeCounts = warning != null && warning.kind !== 'fresh';
   // The leftovers and Up next are offered while no one-off is written: a routine on the list is
   // no plan. The morning notice's groups, judged again on the draft (the sheet judged the stored
   // list), so a row typed or a save already sent counts at once.
@@ -286,7 +288,7 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
         // Every row takes the grid with their column all the same, so on a wide screen a field
         // ends in the same place written or empty, and the first letter typed doesn't narrow it.
         const chip = pick != null && !empty;
-        const placeholder = p.position === 1 ? 'The one thing to get done' : `Priority ${p.position}`;
+        const placeholder = p.position === 1 ? 'The one thing to get done' : 'Another priority';
         // While the box has the focus: retyped, a name that earlier days' lists hold renames it there
         // too; emptied, it says what happens to the name.
         const inFocus = focused != null && p.uid != null && focused.position === p.position;
@@ -400,7 +402,7 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
       <div className="priorities-notice" role="status">
         {warning && (
           <div className="notice notice--gentle">
-            {warning.kind !== 'fresh' && (
+            {nudgeCounts && (
               <div className="notice-done">
                 <strong>
                   {done} of {total} done
@@ -448,7 +450,7 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
         ) : (
           <span />
         )}
-        {total > 0 && (
+        {total > 0 && !nudgeCounts && (
           <span className="priorities-summary muted">
             {done} of {total} done
           </span>

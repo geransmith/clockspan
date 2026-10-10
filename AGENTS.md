@@ -5,8 +5,8 @@
 A self-hosted, single-day **focus sheet** for working through a workday with ADHD: a punch-style
 timeclock (lunch deadline, end of day, celebration), top priorities (default three, with a
 nudge when the list grows), a focus timer that logs what was done and for which priority, a
-retrospective card (plan vs. log, a "why" note, a nudge before clock-out; one line of totals
-until the day is clocked out), a week / month / quarter review, alarms for lunch, clock-out and
+retrospective card (plan vs. log, a "why" note, a nudge before clock-out; folded to an Open
+button until the day is clocked out), a week / month / quarter review, alarms for lunch, clock-out and
 the second meal period, and a Board page for tasks that aren't for today (its In progress column
 is today's Top priorities; tasks carry categories, made from a chip or in Settings → Board, and
 any card can be set to repeat on weekdays from its dialog, which makes it a recurring priority:
@@ -675,8 +675,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   alarm and the card's note start when the switch is set, not when the day runs over. The
   setting `overtimeApproval` shows/hides the switch and banner button, and with it off the
   Clock out tile (and the board's clock bar, which takes its words) reads time past the day as
-  "past your day" rather than a red "Over by"; a flagged day counts only while the setting is
-  on: `overtimeOn` (`lib/timeclock.ts`) decides, which `Timeclock` (the tiles get the flag from
+  "past your day" rather than a red "Over by" (the sheet's tile leaves its line to the card's pill
+  once the day is done or a past day was never clocked out; the bar keeps "Day complete"); a
+  flagged day counts only while the setting is on: `overtimeOn` (`lib/timeclock.ts`) decides, which `Timeclock` (the tiles get the flag from
   it), `ClockBar` and `useTodayAlarms` call.
 - **`mealRules: false` turns the meal periods off in the math, not in the components.**
   `computeTimeclock` then never needs a lunch (`not-needed`, so no lunch alarm and no lunch added to
@@ -1098,9 +1099,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   end of the day) and is **not** silenced by overtime approval; marking the day reviewed
   (`days.retro_at`), or hiding the retrospective card under Customize (`alarmTargets` reads
   `settings.layout`), disarms it. Its banner button jumps to the card and opens it (`jumpTo` in
-  `App.tsx`). Today's card is folded to one line (the rows planned and ticked and the completed
-  focus, from the `reviewDay` it shows) and an Open button, which puts the focus in the note box,
-  until the day is clocked out (`tc.state === 'done'`: the Clock out reached; punches out of order
+  `App.tsx`). Today's card is folded to an Open button, which puts the focus in the note box, until
+  the day is clocked out (`tc.state === 'done'`: the Clock out reached; punches out of order
   read as working). `Sheet` passes `open` for another day, a Clock out reached or the jump, and
   once open, `Retro` stays open until it mounts again (it is keyed by date, so a new day starts
   folded). A Clock out reached while Open has the focus hands it to the note box too
@@ -1670,9 +1670,9 @@ The browser pass for each surface (the logic under it is already tested):
   the board, and the mark before the chip on a routine's row; at 1280 and 1000 the mark and a long
   category in the chip's column, and at 375 the mark before the chip under the field.
 - **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
-  Month / Quarter). Today's card folded to its line at 1280, 1000 and 375: Open shows it with the
-  focus in the note box, Now on Clock out opens it, and with the alarm recipe (see "Alarms") the
-  retro alarm's Open retrospective lands on it opened, the focus in the note box. By category in
+  Month / Quarter). Today's card folded to its Open button at 1280, 1000 and 375: Open shows it
+  with the focus in the note box, Now on Clock out opens it, and with the alarm recipe (see
+  "Alarms") the retro alarm's Open retrospective lands on it opened, the focus in the note box. By category in
   Review → Week and Month (solid and striped bars, No category last), in light and dark. For
   Added mid-day's "mostly …", give the last weekday's "Reply to the recruiter" row a category with
   its chip (the seed files that task under none) and open the Week that holds that day (◀ on a
