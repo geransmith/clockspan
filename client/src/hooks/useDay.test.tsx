@@ -590,10 +590,7 @@ describe('priorities', () => {
     vi.mocked(api.getDay).mockResolvedValue(answered(makeDay()));
     const first = deferredAnswer<{ priorities: Priority[] }>();
     const second = deferredAnswer<{ priorities: Priority[] }>();
-    vi.mocked(api.putPriorities)
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise)
-      .mockRejectedValueOnce(new Error('offline'));
+    vi.mocked(api.putPriorities).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise).mockRejectedValueOnce(new Error('offline'));
     const { result } = renderStore();
     await settle();
     // A timer start's new row goes out and a tick made meanwhile waits behind it, then goes out
