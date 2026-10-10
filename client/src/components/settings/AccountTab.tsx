@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import * as api from '../../api';
 import { useSubmit } from '../../hooks/useSubmit';
 import { unlessGone } from '../../lib/apiError';
-import { CONFIRM, PASSWORD_CHANGED, PASSWORD_MISMATCH } from '../../lib/copy';
+import { CONFIRM, PASSWORD_CHANGED } from '../../lib/copy';
 import type { PublicUser } from '../../types';
-import { HiddenUsername, NewPasswordFields, NewPasswordInput } from '../NewPasswordFields';
+import { HiddenUsername, NewPasswordFields, NewPasswordInput, useNewPassword } from '../NewPasswordFields';
 import { UsernameInput } from '../UsernameInput';
 import { Section } from './controls';
 import { ErrorLine } from '../ErrorLine';
@@ -30,18 +30,15 @@ export function AccountTab({ user }: { user: PublicUser }) {
 
 function ChangePassword({ username }: { username: string }) {
   const [current, setCurrent] = useState('');
-  const [next, setNext] = useState('');
-  const [confirm, setConfirm] = useState('');
+  const next = useNewPassword();
   const [done, setDone] = useState(false);
   const { busy, error, onSubmit } = useSubmit();
   const submit = onSubmit(async () => {
     setDone(false);
-    if (next !== confirm) throw new Error(PASSWORD_MISMATCH);
-    await api.changePassword(current, next);
+    await api.changePassword(current, next.checked());
     setDone(true);
     setCurrent('');
-    setNext('');
-    setConfirm('');
+    next.clear();
   });
   return (
     <form className="stack" onSubmit={submit}>
@@ -50,7 +47,7 @@ function ChangePassword({ username }: { username: string }) {
         <span>Current password</span>
         <input className="input" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
       </label>
-      <NewPasswordFields value={next} confirm={confirm} onValue={setNext} onConfirm={setConfirm} />
+      <NewPasswordFields {...next.fields} />
       <ErrorLine error={error} />
       {/* Always there, so a screen reader hears the line arrive. */}
       <p className="success" role="status">
