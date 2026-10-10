@@ -149,6 +149,7 @@ function storedPriorities(db: DB, dayId: number): Priority[] {
 interface Unsaid {
   categoryUid: Set<string>;
   note: Set<string>;
+  addedAt: Set<string>;
 }
 
 /** What a list of priority rows is called in the errors: the list sent, or the base it was built on. */
@@ -168,8 +169,8 @@ const BASE_ROWS: RowsLabel = { list: 'base', row: 'Base row' };
  * one `now`, so a row the merge compares across them isn't changed by two stamps a millisecond
  * apart. The fields the server works out (`recurring`, `listed` and the rest) are neither read nor
  * refused. A row's text is stored as `taskTitle` gives it, and its note as `taskNote` does. The
- * uids of the rows sent with no `categoryUid` or no `note` go in `unsaid`, when given, so the save
- * can read that field as unchanged.
+ * uids of the rows sent with no `categoryUid`, `note` or `addedAt` go in `unsaid`, when given, so
+ * the save can read that field as unchanged.
  */
 function parsePriorityRows(input: unknown, label: RowsLabel, now: number, unsaid?: Unsaid): Priority[] | string {
   if (!Array.isArray(input) || input.length > MAX_PRIORITIES) return `${label.list} must be an array of at most ${MAX_PRIORITIES}.`;
@@ -200,6 +201,7 @@ function parsePriorityRows(input: unknown, label: RowsLabel, now: number, unsaid
     if (item.note != null && typeof item.note !== 'string') return `${name} has an invalid note.`;
     if (uid && !('categoryUid' in item)) unsaid?.categoryUid.add(uid);
     if (uid && item.note == null) unsaid?.note.add(uid);
+    if (uid && item.addedAt == null) unsaid?.addedAt.add(uid);
     rows.push({
       position: i + 1,
       text,
@@ -377,7 +379,7 @@ export function daysRouter(db: DB, config: Config): Router {
     const body = req.body as Record<string, unknown>;
     if (staleShape(body)) return refuse(res, 409, STALE_CLIENT);
     const now = Date.now();
-    const unsaid: Unsaid = { categoryUid: new Set(), note: new Set() };
+    const unsaid: Unsaid = { categoryUid: new Set(), note: new Set(), addedAt: new Set() };
     const sent = parsePriorityRows(body.priorities, SENT_ROWS, now, unsaid);
     if (typeof sent === 'string') return refuse(res, 400, sent);
     const sentBase = body.base == null ? null : parsePriorityRows(body.base, BASE_ROWS, now);
@@ -385,13 +387,14 @@ export function daysRouter(db: DB, config: Config): Router {
     const saved = db.transaction((): Priority[] | null => {
       const day = findDay(db, user.id, date);
       const stored = day ? storedPriorities(db, day.id) : [];
-      // A row sent with no category or note (curl, a page from before notes) keeps what its base
-      // gives it: left out is unchanged.
+      // A row sent with no category, note or addedAt (curl, a page from before notes) keeps what
+      // its base gives it: left out is unchanged. A row new to the list keeps the stamp it was given.
       const baseRow = new Map((sentBase ?? stored).map((p) => [p.uid, p]));
       for (const p of sent) {
         if (p.uid == null) continue;
         if (unsaid.categoryUid.has(p.uid)) p.categoryUid = baseRow.get(p.uid)?.categoryUid ?? null;
         if (unsaid.note.has(p.uid)) p.note = baseRow.get(p.uid)?.note ?? '';
+        if (unsaid.addedAt.has(p.uid)) p.addedAt = baseRow.get(p.uid)?.addedAt ?? p.addedAt;
       }
       const uids = [...stored, ...sent, ...(sentBase ?? [])].flatMap((p) => (p.uid == null ? [] : [p.uid]));
       // Tombstones included: their rows are dropped, and their uids stay taken.
