@@ -9,14 +9,10 @@ const DATE = '2026-09-01';
 describe('sessions', () => {
   let app: TestApp;
   beforeEach(async () => {
-    // Only Date: the server reads the same clock in this process, and HTTP keeps its real timers.
-    vi.useFakeTimers({ now: SEED_NOW, toFake: ['Date'] });
-    app = await startTestApp();
+    // A known now: the server reads the same clock in this process.
+    app = await startTestApp({ now: SEED_NOW });
   });
-  afterEach(async () => {
-    vi.useRealTimers();
-    await app.close();
-  });
+  afterEach(() => app.close());
 
   /** Moves the clock to `ms` after the test's start. */
   const at = (ms: number) => vi.setSystemTime(SEED_NOW + ms);

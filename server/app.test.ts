@@ -458,10 +458,6 @@ describe('createApp', () => {
 });
 
 describe('startBackgroundJobs', () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   it('purges expired logins every six hours and schedules the old-day prune; building an app starts neither', () => {
     vi.useFakeTimers({ now: Date.UTC(2026, 8, 16, 12) });
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});

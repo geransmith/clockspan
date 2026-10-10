@@ -39,11 +39,9 @@ describe('OIDC code grant', () => {
     await app.close();
   });
 
-  const raw = (path: string, cookie?: string) => fetch(app.url + path, { redirect: 'manual', headers: cookie ? { cookie } : {} });
-
   /** Starts the flow: the redirect to the provider plus the one-time cookie it left behind. */
   const login = async () => {
-    const r = await raw('/auth/login');
+    const r = await app.raw('/auth/login');
     expect(r.status).toBe(302);
     const to = new URL(r.headers.get('location')!);
     const cookie = r.headers.getSetCookie().find((c) => c.startsWith('fs_oidc='))!;
@@ -57,7 +55,7 @@ describe('OIDC code grant', () => {
       vi.mocked(oidc.authorizationCodeGrant).mockResolvedValue(grant(claims));
       if (userinfo instanceof Error) vi.mocked(oidc.fetchUserInfo).mockRejectedValue(userinfo);
       else if (userinfo) vi.mocked(oidc.fetchUserInfo).mockResolvedValue(userinfo as oidc.UserInfoResponse);
-      const r = await raw(`/auth/callback?code=abc&state=${to.searchParams.get('state')}`, pair);
+      const r = await app.raw(`/auth/callback?code=abc&state=${to.searchParams.get('state')}`, pair);
       return { r, flow, to };
     });
 
@@ -192,10 +190,6 @@ describe('OIDC code grant', () => {
 });
 
 describe('Discovery', () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   it('retries with backoff until the provider answers, then remembers the answer', async () => {
     vi.useFakeTimers();
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
