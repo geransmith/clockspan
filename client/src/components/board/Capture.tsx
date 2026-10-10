@@ -29,7 +29,7 @@ export function Capture({
   onCategory: (uid: string | null) => void;
   /** The text was changed. */
   onEdit?: () => void;
-  /** False when the text is held (In progress's nudge): it stays in the box. */
+  /** False when the text is held (In Progress's nudge): it stays in the box. */
   onAdd: (title: string, categoryUid: string | null) => boolean;
   /** `back`: the focus goes back to the column's +. */
   onClose: (back: boolean) => void;

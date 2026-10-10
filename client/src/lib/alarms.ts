@@ -31,7 +31,7 @@ export interface TargetDay {
  * deadline comes from the clock-in and doesn't move, and a typo elsewhere must not mute the
  * meal period while the person is still working. On a day that is really over, the repeat is
  * what prompts fixing the punches. A hidden retrospective card disarms its reminder, since the
- * banner's button and Mark reviewed are on the card.
+ * banner's button and Mark Reviewed are on the card.
  */
 export function alarmTargets(tc: TimeclockResult, settings: TimeclockSettings & Pick<Settings, 'layout'>, day: TargetDay): AlarmTarget[] {
   const endFixed = !tc.outOfOrder && tc.state === 'working';

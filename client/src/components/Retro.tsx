@@ -28,8 +28,8 @@ interface Props {
  * Plan vs. actual for one day: each priority with the focus time logged against it,
  * the sessions that weren't on the plan, and a note on why. The note saves 800 ms after
  * the last keystroke or on blur; a note whose save fails stays in its box and goes again.
- * "Mark reviewed" ticks the day once the note has saved. Until `open`, an Open button stands in
- * for it (the day's totals are on the timeclock and Top priorities). Keyed by date in the sheet,
+ * "Mark Reviewed" ticks the day once the note has saved. Until `open`, an Open button stands in
+ * for it (the day's totals are on the timeclock and Top Priorities). Keyed by date in the sheet,
  * so a new day mounts with its own note and its own fold.
  */
 export function Retro({ priorities, sessions, note, reviewedAt, open, onChange }: Props) {
@@ -67,7 +67,7 @@ export function Retro({ priorities, sessions, note, reviewedAt, open, onChange }
       </PassFocusOnLeave>
     );
 
-  // An empty day still gets the note and Mark reviewed: the retro alarm stays armed until the
+  // An empty day still gets the note and Mark Reviewed: the retro alarm stays armed until the
   // day is reviewed, and its banner opens this card.
   const empty = review.total === 0 && review.unplanned.length === 0;
   const reviewed = reviewedAt != null;
@@ -115,7 +115,7 @@ export function Retro({ priorities, sessions, note, reviewedAt, open, onChange }
 
       {review.unplanned.length > 0 && (
         <section className="retro-section">
-          <h3 className="section-heading">Not on the plan</h3>
+          <h3 className="section-heading">Not on the Plan</h3>
           <ul>
             {review.unplanned.map((s) => (
               <li key={s.id} className="retro-row retro-row--unplanned">
@@ -171,7 +171,7 @@ export function Retro({ priorities, sessions, note, reviewedAt, open, onChange }
             'Undo'
           ) : (
             <>
-              <Check /> Mark reviewed
+              <Check /> Mark Reviewed
             </>
           )}
         </button>

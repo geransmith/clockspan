@@ -11,7 +11,7 @@ interface Leftovers {
 }
 
 /**
- * Today's morning notice on Top priorities, as the sheet hands it down: what the last planned day
+ * Today's morning notice on Top Priorities, as the sheet hands it down: what the last planned day
  * left unticked, the top of Next and the recurring priorities due today. The card shows each group
  * while its list doesn't hold it yet.
  */
@@ -23,7 +23,7 @@ export interface MorningOffer {
   /** The recurring priorities due today and not answered on this device yet, in the order they were made (`dueRecurring`); none before the board's first read. */
   recurring: Recurring[];
   /**
-   * Records what the notice showed once Add to today, Not today or Start fresh is pressed: the
+   * Records what the notice showed once Add to Today, Not today or Start fresh is pressed: the
    * routines shown, ticked or not, are answered for today on this device, and leftovers or Up
    * next shown hold Start fresh for the day.
    */
@@ -43,7 +43,7 @@ interface Props {
   rows: Priority[];
   /** Recurring rows per day: how many routines the notice ticks, less those on `rows`. */
   perDay: number;
-  /** Add to today, with the items ticked: the leftovers and then Up next's, as `seeds`. */
+  /** Add to Today, with the items ticked: the leftovers and then Up next's, as `seeds`. */
   onAdd: (seeds: PrioritySeed[], recurring: Recurring[]) => void;
   /** Not today, or Start fresh with no routine shown. */
   onSkip: () => void;
@@ -58,7 +58,7 @@ const recurringKey = (item: Recurring) => `rcur:${item.uid}`;
  * a box to tick. Leftovers start ticked; Up next up to `rowsPerDay` less the leftovers; routines up
  * to `perDay` less those already on the list (`offerPicks`), and the rest unticked. A box pressed
  * keeps its answer while the groups change around it (an item read from the board later still
- * starts as it should). Ticking more routines than `perDay` says so, and Add to today adds them
+ * starts as it should). Ticking more routines than `perDay` says so, and Add to Today adds them
  * all the same.
  */
 export function TodayOffer({ leftovers, upNext, rowsPerDay, recurring, rows, perDay, onAdd, onSkip }: Props) {

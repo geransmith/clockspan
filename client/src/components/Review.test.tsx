@@ -286,11 +286,11 @@ describe('Review', () => {
     expect(rows('Off the plan')).toEqual([['Inbox', 'Mon', 'no time']]);
   });
 
-  it('folds a long list after eight rows, and Show 2 more hands the focus to the first row it shows', async () => {
+  it('folds a long list after eight rows, and Show 2 More hands the focus to the first row it shows', async () => {
     serveRange([makeDay(MON, { priorities: Array.from({ length: 10 }, (_, i) => makePriority(i + 1, `Row ${i + 1}`, { addedAt: 0 })) })]);
     await review({ kind: 'week', from: MON });
     expect(rows('Not done')).toHaveLength(8);
-    fireEvent.click(screen.getByRole('button', { name: 'Show 2 more' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show 2 More' }));
     expect(rows('Not done')).toHaveLength(10);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Row 9/ }));
   });
@@ -490,7 +490,7 @@ describe('Review: By category', () => {
     serveRange([makeDay(MON, { priorities: categories.map((c, i) => makePriority(i + 1, `Row ${i}`, { categoryUid: c.uid, done: true, addedAt: 0 })) })]);
     await review({ kind: 'week', from: MON });
     expect(categoryRows()).toHaveLength(8);
-    fireEvent.click(screen.getByRole('button', { name: 'Show 2 more' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show 2 More' }));
     expect(categoryRows().map((c) => c.name)).toEqual(categories.map((c) => c.name));
     expect(document.activeElement).toBe(document.querySelectorAll('.review-category')[8]);
   });

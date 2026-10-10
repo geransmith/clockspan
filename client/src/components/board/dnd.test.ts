@@ -31,7 +31,7 @@ interface BoardShape {
   shown?: ColumnId;
 }
 
-/** Later holds a and b, Next holds `next`; In progress and Done take drops as columns. */
+/** Later holds a and b, Next holds `next`; In Progress and Done take drops as columns. */
 function board({ next = { d: cardRect(1, 0), e: cardRect(1, 2) }, shown }: BoardShape = {}) {
   const at = (column: ColumnId, r: ClientRect) => (shown === undefined || shown === column ? r : NOWHERE);
   const later = ['a', 'b'];
@@ -58,7 +58,7 @@ describe('boardCollision', () => {
     expect(collide({ x: 400, y: 160 }, cardRect(1, 0))).toBe('d');
   });
 
-  it('takes an empty lane, In progress and Done as columns', () => {
+  it('takes an empty lane, In Progress and Done as columns', () => {
     expect(collide({ x: 400, y: 300 }, rect(312, 290), true)).toBe(columnDropId('next'));
     expect(collide({ x: 700, y: 160 }, rect(612, 150))).toBe(columnDropId('progress'));
     expect(collide({ x: 1000, y: 500 }, rect(912, 490))).toBe(columnDropId('done'));
@@ -142,7 +142,7 @@ describe('boardKeyboardCoordinates', () => {
     expect(press('ArrowLeft', 'row', { at: rect(612, 150), column: 'progress', shown: 'progress' }).coordinates).toBeUndefined();
   });
 
-  it('moves an item of In progress or Done sideways only, its column standing in for it', () => {
+  it('moves an item of In Progress or Done sideways only, its column standing in for it', () => {
     const inProgress = { at: rect(612, 150), column: 'progress' };
     expect(press('ArrowLeft', 'row', inProgress).coordinates).toEqual({ x: 312, y: 150 });
     expect(press('ArrowRight', 'row', inProgress).coordinates).toEqual({ x: 900, y: 100 });

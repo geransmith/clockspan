@@ -82,12 +82,12 @@ interface Asked {
 export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, onNote, pick, offer }: Props) {
   const { settings } = useSettings();
   const count = settings.priorityCount;
-  // The rows Add priority put past the stored list: the server keeps no free row, so the card pads
+  // The rows Add Priority put past the stored list: the server keeps no free row, so the card pads
   // the stored list to them until a task the server holds reaches the last one, or it mounts again.
   const [added, setAdded] = useState(0);
   if (added > 0 && priorities.some((p) => p.uid != null && p.position >= added)) setAdded(0);
   const stored = useMemo(() => padPriorities(priorities, Math.max(count, added)), [priorities, count, added]);
-  // The last list sent, for Add to today, which answers the offer once its save is in.
+  // The last list sent, for Add to Today, which answers the offer once its save is in.
   const sent = useRef<Promise<boolean>>(Promise.resolve(true));
   // Let go once sent: a list held after a failed save would stop the card following the stored
   // list (a row a timer start or another device added, a tick made elsewhere) until a later save
@@ -122,7 +122,7 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
   // compares with it. A free row's task is minted by its first key, so its uid at focus can't say.
   const [focused, setFocused] = useState<{ position: number; text: string } | null>(null);
   const [asked, setAsked] = useState<Asked | null>(null);
-  // Add to today's save is out: the notice stays away, and comes back if the save fails.
+  // Add to Today's save is out: the notice stays away, and comes back if the save fails.
   const [adding, setAdding] = useState(false);
   const storedName = (uid: string | null) => stored.find((q) => q.uid === uid)?.text;
 
@@ -173,7 +173,7 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
     });
     inputs.current.get(next.length)?.focus();
   };
-  // N presses Add priority: the focus goes where a tap would leave it, on the new row, or on Add
+  // N presses Add Priority: the focus goes where a tap would leave it, on the new row, or on Add
   // priority beside the nudge.
   const addKey = useShortcut(
     'new',
@@ -184,7 +184,7 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
         }
       : null,
   );
-  // Focus goes where Add priority would put a new priority.
+  // Focus goes where Add Priority would put a new priority.
   const focusFree = (rows = local) => {
     const free = rows.find(isFree);
     if (free) inputs.current.get(free.position)?.focus();
@@ -235,7 +235,7 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
   };
   // × asks first when the task is on other days or has time logged on it, a timer running on it
   // included, since Delete everywhere is then a different answer, or when it has a note, which a
-  // delete takes with it; a recurring priority's row never asks (Stop repeating on the board ends those).
+  // delete takes with it; a recurring priority's row never asks (Stop Repeating on the board ends those).
   const remove = (p: Priority) => {
     // `logged` is the other days' time, so the day's own log, a running timer included, adds to it.
     const time = p.uid == null ? 0 : p.logged + (loggedByUid(sessions, now).get(p.uid) ?? 0);
@@ -445,7 +445,7 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
         {local.length < MAX_PRIORITIES ? (
           <button ref={addButton} className="btn btn-ghost priority-add" onClick={() => addRow()} aria-keyshortcuts={addKey}>
             <Plus />
-            Add priority
+            Add Priority
           </button>
         ) : (
           <span />

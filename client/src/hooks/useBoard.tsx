@@ -79,9 +79,9 @@ export interface BoardStore {
    * named it read again and the ranges on screen with them (`taskChanged`).
    */
   deleteItem(uid: string): Promise<void>;
-  /** A card's Stop repeating: the recurring priority is archived, and the days it was on keep it (a 404 counts as done). */
+  /** A card's Stop Repeating: the recurring priority is archived, and the days it was on keep it (a 404 counts as done). */
   removeRecurring(uid: string): Promise<void>;
-  /** A row taken off today's list from the board as × takes it (`takeOffRow`): a recurring priority's Remove from today. */
+  /** A row taken off today's list from the board as × takes it (`takeOffRow`): a recurring priority's Remove From Today. */
   removeFromToday(uid: string): Promise<void>;
   /**
    * A row of today's list renamed, given a category or a note on the board, which reaches every day

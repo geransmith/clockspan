@@ -142,21 +142,21 @@ beforeEach(() => {
 });
 
 describe('Board', () => {
-  it("shows Later, Next, today's open rows in progress and this week in Done", async () => {
+  it("shows Later, Next, today's open rows in In Progress and this week in Done", async () => {
     await renderBoard();
     expect(titlesIn('Later')).toEqual(['Write a KB']);
     expect(titlesIn('Next')).toEqual(['Follow up', 'Plan B']);
-    expect(titlesIn('In progress')).toEqual(['Report']);
-    expect(titlesIn('Done')).toEqual(['Email', 'Earlier this week · 2']);
-    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
-    expect(titlesIn('Done')).toEqual(['Email', 'Earlier this week · 2', 'Shipped', 'Tuesday row']);
-    expect(screen.getByRole('button', { name: 'Earlier this week · 2' }).getAttribute('aria-expanded')).toBe('true');
+    expect(titlesIn('In Progress')).toEqual(['Report']);
+    expect(titlesIn('Done')).toEqual(['Email', 'Earlier This Week · 2']);
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier This Week · 2' }));
+    expect(titlesIn('Done')).toEqual(['Email', 'Earlier This Week · 2', 'Shipped', 'Tuesday row']);
+    expect(screen.getByRole('button', { name: 'Earlier This Week · 2' }).getAttribute('aria-expanded')).toBe('true');
   });
 
   it("names the day on a routine's earlier ticks, which read alike, and counts the fold only beside today's done items", async () => {
     serveRange([makeDay(TUE, { priorities: [tuesdayRoutine()] }), makeDay(MON, { priorities: [tuesdayRoutine()] })]);
     await renderBoard();
-    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 3' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier This Week · 3' }));
     const cards = [...column('Done').querySelectorAll('.board-card')];
     expect(cards.map((c) => [c.querySelector('.board-card-title')?.textContent, c.querySelector('.board-card-meta')?.textContent ?? null])).toEqual([
       ['Email', null],
@@ -167,7 +167,7 @@ describe('Board', () => {
     // With nothing done today, the fold's count would be the column's.
     fireEvent.click(screen.getByRole('checkbox', { name: 'Email done' }));
     await settle();
-    expect(titlesIn('Done')).toEqual(['Earlier this week', 'Shipped', 'Tuesday row', 'Tuesday row']);
+    expect(titlesIn('Done')).toEqual(['Earlier This Week', 'Shipped', 'Tuesday row', 'Tuesday row']);
   });
 
   it("puts today's times above the notice and the columns, only with Times on the board on", async () => {
@@ -194,7 +194,7 @@ describe('Board', () => {
     expect(screen.getByRole('button', { name: 'Category for Check the logs: none' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Delete' })).toBeTruthy();
     // Next too: it has no place of its own there yet.
-    expect(moveOptions()).toEqual(['Later', 'Next', 'In progress', 'Done']);
+    expect(moveOptions()).toEqual(['Later', 'Next', 'In Progress', 'Done']);
     moveTo('next');
     await settle();
     expect(api.editItem).toHaveBeenCalledExactlyOnceWith('left00000001', { lane: 'next', before: null });
@@ -205,21 +205,21 @@ describe('Board', () => {
   it('moves a task between Later and Next with Move to', async () => {
     await renderBoard();
     openCard('Write a KB');
-    expect(moveOptions()).toEqual(['Next', 'In progress', 'Done']);
+    expect(moveOptions()).toEqual(['Next', 'In Progress', 'Done']);
     moveTo('next');
     await settle();
     expect(api.editItem).toHaveBeenCalledExactlyOnceWith('later0000001', { lane: 'next', before: null });
     expect(titlesIn('Next')).toEqual(['Follow up', 'Plan B', 'Write a KB']);
   });
 
-  it("pulls a task into In progress: the task itself on today's list", async () => {
+  it("pulls a task into In Progress: the task itself on today's list", async () => {
     await renderBoard();
     openCard('Follow up');
     moveTo('progress');
     await settle();
     expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Follow up'] }]);
     expect(lists[WED]![2]).toMatchObject({ uid: 'next00000001', done: false });
-    expect(titlesIn('In progress')).toEqual(['Report', 'Follow up']);
+    expect(titlesIn('In Progress')).toEqual(['Report', 'Follow up']);
   });
 
   it('puts a Next task in Done as a ticked row of today, unlocking the sound in the tap', async () => {
@@ -232,7 +232,7 @@ describe('Board', () => {
     expect((document.querySelector('.burst') as HTMLElement).style).toMatchObject({ left: '140px', top: '222px' });
     await settle();
     expect(lists[WED]![2]).toMatchObject({ text: 'Follow up', done: true, uid: 'next00000001' });
-    expect(titlesIn('Done')).toEqual(['Email', 'Follow up', 'Earlier this week · 2']);
+    expect(titlesIn('Done')).toEqual(['Email', 'Follow up', 'Earlier This Week · 2']);
   });
 
   it("ticks today's rows from the board, unlocking the sound for a tick", async () => {
@@ -256,16 +256,16 @@ describe('Board', () => {
   it("puts a task ticked on a later day with today's in Done, with no tick, its dialog saying when its sheet can untick it", async () => {
     onServer = makeBoard(...onServer.cards, makeCard('ahead0000001', 'Ticked ahead', { lane: null, listDate: THU, listDone: true, listed: 1 }));
     await renderBoard();
-    expect(titlesIn('Done')).toEqual(['Email', 'Ticked ahead', 'Earlier this week · 2']);
+    expect(titlesIn('Done')).toEqual(['Email', 'Ticked ahead', 'Earlier This Week · 2']);
     expect(screen.queryByRole('checkbox', { name: 'Ticked ahead done' })).toBeNull();
     openCard('Ticked ahead');
     expect(within(dialog()).getByText(BOARD.doneAhead('tomorrow'))).toBeTruthy();
-    expect(moveOptions()).toEqual(['Later', 'Next', 'In progress']);
+    expect(moveOptions()).toEqual(['Later', 'Next', 'In Progress']);
   });
 
   it('gives a task done on an earlier day no tick, saying where to untick it, and Move to brings it back', async () => {
     await renderBoard();
-    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier This Week · 2' }));
     expect(screen.queryByRole('checkbox', { name: 'Shipped done' })).toBeNull();
     openCard('Shipped');
     expect(dialog().getAttribute('aria-label')).toBe('Shipped');
@@ -273,11 +273,11 @@ describe('Board', () => {
     expect(within(dialog()).getByRole('textbox', { name: 'Title' })).toBeTruthy();
     expect(within(dialog()).getByRole('button', { name: 'Category for Shipped: none' })).toBeTruthy();
     expect(within(dialog()).getByRole('button', { name: 'Delete' })).toBeTruthy();
-    expect(moveOptions()).toEqual(['Later', 'Next', 'In progress']);
+    expect(moveOptions()).toEqual(['Later', 'Next', 'In Progress']);
     moveTo('progress');
     await settle();
     expect(lists[WED]![2]).toMatchObject({ uid: 'done00000001', text: 'Shipped', done: false });
-    expect(titlesIn('In progress')).toEqual(['Report', 'Shipped']);
+    expect(titlesIn('In Progress')).toEqual(['Report', 'Shipped']);
     // Today's ticked row keeps its tick and its Delete.
     openCard('Email');
     expect(screen.getByRole('checkbox', { name: 'Email done' })).toBeTruthy();
@@ -289,14 +289,14 @@ describe('Board', () => {
     const confirm = vi.fn(() => true);
     vi.stubGlobal('confirm', confirm);
     await renderBoard();
-    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier This Week · 2' }));
     openCard('Shipped');
     const title = screen.getByRole('textbox', { name: 'Title' });
     fireEvent.change(title, { target: { value: 'Shipped v2' } });
     fireEvent.keyDown(title, { key: 'Enter' });
     await settle();
     expect(api.editItem).toHaveBeenCalledExactlyOnceWith('done00000001', { title: 'Shipped v2' });
-    expect(titlesIn('Done')).toEqual(['Email', 'Earlier this week · 2', 'Shipped v2', 'Tuesday row']);
+    expect(titlesIn('Done')).toEqual(['Email', 'Earlier This Week · 2', 'Shipped v2', 'Tuesday row']);
 
     openCard('Shipped v2');
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
@@ -304,7 +304,7 @@ describe('Board', () => {
     await settle();
     expect(api.putPriorities).not.toHaveBeenCalled();
     expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith('done00000001');
-    expect(titlesIn('Done')).toEqual(['Email', 'Earlier this week · 1', 'Tuesday row']);
+    expect(titlesIn('Done')).toEqual(['Email', 'Earlier This Week · 1', 'Tuesday row']);
   });
 
   it("parks today's row: its task placed in Later first, then the row off today's list", async () => {
@@ -316,7 +316,7 @@ describe('Board', () => {
     expect(putLists()).toEqual([{ date: WED, texts: ['', 'Email', ''] }]);
     expect(vi.mocked(api.editItem).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(api.putPriorities).mock.invocationCallOrder[0]!);
     expect(titlesIn('Later')).toEqual(['Report', 'Write a KB']);
-    expect(titlesIn('In progress')).toEqual([]);
+    expect(titlesIn('In Progress')).toEqual([]);
     expect(screen.getByText("Nothing open on today's top priorities.")).toBeTruthy();
   });
 
@@ -420,7 +420,7 @@ describe('Board', () => {
       expect(titlesIn('Done')).toContain('Email');
       expect(titlesIn('Next')).toEqual(['Follow up', 'Plan B', 'Email']);
       // Later's new task goes at the top, as Later's + puts one.
-      fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Earlier This Week · 2' }));
       openCard('Shipped');
       moveTo('later');
       fireEvent.click(screen.getByRole('button', { name: DONE_STAYS.add('Later') }));
@@ -459,35 +459,35 @@ describe('Board', () => {
     });
   });
 
-  it("offers a recurring row no Later or Next, only Remove from today, which takes it off today's list, closing its dialog with the focus near it, a failed remove too", async () => {
+  it("offers a recurring row no Later or Next, only Remove From Today, which takes it off today's list, closing its dialog with the focus near it, a failed remove too", async () => {
     lists[WED] = [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true })];
     await renderBoard();
     openCard('Monitor the queue');
     expect(moveOptions()).toEqual(['Done']);
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
     vi.mocked(api.putPriorities).mockRejectedValueOnce(new Error('offline'));
-    fireEvent.click(screen.getByRole('button', { name: 'Remove from today' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove From Today' }));
     await settle();
     // The day store put the row back and read the day again.
-    expect(titlesIn('In progress')).toEqual(['Monitor the queue']);
+    expect(titlesIn('In Progress')).toEqual(['Monitor the queue']);
     expect(screen.queryByRole('dialog')).toBeNull();
-    expect(document.activeElement).toBe(plus('In progress'));
+    expect(document.activeElement).toBe(plus('In Progress'));
     openCard('Monitor the queue');
-    fireEvent.click(screen.getByRole('button', { name: 'Remove from today' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove From Today' }));
     await settle();
     expect(putLists()).toEqual([
       { date: WED, texts: ['', '', ''] },
       { date: WED, texts: ['', '', ''] },
     ]);
-    expect(titlesIn('In progress')).toEqual([]);
-    expect(document.activeElement).toBe(plus('In progress'));
+    expect(titlesIn('In Progress')).toEqual([]);
+    expect(document.activeElement).toBe(plus('In Progress'));
     expect(api.deleteItem).not.toHaveBeenCalled();
   });
 
   /** The lines under the title in the open dialog: where it is renamed, or changed. */
   const dialogLines = () => [...dialog().querySelectorAll('p.muted.small')].map((p) => p.textContent);
 
-  it("renames today's recurring row through the row, which renames the recurring priority and its earlier ticks at once, and keeps its chip, its tick and Remove from today", async () => {
+  it("renames today's recurring row through the row, which renames the recurring priority and its earlier ticks at once, and keeps its chip, its tick and Remove From Today", async () => {
     onServer = { ...onServer, recurring: [makeRecurring('rec000000001', 'Monitor the queue')] };
     lists[WED] = [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true, listed: 2 }), row(2, 'Report')];
     serveRange([makeDay(TUE, { priorities: [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true, done: true })] })]);
@@ -495,7 +495,7 @@ describe('Board', () => {
     openCard('Monitor the queue');
     expect(dialogLines()).toEqual([]);
     expect(within(dialog()).getByRole('button', { name: 'Category for Monitor the queue: none' })).toBeTruthy();
-    expect(within(dialog()).getByRole('button', { name: 'Remove from today' })).toBeTruthy();
+    expect(within(dialog()).getByRole('button', { name: 'Remove From Today' })).toBeTruthy();
     expect(screen.getByRole('checkbox', { name: 'Monitor the queue done' })).toBeTruthy();
     const title = within(dialog()).getByRole('textbox', { name: 'Title' });
     fireEvent.change(title, { target: { value: 'Watch the queue' } });
@@ -505,8 +505,8 @@ describe('Board', () => {
     expect(api.editItem).not.toHaveBeenCalled();
     // Tuesday's tick shows its recurring priority's new name, and the days on screen are read again.
     // Nothing is done today, so the fold doesn't repeat the column's count.
-    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week' }));
-    expect(titlesIn('Done')).toEqual(['Earlier this week', 'Shipped', 'Watch the queue']);
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier This Week' }));
+    expect(titlesIn('Done')).toEqual(['Earlier This Week', 'Shipped', 'Watch the queue']);
     expect(vi.mocked(api.getRange)).toHaveBeenCalledTimes(2);
   });
 
@@ -526,10 +526,10 @@ describe('Board', () => {
   it("renames an earlier day's recurring row in Done by a PATCH of its recurring priority, and shows it as text once that stopped repeating", async () => {
     onServer = { ...onServer, recurring: [makeRecurring('rec000000009', 'Tuesday row')] };
     await renderBoard();
-    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier This Week · 2' }));
     openCard('Tuesday row', 'Done');
     expect(dialogLines()).toEqual([]);
-    expect(moveOptions()).toEqual(['In progress']);
+    expect(moveOptions()).toEqual(['In Progress']);
     const title = screen.getByRole('textbox', { name: 'Title' });
     fireEvent.change(title, { target: { value: 'Tuesday task' } });
     fireEvent.keyDown(title, { key: 'Enter' });
@@ -537,12 +537,12 @@ describe('Board', () => {
     expect(api.editItem).toHaveBeenCalledExactlyOnceWith('rec000000009', { title: 'Tuesday task' });
     expect(api.putPriorities).not.toHaveBeenCalled();
     expect(onServer.recurring[0]!.title).toBe('Tuesday task');
-    expect(titlesIn('Done')).toEqual(['Email', 'Earlier this week · 2', 'Shipped', 'Tuesday task']);
+    expect(titlesIn('Done')).toEqual(['Email', 'Earlier This Week · 2', 'Shipped', 'Tuesday task']);
 
     cleanup();
     onServer = { ...onServer, recurring: [] };
     await renderBoard();
-    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier This Week · 2' }));
     openCard('Tuesday row');
     expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull();
     expect(within(dialog()).getByRole('heading', { name: 'Tuesday row' })).toBeTruthy();
@@ -558,11 +558,11 @@ describe('Board', () => {
       row(3, 'Follow-ups', { uid: 'rec000000002', recurring: true, note: 'Kim first.' }),
     ];
     await renderBoard();
-    const metas = [...column('In progress').querySelectorAll('.board-card-meta')];
+    const metas = [...column('In Progress').querySelectorAll('.board-card-meta')];
     expect(metas.map((m) => m.closest('.board-card')?.querySelector('.board-card-title')?.textContent)).toEqual(['Monitor the queue', 'Follow-ups']);
     for (const m of metas) within(m as HTMLElement).getByRole('img', { name: 'Repeats' });
     // The mark's own title lies under the card's button, which takes the hover.
-    expect([...column('In progress').querySelectorAll('.board-card-open')].map((b) => [b.textContent, b.getAttribute('title')])).toEqual([
+    expect([...column('In Progress').querySelectorAll('.board-card-open')].map((b) => [b.textContent, b.getAttribute('title')])).toEqual([
       ['Monitor the queue', 'Repeats'],
       ['Report', null],
       ['Follow-ups', 'Kim first.'],
@@ -574,7 +574,7 @@ describe('Board', () => {
     vi.stubGlobal('confirm', confirm);
     await renderBoard();
     openCard('Plan B');
-    expect(moveOptions()).toEqual(['Later', 'In progress', 'Done']);
+    expect(moveOptions()).toEqual(['Later', 'In Progress', 'Done']);
     const title = screen.getByRole('textbox', { name: 'Title' });
     fireEvent.change(title, { target: { value: 'Plan C' } });
     fireEvent.blur(title);
@@ -619,7 +619,7 @@ describe('Board', () => {
     await settle();
     expect(api.putPriorities).not.toHaveBeenCalled();
     expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith(REPORT);
-    expect(titlesIn('In progress')).toEqual([]);
+    expect(titlesIn('In Progress')).toEqual([]);
   });
 
   it("counts a timer running on today's task in Delete's confirm, as × on the sheet does", async () => {
@@ -661,7 +661,7 @@ describe('Board', () => {
     await settle();
     expect(titlesIn('Later')).toEqual([]);
     expect(document.activeElement).toBe(plus('Later'));
-    // Done has no +, and the items folded under Earlier this week take no focus: its heading does.
+    // Done has no +, and the items folded under Earlier This Week take no focus: its heading does.
     vi.mocked(api.deleteItem).mockImplementationOnce((uid) => {
       lists[WED] = lists[WED]!.filter((p) => p.uid !== uid);
       return Promise.resolve(answered((onServer = withoutItem(onServer, uid))));
@@ -669,7 +669,7 @@ describe('Board', () => {
     openCard('Email');
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     await settle();
-    expect(titlesIn('Done')).toEqual(['Earlier this week']);
+    expect(titlesIn('Done')).toEqual(['Earlier This Week']);
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Done' }));
     // happy-dom focuses any heading; a browser only one with a tabindex.
     expect(screen.getByRole('heading', { name: 'Done' }).getAttribute('tabindex')).toBe('-1');
@@ -772,12 +772,12 @@ describe('Board', () => {
   it('follows a move made elsewhere in a dialog left open, and closes it for good once its item goes', async () => {
     await renderBoard();
     openCard('Write a KB');
-    expect(moveOptions()).toEqual(['Next', 'In progress', 'Done']);
+    expect(moveOptions()).toEqual(['Next', 'In Progress', 'Done']);
     onServer = withItemPatch(onServer, 'later0000001', { lane: 'next', before: null });
     changedElsewhere();
     await settle();
     expect(titlesIn('Next')).toEqual(['Follow up', 'Plan B', 'Write a KB']);
-    expect(moveOptions()).toEqual(['Later', 'In progress', 'Done']);
+    expect(moveOptions()).toEqual(['Later', 'In Progress', 'Done']);
     const before = onServer;
     onServer = withoutItem(onServer, 'later0000001');
     changedElsewhere();
@@ -821,7 +821,7 @@ describe('Board', () => {
     expect(warnSaveFailed).not.toHaveBeenCalled();
     expect(api.editItem).not.toHaveBeenCalled();
     expect(api.putPriorities).not.toHaveBeenCalled();
-    expect(titlesIn('In progress')).toEqual(['Report']);
+    expect(titlesIn('In Progress')).toEqual(['Report']);
   });
 
   it('shows a Try again for a list of today that could not be read', async () => {
@@ -831,12 +831,12 @@ describe('Board', () => {
     expect(warnQuietly).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
     await settle();
-    expect(titlesIn('In progress')).toEqual(['Report']);
+    expect(titlesIn('In Progress')).toEqual(['Report']);
   });
 
-  it('shows one column at a time from the switch, In progress first', async () => {
+  it('shows one column at a time from the switch, In Progress first', async () => {
     await renderBoard();
-    expect(shownColumns()).toEqual(['In progress']);
+    expect(shownColumns()).toEqual(['In Progress']);
     fireEvent.click(within(screen.getByRole('group', { name: 'Board column' })).getByRole('button', { name: 'Later' }));
     expect(shownColumns()).toEqual(['Later']);
   });
@@ -952,7 +952,7 @@ describe('adding from a column', () => {
 
   it('shows the column whose + is pressed, as a phone shows one at a time', async () => {
     await renderBoard();
-    expect(shownColumns()).toEqual(['In progress']);
+    expect(shownColumns()).toEqual(['In Progress']);
     fireEvent.click(plus('Later'));
     expect(shownColumns()).toEqual(['Later']);
     expect(document.activeElement).toBe(field('New card for Later'));
@@ -983,7 +983,7 @@ describe('adding from a column', () => {
     expect(isOpen('New card for Later')).toBe(false);
   });
 
-  it("shuts Later's and Next's + at the cap and In progress's on a full list, saying why under each, where Tab still reaches it", async () => {
+  it("shuts Later's and Next's + at the cap and In Progress's on a full list, saying why under each, where Tab still reaches it", async () => {
     onServer = makeBoard(...fullBoard());
     await renderBoard();
     const why = (add: HTMLElement) => document.getElementById(add.getAttribute('aria-describedby')!)?.textContent;
@@ -995,11 +995,11 @@ describe('adding from a column', () => {
     }
     expect(screen.queryByRole('textbox')).toBeNull();
     // A shut + doesn't show its column either.
-    expect(shownColumns()).toEqual(['In progress']);
-    // A task typed in In progress has no lane: the cap doesn't count it.
-    expect(plus('In progress').getAttribute('aria-disabled')).toBeNull();
-    expect(plus('In progress').getAttribute('aria-describedby')).toBeNull();
-    fireEvent.click(plus('In progress'));
+    expect(shownColumns()).toEqual(['In Progress']);
+    // A task typed in In Progress has no lane: the cap doesn't count it.
+    expect(plus('In Progress').getAttribute('aria-disabled')).toBeNull();
+    expect(plus('In Progress').getAttribute('aria-describedby')).toBeNull();
+    fireEvent.click(plus('In Progress'));
     enter(field('New priority for today'), 'Call the vendor');
     await settle();
     expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Call the vendor'] }]);
@@ -1008,9 +1008,9 @@ describe('adding from a column', () => {
     onServer = makeBoard();
     lists[WED] = Array.from({ length: MAX_PRIORITIES }, (_, i) => row(i + 1, `Task ${i + 1}`));
     await renderBoard();
-    expect(plus('In progress').getAttribute('aria-disabled')).toBe('true');
-    expect(why(plus('In progress'))).toBe(ADD_PRIORITY_FAILED.full);
-    fireEvent.click(plus('In progress'));
+    expect(plus('In Progress').getAttribute('aria-disabled')).toBe('true');
+    expect(why(plus('In Progress'))).toBe(ADD_PRIORITY_FAILED.full);
+    fireEvent.click(plus('In Progress'));
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(plus('Later').getAttribute('aria-disabled')).toBeNull();
   });
@@ -1032,13 +1032,13 @@ describe('adding from a column', () => {
     expect(isOpen('New card for Later')).toBe(false);
   });
 
-  it("adds a task to today's list from In progress's box on the board's queue, after a board write still out, and keeps the box", async () => {
+  it("adds a task to today's list from In Progress's box on the board's queue, after a board write still out, and keeps the box", async () => {
     const placed = deferredAnswer<BoardData>();
     vi.mocked(api.editItem).mockReturnValueOnce(placed.promise);
     await renderBoard();
     openCard('Report');
     moveTo('later');
-    fireEvent.click(plus('In progress'));
+    fireEvent.click(plus('In Progress'));
     const box = field('New priority for today');
     expect(box.placeholder).toBe('New priority');
     enter(box, 'Call the vendor');
@@ -1060,7 +1060,7 @@ describe('adding from a column', () => {
     expect(lists[WED]![0]).toMatchObject({ text: 'Call the vendor', done: false, recurring: false, categoryUid: null });
     expect(lists[WED]![0]!.uid).toMatch(/^[0-9a-f]{12}$/);
     expect(api.addItem).not.toHaveBeenCalled();
-    expect(titlesIn('In progress')).toEqual(['Call the vendor']);
+    expect(titlesIn('In Progress')).toEqual(['Call the vendor']);
     expect(document.activeElement).toBe(document.body);
   });
 
@@ -1072,7 +1072,7 @@ describe('adding from a column', () => {
     await renderBoard();
     openCard('Write a KB');
     moveTo('next');
-    fireEvent.click(plus('In progress'));
+    fireEvent.click(plus('In Progress'));
     const box = field('New priority for today');
     enter(box, 'Call the vendor');
     expect(notice().textContent).toBe('');
@@ -1088,7 +1088,7 @@ describe('adding from a column', () => {
     lists[WED] = [row(1, 'Report'), row(2, 'Email')];
     vi.mocked(api.putPriorities).mockRejectedValueOnce(new Error('offline'));
     await renderBoard();
-    fireEvent.click(plus('In progress'));
+    fireEvent.click(plus('In Progress'));
     const box = field('New priority for today');
     enter(box, 'Call the vendor');
     expect(notice().textContent).toBe('');
@@ -1098,21 +1098,21 @@ describe('adding from a column', () => {
     expect(notice().textContent).toBe('');
   });
 
-  it("asks first from In progress's box past the nudge: Keep it short leaves the text in the box, Add anyway adds it, closes the box and focuses the new row", async () => {
+  it("asks first from In Progress's box past the nudge: Keep it short leaves the text in the box, Add anyway adds it, closes the box and focuses the new row", async () => {
     lists[WED] = [row(1, 'Report'), row(2, 'Email'), row(3, 'Invoices')];
     await renderBoard();
-    fireEvent.click(plus('In progress'));
+    fireEvent.click(plus('In Progress'));
     const box = field('New priority for today');
     enter(box, 'Call the vendor');
     expect(PRIORITY_WARNINGS.fresh).toContain(within(notice()).getByText(/./, { selector: 'span:not(.notice-actions)' }).textContent);
     expect(document.activeElement).toBe(within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
     expect(box.value).toBe('Call the vendor');
-    // On a phone the notice stays up while another column shows: its answer shows In progress again.
+    // On a phone the notice stays up while another column shows: its answer shows In Progress again.
     const show = (name: string) => fireEvent.click(within(screen.getByRole('group', { name: 'Board column' })).getByRole('button', { name }));
     show('Next');
     fireEvent.click(within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.keep }));
     expect(within(notice()).queryByRole('button')).toBeNull();
-    expect(shownColumns()).toEqual(['In progress']);
+    expect(shownColumns()).toEqual(['In Progress']);
     expect(document.activeElement).toBe(box);
     expect(box.value).toBe('Call the vendor');
     await settle();
@@ -1122,7 +1122,7 @@ describe('adding from a column', () => {
     show('Later');
     fireEvent.click(within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
     expect(isOpen('New priority for today')).toBe(false);
-    expect(shownColumns()).toEqual(['In progress']);
+    expect(shownColumns()).toEqual(['In Progress']);
     await settle();
     expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Invoices', 'Call the vendor'] }]);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Call the vendor' }));
@@ -1132,7 +1132,7 @@ describe('adding from a column', () => {
   it("doesn't take a key still held from the press that raised the nudge as its answer", async () => {
     lists[WED] = [row(1, 'Report'), row(2, 'Email'), row(3, 'Invoices')];
     await renderBoard();
-    fireEvent.click(plus('In progress'));
+    fireEvent.click(plus('In Progress'));
     enter(field('New priority for today'), 'Call the vendor');
     const add = within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.add });
     expect(document.activeElement).toBe(add);
@@ -1141,10 +1141,10 @@ describe('adding from a column', () => {
     expect(fireEvent.keyDown(add, { key: 'Enter' })).toBe(true);
   });
 
-  it("drops the question In progress's box held when its text changes, and asks again on Enter with the new text", async () => {
+  it("drops the question In Progress's box held when its text changes, and asks again on Enter with the new text", async () => {
     lists[WED] = [row(1, 'Report'), row(2, 'Email'), row(3, 'Invoices')];
     await renderBoard();
-    fireEvent.click(plus('In progress'));
+    fireEvent.click(plus('In Progress'));
     const box = field('New priority for today');
     enter(box, 'Call bank');
     // Typing in another column's box leaves it.
@@ -1159,19 +1159,19 @@ describe('adding from a column', () => {
     expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Invoices', 'Call the bank about fees'] }]);
   });
 
-  it("drops the row In progress's box held for the nudge when the box closes", async () => {
+  it("drops the row In Progress's box held for the nudge when the box closes", async () => {
     lists[WED] = [row(1, 'Report'), row(2, 'Email'), row(3, 'Invoices')];
     await renderBoard();
-    fireEvent.click(plus('In progress'));
+    fireEvent.click(plus('In Progress'));
     enter(field('New priority for today'), 'Call the vendor');
     expect(within(notice()).getAllByRole('button')).toHaveLength(2);
     fireEvent.keyDown(field('New priority for today'), { key: 'Escape' });
     expect(notice().textContent).toBe('');
-    expect(document.activeElement).toBe(plus('In progress'));
+    expect(document.activeElement).toBe(plus('In Progress'));
     await settle();
     expect(api.putPriorities).not.toHaveBeenCalled();
     // A pull's question stays when the box closes.
-    fireEvent.click(plus('In progress'));
+    fireEvent.click(plus('In Progress'));
     fireEvent.change(field('New priority for today'), { target: { value: 'Half typed' } });
     openCard('Follow up');
     moveTo('progress');
@@ -1179,12 +1179,12 @@ describe('adding from a column', () => {
     expect(within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.add })).toBeTruthy();
   });
 
-  it('clears an earlier notice when a row goes in from In progress below the nudge', async () => {
+  it('clears an earlier notice when a row goes in from In Progress below the nudge', async () => {
     await renderBoard();
     openCard('Email');
     moveTo('next');
     expect(notice().textContent).toContain(DONE_STAYS.body);
-    fireEvent.click(plus('In progress'));
+    fireEvent.click(plus('In Progress'));
     enter(field('New priority for today'), 'Call the vendor');
     expect(notice().textContent).toBe('');
   });
@@ -1333,7 +1333,7 @@ describe("a card's note", () => {
       makeDay(MON, { priorities: [row(1, 'Monday row', { uid: 'rec000000008', recurring: true, done: true })] }),
     ]);
     await renderBoard();
-    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 3' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier This Week · 3' }));
     openCard('Tuesday row');
     expect(box('Tuesday row')).toBeNull();
     expect(dialog().querySelector('.note-text')?.textContent).toBe('Acme first');
@@ -1377,8 +1377,8 @@ describe('repeating', () => {
       ['Repeats', 'Sat, Sun'],
     ]);
     // On today's list, it shows there alone, with its mark and no days.
-    expect(titlesIn('In progress')).toEqual(['Report', 'Monitor the queue']);
-    expect(column('In progress').querySelector('.board-card-meta')?.textContent).toBe('');
+    expect(titlesIn('In Progress')).toEqual(['Report', 'Monitor the queue']);
+    expect(column('In Progress').querySelector('.board-card-meta')?.textContent).toBe('');
   });
 
   it('says Later has nothing parked only when Repeats is empty too', async () => {
@@ -1393,7 +1393,7 @@ describe('repeating', () => {
     expect(within(column('Later')).queryByRole('heading', { name: 'Repeats' })).toBeNull();
   });
 
-  it('makes a card repeat on the first day pressed, once confirmed, keeping its dialog open on that day, with Stop repeating in place of Delete', async () => {
+  it('makes a card repeat on the first day pressed, once confirmed, keeping its dialog open on that day, with Stop Repeating in place of Delete', async () => {
     await renderBoard();
     openCard('Write a KB');
     expect(
@@ -1402,7 +1402,7 @@ describe('repeating', () => {
         .map((b) => b.textContent),
     ).toEqual(['M', 'T', 'W', 'T', 'F', 'S', 'S']);
     expect(pressed()).toEqual([]);
-    expect(screen.queryByRole('button', { name: 'Stop repeating' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Stop Repeating' })).toBeNull();
     confirm.mockReturnValueOnce(false);
     fireEvent.click(day('Wednesday'));
     expect(confirm).toHaveBeenCalledExactlyOnceWith(CONFIRM.makeRecurring('Write a KB'));
@@ -1419,8 +1419,8 @@ describe('repeating', () => {
     expect(dialog().getAttribute('aria-label')).toBe('Write a KB');
     expect(document.activeElement).toBe(wednesday);
     expect(pressed()).toEqual(['Wednesday']);
-    expect(screen.getByRole('button', { name: 'Stop repeating' })).toBeTruthy();
-    expect(moveOptions()).toEqual(['In progress', 'Done']);
+    expect(screen.getByRole('button', { name: 'Stop Repeating' })).toBeTruthy();
+    expect(moveOptions()).toEqual(['In Progress', 'Done']);
     // Its days change one at a time from here, asking nothing, and the last one stays on.
     fireEvent.click(day('Monday'));
     await settle();
@@ -1445,14 +1445,14 @@ describe('repeating', () => {
     lists[WED] = [row(1, 'Report', { recurring: true }), row(2, 'Email', { done: true })];
     fireEvent.click(day('Friday'));
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Remove from today' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Remove From Today' })).toBeTruthy();
     await settle();
     expect(api.editItem).toHaveBeenCalledExactlyOnceWith(REPORT, { weekday: { day: 5, on: true } });
     expect(api.getDay).toHaveBeenCalledWith(WED);
     expect(dialog().getAttribute('aria-label')).toBe('Report');
     expect(pressed()).toEqual(['Friday']);
-    expect(titlesIn('In progress')).toEqual(['Report']);
-    expect(within(column('In progress')).getByRole('img', { name: 'Repeats' })).toBeTruthy();
+    expect(titlesIn('In Progress')).toEqual(['Report']);
+    expect(within(column('In Progress')).getByRole('img', { name: 'Repeats' })).toBeTruthy();
     // On today's list, it isn't in Repeats too.
     expect(titlesIn('Later')).toEqual(['Write a KB', 'Monitor the queue', 'Follow-ups']);
   });
@@ -1480,10 +1480,10 @@ describe('repeating', () => {
     openCard('Monitor the queue');
     expect(pressed()).toEqual(WORK_WEEK);
     confirm.mockReturnValueOnce(false);
-    fireEvent.click(screen.getByRole('button', { name: 'Stop repeating' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Stop Repeating' }));
     expect(confirm).toHaveBeenCalledExactlyOnceWith(CONFIRM.deleteRecurring('Monitor the queue'));
     expect(dialog()).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop repeating' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Stop Repeating' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Follow-ups' }));
     await settle();
@@ -1496,14 +1496,14 @@ describe('repeating', () => {
     await renderBoard();
     openCard('Monitor the queue');
     expect(pressed()).toEqual(WORK_WEEK);
-    fireEvent.click(screen.getByRole('button', { name: 'Stop repeating' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Stop Repeating' }));
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Monitor the queue' }));
     await settle();
     expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith(QUEUE.uid);
-    expect(titlesIn('In progress')).toEqual(['Monitor the queue', 'Report']);
+    expect(titlesIn('In Progress')).toEqual(['Monitor the queue', 'Report']);
     openCard('Monitor the queue');
     expect(repeatGroup()).toBeNull();
-    expect(screen.getByRole('button', { name: 'Remove from today' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Remove From Today' })).toBeTruthy();
   });
 
   it("offers no Repeat row where the server can't change the task: an earlier day's tick of a stopped routine, an archived task's row", async () => {
@@ -1512,7 +1512,7 @@ describe('repeating', () => {
     openCard('Report');
     expect(repeatGroup()).toBeNull();
     closeCard();
-    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier This Week · 2' }));
     openCard('Tuesday row');
     expect(repeatGroup()).toBeNull();
   });
@@ -1522,17 +1522,17 @@ describe('repeating', () => {
     vi.mocked(api.putPriorities).mockReturnValueOnce(saved.promise);
     await renderBoard();
     openCard('Follow-ups');
-    expect(moveOptions()).toEqual(['In progress', 'Done']);
+    expect(moveOptions()).toEqual(['In Progress', 'Done']);
     moveTo('progress');
-    // On its way to In progress, it shows there without the days Repeats lists.
-    expect(titlesIn('In progress')).toEqual(['Report', 'Follow-ups']);
-    expect(within(column('In progress')).queryByText('Mon, Wed, Fri')).toBeNull();
+    // On its way to In Progress, it shows there without the days Repeats lists.
+    expect(titlesIn('In Progress')).toEqual(['Report', 'Follow-ups']);
+    expect(within(column('In Progress')).queryByText('Mon, Wed, Fri')).toBeNull();
     await settle();
     saved.resolve({ priorities: (lists[WED] = vi.mocked(api.putPriorities).mock.lastCall![1]) });
     await settle();
     expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Follow-ups'] }]);
     expect(lists[WED]![2]).toMatchObject({ uid: FOLLOW.uid, recurring: true, done: false });
-    expect(titlesIn('In progress')).toEqual(['Report', 'Follow-ups']);
+    expect(titlesIn('In Progress')).toEqual(['Report', 'Follow-ups']);
     expect(titlesIn('Later')).toEqual(['Write a KB', 'Monitor the queue']);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Follow-ups' }));
     openCard('Monitor the queue');
@@ -1540,7 +1540,7 @@ describe('repeating', () => {
     expect(unlockAudio).toHaveBeenCalledOnce();
     await settle();
     expect(lists[WED]![3]).toMatchObject({ uid: QUEUE.uid, recurring: true, done: true });
-    expect(titlesIn('Done')).toEqual(['Email', 'Monitor the queue', 'Earlier this week · 2']);
+    expect(titlesIn('Done')).toEqual(['Email', 'Monitor the queue', 'Earlier This Week · 2']);
   });
 });
 
@@ -1590,7 +1590,7 @@ describe('starting the focus timer', () => {
     saved.resolve({ priorities: (lists[WED] = vi.mocked(api.putPriorities).mock.lastCall![1]) });
     await settle();
     expect(uid).toBe('next00000001');
-    expect(titlesIn('In progress')).toEqual(['Report', 'Follow up']);
+    expect(titlesIn('In Progress')).toEqual(['Report', 'Follow up']);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Follow up' }));
   });
 
@@ -1604,7 +1604,7 @@ describe('starting the focus timer', () => {
     expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Monitor the queue'] }]);
     expect(lists[WED]![2]).toMatchObject({ uid: 'rec000000001', recurring: true });
     await expect(startedOn()).resolves.toBe('rec000000001');
-    expect(titlesIn('In progress')).toEqual(['Report', 'Monitor the queue']);
+    expect(titlesIn('In Progress')).toEqual(['Report', 'Monitor the queue']);
   });
 
   it('starts on a task left open on an earlier day the same way, pulled first', async () => {
@@ -1664,7 +1664,7 @@ describe('starting the focus timer', () => {
       expect(startGroup()).not.toBeNull();
       closeCard();
     }
-    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier This Week · 2' }));
     for (const title of ['Email', 'Shipped', 'Tuesday row']) {
       openCard(title);
       expect(startGroup()).toBeNull();
@@ -1807,17 +1807,17 @@ describe('dragging', () => {
     expect(titlesIn('Later')).toEqual(['Call the vendor', 'Write a KB']);
   });
 
-  it("pulls a task onto today's list by keyboard: Next, then In progress", async () => {
+  it("pulls a task onto today's list by keyboard: Next, then In Progress", async () => {
     await renderBoard();
     await pickUp('Write a KB');
     await press('ArrowRight');
     await press('ArrowRight');
-    expect(said()).toBe(BOARD_DRAG.over('Write a KB', 'In progress'));
-    expect(titlesIn('In progress')).toEqual(['Report', 'Write a KB']);
+    expect(said()).toBe(BOARD_DRAG.over('Write a KB', 'In Progress'));
+    expect(titlesIn('In Progress')).toEqual(['Report', 'Write a KB']);
     await press('Space');
-    expect(said()).toBe(BOARD_DRAG.moved('Write a KB', 'In progress'));
+    expect(said()).toBe(BOARD_DRAG.moved('Write a KB', 'In Progress'));
     expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Write a KB'] }]);
-    expect(titlesIn('In progress')).toEqual(['Report', 'Write a KB']);
+    expect(titlesIn('In Progress')).toEqual(['Report', 'Write a KB']);
     // A row of today's now: the focus finds its card there.
     expect(document.activeElement).toBe(card('Write a KB'));
   });
@@ -1826,7 +1826,7 @@ describe('dragging', () => {
     await renderBoard();
     await pickUp('Email');
     expect(said()).toBe(BOARD_DRAG.pickedUp('Email', 'Done'));
-    // In progress and Done don't sort: up and down go nowhere.
+    // In Progress and Done don't sort: up and down go nowhere.
     await press('ArrowUp');
     expect(said()).toBe(BOARD_DRAG.pickedUp('Email', 'Done'));
     await press('ArrowLeft');
@@ -1834,7 +1834,7 @@ describe('dragging', () => {
     expect(titlesIn('Next')).toEqual(['Email', 'Follow up', 'Plan B']);
     await press('Space');
     expect(said()).toBe(DONE_STAYS.announce('Email', 'Next'));
-    expect(titlesIn('Done')).toEqual(['Email', 'Earlier this week · 2']);
+    expect(titlesIn('Done')).toEqual(['Email', 'Earlier This Week · 2']);
     expect(document.activeElement).toBe(within(notice()).getByRole('button', { name: DONE_STAYS.add('Next') }));
     fireEvent.click(screen.getByRole('button', { name: DONE_STAYS.add('Next') }));
     await settle();
@@ -1846,11 +1846,11 @@ describe('dragging', () => {
   it('says when the item is back over where it started, though not as it is picked up', async () => {
     await renderBoard();
     await pickUp('Report');
-    expect(said()).toBe(BOARD_DRAG.pickedUp('Report', 'In progress'));
+    expect(said()).toBe(BOARD_DRAG.pickedUp('Report', 'In Progress'));
     await press('ArrowRight');
     expect(said()).toBe(BOARD_DRAG.over('Report', 'Done'));
     await press('ArrowLeft');
-    expect(said()).toBe(BOARD_DRAG.overStart('Report', 'In progress'));
+    expect(said()).toBe(BOARD_DRAG.overStart('Report', 'In Progress'));
     await press('Escape');
   });
 
@@ -1881,7 +1881,7 @@ describe('dragging', () => {
     await renderBoard();
     await pickUp('Report');
     await press('Space');
-    expect(said()).toBe(BOARD_DRAG.stays('Report', 'In progress'));
+    expect(said()).toBe(BOARD_DRAG.stays('Report', 'In Progress'));
     expect(api.putPriorities).not.toHaveBeenCalled();
   });
 
@@ -1973,7 +1973,7 @@ describe('dragging', () => {
     await press('Escape');
   });
 
-  it('drags no item of In progress or Done below 900 px, where one column shows at a time, while a lane still sorts', async () => {
+  it('drags no item of In Progress or Done below 900 px, where one column shows at a time, while a lane still sorts', async () => {
     stubMatchMedia(new Set());
     await renderBoard();
     for (const title of ['Report', 'Email']) expect(card(title).hasAttribute('aria-roledescription')).toBe(false);
@@ -1991,7 +1991,7 @@ describe('dragging', () => {
     await pickUp('Follow up');
     await press('ArrowLeft');
     expect(titlesIn('Later')).toHaveLength(10);
-    expect(screen.queryByRole('button', { name: /^Show \d+ more$/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Show \d+ More$/ })).toBeNull();
     await press('Escape');
   });
 
@@ -2018,11 +2018,11 @@ describe('dragging', () => {
     fireEvent.click(close());
     await settle();
     expect(api.editItem).not.toHaveBeenCalled();
-    // Onto In progress: today's row, as any pull.
+    // Onto In Progress: today's row, as any pull.
     await pickUp('Monitor the queue');
     await press('ArrowRight');
     await press('ArrowRight');
-    expect(said()).toBe(BOARD_DRAG.over('Monitor the queue', 'In progress'));
+    expect(said()).toBe(BOARD_DRAG.over('Monitor the queue', 'In Progress'));
     await press('Space');
     expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Monitor the queue'] }]);
     expect(titlesIn('Later')).toEqual(['Write a KB']);
@@ -2079,7 +2079,7 @@ describe('categories', () => {
     const meta = (name: string) => [...column(name).querySelectorAll('.board-card-meta')];
     expect(meta('Later').map((m) => m.textContent)).toEqual(['Tickets']);
     expect(meta('Later')[0]!.querySelector('.cat-dot')?.getAttribute('data-color')).toBe('blue');
-    expect(meta('In progress').map((m) => m.textContent)).toEqual(['Old work']);
+    expect(meta('In Progress').map((m) => m.textContent)).toEqual(['Old work']);
     // A card with none has no meta line.
     expect(meta('Next')).toEqual([]);
   });
@@ -2087,7 +2087,7 @@ describe('categories', () => {
   it("puts a recurring row's mark after its category", async () => {
     lists[WED] = [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true, categoryUid: TICKETS.uid })];
     await renderBoard();
-    const meta = column('In progress').querySelector('.board-card-meta')!;
+    const meta = column('In Progress').querySelector('.board-card-meta')!;
     expect([...meta.children].map((c) => c.className)).toEqual(['board-card-category', 'repeat-mark']);
     expect(meta.textContent).toBe('Tickets');
   });
@@ -2100,8 +2100,8 @@ describe('categories', () => {
     expect(localStorage.getItem(USER_KEYS.captureCategory)).toBe(ADMIN.uid);
     capture('Call the vendor');
     capture('Order cables');
-    // In progress's box reads it as it opens, and its row's task takes it.
-    const today = openBox('In progress', 'New priority for today');
+    // In Progress's box reads it as it opens, and its row's task takes it.
+    const today = openBox('In Progress', 'New priority for today');
     expect(chipOf(today).getAttribute('aria-label')).toBe('Category for new cards: Admin');
     enter(today, 'Ring the bank');
     await settle();
@@ -2197,7 +2197,7 @@ describe('categories', () => {
     await settle();
     expect(api.editItem).toHaveBeenCalledExactlyOnceWith('planned00001', { categoryUid: ADMIN.uid });
     closeCard();
-    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier This Week' }));
     openCard('Tuesday row', 'Done');
     fireEvent.click(screen.getByRole('button', { name: 'Category for Tuesday row: none' }));
     pickOption('Tickets');
@@ -2209,7 +2209,7 @@ describe('categories', () => {
     onServer = { ...onServer, recurring: [] };
     serveRange([makeDay(TUE, { priorities: [{ ...tuesdayRoutine(), categoryUid: TICKETS.uid }] }), makeDay(MON)]);
     await renderBoard();
-    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier This Week' }));
     openCard('Tuesday row');
     // Its category shows as text, as its title does.
     expect(screen.queryByRole('button', { name: /^Category for Tuesday row/ })).toBeNull();

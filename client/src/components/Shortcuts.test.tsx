@@ -18,7 +18,7 @@ async function renderShortcuts(settings = makeSettings()) {
   await settle();
 }
 
-const dialog = () => screen.queryByRole('dialog', { name: 'Keyboard shortcuts', hidden: true });
+const dialog = () => screen.queryByRole('dialog', { name: 'Keyboard Shortcuts', hidden: true });
 /** Each group's heading, then its keys and what they do. */
 const groups = () =>
   [...dialog()!.querySelectorAll('section')].map((s) => [

@@ -53,7 +53,7 @@ export function BoardTab({ settings, set, save }: TabProps & { save: Save }) {
       <Categories categories={board.categories} save={save} />
       <Section
         title="Recurring priorities"
-        hint="A card set to repeat on the board is offered on Top priorities on its days. Nothing is added until you tap Add to today."
+        hint="A card set to repeat on the board is offered on Top Priorities on its days. Nothing is added until you tap Add to Today."
       >
         <NumberField
           label="Recurring rows per day"

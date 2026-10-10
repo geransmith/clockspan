@@ -3099,8 +3099,8 @@ kbd {
   }
   /* A weekday's 38 × 36 px (36 × 34 inside the border), 6 px from the next: 44 × 44 px, reaching
      3 px into the gap beside it and 4 px up and down. A card dialog's Repeat row has that room: a
-     44 px line beside Stop repeating, or wrapped on a phone, lines 4 px apart, all of it the
-     days', since Stop repeating is 44 px tall itself. */
+     44 px line beside Stop Repeating, or wrapped on a phone, lines 4 px apart, all of it the
+     days', since Stop Repeating is 44 px tall itself. */
   .weekdays .chip {
     --hit-inset: -5px -4px;
   }

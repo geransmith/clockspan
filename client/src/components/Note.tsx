@@ -8,7 +8,7 @@ import { Note } from './Icons';
 const buttonId = (boxId: string) => `${boxId}-button`;
 
 /**
- * A task's note button on a Top priorities row, kept out of `components/board/` so the sheet can
+ * A task's note button on a Top Priorities row, kept out of `components/board/` so the sheet can
  * show it without the board's chunk (the box is also a board card's dialog's). It is the row's one
  * sign of a note: drawn filled with one, and quiet with none (with a mouse it shows on its row's
  * hover or focus, as an empty category chip does). While its box is closed its title is the note's

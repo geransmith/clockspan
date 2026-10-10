@@ -38,7 +38,7 @@ function Help({ onClose }: { onClose: () => void }) {
     <dialog {...dialog} className="dialog shortcuts-help" aria-labelledby={titleId}>
       <div className="dialog-inner">
         <header className="dialog-head">
-          <h2 id={titleId}>Keyboard shortcuts</h2>
+          <h2 id={titleId}>Keyboard Shortcuts</h2>
           <button className="btn btn-icon" onClick={onClose} aria-label="Close shortcuts">
             <X />
           </button>

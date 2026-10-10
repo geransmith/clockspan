@@ -122,10 +122,10 @@ export const WARNING_ACTIONS = {
   complete: { add: 'Add a Bonus', keep: 'Stop Here' },
 } as const;
 
-/** Under a Top priorities row being retyped, while earlier days' lists hold its task: the name is one for every day. */
+/** Under a Top Priorities row being retyped, while earlier days' lists hold its task: the name is one for every day. */
 export const RENAME_HINT = (earlier: number) => `Also renames it on ${counted(earlier, 'earlier day')}.`;
 
-/** Under a Top priorities row whose box was emptied: a blank name isn't saved. */
+/** Under a Top Priorities row whose box was emptied: a blank name isn't saved. */
 export const BLANK_HINT = (name: string) => `Left empty, it goes back to “${name}”. × takes it off this day.`;
 
 /** Where a task is and the time logged on it, for a question that deletes it everywhere: "It is on 3 days, and 1h 20m is logged on it." */
@@ -137,7 +137,7 @@ const taskFacts = (where: string, logged: string | null) => {
 const unplanned = (logged: string | null) => (logged ? ' The time stays in the log, unplanned.' : '');
 
 /**
- * The question × on a Top priorities row asks when its task is on other days, has time logged on
+ * The question × on a Top Priorities row asks when its task is on other days, has time logged on
  * it or has a note. `logged` is null with no time; each part of the body shows only when it
  * applies.
  */
@@ -297,7 +297,7 @@ export const SAVE_FAILED = {
 /**
  * Under the timer's Start buttons when a new name's row can't be added, the board's banner when
  * the store refuses a move onto today's list (`MoveRefused`), and `full` the line under In
- * progress's + while it is shut on a full list.
+ * Progress's + while it is shut on a full list.
  */
 export const ADD_PRIORITY_FAILED = {
   full: 'The priorities list is full.',

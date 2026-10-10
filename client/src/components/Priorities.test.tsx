@@ -189,17 +189,17 @@ describe('Priorities', () => {
     expect(playSound).toHaveBeenCalledTimes(1);
   });
 
-  it('sends Add priority to the first empty row, with no warning and nothing saved', async () => {
+  it('sends Add Priority to the first empty row, with no warning and nothing saved', async () => {
     const { onChange } = await renderCard();
-    fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Priority' }));
     expect(screen.getByRole('status').textContent).toBe('');
     expect(onChange).not.toHaveBeenCalled();
     expect(screen.getAllByRole('textbox')).toHaveLength(3);
     expect(document.activeElement).toBe(textbox(1));
   });
 
-  it('adds on N as Add priority does, typing no n, with the focus on Add priority when it asks first', async () => {
-    const add = () => screen.getByRole('button', { name: 'Add priority' });
+  it('adds on N as Add Priority does, typing no n, with the focus on Add Priority when it asks first', async () => {
+    const add = () => screen.getByRole('button', { name: 'Add Priority' });
     await renderCard([makePriority(1, 'Report')]);
     expect(add().getAttribute('aria-keyshortcuts')).toBe('N');
     expect(pressKey('n')).toBe(false);
@@ -215,14 +215,14 @@ describe('Priorities', () => {
     expect(onChange).not.toHaveBeenCalled();
     cleanup();
 
-    // A full list has no Add priority, and N does nothing.
+    // A full list has no Add Priority, and N does nothing.
     await renderCard(Array.from({ length: MAX_PRIORITIES }, (_, i) => makePriority(i + 1, `Row ${i + 1}`)));
     expect(pressKey('n')).toBe(true);
   });
 
   it('finds an empty row between written ones', async () => {
     await renderCard([makePriority(1, 'A'), makePriority(3, 'C')]);
-    fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Priority' }));
     expect(document.activeElement).toBe(textbox(2));
     expect(screen.getByRole('status').textContent).toBe('');
   });
@@ -230,7 +230,7 @@ describe('Priorities', () => {
   it('asks before a row past the usual count, then adds it; the extra row can be removed', async () => {
     const { onChange, saved } = await renderCard([makePriority(1, 'Report'), makePriority(2, 'Invoices'), makePriority(3, 'Email')]);
     expect(screen.getByRole('status').textContent).toBe('');
-    fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Priority' }));
     expect(onChange).not.toHaveBeenCalled();
     // The live region is there before the warning, so a screen reader hears it arrive.
     const status = screen.getByRole('status');
@@ -241,10 +241,10 @@ describe('Priorities', () => {
     fireEvent.click(screen.getByRole('button', { name: WARNING_ACTIONS.fresh.keep }));
     expect(screen.getByRole('status')).toBe(status);
     expect(status.textContent).toBe('');
-    // The notice took its buttons with it, so focus goes to Add priority rather than the page.
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add priority' }));
+    // The notice took its buttons with it, so focus goes to Add Priority rather than the page.
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add Priority' }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Priority' }));
     fireEvent.click(screen.getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
     expect(saved()).toHaveLength(4);
     expect(screen.getAllByRole('textbox')).toHaveLength(4);
@@ -252,13 +252,13 @@ describe('Priorities', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove priority 4' }));
     expect(saved()).toHaveLength(3);
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add priority' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add Priority' }));
   });
 
   it('keeps a row it added while free, though the stored list comes back without it, until the server holds a task there', async () => {
     const written = [makePriority(1, 'Report'), makePriority(2, 'Invoices'), makePriority(3, 'Email')];
     const { again, saved } = await renderCard(written);
-    fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Priority' }));
     fireEvent.click(screen.getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
     await settle();
     // The server keeps no free row.
@@ -288,7 +288,7 @@ describe('Priorities', () => {
 
   it('with every row ticked, warns from the "complete" set and lists what is done', async () => {
     await renderCard([makePriority(1, 'Report', { done: true }), makePriority(2, 'Invoices', { done: true }), makePriority(3, 'Email', { done: true })]);
-    fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Priority' }));
     const status = screen.getByRole('status');
     expect(PRIORITY_WARNINGS.complete.some((w) => status.textContent!.includes(w))).toBe(true);
     expect(status.textContent).toContain('3 of 3 done');
@@ -644,14 +644,14 @@ describe('Priorities: the morning offer', () => {
 
   it('is Start fresh with only leftovers shown, and answers no routine', async () => {
     const answer = vi.fn();
-    // Every row is a routine's: no free row, so the focus goes to Add priority.
+    // Every row is a routine's: no free row, so the focus goes to Add Priority.
     const routines = [QUEUE, FOLLOW_UPS, STANDUP].map((item, i) => routineRow(i + 1, item));
     await withOffer(routines, offerOf({ leftovers: left([seed('Invoices')]), answer }));
     expect(screen.queryByRole('button', { name: TODAY_OFFER.notToday })).toBeNull();
     expect(screen.queryByText(TODAY_OFFER.recurring)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.dismiss }));
     expect(answer).toHaveBeenCalledExactlyOnceWith([], true);
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add priority' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add Priority' }));
   });
 
   it('shows the routines alone once a one-off is written, the leftovers and Up next going at the first key', async () => {
@@ -687,7 +687,7 @@ describe('Priorities: routines on the list', () => {
   it('leaves the routines out of the nudge: three routines and two one-offs add a row with no warning', async () => {
     const rows = [routineRow(1, QUEUE), routineRow(2, FOLLOW_UPS), routineRow(3, STANDUP), makePriority(4, 'Report'), makePriority(5, 'Email')];
     const { saved } = await renderCard(rows);
-    fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Priority' }));
     expect(screen.getByRole('status').textContent).toBe('');
     expect(saved()).toHaveLength(6);
     expect(document.activeElement).toBe(textbox(6));
@@ -977,10 +977,10 @@ describe('Priorities: ×', () => {
 });
 
 describe('Priorities on the day store', () => {
-  it('keeps a row Add priority put past Rows per day, with the focus in it, once the server answers without it, and saves it once typed in', async () => {
+  it('keeps a row Add Priority put past Rows per day, with the focus in it, once the server answers without it, and saves it once typed in', async () => {
     vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ priorityCount: 1 })));
     const { stored, answer } = await renderOnStore([makePriority(1, 'Report')]);
-    fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Priority' }));
     expect(document.activeElement).toBe(textbox(2));
     await answer();
     expect(screen.getAllByRole('textbox')).toHaveLength(2);
@@ -991,9 +991,9 @@ describe('Priorities on the day store', () => {
     expect(stored().map((p) => p.text)).toEqual(['Report', 'Call the bank']);
   });
 
-  it('keeps the row Add anyway put past Rows per day the same, and lets its × take it away', async () => {
+  it('keeps the row Add Anyway put past Rows per day the same, and lets its × take it away', async () => {
     const { stored, answer } = await renderOnStore([makePriority(1, 'Report'), makePriority(2, 'Invoices'), makePriority(3, 'Email')]);
-    fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Priority' }));
     fireEvent.click(screen.getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
     await answer();
     expect(screen.getAllByRole('textbox')).toHaveLength(4);
@@ -1003,7 +1003,7 @@ describe('Priorities on the day store', () => {
     await settle();
     expect(stored().map((p) => p.text)).toEqual(['Report', 'Invoices', 'Email', 'Call the bank']);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add priority' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Priority' }));
     fireEvent.click(screen.getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
     await settle();
     expect(screen.getAllByRole('textbox')).toHaveLength(5);

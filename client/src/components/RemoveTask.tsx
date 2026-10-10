@@ -18,7 +18,7 @@ interface Props {
 }
 
 /**
- * Asked by × on a Top priorities row whose task is on other days, has time logged on it or has a
+ * Asked by × on a Top Priorities row whose task is on other days, has time logged on it or has a
  * note: take it off this day, or delete it everywhere. `window.confirm` offers one action, so this
  * is a dialog. Its parent shows it by mounting it (`useModalDialog`).
  */

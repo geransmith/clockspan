@@ -4,7 +4,7 @@ import { addToDaySet, readDaySet, USER_KEYS } from '../lib/storage';
 const NONE: ReadonlySet<string> = new Set();
 
 /**
- * The recurring priorities the morning offer was answered for today on this device (Add to today
+ * The recurring priorities the morning offer was answered for today on this device (Add to Today
  * or Not today, ticked or not), kept in `USER_KEYS.recurringAnswered` so a reload doesn't offer
  * them again. Per device, as Start fresh is: another device still offers them. Read once; the set
  * is today's only, so a sheet left open over midnight starts the new day with none. An answer is

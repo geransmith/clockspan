@@ -43,7 +43,7 @@ async function renderFolded(priorities = PRIORITIES, sessions: Session[] = []) {
 }
 
 const noteBox = () => screen.queryByPlaceholderText(RETRO_PROMPT);
-const markReviewed = () => fireEvent.click(screen.getByRole('button', { name: /Mark reviewed/ }));
+const markReviewed = () => fireEvent.click(screen.getByRole('button', { name: /Mark Reviewed/ }));
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
@@ -73,9 +73,9 @@ describe('Retro', () => {
       completedSession(3, T0 + 2, 600, { priorityUid: 'abcdef123456', title: 'Report' }),
     ];
     await renderCard('', null, PRIORITIES, sessions);
-    const section = screen.getByText('Not on the plan').closest('section')!;
+    const section = screen.getByText('Not on the Plan').closest('section')!;
     // The summary's Off plan has the total, so the heading leaves it out.
-    expect(section.querySelector('h3')!.textContent).toBe('Not on the plan');
+    expect(section.querySelector('h3')!.textContent).toBe('Not on the Plan');
     expect([...section.querySelectorAll('.retro-text')].map((el) => el.firstChild!.textContent)).toEqual(['Inbox', 'Left the day']);
   });
 
@@ -145,7 +145,7 @@ describe('Retro', () => {
     expect(box.value).toBe('Meetings');
   });
 
-  it('Mark reviewed waits for the unsaved note to save, then ticks; Undo clears it', async () => {
+  it('Mark Reviewed waits for the unsaved note to save, then ticks; Undo clears it', async () => {
     const note = deferred<boolean>();
     const { box, onChange, again } = await renderCard();
     onChange.mockReturnValueOnce(note.promise);
@@ -169,16 +169,16 @@ describe('Retro', () => {
     expect(onChange.mock.calls).toEqual([[{ done: true }]]);
   });
 
-  it('keeps the focus on the button as Mark reviewed turns to Undo and back', async () => {
+  it('keeps the focus on the button as Mark Reviewed turns to Undo and back', async () => {
     const { again } = await renderCard();
-    act(() => screen.getByRole('button', { name: /Mark reviewed/ }).focus());
+    act(() => screen.getByRole('button', { name: /Mark Reviewed/ }).focus());
     again('', T0);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Undo' }));
     again('');
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: /Mark reviewed/ }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: /Mark Reviewed/ }));
   });
 
-  it('Mark reviewed sends no tick when the note fails, and the box keeps the text', async () => {
+  it('Mark Reviewed sends no tick when the note fails, and the box keeps the text', async () => {
     const { box, onChange } = await renderCard();
     onChange.mockResolvedValueOnce(false);
     fireEvent.change(box, { target: { value: 'Went to plan' } });
@@ -188,7 +188,7 @@ describe('Retro', () => {
     expect(box.value).toBe('Went to plan');
   });
 
-  it('Mark reviewed right after the 800 ms save fired waits for that save and sends no second note', async () => {
+  it('Mark Reviewed right after the 800 ms save fired waits for that save and sends no second note', async () => {
     const note = deferred<boolean>();
     const { box, onChange } = await renderCard();
     onChange.mockReturnValueOnce(note.promise);
@@ -203,7 +203,7 @@ describe('Retro', () => {
   });
 
   it('folds to its Open button alone, and Open shows the card with the focus in the note box', async () => {
-    // The day's totals are on the timeclock and Top priorities, so the fold repeats none of them.
+    // The day's totals are on the timeclock and Top Priorities, so the fold repeats none of them.
     await renderFolded([makePriority(1, 'Report', { done: true }), makePriority(2, 'Invoices')], [completedSession(1, T0, 25 * 60)]);
     expect(document.querySelector('.retro-folded')!.textContent).toBe('Open');
     expect(noteBox()).toBeNull();
@@ -227,7 +227,7 @@ describe('Retro', () => {
     expect(document.activeElement).toBe(noteBox());
   });
 
-  it('keeps the note and Mark reviewed on a day with nothing planned or logged', async () => {
+  it('keeps the note and Mark Reviewed on a day with nothing planned or logged', async () => {
     // The retro alarm stays armed until the day is reviewed, and its banner opens this card.
     const { box, onChange } = await renderCard('', null, []);
     expect(screen.getByText(/Write priorities and log a session or two/)).toBeTruthy();

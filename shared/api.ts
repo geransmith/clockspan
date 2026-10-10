@@ -76,7 +76,7 @@ export interface Priority {
   logged: number;
 }
 
-/** The board's lanes a task can be placed in. In progress is today's list and Done a task whose latest entry is ticked, so neither is stored. */
+/** The board's lanes a task can be placed in. In Progress is today's list and Done a task whose latest entry is ticked, so neither is stored. */
 export const OPEN_LANES = ['later', 'next'] as const;
 export type OpenLane = (typeof OPEN_LANES)[number];
 

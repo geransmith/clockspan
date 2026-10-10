@@ -5,7 +5,7 @@ import { clockBarItems, type ClockBarItem } from '../../lib/tiles';
 import { dayTimeclock, overtimeOn } from '../../lib/timeclock';
 import type { Day } from '../../types';
 
-const LABELS: Record<ClockBarItem['id'], string> = { clockIn: 'Clock in', lunch: 'Lunch by', clockOut: 'Clock out at' };
+const LABELS: Record<ClockBarItem['id'], string> = { clockIn: 'Clock In', lunch: 'Lunch By', clockOut: 'Clock Out At' };
 
 /**
  * Today's times in a row above the board's columns, read only, worded as the timeclock's tiles.

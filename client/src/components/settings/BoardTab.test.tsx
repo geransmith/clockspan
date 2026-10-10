@@ -225,7 +225,7 @@ describe('BoardTab', () => {
   it('says how many recurring rows the morning offer ticks, described by its hint, and saves a change through set', async () => {
     await renderTab(makeSettings({ recurringPerDay: 4 }));
     expect(
-      screen.getByText('A card set to repeat on the board is offered on Top priorities on its days. Nothing is added until you tap Add to today.'),
+      screen.getByText('A card set to repeat on the board is offered on Top Priorities on its days. Nothing is added until you tap Add to Today.'),
     ).toBeTruthy();
     const perDay = screen.getByRole('textbox', { name: 'Recurring rows per day' }) as HTMLInputElement;
     expect(perDay.value).toBe('4');
