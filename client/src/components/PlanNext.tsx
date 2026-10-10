@@ -98,9 +98,11 @@ function Planner({
   onCancel: () => void;
 }) {
   const { day, failed, store } = useDay(date);
-  // Today's open rows start ticked: carrying them over is the usual answer. Held by uid, since
-  // removing a row on the Priorities card (or on another device) renumbers the rest while this is open.
-  const [picked, setPicked] = useState(() => new Set(candidates.map((p) => p.uid)));
+  // Today's open rows start ticked: carrying them over is the usual answer. So this holds the boxes
+  // unticked here, and a row that opens while this is open (unticked on the Priorities card) starts
+  // ticked too. Held by uid, since removing a row on the Priorities card (or on another device)
+  // renumbers the rest while this is open.
+  const [dropped, setDropped] = useState<ReadonlySet<string | null>>(new Set());
   // The rows typed in, each with the category its chip set.
   const [extra, setExtra] = useState<{ text: string; categoryUid: string | null }[]>([]);
   const [draft, setDraft] = useState('');
@@ -129,7 +131,7 @@ function Planner({
     // A row carried over is the same task, under its current name and category. What is still in
     // the box, never entered, has had no chip, so it goes with no category; so do the rows typed
     // in once the board is off, whose chips are gone.
-    const seeds = [...offered.filter((p) => picked.has(p.uid)), ...extra.map((e) => textSeed(e.text, pick ? e.categoryUid : null)), textSeed(draft)];
+    const seeds = [...offered.filter((p) => !dropped.has(p.uid)), ...extra.map((e) => textSeed(e.text, pick ? e.categoryUid : null)), textSeed(draft)];
     const { rows, added } = planNext(day.priorities, seeds);
     if (added === 0) {
       onDone(0);
@@ -156,13 +158,13 @@ function Planner({
                 <input
                   type="checkbox"
                   className="checkbox"
-                  checked={picked.has(p.uid)}
+                  checked={!dropped.has(p.uid)}
                   disabled={busy}
                   onChange={(e) =>
-                    setPicked((s) => {
+                    setDropped((s) => {
                       const nextSet = new Set(s);
-                      if (e.target.checked) nextSet.add(p.uid);
-                      else nextSet.delete(p.uid);
+                      if (e.target.checked) nextSet.delete(p.uid);
+                      else nextSet.add(p.uid);
                       return nextSet;
                     })
                   }
