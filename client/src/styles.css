@@ -422,8 +422,9 @@ button {
   color: var(--text-2);
   white-space: nowrap;
 }
-/* Icons draw at 20px, too large for the pill's type size. */
-.pill svg {
+/* Icons draw at 20px, too large for the pill's type size and the calendar's reviewed mark. */
+.pill svg,
+.history-reviewed svg {
   width: 14px;
   height: 14px;
 }
@@ -439,7 +440,8 @@ button {
   background: var(--accent-soft);
   color: var(--accent-ink);
 }
-.pill--danger {
+.pill--danger,
+.notice--danger {
   background: var(--danger-soft);
   color: var(--danger-ink);
 }
@@ -520,8 +522,12 @@ button {
   flex: none;
   color: var(--text-2);
 }
+/* The marks', the note button's and a category option's icons, at 16 px beside small text. */
 .repeat-mark svg,
-.board-card-note svg {
+.board-card-note svg,
+.note-toggle svg,
+.category-option svg {
+  flex: none;
   width: 16px;
   height: 16px;
 }
@@ -560,10 +566,6 @@ button {
   min-height: 28px;
   padding: 0;
   color: var(--text-2);
-}
-.note-toggle svg {
-  width: 16px;
-  height: 16px;
 }
 /* Its box: quieter than a field, growing with its text (.grow-field) to eight lines, then
    scrolling; the cap is on the box and on the copy that sets its height. */
@@ -644,11 +646,6 @@ button {
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.category-option svg {
-  flex: none;
-  width: 16px;
-  height: 16px;
-}
 .avatar {
   width: 28px;
   height: 28px;
@@ -668,12 +665,8 @@ button {
   font-size: 0.92rem;
   overflow-wrap: anywhere;
 }
-.notice--danger {
-  background: var(--danger-soft);
-  color: var(--danger-ink);
-}
-/* The Priorities nudge, the left-open notice, the morning offer and the board notice: warm but
-   not alarming, with the buttons on the next line on phones. */
+/* The Priorities nudge, the morning notice and the board notice: warm but not alarming, with the
+   buttons on the next line on phones. */
 .notice--gentle {
   background: var(--warn-soft);
   display: flex;
@@ -714,7 +707,8 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The last planned day's unticked priorities, offered on today's empty list. */
+/* Top Priorities' morning notice: what the last planned day left open, the top of Next and the
+   routines due today. */
 .left-open {
   margin-bottom: 4px;
 }
@@ -727,8 +721,7 @@ button {
 .left-open-list li {
   overflow-wrap: anywhere;
 }
-/* The same notice holds the leftovers and the routines due today, each a box to tick: a title
-   that wraps keeps its box at the top. */
+/* Each of its rows is a box to tick: a title that wraps keeps its box at the top. */
 .today-offer .inline-check {
   align-items: flex-start;
   min-height: 32px;
@@ -1436,8 +1429,10 @@ button {
   resize: none;
   overflow: hidden;
 }
-/* A blank box's placeholder isn't its task's name, so it isn't struck through. */
-.priority-row.is-done .priority-input:not(:placeholder-shown) {
+/* A done task's name, on a priority row and a board card. A blank box's placeholder isn't its
+   task's name, so it isn't struck through. */
+.priority-row.is-done .priority-input:not(:placeholder-shown),
+.board-card.is-done .board-card-title {
   text-decoration: line-through;
   color: var(--text-3);
 }
@@ -1678,22 +1673,28 @@ button {
 .running-bar.is-due .running-progress {
   background: var(--warn);
 }
-.running-label {
-  flex: 1;
+/* A session's name on the bar and in the day log: a button that opens its edit, or text. */
+.running-label,
+.log-label {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   text-align: left;
   border: 0;
   background: none;
-  padding: 6px 4px;
-  font-weight: 600;
   border-radius: 6px;
+  font-weight: 600;
 }
-/* The button only: a session on a written row shows its name as text, with nothing to press. */
-button.running-label:hover {
+/* The button only: on the bar a session on a written row, and in the day log a linked session's
+   edit, show the name as text, with nothing to press. */
+button.running-label:hover,
+button.log-label:hover {
   background: var(--surface-2);
+}
+.running-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 6px 4px;
 }
 .running-label-input {
   flex: 1;
@@ -1884,7 +1885,8 @@ button.running-label:hover {
   padding: 8px 0;
   border-top: 1px solid var(--border);
 }
-/* With no breaks line above them, the rows start under the card's title, with no rule there. */
+/* With no total or breaks line above them, the rows start under the card's title, with no rule
+   there. */
 ul:first-child > .log-row:first-child {
   border-top: 0;
 }
@@ -1902,19 +1904,9 @@ ul:first-child > .log-row:first-child {
 }
 .log-label {
   grid-area: label;
-  text-align: left;
-  border: 0;
-  background: none;
   padding: 6px;
   margin: -6px;
-  border-radius: 6px;
-  font-weight: 600;
-  min-width: 0;
   overflow-wrap: anywhere;
-}
-/* The button only: a linked session's edit shows its name as text, with nothing to press. */
-button.log-label:hover {
-  background: var(--surface-2);
 }
 /* The label (a linked session's name, as text), the priority select and the category chip, stacked
    while a row is being edited. */
@@ -2142,10 +2134,6 @@ button.log-label:hover {
   vertical-align: -2px;
   margin-left: 6px;
   color: var(--ok);
-}
-.history-reviewed svg {
-  width: 14px;
-  height: 14px;
 }
 /* ◀ label ▶, under the review's card head and first in the calendar's card; they share it. */
 .period-nav {
@@ -2670,10 +2658,6 @@ button.log-label:hover {
   line-clamp: 2;
   overflow: hidden;
   overflow-wrap: anywhere;
-}
-.board-card.is-done .board-card-title {
-  text-decoration: line-through;
-  color: var(--text-3);
 }
 .board-card-meta {
   display: flex;
