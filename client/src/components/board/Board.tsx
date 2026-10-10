@@ -56,10 +56,10 @@ import {
 } from '../../lib/board';
 import { ADD_PRIORITY_FAILED, BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, WARNING_ACTIONS } from '../../lib/copy';
 import { dayName, formatDurationCeil } from '../../lib/format';
-import { hasRoom, newTaskRow, newUid, nudgeFor, pickWarning, type WarningKind } from '../../lib/priorities';
+import { hasRoom, newTaskRow, newUid, nudgeFor, pickWarning, placePriority, type WarningKind } from '../../lib/priorities';
 import { loggedByUid } from '../../lib/retro';
 import { readStored, USER_KEYS, writeStored } from '../../lib/storage';
-import type { Category, OpenLane } from '../../types';
+import type { Category, OpenLane, Priority } from '../../types';
 import { Burst } from '../Burst';
 import { Folded } from '../Folded';
 import { Grip, Plus } from '../Icons';
@@ -140,6 +140,8 @@ export const Board = memo(function Board({
   const [ticked, setTicked] = useState<Moment | null>(null);
   const { burst } = useCelebration<HTMLElement>(ticked, 'priorityDone');
   const lastWarning = useRef<string | undefined>(undefined);
+  // Rows sent to today's list whose board job hasn't landed yet, by where they land: the nudge counts them.
+  const queued = useRef(new Map<string, Omit<Priority, 'position'>>());
   const titles = useRef(new Map<string, HTMLButtonElement>());
   const noticeBox = useRef<HTMLDivElement>(null);
   // The columns whose box is open, each box's field, and where the focus goes back to in a column:
@@ -256,13 +258,15 @@ export const Board = memo(function Board({
     const lands = move.kind !== 'place' ? item!.id : move.row.recurring ? `row:${today}:${move.row.uid}` : `item:${move.row.uid}`;
     if (item) focusTo.current = lands;
     setMoving((m) => new Map(m).set(lands, target));
-    const sent = store.move(move).finally(() =>
+    if (move.kind === 'place') queued.current.set(lands, move.row);
+    const sent = store.move(move).finally(() => {
+      queued.current.delete(lands);
       setMoving((m) => {
         const next = new Map(m);
         next.delete(lands);
         return next;
-      }),
-    );
+      });
+    });
     if (minutes == null) report(sent);
     else {
       const pulled = sent.then(() => item!.uid);
@@ -277,7 +281,10 @@ export const Board = memo(function Board({
   // Past the sheet's nudge, as Add priority asks, a task for today's list waits in the notice for
   // Add anyway: the notice's line, or null when it goes at once.
   const askFirst = (held: Held): string | null => {
-    const warning = nudgeFor(todayRows, settings.priorityCount);
+    // Judged on today's list as the board's queue will leave it, so a row sent but not shown yet
+    // counts, as the sheet's draft does; a row already shown isn't placed twice.
+    const rows = [...queued.current.values()].reduce((list, row) => placePriority(list, settings.priorityCount, row) ?? list, todayRows);
+    const warning = nudgeFor(rows, settings.priorityCount);
     if (!warning) return null;
     const text = pickWarning(warning, lastWarning.current);
     lastWarning.current = text;
@@ -809,10 +816,13 @@ function Lifted({ item, category }: { item: BoardItem; category?: Category }) {
   );
 }
 
-/** The board notice's content: its line and buttons, with Escape on a button closing it. */
+/** The board notice's content: its line and buttons, with Escape on a button closing it, and a held Enter or Space pressing none. */
 function NoticeView({ actions, onClose, children }: { actions: { label: string; run: () => void }[]; onClose: () => void; children: ReactNode }) {
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape') onClose();
+    // The notice takes the focus from the press that raised it, so a key still held repeats onto
+    // its first button: only a fresh press answers.
+    else if (e.repeat && (e.key === 'Enter' || e.key === ' ')) e.preventDefault();
   };
   return (
     <div className="notice notice--gentle">

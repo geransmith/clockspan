@@ -329,6 +329,20 @@ describe('Board', () => {
     expect(api.putPriorities).toHaveBeenCalledTimes(2);
   });
 
+  it("puts a pulled task in a free row of today's list with no question, as Add priority does, and asks once none is left", async () => {
+    // Row 3 was taken off.
+    lists[WED] = [row(1, 'Report'), row(2, 'Email'), row(4, 'Invoices')];
+    await renderBoard();
+    openEditor('Follow up');
+    moveTo('progress');
+    expect(notice().textContent).toBe('');
+    await settle();
+    expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Follow up', 'Invoices'] }]);
+    openEditor('Write a KB');
+    moveTo('progress');
+    expect(PRIORITY_WARNINGS.fresh).toContain(within(notice()).getByText(/./, { selector: 'span:not(.notice-actions)' }).textContent);
+  });
+
   describe('a done item moved to Later or Next', () => {
     it('stays done: the notice says so and sends nothing', async () => {
       await renderBoard();
@@ -890,6 +904,40 @@ describe('adding from a column', () => {
     expect(document.activeElement).toBe(document.body);
   });
 
+  it("counts the rows still waiting on the board's queue toward the nudge, as the sheet counts its draft", async () => {
+    lists[WED] = [row(1, 'Report'), row(2, 'Email')];
+    // A lane's PATCH still out holds the board's queue, and the rows typed after it with it.
+    const placed = deferred<BoardData>();
+    vi.mocked(api.editItem).mockReturnValueOnce(placed.promise);
+    await renderBoard();
+    openEditor('Write a KB');
+    moveTo('next');
+    fireEvent.click(plus('In progress'));
+    const box = field('New priority for today');
+    enter(box, 'Call the vendor');
+    expect(notice().textContent).toBe('');
+    enter(box, 'Book the room');
+    expect(PRIORITY_WARNINGS.fresh).toContain(within(notice()).getByText(/./, { selector: 'span:not(.notice-actions)' }).textContent);
+    expect(box.value).toBe('Book the room');
+    placed.resolve((onServer = withItemPatch(onServer, 'later0000001', { lane: 'next', before: null })));
+    await settle();
+    expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Call the vendor'] }]);
+  });
+
+  it('stops counting a row toward the nudge once its save fails', async () => {
+    lists[WED] = [row(1, 'Report'), row(2, 'Email')];
+    vi.mocked(api.putPriorities).mockRejectedValueOnce(new Error('offline'));
+    await renderBoard();
+    fireEvent.click(plus('In progress'));
+    const box = field('New priority for today');
+    enter(box, 'Call the vendor');
+    expect(notice().textContent).toBe('');
+    await settle();
+    // Row 3 is free again.
+    enter(box, 'Book the room');
+    expect(notice().textContent).toBe('');
+  });
+
   it("asks first from In progress's box past the nudge: Keep it short leaves the text in the box, Add anyway adds it, closes the box and focuses the new row", async () => {
     lists[WED] = [row(1, 'Report'), row(2, 'Email'), row(3, 'Invoices')];
     await renderBoard();
@@ -918,6 +966,19 @@ describe('adding from a column', () => {
     await settle();
     expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Invoices', 'Call the vendor'] }]);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Call the vendor' }));
+  });
+
+  // happy-dom never turns a key into a click, so this checks what the browser obeys: the default prevented.
+  it("doesn't take a key still held from the press that raised the nudge as its answer", async () => {
+    lists[WED] = [row(1, 'Report'), row(2, 'Email'), row(3, 'Invoices')];
+    await renderBoard();
+    fireEvent.click(plus('In progress'));
+    enter(field('New priority for today'), 'Call the vendor');
+    const add = within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.add });
+    expect(document.activeElement).toBe(add);
+    expect(fireEvent.keyDown(add, { key: 'Enter', repeat: true })).toBe(false);
+    expect(fireEvent.keyDown(add, { key: ' ', repeat: true })).toBe(false);
+    expect(fireEvent.keyDown(add, { key: 'Enter' })).toBe(true);
   });
 
   it("drops the question In progress's box held when its text changes, and asks again on Enter with the new text", async () => {

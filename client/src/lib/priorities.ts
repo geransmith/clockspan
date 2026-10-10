@@ -65,11 +65,13 @@ export type WarningKind = 'fresh' | 'progress' | 'complete';
 
 /**
  * Whether adding a row to `rows` asks first, and with which kind of warning: null while the
- * one-off rows are fewer than Rows per day (`count`), and never fewer than three. The routines
- * don't bring the warning on sooner, since they have their own number a day (`recurringPerDay`).
- * The kind still counts every row with text, so the warning starts from all the work ticked.
+ * padded list has a free row, which the new row takes (`placePriority`), or while the one-off
+ * rows are fewer than Rows per day (`count`), and never fewer than three. The routines don't
+ * bring the warning on sooner, since they have their own number a day (`recurringPerDay`). The
+ * kind still counts every row with text, so the warning starts from all the work ticked.
  */
 export function nudgeFor(rows: Priority[], count: number): WarningKind | null {
+  if (padPriorities(rows, count).some(isFree)) return null;
   if (rows.filter(isOneOff).length < Math.max(3, count)) return null;
   const written = rows.filter(hasText);
   const done = written.filter((p) => p.done).length;
