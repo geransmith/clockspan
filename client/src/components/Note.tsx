@@ -8,12 +8,12 @@ import { Note } from './Icons';
 const buttonId = (boxId: string) => `${boxId}-button`;
 
 /**
- * A task's note button on a Top priorities row and a board card, kept out of `components/board/`
- * so the sheet can show it without the board's chunk. It is the one sign a note is there: drawn
- * filled with one, and quiet with none (with a mouse it shows on its row's or card's hover or
- * focus, as an empty category chip does). It opens and closes the note's box (`NoteField`, whose
- * id is `boxId`), and the focus goes into the box it opens. `of` names the task: "priority 3", or
- * its title.
+ * A task's note button on a Top priorities row, kept out of `components/board/` so the sheet can
+ * show it without the board's chunk (the box is also a board card's dialog's). It is the row's one
+ * sign of a note: drawn filled with one, and quiet with none (with a mouse it shows on its row's
+ * hover or focus, as an empty category chip does). It opens and closes the note's box
+ * (`NoteField`, whose id is `boxId`), and the focus goes into the box it opens. `of` names the
+ * task: "priority 3".
  */
 export function NoteToggle({ boxId, of, note, open, onToggle }: { boxId: string; of: string; note: string; open: boolean; onToggle: (open: boolean) => void }) {
   const has = hasNote(note);
@@ -42,12 +42,15 @@ export function NoteToggle({ boxId, of, note, open, onToggle }: { boxId: string;
  * Escape closes it, the text kept, with the focus back on its button. It stays mounted while
  * closed, so a note whose save failed stays in its box, open or not, and goes again on the next
  * edit, on leaving the box, or when the box goes (another day, a reload). Without `onSave` (where
- * the title can't be edited either) the note is plain text.
+ * the title can't be edited either) the note is plain text. In a board card's dialog it is always
+ * open, with no button and no `onClose`: its Escape is the dialog's, and `kept` is the text a
+ * save failed for as the dialog last closed, which goes again as it would have in the box.
  */
 export function NoteField({
   id,
   of,
   note,
+  kept,
   open,
   onClose,
   onSave,
@@ -56,13 +59,14 @@ export function NoteField({
   id: string;
   of: string;
   note: string;
+  kept?: string;
   open: boolean;
-  onClose: () => void;
-  /** Resolves to whether the note saved. */
-  onSave?: (note: string) => Promise<boolean>;
+  onClose?: () => void;
+  /** Resolves to whether the note saved; `base` is the stored note it was typed over. */
+  onSave?: (note: string, base: string) => Promise<boolean>;
   ms: number;
 }) {
-  const { draft, edit, flush } = useDebouncedDraft(note, (value) => onSave?.(value) ?? true, ms);
+  const { draft, edit, flush } = useDebouncedDraft(note, (value, base) => onSave?.(value, base) ?? true, ms, kept);
   if (!onSave) {
     return (
       <p id={id} className="note-field note-text" hidden={!open}>
@@ -88,7 +92,7 @@ export function NoteField({
           if (e.key !== 'Escape' || e.nativeEvent.isComposing) return;
           // The blur the focus's move brings saves it.
           document.getElementById(buttonId(id))?.focus();
-          onClose();
+          onClose?.();
         }}
       />
     </span>

@@ -29,7 +29,7 @@ const TYPING = 'input:not([type=checkbox]):not([type=radio]), textarea, select, 
  * The shortcut a keydown asks for, or null when the key belongs to something else: a key already
  * handled, held down or composing; one with Ctrl, Cmd or Alt/Option (the browser's and the
  * system's, and Option's letters on a Mac); one typed into a field; and any key while a dialog is
- * open or an item is dragged (dnd-kit presses its grip, `aria-pressed`, for the drag).
+ * open or an item is dragged (dnd-kit presses what it drags by, `aria-pressed`, for the drag).
  */
 export function shortcutFor(e: KeyboardEvent): ShortcutId | null {
   if (e.defaultPrevented || e.repeat || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return null;

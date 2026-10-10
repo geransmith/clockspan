@@ -193,16 +193,17 @@ client/                 Vite root → dist/client
                         the pieces several of them share (Folded: a long list's Show all; CategoryChip
                         and CategoryDot; RepeatMark, a recurring row's mark, and RunningMark, the
                         running session's pill, kept here so the sheet can show them; Note, a task's
-                        note button and box, on a priority row and a board card; TimerLengths,
-                        the timer's length buttons and their tap, on the timer card and a board
-                        item's editor); settings/ holds SettingsDialog (the shell and tabs), a file per
-                        tab (BoardTab: the categories and recurring priorities), and controls.tsx;
-                        board/ holds the Board page (Board, BoardCard, Capture: a column's box,
-                        opened by the + in its head, ClockBar: today's times above the columns,
-                        useBoardDrag: the drag (what is dragged and where it would land, its
-                        handlers, what a screen reader hears, the grips and the copy under the
-                        pointer), and dnd.ts: its collision and keyboard settings for dnd-kit), its
-                        own lazy chunk
+                        note button and box, the button on a priority row and the box there and in
+                        a board card's dialog; TimerLengths, the timer's length buttons and their
+                        tap, on the timer card and a board card's dialog); settings/ holds
+                        SettingsDialog (the shell and tabs), a file per tab (BoardTab: the
+                        categories and recurring priorities), and controls.tsx; board/ holds the
+                        Board page (Board, BoardCard: a card's face, CardDialog: its details,
+                        opened by the card, Capture: a column's box, opened by the + in its head,
+                        ClockBar: today's times above the columns, useBoardDrag: the drag (what is
+                        dragged and where it would land, its handlers, what a screen reader hears,
+                        the sensors and the copy under the pointer), and dnd.ts: its collision and
+                        keyboard settings for dnd-kit), its own lazy chunk
   src/auth/             AuthGate and the setup / login / new-password pages
   src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
   src/styles.css        design tokens and all component CSS
@@ -433,7 +434,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   banners). Never call `new Notification(...)` or `showNotification()` (its fallback where the
   constructor is refused, Chrome on Android), create an `AudioContext` or fetch a clip anywhere
   else. `unlockAudio()` must be called from a user gesture (the timer's length buttons,
-  `TimerLengths`, on the timer card and a board item's editor, `useBreak`'s `start`, every
+  `TimerLengths`, on the timer card and a board card's dialog, `useBreak`'s `start`, every
   punch commit, the timer's Done and the shortcut listener, for a timer key, do this) for iOS.
   What plays is `settings.sounds[event]`, an id from the catalog in `shared/sounds.ts`;
   `settings.sound` is the master switch over all of them, and `none` is the per-event off. A
@@ -793,23 +794,31 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `useModalDialog`, the focus on the frame; `REMOVE_TASK`): Off this day (the × path), Delete
   everywhere (the × path, then the board store's `deleteItem`; its failure raises the "Change not
   saved" banner and leaves the task off that day only), or Cancel, which puts the focus back on ×.
-- **A task's note shows only when its button opens it** (`components/Note.tsx`). `NoteToggle` is
-  the one sign a note is there: drawn filled with one, and quiet with none (see Conventions), with
-  `aria-expanded` and `aria-controls`, named "Note for …" or "Add a note to …", so a screen reader
-  hears both. Pressing it opens `NoteField` with the focus in it; Escape closes it with the text
-  kept and the focus back on the button, and nothing is open on a load. The box grows to eight
-  lines and then scrolls, Enter adds a line, and a ticked row's isn't struck through. `NoteField`
-  stays mounted while closed, so a note whose save failed stays in its box, open or not, and goes
-  again on the next edit, blur or unmount; where the title can't be edited the note is plain text.
-  On the sheet (`Priorities`) the button sits in a written row's end cell before the chip and the
-  box under the row, after its hint; each row's note is a draft of its own, keyed by the task, apart
-  from the list's, and saves 400 ms after the last key through `onNote`, the day store's
-  `editPriorities` (`Sheet.tsx`), whose `'failed'` keeps it. On the board (`BoardCard`) the button
-  ends the title row of every card the board edits, or that has a note, and the box opens under the
-  card's text, apart from the editor, saving 800 ms after the last key; `onNote` takes the path
-  `onRename` does (`editRow` for today's row, `editItem` for any other the board edits, none for an
-  earlier day's row of a recurring priority removed in Settings), and `saved` (`lib/board.ts`)
-  raises the banner and answers false. A routine's note is one on every day it is on. Nothing else
+- **A task's note shows only when it is opened** (`components/Note.tsx`): by its button on the
+  sheet, and in its card's dialog on the board. On the sheet `NoteToggle` is the one sign a note is
+  there: drawn filled with one, and quiet with none (see Conventions), with `aria-expanded` and
+  `aria-controls`, named "Note for …" or "Add a note to …", so a screen reader hears both. Pressing
+  it opens `NoteField` with the focus in it; Escape closes it with the text kept and the focus back
+  on the button, and nothing is open on a load. The box grows to eight lines and then scrolls,
+  Enter adds a line, and a ticked row's isn't struck through. On the sheet `NoteField` stays
+  mounted while closed, so a note whose save failed stays in its box, open or not, and goes again
+  on the next edit, blur or unmount; where the title can't be edited the note is plain text. The
+  button sits in a written row's end cell before the chip and the box under the row, after its
+  hint; each row's note is a draft of its own, keyed by the task, apart from the list's, and saves
+  400 ms after the last key through `onNote`, the day store's `editPriorities` (`Sheet.tsx`), whose
+  `'failed'` keeps it. On the board a card with a note has a "Has a note" mark on its meta line
+  (`BoardCard`, `role="img"`, no control), and its dialog (`CardDialog`) holds the box, open, for
+  every task the board edits or that has a note, saving 800 ms after the last key and as the dialog
+  closes (`closeCard` blurs it first); Escape there closes the dialog with the note kept. The box
+  goes with the dialog, so `Board` keeps a note whose save failed (`notesKept`, by item, with the
+  stored note it was typed over, from `useDebouncedDraft`'s base) and the dialog's box starts from
+  it, unsaved (`useDebouncedDraft`'s `kept`, which a box already open takes up too when the save
+  from the dialog's last close fails): no typed text is lost, and it goes again on the next edit,
+  blur or close. A save that goes through drops it, and so does the item's note changing from the
+  one it was typed over (another device's change). `onNote` takes the path `onRename` does
+  (`editRow` for today's row, `editItem` for any other the board edits, none for an earlier day's
+  row of a recurring priority removed in Settings), and `saved` (`lib/board.ts`) raises the banner
+  and answers false. A routine's note is one on every day it is on. Nothing else
   shows a note: not Retro, Review, the morning notice, the timer, the day log or History. A note of
   spaces and line breaks alone, stored untrimmed, counts as none (`hasNote`, `shared/text.ts`): its
   button is quiet and × doesn't ask for it. On the sheet, a row gone from the list before its note's
@@ -921,21 +930,30 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   refused. A task whose latest entry is on a later day (a list an older version planned ahead)
   shows as any other: in Done when that entry is ticked, else by its lane, and with no lane in no
   column until that day, when it is today's row. A lane given on a full board is refused before
-  it is sent (`boardFull`, `addsToLanes`, `BOARD.full`), the server's 400 being the backstop. A task
+  it is sent (`boardFull`, `addsToLanes`, `BOARD.full`), the server's 400 being the backstop. A card
+  (`BoardCard`: its tick on today's rows, In progress's row number, its title and a meta line) opens
+  its dialog (`CardDialog`) on a click or Enter, one at a time, rendered by `Board` outside the
+  columns and keyed by its item, so a move made elsewhere updates it in place; one whose item goes
+  (deleted, gone from a read, a new day loading) closes for good. Whatever pressed there moves,
+  starts or deletes closes it first (`closeCard`: a blur, the dialog gone at once, the focus on the
+  card), since a modal leaves the page inert and the notice, the landed card or the next card must
+  take the focus, and acts under the title the box saved as it closed (`renamed`: Safari leaves the
+  focus in the box as a button is pressed); Escape, a press outside, × and Enter in the title close
+  it the same way. A task
   ticked on an earlier day, off today's list, has no checkbox, since the board would rewrite a past
-  day (its editor says `BOARD.doneOn(when)`), and Move to In progress puts it on today's list to
-  work on again; taken off today again (a park included), it is done again. The editor's title and
+  day (its dialog says `BOARD.doneOn(when)`), and Move to In progress puts it on today's list to
+  work on again; taken off today again (a park included), it is done again. The dialog's title and
   category chip rename or file the task on every day: today's row through the row (`editRow`), any
   other task through a PATCH (`editItem`). Delete is the full delete (`deleteItem`) on every one-off
   task, and today's recurring row has Remove from today (`removeFromToday`) in its place. The
-  editor's Start timer (`TimerLengths`) is on today's open rows, recurring ones included, and on
+  dialog's Start timer (`TimerLengths`) is on today's open rows, recurring ones included, and on
   the cards of Later and Next, left-open ones included: none in Done or on an item whose move is on
-  its way, or while any timer runs, and held while a start is out
-  (`starting`). `Board` takes `running`, `start` and `starting` from `Shell` as props, since the
-  timer's context changes every second. A row's Start closes the editor, the focus on the title,
-  and starts on its task; a card's is a pull first (`run` with `minutes`, which asks no nudge:
-  starting a timer never asks, while Move to and a drag still do), whose promise of the task's uid
-  the start awaits, so a refused pull starts nothing and shows one banner. A start the server
+  its way, or while any timer runs, and held while a start is out (`starting`). `Board` takes
+  `running`, `start` and `starting` from `Shell` as props, since the timer's context changes every
+  second. A row's Start closes the dialog, the focus on its card, and starts on its task; a card's
+  is a pull first (`run` with `minutes`, which asks no nudge: starting a timer never asks, while
+  Move to and a drag still do), whose promise of the task's uid the start awaits, so a refused pull
+  starts nothing and shows one banner. A start the server
   refuses (the task taken off the list meanwhile) is the save banner, and a 409 is the
   `TIMER_ELSEWHERE` banner while the sync it brings shows the other device's timer. The item the
   running session is on, on its day (a card, which has none, by its task), starts its meta line with
@@ -958,13 +976,18 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   first button takes the focus, and an Enter or Space still held from the press that raised it
   presses nothing. What the store refuses once a move is under way (`MoveRefused`) is a banner. A
   drag (`components/board/useBoardDrag.tsx`, with dnd-kit's settings in `dnd.ts` beside it) starts
-  at an item's grip; a recurring row has none, and an item whose move is on its way can't be
-  picked up until the move lands. Where a drop lands is `dropTarget`'s (see its doc),
-  and what a screen reader hears comes from `BOARD_DRAG`, `overAnnouncement` and `moveAnnouncement`.
-  dnd-kit's own focus return is off, since it would take the focus from the notice a drop brings: a
-  keyboard drag puts it back on the item's grip, and so does closing the notice (on the title where
-  the grip is hidden or missing; for a row typed in In progress's box, back in that box, which still
-  holds the text).
+  on the card itself, whose button is dnd-kit's handle, stretched over the card (`::before`): a
+  mouse press that moves 6 px, a finger held 250 ms (one that moves first scrolls the page, so
+  `MouseSensor` and `TouchSensor`, not `PointerSensor`, which needs `touch-action: none`), or Space
+  (Enter opens the card, and a repeated Enter or Space's keyup opens nothing). A recurring row
+  doesn't drag, an item of In progress or Done drags only from 900 px (it drags only to another
+  column, and below that one column shows at a time), and an item whose move is on its way can't be
+  picked up until the move lands.
+  Where a drop lands is `dropTarget`'s (see its doc), and what a screen reader hears comes from
+  `BOARD_DRAG` (its `instructions` in place of dnd-kit's), `overAnnouncement` and
+  `moveAnnouncement`. dnd-kit's own focus return is off, since it would take the focus from the
+  notice a drop brings: a keyboard drag puts it back on the item's card, and so does closing the
+  notice (for a row typed in In progress's box, back in that box, which still holds the text).
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started — one
   rule, no clock-in fallback. `GET /days/range` returns full days and the client does the rollup
@@ -1405,8 +1428,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   category stays in view. The timer's label box shows its suggestions the same way (`placeList`,
   at the box's width), so the card's height never changes. A priority row's empty chip is quiet:
   with a mouse it shows on the row's hover or focus only, from the `(hover: hover)` rule beside the
-  chip's. So is a note button with no note (`.note-toggle--empty`), on a sheet row and a board card,
-  unless its box is open. `.category-chip`, `.note-toggle` and `.swatch` are in the coarse block.
+  chip's. So is a note button with no note (`.note-toggle--empty`) on a sheet row, unless its box
+  is open. `.category-chip`, `.note-toggle` and `.swatch` are in the coarse block.
 - Numeric settings inputs commit on blur or Enter, never on every keystroke (`NumberInput`);
   `DurationField` commits when focus leaves its hours / minutes pair or on Enter, so moving from
   hours to minutes saves nothing. A blank or non-numeric box puts the stored value back and
@@ -1416,7 +1439,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   button that sends one calls its `run`: one send at a time with the button disabled, and one
   error line (`ErrorLine`), cleared when a send starts and filled with what it throws (a
   mismatched confirmation throws too). A store write that shows at once (a lane's box, a card's
-  Move to), or a board item's Start timer, whose editor closes, is not a form send: it goes
+  Move to), or a board item's Start timer, whose dialog closes, is not a form send: it goes
   through its store, and a failure is the banner.
 - A press that takes its own control off the page (its row or card goes, another control shows
   in its place, or the arrow at a column's end turns off) moves the focus itself: to the control
@@ -1592,36 +1615,49 @@ The browser pass for each surface (the logic under it is already tested):
   card at the top, Next's at the end, In progress's row on today's sheet and asking past three rows;
   Enter keeps the box, an empty Enter or Escape closes it, one with text stays open when left); a
   left-open task's "Left open from …" in Next, Move to from each column (a done item's notice), a
-  park of a task typed seconds ago, a done-earlier task's editor, and this week's routine ticks in
-  Done. At 1000, where the columns are narrowest: titles clamp to two lines, meta lines wrap, Move
-  to's buttons wrap under their label (four on a left-open task). At 375: the switch shows one
-  column, the notice wraps, and with sign-in on (`web-local`,
-  `npm run seed -- --auth local --sessions`, the printed cookie set) the sheet's five header
-  buttons fit with the brand's name gone, and the board's header is the same.
-  Light and dark. The drag pass: at 1440, drag with the mouse between each pair of columns (Later
-  and Next take the card where it is dropped), a done row onto Later (the notice), then by keyboard
-  (Tab to a grip, Space, arrows, Space) with a screen reader, which hears where the card is and the
-  done-item line, and Escape puts it back; with reduced motion on, nothing glides. At 1000 the copy
-  under the pointer isn't clipped; at 375 a card sorts within the column shown, In progress and Done
-  show no grip, and Move to still moves. The clock bar, at 1440, 1000 and 375: above the notice
-  and the columns with the seeded times and the time left, one line from 640 px and label over
-  time over line on a phone; Overtime approved, Overtime off and the meal periods off (no Lunch
-  by, and the switch's hint drops the lunch deadline) change it as they change the sheet's tiles;
-  Settings → Timeclock → Times on the board off hides it.
-  Start timer, at 1440, 1000 (the lengths wrap under their label) and 375: a row's Start (the
-  bar shows the timer, the row's meta line `running`, then `paused`), a Next card's with three rows
-  open (no nudge: it pulls and starts), and with a timer running no editor offers it.
-  Notes, at 1440, 1000 and 375: the SSO card's note button drawn filled at the end of its title
-  row, the others' quiet until the card is hovered or focused; its note opens under the card's
-  text with the editor closed, and the note button and Start timer both work on one card; Escape
-  closes it with the focus on its button; with a screen reader, the button says whether a note is
-  there and whether it is open; an earlier day's tick of a recurring priority removed in Settings
-  shows its note as text. A key typed into a note does nothing.
+  park of a task typed seconds ago, a done-earlier task's dialog, and this week's routine ticks in
+  Done. The dialog: a click on a card's title, its meta line or its padding opens it, and so does
+  Enter; the tick ticks and opens nothing. Enter in the title saves and closes, and the dialog stays
+  closed; Escape drops the edit; leaving the box saves. Move to from every column, Start timer,
+  Delete's confirm (Cancel keeps the dialog) and Remove from today on a routine's row each leave the
+  focus on the card, or the next card after Delete; a Next card's Move to In progress with three
+  rows open closes it with the nudge's first button focused, as a done row's Move to Later does
+  with its notice's, and Keep it short or Leave it puts the focus back on the card. An alarm banner
+  with a dialog open. At 1000, where the columns are narrowest: titles clamp to two lines and meta
+  lines wrap. At 375: the switch shows one column, the notice wraps, the dialog is a bottom sheet
+  whose Move to and Start lengths wrap under their labels (four targets on a left-open task), and
+  with sign-in on (`web-local`, `npm run seed -- --auth local --sessions`, the printed cookie set)
+  the sheet's five header buttons fit with the brand's name gone, and the board's header is the
+  same.
+  Light and dark. The drag pass: at 1440, drag with the mouse from anywhere on a card between each
+  pair of columns (Later and Next take the card where it is dropped; a press that moves under 6 px
+  opens the dialog, and no click lands after a drag), a done row onto Later (the notice), then by
+  keyboard (Tab to a card, Space, arrows, Space; Enter opens its dialog) with a screen reader,
+  which hears where the card is, the done-item line and the card's instructions, and Escape puts
+  it back. In Chrome, Safari and Firefox: a click or drag from a card's padding and meta line, and
+  Space or Enter dropping a card with no dialog opening. With reduced motion on, nothing glides. At
+  1000 the copy under the pointer isn't clipped; on a phone (a real iPhone and Android phone) a tap
+  opens the bottom sheet, a hold of about a quarter second lifts a card of Later or Next, which
+  sorts within the column shown (one of In progress or Done stays put), a finger that moves first
+  scrolls the page and the column, and no text selection
+  or callout shows on a long hold. The clock bar, at 1440, 1000 and 375: above the notice and the
+  columns with the seeded times and the time left, one line from 640 px and label over time over
+  line on a phone; Overtime approved, Overtime off and the meal periods off (no Lunch by, and the
+  switch's hint drops the lunch deadline) change it as they change the sheet's tiles; Settings →
+  Timeclock → Times on the board off hides it.
+  Start timer, at 1440, 1000 and 375 (the lengths wrap under their label): a row's Start (the bar
+  shows the timer, the row's meta line `running`, then `paused`), a Next card's with three rows
+  open (no nudge: it pulls and starts), and with a timer running no dialog offers it.
+  Notes, at 1440, 1000 and 375: the SSO card's "Has a note" mark on its meta line, and none on the
+  others; its dialog's box with the note, saved 800 ms after the last key and as the dialog closes
+  by Escape, × or a press outside; with a screen reader, the mark is read on the card; an earlier
+  day's tick of a recurring priority removed in Settings shows its note as text. A key typed into
+  a note does nothing.
   Categories (with about 30 added by `curl` to `/api/board/categories` for a long list): a
-  box's chip (a pick, New category, kept after a reload and in the other boxes), a card editor's
-  chip with its list scrolling inside and the box in view, the cards' dot and name (a long name at
-  1000), and Settings → Board (a rename, a name in use, the swatches wrapping at 375, Remove, the
-  touch areas).
+  box's chip (a pick, New category, kept after a reload and in the other boxes), a card dialog's
+  chip with its list opening over the sheet, unclipped, scrolling inside with the box in view, its
+  Escape closing only the list, the cards' dot and name (a long name at 1000), and Settings → Board
+  (a rename, a name in use, the swatches wrapping at 375, Remove, the touch areas).
 - **Keyboard shortcuts**: after `npm run seed -- --running`, at 1280: ? opens
   the list with the focus on it, ? again does nothing and Escape gives the focus back; P pauses
   and resumes, + adds the step, and once the timer is a minute or more past its end (see "The
@@ -1691,10 +1727,11 @@ The browser pass for each surface (the logic under it is already tested):
   or test that needs another board mocks it itself, which runs after. The hook is registered once
   per file because Vitest isolates each file (`isolate`, on by default).
 - A keydown inside a native modal `<dialog>` still bubbles to `window`, so the shortcut guard
-  checks for `dialog[open]` itself. Its drag check reads the `aria-pressed` dnd-kit sets on a grip
-  (beside `aria-roledescription`) while it drags; a dnd-kit upgrade that drops it lets keys
-  through mid-drag, which `Board.test.tsx`'s keyboard-drag case catches. A page key (S, B, H)
-  drops text left in a board box, as a click on the header does.
+  checks for `dialog[open]` itself. Its drag check reads the `aria-pressed` dnd-kit sets on what it
+  drags by (a board card's button, a sheet card's grip; beside `aria-roledescription`) while it
+  drags; a dnd-kit upgrade that drops it lets keys through mid-drag, which `Board.test.tsx`'s
+  keyboard-drag case catches. A page key (S, B, H) drops text left in a board box, as a click on
+  the header does.
 - Prettier leaves `*.md` alone: wrap docs by hand.
 - A workflow step that must trigger CI needs a GitHub App or personal token.
 - The Node floor (`engines` and `devEngines` in `package.json`) has no upper bound, and `.npmrc`

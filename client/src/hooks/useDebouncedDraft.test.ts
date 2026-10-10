@@ -87,6 +87,31 @@ it('keeps the text when its save answers false, and the next flush sends it agai
   expect(result.current.draft).toBe('From another device');
 });
 
+it('starts from a kept draft as an edit not saved yet, on the stored value, until a flush saves it', async () => {
+  const save = vi.fn<Save>(() => true);
+  const { result, rerender } = renderHook((stored: string) => useDebouncedDraft(stored, save, 400, 'Typed before'), { initialProps: 'Stored' });
+  expect(result.current.draft).toBe('Typed before');
+  rerender('Stored again');
+  expect(result.current.draft).toBe('Typed before');
+  await settle(400);
+  expect(save).not.toHaveBeenCalled();
+  await expect(act(() => result.current.flush())).resolves.toBe(true);
+  expect(save).toHaveBeenCalledExactlyOnceWith('Typed before', 'Stored');
+});
+
+it('takes up a kept draft that arrives while nothing waits as an edit not saved yet, on the value stored then', async () => {
+  const save = vi.fn<Save>(() => true);
+  const initialProps: { stored: string; kept?: string } = { stored: 'Typed before' };
+  const { result, rerender } = renderHook((props) => useDebouncedDraft(props.stored, save, 400, props.kept), { initialProps });
+  // The earlier draft's save failed: the store's copy is back, and the text kept.
+  rerender({ stored: 'Stored', kept: 'Typed before' });
+  expect(result.current.draft).toBe('Typed before');
+  rerender({ stored: 'From another device', kept: 'Typed before' });
+  expect(result.current.draft).toBe('Typed before');
+  await expect(act(() => result.current.flush())).resolves.toBe(true);
+  expect(save).toHaveBeenCalledExactlyOnceWith('Typed before', 'Stored');
+});
+
 it('a flush while the save is out sends nothing more and resolves with its answer', async () => {
   const answer = deferred<boolean>();
   const { result, save } = draftOf('');

@@ -307,7 +307,7 @@ export const ADD_PRIORITY_FAILED = {
  * `close` its button. `full` is also the line under Later's and Next's + while they are shut at
  * the cap.
  * `nameTaken` is Settings → Board's line under a category named like another in use. `doneOn` is
- * the editor's line on a task ticked on an earlier day, which the board doesn't untick; `when`
+ * a card dialog's line on a task ticked on an earlier day, which the board doesn't untick; `when`
  * is `dayName`'s in-sentence word or date.
  */
 export const BOARD = {
@@ -335,9 +335,11 @@ export const DONE_STAYS = {
 /**
  * What a screen reader hears while a card is dragged on the board: picked up, where it would land
  * (in Later or Next, before which card, or back where it started), and how it ended. A drop that changes something, or is
- * turned down, says so through `moveAnnouncement` (`lib/board.ts`).
+ * turned down, says so through `moveAnnouncement` (`lib/board.ts`). `instructions` describes every
+ * card that drags, in place of dnd-kit's own.
  */
 export const BOARD_DRAG = {
+  instructions: 'Enter opens the card. Space picks it up; then the arrow keys move it, Space drops it and Escape puts it back.',
   pickedUp: (title: string, column: string) => `Picked up ${title}, in ${column}.`,
   over: (title: string, column: string) => `${title} is over ${column}.`,
   overBefore: (title: string, column: string, next: string) => `${title} is over ${column}, before ${next}.`,

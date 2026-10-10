@@ -164,6 +164,7 @@ describe('copy builders', () => {
   });
 
   it('names the card and the column in what a drag on the board says', () => {
+    expect(BOARD_DRAG.instructions).toBe('Enter opens the card. Space picks it up; then the arrow keys move it, Space drops it and Escape puts it back.');
     expect(BOARD_DRAG.pickedUp('Write a KB', 'Later')).toBe('Picked up Write a KB, in Later.');
     expect(BOARD_DRAG.over('Write a KB', 'In progress')).toBe('Write a KB is over In progress.');
     expect(BOARD_DRAG.overBefore('Write a KB', 'Next', 'Follow up')).toBe('Write a KB is over Next, before Follow up.');
