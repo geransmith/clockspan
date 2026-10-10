@@ -36,7 +36,12 @@ export function TimerControls({ compact = false, takeFocus }: { compact?: boolea
   return (
     <div className={compact ? 'running-controls' : 'timer-controls'}>
       {!due && (
-        <button className={btn} onClick={() => void adjust(-step * 60)} aria-label={`Remove ${step} minutes`} title={compact ? `−${step}m` : undefined}>
+        <button
+          className={compact ? `${btn} running-minus` : btn}
+          onClick={() => void adjust(-step * 60)}
+          aria-label={`Remove ${step} minutes`}
+          title={compact ? `−${step}m` : undefined}
+        >
           <Minus />
           {words(`${step}m`)}
         </button>
