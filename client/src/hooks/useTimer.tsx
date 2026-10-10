@@ -195,7 +195,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // end either way), or a pause left for an hour (the server ends the session where the pause
   // began, so nothing after it is logged). It sends the plan and pause it judged by, and the
   // server refuses (409) a row another device changed since: given time or resumed, it may not
-  // be due any more, so a sync shows what it is now.
+  // be due any more, so a sync shows what it is now. A row deleted there since (404) is gone, and
+  // the same sync shows that.
   useEffect(() => {
     if (!running || !loaded || syncing || completing.current || now < retry.current.at) return;
     const forgotten = pausedForSeconds >= PAUSE_LIMIT_SECONDS;
@@ -231,7 +232,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         });
       })
       .catch((err: unknown) => {
-        if (err instanceof ApiError && err.status === 409) void syncNow();
+        if (err instanceof ApiError && (err.status === 404 || err.status === 409)) void syncNow();
         const delay = nextBackoff(retry.current.delay);
         retry.current = { at: Date.now() + delay, delay };
       });
