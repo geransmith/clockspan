@@ -1,7 +1,7 @@
 import { flushSync } from 'react-dom';
 import { useDebouncedDraft } from '../hooks/useDebouncedDraft';
 import { LIMITS } from '../../../shared/api.js';
-import { hasNote, taskNote } from '../../../shared/text.js';
+import { hasNote, noteStart, taskNote } from '../../../shared/text.js';
 import { Note } from './Icons';
 
 /** The note button's id, from its box's. */
@@ -11,9 +11,9 @@ const buttonId = (boxId: string) => `${boxId}-button`;
  * A task's note button on a Top priorities row, kept out of `components/board/` so the sheet can
  * show it without the board's chunk (the box is also a board card's dialog's). It is the row's one
  * sign of a note: drawn filled with one, and quiet with none (with a mouse it shows on its row's
- * hover or focus, as an empty category chip does). It opens and closes the note's box
- * (`NoteField`, whose id is `boxId`), and the focus goes into the box it opens. `of` names the
- * task: "priority 3".
+ * hover or focus, as an empty category chip does). While its box is closed its title is the note's
+ * start (`noteStart`). It opens and closes the note's box (`NoteField`, whose id is `boxId`), and
+ * the focus goes into the box it opens. `of` names the task: "priority 3".
  */
 export function NoteToggle({ boxId, of, note, open, onToggle }: { boxId: string; of: string; note: string; open: boolean; onToggle: (open: boolean) => void }) {
   const has = hasNote(note);
@@ -24,7 +24,8 @@ export function NoteToggle({ boxId, of, note, open, onToggle }: { boxId: string;
       aria-expanded={open}
       aria-controls={boxId}
       aria-label={has ? `Note for ${of}` : `Add a note to ${of}`}
-      title={has ? 'Note' : 'Add a note'}
+      // Open, the box shows the note; a title would also be read as the button's description.
+      title={has ? (open ? undefined : noteStart(note)) : 'Add a note'}
       onClick={() => {
         // Rendered at once, so the box is shown to take the focus inside the same press.
         flushSync(() => onToggle(!open));
