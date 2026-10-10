@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PRIORITY_WARNINGS } from './copy';
 import {
-  clearRow,
   editPriority,
   emptyRow,
   hasRoom,
@@ -15,7 +14,6 @@ import {
   patchRow,
   pickWarning,
   placePriority,
-  removePriority,
   takeOffRow,
 } from './priorities';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
@@ -177,29 +175,19 @@ describe('patchRow', () => {
   });
 });
 
-describe('clearRow', () => {
-  it('leaves a free row where the task was, and the other rows where they are', () => {
-    const rows = [makePriority(1, 'A'), makePriority(2, 'B', { done: true }), makePriority(3, 'C')];
-    expect(clearRow(rows, 2)).toEqual([rows[0], emptyRow(2), rows[2]]);
-  });
-});
-
 describe('takeOffRow', () => {
-  it('leaves a free row within Rows per day, and drops the row past it', () => {
-    const rows = [makePriority(1, 'A'), makePriority(2, 'B'), makePriority(3, 'C')];
-    expect(takeOffRow(rows, 1, 2)).toEqual(clearRow(rows, 1));
-    expect(takeOffRow(rows, 2, 2)).toEqual(clearRow(rows, 2));
-    expect(takeOffRow(rows, 3, 2)).toEqual(removePriority(rows, 3));
-  });
-});
+  const a = makePriority(1, 'A');
+  const b = makePriority(2, 'B', { done: true });
+  const c = makePriority(3, 'C');
+  const rows = [a, b, c];
 
-describe('removePriority', () => {
-  it('drops the row and renumbers the rest from 1', () => {
-    const next = removePriority([makePriority(1, 'A'), makePriority(2, 'B'), makePriority(3, 'C')], 2);
-    expect(next.map((p) => [p.position, p.text])).toEqual([
-      [1, 'A'],
-      [2, 'C'],
-    ]);
+  it('leaves a free row within Rows per day, the other rows where they are', () => {
+    expect(takeOffRow(rows, 2, 2)).toEqual([a, makePriority(2, '', { uid: null, addedAt: null, listed: 0 }), c]);
+  });
+
+  it('drops the row past Rows per day and renumbers the rest from 1', () => {
+    expect(takeOffRow(rows, 3, 2)).toEqual([a, b]);
+    expect(takeOffRow(rows, 2, 1)).toEqual([a, { ...c, position: 2 }]);
   });
 });
 

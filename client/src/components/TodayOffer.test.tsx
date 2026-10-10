@@ -2,7 +2,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { LEFT_OPEN, TODAY_OFFER } from '../lib/copy';
-import type { PrioritySeed } from '../lib/plan';
+import type { PrioritySeed } from '../lib/recurring';
 import { makeRecurring } from '../test/fixtures';
 import type { Recurring } from '../types';
 import { TodayOffer } from './TodayOffer';

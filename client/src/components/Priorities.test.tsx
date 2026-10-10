@@ -10,7 +10,7 @@ import { SettingsProvider } from '../hooks/useSettings';
 import { useBoardStore } from '../hooks/useBoard';
 import { playSound, unlockAudio, warnSaveFailed } from '../lib/alerts';
 import { BLANK_HINT, LEFT_OPEN, PRIORITY_WARNINGS, REMOVE_TASK, RENAME_HINT, TODAY_OFFER, WARNING_ACTIONS } from '../lib/copy';
-import type { PrioritySeed } from '../lib/plan';
+import type { PrioritySeed } from '../lib/recurring';
 import { emptyRow } from '../lib/priorities';
 import type { CategoryPick } from '../lib/board';
 import {

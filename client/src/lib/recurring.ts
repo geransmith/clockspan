@@ -2,12 +2,12 @@
  * The recurring priorities: their days as a card's Repeat row and Later's Repeats show them
  * (`WEEKDAYS`, `repeatDays`), and the morning offer's recurring half: which are due on a day and
  * not on its list yet (`dueRecurring`, `notOnList`), which of them the offer ticks (`offerPicks`,
- * up to `recurringPerDay`) and the list after Add to Today (`acceptOffer`). The answers this
- * device gave today are `useRecurringAnswered`'s. Pure: the clock comes in as `now`.
+ * up to `recurringPerDay`) and the list after Add to Today (`acceptOffer`, which places the
+ * leftovers and Up Next by `seedRow` too). The answers this device gave today are
+ * `useRecurringAnswered`'s. Pure: the clock comes in as `now`.
  */
 import type { Priority, Recurring } from '../types';
 import { isoWeekday } from '../../../shared/dates.js';
-import { seedRow, type PrioritySeed } from './plan';
 import { newTaskRow, padPriorities, placePriority } from './priorities';
 
 /** A recurring priority's days as the server numbers them (ISO, Monday 1), each a one-letter button named in full. */
@@ -76,6 +76,19 @@ export function offerPicks(due: Recurring[], onToday: Priority[], perDay: number
  */
 export function recurringRow(item: Recurring, now: number): Omit<Priority, 'position'> {
   return { ...newTaskRow(item.title, item.categoryUid, now), uid: item.uid, note: item.note, recurring: true };
+}
+
+/**
+ * What a row put on a day's list from elsewhere starts from: its task, its name and category, and
+ * the note and counts the server gave its source row, which the new row shows until its save
+ * answers. A row carried over is its own seed.
+ */
+export type PrioritySeed = Pick<Priority, 'uid' | 'text' | 'categoryUid' | 'note' | 'listed' | 'earlier' | 'logged'>;
+
+/** The row `seed` puts on a list, added `now`: its own task, with its source row's note and counts until the save answers. */
+export function seedRow(seed: PrioritySeed, now: number): Omit<Priority, 'position'> {
+  const { uid, note, listed, earlier, logged } = seed;
+  return { ...newTaskRow(seed.text, seed.categoryUid, now), uid, note, listed, earlier, logged };
 }
 
 /**

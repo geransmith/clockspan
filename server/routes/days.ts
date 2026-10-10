@@ -26,7 +26,7 @@ import {
 } from './shared.js';
 import { startBreak } from './breaks.js';
 import { startSession } from './sessions.js';
-import { mergePriorities } from '../../shared/priorities.js';
+import { FREE_ROW, mergePriorities } from '../../shared/priorities.js';
 import { cutText, taskNote, taskTitle } from '../../shared/text.js';
 import { kindForPosition, MAX_PUNCHES, mergePunches } from '../../shared/punches.js';
 import { MAX_PRIORITIES, SETTING_LIMITS } from '../../shared/settings.js';
@@ -203,6 +203,7 @@ function parsePriorityRows(input: unknown, label: RowsLabel, now: number, unsaid
     if (uid && item.note == null) unsaid?.note.add(uid);
     if (uid && item.addedAt == null) unsaid?.addedAt.add(uid);
     rows.push({
+      ...FREE_ROW,
       position: i + 1,
       text,
       done: written && item.done === true,
@@ -210,11 +211,6 @@ function parsePriorityRows(input: unknown, label: RowsLabel, now: number, unsaid
       addedAt,
       categoryUid: uid == null ? null : (category.uid ?? null),
       note: uid != null && typeof item.note === 'string' ? taskNote(item.note) : '',
-      recurring: false,
-      archived: false,
-      listed: 0,
-      earlier: 0,
-      logged: 0,
     });
   }
   return rows;

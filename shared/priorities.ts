@@ -10,6 +10,21 @@ export function isFree(p: Priority): boolean {
   return p.uid == null && !hasText(p);
 }
 
+/** A free row's fields but its place: every row the client builds, and each row the list PUT reads, starts from it and sets its own. */
+export const FREE_ROW: Readonly<Omit<Priority, 'position'>> = {
+  text: '',
+  done: false,
+  uid: null,
+  addedAt: null,
+  categoryUid: null,
+  note: '',
+  recurring: false,
+  archived: false,
+  listed: 0,
+  earlier: 0,
+  logged: 0,
+};
+
 /** The fields only the server works out: never merged, and never read from a save. */
 type ReadOnlyField = 'recurring' | 'archived' | 'listed' | 'earlier' | 'logged';
 type MergedField = Exclude<keyof Priority, 'position' | 'uid' | ReadOnlyField>;

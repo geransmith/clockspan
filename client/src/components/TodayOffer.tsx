@@ -1,7 +1,6 @@
 import { useId, useState } from 'react';
 import { LEFT_OPEN, TODAY_OFFER } from '../lib/copy';
-import type { PrioritySeed } from '../lib/plan';
-import { offerPicks, recurringCount } from '../lib/recurring';
+import { offerPicks, recurringCount, type PrioritySeed } from '../lib/recurring';
 import type { Priority, Recurring } from '../types';
 
 /** What the last planned day left unticked, offered on today's list: `from` names that day as `dayName(date, today)` does, for a title. */
