@@ -171,7 +171,7 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
       if (kind === 'lead') {
         return {
           kicker,
-          title: 'Look back before you clock out',
+          title: 'Look Back Before You Clock Out',
           // The end time is the clock-out warning's and the Clock out at tile's.
           body: "Compare what you planned with what you did while it's fresh.",
           tone: 'warn',
@@ -180,14 +180,14 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
       if (kind === 'due') {
         return {
           kicker,
-          title: 'Clocking out? Do the retrospective first.',
+          title: 'Clocking Out? Do the Retrospective First.',
           body: `You reached your ${day} at ${target}. Two minutes on what went to plan and what didn't.`,
           tone: 'warn',
         };
       }
       return {
         kicker,
-        title: `Retrospective is ${formatMinutes(e.minutes)} overdue`,
+        title: `Retrospective Is ${formatMinutes(e.minutes)} Overdue`,
         body: `Your day ended at ${target}. The retrospective card is on today's sheet.`,
         tone: 'warn',
       };
@@ -200,10 +200,10 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
           tone: 'warn',
         };
       }
-      if (kind === 'due') return { kicker, title: 'Take lunch now', body: `Your lunch deadline is ${target}. Punch Lunch out.`, tone: 'danger' };
+      if (kind === 'due') return { kicker, title: 'Take Lunch Now', body: `Your lunch deadline is ${target}. Punch Lunch out.`, tone: 'danger' };
       return {
         kicker,
-        title: `Lunch is ${formatMinutes(e.minutes)} overdue`,
+        title: `Lunch Is ${formatMinutes(e.minutes)} Overdue`,
         body: `Your lunch deadline was ${target}. Punch Lunch out as soon as you can.`,
         tone: 'danger',
       };
@@ -211,7 +211,7 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
       if (kind === 'lead') {
         return {
           kicker,
-          title: `Second meal period in ${left}`,
+          title: `Second Meal Period in ${left}`,
           body: `Your ${mealHours} of work ends at ${target}. A second meal period is due before then.`,
           tone: 'warn',
         };
@@ -219,14 +219,14 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
       if (kind === 'due') {
         return {
           kicker,
-          title: 'Take your second meal period',
+          title: 'Take Your Second Meal Period',
           body: `You reached ${mealHours} of work at ${target}. A second meal period was due by then.`,
           tone: 'danger',
         };
       }
       return {
         kicker,
-        title: `Second meal period is ${formatMinutes(e.minutes)} overdue`,
+        title: `Second Meal Period Is ${formatMinutes(e.minutes)} Overdue`,
         body: `Your ${mealHours} of work ended at ${target}. Take your second meal period as soon as you can.`,
         tone: 'danger',
       };
@@ -234,17 +234,18 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
       if (kind === 'lead') {
         return {
           kicker,
-          title: `Clock out in ${left}`,
+          title: `Clock Out in ${left}`,
           body: `Your ${day} day ends at ${target} (clocked in ${clockIn}). Start wrapping up.`,
           tone: 'warn',
         };
       }
       if (kind === 'due') {
-        return { kicker, title: 'Time to clock out', body: `You reached your ${day} for today at ${target}. Punch out now.`, tone: 'danger' };
+        return { kicker, title: 'Time to Clock Out', body: `You reached your ${day} for today at ${target}. Punch out now.`, tone: 'danger' };
       }
       return {
         kicker,
-        title: `Clock out is ${formatMinutes(e.minutes)} overdue`,
+        // The noun takes the hyphen, as the alarm's name does; "Clock Out Is" would read as the verb.
+        title: `Clock-Out Is ${formatMinutes(e.minutes)} Overdue`,
         body: `Your day ended at ${target}. You're working past your ${day} target.`,
         tone: 'danger',
       };

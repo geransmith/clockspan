@@ -102,7 +102,7 @@ export function BreakProvider({ children }: { children: ReactNode }) {
   }, [endBreak, current]);
 
   // A timer running means the break is over (the server ended it as the session started), and
-  // so is any banner about breaks: a suggestion or Break's over.
+  // so is any banner about breaks: a suggestion or Break's Over.
   const working = running != null;
   useEffect(() => {
     if (working) dismissByTag('break');

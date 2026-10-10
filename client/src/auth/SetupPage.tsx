@@ -54,7 +54,7 @@ export function SetupPage({ onDone, hint }: GateProps) {
         <NewPasswordFields label="Password" value={password} confirm={confirm} onValue={setPassword} onConfirm={setConfirm} />
         <ErrorLine error={error} />
         <button className="btn btn-primary btn-lg" type="submit" disabled={busy}>
-          {busy ? 'Creating…' : 'Create account'}
+          {busy ? 'Creating…' : 'Create Account'}
         </button>
       </form>
     </div>

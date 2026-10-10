@@ -39,7 +39,7 @@ export function LoginPage({ onDone, hint }: GateProps) {
         </label>
         <ErrorLine error={error} />
         <button className="btn btn-primary btn-lg" type="submit" disabled={busy}>
-          {busy ? 'Signing in…' : 'Sign in'}
+          {busy ? 'Signing In…' : 'Sign In'}
         </button>
       </form>
     </div>
@@ -54,7 +54,7 @@ export function OidcLoginPage({ hint }: Pick<GateProps, 'hint'>) {
         {hint && <p className="error">{hint}</p>}
         <p className="muted">Sign in with your identity provider to continue.</p>
         <a className="btn btn-primary btn-lg" href="/auth/login">
-          Sign in
+          Sign In
         </a>
       </div>
     </div>

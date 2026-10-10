@@ -117,9 +117,9 @@ export const PRIORITY_WARNINGS = {
 
 /** Buttons under the warning, by how much of the list is done. */
 export const WARNING_ACTIONS = {
-  fresh: { add: 'Add anyway', keep: 'Keep it short' },
-  progress: { add: 'Add anyway', keep: "Finish what's open" },
-  complete: { add: 'Add a bonus', keep: 'Stop here' },
+  fresh: { add: 'Add Anyway', keep: 'Keep It Short' },
+  progress: { add: 'Add Anyway', keep: "Finish What's Open" },
+  complete: { add: 'Add a Bonus', keep: 'Stop Here' },
 } as const;
 
 /** Under a Top priorities row being retyped, while earlier days' lists hold its task: the name is one for every day. */
@@ -144,21 +144,21 @@ const unplanned = (logged: string | null) => (logged ? ' The time stays in the l
 export const REMOVE_TASK = {
   title: (name: string) => `Remove ${name}`,
   body: (otherDays: number, logged: string | null, note: boolean) => {
-    // Asked for the note alone: nothing else names the task, so Off this day deletes it too (collectItems), unless it has a lane.
-    if (!otherDays && !logged) return 'It is on no other day, so Off this day deletes it and its note too, unless the board keeps it in Later or Next.';
+    // Asked for the note alone: nothing else names the task, so Off This Day deletes it too (collectItems), unless it has a lane.
+    if (!otherDays && !logged) return 'It is on no other day, so Off This Day deletes it and its note too, unless the board keeps it in Later or Next.';
     const where = otherDays ? `It is on ${counted(otherDays, 'other day')}` : '';
-    return `${taskFacts(where, logged)} Delete everywhere takes it off every day.${unplanned(logged)}${note ? ' Its note goes with the task.' : ''}`;
+    return `${taskFacts(where, logged)} Delete Everywhere takes it off every day.${unplanned(logged)}${note ? ' Its note goes with the task.' : ''}`;
   },
-  offDay: 'Off this day',
-  everywhere: 'Delete everywhere',
+  offDay: 'Off This Day',
+  everywhere: 'Delete Everywhere',
   cancel: 'Cancel',
 } as const;
 
 /** On today's empty priorities, when the last day with a plan left rows unticked. */
 export const LEFT_OPEN = {
-  title: (from: string) => `Still open from ${from}`,
-  add: 'Add to today',
-  dismiss: 'Start fresh',
+  title: (from: string) => `Still Open From ${from}`,
+  add: 'Add to Today',
+  dismiss: 'Start Fresh',
 };
 
 /**
@@ -166,9 +166,9 @@ export const LEFT_OPEN = {
  * button that answers it, and the line when more are ticked than Recurring rows per day.
  */
 export const TODAY_OFFER = {
-  upNext: 'Up next',
-  recurring: 'Repeats today',
-  notToday: 'Not today',
+  upNext: 'Up Next',
+  recurring: 'Repeats Today',
+  notToday: 'Not Today',
   over: (n: number) => `More than ${counted(n, 'recurring row')} today.`,
 } as const;
 
@@ -199,14 +199,14 @@ const named = (name: string, text: string) => (name ? `${name} · ${text}` : tex
  * given more time. `more` is the banner button.
  */
 export const TIMER_DUE = {
-  title: "Time's up",
+  title: "Time's Up",
   body: (name: string, planned: string) => named(name, `${planned}. Finish, or add more time.`),
   more: (minutes: number) => `Add ${minutes} min`,
 } as const;
 
 /** The dialog when Finish is pressed a whole minute or more past the end: which length to log. */
 export const FINISH_CHOICE = {
-  title: 'How much to log?',
+  title: 'How Much to Log?',
   body: (over: string | null) => (over ? `The timer ran out ${over} ago.` : 'The timer just ran out.'),
   planned: (duration: string) => `Planned · ${duration}`,
   worked: (duration: string) => `Worked · ${duration}`,
@@ -215,22 +215,22 @@ export const FINISH_CHOICE = {
 
 /** The alert when a timer that ran out got no answer and was logged at its planned length. */
 export const TIMER_DONE = {
-  title: 'Focus session complete',
+  title: 'Focus Session Complete',
   body: (name: string, duration: string) => named(name, `${duration} logged.`),
 } as const;
 
 /** Banner when a pause was left for an hour: the session was closed where the pause began. */
 export const TIMER_PAUSED_OUT = {
-  title: 'Focus session closed',
+  title: 'Focus Session Closed',
   body: (name: string, duration: string) => named(name, `${duration} logged. It sat paused for an hour, so it ended where the pause began.`),
 } as const;
 
 /** The focus timer's break: the button, the line while it runs, and the banner when it's over. */
 export const BREAK = {
-  start: (minutes: number, long: boolean) => `${long ? 'Long break' : 'Break'} · ${minutes} min`,
+  start: (minutes: number, long: boolean) => `${long ? 'Long Break' : 'Break'} · ${minutes} min`,
   running: (until: string) => `Break until ${until}`,
-  end: 'End break',
-  over: "Break's over",
+  end: 'End Break',
+  over: "Break's Over",
   overBody: 'Pick the next thing, or start a timer.',
 } as const;
 
@@ -241,20 +241,20 @@ export const BREAK = {
  */
 export const BREAK_SUGGESTION = {
   kicker: (position: number, of: number) => (position < of ? `Long break after ${counted(of - position, 'more session')}` : `${of} sessions in a row`),
-  title: (minutes: number, long: boolean) => (long ? `Take a long break, ${minutes} min` : `Take a ${minutes} min break`),
+  title: (minutes: number, long: boolean) => (long ? `Take a Long Break, ${minutes} min` : `Take a ${minutes} min Break`),
   body: (focus: string, long: boolean) => (long ? `For the ${focus} logged across them.` : `For the ${focus} you just logged.`),
-  start: 'Start break',
+  start: 'Start Break',
 } as const;
 
 /** The one button an alarm banner can carry: clock-out's and the retrospective's. */
 export const ALARM_ACTIONS = {
-  approveOvertime: 'Overtime approved',
-  openRetro: 'Open retrospective',
+  approveOvertime: 'Overtime Approved',
+  openRetro: 'Open Retrospective',
 } as const;
 
 /** Banner when a start finds a timer already running, started on another device. */
 export const TIMER_ELSEWHERE = {
-  title: 'A timer is already running',
+  title: 'A Timer Is Already Running',
   body: 'It was started on another device. This page now shows that one.',
 } as const;
 
@@ -290,7 +290,7 @@ export const RETRO_PROMPT = 'What got in the way? What went to plan?';
  * task's note, which stay in their box to send again (`useDebouncedDraft`).
  */
 export const SAVE_FAILED = {
-  title: 'Change not saved',
+  title: 'Change Not Saved',
   body: 'The server refused it or did not answer.',
 } as const;
 
@@ -332,8 +332,8 @@ export const BOARD = {
 export const DONE_STAYS = {
   title: (title: string) => `${title} is done.`,
   body: 'More work on it goes on a new card. If it keeps coming back, open it and pick its days under Repeat.',
-  add: (lane: string) => `Add a new card to ${lane}`,
-  leave: 'Leave it',
+  add: (lane: string) => `Add a New Card to ${lane}`,
+  leave: 'Leave It',
   announce: (title: string, lane: string) => `${title} stays in Done. The notice can add a new card to ${lane}.`,
 } as const;
 
@@ -380,7 +380,7 @@ export const UNREADABLE_ANSWER = (status: number) => `Unreadable answer (${statu
  * was loaded before an update, and its saves may not suit the new server. The button reloads.
  */
 export const UPDATED = {
-  title: 'Clockspan was updated',
+  title: 'Clockspan Was Updated',
   body: 'Reload the page so your changes keep saving.',
   reload: 'Reload',
 } as const;
@@ -390,7 +390,7 @@ export const UPDATED = {
  * the server's data went back to a backup. The button reloads.
  */
 export const RESTORED = {
-  title: 'Restored from a backup',
+  title: 'Restored From a Backup',
   body: "The server's data went back to an earlier copy. Reload the page to see it.",
   reload: 'Reload',
 } as const;
@@ -402,11 +402,11 @@ export const RESTORED = {
  */
 export const LOAD_FAILED = {
   title: 'Could not load this day',
-  today: 'Could not load today',
+  today: 'Could Not Load Today',
   range: 'Could not load these days',
   board: 'Could not load the board',
   body: 'The server refused the request or did not answer.',
-  retry: 'Try again',
+  retry: 'Try Again',
 } as const;
 
 /**
@@ -426,7 +426,7 @@ export const PASSWORD_CHANGED = 'Password updated.';
 
 /** After signing in on a temporary password (an admin's, or one the CLI generated), before the app. */
 export const NEW_PASSWORD = {
-  title: 'Choose your own password',
+  title: 'Choose Your Own Password',
   body: 'The password you signed in with was set for you. Pick one of your own to continue.',
 } as const;
 
@@ -441,7 +441,7 @@ export const SIGN_OUT_FAILED = 'Not signed out: the server refused the request o
 
 /** The whole page, when something threw while rendering. */
 export const RENDER_FAILED = {
-  title: 'Something went wrong',
+  title: 'Something Went Wrong',
   body: 'The page hit an error it could not recover from. Reloading usually clears it.',
   reload: 'Reload',
 } as const;

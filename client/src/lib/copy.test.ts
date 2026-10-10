@@ -50,18 +50,18 @@ describe('copy builders', () => {
   it('asks before × takes a task off a day, with the parts of the body that apply', () => {
     expect(REMOVE_TASK.title('Email Bob')).toBe('Remove Email Bob');
     expect(REMOVE_TASK.body(3, '1h 20m', false)).toBe(
-      'It is on 3 other days, and 1h 20m is logged on it. Delete everywhere takes it off every day. The time stays in the log, unplanned.',
+      'It is on 3 other days, and 1h 20m is logged on it. Delete Everywhere takes it off every day. The time stays in the log, unplanned.',
     );
-    expect(REMOVE_TASK.body(1, null, false)).toBe('It is on 1 other day. Delete everywhere takes it off every day.');
-    expect(REMOVE_TASK.body(0, '25m', false)).toBe('25m is logged on it. Delete everywhere takes it off every day. The time stays in the log, unplanned.');
-    expect(REMOVE_TASK.body(1, null, true)).toBe('It is on 1 other day. Delete everywhere takes it off every day. Its note goes with the task.');
+    expect(REMOVE_TASK.body(1, null, false)).toBe('It is on 1 other day. Delete Everywhere takes it off every day.');
+    expect(REMOVE_TASK.body(0, '25m', false)).toBe('25m is logged on it. Delete Everywhere takes it off every day. The time stays in the log, unplanned.');
+    expect(REMOVE_TASK.body(1, null, true)).toBe('It is on 1 other day. Delete Everywhere takes it off every day. Its note goes with the task.');
     expect(REMOVE_TASK.body(0, null, true)).toBe(
-      'It is on no other day, so Off this day deletes it and its note too, unless the board keeps it in Later or Next.',
+      'It is on no other day, so Off This Day deletes it and its note too, unless the board keeps it in Later or Next.',
     );
   });
 
   it('names the day the offered priorities were left open on', () => {
-    expect(LEFT_OPEN.title('yesterday')).toBe('Still open from yesterday');
+    expect(LEFT_OPEN.title('Yesterday')).toBe('Still Open From Yesterday');
   });
 
   it('names the number a day in the offer', () => {
@@ -96,7 +96,7 @@ describe('copy builders', () => {
 
   it('names the break length and when it ends', () => {
     expect(BREAK.start(5, false)).toBe('Break · 5 min');
-    expect(BREAK.start(20, true)).toBe('Long break · 20 min');
+    expect(BREAK.start(20, true)).toBe('Long Break · 20 min');
     expect(BREAK.running('10:35 AM')).toBe('Break until 10:35 AM');
   });
 
@@ -104,8 +104,8 @@ describe('copy builders', () => {
     expect(BREAK_SUGGESTION.kicker(2, 4)).toBe('Long break after 2 more sessions');
     expect(BREAK_SUGGESTION.kicker(3, 4)).toBe('Long break after 1 more session');
     expect(BREAK_SUGGESTION.kicker(4, 4)).toBe('4 sessions in a row');
-    expect(BREAK_SUGGESTION.title(5, false)).toBe('Take a 5 min break');
-    expect(BREAK_SUGGESTION.title(20, true)).toBe('Take a long break, 20 min');
+    expect(BREAK_SUGGESTION.title(5, false)).toBe('Take a 5 min Break');
+    expect(BREAK_SUGGESTION.title(20, true)).toBe('Take a Long Break, 20 min');
     expect(BREAK_SUGGESTION.body('25m', false)).toBe('For the 25m you just logged.');
     expect(BREAK_SUGGESTION.body('1h 40m', true)).toBe('For the 1h 40m logged across them.');
   });
@@ -172,7 +172,7 @@ describe('copy builders', () => {
   it('says a done item stays done and offers a new card in the lane it was moved to', () => {
     expect(DONE_STAYS.title('Ship the fix')).toBe('Ship the fix is done.');
     expect(DONE_STAYS.body).toBe('More work on it goes on a new card. If it keeps coming back, open it and pick its days under Repeat.');
-    expect(DONE_STAYS.add('Next')).toBe('Add a new card to Next');
+    expect(DONE_STAYS.add('Next')).toBe('Add a New Card to Next');
     expect(DONE_STAYS.announce('Ship the fix', 'Next')).toBe('Ship the fix stays in Done. The notice can add a new card to Next.');
   });
 

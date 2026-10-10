@@ -4,7 +4,7 @@ import type { PrioritySeed } from '../lib/plan';
 import { offerPicks, recurringCount } from '../lib/recurring';
 import type { Priority, Recurring } from '../types';
 
-/** What the last planned day left unticked, offered on today's list: `from` names that day as `dayName(date, today, true)` does. */
+/** What the last planned day left unticked, offered on today's list: `from` names that day as `dayName(date, today)` does, for a title. */
 interface Leftovers {
   from: string;
   rows: PrioritySeed[];

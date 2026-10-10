@@ -71,7 +71,7 @@ export function Header({ view, onNavigate, onOpenSettings }: Props) {
               title={`Signed in as ${auth.user.name}. Click to sign out.`}
             >
               <Avatar name={auth.user.name} />
-              <span className="btn-text">Sign out</span>
+              <span className="btn-text">Sign Out</span>
             </button>
           )}
         </div>

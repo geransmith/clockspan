@@ -82,14 +82,14 @@ describe('useTodayAlarms', () => {
     expect(alert).not.toHaveBeenCalled();
     settings.resolve(makeSettings({ workMinutes: 500 }));
     await judged();
-    expect(alerted().find((a) => a.tag === 'alarm:clockOut')?.title).toBe('Clock out in 15 min');
+    expect(alerted().find((a) => a.tag === 'alarm:clockOut')?.title).toBe('Clock Out in 15 min');
   });
 
   it("goes by today's own work-day length", async () => {
     // A half day, clocked in 4 h 10 m ago: over by 10 min, where the usual 8 h is hours away.
     render(makeSettings(), makeDay(TODAY, { punches: punchesAt(T0 - 250 * MINUTE_MS), workMinutes: 240 }));
     await judged();
-    expect(alerted().find((a) => a.tag === 'alarm:clockOut')?.title).toBe('Clock out is 10 min overdue');
+    expect(alerted().find((a) => a.tag === 'alarm:clockOut')?.title).toBe('Clock-Out Is 10 min Overdue');
   });
 
   it('keeps an approved day quiet only while Overtime is on, and offers the button only then', async () => {
@@ -108,7 +108,7 @@ describe('useTodayAlarms', () => {
     render(makeSettings(), overDay());
     await judged();
     const action = alerted().find((a) => a.tag === 'alarm:clockOut')!.action!;
-    expect(action.label).toBe('Overtime approved');
+    expect(action.label).toBe('Overtime Approved');
     // The button approves today, where the switch on the card would.
     vi.mocked(api.putOvertime).mockResolvedValue(answered({ overtimeApproved: true }));
     await act(async () => action.run());
@@ -158,6 +158,6 @@ describe('useTodayAlarms', () => {
     // in a new list.
     await settle(MINUTE_MS);
     expect(api.getDay).toHaveBeenCalledTimes(2);
-    expect(alerted().find((a) => a.tag === 'alarm:clockOut')?.title).toBe('Time to clock out');
+    expect(alerted().find((a) => a.tag === 'alarm:clockOut')?.title).toBe('Time to Clock Out');
   });
 });

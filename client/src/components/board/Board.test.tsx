@@ -829,7 +829,7 @@ describe('Board', () => {
     await renderBoard();
     expect(screen.getByText(new RegExp(LOAD_FAILED.title))).toBeTruthy();
     expect(warnQuietly).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
     await settle();
     expect(titlesIn('In progress')).toEqual(['Report']);
   });
@@ -846,7 +846,7 @@ describe('Board', () => {
     await renderBoard();
     expect(screen.getByText(new RegExp(LOAD_FAILED.board))).toBeTruthy();
     vi.mocked(api.getBoard).mockImplementation(() => Promise.resolve(answered(onServer)));
-    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
     await settle();
     expect(titlesIn('Later')).toEqual(['Write a KB']);
   });
@@ -978,7 +978,7 @@ describe('adding from a column', () => {
     vi.mocked(api.getDay).mockRejectedValueOnce(new Error('offline'));
     await renderBoard();
     expect(pressKey('n')).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
     await settle();
     expect(isOpen('New card for Later')).toBe(false);
   });

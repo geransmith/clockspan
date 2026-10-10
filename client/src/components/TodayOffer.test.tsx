@@ -25,7 +25,7 @@ it('keeps a box pressed by its item while the groups change around it, and start
     <TodayOffer
       upNext={[]}
       rowsPerDay={3}
-      leftovers={{ from: 'yesterday', rows: leftovers }}
+      leftovers={{ from: 'Yesterday', rows: leftovers }}
       recurring={recurring}
       rows={[]}
       perDay={2}
@@ -55,7 +55,7 @@ it('keeps a box pressed by its item while the groups change around it, and start
 it('keeps a leftover pressed by its task through a rename', () => {
   const onAdd = vi.fn<(leftovers: PrioritySeed[], recurring: Recurring[]) => void>();
   const offer = (rows: PrioritySeed[]) => (
-    <TodayOffer upNext={[]} rowsPerDay={3} leftovers={{ from: 'yesterday', rows }} recurring={[]} rows={[]} perDay={1} onAdd={onAdd} onSkip={vi.fn()} />
+    <TodayOffer upNext={[]} rowsPerDay={3} leftovers={{ from: 'Yesterday', rows }} recurring={[]} rows={[]} perDay={1} onAdd={onAdd} onSkip={vi.fn()} />
   );
   const { rerender } = render(offer([INVOICES, EMAIL]));
   fireEvent.click(screen.getByRole('checkbox', { name: 'Invoices' }));
@@ -71,7 +71,7 @@ it('names each group by its heading, so a leftover and a routine of one title ar
     <TodayOffer
       upNext={[]}
       rowsPerDay={3}
-      leftovers={{ from: 'yesterday', rows: [leftover] }}
+      leftovers={{ from: 'Yesterday', rows: [leftover] }}
       recurring={[QUEUE]}
       rows={[]}
       perDay={1}
@@ -79,7 +79,7 @@ it('names each group by its heading, so a leftover and a routine of one title ar
       onSkip={vi.fn()}
     />,
   );
-  const groups = [screen.getByRole('group', { name: LEFT_OPEN.title('yesterday') }), screen.getByRole('group', { name: TODAY_OFFER.recurring })];
+  const groups = [screen.getByRole('group', { name: LEFT_OPEN.title('Yesterday') }), screen.getByRole('group', { name: TODAY_OFFER.recurring })];
   const [fromYesterday, repeats] = groups.map((g) => within(g).getByRole('checkbox', { name: 'Monitor the queue' }));
   expect(fromYesterday).not.toBe(repeats);
 });
@@ -88,7 +88,7 @@ it('ticks Up next to fill Rows per day after the leftovers, and adds the ticked 
   const onAdd = vi.fn<(seeds: PrioritySeed[], recurring: Recurring[]) => void>();
   const offer = (upNext: PrioritySeed[]) => (
     <TodayOffer
-      leftovers={{ from: 'yesterday', rows: [INVOICES] }}
+      leftovers={{ from: 'Yesterday', rows: [INVOICES] }}
       upNext={upNext}
       rowsPerDay={3}
       recurring={[QUEUE]}
@@ -125,7 +125,7 @@ it('ticks the first Rows per day of Up next with nothing left open', () => {
 it('ticks none of Up next once the leftovers fill Rows per day', () => {
   render(
     <TodayOffer
-      leftovers={{ from: 'yesterday', rows: [INVOICES, EMAIL] }}
+      leftovers={{ from: 'Yesterday', rows: [INVOICES, EMAIL] }}
       upNext={[ACME]}
       rowsPerDay={1}
       recurring={[]}
