@@ -19,6 +19,7 @@ import {
   makePriority,
   makeSession,
   makeSettings,
+  refused,
   setVisibility,
   settle,
   T0,
@@ -247,35 +248,17 @@ describe('start', () => {
     expect(result.current.store.days[TODAY]?.sessions.map((s) => s.id)).toEqual([1]);
   });
 
-  it('follows a timer another device already runs (409), says so, and refreshes its day only if held', async () => {
-    const theirs = makeSession({ id: 7, date: YESTERDAY, label: 'Theirs' });
-    vi.mocked(api.startSession).mockRejectedValue(apiError(409, 0, { error: 'running', session: theirs }));
+  it('shows the timer another device already runs once the sync its 409 brings answers, and says so', async () => {
+    const theirs = makeSession({ id: 7, label: 'Theirs' });
     const { result } = await renderRunning(null);
-    vi.mocked(api.getDay).mockClear();
+    vi.mocked(api.startSession).mockImplementation(() => refused(409));
+    vi.mocked(api.getRunning).mockResolvedValue(answered({ session: theirs }));
     await act(() => result.current.timer.start(TODAY, 1500, 'Mine'));
+    await settle();
     expect(api.startSession).toHaveBeenCalledWith(TODAY, 1500, 'Mine', null);
     expect(result.current.timer.running?.id).toBe(7);
-    // Not a day the store holds: it loads with the row when it is opened.
-    expect(api.getDay).not.toHaveBeenCalled();
+    expect(api.getRunning).toHaveBeenCalledTimes(2);
     expect(alert).toHaveBeenCalledWith(expect.objectContaining({ title: TIMER_ELSEWHERE.title, tag: 'timer-elsewhere', sound: false }));
-
-    // A day the store holds is fetched again, so its log has the row.
-    await act(() => result.current.store.load(YESTERDAY));
-    vi.mocked(api.getDay).mockClear();
-    await act(() => result.current.timer.start(TODAY, 1500, 'Mine'));
-    expect(vi.mocked(api.getDay).mock.calls).toEqual([[YESTERDAY]]);
-  });
-
-  it('follows the session a 409 names over a copy from an earlier answer', async () => {
-    const { result } = await renderRunning(startedAgo(5));
-    vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(startedAgo(5), { durationSeconds: 300 }) }, 2));
-    await act(() => result.current.timer.finish());
-    expect(result.current.timer.running).toBeNull();
-    // The phone started one since: the refusal names a higher revision than the finish.
-    const theirs = makeSession({ id: 7, label: 'Theirs' });
-    vi.mocked(api.startSession).mockRejectedValueOnce(apiError(409, 3, { error: 'running', session: theirs }));
-    await act(() => result.current.timer.start(TODAY, 1500, 'Mine'));
-    expect(result.current.timer.running?.id).toBe(7);
   });
 
   it('waits for a priorities save still out before starting on a row from it', async () => {
@@ -446,7 +429,7 @@ describe('adjust', () => {
       .mockResolvedValue(answered({ session: null }));
     await settle(MINUTE_MS);
     expect(api.getRunning).toHaveBeenCalledTimes(2);
-    vi.mocked(api.patchSession).mockRejectedValue(apiError(404));
+    vi.mocked(api.patchSession).mockImplementation(() => refused(404));
     await act(() => result.current.timer.adjust(5 * 60));
     // Nothing goes out beside the sync already out.
     expect(api.getRunning).toHaveBeenCalledTimes(2);
@@ -712,7 +695,7 @@ describe('finish and cancel', () => {
   it('cancel drops the row and clears the timer; a 409 re-syncs', async () => {
     const { result } = await renderRunning(startedAgo(5));
     vi.mocked(api.cancelSession)
-      .mockRejectedValueOnce(apiError(409))
+      .mockImplementationOnce(() => refused(409))
       .mockResolvedValueOnce(answered({ session: endSession(startedAgo(5), { status: 'cancelled' }) }));
     await act(() => result.current.timer.cancel());
     expect(api.getRunning).toHaveBeenCalledTimes(2);
@@ -981,7 +964,7 @@ describe("time's up", () => {
     const session = startedAgo(34.9);
     const { result } = await renderRunning(session);
     // Another device gave it more time after this one's last sync.
-    vi.mocked(api.finishSession).mockRejectedValueOnce(apiError(409));
+    vi.mocked(api.finishSession).mockImplementationOnce(() => refused(409));
     vi.mocked(api.getRunning).mockResolvedValue(answered({ session: { ...session, plannedSeconds: 40 * 60 } }));
     await settle(6000);
     expect(api.finishSession).toHaveBeenCalledWith(1, false, { plannedSeconds: 1500, pausedAt: null });
@@ -994,7 +977,7 @@ describe("time's up", () => {
   it('drops the timer at once when its finish finds the session deleted on another device (404)', async () => {
     // Finished and deleted from the log on another device after this one's last sync.
     const { result } = await renderRunning(startedAgo(34.9));
-    vi.mocked(api.finishSession).mockRejectedValueOnce(apiError(404));
+    vi.mocked(api.finishSession).mockImplementationOnce(() => refused(404));
     vi.mocked(api.getRunning).mockResolvedValue(answered({ session: null }));
     await settle(6000);
     expect(api.finishSession).toHaveBeenCalledWith(1, false, { plannedSeconds: 1500, pausedAt: null });

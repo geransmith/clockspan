@@ -54,7 +54,7 @@ const STALE_MS = 10 * MINUTE_MS;
  */
 export function BreakProvider({ children }: { children: ReactNode }) {
   const { settings, loaded } = useSettings();
-  const { finished, running, resync } = useTimer();
+  const { finished, running } = useTimer();
   const { days } = useDays();
   const { startBreak, endBreak, refresh } = useDayStore();
   const now = useClock();
@@ -86,16 +86,15 @@ export function BreakProvider({ children }: { children: ReactNode }) {
       if (starting.current) return Promise.resolve();
       starting.current = true;
       dismissByTag('break');
+      // The server refuses a break while a timer runs (409), and the sync every refused write brings
+      // shows one started on another device.
       return startBreak(todayKey(Date.now()), minutes * 60)
-        .then((saved) => {
-          // The server refuses a break while a timer runs: one started on another device shows at once.
-          if (!saved) void resync();
-        })
+        .then(() => {})
         .finally(() => {
           starting.current = false;
         });
     },
-    [startBreak, resync],
+    [startBreak],
   );
   const end = useCallback(() => {
     dismissByTag('break');

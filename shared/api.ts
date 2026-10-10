@@ -311,11 +311,6 @@ export interface ErrorResponse {
   error: string;
 }
 
-/** The 409 from starting a timer while one runs (on this device or another): the one that runs. */
-export interface SessionConflict extends ErrorResponse {
-  session: Session;
-}
-
 /** A write with nothing else to report (a password change, a delete), and the health check. */
 export interface OkResponse {
   ok: true;

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from './api';
-import { REQUEST_TIMEOUT_MS, UNAUTHENTICATED_EVENT } from './api';
+import { CHANGED_ELSEWHERE, REQUEST_TIMEOUT_MS, UNAUTHENTICATED_EVENT } from './api';
 import { ApiError } from './lib/apiError';
 import { alert, dismissByTag, getBanners, subscribeBanners } from './lib/alerts';
 import { changedElsewhere } from './lib/ownWrites';
@@ -196,17 +196,40 @@ describe('routes', () => {
 });
 
 describe('failures', () => {
-  it("throws an ApiError with the server's message, status, body and revision", async () => {
-    const body = { error: 'A timer is already running.', session: { id: 9 } };
-    answer(409, body, true, { [REVISION_HEADER]: '12' });
+  it("throws an ApiError with the server's message, status and revision", async () => {
+    answer(409, { error: 'A timer is already running.' }, true, { [REVISION_HEADER]: '12' });
     const err = await api.startSession(TODAY, 1500, '', null).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
-    expect(err).toMatchObject({ status: 409, message: 'A timer is already running.', body, revision: 12 });
+    expect(err).toMatchObject({ status: 409, message: 'A timer is already running.', revision: 12 });
+  });
+
+  it('tells every store to read again when a write is refused as gone (404) or changed (409), and never for a read, another refusal or an auth route', async () => {
+    const changed = vi.fn((e: Event) => (e as CustomEvent<number>).detail);
+    window.addEventListener(CHANGED_ELSEWHERE, changed);
+    try {
+      answer(409, { error: 'This timer was changed on another device.' }, true, { [REVISION_HEADER]: '13' });
+      await expect(api.finishSession(1, false)).rejects.toMatchObject({ status: 409, revision: 13 });
+      answer(404, { error: 'Not found.' }, true, { [REVISION_HEADER]: '14' });
+      await expect(api.deleteSession(1)).rejects.toMatchObject({ status: 404, revision: 14 });
+      expect(changed.mock.results.map((r) => r.value)).toEqual([13, 14]);
+
+      answer(404, { error: 'Not found.' }, true, { [REVISION_HEADER]: '14' });
+      await expect(api.getDay(TODAY)).rejects.toMatchObject({ status: 404 });
+      answer(400, { error: 'Bad.' }, true, { [REVISION_HEADER]: '15' });
+      await expect(api.putSettings({})).rejects.toMatchObject({ status: 400 });
+      answer(409, { error: 'That username is taken.' });
+      await expect(api.addUser('sam', 'secret-pass')).rejects.toMatchObject({ status: 409 });
+      answer(404, { error: 'User not found.' });
+      await expect(api.deleteUser(2)).rejects.toMatchObject({ status: 404 });
+      expect(changed).toHaveBeenCalledTimes(2);
+    } finally {
+      window.removeEventListener(CHANGED_ELSEWHERE, changed);
+    }
   });
 
   it('names the status when the body is not JSON, such as a proxy error page', async () => {
     answer(502, '<html>Bad gateway</html>', false);
-    await expect(api.getDay(TODAY)).rejects.toMatchObject({ status: 502, message: 'Request failed (502)', body: null, revision: 0 });
+    await expect(api.getDay(TODAY)).rejects.toMatchObject({ status: 502, message: 'Request failed (502)', revision: 0 });
   });
 
   it("names the status when a proxy's JSON error is not a string", async () => {
@@ -216,7 +239,7 @@ describe('failures', () => {
 
   it('refuses a 200 whose body is not JSON, such as a sign-in page from a proxy in front', async () => {
     answer(200, '<html>Sign in</html>', false);
-    await expect(api.getDay(TODAY)).rejects.toMatchObject({ status: 200, message: 'Unreadable answer (200)', body: null });
+    await expect(api.getDay(TODAY)).rejects.toMatchObject({ status: 200, message: 'Unreadable answer (200)' });
   });
 
   it('announces a lost session on a 401, but not for a wrong password at sign-in or from /api/auth/me itself', async () => {

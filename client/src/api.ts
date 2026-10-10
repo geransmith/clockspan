@@ -35,8 +35,9 @@ import { REQUEST_FAILED, REQUEST_TIMEOUT, RESTORED, UNREADABLE_ANSWER, UPDATED }
 
 export const UNAUTHENTICATED_EVENT = 'focus:unauthenticated';
 /**
- * Raised on the window by useLiveChanges when another tab or device saved a change, its detail
- * the revision heard: every useRefreshLoop runs, and the day store raises its held days' floors.
+ * Raised on the window by useLiveChanges when another tab or device saved a change, and by
+ * `request()` when a write is refused 404 or 409, its detail the revision heard: every
+ * useRefreshLoop runs, and the day store raises its held days' floors.
  */
 export const CHANGED_ELSEWHERE = 'focus:changed-elsewhere';
 
@@ -120,12 +121,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   // An answer that names none (an auth route, a 401 before the data routes, a proxy's page) reads as 0.
   const named = res.headers.get(REVISION_HEADER);
   const revision = Number(named);
-  if (named !== null) {
-    noticeRestore(revision, before);
-    // The server moves the revision for every write, refused or not, so this page's own don't
-    // count as another device's change when the live stream names them.
-    if (method !== 'GET') noteOwnWrite(revision);
-  }
+  const write = named !== null && method !== 'GET';
+  if (named !== null) noticeRestore(revision, before);
+  // The server moves the revision for every write, refused or not, so this page's own don't
+  // count as another device's change when the live stream names them.
+  if (write) noteOwnWrite(revision);
   let data: unknown = null;
   try {
     data = await res.json();
@@ -134,7 +134,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     // Every API answer is JSON, so a body that isn't is a page from something in between: a
     // proxy's error page (the generic message below), or a forward-auth proxy's sign-in page,
     // which comes as a 200 once its session runs out and must not pass for an empty answer.
-    if (res.ok) throw new ApiError(res.status, UNREADABLE_ANSWER(res.status), null);
+    if (res.ok) throw new ApiError(res.status, UNREADABLE_ANSWER(res.status));
   }
   if (!res.ok) {
     // A proxy in front can answer an error as JSON of another shape, so `error` counts only as a string.
@@ -144,7 +144,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     // makes AuthGate ask /api/auth/me again, which the app never answers with a 401: one from
     // there comes from a proxy in front, and announcing it would ask /me again, forever.
     if (res.status === 401 && path !== '/api/auth/login' && path !== '/api/auth/me') window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT));
-    throw new ApiError(res.status, message, data, revision);
+    // A write refused as gone (404) or changed since (409) met another tab's or device's change, so
+    // every store reads again at once. Never for a read: the event asks for it again, so a refused
+    // read would loop.
+    if (write && (res.status === 404 || res.status === 409)) window.dispatchEvent(new CustomEvent(CHANGED_ELSEWHERE, { detail: revision }));
+    throw new ApiError(res.status, message, revision);
   }
   return { value: data as T, revision };
 }

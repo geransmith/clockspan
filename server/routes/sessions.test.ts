@@ -44,11 +44,10 @@ describe('sessions', () => {
     expect((await app.api.get(`/api/days/${DATE}`)).body.sessions).toHaveLength(1);
   });
 
-  it('refuses a second timer with the running one attached', async () => {
-    const first = await start();
+  it('refuses a second timer while one runs', async () => {
+    await start();
     const second = await start({ label: 'Other' });
-    expect(second.status).toBe(409);
-    expect(second.body.session.id).toBe(first.body.session.id);
+    expect([second.status, second.body]).toEqual([409, { error: 'A timer is already running.' }]);
   });
 
   it('validates planned time and the label', async () => {

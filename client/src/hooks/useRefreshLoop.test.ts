@@ -3,7 +3,7 @@ import { act, cleanup, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CHANGED_ELSEWHERE } from '../api';
 import { MINUTE_MS } from '../../../shared/dates.js';
-import { begin, deferred, settle, setVisibility, T0 } from '../test/hooks';
+import { deferred, settle, setVisibility, T0 } from '../test/hooks';
 import { useRefreshLoop } from './useRefreshLoop';
 
 beforeEach(() => {
@@ -11,7 +11,7 @@ beforeEach(() => {
   setVisibility('visible');
 });
 
-/** What useLiveChanges raises when another tab or device saved a change. */
+/** What useLiveChanges raises when another tab or device saved a change, and api.ts when a write is refused 404 or 409. */
 const changedElsewhere = () => void window.dispatchEvent(new CustomEvent(CHANGED_ELSEWHERE, { detail: 5 }));
 
 describe('useRefreshLoop', () => {
@@ -84,12 +84,11 @@ describe('useRefreshLoop', () => {
     expect(result.current).toBe(false);
   });
 
-  it('runs now when asked with nothing out, inside the throttle too, and the tab coming back just after asks nothing more', async () => {
+  it('runs at once when another tab or device saves a change, inside the throttle too, the tab coming back just after asks nothing more, and stops listening on unmount', async () => {
     const run = vi.fn(() => Promise.resolve());
-    const { result } = renderHook(() => useRefreshLoop(run, true));
+    const { result, unmount } = renderHook(() => useRefreshLoop(run, true));
     await settle();
-    // The mount's run answered a moment ago, and the caller learns its copy is wrong.
-    await act(() => result.current.runNow());
+    act(changedElsewhere);
     expect(run).toHaveBeenCalledTimes(2);
     await settle(4_000);
     act(() => setVisibility('visible'));
@@ -99,50 +98,29 @@ describe('useRefreshLoop', () => {
     act(() => setVisibility('visible'));
     expect(run).toHaveBeenCalledTimes(3);
     await settle();
-  });
-
-  it('with a run out, runs again once it answers: neither sharing it nor sending a second beside it', async () => {
-    const out = deferred<void>();
-    const run = vi.fn().mockReturnValueOnce(out.promise).mockResolvedValue(undefined);
-    const { result } = renderHook(() => useRefreshLoop(run, true));
-    const forced = begin(() => result.current.runNow());
-    expect(run).toHaveBeenCalledTimes(1);
-    // The tab coming back now waits on the fresh run and sends nothing.
-    act(() => setVisibility('visible'));
-    expect(run).toHaveBeenCalledTimes(1);
-    expect(result.current.pending).toBe(true);
-    out.resolve();
-    await act(() => forced);
-    await settle();
-    expect(run).toHaveBeenCalledTimes(2);
-    expect(result.current.pending).toBe(false);
-  });
-
-  it('runs at once when another tab or device saves a change, inside the throttle too, and stops listening on unmount', async () => {
-    const run = vi.fn(() => Promise.resolve());
-    const { unmount } = renderHook(() => useRefreshLoop(run, true));
-    await settle();
-    act(changedElsewhere);
-    expect(run).toHaveBeenCalledTimes(2);
-    await settle();
     unmount();
     changedElsewhere();
-    expect(run).toHaveBeenCalledTimes(2);
+    expect(run).toHaveBeenCalledTimes(3);
   });
 
   it('queues one run behind the one out for a burst of changes, not one each', async () => {
     const out = deferred<void>();
     const run = vi.fn().mockReturnValueOnce(out.promise).mockResolvedValue(undefined);
-    renderHook(() => useRefreshLoop(run, true));
+    const { result } = renderHook(() => useRefreshLoop(run, true));
     act(() => {
       changedElsewhere();
       changedElsewhere();
       changedElsewhere();
     });
     expect(run).toHaveBeenCalledTimes(1);
+    // The tab coming back now waits on the queued run and sends nothing.
+    act(() => setVisibility('visible'));
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(result.current.pending).toBe(true);
     out.resolve();
     await settle();
     expect(run).toHaveBeenCalledTimes(2);
+    expect(result.current.pending).toBe(false);
   });
 
   it('queues again for a change heard while the queued run is out', async () => {
