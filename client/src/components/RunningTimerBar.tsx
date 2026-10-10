@@ -5,7 +5,7 @@ import type { Session } from '../types';
 import { LabelInput, SessionLabel } from './SessionLabel';
 import { TimerControls } from './TimerControls';
 
-/** Fixed to the top of the viewport whenever a timer is running, on every view; `session` is the one running. */
+/** Under the header whenever a timer is running, on every view, and at the top of the window once it scrolls; `session` is the one running. */
 export function RunningTimerBar({ session }: { session: Session }) {
   const { name, linked, countdownSeconds, progress, paused, due, edit } = useTimer();
   const [editing, setEditing] = useState(false);
@@ -15,7 +15,7 @@ export function RunningTimerBar({ session }: { session: Session }) {
   // A session with a task is named by the task, and has no label to edit: a box open as the
   // session is linked (on another device) closes, unsent.
   if (editing && linked) setEditing(false);
-  // Finish or Cancel takes the bar away with the focus in it: the brand, just under it, takes the
+  // Finish or Cancel takes the bar away with the focus in it: the brand, just above it, takes the
   // focus. Not until the bar has left the page, so nothing in it hears a blur: the bar is keyed by
   // the session, and when another device's session replaces this one, the label box's blur would
   // rename the new one.

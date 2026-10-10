@@ -192,7 +192,8 @@ client/                 Vite root → dist/client
                         empty board
   src/components/       the cards, History (Calendar + Review), Banners, FinishChoice, RemoveTask (×'s Off
                         this day / Delete everywhere), TodayOffer (Top priorities' morning notice),
-                        Shortcuts (the key listener, and ? for the list of keys), and
+                        Shortcuts (the key listener, and ? for the list of keys), DateNav (the
+                        sheet's date row and Customize; the header is the same on every view), and
                         the pieces several of them share (Folded: a long list's Show all; CategoryChip
                         and CategoryDot; RepeatMark, a recurring priority's mark, and RunningMark, the
                         running session's pill, kept here so the sheet can show them; Note, a task's
@@ -1118,7 +1119,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `Retro` by date, so none needs a "date changed" effect. For `Timeclock` the remount is also what
   keeps a day already done from reading as one becoming done: `useBecameTrue` compares with the last
   render, and moving between two days the store already holds would otherwise leave the card
-  mounted. Local drafts that mirror a prop use the "adjust state while rendering" form
+  mounted. `DateNav` is never keyed and is the first child of both of the sheet's returns, so a step
+  to a day not loaded yet keeps Previous day, the focus it was pressed with and a date half typed
+  into the picker. Local drafts that mirror a prop use the "adjust state while rendering" form
   (`useFollowedDraft` for a text box's name or number; `DurationField` for a draft mapped from its
   value), not a `useEffect` + `setState`, unless the draft is gated by a dirty flag: a ref can't be
   read during render, so there the effect form is the one the react-hooks rules allow. A typed draft
@@ -1258,12 +1261,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   missing one) that renders the page through `lazy()` inside a `Suspense`, as History is, with
   the page named in the lazy-chunk rule under "Architecture rules" and in the comment above
   `App.tsx`'s `lazy` consts → a toggle in `Header.tsx` that goes to the view, and back to the
-  sheet from it, pressed only there (`aria-pressed={view === '<id>'}`), its name fixed; then
-  revisit Header's `crowded` (the 375 px header holds five buttons; every view takes the same
-  rule) and check the header at 375. The page sits in the one frame (Conventions, CSS) and sets
-  no `--page-w`; one that reads better narrower caps its own width, as History does.
-  `useRoute.test.ts` reads and writes every id in `VIEWS`, and `Header.test.tsx` checks History's
-  toggle on each view; the new toggle gets its own case there.
+  sheet from it, pressed only there (`aria-pressed={view === '<id>'}`), its name fixed. The header
+  is the same on every view, so a page's own controls sit in the page, as the sheet's date row and
+  Customize do (`DateNav`). Then revisit Header's `crowded` (with sign-in on, the header holds four
+  buttons; every view takes the same rule) and check the header at 375 and 360. The page sits in the
+  one frame (Conventions, CSS) and sets no `--page-w`; one that reads better narrower caps its own
+  width, as History does. `useRoute.test.ts` reads and writes every id in `VIEWS`, and
+  `Header.test.tsx` checks History's toggle on each view; the new toggle gets its own case there.
 - **A per-user setting**: add it to the `Settings` type and `DEFAULT_SETTINGS` in
   `shared/settings.ts`, and a number's bounds to `SETTING_LIMITS` there → validate it in
   `mergeSettings()` (`server/settings.ts`; `flag(key)` takes a switch, `limited(key)` checks a
@@ -1440,9 +1444,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `@media (min-width: 640px)` and wider queries enhance; that is how the stylesheet is built, not
   who it is for). The sheet's two columns start at `SPLIT_QUERY` (`lib/layout.ts`), which
   `styles.css` writes out as its `@media` line (`theme-css.test.ts` checks it is there). Every view
-  sits in one frame, `.app` at `--page-w` (1240 px), which the running bar's contents read too, so
-  a page switch leaves the header where it was: History and the one-column sheet cap themselves
-  at 828 px inside it, and the split sheet and the board take all of it. `html`'s
+  sits in one frame, `--page-w` (1240 px), which `.app`'s header and `main` take and the running
+  bar's contents read too, so a page switch leaves the header where it was: History and the
+  one-column sheet cap themselves at 828 px inside it, and the split sheet and the board take all of
+  it. Between the header and `main`, `.top-stack` spans the window: the running bar, and the banners
+  hung under it (or under the header with no timer), sticky under the header and at the top of the
+  window once it scrolls away. It is a direct child of `.app`, since a sticky box sticks only inside
+  its parent, and nothing above it may set `overflow` (but `clip`), or it stops sticking. `html`'s
   `scrollbar-gutter: stable` keeps a classic scrollbar's room on a page too short to scroll and
   under a dialog's scroll lock (`theme-css.test.ts` checks the width is set once). Every width
   rule is a window query, so a card in a column gets the wide-window rules at about half the width:
@@ -1567,8 +1575,9 @@ The browser pass for each surface (the logic under it is already tested):
   column) and 1000 (one column, the widest a card gets). Resize, then reload: the sheet picks its
   columns when it mounts.
 - **The sheet's columns** (the layout, `Sheet.tsx`, `CardFrame`): at 1280, Customize moves a
-  card to the other column and back, ↑/↓ and the grip stay inside a column, and with a timer
-  running (`--running`) the bar's contents line up with the header; at 1000 and at the
+  card to the other column and back, ↑/↓ and the grip stay inside a column, the date row spans
+  both columns with Customize at its end, and with a timer running (`--running`) the bar sits
+  under the header across the window, its contents lined up with the header's; at 1000 and at the
   375 px preset, one column in the layout's order and no column buttons.
 - **`security.ts`, `index.html` or how assets load**: the `prod` config, with the console free
   of CSP violations; `curl -sI localhost:8090/api/health` shows the headers.
@@ -1580,6 +1589,9 @@ The browser pass for each surface (the logic under it is already tested):
   640 px; at 375 the label keeps a readable start) and the card, on the seeded session's row 3:
   the bar goes, the burst flies from Done (on the bar, from under it, whole on screen at 1280 and
   375) and row 3 is ticked; a minute over, Done opens "How much to log?", and Back ticks nothing.
+  The bar sits under the header on the sheet, the board and History, and scrolled it stays at the
+  top of the window, cards passing under it; the "Time's up" banner hangs under it, at rest and
+  scrolled, never over its buttons.
 - **Alarms**: after `npm run seed`, clear Clock in (×) on today's sheet. Set Lunch must start
   within 3 min, Lunch length 0, Work day 10 min and Second meal due after 6 min, in Settings →
   Timeclock or with
@@ -1678,8 +1690,7 @@ The browser pass for each surface (the logic under it is already tested):
   lines wrap. At 375: the switch shows one column, the notice wraps, the dialog is a bottom sheet
   whose Move to and Start lengths wrap under their labels (four targets on a left-open task), and
   with sign-in on (`web-local`, `npm run seed -- --auth local --sessions`, the printed cookie set)
-  the sheet's five header buttons fit with the brand's name gone, and the board's header is the
-  same.
+  the header's four buttons fit with the brand's name gone, the same as on the sheet.
   Light and dark. The drag pass: at 1440, drag with the mouse from anywhere on a card between each
   pair of columns (Later and Next take the card where it is dropped; a press that moves under 6 px
   opens the dialog, and no click lands after a drag), a done row onto Later (the notice), then by
