@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import { emptyDay } from '../../../shared/api.js';
 import { mergePriorities } from '../../../shared/priorities.js';
@@ -13,6 +13,7 @@ import { newTaskRow, padPriorities, placePriority } from '../lib/priorities';
 import { editedSession } from '../lib/retro';
 import { normalizePunches } from '../lib/timeclock';
 import { useLatest } from './useLatest';
+import { useProvided } from './useProvided';
 import { useRefreshLoop } from './useRefreshLoop';
 import { useSettings } from './useSettings';
 import { useTracked } from './useTracked';
@@ -131,7 +132,7 @@ interface DayStore {
  * to change; `'skipped'`, the change gave nothing to save; `'failed'`, the save failed (the store
  * raised the banner and reads the day again). Only `'saved'` and `'failed'` sent anything.
  */
-export type PrioritiesEdit = 'saved' | 'notLoaded' | 'skipped' | 'failed';
+type PrioritiesEdit = 'saved' | 'notLoaded' | 'skipped' | 'failed';
 
 const StateCtx = createContext<DayState | null>(null);
 const Ctx = createContext<DayStore | null>(null);
@@ -734,15 +735,11 @@ export function DayProvider({ children }: { children: ReactNode }) {
 }
 
 export function useDayStore(): DayStore {
-  const v = useContext(Ctx);
-  if (!v) throw new Error('useDayStore outside DayProvider');
-  return v;
+  return useProvided(Ctx, 'useDayStore');
 }
 
 export function useDays(): DayState {
-  const v = useContext(StateCtx);
-  if (!v) throw new Error('useDays outside DayProvider');
-  return v;
+  return useProvided(StateCtx, 'useDays');
 }
 
 /**

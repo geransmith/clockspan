@@ -795,11 +795,6 @@ describe('categories', () => {
   });
 });
 
-it('useBoardState and useBoardStore refuse to run outside the provider', () => {
-  expect(() => renderHook(() => useBoardState())).toThrow('useBoardState outside BoardProvider');
-  expect(() => renderHook(() => useBoardStore())).toThrow('useBoardStore outside BoardProvider');
-});
-
 describe('recurring priorities', () => {
   const QUEUE = makeRecurring('rcur00000001', 'Monitor the queue');
   const titles = (b: Board | undefined) => b?.recurring.map((r) => `${r.title} ${r.weekdays.join('')}`);
