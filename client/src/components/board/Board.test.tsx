@@ -1943,7 +1943,7 @@ describe('dragging', () => {
     await pickUp('Follow up');
     await press('ArrowLeft');
     expect(titlesIn('Later')).toHaveLength(10);
-    expect(screen.queryByRole('button', { name: /^Show all/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Show \d+ more$/ })).toBeNull();
     await press('Escape');
   });
 

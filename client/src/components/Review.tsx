@@ -49,9 +49,9 @@ export function Review({ today, now, period: { kind, from }, onPeriod, onOpen }:
   const pickKind = (k: PeriodKind) => onPeriod({ kind: k, from: periodRange(k, period.to < today ? period.to : today, 0).from });
 
   return (
-    <section className="card review">
+    // Named by History's switch above it, which says Review already.
+    <section className="card review" aria-label="Review">
       <header className="card-head">
-        <h2 className="card-title">Review</h2>
         <span className="chips" role="group" aria-label="Period">
           {PERIOD_KINDS.map((k) => (
             <button key={k} className="chip" onClick={() => pickKind(k)} aria-pressed={kind === k}>
@@ -109,7 +109,7 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
         <Tile
           label="Priorities"
           value={r.prioritiesTotal > 0 ? `${r.prioritiesDone}/${r.prioritiesTotal}` : '—'}
-          sub={`${r.retrosDone} of ${r.days} reviewed`}
+          sub={`${counted(r.retrosDone, 'day')} reviewed`}
         />
       </div>
 
@@ -123,29 +123,37 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
         </ul>
       )}
 
-      {r.byCategory.some((c) => c.categoryUid != null) && <ByCategory byCategory={r.byCategory} categories={categories} />}
+      {/* One bucket would only say the Focused tile again. */}
+      {r.byCategory.length > 1 && r.byCategory.some((c) => c.categoryUid != null) && <ByCategory byCategory={r.byCategory} categories={categories} />}
 
-      <section className="review-section">
-        <h3 className="section-heading">
-          Off the plan <span className="muted">{formatDuration(r.offPlanSeconds)}</span>
-        </h3>
-        {r.unplanned.length === 0 ? (
-          <p className="muted small">{r.sessions === 0 ? 'No sessions logged.' : 'Every logged session was for a priority.'}</p>
-        ) : (
-          <Folded
-            className="review-list"
-            items={r.unplanned.map((g) => (
-              <ReviewRow key={g.key} text={<SessionLabel label={g.label} />} meta={when(g.dates)} seconds={g.seconds} onOpen={() => onOpen(latest(g.dates))} />
-            ))}
-          />
-        )}
-      </section>
+      {/* With no sessions the Focused tile says so. A total over one row would be that row's time. */}
+      {r.sessions > 0 && (
+        <section className="review-section">
+          <h2 className="section-heading">Off the plan {r.unplanned.length > 1 && <span className="muted">{formatDuration(r.offPlanSeconds)}</span>}</h2>
+          {r.unplanned.length === 0 ? (
+            <p className="muted small">Every logged session was for a priority.</p>
+          ) : (
+            <Folded
+              className="review-list"
+              items={r.unplanned.map((g) => (
+                <ReviewRow
+                  key={g.key}
+                  text={<SessionLabel label={g.label} />}
+                  meta={when(g.dates)}
+                  seconds={g.seconds}
+                  onOpen={() => onOpen(latest(g.dates))}
+                />
+              ))}
+            />
+          )}
+        </section>
+      )}
 
       {r.routines.length > 0 && (
         <section className="review-section">
-          <h3 className="section-heading">
+          <h2 className="section-heading">
             Routines <span className="muted">{r.routines.length}</span>
-          </h3>
+          </h2>
           <Folded
             className="review-list"
             items={r.routines.map((g) => (
@@ -162,9 +170,7 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
       )}
 
       <section className="review-section">
-        <h3 className="section-heading">
-          Not done <span className="muted">{r.notDone.length}</span>
-        </h3>
+        <h2 className="section-heading">Not done {r.notDone.length > 0 && <span className="muted">{r.notDone.length}</span>}</h2>
         {r.notDone.length === 0 ? (
           <p className="muted small">
             {r.routines.length > 0
@@ -195,7 +201,7 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
       </section>
 
       <section className="review-section">
-        <h3 className="section-heading">Why</h3>
+        <h2 className="section-heading">Why</h2>
         {r.notes.length === 0 ? (
           <p className="muted small">No retrospective notes yet. Each day's retrospective card is where they go.</p>
         ) : (
@@ -250,7 +256,7 @@ function ByCategory({ byCategory, categories }: { byCategory: CategoryTime[]; ca
   const share = (part: number, whole: number) => `${(part / whole) * 100}%`;
   return (
     <section className="review-section">
-      <h3 className="section-heading">By category</h3>
+      <h2 className="section-heading">By category</h2>
       <Folded
         className="review-list"
         items={byCategory.map((c) => {

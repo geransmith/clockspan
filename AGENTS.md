@@ -195,7 +195,7 @@ client/                 Vite root → dist/client
                         this day / Delete everywhere), TodayOffer (Top priorities' morning notice),
                         Shortcuts (the key listener, and ? for the list of keys), DateNav (the
                         sheet's date row and Customize; the header is the same on every view), and
-                        the pieces several of them share (Folded: a long list's Show all; CategoryChip
+                        the pieces several of them share (Folded: a long list's Show N more; CategoryChip
                         and CategoryDot; RepeatMark, a recurring priority's mark, and RunningMark, the
                         running session's pill, kept here so the sheet can show them; Note, a task's
                         note button and box, the button on a priority row and the box there and in
@@ -1074,7 +1074,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   category. A row's category is its task's current one, so a category change moves the task's past
   time. A uid outside `known` (the board's categories, removed ones included) counts as none, there
   and in `midDay`. Most time first, then most ticks, none last; a category with neither is left out.
-  Review shows By category only while a listed bucket has a category. Review passes `known` and
+  Review shows By category only while it lists more than one bucket, one of them with a category
+  (one bucket would say the Focused tile again), Off the plan only with a session (the tile says
+  none), and a section's muted count only where it adds something (Off the plan's total over two
+  rows or more, Not done's count above none). Review passes `known` and
   `laned` (the uids of the tasks the board holds in Later or Next) from `useBoardState()` once the
   board has loaded, and empty ones before, so until then nothing is grouped by category and no task
   counts as laned in Not done.
@@ -1102,7 +1105,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   so neither moves at midnight. "Open day" first records the picked day (and the Review period,
   `route.review`) on the History entry with `replace` and then pushes the sheet, so Back
   reopens it there (`openDay` in `App.tsx`). Its cells count days by `hasContent` and its panel
-  uses `dayTimeclock`, the sheet's math.
+  uses `dayTimeclock`, the sheet's math. The switch names the view, so the Days and Review cards
+  have no title of their own: each is a section named by `aria-label`, and Review's section
+  headings are its h2s.
 - **The `retro` alarm target is the clock-out instant** ("warn before" = minutes before the
   end of the day) and is **not** silenced by overtime approval; marking the day reviewed
   (`days.retro_at`), or hiding the retrospective card under Customize (`alarmTargets` reads
@@ -1661,7 +1666,7 @@ The browser pass for each surface (the logic under it is already tested):
 - **Recurring priorities**: Settings → Board → Recurring priorities: Recurring rows per day with
   its hint beside the box, and nothing else. On the board at 1440: Later ends with Repeats (the
   seeded "Monitor the queue" ↻ Mon–Fri and "Follow-ups" ↻ Mon, Wed, Fri), counted in Later's number,
-  below Later's Show all once it folds. A Next card's Repeat row: its first day asks first (Cancel
+  below Later's Show N more once it folds. A Next card's Repeat row: its first day asks first (Cancel
   sends nothing), then the card moves under Repeats with its day, the dialog stays open with the
   focus on that day and Stop repeating in Delete's place; more days, and the last one staying on.
   Today's one-off row made to repeat stays in In progress with the mark, and its past day in History

@@ -32,6 +32,15 @@ beforeEach(() => {
 });
 
 describe('History', () => {
+  it("names each view's section without a title repeating the switch above it", async () => {
+    await history(TODAY);
+    expect(screen.getByRole('region', { name: 'Days' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    await settle();
+    expect(screen.getByRole('region', { name: 'Review' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: /^(Days|Review)$/ })).toBeNull();
+  });
+
   it("keeps the calendar's month and picked day across a switch to Review and back", async () => {
     await history(TODAY);
     fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));

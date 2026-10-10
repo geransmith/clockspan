@@ -11,7 +11,7 @@ import { allPrioritiesDone, countStickers, daySummaryOf, STICKER_LABELS, sticker
 import { dayTimeclock, targetFraction, type TimeclockResult } from '../lib/timeclock';
 import { Check } from './Icons';
 import { LoadFailed } from './LoadFailed';
-import { PeriodNav, PeriodReset } from './PeriodNav';
+import { PeriodNav } from './PeriodNav';
 import { Tile } from './Tile';
 
 interface Props {
@@ -36,8 +36,7 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
   const [month, setMonth] = useState(() => startOfMonth(date));
   const [selected, setSelected] = useState<string | null>(date);
   const [filter, setFilter] = useState<StickerId | null>(null);
-  // "This month" sits in the header, apart from the ◀ ▶ it hands the focus to. Try again hands it
-  // there too: the loading block takes its place at once.
+  // Try again goes as the loading block takes its place: ◀ takes the focus.
   const prevRef = useRef<HTMLButtonElement>(null);
   const period = periodRange('month', month, 0);
   const { days: list, failed, retry } = useRange(period.from, period.to);
@@ -69,12 +68,9 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
   };
 
   return (
-    <section className="card">
-      <header className="card-head">
-        <h2 className="card-title">Days</h2>
-        <PeriodReset kind="month" from={month} today={today} onFrom={step} prevRef={prevRef} />
-      </header>
-      <PeriodNav kind="month" label={period.label} from={month} today={today} onFrom={step} noReset prevRef={prevRef} />
+    // Named by History's switch above it, which says Days already.
+    <section className="card" aria-label="Days">
+      <PeriodNav kind="month" label={period.label} from={month} today={today} onFrom={step} prevRef={prevRef} />
       {failed ? <LoadFailed title={LOAD_FAILED.range} onRetry={tryAgain} /> : !weeks && <div className="loading" aria-busy="true" />}
       {weeks && (
         <>

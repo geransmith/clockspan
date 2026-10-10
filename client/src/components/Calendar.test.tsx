@@ -55,7 +55,7 @@ describe('Calendar', () => {
     expect(api.getRange).toHaveBeenLastCalledWith(FIRST, '2026-10-31');
     expect(screen.getByRole('group', { name: formatMonth(FIRST) })).toBeTruthy();
     expect(screen.getByText('Tap a day to see it.')).toBeTruthy();
-    // The reset in the header goes once pressed: the focus moves to Previous month.
+    // The reset goes once pressed: the focus moves to Previous month.
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Previous month' }));
   });
 

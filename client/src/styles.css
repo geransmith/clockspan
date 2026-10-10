@@ -2147,13 +2147,17 @@ button.log-label:hover {
   width: 14px;
   height: 14px;
 }
-/* ◀ label ▶ under a card head; the review and the calendar share it. */
+/* ◀ label ▶, under the review's card head and first in the calendar's card; they share it. */
 .period-nav {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   padding: 10px 16px 0;
+}
+/* The calendar's has no card head above it, so it takes the head's top inset. */
+.period-nav:first-child {
+  padding-top: 14px;
 }
 .period-label {
   min-width: 9ch;
@@ -2162,8 +2166,8 @@ button.log-label:hover {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-/* The review's "This week" ("This month", "This quarter") sits at the right, or drops to its own
-   line when a long label needs the room. The calendar's is in its card head. */
+/* "This week" ("This month", "This quarter") sits at the right, or drops to its own line when a
+   long label needs the room. */
 .period-nav .btn-ghost {
   margin-left: auto;
 }

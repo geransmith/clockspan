@@ -170,6 +170,8 @@ describe('Review', () => {
     // The half day doesn't lower a week's target.
     expect(screen.getByText('worked 11h 00m of 40h 00m')).toBeTruthy();
     expect(screen.getByText('2 sessions · 83% on plan')).toBeTruthy();
+    // The Days tile beside it has the period's days, so the line leaves out "of 2".
+    expect(screen.getByText('Priorities').parentElement?.querySelector('.tile-sub')?.textContent).toBe('0 days reviewed');
     expect(facts()).toEqual(['Added mid-day: 1 · 0 done', 'Breaks: 1 · 10m', 'Typical day: 3 planned · 1 done']);
     // Straight after the tiles, before Off the plan.
     expect(document.querySelector('.tiles + .review-facts + .review-section')).not.toBeNull();
@@ -277,7 +279,6 @@ describe('Review', () => {
     await review({ kind: 'week', from: MON });
     expect(screen.getByText('Focused').parentElement?.querySelector('.tile-sub')?.textContent).toBe('1 session');
     expect(screen.getByText('Every logged session was for a priority.')).toBeTruthy();
-    expect(screen.queryByText('No sessions logged.')).toBeNull();
     cleanup();
 
     serveRange([makeDay(MON, { sessions: [completedSession(1, start, 1500, { date: MON, label: 'Inbox', endedAt: start, durationSeconds: 0 })] })]);
@@ -285,22 +286,47 @@ describe('Review', () => {
     expect(rows('Off the plan')).toEqual([['Inbox', 'Mon', 'no time']]);
   });
 
-  it('folds a long list after eight rows, and Show all hands the focus to the first row it shows', async () => {
+  it('folds a long list after eight rows, and Show 2 more hands the focus to the first row it shows', async () => {
     serveRange([makeDay(MON, { priorities: Array.from({ length: 10 }, (_, i) => makePriority(i + 1, `Row ${i + 1}`, { addedAt: 0 })) })]);
     await review({ kind: 'week', from: MON });
     expect(rows('Not done')).toHaveLength(8);
-    fireEvent.click(screen.getByRole('button', { name: 'Show all 10' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show 2 more' }));
     expect(rows('Not done')).toHaveLength(10);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Row 9/ }));
   });
 
-  it('drops the target with no Work week, the hours with Show hours off, and the facts strip with nothing in it', async () => {
+  it('heads Off the plan with its total only over two rows or more, and Not done with its count only above none', async () => {
+    const muted = (heading: string) => screen.getByText(heading).querySelector('.muted')?.textContent ?? null;
+    serveRange([mon]);
+    await review({ kind: 'week', from: MON });
+    expect(rows('Off the plan')).toHaveLength(1);
+    expect(muted('Off the plan')).toBeNull();
+    expect(muted('Not done')).toBe('1');
+    cleanup();
+
+    serveRange([
+      makeDay(MON, {
+        priorities: [makePriority(1, 'Ship it', { done: true, addedAt: 0 })],
+        sessions: [
+          completedSession(1, atTime(MON, 9, 0), 600, { date: MON, label: 'Inbox' }),
+          completedSession(2, atTime(MON, 10, 0), 1200, { date: MON, label: 'Calls' }),
+        ],
+      }),
+    ]);
+    await review({ kind: 'week', from: MON });
+    expect(muted('Off the plan')).toBe('30m');
+    expect(muted('Not done')).toBeNull();
+  });
+
+  it('drops the target with no Work week, the hours with Show hours off, the facts strip with nothing in it, and Off the plan with no sessions', async () => {
     serveRange([makeDay(MON, { punches: punchesAt(atTime(MON, 8, 0), null, null, atTime(MON, 12, 0)) })]);
     vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ weekMinutes: 0 })));
     await review({ kind: 'week', from: MON });
     expect(screen.getByText('worked 4h 00m')).toBeTruthy();
     expect(screen.getByText('no sessions')).toBeTruthy();
     expect(document.querySelector('.review-facts')).toBeNull();
+    // The Focused tile says no sessions, so Off the plan doesn't say it again.
+    expect(sections()).toEqual(['Not done', 'Why']);
     cleanup();
 
     vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ trackHours: false })));
@@ -378,10 +404,12 @@ describe('Review: By category', () => {
   it('leaves out an off-plan part under a minute, and the parts line with nothing in it', async () => {
     const offFor = (seconds: number, done = false) =>
       makeDay(MON, {
-        priorities: [makePriority(1, 'Ship it', { categoryUid: TICKETS.uid, done, addedAt: 0 })],
+        // A second bucket, with no category, since one alone shows no section.
+        priorities: [makePriority(1, 'Ship it', { categoryUid: TICKETS.uid, done, addedAt: 0 }), makePriority(2, 'Call the bank', { addedAt: 0 })],
         sessions: [
           completedSession(1, atTime(MON, 9, 0), 25 * 60, { date: MON, priorityUid: rowUid(1) }),
           completedSession(2, atTime(MON, 10, 0), seconds, { date: MON, label: 'Inbox', categoryUid: TICKETS.uid }),
+          completedSession(3, atTime(MON, 11, 0), 10 * 60, { date: MON, priorityUid: rowUid(2) }),
         ],
       });
     serveRange([offFor(59)]);
@@ -392,12 +420,12 @@ describe('Review: By category', () => {
 
     serveRange([offFor(59, true)]);
     await review({ kind: 'week', from: MON });
-    expect(categoryRows().map((c) => c.parts)).toEqual([['1 done']]);
+    expect(categoryRows().map((c) => c.parts)).toEqual([['1 done'], []]);
     cleanup();
 
     serveRange([offFor(60)]);
     await review({ kind: 'week', from: MON });
-    expect(categoryRows().map((c) => c.parts)).toEqual([['1m off the plan']]);
+    expect(categoryRows().map((c) => c.parts)).toEqual([['1m off the plan'], []]);
   });
 
   it("sizes each bar against the largest category's time, no category's included", async () => {
@@ -419,11 +447,22 @@ describe('Review: By category', () => {
     ]);
   });
 
-  it('shows no section when nothing in the period has a category', async () => {
+  it('shows no section when nothing in the period has a category, or all of it has the same one', async () => {
     serveRange([mon, tue]);
     await review({ kind: 'week', from: MON });
     expect(sections()).toEqual(['Off the plan', 'Not done', 'Why']);
     expect(facts()[0]).toBe('Added mid-day: 1 · 0 done');
+    cleanup();
+
+    // One bucket would say the Focused tile again.
+    serveRange([
+      makeDay(MON, {
+        priorities: [makePriority(1, 'Ship it', { categoryUid: TICKETS.uid, done: true, addedAt: 0 })],
+        sessions: [completedSession(1, atTime(MON, 9, 0), 25 * 60, { date: MON, priorityUid: rowUid(1) })],
+      }),
+    ]);
+    await review({ kind: 'week', from: MON });
+    expect(sections()[0]).toBe('Off the plan');
   });
 
   it("waits for the board's first read, and shows no category when that read fails", async () => {
@@ -451,7 +490,7 @@ describe('Review: By category', () => {
     serveRange([makeDay(MON, { priorities: categories.map((c, i) => makePriority(i + 1, `Row ${i}`, { categoryUid: c.uid, done: true, addedAt: 0 })) })]);
     await review({ kind: 'week', from: MON });
     expect(categoryRows()).toHaveLength(8);
-    fireEvent.click(screen.getByRole('button', { name: 'Show all 10' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show 2 more' }));
     expect(categoryRows().map((c) => c.name)).toEqual(categories.map((c) => c.name));
     expect(document.activeElement).toBe(document.querySelectorAll('.review-category')[8]);
   });
