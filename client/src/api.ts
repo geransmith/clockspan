@@ -82,10 +82,10 @@ function noticeVersion(version: string | null): void {
  * lower one means the database went back: a backup restored under the open page. Every store
  * would then drop the server's answers as older than its own copy, so the page asks for a reload
  * as an update does, and counts on from the lower number, so a closed banner stays closed and a
- * second restore is caught too. An answer that names none (0) says nothing.
+ * second restore is caught too. A backup from before revisions restores at 0, so 0 counts; an
+ * answer with no header says nothing.
  */
 function noticeRestore(revision: number, before: number): void {
-  if (revision === 0) return;
   const back = revision < before;
   if (back) askReload(RESTORED, 'restored');
   seen = back ? revision : Math.max(seen, revision);
@@ -112,8 +112,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   }
   noticeVersion(res.headers.get(VERSION_HEADER));
   // An answer that names none (an auth route, a 401 before the data routes, a proxy's page) reads as 0.
-  const revision = Number(res.headers.get(REVISION_HEADER));
-  noticeRestore(revision, before);
+  const named = res.headers.get(REVISION_HEADER);
+  const revision = Number(named);
+  if (named !== null) noticeRestore(revision, before);
   let data: unknown = null;
   try {
     data = await res.json();

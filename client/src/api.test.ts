@@ -40,8 +40,8 @@ beforeEach(() => {
 });
 
 // `request()` keeps the highest revision it has heard for the life of the page, so the revisions
-// the cases below answer with rise in the order they run; the restore case's drop is the one
-// exception.
+// the cases below answer with rise in the order they run; the restore cases' drops are the
+// exceptions, and come last.
 
 const REPORT = makePriority(1, 'Report', { uid: 'abcdef123456', addedAt: 1, categoryUid: 'cafe00000001' });
 const FREE = emptyRow(1);
@@ -359,5 +359,13 @@ describe('a restored backup', () => {
     day.resolve(new Response('{}', { headers: { [REVISION_HEADER]: '145' } }));
     await read;
     expect(restored()).toEqual([]);
+  });
+
+  it('asks for a reload when an answer names revision 0, as a backup from before revisions restores', async () => {
+    answerAt(200);
+    await api.getSettings();
+    answerAt(0);
+    await api.getDay(TODAY);
+    expect(restored()).toEqual([expect.objectContaining({ title: RESTORED.title })]);
   });
 });
