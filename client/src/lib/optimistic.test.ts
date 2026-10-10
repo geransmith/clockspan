@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { deferred } from '../test/fixtures';
 import { addPending, confirm, fetched, serial, settle, settleWith, shown, untracked, whenIdle, whileUnsettled, type Tracked } from './optimistic';
 
@@ -173,6 +173,26 @@ describe('serial', () => {
     // Answered, so no write is left on its way for whenIdle's cases.
     b.answer().resolve('B');
     c.answer().resolve('C');
+  });
+
+  it('forgets a key once its last job has settled, and not while a later one is on it', async () => {
+    // The queue's own map, caught as the first job is queued: nothing else shows what it holds.
+    const set = vi.spyOn(Map.prototype, 'set');
+    const queue = serial();
+    const a = deferred<string>();
+    const b = deferred<string>();
+    const first = queue(() => a.promise, 'session:1');
+    const tails = set.mock.contexts[0] as Map<string, unknown>;
+    set.mockRestore();
+    const second = queue(() => b.promise, 'session:1');
+    a.resolve('A');
+    await first;
+    await flush();
+    expect([...tails.keys()]).toEqual(['session:1']);
+    b.reject(new Error('offline'));
+    await expect(second).rejects.toThrow('offline');
+    await flush();
+    expect(tails.size).toBe(0);
   });
 });
 

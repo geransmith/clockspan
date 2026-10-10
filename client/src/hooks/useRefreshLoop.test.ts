@@ -133,6 +133,8 @@ describe('useRefreshLoop', () => {
     await settle();
     expect(run).toHaveBeenCalledTimes(2);
     act(() => changedElsewhere());
+    // Behind the queued run, never beside it: its answer could land last.
+    expect(run).toHaveBeenCalledTimes(2);
     second.resolve();
     await settle();
     expect(run).toHaveBeenCalledTimes(3);
