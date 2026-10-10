@@ -1,4 +1,4 @@
-import type { Day, Priority } from '../types';
+import type { CompletedSession, Day, Priority } from '../types';
 import { LOOKBACK_DAYS } from '../../../shared/api.js';
 import { addDays, addMonths, startOfQuarter, startOfWeek } from '../../../shared/dates.js';
 import { breakSeconds } from './breaks';
@@ -52,7 +52,7 @@ export function periodRange(kind: PeriodKind, date: string, offset: number): Per
  * task's name, and the sessions with no task merged by label (ignoring case and spacing), so a
  * chore that keeps coming back reads as one row with its total.
  */
-export interface UnplannedWork {
+interface UnplannedWork {
   /** `task:<uid>`, or `label:<sameText>` for sessions with no task. */
   key: string;
   /** The task's current name, or the label's latest spelling; '' for untitled sessions. */
@@ -67,7 +67,7 @@ export interface UnplannedWork {
  * it got ticked. Each day stands on its own, so a tick doesn't settle an earlier miss, and none of
  * its rows is a task left open in Not Done.
  */
-export interface RoutineReview {
+interface RoutineReview {
   uid: string;
   /** Its current name, which every row of it shows. */
   title: string;
@@ -95,7 +95,7 @@ export interface CategoryTime {
 }
 
 /** A task not ticked by the end of the range: a one-off's days left open, with a retyped task joined by its text (`addToNotDone`). */
-export interface OpenPriority {
+interface OpenPriority {
   /** The uid of the task that opened it. */
   key: string;
   text: string;
@@ -106,7 +106,7 @@ export interface OpenPriority {
   addedMidDay: boolean;
 }
 
-export interface RangeReview {
+interface RangeReview {
   /** Days in the range, up to today, that have anything on them (`hasContent`). */
   days: number;
   workedSeconds: number;
@@ -229,7 +229,6 @@ export function reviewRange(
     if (day.retroAt != null) out.retrosDone++;
     out.breaks.count += day.breaks.length;
     for (const b of day.breaks) out.breaks.seconds += breakSeconds(b, now);
-    const oneOffs: PriorityReview[] = [];
     for (const p of r.planned) {
       const c = categoryTime(p.priority.categoryUid);
       c.seconds += p.focusedSeconds;
@@ -240,33 +239,19 @@ export function reviewRange(
         const category = knownOrNone(p.priority.categoryUid);
         if (category != null) midDayCategories.set(category, (midDayCategories.get(category) ?? 0) + 1);
       }
-      if (!p.priority.recurring) {
-        oneOffs.push(p);
-        continue;
-      }
-      const uid = p.priority.uid!;
-      let g = routines.get(uid);
-      if (!g) routines.set(uid, (g = { uid, title: '', dates: [], done: 0, focusedSeconds: 0 }));
-      g.title = p.priority.text.trim();
-      addDate(g.dates, day.date);
-      if (p.priority.done) g.done++;
-      g.focusedSeconds += p.focusedSeconds;
+    }
+    for (const session of r.unplanned) {
+      const c = categoryTime(sessionCategory(session, day.priorities));
+      c.seconds += session.durationSeconds;
+      c.offPlanSeconds += session.durationSeconds;
     }
     if (day.date < today && r.total > 0) {
       plannedRows.push(r.total);
       doneRows.push(r.done);
     }
-    for (const session of r.unplanned) {
-      const key = session.priorityUid != null ? `task:${session.priorityUid}` : `label:${sameText(session.label)}`;
-      let g = unplanned.get(key);
-      if (!g) unplanned.set(key, (g = { key, label: '', seconds: 0, dates: [] }));
-      g.label = sessionName(session, day.priorities).trim();
-      g.seconds += session.durationSeconds;
-      addDate(g.dates, day.date);
-      const c = categoryTime(sessionCategory(session, day.priorities));
-      c.seconds += session.durationSeconds;
-      c.offPlanSeconds += session.durationSeconds;
-    }
+    addRoutines(routines, r.planned, day.date);
+    addUnplanned(unplanned, r.unplanned, day);
+    const oneOffs = r.planned.filter((p) => !p.priority.recurring);
     addToNotDone(notDone, groupOf, oneOffs, day.date, laned);
     const note = day.retroNote.trim();
     if (note) out.notes.push({ date: day.date, note, reviewedAt: day.retroAt });
@@ -287,6 +272,32 @@ export function reviewRange(
   );
   out.notDone = [...notDone.values()].sort((a, b) => b.dates.length - a.dates.length || a.dates[0]!.localeCompare(b.dates[0]!));
   return out;
+}
+
+/** One day's recurring rows laid onto `routines`, by their task's uid: each day counts on its own. */
+function addRoutines(routines: Map<string, RoutineReview>, rows: PriorityReview[], date: string): void {
+  for (const { priority: p, focusedSeconds } of rows) {
+    if (!p.recurring) continue;
+    const uid = p.uid!;
+    let g = routines.get(uid);
+    if (!g) routines.set(uid, (g = { uid, title: '', dates: [], done: 0, focusedSeconds: 0 }));
+    g.title = p.text.trim();
+    addDate(g.dates, date);
+    if (p.done) g.done++;
+    g.focusedSeconds += focusedSeconds;
+  }
+}
+
+/** One day's sessions off the plan laid onto `unplanned`, by task, else by label (`UnplannedWork`). */
+function addUnplanned(unplanned: Map<string, UnplannedWork>, sessions: CompletedSession[], day: Day): void {
+  for (const session of sessions) {
+    const key = session.priorityUid != null ? `task:${session.priorityUid}` : `label:${sameText(session.label)}`;
+    let g = unplanned.get(key);
+    if (!g) unplanned.set(key, (g = { key, label: '', seconds: 0, dates: [] }));
+    g.label = sessionName(session, day.priorities).trim();
+    g.seconds += session.durationSeconds;
+    addDate(g.dates, day.date);
+  }
 }
 
 /**
