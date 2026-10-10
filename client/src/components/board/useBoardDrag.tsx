@@ -37,9 +37,9 @@ import { boardCollision, boardKeyboardCoordinates } from './dnd';
 const DRAGGED_OPACITY = 0.4;
 
 /**
- * A recurring priority drags from Later's Repeats alone, to In progress or Done; dropped in Later
+ * A recurring priority drags from Later's Repeats alone, to In Progress or Done; dropped in Later
  * or Next, it stays, and the board notice says why. Its rows don't: today's stays on the list
- * (Remove from today takes it off), and an earlier day's tick stays in Done. Shown in In progress
+ * (Remove From Today takes it off), and an earlier day's tick stays in Done. Shown in In Progress
  * or Done while its pull is on its way, it is already the row it lands as.
  */
 export const canDrag = (item: BoardItem) => !item.recurring || item.column === 'later';
@@ -188,7 +188,7 @@ export function SortableEntry({ id, held, render }: { id: string; held: boolean;
 }
 
 /**
- * A row or card of In progress or Done, which neither sorts, or a recurring priority's card:
+ * A row or card of In Progress or Done, which neither sorts, or a recurring priority's card:
  * `column` tells the keyboard where it shows (`boardKeyboardCoordinates`); `held` as above.
  */
 export function DraggableEntry({ id, column, held, render }: { id: string; column: ColumnId; held: boolean; render: (drag: ItemDrag) => ReactNode }) {

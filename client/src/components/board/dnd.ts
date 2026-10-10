@@ -2,7 +2,7 @@
  * The board's drag and drop settings for dnd-kit: which droppable a card is over
  * (`boardCollision`) and where the arrow keys take it (`boardKeyboardCoordinates`). Every column
  * is a droppable (`columnDropId`); Later's and Next's cards are sortable too, each lane in a
- * SortableContext whose id is the lane, while In progress and Done take a drop as a whole column
+ * SortableContext whose id is the lane, while In Progress and Done take a drop as a whole column
  * and their items, like a recurring priority's card in Later's Repeats, are plain draggables.
  * Here, beside `Board`, so the dnd-kit imports stay in the board's lazy chunk; where a drop lands
  * is `dropTarget` (`lib/board.ts`).
@@ -32,7 +32,7 @@ function fullLane(c: DroppableContainer, all: DroppableContainer[]): OpenLane | 
 /**
  * What the dragged card is over: the droppable under the pointer, else (a keyboard drag, or the
  * pointer in a gap) the one the card overlaps most. Over Later or Next while it shows cards, the
- * nearest of them, so the card sorts in among them; over In progress or Done, the column.
+ * nearest of them, so the card sorts in among them; over In Progress or Done, the column.
  */
 export const boardCollision: CollisionDetection = (args) => {
   const within = pointerWithin(args);
@@ -42,7 +42,7 @@ export const boardCollision: CollisionDetection = (args) => {
   return lane ? closestCorners({ ...args, droppableContainers: args.droppableContainers.filter((c) => inLane(c, lane)) }) : hits;
 };
 
-/** The column a plain draggable (a row or card of In progress or Done, or of Later's Repeats) says it shows in. */
+/** The column a plain draggable (a row or card of In Progress or Done, or of Later's Repeats) says it shows in. */
 function draggableColumn(data: Record<string, unknown> | undefined): ColumnId | undefined {
   const column = data?.column;
   return COLUMNS.find((c) => c === column);
@@ -79,9 +79,9 @@ class Droppables extends Map<UniqueIdentifier, DroppableContainer> {
 /**
  * Where an arrow key takes a dragged card: dnd-kit's sortable getter (the nearest droppable that
  * way) over the droppables the key can reach. ↑ and ↓ sort a card among its lane's cards, and do
- * nothing in In progress or Done, which don't sort, or for a card of Later's Repeats. ← and →
+ * nothing in In Progress or Done, which don't sort, or for a card of Later's Repeats. ← and →
  * reach the other columns: Later's and Next's cards while they show any (so the card sorts in
- * among them), else the column. A row or card of In progress or Done, or of Later's Repeats, is no
+ * among them), else the column. A row or card of In Progress or Done, or of Later's Repeats, is no
  * droppable of its own, which the sortable getter needs: its column stands in for it, and is left
  * out of the way. Below 900 px the columns not shown stay mounted, measured 0 × 0 at the page's
  * corner: none is reached, so ← and → do nothing there.

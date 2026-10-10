@@ -120,8 +120,8 @@ describe('Sheet', () => {
     await renderSheet();
     expect(document.querySelector('.sheet--split')).not.toBeNull();
     expect(columns()).toEqual([
-      ['Timeclock', 'Top priorities'],
-      ['Focus timer', 'Day log', 'Retrospective'],
+      ['Timeclock', 'Top Priorities'],
+      ['Focus Timer', 'Day Log', 'Retrospective'],
     ]);
   });
 
@@ -129,7 +129,7 @@ describe('Sheet', () => {
     media.delete(SPLIT_QUERY);
     await renderSheet();
     expect(document.querySelector('.sheet--split')).toBeNull();
-    expect(columns()).toEqual([['Timeclock', 'Top priorities', 'Focus timer', 'Day log', 'Retrospective']]);
+    expect(columns()).toEqual([['Timeclock', 'Top Priorities', 'Focus Timer', 'Day Log', 'Retrospective']]);
   });
 
   it('keeps the columns it mounted with when the window changes width', async () => {
@@ -146,26 +146,26 @@ describe('Sheet', () => {
 
   it('moves a card to the other column and keeps its place in the one-column order', async () => {
     await renderSheet(true);
-    fireEvent.click(button('Move Focus timer to the left column'));
+    fireEvent.click(button('Move Focus Timer to the left column'));
     await settle();
     expect(savedLayout()).toEqual(['timeclock:left', 'priorities:left', 'timer:left', 'log:right', 'retro:right']);
     expect(columns()).toEqual([
-      ['Timeclock', 'Top priorities', 'Focus timer'],
-      ['Day log', 'Retrospective'],
+      ['Timeclock', 'Top Priorities', 'Focus Timer'],
+      ['Day Log', 'Retrospective'],
     ]);
     // The card mounted again in its new column; its arrow there has the focus.
-    expect(document.activeElement).toBe(button('Move Focus timer to the right column'));
+    expect(document.activeElement).toBe(button('Move Focus Timer to the right column'));
   });
 
   it('gives the focus to the Show chip of a card hidden, and to the Hide button of a card shown', async () => {
     await renderSheet(true);
-    fireEvent.click(button('Hide Day log'));
+    fireEvent.click(button('Hide Day Log'));
     await settle();
-    const show = screen.getByRole('button', { name: 'Day log Show' });
+    const show = screen.getByRole('button', { name: 'Day Log Show' });
     expect(document.activeElement).toBe(show);
     fireEvent.click(show);
     await settle();
-    expect(document.activeElement).toBe(button('Hide Day log'));
+    expect(document.activeElement).toBe(button('Hide Day Log'));
   });
 
   it("scrolls to the card a banner's button jumps to, opens it and puts the focus in its note box", async () => {
@@ -233,15 +233,15 @@ describe('Sheet', () => {
   it('steps a card up and down within its own column', async () => {
     await renderSheet(true);
     // Third in the layout, but first in the right column.
-    expect(button('Move Focus timer up').disabled).toBe(true);
-    expect(button('Move Top priorities down').disabled).toBe(true);
-    act(() => button('Move Day log up').focus());
-    fireEvent.click(button('Move Day log up'));
+    expect(button('Move Focus Timer up').disabled).toBe(true);
+    expect(button('Move Top Priorities down').disabled).toBe(true);
+    act(() => button('Move Day Log up').focus());
+    fireEvent.click(button('Move Day Log up'));
     await settle();
     expect(savedLayout()).toEqual(['timeclock:left', 'priorities:left', 'log:right', 'timer:right', 'retro:right']);
-    expect(columns()[1]).toEqual(['Day log', 'Focus timer', 'Retrospective']);
+    expect(columns()[1]).toEqual(['Day Log', 'Focus Timer', 'Retrospective']);
     // At the top of its column the up arrow is off, so the down arrow has the focus.
-    expect(document.activeElement).toBe(button('Move Day log down'));
+    expect(document.activeElement).toBe(button('Move Day Log down'));
   });
 
   it('keeps a drop inside the column it was dragged in', async () => {
@@ -254,24 +254,24 @@ describe('Sheet', () => {
     act(() => right.onReorder(0, right.cards.length - 1));
     await settle();
     expect(savedLayout()).toEqual(['timeclock:left', 'priorities:left', 'log:right', 'retro:right', 'timer:right']);
-    expect(columns()[1]).toEqual(['Day log', 'Retrospective', 'Focus timer']);
+    expect(columns()[1]).toEqual(['Day Log', 'Retrospective', 'Focus Timer']);
   });
 
   it('offers no column moves in a narrow window', async () => {
     media.delete(SPLIT_QUERY);
     await renderSheet(true);
     expect(screen.queryByRole('button', { name: /column$/ })).toBeNull();
-    expect(button('Move Focus timer up').disabled).toBe(false);
+    expect(button('Move Focus Timer up').disabled).toBe(false);
   });
 
   it('shows one list once a column has no visible card, and still offers the move back', async () => {
     stored = makeSettings({ layout: stored.layout.map((l) => ({ ...l, side: 'left' })) });
     await renderSheet(true);
     expect(document.querySelector('.sheet--split')).toBeNull();
-    expect(columns()).toEqual([['Timeclock', 'Top priorities', 'Focus timer', 'Day log', 'Retrospective']]);
+    expect(columns()).toEqual([['Timeclock', 'Top Priorities', 'Focus Timer', 'Day Log', 'Retrospective']]);
     fireEvent.click(button('Move Retrospective to the right column'));
     await settle();
-    expect(columns()).toEqual([['Timeclock', 'Top priorities', 'Focus timer', 'Day log'], ['Retrospective']]);
+    expect(columns()).toEqual([['Timeclock', 'Top Priorities', 'Focus Timer', 'Day Log'], ['Retrospective']]);
   });
 });
 
@@ -521,7 +521,7 @@ describe('Sheet: the recurring priorities due today', () => {
     expect(screen.queryByText(TODAY_OFFER.recurring)).toBeNull();
   });
 
-  it("doesn't offer the leftovers again once a row Add to today brought over is removed", async () => {
+  it("doesn't offer the leftovers again once a row Add to Today brought over is removed", async () => {
     vi.mocked(api.getBoard).mockResolvedValue(answered(makeBoard()));
     serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Invoices')] })]);
     await renderSheet();

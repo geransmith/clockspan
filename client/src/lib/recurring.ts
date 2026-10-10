@@ -2,7 +2,7 @@
  * The recurring priorities: their days as a card's Repeat row and Later's Repeats show them
  * (`WEEKDAYS`, `repeatDays`), and the morning offer's recurring half: which are due on a day and
  * not on its list yet (`dueRecurring`, `notOnList`), which of them the offer ticks (`offerPicks`,
- * up to `recurringPerDay`) and the list after Add to today (`acceptOffer`). The answers this
+ * up to `recurringPerDay`) and the list after Add to Today (`acceptOffer`). The answers this
  * device gave today are `useRecurringAnswered`'s. Pure: the clock comes in as `now`.
  */
 import type { Priority, Recurring } from '../types';
@@ -79,7 +79,7 @@ export function recurringRow(item: Recurring, now: number): Omit<Priority, 'posi
 }
 
 /**
- * The list after Add to today: each seed (the leftovers, then the tasks from Up next) through
+ * The list after Add to Today: each seed (the leftovers, then the tasks from Up next) through
  * `placePriority` (`seedRow`), in the first free row of the list padded to `count`, then each
  * routine through `placePriority` with `end`, after every row of the padded list, so the free base
  * rows stay for one-offs. Nothing written moves, so routines another device added after the free

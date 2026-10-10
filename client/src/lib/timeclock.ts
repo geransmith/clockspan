@@ -391,7 +391,7 @@ export function normalizePunches(punches: Punch[]): Punch[] {
 }
 
 /**
- * "Add extra out / in": two rows on the end, so the current Clock out becomes the new pair's
+ * "Add Extra Out / In": two rows on the end, so the current Clock out becomes the new pair's
  * Out (keeping its time), followed by an empty In and a fresh Clock out: "I clocked out, then
  * came back".
  */

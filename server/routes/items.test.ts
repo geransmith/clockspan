@@ -81,7 +81,7 @@ describe('POST /api/items: a task made on the board', () => {
       [{ title: '   ' }, 'A task needs a title.'],
       [{ title: 5 }, 'A task needs a title.'],
       [{ lane: undefined }, 'A task needs a lane or weekdays.'],
-      // Done is a ticked entry, and In progress today's list.
+      // Done is a ticked entry, and In Progress today's list.
       [{ lane: 'done' }, 'lane must be later or next.'],
       [{ lane: 'progress' }, 'lane must be later or next.'],
       [{ lane: null }, 'lane must be later or next.'],
@@ -487,7 +487,7 @@ describe('DELETE /api/items/:uid: a recurring priority', () => {
   it('keeps one a stale offer adds as the archived routine, never a one-off, and after its last list drops it', async () => {
     await add('rcur00000001', 'Monitor the queue');
     await remove('rcur00000001');
-    // The phone's board copy still offered it, and Add to today sends it.
+    // The phone's board copy still offered it, and Add to Today sends it.
     const stale = await app.saveList(TODAY, [{ text: 'Monitor the queue', uid: 'rcur00000001' }]);
     expect(stale.body.priorities).toEqual([expect.objectContaining({ uid: 'rcur00000001', recurring: true, archived: true })]);
     expect((await board()).map((c) => c.uid)).toEqual([]);

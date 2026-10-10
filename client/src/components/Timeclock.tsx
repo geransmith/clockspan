@@ -93,7 +93,7 @@ export function Timeclock({
     unlockAudio();
     send(punches.map((p) => (p.position === position ? { ...p, at } : p)));
   };
-  // The rows from before the last "Add extra out / in". Removing the pair it made while the rows
+  // The rows from before the last "Add Extra Out / In". Removing the pair it made while the rows
   // are still the ones it made (by value: a save's answer, or a refresh that changed something
   // else, brings a new list) undoes the Add, and the Clock out gets its time back. Once any punch
   // changes, removing a pair only drops its two rows: stepping out and changing your mind must not
@@ -102,7 +102,7 @@ export function Timeclock({
   // ends the undo: the stored rows can't tell an Add from an Out typed later.
   const [added, setAdded] = useState<Punch[] | null>(null);
   // A pair button that goes with its press hands the focus on once its target shows (the new list
-  // can come with the tap or after it): Remove to Add extra out / in, and an Add that reaches the
+  // can come with the tap or after it): Remove to Add Extra Out / In, and an Add that reaches the
   // row cap, which takes its own button away, to the new pair's Remove, which undoes it. Never to
   // a time field, which would hold today's alarms.
   const punchBox = useRef<HTMLDivElement>(null);
@@ -240,10 +240,10 @@ export function Timeclock({
   return (
     <div className="timeclock">
       <div className={settings.mealRules ? 'tiles tiles--four' : 'tiles'}>
-        {settings.mealRules && <Tile label="Lunch by" {...tiles.lunch} />}
+        {settings.mealRules && <Tile label="Lunch By" {...tiles.lunch} />}
         <Tile label="Worked" {...tiles.worked} />
         {/* A done day's pill says so; the board's clock bar, with no pill, keeps "Day complete". */}
-        <Tile label="Clock out at" {...tiles.clockOut} sub={tc.state === 'done' ? '' : tiles.clockOut.sub} />
+        <Tile label="Clock Out At" {...tiles.clockOut} sub={tc.state === 'done' ? '' : tiles.clockOut.sub} />
         <Tile label="Focused" {...focusTile(focus, isToday)} />
       </div>
 
@@ -308,7 +308,7 @@ export function Timeclock({
         {punches.length + 2 <= MAX_PUNCHES && (
           <button className="btn btn-ghost punch-add" onClick={addPair}>
             <Plus />
-            Add extra out / in
+            Add Extra Out / In
           </button>
         )}
       </div>
@@ -349,7 +349,7 @@ function WorkDay({ usual, own, onChange }: { usual: number; own: number | null; 
         <div className="target-edit">
           <span className="chips">
             <button className="chip" onClick={() => set(half)} aria-pressed={target === half}>
-              Half day · {formatDuration(half * 60)}
+              Half Day · {formatDuration(half * 60)}
             </button>
             <button className="chip" onClick={() => onChange(null)} aria-pressed={own == null}>
               Usual · {formatDuration(usual * 60)}

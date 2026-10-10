@@ -67,7 +67,7 @@ const ROUTINE = { uid: 'rcur00000001', recurring: true };
 const EMPTY = { later: [], repeats: [], next: [], progress: [], doneToday: [], doneEarlier: [] };
 
 describe('boardColumns', () => {
-  it("shows Later and Next by position, and In progress as today's open rows, each task once", () => {
+  it("shows Later and Next by position, and In Progress as today's open rows, each task once", () => {
     const cards = [
       makeCard('later2', 'B', { position: 2 }),
       makeCard('later1', 'A', { position: 1 }),
@@ -226,7 +226,7 @@ describe('boardColumns', () => {
     });
   });
 
-  it('shows a moving item where it lands: in a lane before the task named, else after its own tasks, the end of In progress, the top of Done', () => {
+  it('shows a moving item where it lands: in a lane before the task named, else after its own tasks, the end of In Progress, the top of Done', () => {
     const cards = [
       makeCard('a', 'A'),
       makeCard('b', 'B', { lane: 'next' }),
@@ -268,7 +268,7 @@ describe('boardColumns', () => {
     expect(ids(c)).toEqual({ ...EMPTY, progress: [`item:${ROUTINE.uid}`], doneEarlier: [`row:${TUE}:${ROUTINE.uid}`] });
   });
 
-  it("shows a card of Later's Repeats in In progress while its pull is on its way", () => {
+  it("shows a card of Later's Repeats in In Progress while its pull is on its way", () => {
     const c = columns({
       recurring: [makeRecurring(ROUTINE.uid, 'Monitor the queue')],
       moving: new Map([[`item:${ROUTINE.uid}`, { to: 'progress', before: null }]]),
@@ -387,7 +387,7 @@ describe('planMove', () => {
     expect(planMove(left, 'progress', null, WED)).toMatchObject({ kind: 'place', row: { uid: 'left', categoryUid: 'cafe00000002' }, nudge: true });
   });
 
-  it('pulls a task done on an earlier day into In progress, the same task again', () => {
+  it('pulls a task done on an earlier day into In Progress, the same task again', () => {
     expect(planMove(item('item:doneTue'), 'progress', null, WED)).toMatchObject({
       kind: 'place',
       row: { uid: 'doneTue', text: 'Shipped', done: false, listed: 1, logged: 1500 },
@@ -436,7 +436,7 @@ describe('planMove', () => {
     expect(planMove(repeating, 'done', null, WED)).toMatchObject({ kind: 'place', row: { uid: 'rcur00000002', done: true, recurring: true }, nudge: false });
   });
 
-  it("ticks and unticks today's rows between In progress and Done", () => {
+  it("ticks and unticks today's rows between In Progress and Done", () => {
     expect(planMove(open, 'done', null, WED)).toEqual({ kind: 'tick', uid: rowUid(1), done: true });
     expect(planMove(ticked, 'progress', null, WED)).toEqual({ kind: 'tick', uid: rowUid(2), done: false });
     expect(planMove(recurring, 'done', null, WED)).toEqual({ kind: 'tick', uid: 'rcur00000001', done: true });
@@ -481,7 +481,7 @@ describe('planMove', () => {
     expect(moveTargets(todays, WED)).toEqual(['done']);
   });
 
-  it('does nothing for a drop where the item already is in In progress or Done', () => {
+  it('does nothing for a drop where the item already is in In Progress or Done', () => {
     expect(planMove(open, 'progress', null, WED)).toBeNull();
     expect(planMove(ticked, 'done', null, WED)).toBeNull();
     expect(planMove(item('item:doneTue'), 'done', null, WED)).toBeNull();
@@ -535,7 +535,7 @@ describe('dragging', () => {
     expect(findItem(shown, 'item:a')).toEqual({ item: c.later[0], column: 'next' });
     expect(ids(withDrag(c, 'item:a', { to: 'next', before: null })).next).toEqual(['item:d', 'item:p', 'item:a', 'item:lo1', 'item:lo2']);
     expect(ids(withDrag(c, 'item:d', { to: 'later', before: null })).later).toEqual(['item:a', 'item:b', 'item:c', 'item:d']);
-    // In progress takes it at the end and Done at the top, as a move on its way shows it.
+    // In Progress takes it at the end and Done at the top, as a move on its way shows it.
     expect(ids(withDrag(c, 'item:e', { to: 'progress', before: null }))).toMatchObject({
       progress: [open, 'item:rcur00000001', 'item:carried', 'item:e'],
       doneEarlier: [],
@@ -551,7 +551,7 @@ describe('dragging', () => {
       expect(dropTarget('item:b', 'item:gone', c)).toBeNull();
     });
 
-    it("goes before the task it is over in another lane, at the end of a lane's own tasks, and anywhere in In progress or Done", () => {
+    it("goes before the task it is over in another lane, at the end of a lane's own tasks, and anywhere in In Progress or Done", () => {
       expect(dropTarget('item:d', 'item:a', c)).toEqual({ to: 'next', before: 'd' });
       expect(dropTarget('item:p', 'item:a', c)).toEqual({ to: 'next', before: 'p' });
       expect(dropTarget(columnDropId('next'), 'item:a', c)).toEqual({ to: 'next', before: null });
@@ -601,7 +601,7 @@ describe('dragging', () => {
         to: 'progress',
         before: null,
       });
-      // A row of today shown in Later lands there; back over In progress, it is where it started.
+      // A row of today shown in Later lands there; back over In Progress, it is where it started.
       const parked = withDrag(c, open, { to: 'later', before: 'a' });
       expect(dropTarget(open, open, parked)).toEqual({ to: 'later', before: 'a' });
       expect(dropTarget(columnDropId('progress'), open, parked)).toBeNull();
@@ -612,7 +612,7 @@ describe('dragging', () => {
 
   it('says how a drop ended: stayed, moved, turned down, or done and staying done', () => {
     expect(moveAnnouncement(null, item('item:a'), 'later')).toBe(BOARD_DRAG.stays('A', 'Later'));
-    expect(moveAnnouncement(null, item(open), 'progress')).toBe(BOARD_DRAG.stays('Open', 'In progress'));
+    expect(moveAnnouncement(null, item(open), 'progress')).toBe(BOARD_DRAG.stays('Open', 'In Progress'));
     expect(moveAnnouncement(planMove(item('item:a'), 'next', 'd', WED), item('item:a'), 'next')).toBe(BOARD_DRAG.moved('A', 'Next'));
     expect(moveAnnouncement(planMove(item(open), 'done', null, WED), item(open), 'done')).toBe(BOARD_DRAG.moved('Open', 'Done'));
     expect(moveAnnouncement(planMove(item(ticked), 'next', null, WED), item(ticked), 'next')).toBe(DONE_STAYS.announce('Ticked', 'Next'));
@@ -622,7 +622,7 @@ describe('dragging', () => {
 
   it('says where a dragged item would land: the column, and in Later or Next before which task, or back where it started', () => {
     expect(overAnnouncement(null, item('item:a'), c)).toBe(BOARD_DRAG.overStart('A', 'Later'));
-    expect(overAnnouncement({ to: 'progress', before: null }, item('item:a'), c)).toBe(BOARD_DRAG.over('A', 'In progress'));
+    expect(overAnnouncement({ to: 'progress', before: null }, item('item:a'), c)).toBe(BOARD_DRAG.over('A', 'In Progress'));
     expect(overAnnouncement({ to: 'next', before: 'd' }, item('item:a'), c)).toBe(BOARD_DRAG.overBefore('A', 'Next', 'D'));
     expect(overAnnouncement({ to: 'next', before: null }, item('item:a'), c)).toBe(BOARD_DRAG.overEnd('A', 'Next'));
   });

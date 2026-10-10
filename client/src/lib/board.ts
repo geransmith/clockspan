@@ -9,7 +9,7 @@
  * (`withItem`, `withItemPatch`, `withoutItem`, `withCategory`, `withCategoryPatch`,
  * `withoutCategory`).
  *
- * Each task is stored once, and nothing about In progress or Done is: a task on today's list
+ * Each task is stored once, and nothing about In Progress or Done is: a task on today's list
  * shows as its row there, and any other one-off task by its latest entry (`listDate`, `listDone`)
  * and its lane (`boardColumns`), so the board and the sheet show one list and can't disagree.
  */
@@ -23,7 +23,7 @@ import { BOARD, BOARD_DRAG, DONE_STAYS } from './copy';
 import { isTaskRow } from './priorities';
 import type { PrioritySeed } from './plan';
 
-/** The board's four columns. Later and Next are lanes a task is put in; In progress and Done are worked out from the days. */
+/** The board's four columns. Later and Next are lanes a task is put in; In Progress and Done are worked out from the days. */
 export type ColumnId = 'later' | 'next' | 'progress' | 'done';
 
 export interface BoardItem {
@@ -112,7 +112,7 @@ export interface ColumnsInput {
 }
 
 /**
- * What each column shows. A task on today's list shows as its row: open in In progress, ticked in
+ * What each column shows. A task on today's list shows as its row: open in In Progress, ticked in
  * Done. Any other one-off task, by the first that applies: its latest entry is ticked (in Done:
  * with today's on today or a later day, with the earlier days' on an earlier day this week, else
  * nowhere); its lane; with no lane, its latest entry was
@@ -241,7 +241,7 @@ function withoutItems(columns: BoardColumns, drop: (item: BoardItem) => boolean)
   };
 }
 
-/** Puts `item` into `out` where it lands: at the top of Done, the end of In progress, or in a lane before the task named (null: after the lane's own tasks). */
+/** Puts `item` into `out` where it lands: at the top of Done, the end of In Progress, or in a lane before the task named (null: after the lane's own tasks). */
 function insert(out: BoardColumns, item: BoardItem, { to, before }: DropTarget): void {
   if (to === 'done') out.doneToday.unshift(item);
   else if (to === 'progress') out.progress.push(item);
@@ -335,11 +335,11 @@ function toToday(item: BoardItem, done: boolean, today: string): Move {
 export const COLUMNS: ColumnId[] = ['later', 'next', 'progress', 'done'];
 
 /** Each column's heading, which the board and what a drag says name it by. */
-export const COLUMN_NAMES: Record<ColumnId, string> = { later: 'Later', next: 'Next', progress: 'In progress', done: 'Done' };
+export const COLUMN_NAMES: Record<ColumnId, string> = { later: 'Later', next: 'Next', progress: 'In Progress', done: 'Done' };
 
 /**
  * The columns Move to offers: every other one, no Later or Next for a recurring priority (In
- * progress and Done for its card in Later's Repeats), and no In progress for an earlier day's row
+ * Progress and Done for its card in Later's Repeats), and no In Progress for an earlier day's row
  * of one that stopped repeating. A done item keeps Later and Next, which answer with the board
  * notice. A task left open keeps Next too, which gives it a place.
  */
@@ -395,7 +395,7 @@ export function findItem(columns: BoardColumns, id: string): { item: BoardItem; 
 /**
  * The columns as a drag shows them: the item taken out of the column showing it and shown in
  * `to`, before the task named in Later or Next (null: after the lane's own tasks), at the end of
- * In progress or the top of Done. It keeps its `column`, the one the drag started in.
+ * In Progress or the top of Done. It keeps its `column`, the one the drag started in.
  */
 export function withDrag(columns: BoardColumns, id: string, target: DropTarget): BoardColumns {
   const found = findItem(columns, id);

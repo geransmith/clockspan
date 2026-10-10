@@ -179,11 +179,11 @@ describe('copy builders', () => {
   it('names the card and the column in what a drag on the board says', () => {
     expect(BOARD_DRAG.instructions).toBe('Enter opens the card. Space picks it up; then the arrow keys move it, Space drops it and Escape puts it back.');
     expect(BOARD_DRAG.pickedUp('Write a KB', 'Later')).toBe('Picked up Write a KB, in Later.');
-    expect(BOARD_DRAG.over('Write a KB', 'In progress')).toBe('Write a KB is over In progress.');
+    expect(BOARD_DRAG.over('Write a KB', 'In Progress')).toBe('Write a KB is over In Progress.');
     expect(BOARD_DRAG.overBefore('Write a KB', 'Next', 'Follow up')).toBe('Write a KB is over Next, before Follow up.');
     expect(BOARD_DRAG.overEnd('Write a KB', 'Next')).toBe('Write a KB is over Next, at the end.');
     expect(BOARD_DRAG.overStart('Write a KB', 'Later')).toBe('Write a KB is over Later, where it started.');
-    expect(BOARD_DRAG.moved('Write a KB', 'In progress')).toBe('Write a KB moved to In progress.');
+    expect(BOARD_DRAG.moved('Write a KB', 'In Progress')).toBe('Write a KB moved to In Progress.');
     expect(BOARD_DRAG.stays('Write a KB', 'Later')).toBe('Write a KB stays in Later.');
     expect(BOARD_DRAG.cancelled('Write a KB', 'Later')).toBe('Move cancelled. Write a KB is back in Later.');
   });

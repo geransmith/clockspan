@@ -89,7 +89,7 @@ describe('Timeclock', () => {
   });
 
   it('keeps a pair in its place while its Out is typed across lunch, and moves it once the focus leaves', async () => {
-    // Clocked in at 6:00, out for lunch at 8:00, then "Add extra out / in": the empty Out sits after lunch.
+    // Clocked in at 6:00, out for lunch at 8:00, then "Add Extra Out / In": the empty Out sits after lunch.
     const withPair = addPunchPair(punchesAt(T0 - 3 * HOUR_MS, T0 - HOUR_MS));
     const { again } = await renderCard(TODAY, withPair);
     const out = field('Out 1');
@@ -127,7 +127,7 @@ describe('Timeclock', () => {
   });
 
   it("leaves the Clock out at line to the card's pill on a finished day and on a past day never clocked out", async () => {
-    const tile = () => screen.getByText('Clock out at').closest('.tile')!;
+    const tile = () => screen.getByText('Clock Out At').closest('.tile')!;
     await renderCard(TODAY, punchesAt(T0 - 8 * HOUR_MS, T0 - 5 * HOUR_MS, T0 - 4.5 * HOUR_MS, T0));
     expect(tile().classList.contains('tile--accent')).toBe(true);
     expect(tile().querySelector('.tile-sub')).toBeNull();
@@ -139,10 +139,10 @@ describe('Timeclock', () => {
   });
 
   it('undoes an Add removed before any punch changes', async () => {
-    // Clocked out at 9:00, then "Add extra out / in": removing that pair gives the Clock out its 9:00 back.
+    // Clocked out at 9:00, then "Add Extra Out / In": removing that pair gives the Clock out its 9:00 back.
     const day = punchesAt(T0 - HOUR_MS, null, null, T0);
     const { onChange, again } = await renderCard(TODAY, day);
-    fireEvent.click(screen.getByRole('button', { name: 'Add extra out / in' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Extra Out / In' }));
     again(onChange.mock.lastCall![0]);
     fireEvent.click(screen.getByRole('button', { name: 'Remove Out 1 / In 1' }));
     expect(unlockAudio).toHaveBeenCalledOnce();
@@ -152,7 +152,7 @@ describe('Timeclock', () => {
   it('drops both rows of a pair punched after the Add', async () => {
     const clockedIn = punchesAt(T0 - HOUR_MS);
     const { onChange, again } = await renderCard(TODAY, clockedIn);
-    fireEvent.click(screen.getByRole('button', { name: 'Add extra out / in' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Extra Out / In' }));
     const withPair = onChange.mock.lastCall![0];
     again(withPair);
     // Out 1 punched at 9:00, here or on another device: stepping out, which must not end the day.
@@ -161,32 +161,32 @@ describe('Timeclock', () => {
     expect(onChange.mock.lastCall![0].map((p) => p.at)).toEqual([T0 - HOUR_MS, null, null, null]);
   });
 
-  it('gives the focus to Add extra out / in once Remove takes its pair away', async () => {
+  it('gives the focus to Add Extra Out / In once Remove takes its pair away', async () => {
     const { onChange, again } = await renderCard(TODAY, addPunchPair(punchesAt(T0 - HOUR_MS)));
     const remove = screen.getByRole('button', { name: 'Remove Out 1 / In 1' });
     focus(remove);
     fireEvent.click(remove);
     again(onChange.mock.lastCall![0]);
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add extra out / in' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add Extra Out / In' }));
   });
 
   it("gives the focus to the new pair's Remove when its Add reaches the row cap", async () => {
     const { onChange, again } = await renderCard(TODAY, punchesAt(...Array<null>(MAX_PUNCHES - 2).fill(null)));
-    const add = screen.getByRole('button', { name: 'Add extra out / in' });
+    const add = screen.getByRole('button', { name: 'Add Extra Out / In' });
     focus(add);
     fireEvent.click(add);
     again(onChange.mock.lastCall![0]);
-    expect(screen.queryByRole('button', { name: 'Add extra out / in' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add Extra Out / In' })).toBeNull();
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove Out 18 / In 18' }));
   });
 
-  it('stops offering Add extra out / in at the row cap', async () => {
+  it('stops offering Add Extra Out / In at the row cap', async () => {
     const rows = (n: number) => punchesAt(...Array<null>(n).fill(null));
     await renderCard(TODAY, rows(MAX_PUNCHES - 2));
-    expect(screen.getByRole('button', { name: 'Add extra out / in' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add Extra Out / In' })).toBeTruthy();
     cleanup();
     await renderCard(TODAY, rows(MAX_PUNCHES));
-    expect(screen.queryByRole('button', { name: 'Add extra out / in' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add Extra Out / In' })).toBeNull();
   });
 
   it("shows the second meal on today's sheet only, not on a past day left clocked in", async () => {

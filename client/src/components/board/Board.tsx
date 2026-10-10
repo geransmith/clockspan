@@ -60,7 +60,7 @@ type AddColumn = Exclude<ColumnId, 'done'>;
  */
 type MoveOptions = { at?: DOMRect; minutes?: number };
 
-/** What a nudge holds until Add anyway: a pull, or a row typed in In progress's box. */
+/** What a nudge holds until Add anyway: a pull, or a row typed in In Progress's box. */
 type Held = { item: BoardItem; target: DropTarget; move: StoreMove } | { row: ReturnType<typeof newTaskRow> };
 
 /** What the board notice holds: one at a time, the newest move's. */
@@ -79,11 +79,11 @@ function report(write: Promise<void>): void {
 }
 
 /**
- * The Board page: Later, Next, In progress and Done. In progress is today's list, the sheet's
- * Top priorities, and Done holds this week. A card opens its dialog (`CardDialog`, one at a time).
+ * The Board page: Later, Next, In Progress and Done. In Progress is today's list, the sheet's
+ * Top Priorities, and Done holds this week. A card opens its dialog (`CardDialog`, one at a time).
  * An item moves by being dragged (a mouse, a finger's hold or Space) or by its dialog's Move to,
  * and both go through `planMove`; a move the board can't make shows in the notice above the
- * columns. The + in Later's, Next's and In progress's head opens a box for a new item there.
+ * columns. The + in Later's, Next's and In Progress's head opens a box for a new item there.
  * `now` is App's clock floored to the minute, the one the sheet gets, for the clock bar's times
  * and Delete's count of a timer running on the task: the page renders once a minute, and the
  * sheet's tiles and × count to the same minute. The move, add and delete handlers are built in
@@ -120,7 +120,7 @@ export const Board = memo(function Board({
   // pressed, so a move or start pressed there saves the rename only as the dialog closes, after the
   // item was read, and today's row shows it only once its save starts.
   const renamed = useRef<string | null>(null);
-  // Below 900 px one column shows at a time, so In progress and Done, whose items drag only to
+  // Below 900 px one column shows at a time, so In Progress and Done, whose items drag only to
   // another column, don't drag there.
   const [shownColumn, setShownColumn] = useState<ColumnId>('progress');
   const wide = useMediaQuery('(min-width: 900px)');
@@ -208,7 +208,7 @@ export const Board = memo(function Board({
   // The move goes to the store; the item shows in its new column meanwhile. A tick celebrates
   // from where it was made (`at`, measured by the caller before the control goes with the item to
   // Done in this render, hidden there on a phone). The sound is unlocked in the tap that made it
-  // (iOS). With no item, a row typed in In progress's box, whose field keeps the focus: nothing is
+  // (iOS). With no item, a row typed in In Progress's box, whose field keeps the focus: nothing is
   // focused for it once it lands. With `minutes`, a pull a dialog's Start made: the timer starts on
   // the task once the pull's save answers, and one banner says why if either fails. Every caller
   // runs with no dialog open: a dialog closes before its move or start (`closeCard`).
@@ -244,7 +244,7 @@ export const Board = memo(function Board({
     });
   };
 
-  // Past the sheet's nudge, as Add priority asks, a task for today's list waits in the notice for
+  // Past the sheet's nudge, as Add Priority asks, a task for today's list waits in the notice for
   // Add anyway: the notice's line, or null when it goes at once.
   const askFirst = (held: Held): string | null => {
     // Judged on today's list as the board's queue will leave it, so a row sent but not shown yet
@@ -274,7 +274,7 @@ export const Board = memo(function Board({
     return moveAnnouncement(move, item, to);
   };
 
-  // The row In progress's nudge holds goes when its box closes or changes, so Add anyway never adds
+  // The row In Progress's nudge holds goes when its box closes or changes, so Add anyway never adds
   // what the box no longer says: the next Enter asks again.
   const dropHeldRow = () => setNotice((n) => (n?.kind === 'nudge' && 'row' in n.for ? null : n));
   // `back`: the focus goes to the column's +.
@@ -283,7 +283,7 @@ export const Board = memo(function Board({
     if (id === 'progress') dropHeldRow();
     if (back) heads.current.get(id)?.focus();
   };
-  // A pick in one box is every box's, In progress's included.
+  // A pick in one box is every box's, In Progress's included.
   const pickBoxCategory = (uid: string | null) => {
     setBoxCategory(uid);
     writeStored(USER_KEYS.captureCategory, uid ?? '');
@@ -294,7 +294,7 @@ export const Board = memo(function Board({
     report(store.addItem({ uid: newUid(), title, categoryUid, lane, before: laneStart(columns, lane) }));
     return true;
   };
-  // A task typed in In progress's box: a new row of today's list through the board's queue, as a
+  // A task typed in In Progress's box: a new row of today's list through the board's queue, as a
   // pull goes, held in the box past the nudge.
   const placeRow = (row: ReturnType<typeof newTaskRow>) => send(null, { to: 'progress', before: null }, { kind: 'place', row, nudge: true });
   const addRow = (title: string, categoryUid: string | null) => {
@@ -306,7 +306,7 @@ export const Board = memo(function Board({
   };
 
   // Closing the notice puts the focus back where it came from: on the card it was about, or in In
-  // progress's box, which keeps the row it held (shown again on a phone, where the notice stays up
+  // Progress's box, which keeps the row it held (shown again on a phone, where the notice stays up
   // while another column shows).
   const closeNotice = () => {
     const about = notice?.kind === 'nudge' ? notice.for : notice;
@@ -324,7 +324,7 @@ export const Board = memo(function Board({
     titles.current.get(id)?.focus();
   };
 
-  // The item goes with the button pressed (Delete, Remove from today, Stop repeating on a card of
+  // The item goes with the button pressed (Delete, Remove From Today, Stop Repeating on a card of
   // Later's Repeats), and the focus would fall to the page: the next item in its column takes it,
   // else the one before, else the column's + (Done's heading, which has none).
   const focusNear = (item: BoardItem) => {
@@ -382,7 +382,7 @@ export const Board = memo(function Board({
       today={today}
       pick={pick}
       // Later's Repeats lists a recurring priority with its days, and nothing else does: a pull on
-      // its way shows the card in In progress or Done with no row yet.
+      // its way shows the card in In Progress or Done with no row yet.
       days={item.column === 'later' ? board.recurring.find((r) => r.uid === item.uid)?.weekdays : undefined}
       onOpen={() => {
         renamed.current = null;
@@ -407,7 +407,7 @@ export const Board = memo(function Board({
     // A task off today's list as the board has it: in a lane, left open, or done on another day.
     const cardOnly = item.card != null && item.row == null;
     // Ticked on another day: that day's sheet unticks it, since the board would rewrite another
-    // day's list, and a later day's sheet opens only once that day comes; Move to In progress puts
+    // day's list, and a later day's sheet opens only once that day comes; Move to In Progress puts
     // it on today's list to work on again.
     const doneDay = cardOnly && item.card!.listDone ? item.card!.listDate! : null;
     const hint = doneDay == null ? undefined : (doneDay > today ? BOARD.doneAhead : BOARD.doneOn)(dayName(doneDay, today, true));
@@ -501,10 +501,10 @@ export const Board = memo(function Board({
     );
   };
 
-  // A card of Later or Next sorts among its lane's cards; an item of In progress or Done, and a
+  // A card of Later or Next sorts among its lane's cards; an item of In Progress or Done, and a
   // recurring priority's card in Later's Repeats, drags whole, on a wide window. An item whose move
   // is on its way isn't picked up until the move lands: it shows where the move takes it as the
-  // item it was (a parked row in Later, a pulled card in In progress), and a move planned from that
+  // item it was (a parked row in Later, a pulled card in In Progress), and a move planned from that
   // would be wrong.
   const entry = (item: BoardItem, column: ColumnId) => {
     const sorts = isLane(column) && canSort(item);
@@ -550,7 +550,7 @@ export const Board = memo(function Board({
       />
     ),
   });
-  // The lanes' cap counts tasks in a lane; a row typed in In progress has none, so only a full list shuts it.
+  // The lanes' cap counts tasks in a lane; a row typed in In Progress has none, so only a full list shuts it.
   const lanesFull = boardFull(board) ? BOARD.full : null;
   const listFull = hasRoom(todayRows, settings.priorityCount) ? null : ADD_PRIORITY_FAILED.full;
   // A box closes with its column, so it doesn't open again by itself when the column reopens.
@@ -673,7 +673,7 @@ export const Board = memo(function Board({
               <>
                 {/* With nothing above it, the fold's count is the column's. */}
                 <button className="btn btn-ghost board-earlier" aria-expanded={earlierOpen} onClick={() => setEarlierOpen((o) => !o)}>
-                  Earlier this week{shown.doneToday.length > 0 && ` · ${shown.doneEarlier.length}`}
+                  Earlier This Week{shown.doneToday.length > 0 && ` · ${shown.doneEarlier.length}`}
                 </button>
                 {earlierOpen && list(shown.doneEarlier, 'done')}
               </>
@@ -716,7 +716,7 @@ interface ColumnAdd {
   box: ReactNode;
 }
 
-/** A column, and where a dragged item lands as a whole (In progress, Done, and an empty lane). */
+/** A column, and where a dragged item lands as a whole (In Progress, Done, and an empty lane). */
 function Column({
   id,
   shown,
@@ -730,7 +730,7 @@ function Column({
   shown: ColumnId;
   over?: ColumnId;
   count: number;
-  /** Where the focus goes when Delete or Remove from today takes the column's last item: its +, else its heading. */
+  /** Where the focus goes when Delete or Remove From Today takes the column's last item: its +, else its heading. */
   headRef: (el: HTMLElement | null) => void;
   add?: ColumnAdd;
   children: ReactNode;

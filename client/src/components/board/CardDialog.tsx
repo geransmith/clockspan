@@ -36,7 +36,7 @@ interface Props {
   start?: { disabled: boolean; onStart: (minutes: number) => void };
   /**
    * The task's weekdays, each pressed to set or clear it (none on a one-off, whose first day makes
-   * it a recurring priority), and a recurring priority's Stop repeating; none where the server
+   * it a recurring priority), and a recurring priority's Stop Repeating; none where the server
    * can't change the task.
    */
   repeat?: { days: readonly number[]; onDay: (day: number, on: boolean) => void; onStop?: () => void };
@@ -107,7 +107,7 @@ export function CardDialog({ item, today, pick, onClose, onMove, onRename, onCat
           <footer className="dialog-foot">
             {onRemove && (
               <button className="btn btn-ghost" onClick={onRemove}>
-                Remove from today
+                Remove From Today
               </button>
             )}
             {onDelete && (
@@ -124,7 +124,7 @@ export function CardDialog({ item, today, pick, onClose, onMove, onRename, onCat
 
 /**
  * A task's seven days, each a button pressed while it is on. The last day on stays on, and stays
- * focusable, so a recurring priority is always offered on some day; Stop repeating ends it.
+ * focusable, so a recurring priority is always offered on some day; Stop Repeating ends it.
  */
 function RepeatDays({ id, days, onDay, onStop }: { id: string } & NonNullable<Props['repeat']>) {
   return (
@@ -155,7 +155,7 @@ function RepeatDays({ id, days, onDay, onStop }: { id: string } & NonNullable<Pr
       </div>
       {onStop && (
         <button className="btn btn-ghost" onClick={onStop}>
-          Stop repeating
+          Stop Repeating
         </button>
       )}
     </div>
