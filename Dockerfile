@@ -44,8 +44,9 @@ ENV NODE_ENV=production \
 
 EXPOSE 8080
 VOLUME ["/data"]
+# Its shell sees the container's env, not the entrypoint's export, so it defaults a blank PORT too.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-  CMD wget -qO- http://127.0.0.1:${PORT}/api/health >/dev/null || exit 1
+  CMD wget -qO- http://127.0.0.1:${PORT:-8080}/api/health >/dev/null || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["node", "dist/server/index.js"]
