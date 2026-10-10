@@ -60,14 +60,16 @@ export function timeclockTiles(tc: TimeclockResult, o: TileOptions): { lunch: Ti
 
   const clockOut: TileView = { value: '—', sub: 'Clock in to see your end time', tone: '' };
   if (!o.isToday && tc.state === 'working') {
-    // A past day is judged at its end, so one still working there was never clocked out.
-    clockOut.sub = 'No clock-out recorded';
+    // A past day is judged at its end, so one still working there was never clocked out. The
+    // sheet's pill says so; the board's clock bar is always today's and never gets here.
+    clockOut.sub = '';
     clockOut.tone = 'tile--warn';
   } else if (tc.clockOutAt != null) {
     const secs = (tc.clockOutAt - o.now) / 1000;
     clockOut.value = o.formatTime(tc.clockOutAt);
     if (tc.clockOutStatus === 'done') {
       clockOut.tone = 'tile--accent';
+      // The board's clock bar's line; the sheet's card leaves it to its pill (Timeclock).
       clockOut.sub = 'Day complete';
     } else if (tc.clockOutStatus === 'over' && tc.overSeconds < 60) {
       // Punches are whole minutes, so a break taken at the target (an Add after an on-target

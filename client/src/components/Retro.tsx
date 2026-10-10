@@ -18,7 +18,7 @@ interface Props {
   reviewedAt: number | null;
   /**
    * Show the whole card (a past day, today clocked out, or the retro alarm's banner jumping here)
-   * rather than its one line; once open it stays open until the card mounts again.
+   * rather than its Open button; once open it stays open until the card mounts again.
    */
   open: boolean;
   onChange: (patch: RetroPatch) => Promise<boolean>;
@@ -28,9 +28,9 @@ interface Props {
  * Plan vs. actual for one day: each priority with the focus time logged against it,
  * the sessions that weren't on the plan, and a note on why. The note saves 800 ms after
  * the last keystroke or on blur; a note whose save fails stays in its box and goes again.
- * "Mark reviewed" ticks the day once the note has saved. Until `open`, one line of the day's
- * totals and an Open button stand in for it. Keyed by date in the sheet, so a new day mounts
- * with its own note and its own fold.
+ * "Mark reviewed" ticks the day once the note has saved. Until `open`, an Open button stands in
+ * for it (the day's totals are on the timeclock and Top priorities). Keyed by date in the sheet,
+ * so a new day mounts with its own note and its own fold.
  */
 export function Retro({ priorities, sessions, note, reviewedAt, open, onChange }: Props) {
   const { formatTime } = useTimeFormat();
@@ -54,9 +54,6 @@ export function Retro({ priorities, sessions, note, reviewedAt, open, onChange }
   if (!shown)
     return (
       <PassFocusOnLeave className="retro-folded" onLeave={passFocus}>
-        <span className="muted">
-          {review.total} planned · {review.done} done · {formatDuration(review.onPlanSeconds + review.offPlanSeconds)} focused
-        </span>
         <button
           className="btn btn-ghost"
           aria-label="Open retrospective"
@@ -118,9 +115,7 @@ export function Retro({ priorities, sessions, note, reviewedAt, open, onChange }
 
       {review.unplanned.length > 0 && (
         <section className="retro-section">
-          <h3 className="section-heading">
-            Not on the plan <span className="muted">{formatDuration(review.offPlanSeconds)}</span>
-          </h3>
+          <h3 className="section-heading">Not on the plan</h3>
           <ul>
             {review.unplanned.map((s) => (
               <li key={s.id} className="retro-row retro-row--unplanned">
@@ -144,14 +139,6 @@ export function Retro({ priorities, sessions, note, reviewedAt, open, onChange }
           <span>
             <span className="muted">Off plan</span> <strong>{formatDuration(review.offPlanSeconds)}</strong>
           </span>
-          {review.total > 0 && (
-            <span>
-              <span className="muted">Done</span>{' '}
-              <strong>
-                {review.done} of {review.total}
-              </strong>
-            </span>
-          )}
         </p>
       )}
 

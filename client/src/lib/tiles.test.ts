@@ -160,15 +160,15 @@ describe('Clock out at', () => {
 });
 
 describe('a past day', () => {
-  it('left clocked in shows no clock-out, a lunch not taken and nothing live', () => {
+  it('left clocked in shows an amber dash for the clock-out (the pill says why), a lunch not taken and nothing live', () => {
     expect(pastTiles(clockedIn)).toEqual({
       lunch: { value: '13:00', sub: 'Not taken', tone: '' },
       worked: { value: '15h 59m', sub: '7h 59m over target', tone: '' },
-      clockOut: { value: '—', sub: 'No clock-out recorded', tone: 'tile--warn' },
+      clockOut: { value: '—', sub: '', tone: 'tile--warn' },
     });
     // Clocked in late enough to stay short of the target by midnight.
     const late = pastTiles(punchesAt(at(20)));
-    expect(late.clockOut).toEqual({ value: '—', sub: 'No clock-out recorded', tone: 'tile--warn' });
+    expect(late.clockOut).toEqual({ value: '—', sub: '', tone: 'tile--warn' });
     expect(late.lunch.sub).toBe('Not taken');
     expect(late.worked.sub).toBe('4h 01m under target');
     // A half day needs no lunch; the sheet of a past one doesn't say "today".
@@ -178,7 +178,7 @@ describe('a past day', () => {
   it('keeps a lunch it took', () => {
     const lunchTaken = pastTiles(afterLunch);
     expect(lunchTaken.lunch).toEqual({ value: '13:00', sub: 'Taken at 12:00', tone: 'tile--ok' });
-    expect(lunchTaken.clockOut.sub).toBe('No clock-out recorded');
+    expect(lunchTaken.clockOut.sub).toBe('');
   });
 });
 

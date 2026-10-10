@@ -1,11 +1,10 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HOUR_MS } from '../../../shared/dates.js';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
 import { RETRO_PROMPT } from '../lib/copy';
-import { answered, completedSession, deferred, makePriority, makeSession, makeSettings, settle, T0 } from '../test/hooks';
+import { answered, completedSession, deferred, makePriority, makeSettings, settle, T0 } from '../test/hooks';
 import type { Priority, Session } from '../types';
 import { Retro } from './Retro';
 
@@ -31,7 +30,7 @@ async function renderCard(note = '', reviewedAt: number | null = null, prioritie
   };
 }
 
-/** Today's card before clock-out: its one line, and `open` to hand it the prop again. */
+/** Today's card before clock-out: its Open button, and `open` to hand it the prop again. */
 async function renderFolded(priorities = PRIORITIES, sessions: Session[] = []) {
   const card = (open: boolean) => (
     <SettingsProvider>
@@ -40,7 +39,7 @@ async function renderFolded(priorities = PRIORITIES, sessions: Session[] = []) {
   );
   const view = render(card(false));
   await settle();
-  return { line: document.querySelector('.retro-folded .muted')?.textContent, open: (o: boolean) => view.rerender(card(o)) };
+  return { open: (o: boolean) => view.rerender(card(o)) };
 }
 
 const noteBox = () => screen.queryByPlaceholderText(RETRO_PROMPT);
@@ -60,6 +59,8 @@ describe('Retro', () => {
       makePriority(4, 'Follow-ups', { uid: 'rcur00000002', recurring: true }),
     ]);
     expect(screen.getByText('Planned').querySelector('.muted')?.textContent).toBe('2 of 4 done · routines 1 of 2');
+    // The Planned heading has the count, so the summary leaves it out.
+    expect([...document.querySelector('.retro-summary')!.children].map((c) => c.textContent)).toEqual(['On plan 0m', 'Off plan 0m']);
     cleanup();
     await renderCard();
     expect(screen.getByText('Planned').querySelector('.muted')?.textContent).toBe('0 of 1 done');
@@ -73,6 +74,8 @@ describe('Retro', () => {
     ];
     await renderCard('', null, PRIORITIES, sessions);
     const section = screen.getByText('Not on the plan').closest('section')!;
+    // The summary's Off plan has the total, so the heading leaves it out.
+    expect(section.querySelector('h3')!.textContent).toBe('Not on the plan');
     expect([...section.querySelectorAll('.retro-text')].map((el) => el.firstChild!.textContent)).toEqual(['Inbox', 'Left the day']);
   });
 
@@ -199,19 +202,13 @@ describe('Retro', () => {
     expect(onChange.mock.calls).toEqual([[{ note: 'Went to plan' }], [{ done: true }]]);
   });
 
-  it('folds to a line of the rows planned and ticked and the focus logged, and Open shows the card with the focus in the note box', async () => {
-    const rows = [makePriority(1, 'Report', { done: true }), makePriority(2, 'Invoices'), makePriority(3, 'Inbox')];
-    // The running session isn't focus yet, as on the Focused tile.
-    const sessions = [completedSession(1, T0, 25 * 60), completedSession(2, T0 + HOUR_MS, 30 * 60), makeSession({ id: 3, startedAt: T0 + 2 * HOUR_MS })];
-    const { line } = await renderFolded(rows, sessions);
-    expect(line).toBe('3 planned · 1 done · 55m focused');
+  it('folds to its Open button alone, and Open shows the card with the focus in the note box', async () => {
+    // The day's totals are on the timeclock and Top priorities, so the fold repeats none of them.
+    await renderFolded([makePriority(1, 'Report', { done: true }), makePriority(2, 'Invoices')], [completedSession(1, T0, 25 * 60)]);
+    expect(document.querySelector('.retro-folded')!.textContent).toBe('Open');
     expect(noteBox()).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Open retrospective' }));
     expect(document.activeElement).toBe(noteBox());
-  });
-
-  it('folds a day with nothing on it to zeros', async () => {
-    expect((await renderFolded([])).line).toBe('0 planned · 0 done · 0m focused');
   });
 
   it('opens once `open` turns true, and stays open when it turns false', async () => {

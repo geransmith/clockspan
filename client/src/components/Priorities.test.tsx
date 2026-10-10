@@ -123,6 +123,7 @@ describe('Priorities', () => {
   it('starts with the configured rows and saves text 400 ms after the last keystroke', async () => {
     const { onChange, saved } = await renderCard();
     expect(screen.getAllByRole('textbox')).toHaveLength(3);
+    expect([1, 2, 3].map((n) => textbox(n).placeholder)).toEqual(['The one thing to get done', 'Another priority', 'Another priority']);
     fireEvent.change(textbox(1), { target: { value: 'Write' } });
     fireEvent.change(textbox(1), { target: { value: 'Write the report' } });
     await settle(399);
@@ -234,6 +235,8 @@ describe('Priorities', () => {
     // The live region is there before the warning, so a screen reader hears it arrive.
     const status = screen.getByRole('status');
     expect(PRIORITY_WARNINGS.fresh.some((w) => status.textContent!.includes(w))).toBe(true);
+    // A fresh nudge has no count, so the foot keeps its own.
+    expect(screen.getByText('0 of 3 done')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: WARNING_ACTIONS.fresh.keep }));
     expect(screen.getByRole('status')).toBe(status);
@@ -290,6 +293,10 @@ describe('Priorities', () => {
     expect(PRIORITY_WARNINGS.complete.some((w) => status.textContent!.includes(w))).toBe(true);
     expect(status.textContent).toContain('3 of 3 done');
     expect(screen.getByRole('button', { name: WARNING_ACTIONS.complete.add })).toBeTruthy();
+    // The nudge heads with the count, so the foot leaves it out until the nudge goes.
+    expect(screen.getAllByText('3 of 3 done')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: WARNING_ACTIONS.complete.keep }));
+    expect(screen.getByText('3 of 3 done')).toBeTruthy();
   });
 });
 
