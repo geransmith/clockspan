@@ -5,7 +5,7 @@ import { hashPassword, parsePassword } from './password.js';
 import { revokeSessions } from './session.js';
 
 /** What the CLI prints: the message for a refusal, or the password that is now set. */
-export type ResetResult = { error: string } | { password: string; temporary: boolean };
+type ResetResult = { error: string } | { password: string; temporary: boolean };
 
 /**
  * The one way a password changes (the reset command, a user choosing their own). A new password

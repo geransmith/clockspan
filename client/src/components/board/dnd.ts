@@ -55,7 +55,7 @@ interface StandIn {
 }
 
 /** A droppable list read the way dnd-kit's own map is (the sortable getter calls `get` and `getEnabled`). */
-class Droppables extends Map<UniqueIdentifier, DroppableContainer> {
+export class Droppables extends Map<UniqueIdentifier, DroppableContainer> {
   readonly stand: StandIn | null;
   constructor(entries: DroppableContainer[], stand: StandIn | null) {
     super(entries.map((c) => [c.id, c]));

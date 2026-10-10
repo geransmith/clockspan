@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useMemo, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import type { CategoryPatch, ItemPatch, NewCategory, NewItem } from '../api';
 import { todayKey } from '../../../shared/dates.js';
@@ -26,11 +26,12 @@ import { addPending, confirm, fetched, settle, settleWith, shown, untracked, typ
 import { newUid, patchRow, placePriority, takeOffRow } from '../lib/priorities';
 import { useDayStore } from './useDay';
 import { useLatest } from './useLatest';
+import { useProvided } from './useProvided';
 import { useRefreshLoop } from './useRefreshLoop';
 import { useSettings } from './useSettings';
 import { useTracked } from './useTracked';
 
-export interface BoardState {
+interface BoardState {
   /** The server's board with the writes on their way laid over it; undefined until the first read. */
   board: Board | undefined;
   /**
@@ -57,7 +58,7 @@ export interface BoardState {
  * runs after midnight. The board makes the uids of the tasks it creates. The object keeps its
  * identity for the provider's life.
  */
-export interface BoardStore {
+interface BoardStore {
   /** Reads the board. Never rejects. */
   load(): Promise<void>;
   /** A new task in a lane (a column's +, or a done item's new task), refused at the lanes' cap before it is sent. */
@@ -397,15 +398,11 @@ export function BoardProvider({ children }: { children: ReactNode }) {
 }
 
 export function useBoardState(): BoardState {
-  const v = useContext(StateCtx);
-  if (!v) throw new Error('useBoardState outside BoardProvider');
-  return v;
+  return useProvided(StateCtx, 'useBoardState');
 }
 
 export function useBoardStore(): BoardStore {
-  const v = useContext(StoreCtx);
-  if (!v) throw new Error('useBoardStore outside BoardProvider');
-  return v;
+  return useProvided(StoreCtx, 'useBoardStore');
 }
 
 /**

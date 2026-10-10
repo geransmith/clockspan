@@ -14,7 +14,7 @@ export interface PriorityReview {
   addedMidDay: boolean;
 }
 
-export interface DayReview {
+interface DayReview {
   /** Rows with text, in position order. */
   planned: PriorityReview[];
   /** Completed sessions whose task isn't on the day's list, or that have none. */
@@ -56,6 +56,14 @@ export function loggedByUid(sessions: Session[], now: number): Map<string, numbe
     out.set(s.priorityUid, (out.get(s.priorityUid) ?? 0) + seconds);
   }
   return out;
+}
+
+/**
+ * The time logged on a task, as × and the board's Delete ask with it: `logged`, its other days'
+ * (a row's or a card's), plus its day's own log at `now`, a timer running on it included.
+ */
+export function taskLogged(uid: string, logged: number, sessions: Session[], now: number): number {
+  return logged + (loggedByUid(sessions, now).get(uid) ?? 0);
 }
 
 /** The written row of its day a session's task is, while the day's list holds it. */

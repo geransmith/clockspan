@@ -1042,15 +1042,15 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   Repeats does, as a plain draggable that no lane sorts (`canSort`): onto In Progress as a pull,
   onto Done ticked, and back with the refusal notice from Later or Next; shown in In Progress while
   its pull is on its way, it is already the row it lands as, so its card doesn't mount again and
-  lose the focus. An item of In Progress or Done, and a card of Repeats, drags only from 900 px (it
-  drags only to another column, and below that one column shows at a time), and an item whose move
-  is on its way can't be picked up until the move lands. The first over a drag hears is where it was
-  picked up, so it says nothing. Where a drop lands is `dropTarget`'s (see its doc), and what a
-  screen reader hears comes from `BOARD_DRAG` (its `instructions` in place of dnd-kit's),
-  `overAnnouncement` and `moveAnnouncement`. dnd-kit's own focus return is off, since it would take
-  the focus from the notice a drop brings: a keyboard drag puts it back on the item's card, and so
-  does closing the notice (for a row typed in In Progress's box, back in that box, which still holds
-  the text).
+  lose the focus. An item of In Progress or Done, and a card of Repeats, drags only from 900 px
+  (`BOARD_COLUMNS_QUERY`, `lib/layout.ts`; it drags only to another column, and below that one
+  column shows at a time), and an item whose move is on its way can't be picked up until the move
+  lands. The first over a drag hears is where it was picked up, so it says nothing. Where a drop
+  lands is `dropTarget`'s (see its doc), and what a screen reader hears comes from `BOARD_DRAG` (its
+  `instructions` in place of dnd-kit's), `overAnnouncement` and `moveAnnouncement`. dnd-kit's own
+  focus return is off, since it would take the focus from the notice a drop brings: a keyboard drag
+  puts it back on the item's card, and so does closing the notice (for a row typed in In Progress's
+  box, back in that box, which still holds the text).
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started — one
   rule, no clock-in fallback. `GET /days/range` returns full days and the client does the rollup
@@ -1378,10 +1378,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (`migrate(db, n)`) → `ItemRow` (`routes/shared.ts`) → the field on `Priority` (`shared/api.ts`;
   the column in `ENTRIES`' join and `EntryRow`, read in `priorityJson`, `routes/days.ts`), on
   `BoardCard` (`boardJson`, `server/board.ts`) and on `Recurring` (`recurringJson` there), where
-  each reader needs it, and on `BoardItem` (`lib/board.ts`: `rowItem`, `cardItem`, and in
-  `boardColumns` the earlier day's routine row and the cards of Later's Repeats, which take their
-  recurring priority's) → if the user wrote it, `deleteItem`'s tombstone UPDATE (`server/board.ts`)
-  clears it → if the sheet edits it, its `MERGED` entry (`shared/priorities.ts`; typecheck asks for
+  each reader needs it, and on `BoardItem` (`lib/board.ts`: in `boardColumns`, `taskItem`, which
+  every item is built on, and the earlier day's routine row, which takes its recurring priority's) →
+  if the user wrote it, `deleteItem`'s tombstone UPDATE (`server/board.ts`) clears it → if the sheet
+  edits it, its `MERGED` entry (`shared/priorities.ts`; typecheck asks for
   it there or in `ReadOnlyField`), its rule in `parsePriorityRows` for a value of the wrong kind and
   for one left out (read as unchanged: its uids in `unsaid`, filled from the base), its write in the
   PUT beside the rename: on the task a uid new to the user makes, and otherwise only where this

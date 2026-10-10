@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import type { AuthInfo, PublicUser } from '../types';
 import { warnQuietly } from '../lib/alerts';
@@ -9,6 +9,7 @@ import { LoginPage, OidcLoginPage } from './LoginPage';
 import { NewPasswordPage } from './NewPasswordPage';
 import { SetupPage } from './SetupPage';
 import { ErrorLine } from '../components/ErrorLine';
+import { useProvided } from '../hooks/useProvided';
 
 /** An answer that opens the app: it always names a user. */
 type AppAuth = AuthInfo & { user: PublicUser };
@@ -160,7 +161,5 @@ function Unreachable({ error, onRetry }: { error: string; onRetry: () => void })
 }
 
 export function useAuth(): AuthCtx {
-  const v = useContext(Ctx);
-  if (!v) throw new Error('useAuth outside AuthGate');
-  return v;
+  return useProvided(Ctx, 'useAuth');
 }

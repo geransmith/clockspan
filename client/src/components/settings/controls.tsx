@@ -2,6 +2,7 @@
 import { useId, type ReactNode } from 'react';
 import type { SettingsPatch } from '../../api';
 import { useFollowedDraft } from '../../hooks/useFollowedDraft';
+import { boxNumber, committedNumber } from '../../lib/numberBox';
 import type { Settings } from '../../types';
 
 /** What the dialog hands every tab: the settings and a setter that takes only what changed. */
@@ -113,8 +114,7 @@ export function NumberInput({
 }) {
   const [v, setV] = useFollowedDraft(String(value));
   const commit = () => {
-    const typed = v.trim() === '' ? NaN : Number(v);
-    const n = Number.isFinite(typed) ? Math.max(min, Math.min(max, Math.round(typed))) : value;
+    const n = committedNumber(boxNumber(v), min, max, value);
     if (n !== value) onCommit(n);
     else setV(String(value));
   };

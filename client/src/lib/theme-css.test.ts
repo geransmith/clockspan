@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { CATEGORY_COLORS } from '../../../shared/api.js';
-import { SPLIT_QUERY } from './layout';
+import { BOARD_COLUMNS_QUERY, SPLIT_QUERY } from './layout';
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const css = read('../styles.css');
@@ -115,6 +115,12 @@ describe('styles.css', () => {
   // under the same query; a width changed on one side only would leave a split laid out as one list.
   it('lays the two-column sheet out under the query the sheet picks it with', () => {
     expect(css).toContain(`@media ${SPLIT_QUERY} {`);
+  });
+
+  // In Progress and Done drag only while the board's matchMedia(BOARD_COLUMNS_QUERY) says the four
+  // columns sit side by side; a width changed on one side only would let them drag where one shows.
+  it("lays the board's columns side by side under the query the board asks", () => {
+    expect(css).toContain(`@media ${BOARD_COLUMNS_QUERY} {`);
   });
 
   // Every view sits in the one frame, so a page switch leaves the header and the running bar where they were.

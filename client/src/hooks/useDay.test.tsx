@@ -1603,11 +1603,3 @@ it('useDayStore() stays the same object when a refresh changes a day', async () 
   expect(result.current.days[TODAY]?.retroNote).toBe('from the phone');
   expect(result.current.store).toBe(store);
 });
-
-it('useDayStore refuses to run outside the provider', () => {
-  expect(() => renderHook(() => useDayStore())).toThrow('useDayStore outside DayProvider');
-});
-
-it('useDays refuses to run outside the provider', () => {
-  expect(() => renderHook(() => useDays())).toThrow('useDays outside DayProvider');
-});

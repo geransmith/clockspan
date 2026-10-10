@@ -7,7 +7,7 @@ import type { ClipId, SoundId, SynthId } from '../types';
 import { SAVE_FAILED } from './copy';
 import { clipUrl } from './sounds';
 
-export type Tone = 'info' | 'warn' | 'danger' | 'success';
+type Tone = 'info' | 'warn' | 'danger' | 'success';
 
 export interface Banner {
   id: number;

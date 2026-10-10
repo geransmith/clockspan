@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { createContext, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { alert, dismissByTag, unlockAudio } from '../lib/alerts';
 import { runningBreak, SET_SIZE, suggestBreak } from '../lib/breaks';
 import { BREAK, BREAK_SUGGESTION } from '../lib/copy';
@@ -8,6 +8,7 @@ import { readStored, USER_KEYS, writeStored } from '../lib/storage';
 import { useDays, useDayStore } from './useDay';
 import { useLatest } from './useLatest';
 import { useClock } from './useClock';
+import { useProvided } from './useProvided';
 import { useRefreshLoop } from './useRefreshLoop';
 import { useSettings } from './useSettings';
 import { useTimer } from './useTimer';
@@ -166,7 +167,5 @@ export function BreakProvider({ children }: { children: ReactNode }) {
 }
 
 export function useBreak(): BreakCtx {
-  const v = useContext(Ctx);
-  if (!v) throw new Error('useBreak outside BreakProvider');
-  return v;
+  return useProvided(Ctx, 'useBreak');
 }
