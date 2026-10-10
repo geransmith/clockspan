@@ -40,7 +40,7 @@ export function formatDateSpan(from: string, to: string): string {
 
 /**
  * "Today", "Yesterday", "Tomorrow", or the short date: how the sheet's date row and the calendar
- * name a day. `inSentence` lowercases the word for a line that runs on ("Still Open From yesterday").
+ * name a day. `inSentence` lowercases the word for a line that runs on ("Left open from yesterday").
  */
 export function dayName(key: string, today: string, inSentence = false): string {
   const word = key === today ? 'Today' : key === addDays(today, -1) ? 'Yesterday' : key === addDays(today, 1) ? 'Tomorrow' : null;
@@ -53,12 +53,9 @@ export function formatWeekday(key: string): string {
   return weekdayFmt.format(parseDateKey(key));
 }
 
-/** "15 min", "1h 30m", "2h": a length in minutes the way the alarm banners write it. */
+/** "15 min", "1h 30m", "2h 00m": a length in minutes the way the alarm banners write it, an hour or more as the tiles do. */
 export function formatMinutes(m: number): string {
-  if (m < 60) return `${m} min`;
-  const h = Math.floor(m / 60);
-  const rest = m % 60;
-  return rest ? `${h}h ${rest}m` : `${h}h`;
+  return m < 60 ? `${m} min` : formatDuration(m * 60);
 }
 
 /** "1h 12m", "45m", "0m". Negative values are shown as positive. */

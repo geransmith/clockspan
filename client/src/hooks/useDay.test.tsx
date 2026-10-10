@@ -6,6 +6,7 @@ import { warnQuietly, warnSaveFailed } from '../lib/alerts';
 import { ADD_PRIORITY_FAILED, SAVE_FAILED } from '../lib/copy';
 import { normalizePunches } from '../lib/timeclock';
 import { mergePriorities } from '../../../shared/priorities.js';
+import { mergePunches } from '../../../shared/punches.js';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import {
@@ -534,6 +535,25 @@ describe('setPunches', () => {
     await act(() => done);
     expect(result.current.days[TODAY]?.punches).toEqual(punchesAt(T0, lunchOut, null, clockOut));
   });
+
+  it("builds a list set while one is out on the rows shown, so another device's clear of the first list's punch stays", async () => {
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { punches: punchesAt(T0) })));
+    const first = deferredAnswer<PunchesResponse>();
+    let stored: Punch[] = [];
+    // Once the first list is stored, the phone clears its Lunch out: the server merges onto Clock in alone.
+    vi.mocked(api.putPunches)
+      .mockReturnValueOnce(first.promise)
+      .mockImplementation((_date, list, base) => Promise.resolve(answered({ punches: (stored = mergePunches(punchesAt(T0), base, list)) })));
+    const { result } = renderStore();
+    await settle();
+    const lunchOut = T0 + 180 * MINUTE_MS;
+    const lunchIn = T0 + 210 * MINUTE_MS;
+    act(() => void result.current.setPunches(TODAY, punchesAt(T0, lunchOut)));
+    const done = begin(() => result.current.setPunches(TODAY, punchesAt(T0, lunchOut, lunchIn)));
+    first.resolve({ punches: punchesAt(T0, lunchOut) });
+    await act(() => done);
+    expect(stored).toEqual(punchesAt(T0, null, lunchIn));
+  });
 });
 
 describe('priorities', () => {
@@ -564,6 +584,30 @@ describe('priorities', () => {
     await act(async () => expect(await Promise.all(saves)).toEqual([true, true, true]));
     expect(api.putPriorities).toHaveBeenCalledTimes(2);
     expect(vi.mocked(api.putPriorities).mock.calls[1]?.[1].map((p) => p.done)).toEqual([true, true]);
+  });
+
+  it("tells each caller whether the PUT carrying its own list was saved, whatever a later one's did", async () => {
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay()));
+    const first = deferredAnswer<{ priorities: Priority[] }>();
+    const second = deferredAnswer<{ priorities: Priority[] }>();
+    vi.mocked(api.putPriorities).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise).mockRejectedValueOnce(new Error('offline'));
+    const { result } = renderStore();
+    await settle();
+    // A timer start's new row goes out and a tick made meanwhile waits behind it, then goes out
+    // itself; an untick made while the tick is out waits behind that, and its PUT fails.
+    const added = begin(() => result.current.addPriority(TODAY, 'Call the bank'));
+    const sent = vi.mocked(api.putPriorities).mock.calls[0]![1];
+    const tick = sent.map((p) => ({ ...p, done: p.uid != null }));
+    const ticked = begin(() => result.current.setPriorities(TODAY, tick, sent));
+    first.resolve({ priorities: sent.filter((p) => p.uid != null) });
+    await settle();
+    expect(api.putPriorities).toHaveBeenCalledTimes(2);
+    const unticked = begin(() => result.current.setPriorities(TODAY, sent, tick));
+    second.resolve({ priorities: tick.filter((p) => p.uid != null) });
+    await expect(act(() => added)).resolves.toBe(sent[0]!.uid);
+    await expect(act(() => ticked)).resolves.toBe(true);
+    await expect(act(() => unticked)).resolves.toBe(false);
+    expect(api.putPriorities).toHaveBeenCalledTimes(3);
   });
 
   it('sends each list with the list it was built on, and nothing else', async () => {
@@ -1330,10 +1374,10 @@ describe('breaks', () => {
     vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { breaks: [over, running] })));
     const { result } = renderStore();
     await settle();
+    // A finished session leaves a running break as it is.
+    act(() => result.current.applySession(endSession(makeSession({ id: 4, startedAt: T0 }), { endedAt: T0 + MINUTE_MS, durationSeconds: 60 }), 0));
+    expect(result.current.days[TODAY]?.breaks).toEqual([over, running]);
     act(() => result.current.applySession(makeSession({ id: 5, startedAt: T0 }), 0));
-    expect(result.current.days[TODAY]?.breaks).toEqual([over, { ...running, endedAt: T0 }]);
-    // A finished session leaves breaks as they are.
-    act(() => result.current.applySession(endSession(makeSession({ id: 5, startedAt: T0 }), { endedAt: T0 + MINUTE_MS, durationSeconds: 60 }), 0));
     expect(result.current.days[TODAY]?.breaks).toEqual([over, { ...running, endedAt: T0 }]);
 
     vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { breaks: [over, blip] })));
@@ -1440,6 +1484,14 @@ describe('readRange', () => {
     range.resolve({ days: [makeDay(OTHER, { retroNote: 'older' })] }, 2);
     await act(() => read);
     expect(result.current.days[OTHER]?.retroNote).toBe('newer');
+  });
+
+  it('leaves a held day not loaded yet to its own load: a range read below a session confirmed on it would make up a day without it', async () => {
+    vi.mocked(api.getRange).mockResolvedValueOnce(answered({ days: [makeDay(OTHER)] }, 2));
+    const { result } = renderStore(null);
+    act(() => result.current.applySession(endSession(makeSession({ id: 5, date: OTHER })), 3));
+    await act(() => result.current.readRange(OTHER, TODAY));
+    expect(result.current.days[OTHER]).toBeUndefined();
   });
 });
 

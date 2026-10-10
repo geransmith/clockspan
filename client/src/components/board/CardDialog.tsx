@@ -18,7 +18,8 @@ interface Props {
   pick: CategoryPick;
   /** Escape, the ×, a press outside and Enter in the title: closes it with the focus on the card. */
   onClose: () => void;
-  onMove: (to: ColumnId, el: HTMLElement) => void;
+  /** Moves it; none while a move of it is on its way (`Board`). */
+  onMove?: (to: ColumnId, el: HTMLElement) => void;
   /** Renames it; without one the title shows as text (an earlier day's row of a recurring priority that stopped repeating). */
   onRename?: (title: string) => void;
   /** Sets its category; without one the category shows as text, as the title does. */
@@ -87,7 +88,7 @@ export function CardDialog({ item, today, pick, onClose, onMove, onRename, onCat
               <TimerLengths onStart={start.onStart} disabled={start.disabled} />
             </div>
           )}
-          {targets.length > 0 && (
+          {onMove && targets.length > 0 && (
             // Buttons, not a select: a select's arrow keys and typed letters change it, which moved the card.
             <div className="board-move" role="group" aria-labelledby={`${id}-move`}>
               <span id={`${id}-move`} className="muted small">

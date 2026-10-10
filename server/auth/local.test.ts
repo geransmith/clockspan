@@ -3,12 +3,15 @@ import { FIRST_RUN, SETUP_CODE, startTestApp, type Client, type TestApp } from '
 import { SESSION_COOKIE } from './session.js';
 import { MAX_ACCOUNT_FAILURES } from './limiter.js';
 import { newSetupCode, setupCodeMatches } from './local.js';
-import { hashPassword } from './password.js';
+import { DUMMY_HASH, hashPassword, verifyPassword } from './password.js';
 import { currentUser } from './middleware.js';
 import type { Request } from 'express';
 import { createApp } from '../app.js';
 import { loadConfig } from '../config.js';
 import { openDatabase } from '../db.js';
+
+// The real hashing, watched, so a test can see what a sign-in hashed against.
+vi.mock('./password.js', { spy: true });
 
 const { setupCode: _, ...ADMIN } = FIRST_RUN;
 
@@ -316,6 +319,8 @@ describe('AUTH_MODE=local', () => {
     const wrong = await c.post('/api/auth/login', { username: 'geran', password: 'wrong' });
     expect(unknown.status).toBe(401);
     expect(unknown.body).toEqual(wrong.body);
+    // Hashed all the same, against the dummy, so the time taken can't tell the two apart either.
+    expect(verifyPassword).toHaveBeenCalledWith(ADMIN.password, DUMMY_HASH);
   });
 
   it('lets an admin manage users, and deleting one drops their data', async () => {

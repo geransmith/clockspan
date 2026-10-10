@@ -124,9 +124,11 @@ Then the image is built once and pushed as `ghcr.io/geransmith/clockspan:edge`, 
 tag `vX.Y.Z` and the GitHub Release are created on that commit with generated notes. No tag is
 pushed by hand, and the tag CI creates starts no second run.
 
-**If the run fails.** `check` failed: nothing was published; fix the cause through a normal PR
-and bump again (the skipped version stays unused). `image` or `release` failed: re-run the
-failed jobs, which is safe to repeat:
+**If the run fails.** `check` failed: nothing was published. A failure that isn't the code's (a
+network error, a flaky test) is re-run as below: the re-run still sees the version change and no
+tag, so the same version publishes. A real one (the code's, or one that fails again) is fixed
+through a normal PR and a new bump (the skipped version stays unused). `image` or `release`
+failed: re-run the failed jobs, which is safe to repeat:
 
 ```bash
 gh run rerun <run-id> --failed
@@ -140,7 +142,7 @@ gh run rerun <run-id> --failed
 | Push to `main` | `check`, `image` | both platforms are built and booted by the same script, and only then pushed as one multi-platform `ghcr.io/geransmith/clockspan:edge` |
 | Push to `main` that changes the version | `check`, `image`, `release` | `:edge` and the release image tags (see [README → Docker](README.md#docker)), the git tag `vX.Y.Z` and the GitHub Release |
 | Pull request, push to `main`, weekly | `CodeQL` (not required) | static security analysis of the TypeScript (`security-extended`); alerts land in code scanning, and GitHub fails the PR's CodeQL check on a new high or critical one |
-| Pull request or push that touches `.github/` | `zizmor` (not required) | a security audit of the workflows and `dependabot.yml`; findings fail the job |
+| Pull request or push that touches `.github/` | `zizmor` (not required) | a security audit of the workflows, the local actions and `dependabot.yml`; findings fail the job |
 
 A newer push to a pull request cancels that PR's older run; runs on `main` are never cancelled.
 Actions are pinned to commit SHAs; Dependabot bumps them (SHA and version comment together).

@@ -26,7 +26,8 @@ step() {
 }
 
 # Blank is how Unraid passes a cleared field and Compose a `PUID=` line: the same `${PUID:-1000}` as unset.
-docker run -d --name "$name" ${platform:+--platform "$platform"} -e PUID= -e PGID= -p 8080:8080 "$image" >/dev/null
+# PORT is blank too, so the steps below check that the server and the HEALTHCHECK still use 8080.
+docker run -d --name "$name" ${platform:+--platform "$platform"} -e PUID= -e PGID= -e PORT= -p 8080:8080 "$image" >/dev/null
 
 # Emulated, node takes several times as long to start.
 step "the server answers (the database opened, so the native module loaded)"
