@@ -37,8 +37,9 @@ import {
 } from '../../lib/board';
 import { ADD_PRIORITY_FAILED, BOARD, CONFIRM, DONE_STAYS, LOAD_FAILED, WARNING_ACTIONS } from '../../lib/copy';
 import { dayName, formatDurationCeil } from '../../lib/format';
+import { BOARD_COLUMNS_QUERY } from '../../lib/layout';
 import { hasRoom, newTaskRow, newUid, nudgeFor, pickWarning, placePriority, type WarningKind } from '../../lib/priorities';
-import { loggedByUid } from '../../lib/retro';
+import { taskLogged } from '../../lib/retro';
 import { readStored, USER_KEYS, writeStored } from '../../lib/storage';
 import type { OpenLane, Priority } from '../../types';
 import { Burst } from '../Burst';
@@ -127,7 +128,7 @@ export const Board = memo(function Board({
   // Below 900 px one column shows at a time, so In Progress and Done, whose items drag only to
   // another column, don't drag there.
   const [shownColumn, setShownColumn] = useState<ColumnId>('progress');
-  const wide = useMediaQuery('(min-width: 900px)');
+  const wide = useMediaQuery(BOARD_COLUMNS_QUERY);
   const [earlierOpen, setEarlierOpen] = useState(false);
   const [ticked, setTicked] = useState<Moment | null>(null);
   const { burst } = useCelebration<HTMLElement>(ticked, 'priorityDone');
@@ -349,8 +350,7 @@ export const Board = memo(function Board({
   const confirmDelete = (item: BoardItem) => {
     const listedToday = onToday(item, today);
     const { listed, logged: counted } = (listedToday ? item.row : item.card)!;
-    const todays = listedToday ? (loggedByUid(day.sessions, now).get(item.uid) ?? 0) : 0;
-    const logged = counted + todays;
+    const logged = listedToday ? taskLogged(item.uid, counted, day.sessions, now) : counted;
     if (!window.confirm(CONFIRM.deleteTask(listed, logged > 0 ? formatDurationCeil(logged) : null))) return;
     closeCard(item.id);
     focusNear(item);
@@ -758,8 +758,7 @@ function Column({
       ref={setNodeRef}
       className="board-col"
       data-shown={shown === id || undefined}
-      // A lane sorts its cards; the dragged item shows in the column it is over.
-      data-lane={isLane(id) || undefined}
+      // The dragged item shows in the column it is over.
       data-over={over === id || undefined}
       aria-labelledby={head}
     >

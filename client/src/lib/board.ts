@@ -130,32 +130,32 @@ export function boardColumns({ cards, today, todayRows, earlierDays, recurring, 
   const written = todayRows.filter(isTaskRow);
   const listedToday = new Set(written.map((p) => p.uid));
   const routines = new Map(recurring.map((r) => [r.uid, r]));
-  const rowItem = (row: Priority & { uid: string }, date: string, column: ColumnId): BoardItem => ({
-    id: date === today ? `item:${row.uid}` : `row:${date}:${row.uid}`,
-    uid: row.uid,
-    title: row.text.trim(),
-    note: row.note,
+  // The task itself in `column`, on no list and no card: what every item here is built on.
+  const taskItem = ({ uid, title, note, categoryUid }: Pick<BoardItem, 'uid' | 'title' | 'note' | 'categoryUid'>, column: ColumnId): BoardItem => ({
+    id: `item:${uid}`,
+    uid,
+    title,
+    note,
     column,
+    card: null,
+    row: null,
+    date: null,
+    categoryUid,
+    recurring: false,
+    leftOpen: null,
+  });
+  const rowItem = (row: Priority & { uid: string }, date: string, column: ColumnId): BoardItem => ({
+    ...taskItem({ ...row, title: row.text.trim() }, column),
+    id: date === today ? `item:${row.uid}` : `row:${date}:${row.uid}`,
     card: byUid.get(row.uid) ?? null,
     row,
     date,
-    categoryUid: row.categoryUid,
     // Given its first day on the board, today's row repeats before the day is read again.
     recurring: row.recurring || routines.has(row.uid),
-    leftOpen: null,
   });
   const cardItem = (card: BoardCard, column: ColumnId, at: Partial<Pick<BoardItem, 'leftOpen'>> = {}): BoardItem => ({
-    id: `item:${card.uid}`,
-    uid: card.uid,
-    title: card.title,
-    note: card.note,
-    column,
+    ...taskItem(card, column),
     card,
-    row: null,
-    date: null,
-    categoryUid: card.categoryUid,
-    recurring: false,
-    leftOpen: null,
     ...at,
   });
 
@@ -196,21 +196,7 @@ export function boardColumns({ cards, today, todayRows, earlierDays, recurring, 
   // Stable: on a day, the tasks keep the server's order ahead of the routines' rows in position order.
   const doneEarlier = earlier.sort((a, b) => b.day.localeCompare(a.day)).map((e) => e.item);
 
-  const repeats = recurring
-    .filter((r) => !listedToday.has(r.uid))
-    .map((r): BoardItem => ({
-      id: `item:${r.uid}`,
-      uid: r.uid,
-      title: r.title,
-      note: r.note,
-      column: 'later',
-      card: null,
-      row: null,
-      date: null,
-      categoryUid: r.categoryUid,
-      recurring: true,
-      leftOpen: null,
-    }));
+  const repeats = recurring.filter((r) => !listedToday.has(r.uid)).map((r) => ({ ...taskItem(r, 'later'), recurring: true }));
   const columns: BoardColumns = { later: later.sort(byPosition).map((c) => cardItem(c, 'later')), repeats, next, progress, doneToday, doneEarlier };
   return moving?.size ? withMoving(columns, moving) : columns;
 }

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import { nextBackoff } from '../../../shared/backoff.js';
 import { pausedSecondsAfter } from '../../../shared/timer.js';
@@ -15,6 +15,7 @@ import { adjustedPlan, DUE_GRACE_SECONDS, dueKey, PAUSE_LIMIT_SECONDS, timerView
 import type { Moment } from './useCelebration';
 import { useDays, useDayStore } from './useDay';
 import { useClock } from './useClock';
+import { useProvided } from './useProvided';
 import { useRefreshLoop } from './useRefreshLoop';
 import { useSettings } from './useSettings';
 import { useTracked } from './useTracked';
@@ -535,7 +536,5 @@ export function TimerProvider({ children }: { children: ReactNode }) {
 }
 
 export function useTimer(): TimerCtx {
-  const v = useContext(Ctx);
-  if (!v) throw new Error('useTimer outside TimerProvider');
-  return v;
+  return useProvided(Ctx, 'useTimer');
 }

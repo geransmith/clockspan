@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-import type { Active, ClientRect, DraggableNode, DroppableContainer, UniqueIdentifier } from '@dnd-kit/core';
+import type { Active, ClientRect, DraggableNode, DroppableContainer } from '@dnd-kit/core';
 import { describe, expect, it } from 'vitest';
 import { columnDropId, COLUMNS, type ColumnId } from '../../lib/board';
-import { boardCollision, boardKeyboardCoordinates } from './dnd';
+import { boardCollision, boardKeyboardCoordinates, Droppables } from './dnd';
 
 // Four columns side by side, 280 px wide; cards 256 × 40 px, 50 px apart, from y 150.
 const rect = (left: number, top: number, width = 256, height = 40): ClientRect => ({ left, top, width, height, right: left + width, bottom: top + height });
@@ -73,22 +73,6 @@ describe('boardCollision', () => {
 });
 
 describe('boardKeyboardCoordinates', () => {
-  /** dnd-kit's droppable map, as the sensor's context holds it. */
-  class Containers extends Map<UniqueIdentifier, DroppableContainer> {
-    override get(id: UniqueIdentifier | null | undefined) {
-      return id == null ? undefined : super.get(id);
-    }
-    toArray() {
-      return [...this.values()];
-    }
-    getEnabled() {
-      return this.toArray().filter((c) => !c.disabled);
-    }
-    getNodeFor(id: UniqueIdentifier | null | undefined) {
-      return this.get(id)?.node.current ?? undefined;
-    }
-  }
-
   /** Where `code` takes `id`, a lane's card at its own rect or a plain draggable of `column` at `at`. */
   function press(code: string, id: string, { at = cardRect(0, 0), column, ...shape }: { at?: ClientRect; column?: unknown } & BoardShape = {}) {
     const { containers, rects } = board(shape);
@@ -113,7 +97,7 @@ describe('boardKeyboardCoordinates', () => {
         draggingNode: null,
         draggingNodeRect: null,
         droppableRects: rects,
-        droppableContainers: new Containers(containers.map((c) => [c.id, c])),
+        droppableContainers: new Droppables(containers, null),
         over: null,
         scrollableAncestors: [],
         scrollAdjustedTranslate: null,

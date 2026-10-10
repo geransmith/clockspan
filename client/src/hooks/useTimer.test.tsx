@@ -1168,7 +1168,3 @@ describe("time's up", () => {
     expect(api.finishSession).toHaveBeenCalledTimes(5);
   });
 });
-
-it('useTimer refuses to run outside the provider', () => {
-  expect(() => renderHook(() => useTimer())).toThrow('useTimer outside TimerProvider');
-});
