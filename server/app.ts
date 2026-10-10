@@ -3,22 +3,22 @@ import fs from 'node:fs';
 import { findPackageJSON } from 'node:module';
 import express, { type Express } from 'express';
 import type { Config } from './config.js';
-import type { DB } from './db.js';
-import { requireAuth, requireOwnPassword, resolveUser } from './auth/middleware.js';
+import { bumpRevision, readRevision, type DB } from './db.js';
+import { currentUser, requireAuth, requireOwnPassword, resolveUser } from './auth/middleware.js';
 import { localAuthRouter } from './auth/local.js';
 import { hasLocalUser, publicUser } from './auth/users.js';
 import { oidcAuthRouter, type Discovery } from './auth/oidc.js';
 import { purgeExpiredSessions } from './auth/session.js';
 import { runRetention } from './retention.js';
 import { refuse } from './refuse.js';
-import { rejectCrossSiteWrites, rejectUnknownHosts, securityHeaders } from './security.js';
+import { READ_METHODS, rejectCrossSiteWrites, rejectUnknownHosts, securityHeaders } from './security.js';
 import { boardRouter } from './routes/board.js';
 import { breaksRouter } from './routes/breaks.js';
 import { daysRouter } from './routes/days.js';
 import { itemsRouter } from './routes/items.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { settingsRouter } from './routes/settings.js';
-import { VERSION_HEADER, type AuthInfo, type OkResponse } from '../shared/api.js';
+import { REVISION_HEADER, VERSION_HEADER, type AuthInfo, type OkResponse } from '../shared/api.js';
 import { HOUR_MS } from '../shared/dates.js';
 
 /**
@@ -81,10 +81,14 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
   // ----- data (all behind auth, all scoped to req.user) -----
   const api = express.Router();
   // Each data answer, a refusal included, names the server's version, so a page loaded before
-  // an update can tell and ask for a reload (client/src/api.ts). Only once signed in: the
-  // health check, the auth routes and a 401 tell no one which version runs here.
-  api.use(requireAuth, requireOwnPassword, (_req, res, next) => {
+  // an update can tell and ask for a reload (client/src/api.ts), and the user's revision: a
+  // write moves it on before its handler runs, refused or not, and a read answers it as it
+  // stands. That number describes what the handler did only because no data handler awaits
+  // (AGENTS.md). Only once signed in: the health check, the auth routes and a 401 get neither.
+  api.use(requireAuth, requireOwnPassword, (req, res, next) => {
     res.setHeader(VERSION_HEADER, VERSION);
+    const { id } = currentUser(req);
+    res.setHeader(REVISION_HEADER, READ_METHODS.has(req.method) ? readRevision(db, id) : bumpRevision(db, id));
     next();
   });
   api.use('/settings', settingsRouter(db));

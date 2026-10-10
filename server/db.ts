@@ -177,6 +177,8 @@ export const MIGRATIONS: Migration[] = [
   oneItem,
   // A task's note, plain text; '' is none.
   `ALTER TABLE items ADD COLUMN note TEXT NOT NULL DEFAULT ''`,
+  // Each user's change number: every data write moves it on, and every data answer names it (app.ts).
+  `ALTER TABLE users ADD COLUMN revision INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 export function openDatabase(dbPath: string): DB {
@@ -213,6 +215,7 @@ export interface UserRow {
   is_admin: number;
   created_at: number;
   must_change_password: number;
+  // No `revision`: req.user is read before a write moves it on (once at boot under AUTH_MODE=none), so the number comes from readRevision.
 }
 
 /** In AUTH_MODE=none every request acts as this single user. */
@@ -222,4 +225,14 @@ export function ensureDefaultUser(db: DB): UserRow {
     existing ??
     (db.prepare(`INSERT INTO users (kind, display_name, is_admin, created_at) VALUES ('default', 'You', 1, ?) RETURNING *`).get(Date.now()) as UserRow)
   );
+}
+
+/** The user's change number as it stands, which app.ts names on a data read. */
+export function readRevision(db: DB, userId: number): number {
+  return (db.prepare(`SELECT revision FROM users WHERE id = ?`).get(userId) as { revision: number }).revision;
+}
+
+/** Moves the user's change number on by one and returns it: app.ts on a data write, and runRetention for a user it pruned. */
+export function bumpRevision(db: DB, userId: number): number {
+  return (db.prepare(`UPDATE users SET revision = revision + 1 WHERE id = ? RETURNING revision`).get(userId) as { revision: number }).revision;
 }

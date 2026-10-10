@@ -5,7 +5,7 @@ import { seedDatabase } from './dev/seed.js';
 import { effectiveKeepDays, runRetention } from './retention.js';
 import { DEFAULT_SETTINGS } from '../shared/settings.js';
 import { cutoffKey, DAY_MS } from '../shared/dates.js';
-import { ensureDefaultUser, type UserRow } from './db.js';
+import { ensureDefaultUser, readRevision, type UserRow } from './db.js';
 import type { Board } from '../shared/api.js';
 
 describe('effectiveKeepDays', () => {
@@ -70,9 +70,12 @@ describe('runRetention', () => {
     }
     const tasksOf = (user: UserRow) => app.db.prepare(`SELECT * FROM items WHERE user_id = ? ORDER BY id`).all(user.id) as { uid: string }[];
     const memberTasks = tasksOf(member);
+    // A pass moves on the revision of each user it deleted something for, and no one else's.
+    const revisions = () => [admin, member].map((u) => readRevision(app.db, u.id));
 
     // The admin keeps 30 days; sam's setting is off and there is no cap, so they keep everything.
     expect((await a.put('/api/settings', { retention: { enabled: true, days: 30 } })).status).toBe(200);
+    expect(revisions()).toEqual([1, 0]);
     expect(runRetention(app.db, app.config, SEED_NOW)).toBe(seeded.length - keptAfter(30).length);
     expect(datesOf(admin)).toEqual(keptAfter(30));
     expect(datesOf(member)).toEqual(seeded);
@@ -80,11 +83,13 @@ describe('runRetention', () => {
     expect(adminUids).not.toContain('card000000aa');
     expect(adminUids).not.toContain('card000000bb');
     expect(tasksOf(member)).toEqual(memberTasks);
+    expect(revisions()).toEqual([2, 0]);
 
     // A 60-day cap reaches sam too; the admin's own 30 is already the tighter limit.
     expect(runRetention(app.db, { ...app.config, retentionDays: 60 }, SEED_NOW)).toBe(seeded.length - keptAfter(60).length);
     expect(datesOf(member)).toEqual(keptAfter(60));
     expect(datesOf(admin)).toEqual(keptAfter(30));
+    expect(revisions()).toEqual([2, 1]);
   });
 });
 
@@ -235,8 +240,12 @@ describe('pruning tasks', () => {
     expect(log).not.toHaveBeenCalled();
 
     expect((await app.api.put('/api/settings', { retention: { enabled: true, days: 30 } })).status).toBe(200);
+    const revision = () => readRevision(app.db, ensureDefaultUser(app.db).id);
+    const before = revision();
     expect(runRetention(app.db, app.config, SEED_NOW)).toBe(0);
     expect(log).toHaveBeenCalledWith('[retention] deleted 1 task');
+    // A pass that deleted only a tombstone still moves the revision on.
+    expect(revision()).toBe(before + 1);
     expect(log).not.toHaveBeenCalledWith(expect.stringMatching(/ day/));
     expect(app.db.serialize().includes('Deleted long ago')).toBe(false);
     await save('2025-12-01', [row('aaaaaaaaaaa1', true), row('aaaaaaaaaaa2', true)]);

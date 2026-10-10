@@ -20,7 +20,8 @@ const ONE_YEAR_SEC = 31_536_000;
 
 const API_PATH = /^\/api(?:\/|$)/i;
 
-const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+/** The methods that change nothing: rejectCrossSiteWrites lets them through, and app.ts reads the revision for them instead of moving it on. */
+export const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 /**
  * Refuses an API write that the browser says another site sent. SameSite=Lax keeps the

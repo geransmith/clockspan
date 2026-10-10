@@ -1,5 +1,5 @@
 import type { Config } from './config.js';
-import type { DB } from './db.js';
+import { bumpRevision, type DB } from './db.js';
 import type { PruneInfo } from '../shared/api.js';
 import { RETENTION_LIMITS, type Settings } from '../shared/settings.js';
 import { loadSettings } from './settings.js';
@@ -101,7 +101,7 @@ export function effectiveKeepDays(settings: Settings, config: Config): number | 
   return Math.min(own, cap);
 }
 
-/** One pass over every user. Returns the number of days deleted. */
+/** One pass over every user, moving on the revision of each user it deleted something for. Returns the number of days deleted. */
 export function runRetention(db: DB, config: Config, now: number = Date.now()): number {
   const users = db.prepare(`SELECT id FROM users`).all() as { id: number }[];
   const deleted: Pruned = { days: 0, items: 0 };
@@ -109,6 +109,8 @@ export function runRetention(db: DB, config: Config, now: number = Date.now()): 
     const keep = effectiveKeepDays(loadSettings(db, id), config);
     if (keep == null) continue;
     const pruned = pruneDays(db, id, cutoffKey(now, keep), now);
+    // Here and not in pruneDays: POST /days/prune is a write the middleware has numbered already.
+    if (pruned.days > 0 || pruned.items > 0) bumpRevision(db, id);
     deleted.days += pruned.days;
     deleted.items += pruned.items;
   }
