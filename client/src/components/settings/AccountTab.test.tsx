@@ -97,18 +97,22 @@ describe('AccountTab', () => {
     expect(document.activeElement).toBe(current);
   });
 
-  it('says the password changed in a live region that was there before the text', async () => {
+  it('says the password changed in a live region that was there before the text, and empties the boxes', async () => {
     vi.mocked(api.listUsers).mockResolvedValue({ users: [admin] });
     vi.mocked(api.changePassword).mockResolvedValue({ ok: true });
     await renderTab();
     const status = screen.getByRole('status');
     expect(status.textContent).toBe('');
-    fireEvent.change(screen.getByLabelText('Current password'), { target: { value: 'old-password' } });
+    const boxes = ['Current password', 'New password', 'Confirm new password'].map((label) => screen.getByLabelText<HTMLInputElement>(label));
+    fireEvent.change(boxes[0]!, { target: { value: 'old-password' } });
+    fireEvent.change(boxes[1]!, { target: { value: 'new-password' } });
+    fireEvent.change(boxes[2]!, { target: { value: 'new-password' } });
     fireEvent.submit(status.closest('form')!);
     await settle();
-    expect(api.changePassword).toHaveBeenCalledWith('old-password', '');
+    expect(api.changePassword).toHaveBeenCalledWith('old-password', 'new-password');
     expect(screen.getByRole('status')).toBe(status);
     expect(status.textContent).toBe(PASSWORD_CHANGED);
+    expect(boxes.map((box) => box.value)).toEqual(['', '', '']);
   });
 
   it('sends no password change when the new password was typed differently twice', async () => {
