@@ -167,7 +167,7 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
             // so a row gone meanwhile (another device or ×, before the box saved) sends it to the task, as
             // the board's editRow does; a task gone with it (a 404) has nowhere to keep it.
             onNote={async (uid, note) => {
-              const edit = await store.editPriorities(date, (rows) => patchRow(rows, uid, { note }));
+              const { value: edit } = await store.editPriorities(date, (rows) => patchRow(rows, uid, { note }));
               return edit === 'skipped' ? saved(unlessGone(boardStore.editItem(uid, { note }))) : edit !== 'failed';
             }}
             offer={

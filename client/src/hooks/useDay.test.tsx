@@ -884,13 +884,10 @@ describe('editPriorities', () => {
     const typed = [makePriority(1, 'Report'), makePriority(2, 'Email')];
     act(() => void result.current.setPriorities(TODAY, typed, [makePriority(1, 'Report')]));
     const seen = vi.fn((rows: Priority[]) => rows.map((p) => (p.uid === typed[1]!.uid ? { ...p, done: true } : p)));
-    let edited!: Promise<string>;
-    act(() => {
-      edited = result.current.editPriorities(TODAY, seen);
-    });
+    const edited = begin(() => result.current.editPriorities(TODAY, seen));
     expect(seen.mock.calls[0]![0].map((p) => p.text)).toEqual(['Report', 'Email', '']);
     first.resolve({ priorities: [makePriority(1, 'Report')] });
-    await act(async () => expect(await edited).toBe('saved'));
+    await act(async () => expect(await edited).toEqual({ value: 'saved', revision: 0 }));
     expect(vi.mocked(api.putPriorities).mock.lastCall![1].map((p) => [p.text, p.done])).toEqual([
       ['Report', false],
       ['Email', true],
@@ -901,12 +898,31 @@ describe('editPriorities', () => {
   it('says why an edit sent nothing, or that its save failed', async () => {
     const { result } = renderStore();
     await settle();
-    expect(await result.current.editPriorities(OTHER, (rows) => rows)).toBe('notLoaded');
-    expect(await result.current.editPriorities(TODAY, () => null)).toBe('skipped');
+    expect(await result.current.editPriorities(OTHER, (rows) => rows)).toEqual({ value: 'notLoaded', revision: 0 });
+    expect(await result.current.editPriorities(TODAY, () => null)).toEqual({ value: 'skipped', revision: 0 });
     expect(api.putPriorities).not.toHaveBeenCalled();
     vi.mocked(api.putPriorities).mockRejectedValueOnce(new Error('offline'));
-    await act(async () => expect(await result.current.editPriorities(TODAY, (rows) => rows)).toBe('failed'));
+    await act(async () => expect(await result.current.editPriorities(TODAY, (rows) => rows)).toEqual({ value: 'failed', revision: 0 }));
     expect(warnSaveFailed).toHaveBeenCalledOnce();
+  });
+
+  it("answers the revision of the PUT that carried its list, not a later list's", async () => {
+    const first = deferredAnswer<{ priorities: Priority[] }>();
+    const second = deferredAnswer<{ priorities: Priority[] }>();
+    vi.mocked(api.putPriorities)
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+      .mockImplementation((_d, priorities) => Promise.resolve(answered({ priorities }, 3)));
+    const { result } = renderStore();
+    await settle();
+    act(() => void result.current.setPriorities(TODAY, [makePriority(1, 'Report')], []));
+    const edited = begin(() => result.current.editPriorities(TODAY, (rows) => rows));
+    first.resolve({ priorities: [makePriority(1, 'Report')] }, 1);
+    await settle();
+    act(() => void result.current.setPriorities(TODAY, [makePriority(1, 'Report v2')], [makePriority(1, 'Report')]));
+    second.resolve({ priorities: [makePriority(1, 'Report')] }, 2);
+    await act(async () => expect(await edited).toEqual({ value: 'saved', revision: 2 }));
+    expect(api.putPriorities).toHaveBeenCalledTimes(3);
   });
 });
 
