@@ -3,7 +3,7 @@ import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { makePriority, makeRecurring, T0, TODAY } from '../test/fixtures';
 import type { Priority } from '../types';
 import { emptyRow } from './priorities';
-import { acceptOffer, dueRecurring, notOnList, offerPicks, recurringCount, recurringRow } from './recurring';
+import { acceptOffer, dueRecurring, notOnList, offerPicks, recurringCount, recurringRow, repeatDays, WEEKDAYS } from './recurring';
 
 // TODAY is a Monday.
 const QUEUE = makeRecurring('rcur00000001', 'Monitor the queue', { categoryUid: 'cafe00000001', note: 'Tier 2 too.' });
@@ -14,6 +14,29 @@ const NONE = new Set<string>();
 /** A routine's row on today's list, its box blank in the draft when given ''. */
 const routine = (position: number, item = QUEUE, text = item.title, patch: Partial<Priority> = {}) =>
   makePriority(position, text, { uid: item.uid, recurring: true, categoryUid: item.categoryUid, ...patch });
+
+describe('the days', () => {
+  it('numbers the days from Monday, each a letter named in full', () => {
+    expect(WEEKDAYS.map((d) => [d.day, d.letter, d.name])).toEqual([
+      [1, 'M', 'Monday'],
+      [2, 'T', 'Tuesday'],
+      [3, 'W', 'Wednesday'],
+      [4, 'T', 'Thursday'],
+      [5, 'F', 'Friday'],
+      [6, 'S', 'Saturday'],
+      [7, 'S', 'Sunday'],
+    ]);
+  });
+
+  it('shows three or more days in a row as a span, and the others one by one', () => {
+    expect(repeatDays([1, 2, 3, 4, 5])).toBe('Mon–Fri');
+    expect(repeatDays([1, 2, 3, 4, 5, 6, 7])).toBe('Mon–Sun');
+    expect(repeatDays([1, 3, 5])).toBe('Mon, Wed, Fri');
+    expect(repeatDays([6, 7])).toBe('Sat, Sun');
+    expect(repeatDays([3])).toBe('Wed');
+    expect(repeatDays([1, 2, 3, 5])).toBe('Mon–Wed, Fri');
+  });
+});
 
 describe('dueRecurring', () => {
   it("offers the items whose weekdays hold the date's, in the order given", () => {

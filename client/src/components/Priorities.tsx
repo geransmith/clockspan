@@ -233,7 +233,7 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
   };
   // × asks first when the task is on other days or has time logged on it, a timer running on it
   // included, since Delete everywhere is then a different answer, or when it has a note, which a
-  // delete takes with it; a recurring priority's row never asks (Settings removes those).
+  // delete takes with it; a recurring priority's row never asks (Stop repeating on the board ends those).
   const remove = (p: Priority) => {
     // `logged` is the other days' time, so the day's own log, a running timer included, adds to it.
     const time = p.uid == null ? 0 : p.logged + (loggedByUid(sessions, now).get(p.uid) ?? 0);

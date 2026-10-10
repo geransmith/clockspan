@@ -1,8 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import * as api from '../../api';
-import type { NewItem } from '../../api';
 import { BOARD_LIMITS, LOOKBACK_DAYS } from '../../../../shared/api.js';
 import { addDays, DAY_MS, HOUR_MS, MINUTE_MS } from '../../../../shared/dates.js';
 import { MAX_PRIORITIES } from '../../../../shared/settings.js';
@@ -85,10 +84,10 @@ const notice = () => document.querySelector<HTMLElement>('.board-notice[role="st
 const titlesIn = (name: string) => [...column(name).querySelectorAll('.board-card-title, .board-earlier')].map((b) => b.textContent);
 /** The open card's dialog. */
 const dialog = () => screen.getByRole('dialog');
-/** Opens an item's dialog by its card. Nothing behind an open dialog takes a press in a browser, so none is open. */
-const openCard = (title: string) => {
+/** Opens an item's dialog by its card, in the column named when two show the title. Nothing behind an open dialog takes a press in a browser, so none is open. */
+const openCard = (title: string, inColumn?: string) => {
   expect(screen.queryByRole('dialog')).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: title }));
+  fireEvent.click((inColumn ? within(column(inColumn)) : screen).getByRole('button', { name: title }));
 };
 /** Closes the open dialog with Escape. */
 const closeCard = () => fireEvent.keyDown(dialog(), { key: 'Escape' });
@@ -103,8 +102,8 @@ const moveOptions = () =>
     .getAllByRole('button')
     .map((b) => b.textContent);
 const putLists = () => vi.mocked(api.putPriorities).mock.calls.map(([date, list]) => ({ date, texts: list.map((p) => p.text) }));
-/** The tasks a lane's box and Add a new card sent: always to a lane. */
-const added = () => vi.mocked(api.addItem).mock.calls.map(([item]) => item as Extract<NewItem, { lane: unknown }>);
+/** The tasks a lane's box and Add a new card sent. */
+const added = () => vi.mocked(api.addItem).mock.calls.map(([item]) => item);
 /** A column's + by its heading. */
 const plus = (name: string) => screen.getByRole('button', { name: `Add to ${name}` });
 /** A column's box by its field's name. */
@@ -482,7 +481,7 @@ describe('Board', () => {
     expect(vi.mocked(api.getRange)).toHaveBeenCalledTimes(2);
   });
 
-  it("renames today's recurring row through the row once its recurring priority is removed in Settings too", async () => {
+  it("renames today's recurring row through the row once its recurring priority stopped repeating too", async () => {
     lists[WED] = [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true })];
     await renderBoard();
     openCard('Monitor the queue');
@@ -495,11 +494,11 @@ describe('Board', () => {
     expect(api.editItem).not.toHaveBeenCalled();
   });
 
-  it("renames an earlier day's recurring row in Done by a PATCH of its recurring priority, and shows it as text once that is removed", async () => {
+  it("renames an earlier day's recurring row in Done by a PATCH of its recurring priority, and shows it as text once that stopped repeating", async () => {
     onServer = { ...onServer, recurring: [makeRecurring('rec000000009', 'Tuesday row')] };
     await renderBoard();
     fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
-    openCard('Tuesday row');
+    openCard('Tuesday row', 'Done');
     expect(dialogLines()).toEqual([]);
     expect(moveOptions()).toEqual(['In progress']);
     const title = screen.getByRole('textbox', { name: 'Title' });
@@ -519,7 +518,7 @@ describe('Board', () => {
     expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull();
     expect(within(dialog()).getByRole('heading', { name: 'Tuesday row' })).toBeTruthy();
     expect(dialogLines()).toEqual([]);
-    // Removed, it doesn't go back on today's list.
+    // Stopped, it doesn't go back on today's list.
     expect(screen.queryByRole('group', { name: 'Move to' })).toBeNull();
   });
 
@@ -1271,7 +1270,7 @@ describe("a card's note", () => {
     expect(onServer.cards.find((c) => c.uid === 'later0000001')!.note).toBe('Ask Kim');
   });
 
-  it("shows an earlier day's row of a removed recurring priority's note as text in its dialog, and no note where there is none", async () => {
+  it("shows an earlier day's row of a stopped recurring priority's note as text in its dialog, and no note where there is none", async () => {
     serveRange([
       makeDay(TUE, { priorities: [row(1, 'Tuesday row', { uid: 'rec000000009', recurring: true, done: true, note: 'Acme first' })] }),
       makeDay(MON, { priorities: [row(1, 'Monday row', { uid: 'rec000000008', recurring: true, done: true })] }),
@@ -1284,6 +1283,207 @@ describe("a card's note", () => {
     closeCard();
     openCard('Monday row');
     expect(dialog().querySelector('.note-field')).toBeNull();
+  });
+});
+
+describe('repeating', () => {
+  const QUEUE = makeRecurring('rec000000001', 'Monitor the queue');
+  const FOLLOW = makeRecurring('rec000000002', 'Follow-ups', { weekdays: [1, 3, 5] });
+  /** The open dialog's Repeat row, a day's button in it, and the days pressed. */
+  const repeatGroup = () => screen.queryByRole('group', { name: 'Repeat' });
+  const day = (name: string) => within(repeatGroup()!).getByRole('button', { name });
+  const pressed = () =>
+    within(repeatGroup()!)
+      .getAllByRole('button')
+      .filter((b) => b.getAttribute('aria-pressed') === 'true')
+      .map((b) => b.getAttribute('aria-label'));
+  const WORK_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  /** The confirms, answered yes unless a case says otherwise. */
+  let confirm: Mock<(message?: string) => boolean>;
+
+  beforeEach(() => {
+    onServer = { ...onServer, recurring: [QUEUE, FOLLOW] };
+    confirm = vi.fn(() => true);
+    vi.stubGlobal('confirm', confirm);
+  });
+
+  it("lists the recurring priorities off today's list under Repeats at the end of Later, with their days, counted with Later's cards", async () => {
+    lists[WED] = [row(1, 'Report'), row(2, 'Monitor the queue', { uid: QUEUE.uid, recurring: true })];
+    onServer = { ...onServer, recurring: [QUEUE, FOLLOW, makeRecurring('rec000000003', 'Water the plants', { weekdays: [6, 7] })] };
+    await renderBoard();
+    expect(titlesIn('Later')).toEqual(['Write a KB', 'Follow-ups', 'Water the plants']);
+    expect(within(column('Later')).getByRole('heading', { name: 'Repeats' })).toBeTruthy();
+    expect(column('Later').querySelector('.board-col-head .muted')?.textContent).toBe('3');
+    const metas = [...column('Later').querySelectorAll('.board-card-meta')];
+    expect(metas.map((m) => [m.querySelector('[role="img"]')?.getAttribute('aria-label'), m.textContent])).toEqual([
+      ['Repeats', 'Mon, Wed, Fri'],
+      ['Repeats', 'Sat, Sun'],
+    ]);
+    // On today's list, it shows there alone, with its mark and no days.
+    expect(titlesIn('In progress')).toEqual(['Report', 'Monitor the queue']);
+    expect(column('In progress').querySelector('.board-card-meta')?.textContent).toBe('');
+  });
+
+  it('says Later has nothing parked only when Repeats is empty too', async () => {
+    onServer = { ...makeBoard(), recurring: [FOLLOW] };
+    await renderBoard();
+    expect(titlesIn('Later')).toEqual(['Follow-ups']);
+    expect(within(column('Later')).queryByText('Nothing parked.')).toBeNull();
+    cleanup();
+    onServer = makeBoard();
+    await renderBoard();
+    expect(within(column('Later')).getByText('Nothing parked.')).toBeTruthy();
+    expect(within(column('Later')).queryByRole('heading', { name: 'Repeats' })).toBeNull();
+  });
+
+  it('makes a card repeat on the first day pressed, once confirmed, keeping its dialog open on that day, with Stop repeating in place of Delete', async () => {
+    await renderBoard();
+    openCard('Write a KB');
+    expect(
+      within(repeatGroup()!)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['M', 'T', 'W', 'T', 'F', 'S', 'S']);
+    expect(pressed()).toEqual([]);
+    expect(screen.queryByRole('button', { name: 'Stop repeating' })).toBeNull();
+    confirm.mockReturnValueOnce(false);
+    fireEvent.click(day('Wednesday'));
+    expect(confirm).toHaveBeenCalledExactlyOnceWith(CONFIRM.makeRecurring('Write a KB'));
+    await settle();
+    expect(api.editItem).not.toHaveBeenCalled();
+    const wednesday = day('Wednesday');
+    wednesday.focus();
+    fireEvent.click(wednesday);
+    // It repeats at once: Later's Repeats lists it, and its dialog has no Delete.
+    expect(titlesIn('Later')).toEqual(['Monitor the queue', 'Follow-ups', 'Write a KB']);
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
+    await settle();
+    expect(api.editItem).toHaveBeenCalledExactlyOnceWith('later0000001', { weekday: { day: 3, on: true } });
+    expect(dialog().getAttribute('aria-label')).toBe('Write a KB');
+    expect(document.activeElement).toBe(wednesday);
+    expect(pressed()).toEqual(['Wednesday']);
+    expect(screen.getByRole('button', { name: 'Stop repeating' })).toBeTruthy();
+    expect(moveOptions()).toEqual(['In progress', 'Done']);
+    // Its days change one at a time from here, asking nothing, and the last one stays on.
+    fireEvent.click(day('Monday'));
+    await settle();
+    expect(api.editItem).toHaveBeenLastCalledWith('later0000001', { weekday: { day: 1, on: true } });
+    fireEvent.click(day('Monday'));
+    await settle();
+    expect(pressed()).toEqual(['Wednesday']);
+    expect(day('Wednesday').getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(day('Wednesday'));
+    await settle();
+    expect(api.editItem).toHaveBeenCalledTimes(3);
+    expect(confirm).toHaveBeenCalledTimes(2);
+    closeCard();
+    expect(within(column('Later')).getByText('Wed')).toBeTruthy();
+  });
+
+  it("makes today's row repeat, keeping its dialog open, and reads today again", async () => {
+    await renderBoard();
+    openCard('Report');
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeTruthy();
+    vi.mocked(api.getDay).mockClear();
+    lists[WED] = [row(1, 'Report', { recurring: true }), row(2, 'Email', { done: true })];
+    fireEvent.click(day('Friday'));
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Remove from today' })).toBeTruthy();
+    await settle();
+    expect(api.editItem).toHaveBeenCalledExactlyOnceWith(REPORT, { weekday: { day: 5, on: true } });
+    expect(api.getDay).toHaveBeenCalledWith(WED);
+    expect(dialog().getAttribute('aria-label')).toBe('Report');
+    expect(pressed()).toEqual(['Friday']);
+    expect(titlesIn('In progress')).toEqual(['Report']);
+    expect(within(column('In progress')).getByRole('img', { name: 'Repeats' })).toBeTruthy();
+    // On today's list, it isn't in Repeats too.
+    expect(titlesIn('Later')).toEqual(['Write a KB', 'Monitor the queue', 'Follow-ups']);
+  });
+
+  it("makes a row the board hasn't read yet repeat at once, asking only for its first day", async () => {
+    lists[WED] = [row(1, 'Report'), row(2, 'Email', { done: true }), row(3, 'Water the plants')];
+    const patched = deferredAnswer<BoardData>();
+    vi.mocked(api.editItem).mockReturnValueOnce(patched.promise);
+    await renderBoard();
+    openCard('Water the plants');
+    fireEvent.click(day('Friday'));
+    await settle();
+    expect(pressed()).toEqual(['Friday']);
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
+    fireEvent.click(day('Monday'));
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(pressed()).toEqual(['Monday', 'Friday']);
+    patched.resolve((onServer = { ...onServer, recurring: [QUEUE, FOLLOW, makeRecurring('row3xxxxxxxx', 'Water the plants', { weekdays: [5] })] }));
+    await settle();
+    expect(api.editItem).toHaveBeenLastCalledWith('row3xxxxxxxx', { weekday: { day: 1, on: true } });
+  });
+
+  it('stops repeating once confirmed: the card leaves the board, the focus on the card after it; turned down, nothing is sent', async () => {
+    await renderBoard();
+    openCard('Monitor the queue');
+    expect(pressed()).toEqual(WORK_WEEK);
+    confirm.mockReturnValueOnce(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Stop repeating' }));
+    expect(confirm).toHaveBeenCalledExactlyOnceWith(CONFIRM.deleteRecurring('Monitor the queue'));
+    expect(dialog()).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop repeating' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Follow-ups' }));
+    await settle();
+    expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith(QUEUE.uid);
+    expect(titlesIn('Later')).toEqual(['Write a KB', 'Follow-ups']);
+  });
+
+  it("stops repeating from today's row, which stays on today's list with the focus on it and no Repeat row", async () => {
+    lists[WED] = [row(1, 'Monitor the queue', { uid: QUEUE.uid, recurring: true }), row(2, 'Report')];
+    await renderBoard();
+    openCard('Monitor the queue');
+    expect(pressed()).toEqual(WORK_WEEK);
+    fireEvent.click(screen.getByRole('button', { name: 'Stop repeating' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Monitor the queue' }));
+    await settle();
+    expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith(QUEUE.uid);
+    expect(titlesIn('In progress')).toEqual(['Monitor the queue', 'Report']);
+    openCard('Monitor the queue');
+    expect(repeatGroup()).toBeNull();
+    expect(screen.getByRole('button', { name: 'Remove from today' })).toBeTruthy();
+  });
+
+  it("offers no Repeat row where the server can't change the task: an earlier day's tick of a stopped routine, an archived task's row", async () => {
+    lists[WED] = [row(1, 'Report', { archived: true })];
+    await renderBoard();
+    openCard('Report');
+    expect(repeatGroup()).toBeNull();
+    closeCard();
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
+    openCard('Tuesday row');
+    expect(repeatGroup()).toBeNull();
+  });
+
+  it("puts a card of Repeats on today's list with Move to, and ticked with Done", async () => {
+    const saved = deferredAnswer<{ priorities: Priority[] }>();
+    vi.mocked(api.putPriorities).mockReturnValueOnce(saved.promise);
+    await renderBoard();
+    openCard('Follow-ups');
+    expect(moveOptions()).toEqual(['In progress', 'Done']);
+    moveTo('progress');
+    // On its way to In progress, it shows there without the days Repeats lists.
+    expect(titlesIn('In progress')).toEqual(['Report', 'Follow-ups']);
+    expect(within(column('In progress')).queryByText('Mon, Wed, Fri')).toBeNull();
+    await settle();
+    saved.resolve({ priorities: (lists[WED] = vi.mocked(api.putPriorities).mock.lastCall![1]) });
+    await settle();
+    expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Follow-ups'] }]);
+    expect(lists[WED]![2]).toMatchObject({ uid: FOLLOW.uid, recurring: true, done: false });
+    expect(titlesIn('In progress')).toEqual(['Report', 'Follow-ups']);
+    expect(titlesIn('Later')).toEqual(['Write a KB', 'Monitor the queue']);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Follow-ups' }));
+    openCard('Monitor the queue');
+    moveTo('done');
+    expect(unlockAudio).toHaveBeenCalledOnce();
+    await settle();
+    expect(lists[WED]![3]).toMatchObject({ uid: QUEUE.uid, recurring: true, done: true });
+    expect(titlesIn('Done')).toEqual(['Email', 'Monitor the queue', 'Earlier this week · 2']);
   });
 });
 
@@ -1335,6 +1535,19 @@ describe('starting the focus timer', () => {
     expect(uid).toBe('next00000001');
     expect(titlesIn('In progress')).toEqual(['Report', 'Follow up']);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Follow up' }));
+  });
+
+  it("starts on a card of Later's Repeats once its pull puts the recurring priority on today's list", async () => {
+    onServer = { ...onServer, recurring: [makeRecurring('rec000000001', 'Monitor the queue')] };
+    await renderBoard();
+    openCard('Monitor the queue');
+    startFor(25);
+    expect(start).toHaveBeenCalledExactlyOnceWith(WED, 25 * 60, 'Monitor the queue', expect.any(Promise));
+    await settle();
+    expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Monitor the queue'] }]);
+    expect(lists[WED]![2]).toMatchObject({ uid: 'rec000000001', recurring: true });
+    await expect(startedOn()).resolves.toBe('rec000000001');
+    expect(titlesIn('In progress')).toEqual(['Report', 'Monitor the queue']);
   });
 
   it('starts on a task left open on an earlier day the same way, pulled first', async () => {
@@ -1725,6 +1938,40 @@ describe('dragging', () => {
     await press('Escape');
   });
 
+  it("drags a card of Later's Repeats onto today's list, and puts it back with the board notice from Later or Next", async () => {
+    onServer = { ...onServer, recurring: [makeRecurring('rec000000001', 'Monitor the queue')] };
+    await renderBoard();
+    const refused = BOARD.recurringStays('Monitor the queue');
+    const close = () => within(notice()).getByRole('button', { name: BOARD.close });
+    await pickUp('Monitor the queue');
+    expect(said()).toBe(BOARD_DRAG.pickedUp('Monitor the queue', 'Later'));
+    await press('ArrowRight');
+    expect(titlesIn('Next')).toContain('Monitor the queue');
+    await press('Space');
+    expect(said()).toBe(refused);
+    expect(notice().textContent).toContain(refused);
+    expect(document.activeElement).toBe(close());
+    expect(titlesIn('Later')).toEqual(['Write a KB', 'Monitor the queue']);
+    fireEvent.click(close());
+    expect(document.activeElement).toBe(card('Monitor the queue'));
+    // Dropped in Later, among its cards, the same.
+    await pickUp('Monitor the queue');
+    await press('Space');
+    expect(said()).toBe(refused);
+    fireEvent.click(close());
+    await settle();
+    expect(api.editItem).not.toHaveBeenCalled();
+    // Onto In progress: today's row, as any pull.
+    await pickUp('Monitor the queue');
+    await press('ArrowRight');
+    await press('ArrowRight');
+    expect(said()).toBe(BOARD_DRAG.over('Monitor the queue', 'In progress'));
+    await press('Space');
+    expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Monitor the queue'] }]);
+    expect(titlesIn('Later')).toEqual(['Write a KB']);
+    expect(document.activeElement).toBe(card('Monitor the queue'));
+  });
+
   it("doesn't drag a recurring row, which stays on today's list, and tells how every other card drags and opens", async () => {
     lists[WED] = [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true }), row(2, 'Report')];
     await renderBoard();
@@ -1884,7 +2131,7 @@ describe('categories', () => {
     expect(screen.getByRole('button', { name: 'Category for Write a KB: Admin' })).toBe(document.activeElement);
   });
 
-  it("sets a card's category and an earlier day's recurring row's by a PATCH, and offers none once that recurring priority is removed", async () => {
+  it("sets a card's category and an earlier day's recurring row's by a PATCH, and offers none once that recurring priority stopped repeating", async () => {
     onServer = { ...onServer, recurring: [makeRecurring('rec000000009', 'Tuesday row')] };
     await renderBoard();
     openCard('Plan B');
@@ -1894,7 +2141,7 @@ describe('categories', () => {
     expect(api.editItem).toHaveBeenCalledExactlyOnceWith('planned00001', { categoryUid: ADMIN.uid });
     closeCard();
     fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 1' }));
-    openCard('Tuesday row');
+    openCard('Tuesday row', 'Done');
     fireEvent.click(screen.getByRole('button', { name: 'Category for Tuesday row: none' }));
     pickOption('Tickets');
     await settle();

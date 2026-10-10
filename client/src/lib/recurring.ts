@@ -1,13 +1,40 @@
 /**
- * The morning offer's recurring half: which recurring priorities are due on a day and not on
- * its list yet (`dueRecurring`, `notOnList`), which of them the offer ticks (`offerPicks`, up to
- * `recurringPerDay`) and the list after Add to today (`acceptOffer`). The answers this device
- * gave today are `useRecurringAnswered`'s. Pure: the clock comes in as `now`.
+ * The recurring priorities: their days as a card's Repeat row and Later's Repeats show them
+ * (`WEEKDAYS`, `repeatDays`), and the morning offer's recurring half: which are due on a day and
+ * not on its list yet (`dueRecurring`, `notOnList`), which of them the offer ticks (`offerPicks`,
+ * up to `recurringPerDay`) and the list after Add to today (`acceptOffer`). The answers this
+ * device gave today are `useRecurringAnswered`'s. Pure: the clock comes in as `now`.
  */
 import type { Priority, Recurring } from '../types';
 import { isoWeekday } from '../../../shared/dates.js';
 import { seedRow, type PrioritySeed } from './plan';
 import { newTaskRow, padPriorities, placePriority } from './priorities';
+
+/** A recurring priority's days as the server numbers them (ISO, Monday 1), each a one-letter button named in full. */
+export const WEEKDAYS = [
+  { day: 1, letter: 'M', name: 'Monday' },
+  { day: 2, letter: 'T', name: 'Tuesday' },
+  { day: 3, letter: 'W', name: 'Wednesday' },
+  { day: 4, letter: 'T', name: 'Thursday' },
+  { day: 5, letter: 'F', name: 'Friday' },
+  { day: 6, letter: 'S', name: 'Saturday' },
+  { day: 7, letter: 'S', name: 'Sunday' },
+] as const;
+
+/**
+ * A recurring priority's days, ascending as the server answers them, as Later's Repeats shows
+ * them: three or more in a row as a span ("Mon–Fri"), the others one by one ("Mon, Wed, Fri").
+ */
+export function repeatDays(days: readonly number[]): string {
+  const short = (day: number) => WEEKDAYS[day - 1]!.name.slice(0, 3);
+  const runs: number[][] = [];
+  for (const day of days) {
+    const run = runs.at(-1);
+    if (run?.at(-1) === day - 1) run.push(day);
+    else runs.push([day]);
+  }
+  return runs.flatMap((run) => (run.length >= 3 ? [`${short(run[0]!)}–${short(run.at(-1)!)}`] : run.map(short))).join(', ');
+}
 
 /** The items no row on `rows` is yet, in the order given: a row is its task's whatever its draft text. */
 export function notOnList(items: Recurring[], rows: Priority[]): Recurring[] {
@@ -15,8 +42,9 @@ export function notOnList(items: Recurring[], rows: Priority[]): Recurring[] {
 }
 
 /**
- * The items due on `date` (its ISO weekday is one of theirs), in the order given (Settings
- * order), less those answered on this device today and those on `rows` already (`notOnList`).
+ * The items due on `date` (its ISO weekday is one of theirs), in the order given (the order they
+ * were made, as Later's Repeats lists them), less those answered on this device today and those on
+ * `rows` already (`notOnList`).
  */
 export function dueRecurring(items: Recurring[], date: string, rows: Priority[], answered: ReadonlySet<string>): Recurring[] {
   const weekday = isoWeekday(date);

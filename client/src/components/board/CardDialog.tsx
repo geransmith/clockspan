@@ -4,6 +4,7 @@ import { hasNote } from '../../../../shared/text.js';
 import { useFollowedDraft } from '../../hooks/useFollowedDraft';
 import { useModalDialog } from '../../hooks/useModalDialog';
 import { categoryOf, COLUMN_NAMES, moveTargets, type BoardItem, type CategoryPick, type ColumnId } from '../../lib/board';
+import { WEEKDAYS } from '../../lib/recurring';
 import { CategoryChip } from '../CategoryChip';
 import { X } from '../Icons';
 import { NoteField } from '../Note';
@@ -18,7 +19,7 @@ interface Props {
   /** Escape, the ×, a press outside and Enter in the title: closes it with the focus on the card. */
   onClose: () => void;
   onMove: (to: ColumnId, el: HTMLElement) => void;
-  /** Renames it; without one the title shows as text (an earlier day's row of a recurring priority removed in Settings). */
+  /** Renames it; without one the title shows as text (an earlier day's row of a recurring priority that stopped repeating). */
   onRename?: (title: string) => void;
   /** Sets its category; without one the category shows as text, as the title does. */
   onCategory?: (uid: string | null) => void;
@@ -33,16 +34,22 @@ interface Props {
   hint?: string;
   /** The timer card's length buttons; none where no timer can start on it (`Board`). */
   start?: { disabled: boolean; onStart: (minutes: number) => void };
+  /**
+   * The task's weekdays, each pressed to set or clear it (none on a one-off, whose first day makes
+   * it a recurring priority), and a recurring priority's Stop repeating; none where the server
+   * can't change the task.
+   */
+  repeat?: { days: readonly number[]; onDay: (day: number, on: boolean) => void; onStop?: () => void };
 }
 
 /**
- * A board item's details, opened by its card: the title to rename it, its category and note, Start
- * timer, Move to (the way to move without dragging) and Delete, or Remove from today for a
- * recurring row. `Board` renders one, outside the columns, and closes it before a move, a start
- * or a delete runs (`closeCard`). A bottom sheet on a phone (`.dialog`). Each control sits on a row
- * of its own, a label and its buttons, so another can join them.
+ * A board item's details, opened by its card: the title to rename it, its category and note, the
+ * days it repeats on, Start timer, Move to (the way to move without dragging) and Delete, or Remove
+ * from today for a recurring row. `Board` renders one, outside the columns, and closes it before a
+ * move, a start or a delete runs (`closeCard`). A bottom sheet on a phone (`.dialog`). Each control
+ * sits on a row of its own, a label and its buttons, so another can join them.
  */
-export function CardDialog({ item, today, pick, onClose, onMove, onRename, onCategory, onNote, keptNote, onDelete, onRemove, hint, start }: Props) {
+export function CardDialog({ item, today, pick, onClose, onMove, onRename, onCategory, onNote, keptNote, onDelete, onRemove, hint, start, repeat }: Props) {
   const dialog = useModalDialog(onClose);
   const targets = moveTargets(item, today);
   const category = categoryOf(pick.categories, item.categoryUid);
@@ -70,6 +77,8 @@ export function CardDialog({ item, today, pick, onClose, onMove, onRename, onCat
             )
           )}
           {(onNote || hasNote(item.note)) && <NoteField id={`${id}-note`} of={item.title} note={item.note} kept={keptNote} open onSave={onNote} ms={800} />}
+          {/* In the same place on a one-off and a recurring priority, so the day pressed keeps the focus as the task starts repeating. */}
+          {repeat && <RepeatDays id={`${id}-repeat`} {...repeat} />}
           {start && (
             <div className="board-start" role="group" aria-labelledby={`${id}-start`}>
               <span id={`${id}-start`} className="muted small">
@@ -110,6 +119,46 @@ export function CardDialog({ item, today, pick, onClose, onMove, onRename, onCat
         )}
       </div>
     </dialog>
+  );
+}
+
+/**
+ * A task's seven days, each a button pressed while it is on. The last day on stays on, and stays
+ * focusable, so a recurring priority is always offered on some day; Stop repeating ends it.
+ */
+function RepeatDays({ id, days, onDay, onStop }: { id: string } & NonNullable<Props['repeat']>) {
+  return (
+    <div className="board-repeat" role="group" aria-labelledby={id}>
+      <span id={id} className="muted small">
+        Repeat
+      </span>
+      <div className="weekdays">
+        {WEEKDAYS.map(({ day, letter, name }) => {
+          const on = days.includes(day);
+          const last = on && days.length === 1;
+          return (
+            <button
+              key={day}
+              type="button"
+              className="chip"
+              onClick={() => {
+                if (!last) onDay(day, !on);
+              }}
+              aria-pressed={on}
+              aria-disabled={last || undefined}
+              aria-label={name}
+            >
+              {letter}
+            </button>
+          );
+        })}
+      </div>
+      {onStop && (
+        <button className="btn btn-ghost" onClick={onStop}>
+          Stop repeating
+        </button>
+      )}
+    </div>
   );
 }
 

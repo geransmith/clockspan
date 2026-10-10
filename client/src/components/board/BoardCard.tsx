@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import { hasNote } from '../../../../shared/text.js';
 import { categoryOf, type BoardItem, type CategoryPick } from '../../lib/board';
 import { dayName } from '../../lib/format';
+import { repeatDays } from '../../lib/recurring';
 import type { Category, Session } from '../../types';
 import { CategoryDot } from '../CategoryDot';
 import { Note } from '../Icons';
@@ -21,6 +22,8 @@ interface Props {
   tick?: { checked: boolean; onChange: (checked: boolean, el: HTMLInputElement) => void };
   /** The session running on it: the meta line starts with the day log's pill, which the title names. */
   running?: Session;
+  /** A recurring priority's days, shown after its mark on its card in Later's Repeats. */
+  days?: readonly number[];
   /** Drag and drop; an item without it doesn't drag. */
   drag?: ItemDrag;
 }
@@ -39,11 +42,12 @@ export interface ItemDrag {
 
 /**
  * A task on the board: its tick, its number on today's list, its title, and a line with the timer
- * running on it, its category, the Repeats mark of a recurring row, a mark for a note, and the day
- * it was left open on. The title's button reaches over the whole card (styles.css): a click or
- * Enter opens the dialog, and it is what a mouse, a finger's hold or Space drags.
+ * running on it, its category, the Repeats mark of a recurring priority (and its days in Later's
+ * Repeats), a mark for a note, and the day it was left open on. The title's button reaches over
+ * the whole card (styles.css): a click or Enter opens the dialog, and it is what a mouse, a
+ * finger's hold or Space drags.
  */
-export function BoardCardView({ item, today, pick, onOpen, titleRef, tick, running, drag }: Props) {
+export function BoardCardView({ item, today, pick, onOpen, titleRef, tick, running, days, drag }: Props) {
   const category = categoryOf(pick.categories, item.categoryUid);
   const markId = `running-${item.id}`;
   const noted = hasNote(item.note);
@@ -100,6 +104,7 @@ export function BoardCardView({ item, today, pick, onOpen, titleRef, tick, runni
           {running && <RunningMark paused={running.pausedAt != null} id={markId} />}
           {category && <CategoryTag category={category} />}
           {item.recurring && <RepeatMark />}
+          {days && <span>{repeatDays(days)}</span>}
           {noted && (
             <span className="board-card-note" role="img" aria-label="Has a note">
               <Note filled />

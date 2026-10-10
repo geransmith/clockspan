@@ -36,8 +36,16 @@ import { boardCollision, boardKeyboardCoordinates } from './dnd';
 /** The dragged item's place in its list while the copy under the pointer moves. */
 const DRAGGED_OPACITY = 0.4;
 
-/** Recurring rows don't drag: they stay on today's list. */
-export const canDrag = (item: BoardItem) => !item.recurring;
+/**
+ * A recurring priority drags from Later's Repeats alone, to In progress or Done; dropped in Later
+ * or Next, it stays, and the board notice says why. Its rows don't: today's stays on the list
+ * (Remove from today takes it off), and an earlier day's tick stays in Done. Shown in In progress
+ * or Done while its pull is on its way, it is already the row it lands as.
+ */
+export const canDrag = (item: BoardItem) => !item.recurring || item.column === 'later';
+
+/** A lane sorts its own cards and any other one-off shown in it; a recurring priority keeps no place there, so its card drags whole. */
+export const canSort = (item: BoardItem) => !item.recurring;
 
 /** The board's focus as a drag ends: `clear` drops one an earlier move left, and `afterKeyboard` sends it to the item's card. */
 interface DragFocus {
@@ -134,14 +142,14 @@ export function useBoardDrag(columns: BoardColumns | null) {
       const item = find(active.id)?.item;
       return item && BOARD_DRAG.pickedUp(item.title, COLUMN_NAMES[item.column]);
     },
-    // Back where it started, it says so, but not the first time: "Picked up" has said where it is.
+    // Back where it started, it says so, but not the first time: "Picked up" has said where it is
+    // (a card of Later's Repeats, which keeps no place there, starts over Later's nearest card).
     onDragOver: ({ active, over }) => {
       const item = find(active.id)?.item;
       const first = !overSaid.current;
       overSaid.current = true;
-      if (!item || !over) return undefined;
-      const target = dropTarget(String(over.id), item.id, cols);
-      return target || !first ? overAnnouncement(target, item, cols) : undefined;
+      if (!item || !over || first) return undefined;
+      return overAnnouncement(dropTarget(String(over.id), item.id, cols), item, cols);
     },
     onDragEnd: () => dropLine.current,
     onDragCancel: ({ active }) => {
@@ -179,7 +187,10 @@ export function SortableEntry({ id, held, render }: { id: string; held: boolean;
   });
 }
 
-/** A row or card of In progress or Done, which neither sorts: `column` tells the keyboard where it shows (`boardKeyboardCoordinates`); `held` as above. */
+/**
+ * A row or card of In progress or Done, which neither sorts, or a recurring priority's card:
+ * `column` tells the keyboard where it shows (`boardKeyboardCoordinates`); `held` as above.
+ */
 export function DraggableEntry({ id, column, held, render }: { id: string; column: ColumnId; held: boolean; render: (drag: ItemDrag) => ReactNode }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id, data: { column }, disabled: held });
   return render({ nodeRef: setNodeRef, style: { opacity: isDragging ? DRAGGED_OPACITY : undefined }, attributes, listeners });

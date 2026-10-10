@@ -186,7 +186,9 @@ export const CONFIRM = {
     days || logged
       ? `Delete this task everywhere? ${taskFacts(days ? `It is on ${counted(days, 'day')}` : '', logged)}${unplanned(logged)}`
       : 'Delete this task?',
-  deleteRecurring: (title: string) => `Remove ${title}? It stops repeating. Days it was on keep it.`,
+  /** The first day pressed on a one-off task, on a card or today's row: there is no way back to a one-off. */
+  makeRecurring: (title: string) => `Make ${title} repeat? Off today's list it shows under Repeats, not in Later or Next. This cannot be undone.`,
+  deleteRecurring: (title: string) => `Stop repeating ${title}? It won't show under Repeats or be offered again. The days it was on keep it.`,
 } as const;
 
 /** A timer line, with the session's name (`useTimer().name`) in front when it has one. */
@@ -312,8 +314,8 @@ export const ADD_PRIORITY_FAILED = {
  */
 export const BOARD = {
   full: `Later and Next hold ${BOARD_LIMITS.openCards} cards at most.`,
-  recurringStays: (title: string) => `${title} stays on today's list. Use Remove from today.`,
-  removed: (title: string) => `${title} was removed from the recurring priorities.`,
+  recurringStays: (title: string) => `${title} repeats, so it stays under Repeats.`,
+  removed: (title: string) => `${title} stopped repeating.`,
   close: 'Close',
   nameTaken: 'There is already a category with that name.',
   doneOn: (when: string) => `Done ${when}. Untick it on that day's sheet.`,
@@ -326,7 +328,7 @@ export const BOARD = {
  */
 export const DONE_STAYS = {
   title: (title: string) => `${title} is done.`,
-  body: 'More work on it goes on a new card. If it keeps coming back, make it a recurring priority in Settings → Board.',
+  body: 'More work on it goes on a new card. If it keeps coming back, open it and pick its days under Repeat.',
   add: (lane: string) => `Add a new card to ${lane}`,
   leave: 'Leave it',
   announce: (title: string, lane: string) => `${title} stays in Done. The notice can add a new card to ${lane}.`,

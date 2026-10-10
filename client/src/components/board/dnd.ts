@@ -3,8 +3,9 @@
  * (`boardCollision`) and where the arrow keys take it (`boardKeyboardCoordinates`). Every column
  * is a droppable (`columnDropId`); Later's and Next's cards are sortable too, each lane in a
  * SortableContext whose id is the lane, while In progress and Done take a drop as a whole column
- * and their items are plain draggables. Here, beside `Board`, so the dnd-kit imports stay in the
- * board's lazy chunk; where a drop lands is `dropTarget` (`lib/board.ts`).
+ * and their items, like a recurring priority's card in Later's Repeats, are plain draggables.
+ * Here, beside `Board`, so the dnd-kit imports stay in the board's lazy chunk; where a drop lands
+ * is `dropTarget` (`lib/board.ts`).
  */
 import {
   closestCorners,
@@ -41,7 +42,7 @@ export const boardCollision: CollisionDetection = (args) => {
   return lane ? closestCorners({ ...args, droppableContainers: args.droppableContainers.filter((c) => inLane(c, lane)) }) : hits;
 };
 
-/** The column a plain draggable (a row or card of In progress or Done) says it shows in. */
+/** The column a plain draggable (a row or card of In progress or Done, or of Later's Repeats) says it shows in. */
 function draggableColumn(data: Record<string, unknown> | undefined): ColumnId | undefined {
   const column = data?.column;
   return COLUMNS.find((c) => c === column);
@@ -78,11 +79,12 @@ class Droppables extends Map<UniqueIdentifier, DroppableContainer> {
 /**
  * Where an arrow key takes a dragged card: dnd-kit's sortable getter (the nearest droppable that
  * way) over the droppables the key can reach. ↑ and ↓ sort a card among its lane's cards, and do
- * nothing in In progress or Done, which don't sort. ← and → reach the other columns: Later's and
- * Next's cards while they show any (so the card sorts in among them), else the column. A row or
- * card of In progress or Done is no droppable of its own, which the sortable getter needs: its
- * column stands in for it, and is left out of the way. Below 900 px the columns not shown stay
- * mounted, measured 0 × 0 at the page's corner: none is reached, so ← and → do nothing there.
+ * nothing in In progress or Done, which don't sort, or for a card of Later's Repeats. ← and →
+ * reach the other columns: Later's and Next's cards while they show any (so the card sorts in
+ * among them), else the column. A row or card of In progress or Done, or of Later's Repeats, is no
+ * droppable of its own, which the sortable getter needs: its column stands in for it, and is left
+ * out of the way. Below 900 px the columns not shown stay mounted, measured 0 × 0 at the page's
+ * corner: none is reached, so ← and → do nothing there.
  */
 export const boardKeyboardCoordinates: KeyboardCoordinateGetter = (event, args) => {
   const { active } = args;

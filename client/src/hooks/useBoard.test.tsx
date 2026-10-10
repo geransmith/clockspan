@@ -138,25 +138,26 @@ describe('reading the board', () => {
     expect(shownTexts(result.current.board)).toEqual(['Write a KB', 'Captured', 'Follow up']);
   });
 
-  it('offers the recurring priorities the server has confirmed, never one whose create is still out', async () => {
+  it('offers the recurring priorities the server has confirmed, never a task whose first day is still on its way', async () => {
     const queue = makeRecurring('rcur00000001', 'Monitor the queue');
     onServer = { ...onServer, recurring: [queue] };
     const { result } = renderBoard();
     await settle();
     expect(result.current.confirmedRecurring).toEqual([queue]);
-    const created = deferredAnswer<Board>();
-    vi.mocked(api.addItem).mockReturnValueOnce(created.promise);
-    const timesheet = { uid: 'rcur00000002', title: 'Timesheet', categoryUid: null, weekdays: [5] };
+    const made = deferredAnswer<Board>();
+    vi.mocked(api.editItem).mockReturnValueOnce(made.promise);
+    const friday = { weekday: { day: 5, on: true } };
     act(() => {
-      void result.current.store.addItem(timesheet);
+      void result.current.store.editItem('next00000001', friday);
       void result.current.store.editItem(queue.uid, { title: 'Watch the queue' });
     });
-    expect(result.current.board?.recurring.map((r) => r.title)).toEqual(['Watch the queue', 'Timesheet']);
-    // A rename on its way shows; a recurring priority the server doesn't hold yet isn't offered.
+    expect(result.current.board?.recurring.map((r) => r.title)).toEqual(['Watch the queue', 'Follow up']);
+    // A rename on its way shows; a task the server doesn't hold as a recurring priority yet isn't offered.
     expect(result.current.confirmedRecurring?.map((r) => r.title)).toEqual(['Watch the queue']);
-    created.resolve((onServer = withItem(onServer, timesheet, T0)));
     await settle();
-    expect(result.current.confirmedRecurring?.map((r) => r.title)).toEqual(['Watch the queue', 'Timesheet']);
+    made.resolve((onServer = withItemPatch(onServer, 'next00000001', friday)));
+    await settle();
+    expect(result.current.confirmedRecurring?.map((r) => r.title)).toEqual(['Watch the queue', 'Follow up']);
   });
 
   it('offers Up next the cards the server has confirmed, never one whose create is still out', async () => {
@@ -216,9 +217,6 @@ describe('task writes', () => {
     ).rejects.toThrow(new MoveRefused(BOARD.full));
     expect(api.addItem).not.toHaveBeenCalled();
     expect(result.current.board?.cards).toHaveLength(BOARD_LIMITS.openCards);
-    // A recurring priority takes no lane.
-    await act(() => result.current.store.addItem(makeRecurring('rcur00000001', 'Timesheet')));
-    expect(api.addItem).toHaveBeenCalledOnce();
   });
 
   it('take a failed change off, reject, and read the board again: a refusal of any kind', async () => {
@@ -240,13 +238,13 @@ describe('task writes', () => {
     expect(api.getDay).toHaveBeenCalledTimes(1);
   });
 
-  it('read again every held day that names a task given a new name or category, and the ranges on screen, and nothing after a lane or weekdays', async () => {
+  it("read again every held day that names a task given a new name or category, or made a recurring priority, and the ranges on screen, and nothing after a lane or a recurring priority's day", async () => {
     const queue = makeRecurring('rcur00000001', 'Monitor the queue');
     onServer = { ...onServer, recurring: [queue] };
     const row = makePriority(1, 'Monitor the queue', { uid: queue.uid, recurring: true });
     lists[TODAY] = [row];
     lists[YESTERDAY] = [row];
-    lists[TOMORROW] = [makePriority(1, 'Email')];
+    lists[TOMORROW] = [makePriority(1, 'Email', { uid: 'email0000001' })];
     const { result } = renderBoard();
     await settle();
     for (const d of [YESTERDAY, TOMORROW]) await act(() => result.current.days.load(d));
@@ -257,6 +255,7 @@ describe('task writes', () => {
         .sort();
     vi.mocked(api.getDay).mockClear();
     await act(() => result.current.store.editItem('next00000001', { lane: 'later', before: null }));
+    await act(() => result.current.store.editItem(queue.uid, { weekday: { day: 6, on: true } }));
     await act(() => result.current.store.editItem(queue.uid, { weekday: { day: 3, on: false } }));
     await settle();
     expect(api.getDay).not.toHaveBeenCalled();
@@ -279,6 +278,12 @@ describe('task writes', () => {
     await settle();
     expect(reads()).toEqual([YESTERDAY, TODAY]);
     expect(result.current.generation).toBe(3);
+    // Its first day makes the task a recurring priority on every day that lists it.
+    vi.mocked(api.getDay).mockClear();
+    await act(() => result.current.store.editItem('email0000001', { weekday: { day: 2, on: true } }));
+    await settle();
+    expect(reads()).toEqual([TOMORROW]);
+    expect(result.current.generation).toBe(4);
   });
 });
 
@@ -722,8 +727,8 @@ describe('categories', () => {
   });
 
   describe('useCategoryPick', () => {
-    function renderPick(report?: (saved: Promise<void>) => void) {
-      return renderHook(() => ({ pick: useCategoryPick(report), board: useBoardState().board }), { wrapper: SettingsAndDays });
+    function renderPick() {
+      return renderHook(() => ({ pick: useCategoryPick(), board: useBoardState().board }), { wrapper: SettingsAndDays });
     }
 
     it("is null until the board's first read lands", async () => {
@@ -769,25 +774,15 @@ describe('categories', () => {
       expect(result.current.pick?.categories[1]).toEqual(makeCategory('cat000000002', 'admin', { color: 'gold' }));
     });
 
-    it('hands a failed create to report, with the category taken off and the board read again', async () => {
-      const report = vi.fn<(saved: Promise<void>) => void>();
-      const { result } = renderPick(report);
-      await settle();
-      vi.mocked(api.addCategory).mockRejectedValueOnce(new Error('offline'));
-      act(() => void result.current.pick!.create('KB'));
-      await expect(report.mock.calls[0]![0]).rejects.toThrow('offline');
-      await settle();
-      expect(result.current.pick?.categories).toEqual([TICKETS]);
-      expect(api.getBoard).toHaveBeenCalledTimes(2);
-    });
-
-    it('raises the not-saved banner for a failed create by default', async () => {
+    it('raises the not-saved banner for a failed create, with the category taken off and the board read again', async () => {
       const { result } = renderPick();
       await settle();
       vi.mocked(api.addCategory).mockRejectedValueOnce(new Error('offline'));
       act(() => void result.current.pick!.create('KB'));
       await settle();
       expect(warnSaveFailed).toHaveBeenCalledOnce();
+      expect(result.current.pick?.categories).toEqual([TICKETS]);
+      expect(api.getBoard).toHaveBeenCalledTimes(2);
     });
 
     it('reads the board again on refresh', async () => {
@@ -813,28 +808,53 @@ describe('recurring priorities', () => {
     onServer = { ...onServer, recurring: [QUEUE] };
   });
 
-  it('show a new, edited or removed item at once, and go out one after another', async () => {
+  it('show a task made one, a day set and a removal at once, and go out one after another', async () => {
     const first = deferredAnswer<Board>();
-    vi.mocked(api.addItem).mockReturnValueOnce(first.promise);
+    vi.mocked(api.editItem).mockReturnValueOnce(first.promise);
     const { result } = renderBoard();
     await settle();
-    const timesheet = makeRecurring('rcur00000002', 'Timesheet', { weekdays: [5] });
+    const friday = { weekday: { day: 5, on: true } };
+    const monday = { title: 'Follow-ups', weekday: { day: 1, on: true } };
     act(() => {
-      void result.current.store.addItem(timesheet);
-      void result.current.store.editItem('rcur00000002', { title: 'Timesheets', weekday: { day: 1, on: true } });
+      void result.current.store.editItem('next00000001', friday);
+      void result.current.store.editItem('next00000001', monday);
       void result.current.store.removeRecurring('rcur00000001');
     });
-    expect(titles(result.current.board)).toEqual(['Timesheets 15']);
-    expect(api.editItem).not.toHaveBeenCalled();
-    expect(api.deleteItem).not.toHaveBeenCalled();
-    first.resolve((onServer = withItem(onServer, timesheet, T0)));
+    expect(titles(result.current.board)).toEqual(['Follow-ups 15']);
+    expect(shownTexts(result.current.board)).toEqual(['Write a KB']);
     await settle();
-    expect(api.addItem).toHaveBeenCalledExactlyOnceWith(timesheet);
-    expect(api.editItem).toHaveBeenCalledExactlyOnceWith('rcur00000002', { title: 'Timesheets', weekday: { day: 1, on: true } });
+    expect(api.editItem).toHaveBeenCalledOnce();
+    expect(api.deleteItem).not.toHaveBeenCalled();
+    first.resolve((onServer = withItemPatch(onServer, 'next00000001', friday)));
+    await settle();
+    expect(api.editItem).toHaveBeenLastCalledWith('next00000001', monday);
     expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith('rcur00000001');
-    expect(callOrder(api.editItem)).toBeLessThan(callOrder(api.deleteItem));
+    expect(callOrder(api.editItem, 1)).toBeLessThan(callOrder(api.deleteItem));
     expect(result.current.board).toEqual(onServer);
-    expect(titles(result.current.board)).toEqual(['Timesheets 15']);
+    expect(titles(result.current.board)).toEqual(['Follow-ups 15']);
+  });
+
+  it("make a task one once today's save still out has landed, so a row typed seconds ago has its task, and set a day of one at once", async () => {
+    const { result } = renderBoard();
+    await settle();
+    const typed = makePriority(1, 'Water the plants', { uid: 'plnt00000001' });
+    const save = deferredAnswer<{ priorities: Priority[] }>();
+    vi.mocked(api.putPriorities).mockReturnValueOnce(save.promise);
+    act(() => void result.current.days.setPriorities(TODAY, [typed], []));
+    const made = begin(() => result.current.store.editItem(typed.uid!, { weekday: { day: 6, on: true } }));
+    await settle();
+    expect(api.editItem).not.toHaveBeenCalled();
+    save.resolve({ priorities: (lists[TODAY] = [typed]) });
+    await act(() => made);
+    expect(api.editItem).toHaveBeenCalledExactlyOnceWith(typed.uid, { weekday: { day: 6, on: true } });
+
+    const again = deferredAnswer<{ priorities: Priority[] }>();
+    vi.mocked(api.putPriorities).mockReturnValueOnce(again.promise);
+    act(() => void result.current.days.setPriorities(TODAY, [typed, makePriority(2, 'Email')], [typed]));
+    await act(() => result.current.store.editItem(QUEUE.uid, { weekday: { day: 6, on: true } }));
+    expect(api.editItem).toHaveBeenCalledTimes(2);
+    again.resolve({ priorities: lists[TODAY] });
+    await settle();
   });
 
   it("removes one without touching today's list, which keeps its row", async () => {
@@ -854,9 +874,11 @@ describe('recurring priorities', () => {
     expect(titles(result.current.board)).toEqual(['Monitor the queue 12345']);
     expect(api.getBoard).toHaveBeenCalledTimes(2);
 
-    vi.mocked(api.addItem).mockRejectedValueOnce(apiError(400));
-    await expect(act(() => result.current.store.addItem(makeRecurring('rcur00000002', 'Timesheet')))).rejects.toThrow('Request failed (400)');
+    // At the cap of recurring priorities: the card stays where it was.
+    vi.mocked(api.editItem).mockRejectedValueOnce(apiError(400));
+    await expect(act(() => result.current.store.editItem('next00000001', { weekday: { day: 2, on: true } }))).rejects.toThrow('Request failed (400)');
     expect(titles(result.current.board)).toEqual(['Monitor the queue 12345']);
+    expect(shownTexts(result.current.board)).toEqual(['Write a KB', 'Follow up']);
 
     vi.mocked(api.deleteItem).mockRejectedValueOnce(apiError(500));
     await expect(act(() => result.current.store.removeRecurring('rcur00000001'))).rejects.toThrow('Request failed (500)');

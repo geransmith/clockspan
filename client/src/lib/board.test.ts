@@ -50,14 +50,21 @@ function columns(input: Partial<ColumnsInput> = {}): BoardColumns {
 /** Each column as its items' ids. */
 function ids(c: BoardColumns): Record<keyof BoardColumns, string[]> {
   const of = (items: BoardItem[]) => items.map((i) => i.id);
-  return { later: of(c.later), next: of(c.next), progress: of(c.progress), doneToday: of(c.doneToday), doneEarlier: of(c.doneEarlier) };
+  return {
+    later: of(c.later),
+    repeats: of(c.repeats),
+    next: of(c.next),
+    progress: of(c.progress),
+    doneToday: of(c.doneToday),
+    doneEarlier: of(c.doneEarlier),
+  };
 }
 
 const row = (position: number, text: string, patch: Partial<Priority> = {}) =>
   makePriority(position, text, { uid: `row${position}`.padEnd(12, 'x'), ...patch });
 const rowUid = (position: number) => `row${position}`.padEnd(12, 'x');
 const ROUTINE = { uid: 'rcur00000001', recurring: true };
-const EMPTY = { later: [], next: [], progress: [], doneToday: [], doneEarlier: [] };
+const EMPTY = { later: [], repeats: [], next: [], progress: [], doneToday: [], doneEarlier: [] };
 
 describe('boardColumns', () => {
   it("shows Later and Next by position, and In progress as today's open rows, each task once", () => {
@@ -84,10 +91,42 @@ describe('boardColumns', () => {
     expect(c.later[0]).toMatchObject({ uid: 'later1', title: 'A', row: null, date: null });
   });
 
-  it('shows a recurring row of today by its day, never by a task of the board', () => {
-    const c = columns({ todayRows: [row(1, 'Monitor the queue', ROUTINE), row(2, 'Follow-ups', { uid: 'rcur00000002', recurring: true, done: true })] });
-    expect(ids(c)).toEqual({ ...EMPTY, progress: [`row:${WED}:rcur00000001`], doneToday: [`row:${WED}:rcur00000002`] });
+  it("shows today's recurring row as its task, and the recurring priorities off today's list in Later's Repeats, in the order given", () => {
+    const todayRows = [row(1, 'Monitor the queue', ROUTINE), row(2, 'Follow-ups', { uid: 'rcur00000002', recurring: true, done: true })];
+    const recurring = [
+      makeRecurring('rcur00000003', 'Water the plants', { categoryUid: 'cafe00000001', note: 'The fern too', weekdays: [6] }),
+      makeRecurring(ROUTINE.uid, 'Monitor the queue'),
+      makeRecurring('rcur00000002', 'Follow-ups'),
+      makeRecurring('rcur00000004', 'Timesheet'),
+    ];
+    const c = columns({ todayRows, recurring });
+    expect(ids(c)).toEqual({
+      ...EMPTY,
+      repeats: ['item:rcur00000003', 'item:rcur00000004'],
+      progress: ['item:rcur00000001'],
+      doneToday: ['item:rcur00000002'],
+    });
     expect(c.progress[0]).toMatchObject({ recurring: true, card: null, uid: 'rcur00000001' });
+    expect(c.repeats[0]).toEqual({
+      id: 'item:rcur00000003',
+      uid: 'rcur00000003',
+      title: 'Water the plants',
+      note: 'The fern too',
+      column: 'later',
+      card: null,
+      row: null,
+      date: null,
+      categoryUid: 'cafe00000001',
+      recurring: true,
+      leftOpen: null,
+    });
+    expect(findItem(c, 'item:rcur00000004')).toEqual({ item: c.repeats[1], column: 'later' });
+  });
+
+  it("shows today's row of a task the board has as a recurring priority as one, before the day is read again", () => {
+    const c = columns({ todayRows: [row(1, 'Report')], recurring: [makeRecurring(rowUid(1), 'Report', { weekdays: [3] })] });
+    expect(ids(c)).toEqual({ ...EMPTY, progress: [`item:${rowUid(1)}`] });
+    expect(c.progress[0]).toMatchObject({ recurring: true, row: { recurring: false } });
   });
 
   it("shows a task a later day's list holds as any other: by its lane, in no column until that day with none, and in Done once ticked there", () => {
@@ -135,7 +174,7 @@ describe('boardColumns', () => {
     const c = columns({ cards, earlierDays: [monday, tuesday] });
     expect(ids(c)).toEqual({ ...EMPTY, doneEarlier: ['item:tue', `row:${TUE}:rcur00000001`, 'item:mon', `row:${MON}:rcur00000001`] });
     expect(c.doneEarlier[1]).toMatchObject({ title: 'Monitor the queue', column: 'done', card: null, date: TUE, recurring: true });
-    // Its recurring priority's title and category, while it is in Settings, so a rename shows at once.
+    // Its recurring priority's title and category, while it repeats, so a rename shows at once.
     const renamed = columns({
       cards,
       earlierDays: [monday, tuesday],
@@ -143,7 +182,7 @@ describe('boardColumns', () => {
     });
     expect(renamed.doneEarlier[1]!.row).toBe(tuesday.priorities[0]);
     expect(renamed.doneEarlier[1]).toMatchObject({ title: 'Watch the queue', categoryUid: 'cafe00000004' });
-    // Gone from Settings, it is removed, though the day was read before that.
+    // Gone from the board, it stopped repeating, though the day was read before that.
     expect(c.doneEarlier[1]!.row).toEqual({ ...tuesday.priorities[0], archived: true });
   });
 
@@ -151,7 +190,7 @@ describe('boardColumns', () => {
     const ticked = (date: string) => makeDay(date, { priorities: [row(1, 'Monitor the queue', { ...ROUTINE, done: true })] });
     const c = columns({ todayRows: ticked(WED).priorities, earlierDays: [ticked(MON), ticked(TUE)] });
     const done = [...ids(c).doneToday, ...ids(c).doneEarlier];
-    expect(done).toEqual([`row:${WED}:rcur00000001`, `row:${TUE}:rcur00000001`, `row:${MON}:rcur00000001`]);
+    expect(done).toEqual(['item:rcur00000001', `row:${TUE}:rcur00000001`, `row:${MON}:rcur00000001`]);
     expect(new Set(done).size).toBe(3);
   });
 
@@ -204,6 +243,7 @@ describe('boardColumns', () => {
     const c = columns({ cards, todayRows, moving });
     expect(ids(c)).toEqual({
       later: ['item:a', `item:${rowUid(1)}`],
+      repeats: [],
       next: ['item:c', 'item:lo'],
       progress: ['item:b', `item:${rowUid(2)}`],
       doneToday: [`item:${rowUid(3)}`],
@@ -221,9 +261,18 @@ describe('boardColumns', () => {
       todayRows: [pulled],
       earlierDays: [tuesday],
       recurring: [makeRecurring(ROUTINE.uid, 'Monitor the queue')],
-      moving: new Map([[`row:${WED}:${ROUTINE.uid}`, { to: 'progress', before: null }]]),
+      moving: new Map([[`item:${ROUTINE.uid}`, { to: 'progress', before: null }]]),
     });
-    expect(ids(c)).toEqual({ ...EMPTY, progress: [`row:${WED}:${ROUTINE.uid}`], doneEarlier: [`row:${TUE}:${ROUTINE.uid}`] });
+    expect(ids(c)).toEqual({ ...EMPTY, progress: [`item:${ROUTINE.uid}`], doneEarlier: [`row:${TUE}:${ROUTINE.uid}`] });
+  });
+
+  it("shows a card of Later's Repeats in In progress while its pull is on its way", () => {
+    const c = columns({
+      recurring: [makeRecurring(ROUTINE.uid, 'Monitor the queue')],
+      moving: new Map([[`item:${ROUTINE.uid}`, { to: 'progress', before: null }]]),
+    });
+    expect(ids(c)).toEqual({ ...EMPTY, progress: [`item:${ROUTINE.uid}`] });
+    expect(c.progress[0]).toMatchObject({ column: 'progress', row: null, recurring: true });
   });
 });
 
@@ -291,10 +340,12 @@ describe('planMove', () => {
   const item = (id: string) => findItem(c, id)!.item;
   const open = item(`item:${rowUid(1)}`);
   const ticked = item(`item:${rowUid(2)}`);
-  const recurring = item(`row:${WED}:rcur00000001`);
+  const recurring = item('item:rcur00000001');
   const carried = item('item:carried');
   const left = item('item:left');
   const routineTicked = item(`row:${TUE}:rcur00000002`);
+  // Follow-ups is off today's list: Later's Repeats shows it.
+  const repeating = item('item:rcur00000002');
 
   it('moves a task between Later and Next, or within one, as a patch', () => {
     expect(planMove(item('item:later'), 'next', null, WED)).toEqual({ kind: 'patch', uid: 'later', patch: { lane: 'next', before: null } });
@@ -362,6 +413,27 @@ describe('planMove', () => {
     });
   });
 
+  it("puts a card of Later's Repeats on today's list as the recurring priority, with none of a row's counts: open with the nudge, ticked without", () => {
+    expect(planMove(repeating, 'progress', null, WED)).toEqual({
+      kind: 'place',
+      row: {
+        uid: 'rcur00000002',
+        addedAt: null,
+        text: 'Follow-ups',
+        done: false,
+        categoryUid: 'cafe00000004',
+        note: 'Acme first',
+        recurring: true,
+        archived: false,
+        listed: 0,
+        earlier: 0,
+        logged: 0,
+      },
+      nudge: true,
+    });
+    expect(planMove(repeating, 'done', null, WED)).toMatchObject({ kind: 'place', row: { uid: 'rcur00000002', done: true, recurring: true }, nudge: false });
+  });
+
   it("ticks and unticks today's rows between In progress and Done", () => {
     expect(planMove(open, 'done', null, WED)).toEqual({ kind: 'tick', uid: rowUid(1), done: true });
     expect(planMove(ticked, 'progress', null, WED)).toEqual({ kind: 'tick', uid: rowUid(2), done: false });
@@ -385,12 +457,14 @@ describe('planMove', () => {
     expect(planMove(item('item:doneTue'), 'next', null, WED)).toEqual({ kind: 'doneStays', title: 'Shipped', categoryUid: null, lane: 'next', before: null });
   });
 
-  it('refuses a recurring row in Later or Next, ticked or not', () => {
+  it("refuses a recurring priority in Later or Next: a row, ticked or not, and its card in Later's Repeats, its own column included", () => {
     expect(planMove(recurring, 'later', null, WED)).toEqual({ kind: 'refuse', message: BOARD.recurringStays('Monitor the queue') });
     expect(planMove(routineTicked, 'next', null, WED)).toEqual({ kind: 'refuse', message: BOARD.recurringStays('Follow-ups') });
+    expect(planMove(repeating, 'next', 'next', WED)).toEqual({ kind: 'refuse', message: BOARD.recurringStays('Follow-ups') });
+    expect(planMove(repeating, 'later', 'later', WED)).toEqual({ kind: 'refuse', message: BOARD.recurringStays('Follow-ups') });
   });
 
-  it("refuses an earlier day's tick of a removed recurring priority on today's list, archived or gone from Settings, and still ticks today's row of one", () => {
+  it("refuses an earlier day's tick of a recurring priority that stopped repeating on today's list, archived or gone from the board, and still ticks today's row of one", () => {
     const archived = makeDay(TUE, { priorities: [{ ...tuesday.priorities[0]!, archived: true }] });
     const removedToday = row(5, 'Old routine', { uid: 'rcur00000003', recurring: true, archived: true });
     const gone = columns({ cards, todayRows: [removedToday], earlierDays: [tuesday], recurring: [routines[0]!] });
@@ -400,7 +474,7 @@ describe('planMove', () => {
       expect(planMove(tick, 'progress', null, WED)).toEqual({ kind: 'refuse', message: BOARD.removed('Follow-ups') });
       expect(moveTargets(tick, WED)).toEqual([]);
     }
-    const todays = findItem(gone, `row:${WED}:rcur00000003`)!.item;
+    const todays = findItem(gone, 'item:rcur00000003')!.item;
     expect(planMove(todays, 'done', null, WED)).toEqual({ kind: 'tick', uid: 'rcur00000003', done: true });
     expect(moveTargets(todays, WED)).toEqual(['done']);
   });
@@ -412,7 +486,7 @@ describe('planMove', () => {
     expect(planMove(routineTicked, 'done', null, WED)).toBeNull();
   });
 
-  it('offers every other column, Next for a task left open, and no Later or Next for a recurring row', () => {
+  it('offers every other column, Next for a task left open, and no Later or Next for a recurring priority', () => {
     expect(moveTargets(item('item:later'), WED)).toEqual(['next', 'progress', 'done']);
     expect(moveTargets(item('item:planned'), WED)).toEqual(['later', 'progress', 'done']);
     expect(moveTargets(open, WED)).toEqual(['later', 'next', 'done']);
@@ -423,6 +497,7 @@ describe('planMove', () => {
     expect(moveTargets(item('item:doneTue'), WED)).toEqual(['later', 'next', 'progress']);
     expect(moveTargets(recurring, WED)).toEqual(['done']);
     expect(moveTargets(routineTicked, WED)).toEqual(['progress']);
+    expect(moveTargets(repeating, WED)).toEqual(['progress', 'done']);
   });
 });
 
@@ -460,7 +535,7 @@ describe('dragging', () => {
     expect(ids(withDrag(c, 'item:d', { to: 'later', before: null })).later).toEqual(['item:a', 'item:b', 'item:c', 'item:d']);
     // In progress takes it at the end and Done at the top, as a move on its way shows it.
     expect(ids(withDrag(c, 'item:e', { to: 'progress', before: null }))).toMatchObject({
-      progress: [open, `row:${WED}:rcur00000001`, 'item:carried', 'item:e'],
+      progress: [open, 'item:rcur00000001', 'item:carried', 'item:e'],
       doneEarlier: [],
     });
     expect(ids(withDrag(c, open, { to: 'done', before: null })).doneToday).toEqual([open, ticked]);
@@ -539,7 +614,7 @@ describe('dragging', () => {
     expect(moveAnnouncement(planMove(item('item:a'), 'next', 'd', WED), item('item:a'), 'next')).toBe(BOARD_DRAG.moved('A', 'Next'));
     expect(moveAnnouncement(planMove(item(open), 'done', null, WED), item(open), 'done')).toBe(BOARD_DRAG.moved('Open', 'Done'));
     expect(moveAnnouncement(planMove(item(ticked), 'next', null, WED), item(ticked), 'next')).toBe(DONE_STAYS.announce('Ticked', 'Next'));
-    const recurring = item(`row:${WED}:rcur00000001`);
+    const recurring = item('item:rcur00000001');
     expect(moveAnnouncement(planMove(recurring, 'next', null, WED), recurring, 'next')).toBe(BOARD.recurringStays('Monitor the queue'));
   });
 
@@ -632,15 +707,9 @@ describe('the board as a write shows it', () => {
       ]);
     });
 
-    it('adds a recurring priority after the others, its weekdays ascending, as the server answers them', () => {
-      const added = withItem(board, { uid: 'rec000000003', title: 'Timesheet', categoryUid: null, weekdays: [5, 1] }, T0);
-      expect(added.recurring).toEqual([queue, follow, makeRecurring('rec000000003', 'Timesheet', { weekdays: [1, 5] })]);
-      expect(added.cards).toBe(board.cards);
-    });
-
     it('leaves the board as it is when the uid is held already, as the server does for a retry', () => {
       expect(withItem(board, { uid: 'd1', title: 'Other', categoryUid: null, lane: 'later', before: null }, T0)).toBe(board);
-      expect(withItem(board, { uid: queue.uid, title: 'Other', categoryUid: null, weekdays: [7] }, T0)).toBe(board);
+      expect(withItem(board, { uid: queue.uid, title: 'Other', categoryUid: null, lane: 'next', before: null }, T0)).toBe(board);
     });
   });
 
@@ -686,9 +755,27 @@ describe('the board as a write shows it', () => {
       const filed = { ...board, recurring: [{ ...queue, categoryUid: 'cat000000001' }] };
       expect(withItemPatch(filed, queue.uid, { categoryUid: null }).recurring[0]).toEqual(queue);
     });
+
+    it("makes a task a recurring priority with its first day set, out of its lane, after the others, with the patch's other fields", () => {
+      const made = withItemPatch(board, 'l1', { title: 'Weekly report', note: 'Fridays', weekday: { day: 5, on: true } });
+      expect(made.recurring).toEqual([queue, follow, makeRecurring('l1', 'Weekly report', { note: 'Fridays', weekdays: [5] })]);
+      expect(lane(made, 'later')).toEqual(['l2:2']);
+      expect(task(made, 'l1')).toBeUndefined();
+      const tagged = withItemPatch({ ...board, cards: [{ ...board.cards[2]!, categoryUid: 'cafe00000001' }] }, 'n1', { weekday: { day: 1, on: true } });
+      expect(tagged).toMatchObject({ cards: [], recurring: [queue, follow, { uid: 'n1', categoryUid: 'cafe00000001', weekdays: [1] }] });
+      // A day cleared on a task changes nothing, as the server refuses it.
+      expect(withItemPatch(board, 'l1', { weekday: { day: 5, on: false } })).toEqual(board);
+      // A task this copy hasn't read (today's row typed since) is made one from the task as shown; the card held wins.
+      const shownAs = { title: 'Water the plants', categoryUid: 'cafe00000001', note: 'Both' };
+      expect(withItemPatch(board, 'new000000001', { weekday: { day: 6, on: true } }, shownAs).recurring[2]).toEqual(
+        makeRecurring('new000000001', 'Water the plants', { categoryUid: 'cafe00000001', note: 'Both', weekdays: [6] }),
+      );
+      expect(withItemPatch(board, 'l1', { weekday: { day: 6, on: true } }, shownAs).recurring[2]?.title).toBe(task(board, 'l1')!.title);
+      expect(withItemPatch(board, 'new000000001', { title: 'X' }, shownAs)).toBe(board);
+    });
   });
 
-  it('takes a deleted task or a removed recurring priority off', () => {
+  it('takes a deleted task or a recurring priority that stopped repeating off', () => {
     expect(withoutItem(board, 'l1').cards.map((c) => c.uid)).toEqual(['l2', 'n1', 'd1']);
     expect(withoutItem(board, queue.uid).recurring).toEqual([follow]);
     expect(withoutItem(board, 'gone00000001')).toEqual(board);

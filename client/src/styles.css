@@ -2670,7 +2670,8 @@ button.log-label:hover {
   align-items: center;
 }
 .board-move,
-.board-start {
+.board-start,
+.board-repeat {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -2931,22 +2932,19 @@ kbd {
   flex-direction: column;
   gap: 4px;
 }
-/* Settings → Board: a category's name, its eight swatches and Remove, and a recurring priority's
-   title, category, weekdays and Remove, wrapping onto more lines on a phone. */
-.category-row,
-.recurring-row {
+/* Settings → Board: a category's name, its eight swatches and Remove, wrapping onto more lines on
+   a phone. */
+.category-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
-.category-name,
-.recurring-title {
+.category-name {
   flex: 1 1 8rem;
   min-width: 0;
 }
-.category-row > .btn,
-.recurring-row > .btn {
+.category-row > .btn {
   margin-left: auto;
 }
 .category-row > .error {
@@ -2963,8 +2961,8 @@ kbd {
   align-items: center;
   gap: 8px;
 }
-/* A recurring priority's seven days, one letter each, drawn one size: 7 × 38 px and 6 px gaps
-   take 302 px, which fits the dialog on a 375 px phone. */
+/* A card's seven days, one letter each, drawn one size: 7 × 38 px and 6 px gaps take 302 px,
+   which fits its dialog on a 375 px phone. */
 .weekdays {
   display: flex;
   flex-wrap: wrap;
@@ -3074,8 +3072,10 @@ kbd {
   .chip {
     --hit-inset: -4px -1px;
   }
-  /* A weekday's 38 × 36 px (36 × 34 inside the border), 6 px from the next and 8 px from the row
-     above or below: 44 × 44 px, reaching 3 px into the gap beside it and 4 px up and down. */
+  /* A weekday's 38 × 36 px (36 × 34 inside the border), 6 px from the next: 44 × 44 px, reaching
+     3 px into the gap beside it and 4 px up and down. A card dialog's Repeat row has that room: a
+     44 px line beside Stop repeating, or wrapped on a phone, lines 4 px apart, all of it the
+     days', since Stop repeating is 44 px tall itself. */
   .weekdays .chip {
     --hit-inset: -5px -4px;
   }
