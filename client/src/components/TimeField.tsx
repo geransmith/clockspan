@@ -2,8 +2,9 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useDateSegment, useLocale, useTimeField } from 'react-aria';
 import { useTimeFieldState, type DateFieldState, type DateSegment } from 'react-stately';
 import type { Time } from '@internationalized/date';
+import { atTime } from '../../../shared/dates.js';
 import { useLatest } from '../hooks/useLatest';
-import { guessPeriod, msToTime, timeToMs } from '../lib/timefield';
+import { guessPeriod, msToTime } from '../lib/timefield';
 
 interface Props {
   /** The stored instant, or null for an empty row. */
@@ -63,7 +64,7 @@ function Field({
     isInvalid: errorId != null,
     value: time,
     onChange: (t: Time | null) => {
-      if (t) onCommit(timeToMs(t, date));
+      if (t) onCommit(atTime(date, t.hour, t.minute));
     },
     hourCycle: hour12 ? (12 as const) : (24 as const),
     granularity: 'minute' as const,

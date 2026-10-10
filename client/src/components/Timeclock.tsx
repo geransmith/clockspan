@@ -22,7 +22,7 @@ import {
   type ExtraPair,
   type TimeclockResult,
 } from '../lib/timeclock';
-import { MAX_PUNCHES, punchesKey, samePunches } from '../../../shared/punches.js';
+import { MAX_PUNCHES, punchesKey } from '../../../shared/punches.js';
 import { SETTING_LIMITS } from '../../../shared/settings.js';
 import type { WeekHours } from '../lib/week';
 import type { Punch } from '../types';
@@ -130,7 +130,7 @@ export function Timeclock({
     unlockAudio();
     setTyping(null);
     refocus.current = '.punch-add';
-    send(added && outPosition === added.length - 1 && samePunches(addPunchPair(added), punches) ? added : removePunchPair(punches, outPosition));
+    send(added && outPosition === added.length - 1 && punchesKey(addPunchPair(added)) === punchesKey(punches) ? added : removePunchPair(punches, outPosition));
   };
 
   const tiles = timeclockTiles(tc, {

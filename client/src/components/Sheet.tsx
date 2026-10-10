@@ -12,7 +12,7 @@ import { startOfWeek } from '../../../shared/dates.js';
 import { dayName } from '../lib/format';
 import { unlessGone } from '../lib/apiError';
 import { offeredLeftovers, saved } from '../lib/board';
-import { CARD_TITLES, moveCard, setCardSide, setCardVisible, SPLIT_QUERY, splitColumns } from '../lib/layout';
+import { CARD_TITLES, moveCard, patchCard, SPLIT_QUERY, splitColumns } from '../lib/layout';
 import { isOneOff, patchRow } from '../lib/priorities';
 import { dueRecurring } from '../lib/recurring';
 import { CARD_SIDES } from '../../../shared/settings.js';
@@ -100,11 +100,11 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
   const [refocus, setRefocus] = useState<{ selector: string } | null>(null);
   const setVisible = (id: CardId, v: boolean) => {
     setRefocus({ selector: v ? `#card-${id} .card-tools [aria-label^="Hide"]` : `.hidden-strip [data-card="${id}"]` });
-    void saveLayout(setCardVisible(layout, id, v));
+    void saveLayout(patchCard(layout, id, { visible: v }));
   };
   const setSide = (id: CardId, side: CardSide) => {
     setRefocus({ selector: `#card-${id} [data-swap]` });
-    void saveLayout(setCardSide(layout, id, side));
+    void saveLayout(patchCard(layout, id, { side }));
   };
   useEffect(() => {
     if (refocus) document.querySelector<HTMLElement>(refocus.selector)?.focus();

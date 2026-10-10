@@ -1,15 +1,13 @@
 import { Time } from '@internationalized/date';
 import { describe, expect, it } from 'vitest';
-import { guessPeriod, msToTime, timeToMs } from './timefield';
+import { guessPeriod, msToTime } from './timefield';
 
 const DAY = '2026-09-16';
 const at = (h: number, m: number) => new Date(2026, 8, 16, h, m).getTime();
 
-describe('msToTime / timeToMs', () => {
-  it('round-trips a local time on the given day and drops seconds', () => {
-    const t = msToTime(at(8, 5) + 42_000);
-    expect(t).toEqual(new Time(8, 5));
-    expect(timeToMs(t!, DAY)).toBe(at(8, 5));
+describe('msToTime', () => {
+  it('reads the local hour and minute of an instant and drops seconds', () => {
+    expect(msToTime(at(8, 5) + 42_000)).toEqual(new Time(8, 5));
     expect(msToTime(null)).toBeNull();
   });
 });

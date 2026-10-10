@@ -11,13 +11,6 @@ export function clipUrl(id: ClipId): string {
   return CLIP_FILES[`../sounds/${id}.mp3`]!;
 }
 
-/** The ids the folder holds, for the test that keeps the catalog and the folder in step. */
-export function bundledClipIds(): string[] {
-  return Object.keys(CLIP_FILES)
-    .map((k) => k.replace(/^\.\.\/sounds\/(.*)\.mp3$/, '$1'))
-    .sort();
-}
-
 /** A row per event in Settings → Alarms → Sounds; a new event without a label is a type error. */
 export const SOUND_EVENT_LABELS: Record<SoundEvent, string> = {
   timer: "Time's up",
