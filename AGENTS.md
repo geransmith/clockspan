@@ -521,7 +521,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   the last left off, a judgement the hide dropped included, since a tab back inside
   `useRefreshLoop`'s 5 s throttle reads nothing (a change saved elsewhere while it was hidden is
   then read twice if the come-back did read). The minute tick stays, for a page with no stream (a
-  buffering proxy), a change between the page's first reads and its first stream's first message,
+  buffering proxy), a change between the page's first reads and the first message any stream brings,
   and the prune, whose revision no stream hears. A past day, History or Review on screen is read
   again the next time it is shown.
 - **The day store keeps the server's copy and this device's changes apart** (`lib/optimistic.ts`):
