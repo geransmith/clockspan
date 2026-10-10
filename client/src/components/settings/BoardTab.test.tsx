@@ -198,15 +198,21 @@ describe('BoardTab', () => {
     expect(save).toHaveBeenCalledTimes(2);
   });
 
-  it('refuses a name in use, and brings a removed category back by its name', async () => {
+  it('refuses a name in use until the box is emptied, and brings a removed category back by its name', async () => {
     await renderTab();
     fireEvent.click(screen.getByRole('button', { name: 'Add category' }));
     fireEvent.change(newBox(), { target: { value: 'admin' } });
     fireEvent.keyDown(newBox(), { key: 'Enter' });
     expect(screen.getByRole('alert').textContent).toBe(BOARD.nameTaken);
+    expect(newBox().getAttribute('aria-invalid')).toBe('true');
     fireEvent.blur(newBox());
     expect(newBox().value).toBe('admin');
     expect(api.addCategory).not.toHaveBeenCalled();
+    // Emptied, the box drops the line.
+    fireEvent.change(newBox(), { target: { value: '' } });
+    fireEvent.keyDown(newBox(), { key: 'Enter' });
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(newBox().hasAttribute('aria-invalid')).toBe(false);
 
     fireEvent.change(newBox(), { target: { value: 'Old work' } });
     fireEvent.keyDown(newBox(), { key: 'Enter' });
