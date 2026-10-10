@@ -411,6 +411,24 @@ describe('refresh', () => {
     expect(result.current.days).toBe(before);
   });
 
+  it('asks again when the read it shared left before another tab or device saved a change', async () => {
+    vi.mocked(api.getDay).mockResolvedValueOnce(answered(makeDay(), 1));
+    const { result } = renderStore();
+    await settle();
+    const out = deferredAnswer<Day>();
+    vi.mocked(api.getDay)
+      .mockReturnValueOnce(out.promise)
+      .mockResolvedValueOnce(answered(makeDay(TODAY, { retroNote: 'from the phone' }), 5));
+    const refreshed = begin(() => result.current.refresh(TODAY));
+    // The live stream heard the phone's save at 5 while that read was out.
+    act(() => void window.dispatchEvent(new CustomEvent(api.CHANGED_ELSEWHERE, { detail: 5 })));
+    out.resolve(makeDay(), 4);
+    await act(() => refreshed);
+    await settle();
+    expect(api.getDay).toHaveBeenCalledTimes(3);
+    expect(result.current.days[TODAY]?.retroNote).toBe('from the phone');
+  });
+
   it('sends nothing for a day not loaded yet, and a change still out stays on top of the answer', async () => {
     const first = deferredAnswer<Day>();
     vi.mocked(api.getDay).mockReturnValueOnce(first.promise);

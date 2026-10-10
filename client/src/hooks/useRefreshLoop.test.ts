@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { CHANGED_ELSEWHERE } from '../api';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { begin, deferred, settle, setVisibility, T0 } from '../test/hooks';
 import { useRefreshLoop } from './useRefreshLoop';
@@ -9,6 +10,9 @@ beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
   setVisibility('visible');
 });
+
+/** What useLiveChanges raises when another tab or device saved a change. */
+const changedElsewhere = () => void window.dispatchEvent(new CustomEvent(CHANGED_ELSEWHERE, { detail: 5 }));
 
 describe('useRefreshLoop', () => {
   it('runs every minute, and on mount only when asked to', async () => {
@@ -112,6 +116,33 @@ describe('useRefreshLoop', () => {
     await settle();
     expect(run).toHaveBeenCalledTimes(2);
     expect(result.current.pending).toBe(false);
+  });
+
+  it('runs at once when another tab or device saves a change, inside the throttle too, and stops listening on unmount', async () => {
+    const run = vi.fn(() => Promise.resolve());
+    const { unmount } = renderHook(() => useRefreshLoop(run, true));
+    await settle();
+    act(changedElsewhere);
+    expect(run).toHaveBeenCalledTimes(2);
+    await settle();
+    unmount();
+    changedElsewhere();
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it('queues one run behind the one out for a burst of changes, not one each', async () => {
+    const out = deferred<void>();
+    const run = vi.fn().mockReturnValueOnce(out.promise).mockResolvedValue(undefined);
+    renderHook(() => useRefreshLoop(run, true));
+    act(() => {
+      changedElsewhere();
+      changedElsewhere();
+      changedElsewhere();
+    });
+    expect(run).toHaveBeenCalledTimes(1);
+    out.resolve();
+    await settle();
+    expect(run).toHaveBeenCalledTimes(2);
   });
 
   it('uses the newest run and stops on unmount', async () => {

@@ -30,9 +30,15 @@ import type {
 import { REVISION_HEADER, VERSION_HEADER } from '../../shared/api.js';
 import { alert } from './lib/alerts';
 import { ApiError } from './lib/apiError';
+import { noteOwnWrite } from './lib/ownWrites';
 import { REQUEST_FAILED, REQUEST_TIMEOUT, RESTORED, UNREADABLE_ANSWER, UPDATED } from './lib/copy';
 
 export const UNAUTHENTICATED_EVENT = 'focus:unauthenticated';
+/**
+ * Raised on the window by useLiveChanges when another tab or device saved a change, its detail
+ * the revision heard: every useRefreshLoop runs, and the day store raises its held days' floors.
+ */
+export const CHANGED_ELSEWHERE = 'focus:changed-elsewhere';
 
 /**
  * How long a request may take, answer included. `fetch` has no limit of its own: one that never
@@ -114,7 +120,12 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   // An answer that names none (an auth route, a 401 before the data routes, a proxy's page) reads as 0.
   const named = res.headers.get(REVISION_HEADER);
   const revision = Number(named);
-  if (named !== null) noticeRestore(revision, before);
+  if (named !== null) {
+    noticeRestore(revision, before);
+    // The server moves the revision for every write, refused or not, so this page's own don't
+    // count as another device's change when the live stream names them.
+    if (method !== 'GET') noteOwnWrite(revision);
+  }
   let data: unknown = null;
   try {
     data = await res.json();

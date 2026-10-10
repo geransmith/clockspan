@@ -76,9 +76,14 @@ shared/                 imported by both sides, always with a `.js` suffix
 server/                 Express API → dist/server
   app.ts                createApp(): headers, /api/health, /api/auth/me for every mode, auth routers,
                         data routers behind requireAuth (each answer naming the server's version
-                        and the user's revision), static files and the SPA fallback;
-                        startBackgroundJobs() (the login purge, the retention schedule and, under
-                        OIDC, warming the `Discovery` index.ts passes in; started by index.ts only)
+                        and the user's revision), the live stream (GET /api/changes), static files
+                        and the SPA fallback; startBackgroundJobs() (the login purge, the retention
+                        schedule, the live streams' ping and, under OIDC, warming the `Discovery`
+                        index.ts passes in; started by index.ts only)
+  changes.ts            changeFeed: each user's open live streams (GET /api/changes, at most
+                        MAX_STREAMS), the revision sent when one opens and after each of the user's
+                        writes, the ping (PING_MS) startBackgroundJobs sends, and end() before the
+                        server closes
   security.ts           every security header, rejectCrossSiteWrites (READ_METHODS: what isn't a write)
                         and rejectUnknownHosts
   config.ts, db.ts      env parsing (throws on bad config); pragmas, MIGRATIONS and migrate, the default user,
@@ -106,29 +111,34 @@ server/                 Express API → dist/server
                         ownedRouter (rows of a day, by id), uidRouter (rows of a user, by uid: categories
                         and tasks), parseUidField (an optional uid field) and the session and break row →
                         JSON builders (dayJson is in days.ts)
-  dev/                  seed.ts + seed-cli.ts (`npm run seed`), harness.ts (startTestApp for route tests)
+  dev/                  seed.ts + seed-cli.ts (`npm run seed`), harness.ts (startTestApp for route tests;
+                        a client reads an event stream with stream(path))
   index.ts, cli.ts      the process entrypoints: the server (warns under AUTH_MODE=none), reset-password
                         (reads the arguments and prints resetPassword's answer)
 client/                 Vite root → dist/client
   public/               manifest, sw.js, icons/icon.svg (the icon's one source; `npm run icons` renders
                         the PNGs next to it)
   src/App.tsx           Shell (route, settings dialog) inside AppProviders (hooks/AppProviders.tsx); today's
-                        alarms are hooks/useTodayAlarms.ts
+                        alarms are hooks/useTodayAlarms.ts, and the live stream hooks/useLiveChanges.ts
   src/api.ts            fetch wrapper (30 s timeout; UNAUTHENTICATED_EVENT on a 401 from anything but login and
                         /me; the reload banner when an answer names another version, or a revision below
-                        one heard before it was asked (a restored backup); a data call answers
-                        Answer<T>, its body as `value` and the user's revision the server named as
-                        `revision` (REVISION_HEADER; 0 when an answer names none), an auth call the body
-                        alone (auth()); throws lib/apiError.ts's ApiError (with the refusal's
+                        one heard before it was asked (a restored backup); each write's revision, a
+                        refusal's included, noted as this page's own (lib/ownWrites.ts); a data call
+                        answers Answer<T>, its body as `value` and the user's revision the server named
+                        as `revision` (REVISION_HEADER; 0 when an answer names none), an auth call the
+                        body alone (auth()); throws lib/apiError.ts's ApiError (with the refusal's
                         `revision`), which a caller checks with instanceof, and beside it unlessGone
                         counts a delete answered 404 as done, and goneAt does the same for a data call,
-                        keeping the refusal's revision);
+                        keeping the refusal's revision); CHANGED_ELSEWHERE, the event useLiveChanges
+                        raises;
                         src/types.ts re-exports the shared types (types only)
   src/lib/              logic with no React, a test beside each file (the browser-facing ones stub the
                         globals, as alerts.ts does; apiError is covered through api.test and the hook
                         tests)
     optimistic.ts       a server copy plus pending changes, which the stores are built on, and `serial()`,
                         their write queue
+    ownWrites.ts        the revisions this page's writes were answered with (noteOwnWrite, from api.ts),
+                        and changedElsewhere: whether a span of revisions holds another tab's or device's
     alerts.ts           the one place that plays sound, shows notifications and pushes banners
     copy.ts             every line the app raises at the user; no logic
     storage.ts          localStorage that never throws (private mode, quota); readDaySet / addToDaySet, a
@@ -163,7 +173,10 @@ client/                 Vite root → dist/client
                         text box's draft that follows the stored name or number; useRecurringAnswered
                         keeps the recurring priorities the morning offer was answered for today on this
                         device; useShortcuts binds a key beside its button (useShortcut) and is the one
-                        keydown listener (useShortcutListener).
+                        keydown listener (useShortcutListener); useLiveChanges keeps the server's live
+                        stream open while the tab is shown and raises CHANGED_ELSEWHERE (its detail the
+                        revision heard), on which every useRefreshLoop runs and the day store raises its
+                        held days' floors.
                         src/test/fixtures.ts has the plain factories and TEST_SETTINGS (no React), and a
                         mocked data call's answer (answered(value, revision = 0), and deferredAnswer<T>()
                         for one a case resolves by hand);
@@ -326,10 +339,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   before `resolveUser`, so keep write routes under `/api`; `rejectUnknownHosts` is mounted
   under `AUTH_MODE=none` only, on `/api` after `/api/health`, and reads the raw `Host` header,
   never `req.hostname`. Headers that describe one answer stay with the code that sends it: the
-  static files' `Cache-Control` in `app.ts` and `Retry-After` in `refuseTooMany`
-  (`auth/limiter.ts`). `Clockspan-Version` and `Clockspan-Revision`, which guard nothing, are set
-  in `app.ts` on the data router (see "A page left open across an update asks to be reloaded" and
-  "Every data answer numbers the user's changes").
+  static files' `Cache-Control` in `app.ts`, `Retry-After` in `refuseTooMany` (`auth/limiter.ts`)
+  and the live stream's `X-Accel-Buffering` in `changes.ts`. `Clockspan-Version` and
+  `Clockspan-Revision`, which guard nothing, are set in `app.ts` on the data router (see "A page
+  left open across an update asks to be reloaded" and "Every data answer numbers the user's
+  changes").
 - **Cookies, sessions and passwords stay in `server/auth/`.** A request's cookies are read only
   through `readCookie()` (`auth/session.ts`), and `Set-Cookie` is written only through
   `cookieHeader()` there; outside `server/dev/` (the test harness's cookie jar) no other module
@@ -476,15 +490,32 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   minute), never settled with the defaults. After the first answer the settings are fetched
   again on `useRefreshLoop`, like today's day, since another device may change them.
 - **Today's day is kept in step with the server** (`useRefreshDay` in `useDay.tsx`, on
-  `useRefreshLoop`: every minute and when the tab comes back, throttled to 5 s per caller), so the
-  alarms in `useTodayAlarms` judge the server's copy of the punches, not one from hours ago; they
-  wait while a come-back refresh is out. Break's over waits the same way on `useBreak`'s own loop,
-  which reads the day the break is on (yesterday's for a break from before midnight, while it can
-  still ring). A today whose first load failed is loaded again on the same ticks (no second banner),
-  so its alarms come back with the server. Any day the store holds is also read again each time a
-  view shows it (`useDay`; one whose first load failed is asked for again then, quietly), and a
-  range read (`store.readRange`) lands on every day it holds loaded in the range when it answers,
-  under the same `revision` rule (below).
+  `useRefreshLoop`: every minute and when the tab comes back, throttled to 5 s per caller, and at
+  once when another tab or device saves a change), so the alarms in `useTodayAlarms` judge the
+  server's copy of the punches, not one from hours ago; they wait while a come-back refresh is out.
+  Break's over waits the same way on `useBreak`'s own loop, which reads the day the break is on
+  (yesterday's for a break from before midnight, while it can still ring). A today whose first load
+  failed is loaded again on the same ticks (no second banner), so its alarms come back with the
+  server. Any day the store holds is also read again each time a view shows it (`useDay`; one whose
+  first load failed is asked for again then, quietly), and a range read (`store.readRange`) lands on
+  every day it holds loaded in the range when it answers, under the same `revision` rule (below). A
+  change saved elsewhere also raises every held day's floor to its revision, so a read out from
+  before it is asked for again.
+- **Another device's save reaches a shown tab within a second** (`server/changes.ts`,
+  `hooks/useLiveChanges.ts`, `lib/ownWrites.ts`). Each shown tab holds one server-sent event stream,
+  `GET /api/changes` (`useLiveChanges`, called in `Shell`, not `AppProviders`, since happy-dom has
+  no `EventSource`), and a hidden tab closes it. The stream names the user's revision as it opens,
+  which is where the tab starts judging, and again after each of the user's writes has answered.
+  The revisions heard gather for `GATHER_MS` (300 ms); if the span holds one this page didn't write
+  (`changedElsewhere`: `request()` notes each write's revision, a refusal's included, and the
+  server moves it by one per write), `CHANGED_ELSEWHERE` is raised on the window with the newest
+  one as its detail. On it every `useRefreshLoop` runs at once, after the run out and once for a
+  burst, and the day store raises its held days' floors (above). A stream the browser gave up on (a
+  401, the 429 past `MAX_STREAMS`, a proxy's error page) is opened again on `nextBackoff` and judged
+  from where it left off; a tab shown again starts from its new first message, since coming back
+  reads everything anyway. The minute tick stays, for a page with no stream (a buffering proxy), a
+  change between a read and a stream's first message, and the prune, whose revision no stream
+  hears. A past day, History or Review on screen is read again the next time it is shown.
 - **The day store keeps the server's copy and this device's changes apart** (`lib/optimistic.ts`):
   each day is its confirmed copy plus the changes not confirmed yet, and the sheet shows the one
   laid over the other. The confirmed copy is the server's answers in the order they arrived (a
@@ -1072,10 +1103,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   write moves it on, and once at boot under `AUTH_MODE=none`; `UserRow` leaves the column out. The
   number describes what the handler wrote or read only because nothing runs in between: every
   handler, param handler and middleware on the `api` router is synchronous, never `await`s and
-  never answers from a callback or a timer. A route that must wait lives outside that router, or
-  this rule changes first. Anything else that changes a user's rows while the server runs moves
-  their number too: `runRetention` does, for each user its prune deleted something for (the Data
-  tab's prune is a write already). The seed and the README's handover script write without it.
+  never answers from a callback or a timer; `GET /changes` alone sends after its handler returns,
+  and only revisions, never rows. A route that must wait lives outside that router, or this rule
+  changes first. The same middleware tells the user's live streams a write's revision once its
+  answer has closed (`changes.notify`). Anything else that changes a user's rows while the server
+  runs moves their number too: `runRetention` does, for each user its prune deleted something for
+  (the Data tab's prune is a write already), though no stream hears of it. The seed and the
+  README's handover script write without it.
 - **A wide window shows the sheet in two columns, chosen when the sheet mounts.** Each layout
   entry has a `side` (`'left' | 'right'`), which `normalizeLayout` keeps or sets to the card's
   `DEFAULT_SIDE` (`shared/settings.ts`), so a layout saved before the columns needs no
@@ -1274,7 +1308,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   cover it in that router's `*.test.ts`: happy path, each 400, and that another user gets a
   404/empty result (the scoping test is not optional). A new `/:date` route also gets a row in the
   bad-date table near the end of `server/routes/days.test.ts`, and a write route one in the
-  distance table after it.
+  distance table after it. An event stream (`GET /changes`) is read by `EventSource`, not
+  `api.ts`: it has no call there and no `ROUTES` row, and its tests read it with the harness's
+  `stream()`. Only a route whose later messages are revisions may write after its handler returns.
 - **A schema change**: append to `MIGRATIONS` in `db.ts` and never edit an entry (see
   "Migrations are append-only"); a function migration's `db.test.ts` cases call
   `migrate(db, upTo)` to stop at the version before it, write the old rows, then run it. A new
@@ -1398,7 +1434,8 @@ Prove a change at the cheapest level that can show it, and stop there:
      adds the sample days and their manifest (`app.seeded`). `app.db` sets up what the API
      can't, such as an expired login. One app per test. To move time, fake only `Date`
      (`vi.useFakeTimers({ toFake: ['Date'] })`, so HTTP keeps its real timers) and step it with
-     `vi.setSystemTime`.
+     `vi.setSystemTime`. An event stream is read with a client's `stream(path)`, whose `next()`
+     gives one event; the harness closes every connection, streams included, when it closes.
    - Code with no route (`mergeSettings`, config, passwords, the limiter) is unit-tested
      directly.
    - The database is `openDatabase(':memory:')`, never a file. The static-file tests write a
@@ -1454,6 +1491,16 @@ The browser pass for each surface (the logic under it is already tested):
   `Clockspan-Version` header names another version (a new `Response` over the same body, with
   that header changed), then switch views, and look at the info banner with its Reload button.
   That it shows once, stays, stays closed and reloads is `api.test.ts`'s.
+- **Live updates**: after `npm run seed`, the sheet at 1280 in two windows side by side (or one
+  window and `curl`). Turning the board on (`curl -X PUT localhost:3000/api/settings -H
+  'content-type: application/json' -d '{"board":true}'`) shows Board in the header within a second;
+  a row ticked, and a timer started and finished, in one window show in the other within a second.
+  A tick in the page sends its PUT and no GET of `/api/days`, `/settings`, `/sessions/running` or
+  `/board` after it, with one `/api/changes` pending in the Network panel. Switching to another tab
+  ends its `/api/changes`, and coming back opens exactly one. Under the `prod` config the same tick
+  in two windows leaves the console free of CSP violations, and `curl -sN
+  localhost:8090/api/changes` prints `data: N` at once and `: ping` within 25 s. No width or theme
+  pass: nothing new is drawn.
 - **Punches**: a pair added before lunch, an early Clock out (done, celebration), "Add extra
   out / in" after it (the old Clock out becomes Out N) and removing that pair. In the time
   field: clear Clock in and press `0` `7` `3` `0` (the hour advances, the period fills, the
@@ -1578,10 +1625,19 @@ The browser pass for each surface (the logic under it is already tested):
   reaches `/api/auth`.
 - `window` `focus` events fire on ordinary clicks in some embedded browsers, so the periodic
   and come-back refreshes (today's day, the settings, the timer's sync, the board) go through
-  `useRefreshLoop`, which listens for `visibilitychange` and never `focus`; a new one goes
-  through it too, and nothing in the app listens for the window's `focus`. A read tied to what
-  is shown or to a change just made (a view showing a held day, a re-read after a write) is not
-  a refresh and stays outside the loop.
+  `useRefreshLoop`, which listens for `visibilitychange` and `CHANGED_ELSEWHERE` and never
+  `focus`; a new one goes through it too, and nothing in the app listens for the window's `focus`
+  (`useLiveChanges` follows `visibilitychange` too). A read tied to what is shown or to a change
+  just made (a view showing a held day, a re-read after a write) is not a refresh and stays outside
+  the loop.
+- Over HTTP/1.1 a browser holds six connections per host, and each live stream keeps one, so a tab
+  opens one stream and only while it is shown; several tabs shown at once over plain HTTP can use
+  them up (HTTPS through a proxy is usually HTTP/2, which carries them all on one connection).
+- The live stream is one long answer. Node's `requestTimeout` and `headersTimeout` cover only the
+  request, so they don't cut it, but `server.close()` waits for it, which is why `index.ts` calls
+  `changes.end()` first. A proxy's idle cut is kept off by the ping (`PING_MS`, under nginx's 60 s
+  and Cloudflare's 100 s) and its buffering by `X-Accel-Buffering: no`. A dev-server restart ends
+  the stream, and the browser or `nextBackoff` opens it again.
 - The board's refresh lives in `BoardRefresh` (`hooks/useBoard.tsx`), a child the provider
   mounts only while the board is on: switching it on reads at once (StrictMode's second mount
   lands inside the loop's throttle), and nothing ticks while it is off. So the test files that

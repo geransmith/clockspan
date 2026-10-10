@@ -10,6 +10,7 @@ import { hasLocalUser, publicUser } from './auth/users.js';
 import { oidcAuthRouter, type Discovery } from './auth/oidc.js';
 import { purgeExpiredSessions } from './auth/session.js';
 import { runRetention } from './retention.js';
+import { changeFeed, PING_MS, type ChangeFeed } from './changes.js';
 import { refuse } from './refuse.js';
 import { READ_METHODS, rejectCrossSiteWrites, rejectUnknownHosts, securityHeaders } from './security.js';
 import { boardRouter } from './routes/board.js';
@@ -34,10 +35,16 @@ export interface AppOptions {
   setupCode?: string;
   /** AUTH_MODE=oidc's provider lookup, shared with `startBackgroundJobs`, which warms it. Without one, the OIDC router makes its own. */
   discovery?: Discovery;
+  /**
+   * The users' live streams, shared with `startBackgroundJobs`, which pings them; the entrypoint
+   * ends them before it closes the server. Without one, the app makes its own.
+   */
+  changes?: ChangeFeed;
 }
 
 export function createApp(db: DB, config: Config, opts: AppOptions = {}): Express {
   const app = express();
+  const changes = opts.changes ?? changeFeed();
   app.disable('x-powered-by');
   app.set('trust proxy', config.trustProxy);
   app.use(securityHeaders(config));
@@ -88,8 +95,18 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
   api.use(requireAuth, requireOwnPassword, (req, res, next) => {
     res.setHeader(VERSION_HEADER, VERSION);
     const { id } = currentUser(req);
-    res.setHeader(REVISION_HEADER, READ_METHODS.has(req.method) ? readRevision(db, id) : bumpRevision(db, id));
+    const write = !READ_METHODS.has(req.method);
+    const revision = write ? bumpRevision(db, id) : readRevision(db, id);
+    res.setHeader(REVISION_HEADER, revision);
+    // The user's live streams hear of a write once it has answered. 'close' rather than 'finish',
+    // which a caller that left mid-request never gets; no handler awaits, so it has written by then.
+    if (write) res.on('close', () => changes.notify(id, revision));
     next();
+  });
+  // The one route that sends after its handler returns: revisions, never rows (changes.ts).
+  api.get('/changes', (req, res) => {
+    const { id } = currentUser(req);
+    changes.open(id, res, readRevision(db, id));
   });
   api.use('/settings', settingsRouter(db));
   api.use('/days', daysRouter(db, config));
@@ -152,12 +169,13 @@ export function createApp(db: DB, config: Config, opts: AppOptions = {}): Expres
 
 /**
  * The server's timers: expired logins purged every six hours, old days pruned
- * (`runRetention`) 30 s after boot and then every six hours, and under OIDC the provider looked
- * up until it answers (`Discovery.warm`, on the one `createApp` was given). The process
- * entrypoint starts them after `createApp`, so building an app (every test does) starts
- * nothing. All are unref'd and never hold the process open.
+ * (`runRetention`) 30 s after boot and then every six hours, the live streams pinged every 25 s
+ * (`PING_MS`, on the feed `createApp` was given), and under OIDC the provider looked up until it
+ * answers (`Discovery.warm`, on the one `createApp` was given). The process entrypoint starts
+ * them after `createApp`, so building an app (every test does) starts nothing. All are unref'd
+ * and never hold the process open.
  */
-export function startBackgroundJobs(db: DB, config: Config, discovery?: Discovery): void {
+export function startBackgroundJobs(db: DB, config: Config, discovery?: Discovery, changes?: ChangeFeed): void {
   // A timer's throw is an uncaught exception: one busy or full database would end the server.
   const guarded = (label: string, job: () => unknown) => () => {
     try {
@@ -172,4 +190,9 @@ export function startBackgroundJobs(db: DB, config: Config, discovery?: Discover
   setTimeout(prune, 30_000).unref();
   setInterval(prune, 6 * HOUR_MS).unref();
   if (discovery) void discovery.warm();
+  if (changes)
+    setInterval(
+      guarded('[changes]', () => changes.ping()),
+      PING_MS,
+    ).unref();
 }
