@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import { ApiError } from '../../lib/apiError';
-import { PASSWORD_CHANGED } from '../../lib/copy';
+import { PASSWORD_CHANGED, PASSWORD_MISMATCH } from '../../lib/copy';
 import { apiError, makeUser, settle } from '../../test/hooks';
 import { AccountTab } from './AccountTab';
 
@@ -49,6 +49,16 @@ describe('AccountTab', () => {
     expect(screen.getByRole('alert').textContent).toBe('Request failed (502)');
     await deleteSam();
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('deletes no user when the confirm is answered no', async () => {
+    vi.mocked(api.listUsers).mockResolvedValue({ users: [admin, sam] });
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal('confirm', confirm);
+    await renderTab();
+    await deleteSam();
+    expect(confirm).toHaveBeenCalled();
+    expect(api.deleteUser).not.toHaveBeenCalled();
   });
 
   it('disables every Delete and Add User while a request is out, so a confirmed press is never dropped', async () => {
@@ -99,6 +109,17 @@ describe('AccountTab', () => {
     expect(api.changePassword).toHaveBeenCalledWith('old-password', '');
     expect(screen.getByRole('status')).toBe(status);
     expect(status.textContent).toBe(PASSWORD_CHANGED);
+  });
+
+  it('sends no password change when the new password was typed differently twice', async () => {
+    vi.mocked(api.listUsers).mockResolvedValue({ users: [admin] });
+    await renderTab();
+    fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'new-pass-1' } });
+    fireEvent.change(screen.getByLabelText('Confirm new password'), { target: { value: 'new-pass-2' } });
+    fireEvent.submit(screen.getByRole('button', { name: 'Change Password' }).closest('form')!);
+    await settle();
+    expect(screen.getByRole('alert').textContent).toBe(PASSWORD_MISMATCH);
+    expect(api.changePassword).not.toHaveBeenCalled();
   });
 
   it('names the account on the change-password form for password managers', async () => {

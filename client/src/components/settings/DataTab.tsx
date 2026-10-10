@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { RETENTION_LIMITS } from '../../../../shared/settings.js';
 import * as api from '../../api';
 import { useBoardStore } from '../../hooks/useBoard';
@@ -62,6 +62,7 @@ function DeleteOldDays() {
   const [before, setBefore] = useState(() => addDays(today, -365));
   const [loaded, setLoaded] = useState<PruneInfo | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const dateBox = useRef<HTMLInputElement>(null);
   const { busy, error, setError, run } = useSubmit();
   // The server says which cutoff each count is for: one for another date, or cleared by a
   // delete, is not shown, so Delete waits for the count that matches.
@@ -88,6 +89,9 @@ function DeleteOldDays() {
       void board.load();
       setDone(DAYS_DELETED(deleted));
       setLoaded(null);
+      // Nothing is left before the date, so Delete stays off: a focus that fell to the page, or is
+      // still on that button, moves to the date.
+      if (document.activeElement?.matches('body, :disabled')) dateBox.current?.focus();
     });
   };
 
@@ -106,6 +110,7 @@ function DeleteOldDays() {
         <span>Delete days before</span>
         <span className="inline-controls">
           <input
+            ref={dateBox}
             className="input"
             type="date"
             value={before}
