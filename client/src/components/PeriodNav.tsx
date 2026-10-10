@@ -11,8 +11,6 @@ interface Props {
   /** Today's period is the latest one: it disables "next" and hides the reset. */
   today: string;
   onFrom: (from: string) => void;
-  /** Leave the reset to the current period out; the caller shows `PeriodReset` somewhere roomier. */
-  noReset?: boolean;
   /** The ◀ button, which the reset and the caller's Try again give the focus to. */
   prevRef: RefObject<HTMLButtonElement | null>;
 }
@@ -22,7 +20,7 @@ interface Props {
  * shared by the review and the calendar. A press that reaches the current period disables ▶ or
  * takes the reset away, so the focus moves to ◀ rather than falling back to the top of the page.
  */
-export function PeriodNav({ kind, label, from, today, onFrom, noReset, prevRef }: Props) {
+export function PeriodNav({ kind, label, from, today, onFrom, prevRef }: Props) {
   const current = periodRange(kind, today, 0).from;
   const next = () => {
     const f = periodRange(kind, from, -1).from;
@@ -38,13 +36,13 @@ export function PeriodNav({ kind, label, from, today, onFrom, noReset, prevRef }
       <button className="btn btn-icon" onClick={next} aria-label={`Next ${kind}`} disabled={from >= current}>
         <ChevronRight />
       </button>
-      {!noReset && <PeriodReset kind={kind} from={from} today={today} onFrom={onFrom} prevRef={prevRef} />}
+      <PeriodReset kind={kind} from={from} today={today} onFrom={onFrom} prevRef={prevRef} />
     </div>
   );
 }
 
 /** "This week" / "This month" / "This quarter": back to today's period, shown once stepped back. It hands the focus to `prevRef` as it goes. */
-export function PeriodReset({ kind, from, today, onFrom, prevRef }: Pick<Props, 'kind' | 'from' | 'today' | 'onFrom' | 'prevRef'>) {
+function PeriodReset({ kind, from, today, onFrom, prevRef }: Pick<Props, 'kind' | 'from' | 'today' | 'onFrom' | 'prevRef'>) {
   const current = periodRange(kind, today, 0).from;
   if (from >= current) return null;
   return (

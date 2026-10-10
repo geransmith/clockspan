@@ -2,8 +2,9 @@ import { useRef, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 
 /**
- * A list longer than FOLD_AT + 1 rows shows its first FOLD_AT and a Show all button. One row
- * over shows in full, since the button would take the space of the one row it hides.
+ * A list longer than FOLD_AT + 1 rows shows its first FOLD_AT and a "Show N more" button (the
+ * list's heading has its whole count). One row over shows in full, since the button would take
+ * the space of the one row it hides.
  */
 const FOLD_AT = 8;
 
@@ -14,7 +15,7 @@ const FOCUSABLE = 'a[href], button:not(:disabled), input:not(:disabled), select:
  * gets how many items show and the list, and returns the list wrapped: the board's Later puts it
  * in a SortableContext of just the cards shown. `count` is the list's own length when `items`
  * holds one more or one fewer for a moment (a card dragged into or out of Later): the fold and
- * Show all follow it, so the list doesn't fold or open mid-drag.
+ * Show N more follow it, so the list doesn't fold or open mid-drag.
  */
 export function Folded({
   items,
@@ -35,7 +36,7 @@ export function Folded({
       {folded ? items.slice(0, FOLD_AT) : items}
     </ul>
   );
-  // Show all goes once pressed, so the focus moves to the first row it showed, or the row itself
+  // Show N more goes once pressed, so the focus moves to the first row it showed, or the row itself
   // when nothing in it takes focus, rather than falling back to the top of the page.
   const showAll = () => {
     flushSync(() => setOpen(true));
@@ -50,7 +51,7 @@ export function Folded({
       {wrap ? wrap(folded ? FOLD_AT : items.length, list) : list}
       {folded && (
         <button className="btn btn-ghost fold-more" onClick={showAll}>
-          Show all {count}
+          Show {count - FOLD_AT} more
         </button>
       )}
     </>
