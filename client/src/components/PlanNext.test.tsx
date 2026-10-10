@@ -166,6 +166,18 @@ describe('PlanNext', () => {
     expect(sent().map((p) => p.text)).toEqual(['Call the bank']);
   });
 
+  it("starts a row that opens on today's list while it's open ticked, and keeps a box unticked here unticked", async () => {
+    const { again } = await renderPlan();
+    await open();
+    fireEvent.click(box('Call the bank'));
+    // Ship it unticked on Top priorities.
+    again([{ ...TODAYS[0]!, done: false }, ...TODAYS.slice(1)]);
+    expect(box('Ship it').checked).toBe(true);
+    expect(box('Call the bank').checked).toBe(false);
+    await save();
+    expect(sent().map((p) => p.text)).toEqual(['Ship it', 'Review the PR']);
+  });
+
   it("doesn't offer a task already on the next day's list, under any name, and offers another task of the same text", async () => {
     const kept = { ...TODAYS[1]!, position: 1, text: 'Review the pull request' };
     const twin = makePriority(2, 'call the  bank', { uid: 'twin00000001' });
