@@ -49,7 +49,15 @@ export function Header({ view, onNavigate, onOpenSettings }: Props) {
           <span className="brand-name">Clockspan</span>
         </button>
         <div className="topbar-actions">
-          <button ref={boardButton} className="btn btn-icon" onClick={toggleBoard} aria-pressed={onBoard} title="Board" aria-keyshortcuts={boardKey}>
+          <button
+            ref={boardButton}
+            id="header-board"
+            className="btn btn-icon"
+            onClick={toggleBoard}
+            aria-pressed={onBoard}
+            title="Board"
+            aria-keyshortcuts={boardKey}
+          >
             <Columns />
             <span className="btn-text">Board</span>
           </button>

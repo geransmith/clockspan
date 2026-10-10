@@ -2,9 +2,11 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import * as api from '../../api';
+import { AuthGate } from '../../auth/AuthGate';
 import { BOARD_LIMITS, LOOKBACK_DAYS } from '../../../../shared/api.js';
 import { addDays, DAY_MS, HOUR_MS, MINUTE_MS } from '../../../../shared/dates.js';
 import { MAX_PRIORITIES } from '../../../../shared/settings.js';
+import { SettingsProvider } from '../../hooks/useSettings';
 import type { TimerCtx } from '../../hooks/useTimer';
 import { dismissByTag, unlockAudio, warnQuietly, warnSaveFailed } from '../../lib/alerts';
 import { COLUMN_NAMES, withCategory, withItem, withItemPatch, withoutItem, type ColumnId } from '../../lib/board';
@@ -14,10 +16,12 @@ import { USER_KEYS } from '../../lib/storage';
 import {
   answered,
   completedSession,
+  DEFAULT_USER,
   deferredAnswer,
   makeBoard,
   makeCard,
   makeCategory,
+  makeAuth,
   makeDay,
   makePriority,
   makeSession,
@@ -30,7 +34,8 @@ import {
   ShortcutKeys,
   stubMatchMedia,
 } from '../../test/hooks';
-import type { Board as BoardData, Priority, Session } from '../../types';
+import type { Board as BoardData, Priority, RangeResponse, Session } from '../../types';
+import { Header } from '../Header';
 import { Board } from './Board';
 
 vi.mock('../../api');
@@ -75,6 +80,19 @@ async function renderBoard(settings = makeSettings(), now = NOW, { running = nul
   const { rerender } = render(page(now, WED));
   await settle();
   return (at: number, today = WED) => rerender(page(at, today));
+}
+
+/** App's header, whose Board button stays as the board's page changes. */
+async function renderHeader() {
+  vi.mocked(api.getAuth).mockResolvedValue(makeAuth({ mode: 'none', user: DEFAULT_USER }));
+  render(
+    <AuthGate>
+      <SettingsProvider>
+        <Header view="board" onNavigate={vi.fn()} onOpenSettings={vi.fn()} />
+      </SettingsProvider>
+    </AuthGate>,
+  );
+  await settle();
 }
 
 /** A column by its heading. */
@@ -675,7 +693,7 @@ describe('Board', () => {
     expect(screen.getByRole('heading', { name: 'Done' }).getAttribute('tabindex')).toBe('-1');
   });
 
-  it("shows today's row parked in a lane where it lands, with no tick, rename, category or Remove until the park lands", async () => {
+  it("shows today's row parked in a lane where it lands, with no tick, rename, category, Move to or Remove until the park lands", async () => {
     onServer = makeBoard(...onServer.cards, makeCard('left00000001', 'Check the logs', { lane: null, listDate: TUE, listed: 1 }));
     const placed = deferredAnswer<BoardData>();
     vi.mocked(api.editItem).mockReturnValueOnce(placed.promise);
@@ -688,12 +706,15 @@ describe('Board', () => {
     expect(screen.queryByRole('checkbox', { name: 'Report done' })).toBeNull();
     expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Category for Report/ })).toBeNull();
+    // A move planned from where it shows would be wrong: Done would tick a row the park takes off.
+    expect(screen.queryByRole('group', { name: 'Move to' })).toBeNull();
     placed.resolve((onServer = withItemPatch(onServer, REPORT, { lane: 'next', before: null })));
     await settle();
     expect(titlesIn('Next')).toEqual(['Follow up', 'Plan B', 'Report', 'Check the logs']);
     // The dialog left open takes them once it lands.
     expect(screen.getByRole('textbox', { name: 'Title' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Category for Report: none' })).toBeTruthy();
+    expect(moveOptions()).toEqual(['Later', 'In Progress', 'Done']);
   });
 
   it("parks today's row whose task a later day's list holds in Later, as any other", async () => {
@@ -824,14 +845,18 @@ describe('Board', () => {
     expect(titlesIn('In Progress')).toEqual(['Report']);
   });
 
-  it('shows a Try again for a list of today that could not be read', async () => {
+  it("shows a Try again for a list of today that could not be read, handing the focus to the header's Board button as it goes", async () => {
     vi.mocked(api.getDay).mockRejectedValueOnce(new Error('offline'));
     await renderBoard();
+    await renderHeader();
     expect(screen.getByText(new RegExp(LOAD_FAILED.title))).toBeTruthy();
     expect(warnQuietly).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
+    const retry = screen.getByRole('button', { name: 'Try Again' });
+    retry.focus();
+    fireEvent.click(retry);
     await settle();
     expect(titlesIn('In Progress')).toEqual(['Report']);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Board' }));
   });
 
   it("shows today's failed read beside the board's, since no banner says it on the board", async () => {
@@ -848,11 +873,23 @@ describe('Board', () => {
     expect(shownColumns()).toEqual(['Later']);
   });
 
-  it('shows a Try again for a board that could not be read', async () => {
+  it("shows a Try again for a board that could not be read, which keeps the focus until it goes and then hands it to the header's Board button", async () => {
     vi.mocked(api.getBoard).mockRejectedValue(new Error('offline'));
+    vi.mocked(api.getDay).mockRejectedValueOnce(new Error('offline'));
     await renderBoard();
-    expect(screen.getByText(new RegExp(LOAD_FAILED.board))).toBeTruthy();
+    await renderHeader();
+    const retry = screen.getAllByRole('button', { name: 'Try Again' })[0]!;
+    retry.focus();
+    fireEvent.click(retry);
+    await settle();
+    // Failed again: it stays, so a second press reads again rather than leaving the board.
+    expect(document.activeElement).toBe(retry);
     vi.mocked(api.getBoard).mockImplementation(() => Promise.resolve(answered(onServer)));
+    fireEvent.click(retry);
+    await settle();
+    // Today's notice stays, and the board's took the focus with it.
+    expect(screen.getAllByRole('alert').map((a) => a.querySelector('strong')?.textContent)).toEqual([`${LOAD_FAILED.title}.`]);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Board' }));
     fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
     await settle();
     expect(titlesIn('Later')).toEqual(['Write a KB']);
@@ -875,6 +912,22 @@ describe('Board', () => {
     expect(done.queryByRole('alert')).toBeNull();
     expect(done.getByText('Nothing done this week.')).toBeTruthy();
     expect(api.getRange).toHaveBeenCalledTimes(2);
+  });
+
+  it("says nothing is done only once this week's earlier days are read, and at once on a Monday, which has none", async () => {
+    onServer = makeBoard();
+    lists = {};
+    const range = deferredAnswer<RangeResponse>();
+    vi.mocked(api.getRange).mockReturnValueOnce(range.promise);
+    const at = await renderBoard();
+    // A routine ticked on those days may be all Done has.
+    expect(within(column('Done')).queryByText('Nothing done this week.')).toBeNull();
+    range.resolve({ days: [makeDay(TUE)] });
+    await settle();
+    expect(within(column('Done')).getByText('Nothing done this week.')).toBeTruthy();
+    at(NOW - 2 * DAY_MS, MON);
+    await settle();
+    expect(within(column('Done')).getByText('Nothing done this week.')).toBeTruthy();
   });
 });
 

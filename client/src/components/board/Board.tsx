@@ -43,6 +43,7 @@ import { readStored, USER_KEYS, writeStored } from '../../lib/storage';
 import type { OpenLane, Priority } from '../../types';
 import { Burst } from '../Burst';
 import { Folded } from '../Folded';
+import { PassFocusOnLeave } from '../FocusTimer';
 import { Plus } from '../Icons';
 import { LoadFailed } from '../LoadFailed';
 import { BoardCardView, type ItemDrag } from './BoardCard';
@@ -72,6 +73,9 @@ type Notice =
    * done, and a new card can take its place), or a move refused before anything was sent.
    */
   | (Extract<Move, { kind: 'doneStays' | 'refuse' }> & { item: BoardItem });
+
+/** Where a failed read's Try Again leaves the focus as it goes: the header's Board button, which stays. */
+const toBoardButton = () => document.getElementById('header-board')?.focus();
 
 /** A board write sent and let go, its failure a banner. */
 function report(write: Promise<void>): void {
@@ -189,12 +193,21 @@ export const Board = memo(function Board({
   // N is Later's +, while that would open the box. A hook, so bound above the returns below.
   const laterKey = useShortcut('new', board && day && pick && !boardFull(board) ? () => openAdd('later') : null);
 
-  // Each failed read says so here, today's too, which no banner repeats on the board.
+  // Each failed read says so here, today's too, which no banner repeats on the board. A Try Again
+  // stays until a read answers, its own or a refresh, so the focus moves only as it goes.
   if ((failed && !board) || (dayFailed && !day))
     return (
       <div className="board">
-        {failed && !board && <LoadFailed title={LOAD_FAILED.board} onRetry={() => void store.load()} />}
-        {dayFailed && !day && <LoadFailed title={LOAD_FAILED.title} onRetry={() => void dayStore.load(today)} />}
+        {failed && !board && (
+          <PassFocusOnLeave className="board-failed" onLeave={toBoardButton}>
+            <LoadFailed title={LOAD_FAILED.board} onRetry={() => void store.load()} />
+          </PassFocusOnLeave>
+        )}
+        {dayFailed && !day && (
+          <PassFocusOnLeave className="board-failed" onLeave={toBoardButton}>
+            <LoadFailed title={LOAD_FAILED.title} onRetry={() => void dayStore.load(today)} />
+          </PassFocusOnLeave>
+        )}
       </div>
     );
   if (!board || !day || !columns || !shown || !pick) return <div className="board loading" aria-busy="true" />;
@@ -464,11 +477,17 @@ export const Board = memo(function Board({
         today={today}
         pick={pick}
         onClose={() => closeCard(item.id)}
-        onMove={(to, el) => {
-          // Measured first: the button goes with the dialog.
-          const at = el.getBoundingClientRect();
-          run(closeFor(), to, isLane(to) ? laneStart(columns, to) : null, { at });
-        }}
+        // None while the item's move is on its way: a move planned from where it shows would be
+        // wrong, which is why a drag doesn't pick it up either (`entry`).
+        onMove={
+          moving.has(item.id)
+            ? undefined
+            : (to, el) => {
+                // Measured first: the button goes with the dialog.
+                const at = el.getBoundingClientRect();
+                run(closeFor(), to, isLane(to) ? laneStart(columns, to) : null, { at });
+              }
+        }
         onRename={
           editTask
             ? (text) => {
@@ -662,8 +681,8 @@ export const Board = memo(function Board({
             {shown.progress.length > 0 ? list(shown.progress, 'progress') : <Empty>Nothing open on today's Top Priorities.</Empty>}
           </Column>
           <Column id="done" shown={shownColumn} over={over} count={done} headRef={headRef('done')}>
-            {/* Not while the earlier days are unread: a routine ticked then may be all Done has. */}
-            {done === 0 && !earlierFailed && <Empty>Nothing done this week.</Empty>}
+            {/* Not while the earlier days are unread (a Monday has none): a routine ticked then may be all Done has. */}
+            {done === 0 && (today === weekStart || earlierDays != null) && <Empty>Nothing done this week.</Empty>}
             {shown.doneToday.length > 0 && list(shown.doneToday, 'done')}
             {shown.doneEarlier.length > 0 && (
               <>

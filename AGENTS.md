@@ -1006,7 +1006,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   instead (above), and today's recurring row Remove From Today (`removeFromToday`) too. The dialog's
   Start timer (`TimerLengths`) is on today's open rows, recurring ones included, and on the cards of
   Later and Next, left-open ones and Repeats included: none in Done or on an item whose move is on
-  its way, or while any timer runs, and held while a start is out (`starting`). `Board` takes
+  its way (Move to is gone there too: a move planned from where it shows would be wrong), or while
+  any timer runs, and held while a start is out (`starting`). `Board` takes
   `running`, `start` and `starting` from `Shell` as props, since the timer's context changes every
   second. A row's Start closes the dialog, the focus on its card, and starts on its task; a card's
   is a pull first (`run` with `minutes`, which asks no nudge: starting a timer never asks, while
