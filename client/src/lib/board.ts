@@ -62,9 +62,9 @@ export interface BoardColumns {
   /** Next's own tasks, then the tasks left open. */
   next: BoardItem[];
   progress: BoardItem[];
-  /** Today's ticked rows, then the tasks whose latest entry, today's, was ticked. */
+  /** Today's ticked rows, then the tasks whose latest entry, today's or a later day's, was ticked. */
   doneToday: BoardItem[];
-  /** Done on an earlier day this week, or on a later day: newest day first. */
+  /** Done on an earlier day this week: newest day first. */
   doneEarlier: BoardItem[];
 }
 
@@ -113,8 +113,9 @@ export interface ColumnsInput {
 
 /**
  * What each column shows. A task on today's list shows as its row: open in In progress, ticked in
- * Done. Any other one-off task, by the first that applies: its latest entry is ticked (Done, when
- * that day is this week or later, else nowhere); its lane; with no lane, its latest entry was
+ * Done. Any other one-off task, by the first that applies: its latest entry is ticked (in Done:
+ * with today's on today or a later day, with the earlier days' on an earlier day this week, else
+ * nowhere); its lane; with no lane, its latest entry was
  * left open on an earlier day of the last `LOOKBACK_DAYS` (in Next after its own tasks, newest
  * day first, then oldest made first); else nowhere, which is where a task in no lane that a later
  * day's list holds (one an older version planned ahead) waits for that day. A recurring priority
@@ -166,7 +167,8 @@ export function boardColumns({ cards, today, todayRows, earlierDays, recurring, 
     if (listedToday.has(c.uid)) continue;
     const day = c.listDate;
     if (c.listDone) {
-      if (day === today) doneOffToday.push(c);
+      // A later day's tick (a device in a zone ahead, or curl) is no earlier day's: it shows with today's.
+      if (day! >= today) doneOffToday.push(c);
       else if (day! >= weekStart) earlier.push({ day: day!, item: cardItem(c, 'done') });
     } else if (c.lane === 'later') later.push(c);
     else if (c.lane === 'next') ownNext.push(c);

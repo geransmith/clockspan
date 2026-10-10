@@ -129,13 +129,14 @@ describe('boardColumns', () => {
     expect(c.progress[0]).toMatchObject({ recurring: true, row: { recurring: false } });
   });
 
-  it("shows a task a later day's list holds as any other: by its lane, in no column until that day with none, and in Done once ticked there", () => {
+  it("shows a task a later day's list holds as any other: by its lane, in no column until that day with none, and in Done with today's once ticked there, whatever its lane or week", () => {
     const cards = [
       makeCard('own', 'Own', { lane: 'next', position: 1 }),
       makeCard('plannedNext', 'Planned in Next', { lane: 'next', position: 2, listDate: THU }),
       makeCard('fri', 'From Later, Friday', { lane: 'later', listDate: FRI }),
       makeCard('thu', 'Typed on Thursday', { lane: null, listDate: THU }),
       makeCard('ticked', 'Ticked ahead', { lane: null, listDate: THU, listDone: true }),
+      makeCard('tickedLater', 'Ticked next week', { lane: 'later', listDate: '2026-10-06', listDone: true }),
       makeCard('left', 'Left open', { lane: null, listDate: TUE }),
       makeCard('past', 'Listed on Monday', { lane: 'later', position: 2, listDate: MON }),
     ];
@@ -143,7 +144,8 @@ describe('boardColumns', () => {
       ...EMPTY,
       later: ['item:fri', 'item:past'],
       next: ['item:own', 'item:plannedNext', 'item:left'],
-      doneEarlier: ['item:ticked'],
+      // No earlier day's: with today's, so the fold doesn't misname it.
+      doneToday: ['item:ticked', 'item:tickedLater'],
     });
     expect(ids(columns({ cards, today: THU, todayRows: [row(1, 'Typed on Thursday', { uid: 'thu' })] })).progress).toEqual(['item:thu']);
   });

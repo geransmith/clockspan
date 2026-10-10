@@ -961,8 +961,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   store, matched by uid. Nothing about In progress or Done is stored, so the board and the sheet
   show one list. Which column an item is in comes only from `boardColumns` (its doc has the
   rules in order). Later ends with Repeats (`BoardColumns.repeats`, joined after Later's own cards
-  by `itemsIn`, as Done joins its two lists; the column's count holds both, and "Nothing parked."
-  shows only while both are empty): every recurring priority not on today's list, in the order they
+  by `itemsIn`, as Done joins its two lists (today's, then Earlier this week, folded, whose button
+  counts its cards only while today's show above it); the column's count holds both, and "Nothing
+  parked." shows only while both are empty): every recurring priority not on today's list, in the order they
   were made, its card showing the repeat mark and its days (`repeatDays`: "Mon–Fri", "Mon, Wed,
   Fri"), which no other item shows; one on today's list shows there alone, in In progress or Done.
   An item's id is `item:<uid>` wherever the task shows as itself (a card, today's row, a card of
@@ -976,11 +977,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   in Later or Next (`BOARD.recurringStays`, a card of Repeats dropped in Later included) and In
   progress for an earlier day's row of one that stopped repeating are refused. Move to offers a card
   of Repeats In progress and Done. A task whose latest entry is on a later day (a list an older
-  version planned ahead) shows as any other: in Done when that entry is ticked, else by its lane,
-  and with no lane in no column until that day, when it is today's row. A lane given on a full board
+  version planned ahead; a tick there comes from a device in a zone ahead, or curl) shows as any
+  other: in Done when that entry is ticked, with today's, since it is no earlier day's (its dialog
+  says `BOARD.doneAhead(when)`), else by its lane, and with no lane in no column until that day,
+  when it is today's row. A lane given on a full board
   is refused before it is sent (`boardFull`, `addsToLanes`, `BOARD.full`), the server's 400 being
   the backstop. A card (`BoardCard`: its tick on today's rows, In progress's row number, its title
-  and a meta line) opens its dialog (`CardDialog`) on a click or Enter, one at a time, rendered by
+  and a meta line, which on a routine's earlier tick ends with the day it was done) opens its dialog (`CardDialog`) on a click or Enter, one at a time, rendered by
   `Board` outside the columns and keyed by its item, so a move made elsewhere updates it in place;
   one whose item goes (deleted, gone from a read, a new day loading) closes for good. Whatever
   pressed there moves, starts or deletes closes it first (`closeCard`: a blur, the dialog gone at
@@ -1694,8 +1697,11 @@ The browser pass for each surface (the logic under it is already tested):
   card at the top, Next's at the end, In progress's row on today's sheet and asking past three rows;
   Enter keeps the box, an empty Enter or Escape closes it, one with text stays open when left); a
   left-open task's "Left open from …" in Next, Move to from each column (a done item's notice), a
-  park of a task typed seconds ago, a done-earlier task's dialog, and this week's routine ticks in
-  Done. The dialog: a click on a card's title, its meta line or its padding opens it, and so does
+  park of a task typed seconds ago, a done-earlier task's dialog, this week's routine ticks in Done,
+  each with its day ("Done yesterday"), the fold's number gone while nothing is done today, and a
+  task ticked on a later day with today's, its dialog naming that day (in a second tab, DevTools →
+  Sensors → Location, Timezone ID Pacific/Kiritimati: Move to Done on a Next card, then reload the
+  first tab). The dialog: a click on a card's title, its meta line or its padding opens it, and so does
   Enter; the tick ticks and opens nothing. Enter in the title saves and closes, and the dialog stays
   closed; Escape drops the edit; leaving the box saves. Move to from every column, Start timer,
   Delete's confirm (Cancel keeps the dialog) and Remove from today on a routine's row each leave the
