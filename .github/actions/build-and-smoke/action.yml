@@ -2,8 +2,8 @@ name: Build and smoke the image
 description: >-
   Builds the image for amd64 and arm64 into the local Docker and boots each with
   scripts/smoke-image.sh. image-smoke (pull requests) and image (main, before it pushes) both run
-  it, so a pull request is checked with the steps main publishes after. The repository must be
-  checked out first; the buildx builder it sets up stays for the job's later steps.
+  it, so a pull request runs the build and checks that main runs before it pushes. The repository
+  must be checked out first; the buildx builder it sets up stays for the job's later steps.
 
 runs:
   using: composite

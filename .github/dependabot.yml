@@ -34,8 +34,8 @@ updates:
     cooldown:
       default-days: 7
     labels: [dependencies]
-    # One PR a week per directory for the action bumps: the docker/* actions often release
-    # together. Majors are included.
+    # The week's action bumps are grouped: the docker/* actions often release together. Majors
+    # are included.
     groups:
       actions:
         patterns: ['*']

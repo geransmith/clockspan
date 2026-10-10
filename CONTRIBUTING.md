@@ -140,7 +140,7 @@ gh run rerun <run-id> --failed
 | Push to `main` | `check`, `image` | both platforms are built and booted by the same script, and only then pushed as one multi-platform `ghcr.io/geransmith/clockspan:edge` |
 | Push to `main` that changes the version | `check`, `image`, `release` | `:edge` and the release image tags (see [README → Docker](README.md#docker)), the git tag `vX.Y.Z` and the GitHub Release |
 | Pull request, push to `main`, weekly | `CodeQL` (not required) | static security analysis of the TypeScript (`security-extended`); alerts land in code scanning, and GitHub fails the PR's CodeQL check on a new high or critical one |
-| Pull request or push that touches `.github/` | `zizmor` (not required) | a security audit of the workflows and `dependabot.yml`; findings fail the job |
+| Pull request or push that touches `.github/` | `zizmor` (not required) | a security audit of the workflows, the local actions and `dependabot.yml`; findings fail the job |
 
 A newer push to a pull request cancels that PR's older run; runs on `main` are never cancelled.
 Actions are pinned to commit SHAs; Dependabot bumps them (SHA and version comment together).

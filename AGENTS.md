@@ -224,6 +224,7 @@ ca_profile.xml          the Community Apps profile. Both XML files link client/p
                         three shots (sheet-phone-dark, sheet-desktop, history). Moving or renaming
                         any of those breaks the listing
 .github/workflows/      ci.yml (check, image-smoke, image, release), codeql.yml, workflow-lint.yml (zizmor)
+.github/actions/        build-and-smoke: the image build and boot steps image-smoke and image share
 ```
 
 ## Commands
