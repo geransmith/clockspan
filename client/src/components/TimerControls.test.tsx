@@ -122,18 +122,20 @@ describe('TimerControls', () => {
   it('asks how much to log a minute or more past the end: Back sends nothing, Planned and Worked log their length', async () => {
     // Two minutes past a 25-minute plan.
     const due = makeSession({ startedAt: T0 - 22 * MINUTE_MS });
+    vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(due) }));
+    await renderControls(false, due);
+    fireEvent.click(button('Finish'));
+    fireEvent.click(button('Back'));
+    await settle();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(api.finishSession).not.toHaveBeenCalled();
+    cleanup();
     for (const [choice, countOverrun] of [
       ['Planned · 25m', false],
       ['Worked · 27m', true],
     ] as const) {
       await renderControls(false, due);
       fireEvent.click(button('Finish'));
-      fireEvent.click(button('Back'));
-      await settle();
-      expect(screen.queryByRole('dialog')).toBeNull();
-      expect(api.finishSession).not.toHaveBeenCalled();
-      fireEvent.click(button('Finish'));
-      vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(due) }));
       fireEvent.click(button(choice));
       await settle();
       expect(api.finishSession, choice).toHaveBeenCalledExactlyOnceWith(due.id, countOverrun);
