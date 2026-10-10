@@ -106,7 +106,7 @@ describe('sync with the server', () => {
   it('drops an answer that a local change overtook, and a failed poll quietly', async () => {
     const poll = deferredAnswer<RunningResponse>();
     vi.mocked(api.getRunning).mockReturnValueOnce(poll.promise);
-    vi.mocked(api.startSession).mockResolvedValue(answered({ session: makeSession() }));
+    vi.mocked(api.startSession).mockResolvedValue(answered({ session: makeSession() }, 1));
     const { result } = renderTimer();
     await act(() => result.current.timer.start(TODAY, 1500, 'Write the report'));
     poll.resolve({ session: null });
@@ -118,6 +118,23 @@ describe('sync with the server', () => {
     expect(result.current.timer.running?.id).toBe(1);
     expect(warnSaveFailed).not.toHaveBeenCalled();
     expect(alert).not.toHaveBeenCalled();
+  });
+
+  it('keeps the newer of two syncs out at once, whichever answers last', async () => {
+    const { result } = await renderRunning(startedAgo(5));
+    const minute = deferredAnswer<RunningResponse>();
+    vi.mocked(api.getRunning).mockReturnValueOnce(minute.promise);
+    await settle(MINUTE_MS);
+    // Finished on the phone; the tab coming back asks beside the minute's sync, still out.
+    vi.mocked(api.getRunning).mockResolvedValueOnce(answered({ session: null }, 2));
+    await settle(10_000);
+    act(() => setVisibility('visible'));
+    await settle();
+    expect(api.getRunning).toHaveBeenCalledTimes(3);
+    expect(result.current.timer.running).toBeNull();
+    minute.resolve({ session: startedAgo(5) }, 1);
+    await settle();
+    expect(result.current.timer.running).toBeNull();
   });
 
   it('puts the plain title back on unmount (the error card)', async () => {
@@ -232,7 +249,7 @@ describe('start', () => {
 
   it('follows a timer another device already runs (409), says so, and refreshes its day only if held', async () => {
     const theirs = makeSession({ id: 7, date: YESTERDAY, label: 'Theirs' });
-    vi.mocked(api.startSession).mockRejectedValue(apiError(409, { error: 'running', session: theirs }));
+    vi.mocked(api.startSession).mockRejectedValue(apiError(409, 0, { error: 'running', session: theirs }));
     const { result } = await renderRunning(null);
     vi.mocked(api.getDay).mockClear();
     await act(() => result.current.timer.start(TODAY, 1500, 'Mine'));
@@ -247,6 +264,18 @@ describe('start', () => {
     vi.mocked(api.getDay).mockClear();
     await act(() => result.current.timer.start(TODAY, 1500, 'Mine'));
     expect(vi.mocked(api.getDay).mock.calls).toEqual([[YESTERDAY]]);
+  });
+
+  it('follows the session a 409 names over a copy from an earlier answer', async () => {
+    const { result } = await renderRunning(startedAgo(5));
+    vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(startedAgo(5), { durationSeconds: 300 }) }, 2));
+    await act(() => result.current.timer.finish());
+    expect(result.current.timer.running).toBeNull();
+    // The phone started one since: the refusal names a higher revision than the finish.
+    const theirs = makeSession({ id: 7, label: 'Theirs' });
+    vi.mocked(api.startSession).mockRejectedValueOnce(apiError(409, 3, { error: 'running', session: theirs }));
+    await act(() => result.current.timer.start(TODAY, 1500, 'Mine'));
+    expect(result.current.timer.running?.id).toBe(7);
   });
 
   it('waits for a priorities save still out before starting on a row from it', async () => {
@@ -302,7 +331,7 @@ describe('start', () => {
 
   it('rethrows any other failure for the card to show', async () => {
     const { result } = await renderRunning(null);
-    vi.mocked(api.startSession).mockRejectedValueOnce(apiError(400, { error: 'bad' }));
+    vi.mocked(api.startSession).mockRejectedValueOnce(apiError(400));
     await expect(result.current.timer.start(TODAY, 1500, '')).rejects.toThrow('Request failed (400)');
     vi.mocked(api.startSession).mockRejectedValueOnce(new Error('offline'));
     await expect(result.current.timer.start(TODAY, 1500, '')).rejects.toThrow('offline');

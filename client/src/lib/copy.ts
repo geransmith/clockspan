@@ -392,6 +392,16 @@ export const UPDATED = {
 } as const;
 
 /**
+ * The banner when an answer names a revision below one this page heard before asking (`api.ts`):
+ * the server's data went back to a backup. The button reloads.
+ */
+export const RESTORED = {
+  title: 'Restored from a backup',
+  body: "The server's data went back to an earlier copy. Reload the page to see it.",
+  reload: 'Reload',
+} as const;
+
+/**
  * In place of what could not be fetched, and the banner a failed day load raises; the button
  * asks again. Covers a refusal too, like `SAVE_FAILED`.
  */

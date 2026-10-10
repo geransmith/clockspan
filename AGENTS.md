@@ -115,15 +115,18 @@ client/                 Vite root → dist/client
   src/App.tsx           Shell (route, settings dialog) inside AppProviders (hooks/AppProviders.tsx); today's
                         alarms are hooks/useTodayAlarms.ts
   src/api.ts            fetch wrapper (30 s timeout; UNAUTHENTICATED_EVENT on a 401 from anything but login and
-                        /me; the reload banner when an answer names another version; a data call answers
+                        /me; the reload banner when an answer names another version, or a revision below
+                        one heard before it was asked (a restored backup); a data call answers
                         Answer<T>, its body as `value` and the user's revision the server named as
                         `revision` (REVISION_HEADER; 0 when an answer names none), an auth call the body
                         alone (auth()); throws lib/apiError.ts's ApiError (with the refusal's
                         `revision`), which a caller checks with instanceof, and beside it unlessGone
-                        counts a delete answered 404 as done);
+                        counts a delete answered 404 as done, and goneAt does the same for a data call,
+                        keeping the refusal's revision);
                         src/types.ts re-exports the shared types (types only)
   src/lib/              logic with no React, a test beside each file (the browser-facing ones stub the
-                        globals, as alerts.ts does; apiError is covered through api.test)
+                        globals, as alerts.ts does; apiError is covered through api.test and the hook
+                        tests)
     optimistic.ts       a server copy plus pending changes, which the stores are built on, and `serial()`,
                         their write queue
     alerts.ts           the one place that plays sound, shows notifications and pushes banners
@@ -480,38 +483,47 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   still ring). A today whose first load failed is loaded again on the same ticks (no second banner),
   so its alarms come back with the server. Any day the store holds is also read again each time a
   view shows it (`useDay`; one whose first load failed is asked for again then, quietly), and a
-  range read (`store.readRange`) lands on the held days in it under the same `version` rule.
+  range read (`store.readRange`) lands on every day it holds loaded in the range when it answers,
+  under the same `revision` rule (below).
 - **The day store keeps the server's copy and this device's changes apart** (`lib/optimistic.ts`):
   each day is its confirmed copy plus the changes not confirmed yet, and the sheet shows the one
   laid over the other. The confirmed copy is the server's answers in the order they arrived (a
   read's copy with each save's answer laid on it), so it is not always what the server holds now: a
   save's answer can be older than a read that landed first. A failed write just drops its change, so
   the screen is back on the confirmed copy at once (with the "Change not saved" banner), and the day
-  is asked for again. A writer off the Priorities card (the board) changes a list through
-  `editPriorities(date, fn)`: `fn` gets the rows the store shows now (`current()`), padded, and it
-  answers `'saved'`, `'notLoaded'`, `'skipped'` (`fn` gave null) or `'failed'`, never rejecting. It
-  saves through `setPriorities`, and `addPriority` goes through it. A delete or a break's end the
-  server answers 404 for counts as done: another device removed the row already. A read's answer
-  replaces the confirmed copy and never a change still on its way. It is stale when the server
-  confirmed a change after the read went out (`version`): a day read then drops it (a day never
-  loaded takes it anyway) and asks for the day again, whoever sent the read, while a range read's
-  stale day is left to the next read. An answer the same as the confirmed copy changes nothing, so a
+  is asked for again, sharing a read already out; a refusal names the server's revision, which the
+  day's copy is raised to, so a read that left before it comes back stale and asks again. A writer
+  off the Priorities card (the board) changes a list through `editPriorities(date, fn)`: `fn` gets
+  the rows the store shows now (`current()`), padded, and it answers `'saved'`, `'notLoaded'`,
+  `'skipped'` (`fn` gave null) or `'failed'`, never rejecting. It saves through `setPriorities`, and
+  `addPriority` goes through it. A delete or a break's end the server answers 404 for counts as
+  done: another device removed the row already. A read's answer replaces the confirmed copy and
+  never a change still on its way. Every data answer names the user's revision on the server
+  (`Answer.revision`), and each value keeps the highest one laid on its confirmed copy
+  (`Tracked.revision`). A read below it is stale. A day read drops it (a day never loaded takes it
+  anyway) and asks again, whoever sent it, but not when the answer is below what the store knew as
+  it left: the server went back (a restored backup), and asking would loop. A range read's stale
+  day waits for the next read. The settings, the timer and the board just drop it. A save's whole
+  answer (the settings, the running session, the board) older than the confirmed copy only takes
+  its change off. A day save's answer is laid on whatever its revision, since it carries one part
+  of the day. An answer equal to the confirmed copy changes nothing, its revision included, so a
   day that didn't change keeps its identity. A day not loaded yet keeps its changes until the
   server's copy arrives, so nothing made up stands in for it. `pruneBefore` is the one store write
   sent on no queue (the queues are keyed by day, session and breaks), so a change still on its way
   for a day before the cutoff can land after the prune and re-create that day, which the re-read
   after the prune shows. After a full delete (the board store's `deleteItem`), a new name,
   category or note (its `editItem`), or a priorities save whose row renamed, filed or noted a task
-  another day lists or logged time on, `taskChanged(uid)` reads again every held day whose list or
-  log names the task, as a change the server confirmed (a read already out may have left before it,
-  so its answer is dropped and the day asked for again), and moves `generation` as `pruneBefore`
-  does, so no range on screen (the board's Done, History, Review) shows the task from an older
-  answer. A priorities save that puts a task on its list or takes one off (Plan tomorrow, a carry,
-  ×) reads again, the same way, the other held days whose lists hold that task, since their
-  `listed` and `earlier` moved and × asks from them. The day store, `useSettings`, `useTimer` and
-  `useBoard` are all built on `useTracked` (`hooks/useTracked.ts`); a board write rejects when it
-  fails, like a settings save, and the board is read again. `apply` and commit functions are pure:
-  read the clock outside them.
+  another day lists or logged time on, `taskChanged(uid, revision)` reads again every held day whose
+  list or log names the task, with the revision of the write that changed it as each day's floor (a
+  read already out below it is dropped and the day asked for again), and moves `generation` as
+  `pruneBefore` does, so no range on screen (the board's Done, History, Review) shows the task from
+  an older answer. A priorities save that puts a task on its list or takes one off (Plan tomorrow,
+  a carry, ×) reads again, the same way, the other held days whose lists hold that task, since
+  their `listed` and `earlier` moved and × asks from them. The day store, `useSettings`, `useTimer`
+  and `useBoard` are all built on `useTracked` (`hooks/useTracked.ts`); a board write rejects when
+  it fails, like a settings save, and the board is read again. A board read is never shared, so
+  that read, like the one after a prune or a park, left after the change; one still out from before
+  answers lower and is dropped. `apply` and commit functions are pure: read the clock outside them.
 - **Suggested break lengths come only from `client/src/lib/breaks.ts`** (`suggestBreak`, pure, over
   a day's sessions); with Suggest breaks off the Break button runs `settings.breakMinutes`. With
   `suggestBreaks` on, `useBreak` offers today's suggestion on the Break button and as a quiet banner
@@ -569,7 +581,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   board PATCH of a task off today's list needs no wait: the board read that task from the server.
   A new edit of a day's rows, the settings, the timer or the board goes through one of these, never
   straight to `api`. Reads are not queued, and in every store a read's answer never replaces a
-  change still on its way.
+  change still on its way, nor an answer with a higher revision.
 - **Punch positions are fixed**: 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in pairs,
   and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches` enforces
   it). Kind is parity (`kindForPosition`, `shared/punches.ts`). The math evaluates *set* punches
@@ -1046,7 +1058,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   their presence, never their values, with 409 and `STALE_CLIENT` (`server/refuse.ts`): a priorities
   PUT carrying `cards` or `touched`, or a row carrying `cardUid` or `recurringUid` (`staleShape`),
   and any request under `/board/cards` or `/board/recurring`. Its saves fail until it is reloaded,
-  which the banner asks for, and none is read as done or applied in part.
+  which the banner asks for, and none is read as done or applied in part. A page left open across a
+  restored backup asks the same way: `request()` keeps the highest revision an answer named, and an
+  answer below the one heard before its request left raises `RESTORED` through `askReload` (once,
+  and it counts on from the lower number), since every store would drop the server's answers as
+  older than its copy.
 - **Every data answer numbers the user's changes, so no data handler awaits.** `users.revision`
   (migration 15) goes out as `Clockspan-Revision` (`REVISION_HEADER`, `shared/api.ts`) on every
   answer of the data routes, a refusal included, from the middleware in `app.ts` that names the

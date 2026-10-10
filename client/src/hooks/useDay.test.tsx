@@ -30,7 +30,19 @@ import {
   TODAY,
   YESTERDAY,
 } from '../test/hooks';
-import type { BreakEndResponse, BreakResponse, Day, OkResponse, OvertimeResponse, Priority, PruneResult, Punch, PunchesResponse, Session } from '../types';
+import type {
+  BreakEndResponse,
+  BreakResponse,
+  Day,
+  OkResponse,
+  OvertimeResponse,
+  Priority,
+  PruneResult,
+  Punch,
+  PunchesResponse,
+  RangeResponse,
+  Session,
+} from '../types';
 import { useDay, useDays, useDayStore, useRefreshDay } from './useDay';
 
 vi.mock('../api');
@@ -188,8 +200,8 @@ describe('load after a write', () => {
     const stale = deferredAnswer<Day>();
     vi.mocked(api.getDay)
       .mockReturnValueOnce(stale.promise)
-      .mockResolvedValueOnce(answered(makeDay(TODAY, { punches: punchesAt(T0) })));
-    vi.mocked(api.putPunches).mockImplementation(echoPunches);
+      .mockResolvedValueOnce(answered(makeDay(TODAY, { punches: punchesAt(T0) }), 1));
+    vi.mocked(api.putPunches).mockImplementation((_date, punches) => Promise.resolve(answered({ punches }, 1)));
     const loaded = begin(() => result.current.refresh(TODAY));
     await act(() => result.current.setPunches(TODAY, punchesAt(T0)));
     stale.resolve(makeDay());
@@ -207,7 +219,7 @@ describe('load after a write', () => {
     const again = deferredAnswer<Day>();
     vi.mocked(api.getDay).mockReturnValueOnce(first.promise).mockReturnValueOnce(again.promise);
     const saved = makeBreak({ id: 3 });
-    vi.mocked(api.startBreak).mockResolvedValue(answered({ break: saved }));
+    vi.mocked(api.startBreak).mockResolvedValue(answered({ break: saved }, 1));
     const { result } = renderStore();
     await act(() => result.current.startBreak(TODAY, 300));
     expect(result.current.days[TODAY]).toBeUndefined();
@@ -216,7 +228,7 @@ describe('load after a write', () => {
     await settle();
     expect(result.current.days[TODAY]?.punches[0]?.at).toBe(T0);
     expect(api.getDay).toHaveBeenCalledTimes(2);
-    again.resolve(makeDay(TODAY, { punches: punchesAt(T0), breaks: [saved] }));
+    again.resolve(makeDay(TODAY, { punches: punchesAt(T0), breaks: [saved] }), 1);
     await settle();
     expect(result.current.days[TODAY]?.breaks).toEqual([saved]);
   });
@@ -227,9 +239,9 @@ describe('load after a write', () => {
     const done = endSession(makeSession({ id: 5 }), { endedAt: T0 + 25 * MINUTE_MS, durationSeconds: 1500 });
     vi.mocked(api.getDay)
       .mockReturnValueOnce(first.promise)
-      .mockResolvedValueOnce(answered(makeDay(TODAY, { punches: punchesAt(T0), sessions: [done] })));
+      .mockResolvedValueOnce(answered(makeDay(TODAY, { punches: punchesAt(T0), sessions: [done] }), 1));
     const { result } = renderStore();
-    act(() => result.current.applySession(done));
+    act(() => result.current.applySession(done, 1));
     expect(result.current.days[TODAY]).toBeUndefined();
     // The first answer was read before the finish: it has the punches but not the session.
     first.resolve(makeDay(TODAY, { punches: punchesAt(T0) }));
@@ -291,8 +303,8 @@ describe('load after a write', () => {
     const out = deferredAnswer<Day>();
     vi.mocked(api.getDay)
       .mockReturnValueOnce(out.promise)
-      .mockResolvedValueOnce(answered(makeDay(TODAY, { overtimeApproved: true, retroNote: 'from the phone', breaks: [stored] })));
-    vi.mocked(api.putOvertime).mockResolvedValueOnce(answered({ overtimeApproved: true }));
+      .mockResolvedValueOnce(answered(makeDay(TODAY, { overtimeApproved: true, retroNote: 'from the phone', breaks: [stored] }), 1));
+    vi.mocked(api.putOvertime).mockResolvedValueOnce(answered({ overtimeApproved: true }, 1));
     vi.mocked(api.deleteBreak).mockRejectedValueOnce(new Error('offline'));
     const refreshed = begin(() => result.current.refresh(TODAY));
     await act(() => result.current.setOvertimeApproved(TODAY, true));
@@ -306,6 +318,42 @@ describe('load after a write', () => {
     await settle();
     expect(api.getDay).toHaveBeenCalledTimes(3);
     expect(result.current.days[TODAY]).toMatchObject({ overtimeApproved: true, retroNote: 'from the phone', breaks: [stored] });
+  });
+
+  it('drops a read that left before a refused save, and asks again: a session another device deleted goes', async () => {
+    vi.mocked(api.getDay).mockResolvedValueOnce(answered(makeDay(TODAY, { sessions: [makeSession()] }), 1));
+    const { result } = renderStore();
+    await settle();
+    // A background read is out when a rename finds the session deleted on another device.
+    const out = deferredAnswer<Day>();
+    vi.mocked(api.getDay)
+      .mockReturnValueOnce(out.promise)
+      .mockResolvedValueOnce(answered(makeDay(TODAY), 3));
+    vi.mocked(api.patchSession).mockRejectedValueOnce(apiError(404, 3));
+    const refreshed = begin(() => result.current.refresh(TODAY));
+    await act(() => result.current.updateSession(TODAY, 1, { label: 'Renamed' }));
+    expect(result.current.days[TODAY]?.sessions[0]?.label).toBe('Write the report');
+    expect(warnSaveFailed).toHaveBeenCalledOnce();
+    // The reload shares the read out.
+    expect(api.getDay).toHaveBeenCalledTimes(2);
+    // Read before the refusal, which names a higher revision: dropped, and the day asked for again.
+    out.resolve(makeDay(TODAY, { sessions: [makeSession()] }), 2);
+    await act(() => refreshed);
+    await settle();
+    expect(api.getDay).toHaveBeenCalledTimes(3);
+    expect(result.current.days[TODAY]?.sessions).toEqual([]);
+  });
+
+  it('drops a read that answers below what the store held when it went out, and asks no more (a restored backup)', async () => {
+    vi.mocked(api.getDay)
+      .mockResolvedValueOnce(answered(makeDay(TODAY, { retroNote: 'kept' }), 5))
+      .mockResolvedValue(answered(makeDay(TODAY), 3));
+    const { result } = renderStore();
+    await settle();
+    await act(() => result.current.refresh(TODAY));
+    await settle();
+    expect(api.getDay).toHaveBeenCalledTimes(2);
+    expect(result.current.days[TODAY]?.retroNote).toBe('kept');
   });
 
   it('shows the stored copy, not the change, when the server is down for the save and the reload alike', async () => {
@@ -931,7 +979,7 @@ describe('a task changed on the server', () => {
         answered(date === TODAY ? makeDay(TODAY) : makeDay(YESTERDAY, { sessions: [endSession(makeSession({ id: 2, date: YESTERDAY, label: 'Report' }))] })),
       ),
     );
-    act(() => result.current.taskChanged(TASK));
+    act(() => result.current.taskChanged(TASK, 0));
     await settle();
     expect(
       vi
@@ -951,9 +999,9 @@ describe('a task changed on the server', () => {
     const out = deferredAnswer<Day>();
     vi.mocked(api.getDay)
       .mockReturnValueOnce(out.promise)
-      .mockResolvedValueOnce(answered(makeDay(TODAY)));
+      .mockResolvedValueOnce(answered(makeDay(TODAY), 1));
     const refreshed = begin(() => result.current.refresh(TODAY));
-    act(() => result.current.taskChanged(TASK));
+    act(() => result.current.taskChanged(TASK, 1));
     out.resolve(makeDay(TODAY, { priorities: [makePriority(1, 'Report', { uid: TASK })] }));
     await act(() => refreshed);
     await settle();
@@ -1058,12 +1106,12 @@ describe('sessions', () => {
     await settle();
     const later = makeSession({ id: 2, startedAt: T0 + 30 * MINUTE_MS });
     const earlier = makeSession({ id: 1, startedAt: T0 });
-    act(() => result.current.applySession(later));
-    act(() => result.current.applySession(earlier));
+    act(() => result.current.applySession(later, 0));
+    act(() => result.current.applySession(earlier, 0));
     expect(result.current.days[TODAY]?.sessions.map((s) => s.id)).toEqual([1, 2]);
-    act(() => result.current.applySession({ ...later, label: 'Renamed' }));
+    act(() => result.current.applySession({ ...later, label: 'Renamed' }, 0));
     expect(result.current.days[TODAY]?.sessions[1]?.label).toBe('Renamed');
-    act(() => result.current.applySession(endSession(earlier, { status: 'cancelled' })));
+    act(() => result.current.applySession(endSession(earlier, { status: 'cancelled' }), 0));
     expect(result.current.days[TODAY]?.sessions.map((s) => s.id)).toEqual([2]);
   });
 
@@ -1267,15 +1315,15 @@ describe('breaks', () => {
     vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { breaks: [over, running] })));
     const { result } = renderStore();
     await settle();
-    act(() => result.current.applySession(makeSession({ id: 5, startedAt: T0 })));
+    act(() => result.current.applySession(makeSession({ id: 5, startedAt: T0 }), 0));
     expect(result.current.days[TODAY]?.breaks).toEqual([over, { ...running, endedAt: T0 }]);
     // A finished session leaves breaks as they are.
-    act(() => result.current.applySession(endSession(makeSession({ id: 5, startedAt: T0 }), { endedAt: T0 + MINUTE_MS, durationSeconds: 60 })));
+    act(() => result.current.applySession(endSession(makeSession({ id: 5, startedAt: T0 }), { endedAt: T0 + MINUTE_MS, durationSeconds: 60 }), 0));
     expect(result.current.days[TODAY]?.breaks).toEqual([over, { ...running, endedAt: T0 }]);
 
     vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { breaks: [over, blip] })));
     await act(() => result.current.load(TODAY));
-    act(() => result.current.applySession(makeSession({ id: 6, startedAt: T0 })));
+    act(() => result.current.applySession(makeSession({ id: 6, startedAt: T0 }), 0));
     expect(result.current.days[TODAY]?.breaks).toEqual([over]);
   });
 
@@ -1289,13 +1337,13 @@ describe('breaks', () => {
     const other = result.current.days[OTHER];
     // The session's own day isn't loaded: nothing is made up for it.
     const session = makeSession({ id: 5, startedAt: MIDNIGHT + 2 * MINUTE_MS });
-    act(() => result.current.applySession(session));
+    act(() => result.current.applySession(session, 0));
     expect(result.current.days[YESTERDAY]?.breaks).toEqual([{ ...late, endedAt: MIDNIGHT + 2 * MINUTE_MS }]);
     expect(result.current.days[OTHER]).toBe(other);
     expect(result.current.days[TODAY]).toBeUndefined();
     // The session's later answers (a pause) find no break running past its start.
     const ended = result.current.days[YESTERDAY];
-    act(() => result.current.applySession({ ...session, pausedAt: MIDNIGHT + 3 * MINUTE_MS }));
+    act(() => result.current.applySession({ ...session, pausedAt: MIDNIGHT + 3 * MINUTE_MS }, 0));
     expect(result.current.days[YESTERDAY]).toBe(ended);
     expect(api.getDay).toHaveBeenCalledTimes(2);
   });
@@ -1337,7 +1385,7 @@ describe('breaks', () => {
 });
 
 describe('readRange', () => {
-  it('lands on the days held when it went out, as empty where the answer has none, and adds no other day', async () => {
+  it('lands on the days it holds loaded when it answers, as empty where the answer has none, and adds no other day', async () => {
     const tue = '2026-09-29';
     vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(answered(makeDay(date, { retroNote: 'held' }))));
     vi.mocked(api.getRange).mockResolvedValue(answered({ days: [makeDay(OTHER, { retroNote: 'range' }), makeDay(tue, { retroNote: 'range' })] }));
@@ -1362,6 +1410,21 @@ describe('readRange', () => {
     vi.mocked(api.getRange).mockRejectedValueOnce(new Error('Request failed (500)'));
     await expect(act(() => result.current.readRange(OTHER, tue))).rejects.toThrow('Request failed (500)');
     expect(warnQuietly).not.toHaveBeenCalled();
+  });
+
+  it('leaves a held day on its own read where the range answered below it', async () => {
+    vi.mocked(api.getDay).mockResolvedValueOnce(answered(makeDay(OTHER, { retroNote: 'held' }), 1));
+    const { result } = renderStore(null);
+    await act(() => result.current.load(OTHER));
+    const range = deferredAnswer<RangeResponse>();
+    vi.mocked(api.getRange).mockReturnValueOnce(range.promise);
+    const read = begin(() => result.current.readRange(OTHER, TODAY));
+    // The day's own read went out after the range and answers first.
+    vi.mocked(api.getDay).mockResolvedValueOnce(answered(makeDay(OTHER, { retroNote: 'newer' }), 3));
+    await act(() => result.current.refresh(OTHER));
+    range.resolve({ days: [makeDay(OTHER, { retroNote: 'older' })] }, 2);
+    await act(() => read);
+    expect(result.current.days[OTHER]?.retroNote).toBe('newer');
   });
 });
 
@@ -1389,7 +1452,7 @@ describe('pruneBefore', () => {
 
   it('drops a read sent before the prune, and asks again', async () => {
     vi.mocked(api.getDay).mockResolvedValueOnce(answered(makeDay(OTHER, { retroNote: 'stored' })));
-    vi.mocked(api.pruneDays).mockResolvedValue(answered({ deleted: 1 }));
+    vi.mocked(api.pruneDays).mockResolvedValue(answered({ deleted: 1 }, 1));
     const { result } = renderStore(null);
     await act(() => result.current.load(OTHER));
     const out = deferredAnswer<Day>();
@@ -1403,7 +1466,7 @@ describe('pruneBefore', () => {
     await act(() => refreshed);
     expect(result.current.days[OTHER]?.retroNote).toBe('stored');
     expect(api.getDay).toHaveBeenCalledTimes(3);
-    again.resolve(makeDay(OTHER));
+    again.resolve(makeDay(OTHER), 1);
     await settle();
     expect(result.current.days[OTHER]?.retroNote).toBe('');
   });

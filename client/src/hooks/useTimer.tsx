@@ -132,19 +132,18 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // (`useRefreshLoop`), and at once when a press finds the session gone (`syncNow`: a sync sent
   // after the refusal, since one already out may still show the session running; it waits for
   // that one, and the tab coming back just after asks nothing more). The answer replaces the
-  // confirmed session unless the server confirmed a change after it went out, and a press still
-  // on its way stays on top of it. A different session than the one shown means another device
+  // confirmed session unless an answer with a higher revision has landed, and a press still on
+  // its way stays on top of it. A different session than the one shown means another device
   // started or ended a timer: its day is fetched again, quietly, if the store holds it, so the
   // log shows the row this device never wrote. A day it doesn't hold loads with the row when
   // it is opened.
   const sync = useCallback(() => {
-    const sentAt = current().version;
     return api
       .getRunning()
-      .then(({ value: { session } }) => {
+      .then(({ value: { session }, revision }) => {
         const held = current();
         const prev = shown(held) ?? null;
-        const { next } = fetched(held, sentAt, session);
+        const { next } = fetched(held, session, revision);
         if (next === held) return;
         change(() => next);
         if (prev?.id === session?.id) return;
@@ -163,9 +162,12 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     async (send: () => Promise<api.Answer<SessionResponse>>) => {
       completing.current = true;
       try {
-        const { session } = (await queue(send)).value;
-        change((t) => (t.confirmed && t.confirmed.id !== session.id ? t : settleWith(t, [], null)));
-        applySession(session);
+        const {
+          value: { session },
+          revision,
+        } = await queue(send);
+        change((t) => (t.confirmed && t.confirmed.id !== session.id ? t : settleWith(t, [], null, revision)));
+        applySession(session, revision);
         return session;
       } finally {
         completing.current = false;
@@ -276,21 +278,22 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       try {
         const {
           value: { session },
+          revision,
         } = await queue(async () => {
           const uid = await priorityUid;
           // A chip can link a row whose priorities save is still out.
           if (uid) await prioritiesSaved(date);
           return api.startSession(date, plannedSeconds, label, uid);
         });
-        change((t) => settleWith(t, [], session));
-        applySession(session);
+        change((t) => settleWith(t, [], session, revision));
+        applySession(session, revision);
       } catch (err) {
         const theirs = err instanceof ApiError && err.status === 409 ? (err.body as Partial<SessionConflict> | null)?.session : undefined;
         if (!theirs) throw err;
         // 409: a timer is already running, started on another device. Follow it, fetch its
         // day again if the store holds it so the log has the row, and say why what was typed
         // here went nowhere.
-        change((t) => settleWith(t, [], theirs));
+        change((t) => settleWith(t, [], theirs, (err as ApiError).revision));
         void refresh(theirs.date);
         alert({ ...TIMER_ELSEWHERE, tone: 'info', tag: 'timer-elsewhere', sound: false, notifications: false });
       } finally {
@@ -331,10 +334,13 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       const id = nextId();
       change((t) => addPending(t, id, (s) => (s && s.id === cur.id ? apply(s) : s)));
       try {
-        const { session } = (await queue(send)).value;
+        const {
+          value: { session },
+          revision,
+        } = await queue(send);
         const same = current().confirmed?.id === cur.id;
-        change((t) => (same ? settleWith(t, [id], session.status === 'running' ? session : null) : settle(t, [id])));
-        if (same || session.status !== 'running') applySession(session);
+        change((t) => (same ? settleWith(t, [id], session.status === 'running' ? session : null, revision) : settle(t, [id])));
+        if (same || session.status !== 'running') applySession(session, revision);
       } catch (err) {
         change((t) => settle(t, [id]));
         throw err;

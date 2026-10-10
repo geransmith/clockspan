@@ -4,9 +4,9 @@ import * as api from './api';
 import { REQUEST_TIMEOUT_MS, UNAUTHENTICATED_EVENT } from './api';
 import { ApiError } from './lib/apiError';
 import { alert, dismissByTag, getBanners, subscribeBanners } from './lib/alerts';
-import { REQUEST_FAILED, REQUEST_TIMEOUT, UPDATED } from './lib/copy';
+import { REQUEST_FAILED, REQUEST_TIMEOUT, RESTORED, UPDATED } from './lib/copy';
 import { emptyRow } from './lib/priorities';
-import { makePriority, TODAY } from './test/fixtures';
+import { deferred, makePriority, TODAY } from './test/fixtures';
 import { REVISION_HEADER, VERSION_HEADER } from '../../shared/api.js';
 import { MINUTE_MS } from '../../shared/dates.js';
 
@@ -38,6 +38,10 @@ function lastCall(): { path: string; init: RequestInit } {
 beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock);
 });
+
+// `request()` keeps the highest revision it has heard for the life of the page, so the revisions
+// the cases below answer with rise in the order they run; the restore cases' drops are the
+// exceptions, and come last.
 
 const REPORT = makePriority(1, 'Report', { uid: 'abcdef123456', addedAt: 1, categoryUid: 'cafe00000001' });
 const FREE = emptyRow(1);
@@ -323,5 +327,45 @@ describe('an update while the page is open', () => {
     await api.getRunning();
     updated()[0]!.action!.run();
     expect(reload).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('a restored backup', () => {
+  const restored = () => getBanners().filter((b) => b.tag === 'restored');
+  const answerAt = (revision: number) => answer(200, {}, true, { [REVISION_HEADER]: String(revision) });
+  afterEach(() => dismissByTag('restored'));
+
+  it('asks for a reload when an answer names a revision below one heard before its request left, and counts on from there', async () => {
+    answerAt(100);
+    await api.getSettings();
+    answerAt(40);
+    await api.getDay(TODAY);
+    expect(restored()).toEqual([
+      expect.objectContaining({ title: RESTORED.title, body: RESTORED.body, tone: 'info', action: { label: RESTORED.reload, run: expect.any(Function) } }),
+    ]);
+    expect(alert).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ tag: 'restored', sticky: true, sound: false, notifications: false }));
+    dismissByTag('restored');
+    answerAt(41);
+    await api.getSettings();
+    expect(restored()).toEqual([]);
+  });
+
+  it('says nothing when an older answer crosses a newer one: its request left before the newer one came back', async () => {
+    const day = deferred<Response>();
+    fetchMock.mockReturnValueOnce(day.promise);
+    const read = api.getDay(TODAY);
+    answerAt(150);
+    await api.putSettings({ sound: false });
+    day.resolve(new Response('{}', { headers: { [REVISION_HEADER]: '145' } }));
+    await read;
+    expect(restored()).toEqual([]);
+  });
+
+  it('asks for a reload when an answer names revision 0, as a backup from before revisions restores', async () => {
+    answerAt(200);
+    await api.getSettings();
+    answerAt(0);
+    await api.getDay(TODAY);
+    expect(restored()).toEqual([expect.objectContaining({ title: RESTORED.title })]);
   });
 });
