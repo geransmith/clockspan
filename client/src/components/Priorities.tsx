@@ -11,7 +11,7 @@ import { formatDurationCeil } from '../lib/format';
 import type { PrioritySeed } from '../lib/plan';
 import { editPriority, emptyRow, isOneOff, nudgeFor, padPriorities, pickWarning, takeOffRow, type WarningKind } from '../lib/priorities';
 import { acceptOffer, notOnList } from '../lib/recurring';
-import { loggedByUid } from '../lib/retro';
+import { taskLogged } from '../lib/retro';
 import { hasText, isFree } from '../../../shared/priorities.js';
 import { LIMITS } from '../../../shared/api.js';
 import { hasNote } from '../../../shared/text.js';
@@ -237,8 +237,7 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
   // included, since Delete Everywhere is then a different answer, or when it has a note, which a
   // delete takes with it; a recurring priority's row never asks (Stop Repeating on the board ends those).
   const remove = (p: Priority) => {
-    // `logged` is the other days' time, so the day's own log, a running timer included, adds to it.
-    const time = p.uid == null ? 0 : p.logged + (loggedByUid(sessions, now).get(p.uid) ?? 0);
+    const time = p.uid == null ? 0 : taskLogged(p.uid, p.logged, sessions, now);
     const note = hasNote(p.note);
     if (p.uid != null && !p.recurring && (p.listed > 1 || time > 0 || note)) {
       setAsked({ uid: p.uid, name: hasText(p) ? p.text : (storedName(p.uid) ?? ''), otherDays: Math.max(0, p.listed - 1), logged: time, note });
