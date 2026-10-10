@@ -90,11 +90,11 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
   // The last list sent, for Add to today, which answers the offer once its save is in.
   const sent = useRef<Promise<boolean>>(Promise.resolve(true));
   // Let go once sent: a list held after a failed save would stop the card following the stored
-  // list (a row the timer's "Also add to today's priorities" or another device added, a tick
-  // made elsewhere) until a later save went through. A failed row goes back to the stored copy,
-  // with the banner. A blank name is the exception: the other rows' changes go, the name goes as
-  // it was, and the draft is held, so the box stays empty until it is left rather than taking the
-  // stored name back while it has the focus.
+  // list (a row a timer start or another device added, a tick made elsewhere) until a later save
+  // went through. A failed row goes back to the stored copy, with the banner. A blank name is the
+  // exception: the other rows' changes go, the name goes as it was, and the draft is held, so the
+  // box stays empty until it is left rather than taking the stored name back while it has the
+  // focus.
   const sendList = (list: Priority[], base: Priority[]) => {
     sent.current = onChange(named(list, base), base);
     return !list.some(isBlank);

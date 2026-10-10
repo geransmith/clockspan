@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, type ReactNode, type Ref, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useBreak } from '../hooks/useBreak';
 import { useDayStore } from '../hooks/useDay';
 import { useSettings } from '../hooks/useSettings';
@@ -13,7 +13,7 @@ import { hasRoom, isTaskRow } from '../lib/priorities';
 import { LIMITS } from '../../../shared/api.js';
 import { sameText } from '../../../shared/text.js';
 import type { Priority, Session } from '../types';
-import { CategoryChip } from './CategoryChip';
+import { CategoryChip, placeList } from './CategoryChip';
 import { SessionLabel } from './SessionLabel';
 import { TimerControls } from './TimerControls';
 import { TimerLengths } from './TimerLengths';
@@ -23,7 +23,7 @@ interface Props {
   date: string;
   isToday: boolean;
   priorities: Priority[];
-  /** The category chip's data: "Also add to today's priorities" offers a category for the row. Null (before the board's first read) shows none. */
+  /** The category chip's data: a new name typed in the label box offers a category for its row. Null (before the board's first read) shows none. */
   pick: CategoryPick | null;
 }
 
@@ -34,9 +34,9 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
   const { settings } = useSettings();
   const { formatTime } = useTimeFormat();
   const [label, setLabel] = useState('');
+  // The row picked from the label box's list, so a pick between two rows of one name starts on the one picked.
   const [linked, setLinked] = useState<string | null>(null);
-  const [addAsPriority, setAddAsPriority] = useState(false);
-  // The new row's category, offered beside "Also add to today's priorities" while it is ticked.
+  // The new row's category, offered beside the label box while the name typed matches no open row.
   const [category, setCategory] = useState<string | null>(null);
   // A start (of a timer or a break) is out, here or on the board (`timer.starting`): the start
   // and break buttons are disabled until it answers. A second start would add the priority twice
@@ -77,89 +77,55 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
   const open = priorities.filter((p) => isTaskRow(p) && !p.done);
   const linkedStillOpen = linked != null && open.some((p) => p.uid === linked);
   const trimmed = label.trim();
-  // An open row whose text was typed (a chip unlinked, its row's name typed) is on the plan
-  // already (`sameText`): the session starts on it, as its chip would.
+  // An open row whose text was typed is on the plan already (`sameText`): the session starts on
+  // it, as a pick would.
   const named = open.find((p) => sameText(p.text) === sameText(trimmed));
-  // New work typed in, not tied to a row: offer to put it on the plan as well, while the plan
-  // has a row for it. On a full list the tick would only earn an error at Start.
+  // New work typed in, not tied to an open row, goes on today's list as the session starts, while
+  // the list has a row for it: a timer never refuses to start, so on a full one it runs on no task.
   const offerAdd = isToday && trimmed !== '' && !linkedStillOpen && !named && hasRoom(priorities, settings.priorityCount);
-
-  const toggleLink = (p: Priority) => {
-    if (linked === p.uid) {
-      setLinked(null);
-      return;
-    }
-    setLinked(p.uid);
-    setLabel(p.text);
-    setAddAsPriority(false);
-  };
 
   const start = (minutes: number) => {
     // Set before the send: the running card can mount before this continues.
     passFocus();
     run(async () => {
       // The new row's save goes in as the start's uid, so the timer counts the start as out from the tap.
-      const uid =
-        offerAdd && addAsPriority
-          ? addPriority(date, trimmed, category).then((added) => {
-              // Linked from here on, so a retry after a failed start uses this row instead of adding another.
-              setLinked(added);
-              setAddAsPriority(false);
-              setCategory(null);
-              return added;
-            })
-          : linkedStillOpen
-            ? linked
-            : (named?.uid ?? null);
+      const uid = offerAdd
+        ? addPriority(date, trimmed, category).then((added) => {
+            // Linked from here on, so a retry after a failed start uses this row instead of adding another.
+            setLinked(added);
+            setCategory(null);
+            return added;
+          })
+        : linkedStillOpen
+          ? linked
+          : (named?.uid ?? null);
       // Back to work: the server ends a running break as the session starts, so nothing to send here.
       await timer.start(date, minutes * 60, trimmed, uid);
       setLabel('');
       setLinked(null);
-      setAddAsPriority(false);
       setCategory(null);
     });
   };
 
   return (
     <div className="stack">
-      <input
-        className="input"
-        value={label}
-        onChange={(e) => setLabel(e.target.value)}
-        placeholder="What are you working on?"
-        maxLength={LIMITS.sessionLabel}
-        disabled={!isToday}
-        aria-label="Session label"
-        ref={takeFocus}
-      />
-      {isToday && open.length > 0 && (
-        <div className="timer-priorities">
-          <span className="muted small">Working on</span>
-          <span className="chips">
-            {open.map((p) => (
-              <button
-                key={p.uid}
-                className="chip"
-                onClick={() => toggleLink(p)}
-                aria-pressed={linked === p.uid}
-                title={linked === p.uid ? 'Unlink from this priority' : `Link the next session to priority ${p.position}`}
-              >
-                <span className="chip-num">{p.position}</span>
-                <span className="chip-text">{p.text}</span>
-              </button>
-            ))}
-          </span>
-        </div>
-      )}
-      {offerAdd && (
-        <div className="timer-add">
-          <label className="inline-check timer-add-priority">
-            <input type="checkbox" className="checkbox" checked={addAsPriority} onChange={(e) => setAddAsPriority(e.target.checked)} />
-            <span>Also add to today's priorities</span>
-          </label>
-          {pick && addAsPriority && <CategoryChip value={category} onChange={setCategory} pick={pick} label="Category for the new priority" />}
-        </div>
-      )}
+      <div className="timer-label">
+        <LabelBox
+          value={label}
+          rows={open}
+          disabled={!isToday}
+          inputRef={takeFocus}
+          onType={(text) => {
+            setLabel(text);
+            setLinked(null);
+          }}
+          onPick={(p) => {
+            setLabel(p.text);
+            setLinked(p.uid);
+          }}
+        />
+        {pick && offerAdd && <CategoryChip value={category} onChange={setCategory} pick={pick} label="Category for the new priority" />}
+      </div>
       {breakTimer.endsAt != null && (
         <PassFocusOnLeave className="timer-break" onLeave={passFocus}>
           <span className="timer-break-text">
@@ -228,6 +194,148 @@ function Running({
       </div>
       <TimerControls takeFocus={takeFocus} />
     </PassFocusOnLeave>
+  );
+}
+
+/** The list at the box's width, under the box or above it, as the category chip's list is placed. */
+function placeUnder(box: HTMLElement | null, list: HTMLElement | null): void {
+  if (!box || !list) return;
+  list.style.width = `${box.offsetWidth}px`;
+  placeList(box, list);
+}
+
+/**
+ * The session label box: an ARIA 1.2 combobox listing today's open rows, numbered, narrowed to the
+ * rows whose text holds what is typed. It opens as the box takes the focus from another control
+ * (Tab), on a press, on typing and on ↓ or ↑, but not for a focus that comes from nowhere: the one
+ * handed to it as the running card leaves, which would cover the card after every session, or the
+ * one the window gives back as it returns. The focus stays in the box: ↓ and ↑ move the active
+ * option without wrapping, Enter picks it and Escape closes the list. The list is
+ * `position: fixed`, so the card's height never changes and its overflow can't clip it.
+ */
+function LabelBox({
+  value,
+  rows,
+  disabled,
+  inputRef,
+  onType,
+  onPick,
+}: {
+  value: string;
+  rows: Priority[];
+  disabled: boolean;
+  inputRef: Ref<HTMLInputElement>;
+  onType: (text: string) => void;
+  onPick: (row: Priority) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  const wrap = useRef<HTMLDivElement>(null);
+  const pop = useRef<HTMLDivElement>(null);
+  const id = useId();
+  const matches = rows.filter((p) => sameText(p.text).includes(sameText(value)));
+  const shown = open ? matches : [];
+  // None at -1, or once the rows shrink under the index (another device ticks one).
+  const current = shown[active];
+
+  // After every render while it shows, since the rows can change under it, and on any scroll or
+  // resize.
+  useLayoutEffect(() => placeUnder(wrap.current, pop.current));
+  // Into the list's view as the keys move it, as the focus would scroll it; never on the card's
+  // one-second renders, which would undo a scroll of the list by wheel or touch. In braces: Chrome's
+  // scrollIntoView returns a promise, which React would take for the effect's cleanup.
+  useLayoutEffect(() => {
+    document.getElementById(`${id}-${active}`)?.scrollIntoView({ block: 'nearest' });
+  }, [id, active]);
+  const showing = shown.length > 0;
+  useEffect(() => {
+    if (!showing) return;
+    const follow = () => placeUnder(wrap.current, pop.current);
+    window.addEventListener('scroll', follow, true);
+    window.addEventListener('resize', follow);
+    return () => {
+      window.removeEventListener('scroll', follow, true);
+      window.removeEventListener('resize', follow);
+    };
+  }, [showing]);
+
+  const close = () => {
+    setOpen(false);
+    setActive(-1);
+  };
+  const pick = (p: Priority) => {
+    onPick(p);
+    close();
+  };
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.nativeEvent.isComposing) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      setOpen(true);
+      setActive(e.key === 'ArrowDown' ? Math.min(active + 1, matches.length - 1) : Math.max(active - 1, 0));
+    } else if (e.key === 'Enter' && current) {
+      e.preventDefault();
+      pick(current);
+    } else if (e.key === 'Escape' && showing) {
+      e.preventDefault();
+      close();
+    }
+  };
+
+  return (
+    <div ref={wrap} className="timer-label-box">
+      <input
+        ref={inputRef}
+        className="input"
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={showing}
+        aria-controls={showing ? id : undefined}
+        aria-activedescendant={current ? `${id}-${active}` : undefined}
+        aria-label="Session label"
+        value={value}
+        placeholder="What are you working on?"
+        maxLength={LIMITS.sessionLabel}
+        disabled={disabled}
+        onChange={(e) => {
+          onType(e.target.value);
+          setOpen(true);
+          setActive(-1);
+        }}
+        onFocus={(e) => {
+          if (e.relatedTarget) setOpen(true);
+        }}
+        onClick={() => setOpen(true)}
+        onBlur={close}
+        onKeyDown={onKeyDown}
+      />
+      {showing && (
+        <div
+          ref={pop}
+          className="category-pop timer-suggest"
+          // A press on the list leaves the focus in the box, so its blur doesn't close the list
+          // before the click picks the option pressed. The options are picked from the box with
+          // the keys, so these handlers only serve the mouse and touch, and the wrapper is
+          // presentation to a screen reader.
+          role="presentation"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={(e) => {
+            const option = (e.target as Element).closest<HTMLElement>('[role="option"]');
+            const p = option && shown[Number(option.dataset.index)];
+            if (p) pick(p);
+          }}
+        >
+          <div id={id} className="category-options" role="listbox" aria-label="Today's open priorities">
+            {shown.map((p, i) => (
+              <div key={p.uid} id={`${id}-${i}`} data-index={i} role="option" aria-selected={i === active} className="category-option">
+                <span className="chip-num">{p.position}</span>
+                <span className="category-option-name">{p.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

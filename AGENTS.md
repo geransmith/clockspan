@@ -155,8 +155,8 @@ client/                 Vite root → dist/client
                         (CategoryPick) and what New category makes of a name (categoryForName,
                         nextColor, categoryNameTaken), and the board as a write shows it (withItem,
                         withItemPatch, withoutItem, withCategory, withCategoryPatch, withoutCategory)
-    popover.ts          placePopover: where the category chip's list goes on screen (under the chip or
-                        above it, inside the viewport)
+    popover.ts          placePopover: where the category chip's list and the timer's label suggestions
+                        go on screen (under the control or above it, inside the viewport)
     recurring.ts        the morning offer's routines: which are due (dueRecurring, notOnList), which
                         it ticks (offerPicks, recurringCount), the list after Add to today
                         (acceptOffer; recurringRow, the recurring priority itself as a new row)
@@ -608,13 +608,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   across queues: a session start or edit that names a priority's uid first waits, inside its own
   queue's job, for that day's priorities save still out (`prioritiesSaved`), since the server
   refuses a task that day's list doesn't hold yet; a board job that changes a day's list waits for
-  that save (below); and a timer start whose uid is a promise awaits it first inside its job (the
-  timer card's Also add hands it the new row's save, a board item's Start its pull), so it names the
-  task once today's list holds it. `useSettings` sends its PUTs and resets one at a time. The board
-  (`useBoard`) sends each write as one job on its own queue, its change to the tasks shown from the
-  moment it is made; a job that changes today's list (a pull, a row typed in In progress's box, a
-  tick, a rename, category or note of today's row, Remove from today, which leaves a free row as ×
-  does, `takeOffRow`) goes through `editPriorities`, and so on the day store's list sends, and
+  that save (below); and a timer start whose uid is a promise awaits it first inside its job (a new
+  name typed on the timer card hands it the new row's save, a board item's Start its pull), so it
+  names the task once today's list holds it. `useSettings` sends its PUTs and resets one at a time.
+  The board (`useBoard`) sends each write as one job on its own queue, its change to the tasks shown
+  from the moment it is made; a job that changes today's list (a pull, a row typed in In progress's
+  box, a tick, a rename, category or note of today's row, Remove from today, which leaves a free row
+  as × does, `takeOffRow`) goes through `editPriorities`, and so on the day store's list sends, and
   awaits that save inside the job. A park waits for today's save still out, PATCHes the task's
   lane, then takes its row off today's list and reads the board again; Delete (`deleteItem`, the
   board's and the sheet's) waits for today's save, then sends `DELETE /items/:uid`, which takes
@@ -731,11 +731,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   shows, free ones included; the server stores each row with a uid at its place in the list and
   skips the free ones, so positions can have gaps where free rows sat (`padPriorities` fills them by
   position): the morning offer's routines stay after the padded rows, and a row typed under empty
-  ones stays where it was typed. Add priority and the timer's Also add (`placePriority`, `hasRoom`)
-  use the first free row or a new one at the end; a row Add priority puts past the stored list stays
-  on the card while it is free (`added`: the card pads the stored list to it until a stored task
-  reaches it, × takes it, or the card mounts again). The nudge (`nudgeFor`) never asks while the
-  padded list has a free row, which the new row takes, and counts the one-off rows with text
+  ones stays where it was typed. Add priority and a timer start on a new name (`placePriority`,
+  `hasRoom`) use the first free row or a new one at the end; a row Add priority puts past the stored
+  list stays on the card while it is free (`added`: the card pads the stored list to it until a
+  stored task reaches it, × takes it, or the card mounts again). The nudge (`nudgeFor`) never asks
+  for a timer start (a new name on the timer card, a board card's Start), nor while the padded list
+  has a free row, which the new row takes, and counts the one-off rows with text
   (`isOneOff`), while the warning's kind still counts every written row. Every reader of a list
   skips free rows with `hasText` (`shared/priorities.ts`). `PUT /days/:date/priorities` takes the
   list and its `base`, the list it was built on (the card's draft sends what its edits were made
@@ -825,8 +826,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `CategoryChip` is the one way a category is picked, fed by `useCategoryPick` (null before the
   board's first read, and then no chip shows), which the board page, the sheet and Settings → Board
   each call once and pass down as `pick`: the sheet's goes to Top priorities (a written row's chip,
-  which saves at once), the timer (the row Also add makes, `addPriority(date, text, categoryUid)`)
-  and the day log (a session on no written row, in the edit's one PATCH); Settings → Board's goes to
+  which saves at once), the timer (the row a new name makes at Start, `addPriority(date, text,
+  categoryUid)`, its chip in the label box's row while the name matches no open row) and the day log
+  (a session on no written row, in the edit's one PATCH); Settings → Board's goes to
   its recurring priorities' rows, with `report` going to the dialog's `save`. A press on the chip
   keeps the focus where it is until the list takes it, so the day log's edit doesn't end (the
   browser reasons are in `CategoryChip`'s comments). Its New category box runs `categoryForName`
@@ -922,9 +924,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   its way, or while any timer runs, and held while a start is out
   (`starting`). `Board` takes `running`, `start` and `starting` from `Shell` as props, since the
   timer's context changes every second. A row's Start closes the editor, the focus on the title,
-  and starts on its task; a card's is a pull first (`run` with `minutes`: the nudge asks as Move
-  to's does, Add anyway pulls and starts, Keep it short does neither), whose promise of the task's
-  uid the start awaits, so a refused pull starts nothing and shows one banner. A start the server
+  and starts on its task; a card's is a pull first (`run` with `minutes`, which asks no nudge:
+  starting a timer never asks, while Move to and a drag still do), whose promise of the task's uid
+  the start awaits, so a refused pull starts nothing and shows one banner. A start the server
   refuses (the task taken off the list meanwhile) is the save banner, and a 409 is the
   `TIMER_ELSEWHERE` banner while the sync it brings shows the other device's timer. The item the
   running session is on, on its day (a card, which has none, by its task), starts its meta line with
@@ -999,8 +1001,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   surface names a session through them or `useTimer().name`: the day log, the timer card, the
   running bar, the tab title, the timer's alerts as they are raised (a "Time's up" banner already up
   keeps its name: see the timer rule), the retro's Not on the plan and Review's Off the plan
-  (grouped by task, else by label). A label typed at Start with an open row's text (`sameText`)
-  starts linked to that row, as its chip does. A session with a task has no name or category of its
+  (grouped by task, else by label). Every named start from the timer card is on a task: a pick
+  from the label box's list (`LabelBox` in `FocusTimer.tsx`, today's open rows, numbered), or an
+  open row's text typed (`sameText`), starts on that row, and any other name puts a new row on
+  today's list (`addPriority`, with no nudge) and starts on it, a ticked row's name included,
+  unless the list has no room (`hasRoom`), where it starts on no task under its label. An empty box
+  starts an untitled session on no task. A session with a task has no name or category of its
   own to edit until it is set to Unplanned, and `editedSession` shows an edit as the server will
   store it while it is out; the day log picks a category only for a session not on a written row of
   its day (`sessionCategoryEdit`), and shows it as a `CategoryDot` named by its `label`, the one dot
@@ -1380,10 +1386,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (`nextColor`); the one exception is the day log's dot, named by its `label`. `CategoryChip` is the
   one category picker: its list is `position: fixed` inside the chip's wrapper, placed by
   `placePopover` (`lib/popover.ts`) and scrolling inside, so no card or dialog clips it and New
-  category stays in view. A priority row's empty chip is quiet: with a mouse it shows on the row's
-  hover or focus only, from the `(hover: hover)` rule beside the chip's. So is a note button with no
-  note (`.note-toggle--empty`), on a sheet row and a board card, unless its box is open.
-  `.category-chip`, `.note-toggle` and `.swatch` are in the coarse block.
+  category stays in view. The timer's label box shows its suggestions the same way (`placeList`,
+  at the box's width), so the card's height never changes. A priority row's empty chip is quiet:
+  with a mouse it shows on the row's hover or focus only, from the `(hover: hover)` rule beside the
+  chip's. So is a note button with no note (`.note-toggle--empty`), on a sheet row and a board card,
+  unless its box is open. `.category-chip`, `.note-toggle` and `.swatch` are in the coarse block.
 - Numeric settings inputs commit on blur or Enter, never on every keystroke (`NumberInput`);
   `DurationField` commits when focus leaves its hours / minutes pair or on Enter, so moving from
   hours to minutes saves nothing. A blank or non-numeric box puts the stored value back and
@@ -1525,7 +1532,10 @@ The browser pass for each surface (the logic under it is already tested):
   the browser pane send single `key` presses; the `type` action pastes the whole string into one
   segment.
 - **Priorities or the timer card**: tick one row and press Add priority (the notice lists the
-  ticked row); tap a chip, start, and the log row shows the number; the log row's edit of a session
+  ticked row); in the timer's label box, the list of open rows on a press and on Tab (not on the
+  focus Finish hands back), under the box at its width and over the card, whose height stays put as
+  it opens and as a break starts; pick one, start, and the log row shows the number; a new name,
+  started, lands on today's list and in the board's In progress; the log row's edit of a session
   on a written row shows its name as text, with no hover. Empty a written row's box and retype the
   carried row's name: where the hints under them sit (at 375, under the row's own chip, nearer it
   than the next row). × on the carried row: how "Remove …" renders, a long name included. Notes: row
@@ -1535,9 +1545,10 @@ The browser pass for each surface (the logic under it is already tested):
   Categories: pick a category on a row (an empty chip shows only on the row's hover or focus with a
   mouse, always on a phone; a long name ends in an ellipsis; at 375 the chip sits under the field,
   nearer it than the next row's, and the field keeps the row's width, beside the ×; from 640 it sits
-  beside the field, which ends in the same place written or empty), tick Also add and pick one for
-  the new row (the chip beside it wraps under it at 375) and give an unplanned log session one (its
-  dot before the label), then the same at 1280 in the split's columns.
+  beside the field, which ends in the same place written or empty), type a new name in the timer's
+  label box and pick one in the chip at the end of its row (at 375 the box narrows and the row stays
+  one line) and give an unplanned log session one (its dot before the label), then the same at 1280
+  in the split's columns.
 - **Recurring priorities**: Settings → Board → Recurring priorities: Recurring rows per day with
   its hint beside the box; Add recurring priority; a rename; a category from
   the row's chip, where Escape closes only the list and the dialog stays open; the days (on a
@@ -1577,7 +1588,7 @@ The browser pass for each surface (the logic under it is already tested):
   Settings → Timeclock → Times on the board off hides it.
   Start timer, at 1440, 1000 (the lengths wrap under their label) and 375: a row's Start (the
   bar shows the timer, the row's meta line `running`, then `paused`), a Next card's with three rows
-  open (the nudge, then Add anyway pulls and starts), and with a timer running no editor offers it.
+  open (no nudge: it pulls and starts), and with a timer running no editor offers it.
   Notes, at 1440, 1000 and 375: the SSO card's note button drawn filled at the end of its title
   row, the others' quiet until the card is hovered or focused; its note opens under the card's
   text with the editor closed, and the note button and Start timer both work on one card; Escape

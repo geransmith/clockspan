@@ -3,7 +3,7 @@ import { hasText, isFree } from '../../../shared/priorities.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { PRIORITY_WARNINGS } from './copy';
 
-/** A row with text that isn't ticked: what the left-open offer and the timer's chips work from. */
+/** A row with text that isn't ticked: what the left-open offer works from. */
 export const isOpen = (p: Priority) => hasText(p) && !p.done;
 
 /** A row with a task on it and its name written: what the board shows of a day's list, and what a session can be linked to. */
@@ -135,12 +135,12 @@ export function hasRoom(rows: Priority[], count: number): boolean {
 }
 
 /**
- * Where a task placed from outside the card goes (the timer's Also add, a board pull, the morning
- * offer's routines): the list as it is when a row of the list is that task already (a repeat is a
- * no-op, whatever the row's draft text); else the first free row (`isFree`); else a new row at the
- * end. With `end` (the morning offer) it goes after every row of the padded list instead, leaving
- * the free rows for one-offs, unless the list is at `MAX_PRIORITIES`, where a free row still takes
- * it. Returns the full list to save; null when the sheet is full.
+ * Where a task placed from outside the card goes (a timer start on a new name, a board pull, the
+ * morning offer's routines): the list as it is when a row of the list is that task already (a
+ * repeat is a no-op, whatever the row's draft text); else the first free row (`isFree`); else a new
+ * row at the end. With `end` (the morning offer) it goes after every row of the padded list
+ * instead, leaving the free rows for one-offs, unless the list is at `MAX_PRIORITIES`, where a free
+ * row still takes it. Returns the full list to save; null when the sheet is full.
  */
 export function placePriority(rows: Priority[], count: number, row: Omit<Priority, 'position'>, opts: { end?: boolean } = {}): Priority[] | null {
   const padded = padPriorities(rows, count);

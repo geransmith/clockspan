@@ -1200,30 +1200,24 @@ describe('starting the focus timer', () => {
     await expect(startedOn()).resolves.toBe('left00000001');
   });
 
-  it('holds a Start from a card at the nudge: Add anyway pulls and starts, Keep it short does neither', async () => {
+  it('pulls and starts a Next card with three rows open without the nudge, since starting a timer never asks', async () => {
     lists[WED] = [row(1, 'Report'), row(2, 'Email'), row(3, 'Invoices')];
     await renderBoard();
     openEditor('Follow up');
     startFor(25);
-    fireEvent.click(within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.keep }));
-    await settle();
-    expect(api.putPriorities).not.toHaveBeenCalled();
-    expect(start).not.toHaveBeenCalled();
-    // The editor stays open behind the notice.
-    startFor(25);
-    expect(start).not.toHaveBeenCalled();
-    fireEvent.click(within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
+    expect(within(notice()).queryByRole('button')).toBeNull();
     await settle();
     expect(putLists()[0]!.texts).toEqual(['Report', 'Email', 'Invoices', 'Follow up']);
     expect(start).toHaveBeenCalledExactlyOnceWith(WED, 25 * 60, 'Follow up', expect.any(Promise));
     await expect(startedOn()).resolves.toBe('next00000001');
   });
 
-  it("takes down a card's nudge when a row's Start starts the timer, so Add anyway can't start a second", async () => {
+  it("takes down a Move to's nudge when a row's Start starts the timer", async () => {
     lists[WED] = [row(1, 'Report'), row(2, 'Email'), row(3, 'Invoices')];
     await renderBoard();
     openEditor('Follow up');
-    startFor(25);
+    moveTo('progress');
+    expect(within(notice()).queryByRole('button', { name: WARNING_ACTIONS.fresh.add })).not.toBeNull();
     openEditor('Report');
     startFor(15);
     expect(within(notice()).queryByRole('button', { name: WARNING_ACTIONS.fresh.add })).toBeNull();
@@ -1235,7 +1229,6 @@ describe('starting the focus timer', () => {
     await renderBoard();
     openEditor('Follow up');
     startFor(25);
-    fireEvent.click(within(notice()).getByRole('button', { name: WARNING_ACTIONS.fresh.add }));
     await settle();
     expect(api.putPriorities).not.toHaveBeenCalled();
     await expect(startedOn()).rejects.toThrow(ADD_PRIORITY_FAILED.full);

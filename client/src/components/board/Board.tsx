@@ -58,8 +58,8 @@ type AddColumn = Exclude<ColumnId, 'done'>;
  */
 type MoveOptions = { at?: DOMRect; minutes?: number };
 
-/** What a nudge holds until Add anyway: a pull (with a Start's length), or a row typed in In progress's box. */
-type Held = { item: BoardItem; target: DropTarget; move: StoreMove; minutes?: number } | { row: ReturnType<typeof newTaskRow> };
+/** What a nudge holds until Add anyway: a pull, or a row typed in In progress's box. */
+type Held = { item: BoardItem; target: DropTarget; move: StoreMove } | { row: ReturnType<typeof newTaskRow> };
 
 /** What the board notice holds: one at a time, the newest move's. */
 type Notice =
@@ -259,7 +259,8 @@ export const Board = memo(function Board({
     if (move?.kind === 'refuse' || move?.kind === 'doneStays') setNotice({ ...move, item });
     else if (move) {
       const target = { to, before };
-      const asked = move.kind === 'place' && move.nudge ? askFirst({ item, target, move, minutes: options.minutes }) : null;
+      // A Start's pull goes at once: starting a timer never asks.
+      const asked = move.kind === 'place' && move.nudge && options.minutes == null ? askFirst({ item, target, move }) : null;
       if (asked) return asked;
       send(item, target, move, options);
     }
@@ -376,15 +377,15 @@ export const Board = memo(function Board({
       setOpen(null);
     };
     // A timer starts on today's open row and on a card in Later or Next, which a pull puts on
-    // today's list first, the nudge asking as Move to's does. None while a timer runs (another
-    // device's too, once synced) or the item's move is on its way.
+    // today's list first, with no nudge: starting a timer never asks. None while a timer runs
+    // (another device's too, once synced) or the item's move is on its way.
     const startable = !running && !moving.has(item.id) && item.column !== 'done';
     const onStart = (minutes: number) => {
       if (!throughRow) {
         run(item, 'progress', null, { minutes });
         return;
       }
-      // As run() does: a nudge still up holds an earlier Start's minutes, which Add anyway would send.
+      // As run() does: the newest press takes the notice's place.
       setNotice(null);
       close();
       report(start(today, minutes * 60, item.title, item.uid));
@@ -502,7 +503,7 @@ export const Board = memo(function Board({
                     placeRow(held.row);
                     focusTo.current = `item:${held.row.uid}`;
                   } else {
-                    send(held.item, held.target, held.move, { minutes: held.minutes });
+                    send(held.item, held.target, held.move);
                     focusGrip.current = true;
                   }
                 },

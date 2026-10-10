@@ -68,8 +68,10 @@ async function renderCard(priorities: Priority[] = [], breaks: Break[] = [], pic
 }
 
 const start25 = () => screen.getByRole('button', { name: /^25\s*min$/ });
-const typeLabel = (text: string) => fireEvent.change(screen.getByLabelText('Session label'), { target: { value: text } });
-const alsoAdd = () => screen.queryByRole('checkbox', { name: "Also add to today's priorities" });
+const box = () => screen.getByRole<HTMLInputElement>('combobox', { name: 'Session label' });
+const typeLabel = (text: string) => fireEvent.change(box(), { target: { value: text } });
+/** The label box's suggestions, as their text reads: the row's number, then its name. */
+const suggestions = () => screen.queryAllByRole('option').map((o) => o.textContent);
 const started = (session = makeSession({ label: 'Call the vendor' })): SessionResponse => ({ session });
 const disabled = (name: string | RegExp) => (screen.getByRole('button', { name }) as HTMLButtonElement).disabled;
 const startOut = () => screen.getByRole('status', { name: 'A start is out' }).textContent;
@@ -99,8 +101,10 @@ describe('FocusTimer', () => {
     expect(disabled(/^Break · /)).toBe(true);
     fireEvent.click(start25());
     await settle();
-    expect(api.startSession).toHaveBeenCalledTimes(1);
-    expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Write the report', null);
+    // Nor is the new name's row added twice.
+    expect(api.putPriorities).toHaveBeenCalledTimes(1);
+    const uid = vi.mocked(api.putPriorities).mock.lastCall![1][0]!.uid;
+    expect(api.startSession).toHaveBeenCalledExactlyOnceWith(TODAY, 25 * 60, 'Write the report', uid);
     answer.resolve(started(makeSession({ label: 'Write the report' })));
     await settle();
     expect(screen.getByRole('timer', { name: 'Time remaining' })).toBeTruthy();
@@ -195,15 +199,139 @@ describe('FocusTimer', () => {
     expect(screen.getByRole('timer', { name: 'Time remaining' })).toBeTruthy();
   });
 
-  it('links a session to the chip that was picked', async () => {
+  it('starts on the suggestion picked from the label box', async () => {
     vi.mocked(api.startSession).mockResolvedValue(answered(started()));
     await renderCard([makePriority(1, 'Ship the fix', { uid: 'abcdef123456' })]);
-    fireEvent.click(screen.getByRole('button', { name: /Ship the fix/ }));
-    // A picked row needs no "also add": it is on the plan already.
-    expect(alsoAdd()).toBeNull();
+    fireEvent.click(box());
+    expect(suggestions()).toEqual(['1Ship the fix']);
+    fireEvent.click(screen.getByRole('option', { name: /Ship the fix/ }));
+    expect(box().value).toBe('Ship the fix');
+    expect(suggestions()).toEqual([]);
     fireEvent.click(start25());
     await settle();
+    expect(api.putPriorities).not.toHaveBeenCalled();
     expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Ship the fix', 'abcdef123456');
+  });
+
+  it('starts on the row picked of two that share a name', async () => {
+    vi.mocked(api.startSession).mockResolvedValue(answered(started()));
+    await renderCard([makePriority(1, 'Email', { uid: 'email0000001' }), makePriority(2, 'Email', { uid: 'email0000002' })]);
+    fireEvent.click(box());
+    fireEvent.click(screen.getByRole('option', { name: '2 Email' }));
+    fireEvent.click(start25());
+    await settle();
+    expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Email', 'email0000002');
+  });
+
+  it("lists today's open rows, numbered, on a press, narrowed by what is typed", async () => {
+    await renderCard([makePriority(1, 'Ship the fix'), makePriority(2, 'Email', { done: true }), makePriority(3, 'Fix the build')]);
+    expect(box().getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('listbox')).toBeNull();
+    fireEvent.click(box());
+    // A ticked row isn't listed: a done task isn't something to start on.
+    expect(suggestions()).toEqual(['1Ship the fix', '3Fix the build']);
+    expect(box().getAttribute('aria-expanded')).toBe('true');
+    expect(box().getAttribute('aria-controls')).toBe(screen.getByRole('listbox', { name: "Today's open priorities" }).id);
+    typeLabel('  the FIX');
+    expect(suggestions()).toEqual(['1Ship the fix']);
+    typeLabel('Call the vendor');
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(box().getAttribute('aria-expanded')).toBe('false');
+    expect(box().getAttribute('aria-controls')).toBeNull();
+    // Leaving the box closes the list.
+    typeLabel('');
+    expect(suggestions()).toHaveLength(2);
+    fireEvent.blur(box());
+    expect(suggestions()).toEqual([]);
+  });
+
+  it('opens the list as the box takes the focus by Tab, not as the window gives it back', async () => {
+    await renderCard([makePriority(1, 'Ship the fix')]);
+    act(() => start25().focus());
+    act(() => box().focus());
+    expect(suggestions()).toEqual(['1Ship the fix']);
+    expect(box().getAttribute('aria-expanded')).toBe('true');
+    fireEvent.keyDown(box(), { key: 'Escape' });
+    // A focus from no other control: the window's, as it returns to the front.
+    fireEvent.focus(box());
+    expect(box().getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('keeps the focus in the box on a press on the list, so the click picks the option pressed', async () => {
+    await renderCard([makePriority(1, 'Ship the fix')]);
+    press(box());
+    // false: the press's default, which would take the focus from the box and close the list
+    // before the click, was stopped.
+    expect(fireEvent.mouseDown(document.querySelector('.timer-suggest')!)).toBe(false);
+    expect(fireEvent.mouseDown(screen.getByRole('option'))).toBe(false);
+    expect(document.activeElement).toBe(box());
+    expect(suggestions()).toEqual(['1Ship the fix']);
+  });
+
+  it('moves through the suggestions with ↓ and ↑ and picks with Enter; Escape closes them', async () => {
+    // Chrome's scrollIntoView answers a promise; the card must not hand it to React as a cleanup.
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView').mockReturnValue(Promise.resolve() as never);
+    await renderCard([makePriority(1, 'Ship the fix'), makePriority(2, 'Report'), makePriority(3, 'Email', { uid: 'email0000001' })]);
+    const key = (k: string) => fireEvent.keyDown(box(), { key: k });
+    const active = () => {
+      const id = box().getAttribute('aria-activedescendant');
+      const selected = screen.queryAllByRole('option', { selected: true });
+      expect(selected.map((o) => o.id)).toEqual(id ? [id] : []);
+      return selected[0]?.textContent;
+    };
+    key('ArrowDown');
+    expect(active()).toBe('1Ship the fix');
+    key('ArrowUp');
+    expect(active()).toBe('1Ship the fix');
+    key('ArrowDown');
+    key('ArrowDown');
+    key('ArrowDown');
+    expect(active()).toBe('3Email');
+    key('Escape');
+    expect(suggestions()).toEqual([]);
+    expect(box().getAttribute('aria-activedescendant')).toBeNull();
+    // Closed, Enter picks nothing; ↑ opens the list again on its first row, as ↓ does.
+    key('Enter');
+    expect(box().value).toBe('');
+    key('ArrowUp');
+    expect(active()).toBe('1Ship the fix');
+    key('ArrowDown');
+    key('ArrowDown');
+    // An input method's Enter and Escape are its own: they pick nothing and leave the list open.
+    fireEvent.keyDown(box(), { key: 'Enter', isComposing: true });
+    fireEvent.keyDown(box(), { key: 'Escape', isComposing: true });
+    expect(box().value).toBe('');
+    expect(active()).toBe('3Email');
+    key('Enter');
+    expect(box().value).toBe('Email');
+    expect(suggestions()).toEqual([]);
+    // With nothing matching, ↓ shows nothing to move to.
+    typeLabel('Call the vendor');
+    key('ArrowDown');
+    expect(active()).toBeUndefined();
+    expect(scroll).toHaveBeenCalled();
+  });
+
+  it('drops the link to a picked row once the box is typed in', async () => {
+    vi.mocked(api.startSession).mockResolvedValue(answered(started()));
+    await renderCard([makePriority(1, 'Ship the fix', { uid: 'abcdef123456' })]);
+    fireEvent.click(box());
+    fireEvent.click(screen.getByRole('option', { name: /Ship the fix/ }));
+    typeLabel('Ship the fix 2');
+    fireEvent.click(start25());
+    await settle();
+    const rows = vi.mocked(api.putPriorities).mock.lastCall![1];
+    expect(rows[1]).toMatchObject({ text: 'Ship the fix 2', done: false });
+    expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Ship the fix 2', rows[1]!.uid);
+  });
+
+  it('starts an untitled session on no task from an empty box', async () => {
+    vi.mocked(api.startSession).mockResolvedValue(answered(started()));
+    await renderCard([makePriority(1, 'Ship the fix')]);
+    fireEvent.click(start25());
+    await settle();
+    expect(api.putPriorities).not.toHaveBeenCalled();
+    expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, '', null);
   });
 
   it("names the running session by its row's current text, not the label it started with", async () => {
@@ -217,7 +345,6 @@ describe('FocusTimer', () => {
     vi.mocked(api.startSession).mockResolvedValue(answered(started()));
     await renderCard();
     typeLabel('Call the vendor');
-    fireEvent.click(alsoAdd()!);
     fireEvent.click(start25());
     await settle();
     const rows = vi.mocked(api.putPriorities).mock.lastCall![1];
@@ -225,49 +352,45 @@ describe('FocusTimer', () => {
     expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Call the vendor', rows[0]!.uid);
   });
 
-  it('does not offer to add text an open row already has, as when a chip is unlinked', async () => {
-    await renderCard([makePriority(1, 'Ship the fix'), makePriority(2, 'Email', { done: true })]);
-    const chip = screen.getByRole('button', { name: /Ship the fix/ });
-    fireEvent.click(chip);
-    fireEvent.click(chip);
-    expect(screen.getByLabelText<HTMLInputElement>('Session label').value).toBe('Ship the fix');
-    expect(alsoAdd()).toBeNull();
-    typeLabel('  ship THE fix ');
-    expect(alsoAdd()).toBeNull();
-    // A ticked row's text is new work again.
-    typeLabel('Email');
-    expect(alsoAdd()).not.toBeNull();
-  });
-
-  it('starts linked to the open row whose name was typed, as its chip would', async () => {
+  it('starts on the open row whose name was typed, adding none', async () => {
     vi.mocked(api.startSession).mockResolvedValue(answered(started()));
     await renderCard([makePriority(1, 'Ship the fix', { uid: 'abcdef123456' })]);
     typeLabel('  ship THE fix ');
     fireEvent.click(start25());
     await settle();
+    expect(api.putPriorities).not.toHaveBeenCalled();
     expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'ship THE fix', 'abcdef123456');
   });
 
-  it("starts unplanned under a ticked row's name", async () => {
+  it("adds a new row under a ticked row's name, which stays ticked", async () => {
     vi.mocked(api.startSession).mockResolvedValue(answered(started()));
     await renderCard([makePriority(1, 'Email', { uid: 'abcdef123456', done: true })]);
     typeLabel('Email');
     fireEvent.click(start25());
     await settle();
-    expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Email', null);
+    const rows = vi.mocked(api.putPriorities).mock.lastCall![1];
+    expect(rows.slice(0, 2)).toMatchObject([
+      { text: 'Email', uid: 'abcdef123456', done: true },
+      { text: 'Email', done: false },
+    ]);
+    expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Email', rows[1]!.uid);
   });
 
-  it('does not offer to add typed work to a full list', async () => {
-    await renderCard(ticked(MAX_PRIORITIES));
+  it('starts on no task on a full list', async () => {
+    vi.mocked(api.startSession).mockResolvedValue(answered(started()));
+    await renderCard(ticked(MAX_PRIORITIES), [], makePick([]));
     typeLabel('Call the vendor');
-    expect(alsoAdd()).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Category for the new priority:/ })).toBeNull();
+    fireEvent.click(start25());
+    await settle();
+    expect(api.putPriorities).not.toHaveBeenCalled();
+    expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Call the vendor', null);
   });
 
   it('adds typed work in the first free row, between written ones', async () => {
     vi.mocked(api.startSession).mockResolvedValue(answered(started()));
     await renderCard([makePriority(1, 'Report'), makePriority(3, 'Email')]);
     typeLabel('Call the vendor');
-    fireEvent.click(alsoAdd()!);
     fireEvent.click(start25());
     await settle();
     const rows = vi.mocked(api.putPriorities).mock.lastCall![1];
@@ -275,13 +398,12 @@ describe('FocusTimer', () => {
     expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Call the vendor', rows[1]!.uid);
   });
 
-  it("counts the start as out from the tap while Also add's row is saved, so the board holds its Start too", async () => {
+  it("counts the start as out from the tap while the new row's save is out, so the board holds its Start too", async () => {
     const saved = deferredAnswer<{ priorities: Priority[] }>();
     vi.mocked(api.putPriorities).mockReturnValueOnce(saved.promise);
     vi.mocked(api.startSession).mockResolvedValue(answered(started()));
     await renderCard();
     typeLabel('Call the vendor');
-    fireEvent.click(alsoAdd()!);
     expect(startOut()).toBe('false');
     fireEvent.click(start25());
     await settle();
@@ -299,26 +421,28 @@ describe('FocusTimer', () => {
     const ADMIN = makeCategory('cat000000002', 'Admin', { color: 'teal' });
     const chip = () => screen.queryByRole('button', { name: /^Category for the new priority:/ });
 
-    it('offers a chip only while Also add is ticked, and adds the row in the category picked', async () => {
+    it('offers a chip while the typed name matches no open row, and adds the row in the category picked', async () => {
       vi.mocked(api.startSession).mockResolvedValue(answered(started()));
-      await renderCard([], [], makePick([TICKETS, ADMIN]));
-      typeLabel('Call the vendor');
+      await renderCard([makePriority(1, 'Ship the fix')], [], makePick([TICKETS, ADMIN]));
       expect(chip()).toBeNull();
-      fireEvent.click(alsoAdd()!);
+      typeLabel('Call the vendor');
       expect(chip()!.getAttribute('aria-label')).toBe('Category for the new priority: none');
       fireEvent.click(chip()!);
       fireEvent.click(screen.getByRole('option', { name: 'Admin' }));
       expect(chip()!.getAttribute('aria-label')).toBe('Category for the new priority: Admin');
-      // Unticked, the chip goes and nothing is sent; ticked again, the pick is still there.
-      fireEvent.click(alsoAdd()!);
+      // An open row's name, or an empty box, takes the chip away and sends nothing; a new name
+      // again finds the pick still there.
+      typeLabel('ship the fix');
       expect(chip()).toBeNull();
-      fireEvent.click(alsoAdd()!);
+      typeLabel('');
+      expect(chip()).toBeNull();
+      typeLabel('Call the vendor');
       expect(chip()!.getAttribute('aria-label')).toBe('Category for the new priority: Admin');
       expect(api.putPriorities).not.toHaveBeenCalled();
 
       fireEvent.click(start25());
       await settle();
-      const row = vi.mocked(api.putPriorities).mock.lastCall![1][0]!;
+      const row = vi.mocked(api.putPriorities).mock.lastCall![1][1]!;
       expect(row).toMatchObject({ text: 'Call the vendor', categoryUid: ADMIN.uid });
       expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Call the vendor', row.uid);
     });
@@ -328,16 +452,14 @@ describe('FocusTimer', () => {
       vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(makeSession({ label: 'Call the vendor' })) }));
       await renderCard([], [], makePick([TICKETS]));
       typeLabel('Call the vendor');
-      fireEvent.click(alsoAdd()!);
       fireEvent.click(chip()!);
       fireEvent.click(screen.getByRole('option', { name: 'Tickets' }));
       fireEvent.click(start25());
       await settle();
       fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
       await settle();
-      expect(screen.getByLabelText<HTMLInputElement>('Session label').value).toBe('');
+      expect(box().value).toBe('');
       typeLabel('Email the vendor');
-      fireEvent.click(alsoAdd()!);
       expect(chip()!.getAttribute('aria-label')).toBe('Category for the new priority: none');
     });
 
@@ -346,13 +468,12 @@ describe('FocusTimer', () => {
       vi.mocked(api.startSession).mockResolvedValue(answered(started(makeSession({ label: 'Ship the fix', priorityUid: row.uid }))));
       vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(makeSession({ label: 'Ship the fix', priorityUid: row.uid })) }));
       await renderCard([row], [], makePick([TICKETS]));
-      typeLabel('Call the vendor');
-      fireEvent.click(alsoAdd()!);
+      typeLabel('Ship');
       fireEvent.click(chip()!);
       fireEvent.click(screen.getByRole('option', { name: 'Tickets' }));
-      // The row's link chip takes the label and the Also add offer with it.
-      fireEvent.click(screen.getByRole('button', { name: /Ship the fix/ }));
-      expect(alsoAdd()).toBeNull();
+      // A pick from the label box's list takes the chip away with the new name.
+      fireEvent.click(screen.getByRole('option', { name: /Ship the fix/ }));
+      expect(chip()).toBeNull();
       fireEvent.click(start25());
       await settle();
       expect(api.putPriorities).not.toHaveBeenCalled();
@@ -360,27 +481,6 @@ describe('FocusTimer', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
       await settle();
       typeLabel('Email the vendor');
-      fireEvent.click(alsoAdd()!);
-      expect(chip()!.getAttribute('aria-label')).toBe('Category for the new priority: none');
-    });
-
-    it('starts the next session with no category after a start with Also add unticked', async () => {
-      vi.mocked(api.startSession).mockResolvedValue(answered(started()));
-      vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(makeSession({ label: 'Call the vendor' })) }));
-      await renderCard([], [], makePick([TICKETS]));
-      typeLabel('Call the vendor');
-      fireEvent.click(alsoAdd()!);
-      fireEvent.click(chip()!);
-      fireEvent.click(screen.getByRole('option', { name: 'Tickets' }));
-      fireEvent.click(alsoAdd()!);
-      fireEvent.click(start25());
-      await settle();
-      expect(api.putPriorities).not.toHaveBeenCalled();
-      expect(api.startSession).toHaveBeenCalledWith(TODAY, 25 * 60, 'Call the vendor', null);
-      fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
-      await settle();
-      typeLabel('Email the vendor');
-      fireEvent.click(alsoAdd()!);
       expect(chip()!.getAttribute('aria-label')).toBe('Category for the new priority: none');
     });
 
@@ -388,16 +488,15 @@ describe('FocusTimer', () => {
       vi.mocked(api.startSession).mockRejectedValueOnce(new Error('The server did not answer in time.'));
       await renderCard([], [], makePick([TICKETS]));
       typeLabel('Call the vendor');
-      fireEvent.click(alsoAdd()!);
       fireEvent.click(chip()!);
       fireEvent.click(screen.getByRole('option', { name: 'Tickets' }));
       fireEvent.click(start25());
       await settle();
       expect(vi.mocked(api.putPriorities).mock.lastCall![1][0]).toMatchObject({ text: 'Call the vendor', categoryUid: TICKETS.uid });
-      // The start failed after the row went on the list, linked: unlinked, new text offers Also add again.
-      fireEvent.click(screen.getByRole('button', { name: /Call the vendor/, pressed: true }));
+      // The start failed after the row went on the list: its name is an open row's now, and a new
+      // name starts with none.
+      expect(chip()).toBeNull();
       typeLabel('Email the vendor');
-      fireEvent.click(alsoAdd()!);
       expect(chip()!.getAttribute('aria-label')).toBe('Category for the new priority: none');
     });
   });
@@ -406,12 +505,9 @@ describe('FocusTimer', () => {
     vi.mocked(api.startSession).mockRejectedValueOnce(new Error('The server did not answer in time.')).mockResolvedValueOnce(answered(started()));
     await renderCard();
     typeLabel('Call the vendor');
-    fireEvent.click(alsoAdd()!);
     fireEvent.click(start25());
     await settle();
     expect(screen.getByText('The server did not answer in time.')).toBeTruthy();
-    expect(alsoAdd()).toBeNull();
-    expect(screen.getByRole('button', { name: /Call the vendor/, pressed: true })).toBeTruthy();
 
     fireEvent.click(start25());
     await settle();
@@ -443,13 +539,17 @@ describe('FocusTimer', () => {
       expect(document.activeElement).toBe(document.body);
     });
 
-    it("goes to the label box once the running card's Finish ends the session", async () => {
+    it("goes to the label box once the running card's Finish ends the session, opening no list over the card", async () => {
       vi.mocked(api.getRunning).mockResolvedValueOnce(answered({ session: makeSession() }));
       vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(makeSession()) }));
-      await renderCard();
+      await renderCard([makePriority(1, 'Ship the fix')]);
       press(screen.getByRole('button', { name: 'Finish' }));
       await settle();
-      expect(document.activeElement).toBe(screen.getByLabelText('Session label'));
+      expect(document.activeElement).toBe(box());
+      expect(box().getAttribute('aria-expanded')).toBe('false');
+      // A press still opens it.
+      fireEvent.click(box());
+      expect(suggestions()).toEqual(['1Ship the fix']);
     });
 
     it('goes from Break to End break and back, as each takes the place of the other', async () => {
