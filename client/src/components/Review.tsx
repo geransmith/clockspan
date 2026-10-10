@@ -35,7 +35,7 @@ interface Props {
 export function Review({ today, now, period: { kind, from }, onPeriod, onOpen }: Props) {
   const period = periodRange(kind, from, 0);
   const { days, failed, retry } = useRange(period.from, period.to);
-  // Try again goes as the loading block takes its place: ◀ takes the focus.
+  // Try Again goes as the loading block takes its place: ◀ takes the focus.
   const prevRef = useRef<HTMLButtonElement>(null);
   const tryAgain = () => {
     prevRef.current?.focus();

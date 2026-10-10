@@ -2,9 +2,9 @@ import { useRef, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 
 /**
- * A list longer than FOLD_AT + 1 rows shows its first FOLD_AT and a "Show N More" button (the
- * list's heading has its whole count). One row over shows in full, since the button would take
- * the space of the one row it hides.
+ * A list longer than FOLD_AT + 1 rows shows its first FOLD_AT and a "Show N More" button, N being
+ * the rows it hides. One row over shows in full, since the button would take the space of the one
+ * row it hides.
  */
 const FOLD_AT = 8;
 

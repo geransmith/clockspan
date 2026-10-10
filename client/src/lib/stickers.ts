@@ -16,7 +16,7 @@ export const STICKER_REASONS: { id: StickerId; label: string }[] = [
   { id: 'reviewed', label: 'Retrospective Reviewed' },
 ];
 
-/** Each reason's label, for a cell's name and a sticker's tooltip. */
+/** Each reason's label: the legend's chip, in Title Case; a cell's name and a sticker's tooltip say it in sentence case. */
 export const STICKER_LABELS = Object.fromEntries(STICKER_REASONS.map((r) => [r.id, r.label])) as Record<StickerId, string>;
 
 /** What the chart needs to judge a day: its timeclock, and whether hours and lunch are tracked at all. */

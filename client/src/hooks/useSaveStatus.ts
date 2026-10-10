@@ -14,7 +14,7 @@ const SAVED_MS = 2500;
  * stored value shows again. In-flight saves are counted so a burst of chip clicks reads as one
  * save instead of flickering between states. `run` is any provider call that settles when the
  * server has answered (update or reset, or a board write from the Board tab). A save that fails
- * after the dialog has closed raises the quiet "Change not saved" banner instead, as the other
+ * after the dialog has closed raises the quiet "Change Not Saved" banner instead, as the other
  * stores do, since no header is left to say so.
  */
 export function useSaveStatus(): { saveState: SaveState; save: Save } {

@@ -25,7 +25,7 @@ function useHeldOver(fetched: Day[] | null | undefined, from: string, to: string
  * may still hold; that answer stays shown meanwhile.
  * The answer is tagged with the range it is for, so stepping to another period reads as loading
  * (days null, not failed) straight away without clearing state inside the effect. A failed read
- * reads as `failed` until `retry` asks again (a History tab's Try again).
+ * reads as `failed` until `retry` asks again (a History tab's Try Again).
  */
 export function useRange(from: string, to: string, enabled = true): { days: Day[] | null; failed: boolean; retry: () => void } {
   const [attempt, setAttempt] = useState(0);

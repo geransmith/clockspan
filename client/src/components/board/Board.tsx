@@ -104,7 +104,7 @@ export const Board = memo(function Board({
   const { day, failed: dayFailed, store: dayStore } = useDay(today);
   const weekStart = startOfWeek(today);
   // Done holds the week: the days before today (none on a Monday) give the rows ticked on them; a
-  // failed read says so in Done, with Try again.
+  // failed read says so in Done, with Try Again.
   const { days: earlierDays, failed: earlierFailed, retry: retryEarlier } = useRange(weekStart, addDays(today, -1), today !== weekStart);
   const pick = useCategoryPick();
   useEffect(() => void store.load(), [store]);
@@ -659,7 +659,7 @@ export const Board = memo(function Board({
             headRef={headRef('progress')}
             add={add('progress', listFull, addRow)}
           >
-            {shown.progress.length > 0 ? list(shown.progress, 'progress') : <Empty>Nothing open on today's top priorities.</Empty>}
+            {shown.progress.length > 0 ? list(shown.progress, 'progress') : <Empty>Nothing open on today's Top Priorities.</Empty>}
           </Column>
           <Column id="done" shown={shownColumn} over={over} count={done} headRef={headRef('done')}>
             {/* Not while the earlier days are unread: a routine ticked then may be all Done has. */}
@@ -674,7 +674,7 @@ export const Board = memo(function Board({
                 {earlierOpen && list(shown.doneEarlier, 'done')}
               </>
             )}
-            {/* In place of the routines ticked earlier this week. Try again goes as the read starts
+            {/* In place of the routines ticked earlier this week. Try Again goes as the read starts
                 again, so Done's heading takes the focus, as History's ◀ does. */}
             {earlierFailed && (
               <LoadFailed

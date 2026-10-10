@@ -11,12 +11,12 @@ interface Props {
   /** Today's period is the latest one: it disables "next" and hides the reset. */
   today: string;
   onFrom: (from: string) => void;
-  /** The ◀ button, which the reset and the caller's Try again give the focus to. */
+  /** The ◀ button, which the reset and the caller's Try Again give the focus to. */
   prevRef: RefObject<HTMLButtonElement | null>;
 }
 
 /**
- * ◀ label ▶ with a reset to the current period ("This week", "This month", …) once stepped back;
+ * ◀ label ▶ with a reset to the current period ("This Week", "This Month", …) once stepped back;
  * shared by the review and the calendar. A press that reaches the current period disables ▶ or
  * takes the reset away, so the focus moves to ◀ rather than falling back to the top of the page.
  */
@@ -41,7 +41,7 @@ export function PeriodNav({ kind, label, from, today, onFrom, prevRef }: Props) 
   );
 }
 
-/** "This week" / "This month" / "This quarter": back to today's period, shown once stepped back. It hands the focus to `prevRef` as it goes. */
+/** "This Week" / "This Month" / "This Quarter": back to today's period, shown once stepped back. It hands the focus to `prevRef` as it goes. */
 function PeriodReset({ kind, from, today, onFrom, prevRef }: Pick<Props, 'kind' | 'from' | 'today' | 'onFrom' | 'prevRef'>) {
   const current = periodRange(kind, today, 0).from;
   if (from >= current) return null;

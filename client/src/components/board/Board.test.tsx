@@ -317,7 +317,7 @@ describe('Board', () => {
     expect(vi.mocked(api.editItem).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(api.putPriorities).mock.invocationCallOrder[0]!);
     expect(titlesIn('Later')).toEqual(['Report', 'Write a KB']);
     expect(titlesIn('In Progress')).toEqual([]);
-    expect(screen.getByText("Nothing open on today's top priorities.")).toBeTruthy();
+    expect(screen.getByText("Nothing open on today's Top Priorities.")).toBeTruthy();
   });
 
   it('puts the focus on the moved item once it lands, when the move left it nowhere', async () => {

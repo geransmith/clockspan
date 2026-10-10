@@ -11,14 +11,14 @@ export function TimeclockTab({ settings, set }: TabProps) {
       <DurationField label="Work day" minutes={settings.workMinutes} {...SETTING_LIMITS.workMinutes} onCommit={(m) => set({ workMinutes: m })} />
       <Toggle
         label="Meal periods"
-        hint="The lunch deadline and the second meal period, with their alarms and the Lunch by tile. Off for salaried or exempt work, or where other rules apply."
+        hint="The lunch deadline and the second meal period, with their alarms and the Lunch By tile. Off for salaried or exempt work, or where other rules apply."
         checked={settings.mealRules}
         onChange={(v) => set({ mealRules: v })}
       />
       {!settings.mealRules && (
         <Toggle
           label="Lunch punches"
-          hint="The Lunch out and Lunch in rows on the timeclock, and the Lunch taken sticker. Off hides the rows, except on a day with a lunch already punched, and drops the sticker."
+          hint="The Lunch out and Lunch in rows on the timeclock, and the Lunch Taken sticker. Off hides the rows, except on a day with a lunch already punched, and drops the sticker."
           checked={settings.lunchPunches}
           onChange={(v) => set({ lunchPunches: v })}
         />
@@ -54,7 +54,7 @@ export function TimeclockTab({ settings, set }: TabProps) {
       />
       <Toggle
         label="Show hours"
-        hint="The week line, the hours in History and the review, and the Clocked out sticker. Off if you don't track hours."
+        hint="The week line, the hours in History and the review, and the Clocked Out sticker. Off if you don't track hours."
         checked={settings.trackHours}
         onChange={(v) => set({ trackHours: v })}
       />

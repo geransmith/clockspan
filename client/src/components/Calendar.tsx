@@ -14,6 +14,9 @@ import { LoadFailed } from './LoadFailed';
 import { PeriodNav } from './PeriodNav';
 import { Tile } from './Tile';
 
+/** A legend chip's label as a tooltip says it: "Clocked Out" → "Clocked out". */
+const sentence = (label: string) => label[0] + label.slice(1).toLowerCase();
+
 interface Props {
   today: string;
   now: number;
@@ -32,11 +35,11 @@ interface Props {
 export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
   const { settings } = useSettings();
   // Held by its first day, so the grid and the picked day stay put when the clock passes
-  // midnight into the next month; ◀ ▶ step from it and "This month" goes back to today's.
+  // midnight into the next month; ◀ ▶ step from it and "This Month" goes back to today's.
   const [month, setMonth] = useState(() => startOfMonth(date));
   const [selected, setSelected] = useState<string | null>(date);
   const [filter, setFilter] = useState<StickerId | null>(null);
-  // Try again goes as the loading block takes its place: ◀ takes the focus.
+  // Try Again goes as the loading block takes its place: ◀ takes the focus.
   const prevRef = useRef<HTMLButtonElement>(null);
   const period = periodRange('month', month, 0);
   const { days: list, failed, retry } = useRange(period.from, period.to);
@@ -173,11 +176,11 @@ function DayCell({
   let label: string;
   let face: ReactNode = null;
   if (shown) {
-    label = shown.length ? shown.map((id) => STICKER_LABELS[id]).join(', ') : 'no stickers';
+    label = shown.length ? shown.map((id) => STICKER_LABELS[id].toLowerCase()).join(', ') : 'no stickers';
     face = (
       <span className="sticker-row">
         {shown.map((id) => (
-          <span key={id} title={STICKER_LABELS[id]} aria-hidden="true">
+          <span key={id} title={sentence(STICKER_LABELS[id])} aria-hidden="true">
             {stickerEmoji(d.date, id)}
           </span>
         ))}

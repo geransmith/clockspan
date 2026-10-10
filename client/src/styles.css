@@ -1059,7 +1059,7 @@ button {
    off, three elsewhere; the timeclock's four are below). On a phone the type shrinks instead of
    the tiles stacking, which would push the punch rows and the priorities most of a screen
    down. Each tile's label, value and sub-line sit on rows shared by the tiles in a row
-   (subgrid), so a label that wraps to two lines ("Clock out at" on a narrow phone) doesn't drop
+   (subgrid), so a label that wraps to two lines ("Clock Out At" on a narrow phone) doesn't drop
    that tile's number below the others. */
 .tiles {
   display: grid;
@@ -2166,7 +2166,7 @@ button.log-label:hover {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-/* "This week" ("This month", "This quarter") sits at the right, or drops to its own line when a
+/* "This Week" ("This Month", "This Quarter") sits at the right, or drops to its own line when a
    long label needs the room. */
 .period-nav .btn-ghost {
   margin-left: auto;

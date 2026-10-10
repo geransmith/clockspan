@@ -48,7 +48,7 @@ interface DayState {
 interface DayStore {
   /**
    * Fetch a day. Never rejects: a failure on a day not loaded yet is recorded in `failed` (the
-   * sheet and the board show it with Try again; `useTodayAlarms` raises the banner for today
+   * sheet and the board show it with Try Again; `useTodayAlarms` raises the banner for today
    * elsewhere); a loaded day keeps its copy and says nothing.
    */
   load: (date: string) => Promise<void>;
@@ -210,7 +210,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
     [change],
   );
 
-  // A first load that fails is recorded (the sheet and the board show it with Try again, and
+  // A first load that fails is recorded (the sheet and the board show it with Try Again, and
   // `useTodayAlarms` raises a banner for today where neither does); a day already shown keeps its
   // copy. An answer that isn't a day fails the same way. Never rejects.
   const fetchDay = useCallback(
@@ -260,7 +260,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
     async (date: string) => {
       const { days, failed } = current();
       // Not loaded yet: useDay's first fetch owns that. If it failed, asking again here brings
-      // today's alarms back once the server answers, without anyone pressing Try again.
+      // today's alarms back once the server answers, without anyone pressing Try Again.
       if (!shownDay(days[date]) && !failed.has(date)) return;
       await fetchDay(date);
     },
@@ -747,7 +747,7 @@ export function useDays(): DayState {
  * The day for a date key, loading it on first use. A day the store holds already is read again
  * each time a view shows it, since another device may have changed it, and one whose first load
  * failed is asked for again then, quietly. Otherwise a failed first load (`failed`) waits for the
- * caller's Try again (`store.load`) or, for today, `useRefreshDay`'s next tick.
+ * caller's Try Again (`store.load`) or, for today, `useRefreshDay`'s next tick.
  */
 export function useDay(date: string): { day: Day | undefined; failed: boolean; store: DayStore } {
   const store = useDayStore();
