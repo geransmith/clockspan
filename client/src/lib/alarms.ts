@@ -119,13 +119,13 @@ export function dueEvents(
  * ("clocked in at 8:32 AM"), whether times carry AM/PM (see `resolveHour12`), and when the event
  * is shown, since a warning seen late (the phone was asleep) says the time actually left.
  */
-export type EventContext = Pick<TimeclockSettings, 'workMinutes' | 'lunchDeadlineMinutes' | 'secondMealAfterMinutes'> & {
+type EventContext = Pick<TimeclockSettings, 'workMinutes' | 'lunchDeadlineMinutes' | 'secondMealAfterMinutes'> & {
   clockIn: number;
   hour12: boolean;
   now: number;
 };
 
-export interface EventCopy {
+interface EventCopy {
   /** Which alarm, e.g. "Clock-out alarm"; the title says how long is left or past. */
   kicker: string;
   title: string;

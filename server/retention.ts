@@ -41,7 +41,7 @@ export function countDays(db: DB, userId: number, before: string): PruneCounts {
 }
 
 /** What one prune deleted: days, and tasks, tombstones included. */
-export interface Pruned {
+interface Pruned {
   days: number;
   items: number;
 }

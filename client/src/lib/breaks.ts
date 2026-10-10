@@ -27,7 +27,7 @@ export const SET_GAP_MINUTES = 15;
 /** Under a minute of focus is a false start: it earns no break and isn't one of a set. */
 export const MIN_FOCUS_SECONDS = 60;
 
-export interface BreakSuggestion {
+interface BreakSuggestion {
   /** The session the break follows. */
   sessionId: number;
   minutes: number;

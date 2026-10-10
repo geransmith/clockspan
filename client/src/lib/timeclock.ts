@@ -150,7 +150,6 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
   // the target or past it. An out on any other row is a break, the second meal included. A
   // past day ends once it is off the clock.
   const done = !clockedIn && ((finalOut != null && lastOut === finalOut) || (opts.frozen === true && lastOut != null));
-  const openOffMs = !clockedIn && lastOut != null && !done ? Math.max(0, effectiveNow - lastOut) : 0;
 
   const state: TimeclockState = outOfOrder ? 'working' : done ? 'done' : clockedIn ? 'working' : atLunch ? 'at-lunch' : 'on-break';
 
@@ -168,7 +167,8 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
   // Time still expected off the clock before the day can end. A lunch not taken is planned only
   // until its deadline, so a skipped lunch moves the end once, hours ahead, and not at the target,
   // where the jump would skip the end's warnings. A late Lunch out plans it again.
-  const futureOffSeconds = lunchOut == null ? (lunchStatus === 'upcoming' ? lunchSeconds : 0) : atLunch ? Math.max(0, lunchSeconds - openOffMs / 1000) : 0;
+  const futureOffSeconds =
+    lunchOut == null ? (lunchStatus === 'upcoming' ? lunchSeconds : 0) : atLunch ? Math.max(0, lunchSeconds - (effectiveNow - lunchOut) / 1000) : 0;
 
   let clockOutAt: number | null;
   let clockOutStatus: ClockOutStatus;

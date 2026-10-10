@@ -100,7 +100,7 @@ export function daySummaryOf(day: Day): DaySummary {
   };
 }
 
-export interface StickerCount {
+interface StickerCount {
   total: number;
   /** Days that earned every sticker. */
   full: number;

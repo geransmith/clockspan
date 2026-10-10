@@ -24,7 +24,6 @@ export default defineConfig({
     assetsInlineLimit: 0,
   },
   server: {
-    port: 5173,
     // No `host`: Vite's default keeps the dev server on localhost, off whatever network the
     // laptop is on. `npm run dev:client -- --host` opens it up for a test on a phone.
     proxy: {
@@ -33,7 +32,6 @@ export default defineConfig({
     },
   },
   test: {
-    environment: 'node',
     include: ['client/src/**/*.test.{ts,tsx}', 'server/**/*.test.ts', 'shared/**/*.test.ts'],
     root: '.',
     // The server logs every setup, sign-in and retention run, so the route tests would fill a
