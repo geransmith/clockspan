@@ -952,6 +952,19 @@ describe("time's up", () => {
     expect(result.current.timer).toMatchObject({ running: { plannedSeconds: 2400 }, due: false });
   });
 
+  it('drops the timer at once when its finish finds the session deleted on another device (404)', async () => {
+    // Finished and deleted from the log on another device after this one's last sync.
+    const { result } = await renderRunning(startedAgo(34.9));
+    vi.mocked(api.finishSession).mockRejectedValueOnce(apiError(404));
+    vi.mocked(api.getRunning).mockResolvedValue({ session: null });
+    await settle(6000);
+    expect(api.finishSession).toHaveBeenCalledWith(1, false, { plannedSeconds: 1500, pausedAt: null });
+    expect(api.getRunning).toHaveBeenCalledTimes(2);
+    expect(result.current.timer.running).toBeNull();
+    await settle(5000);
+    expect(api.finishSession).toHaveBeenCalledTimes(1);
+  });
+
   it('retries a failed auto-finish, 2 s doubling, one request at a time', async () => {
     const first = deferred<SessionResponse>();
     vi.mocked(api.finishSession).mockReturnValueOnce(first.promise);

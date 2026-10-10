@@ -429,21 +429,22 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   auto-finish (which chimes only if nothing has for that end). The auto-finish and the banner wait
   while a come-back sync is out (`syncing`), as the alarms do, and the auto-finish sends the plan
   and pause it judged by: the server refuses (409) a session another device has changed since, and
-  the timer syncs. The banner goes while a press that took it away is on its way, and comes back,
-  quietly, if that press fails. Plans are whole minutes: `adjust` rounds the new plan up to one and
-  stops at `PLANNED_SECONDS.max` (8 h), where `canAdd` turns false, + is disabled and the "Time's
-  up" banner is raised again, quietly, without its Add button. The banner names the session
-  (`useTimer().name`) as it was when raised, as its notification does: a rename while it is up shows
-  in the bar, the timer card and the tab title, and never raises it again, which would bring a
-  closed banner back. The Finish buttons call `requestFinish()`: it finishes unless the timer is due
-  and the planned and worked lengths differ in their whole minutes (a minute or more over), where
-  `finishChoice` opens the `FinishChoice` sheet (Planned · Nm / Worked · Mm / Back). A finish goes
-  out behind any press still on its way. The choice belongs to the due end it was asked for
-  (`finishChoiceFor`, a `dueKey`): once the timer is no longer due at that end (time added or a
-  pause, here or on another device, or the session ending however it ends), the sheet goes and stays
-  gone. `useTimer` keeps the running session the way the day store keeps a day: a press (adjust,
-  edit, pause, resume) shows at once, a failure drops only that press, and a sync's answer never
-  hides a press still on its way. Keep that pattern for new mutations.
+  the timer syncs, as it does when the finish finds the session deleted there (404). The banner goes
+  while a press that took it away is on its way, and comes back, quietly, if that press fails. Plans
+  are whole minutes: `adjust` rounds the new plan up to one and stops at `PLANNED_SECONDS.max`
+  (8 h), where `canAdd` turns false, + is disabled and the "Time's up" banner is raised again,
+  quietly, without its Add button. The banner names the session (`useTimer().name`) as it was when
+  raised, as its notification does: a rename while it is up shows in the bar, the timer card and the
+  tab title, and never raises it again, which would bring a closed banner back. The Finish buttons
+  call `requestFinish()`: it finishes unless the timer is due and the planned and worked lengths
+  differ in their whole minutes (a minute or more over), where `finishChoice` opens the
+  `FinishChoice` sheet (Planned · Nm / Worked · Mm / Back). A finish goes out behind any press still
+  on its way. The choice belongs to the due end it was asked for (`finishChoiceFor`, a `dueKey`):
+  once the timer is no longer due at that end (time added or a pause, here or on another device, or
+  the session ending however it ends), the sheet goes and stays gone. `useTimer` keeps the running
+  session the way the day store keeps a day: a press (adjust, edit, pause, resume) shows at once, a
+  failure drops only that press, and a sync's answer never hides a press still on its way. Keep that
+  pattern for new mutations.
 - **One running session per user is a schema invariant** (a unique partial index), and another
   device may own it: a 409 on start is adopted with a banner, a sync whose answer differs from the
   session shown refreshes that day if the store holds it so the log catches up (a day it doesn't
