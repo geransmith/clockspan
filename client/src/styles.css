@@ -11,7 +11,7 @@
   --text-2: #5b6473;
   /* About 3:1 on the surfaces: icons, placeholders and struck-through done rows. Other text uses
      --text-2 or a tone's -ink (4.5:1 and up). */
-  --text-3: #8a94a4;
+  --text-3: #7d8797;
   /* Words in a tone's colour use its -ink: in light mode the tone itself is 3.7 to 4.3:1 on its
      -soft, and the -ink is 5:1 and up there, on white and on --surface-2. The tone stays for
      fills, borders, icons and bars. The dark tones pass as they are, so each dark -ink is its
@@ -270,7 +270,9 @@ button {
   transform: translateY(1px);
 }
 .btn:disabled,
-.btn[aria-disabled='true'] {
+.btn[aria-disabled='true'],
+.chip:disabled,
+.chip[aria-disabled='true'] {
   opacity: 0.45;
   cursor: not-allowed;
 }
@@ -375,7 +377,9 @@ button {
   width: 46px;
   height: 28px;
   border-radius: 999px;
-  background: var(--surface-3);
+  /* Off, the track is all that draws the control: 3:1 or more on a card in both themes, and the
+     white thumb on it too. */
+  background: var(--text-3);
   position: relative;
   flex: none;
   cursor: pointer;
@@ -454,10 +458,6 @@ button {
   background: var(--surface);
   font-size: 0.88rem;
   font-weight: 550;
-}
-.chip:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 .chip-action {
   color: var(--accent-ink);
@@ -2218,6 +2218,9 @@ button.log-label:hover {
 .calendar-day.is-empty,
 .calendar-day.is-future {
   background: transparent;
+}
+/* Faded only where it is shut: an empty past day still opens, and its number keeps its contrast. */
+.calendar-day.is-future {
   opacity: 0.55;
 }
 .calendar-day.is-today .calendar-daynum {
@@ -2227,7 +2230,6 @@ button.log-label:hover {
 .calendar-day.is-full {
   background: var(--accent-soft);
   border-color: var(--accent);
-  opacity: 1;
 }
 .calendar-day[aria-pressed='true'] {
   border-color: var(--accent);
@@ -3315,5 +3317,11 @@ kbd {
   [aria-pressed='true'] .calendar-dot,
   [aria-pressed='true'] .calendar-bar > span {
     background: HighlightText !important;
+  }
+  /* Told apart by their border's colour alone, which the mode repaints. */
+  .board-col[data-over],
+  .timefield.is-partial,
+  .calendar-day.is-full {
+    border-style: dashed;
   }
 }
