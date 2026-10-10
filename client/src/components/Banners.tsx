@@ -6,10 +6,11 @@ import { useTimeFormat } from '../hooks/useTimeFormat';
 import { Bell, X } from './Icons';
 
 /**
- * The stack is fixed over the sheet, and on a phone a fourth banner would cover the cards. A
- * re-raised tag moves to the end, so the banners left out are the ones raised longest ago,
- * whose chime and notification have already played; closing one brings the next back. Sticky
- * banners get no priority over the others, so a fresh "Change not saved" is always drawn.
+ * The stack hangs over the page, under the running bar or the header, and on a phone a fourth
+ * banner would cover the cards. A re-raised tag moves to the end, so the banners left out are the
+ * ones raised longest ago, whose chime and notification have already played; closing one brings
+ * the next back. Sticky banners get no priority over the others, so a fresh "Change not saved" is
+ * always drawn.
  */
 const MAX_SHOWN = 3;
 

@@ -6,7 +6,7 @@ import * as api from '../api';
 import { useDayStore } from '../hooks/useDay';
 import { warnSaveFailed } from '../lib/alerts';
 import { ApiError } from '../lib/apiError';
-import { LEFT_OPEN, PUNCH_ORDER, REMOVE_TASK, TODAY_OFFER } from '../lib/copy';
+import { LEFT_OPEN, LOAD_FAILED, PUNCH_ORDER, REMOVE_TASK, TODAY_OFFER } from '../lib/copy';
 import { SPLIT_QUERY } from '../lib/layout';
 import { applySettingsPatch } from '../lib/settings';
 import { USER_KEYS } from '../lib/storage';
@@ -60,7 +60,19 @@ function SheetAt({
   jumpTo?: CardId | null;
   onJumped?: () => void;
 }) {
-  return <Sheet date={date} today={TODAY} now={now} customize={customize} jumpTo={jumpTo} onJumped={onJumped} onPunchEditing={() => {}} />;
+  return (
+    <Sheet
+      date={date}
+      today={TODAY}
+      now={now}
+      customize={customize}
+      onToggleCustomize={() => {}}
+      onNavigate={() => {}}
+      jumpTo={jumpTo}
+      onJumped={onJumped}
+      onPunchEditing={() => {}}
+    />
+  );
 }
 
 async function renderSheet(customize = false) {
@@ -186,6 +198,34 @@ describe('Sheet', () => {
     } finally {
       scrolled.mockRestore();
     }
+  });
+
+  // Keyed by date, the row would mount again for a day still loading: Previous day would drop the
+  // focus it was pressed with, and the next press would miss.
+  it('keeps its date row through a step to a day still loading, and beside a day that failed to load', async () => {
+    const yesterday = deferredAnswer<Day>();
+    vi.mocked(api.getDay).mockImplementation((d) => (d === YESTERDAY ? yesterday.promise : Promise.resolve(answered(makeDay(d)))));
+    const { rerender } = render(
+      <AppProviders>
+        <SheetAt />
+      </AppProviders>,
+    );
+    await settle();
+    const previous = button('Previous day');
+    act(() => previous.focus());
+    rerender(
+      <AppProviders>
+        <SheetAt date={YESTERDAY} />
+      </AppProviders>,
+    );
+    expect(document.querySelector('.loading')).not.toBeNull();
+    expect(button('Previous day')).toBe(previous);
+    expect(document.activeElement).toBe(previous);
+    yesterday.reject(new ApiError(500, 'Server error', 0));
+    await settle();
+    expect(screen.getByRole('alert').textContent).toContain(LOAD_FAILED.title);
+    expect(button('Previous day')).toBe(previous);
+    expect(document.activeElement).toBe(previous);
   });
 
   it('steps a card up and down within its own column', async () => {

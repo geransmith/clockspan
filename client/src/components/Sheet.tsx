@@ -4,6 +4,7 @@ import { useDay } from '../hooks/useDay';
 import { useLeftOpen } from '../hooks/useLeftOpen';
 import { useRange } from '../hooks/useRange';
 import { useRecurringAnswered } from '../hooks/useRecurringAnswered';
+import type { Route } from '../hooks/useRoute';
 import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { warnSaveFailed } from '../lib/alerts';
@@ -21,6 +22,7 @@ import { clampToDay, dayTimeclock, punchLabel, type TimeclockResult, type Timecl
 import { weekHours } from '../lib/week';
 import type { CardId, CardSide, Punch } from '../types';
 import { CardFrame, type SheetCard } from './CardFrame';
+import { DateNav } from './DateNav';
 import { FocusTimer } from './FocusTimer';
 import { LoadFailed } from './LoadFailed';
 import { Priorities } from './Priorities';
@@ -38,6 +40,8 @@ interface Props {
   /** The clock floored to the minute: nothing the sheet shows is finer, and the day log keeps its own clock. */
   now: number;
   customize: boolean;
+  onToggleCustomize: () => void;
+  onNavigate: (next: Partial<Route>, opts?: { replace?: boolean }) => void;
   /** A card to scroll into view once the sheet has rendered (a banner's "Open …" button), opening a folded retrospective. */
   jumpTo: CardId | null;
   onJumped: () => void;
@@ -46,7 +50,7 @@ interface Props {
 }
 
 /** Memoized: App re-renders every second, and the sheet renders once a minute on the minute it is handed. */
-export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, onJumped, onPunchEditing }: Props) {
+export const Sheet = memo(function Sheet({ date, today, now, customize, onToggleCustomize, onNavigate, jumpTo, onJumped, onPunchEditing }: Props) {
   const { settings, update } = useSettings();
   const { day, failed, store } = useDay(date);
   const isToday = date === today;
@@ -124,9 +128,14 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
   }, [jumpTo, ready, onJumped]);
 
   const sheetClass = columns ? 'sheet sheet--split' : 'sheet';
+  // The first child of both returns and not keyed by date, as Timeclock, Priorities and Retro are:
+  // a step to a day not loaded yet keeps the row mounted, so Previous day keeps the focus it was
+  // pressed with, and a date half typed stays in the picker.
+  const dateNav = <DateNav date={date} today={today} customize={customize} onNavigate={onNavigate} onToggleCustomize={onToggleCustomize} />;
   if (!day || !tc)
     return (
-      <div className="sheet">
+      <div className={sheetClass}>
+        {dateNav}
         {failed ? <LoadFailed title={LOAD_FAILED.title} onRetry={() => void store.load(date)} /> : <div className="loading" aria-busy="true" />}
       </div>
     );
@@ -242,6 +251,7 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
 
   return (
     <div className={sheetClass}>
+      {dateNav}
       {/* A live region already on the page when the notice appears, or a screen reader may not read it. */}
       <div className="punch-order" role="status">
         {tc.outOfOrder && <PunchOrder id={orderNotice} punches={day.punches} slip={tc.outOfOrder} />}

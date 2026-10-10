@@ -66,6 +66,8 @@ function Shell() {
     setJumpTo('retro');
   };
   const onJumped = useCallback(() => setJumpTo(null), []);
+  // Stable, as the memoized sheet takes it.
+  const toggleCustomize = useCallback(() => setCustomize((c) => !c), []);
   // History and the sheet show nothing finer than a minute. Handed the clock floored to the
   // minute (and memoized), they render once a minute instead of every second.
   const minute = floorToMinute(now);
@@ -86,7 +88,19 @@ function Shell() {
   const page = () => {
     switch (route.view) {
       case 'sheet':
-        return <Sheet date={date} today={today} now={minute} customize={customize} jumpTo={jumpTo} onJumped={onJumped} onPunchEditing={setEditingPunches} />;
+        return (
+          <Sheet
+            date={date}
+            today={today}
+            now={minute}
+            customize={customize}
+            onToggleCustomize={toggleCustomize}
+            onNavigate={navigate}
+            jumpTo={jumpTo}
+            onJumped={onJumped}
+            onPunchEditing={setEditingPunches}
+          />
+        );
       case 'history':
         return (
           <Suspense fallback={loading}>
@@ -107,18 +121,14 @@ function Shell() {
 
   return (
     <div className={`app${running ? ' app--has-bar' : ''}`}>
-      {/* Keyed by session: one another device swapped in must not inherit an open label draft. */}
-      {running && <RunningTimerBar key={running.id} session={running} />}
-      <Banners />
-      <Header
-        view={route.view}
-        date={date}
-        today={today}
-        customize={customize}
-        onNavigate={navigate}
-        onToggleCustomize={() => setCustomize((c) => !c)}
-        onOpenSettings={() => setSettingsOpen(true)}
-      />
+      <Header view={route.view} onNavigate={navigate} onOpenSettings={() => setSettingsOpen(true)} />
+      {/* Under the header and sticking to the top once it scrolls away; a child of .app, since a sticky
+          box sticks only inside its parent. Always here: Banners is a live region. */}
+      <div className="top-stack">
+        {/* Keyed by session: one another device swapped in must not inherit an open label draft. */}
+        {running && <RunningTimerBar key={running.id} session={running} />}
+        <Banners />
+      </div>
       <main>{page()}</main>
       {settingsOpen && (
         <Suspense fallback={null}>

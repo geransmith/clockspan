@@ -39,8 +39,8 @@ export function formatDateSpan(from: string, to: string): string {
 }
 
 /**
- * "Today", "Yesterday", "Tomorrow", or the short date: how the header and the calendar name a
- * day. `inSentence` lowercases the word for a line that runs on ("Still open from yesterday").
+ * "Today", "Yesterday", "Tomorrow", or the short date: how the sheet's date row and the calendar
+ * name a day. `inSentence` lowercases the word for a line that runs on ("Still open from yesterday").
  */
 export function dayName(key: string, today: string, inSentence = false): string {
   const word = key === today ? 'Today' : key === addDays(today, -1) ? 'Yesterday' : key === addDays(today, 1) ? 'Tomorrow' : null;

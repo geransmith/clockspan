@@ -65,7 +65,7 @@ describe('RunningTimerBar', () => {
     vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(session) }));
     render(
       <AppProviders>
-        {/* The header's brand, which sits just under the bar. */}
+        {/* The header's brand, which sits just above the bar. */}
         <button className="brand">Go to today</button>
         <Bar />
       </AppProviders>,
