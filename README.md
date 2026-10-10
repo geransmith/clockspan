@@ -125,7 +125,7 @@ npm run seed -- --now 10:30       # pin the time of day: clock-in two hours befo
 ### Trying the auth modes locally
 
 ```bash
-AUTH_MODE=local npm run dev       # first visit shows the "create account" page; its setup code is in the terminal
+AUTH_MODE=local npm run dev       # first visit shows the account setup page; its setup code is in the terminal
 AUTH_MODE=local npm run seed      # creates users "admin" (admin) and "sam", password
                                   # clockspan-dev, each with their own sample days (an
                                   # existing "admin" keeps its own password)
@@ -215,7 +215,7 @@ Set these in `.env` (start from `.env.example`, which documents each one) or in 
 
 **No sign-in (`none`).** Meant for a network you trust: anyone who can reach the port can read and change the data. A web page from another site, open in a browser on that network, can't: the browser won't let it read the API, and the app refuses its writes. That site could still point one of its own names at the server's address (DNS rebinding) and pass as the app, so the app answers only names no outside site can use, plus the ones you list. IP addresses (`http://192.168.1.10:8080`), `localhost`, one-word names (`http://tower:8080`), `.localhost`, `.local`, `.home.arpa` and `.internal` names and `APP_URL`'s name always work. Reach the app by another name, such as a domain on your reverse proxy or a `.lan` name? Set `APP_URL` to it, or list it in `ALLOWED_HOSTS`; until then the page says *Can't reach the server* and names the host to add.
 
-**Local mode.** The first visit shows a *create account* page; that account is the admin. The page asks for a setup code, which the server prints in its log when it starts with no account yet (`docker logs clockspan`, or the container's log in Unraid): someone who finds a fresh install before you can't claim it. A restart prints a new code. The admin adds users in **Settings → Account** with a temporary password; a new user has to choose their own the first time they sign in, before the sheet opens. Passwords are hashed with scrypt. Change your password in **Settings → Account**. Forgot it?
+**Local mode.** The first visit shows the account setup page (**Create Account**); that account is the admin. The page asks for a setup code, which the server prints in its log when it starts with no account yet (`docker logs clockspan`, or the container's log in Unraid): someone who finds a fresh install before you can't claim it. A restart prints a new code. The admin adds users in **Settings → Account** with a temporary password; a new user has to choose their own the first time they sign in, before the sheet opens. Passwords are hashed with scrypt. Change your password in **Settings → Account**. Forgot it?
 
 ```bash
 docker exec clockspan node dist/server/cli.js reset-password <username>
