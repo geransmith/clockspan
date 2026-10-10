@@ -66,7 +66,7 @@ export interface Priority {
   note: string;
   /** Read only: the task is a recurring priority. */
   recurring: boolean;
-  /** Read only: a recurring priority removed in Settings, or a task the one-item migration (server/migrations/oneItem.ts) archived. */
+  /** Read only: a recurring priority that stopped repeating, or a task the one-item migration (server/migrations/oneItem.ts) archived. */
   archived: boolean;
   /** Read only: how many days' lists hold the task. */
   listed: number;

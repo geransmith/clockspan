@@ -146,19 +146,29 @@ describe('copy builders', () => {
     expect(CONFIRM.deleteTask(0, '5m')).toBe('Delete this task everywhere? 5m is logged on it. The time stays in the log, unplanned.');
   });
 
-  it('names the recurring priority Remove takes, and says its days keep it', () => {
-    expect(CONFIRM.deleteRecurring('Follow-ups')).toBe('Remove Follow-ups? It stops repeating. Days it was on keep it.');
+  it('names the task a first day makes repeat, and says where it goes and that it stays a recurring priority', () => {
+    expect(CONFIRM.makeRecurring('Weekly report')).toBe(
+      "Make Weekly report repeat? Off today's list it shows under Repeats, not in Later or Next. This cannot be undone.",
+    );
+  });
+
+  it('names the recurring priority Stop repeating ends, and says its days keep it', () => {
+    expect(CONFIRM.deleteRecurring('Follow-ups')).toBe(
+      "Stop repeating Follow-ups? It won't show under Repeats or be offered again. The days it was on keep it.",
+    );
   });
 
   it('names the card and the day in the board refusals, and the cap in the full line', () => {
     expect(BOARD.full).toBe('Later and Next hold 300 cards at most.');
-    expect(BOARD.recurringStays('Monitor the queue')).toBe("Monitor the queue stays on today's list. Use Remove from today.");
+    expect(BOARD.recurringStays('Monitor the queue')).toBe('Monitor the queue repeats, so it stays under Repeats.');
+    expect(BOARD.removed('Follow-ups')).toBe('Follow-ups stopped repeating.');
     expect(BOARD.doneOn('yesterday')).toBe("Done yesterday. Untick it on that day's sheet.");
     expect(BOARD.doneOn('Mon, Oct 5')).toBe("Done Mon, Oct 5. Untick it on that day's sheet.");
   });
 
   it('says a done item stays done and offers a new card in the lane it was moved to', () => {
     expect(DONE_STAYS.title('Ship the fix')).toBe('Ship the fix is done.');
+    expect(DONE_STAYS.body).toBe('More work on it goes on a new card. If it keeps coming back, open it and pick its days under Repeat.');
     expect(DONE_STAYS.add('Next')).toBe('Add a new card to Next');
     expect(DONE_STAYS.announce('Ship the fix', 'Next')).toBe('Ship the fix stays in Done. The notice can add a new card to Next.');
   });

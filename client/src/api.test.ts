@@ -130,18 +130,11 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
   ['deleteBreak', () => api.deleteBreak(4), 'DELETE', '/api/breaks/4', undefined],
   ['getBoard', () => api.getBoard(), 'GET', '/api/board', undefined],
   [
-    'addItem, a task in a lane',
+    'addItem',
     () => api.addItem({ uid: 'task00000002', title: 'Write the KB', categoryUid: 'cat000000001', lane: 'later', before: 'task00000001' }),
     'POST',
     '/api/items',
     { uid: 'task00000002', title: 'Write the KB', categoryUid: 'cat000000001', lane: 'later', before: 'task00000001' },
-  ],
-  [
-    'addItem, a recurring priority',
-    () => api.addItem({ uid: 'rcur00000001', title: 'Monitor the queue', categoryUid: null, weekdays: [1, 2, 3, 4, 5] }),
-    'POST',
-    '/api/items',
-    { uid: 'rcur00000001', title: 'Monitor the queue', categoryUid: null, weekdays: [1, 2, 3, 4, 5] },
   ],
   [
     'editItem',

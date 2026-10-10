@@ -575,7 +575,7 @@ describe('PUT /api/days/:date/priorities: the tasks', () => {
     expect((await app.saveList(WED, [report], [report])).body.priorities[0]).toMatchObject({ listed: 3, earlier: 2, logged: 300 });
   });
 
-  it("answers a recurring priority's row as recurring, and one removed in Settings as archived", async () => {
+  it("answers a recurring priority's row as recurring, and one that stopped repeating as archived", async () => {
     await app.api.post('/api/items', { uid: 'rcur0000000a', title: 'Check the queue', categoryUid: 'cat000000001', weekdays: [1, 2, 3, 4, 5] });
     const r = await app.saveList(MON, [row('Check the queue', 'rcur0000000a')], []);
     expect(r.body.priorities).toEqual([stored(1, 'Check the queue', 'rcur0000000a', { categoryUid: 'cat000000001', recurring: true })]);

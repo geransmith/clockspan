@@ -60,18 +60,17 @@ export interface BoardState {
 export interface BoardStore {
   /** Reads the board. Never rejects. */
   load(): Promise<void>;
-  /**
-   * A new task in a lane (a column's +, or a done item's new task), refused at the lanes' cap
-   * before it is sent, or a new recurring priority made in Settings → Board.
-   */
+  /** A new task in a lane (a column's +, or a done item's new task), refused at the lanes' cap before it is sent. */
   addItem(item: NewItem): Promise<void>;
   /**
-   * A task off today's list edited on the board, or a recurring priority renamed, given a category
-   * or other weekdays in Settings → Board, which reaches every day it is on. After a new name,
-   * category or note, the held days that name the task and the ranges on screen are read again
-   * (`taskChanged`).
+   * A task off today's list edited on the board, or a weekday set or cleared on any task's card,
+   * which reaches every day it is on. A one-off's first day makes it a recurring priority: that
+   * waits for today's saves still out, so a task typed seconds ago exists. After a new name,
+   * category or note, or that first day, the held days that name the task and the ranges on screen
+   * are read again (`taskChanged`). `task` is the task as the view shows it, which a first day
+   * shows as a recurring priority at once when the board hasn't read the task yet.
    */
-  editItem(uid: string, patch: ItemPatch): Promise<void>;
+  editItem(uid: string, patch: ItemPatch, task?: Pick<Recurring, 'title' | 'categoryUid' | 'note'>): Promise<void>;
   /**
    * A one-off task deleted everywhere, the board's Delete and the sheet's: off the board at once,
    * then, once today's saves are in (so a task typed seconds ago exists or never went),
@@ -80,15 +79,14 @@ export interface BoardStore {
    * named it read again and the ranges on screen with them (`taskChanged`).
    */
   deleteItem(uid: string): Promise<void>;
-  /** A recurring priority removed in Settings → Board: it stops repeating, and the days it was on keep it (a 404 counts as done). */
+  /** A card's Stop repeating: the recurring priority is archived, and the days it was on keep it (a 404 counts as done). */
   removeRecurring(uid: string): Promise<void>;
   /** A row taken off today's list from the board as × takes it (`takeOffRow`): a recurring priority's Remove from today. */
   removeFromToday(uid: string): Promise<void>;
   /**
    * A row of today's list renamed, given a category or a note on the board, which reaches every day
-   * its task is on and shows on the board's copy at once (a recurring priority in Settings → Board,
-   * its earlier ticks in Done). A row gone from today's list meanwhile has its task patched
-   * instead.
+   * its task is on and shows on the board's copy at once (a recurring priority's card, its earlier
+   * ticks in Done). A row gone from today's list meanwhile has its task patched instead.
    */
   editRow(uid: string, patch: RowPatch): Promise<void>;
   /** A move `planMove` gave, as one job. */
@@ -179,7 +177,7 @@ export function BoardProvider({ children }: { children: ReactNode }) {
 
   const addItem = useCallback(
     (item: NewItem) => {
-      const refused = 'lane' in item ? full(item.uid) : null;
+      const refused = full(item.uid);
       if (refused) return Promise.reject(refused);
       const now = Date.now();
       return write(
@@ -190,23 +188,31 @@ export function BoardProvider({ children }: { children: ReactNode }) {
     [full, write],
   );
 
-  // The server renamed, filed or noted it on every day: the board's earlier days in Done, today's row.
+  // The server renamed, filed or noted it on every day, or made it a recurring priority there
+  // (`converts`): the board's earlier days in Done, today's row.
   const patchItem = useCallback(
-    async (uid: string, patch: ItemPatch) => {
+    async (uid: string, patch: ItemPatch, converts = false) => {
       const saved = await api.editItem(uid, patch);
-      if (patch.title !== undefined || patch.categoryUid !== undefined || patch.note !== undefined) dayStore.taskChanged(uid, saved.revision);
+      if (converts || patch.title !== undefined || patch.categoryUid !== undefined || patch.note !== undefined) dayStore.taskChanged(uid, saved.revision);
       return saved;
     },
     [dayStore],
   );
 
   const editItem = useCallback(
-    (uid: string, patch: ItemPatch) =>
-      write(
-        (b) => withItemPatch(b, uid, patch),
-        () => patchItem(uid, patch),
-      ),
-    [write, patchItem],
+    (uid: string, patch: ItemPatch, task?: Pick<Recurring, 'title' | 'categoryUid' | 'note'>) => {
+      const today = todayKey();
+      // A day set on a task the board doesn't hold as a recurring priority makes it one.
+      const converts = patch.weekday?.on === true && !shown(current())?.recurring.some((r) => r.uid === uid);
+      return write(
+        (b) => withItemPatch(b, uid, patch, task),
+        async () => {
+          if (converts) await dayStore.prioritiesSaved(today);
+          return patchItem(uid, patch, converts);
+        },
+      );
+    },
+    [current, write, dayStore, patchItem],
   );
 
   // Today's list changed by `fn`, inside a job, answered at its save's revision: refused while the
@@ -402,22 +408,16 @@ export function useBoardStore(): BoardStore {
   return v;
 }
 
-/** A failed category create, said where the view has no other way: the "Change not saved" banner. */
-function bannerOnFailure(saved: Promise<void>): void {
-  void saved.catch(warnSaveFailed);
-}
-
 /**
- * The category chip's data, for a view that offers the chip and passes it down (the board page,
- * the sheet, Settings → Board); null before the board's first read. `create` gives the uid to set
- * at once (`categoryForName`): a category is a soft link, so the row or card that takes it needs
- * no wait. A new or removed category goes out as an optimistic `addCategory`, and its failure (a
- * stale copy whose name another device took, or a server cap) takes it off, reads the board again
- * and goes to `report`, the banner by default (Settings → Board passes the dialog's save, whose
- * header says Not saved); what picked it then reads as no category. `refresh` reads the board, as
- * the chip's list does when it opens.
+ * The category chip's data, for a view that offers the chip and passes it down (the board page and
+ * the sheet); null before the board's first read. `create` gives the uid to set at once
+ * (`categoryForName`): a category is a soft link, so the row or card that takes it needs no wait.
+ * A new or removed category goes out as an optimistic `addCategory`, and its failure (a stale copy
+ * whose name another device took, or a server cap) takes it off, reads the board again and raises
+ * the "Change not saved" banner; what picked it then reads as no category. `refresh` reads the
+ * board, as the chip's list does when it opens.
  */
-export function useCategoryPick(report: (saved: Promise<void>) => void = bannerOnFailure): CategoryPick | null {
+export function useCategoryPick(): CategoryPick | null {
   const { board } = useBoardState();
   const store = useBoardStore();
   return useMemo(() => {
@@ -427,10 +427,10 @@ export function useCategoryPick(report: (saved: Promise<void>) => void = bannerO
       categories,
       create: (name: string) => {
         const made = categoryForName(categories, name, newUid());
-        if (made?.send) report(store.addCategory(made.send));
+        if (made?.send) void store.addCategory(made.send).catch(warnSaveFailed);
         return made?.uid ?? null;
       },
       refresh: () => void store.load(),
     };
-  }, [board, store, report]);
+  }, [board, store]);
 }

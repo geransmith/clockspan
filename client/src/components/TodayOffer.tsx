@@ -20,7 +20,7 @@ export interface MorningOffer {
   leftovers: Leftovers | null;
   /** The top of Next as seeds (`topOfNext`); none until the leftovers' read and the board's have answered. */
   upNext: PrioritySeed[];
-  /** The recurring priorities due today and not answered on this device yet, in Settings order (`dueRecurring`); none before the board's first read. */
+  /** The recurring priorities due today and not answered on this device yet, in the order they were made (`dueRecurring`); none before the board's first read. */
   recurring: Recurring[];
   /**
    * Records what the notice showed once Add to today, Not today or Start fresh is pressed: the
@@ -37,7 +37,7 @@ interface Props {
   upNext: PrioritySeed[];
   /** Rows per day: the leftovers, all ticked, and then Up next's first boxes fill it. */
   rowsPerDay: number;
-  /** The routines shown, in Settings order. */
+  /** The routines shown, in the order they were made. */
   recurring: Recurring[];
   /** Today's list as the card shows it: the routines on it count toward `perDay`. */
   rows: Priority[];

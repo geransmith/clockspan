@@ -9,9 +9,10 @@ retrospective card (plan vs. log, a "why" note, a nudge before clock-out; one li
 until the day is clocked out), a week / month / quarter review, alarms for lunch, clock-out and
 the second meal period, and a Board page for tasks that aren't for today (its In progress column
 is today's Top priorities; tasks carry categories, made from a chip or in Settings → Board, and
-recurring priorities, set up in Settings → Board and offered on Top priorities on their
-weekdays). Each task (a priority, a board card, a recurring priority) is stored once, with one
-name, one category and one note; a day's list names the tasks on it.
+any card can be set to repeat on weekdays from its dialog, which makes it a recurring priority:
+listed under Later's Repeats and offered on Top priorities on those days). Each task (a
+priority, a board card, a recurring priority) is stored once, with one name, one category and
+one note; a day's list names the tasks on it.
 "Overtime approved" silences the clock-out alarm only. Every day is persisted; old days can be
 pruned. Data is **per user**; auth is optional (`AUTH_MODE=none | local | oidc`). One Docker
 container, SQLite on `/data`. A PWA used mostly on a laptop or desktop and laid out for phones
@@ -157,9 +158,11 @@ client/                 Vite root → dist/client
                         withItemPatch, withoutItem, withCategory, withCategoryPatch, withoutCategory)
     popover.ts          placePopover: where the category chip's list and the timer's label suggestions
                         go on screen (under the control or above it, inside the viewport)
-    recurring.ts        the morning offer's routines: which are due (dueRecurring, notOnList), which
-                        it ticks (offerPicks, recurringCount), the list after Add to today
-                        (acceptOffer; recurringRow, the recurring priority itself as a new row)
+    recurring.ts        a recurring priority's days as a card's Repeat row and Later's Repeats show
+                        them (WEEKDAYS, repeatDays: "Mon–Fri"), and the morning offer's
+                        routines: which are due (dueRecurring, notOnList), which it ticks
+                        (offerPicks, recurringCount), the list after Add to today (acceptOffer;
+                        recurringRow, the recurring priority itself as a new row)
     shortcuts.ts        the single-key shortcuts: the one key list (SHORTCUTS) and the guard that
                         leaves a key to a field, a dialog or a drag (shortcutFor)
   src/hooks/            state and effects (useDay, useTimer, useSettings, useBoard, useAlarms, …), each
@@ -191,13 +194,13 @@ client/                 Vite root → dist/client
                         this day / Delete everywhere), TodayOffer (Top priorities' morning notice),
                         Shortcuts (the key listener, and ? for the list of keys), and
                         the pieces several of them share (Folded: a long list's Show all; CategoryChip
-                        and CategoryDot; RepeatMark, a recurring row's mark, and RunningMark, the
+                        and CategoryDot; RepeatMark, a recurring priority's mark, and RunningMark, the
                         running session's pill, kept here so the sheet can show them; Note, a task's
                         note button and box, the button on a priority row and the box there and in
                         a board card's dialog; TimerLengths, the timer's length buttons and their
                         tap, on the timer card and a board card's dialog); settings/ holds
                         SettingsDialog (the shell and tabs), a file per tab (BoardTab: the
-                        categories and recurring priorities), and controls.tsx; board/ holds the
+                        categories and Recurring rows per day), and controls.tsx; board/ holds the
                         Board page (Board, BoardCard: a card's face, CardDialog: its details,
                         opened by the card, Capture: a column's box, opened by the + in its head,
                         ClockBar: today's times above the columns, useBoardDrag: the drag (what is
@@ -561,18 +564,19 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   sent on no queue (the queues are keyed by day, session and breaks), so a change still on its way
   for a day before the cutoff can land after the prune and re-create that day, which the re-read
   after the prune shows. After a full delete (the board store's `deleteItem`), a new name,
-  category or note (its `editItem`), or a priorities save whose row renamed, filed or noted a task
-  another day lists or logged time on, `taskChanged(uid, revision)` reads again every held day whose
-  list or log names the task, with the revision of the write that changed it as each day's floor (a
-  read already out below it is dropped and the day asked for again), and moves `generation` as
-  `pruneBefore` does, so no range on screen (the board's Done, History, Review) shows the task from
-  an older answer. A priorities save that puts a task on its list or takes one off (the morning
-  offer, a pull, ×) reads again, the same way, the other held days whose lists hold that task, since
-  their `listed` and `earlier` moved and × asks from them. The day store, `useSettings`, `useTimer`
-  and `useBoard` are all built on `useTracked` (`hooks/useTracked.ts`); a board write rejects when
-  it fails, like a settings save, and the board is read again. A board read is never shared, so
-  that read, like the one after a prune or a park, left after the change; one still out from before
-  answers lower and is dropped. `apply` and commit functions are pure: read the clock outside them.
+  category or note, or a one-off's first day (its `editItem`), or a priorities save whose row
+  renamed, filed or noted a task another day lists or logged time on, `taskChanged(uid, revision)`
+  reads again every held day whose list or log names the task, with the revision of the write that
+  changed it as each day's floor (a read already out below it is dropped and the day asked for
+  again), and moves `generation` as `pruneBefore` does, so no range on screen (the board's Done,
+  History, Review) shows the task from an older answer. A priorities save that puts a task on its
+  list or takes one off (the morning offer, a pull, ×) reads again, the same way, the other held
+  days whose lists hold that task, since their `listed` and `earlier` moved and × asks from them.
+  The day store, `useSettings`, `useTimer` and `useBoard` are all built on `useTracked`
+  (`hooks/useTracked.ts`); a board write rejects when it fails, like a settings save, and the board
+  is read again. A board read is never shared, so that read, like the one after a prune or a park,
+  left after the change; one still out from before answers lower and is dropped. `apply` and commit
+  functions are pure: read the clock outside them.
 - **Suggested break lengths come only from `client/src/lib/breaks.ts`** (`suggestBreak`, pure, over
   a day's sessions); with Suggest breaks off the Break button runs `settings.breakMinutes`. With
   `suggestBreaks` on, `useBreak` offers today's suggestion on the Break button and as a quiet banner
@@ -628,11 +632,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   awaits that save inside the job. A park waits for today's save still out, PATCHes the task's
   lane, then takes its row off today's list and reads the board again; Delete (`deleteItem`, the
   board's and the sheet's) waits for today's save, then sends `DELETE /items/:uid`, which takes
-  every day's entry and leaves the tombstone. `useBoard.tsx` says why each goes in that order. A
-  board PATCH of a task off today's list needs no wait: the board read that task from the server.
-  A new edit of a day's rows, the settings, the timer or the board goes through one of these, never
-  straight to `api`. Reads are not queued, and in every store a read's answer never replaces a
-  change still on its way, nor an answer with a higher revision.
+  every day's entry and leaves the tombstone; a one-off's first day (`editItem` with `weekday`)
+  waits for today's save too, so a row typed seconds ago has its task. `useBoard.tsx` says why each
+  goes in that order. Any other board PATCH of a task off today's list needs no wait: the board read
+  that task from the server. A new edit of a day's rows, the settings, the timer or the board goes
+  through one of these, never straight to `api`. Reads are not queued, and in every store a read's
+  answer never replaces a change still on its way, nor an answer with a higher revision.
 - **Punch positions are fixed**: 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in pairs,
   and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches` enforces
   it). Kind is parity (`kindForPosition`, `shared/punches.ts`). The math evaluates *set* punches
@@ -698,24 +703,29 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   before notes, curl) as keeping them (`unsaid`), makes a task for a uid new to the user (no lane),
   and writes nothing for a task new to that list (a carry, a pull, the offer), so a stale name never
   renames it; `PATCH /items/:uid` sets only the fields sent, and sets or clears one weekday at a
-  time (`weekday: { day, on }`), so two devices' toggles both land. `POST /items` makes a task on
-  the board (`lane`: Later's or Next's +, or a done item's new task) or a recurring priority
-  (`weekdays`), never both; a uid that exists answers the board as it is (a retry), and an archived
-  or deleted task's is a 404. The cap of 300 (`BOARD_LIMITS.openCards`) counts the tasks in Later or
-  Next whose latest entry isn't ticked; only board writes reach it (`POST /items` with a lane, a
-  PATCH giving a lane to a task in none), refused with a 400 (`FULL`, `routes/items.ts`), and the
-  board checks it first (`BOARD.full`). A task's row is deleted in two places only: `collectItems`,
-  which deletes the tasks no entry or session names that are a one-off in no lane, or, in the prune
-  alone, archived (the list PUT runs it on the tasks it took off, a session delete, cancel or relink
-  on the task the session left, the prune over everything), and the prune's tombstone step. So a
-  task typed and taken off again leaves nothing, a task in a lane stays, and a task carried to a new
-  day and taken off there keeps its earlier day. A cancel takes its session off the task too, since
-  a cancelled session counts nowhere. Archived (`archived_at`) is a recurring priority removed in
-  Settings, or a task the migration archived: it still shows wherever an entry or session names it
-  (`Priority.archived`), is never in a lane or offered, and nothing unarchives it. A lane or an edit
-  on it is a 404, and so is a second Remove of an archived routine; a full delete of an archived
-  one-off still goes through. It stays until the prune, so a stale offer that adds it finds it
-  archived and can't make a one-off under its uid.
+  time (`weekday: { day, on }`), so two devices' toggles both land. The first day set on a one-off
+  makes it a recurring priority, in one transaction: checked against the cap of 100 recurring
+  priorities, out of its lane (`lane` and `position` cleared before `weekdays` is written, as the
+  table's CHECK wants), the lane it left renumbered, and a `before` sent with it ignored; a day
+  cleared on a one-off is a 400. `POST /items` makes a task on the board (`lane`: Later's or Next's
+  +, or a done item's new task) or a recurring priority (`weekdays`: curl, or a tab from before the
+  upgrade; the app sends only `lane`), never both; a uid that exists answers the board as it is (a
+  retry), and an archived or deleted task's is a 404. The cap of 300 (`BOARD_LIMITS.openCards`)
+  counts the tasks in Later or Next whose latest entry isn't ticked; only board writes reach it
+  (`POST /items` with a lane, a PATCH giving a lane to a task in none), refused with a 400 (`FULL`,
+  `routes/items.ts`), and the board checks it first (`BOARD.full`). A task's row is deleted in two
+  places only: `collectItems`, which deletes the tasks no entry or session names that are a one-off
+  in no lane, or, in the prune alone, archived (the list PUT runs it on the tasks it took off, a
+  session delete, cancel or relink on the task the session left, the prune over everything), and the
+  prune's tombstone step. So a task typed and taken off again leaves nothing, a task in a lane
+  stays, and a task carried to a new day and taken off there keeps its earlier day. A cancel takes
+  its session off the task too, since a cancelled session counts nowhere. Archived (`archived_at`)
+  is a recurring priority that stopped repeating (its card's Stop repeating), or a task the
+  migration archived: it still shows wherever an entry or session names it (`Priority.archived`), is
+  never in a lane or offered, and nothing unarchives it. A lane or an edit on it is a 404, and so is
+  a second Stop repeating of an archived routine; a full delete of an archived one-off still goes
+  through. It stays until the prune, so a stale offer that adds it finds it archived and can't make
+  a one-off under its uid.
 - **A deleted task is a tombstone until the prune.** Delete, the board's and the sheet's × → Delete
   everywhere, is `DELETE /items/:uid` on a one-off task, `deleteItem` in one transaction: every
   session on it stays on its day as unplanned time, with the task's name (cut to
@@ -727,7 +737,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   for it (see the scoping rule), `POST /items` with its uid is a 404, a session start or PATCH
   naming it is refused (it has no entry), `collectItems` skips it, and no read shows it. It stays
   until a prune deletes it (see "Old-day deletion"). `DELETE /items/:uid` on a recurring priority is
-  Settings' Remove instead: a routine has no full delete. The board's Delete asks first with
+  its card's Stop repeating instead: a routine has no full delete. So another device's Delete on a
+  task this one has just made repeat archives it. The board's Delete asks first with
   `CONFIRM.deleteTask(days, logged)`, the days the task is on and the time logged on it: for an item
   on today's list, today's row's counts plus the day's log (a timer running on it included, on the
   minute clock `App` passes), as × counts them; else the board's (`BoardCard.listed`, `logged`).
@@ -817,14 +828,14 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   blur or close. A save that goes through drops it, and so does the item's note changing from the
   one it was typed over (another device's change). `onNote` takes the path `onRename` does
   (`editRow` for today's row, `editItem` for any other the board edits, none for an earlier day's
-  row of a recurring priority removed in Settings), and `saved` (`lib/board.ts`) raises the banner
-  and answers false. A routine's note is one on every day it is on. Nothing else
-  shows a note: not Retro, Review, the morning notice, the timer, the day log or History. A note of
-  spaces and line breaks alone, stored untrimmed, counts as none (`hasNote`, `shared/text.ts`): its
-  button is quiet and × doesn't ask for it. On the sheet, a row gone from the list before its note's
-  save (another device took it off, or × did before the box saved) sends the note to the task
-  through the board store's `editItem`, as `editRow` does: a 404 (the task went with the row) counts
-  as done (`unlessGone`), and any other failure is the banner (`saved`).
+  row of a recurring priority that stopped repeating), and `saved` (`lib/board.ts`) raises the
+  banner and answers false. A routine's note is one on every day it is on. Nothing else shows a
+  note: not Retro, Review, the morning notice, the timer, the day log or History. A note of spaces
+  and line breaks alone, stored untrimmed, counts as none (`hasNote`, `shared/text.ts`): its button
+  is quiet and × doesn't ask for it. On the sheet, a row gone from the list before its note's save
+  (another device took it off, or × did before the box saved) sends the note to the task through the
+  board store's `editItem`, as `editRow` does: a 404 (the task went with the row) counts as done
+  (`unlessGone`), and any other failure is the banner (`saved`).
 - **A category is a row of its own, named by its uid** (`categories`, routes in `routes/board.ts`,
   answered in `Board.categories`). Tasks and sessions point at one by `categoryUid`, a soft link
   checked for shape only, so a category made on this device can reach the server after the row that
@@ -842,40 +853,57 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   category sent for a session that keeps its task is refused (400); the day store and the timer show
   an edit as the server will store it while it is out (`editedSession`). On the client
   `CategoryChip` is the one way a category is picked, fed by `useCategoryPick` (null before the
-  board's first read, and then no chip shows), which the board page, the sheet and Settings → Board
-  each call once and pass down as `pick`: the sheet's goes to Top priorities (a written row's chip,
-  which saves at once), the timer (the row a new name makes at Start, `addPriority(date, text,
-  categoryUid)`, its chip in the label box's row while the name matches no open row) and the day log
-  (a session on no written row, in the edit's one PATCH); Settings → Board's goes to
-  its recurring priorities' rows, with `report` going to the dialog's `save`. A press on the chip
-  keeps the focus where it is until the list takes it, so the day log's edit doesn't end (the
-  browser reasons are in `CategoryChip`'s comments). Its New category box runs `categoryForName`
-  (`lib/board.ts`): the category in use by that name, else a removed one brought back under its own
-  uid, else a new one in `nextColor` (the colour the fewest categories in use have, so the eight
-  repeat evenly). The chip sets that uid at once and the create goes out as an optimistic board
-  write; opening the list reads the board again, and a create the server refuses (another device
-  took the name, a cap) is taken off with the "Change not saved" banner (in Settings → Board, the
-  header's Not saved), so what picked it reads as no category. The board columns' boxes share one
-  category, the last picked on the device (`USER_KEYS.captureCategory`; a removed or unknown one
+  board's first read, and then no chip shows), which the board page and the sheet each call once and
+  pass down as `pick`: the sheet's goes to Top priorities (a written row's chip, which saves at
+  once), the timer (the row a new name makes at Start, `addPriority(date, text, categoryUid)`, its
+  chip in the label box's row while the name matches no open row) and the day log (a session on no
+  written row, in the edit's one PATCH). A press on the chip keeps the focus where it is until the
+  list takes it, so the day log's edit doesn't end (the browser reasons are in `CategoryChip`'s
+  comments). Its New category box runs `categoryForName` (`lib/board.ts`): the category in use by
+  that name, else a removed one brought back under its own uid, else a new one in `nextColor` (the
+  colour the fewest categories in use have, so the eight repeat evenly). The chip sets that uid at
+  once and the create goes out as an optimistic board write; opening the list reads the board again,
+  and a create the server refuses (another device took the name, a cap) is taken off with the
+  "Change not saved" banner, so what picked it reads as no category. The board columns' boxes share
+  one category, the last picked on the device (`USER_KEYS.captureCategory`; a removed or unknown one
   reads as none). Settings → Board (`BoardTab`) adds (`categoryForName` again), renames (refusing a
   name in use, `categoryNameTaken`), recolours and removes categories, each through the dialog's
   `save`; a category's Remove archives it and doesn't ask.
-- **A recurring priority is a task with weekdays** (`items.weekdays`, made and edited through
-  `/items` from Settings → Board, answered in `Board.recurring` in the order they were made,
-  archived ones left out): a title, a category and the weekdays it is offered on, ISO 1 (Monday) to
-  7 on the wire and a mask in the table (bit 0 for Monday; `weekdayMask` in `server/board.ts`). The
-  rows it adds are entries of it (`Priority.recurring`), so a rename or a category, in Settings or
-  on its row on the sheet, reaches every day it is on, and the held days that name it are read again
-  (`taskChanged`, see the day store rule). It is never in a lane (a `lane` sent for one is a 400).
-  Settings → Board adds one (on Monday to Friday, no category), renames it, gives it a category,
-  sets its weekdays (the last day on stays on) and removes it, through the board store's `addItem`
-  with `weekdays`, `editItem` and `removeRecurring` and the dialog's `save`. It has no full delete:
-  Remove asks first (`CONFIRM.deleteRecurring`, which says the days it was on keep it), since
-  nothing in the app brings one back, then archives it, so it is no longer offered, listed in
-  Settings or counted toward the cap, and the days it was on keep it; a 404 on that delete counts as
-  done (an archived routine is one), and only the prune deletes it, once nothing names it. The
-  server caps them at 100 in use (`BOARD_LIMITS`), a sanity cap with no product limit behind it, and
-  the prune never takes one in use.
+- **A recurring priority is a task with weekdays** (`items.weekdays`, answered in `Board.recurring`
+  in the order the tasks were made, by id, archived ones left out): a title, a category and the
+  weekdays it is offered on, ISO 1 (Monday) to 7 on the wire and a mask in the table (bit 0 for
+  Monday; `weekdayMask` in `server/board.ts`). Any task becomes one on the board: a card's dialog
+  (`CardDialog`) has a Repeat row of seven day buttons (`WEEKDAYS`, `lib/recurring.ts`;
+  `aria-pressed`; none where the server can't change the task: an archived one-off's row, a routine
+  that stopped repeating), in the same place on a one-off and a routine, so the day pressed keeps
+  the focus as the task starts repeating and the dialog stays open under the same item id. The first
+  day pressed on a one-off asks first (`CONFIRM.makeRecurring`: there is no way back to a one-off;
+  Cancel sends nothing), then goes out as `editItem` with `weekday` (see "A task is stored once" for
+  the server's side); a day of a routine is set or cleared at once, and the last day on stays on
+  (`aria-disabled`, sending nothing; `LAST_WEEKDAY` is the server's backstop). The Repeat row, Stop
+  repeating, Delete's absence and the repeat mark follow the board's copy, so they change at once:
+  `boardColumns` reads today's row of a task the board holds in `recurring` as recurring before the
+  day is read again, and a row whose task the board hasn't read yet (one typed since) is made one
+  from the item the dialog shows (`editItem`'s `task`). The first day (never a day toggled on a routine) waits for today's saves still
+  out, so a row typed seconds ago has its task, and reads again the held days that name the task
+  (`taskChanged`), since `Priority.recurring` is the task's: its past rows become a routine's from
+  then on (the sheet's mark, Review's Routines in place of Not done, the retro's routines count, no
+  left-open carry); entries, ticks and sessions stay as they were. The rows it adds are entries of
+  it (`Priority.recurring`), so a rename or a category, on its card or its row on the sheet, reaches
+  every day it is on, and the held days that name it are read again (`taskChanged`, see the day
+  store rule). It is never in a lane (a `lane` sent for one is a 400). It has no full delete: its
+  dialog's Stop repeating (in the Repeat row, in Delete's place) asks first
+  (`CONFIRM.deleteRecurring`, which says it won't show under Repeats or be offered again and the
+  days it was on keep it), since nothing in the app brings one back, then closes the dialog
+  (`closeCard`), moves the focus near when its card goes (a card of Later's Repeats; a row stays on
+  its list) and sends `removeRecurring`, which archives it, so it is no longer offered, shown in
+  Repeats or counted toward the cap, and the days it was on keep it; a 404 on that delete counts as
+  done (an archived routine is one), and only the prune deletes it, once nothing names it. The server caps them at 100
+  in use (`BOARD_LIMITS`), a sanity cap with no product limit behind it, refused as the save banner,
+  and the prune never takes one in use. A task made to repeat that was made long ago sorts first in
+  Repeats and the morning offer once the server answers, which orders by id; until then it shows
+  after the others. Settings → Board keeps only how many the morning offer ticks (Recurring rows per
+  day).
 - **Today's sheet offers what the last planned day left open, the top of Next and the recurring
   priorities due** (`client/src/lib/recurring.ts`, `components/TodayOffer.tsx`), in one morning
   notice on Top priorities, worked out on the client. "Still open from …" (the leftovers:
@@ -895,99 +923,112 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   since the board was read, which the board's copy still has open. "Repeats today" lists the items
   due (`dueRecurring`: the date's ISO weekday, `isoWeekday` in `shared/dates.ts`, computed in UTC
   from the key; no row of the list is its task, `notOnList`, a row whose box is blank included; not
-  answered on this device today), in Settings order, taken from the recurring priorities the server
-  has confirmed (`useBoardState().confirmedRecurring`), never one whose create is still on its way,
-  which a list save would make a one-off. The groups are judged on the stored list by the sheet and
-  again on the card's draft (`isOneOff`, `notOnList`), so a row typed or a save already sent counts
-  at once. Each group is a `role="group"` named by its heading, and each item a box: the leftovers
-  start ticked, Up next up to Rows per day less the leftovers shown, the routines up to
-  `recurringPerDay` less the routines already on the list (`offerPicks`), the rest unticked, and a
-  box pressed keeps its answer while the groups change. Ticking more routines than that says so
-  (`TODAY_OFFER.over`, a live region always there under their group), and Add to today adds them all
-  the same. Add runs `acceptOffer` through the card's draft, so what is typed goes out in the same
-  save: each leftover, then each task from Up next (which keeps its lane, as a pull does), through
-  `placePriority`, in the first free row, then each routine through `placePriority` with `end`,
-  after every row of the padded list, so the free rows stay for one-offs and no written row moves,
-  and one that doesn't fit is skipped. Once Add's save goes through, and at once for Not today
-  (Start fresh while no routine shows), the notice records every routine shown, ticked or not, under
-  `USER_KEYS.recurringAnswered` (`useRecurringAnswered`: per item, day and device, so another device
-  still offers it and a new day starts with none; an answer joins what is stored when it is given,
-  so another tab's answers stay), and leftovers or Up next shown hold Start fresh
-  (`leftOpenDismissed`), so removing a row the notice added brings nothing back.
+  answered on this device today), in the order they were made, as Later's Repeats lists them, taken
+  from the recurring priorities the server has confirmed (`useBoardState().confirmedRecurring`),
+  never a task whose first day is still on its way, which a list save would put on the list as a
+  one-off. The groups are judged on the stored list by the sheet and again on the card's draft
+  (`isOneOff`, `notOnList`), so a row typed or a save already sent counts at once. Each group is a
+  `role="group"` named by its heading, and each item a box: the leftovers start ticked, Up next up
+  to Rows per day less the leftovers shown, the routines up to `recurringPerDay` less the routines
+  already on the list (`offerPicks`), the rest unticked, and a box pressed keeps its answer while
+  the groups change. Ticking more routines than that says so (`TODAY_OFFER.over`, a live region
+  always there under their group), and Add to today adds them all the same. Add runs `acceptOffer`
+  through the card's draft, so what is typed goes out in the same save: each leftover, then each
+  task from Up next (which keeps its lane, as a pull does), through `placePriority`, in the first
+  free row, then each routine through `placePriority` with `end`, after every row of the padded
+  list, so the free rows stay for one-offs and no written row moves, and one that doesn't fit is
+  skipped. Once Add's save goes through, and at once for Not today (Start fresh while no routine
+  shows), the notice records every routine shown, ticked or not, under `USER_KEYS.recurringAnswered`
+  (`useRecurringAnswered`: per item, day and device, so another device still offers it and a new day
+  starts with none; an answer joins what is stored when it is given, so another tab's answers stay),
+  and leftovers or Up next shown hold Start fresh (`leftOpenDismissed`), so removing a row the
+  notice added brings nothing back.
 - **In progress is today's list** (`client/src/lib/board.ts`, `hooks/useBoard.tsx`). The board
   shows the tasks `GET /board` sends (`boardJson`: the one-off tasks in Later or Next that aren't
   done, then every other one whose latest entry is from `LIST_WINDOW_DAYS` back to
   `PLANNED_WINDOW_DAYS` ahead; archived and deleted ones left out) and today's rows from the day
   store, matched by uid. Nothing about In progress or Done is stored, so the board and the sheet
   show one list. Which column an item is in comes only from `boardColumns` (its doc has the
-  rules in order); a one-off's item id is `item:<uid>` in every column and a recurring row's
-  `row:<date>:<uid>`. Every Move to and every drop goes through `planMove`, which says what it
-  writes: a task's lane or place (`editItem`, a PATCH), today's list through the day store's
-  `editPriorities` (a pull of the task itself, or a tick), a park of today's open row to Later or
+  rules in order). Later ends with Repeats (`BoardColumns.repeats`, joined after Later's own cards
+  by `itemsIn`, as Done joins its two lists; the column's count holds both, and "Nothing parked."
+  shows only while both are empty): every recurring priority not on today's list, in the order they
+  were made, its card showing the repeat mark and its days (`repeatDays`: "Mon–Fri", "Mon, Wed,
+  Fri"), which no other item shows; one on today's list shows there alone, in In progress or Done.
+  An item's id is `item:<uid>` wherever the task shows as itself (a card, today's row, a card of
+  Repeats), so it keeps its id as it starts repeating, and `row:<date>:<uid>` only for an earlier
+  day's tick of a recurring priority in Done. Every Move to and every drop goes through `planMove`,
+  which says what it writes: a task's lane or place (`editItem`, a PATCH), today's list through the
+  day store's `editPriorities` (a pull of the task itself, a card of Repeats included, which goes
+  where any pull goes and asks the same nudge, or a tick), a park of today's open row to Later or
   Next (see "Saves reach the server in the order they were made"), or nothing: a done item moved to
-  Later or Next stays done and the notice offers a new task in its place, and a recurring row in
-  Later or Next and In progress for an earlier day's row of a removed recurring priority are
-  refused. A task whose latest entry is on a later day (a list an older version planned ahead)
-  shows as any other: in Done when that entry is ticked, else by its lane, and with no lane in no
-  column until that day, when it is today's row. A lane given on a full board is refused before
-  it is sent (`boardFull`, `addsToLanes`, `BOARD.full`), the server's 400 being the backstop. A card
-  (`BoardCard`: its tick on today's rows, In progress's row number, its title and a meta line) opens
-  its dialog (`CardDialog`) on a click or Enter, one at a time, rendered by `Board` outside the
-  columns and keyed by its item, so a move made elsewhere updates it in place; one whose item goes
-  (deleted, gone from a read, a new day loading) closes for good. Whatever pressed there moves,
-  starts or deletes closes it first (`closeCard`: a blur, the dialog gone at once, the focus on the
-  card), since a modal leaves the page inert and the notice, the landed card or the next card must
-  take the focus, and acts under the title the box saved as it closed (`renamed`: Safari leaves the
-  focus in the box as a button is pressed); Escape, a press outside, × and Enter in the title close
-  it the same way. A task
-  ticked on an earlier day, off today's list, has no checkbox, since the board would rewrite a past
-  day (its dialog says `BOARD.doneOn(when)`), and Move to In progress puts it on today's list to
-  work on again; taken off today again (a park included), it is done again. The dialog's title and
-  category chip rename or file the task on every day: today's row through the row (`editRow`), any
-  other task through a PATCH (`editItem`). Delete is the full delete (`deleteItem`) on every one-off
-  task, and today's recurring row has Remove from today (`removeFromToday`) in its place. The
-  dialog's Start timer (`TimerLengths`) is on today's open rows, recurring ones included, and on
-  the cards of Later and Next, left-open ones included: none in Done or on an item whose move is on
+  Later or Next stays done and the notice offers a new task in its place, and a recurring priority
+  in Later or Next (`BOARD.recurringStays`, a card of Repeats dropped in Later included) and In
+  progress for an earlier day's row of one that stopped repeating are refused. Move to offers a card
+  of Repeats In progress and Done. A task whose latest entry is on a later day (a list an older
+  version planned ahead) shows as any other: in Done when that entry is ticked, else by its lane,
+  and with no lane in no column until that day, when it is today's row. A lane given on a full board
+  is refused before it is sent (`boardFull`, `addsToLanes`, `BOARD.full`), the server's 400 being
+  the backstop. A card (`BoardCard`: its tick on today's rows, In progress's row number, its title
+  and a meta line) opens its dialog (`CardDialog`) on a click or Enter, one at a time, rendered by
+  `Board` outside the columns and keyed by its item, so a move made elsewhere updates it in place;
+  one whose item goes (deleted, gone from a read, a new day loading) closes for good. Whatever
+  pressed there moves, starts or deletes closes it first (`closeCard`: a blur, the dialog gone at
+  once, the focus on the card), since a modal leaves the page inert and the notice, the landed card
+  or the next card must take the focus, and acts under the title the box saved as it closed
+  (`renamed`: Safari leaves the focus in the box as a button is pressed); Escape, a press outside, ×
+  and Enter in the title close it the same way. A task ticked on an earlier day, off today's list,
+  has no checkbox, since the board would rewrite a past day (its dialog says `BOARD.doneOn(when)`),
+  and Move to In progress puts it on today's list to work on again; taken off today again (a park
+  included), it is done again. The dialog's title and category chip rename or file the task on every
+  day: today's row through the row (`editRow`), any other task through a PATCH (`editItem`). Delete
+  is the full delete (`deleteItem`) on every one-off task; a recurring priority has Stop repeating
+  instead (above), and today's recurring row Remove from today (`removeFromToday`) too. The dialog's
+  Start timer (`TimerLengths`) is on today's open rows, recurring ones included, and on the cards of
+  Later and Next, left-open ones and Repeats included: none in Done or on an item whose move is on
   its way, or while any timer runs, and held while a start is out (`starting`). `Board` takes
   `running`, `start` and `starting` from `Shell` as props, since the timer's context changes every
   second. A row's Start closes the dialog, the focus on its card, and starts on its task; a card's
   is a pull first (`run` with `minutes`, which asks no nudge: starting a timer never asks, while
   Move to and a drag still do), whose promise of the task's uid the start awaits, so a refused pull
-  starts nothing and shows one banner. A start the server
-  refuses (the task taken off the list meanwhile) is the save banner, and a 409 is the
-  `TIMER_ELSEWHERE` banner while the sync it brings shows the other device's timer. The item the
-  running session is on, on its day (a card, which has none, by its task), starts its meta line with
-  the day log's pill (`RunningMark`), which its title is `aria-describedby`. The + at the end of
-  Later's, Next's and In progress's head opens that column's box (`Capture`: a field and the
-  category chip; `openAdd`, which also shows the column on a phone). Enter adds and keeps the box
-  open; an empty Enter or Escape closes it with the focus back on the +, Escape dropping the text;
-  leaving it closes it only while it is empty. Later's card goes at the top and Next's at the end
-  (`laneStart`, `addItem`). In progress's text is a new task on today's list, a `place` move of
-  `newTaskRow` through `move`, so on the board's queue, where it shows once its job starts (it has
-  no item for `moving` to show); past the nudge it asks as Add priority does (this nudge and a
-  pull's count the rows still waiting on the board's queue, as the sheet counts its draft), the text
-  staying in the box until Add anyway, which closes the box and focuses the new row. An edit of the
-  box's text or category drops the question, and the next Enter asks again. Later's and Next's + is
-  `aria-disabled` at the cap (`boardFull`, `BOARD.full` under it), and In progress's only on a full
-  list (`hasRoom`, `ADD_PRIORITY_FAILED.full`), since its task has no lane; a box open as its +
-  shuts closes, giving the focus it had to the +. A Delete or a Remove from today that empties a
-  column puts the focus on its +, or on Done's heading. One `role="status"` slot above the columns
-  holds the board notice (a pull's or a typed row's nudge, the done-item notice or a refusal): its
-  first button takes the focus, and an Enter or Space still held from the press that raised it
-  presses nothing. What the store refuses once a move is under way (`MoveRefused`) is a banner. A
-  drag (`components/board/useBoardDrag.tsx`, with dnd-kit's settings in `dnd.ts` beside it) starts
-  on the card itself, whose button is dnd-kit's handle, stretched over the card (`::before`): a
-  mouse press that moves 6 px, a finger held 250 ms (one that moves first scrolls the page, so
-  `MouseSensor` and `TouchSensor`, not `PointerSensor`, which needs `touch-action: none`), or Space
-  (Enter opens the card, and a repeated Enter or Space's keyup opens nothing). A recurring row
-  doesn't drag, an item of In progress or Done drags only from 900 px (it drags only to another
-  column, and below that one column shows at a time), and an item whose move is on its way can't be
-  picked up until the move lands.
-  Where a drop lands is `dropTarget`'s (see its doc), and what a screen reader hears comes from
-  `BOARD_DRAG` (its `instructions` in place of dnd-kit's), `overAnnouncement` and
-  `moveAnnouncement`. dnd-kit's own focus return is off, since it would take the focus from the
-  notice a drop brings: a keyboard drag puts it back on the item's card, and so does closing the
-  notice (for a row typed in In progress's box, back in that box, which still holds the text).
+  starts nothing and shows one banner. A start the server refuses (the task taken off the list
+  meanwhile) is the save banner, and a 409 is the `TIMER_ELSEWHERE` banner while the sync it brings
+  shows the other device's timer. The item the running session is on, on its day (a card, which has
+  none, by its task), starts its meta line with the day log's pill (`RunningMark`), which its title
+  is `aria-describedby`. The + at the end of Later's, Next's and In progress's head opens that
+  column's box (`Capture`: a field and the category chip; `openAdd`, which also shows the column on
+  a phone). Enter adds and keeps the box open; an empty Enter or Escape closes it with the focus
+  back on the +, Escape dropping the text; leaving it closes it only while it is empty. Later's card
+  goes at the top and Next's at the end (`laneStart`, `addItem`). In progress's text is a new task
+  on today's list, a `place` move of `newTaskRow` through `move`, so on the board's queue, where it
+  shows once its job starts (it has no item for `moving` to show); past the nudge it asks as Add
+  priority does (this nudge and a pull's count the rows still waiting on the board's queue, as the
+  sheet counts its draft), the text staying in the box until Add anyway, which closes the box and
+  focuses the new row. An edit of the box's text or category drops the question, and the next Enter
+  asks again. Later's and Next's + is `aria-disabled` at the cap (`boardFull`, `BOARD.full` under
+  it), and In progress's only on a full list (`hasRoom`, `ADD_PRIORITY_FAILED.full`), since its task
+  has no lane; a box open as its + shuts closes, giving the focus it had to the +. A Delete or a
+  Remove from today that empties a column puts the focus on its +, or on Done's heading. One
+  `role="status"` slot above the columns holds the board notice (a pull's or a typed row's nudge,
+  the done-item notice or a refusal): its first button takes the focus, and an Enter or Space still
+  held from the press that raised it presses nothing. What the store refuses once a move is under
+  way (`MoveRefused`) is a banner. A drag (`components/board/useBoardDrag.tsx`, with dnd-kit's
+  settings in `dnd.ts` beside it) starts on the card itself, whose button is dnd-kit's handle,
+  stretched over the card (`::before`): a mouse press that moves 6 px, a finger held 250 ms (one
+  that moves first scrolls the page, so `MouseSensor` and `TouchSensor`, not `PointerSensor`, which
+  needs `touch-action: none`), or Space (Enter opens the card, and a repeated Enter or Space's keyup
+  opens nothing). A recurring priority's row doesn't drag (`canDrag`), but its card in Later's
+  Repeats does, as a plain draggable that no lane sorts (`canSort`): onto In progress as a pull,
+  onto Done ticked, and back with the refusal notice from Later or Next; shown in In progress while
+  its pull is on its way, it is already the row it lands as, so its card doesn't mount again and
+  lose the focus. An item of In progress or Done, and a card of Repeats, drags only from 900 px (it
+  drags only to another column, and below that one column shows at a time), and an item whose move
+  is on its way can't be picked up until the move lands. The first over a drag hears is where it was
+  picked up, so it says nothing. Where a drop lands is `dropTarget`'s (see its doc), and what a
+  screen reader hears comes from `BOARD_DRAG` (its `instructions` in place of dnd-kit's),
+  `overAnnouncement` and `moveAnnouncement`. dnd-kit's own focus return is off, since it would take
+  the focus from the notice a drop brings: a keyboard drag puts it back on the item's card, and so
+  does closing the notice (for a row typed in In progress's box, back in that box, which still holds
+  the text).
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started — one
   rule, no clock-in fallback. `GET /days/range` returns full days and the client does the rollup
@@ -1306,28 +1347,28 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (`migrate(db, n)`) → `ItemRow` (`routes/shared.ts`) → the field on `Priority` (`shared/api.ts`;
   the column in `ENTRIES`' join and `EntryRow`, read in `priorityJson`, `routes/days.ts`), on
   `BoardCard` (`boardJson`, `server/board.ts`) and on `Recurring` (`recurringJson` there), where
-  each reader needs it, and on `BoardItem` (`lib/board.ts`: `rowItem`, `cardItem`, and the
-  earlier day's routine row in `boardColumns`, which takes its recurring priority's) → if the
-  user wrote it, `deleteItem`'s tombstone UPDATE (`server/board.ts`) clears it → if the sheet
-  edits it, its `MERGED` entry (`shared/priorities.ts`; typecheck asks for it there or in
-  `ReadOnlyField`), its rule in `parsePriorityRows` for a value of the wrong kind and for one left
-  out (read as unchanged: its uids in `unsaid`, filled from the base), its write in the PUT beside
-  the rename: on the task a uid new to the user makes, and otherwise only where this device's row
-  differs from its base row, and `setPriorities`' `taskChanged` condition (`hooks/useDay.tsx`) →
-  if the board or Settings edits it, `NewItem` and `ItemPatch` (`client/src/api.ts`), the `POST`
-  and `PATCH` routes in `routes/items.ts`, `withItem`, `withItemPatch`, `RowPatch` and
-  `itemPatchOf` (`lib/board.ts`: a row's edit on the board, and that edit as the task's PATCH), and
-  in `hooks/useBoard.tsx` `patchItem`'s `taskChanged` condition and `setRow`'s patch type, so the
-  held days that show it are read again → its value on every row the client builds:
-  `emptyRow` and `newTaskRow` (`lib/priorities.ts`), and, taken from the source,
+  each reader needs it, and on `BoardItem` (`lib/board.ts`: `rowItem`, `cardItem`, and in
+  `boardColumns` the earlier day's routine row and the cards of Later's Repeats, which take their
+  recurring priority's) → if the user wrote it, `deleteItem`'s tombstone UPDATE (`server/board.ts`)
+  clears it → if the sheet edits it, its `MERGED` entry (`shared/priorities.ts`; typecheck asks for
+  it there or in `ReadOnlyField`), its rule in `parsePriorityRows` for a value of the wrong kind and
+  for one left out (read as unchanged: its uids in `unsaid`, filled from the base), its write in the
+  PUT beside the rename: on the task a uid new to the user makes, and otherwise only where this
+  device's row differs from its base row, and `setPriorities`' `taskChanged` condition
+  (`hooks/useDay.tsx`) → if the board edits it, `NewItem` and `ItemPatch`
+  (`client/src/api.ts`), the `POST` and `PATCH` routes in `routes/items.ts`, `withItem`,
+  `withItemPatch`, `RowPatch` and `itemPatchOf` (`lib/board.ts`: a row's edit on the board, and that
+  edit as the task's PATCH), and in `hooks/useBoard.tsx` `patchItem`'s `taskChanged` condition and
+  `setRow`'s patch type, so the held days that show it are read again → its value on every row the
+  client builds: `emptyRow` and `newTaskRow` (`lib/priorities.ts`), and, taken from the source,
   `seedRow` and `PrioritySeed` (`lib/plan.ts`), `recurringRow` (`lib/recurring.ts`), and
   `planMove`'s pull and `topOfNext` (`lib/board.ts`) → the seed (its rows and `SEEDED_RECURRING`,
-  which typecheck asks for; `insertItems`' INSERT, which it doesn't) → `makePriority`, `makeCard` and
-  `makeRecurring` (`client/src/test/fixtures.ts`). A field the server works out (like `recurring`
-  or `listed`) is read only: it goes in `ReadOnlyField` (`shared/priorities.ts`), never in `MERGED`
-  or `parsePriorityRows`, which neither reads nor refuses it; in the seed the row builders set it
-  (`recurring` in `oneOff` and `routineRows`, `archived` in `UNCOUNTED`), or `withCounts` fills it
-  once the days are built (`listed`, `earlier`, `logged`).
+  which typecheck asks for; `insertItems`' INSERT, which it doesn't) → `makePriority`, `makeCard`
+  and `makeRecurring` (`client/src/test/fixtures.ts`). A field the server works out (like
+  `recurring` or `listed`) is read only: it goes in `ReadOnlyField` (`shared/priorities.ts`), never
+  in `MERGED` or `parsePriorityRows`, which neither reads nor refuses it; in the seed the row
+  builders set it (`recurring` in `oneOff` and `routineRows`, `archived` in `UNCOUNTED`), or
+  `withCounts` fills it once the days are built (`listed`, `earlier`, `logged`).
 - **An entry field** (like `done` or `addedAt`: a fact of one day's list): append a migration
   adding the column to `priorities` → the column in `ENTRIES` and `EntryRow`, read in
   `priorityJson` and written in the PUT's INSERT (`routes/days.ts`) → the field on `Priority`
@@ -1592,15 +1633,25 @@ The browser pass for each surface (the logic under it is already tested):
   one line) and give an unplanned log session one (its dot before the label), then the same at 1280
   in the split's columns.
 - **Recurring priorities**: Settings → Board → Recurring priorities: Recurring rows per day with
-  its hint beside the box; Add recurring priority; a rename; a category from
-  the row's chip, where Escape closes only the list and the dialog stays open; the days (on a
-  touch screen each takes 44 × 44 px). At 375 the rows wrap and the seven days fit on one line.
-  On the board, a recurring row's meta line has the Repeats mark. On the sheet, with a routine due
-  today (see "Dev data is disposable" for the three groups): the morning notice with "Still open
-  from …", "Up next" (ticked to fill Rows per day after the leftovers), "Repeats today" and the line
-  once more routines are ticked than Recurring rows per day; after Add to today, the leftovers then
-  Up next in the first rows and the routines after the padded rows, Up next's cards in In progress
-  on the board, and the mark before the chip on a routine's row; at 1280 and 1000 the mark and a long
+  its hint beside the box, and nothing else. On the board at 1440: Later ends with Repeats (the
+  seeded "Monitor the queue" ↻ Mon–Fri and "Follow-ups" ↻ Mon, Wed, Fri), counted in Later's number,
+  below Later's Show all once it folds. A Next card's Repeat row: its first day asks first (Cancel
+  sends nothing), then the card moves under Repeats with its day, the dialog stays open with the
+  focus on that day and Stop repeating in Delete's place; more days, and the last one staying on.
+  Today's one-off row made to repeat stays in In progress with the mark, and its past day in History
+  and Review → Week (Routines) follow. A card of Repeats: Move to In progress and Done (the burst),
+  Start timer, a drag onto In progress, and one dropped in Next or Later snapping back with the
+  notice. Stop repeating on a card of Repeats (the focus on the next card) and on today's row (the
+  row stays, its Repeat row gone). At 1000 the days and the mark wrap on the meta line; at 375, in
+  the bottom sheet, the seven days fit on one line, each 44 × 44 px on a touch screen, with Stop
+  repeating under them. A screen reader hears the Repeat group, each day's name and pressed state,
+  the last day as unavailable, and a card of Repeats' "Repeats" and its days (check how "Mon–Fri"
+  reads). A recurring row's meta line has the Repeats mark. On the sheet, with a routine due today
+  (see "Dev data is disposable" for the three groups): the morning notice with "Still open from …",
+  "Up next" (ticked to fill Rows per day after the leftovers), "Repeats today" and the line once
+  more routines are ticked than Recurring rows per day; after Add to today, the leftovers then Up
+  next in the first rows and the routines after the padded rows, Up next's cards in In progress on
+  the board, and the mark before the chip on a routine's row; at 1280 and 1000 the mark and a long
   category in the chip's column, and at 375 the mark before the chip under the field.
 - **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
   Month / Quarter). Today's card folded to its line at 1280, 1000 and 375: Open shows it with the
@@ -1651,13 +1702,12 @@ The browser pass for each surface (the logic under it is already tested):
   Notes, at 1440, 1000 and 375: the SSO card's "Has a note" mark on its meta line, and none on the
   others; its dialog's box with the note, saved 800 ms after the last key and as the dialog closes
   by Escape, × or a press outside; with a screen reader, the mark is read on the card; an earlier
-  day's tick of a recurring priority removed in Settings shows its note as text. A key typed into
-  a note does nothing.
-  Categories (with about 30 added by `curl` to `/api/board/categories` for a long list): a
-  box's chip (a pick, New category, kept after a reload and in the other boxes), a card dialog's
-  chip with its list opening over the sheet, unclipped, scrolling inside with the box in view, its
-  Escape closing only the list, the cards' dot and name (a long name at 1000), and Settings → Board
-  (a rename, a name in use, the swatches wrapping at 375, Remove, the touch areas).
+  day's tick of a recurring priority that stopped repeating shows its note as text. A key typed into
+  a note does nothing. Categories (with about 30 added by `curl` to `/api/board/categories` for a
+  long list): a box's chip (a pick, New category, kept after a reload and in the other boxes), a
+  card dialog's chip with its list opening over the sheet, unclipped, scrolling inside with the box
+  in view, its Escape closing only the list, the cards' dot and name (a long name at 1000), and
+  Settings → Board (a rename, a name in use, the swatches wrapping at 375, Remove, the touch areas).
 - **Keyboard shortcuts**: after `npm run seed -- --running`, at 1280: ? opens
   the list with the focus on it, ? again does nothing and Escape gives the focus back; P pauses
   and resumes, + adds the step, and once the timer is a minute or more past its end (see "The

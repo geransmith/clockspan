@@ -85,7 +85,7 @@ describe('POST /api/items: a task made on the board', () => {
       [{ lane: 'done' }, 'lane must be later or next.'],
       [{ lane: 'progress' }, 'lane must be later or next.'],
       [{ lane: null }, 'lane must be later or next.'],
-      [{ weekdays: [1] }, 'A recurring priority stays off the board.'],
+      [{ weekdays: [1] }, 'A recurring priority has no lane.'],
       [{ before: 'x' }, 'before must be a task id or null.'],
       [{ before: 5 }, 'before must be a task id or null.'],
       [{ categoryUid: 'not a uid' }, "categoryUid must be a category's id or null."],
@@ -110,7 +110,7 @@ describe('POST /api/items: a task made on the board', () => {
     expect([retry.status, retry.body]).toEqual(NOT_FOUND);
     expect(app.item('card00000001')).toEqual(tombstone);
 
-    // A recurring priority removed in Settings while a day lists it is archived.
+    // A recurring priority that stopped repeating while a day lists it is archived.
     await app.api.post('/api/items', { uid: 'rcur00000001', title: 'Monitor the queue', weekdays: [1] });
     await app.saveList(TODAY, [{ text: 'Monitor the queue', uid: 'rcur00000001' }]);
     await remove('rcur00000001');
@@ -269,7 +269,7 @@ describe('PATCH /api/items/:uid', () => {
     expect((await patch('card00000002', { lane: 'next' })).status).toBe(200);
   });
 
-  it('edits a recurring priority, never into a lane, and no one-off gets weekdays', async () => {
+  it('edits a recurring priority, never into a lane, and clears no day of a one-off', async () => {
     await app.api.post('/api/items', { uid: 'rcur00000001', title: 'Monitor the queue', weekdays: [1, 2] });
     await patch('RCUR00000001', { title: '  Watch the queue ', categoryUid: 'cat000000002', note: 'Tier 2 too.', weekday: { day: 3, on: true } });
     expect((await app.api.get('/api/board')).body.recurring).toEqual([
@@ -277,7 +277,7 @@ describe('PATCH /api/items/:uid', () => {
     ]);
     const WEEKDAY = 'weekday must be a day from 1 to 7 with on true or false.';
     for (const [uid, change, error] of [
-      ['rcur00000001', { lane: 'next' }, 'A recurring priority stays off the board.'],
+      ['rcur00000001', { lane: 'next' }, 'A recurring priority has no lane.'],
       ['rcur00000001', { weekday: null }, WEEKDAY],
       ['rcur00000001', { weekday: 3 }, WEEKDAY],
       ['rcur00000001', { weekday: { day: 0, on: true } }, WEEKDAY],
@@ -286,12 +286,62 @@ describe('PATCH /api/items/:uid', () => {
       ['rcur00000001', { weekday: { on: false } }, WEEKDAY],
       // The whole list, as a tab from before the upgrade sends it, would put back another device's days.
       ['rcur00000001', { weekdays: [1, 2, 4] }, 'Send one day as weekday: { day, on }.'],
-      ['card00000001', { weekday: { day: 1, on: true } }, 'Only a recurring priority has weekdays.'],
+      // A one-off has no day to clear: its first day set makes it a recurring priority.
+      ['card00000001', { weekday: { day: 1, on: false } }, 'Only a recurring priority has weekdays.'],
+      ['card00000001', { weekday: { day: 9, on: true } }, WEEKDAY],
     ] as const) {
       const r = await patch(uid, change);
       expect([r.status, r.body.error], JSON.stringify(change)).toEqual([400, error]);
     }
     expect(app.item('rcur00000001')).toMatchObject({ lane: null, weekdays: 0b111 });
+  });
+
+  it("makes a one-off a recurring priority with the first day set, out of its lane, its past rows and sessions kept as a routine's", async () => {
+    await app.capture('card00000004', 'Update the macros', 'later');
+    await app.saveList(YESTERDAY, [{ text: 'Review canned replies', uid: 'card00000002' }]);
+    const { id } = (await app.api.post(`/api/days/${YESTERDAY}/sessions`, { plannedSeconds: 600, priorityUid: 'card00000002' })).body.session as Session;
+    vi.setSystemTime(Date.now() + 10 * MINUTE_MS);
+    await app.api.post(`/api/sessions/${id}/finish`);
+    // A place sent with it is ignored: a recurring priority has none.
+    const r = await patch('card00000002', { weekday: { day: 3, on: true }, before: 'card00000001' });
+    expect(r.status).toBe(200);
+    expect(r.body.recurring).toEqual([{ uid: 'card00000002', title: 'Review canned replies', categoryUid: null, note: '', weekdays: [3] }]);
+    const LANES = [
+      ['later', 1, 'Write the KB'],
+      ['later', 2, 'Update the macros'],
+      ['next', 1, 'Follow up on the SLA'],
+    ];
+    expect(await lanes()).toEqual(LANES);
+    expect(app.item('card00000002')).toMatchObject({ lane: null, position: 0, weekdays: 0b100 });
+    const day = (await app.api.get(`/api/days/${YESTERDAY}`)).body as Day;
+    expect(day.priorities[0]).toMatchObject({ uid: 'card00000002', recurring: true });
+    expect(day.sessions).toEqual([expect.objectContaining({ id, priorityUid: 'card00000002', status: 'completed' })]);
+    // Its days change one at a time from here.
+    await patch('card00000002', { weekday: { day: 5, on: true } });
+    expect(app.item('card00000002')!.weekdays).toBe(0b10100);
+    // A task in no lane, typed on a day's list, has no lane to close up.
+    await app.saveList(TODAY, [{ text: 'Typed', uid: 'aaaaaaaaaaa1' }]);
+    expect((await patch('aaaaaaaaaaa1', { weekday: { day: 1, on: true } })).body.recurring.map((x: Recurring) => x.uid)).toEqual([
+      'card00000002',
+      'aaaaaaaaaaa1',
+    ]);
+    expect(app.item('aaaaaaaaaaa1')).toMatchObject({ lane: null, weekdays: 1 });
+    expect(await lanes()).toEqual(LANES);
+  });
+
+  it('refuses the first day at the cap of recurring priorities, and with a lane, changing nothing', async () => {
+    const userId = ensureDefaultUser(app.db).id;
+    const insert = app.db.prepare(`INSERT INTO items (user_id, uid, title, weekdays, created_at) VALUES (?, ?, ?, 31, 0)`);
+    for (let i = 1; i <= BOARD_LIMITS.recurring; i++) insert.run(userId, `rout${String(i).padStart(8, '0')}`, `Routine ${i}`);
+    const before = await board();
+    const full = await patch('card00000001', { weekday: { day: 1, on: true } });
+    expect([full.status, full.body.error]).toEqual([400, `The board keeps at most ${BOARD_LIMITS.recurring} recurring priorities.`]);
+    const laned = await patch('card00000002', { lane: 'next', weekday: { day: 1, on: true } });
+    expect([laned.status, laned.body.error]).toEqual([400, 'A recurring priority has no lane.']);
+    expect(await board()).toEqual(before);
+    expect(app.item('card00000001')).toMatchObject({ lane: 'later', position: 1, weekdays: null });
+    // A day of one already repeating isn't held to it.
+    expect((await patch('rout00000001', { weekday: { day: 6, on: true } })).status).toBe(200);
   });
 
   it("sets or clears one weekday, so two devices' changes to different days both land, and never clears the last", async () => {
@@ -336,8 +386,10 @@ describe('PATCH /api/items/:uid', () => {
     await app.saveList(TODAY, [{ text: 'Monitor the queue', uid: 'rcur00000001' }]);
     await remove('rcur00000001');
     for (const uid of ['card00000001', 'rcur00000001', 'card00000009']) {
-      const r = await patch(uid, { title: 'Back' });
-      expect([r.status, r.body], uid).toEqual(NOT_FOUND);
+      for (const change of [{ title: 'Back' }, { weekday: { day: 1, on: true } }]) {
+        const r = await patch(uid, change);
+        expect([r.status, r.body], uid).toEqual(NOT_FOUND);
+      }
     }
     expect([app.item('card00000001')!.title, app.item('rcur00000001')!.title]).toEqual(['card00000001', 'Monitor the queue']);
   });
@@ -471,7 +523,8 @@ describe('tasks are scoped to the signed-in user', () => {
 
     expect((await b.get('/api/board')).body).toEqual({ cards: [], categories: [], recurring: [] });
     for (const uid of ['card00000001', 'rcur00000001', 'aaaaaaaaaaa1']) {
-      for (const r of [await b.patch(`/api/items/${uid}`, { title: 'Mine' }), await b.del(`/api/items/${uid}`)])
+      const edits = [{ title: 'Mine' }, { weekday: { day: 1, on: true } }];
+      for (const r of [...(await Promise.all(edits.map((e) => b.patch(`/api/items/${uid}`, e)))), await b.del(`/api/items/${uid}`)])
         expect([r.status, r.body], uid).toEqual(NOT_FOUND);
     }
     // A's uids are B's own, A's deleted one included: B's POST of one makes B a task.

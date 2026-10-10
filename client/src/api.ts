@@ -248,16 +248,16 @@ export const deleteBreak = (id: number) => request<OkResponse>('DELETE', `/api/b
 
 // ----- board -----
 /**
- * POST /items: a task made on the board, in `lane` before `before` there (null: the end), or a
- * recurring priority made in Settings, with its `weekdays`. A uid the server holds answers the
- * board as it is, so a retry adds nothing.
+ * POST /items: a task made on the board, in `lane` before `before` there (null: the end). A uid
+ * the server holds answers the board as it is, so a retry adds nothing.
  */
-export type NewItem = Pick<BoardCard, 'uid' | 'title' | 'categoryUid'> & ({ lane: OpenLane; before: string | null } | { weekdays: number[] });
+export type NewItem = Pick<BoardCard, 'uid' | 'title' | 'categoryUid'> & { lane: OpenLane; before: string | null };
 /**
  * PATCH /items/:uid: a field left out keeps its value. `before` alone reorders the task's lane;
  * `lane` is for a one-off task, and `weekday` sets or clears one ISO weekday (1..7) of a recurring
- * priority, so a change another device made to its other days stands. A rename, a category or a
- * note reaches every day the task is on.
+ * priority, so a change another device made to its other days stands. The first day set on a
+ * one-off makes it a recurring priority, out of its lane. A rename, a category or a note reaches
+ * every day the task is on.
  */
 export type ItemPatch = {
   title?: string;
@@ -277,8 +277,7 @@ export const addItem = (item: NewItem) => request<Board>('POST', '/api/items', i
 export const editItem = (uid: string, patch: ItemPatch) => request<Board>('PATCH', `/api/items/${uid}`, patch);
 /**
  * A one-off task deleted everywhere: off every day's list, its sessions kept as unplanned time
- * under its name. A recurring priority is removed instead: it stops repeating, and the days it was
- * on keep it.
+ * under its name. A recurring priority stops repeating instead, and the days it was on keep it.
  */
 export const deleteItem = (uid: string) => request<Board>('DELETE', `/api/items/${uid}`);
 export const addCategory = (category: NewCategory) => request<Board>('POST', '/api/board/categories', category);

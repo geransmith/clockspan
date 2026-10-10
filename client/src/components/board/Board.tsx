@@ -49,7 +49,7 @@ import { BoardCardView, type ItemDrag } from './BoardCard';
 import { Capture } from './Capture';
 import { CardDialog } from './CardDialog';
 import { ClockBar } from './ClockBar';
-import { canDrag, DraggableEntry, Lifted, SortableEntry, useBoardDrag } from './useBoardDrag';
+import { canDrag, canSort, DraggableEntry, Lifted, SortableEntry, useBoardDrag } from './useBoardDrag';
 
 /** The columns with a + in their head. */
 type AddColumn = Exclude<ColumnId, 'done'>;
@@ -217,10 +217,10 @@ export const Board = memo(function Board({
       unlockAudio();
       setTicked({ at });
     }
-    // Where the item will be once the move lands: a one-off task keeps its id wherever it shows, and
-    // an earlier day's recurring row pulled onto today's list is today's row, while the earlier
+    // Where the item will be once the move lands: a task keeps its id wherever it shows, and an
+    // earlier day's recurring row pulled onto today's list lands as today's row, while the earlier
     // one stays in Done.
-    const lands = move.kind !== 'place' ? item!.id : move.row.recurring ? `row:${today}:${move.row.uid}` : `item:${move.row.uid}`;
+    const lands = move.kind === 'place' ? `item:${move.row.uid}` : item!.id;
     if (item) focusTo.current = lands;
     setMoving((m) => new Map(m).set(lands, target));
     if (move.kind === 'place') queued.current.set(lands, move.row);
@@ -323,9 +323,9 @@ export const Board = memo(function Board({
     titles.current.get(id)?.focus();
   };
 
-  // The item goes with the button pressed (Delete, Remove from today), and the focus would fall to
-  // the page: the next item in its column takes it, else the one before, else the column's + (Done's
-  // heading, which has none).
+  // The item goes with the button pressed (Delete, Remove from today, Stop repeating on a card of
+  // Later's Repeats), and the focus would fall to the page: the next item in its column takes it,
+  // else the one before, else the column's + (Done's heading, which has none).
   const focusNear = (item: BoardItem) => {
     const found = findItem(shown, item.id);
     const items = found ? itemsIn(shown, found.column) : [];
@@ -352,6 +352,13 @@ export const Board = memo(function Board({
     focusNear(item);
     report(store.removeFromToday(item.uid));
   };
+  // Archived, the recurring priority leaves Later's Repeats; a row of it stays on its day's list.
+  const stopRepeating = (item: BoardItem) => {
+    if (!window.confirm(CONFIRM.deleteRecurring(item.title))) return;
+    closeCard(item.id);
+    if (item.row == null) focusNear(item);
+    report(store.removeRecurring(item.uid));
+  };
 
   // A drop's move first drops a focus left for an earlier move, and a keyboard drag ends on the item's card.
   const dragFocus = {
@@ -373,6 +380,9 @@ export const Board = memo(function Board({
       item={item}
       today={today}
       pick={pick}
+      // Later's Repeats lists a recurring priority with its days, and nothing else does: a pull on
+      // its way shows the card in In progress or Done with no row yet.
+      days={item.column === 'later' ? board.recurring.find((r) => r.uid === item.uid)?.weekdays : undefined}
       onOpen={() => {
         renamed.current = null;
         setOpen(item.id);
@@ -398,10 +408,12 @@ export const Board = memo(function Board({
     // Ticked on an earlier day: that day's sheet unticks it, since the board would rewrite a past
     // day; Move to In progress puts it on today's list to work on again.
     const hint = cardOnly && item.card!.listDone ? BOARD.doneOn(dayName(item.card!.listDate!, today, true)) : undefined;
+    // The recurring priority as the board has it, a task given its first day included: none for a
+    // one-off, or one that stopped repeating.
+    const routine = board.recurring.find((r) => r.uid === item.uid);
     // Off today's list, a PATCH renames or files it on every day: any one-off task the board has,
-    // and an earlier day's recurring row while its recurring priority is in Settings (one removed
-    // there answers 404).
-    const editable = cardOnly || (item.recurring && board.recurring.some((r) => r.uid === item.uid));
+    // and a recurring priority's card or earlier day's row while it repeats (one archived answers 404).
+    const editable = cardOnly || routine != null;
     // The title, category and note are the task's, on every day: today's row through the list, the
     // sheet's write, which renames a recurring priority too; any other by a PATCH.
     const editTask = throughRow(item)
@@ -430,6 +442,12 @@ export const Board = memo(function Board({
     // today's list first, with no nudge: starting a timer never asks. None while a timer runs
     // (another device's too, once synced) or the item's move is on its way.
     const startable = !running && !moving.has(item.id) && item.column !== 'done';
+    // A one-off's first day makes it a recurring priority, which can't be undone: that asks first.
+    // The item stands in for a row whose task the board hasn't read yet.
+    const onDay = (day: number, on: boolean) => {
+      if (!routine && !window.confirm(CONFIRM.makeRecurring(item.title))) return;
+      report(store.editItem(item.uid, { weekday: { day, on } }, item));
+    };
     const onStart = (minutes: number) => {
       const acting = closeFor();
       if (!throughRow(acting)) {
@@ -463,33 +481,43 @@ export const Board = memo(function Board({
         onCategory={editTask ? (categoryUid) => report(editTask({ categoryUid })) : undefined}
         onNote={editTask ? (note, base) => saved(editTask({ note })).then((ok) => keepNote(ok, note, base)) : undefined}
         keptNote={notesKept.get(item.id)?.text}
-        // A recurring priority is removed in Settings → Board, so its row only comes off today's list.
+        // A recurring priority has no full delete: it stops repeating, and its row only comes off today's list.
         onDelete={item.recurring ? undefined : () => confirmDelete(item)}
         onRemove={item.recurring && throughRow(item) ? () => removeFromToday(item) : undefined}
+        // None on a task the server can't change: a recurring priority that stopped repeating, an archived one-off.
+        repeat={
+          routine
+            ? { days: routine.weekdays, onDay, onStop: () => stopRepeating(item) }
+            : !item.recurring && !item.row?.archived
+              ? { days: [], onDay }
+              : undefined
+        }
         hint={hint}
         start={startable ? { disabled: starting, onStart } : undefined}
       />
     );
   };
 
-  // A card of Later or Next sorts among its lane's cards; an item of In progress or Done drags whole,
-  // on a wide window. An item whose move is on its way isn't picked up until the move lands: it
-  // shows where the move takes it as the item it was (a parked row in Later, a pulled card in In
-  // progress), and a move planned from that would be wrong.
+  // A card of Later or Next sorts among its lane's cards; an item of In progress or Done, and a
+  // recurring priority's card in Later's Repeats, drags whole, on a wide window. An item whose move
+  // is on its way isn't picked up until the move lands: it shows where the move takes it as the
+  // item it was (a parked row in Later, a pulled card in In progress), and a move planned from that
+  // would be wrong.
   const entry = (item: BoardItem, column: ColumnId) => {
-    if (!canDrag(item) || (!isLane(column) && !wide)) return card(item);
+    const sorts = isLane(column) && canSort(item);
+    if (!canDrag(item) || (!sorts && !wide)) return card(item);
     const render = (drag: ItemDrag) => card(item, drag);
     const held = moving.has(item.id);
-    return isLane(column) ? (
+    return sorts ? (
       <SortableEntry key={item.id} id={item.id} held={held} render={render} />
     ) : (
       <DraggableEntry key={item.id} id={item.id} column={column} held={held} render={render} />
     );
   };
   const list = (items: BoardItem[], column: ColumnId) => <ul className="board-list">{items.map((i) => entry(i, column))}</ul>;
-  // A lane lists the cards it shows that drag (Later folds past eight), in order.
+  // A lane lists the cards it shows that sort (Later folds past eight), in order.
   const sorted = (lane: OpenLane, items: BoardItem[], children: ReactNode) => (
-    <SortableContext id={lane} items={items.filter(canDrag).map((i) => i.id)} strategy={verticalListSortingStrategy}>
+    <SortableContext id={lane} items={items.filter(canSort).map((i) => i.id)} strategy={verticalListSortingStrategy}>
       {children}
     </SortableContext>
   );
@@ -600,7 +628,7 @@ export const Board = memo(function Board({
             id="later"
             shown={shownColumn}
             over={over}
-            count={shown.later.length}
+            count={shown.later.length + shown.repeats.length}
             headRef={headRef('later')}
             add={add('later', lanesFull, addCard('later'))}
           >
@@ -612,7 +640,13 @@ export const Board = memo(function Board({
                 wrap={(n, ul) => sorted('later', shown.later.slice(0, n), ul)}
               />
             ) : (
-              <Empty>Nothing parked.</Empty>
+              shown.repeats.length === 0 && <Empty>Nothing parked.</Empty>
+            )}
+            {shown.repeats.length > 0 && (
+              <>
+                <h3 className="muted small">Repeats</h3>
+                {list(shown.repeats, 'later')}
+              </>
             )}
           </Column>
           <Column id="next" shown={shownColumn} over={over} count={shown.next.length} headRef={headRef('next')} add={add('next', lanesFull, addCard('next'))}>
