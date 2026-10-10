@@ -73,7 +73,7 @@ describe('durations', () => {
     expect(formatMinutes(15)).toBe('15 min');
     expect(formatMinutes(60)).toBe('1h 00m');
     expect(formatMinutes(90)).toBe('1h 30m');
-    expect(formatMinutes(425)).toBe(formatDuration(425 * 60));
+    expect(formatMinutes(425)).toBe('7h 05m');
     expect(formatMinutes(605)).toBe('10h 05m');
   });
 
