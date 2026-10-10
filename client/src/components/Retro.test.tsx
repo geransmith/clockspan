@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
 import { RETRO_PROMPT } from '../lib/copy';
-import { answered, completedSession, deferred, makePriority, makeSettings, settle, T0 } from '../test/hooks';
+import { completedSession, deferred, makePriority, settle, T0 } from '../test/hooks';
 import type { Priority, Session } from '../types';
 import { Retro } from './Retro';
 
@@ -47,7 +47,6 @@ const markReviewed = () => fireEvent.click(screen.getByRole('button', { name: /M
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
 });
 
 describe('Retro', () => {

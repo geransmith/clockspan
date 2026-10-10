@@ -56,8 +56,6 @@ const render = () =>
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
   localStorage.clear();
-  vi.mocked(api.getSettings).mockResolvedValue(answered(settings));
-  vi.mocked(api.getRunning).mockResolvedValue(answered({ session: null }));
   held = [];
   vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(answered(makeDay(date, { breaks: held.filter((b) => b.date === date) }))));
   vi.mocked(api.startBreak).mockImplementation((date, plannedSeconds) => {

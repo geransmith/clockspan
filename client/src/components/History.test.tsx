@@ -1,10 +1,9 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import * as api from '../api';
 import { formatDateLong, formatMonth } from '../lib/format';
 import type { ReviewPeriod } from '../lib/review';
-import { answered, makeDay, makeSettings, serveRange, SettingsAndDays, settle } from '../test/hooks';
+import { makeDay, serveRange, SettingsAndDays, settle } from '../test/hooks';
 import { History } from './History';
 
 vi.mock('../api');
@@ -27,7 +26,6 @@ async function history(date: string, review: ReviewPeriod | null = null) {
 
 beforeEach(() => {
   vi.useFakeTimers({ now: NOW });
-  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
   serveRange([AUGUST_DAY, JULY_DAY]);
 });
 

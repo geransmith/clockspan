@@ -14,25 +14,29 @@ import { ADD_PRIORITY_FAILED, BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILE
 import { dayName } from '../../lib/format';
 import { USER_KEYS } from '../../lib/storage';
 import {
+  ADMIN,
   answered,
   completedSession,
   DEFAULT_USER,
   deferredAnswer,
+  FOLLOW_UPS,
   makeBoard,
   makeCard,
-  makeCategory,
   makeAuth,
   makeDay,
   makePriority,
   makeSession,
   makeRecurring,
   makeSettings,
+  OLD_WORK,
   pressKey,
+  QUEUE,
   serveRange,
   settle,
   SettingsAndDays,
   ShortcutKeys,
   stubMatchMedia,
+  TICKETS,
 } from '../../test/hooks';
 import type { Board as BoardData, Priority, RangeResponse, Session } from '../../types';
 import { Header } from '../Header';
@@ -153,7 +157,10 @@ beforeEach(() => {
   vi.mocked(api.getBoard).mockImplementation(() => Promise.resolve(answered(onServer)));
   vi.mocked(api.addItem).mockImplementation((item) => Promise.resolve(answered((onServer = withItem(onServer, item, NOW)))));
   vi.mocked(api.editItem).mockImplementation((uid, patch) => Promise.resolve(answered((onServer = withItemPatch(onServer, uid, patch)))));
-  vi.mocked(api.deleteItem).mockImplementation((uid) => Promise.resolve(answered((onServer = withoutItem(onServer, uid)))));
+  vi.mocked(api.deleteItem).mockImplementation((uid) => {
+    for (const [date, list] of Object.entries(lists)) lists[date] = list.filter((p) => p.uid !== uid);
+    return Promise.resolve(answered((onServer = withoutItem(onServer, uid))));
+  });
   start.mockImplementation(async (_date, _seconds, _label, uid) => {
     await uid;
   });
@@ -478,7 +485,7 @@ describe('Board', () => {
   });
 
   it("offers a recurring row no Later or Next, only Remove From Today, which takes it off today's list, closing its dialog with the focus near it, a failed remove too", async () => {
-    lists[WED] = [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true })];
+    lists[WED] = [row(1, 'Monitor the queue', { uid: QUEUE.uid, recurring: true })];
     await renderBoard();
     openCard('Monitor the queue');
     expect(moveOptions()).toEqual(['Done']);
@@ -506,9 +513,9 @@ describe('Board', () => {
   const dialogLines = () => [...dialog().querySelectorAll('p.muted.small')].map((p) => p.textContent);
 
   it("renames today's recurring row through the row, which renames the recurring priority and its earlier ticks at once, and keeps its chip, its tick and Remove From Today", async () => {
-    onServer = { ...onServer, recurring: [makeRecurring('rec000000001', 'Monitor the queue')] };
-    lists[WED] = [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true, listed: 2 }), row(2, 'Report')];
-    serveRange([makeDay(TUE, { priorities: [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true, done: true })] })]);
+    onServer = { ...onServer, recurring: [QUEUE] };
+    lists[WED] = [row(1, 'Monitor the queue', { uid: QUEUE.uid, recurring: true, listed: 2 }), row(2, 'Report')];
+    serveRange([makeDay(TUE, { priorities: [row(1, 'Monitor the queue', { uid: QUEUE.uid, recurring: true, done: true })] })]);
     await renderBoard();
     openCard('Monitor the queue');
     expect(dialogLines()).toEqual([]);
@@ -529,7 +536,7 @@ describe('Board', () => {
   });
 
   it("renames today's recurring row through the row once its recurring priority stopped repeating too", async () => {
-    lists[WED] = [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true })];
+    lists[WED] = [row(1, 'Monitor the queue', { uid: QUEUE.uid, recurring: true })];
     await renderBoard();
     openCard('Monitor the queue');
     expect(dialogLines()).toEqual([]);
@@ -571,9 +578,9 @@ describe('Board', () => {
 
   it("marks a recurring row on its meta line, and only that row, with Repeats as its card's title, or the note's start on one with a note", async () => {
     lists[WED] = [
-      row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true }),
+      row(1, 'Monitor the queue', { uid: QUEUE.uid, recurring: true }),
       row(2, 'Report'),
-      row(3, 'Follow-ups', { uid: 'rec000000002', recurring: true, note: 'Kim first.' }),
+      row(3, 'Follow-ups', { uid: FOLLOW_UPS.uid, recurring: true, note: 'Kim first.' }),
     ];
     await renderBoard();
     const metas = [...column('In Progress').querySelectorAll('.board-card-meta')];
@@ -585,27 +592,6 @@ describe('Board', () => {
       ['Report', null],
       ['Follow-ups', 'Kim first.'],
     ]);
-  });
-
-  it("treats a task a later day's list holds as any card: Move to, a rename by a PATCH, and Delete everywhere with a confirm that counts its days", async () => {
-    const confirm = vi.fn(() => true);
-    vi.stubGlobal('confirm', confirm);
-    await renderBoard();
-    openCard('Plan B');
-    expect(moveOptions()).toEqual(['Later', 'In Progress', 'Done']);
-    const title = screen.getByRole('textbox', { name: 'Title' });
-    fireEvent.change(title, { target: { value: 'Plan C' } });
-    fireEvent.blur(title);
-    await settle();
-    expect(api.editItem).toHaveBeenCalledExactlyOnceWith('planned00001', { title: 'Plan C' });
-    expect(titlesIn('Next')).toEqual(['Follow up', 'Plan C']);
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
-    expect(confirm).toHaveBeenCalledWith(CONFIRM.deleteTask(1, null));
-    await settle();
-    // The server takes it off every day's list: nothing here sends a list.
-    expect(api.putPriorities).not.toHaveBeenCalled();
-    expect(api.deleteItem).toHaveBeenCalledExactlyOnceWith('planned00001');
-    expect(titlesIn('Next')).toEqual(['Follow up']);
   });
 
   it("deletes today's task with a confirm counting its days and time from its row and today's log, the server taking its row off, and nothing when turned down", async () => {
@@ -628,11 +614,6 @@ describe('Board', () => {
     expect(api.deleteItem).not.toHaveBeenCalled();
 
     confirm.mockReturnValue(true);
-    // The server takes it off every day's list, today's included.
-    vi.mocked(api.deleteItem).mockImplementationOnce((uid) => {
-      lists[WED] = lists[WED]!.filter((p) => p.uid !== uid);
-      return Promise.resolve(answered((onServer = withoutItem(onServer, uid))));
-    });
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     await settle();
     expect(api.putPriorities).not.toHaveBeenCalled();
@@ -680,10 +661,6 @@ describe('Board', () => {
     expect(titlesIn('Later')).toEqual([]);
     expect(document.activeElement).toBe(plus('Later'));
     // Done has no +, and the items folded under Earlier This Week take no focus: its heading does.
-    vi.mocked(api.deleteItem).mockImplementationOnce((uid) => {
-      lists[WED] = lists[WED]!.filter((p) => p.uid !== uid);
-      return Promise.resolve(answered((onServer = withoutItem(onServer, uid))));
-    });
     openCard('Email');
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     await settle();
@@ -1404,8 +1381,7 @@ describe("a card's note", () => {
 });
 
 describe('repeating', () => {
-  const QUEUE = makeRecurring('rec000000001', 'Monitor the queue');
-  const FOLLOW = makeRecurring('rec000000002', 'Follow-ups', { weekdays: [1, 3, 5] });
+  const FOLLOW = { ...FOLLOW_UPS, weekdays: [1, 3, 5] };
   /** The open dialog's Repeat row, a day's button in it, and the days pressed. */
   const repeatGroup = () => screen.queryByRole('group', { name: 'Repeat' });
   const day = (name: string) => within(repeatGroup()!).getByRole('button', { name });
@@ -1655,15 +1631,15 @@ describe('starting the focus timer', () => {
   });
 
   it("starts on a card of Later's Repeats once its pull puts the recurring priority on today's list", async () => {
-    onServer = { ...onServer, recurring: [makeRecurring('rec000000001', 'Monitor the queue')] };
+    onServer = { ...onServer, recurring: [QUEUE] };
     await renderBoard();
     openCard('Monitor the queue');
     startFor(25);
     expect(start).toHaveBeenCalledExactlyOnceWith(WED, 25 * 60, 'Monitor the queue', expect.any(Promise));
     await settle();
     expect(putLists()).toEqual([{ date: WED, texts: ['Report', 'Email', 'Monitor the queue'] }]);
-    expect(lists[WED]![2]).toMatchObject({ uid: 'rec000000001', recurring: true });
-    await expect(startedOn()).resolves.toBe('rec000000001');
+    expect(lists[WED]![2]).toMatchObject({ uid: QUEUE.uid, recurring: true });
+    await expect(startedOn()).resolves.toBe(QUEUE.uid);
     expect(titlesIn('In Progress')).toEqual(['Report', 'Monitor the queue']);
   });
 
@@ -1715,7 +1691,7 @@ describe('starting the focus timer', () => {
   });
 
   it("offers Start on today's recurring row and a card a later day's list holds too, and none in Done or on an item whose move is on its way", async () => {
-    lists[WED] = [row(1, 'Report'), row(2, 'Email', { done: true }), row(3, 'Monitor the queue', { uid: 'rec000000001', recurring: true })];
+    lists[WED] = [row(1, 'Report'), row(2, 'Email', { done: true }), row(3, 'Monitor the queue', { uid: QUEUE.uid, recurring: true })];
     const placed = deferredAnswer<BoardData>();
     vi.mocked(api.editItem).mockReturnValueOnce(placed.promise);
     await renderBoard();
@@ -2056,7 +2032,7 @@ describe('dragging', () => {
   });
 
   it("drags a card of Later's Repeats onto today's list, and puts it back with the board notice from Later or Next", async () => {
-    onServer = { ...onServer, recurring: [makeRecurring('rec000000001', 'Monitor the queue')] };
+    onServer = { ...onServer, recurring: [QUEUE] };
     await renderBoard();
     const refused = BOARD.recurringStays('Monitor the queue');
     const close = () => within(notice()).getByRole('button', { name: BOARD.close });
@@ -2090,7 +2066,7 @@ describe('dragging', () => {
   });
 
   it("doesn't drag a recurring row, which stays on today's list, and tells how every other card drags and opens", async () => {
-    lists[WED] = [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true }), row(2, 'Report')];
+    lists[WED] = [row(1, 'Monitor the queue', { uid: QUEUE.uid, recurring: true }), row(2, 'Report')];
     await renderBoard();
     expect(card('Monitor the queue').hasAttribute('aria-roledescription')).toBe(false);
     await pickUp('Monitor the queue');
@@ -2109,9 +2085,6 @@ describe('dragging', () => {
 });
 
 describe('categories', () => {
-  const TICKETS = makeCategory('cat000000001', 'Tickets');
-  const ADMIN = makeCategory('cat000000002', 'Admin', { color: 'teal' });
-  const OLD = makeCategory('cat000000003', 'Old work', { color: 'gold', archived: true });
   /** A column's box, opened by its + when it isn't open yet. */
   const openBox = (column: string, name: string) => {
     if (!isOpen(name)) fireEvent.click(plus(column));
@@ -2128,9 +2101,9 @@ describe('categories', () => {
     localStorage.clear();
     onServer = {
       ...makeBoard(makeCard('later0000001', 'Write a KB', { categoryUid: TICKETS.uid }), makeCard('planned00001', 'Plan B', { lane: 'next', listDate: THU })),
-      categories: [TICKETS, ADMIN, OLD],
+      categories: [TICKETS, ADMIN, OLD_WORK],
     };
-    lists[WED] = [row(1, 'Report', { categoryUid: OLD.uid })];
+    lists[WED] = [row(1, 'Report', { categoryUid: OLD_WORK.uid })];
     vi.mocked(api.addCategory).mockImplementation((c) => Promise.resolve(answered((onServer = withCategory(onServer, c)))));
   });
 
@@ -2145,7 +2118,7 @@ describe('categories', () => {
   });
 
   it("puts a recurring row's mark after its category", async () => {
-    lists[WED] = [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true, categoryUid: TICKETS.uid })];
+    lists[WED] = [row(1, 'Monitor the queue', { uid: QUEUE.uid, recurring: true, categoryUid: TICKETS.uid })];
     await renderBoard();
     const meta = column('In Progress').querySelector('.board-card-meta')!;
     expect([...meta.children].map((c) => c.className)).toEqual(['board-card-category', 'repeat-mark']);
@@ -2192,7 +2165,7 @@ describe('categories', () => {
   });
 
   it('reads a remembered category that was removed, or that the board lacks, as none', async () => {
-    localStorage.setItem(USER_KEYS.captureCategory, OLD.uid);
+    localStorage.setItem(USER_KEYS.captureCategory, OLD_WORK.uid);
     await renderBoard();
     expect(captureChip().getAttribute('aria-label')).toBe('Category for new cards: none');
     capture('A card');

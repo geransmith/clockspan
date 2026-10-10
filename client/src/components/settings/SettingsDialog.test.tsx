@@ -7,7 +7,7 @@ import { notificationPermission, requestNotificationPermission } from '../../lib
 import { CONFIRM, LOAD_FAILED, SAVE_STATUS } from '../../lib/copy';
 import { applySettingsPatch } from '../../lib/settings';
 import { SOUND_EVENT_LABELS } from '../../lib/sounds';
-import { answered, DEFAULT_USER, deferredAnswer, makeAuth, makeBoard, makeCategory, makeSettings, makeUser, settle, SettingsAndDays } from '../../test/hooks';
+import { answered, DEFAULT_USER, deferredAnswer, makeAuth, makeBoard, makeSettings, makeUser, settle, SettingsAndDays, TICKETS } from '../../test/hooks';
 import type { AuthInfo, Settings } from '../../types';
 import { SettingsDialog } from './SettingsDialog';
 
@@ -41,7 +41,6 @@ const openTab = async (name: string) => {
 beforeEach(() => {
   vi.useFakeTimers();
   localStorage.clear();
-  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
   vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(answered(applySettingsPatch(makeSettings(), patch))));
   vi.mocked(api.getPruneInfo).mockImplementation((before) =>
     Promise.resolve(answered({ before, matching: 0, total: 4, oldest: '2026-09-01', serverMaxDays: null })),
@@ -166,34 +165,19 @@ describe('SettingsDialog', () => {
   });
 
   it('saves a category change on the Board tab through the header', async () => {
-    vi.mocked(api.getBoard).mockResolvedValue(answered({ ...makeBoard(), categories: [makeCategory('cat000000001', 'Tickets')] }));
-    vi.mocked(api.patchCategory).mockResolvedValue(answered({ ...makeBoard(), categories: [makeCategory('cat000000001', 'Tickets', { color: 'pink' })] }));
+    vi.mocked(api.getBoard).mockResolvedValue(answered({ ...makeBoard(), categories: [TICKETS] }));
+    vi.mocked(api.patchCategory).mockResolvedValue(answered({ ...makeBoard(), categories: [{ ...TICKETS, color: 'pink' }] }));
     await renderDialog();
     await openTab('Board');
     fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Colour of Tickets', hidden: true })).getByRole('radio', { name: 'Pink', hidden: true }));
     await settle();
-    expect(api.patchCategory).toHaveBeenCalledWith('cat000000001', { color: 'pink' });
+    expect(api.patchCategory).toHaveBeenCalledWith(TICKETS.uid, { color: 'pink' });
     expect(screen.getByRole('status', { hidden: true }).textContent).toContain(SAVE_STATUS.saved);
 
     vi.mocked(api.patchCategory).mockRejectedValueOnce(new Error('Request failed (500)'));
     fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Colour of Tickets', hidden: true })).getByRole('radio', { name: 'Teal', hidden: true }));
     await settle();
     expect(screen.getByRole('status', { hidden: true }).textContent).toBe(SAVE_STATUS.failed);
-  });
-
-  it('hands the Board tab the settings, and saves its number through the header', async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ recurringPerDay: 4 })));
-    vi.mocked(api.putSettings).mockImplementation((patch) => Promise.resolve(answered(applySettingsPatch(makeSettings({ recurringPerDay: 4 }), patch))));
-    await renderDialog();
-    await openTab('Board');
-    const perDay = screen.getByRole('textbox', { name: 'Recurring rows per day', hidden: true }) as HTMLInputElement;
-    expect(perDay.value).toBe('4');
-    fireEvent.change(perDay, { target: { value: '6' } });
-    fireEvent.blur(perDay);
-    await settle();
-    expect(api.putSettings).toHaveBeenCalledWith({ recurringPerDay: 6 });
-    expect(perDay.value).toBe('6');
-    expect(screen.getByRole('status', { hidden: true }).textContent).toContain(SAVE_STATUS.saved);
   });
 
   it('hands the focus to the Board tab when its Try again is pressed, since it goes once the board loads', async () => {

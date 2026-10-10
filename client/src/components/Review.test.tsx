@@ -6,6 +6,7 @@ import * as api from '../api';
 import { LOAD_FAILED } from '../lib/copy';
 import type { ReviewPeriod } from '../lib/review';
 import {
+  ADMIN,
   answered,
   completedSession,
   deferredAnswer,
@@ -21,6 +22,7 @@ import {
   serveRange,
   SettingsAndDays,
   settle,
+  TICKETS,
 } from '../test/hooks';
 import type { Board } from '../types';
 import { Review } from './Review';
@@ -103,7 +105,6 @@ async function review(period: ReviewPeriod, onOpen = vi.fn()) {
 
 beforeEach(() => {
   vi.useFakeTimers({ now: NOW });
-  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
   vi.mocked(api.getRange).mockResolvedValue(answered({ days: [] }));
 });
 
@@ -337,8 +338,6 @@ describe('Review', () => {
 });
 
 describe('Review: By category', () => {
-  const TICKETS = makeCategory('cat000000001', 'Tickets');
-  const ADMIN = makeCategory('cat000000002', 'Admin', { color: 'teal' });
   // Removed since: the time logged under it keeps its name.
   const KB = makeCategory('cat000000003', 'Knowledge base', { color: 'gold', archived: true });
   // Not one the board has.

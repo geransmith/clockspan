@@ -8,22 +8,23 @@ import { warnSaveFailed } from '../lib/alerts';
 import { BREAK, SAVE_FAILED } from '../lib/copy';
 import type { CategoryPick } from '../lib/board';
 import {
+  ADMIN,
   answered,
   AppProviders,
   deferred,
   deferredAnswer,
+  echoPriorities,
   endSession,
   makeBreak,
-  makeCategory,
   makeDay,
   makePick,
   makePriority,
   makeSession,
-  makeSettings,
   pressKey,
   settle,
   ShortcutKeys,
   T0,
+  TICKETS,
   TODAY,
 } from '../test/hooks';
 import type { Break, Priority, SessionResponse } from '../types';
@@ -85,9 +86,7 @@ const press = (el: HTMLElement) => {
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
   elsewhere = deferred<string | null>();
-  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
-  vi.mocked(api.getRunning).mockResolvedValue(answered({ session: null }));
-  vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities })));
+  vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
 });
 
 describe('FocusTimer', () => {
@@ -418,8 +417,6 @@ describe('FocusTimer', () => {
   });
 
   describe("the new row's category", () => {
-    const TICKETS = makeCategory('cat000000001', 'Tickets');
-    const ADMIN = makeCategory('cat000000002', 'Admin', { color: 'teal' });
     const chip = () => screen.queryByRole('button', { name: /^Category for the new priority:/ });
 
     it('offers a chip while the typed name matches no open row, and adds the row in the category picked', async () => {

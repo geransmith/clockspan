@@ -5,7 +5,20 @@ import * as api from '../api';
 import { alert, dismissByTag, warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED } from '../lib/copy';
 import { MINUTE_MS } from '../../../shared/dates.js';
-import { answered, deferred, deferredAnswer, makeDay, makeSettings, punchesAt, setVisibility, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
+import {
+  answered,
+  deferred,
+  deferredAnswer,
+  echoPunches,
+  makeDay,
+  makeSettings,
+  punchesAt,
+  setVisibility,
+  settle,
+  SettingsAndDays,
+  T0,
+  TODAY,
+} from '../test/hooks';
 import type { Day, Settings } from '../types';
 import { useDayStore } from './useDay';
 import { useTodayAlarms } from './useTodayAlarms';
@@ -46,7 +59,6 @@ beforeEach(() => {
 
 describe('useTodayAlarms', () => {
   it("raises a banner for today's failed load only while the page doesn't show today, and takes it down once today loads", async () => {
-    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
     vi.mocked(api.getDay).mockRejectedValue(new Error('offline'));
     const { result, rerender } = renderHook(
       (p: { shown: boolean }) => ({ alarms: useTodayAlarms(TODAY, Date.now(), vi.fn(), p.shown), store: useDayStore() }),
@@ -136,7 +148,7 @@ describe('useTodayAlarms', () => {
   });
 
   it('holds while a punch is being typed, and judges the punches three seconds after', async () => {
-    vi.mocked(api.putPunches).mockImplementation((_date, punches) => Promise.resolve(answered({ punches })));
+    vi.mocked(api.putPunches).mockImplementation(echoPunches);
     const { result } = render(makeSettings(), makeDay());
     await judged();
     act(() => result.current.alarms.setEditingPunches(true));
@@ -151,7 +163,7 @@ describe('useTodayAlarms', () => {
   });
 
   it('lets a hold go five minutes after the last change, though focus stays and a refresh brings the same times in a new list', async () => {
-    vi.mocked(api.putPunches).mockImplementation((_date, punches) => Promise.resolve(answered({ punches })));
+    vi.mocked(api.putPunches).mockImplementation(echoPunches);
     const { result } = render(makeSettings(), makeDay());
     await judged();
     act(() => result.current.alarms.setEditingPunches(true));

@@ -23,7 +23,6 @@ async function renderTab(settings = makeSettings()) {
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
   vi.mocked(api.getPruneInfo).mockImplementation((before) =>
     Promise.resolve(answered({ before, matching: 2, total: 4, oldest: '2026-09-01', serverMaxDays: null })),
   );

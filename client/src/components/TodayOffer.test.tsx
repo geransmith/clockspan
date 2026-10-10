@@ -3,13 +3,10 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { LEFT_OPEN, TODAY_OFFER } from '../lib/copy';
 import type { PrioritySeed } from '../lib/recurring';
-import { makeRecurring } from '../test/fixtures';
+import { FOLLOW_UPS, QUEUE, STANDUP } from '../test/fixtures';
 import type { Recurring } from '../types';
 import { TodayOffer } from './TodayOffer';
 
-const QUEUE = makeRecurring('rcur00000001', 'Monitor the queue');
-const FOLLOW_UPS = makeRecurring('rcur00000002', 'Follow-ups');
-const STANDUP = makeRecurring('rcur00000003', 'Standup notes');
 const INVOICES: PrioritySeed = { uid: 'invoices0001', text: 'Invoices', categoryUid: null, note: '', listed: 0, earlier: 0, logged: 0 };
 const EMAIL: PrioritySeed = { uid: 'email0000001', text: 'Email', categoryUid: null, note: '', listed: 0, earlier: 0, logged: 0 };
 const card = (uid: string, text: string): PrioritySeed => ({ ...EMAIL, uid, text });

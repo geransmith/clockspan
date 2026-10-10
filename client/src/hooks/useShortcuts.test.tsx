@@ -40,7 +40,6 @@ const keysOf = (name: string) => screen.getByRole('button', { name }).getAttribu
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
 });
 
 describe('useShortcut', () => {

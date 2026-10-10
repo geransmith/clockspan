@@ -2,7 +2,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
-import { answered, deferredAnswer, makeDay, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
+import { answered, deferredAnswer, makeDay, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
 import type { Day } from '../types';
 import { useDay, useDays, useDayStore } from './useDay';
 import { useRange } from './useRange';
@@ -14,7 +14,6 @@ const render = (from: string, to: string) =>
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
 });
 
 it('loads the days of a range', async () => {

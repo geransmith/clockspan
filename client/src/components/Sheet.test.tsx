@@ -11,23 +11,26 @@ import { SPLIT_QUERY } from '../lib/layout';
 import { applySettingsPatch } from '../lib/settings';
 import { USER_KEYS } from '../lib/storage';
 import {
+  ADMIN,
   answered,
   AppProviders,
   completedSession,
   deferredAnswer,
+  echoPriorities,
   makeBoard,
   makeCard,
-  makeCategory,
   makeDay,
   makePriority,
   makeRecurring,
   makeSettings,
   punchesAt,
+  QUEUE,
   serveRange,
   setVisibility,
   settle,
   stubMatchMedia,
   T0,
+  TICKETS,
   TODAY,
   YESTERDAY,
 } from '../test/hooks';
@@ -108,7 +111,6 @@ beforeEach(() => {
     stored = applySettingsPatch(stored, patch);
     return Promise.resolve(answered(stored));
   });
-  vi.mocked(api.getRunning).mockResolvedValue(answered({ session: null }));
   vi.mocked(api.getDay).mockResolvedValue(answered(makeDay()));
   // The week line reads a range that holds today, and a range lands on each held day it is as new
   // as: a case whose today has rows answers that day at revision 1, above the ranges (0), which
@@ -172,33 +174,29 @@ describe('Sheet', () => {
   it("scrolls to the card a banner's button jumps to, opens it and puts the focus in its note box", async () => {
     const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView');
     const onJumped = vi.fn();
-    try {
-      // Today, not clocked in: the retrospective is folded until the jump opens it.
-      const { rerender } = render(
-        <AppProviders>
-          <SheetAt onJumped={onJumped} />
-        </AppProviders>,
-      );
-      await settle();
-      expect(document.querySelector('#card-retro .retro-folded')).not.toBeNull();
-      expect(document.querySelector('#card-retro textarea')).toBeNull();
-      rerender(
-        <AppProviders>
-          <SheetAt jumpTo="retro" onJumped={onJumped} />
-        </AppProviders>,
-      );
-      expect(scrolled.mock.contexts).toEqual([document.getElementById('card-retro')]);
-      expect(document.activeElement).toBe(document.querySelector('#card-retro textarea'));
-      expect(onJumped).toHaveBeenCalled();
-      rerender(
-        <AppProviders>
-          <SheetAt onJumped={onJumped} />
-        </AppProviders>,
-      );
-      expect(document.querySelector('#card-retro textarea')).not.toBeNull();
-    } finally {
-      scrolled.mockRestore();
-    }
+    // Today, not clocked in: the retrospective is folded until the jump opens it.
+    const { rerender } = render(
+      <AppProviders>
+        <SheetAt onJumped={onJumped} />
+      </AppProviders>,
+    );
+    await settle();
+    expect(document.querySelector('#card-retro .retro-folded')).not.toBeNull();
+    expect(document.querySelector('#card-retro textarea')).toBeNull();
+    rerender(
+      <AppProviders>
+        <SheetAt jumpTo="retro" onJumped={onJumped} />
+      </AppProviders>,
+    );
+    expect(scrolled.mock.contexts).toEqual([document.getElementById('card-retro')]);
+    expect(document.activeElement).toBe(document.querySelector('#card-retro textarea'));
+    expect(onJumped).toHaveBeenCalled();
+    rerender(
+      <AppProviders>
+        <SheetAt onJumped={onJumped} />
+      </AppProviders>,
+    );
+    expect(document.querySelector('#card-retro textarea')).not.toBeNull();
   });
 
   // Keyed by date, the row would mount again for a day still loading: Previous day would drop the
@@ -488,7 +486,7 @@ describe('Sheet: what the last day left open', () => {
 
   it("offers the top of Next less the last plan's tasks once they are read, ticked to fill Rows per day, held by Start fresh, and added with each task kept in Next", async () => {
     localStorage.clear();
-    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities })));
+    vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
     // Ticked on yesterday's sheet since the board was read, which still has it open in Next.
     const ticked = makePriority(2, 'Ticked yesterday', { uid: 'next00000001', done: true });
     const yesterday = makeDay(YESTERDAY, { priorities: [makePriority(1, 'Left open', { uid: 'next00000002' }), ticked] });
@@ -539,7 +537,6 @@ describe('Sheet: what the last day left open', () => {
 
 describe('Sheet: the recurring priorities due today', () => {
   // TODAY is a Monday.
-  const QUEUE = makeRecurring('rcur00000001', 'Monitor the queue');
   const SATURDAY = makeRecurring('rcur00000002', 'Water the plants', { weekdays: [6] });
   const offered = () => [...document.querySelectorAll('.today-offer li')].map((li) => li.textContent);
   const reload = async () => {
@@ -550,7 +547,7 @@ describe('Sheet: the recurring priorities due today', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.mocked(api.getBoard).mockResolvedValue(answered({ ...makeBoard(), recurring: [SATURDAY, QUEUE] }));
-    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities })));
+    vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
   });
 
   it('offers the ones due on its weekday, and none answered on this device today', async () => {
@@ -654,7 +651,7 @@ describe('Sheet: × on a task on other days', () => {
   it('deletes it everywhere through the board store', async () => {
     const email = makePriority(1, 'Email', { listed: 3 });
     vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: [email] }), 1));
-    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities: priorities.filter((p) => p.uid != null) })));
+    vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
     vi.mocked(api.deleteItem).mockResolvedValue(answered(makeBoard()));
     await renderSheet();
     fireEvent.click(button('Remove priority 1'));
@@ -671,7 +668,7 @@ describe("Sheet: a row's note", () => {
     const noteOf = (rows: { uid: string | null; note: string }[]) => rows.find((p) => p.uid === report.uid)?.note;
     const box = () => screen.getByRole('textbox', { name: 'Note for priority 1' }) as HTMLTextAreaElement;
     vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: [report] }), 1));
-    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities: priorities.filter((p) => p.uid != null) })));
+    vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
     await renderSheet();
     fireEvent.click(button('Note for priority 1'));
     fireEvent.change(box(), { target: { value: 'Kim has them.' } });
@@ -718,7 +715,7 @@ describe("Sheet: a row's note", () => {
   it('raises no banner when × takes the task before the box saved and the task goes with it', async () => {
     const report = makePriority(1, 'Report');
     vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: [report] }), 1));
-    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities: priorities.filter((p) => p.uid != null) })));
+    vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
     // The list's save without the row deleted the task, which nothing else names.
     vi.mocked(api.editItem).mockRejectedValue(new ApiError(404, 'Not found'));
     await renderSheet();
@@ -734,8 +731,6 @@ describe("Sheet: a row's note", () => {
 });
 
 describe("Sheet: a category's chip", () => {
-  const TICKETS = makeCategory('cat000000001', 'Tickets');
-  const ADMIN = makeCategory('cat000000002', 'Admin', { color: 'teal' });
   const day = makeDay(TODAY, {
     priorities: [makePriority(1, 'Report', { categoryUid: TICKETS.uid })],
     sessions: [completedSession(1, T0 - HOUR_MS, 25 * 60, { label: 'Inbox', categoryUid: ADMIN.uid })],
@@ -745,7 +740,7 @@ describe("Sheet: a category's chip", () => {
   beforeEach(() => {
     vi.mocked(api.getDay).mockResolvedValue(answered(day, 1));
     vi.mocked(api.getBoard).mockResolvedValue(answered({ ...makeBoard(), categories: [TICKETS, ADMIN] }));
-    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities })));
+    vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
   });
 
   it("gives a priority row, the timer's new row and the log the board's categories", async () => {

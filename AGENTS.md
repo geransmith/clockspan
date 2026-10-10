@@ -183,16 +183,18 @@ client/                 Vite root → dist/client
                         stream open while the tab is shown and raises CHANGED_ELSEWHERE (its detail the
                         revision heard), as api.ts does for a write refused 404 or 409, on which every
                         useRefreshLoop runs and the day store raises its held days' floors.
-                        src/test/fixtures.ts has the plain factories and TEST_SETTINGS (no React), and a
-                        mocked data call's answer (answered(value, revision = 0), and deferredAnswer<T>()
-                        for one a case resolves by hand);
+                        src/test/fixtures.ts has the plain factories and TEST_SETTINGS (no React), the
+                        categories and recurring priorities the tests share (TICKETS, ADMIN, OLD_WORK;
+                        QUEUE, FOLLOW_UPS, STANDUP), and a mocked data call's answer (answered(value,
+                        revision = 0), deferredAnswer<T>() for one a case resolves by hand, and
+                        echoPriorities and echoPunches, a list PUT's answer as the server stores it);
                         src/test/hooks.tsx re-exports fixtures.ts and AppProviders and has
                         SettingsAndDays, serveRange (a mocked getRange that answers from a list of
-                        days), refused(status, revision) (a mocked write refused 404 or 409 the way
-                        request() refuses it, CHANGED_ELSEWHERE first), ShortcutKeys and pressKey (the
-                        key listener, and a key pressed where the focus is) and the act() helpers;
-                        before each test of a file that mocks api, it answers getBoard with an
-                        empty board
+                        days), refused(status) (a mocked write refused 404 or 409 the way request()
+                        refuses it, CHANGED_ELSEWHERE first), ShortcutKeys and pressKey (the key
+                        listener, and a key pressed where the focus is) and the act() helpers; before
+                        each test of a file that mocks api, it answers getSettings with
+                        makeSettings(), getRunning with no session and getBoard with an empty board
   src/components/       the cards, History (Calendar + Review), Banners, FinishChoice, RemoveTask (×'s Off
                         This Day / Delete Everywhere), TodayOffer (Top Priorities' morning notice),
                         Shortcuts (the key listener, and ? for the list of keys), DateNav (the
@@ -1847,10 +1849,12 @@ The browser pass for each surface (the logic under it is already tested):
   `changes.end()` first. A proxy's idle cut is kept off by the ping (`PING_MS`, under nginx's 60 s
   and Cloudflare's 100 s) and its buffering by `X-Accel-Buffering: no`. A dev-server restart ends
   the stream, and the browser or `nextBackoff` opens it again.
-- `BoardProvider` reads the board at once and on `useRefreshLoop` in every provider stack, so
-  `test/hooks.tsx` answers an automocked `getBoard` with an empty board before each test; a file
-  or test that needs another board mocks it itself, which runs after. The hook is registered once
-  per file because Vitest isolates each file (`isolate`, on by default).
+- Every provider stack reads the settings and the board at once and on `useRefreshLoop`
+  (`AppProviders` the running session too), so `test/hooks.tsx` answers an automocked
+  `getSettings` with `makeSettings()`, `getRunning` with no session and `getBoard` with an empty
+  board before each test; a file or test that needs another answer mocks it itself, which runs
+  after. The hook is registered once per file because Vitest isolates each file (`isolate`, on by
+  default).
 - A keydown inside a native modal `<dialog>` still bubbles to `window`, so the shortcut guard
   checks for `dialog[open]` itself. Its drag check reads the `aria-pressed` dnd-kit sets on what it
   drags by (a board card's button, a sheet card's grip; beside `aria-roledescription`) while it

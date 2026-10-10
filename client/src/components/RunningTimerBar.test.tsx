@@ -7,7 +7,7 @@ import { formatCountdown } from '../lib/format';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { useDay } from '../hooks/useDay';
 import { useTimer } from '../hooks/useTimer';
-import { answered, AppProviders, endSession, makeDay, makePriority, makeSession, makeSettings, setVisibility, settle, T0, TODAY } from '../test/hooks';
+import { answered, AppProviders, endSession, makeDay, makePriority, makeSession, setVisibility, settle, T0, TODAY } from '../test/hooks';
 import type { Session } from '../types';
 import { RunningTimerBar } from './RunningTimerBar';
 
@@ -45,7 +45,6 @@ const input = () => screen.getByRole('textbox', { name: 'Session label' }) as HT
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 + 5 * MINUTE_MS });
-  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
   vi.mocked(api.getDay).mockResolvedValue(answered(makeDay()));
 });
 

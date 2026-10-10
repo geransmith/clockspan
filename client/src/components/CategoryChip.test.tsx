@@ -3,12 +3,10 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { useModalDialog } from '../hooks/useModalDialog';
-import { makeCategory, makePick, NEW_CATEGORY } from '../test/fixtures';
+import { ADMIN, makeCategory, makePick, NEW_CATEGORY, TICKETS } from '../test/fixtures';
 import type { Category } from '../types';
 import { CategoryChip } from './CategoryChip';
 
-const TICKETS = makeCategory('cat000000001', 'Tickets');
-const ADMIN = makeCategory('cat000000002', 'Admin', { color: 'teal' });
 const KB = makeCategory('cat000000003', 'Knowledge base', { color: 'green' });
 const CATS = [TICKETS, ADMIN, KB];
 const LABEL = 'Category for new cards';

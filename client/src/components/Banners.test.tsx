@@ -1,11 +1,10 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import * as api from '../api';
 import { alert, dismissBanner, getBanners, type BannerAction } from '../lib/alerts';
 import { BANNERS_MORE } from '../lib/copy';
 import { SettingsProvider } from '../hooks/useSettings';
-import { answered, makeSettings, settle, T0 } from '../test/hooks';
+import { settle, T0 } from '../test/hooks';
 import { Banners } from './Banners';
 
 vi.mock('../api');
@@ -25,7 +24,6 @@ const banner = (title: string) => within(screen.getByText(title).closest<HTMLEle
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
 });
 afterEach(() => {
   cleanup();

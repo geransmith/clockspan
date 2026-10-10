@@ -9,19 +9,20 @@ import { useTimer } from '../hooks/useTimer';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import type { CategoryPick } from '../lib/board';
 import {
+  ADMIN,
   answered,
   AppProviders,
   breakAt,
   completedSession,
   deferredAnswer,
   endSession,
+  TICKETS,
   type EndPatch,
   makeCategory,
   makeDay,
   makePick,
   makePriority,
   makeSession,
-  makeSettings,
   settle,
   T0,
   TODAY,
@@ -88,8 +89,6 @@ const elsewhere = () => screen.getByRole('button', { name: 'Elsewhere' });
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 + 30 * MINUTE_MS });
-  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
-  vi.mocked(api.getRunning).mockResolvedValue(answered({ session: null }));
   vi.mocked(api.getDay).mockResolvedValue(answered(makeDay()));
   vi.mocked(api.patchSession).mockImplementation((id, patch) => Promise.resolve(answered({ session: { ...DONE, id, ...patch } })));
   vi.mocked(api.deleteSession).mockResolvedValue(answered({ ok: true }));
@@ -327,8 +326,6 @@ describe('SessionLog', () => {
   });
 
   describe("a session's category", () => {
-    const TICKETS = makeCategory('cat000000001', 'Tickets');
-    const ADMIN = makeCategory('cat000000002', 'Admin', { color: 'teal' });
     const PICK = makePick([TICKETS, ADMIN]);
     // The fix's row has a category.
     const ROWS = [makePriority(1, 'Ship the fix', { uid: 'abcdef123456', categoryUid: TICKETS.uid })];

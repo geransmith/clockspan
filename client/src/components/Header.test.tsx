@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { AuthGate } from '../auth/AuthGate';
 import { VIEWS, type Route } from '../hooks/useRoute';
 import { SettingsProvider } from '../hooks/useSettings';
 import { CONFIRM } from '../lib/copy';
-import { answered, DEFAULT_USER, makeAuth, makeSettings, pressKey, settle, ShortcutKeys } from '../test/hooks';
+import { DEFAULT_USER, makeAuth, pressKey, settle, ShortcutKeys } from '../test/hooks';
 import { Header } from './Header';
 
 vi.mock('../api');
@@ -28,9 +28,7 @@ async function renderHeader(view: Route['view'] = 'sheet', { auth = makeAuth({ m
 
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
 });
-afterEach(cleanup);
 
 describe('Header', () => {
   // The null route follows the date over midnight. The clock's date key is yesterday's until its next

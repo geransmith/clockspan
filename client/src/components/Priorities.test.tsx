@@ -14,11 +14,12 @@ import type { PrioritySeed } from '../lib/recurring';
 import { emptyRow } from '../lib/priorities';
 import type { CategoryPick } from '../lib/board';
 import {
+  ADMIN,
   answered,
   completedSession,
   deferred,
+  FOLLOW_UPS,
   makeBoard,
-  makeCategory,
   makeDay,
   makePick,
   makePriority,
@@ -31,7 +32,9 @@ import {
   settle,
   SettingsAndDays,
   ShortcutKeys,
+  STANDUP,
   T0,
+  TICKETS,
   TODAY,
 } from '../test/hooks';
 import type { Priority, Recurring, Session } from '../types';
@@ -116,7 +119,6 @@ const tick = (n: number) => screen.getByLabelText(`Priority ${n} done`) as HTMLI
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
 });
 
 describe('Priorities', () => {
@@ -301,8 +303,6 @@ describe('Priorities', () => {
 });
 
 describe("Priorities: a row's category", () => {
-  const TICKETS = makeCategory('cat000000001', 'Tickets');
-  const ADMIN = makeCategory('cat000000002', 'Admin', { color: 'teal' });
   const chip = (n: number) => screen.queryByRole('button', { name: new RegExp(`^Category for priority ${n}:`) });
   const option = (name: string) => screen.getByRole('option', { name });
   /** The card with the chip's data, over Tickets and Admin unless given. */
@@ -440,8 +440,6 @@ describe("Priorities: a row's category", () => {
 const seed = (text: string, patch: Partial<PrioritySeed> = {}): PrioritySeed => makePriority(1, text, { uid: `left:${text}`, listed: 0, ...patch });
 
 const QUEUE = makeRecurring('rcur00000001', 'Monitor the queue', { categoryUid: 'cafe00000001' });
-const FOLLOW_UPS = makeRecurring('rcur00000002', 'Follow-ups');
-const STANDUP = makeRecurring('rcur00000003', 'Standup notes');
 /** A row of today's list that is `item`. */
 const routineRow = (position: number, item: Recurring, patch: Partial<Priority> = {}) =>
   makePriority(position, item.title, { uid: item.uid, recurring: true, categoryUid: item.categoryUid, ...patch });
