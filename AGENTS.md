@@ -68,7 +68,9 @@ shared/                 imported by both sides, always with a `.js` suffix
   text.ts               sameText: the key a task typed again by hand is matched by (Plan tomorrow's typed
                         rows, Review's Not done), and category names are compared by; categoryName,
                         taskTitle and taskNote: a category's name, and a task's name and note, as the
-                        server stores them
+                        server stores them; cutText: text cut to a limit with no half character left (a
+                        lone surrogate becomes U+FFFD, as SQLite stores it), which every cut of a name,
+                        label or note goes through
   backoff.ts            nextBackoff: the wait between retries of a request that must answer
 server/                 Express API → dist/server
   app.ts                createApp(): headers, /api/health, /api/auth/me for every mode, auth routers,

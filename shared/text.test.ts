@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LIMITS } from './api.js';
-import { categoryName, hasNote, sameText, taskNote, taskTitle } from './text.js';
+import { categoryName, cutText, hasNote, sameText, taskNote, taskTitle } from './text.js';
 
 describe('sameText', () => {
   it('keys text by its words, whatever the case or spacing', () => {
@@ -13,23 +13,33 @@ describe('sameText', () => {
   });
 });
 
+describe('cutText', () => {
+  it('cuts at the limit, keeping a whole emoji and replacing half of one the cut split', () => {
+    expect(cutText('abcdef', 3)).toBe('abc');
+    expect(cutText('x😀', 2)).toBe('x�');
+    expect(cutText('😀 x', 9)).toBe('😀 x');
+  });
+});
+
 describe('categoryName', () => {
   it('trims and collapses inner spaces, keeping the case', () => {
     expect(categoryName('  Follow   ups\t')).toBe('Follow ups');
     expect(categoryName(' \t ')).toBe('');
   });
 
-  it('cuts a long name to the limit, with no space left at the cut', () => {
+  it('cuts a long name to the limit, with no space or half a character left at the cut', () => {
     expect(categoryName('x'.repeat(LIMITS.categoryName + 5))).toBe('x'.repeat(LIMITS.categoryName));
     expect(categoryName(`${'x'.repeat(LIMITS.categoryName - 1)} y`)).toBe('x'.repeat(LIMITS.categoryName - 1));
+    expect(categoryName(`${'x'.repeat(LIMITS.categoryName - 1)}😀`)).toBe(`${'x'.repeat(LIMITS.categoryName - 1)}�`);
   });
 });
 
 describe('taskTitle', () => {
-  it('trims, keeps inner spaces, and cuts a long name with no space left at the cut', () => {
+  it('trims, keeps inner spaces, and cuts a long name with no space or half a character left at the cut', () => {
     expect(taskTitle('  Call  the bank ')).toBe('Call  the bank');
     expect(taskTitle(' \t ')).toBe('');
     expect(taskTitle(`  ${'x'.repeat(LIMITS.priorityText - 1)} y`)).toBe('x'.repeat(LIMITS.priorityText - 1));
+    expect(taskTitle(`${'x'.repeat(LIMITS.priorityText - 1)}😀`)).toBe(`${'x'.repeat(LIMITS.priorityText - 1)}�`);
   });
 });
 

@@ -27,7 +27,7 @@ import {
 import { startBreak } from './breaks.js';
 import { startSession } from './sessions.js';
 import { mergePriorities } from '../../shared/priorities.js';
-import { taskNote, taskTitle } from '../../shared/text.js';
+import { cutText, taskNote, taskTitle } from '../../shared/text.js';
 import { kindForPosition, MAX_PUNCHES, mergePunches } from '../../shared/punches.js';
 import { MAX_PRIORITIES, SETTING_LIMITS } from '../../shared/settings.js';
 import {
@@ -480,7 +480,7 @@ export function daysRouter(db: DB, config: Config): Router {
     // An empty patch changes nothing, so it stores no day either; it answers what is there.
     if (note !== undefined || done !== undefined) {
       const dayId = ensureDay(db, user.id, date);
-      if (note !== undefined) db.prepare(`UPDATE days SET retro_note = ? WHERE id = ?`).run(note.slice(0, LIMITS.retroNote), dayId);
+      if (note !== undefined) db.prepare(`UPDATE days SET retro_note = ? WHERE id = ?`).run(cutText(note, LIMITS.retroNote), dayId);
       if (done === true) db.prepare(`UPDATE days SET retro_at = COALESCE(retro_at, ?) WHERE id = ?`).run(Date.now(), dayId);
       if (done === false) db.prepare(`UPDATE days SET retro_at = NULL WHERE id = ?`).run(dayId);
     }

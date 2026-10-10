@@ -6,6 +6,7 @@ import { cookieHeader, createSession, destroySession, readCookie } from './sessi
 import { logName } from './users.js';
 import type { LogoutResponse } from '../../shared/api.js';
 import { nextBackoff } from '../../shared/backoff.js';
+import { cutText } from '../../shared/text.js';
 
 const FLOW_COOKIE = 'fs_oidc';
 const FLOW_TTL_SEC = 600;
@@ -113,7 +114,7 @@ export class Discovery {
 export function upsertOidcUser(db: DB, issuer: string, sub: string, rawName: string): UserRow {
   // Stored in users.oidc_sub: changing its form orphans every OIDC account without a migration.
   const key = `${issuer}|${sub}`;
-  const displayName = rawName.slice(0, MAX_DISPLAY_NAME);
+  const displayName = cutText(rawName, MAX_DISPLAY_NAME);
   return db
     .prepare(
       `INSERT INTO users (kind, oidc_sub, display_name, created_at) VALUES ('oidc', ?, ?, ?)

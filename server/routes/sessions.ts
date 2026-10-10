@@ -18,6 +18,7 @@ import {
 } from './shared.js';
 import { LIMITS, type OkResponse, type RunningResponse, type SessionConflict, type SessionResponse } from '../../shared/api.js';
 import { pausedSecondsAfter, PLANNED_SECONDS, plannedEndAt } from '../../shared/timer.js';
+import { cutText } from '../../shared/text.js';
 
 /** What an automatic finish judged the session by (`POST /sessions/:id/finish`'s `expect`). */
 function isJudged(raw: unknown): raw is { plannedSeconds: number; pausedAt: number | null } {
@@ -50,7 +51,7 @@ function parsePriorityUid(db: DB, dayId: number | undefined, raw: unknown): { it
 function parseLabel(raw: unknown): { label: string | undefined } | { error: string } {
   if (raw === undefined) return { label: undefined };
   if (typeof raw !== 'string') return { error: 'label must be a string.' };
-  return { label: raw.slice(0, LIMITS.sessionLabel) };
+  return { label: cutText(raw, LIMITS.sessionLabel) };
 }
 
 /** `POST /days/:date/sessions`, registered on the days router, whose date check has already run. */
@@ -134,7 +135,7 @@ export function sessionsRouter(db: DB): Router {
     // A session that leaves its task takes no category with it, nor one it held before it had it.
     const own = itemId != null ? null : category.uid !== undefined ? category.uid : left ? null : s.category_uid;
     // The task's current name, so the session keeps reading under the name it showed.
-    const called = name.label ?? (left && itemId == null ? s.item_title!.slice(0, LIMITS.sessionLabel) : s.label);
+    const called = name.label ?? (left && itemId == null ? cutText(s.item_title!, LIMITS.sessionLabel) : s.label);
     db.transaction(() => {
       db.prepare(`UPDATE sessions SET planned_seconds = ?, label = ?, item_id = ?, category_uid = ? WHERE id = ?`).run(planned, called, itemId, own, s.id);
       if (left) collectItems(db, s.user_id, [s.item_id!]);
