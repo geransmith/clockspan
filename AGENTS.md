@@ -1432,11 +1432,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   answers `Answer<Type>`, so its store reads `.value`, and a hook or component test mocks it
   with `answered(…)` or `deferredAnswer<Type>()`; an auth route goes through `auth<Type>`) →
   cover it in that router's `*.test.ts`: happy path, each 400, and that another user gets a
-  404/empty result (the scoping test is not optional). A new `/:date` route also gets a row in the
-  bad-date table near the end of `server/routes/days.test.ts`, and a write route one in the
-  distance table after it. An event stream (`GET /changes`) is read by `EventSource`, not
-  `api.ts`: it has no call there and no `ROUTES` row, and its tests read it with the harness's
-  `stream()`. Only a route whose later messages are revisions may write after its handler returns.
+  404/empty result (the scoping test is not optional). A new `/:date` write route also gets a row
+  in `writes` near the end of `server/routes/days.test.ts`, which the bad-date and distance tests
+  both run; a read gets a line of its own in the bad-date test. An event stream (`GET /changes`)
+  is read by `EventSource`, not `api.ts`: it has no call there and no `ROUTES` row, and its tests
+  read it with the harness's `stream()`. Only a route whose later messages are revisions may write
+  after its handler returns.
 - **A schema change**: append to `MIGRATIONS` in `db.ts` and never edit an entry (see
   "Migrations are append-only"); a function migration's `db.test.ts` cases call
   `migrate(db, upTo)` to stop at the version before it, write the old rows, then run it. A new

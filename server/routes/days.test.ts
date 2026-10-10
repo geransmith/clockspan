@@ -514,8 +514,8 @@ describe('PUT /api/days/:date/priorities: the tasks', () => {
     expect(app.item('aaaaaaaaaaa1')).toMatchObject({ title: 'Report v2', category_uid: 'cat000000003' });
   });
 
-  it('reads a row sent with no categoryUid or note as keeping them, with a base or without', async () => {
-    const kept = { categoryUid: 'cat000000001', note: 'From Kim' };
+  it('reads a row sent with no categoryUid, note or addedAt as keeping them, with a base or without', async () => {
+    const kept = { categoryUid: 'cat000000001', note: 'From Kim', addedAt: T0 };
     await app.saveList(MON, [row('Report', 'aaaaaaaaaaa1', kept)]);
     await app.saveList(TUE, [row('Report', 'aaaaaaaaaaa1')], []);
     // curl, with no base: the task keeps its category and note on every day.
@@ -529,8 +529,9 @@ describe('PUT /api/days/:date/priorities: the tasks', () => {
     const old = ({ note: _, ...p }: Priority) => p;
     await app.saveList(MON, [{ ...old(based.body.priorities[0]), text: 'Report v4' }], based.body.priorities.map(old));
     expect(app.item('aaaaaaaaaaa1')).toMatchObject({ title: 'Report v4', category_uid: 'cat000000001', note: 'From Kim' });
-    // A new task sent without them has none.
-    await app.saveList(WED, [{ text: 'Email', uid: 'aaaaaaaaaaa2' }]);
+    // A new task sent without them has none, and is stamped now.
+    const email = await app.saveList(WED, [{ text: 'Email', uid: 'aaaaaaaaaaa2' }]);
+    expect(email.body.priorities[0].addedAt).toBe(SEED_NOW);
     expect(app.item('aaaaaaaaaaa2')).toMatchObject({ category_uid: null, note: '' });
   });
 
@@ -904,23 +905,25 @@ describe('days are scoped to the signed-in user', () => {
   });
 });
 
+/** Every /:date write, the two checks below both take: each body would pass on a real date, so a write let through would store the day. */
+const writes = (day: string): [method: 'put' | 'post', path: string, body: unknown][] => [
+  ['put', `${day}/punches`, { punches: [] }],
+  ['put', `${day}/priorities`, { priorities: [{ text: 'x' }] }],
+  ['put', `${day}/overtime`, { approved: true }],
+  ['put', `${day}/target`, { workMinutes: 240 }],
+  ['put', `${day}/retro`, { note: 'x' }],
+  ['post', `${day}/sessions`, { plannedSeconds: 1500 }],
+  ['post', `${day}/breaks`, { plannedSeconds: 300 }],
+];
+
 // The days router's param handler refuses a bad key on every /:date route; the table pins each one.
 describe('the date check on every /:date route', () => {
   it('refuses an impossible date and stores no day for it', async () => {
-    // Each write's body would pass on a real date, so a write without the guard would store the day.
     const day = '/api/days/2026-02-30';
-    const routes: [method: 'get' | 'put' | 'post', path: string, body?: unknown][] = [
-      ['get', day],
-      ['put', `${day}/punches`, { punches: [] }],
-      ['put', `${day}/priorities`, { priorities: [{ text: 'x' }] }],
-      ['put', `${day}/overtime`, { approved: true }],
-      ['put', `${day}/target`, { workMinutes: 240 }],
-      ['put', `${day}/retro`, { note: 'x' }],
-      ['post', `${day}/sessions`, { plannedSeconds: 1500 }],
-      ['post', `${day}/breaks`, { plannedSeconds: 300 }],
-    ];
-    for (const [method, path, body] of routes) {
-      const r = method === 'get' ? await app.api.get(path) : await app.api[method](path, body);
+    const get = await app.api.get(day);
+    expect([get.status, get.body]).toEqual([400, { error: 'Invalid date.' }]);
+    for (const [method, path, body] of writes(day)) {
+      const r = await app.api[method](path, body);
       expect([path, r.status, r.body]).toEqual([path, 400, { error: 'Invalid date.' }]);
     }
     expect(app.count('days', 'date = ?', '2026-02-30')).toBe(0);
@@ -934,16 +937,7 @@ describe('the distance check on every /:date write', () => {
     try {
       const far = '2027-10-22';
       const day = `/api/days/${far}`;
-      const writes: [method: 'put' | 'post', path: string, body: unknown][] = [
-        ['put', `${day}/punches`, { punches: [] }],
-        ['put', `${day}/priorities`, { priorities: [{ text: 'x' }] }],
-        ['put', `${day}/overtime`, { approved: true }],
-        ['put', `${day}/target`, { workMinutes: 240 }],
-        ['put', `${day}/retro`, { note: 'x' }],
-        ['post', `${day}/sessions`, { plannedSeconds: 1500 }],
-        ['post', `${day}/breaks`, { plannedSeconds: 300 }],
-      ];
-      for (const [method, path, body] of writes) {
+      for (const [method, path, body] of writes(day)) {
         const r = await app.api[method](path, body);
         expect([path, r.status, r.body]).toEqual([path, 400, { error: 'That date is too far ahead.' }]);
       }
