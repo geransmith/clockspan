@@ -288,7 +288,7 @@ describe('an update while the page is open', () => {
     try {
       answerFrom(__APP_VERSION__);
       await api.getSettings();
-      answer(200, { mode: 'none' });
+      answer(200);
       await api.getAuth();
       expect(raised).not.toHaveBeenCalled();
     } finally {
@@ -389,6 +389,22 @@ describe('a restored backup', () => {
     await api.putSettings({ sound: false });
     day.resolve(new Response('{}', { headers: { [REVISION_HEADER]: '145' } }));
     await read;
+    expect(restored()).toEqual([]);
+  });
+
+  it('says nothing when an answer names the revision heard before its request left: nothing changed meanwhile', async () => {
+    answerAt(160);
+    await api.getSettings();
+    answerAt(160);
+    await api.getDay(TODAY);
+    expect(restored()).toEqual([]);
+  });
+
+  it('says nothing when an answer names no revision, as an auth route answers', async () => {
+    answerAt(170);
+    await api.getSettings();
+    answer(200);
+    await api.getAuth();
     expect(restored()).toEqual([]);
   });
 

@@ -191,9 +191,9 @@ describe('host names under AUTH_MODE=none', () => {
   });
 
   // fetch drops a Host header it is handed, so these go through node:http, which sends it as given.
-  const as = (host: string, path = '/api/settings', method = 'GET') =>
+  const as = (host: string, path = '/api/settings', method = 'GET', headers: http.OutgoingHttpHeaders = {}) =>
     new Promise<{ status: number; body: unknown }>((resolve, reject) => {
-      const req = http.request(`${app.url}${path}`, { method, headers: { host, 'content-type': 'application/json' } }, (res) => {
+      const req = http.request(`${app.url}${path}`, { method, headers: { host, 'content-type': 'application/json', ...headers } }, (res) => {
         let text = '';
         res
           .setEncoding('utf8')
@@ -233,6 +233,13 @@ describe('host names under AUTH_MODE=none', () => {
     for (const host of ['example.com', 'www.focus.example.com', 'focus.example.com.evil.example', 'example.net', 'tower.flan']) {
       expect([host, (await as(host)).status]).toEqual([host, 403]);
     }
+  });
+
+  it('reads the Host header the browser sent, never a forwarded one, though the proxy is trusted', async () => {
+    app = await startTestApp({ env: { TRUST_PROXY: '1' } });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // req.hostname would read X-Forwarded-Host here, and a rebinding page's fetch can set it.
+    expect((await as('rebind.example', '/api/settings', 'GET', { 'x-forwarded-host': 'tower' })).status).toBe(403);
   });
 
   it('refuses a Host header no browser would send, without logging it', async () => {
