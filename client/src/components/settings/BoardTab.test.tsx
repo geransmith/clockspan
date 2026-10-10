@@ -240,7 +240,7 @@ describe('BoardTab', () => {
     vi.mocked(api.getBoard).mockRejectedValueOnce(new Error('offline')).mockRejectedValueOnce(new Error('offline'));
     await renderTab();
     expect(screen.getByText(new RegExp(LOAD_FAILED.board))).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
     await settle();
     expect(names()).toEqual(['Tickets', 'Admin']);
   });

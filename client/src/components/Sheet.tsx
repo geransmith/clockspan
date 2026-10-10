@@ -182,7 +182,7 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
             offer={
               isToday
                 ? {
-                    leftovers: leftOpen && leftovers?.length ? { from: dayName(leftOpen.date, today, true), rows: leftovers } : null,
+                    leftovers: leftOpen && leftovers?.length ? { from: dayName(leftOpen.date, today), rows: leftovers } : null,
                     upNext: planned && confirmedCards ? topOfNext(confirmedCards, planned, settings.priorityCount) : [],
                     recurring: confirmedRecurring ? dueRecurring(confirmedRecurring, today, day.priorities, answered) : [],
                     answer: (shownRecurring, oneOffsShown) => {

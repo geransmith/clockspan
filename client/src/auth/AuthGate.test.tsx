@@ -23,7 +23,7 @@ function App() {
   return (
     <>
       <p>Sheet for {auth.user.name}</p>
-      <button onClick={() => void signOut().then(signedOut)}>Sign out</button>
+      <button onClick={() => void signOut().then(signedOut)}>Sign Out</button>
     </>
   );
 }
@@ -50,7 +50,7 @@ async function lostSession(): Promise<void> {
 }
 
 async function signOut(): Promise<void> {
-  fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Sign Out' }));
   await settle();
 }
 
@@ -100,14 +100,14 @@ describe('AuthGate', () => {
     expect(screen.getByPlaceholderText('XXXX-XXXX-XXXX')).toBeTruthy();
     cleanup();
     await renderGate(makeAuth());
-    expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sign In' })).toBeTruthy();
     expect(screen.queryByPlaceholderText('XXXX-XXXX-XXXX')).toBeNull();
     expect(localStorage.getItem(AUTH_USER_KEY)).toBe('');
   });
 
   it('sends OIDC sign-ins to the provider', async () => {
     await renderGate(makeAuth({ mode: 'oidc' }));
-    expect(screen.getByRole('link', { name: 'Sign in' }).getAttribute('href')).toBe('/auth/login');
+    expect(screen.getByRole('link', { name: 'Sign In' }).getAttribute('href')).toBe('/auth/login');
   });
 
   it('asks for a new password before anything else on a temporary one', async () => {
@@ -117,7 +117,7 @@ describe('AuthGate', () => {
   });
 
   const type = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
-  const setPassword = () => fireEvent.submit(screen.getByRole('button', { name: 'Set password' }).closest('form')!);
+  const setPassword = () => fireEvent.submit(screen.getByRole('button', { name: 'Set Password' }).closest('form')!);
 
   it('checks the new password was typed the same twice before sending it', async () => {
     await renderGate(makeAuth({ user: TEMPORARY }));
@@ -151,7 +151,7 @@ describe('AuthGate', () => {
     setPassword();
     await settle();
     expect(screen.getByText(/Request failed \(502\)/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Set password' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Set Password' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await settle();
@@ -187,7 +187,7 @@ describe('AuthGate', () => {
       expect(reload).toHaveBeenCalledTimes(1);
       // The page load takes the sheet away; the gate never swaps the sign-in page in over it.
       expect(screen.getByText('Sheet for sam')).toBeTruthy();
-      expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Sign In' })).toBeNull();
 
       await lostSession();
       expect(api.getAuth).toHaveBeenCalledTimes(2);
@@ -308,7 +308,7 @@ describe('AuthGate', () => {
 
       vi.mocked(api.getAuth).mockResolvedValue(makeAuth());
       await signOut();
-      expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Sign In' })).toBeTruthy();
       expect(reload).not.toHaveBeenCalled();
     });
   });

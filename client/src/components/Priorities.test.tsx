@@ -449,7 +449,7 @@ const routineRow = (position: number, item: Recurring, patch: Partial<Priority> 
 describe('Priorities: the morning offer', () => {
   const offerOf = (patch: Partial<MorningOffer> = {}): MorningOffer => ({ leftovers: null, upNext: [], recurring: [], answer: vi.fn(), ...patch });
   /** The leftovers group as the sheet hands it down, from yesterday. */
-  const left = (rows: PrioritySeed[]) => ({ from: 'yesterday', rows });
+  const left = (rows: PrioritySeed[]) => ({ from: 'Yesterday', rows });
   const withOffer = (rows: Priority[], offer: MorningOffer) => renderCard(rows, [], null, offer);
   const box = (name: string) => screen.getByRole('checkbox', { name }) as HTMLInputElement;
   const ticks = (...names: string[]) => names.map((n) => box(n).checked);
@@ -462,7 +462,7 @@ describe('Priorities: the morning offer', () => {
     const offer = offerOf({ leftovers: left([seed('Invoices'), seed('Email')]), recurring: [QUEUE, FOLLOW_UPS, STANDUP] });
     await withOffer([], offer);
     const notice = document.querySelector('.today-offer')!;
-    expect([...notice.querySelectorAll('strong')].map((h) => h.textContent)).toEqual([LEFT_OPEN.title('yesterday'), TODAY_OFFER.recurring]);
+    expect([...notice.querySelectorAll('strong')].map((h) => h.textContent)).toEqual([LEFT_OPEN.title('Yesterday'), TODAY_OFFER.recurring]);
     expect(ticks('Invoices', 'Email', 'Monitor the queue', 'Follow-ups', 'Standup notes')).toEqual([true, true, true, true, false]);
     expect(over()).toBe('');
     expect(screen.getByRole('button', { name: TODAY_OFFER.notToday })).toBeTruthy();
@@ -552,7 +552,7 @@ describe('Priorities: the morning offer', () => {
     const upNext = [seed('Follow up'), seed('Draft the rota'), seed('Write a KB')];
     const { saved } = await withOffer([], offerOf({ leftovers: left([seed('Invoices')]), upNext, recurring: [QUEUE], answer }));
     const notice = document.querySelector('.today-offer')!;
-    expect([...notice.querySelectorAll('strong')].map((h) => h.textContent)).toEqual([LEFT_OPEN.title('yesterday'), TODAY_OFFER.upNext, TODAY_OFFER.recurring]);
+    expect([...notice.querySelectorAll('strong')].map((h) => h.textContent)).toEqual([LEFT_OPEN.title('Yesterday'), TODAY_OFFER.upNext, TODAY_OFFER.recurring]);
     expect(ticks('Invoices', 'Follow up', 'Draft the rota', 'Write a KB', 'Monitor the queue')).toEqual([true, true, true, false, true]);
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
     expect(saved().map((p) => [p.position, p.uid])).toEqual([
@@ -592,7 +592,7 @@ describe('Priorities: the morning offer', () => {
     const answer = vi.fn();
     const seeds = [seed('Invoices', { listed: 1, logged: 600 }), seed('Call the bank', { categoryUid: 'cafe00000001' })];
     const { saved } = await withOffer([], offerOf({ leftovers: left(seeds), answer }));
-    expect(screen.getByRole('group', { name: LEFT_OPEN.title('yesterday') })).toBeTruthy();
+    expect(screen.getByRole('group', { name: LEFT_OPEN.title('Yesterday') })).toBeTruthy();
     expect(ticks('Invoices', 'Call the bank')).toEqual([true, true]);
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
     expect(saved().map((p) => [p.text, p.uid, p.categoryUid])).toEqual([
@@ -658,7 +658,7 @@ describe('Priorities: the morning offer', () => {
     const answer = vi.fn();
     await withOffer([], offerOf({ leftovers: left([seed('Invoices')]), upNext: [seed('Follow up')], recurring: [QUEUE], answer }));
     fireEvent.change(textbox(1), { target: { value: 'C' } });
-    expect(screen.queryByText(LEFT_OPEN.title('yesterday'))).toBeNull();
+    expect(screen.queryByText(LEFT_OPEN.title('Yesterday'))).toBeNull();
     expect(screen.queryByText(TODAY_OFFER.upNext)).toBeNull();
     expect(shown()).toEqual(['Monitor the queue']);
     fireEvent.click(screen.getByRole('button', { name: TODAY_OFFER.notToday }));
@@ -668,7 +668,7 @@ describe('Priorities: the morning offer', () => {
   it('keeps the leftovers while the list holds only routines, and drops a routine a row with text holds, answering only those shown', async () => {
     const answer = vi.fn();
     await withOffer([routineRow(1, QUEUE)], offerOf({ leftovers: left([seed('Invoices')]), recurring: [QUEUE, FOLLOW_UPS], answer }));
-    expect(screen.getByText(LEFT_OPEN.title('yesterday'))).toBeTruthy();
+    expect(screen.getByText(LEFT_OPEN.title('Yesterday'))).toBeTruthy();
     expect(shown()).toEqual(['Invoices', 'Follow-ups']);
     // The queue's row could still be removed today, and the notice offer it again.
     fireEvent.click(screen.getByRole('button', { name: TODAY_OFFER.notToday }));

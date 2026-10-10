@@ -51,7 +51,7 @@ export function NewPasswordPage({ user, onDone, onSignOut }: Props) {
         <NewPasswordFields value={next} confirm={confirm} onValue={setNext} onConfirm={setConfirm} />
         <ErrorLine error={error} />
         <button className="btn btn-primary btn-lg" type="submit" disabled={busy}>
-          {busy ? 'Saving…' : 'Set password'}
+          {busy ? 'Saving…' : 'Set Password'}
         </button>
         <button
           className="btn btn-ghost"
@@ -62,7 +62,7 @@ export function NewPasswordPage({ user, onDone, onSignOut }: Props) {
             })
           }
         >
-          Sign out
+          Sign Out
         </button>
       </form>
     </div>

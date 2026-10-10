@@ -7,7 +7,7 @@ import { useTimeFormat } from '../hooks/useTimeFormat';
 import { useSubmit } from '../hooks/useSubmit';
 import { useTimer } from '../hooks/useTimer';
 import type { CategoryPick } from '../lib/board';
-import { BREAK, SAVE_FAILED, TIMER_DUE } from '../lib/copy';
+import { BREAK, SAVE_FAILED } from '../lib/copy';
 import { formatCountdown, formatDuration } from '../lib/format';
 import { hasRoom, isTaskRow } from '../lib/priorities';
 import { LIMITS } from '../../../shared/api.js';
@@ -174,7 +174,8 @@ function Running({
   const r = 54;
   const circ = 2 * Math.PI * r;
   // Past the end the countdown goes negative; the sub-line says why.
-  const subline = due ? TIMER_DUE.title : paused ? 'Paused' : `of ${formatDuration(session.plannedSeconds)}`;
+  // A status line under the ring, in sentence case beside the banner's title.
+  const subline = due ? "Time's up" : paused ? 'Paused' : `of ${formatDuration(session.plannedSeconds)}`;
 
   return (
     <PassFocusOnLeave className={`timer--running${paused ? ' is-paused' : ''}${due ? ' is-due' : ''}`} onLeave={onLeave}>

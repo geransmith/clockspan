@@ -346,10 +346,10 @@ describe('Sheet: what the last day left open', () => {
     const board = deferredAnswer<Board>();
     vi.mocked(api.getBoard).mockReturnValue(board.promise);
     await renderSheet();
-    expect(screen.queryByText(LEFT_OPEN.title('yesterday'))).toBeNull();
+    expect(screen.queryByText(LEFT_OPEN.title('Yesterday'))).toBeNull();
     board.resolve(makeBoard(makeCard('next00000001', 'In Next', { lane: 'next' }), makeCard('later0000001', 'Parked since')));
     await settle();
-    const offer = screen.getByText(LEFT_OPEN.title('yesterday')).closest('.today-offer')!;
+    const offer = screen.getByText(LEFT_OPEN.title('Yesterday')).closest('.today-offer')!;
     expect([...offer.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['In Next', 'On no lane']);
     expect(screen.getByRole('button', { name: LEFT_OPEN.dismiss })).toBeTruthy();
   });
@@ -358,7 +358,7 @@ describe('Sheet: what the last day left open', () => {
     serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Parked', { uid: 'later0000001' })] })]);
     vi.mocked(api.getBoard).mockResolvedValue(answered(makeBoard(makeCard('later0000001', 'Parked'))));
     await renderSheet();
-    expect(screen.queryByText(LEFT_OPEN.title('yesterday'))).toBeNull();
+    expect(screen.queryByText(LEFT_OPEN.title('Yesterday'))).toBeNull();
     expect(document.querySelector('.left-open')).toBeNull();
   });
 
@@ -367,9 +367,9 @@ describe('Sheet: what the last day left open', () => {
     serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Invoices')] })]);
     vi.mocked(api.getBoard).mockRejectedValueOnce(new Error('offline'));
     await renderSheet();
-    expect(screen.queryByText(LEFT_OPEN.title('yesterday'))).toBeNull();
+    expect(screen.queryByText(LEFT_OPEN.title('Yesterday'))).toBeNull();
     await settle(MINUTE_MS);
-    expect(screen.getByText(LEFT_OPEN.title('yesterday'))).toBeTruthy();
+    expect(screen.getByText(LEFT_OPEN.title('Yesterday'))).toBeTruthy();
   });
 
   it("offers the top of Next less the last plan's tasks once they are read, ticked to fill Rows per day, held by Start fresh, and added with each task kept in Next", async () => {
@@ -399,7 +399,7 @@ describe('Sheet: what the last day left open', () => {
     expect(screen.queryByText(TODAY_OFFER.upNext)).toBeNull();
     lookback.resolve({ days: [yesterday] });
     await settle();
-    expect(screen.getByRole('group', { name: LEFT_OPEN.title('yesterday') }).textContent).toContain('Left open');
+    expect(screen.getByRole('group', { name: LEFT_OPEN.title('Yesterday') }).textContent).toContain('Left open');
     const upNext = within(screen.getByRole('group', { name: TODAY_OFFER.upNext })).getAllByRole('checkbox') as HTMLInputElement[];
     expect(upNext.map((b) => [b.closest('li')!.textContent, b.checked])).toEqual([
       ['Follow up on the Acme SLA', true],
@@ -495,7 +495,7 @@ describe('Sheet: the recurring priorities due today', () => {
     fireEvent.click(button('Remove priority 1'));
     await settle();
     expect(offered()).toEqual(['Invoices']);
-    expect(screen.getByText(LEFT_OPEN.title('yesterday'))).toBeTruthy();
+    expect(screen.getByText(LEFT_OPEN.title('Yesterday'))).toBeTruthy();
   });
 
   it("offers nothing on another day's sheet, though today's routines are due", async () => {

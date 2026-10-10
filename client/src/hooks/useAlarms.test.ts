@@ -100,8 +100,8 @@ describe('clock-out and retro', () => {
     renderAlarms({ tc: overDay, day: { ...NO_DAY, approveOvertime, openRetro } });
     expect(tags()).toEqual(['alarm:clockOut', 'alarm:retro']);
     const [clockOut, retro] = vi.mocked(alert).mock.calls.map(([a]) => a);
-    expect(clockOut!.action).toEqual({ label: 'Overtime approved', run: approveOvertime });
-    expect(retro!.action).toEqual({ label: 'Open retrospective', run: openRetro });
+    expect(clockOut!.action).toEqual({ label: 'Overtime Approved', run: approveOvertime });
+    expect(retro!.action).toEqual({ label: 'Open Retrospective', run: openRetro });
   });
 
   it('approving overtime while the clock-out banner is up clears that banner and no other', () => {

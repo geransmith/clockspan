@@ -67,7 +67,7 @@ export interface TimerCtx extends Pick<TimerView, 'countdownSeconds' | 'elapsedS
    * the tap.
    */
   requestDone: (at: DOMRect) => void;
-  /** The running session while "How much to log?" is open for it; null otherwise. */
+  /** The running session while "How Much to Log?" is open for it; null otherwise. */
   finishChoice: Session | null;
   dismissFinishChoice: () => void;
   cancel: () => Promise<void>;
@@ -116,7 +116,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // answered, so the server ends where the screen does: two +5s in flight could land swapped.
   const { tracked, current, change, nextId, queue } = useTracked<Tracked<Session | null>>(untracked);
   const running = useMemo(() => shown(tracked) ?? null, [tracked]);
-  // The planned end "How much to log?" was asked for (its `dueKey`). The question holds only
+  // The planned end "How Much to Log?" was asked for (its `dueKey`). The question holds only
   // while the running session is due at that end: once the session ends, however it ends, or
   // its end moves (time added, a pause), it closes and never opens over the next one.
   const [finishChoiceFor, setFinishChoiceFor] = useState<string | null>(null);
