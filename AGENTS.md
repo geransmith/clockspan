@@ -1305,8 +1305,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   in its place or the one that undoes the press, else the next control of its kind (the one
   before it at the end). It falls to the page only where none is left (the last banner, the last
   day log row). Where that control shows only once the server answers, a flag set in the tap is
-  taken by the control as it mounts (`FocusTimer`'s `takeFocus`). A punch time field never takes
-  it, since that would hold today's alarms.
+  taken by the control as it mounts (`FocusTimer`'s `takeFocus`); where the pressed control goes
+  later than the answer (End break's row, once the one-second clock reaches the end it stamped),
+  the flag is set as its block leaves with the focus inside (`PassFocusOnLeave`). A punch time
+  field never takes it, since that would hold today's alarms.
 - Comments explain *why* (browser quirks, math), not what.
 - No new dependency (a server one or a client library the bundle carries) without stating the
   reason in the PR body, which becomes the squash commit's message on `main`.

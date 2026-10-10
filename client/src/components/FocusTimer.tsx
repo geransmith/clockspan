@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useBreak } from '../hooks/useBreak';
 import { useDayStore } from '../hooks/useDay';
 import { useSettings } from '../hooks/useSettings';
@@ -51,11 +51,13 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
   // R is the Break button, so a break it starts holds the start buttons as a tap does.
   const startBreak = () => run(() => breakTimer.start(breakTimer.next.minutes));
   const breakKey = useShortcut('rest', !timer.running && isToday && breakTimer.endsAt == null && !held ? startBreak : null);
-  // A press whose control the answer takes away (a start, Break, End break, the running card's
-  // end) hands the focus to the control that mounts in its place: a stable ref callback runs only
-  // on mount, where an inline one would run on every render and take the focus back. It acts only
-  // while the focus is on the page's body, so a focus moved meanwhile stays put, and a hand-off
-  // nothing took (a start that failed) is dropped once nothing is out.
+  // A control the answer takes away hands the focus to the control that mounts in its place: a
+  // start or Break sets the flag in its tap, and the running card and the break's row as they
+  // leave with the focus inside (`PassFocusOnLeave`), since an End break's row goes only once the
+  // one-second clock reaches the end it stamped. A stable ref callback runs only on mount, where
+  // an inline one would run on every render and take the focus back. It acts only while the focus
+  // is on the page's body, so a focus moved meanwhile stays put, and a hand-off nothing took (a
+  // start that failed) is dropped once nothing is out.
   const handOff = useRef(false);
   const passFocus = useCallback(() => {
     handOff.current = true;
@@ -160,24 +162,16 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
         </div>
       )}
       {breakTimer.endsAt != null && (
-        <div className="timer-break">
+        <PassFocusOnLeave className="timer-break" onLeave={passFocus}>
           <span className="timer-break-text">
             <span>{BREAK.running(formatTime(breakTimer.endsAt))}</span>
             {/* A timer, like the focus ring's: a live region would read it out every second. */}
             <strong role="timer">{formatCountdown(breakTimer.remainingSeconds)}</strong>
           </span>
-          <button
-            className="btn btn-ghost"
-            onClick={() => {
-              passFocus();
-              breakTimer.end();
-            }}
-            disabled={held}
-            ref={takeFocus}
-          >
+          <button className="btn btn-ghost" onClick={breakTimer.end} disabled={held} ref={takeFocus}>
             {BREAK.end}
           </button>
-        </div>
+        </PassFocusOnLeave>
       )}
       <TimerLengths onStart={start} disabled={!isToday || held} />
       {isToday && breakTimer.endsAt == null && (
@@ -211,21 +205,13 @@ function Running({
   onLeave: () => void;
 }) {
   const { name, countdownSeconds, progress, paused, due } = useTimer();
-  const root = useRef<HTMLDivElement>(null);
-  // A layout cleanup runs while the card is still in the page, so it can tell where the focus was.
-  useLayoutEffect(() => {
-    const el = root.current!;
-    return () => {
-      if (el.contains(document.activeElement)) onLeave();
-    };
-  }, [onLeave]);
   const r = 54;
   const circ = 2 * Math.PI * r;
   // Past the end the countdown goes negative; the sub-line says why.
   const subline = due ? TIMER_DUE.title : paused ? 'Paused' : `of ${formatDuration(session.plannedSeconds)}`;
 
   return (
-    <div ref={root} className={`timer--running${paused ? ' is-paused' : ''}${due ? ' is-due' : ''}`}>
+    <PassFocusOnLeave className={`timer--running${paused ? ' is-paused' : ''}${due ? ' is-due' : ''}`} onLeave={onLeave}>
       <div className="ring-wrap">
         <svg className="ring" viewBox="0 0 120 120" aria-hidden="true">
           <circle className="ring-track" cx="60" cy="60" r={r} />
@@ -242,6 +228,23 @@ function Running({
         <SessionLabel label={name} />
       </div>
       <TimerControls takeFocus={takeFocus} />
+    </PassFocusOnLeave>
+  );
+}
+
+/** A block that calls `onLeave` as it leaves the page with the focus inside it. */
+function PassFocusOnLeave({ className, onLeave, children }: { className: string; onLeave: () => void; children: ReactNode }) {
+  const root = useRef<HTMLDivElement>(null);
+  // A layout cleanup runs while the block is still in the page, so it can tell where the focus was.
+  useLayoutEffect(() => {
+    const el = root.current!;
+    return () => {
+      if (el.contains(document.activeElement)) onLeave();
+    };
+  }, [onLeave]);
+  return (
+    <div ref={root} className={className}>
+      {children}
     </div>
   );
 }

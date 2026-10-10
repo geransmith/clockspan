@@ -485,5 +485,18 @@ describe('FocusTimer', () => {
       await settle();
       expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Break · / }));
     });
+
+    // The end stamps `Date.now()`, which the card's one-second clock reaches only at its next tick.
+    it('goes to Break when a break ended by hand leaves only at the next tick', async () => {
+      const running = makeBreak({ startedAt: T0 - 3 * MINUTE_MS, endedAt: T0 + 2 * MINUTE_MS });
+      vi.mocked(api.endBreak).mockResolvedValue({ break: { ...running, endedAt: T0 + 400 } });
+      await renderCard([], [running]);
+      vi.setSystemTime(T0 + 400);
+      press(screen.getByRole('button', { name: BREAK.end }));
+      await settle();
+      expect(screen.getByRole('button', { name: BREAK.end })).toBeTruthy();
+      await settle(1000);
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Break · / }));
+    });
   });
 });
