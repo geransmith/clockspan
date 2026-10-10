@@ -80,8 +80,6 @@ function Shell() {
   // A board link opened with the board off (switched off here or on another device) shows the sheet.
   const view = route.view === 'board' && loaded && !settings.board ? 'sheet' : route.view;
   const loading = <div className="loading" aria-busy="true" />;
-  // With the board's class, so the page takes the board's width while its chunk and data load.
-  const boardLoading = <div className="board loading" aria-busy="true" />;
 
   const page = () => {
     switch (view) {
@@ -96,11 +94,11 @@ function Shell() {
       case 'board':
         // Until the settings answer, whether the board is on isn't known.
         return loaded ? (
-          <Suspense fallback={boardLoading}>
+          <Suspense fallback={loading}>
             <Board today={today} now={minute} running={running} start={start} starting={starting} />
           </Suspense>
         ) : (
-          boardLoading
+          loading
         );
     }
   };

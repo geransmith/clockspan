@@ -44,8 +44,9 @@ export function Header({ view, date, today, board, customize, onNavigate, onTogg
   const long = formatDateLong(date);
   // Customize, Board, History, Settings and the user: five buttons and the brand's name don't fit
   // a 375 px phone, so the name goes there (styles.css) and the logo stays; the buttons' words
-  // come back from 760 px rather than 640.
-  const crowded = onSheet && board && auth.mode !== 'none';
+  // come back from 760 px rather than 640. Every view takes the same rule, so a page switch leaves
+  // the header as it was.
+  const crowded = board && auth.mode !== 'none';
   const toToday = () => onNavigate({ view: 'sheet', date: null });
   const toggleBoard = () => onNavigate({ view: onBoard ? 'sheet' : 'board' });
   const toggleHistory = () => onNavigate({ view: onHistory ? 'sheet' : 'history' });

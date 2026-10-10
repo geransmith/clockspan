@@ -145,21 +145,23 @@ describe('Header', () => {
     expect(onToggleCustomize).toHaveBeenCalledTimes(1);
   });
 
-  // Customize, Board, History, Settings and Sign out leave no room on a phone for the brand's name.
-  it('marks the row crowded only with five buttons: the sheet, the board on and someone signed in; the brand keeps its name', async () => {
+  // Customize, Board, History, Settings and Sign out leave no room on a phone for the brand's name;
+  // every view keeps the same header, so a page switch moves nothing.
+  it('marks the row crowded on every view with the board on and someone signed in; the brand keeps its name', async () => {
     const signedIn = makeAuth({ user: DEFAULT_USER });
     const crowded = () => document.querySelector('.topbar-row--crowded') !== null;
-    await renderHeader(TODAY, 'sheet', { board: true, auth: signedIn });
-    expect(crowded()).toBe(true);
-    expect(screen.getByRole('button', { name: 'Clockspan' })).toBeTruthy();
-    cleanup();
-    for (const [view, board, auth] of [
-      ['board', true, signedIn],
-      ['sheet', false, signedIn],
-      ['sheet', true, makeAuth({ mode: 'none', user: DEFAULT_USER })],
+    for (const view of VIEWS) {
+      await renderHeader(TODAY, view, { board: true, auth: signedIn });
+      expect(crowded(), view).toBe(true);
+      expect(screen.getByRole('button', { name: 'Clockspan' })).toBeTruthy();
+      cleanup();
+    }
+    for (const [board, auth] of [
+      [false, signedIn],
+      [true, makeAuth({ mode: 'none', user: DEFAULT_USER })],
     ] as const) {
-      await renderHeader(TODAY, view, { board, auth });
-      expect(crowded(), `${view} ${String(board)} ${auth.mode}`).toBe(false);
+      await renderHeader(TODAY, 'sheet', { board, auth });
+      expect(crowded(), `${String(board)} ${auth.mode}`).toBe(false);
       cleanup();
     }
   });

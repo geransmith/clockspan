@@ -121,12 +121,10 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
     onJumped();
   }, [jumpTo, ready, onJumped]);
 
-  // The split class goes on while a day loads too, so the page keeps its width when ◀ or ▶ opens
-  // a day the store doesn't hold yet.
   const sheetClass = columns ? 'sheet sheet--split' : 'sheet';
   if (!day || !tc)
     return (
-      <div className={sheetClass}>
+      <div className="sheet">
         {failed ? <LoadFailed title={LOAD_FAILED.title} onRetry={() => void store.load(date)} /> : <div className="loading" aria-busy="true" />}
       </div>
     );

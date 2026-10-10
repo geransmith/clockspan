@@ -1170,8 +1170,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   the page named in the lazy-chunk rule under "Architecture rules" and in the comment above
   `App.tsx`'s `lazy` consts → a toggle in `Header.tsx` that goes to the view, and back to the
   sheet from it, pressed only there (`aria-pressed={view === '<id>'}`), its name fixed; then
-  revisit Header's `crowded` (the 375 px header holds five buttons) and check the header at
-  375. A view behind a setting,
+  revisit Header's `crowded` (the 375 px header holds five buttons; every view takes the same
+  rule) and check the header at 375. The page sits in the one frame (Conventions, CSS) and sets
+  no `--page-w`; one that reads better narrower caps its own width, as History does. A view
+  behind a setting,
   as the board is, also needs: the `view` const in `Shell` showing the sheet while the setting
   is off (a link opened then, or the setting switched off on another device), its `case`
   showing the loading block until the settings have loaded, and its Header toggle rendered only
@@ -1355,7 +1357,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `theme-css.test.ts` checks them all), built **phone-base** (the base rules are the phone;
   `@media (min-width: 640px)` and wider queries enhance; that is how the stylesheet is built, not
   who it is for). The sheet's two columns start at `SPLIT_QUERY` (`lib/layout.ts`), which
-  `styles.css` writes out as its `@media` line (`theme-css.test.ts` checks it is there). Every width
+  `styles.css` writes out as its `@media` line (`theme-css.test.ts` checks it is there). Every view
+  sits in one frame, `.app` at `--page-w` (1240 px), which the running bar's contents read too, so
+  a page switch leaves the header where it was: History and the one-column sheet cap themselves
+  at 828 px inside it, and the split sheet and the board take all of it. `html`'s
+  `scrollbar-gutter: stable` keeps a classic scrollbar's room on a page too short to scroll and
+  under a dialog's scroll lock (`theme-css.test.ts` checks the width is set once). Every width
   rule is a window query, so a card in a column gets the wide-window rules at about half the width:
   a rule that needs the room (the timeclock's four tiles in a row) is undone under `.sheet--split`.
   Tap targets are 44 px on a touch screen: `.btn` and `.input` set `min-height: 44px`, and a compact
@@ -1479,7 +1486,7 @@ The browser pass for each surface (the logic under it is already tested):
   columns when it mounts.
 - **The sheet's columns** (the layout, `Sheet.tsx`, `CardFrame`): at 1280, Customize moves a
   card to the other column and back, ↑/↓ and the grip stay inside a column, and with a timer
-  running (`--running`) the bar's contents line up with the wider page; at 1000 and at the
+  running (`--running`) the bar's contents line up with the header; at 1000 and at the
   375 px preset, one column in the layout's order and no column buttons.
 - **`security.ts`, `index.html` or how assets load**: the `prod` config, with the console free
   of CSP violations; `curl -sI localhost:8090/api/health` shows the headers.
@@ -1563,7 +1570,7 @@ The browser pass for each surface (the logic under it is already tested):
   buttons wrap under their label (four on a left-open task). At 375: the switch shows one column,
   the notice wraps, and with sign-in on (`web-local`, `npm run seed -- --auth local --sessions`,
   the printed cookie set and the board turned on in Settings → Sheet) the sheet's five header
-  buttons fit with the brand's name gone.
+  buttons fit with the brand's name gone, and the board's header is the same.
   Light and dark. The drag pass: at 1440, drag with the mouse between each pair of columns (Later
   and Next take the card where it is dropped), a done row onto Later (the notice), then by keyboard
   (Tab to a grip, Space, arrows, Space) with a screen reader, which hears where the card is and the
