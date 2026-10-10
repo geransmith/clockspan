@@ -1,7 +1,7 @@
 /**
  * The wait before asking again after a failure, for requests that are retried until they
- * answer (the settings fetch, the timer's auto-finish, OIDC discovery): two seconds, doubling
- * up to a minute, so a server that is down is not asked every second.
+ * answer (the settings fetch, the timer's auto-finish, the live stream, OIDC discovery): two
+ * seconds, doubling up to a minute, so a server that is down is not asked every second.
  */
 const FIRST_MS = 2_000;
 const MAX_MS = 60_000;

@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net';
 import { parseSetCookie, stringifyCookie } from 'cookie';
 import { createApp } from '../app.js';
 import type { Discovery } from '../auth/oidc.js';
+import { changeFeed, type ChangeFeed } from '../changes.js';
 import { loadConfig, type Config } from '../config.js';
 import { ensureDefaultUser, openDatabase, type DB, type UserRow } from '../db.js';
 import { ensureLocalUsers, LOCAL_USERS, seedDatabase, type SeedManifest, type SeedOptions } from './seed.js';
@@ -38,14 +39,27 @@ export interface Client {
   put<T = any>(path: string, body?: unknown): Promise<ApiResponse<T>>;
   patch<T = any>(path: string, body?: unknown): Promise<ApiResponse<T>>;
   del<T = any>(path: string): Promise<ApiResponse<T>>;
+  /** A GET read as a server-sent event stream, as the web app's EventSource reads it. */
+  stream(path: string): Promise<Stream>;
   /** Cookies this client is currently sending (name → value). */
   cookies(): Record<string, string>;
+}
+
+export interface Stream {
+  status: number;
+  headers: Headers;
+  /** The next event: its text up to the blank line that ends it. Rejects with 'stream ended' once the server ends the answer. */
+  next(): Promise<string>;
+  /** Leaves, as a closed tab does. */
+  close(): void;
 }
 
 export interface TestApp {
   db: DB;
   config: Config;
   url: string;
+  /** The users' live streams, as the entrypoint shares them with `startBackgroundJobs`. */
+  changes: ChangeFeed;
   /** Default client. In AUTH_MODE=none every request is the default user. */
   api: Client;
   /** A client with its own cookie jar, e.g. a second user. */
@@ -147,6 +161,29 @@ function makeClient(baseUrl: string): Client {
     put: (p, b) => request('PUT', p, b),
     patch: (p, b) => request('PATCH', p, b),
     del: (p) => request('DELETE', p),
+    stream: async (p) => {
+      const leave = new AbortController();
+      const headers = jar.size ? { cookie: stringifyCookie(Object.fromEntries(jar)) } : undefined;
+      const res = await fetch(baseUrl + p, { headers, signal: leave.signal });
+      const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
+      let text = '';
+      return {
+        status: res.status,
+        headers: res.headers,
+        next: async () => {
+          while (!text.includes('\n\n')) {
+            const { done, value } = await reader.read();
+            if (done) throw new Error('stream ended');
+            text += value;
+          }
+          const end = text.indexOf('\n\n');
+          const event = text.slice(0, end);
+          text = text.slice(end + 2);
+          return event;
+        },
+        close: () => leave.abort(),
+      };
+    },
     cookies: () => Object.fromEntries(jar),
   };
 }
@@ -168,11 +205,13 @@ export async function startTestApp(opts: StartOptions = {}): Promise<TestApp> {
     const extra = typeof opts.seed === 'object' ? opts.seed : {};
     seeded = seedDatabase(db, { userId: user.id, today: SEED_TODAY, now: SEED_NOW, ...extra });
   }
+  const changes = changeFeed();
   // No client dir means the static block stays off, so /api tests never see index.html.
   const app = createApp(db, config, {
     clientDir: opts.clientDir ?? path.join(os.tmpdir(), 'clockspan-no-client'),
     setupCode: SETUP_CODE,
     discovery: opts.discovery,
+    changes,
   });
   const server = app.listen(0, '127.0.0.1');
   // Rejects on 'error': Express 5 hands a failed listen to the callback instead of throwing.
@@ -185,6 +224,7 @@ export async function startTestApp(opts: StartOptions = {}): Promise<TestApp> {
     db,
     config,
     url,
+    changes,
     api,
     client: () => makeClient(url),
     seeded,
@@ -209,6 +249,9 @@ export async function startTestApp(opts: StartOptions = {}): Promise<TestApp> {
           if (err) reject(err);
           else resolve();
         });
+        // close() waits for every busy connection: an open stream never ends by itself, and after a
+        // stream it aborted, fetch opens a spare that counts as busy until fetch drops it, 3 s on.
+        server.closeAllConnections();
       }),
   };
 }

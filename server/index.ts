@@ -2,6 +2,7 @@ import { loadConfig } from './config.js';
 import { openDatabase } from './db.js';
 import { createApp, startBackgroundJobs } from './app.js';
 import { Discovery } from './auth/oidc.js';
+import { changeFeed } from './changes.js';
 
 let config;
 try {
@@ -25,8 +26,9 @@ if (config.trustProxy === true) {
 const db = openDatabase(config.dbPath);
 // One lookup for the sign-in routes and the warm-up, so the first sign-in finds it done.
 const discovery = config.oidc ? new Discovery(config.oidc.issuer, config.oidc.clientId, config.oidc.clientSecret) : undefined;
-const app = createApp(db, config, { discovery });
-startBackgroundJobs(db, config, discovery);
+const changes = changeFeed();
+const app = createApp(db, config, { discovery, changes });
+startBackgroundJobs(db, config, discovery, changes);
 
 // Express 5 hands a failed listen (the port taken, or below 1024 without root) to this callback
 // instead of throwing.
@@ -52,6 +54,8 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
       console.error(`[server] still open after ${SHUTDOWN_DEADLINE_MS / 1000}s; exiting`);
       process.exit(1);
     }, SHUTDOWN_DEADLINE_MS).unref();
+    // An open live stream never ends by itself, and close() would wait for it until the deadline.
+    changes.end();
     server.close(() => {
       db.close();
       process.exit(0);

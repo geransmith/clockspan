@@ -4,6 +4,7 @@ import * as api from './api';
 import { REQUEST_TIMEOUT_MS, UNAUTHENTICATED_EVENT } from './api';
 import { ApiError } from './lib/apiError';
 import { alert, dismissByTag, getBanners, subscribeBanners } from './lib/alerts';
+import { changedElsewhere } from './lib/ownWrites';
 import { REQUEST_FAILED, REQUEST_TIMEOUT, RESTORED, UPDATED } from './lib/copy';
 import { emptyRow } from './lib/priorities';
 import { deferred, makePriority, TODAY } from './test/fixtures';
@@ -327,6 +328,20 @@ describe('an update while the page is open', () => {
     await api.getRunning();
     updated()[0]!.action!.run();
     expect(reload).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('own writes', () => {
+  it("notes a write's revision as this page's own, a refusal's included, and never a read's", async () => {
+    answer(200, {}, true, { [REVISION_HEADER]: '20' });
+    await api.putSettings({ sound: false });
+    expect(changedElsewhere(19, 20)).toBe(false);
+    answer(409, { error: 'Refused.' }, true, { [REVISION_HEADER]: '21' });
+    await expect(api.finishSession(3)).rejects.toMatchObject({ status: 409 });
+    expect(changedElsewhere(20, 21)).toBe(false);
+    answer(200, {}, true, { [REVISION_HEADER]: '22' });
+    await api.getSettings();
+    expect(changedElsewhere(21, 22)).toBe(true);
   });
 });
 

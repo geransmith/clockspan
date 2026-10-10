@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HOUR_MS, MINUTE_MS } from '../shared/dates.js';
 import { createApp, startBackgroundJobs } from './app.js';
+import { changeFeed, PING_MS } from './changes.js';
 import { loadConfig } from './config.js';
 import { ensureDefaultUser, openDatabase } from './db.js';
 import { countRows, SEED_TODAY, startTestApp, tempClientBuild, writeClientBuild, type ApiResponse, type TestApp } from './dev/harness.js';
@@ -506,6 +507,23 @@ describe('startBackgroundJobs', () => {
     expect(warm).not.toHaveBeenCalled();
     startBackgroundJobs(db, config, discovery);
     expect(warm).toHaveBeenCalledOnce();
+    db.close();
+  });
+
+  it('pings the live streams every 25 s once started, and building an app does not', () => {
+    vi.useFakeTimers();
+    const db = openDatabase(':memory:');
+    const config = loadConfig({ AUTH_MODE: 'none' });
+    const changes = changeFeed();
+    const ping = vi.spyOn(changes, 'ping');
+    createApp(db, config, { changes });
+    vi.advanceTimersByTime(PING_MS);
+    expect(ping).not.toHaveBeenCalled();
+    startBackgroundJobs(db, config, undefined, changes);
+    vi.advanceTimersByTime(PING_MS - 1);
+    expect(ping).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(ping).toHaveBeenCalledOnce();
     db.close();
   });
 

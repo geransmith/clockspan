@@ -8,6 +8,7 @@ import { Shortcuts } from './components/Shortcuts';
 import { Sheet } from './components/Sheet';
 import { AppProviders } from './hooks/AppProviders';
 import { useClock } from './hooks/useClock';
+import { useLiveChanges } from './hooks/useLiveChanges';
 import { useRoute } from './hooks/useRoute';
 import { useSettings } from './hooks/useSettings';
 import { useTimer } from './hooks/useTimer';
@@ -43,6 +44,8 @@ function Shell() {
   const { settings, loaded } = useSettings();
   const { running, start, starting } = useTimer();
   const now = useClock();
+  // Here rather than in AppProviders, which the hook and component tests render: happy-dom has no EventSource.
+  useLiveChanges();
   // Only a real answer: the defaults' 'auto' would undo a forced theme main.tsx put up.
   useEffect(() => {
     if (loaded) applyTheme(settings.theme);

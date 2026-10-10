@@ -287,6 +287,18 @@ export function DayProvider({ children }: { children: ReactNode }) {
     [update, refresh],
   );
 
+  // Another tab or device saved at revision n: every held day's floor rises to it, so a read
+  // already out, which the loops' runs share, answers below it and asks again. A read sent after
+  // the change answers n or more, whichever listener runs first.
+  useEffect(() => {
+    const raise = (e: Event) => {
+      const n = (e as CustomEvent<number>).detail;
+      for (const date of Object.keys(current().days)) update(date, (t) => confirm(t, (d) => d, n));
+    };
+    window.addEventListener(api.CHANGED_ELSEWHERE, raise);
+    return () => window.removeEventListener(api.CHANGED_ELSEWHERE, raise);
+  }, [current, update]);
+
   // Reads again each held day `picks`.
   const readAgain = useCallback(
     (picks: (day: Day, date: string) => boolean, revision: number) => {
