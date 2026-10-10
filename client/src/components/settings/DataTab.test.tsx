@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import { CONFIRM, DAYS_DELETED } from '../../lib/copy';
 import { formatDateFull } from '../../lib/format';
-import { deferred, makeBoard, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../../test/hooks';
+import { answered, deferredAnswer, makeBoard, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../../test/hooks';
 import type { Board, PruneResult } from '../../types';
 import { DataTab } from './DataTab';
 
@@ -23,8 +23,10 @@ async function renderTab(settings = makeSettings()) {
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-  vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
-  vi.mocked(api.getPruneInfo).mockImplementation((before) => Promise.resolve({ before, matching: 2, total: 4, oldest: '2026-09-01', serverMaxDays: null }));
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
+  vi.mocked(api.getPruneInfo).mockImplementation((before) =>
+    Promise.resolve(answered({ before, matching: 2, total: 4, oldest: '2026-09-01', serverMaxDays: null })),
+  );
 });
 
 describe('DataTab', () => {
@@ -57,7 +59,7 @@ describe('DataTab', () => {
   });
 
   it('deletes before the picked date after a confirm that names the count, and says how many went', async () => {
-    vi.mocked(api.pruneDays).mockResolvedValue({ deleted: 2 });
+    vi.mocked(api.pruneDays).mockResolvedValue(answered({ deleted: 2 }));
     const confirm = vi.fn(() => true);
     vi.stubGlobal('confirm', confirm);
     const { date, button } = await renderTab();
@@ -77,9 +79,9 @@ describe('DataTab', () => {
   it("shows the new date's count when the date changes during a delete", async () => {
     const later = '2026-01-01';
     vi.mocked(api.getPruneInfo).mockImplementation((before) =>
-      Promise.resolve({ before, matching: before === later ? 5 : 2, total: 9, oldest: '2025-01-01', serverMaxDays: null }),
+      Promise.resolve(answered({ before, matching: before === later ? 5 : 2, total: 9, oldest: '2025-01-01', serverMaxDays: null })),
     );
-    const prune = deferred<PruneResult>();
+    const prune = deferredAnswer<PruneResult>();
     vi.mocked(api.pruneDays).mockReturnValue(prune.promise);
     vi.stubGlobal('confirm', () => true);
     const { date, button } = await renderTab();
@@ -95,11 +97,11 @@ describe('DataTab', () => {
   });
 
   it('reads the board again after a delete, once a read still out has answered', async () => {
-    vi.mocked(api.pruneDays).mockResolvedValue({ deleted: 2 });
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ board: true }));
+    vi.mocked(api.pruneDays).mockResolvedValue(answered({ deleted: 2 }));
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ board: true })));
     // The read the board sent as it came on is still out when the delete lands, and may be older.
-    const first = deferred<Board>();
-    vi.mocked(api.getBoard).mockReturnValueOnce(first.promise).mockResolvedValue(makeBoard());
+    const first = deferredAnswer<Board>();
+    vi.mocked(api.getBoard).mockReturnValueOnce(first.promise).mockResolvedValue(answered(makeBoard()));
     vi.stubGlobal('confirm', () => true);
     const { button } = await renderTab();
     expect(api.getBoard).toHaveBeenCalledTimes(1);
@@ -113,7 +115,7 @@ describe('DataTab', () => {
   });
 
   it('keeps the result when the count after a delete fails, with Delete off', async () => {
-    vi.mocked(api.pruneDays).mockResolvedValue({ deleted: 2 });
+    vi.mocked(api.pruneDays).mockResolvedValue(answered({ deleted: 2 }));
     vi.stubGlobal('confirm', () => true);
     const { button } = await renderTab();
     vi.mocked(api.getPruneInfo).mockRejectedValueOnce(new Error('Request failed (500)'));

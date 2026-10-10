@@ -3,13 +3,13 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
-import { makeSettings, pressKey, settle } from '../test/hooks';
+import { answered, makeSettings, pressKey, settle } from '../test/hooks';
 import { Shortcuts } from './Shortcuts';
 
 vi.mock('../api');
 
 async function renderShortcuts(settings = makeSettings()) {
-  vi.mocked(api.getSettings).mockResolvedValue(settings);
+  vi.mocked(api.getSettings).mockResolvedValue(answered(settings));
   render(
     <SettingsProvider>
       <Shortcuts />

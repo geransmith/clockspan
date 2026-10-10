@@ -9,10 +9,11 @@ import { useTimer } from '../hooks/useTimer';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import type { CategoryPick } from '../lib/board';
 import {
+  answered,
   AppProviders,
   breakAt,
   completedSession,
-  deferred,
+  deferredAnswer,
   endSession,
   type EndPatch,
   makeCategory,
@@ -87,12 +88,12 @@ const elsewhere = () => screen.getByRole('button', { name: 'Elsewhere' });
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 + 30 * MINUTE_MS });
-  vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
-  vi.mocked(api.getRunning).mockResolvedValue({ session: null });
-  vi.mocked(api.getDay).mockResolvedValue(makeDay());
-  vi.mocked(api.patchSession).mockImplementation((id, patch) => Promise.resolve({ session: { ...DONE, id, ...patch } }));
-  vi.mocked(api.deleteSession).mockResolvedValue({ ok: true });
-  vi.mocked(api.deleteBreak).mockResolvedValue({ ok: true });
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
+  vi.mocked(api.getRunning).mockResolvedValue(answered({ session: null }));
+  vi.mocked(api.getDay).mockResolvedValue(answered(makeDay()));
+  vi.mocked(api.patchSession).mockImplementation((id, patch) => Promise.resolve(answered({ session: { ...DONE, id, ...patch } })));
+  vi.mocked(api.deleteSession).mockResolvedValue(answered({ ok: true }));
+  vi.mocked(api.deleteBreak).mockResolvedValue(answered({ ok: true }));
 });
 
 describe('SessionLog', () => {
@@ -183,8 +184,8 @@ describe('SessionLog', () => {
   });
 
   it('edits the running row through the timer, so the bar shows the edit too', async () => {
-    vi.mocked(api.getRunning).mockResolvedValue({ session: RUNNING });
-    const answer = deferred<SessionResponse>();
+    vi.mocked(api.getRunning).mockResolvedValue(answered({ session: RUNNING }));
+    const answer = deferredAnswer<SessionResponse>();
     vi.mocked(api.patchSession).mockReturnValue(answer.promise);
     await renderLog([DONE, RUNNING]);
     expect(bar()).toBe('Still going');
@@ -249,9 +250,11 @@ describe('SessionLog', () => {
     });
 
     it('edits the label again once Unplanned takes the session off its row', async () => {
-      vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: PLANNED, sessions: [onFix] }));
+      vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: PLANNED, sessions: [onFix] })));
       // As the server answers: the task's name becomes the label.
-      vi.mocked(api.patchSession).mockImplementation((_id, patch) => Promise.resolve({ session: { ...onFix, ...patch, title: null, label: 'Ship the fix' } }));
+      vi.mocked(api.patchSession).mockImplementation((_id, patch) =>
+        Promise.resolve(answered({ session: { ...onFix, ...patch, title: null, label: 'Ship the fix' } })),
+      );
       await renderOnStore(null);
       fireEvent.click(named());
       fireEvent.change(planSelect(), { target: { value: '' } });
@@ -273,10 +276,10 @@ describe('SessionLog', () => {
     it('closes a box opened before another device linked or unlinked the session, sending nothing', async () => {
       const unplanned = { ...onFix, priorityUid: null, title: null };
       const reads = (session: Session) => makeDay(TODAY, { priorities: PLANNED, sessions: [session] });
-      vi.mocked(api.getDay).mockResolvedValue(reads(unplanned));
+      vi.mocked(api.getDay).mockResolvedValue(answered(reads(unplanned)));
       await renderOnStore(null, <ReadAgain />);
       const readAgain = async (session: Session) => {
-        vi.mocked(api.getDay).mockResolvedValue(reads(session));
+        vi.mocked(api.getDay).mockResolvedValue(answered(reads(session)));
         fireEvent.click(screen.getByRole('button', { name: 'Read today again' }));
         await settle();
       };
@@ -290,7 +293,7 @@ describe('SessionLog', () => {
 
       // A rename keeps the edit open on the new name; an unlink closes it.
       fireEvent.click(named());
-      vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [{ ...fix, text: 'Ship the hotfix' }], sessions: [onFix] }));
+      vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: [{ ...fix, text: 'Ship the hotfix' }], sessions: [onFix] })));
       fireEvent.click(screen.getByRole('button', { name: 'Read today again' }));
       await settle();
       expect(screen.getByText('Ship the hotfix', { selector: 'span' })).toBeTruthy();
@@ -303,9 +306,9 @@ describe('SessionLog', () => {
     });
 
     it('names the running row by the row the select links it to, in the log and the bar at once', async () => {
-      vi.mocked(api.getRunning).mockResolvedValue({ session: RUNNING });
-      vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: PLANNED, sessions: [RUNNING] }));
-      const answer = deferred<SessionResponse>();
+      vi.mocked(api.getRunning).mockResolvedValue(answered({ session: RUNNING }));
+      vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: PLANNED, sessions: [RUNNING] })));
+      const answer = deferredAnswer<SessionResponse>();
       vi.mocked(api.patchSession).mockReturnValue(answer.promise);
       await renderOnStore(null, <BarLabel />);
       expect(bar()).toBe('Still going');
@@ -403,9 +406,11 @@ describe('SessionLog', () => {
 
     it("takes a session whose task left the day off the task with a pick, which keeps the task's name as its label", async () => {
       const left = offDay(1, 'Started as this');
-      vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: ROWS, sessions: [left] }));
+      vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: ROWS, sessions: [left] })));
       // As the server answers an unlink with no label: the task's name becomes the label.
-      vi.mocked(api.patchSession).mockImplementation((_id, patch) => Promise.resolve({ session: { ...left, ...patch, title: null, label: 'Left the day' } }));
+      vi.mocked(api.patchSession).mockImplementation((_id, patch) =>
+        Promise.resolve(answered({ session: { ...left, ...patch, title: null, label: 'Left the day' } })),
+      );
       await renderOnStore(PICK);
       expect(dot('Admin')).toBeTruthy();
       edit(/Left the day/);
@@ -421,11 +426,11 @@ describe('SessionLog', () => {
 
     it('sends only the link from the select, and shows the server dropping the category the session was given here', async () => {
       let stored = at(1, 'Picked', { categoryUid: ADMIN.uid });
-      vi.mocked(api.getDay).mockImplementation(() => Promise.resolve(makeDay(TODAY, { priorities: ROWS, sessions: [stored] })));
+      vi.mocked(api.getDay).mockImplementation(() => Promise.resolve(answered(makeDay(TODAY, { priorities: ROWS, sessions: [stored] }))));
       // As the server answers: a link drops a category of its own.
       vi.mocked(api.patchSession).mockImplementation((_id, patch) => {
         stored = { ...stored, ...patch, ...(patch.priorityUid ? { categoryUid: null } : {}) };
-        return Promise.resolve({ session: stored });
+        return Promise.resolve(answered({ session: stored }));
       });
       await renderOnStore(PICK);
       expect(dot('Admin')).toBeTruthy();
@@ -467,8 +472,8 @@ describe('SessionLog', () => {
     });
 
     it("ends the running row's edit the same way, through the timer", async () => {
-      vi.mocked(api.getRunning).mockResolvedValue({ session: RUNNING });
-      vi.mocked(api.patchSession).mockImplementation((id, patch) => Promise.resolve({ session: { ...RUNNING, id, ...patch } }));
+      vi.mocked(api.getRunning).mockResolvedValue(answered({ session: RUNNING }));
+      vi.mocked(api.patchSession).mockImplementation((id, patch) => Promise.resolve(answered({ session: { ...RUNNING, id, ...patch } })));
       await renderLog([RUNNING], [], TODAY, { priorities: ROWS, pick: PICK });
       await pressOutsideTheList(/Still going/);
       expect(screen.queryByRole('textbox', { name: 'Session label' })).toBeNull();
@@ -477,8 +482,8 @@ describe('SessionLog', () => {
     });
 
     it("edits the running row's category through the timer", async () => {
-      vi.mocked(api.getRunning).mockResolvedValue({ session: RUNNING });
-      vi.mocked(api.patchSession).mockImplementation((id, patch) => Promise.resolve({ session: { ...RUNNING, id, ...patch } }));
+      vi.mocked(api.getRunning).mockResolvedValue(answered({ session: RUNNING }));
+      vi.mocked(api.patchSession).mockImplementation((id, patch) => Promise.resolve(answered({ session: { ...RUNNING, id, ...patch } })));
       await renderLog([RUNNING], [], TODAY, { priorities: ROWS, pick: PICK });
       edit(/Still going/);
       fireEvent.click(chip()!);
@@ -491,7 +496,7 @@ describe('SessionLog', () => {
 
   it('shows the running row as the timer has it', async () => {
     // Renamed in the bar: the day's copy hasn't heard yet.
-    vi.mocked(api.getRunning).mockResolvedValue({ session: { ...RUNNING, label: 'Renamed in the bar', pausedAt: T0 + 29 * MINUTE_MS } });
+    vi.mocked(api.getRunning).mockResolvedValue(answered({ session: { ...RUNNING, label: 'Renamed in the bar', pausedAt: T0 + 29 * MINUTE_MS } }));
     await renderLog([DONE, RUNNING]);
     const row = screen.getAllByRole('listitem')[1]!.textContent;
     expect(row).toMatch(/Renamed in the bar/);
@@ -529,7 +534,7 @@ describe('SessionLog', () => {
 
   it('sends only the delete for a session deleted with its edit open', async () => {
     vi.stubGlobal('confirm', () => true);
-    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: PLANNED, sessions: [DONE] }));
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: PLANNED, sessions: [DONE] })));
     await renderOnStore(null);
     openEdit();
     fireEvent.change(labelInput(), { target: { value: 'Not kept' } });

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { alert } from '../lib/alerts';
 import { MINUTE_MS } from '../../../shared/dates.js';
-import { deferred, makeDay, makeSettings, punchesAt, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
+import { answered, deferred, makeDay, makeSettings, punchesAt, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
 import type { Day, Settings } from '../types';
 import { useDayStore } from './useDay';
 import { useTodayAlarms } from './useTodayAlarms';
@@ -26,8 +26,8 @@ const alerted = () => vi.mocked(alert).mock.calls.map(([a]) => a);
 const tags = () => alerted().map((a) => a.tag);
 
 function render(settings: Settings | Promise<Settings>, day: Day) {
-  vi.mocked(api.getSettings).mockReturnValue(Promise.resolve(settings));
-  vi.mocked(api.getDay).mockResolvedValue(day);
+  vi.mocked(api.getSettings).mockReturnValue(Promise.resolve(settings).then(answered));
+  vi.mocked(api.getDay).mockResolvedValue(answered(day));
   return renderHook(() => ({ alarms: useTodayAlarms(TODAY, Date.now(), vi.fn()), store: useDayStore() }), { wrapper: SettingsAndDays });
 }
 
@@ -81,13 +81,13 @@ describe('useTodayAlarms', () => {
     const action = alerted().find((a) => a.tag === 'alarm:clockOut')!.action!;
     expect(action.label).toBe('Overtime approved');
     // The button approves today, where the switch on the card would.
-    vi.mocked(api.putOvertime).mockResolvedValue({ overtimeApproved: true });
+    vi.mocked(api.putOvertime).mockResolvedValue(answered({ overtimeApproved: true }));
     await act(async () => action.run());
     expect(api.putOvertime).toHaveBeenCalledWith(TODAY, true);
   });
 
   it('holds while a punch is being typed, and judges the punches three seconds after', async () => {
-    vi.mocked(api.putPunches).mockImplementation((_date, punches) => Promise.resolve({ punches }));
+    vi.mocked(api.putPunches).mockImplementation((_date, punches) => Promise.resolve(answered({ punches })));
     const { result } = render(makeSettings(), makeDay());
     await judged();
     act(() => result.current.alarms.setEditingPunches(true));
@@ -102,13 +102,13 @@ describe('useTodayAlarms', () => {
   });
 
   it('lets a hold go five minutes after the last change, though focus stays and a refresh brings the same times in a new list', async () => {
-    vi.mocked(api.putPunches).mockImplementation((_date, punches) => Promise.resolve({ punches }));
+    vi.mocked(api.putPunches).mockImplementation((_date, punches) => Promise.resolve(answered({ punches })));
     const { result } = render(makeSettings(), makeDay());
     await judged();
     act(() => result.current.alarms.setEditingPunches(true));
     // The server has the edit, and a note written on another device makes the next refresh a new
     // list with the same times.
-    vi.mocked(api.getDay).mockResolvedValue(overDay({ retroNote: 'From the phone' }));
+    vi.mocked(api.getDay).mockResolvedValue(answered(overDay({ retroNote: 'From the phone' })));
     await act(() => result.current.store.setPunches(TODAY, overDay().punches));
     await settle(5 * MINUTE_MS - 1000);
     expect(vi.mocked(api.getDay).mock.calls.length).toBeGreaterThan(1);
@@ -123,7 +123,7 @@ describe('useTodayAlarms', () => {
     const { result } = render(makeSettings(), day);
     await judged();
     act(() => result.current.alarms.setEditingPunches(true));
-    vi.mocked(api.getDay).mockResolvedValue({ ...day, retroNote: 'From the phone' });
+    vi.mocked(api.getDay).mockResolvedValue(answered({ ...day, retroNote: 'From the phone' }));
     vi.mocked(alert).mockClear();
     // The minute's refresh lands as the day ends, with a note from another device: the same times
     // in a new list.

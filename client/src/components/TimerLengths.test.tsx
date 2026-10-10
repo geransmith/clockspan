@@ -3,14 +3,14 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { dismissByTag, unlockAudio } from '../lib/alerts';
-import { makeSettings, SettingsAndDays, settle } from '../test/hooks';
+import { answered, makeSettings, SettingsAndDays, settle } from '../test/hooks';
 import { TimerLengths } from './TimerLengths';
 
 vi.mock('../api');
 vi.mock('../lib/alerts');
 
 async function renderLengths(timerMinutes: number[], disabled = false) {
-  vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ timerMinutes }));
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ timerMinutes })));
   const onStart = vi.fn();
   render(
     <SettingsAndDays>

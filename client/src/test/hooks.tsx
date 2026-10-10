@@ -7,6 +7,7 @@ import { DayProvider } from '../hooks/useDay';
 import { SettingsProvider } from '../hooks/useSettings';
 import { useShortcutListener } from '../hooks/useShortcuts';
 import type { Day } from '../types';
+import { answered } from './fixtures';
 
 export * from './fixtures';
 export { AppProviders } from '../hooks/AppProviders';
@@ -38,7 +39,7 @@ export function begin<T>(fn: () => Promise<T>): Promise<T> {
 
 /** The server answers a range with the days it holds in it; the calling test mocks '../api'. */
 export function serveRange(days: Day[]): void {
-  vi.mocked(api.getRange).mockImplementation((from, to) => Promise.resolve({ days: days.filter((d) => d.date >= from && d.date <= to) }));
+  vi.mocked(api.getRange).mockImplementation((from, to) => Promise.resolve(answered({ days: days.filter((d) => d.date >= from && d.date <= to) })));
 }
 
 /** Fires `visibilitychange` with the page shown or hidden. */

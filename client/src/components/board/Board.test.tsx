@@ -12,8 +12,9 @@ import { COLUMN_NAMES, withCategory, withItem, withItemPatch, withoutItem, type 
 import { ADD_PRIORITY_FAILED, BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, PRIORITY_WARNINGS, WARNING_ACTIONS } from '../../lib/copy';
 import { USER_KEYS } from '../../lib/storage';
 import {
+  answered,
   completedSession,
-  deferred,
+  deferredAnswer,
   makeBoard,
   makeCard,
   makeCategory,
@@ -67,7 +68,7 @@ async function renderBoard(
   now = NOW,
   { running = null, starting = false }: { running?: Session | null; starting?: boolean } = {},
 ) {
-  vi.mocked(api.getSettings).mockResolvedValue(settings);
+  vi.mocked(api.getSettings).mockResolvedValue(answered(settings));
   const page = (at: number) => (
     <SettingsAndDays>
       <ShortcutKeys />
@@ -122,13 +123,13 @@ beforeEach(() => {
     makeCard(EMAIL, 'Email', { lane: null, listDate: WED, listDone: true, listed: 1 }),
   );
   lists = { [WED]: [row(1, 'Report'), row(2, 'Email', { done: true })] };
-  vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(makeDay(date, { priorities: lists[date] ?? [] })));
+  vi.mocked(api.getDay).mockImplementation((date) => Promise.resolve(answered(makeDay(date, { priorities: lists[date] ?? [] }))));
   serveRange([makeDay(TUE, { priorities: [tuesdayRoutine()] }), makeDay(MON)]);
-  vi.mocked(api.putPriorities).mockImplementation((date, list) => Promise.resolve({ priorities: (lists[date] = list) }));
-  vi.mocked(api.getBoard).mockImplementation(() => Promise.resolve(onServer));
-  vi.mocked(api.addItem).mockImplementation((item) => Promise.resolve((onServer = withItem(onServer, item, NOW))));
-  vi.mocked(api.editItem).mockImplementation((uid, patch) => Promise.resolve((onServer = withItemPatch(onServer, uid, patch))));
-  vi.mocked(api.deleteItem).mockImplementation((uid) => Promise.resolve((onServer = withoutItem(onServer, uid))));
+  vi.mocked(api.putPriorities).mockImplementation((date, list) => Promise.resolve(answered({ priorities: (lists[date] = list) })));
+  vi.mocked(api.getBoard).mockImplementation(() => Promise.resolve(answered(onServer)));
+  vi.mocked(api.addItem).mockImplementation((item) => Promise.resolve(answered((onServer = withItem(onServer, item, NOW)))));
+  vi.mocked(api.editItem).mockImplementation((uid, patch) => Promise.resolve(answered((onServer = withItemPatch(onServer, uid, patch)))));
+  vi.mocked(api.deleteItem).mockImplementation((uid) => Promise.resolve(answered((onServer = withoutItem(onServer, uid)))));
   start.mockImplementation(async (_date, _seconds, _label, uid) => {
     await uid;
   });
@@ -299,7 +300,7 @@ describe('Board', () => {
   });
 
   it('leaves the focus where the user put it while a park was on its way', async () => {
-    const placed = deferred<BoardData>();
+    const placed = deferredAnswer<BoardData>();
     vi.mocked(api.editItem).mockReturnValueOnce(placed.promise);
     await renderBoard();
     openEditor('Report');
@@ -538,10 +539,12 @@ describe('Board', () => {
   it("deletes today's task with a confirm counting its days and time from its row and today's log, the server taking its row off, and nothing when turned down", async () => {
     lists[WED]![0] = { ...lists[WED]![0]!, listed: 3, logged: 60 * 60 };
     const getDay = vi.mocked(api.getDay).getMockImplementation()!;
-    vi.mocked(api.getDay).mockImplementation(async (date) => ({
-      ...(await getDay(date)),
-      sessions: date === WED ? [completedSession(1, NOW - HOUR_MS, 20 * 60, { priorityUid: REPORT })] : [],
-    }));
+    vi.mocked(api.getDay).mockImplementation(async (date) =>
+      answered({
+        ...(await getDay(date)).value,
+        sessions: date === WED ? [completedSession(1, NOW - HOUR_MS, 20 * 60, { priorityUid: REPORT })] : [],
+      }),
+    );
     const confirm = vi.fn(() => false);
     vi.stubGlobal('confirm', confirm);
     await renderBoard();
@@ -556,7 +559,7 @@ describe('Board', () => {
     // The server takes it off every day's list, today's included.
     vi.mocked(api.deleteItem).mockImplementationOnce((uid) => {
       lists[WED] = lists[WED]!.filter((p) => p.uid !== uid);
-      return Promise.resolve((onServer = withoutItem(onServer, uid)));
+      return Promise.resolve(answered((onServer = withoutItem(onServer, uid))));
     });
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     await settle();
@@ -568,10 +571,12 @@ describe('Board', () => {
   it("counts a timer running on today's task in Delete's confirm, as × on the sheet does", async () => {
     lists[WED]![0] = { ...lists[WED]![0]!, listed: 2, logged: 5 * 60 };
     const getDay = vi.mocked(api.getDay).getMockImplementation()!;
-    vi.mocked(api.getDay).mockImplementation(async (date) => ({
-      ...(await getDay(date)),
-      sessions: date === WED ? [makeSession({ date: WED, startedAt: NOW - 10 * MINUTE_MS, priorityUid: REPORT })] : [],
-    }));
+    vi.mocked(api.getDay).mockImplementation(async (date) =>
+      answered({
+        ...(await getDay(date)).value,
+        sessions: date === WED ? [makeSession({ date: WED, startedAt: NOW - 10 * MINUTE_MS, priorityUid: REPORT })] : [],
+      }),
+    );
     const confirm = vi.fn(() => false);
     vi.stubGlobal('confirm', confirm);
     const at = await renderBoard();
@@ -605,7 +610,7 @@ describe('Board', () => {
     // Done has no +, and the items folded under Earlier this week take no focus: its heading does.
     vi.mocked(api.deleteItem).mockImplementationOnce((uid) => {
       lists[WED] = lists[WED]!.filter((p) => p.uid !== uid);
-      return Promise.resolve((onServer = withoutItem(onServer, uid)));
+      return Promise.resolve(answered((onServer = withoutItem(onServer, uid))));
     });
     openEditor('Email');
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
@@ -618,7 +623,7 @@ describe('Board', () => {
 
   it("shows today's row parked in a lane where it lands, with no tick, rename, category or Remove until the park lands", async () => {
     onServer = makeBoard(...onServer.cards, makeCard('left00000001', 'Check the logs', { lane: null, listDate: TUE, listed: 1 }));
-    const placed = deferred<BoardData>();
+    const placed = deferredAnswer<BoardData>();
     vi.mocked(api.editItem).mockReturnValueOnce(placed.promise);
     await renderBoard();
     openEditor('Report');
@@ -724,7 +729,7 @@ describe('Board', () => {
     vi.mocked(api.getBoard).mockRejectedValue(new Error('offline'));
     await renderBoard();
     expect(screen.getByText(new RegExp(LOAD_FAILED.board))).toBeTruthy();
-    vi.mocked(api.getBoard).mockImplementation(() => Promise.resolve(onServer));
+    vi.mocked(api.getBoard).mockImplementation(() => Promise.resolve(answered(onServer)));
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await settle();
     expect(titlesIn('Later')).toEqual(['Write a KB']);
@@ -893,7 +898,7 @@ describe('adding from a column', () => {
   });
 
   it("adds a task to today's list from In progress's box on the board's queue, after a board write still out, and keeps the box", async () => {
-    const placed = deferred<BoardData>();
+    const placed = deferredAnswer<BoardData>();
     vi.mocked(api.editItem).mockReturnValueOnce(placed.promise);
     await renderBoard();
     openEditor('Report');
@@ -927,7 +932,7 @@ describe('adding from a column', () => {
   it("counts the rows still waiting on the board's queue toward the nudge, as the sheet counts its draft", async () => {
     lists[WED] = [row(1, 'Report'), row(2, 'Email')];
     // A lane's PATCH still out holds the board's queue, and the rows typed after it with it.
-    const placed = deferred<BoardData>();
+    const placed = deferredAnswer<BoardData>();
     vi.mocked(api.editItem).mockReturnValueOnce(placed.promise);
     await renderBoard();
     openEditor('Write a KB');
@@ -1171,7 +1176,7 @@ describe('starting the focus timer', () => {
   });
 
   it("pulls a Next card onto today's list first, and starts on the task once the save answers", async () => {
-    const saved = deferred<{ priorities: Priority[] }>();
+    const saved = deferredAnswer<{ priorities: Priority[] }>();
     vi.mocked(api.putPriorities).mockReturnValueOnce(saved.promise);
     await renderBoard();
     openEditor('Follow up');
@@ -1248,7 +1253,7 @@ describe('starting the focus timer', () => {
 
   it("offers Start on today's recurring row too, and none in Done, on a planned task, or on an item whose move is on its way", async () => {
     lists[WED] = [row(1, 'Report'), row(2, 'Email', { done: true }), row(3, 'Monitor the queue', { uid: 'rec000000001', recurring: true })];
-    const placed = deferred<BoardData>();
+    const placed = deferredAnswer<BoardData>();
     vi.mocked(api.editItem).mockReturnValueOnce(placed.promise);
     await renderBoard();
     openEditor('Monitor the queue');
@@ -1496,7 +1501,7 @@ describe('dragging', () => {
   });
 
   it("doesn't pick up an item whose move is on its way until the move lands", async () => {
-    const placed = deferred<BoardData>();
+    const placed = deferredAnswer<BoardData>();
     vi.mocked(api.editItem).mockReturnValueOnce(placed.promise);
     await renderBoard();
     openEditor('Report');
@@ -1558,7 +1563,7 @@ describe('categories', () => {
       categories: [TICKETS, ADMIN, OLD],
     };
     lists[WED] = [row(1, 'Report', { categoryUid: OLD.uid })];
-    vi.mocked(api.addCategory).mockImplementation((c) => Promise.resolve((onServer = withCategory(onServer, c))));
+    vi.mocked(api.addCategory).mockImplementation((c) => Promise.resolve(answered((onServer = withCategory(onServer, c)))));
   });
 
   it("shows each item's category on its meta line, a removed one included", async () => {

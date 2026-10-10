@@ -2,7 +2,7 @@
 import { renderHook } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import * as api from '../api';
-import { makeSettings, settle, T0 } from '../test/hooks';
+import { answered, makeSettings, settle, T0 } from '../test/hooks';
 import { SettingsProvider } from './useSettings';
 import { useTimeFormat } from './useTimeFormat';
 
@@ -13,7 +13,7 @@ beforeEach(() => {
 });
 
 it('follows the time format setting', async () => {
-  vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ timeFormat: '24h' }));
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ timeFormat: '24h' })));
   const { result } = renderHook(() => useTimeFormat(), { wrapper: SettingsProvider });
   await settle();
   expect(result.current.hour12).toBe(false);

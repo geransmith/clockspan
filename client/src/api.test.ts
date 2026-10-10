@@ -7,7 +7,7 @@ import { alert, dismissByTag, getBanners, subscribeBanners } from './lib/alerts'
 import { REQUEST_FAILED, REQUEST_TIMEOUT, UPDATED } from './lib/copy';
 import { emptyRow } from './lib/priorities';
 import { makePriority, TODAY } from './test/fixtures';
-import { VERSION_HEADER } from '../../shared/api.js';
+import { REVISION_HEADER, VERSION_HEADER } from '../../shared/api.js';
 import { MINUTE_MS } from '../../shared/dates.js';
 
 // The real alerts, watched, so a test can see what a banner was raised with as well as the banner.
@@ -172,9 +172,10 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
 ];
 
 describe('routes', () => {
+  // A data call answers the body with the revision the server named; an auth call, the body alone.
   it.each(ROUTES)('%s', async (_name, call, method, path, body) => {
-    answer(200, { ok: true });
-    await expect(call()).resolves.toEqual({ ok: true });
+    answer(200, { ok: true }, true, { [REVISION_HEADER]: '7' });
+    await expect(call()).resolves.toEqual(path.startsWith('/api/auth/') ? { ok: true } : { value: { ok: true }, revision: 7 });
     const sent = lastCall();
     expect(sent.path).toBe(path);
     expect(sent.init.method).toBe(method);
@@ -190,17 +191,17 @@ describe('routes', () => {
 });
 
 describe('failures', () => {
-  it("throws an ApiError with the server's message, status and body", async () => {
+  it("throws an ApiError with the server's message, status, body and revision", async () => {
     const body = { error: 'A timer is already running.', session: { id: 9 } };
-    answer(409, body);
+    answer(409, body, true, { [REVISION_HEADER]: '12' });
     const err = await api.startSession(TODAY, 1500, '', null).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
-    expect(err).toMatchObject({ status: 409, message: 'A timer is already running.', body });
+    expect(err).toMatchObject({ status: 409, message: 'A timer is already running.', body, revision: 12 });
   });
 
   it('names the status when the body is not JSON, such as a proxy error page', async () => {
     answer(502, '<html>Bad gateway</html>', false);
-    await expect(api.getDay(TODAY)).rejects.toMatchObject({ status: 502, message: 'Request failed (502)', body: null });
+    await expect(api.getDay(TODAY)).rejects.toMatchObject({ status: 502, message: 'Request failed (502)', body: null, revision: 0 });
   });
 
   it("names the status when a proxy's JSON error is not a string", async () => {

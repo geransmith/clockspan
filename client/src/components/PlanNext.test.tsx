@@ -6,7 +6,21 @@ import * as api from '../api';
 import { playSound, unlockAudio } from '../lib/alerts';
 import { LOAD_FAILED, PLAN_NEXT } from '../lib/copy';
 import type { CategoryPick } from '../lib/board';
-import { deferred, makeCategory, makeDay, makePick, makePriority, makeSettings, rowUid, SettingsAndDays, settle, T0, TODAY } from '../test/hooks';
+import {
+  answered,
+  deferred,
+  deferredAnswer,
+  makeCategory,
+  makeDay,
+  makePick,
+  makePriority,
+  makeSettings,
+  rowUid,
+  SettingsAndDays,
+  settle,
+  T0,
+  TODAY,
+} from '../test/hooks';
 import type { Day, Priority } from '../types';
 import { PlanNext } from './PlanNext';
 
@@ -24,7 +38,7 @@ const TODAYS: Priority[] = [
 ];
 
 async function renderPlan({ next = makeDay(NEXT) as Day | Promise<Day>, todays = TODAYS, pick = null as CategoryPick | null } = {}) {
-  vi.mocked(api.getDay).mockImplementation((d) => (d === NEXT ? Promise.resolve(next) : Promise.resolve(makeDay(d))));
+  vi.mocked(api.getDay).mockImplementation((d) => (d === NEXT ? Promise.resolve(next).then(answered) : Promise.resolve(answered(makeDay(d)))));
   const card = (rows: Priority[]) => (
     <SettingsAndDays>
       <PlanNext today={TODAY} priorities={rows} pick={pick} />
@@ -65,8 +79,8 @@ const sent = () => vi.mocked(api.putPriorities).mock.calls[0]![1];
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 + 8 * HOUR_MS });
-  vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ sounds: { ...makeSettings().sounds, planDone: 'triad' } }));
-  vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve({ priorities }));
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ sounds: { ...makeSettings().sounds, planDone: 'triad' } })));
+  vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities })));
 });
 
 describe('PlanNext', () => {
@@ -283,7 +297,7 @@ describe('PlanNext', () => {
   });
 
   it('locks what it sends while the save is out, and stays open with the rows still offered when it fails', async () => {
-    const answer = deferred<{ priorities: Priority[] }>();
+    const answer = deferredAnswer<{ priorities: Priority[] }>();
     vi.mocked(api.putPriorities).mockReturnValue(answer.promise);
     await renderPlan({ pick: makePick([makeCategory('cat000000001', 'Tickets')]) });
     await open();

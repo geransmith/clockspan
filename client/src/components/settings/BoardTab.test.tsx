@@ -7,7 +7,7 @@ import { BOARD_LIMITS, LIMITS } from '../../../../shared/api.js';
 import { warnSaveFailed } from '../../lib/alerts';
 import { withCategory, withCategoryPatch, withoutCategory, withItem, withItemPatch, withoutItem } from '../../lib/board';
 import { BOARD, CONFIRM, LOAD_FAILED } from '../../lib/copy';
-import { apiError, makeBoard, makeCategory, makeRecurring, makeSettings, settle, SettingsAndDays } from '../../test/hooks';
+import { answered, apiError, makeBoard, makeCategory, makeRecurring, makeSettings, settle, SettingsAndDays } from '../../test/hooks';
 import type { Board } from '../../types';
 import { BoardTab } from './BoardTab';
 
@@ -51,14 +51,14 @@ beforeEach(() => {
   vi.useFakeTimers();
   notSaved = 0;
   onServer = { ...makeBoard(), categories: [TICKETS, ADMIN, OLD] };
-  vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ board: true }));
-  vi.mocked(api.getBoard).mockImplementation(() => Promise.resolve(onServer));
-  vi.mocked(api.addCategory).mockImplementation((c) => Promise.resolve((onServer = withCategory(onServer, c))));
-  vi.mocked(api.patchCategory).mockImplementation((uid, patch) => Promise.resolve((onServer = withCategoryPatch(onServer, uid, patch))));
-  vi.mocked(api.deleteCategory).mockImplementation((uid) => Promise.resolve((onServer = withoutCategory(onServer, uid))));
-  vi.mocked(api.addItem).mockImplementation((item) => Promise.resolve((onServer = withItem(onServer, item, 0))));
-  vi.mocked(api.editItem).mockImplementation((uid, patch) => Promise.resolve((onServer = withItemPatch(onServer, uid, patch))));
-  vi.mocked(api.deleteItem).mockImplementation((uid) => Promise.resolve((onServer = withoutItem(onServer, uid))));
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ board: true })));
+  vi.mocked(api.getBoard).mockImplementation(() => Promise.resolve(answered(onServer)));
+  vi.mocked(api.addCategory).mockImplementation((c) => Promise.resolve(answered((onServer = withCategory(onServer, c)))));
+  vi.mocked(api.patchCategory).mockImplementation((uid, patch) => Promise.resolve(answered((onServer = withCategoryPatch(onServer, uid, patch)))));
+  vi.mocked(api.deleteCategory).mockImplementation((uid) => Promise.resolve(answered((onServer = withoutCategory(onServer, uid)))));
+  vi.mocked(api.addItem).mockImplementation((item) => Promise.resolve(answered((onServer = withItem(onServer, item, 0)))));
+  vi.mocked(api.editItem).mockImplementation((uid, patch) => Promise.resolve(answered((onServer = withItemPatch(onServer, uid, patch)))));
+  vi.mocked(api.deleteItem).mockImplementation((uid) => Promise.resolve(answered((onServer = withoutItem(onServer, uid)))));
 });
 
 describe('BoardTab', () => {

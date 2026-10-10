@@ -5,7 +5,7 @@ import * as api from '../api';
 import { alert, dismissBanner, getBanners, type BannerAction } from '../lib/alerts';
 import { BANNERS_MORE } from '../lib/copy';
 import { SettingsProvider } from '../hooks/useSettings';
-import { makeSettings, settle, T0 } from '../test/hooks';
+import { answered, makeSettings, settle, T0 } from '../test/hooks';
 import { Banners } from './Banners';
 
 vi.mock('../api');
@@ -25,7 +25,7 @@ const banner = (title: string) => within(screen.getByText(title).closest<HTMLEle
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-  vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
 });
 afterEach(() => {
   cleanup();

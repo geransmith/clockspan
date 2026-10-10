@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
-import { AppProviders, endSession, makeDay, makeSession, makeSettings, pressKey, settle, ShortcutKeys, T0 } from '../test/hooks';
+import { answered, AppProviders, endSession, makeDay, makeSession, makeSettings, pressKey, settle, ShortcutKeys, T0 } from '../test/hooks';
 import type { Session } from '../types';
 import { TimerControls } from './TimerControls';
 
@@ -11,7 +11,7 @@ vi.mock('../api');
 vi.mock('../lib/alerts');
 
 async function renderControls(compact: boolean, session: Session = makeSession()) {
-  vi.mocked(api.getRunning).mockResolvedValue({ session });
+  vi.mocked(api.getRunning).mockResolvedValue(answered({ session }));
   render(
     <AppProviders>
       <ShortcutKeys />
@@ -27,8 +27,8 @@ const names = () => screen.getAllByRole('button').map((b) => b.getAttribute('ari
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 + 5 * MINUTE_MS });
-  vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ adjustStepMinutes: 5 }));
-  vi.mocked(api.getDay).mockResolvedValue(makeDay());
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ adjustStepMinutes: 5 })));
+  vi.mocked(api.getDay).mockResolvedValue(answered(makeDay()));
 });
 
 describe('TimerControls', () => {
@@ -44,16 +44,16 @@ describe('TimerControls', () => {
   it('pauses and resumes the running session, and moves the planned end by the step', async () => {
     const running = makeSession();
     await renderControls(true, running);
-    vi.mocked(api.pauseSession).mockResolvedValue({ session: { ...running, pausedAt: Date.now() } });
+    vi.mocked(api.pauseSession).mockResolvedValue(answered({ session: { ...running, pausedAt: Date.now() } }));
     fireEvent.click(button('Pause timer'));
     await settle();
     expect(api.pauseSession).toHaveBeenCalledWith(running.id);
-    vi.mocked(api.resumeSession).mockResolvedValue({ session: { ...running, pausedSeconds: 0 } });
+    vi.mocked(api.resumeSession).mockResolvedValue(answered({ session: { ...running, pausedSeconds: 0 } }));
     fireEvent.click(button('Resume timer'));
     await settle();
     expect(api.resumeSession).toHaveBeenCalledWith(running.id);
 
-    vi.mocked(api.patchSession).mockResolvedValue({ session: { ...running, plannedSeconds: running.plannedSeconds + 5 * 60 } });
+    vi.mocked(api.patchSession).mockResolvedValue(answered({ session: { ...running, plannedSeconds: running.plannedSeconds + 5 * 60 } }));
     fireEvent.click(button('Add 5 minutes'));
     await settle();
     expect(api.patchSession).toHaveBeenCalledWith(running.id, { plannedSeconds: running.plannedSeconds + 5 * 60 });
@@ -66,7 +66,7 @@ describe('TimerControls', () => {
     fireEvent.click(button(/Cancel/));
     expect(confirm).toHaveBeenCalled();
     expect(api.cancelSession).not.toHaveBeenCalled();
-    vi.mocked(api.cancelSession).mockResolvedValue({ session: endSession(makeSession(), { status: 'cancelled' }) });
+    vi.mocked(api.cancelSession).mockResolvedValue(answered({ session: endSession(makeSession(), { status: 'cancelled' }) }));
     confirm.mockReturnValue(true);
     fireEvent.click(button(/Cancel/));
     // It goes out after any write still queued, a tick later.
@@ -97,16 +97,16 @@ describe('TimerControls', () => {
     expect([keys('Remove 5 minutes'), keys('Add 5 minutes'), keys('Pause'), keys('Finish')]).toEqual([null, 'Plus', 'P', null]);
     expect(pressKey('f')).toBe(true);
     expect(pressKey('-')).toBe(true);
-    vi.mocked(api.pauseSession).mockResolvedValue({ session: { ...running, pausedAt: Date.now() } });
+    vi.mocked(api.pauseSession).mockResolvedValue(answered({ session: { ...running, pausedAt: Date.now() } }));
     pressKey('p');
     await settle();
     expect(api.pauseSession).toHaveBeenCalledWith(running.id);
     expect(keys('Resume')).toBe('P');
-    vi.mocked(api.resumeSession).mockResolvedValue({ session: { ...running, pausedSeconds: 0 } });
+    vi.mocked(api.resumeSession).mockResolvedValue(answered({ session: { ...running, pausedSeconds: 0 } }));
     pressKey('P');
     await settle();
     expect(api.resumeSession).toHaveBeenCalledWith(running.id);
-    vi.mocked(api.patchSession).mockResolvedValue({ session: { ...running, plannedSeconds: running.plannedSeconds + 5 * 60 } });
+    vi.mocked(api.patchSession).mockResolvedValue(answered({ session: { ...running, plannedSeconds: running.plannedSeconds + 5 * 60 } }));
     pressKey('+');
     await settle();
     expect(api.patchSession).toHaveBeenCalledWith(running.id, { plannedSeconds: running.plannedSeconds + 5 * 60 });
@@ -119,7 +119,7 @@ describe('TimerControls', () => {
     await renderControls(true, due);
     expect(keys('Finish timer')).toBe('F');
     expect(pressKey('p')).toBe(true);
-    vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(due, { durationSeconds: 25 * 60 }) });
+    vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(due, { durationSeconds: 25 * 60 }) }));
     pressKey('f');
     await settle();
     expect(api.finishSession).toHaveBeenCalledOnce();

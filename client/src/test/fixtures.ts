@@ -3,6 +3,7 @@ import { emptyDay } from '../../../shared/api.js';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { kindForPosition } from '../../../shared/punches.js';
 import { CARD_IDS } from '../../../shared/settings.js';
+import type { Answer } from '../api';
 import { ApiError } from '../lib/apiError';
 import type { CategoryPick } from '../lib/board';
 import { REQUEST_FAILED } from '../lib/copy';
@@ -274,6 +275,17 @@ export function deferred<T>() {
     reject = rej;
   });
   return { promise, resolve, reject };
+}
+
+/** A data call's answer as `api.ts` gives it: the body, and the revision the server named. */
+export function answered<T>(value: T, revision = 0): Answer<T> {
+  return { value, revision };
+}
+
+/** `deferred` for a data call's answer, which the test resolves with the body (and a revision). */
+export function deferredAnswer<T>() {
+  const d = deferred<Answer<T>>();
+  return { ...d, resolve: (value: T, revision = 0) => d.resolve(answered(value, revision)) };
 }
 
 /** An API failure the way `request()` throws one: a status, and the body for a 409. */

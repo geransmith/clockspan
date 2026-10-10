@@ -11,9 +11,10 @@ import { SPLIT_QUERY } from '../lib/layout';
 import { applySettingsPatch } from '../lib/settings';
 import { USER_KEYS } from '../lib/storage';
 import {
+  answered,
   AppProviders,
   completedSession,
-  deferred,
+  deferredAnswer,
   makeBoard,
   makeCard,
   makeCategory,
@@ -89,13 +90,13 @@ beforeEach(() => {
   media = new Set([SPLIT_QUERY]);
   stubMatchMedia(media);
   stored = makeSettings();
-  vi.mocked(api.getSettings).mockImplementation(() => Promise.resolve(stored));
+  vi.mocked(api.getSettings).mockImplementation(() => Promise.resolve(answered(stored)));
   vi.mocked(api.putSettings).mockImplementation((patch) => {
     stored = applySettingsPatch(stored, patch);
-    return Promise.resolve(stored);
+    return Promise.resolve(answered(stored));
   });
-  vi.mocked(api.getRunning).mockResolvedValue({ session: null });
-  vi.mocked(api.getDay).mockResolvedValue(makeDay());
+  vi.mocked(api.getRunning).mockResolvedValue(answered({ session: null }));
+  vi.mocked(api.getDay).mockResolvedValue(answered(makeDay()));
   serveRange([]);
 });
 
@@ -223,20 +224,20 @@ describe('Sheet', () => {
 
 describe("Sheet: the timeclock card's state", () => {
   it('shows the state beside the title, and none while the punches are out of order', async () => {
-    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { punches: punchesAt(T0 - 3 * HOUR_MS) }));
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { punches: punchesAt(T0 - 3 * HOUR_MS) })));
     await renderSheet();
     expect(document.querySelector('.card-aside')?.textContent).toBe('Working');
     // The notice's live region is there, empty, before any punch is out of order.
     expect(document.querySelector('.punch-order[role="status"]')?.textContent).toBe('');
     cleanup();
     // Lunch in typed as 7:00, before the 8:00 Lunch out: the notice says so, and "Working" would be a guess.
-    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { punches: punchesAt(T0 - 3 * HOUR_MS, T0 - HOUR_MS, T0 - 2 * HOUR_MS) }));
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { punches: punchesAt(T0 - 3 * HOUR_MS, T0 - HOUR_MS, T0 - 2 * HOUR_MS) })));
     await renderSheet();
     expect(document.querySelector('.card-aside')).toBeNull();
   });
 
   it('names the punch out of place in the notice, which describes that row', async () => {
-    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { punches: punchesAt(T0 - 3 * HOUR_MS, T0 - HOUR_MS, T0 - 2 * HOUR_MS) }));
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { punches: punchesAt(T0 - 3 * HOUR_MS, T0 - HOUR_MS, T0 - 2 * HOUR_MS) })));
     await renderSheet();
     const notice = screen.getByText(PUNCH_ORDER('Lunch in', '7:00 AM', 'Lunch out', '8:00 AM'));
     // Inside a live region that is there before it appears, so a screen reader hears it.
@@ -262,7 +263,7 @@ describe('Sheet: what the last day left open, with the board on', () => {
         ],
       }),
     ]);
-    const board = deferred<Board>();
+    const board = deferredAnswer<Board>();
     vi.mocked(api.getBoard).mockReturnValue(board.promise);
     await renderSheet();
     expect(screen.queryByText(LEFT_OPEN.title('yesterday'))).toBeNull();
@@ -276,7 +277,7 @@ describe('Sheet: what the last day left open, with the board on', () => {
   it('offers nothing when every row it would bring back was moved off Next', async () => {
     stored = makeSettings({ board: true });
     serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Parked', { uid: 'later0000001' })] })]);
-    vi.mocked(api.getBoard).mockResolvedValue(makeBoard(makeCard('later0000001', 'Parked')));
+    vi.mocked(api.getBoard).mockResolvedValue(answered(makeBoard(makeCard('later0000001', 'Parked'))));
     await renderSheet();
     expect(screen.queryByText(LEFT_OPEN.title('yesterday'))).toBeNull();
     expect(document.querySelector('.left-open')).toBeNull();
@@ -296,8 +297,8 @@ describe('Sheet: the recurring priorities due today', () => {
   beforeEach(() => {
     localStorage.clear();
     stored = makeSettings({ board: true });
-    vi.mocked(api.getBoard).mockResolvedValue({ ...makeBoard(), recurring: [SATURDAY, QUEUE] });
-    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve({ priorities }));
+    vi.mocked(api.getBoard).mockResolvedValue(answered({ ...makeBoard(), recurring: [SATURDAY, QUEUE] }));
+    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities })));
   });
 
   it('offers the ones due on its weekday, and none answered on this device today', async () => {
@@ -346,7 +347,7 @@ describe('Sheet: the recurring priorities due today', () => {
 
   it('leaves the leftovers for later when Not today answers the routines alone', async () => {
     serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Invoices')] })]);
-    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [makePriority(1, 'Report')] }));
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: [makePriority(1, 'Report')] })));
     await renderSheet();
     expect(offered()).toEqual(['Monitor the queue']);
     fireEvent.click(button(TODAY_OFFER.notToday));
@@ -360,7 +361,7 @@ describe('Sheet: the recurring priorities due today', () => {
   });
 
   it("offers nothing on another day's sheet, though today's routines are due", async () => {
-    vi.mocked(api.getDay).mockImplementation((d) => Promise.resolve(makeDay(d)));
+    vi.mocked(api.getDay).mockImplementation((d) => Promise.resolve(answered(makeDay(d))));
     render(
       <AppProviders>
         <SheetAt date={YESTERDAY} />
@@ -385,7 +386,9 @@ describe('Sheet: the recurring priorities due today', () => {
 
   it('offers no routine with the board off, and still offers the leftovers while the list holds only a routine', async () => {
     stored = makeSettings();
-    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [makePriority(1, 'Monitor the queue', { uid: QUEUE.uid, recurring: true })] }));
+    vi.mocked(api.getDay).mockResolvedValue(
+      answered(makeDay(TODAY, { priorities: [makePriority(1, 'Monitor the queue', { uid: QUEUE.uid, recurring: true })] })),
+    );
     serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Invoices')] })]);
     await renderSheet();
     expect(offered()).toEqual(['Invoices']);
@@ -411,9 +414,9 @@ describe('Sheet: the recurring priorities due today', () => {
 describe('Sheet: × on a task on other days', () => {
   it('deletes it everywhere through the board store, with the board off too', async () => {
     const email = makePriority(1, 'Email', { listed: 3 });
-    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [email] }));
-    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve({ priorities: priorities.filter((p) => p.uid != null) }));
-    vi.mocked(api.deleteItem).mockResolvedValue(makeBoard());
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: [email] })));
+    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities: priorities.filter((p) => p.uid != null) })));
+    vi.mocked(api.deleteItem).mockResolvedValue(answered(makeBoard()));
     await renderSheet();
     fireEvent.click(button('Remove priority 1'));
     fireEvent.click(button(REMOVE_TASK.everywhere));
@@ -429,8 +432,8 @@ describe("Sheet: a row's note", () => {
     const report = makePriority(1, 'Report', { note: 'Kim has the numbers.' });
     const noteOf = (rows: { uid: string | null; note: string }[]) => rows.find((p) => p.uid === report.uid)?.note;
     const box = () => screen.getByRole('textbox', { name: 'Note for priority 1' }) as HTMLTextAreaElement;
-    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [report] }));
-    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve({ priorities: priorities.filter((p) => p.uid != null) }));
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: [report] })));
+    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities: priorities.filter((p) => p.uid != null) })));
     await renderSheet();
     fireEvent.click(button('Note for priority 1'));
     fireEvent.change(box(), { target: { value: 'Kim has them.' } });
@@ -450,8 +453,8 @@ describe("Sheet: a row's note", () => {
 
   it("sends it to the task when the row has left the day's list before the box's save", async () => {
     const report = makePriority(1, 'Report', { listed: 2 });
-    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [report] }));
-    vi.mocked(api.editItem).mockResolvedValue(makeBoard());
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: [report] })));
+    vi.mocked(api.editItem).mockResolvedValue(answered(makeBoard()));
     // The day store the sheet uses, to read the day again as the refresh loop would.
     const { result } = renderHook(() => useDayStore(), {
       wrapper: ({ children }) => (
@@ -465,7 +468,7 @@ describe("Sheet: a row's note", () => {
     fireEvent.click(button('Add a note to priority 1'));
     fireEvent.change(screen.getByRole('textbox', { name: 'Note for priority 1' }), { target: { value: 'Kim has the numbers.' } });
     // Another device took it off this day: the read drops the row, and its box goes with it, unsent.
-    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY));
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY)));
     await act(() => result.current.refresh(TODAY));
     await settle();
     expect(screen.queryByRole('textbox', { name: 'Note for priority 1' })).toBeNull();
@@ -476,8 +479,8 @@ describe("Sheet: a row's note", () => {
 
   it('raises no banner when × takes the task before the box saved and the task goes with it', async () => {
     const report = makePriority(1, 'Report');
-    vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: [report] }));
-    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve({ priorities: priorities.filter((p) => p.uid != null) }));
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: [report] })));
+    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities: priorities.filter((p) => p.uid != null) })));
     // The list's save without the row deleted the task, which nothing else names.
     vi.mocked(api.editItem).mockRejectedValue(new ApiError(404, 'Not found'));
     await renderSheet();
@@ -502,9 +505,9 @@ describe("Sheet: a category's chip, with the board on", () => {
   const chips = () => screen.queryAllByRole('button', { name: /^Category for / }).map((b) => b.getAttribute('aria-label'));
 
   beforeEach(() => {
-    vi.mocked(api.getDay).mockResolvedValue(day);
-    vi.mocked(api.getBoard).mockResolvedValue({ ...makeBoard(), categories: [TICKETS, ADMIN] });
-    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve({ priorities }));
+    vi.mocked(api.getDay).mockResolvedValue(answered(day));
+    vi.mocked(api.getBoard).mockResolvedValue(answered({ ...makeBoard(), categories: [TICKETS, ADMIN] }));
+    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities })));
   });
 
   it("gives a priority row, the timer's new row, the log and Plan tomorrow's rows the board's categories", async () => {

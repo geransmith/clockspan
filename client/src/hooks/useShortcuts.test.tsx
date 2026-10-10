@@ -5,7 +5,7 @@ import * as api from '../api';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { unlockAudio } from '../lib/alerts';
 import type { ShortcutId } from '../lib/shortcuts';
-import { deferred, makeSettings, pressKey, settle, ShortcutKeys, T0 } from '../test/hooks';
+import { answered, deferredAnswer, makeSettings, pressKey, settle, ShortcutKeys, T0 } from '../test/hooks';
 import type { Settings } from '../types';
 import { SettingsProvider } from './useSettings';
 import { useShortcut } from './useShortcuts';
@@ -40,7 +40,7 @@ const keysOf = (name: string) => screen.getByRole('button', { name }).getAttribu
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-  vi.mocked(api.getSettings).mockResolvedValue(makeSettings());
+  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
 });
 
 describe('useShortcut', () => {
@@ -130,7 +130,7 @@ describe('useShortcut', () => {
 
 describe('useShortcutListener', () => {
   it('listens only once the settings have loaded and while shortcuts are on', async () => {
-    const answer = deferred<Settings>();
+    const answer = deferredAnswer<Settings>();
     vi.mocked(api.getSettings).mockReturnValue(answer.promise);
     const run = vi.fn();
     await renderKeys([{ id: 'history', run, name: 'History' }]);
@@ -143,7 +143,7 @@ describe('useShortcutListener', () => {
     expect(run).toHaveBeenCalledOnce();
 
     // Turned off on another device: the next read of the settings brings it.
-    vi.mocked(api.getSettings).mockResolvedValue(makeSettings({ shortcuts: false }));
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ shortcuts: false })));
     await settle(MINUTE_MS);
     expect(keysOf('History')).toBeNull();
     expect(pressKey('h')).toBe(true);
