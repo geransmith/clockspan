@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { ensureDefaultUser, openDatabase, type DB } from '../db.js';
 import { insertSession, SESSION_COOKIE } from '../auth/session.js';
 import { countRows, SEED_NOW, SEED_TODAY, startTestApp, type TestApp } from './harness.js';
@@ -304,9 +304,8 @@ describe('seedDatabase', () => {
   });
 
   it('writes a board the API would take back, and reads it back at the seed time', async () => {
-    // Only Date: the board's Done lane is read against the clock, and HTTP keeps its real timers.
-    vi.useFakeTimers({ now: SEED_NOW, toFake: ['Date'] });
-    const app = await startTestApp({ authMode: 'local' });
+    // The board's Done lane is read against the clock.
+    const app = await startTestApp({ authMode: 'local', now: SEED_NOW });
     try {
       const { admin, a, b } = await app.twoUsers();
       const m = seedDatabase(app.db, { userId: admin.id, today: SEED_TODAY, now: SEED_NOW });

@@ -9,6 +9,7 @@ const DATE = '2026-09-01';
 describe('sessions', () => {
   let app: TestApp;
   beforeEach(async () => {
+    // A known now: the server reads the same clock in this process.
     app = await startTestApp({ now: SEED_NOW });
   });
   afterEach(() => app.close());

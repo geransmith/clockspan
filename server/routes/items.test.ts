@@ -9,6 +9,7 @@ const YESTERDAY = addDays(TODAY, -1);
 
 let app: TestApp;
 beforeEach(async () => {
+  // A known now: createdAt and the board's window are compared.
   app = await startTestApp({ now: SEED_NOW });
 });
 afterEach(() => app.close());

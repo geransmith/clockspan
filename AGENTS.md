@@ -1599,8 +1599,9 @@ Prove a change at the cheapest level that can show it, and stop there:
      can't, such as an expired login. One app per test. To move time, fake only `Date`, so HTTP
      keeps its real timers (`now` starts the app with it faked at that time; mid-test,
      `vi.useFakeTimers({ toFake: ['Date'] })`), and step it with `vi.setSystemTime`; the shared
-     teardown (`client/src/test/setup.ts`) puts the real clock back. An event stream is read with a client's `stream(path)`, whose `next()`
-     gives one event; the harness closes every connection, streams included, when it closes.
+     teardown (`client/src/test/setup.ts`) puts the real clock back. An event stream is read
+     with a client's `stream(path)`, whose `next()` gives one event; the harness closes every
+     connection, streams included, when it closes.
    - Code with no route (`mergeSettings`, config, passwords, the limiter) is unit-tested
      directly.
    - The database is `openDatabase(':memory:')`, never a file. The static-file tests write a
