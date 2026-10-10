@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { useDay } from '../hooks/useDay';
@@ -24,6 +24,7 @@ import {
   TODAY,
 } from '../test/hooks';
 import type { Break, Priority, SessionResponse } from '../types';
+import { MINUTE_MS } from '../../../shared/dates.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { FocusTimer } from './FocusTimer';
 
@@ -80,6 +81,11 @@ const alsoAdd = () => screen.queryByRole('checkbox', { name: "Also add to today'
 const started = (session = makeSession({ label: 'Call the vendor' })): SessionResponse => ({ session });
 const disabled = (name: string | RegExp) => (screen.getByRole('button', { name }) as HTMLButtonElement).disabled;
 const startOut = () => screen.getByRole('status', { name: 'A start is out' }).textContent;
+/** A press with the keyboard: the focus is on the button as it acts. */
+const press = (el: HTMLElement) => {
+  act(() => el.focus());
+  fireEvent.click(el);
+};
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
@@ -434,5 +440,50 @@ describe('FocusTimer', () => {
     expect(api.putPriorities).toHaveBeenCalledTimes(1);
     const uid = vi.mocked(api.putPriorities).mock.lastCall![1][0]!.uid;
     expect(vi.mocked(api.startSession).mock.calls.map((c) => c[3])).toEqual([uid, uid]);
+  });
+
+  describe('the focus, as the control pressed goes', () => {
+    it("goes to the running card's Pause once a start from the card lands", async () => {
+      vi.mocked(api.startSession).mockResolvedValue(started());
+      await renderCard();
+      press(start25());
+      await settle();
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Pause' }));
+    });
+
+    it('is not handed on after a start that failed, to a timer started later elsewhere', async () => {
+      vi.mocked(api.startSession)
+        .mockRejectedValueOnce(new Error('The server did not answer in time.'))
+        .mockResolvedValueOnce(started(makeSession({ label: 'Board task' })));
+      await renderCard();
+      press(start25());
+      await settle();
+      fireEvent.click(screen.getByRole('button', { name: 'Start elsewhere' }));
+      elsewhere.resolve(null);
+      await settle();
+      expect(screen.getByRole('timer', { name: 'Time remaining' })).toBeTruthy();
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it("goes to the label box once the running card's Finish ends the session", async () => {
+      vi.mocked(api.getRunning).mockResolvedValueOnce({ session: makeSession() });
+      vi.mocked(api.finishSession).mockResolvedValue({ session: endSession(makeSession()) });
+      await renderCard();
+      press(screen.getByRole('button', { name: 'Finish' }));
+      await settle();
+      expect(document.activeElement).toBe(screen.getByLabelText('Session label'));
+    });
+
+    it('goes from Break to End break and back, as each takes the place of the other', async () => {
+      vi.mocked(api.startBreak).mockResolvedValue({ break: makeBreak({ startedAt: T0, endedAt: T0 + 5 * MINUTE_MS }) });
+      vi.mocked(api.endBreak).mockResolvedValue({ break: null });
+      await renderCard();
+      press(screen.getByRole('button', { name: /^Break · / }));
+      await settle();
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: BREAK.end }));
+      press(screen.getByRole('button', { name: BREAK.end }));
+      await settle();
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Break · / }));
+    });
   });
 });

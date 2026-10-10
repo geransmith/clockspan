@@ -149,6 +149,25 @@ describe('Timeclock', () => {
     expect(onChange.mock.lastCall![0].map((p) => p.at)).toEqual([T0 - HOUR_MS, null, null, null]);
   });
 
+  it('gives the focus to Add extra out / in once Remove takes its pair away', async () => {
+    const { onChange, again } = await renderCard(TODAY, addPunchPair(punchesAt(T0 - HOUR_MS)));
+    const remove = screen.getByRole('button', { name: 'Remove Out 1 / In 1' });
+    focus(remove);
+    fireEvent.click(remove);
+    again(onChange.mock.lastCall![0]);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add extra out / in' }));
+  });
+
+  it("gives the focus to the new pair's Remove when its Add reaches the row cap", async () => {
+    const { onChange, again } = await renderCard(TODAY, punchesAt(...Array<null>(MAX_PUNCHES - 2).fill(null)));
+    const add = screen.getByRole('button', { name: 'Add extra out / in' });
+    focus(add);
+    fireEvent.click(add);
+    again(onChange.mock.lastCall![0]);
+    expect(screen.queryByRole('button', { name: 'Add extra out / in' })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove Out 18 / In 18' }));
+  });
+
   it('stops offering Add extra out / in at the row cap', async () => {
     const rows = (n: number) => punchesAt(...Array<null>(n).fill(null));
     await renderCard(TODAY, rows(MAX_PUNCHES - 2));

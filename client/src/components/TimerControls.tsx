@@ -12,9 +12,10 @@ import { Check, Minus, Pause, Play, Plus, X } from './Icons';
  * icons and hides the words on a narrow screen, so there each button carries its name. − and +
  * carry theirs on the card too: the icons are hidden from screen readers and both say only the
  * step. Keys: P pauses or resumes, + adds the step, and F finishes only once time's up, so a
- * stray F can't end a session early; − has none.
+ * stray F can't end a session early; − has none. On the card, `takeFocus` lets the first of Pause,
+ * Resume and Finish to mount take the focus a start from the card handed on.
  */
-export function TimerControls({ compact = false }: { compact?: boolean }) {
+export function TimerControls({ compact = false, takeFocus }: { compact?: boolean; takeFocus?: (el: HTMLElement | null) => void }) {
   const { paused, due, canAdd, adjust, pause, resume, requestFinish, cancel } = useTimer();
   const { settings } = useSettings();
   const step = settings.adjustStepMinutes;
@@ -51,17 +52,17 @@ export function TimerControls({ compact = false }: { compact?: boolean }) {
       </button>
       {!due &&
         (paused ? (
-          <button className={btn} onClick={onPause} aria-keyshortcuts={pauseKey} {...named('Resume timer', 'Resume')}>
+          <button className={btn} onClick={onPause} aria-keyshortcuts={pauseKey} {...named('Resume timer', 'Resume')} ref={takeFocus}>
             <Play />
             {words('Resume')}
           </button>
         ) : (
-          <button className={btn} onClick={onPause} aria-keyshortcuts={pauseKey} {...named('Pause timer', 'Pause')}>
+          <button className={btn} onClick={onPause} aria-keyshortcuts={pauseKey} {...named('Pause timer', 'Pause')} ref={takeFocus}>
             <Pause />
             {words('Pause')}
           </button>
         ))}
-      <button className={`${btn} btn-primary`} onClick={requestFinish} aria-keyshortcuts={finishKey} {...named('Finish timer', 'Finish now')}>
+      <button className={`${btn} btn-primary`} onClick={requestFinish} aria-keyshortcuts={finishKey} {...named('Finish timer', 'Finish now')} ref={takeFocus}>
         <Check />
         {words('Finish')}
       </button>

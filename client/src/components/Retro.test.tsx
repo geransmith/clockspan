@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
@@ -160,6 +160,15 @@ describe('Retro', () => {
     markReviewed();
     await settle();
     expect(onChange.mock.calls).toEqual([[{ done: true }]]);
+  });
+
+  it('keeps the focus on the button as Mark reviewed turns to Undo and back', async () => {
+    const { again } = await renderCard();
+    act(() => screen.getByRole('button', { name: /Mark reviewed/ }).focus());
+    again('', T0);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Undo' }));
+    again('');
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: /Mark reviewed/ }));
   });
 
   it('Mark reviewed sends no tick when the note fails, and the box keeps the text', async () => {

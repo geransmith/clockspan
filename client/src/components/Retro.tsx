@@ -40,6 +40,7 @@ export function Retro({ date, today, priorities, sessions, note, reviewedAt, pic
   // An empty day still gets the note and Mark reviewed: the retro alarm stays armed until the
   // day is reviewed, and its banner opens this card.
   const empty = review.total === 0 && review.unplanned.length === 0;
+  const reviewed = reviewedAt != null;
 
   return (
     <div className="retro">
@@ -134,21 +135,25 @@ export function Retro({ date, today, priorities, sessions, note, reviewedAt, pic
         />
       </label>
 
+      {/* One button in one place, so React keeps its node, and the focus, as it turns to Undo and back. */}
       <div className="retro-foot">
-        {reviewedAt != null ? (
-          <>
-            <span className="pill pill--ok">
-              <Check /> Reviewed {formatTime(reviewedAt)}
-            </span>
-            <button className="btn btn-ghost" onClick={() => void onChange({ done: false })}>
-              Undo
-            </button>
-          </>
-        ) : (
-          <button className="btn btn-primary" onClick={() => void flush().then((ok) => ok && onChange({ done: true }))}>
-            <Check /> Mark reviewed
-          </button>
+        {reviewed && (
+          <span className="pill pill--ok">
+            <Check /> Reviewed {formatTime(reviewedAt)}
+          </span>
         )}
+        <button
+          className={reviewed ? 'btn btn-ghost' : 'btn btn-primary'}
+          onClick={() => void (reviewed ? onChange({ done: false }) : flush().then((ok) => ok && onChange({ done: true })))}
+        >
+          {reviewed ? (
+            'Undo'
+          ) : (
+            <>
+              <Check /> Mark reviewed
+            </>
+          )}
+        </button>
       </div>
 
       {/* Only today's card offers a plan, since the next day is ahead. */}

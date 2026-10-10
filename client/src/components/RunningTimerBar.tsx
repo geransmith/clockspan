@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useTimer } from '../hooks/useTimer';
 import { formatCountdown } from '../lib/format';
 import type { Session } from '../types';
@@ -15,6 +15,17 @@ export function RunningTimerBar({ session }: { session: Session }) {
   // A session with a task is named by the task, and has no label to edit: a box open as the
   // session is linked (on another device) closes, unsent.
   if (editing && linked) setEditing(false);
+  // Finish or Cancel takes the bar away with the focus in it: the brand, just under it, takes the
+  // focus. Not until the bar has left the page, so nothing in it hears a blur: the bar is keyed by
+  // the session, and when another device's session replaces this one, the label box's blur would
+  // rename the new one.
+  const bar = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = bar.current!;
+    return () => {
+      if (el.contains(document.activeElement)) queueMicrotask(() => document.querySelector<HTMLElement>('.brand')?.focus());
+    };
+  }, []);
 
   const commitLabel = () => {
     setEditing(false);
@@ -22,7 +33,7 @@ export function RunningTimerBar({ session }: { session: Session }) {
   };
 
   return (
-    <div className={`running-bar${paused ? ' is-paused' : ''}${due ? ' is-due' : ''}`}>
+    <div ref={bar} className={`running-bar${paused ? ' is-paused' : ''}${due ? ' is-due' : ''}`}>
       <div className="running-bar-inner">
         <span className="running-dot" aria-hidden="true" />
         {linked ? (

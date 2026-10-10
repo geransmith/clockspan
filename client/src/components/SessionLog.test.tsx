@@ -513,6 +513,20 @@ describe('SessionLog', () => {
     expect(api.deleteSession).toHaveBeenCalledWith(1);
   });
 
+  it("hands the focus to the next row's delete, else the one before, past a running row's", async () => {
+    vi.stubGlobal('confirm', () => true);
+    await renderLog([completedSession(1, T0, 300), completedSession(3, T0 + 10 * MINUTE_MS, 300), completedSession(4, T0 + 20 * MINUTE_MS, 300), RUNNING]);
+    const deletes = screen.getAllByRole('button', { name: /^Delete session at / });
+    act(() => deletes[1]!.focus());
+    fireEvent.click(deletes[1]!);
+    expect(document.activeElement).toBe(deletes[2]);
+    // Next is the running row's, which is off.
+    fireEvent.click(deletes[2]!);
+    expect(document.activeElement).toBe(deletes[1]);
+    await settle();
+    expect(vi.mocked(api.deleteSession).mock.calls).toEqual([[3], [4]]);
+  });
+
   it('sends only the delete for a session deleted with its edit open', async () => {
     vi.stubGlobal('confirm', () => true);
     vi.mocked(api.getDay).mockResolvedValue(makeDay(TODAY, { priorities: PLANNED, sessions: [DONE] }));
