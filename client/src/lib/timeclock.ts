@@ -23,8 +23,9 @@ export interface TimeclockResult {
   /** Seconds worked beyond the target (0 while under). */
   overSeconds: number;
   /**
-   * When the workday will end. Stable while working; while at lunch/on a break it moves
-   * later as the break runs long. Null before clock-in. Past the target it is the instant
+   * When the workday will end. Stable while working, except that a lunch not started by its
+   * deadline stops being planned then; while at lunch/on a break it moves later as the break
+   * runs long. Null before clock-in. Past the target it is the instant
    * the target was reached plus any time off the clock since, and holds still while working
    * and on a break, so alarms have a fixed anchor. Once done, the last clock-out.
    */
@@ -164,8 +165,10 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
   const lunchNeeded = settings.mealRules && dayWorkSeconds > settings.lunchDeadlineMinutes * 60;
   const lunchStatus: LunchStatus = lunchOut != null ? 'taken' : !lunchNeeded ? 'not-needed' : now < lunchBy ? 'upcoming' : 'overdue';
 
-  // Time still expected off the clock before the day can end.
-  const futureOffSeconds = lunchOut == null ? (lunchNeeded ? lunchSeconds : 0) : atLunch ? Math.max(0, lunchSeconds - openOffMs / 1000) : 0;
+  // Time still expected off the clock before the day can end. A lunch not taken is planned only
+  // until its deadline, so a skipped lunch moves the end once, hours ahead, and not at the target,
+  // where the jump would skip the end's warnings. A late Lunch out plans it again.
+  const futureOffSeconds = lunchOut == null ? (lunchStatus === 'upcoming' ? lunchSeconds : 0) : atLunch ? Math.max(0, lunchSeconds - openOffMs / 1000) : 0;
 
   let clockOutAt: number | null;
   let clockOutStatus: ClockOutStatus;
