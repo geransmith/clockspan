@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { HOUR_MS } from '../../../shared/dates.js';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
 import { RETRO_PROMPT } from '../lib/copy';
-import { answered, completedSession, deferred, makePriority, makeSettings, settle, T0 } from '../test/hooks';
+import { answered, completedSession, deferred, makePriority, makeSession, makeSettings, settle, T0 } from '../test/hooks';
 import type { Priority, Session } from '../types';
 import { Retro } from './Retro';
 
@@ -17,7 +18,7 @@ async function renderCard(note = '', reviewedAt: number | null = null, prioritie
   const onChange = vi.fn<(patch: api.RetroPatch) => Promise<boolean>>(() => Promise.resolve(true));
   const card = (n: string, r: number | null) => (
     <SettingsProvider>
-      <Retro priorities={priorities} sessions={sessions} note={n} reviewedAt={r} onChange={onChange} />
+      <Retro priorities={priorities} sessions={sessions} note={n} reviewedAt={r} open onChange={onChange} />
     </SettingsProvider>
   );
   const view = render(card(note, reviewedAt));
@@ -30,6 +31,19 @@ async function renderCard(note = '', reviewedAt: number | null = null, prioritie
   };
 }
 
+/** Today's card before clock-out: its one line, and `open` to hand it the prop again. */
+async function renderFolded(priorities = PRIORITIES, sessions: Session[] = []) {
+  const card = (open: boolean) => (
+    <SettingsProvider>
+      <Retro priorities={priorities} sessions={sessions} note="" reviewedAt={null} open={open} onChange={() => Promise.resolve(true)} />
+    </SettingsProvider>
+  );
+  const view = render(card(false));
+  await settle();
+  return { line: document.querySelector('.retro-folded .muted')?.textContent, open: (o: boolean) => view.rerender(card(o)) };
+}
+
+const noteBox = () => screen.queryByPlaceholderText(RETRO_PROMPT);
 const markReviewed = () => fireEvent.click(screen.getByRole('button', { name: /Mark reviewed/ }));
 
 beforeEach(() => {
@@ -183,6 +197,37 @@ describe('Retro', () => {
     note.resolve(true);
     await settle();
     expect(onChange.mock.calls).toEqual([[{ note: 'Went to plan' }], [{ done: true }]]);
+  });
+
+  it('folds to a line of the rows planned and ticked and the focus logged, and Open shows the card with the focus in the note box', async () => {
+    const rows = [makePriority(1, 'Report', { done: true }), makePriority(2, 'Invoices'), makePriority(3, 'Inbox')];
+    // The running session isn't focus yet, as on the Focused tile.
+    const sessions = [completedSession(1, T0, 25 * 60), completedSession(2, T0 + HOUR_MS, 30 * 60), makeSession({ id: 3, startedAt: T0 + 2 * HOUR_MS })];
+    const { line } = await renderFolded(rows, sessions);
+    expect(line).toBe('3 planned · 1 done · 55m focused');
+    expect(noteBox()).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Open retrospective' }));
+    expect(document.activeElement).toBe(noteBox());
+  });
+
+  it('folds a day with nothing on it to zeros', async () => {
+    expect((await renderFolded([])).line).toBe('0 planned · 0 done · 0m focused');
+  });
+
+  it('opens once `open` turns true, and stays open when it turns false', async () => {
+    const { open } = await renderFolded();
+    open(true);
+    expect(noteBox()).not.toBeNull();
+    expect(document.activeElement).toBe(document.body);
+    open(false);
+    expect(noteBox()).not.toBeNull();
+  });
+
+  it('hands the focus Open held to the note box when the card opens with no press (a Clock out reached)', async () => {
+    const { open } = await renderFolded();
+    screen.getByRole('button', { name: 'Open retrospective' }).focus();
+    open(true);
+    expect(document.activeElement).toBe(noteBox());
   });
 
   it('keeps the note and Mark reviewed on a day with nothing planned or logged', async () => {

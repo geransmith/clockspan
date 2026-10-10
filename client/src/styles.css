@@ -2064,10 +2064,15 @@ button.log-label:hover {
   resize: vertical;
   line-height: 1.4;
 }
-.retro-foot {
+/* The note's foot, and today's card folded to its totals line until clock-out. */
+.retro-foot,
+.retro-folded {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+.retro-folded {
+  justify-content: space-between;
 }
 @media (min-width: 640px) {
   .retro-row {

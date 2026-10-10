@@ -1,3 +1,4 @@
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import type { RetroPatch } from '../api';
 import { useDebouncedDraft } from '../hooks/useDebouncedDraft';
 import { RETRO_PROMPT } from '../lib/copy';
@@ -6,6 +7,7 @@ import { counted, formatDuration } from '../lib/format';
 import { reviewDay, sessionName } from '../lib/retro';
 import { LIMITS } from '../../../shared/api.js';
 import type { Priority, Session } from '../types';
+import { PassFocusOnLeave } from './FocusTimer';
 import { Check } from './Icons';
 import { SessionLabel } from './SessionLabel';
 
@@ -14,6 +16,11 @@ interface Props {
   sessions: Session[];
   note: string;
   reviewedAt: number | null;
+  /**
+   * Show the whole card (a past day, today clocked out, or the retro alarm's banner jumping here)
+   * rather than its one line; once open it stays open until the card mounts again.
+   */
+  open: boolean;
   onChange: (patch: RetroPatch) => Promise<boolean>;
 }
 
@@ -21,15 +28,47 @@ interface Props {
  * Plan vs. actual for one day: each priority with the focus time logged against it,
  * the sessions that weren't on the plan, and a note on why. The note saves 800 ms after
  * the last keystroke or on blur; a note whose save fails stays in its box and goes again.
- * "Mark reviewed" ticks the day once the note has saved. Keyed by date in the sheet, so a
- * new day mounts with its own note.
+ * "Mark reviewed" ticks the day once the note has saved. Until `open`, one line of the day's
+ * totals and an Open button stand in for it. Keyed by date in the sheet, so a new day mounts
+ * with its own note and its own fold.
  */
-export function Retro({ priorities, sessions, note, reviewedAt, onChange }: Props) {
+export function Retro({ priorities, sessions, note, reviewedAt, open, onChange }: Props) {
   const { formatTime } = useTimeFormat();
   const review = reviewDay(priorities, sessions);
   // A note typed back to `note` is sent too: `note` can hold a save still out, and a box let go
   // for matching it would follow the note back if that save fails.
   const { draft, edit, flush } = useDebouncedDraft(note, (value) => onChange({ note: value }), 800);
+  const [shown, setShown] = useState(open);
+  if (open && !shown) setShown(true);
+  const box = useRef<HTMLTextAreaElement>(null);
+  // Open goes as the card opens. Its press, or a Clock out reached (here or on another device)
+  // while it has the focus, hands the focus to the note box rather than the top of the page.
+  const handOff = useRef(false);
+  const passFocus = useCallback(() => {
+    handOff.current = true;
+  }, []);
+  useLayoutEffect(() => {
+    if (shown && handOff.current) box.current?.focus();
+  }, [shown]);
+
+  if (!shown)
+    return (
+      <PassFocusOnLeave className="retro-folded" onLeave={passFocus}>
+        <span className="muted">
+          {review.total} planned · {review.done} done · {formatDuration(review.onPlanSeconds + review.offPlanSeconds)} focused
+        </span>
+        <button
+          className="btn btn-ghost"
+          aria-label="Open retrospective"
+          onClick={() => {
+            passFocus();
+            setShown(true);
+          }}
+        >
+          Open
+        </button>
+      </PassFocusOnLeave>
+    );
 
   // An empty day still gets the note and Mark reviewed: the retro alarm stays armed until the
   // day is reviewed, and its banner opens this card.
@@ -119,6 +158,7 @@ export function Retro({ priorities, sessions, note, reviewedAt, onChange }: Prop
       <label className="field">
         <span className="muted small">Why did the day go this way?</span>
         <textarea
+          ref={box}
           className="input retro-textarea"
           value={draft}
           placeholder={RETRO_PROMPT}

@@ -156,19 +156,33 @@ describe('Sheet', () => {
     expect(document.activeElement).toBe(button('Hide Day log'));
   });
 
-  it("scrolls to the card a banner's button jumps to and puts the focus in its note box", async () => {
+  it("scrolls to the card a banner's button jumps to, opens it and puts the focus in its note box", async () => {
     const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView');
     const onJumped = vi.fn();
     try {
-      render(
+      // Today, not clocked in: the retrospective is folded until the jump opens it.
+      const { rerender } = render(
+        <AppProviders>
+          <SheetAt onJumped={onJumped} />
+        </AppProviders>,
+      );
+      await settle();
+      expect(document.querySelector('#card-retro .retro-folded')).not.toBeNull();
+      expect(document.querySelector('#card-retro textarea')).toBeNull();
+      rerender(
         <AppProviders>
           <SheetAt jumpTo="retro" onJumped={onJumped} />
         </AppProviders>,
       );
-      await settle();
       expect(scrolled.mock.contexts).toEqual([document.getElementById('card-retro')]);
       expect(document.activeElement).toBe(document.querySelector('#card-retro textarea'));
       expect(onJumped).toHaveBeenCalled();
+      rerender(
+        <AppProviders>
+          <SheetAt onJumped={onJumped} />
+        </AppProviders>,
+      );
+      expect(document.querySelector('#card-retro textarea')).not.toBeNull();
     } finally {
       scrolled.mockRestore();
     }
@@ -245,6 +259,34 @@ describe("Sheet: the timeclock card's state", () => {
       expect(s.getAttribute('aria-describedby')?.split(' ')).toContain(notice.id);
     }
     expect(segments('Lunch out').some((s) => s.hasAttribute('aria-invalid'))).toBe(false);
+  });
+});
+
+describe("Sheet: today's retrospective", () => {
+  const retroNote = () => document.querySelector('#card-retro textarea');
+
+  it('stays folded to its line until the Clock out is reached, then opens', async () => {
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { punches: punchesAt(T0 - 3 * HOUR_MS, null, null, T0 + 30 * MINUTE_MS) }), 1));
+    const { rerender } = await renderSheet();
+    expect(retroNote()).toBeNull();
+    expect(document.querySelector('#card-retro .retro-folded')).not.toBeNull();
+    rerender(
+      <AppProviders>
+        <SheetAt now={T0 + 30 * MINUTE_MS} />
+      </AppProviders>,
+    );
+    expect(retroNote()).not.toBeNull();
+  });
+
+  it("shows another day's open", async () => {
+    vi.mocked(api.getDay).mockImplementation((d) => Promise.resolve(answered(makeDay(d))));
+    render(
+      <AppProviders>
+        <SheetAt date={YESTERDAY} />
+      </AppProviders>,
+    );
+    await settle();
+    expect(retroNote()).not.toBeNull();
   });
 });
 
