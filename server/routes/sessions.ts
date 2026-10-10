@@ -16,7 +16,7 @@ import {
   sessionRowToJson,
   UID_RE,
 } from './shared.js';
-import { LIMITS, type OkResponse, type RunningResponse, type SessionConflict, type SessionResponse } from '../../shared/api.js';
+import { LIMITS, type OkResponse, type RunningResponse, type SessionResponse } from '../../shared/api.js';
 import { pausedSecondsAfter, PLANNED_SECONDS, plannedEndAt } from '../../shared/timer.js';
 import { cutText } from '../../shared/text.js';
 
@@ -64,11 +64,7 @@ export function startSession(db: DB): RequestHandler<{ date: string }> {
     if ('error' in planned) return refuse(res, 400, planned.error);
     const name = parseLabel(label);
     if ('error' in name) return refuse(res, 400, name.error);
-    const existing = runningSession(db, user.id);
-    if (existing) {
-      res.status(409).json({ error: 'A timer is already running.', session: sessionRowToJson(existing) } satisfies SessionConflict);
-      return;
-    }
+    if (runningSession(db, user.id)) return refuse(res, 409, 'A timer is already running.');
     // Checked before the day is stored, so a refused start leaves no empty day behind.
     const link = parsePriorityUid(db, findDay(db, user.id, date)?.id, priorityUid);
     if ('error' in link) return refuse(res, 400, link.error);

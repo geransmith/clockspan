@@ -8,17 +8,17 @@ const THROTTLE_MS = 5000;
 
 /**
  * Keeps something on screen in step with the server: `run` every minute and when the tab comes
- * back (with `immediately`, on mount too), at most once every 5 s, and at once when another tab or
- * device saves a change (CHANGED_ELSEWHERE, from useLiveChanges): after the run out, never beside
- * it, and one run for a burst of them. No `focus` listener: some embedded browsers fire `focus` on
- * ordinary clicks (see the gotcha in AGENTS.md). `pending` is true while a come-back's run is out,
- * so the caller can wait for its answer before acting on a copy that may be hours old; one that
- * comes back inside the throttle waits on the run already out. `runNow` is for a caller that has
- * just learned its copy is wrong: a run sent before that may answer with the old state, so it
- * starts a fresh run, after the one out (never beside it, or the older answer could land last). It
- * counts for the throttle, so the tab coming back just after waits on it and sends nothing more.
+ * back (with `immediately`, on mount too), at most once every 5 s, and at once on CHANGED_ELSEWHERE
+ * (another tab's or device's save, from useLiveChanges, or a write refused 404/409, from api.ts): a
+ * run sent before it may answer with the old state, so it starts a fresh run after the one out,
+ * never beside it (the older answer could land last), and one for a burst of them. That run counts
+ * for the throttle, so the tab coming back just after waits on it and sends nothing more. No
+ * `focus` listener: some embedded browsers fire `focus` on ordinary clicks (see the gotcha in
+ * AGENTS.md). `pending` is true while a come-back's run is out, so the caller can wait for its
+ * answer before acting on a copy that may be hours old; one that comes back inside the throttle
+ * waits on the run already out.
  */
-export function useRefreshLoop(run: () => Promise<unknown>, immediately = false): { pending: boolean; runNow: () => Promise<unknown> } {
+export function useRefreshLoop(run: () => Promise<unknown>, immediately = false): { pending: boolean } {
   const latestRun = useLatest(run);
   const [pending, setPending] = useState(false);
   const loop = useRef<{ last: number; out: Promise<unknown> | null }>({ last: 0, out: null });
@@ -36,7 +36,6 @@ export function useRefreshLoop(run: () => Promise<unknown>, immediately = false)
     },
     [latestRun],
   );
-  const runNow = useCallback(() => start(loop.current.out), [start]);
 
   useEffect(() => {
     const tick = (): Promise<unknown> | null => (Date.now() - loop.current.last < THROTTLE_MS ? loop.current.out : start());
@@ -69,5 +68,5 @@ export function useRefreshLoop(run: () => Promise<unknown>, immediately = false)
       window.removeEventListener(CHANGED_ELSEWHERE, onChanged);
     };
   }, [start, immediately]);
-  return { pending, runNow };
+  return { pending };
 }

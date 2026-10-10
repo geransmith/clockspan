@@ -101,7 +101,7 @@ server/                 Express API → dist/server
   validate.ts           isWholeNumber: the one check for every bounded whole number the server takes;
                         isOneOf: a value from a fixed list (a setting's choices, a category's colour);
                         parseId: a route's numeric id
-  refuse.ts             refuse(): sends an ErrorResponse; every API refusal but the timer-start 409 goes through it;
+  refuse.ts             refuse(): sends an ErrorResponse, which every API refusal goes through;
                         STALE_CLIENT, the 409's message to a page loaded before tasks were stored once
   auth/                 session cookie, scrypt passwords, the login limiter, publicUser, logName and the
                         local-account queries (users.ts), middleware (currentUser), local + OIDC routes,
@@ -130,7 +130,8 @@ client/                 Vite root → dist/client
                         `revision`), which a caller checks with instanceof, and beside it unlessGone
                         counts a delete answered 404 as done, and goneAt does the same for a data call,
                         keeping the refusal's revision); CHANGED_ELSEWHERE, the event useLiveChanges
-                        raises;
+                        raises, and request() too, its detail the refusal's revision, when a data
+                        write is refused 404 (gone) or 409 (changed elsewhere);
                         src/types.ts re-exports the shared types (types only)
   src/lib/              logic with no React, a test beside each file (the browser-facing ones stub the
                         globals, as alerts.ts does; apiError is covered through api.test and the hook
@@ -175,15 +176,16 @@ client/                 Vite root → dist/client
                         device; useShortcuts binds a key beside its button (useShortcut) and is the one
                         keydown listener (useShortcutListener); useLiveChanges keeps the server's live
                         stream open while the tab is shown and raises CHANGED_ELSEWHERE (its detail the
-                        revision heard), on which every useRefreshLoop runs and the day store raises its
-                        held days' floors.
+                        revision heard), as api.ts does for a write refused 404 or 409, on which every
+                        useRefreshLoop runs and the day store raises its held days' floors.
                         src/test/fixtures.ts has the plain factories and TEST_SETTINGS (no React), and a
                         mocked data call's answer (answered(value, revision = 0), and deferredAnswer<T>()
                         for one a case resolves by hand);
                         src/test/hooks.tsx re-exports fixtures.ts and AppProviders and has
                         SettingsAndDays, serveRange (a mocked getRange that answers from a list of
-                        days), ShortcutKeys and pressKey (the key listener, and a key pressed where
-                        the focus is) and the act() helpers
+                        days), refused(status, revision) (a mocked write refused 404 or 409 the way
+                        request() refuses it, CHANGED_ELSEWHERE first), ShortcutKeys and pressKey (the
+                        key listener, and a key pressed where the focus is) and the act() helpers
   src/components/       the cards, History (Calendar + Review), Banners, FinishChoice, RemoveTask (×'s Off
                         this day / Delete everywhere), TodayOffer (Top priorities' morning notice),
                         Shortcuts (the key listener, and ? for the list of keys), and
@@ -322,11 +324,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   never through another module (a constant read through `types.ts` fails `typecheck`). Every
   success body has a `shared/` type
   (one in `api.ts`, or `Settings`); a failure is `ErrorResponse` (`{ error }`, whose message
-  the client throws), sent through `refuse()` (`server/refuse.ts`); the timer-start 409 is
-  `SessionConflict`, which extends it with the running session and is the one refusal sent
-  without `refuse()`. Builders are annotated with these types
-  (`sessionRowToJson(): Session`, `dayJson(): Day`, …) and each route's answer names its
-  envelope with `satisfies` (`res.json({ deleted } satisfies PruneResult)`), while
+  the client throws), sent through `refuse()` (`server/refuse.ts`). Builders are annotated with
+  these types (`sessionRowToJson(): Session`, `dayJson(): Day`, …) and each route's answer names
+  its envelope with `satisfies` (`res.json({ deleted } satisfies PruneResult)`), while
   `client/src/api.ts` reads the same types, so a field renamed on one side fails `typecheck`
   on the other. Server-only row types (a day's rows in `routes/shared.ts`) take their unions
   from there too (`PunchRow.kind` is `Punch['kind']`); `UserRow.kind` follows the users
@@ -458,8 +458,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   without a second chime — and waits `DUE_GRACE_SECONDS` (10 min) for an answer before the
   auto-finish (which chimes only if nothing has for that end). The auto-finish and the banner wait
   while a come-back sync is out (`syncing`), as the alarms do, and the auto-finish sends the plan
-  and pause it judged by: the server refuses (409) a session another device has changed since, and
-  the timer syncs, as it does when the finish finds the session deleted there (404). The banner goes
+  and pause it judged by: the server refuses a session another device changed (409) or deleted (404)
+  since, and the refusal syncs the timer, as any write's 404 or 409 does (`api.ts`). The banner goes
   while a press that took it away is on its way, and comes back, quietly, if that press fails. Plans
   are whole minutes: `adjust` rounds the new plan up to one and stops at `PLANNED_SECONDS.max`
   (8 h), where `canAdd` turns false, + is disabled and the "Time's up" banner is raised again,
@@ -476,11 +476,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   failure drops only that press, and a sync's answer never hides a press still on its way. Keep that
   pattern for new mutations.
 - **One running session per user is a schema invariant** (a unique partial index), and another
-  device may own it: a 409 on start is adopted with a banner, a sync whose answer differs from the
-  session shown refreshes that day if the store holds it so the log catches up (a day it doesn't
-  hold loads with the row when it is opened), a 404/409 on any press on the running session re-syncs
-  at once (`runNow`), and so does a refused break start, and the completion chime only plays when
-  the server says `completed`.
+  device may own it: a 409 on start raises the `TIMER_ELSEWHERE` banner and the sync it brings
+  shows the other device's session, a sync whose answer differs from the session shown refreshes
+  that day if the store holds it so the log catches up (a day it doesn't hold loads with the row
+  when it is opened), a 404/409 on any press on the running session, and a refused break start,
+  re-sync the same way, since `api.ts` raises `CHANGED_ELSEWHERE` for every data write refused 404
+  or 409, and the completion chime only plays when the server says `completed`.
 - **Nothing alerts before the settings have loaded.** The timer's two alerting effects and the
   break-over alert (`useBreak`) wait for `useSettings().loaded`, or an alert raised on load
   would use the default sound and switch; the alarms (`useTodayAlarms`) wait for it the same
@@ -510,12 +511,17 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (`changedElsewhere`: `request()` notes each write's revision, a refusal's included, and the
   server moves it by one per write), `CHANGED_ELSEWHERE` is raised on the window with the newest
   one as its detail. On it every `useRefreshLoop` runs at once, after the run out and once for a
-  burst, and the day store raises its held days' floors (above). A stream the browser gave up on (a
-  401, the 429 past `MAX_STREAMS`, a proxy's error page) is opened again on `nextBackoff` and judged
-  from where it left off; a tab shown again starts from its new first message, since coming back
-  reads everything anyway. The minute tick stays, for a page with no stream (a buffering proxy), a
-  change between a read and a stream's first message, and the prune, whose revision no stream
-  hears. A past day, History or Review on screen is read again the next time it is shown.
+  burst, and the day store raises its held days' floors (above). A data write of this page refused
+  404 (gone) or 409 (changed) raises the same event from `request()`, at once and unjudged (the
+  stream would never call it foreign, since its revision is noted as this page's own), with the
+  refusal's revision as its detail, whether the stream is open or not; never for a read, whose
+  answer the event asks for again (a refused read would loop), nor an auth route, which names no
+  revision. A stream the browser gave up on (a 401, the 429 past `MAX_STREAMS`, a proxy's error
+  page) is opened again on `nextBackoff` and judged from where it left off; a tab shown again starts
+  from its new first message, since coming back reads everything anyway. The minute tick stays, for
+  a page with no stream (a buffering proxy), a change between a read and a stream's first message,
+  and the prune, whose revision no stream hears. A past day, History or Review on screen is read
+  again the next time it is shown.
 - **The day store keeps the server's copy and this device's changes apart** (`lib/optimistic.ts`):
   each day is its confirmed copy plus the changes not confirmed yet, and the sheet shows the one
   laid over the other. The confirmed copy is the server's answers in the order they arrived (a
@@ -912,34 +918,35 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   and starts on its task; a card's is a pull first (`run` with `minutes`: the nudge asks as Move
   to's does, Add anyway pulls and starts, Keep it short does neither), whose promise of the task's
   uid the start awaits, so a refused pull starts nothing and shows one banner. A start the server
-  refuses (the task taken off the list meanwhile) is the save banner, and a 409 is adopted
-  (`TIMER_ELSEWHERE`). The item the running session is on, on its day (a card, which has none, by
-  its task), starts its meta line with the day log's pill (`RunningMark`), which its title is
-  `aria-describedby`. The + at the end of Later's, Next's and In progress's head opens that
-  column's box (`Capture`: a field and the category chip; `openAdd`, which also shows the column on
-  a phone). Enter adds and keeps the box open; an empty Enter or Escape closes it with the focus
-  back on the +, Escape dropping the text; leaving it closes it only while it is empty. Later's
-  card goes at the top and Next's at the end (`laneStart`, `addItem`). In progress's text is a new
-  task on today's list, a `place` move of `newTaskRow` through `move`, so on the board's queue,
-  where it shows once its job starts (it has no item for `moving` to show); past the nudge it asks
-  as Add priority does (this nudge and a pull's count the rows still waiting on the board's queue,
-  as the sheet counts its draft), the text staying in the box until Add anyway, which closes the box
-  and focuses the new row. An edit of the box's text or category drops the question, and the next
-  Enter asks again. Later's and Next's + is `aria-disabled` at the cap (`boardFull`, `BOARD.full`
-  under it), and In progress's only on a full list (`hasRoom`, `ADD_PRIORITY_FAILED.full`), since
-  its task has no lane; a box open as its + shuts closes, giving the focus it had to the +. A Delete
-  or a Remove from today that empties a column puts the focus on its +, or on Done's heading. One
-  `role="status"` slot above the columns holds the board notice (a pull's or a typed row's nudge,
-  the done-item notice or a refusal): its first button takes the focus, and an Enter or Space still
-  held from the press that raised it presses nothing. What the store refuses once a move is under
-  way (`MoveRefused`) is a banner. A drag (`components/board/useBoardDrag.tsx`, with dnd-kit's
-  settings in `dnd.ts` beside it) starts at an item's grip; a planned task and a recurring row have
-  none, and an item whose move is on its way can't be picked up until the move lands. Where a drop
-  lands is `dropTarget`'s (see its doc), and what a screen reader hears comes from `BOARD_DRAG`,
-  `overAnnouncement` and `moveAnnouncement`. dnd-kit's own focus return is off, since it would take
-  the focus from the notice a drop brings: a keyboard drag puts it back on the item's grip, and so
-  does closing the notice (on the title where the grip is hidden or missing; for a row typed in In
-  progress's box, back in that box, which still holds the text).
+  refuses (the task taken off the list meanwhile) is the save banner, and a 409 is the
+  `TIMER_ELSEWHERE` banner while the sync it brings shows the other device's timer. The item the
+  running session is on, on its day (a card, which has none, by its task), starts its meta line with
+  the day log's pill (`RunningMark`), which its title is `aria-describedby`. The + at the end of
+  Later's, Next's and In progress's head opens that column's box (`Capture`: a field and the
+  category chip; `openAdd`, which also shows the column on a phone). Enter adds and keeps the box
+  open; an empty Enter or Escape closes it with the focus back on the +, Escape dropping the text;
+  leaving it closes it only while it is empty. Later's card goes at the top and Next's at the end
+  (`laneStart`, `addItem`). In progress's text is a new task on today's list, a `place` move of
+  `newTaskRow` through `move`, so on the board's queue, where it shows once its job starts (it has
+  no item for `moving` to show); past the nudge it asks as Add priority does (this nudge and a
+  pull's count the rows still waiting on the board's queue, as the sheet counts its draft), the text
+  staying in the box until Add anyway, which closes the box and focuses the new row. An edit of the
+  box's text or category drops the question, and the next Enter asks again. Later's and Next's + is
+  `aria-disabled` at the cap (`boardFull`, `BOARD.full` under it), and In progress's only on a full
+  list (`hasRoom`, `ADD_PRIORITY_FAILED.full`), since its task has no lane; a box open as its +
+  shuts closes, giving the focus it had to the +. A Delete or a Remove from today that empties a
+  column puts the focus on its +, or on Done's heading. One `role="status"` slot above the columns
+  holds the board notice (a pull's or a typed row's nudge, the done-item notice or a refusal): its
+  first button takes the focus, and an Enter or Space still held from the press that raised it
+  presses nothing. What the store refuses once a move is under way (`MoveRefused`) is a banner. A
+  drag (`components/board/useBoardDrag.tsx`, with dnd-kit's settings in `dnd.ts` beside it) starts
+  at an item's grip; a planned task and a recurring row have none, and an item whose move is on its
+  way can't be picked up until the move lands. Where a drop lands is `dropTarget`'s (see its doc),
+  and what a screen reader hears comes from `BOARD_DRAG`, `overAnnouncement` and `moveAnnouncement`.
+  dnd-kit's own focus return is off, since it would take the focus from the notice a drop brings: a
+  keyboard drag puts it back on the item's grip, and so does closing the notice (on the title where
+  the grip is hidden or missing; for a row typed in In progress's box, back in that box, which still
+  holds the text).
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started — one
   rule, no clock-in fallback. `GET /days/range` returns full days and the client does the rollup
@@ -1296,7 +1303,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   validate input (`app.ts` makes a missing or non-JSON body `{}`, so a route reads fields
   straight off `req.body as { field?: unknown }`, with no `?? {}` or `?.`, and checks each one;
   the `no-unsafe-*` lint refuses reading it as `any`), refuse with
-  `return refuse(res, status, message)`, and never `await` (see "Every data answer numbers the
+  `return refuse(res, status, message)` (on a write a 404 says the row is gone and a 409 that
+  another device changed it; either makes the page read everything again, so bad input is a 400),
+  and never `await` (see "Every data answer numbers the
   user's changes") → add the call to `client/src/api.ts` (a request
   body the client builds in more than one place gets its type there, at the head of the section
   whose calls send it, as `RetroPatch` and `SessionEdit` do: the server reads every body as `unknown`), with a
@@ -1625,11 +1634,12 @@ The browser pass for each surface (the logic under it is already tested):
   reaches `/api/auth`.
 - `window` `focus` events fire on ordinary clicks in some embedded browsers, so the periodic
   and come-back refreshes (today's day, the settings, the timer's sync, the board) go through
-  `useRefreshLoop`, which listens for `visibilitychange` and `CHANGED_ELSEWHERE` and never
+  `useRefreshLoop`, which listens for `visibilitychange` and `CHANGED_ELSEWHERE` (another tab's or
+  device's save, from `useLiveChanges`, or a write refused 404/409, from `api.ts`) and never
   `focus`; a new one goes through it too, and nothing in the app listens for the window's `focus`
   (`useLiveChanges` follows `visibilitychange` too). A read tied to what is shown or to a change
-  just made (a view showing a held day, a re-read after a write) is not a refresh and stays outside
-  the loop.
+  just made (a view showing a held day, a store's own re-read after its write) is not a refresh and
+  stays outside the loop; the run a refusal's `CHANGED_ELSEWHERE` starts is a loop run.
 - Over HTTP/1.1 a browser holds six connections per host, and each live stream keeps one, so a tab
   opens one stream and only while it is shown; several tabs shown at once over plain HTTP can use
   them up (HTTPS through a proxy is usually HTTP/2, which carries them all on one connection).

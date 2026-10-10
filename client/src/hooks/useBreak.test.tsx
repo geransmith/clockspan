@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { alert, dismissByTag, unlockAudio, type AlertOptions } from '../lib/alerts';
 import { MINUTE_MS, todayKey } from '../../../shared/dates.js';
-import { ApiError } from '../lib/apiError';
 import { endBreaksAt } from '../lib/breaks';
 import { BREAK, BREAK_SUGGESTION } from '../lib/copy';
 import {
@@ -18,6 +17,7 @@ import {
   makeSession,
   makeSettings,
   MIDNIGHT,
+  refused,
   setVisibility,
   settle,
   T0,
@@ -240,11 +240,13 @@ it('does not ring an earlier break again when the later one is deleted', async (
 it('asks for the running session at once when the server refuses a break, as it does while a timer runs on another device', async () => {
   const { result } = render();
   await settle();
-  vi.mocked(api.startBreak).mockRejectedValue(new ApiError(409, 'A focus timer is running.'));
+  vi.mocked(api.startBreak).mockImplementation(() => refused(409));
   vi.mocked(api.getRunning).mockResolvedValue(answered({ session: makeSession({ id: 3 }) }));
   await act(() => result.current.start(5));
   await settle();
   expect(result.current.timer.running?.id).toBe(3);
+  // The mount's sync and the one the refusal brings: nothing more.
+  expect(api.getRunning).toHaveBeenCalledTimes(2);
 });
 
 it("waits for the read the tab's coming back sends, so a break ended on another device meanwhile isn't announced", async () => {

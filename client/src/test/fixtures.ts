@@ -288,7 +288,7 @@ export function deferredAnswer<T>() {
   return { ...d, resolve: (value: T, revision = 0) => d.resolve(answered(value, revision)) };
 }
 
-/** An API failure the way `request()` throws one: a status, the revision the refusal names, and the body for a 409. */
-export function apiError(status: number, revision = 0, body?: unknown): ApiError {
-  return new ApiError(status, REQUEST_FAILED(status), body, revision);
+/** An API failure the way `request()` throws one: a status and the revision the refusal names. */
+export function apiError(status: number, revision = 0): ApiError {
+  return new ApiError(status, REQUEST_FAILED(status), revision);
 }

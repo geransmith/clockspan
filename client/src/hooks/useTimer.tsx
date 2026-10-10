@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as api from '../api';
 import { nextBackoff } from '../../../shared/backoff.js';
 import { pausedSecondsAfter } from '../../../shared/timer.js';
-import type { Session, SessionConflict, SessionResponse } from '../types';
+import type { Session, SessionResponse } from '../types';
 import { alert, dismissByTag, warnSaveFailed } from '../lib/alerts';
 import { ApiError } from '../lib/apiError';
 import { TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
@@ -66,8 +66,6 @@ export interface TimerCtx extends Pick<TimerView, 'countdownSeconds' | 'elapsedS
    * a forgotten pause, or on another device: its user wasn't here to take a break after it.
    */
   finished: Session | null;
-  /** Asks the server for the running session now: for a caller whose write was refused, perhaps by a timer another device started. */
-  resync: () => Promise<unknown>;
 }
 
 const Ctx = createContext<TimerCtx | null>(null);
@@ -129,9 +127,9 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   const chimedEnd = useRef<string | null>(null);
 
   // Re-sync with the server on load, when the tab comes back, and every minute
-  // (`useRefreshLoop`), and at once when a press finds the session gone (`syncNow`: a sync sent
-  // after the refusal, since one already out may still show the session running; it waits for
-  // that one, and the tab coming back just after asks nothing more). The answer replaces the
+  // (`useRefreshLoop`), and at once on CHANGED_ELSEWHERE: another tab's or device's save, or a
+  // write of this page refused as gone or changed (a press on a session ended elsewhere), sent
+  // after any sync already out, which may still show the session running. The answer replaces the
   // confirmed session unless an answer with a higher revision has landed, and a press still on
   // its way stays on top of it. A different session than the one shown means another device
   // started or ended a timer: its day is fetched again, quietly, if the store holds it, so the
@@ -153,7 +151,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   }, [current, change, refresh]);
   // `syncing`: the tab came back and the sync it sent hasn't answered, so the copy shown may be
   // hours old. The auto-finish and the time's-up banner wait for it, as the alarms do.
-  const { pending: syncing, runNow: syncNow } = useRefreshLoop(sync, true);
+  const { pending: syncing } = useRefreshLoop(sync, true);
 
   // The session is over (finished or cancelled, here or by the server): nothing runs now, and
   // the day's log takes the row. Unless a sync has meanwhile shown a session another device
@@ -197,8 +195,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // end either way), or a pause left for an hour (the server ends the session where the pause
   // began, so nothing after it is logged). It sends the plan and pause it judged by, and the
   // server refuses (409) a row another device changed since: given time or resumed, it may not
-  // be due any more, so a sync shows what it is now. A row deleted there since (404) is gone, and
-  // the same sync shows that.
+  // be due any more. A row deleted there since is a 404. Either refusal brings a sync
+  // (CHANGED_ELSEWHERE, api.ts) that shows what the session is now.
   useEffect(() => {
     if (!running || !loaded || syncing || completing.current || now < retry.current.at) return;
     const forgotten = pausedForSeconds >= PAUSE_LIMIT_SECONDS;
@@ -233,27 +231,11 @@ export function TimerProvider({ children }: { children: ReactNode }) {
           notifications: !chimed && settings.notifications,
         });
       })
-      .catch((err: unknown) => {
-        if (err instanceof ApiError && (err.status === 404 || err.status === 409)) void syncNow();
+      .catch(() => {
         const delay = nextBackoff(retry.current.delay);
         retry.current = { at: Date.now() + delay, delay };
       });
-  }, [
-    running,
-    name,
-    loaded,
-    syncing,
-    now,
-    endAt,
-    due,
-    overrunSeconds,
-    pausedForSeconds,
-    end,
-    syncNow,
-    settings.sound,
-    settings.sounds.timer,
-    settings.notifications,
-  ]);
+  }, [running, name, loaded, syncing, now, endAt, due, overrunSeconds, pausedForSeconds, end, settings.sound, settings.sounds.timer, settings.notifications]);
 
   useWakeLock(running != null && !paused && !due && settings.keepScreenAwake);
 
@@ -288,19 +270,16 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         change((t) => settleWith(t, [], session, revision));
         applySession(session, revision);
       } catch (err) {
-        const theirs = err instanceof ApiError && err.status === 409 ? (err.body as Partial<SessionConflict> | null)?.session : undefined;
-        if (!theirs) throw err;
-        // 409: a timer is already running, started on another device. Follow it, fetch its
-        // day again if the store holds it so the log has the row, and say why what was typed
-        // here went nowhere.
-        change((t) => settleWith(t, [], theirs, (err as ApiError).revision));
-        void refresh(theirs.date);
+        if (!(err instanceof ApiError && err.status === 409)) throw err;
+        // A timer already runs, started on another device: the sync that refusal brings shows it
+        // and fetches its day again if the store holds it. This says why what was typed here went
+        // nowhere.
         alert({ ...TIMER_ELSEWHERE, tone: 'info', tag: 'timer-elsewhere', sound: false, notifications: false });
       } finally {
         setStartsOut((n) => n - 1);
       }
     },
-    [change, queue, applySession, refresh, prioritiesSaved],
+    [change, queue, applySession, prioritiesSaved],
   );
 
   // The bar and the card call these with `void`, so a failure has to be reported here: the
@@ -312,14 +291,11 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       if (!cur) return;
       try {
         await run(cur);
-      } catch (err) {
+      } catch {
         warnSaveFailed();
-        // Gone, or no longer running: it ended on another device. Show that now, not at the
-        // next poll.
-        if (err instanceof ApiError && (err.status === 404 || err.status === 409)) void syncNow();
       }
     },
-    [current, syncNow],
+    [current],
   );
 
   // A press on the running session (adjust, edit, pause, resume): shown at once, sent after
@@ -485,7 +461,6 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       dismissFinishChoice,
       cancel,
       finished,
-      resync: syncNow,
     }),
     [
       running,
@@ -510,7 +485,6 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       dismissFinishChoice,
       cancel,
       finished,
-      syncNow,
     ],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

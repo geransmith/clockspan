@@ -7,7 +7,7 @@ import { DayProvider } from '../hooks/useDay';
 import { SettingsProvider } from '../hooks/useSettings';
 import { useShortcutListener } from '../hooks/useShortcuts';
 import type { Day } from '../types';
-import { answered } from './fixtures';
+import { answered, apiError } from './fixtures';
 
 export * from './fixtures';
 export { AppProviders } from '../hooks/AppProviders';
@@ -40,6 +40,15 @@ export function begin<T>(fn: () => Promise<T>): Promise<T> {
 /** The server answers a range with the days it holds in it; the calling test mocks '../api'. */
 export function serveRange(days: Day[]): void {
   vi.mocked(api.getRange).mockImplementation((from, to) => Promise.resolve(answered({ days: days.filter((d) => d.date >= from && d.date <= to) })));
+}
+
+/**
+ * A write the server refuses as gone (404) or changed (409), the way `request()` refuses it:
+ * CHANGED_ELSEWHERE first, then the ApiError. The calling test mocks '../api'.
+ */
+export function refused(status: 404 | 409, revision = 0): Promise<never> {
+  window.dispatchEvent(new CustomEvent(api.CHANGED_ELSEWHERE, { detail: revision }));
+  return Promise.reject(apiError(status, revision));
 }
 
 /** Fires `visibilitychange` with the page shown or hidden. */
