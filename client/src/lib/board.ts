@@ -16,12 +16,13 @@
 import type { CategoryPatch, ItemPatch, NewCategory, NewItem } from '../api';
 import { BOARD_LIMITS, CATEGORY_COLORS, LOOKBACK_DAYS, OPEN_LANES } from '../../../shared/api.js';
 import { addDays, startOfWeek } from '../../../shared/dates.js';
+import { FREE_ROW } from '../../../shared/priorities.js';
 import { categoryName, sameText } from '../../../shared/text.js';
 import type { Board, BoardCard, Category, CategoryColor, Day, OpenLane, Priority, Recurring } from '../types';
 import { warnQuietly, warnSaveFailed } from './alerts';
 import { BOARD, BOARD_DRAG, DONE_STAYS } from './copy';
 import { isTaskRow } from './priorities';
-import type { PrioritySeed } from './plan';
+import type { PrioritySeed } from './recurring';
 
 /** The board's four columns. Later and Next are lanes a task is put in; In Progress and Done are worked out from the days. */
 export type ColumnId = 'later' | 'next' | 'progress' | 'done';
@@ -316,16 +317,14 @@ function toToday(item: BoardItem, done: boolean, today: string): Move {
   // card of Later's Repeats, which has neither.
   const from = item.row ?? item.card ?? { listed: 0, logged: 0 };
   const row: Omit<Priority, 'position'> = {
+    ...FREE_ROW,
     uid: item.uid,
     text: item.title,
     done,
-    addedAt: null,
     categoryUid: item.categoryUid,
     note: item.note,
     recurring: item.recurring,
-    archived: false,
     listed: from.listed,
-    earlier: 0,
     logged: from.logged,
   };
   return { kind: 'place', row, nudge: !done };

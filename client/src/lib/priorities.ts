@@ -1,10 +1,7 @@
 import type { Day, Priority } from '../types';
-import { hasText, isFree } from '../../../shared/priorities.js';
+import { FREE_ROW, hasText, isFree } from '../../../shared/priorities.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { PRIORITY_WARNINGS } from './copy';
-
-/** A row with text that isn't ticked: what the left-open offer works from. */
-export const isOpen = (p: Priority) => hasText(p) && !p.done;
 
 /** A row with a task on it and its name written: what the board shows of a day's list, and what a session can be linked to. */
 export const isTaskRow = (p: Priority): p is Priority & { uid: string } => p.uid != null && hasText(p);
@@ -17,20 +14,7 @@ export const isOneOff = (p: Pick<Priority, 'text' | 'recurring'>) => hasText(p) 
 
 /** A free row (`isFree`): no task on it, which is what the card pads a list with. */
 export function emptyRow(position: number): Priority {
-  return {
-    position,
-    text: '',
-    done: false,
-    uid: null,
-    addedAt: null,
-    categoryUid: null,
-    note: '',
-    recurring: false,
-    archived: false,
-    listed: 0,
-    earlier: 0,
-    logged: 0,
-  };
+  return { ...FREE_ROW, position };
 }
 
 /**
@@ -40,7 +24,7 @@ export function emptyRow(position: number): Priority {
  * its task and the note and counts its source gave.
  */
 export function newTaskRow(text: string, categoryUid: string | null, now: number): Omit<Priority, 'position'> & { uid: string } {
-  return { text, done: false, uid: newUid(), addedAt: now, categoryUid, note: '', recurring: false, archived: false, listed: 0, earlier: 0, logged: 0 };
+  return { ...FREE_ROW, text, uid: newUid(), addedAt: now, categoryUid };
 }
 
 /**
@@ -110,22 +94,14 @@ export function patchRow(rows: Priority[], uid: string, patch: Partial<Priority>
   return rows.some((p) => p.uid === uid) ? rows.map((p) => (p.uid === uid ? { ...p, ...patch } : p)) : null;
 }
 
-/** The rows with the one at `position` a free row: × on a row within Rows per day takes its task off and leaves the row. */
-export function clearRow(rows: Priority[], position: number): Priority[] {
-  return rows.map((p) => (p.position === position ? emptyRow(position) : p));
-}
-
-/** The rows without the one at `position`, renumbered from 1. */
-export function removePriority(rows: Priority[], position: number): Priority[] {
-  return rows.filter((p) => p.position !== position).map((p, i) => ({ ...p, position: i + 1 }));
-}
-
 /**
  * The rows with a task taken off its day, as × and the board take it: within Rows per day
- * (`count`) the row stays, free, so the rows under it keep their numbers; past it the row goes.
+ * (`count`) the row stays, free, so the rows under it keep their numbers; past it the row goes
+ * and the rest are renumbered from 1.
  */
 export function takeOffRow(rows: Priority[], position: number, count: number): Priority[] {
-  return position > count ? removePriority(rows, position) : clearRow(rows, position);
+  if (position <= count) return rows.map((p) => (p.position === position ? emptyRow(position) : p));
+  return rows.filter((p) => p.position !== position).map((p, i) => ({ ...p, position: i + 1 }));
 }
 
 /** Whether `placePriority` has somewhere to put a row: a free row, or space for one more. */
@@ -161,11 +137,11 @@ export interface LeftOpen {
 }
 
 /**
- * A row carried to another day (the left-open offer): open, and neither a routine, which comes
- * back on its own weekdays, nor archived (a deleted card that `server/migrations/oneItem.ts` kept
- * for its rows), which would otherwise be carried every day.
+ * A row carried to another day (the left-open offer): written and unticked, and neither a
+ * routine, which comes back on its own weekdays, nor archived (a deleted card that
+ * `server/migrations/oneItem.ts` kept for its rows), which would otherwise be carried every day.
  */
-export const carriesOver = (p: Priority) => isOpen(p) && !p.recurring && !p.archived;
+export const carriesOver = (p: Priority) => hasText(p) && !p.done && !p.recurring && !p.archived;
 
 /** The latest day with a one-off priority written (a day that held only routines isn't a plan), null when none had one. */
 export function lastPlan(days: Day[]): Day | null {

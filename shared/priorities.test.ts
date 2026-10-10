@@ -1,27 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Priority } from './api.js';
-import { hasText, isFree, mergePriorities } from './priorities.js';
+import { FREE_ROW, hasText, isFree, mergePriorities } from './priorities.js';
 import { MAX_PRIORITIES } from './settings.js';
 
 type Row = [uid: string | null, text: string, patch?: Partial<Priority>];
 
 /** A list as the card holds it: positions from 1, each written row with its uid and addedAt. */
 function list(...rows: Row[]): Priority[] {
-  return rows.map(([uid, text, patch], i) => ({
-    position: i + 1,
-    text,
-    done: false,
-    uid,
-    addedAt: uid == null ? null : 100,
-    categoryUid: null,
-    note: '',
-    recurring: false,
-    archived: false,
-    listed: 0,
-    earlier: 0,
-    logged: 0,
-    ...patch,
-  }));
+  return rows.map(([uid, text, patch], i) => ({ ...FREE_ROW, position: i + 1, text, uid, addedAt: uid == null ? null : 100, ...patch }));
 }
 
 /** A row no task is on. */
@@ -34,9 +20,9 @@ describe('hasText', () => {
 });
 
 describe('isFree', () => {
-  it('is a row with no task and no text', () => {
+  it('is a row with no task and no text, as FREE_ROW is', () => {
     const [free, written, typed] = list(FREE, ['a', 'Report'], [null, 'Typed']);
-    expect([isFree(free!), isFree(written!), isFree(typed!)]).toEqual([true, false, false]);
+    expect([isFree(free!), isFree(written!), isFree(typed!), isFree({ ...FREE_ROW, position: 1 })]).toEqual([true, false, false, true]);
   });
 });
 

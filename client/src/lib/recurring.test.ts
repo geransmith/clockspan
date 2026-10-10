@@ -3,7 +3,7 @@ import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { makePriority, makeRecurring, T0, TODAY } from '../test/fixtures';
 import type { Priority } from '../types';
 import { emptyRow } from './priorities';
-import { acceptOffer, dueRecurring, notOnList, offerPicks, recurringCount, recurringRow, repeatDays, WEEKDAYS } from './recurring';
+import { acceptOffer, dueRecurring, notOnList, offerPicks, recurringCount, recurringRow, repeatDays, seedRow, WEEKDAYS } from './recurring';
 
 // TODAY is a Monday.
 const QUEUE = makeRecurring('rcur00000001', 'Monitor the queue', { categoryUid: 'cafe00000001', note: 'Tier 2 too.' });
@@ -100,6 +100,22 @@ describe('recurringRow', () => {
       earlier: 0,
       logged: 0,
     });
+  });
+});
+
+describe('seedRow', () => {
+  it("puts a carried row's own task on the list, in its category with its note, with its counts until the save answers", () => {
+    const source = makePriority(2, 'Invoices', {
+      uid: 'task00000001',
+      addedAt: 5,
+      categoryUid: 'cafe00000001',
+      note: 'Ask Kim',
+      listed: 2,
+      earlier: 1,
+      logged: 1500,
+    });
+    const { position: _position, ...row } = source;
+    expect(seedRow(source, 99)).toEqual({ ...row, addedAt: 99 });
   });
 });
 

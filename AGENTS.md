@@ -1390,12 +1390,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (`client/src/api.ts`), the `POST` and `PATCH` routes in `routes/items.ts`, `withItem`,
   `withItemPatch`, `RowPatch` and `itemPatchOf` (`lib/board.ts`: a row's edit on the board, and that
   edit as the task's PATCH), and in `hooks/useBoard.tsx` `patchItem`'s `taskChanged` condition and
-  `setRow`'s patch type, so the held days that show it are read again → its value on every row the
-  client builds: `emptyRow` and `newTaskRow` (`lib/priorities.ts`), and, taken from the source,
-  `seedRow` and `PrioritySeed` (`lib/plan.ts`), `recurringRow` (`lib/recurring.ts`), and
-  `planMove`'s pull and `topOfNext` (`lib/board.ts`) → the seed (its rows and `SEEDED_RECURRING`,
-  which typecheck asks for; `insertItems`' INSERT, which it doesn't) → `makePriority`, `makeCard`
-  and `makeRecurring` (`client/src/test/fixtures.ts`). A field the server works out (like
+  `setRow`'s patch type, so the held days that show it are read again → its default in `FREE_ROW`
+  (`shared/priorities.ts`; typecheck asks for it), which every row built on either side starts
+  from, and its value taken from the source in `seedRow`, `PrioritySeed` and `recurringRow`
+  (`lib/recurring.ts`), and `planMove`'s pull and `topOfNext` (`lib/board.ts`) → the seed (its
+  rows and `SEEDED_RECURRING`, which typecheck asks for; `insertItems`' INSERT, which it doesn't)
+  → `makePriority`, `makeCard` and `makeRecurring` (`client/src/test/fixtures.ts`). A field the server works out (like
   `recurring` or `listed`) is read only: it goes in `ReadOnlyField` (`shared/priorities.ts`), never
   in `MERGED` or `parsePriorityRows`, which neither reads nor refuses it; in the seed the row
   builders set it (`recurring` in `oneOff` and `routineRows`, `archived` in `UNCOUNTED`), or
@@ -1405,8 +1405,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `priorityJson` and written in the PUT's INSERT (`routes/days.ts`) → the field on `Priority`
   (`shared/api.ts`) and its `MERGED` entry (`shared/priorities.ts`, which typecheck asks for) →
   its rule in `parsePriorityRows` for a value of the wrong kind and for one left out → its
-  default in `emptyRow` and `newTaskRow` (`lib/priorities.ts`; `seedRow` and
-  `recurringRow` start from `newTaskRow`) and `planMove`'s pull (`lib/board.ts`) → the seed
+  default in `FREE_ROW` (`shared/priorities.ts`; typecheck asks for it), which every row built on
+  either side starts from, and its value where a builder sets one: `newTaskRow`
+  (`lib/priorities.ts`) and `planMove`'s pull (`lib/board.ts`) → the seed
   (`server/dev/seed.ts`: its rows, typecheck asks; `insertDay`'s INSERT, it doesn't) →
   `makePriority` (`client/src/test/fixtures.ts`) → the padded-rows case in
   `server/routes/days.test.ts` ("takes the web app's rows as it pads and sends them").
