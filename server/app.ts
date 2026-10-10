@@ -28,7 +28,7 @@ import { HOUR_MS } from '../shared/dates.js';
  */
 const VERSION = (JSON.parse(fs.readFileSync(findPackageJSON(import.meta.url)!, 'utf8')) as { version: string }).version;
 
-export interface AppOptions {
+interface AppOptions {
   /** Where the built client lives; the default is `dist/client` next to the built server. */
   clientDir?: string;
   /** AUTH_MODE=local's first-run setup code. Only tests fix it; a server makes its own. */

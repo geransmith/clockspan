@@ -6,7 +6,7 @@ import { oneItem } from './migrations/oneItem.js';
 export type DB = Database.Database;
 
 /** SQL, or a function for a change that needs code (a backfill), kept in `migrations/` and frozen like the SQL. */
-export type Migration = string | ((db: DB) => void);
+type Migration = string | ((db: DB) => void);
 
 // Append-only. Each entry runs once, in order, in a transaction of its own, guarded by PRAGMA user_version.
 export const MIGRATIONS: Migration[] = [
