@@ -328,7 +328,6 @@ describe('an update while the page is open', () => {
       expect(updated()).toHaveLength(1);
     } finally {
       off();
-      vi.useRealTimers();
     }
   });
 

@@ -2,11 +2,10 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { type ComponentProps, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
 import { playSound, unlockAudio } from '../lib/alerts';
 import { addPunchPair, dayTimeclock, removePunchPair, type PairTyping } from '../lib/timeclock';
-import { answered, makeSettings, punchesAt, settle, T0, TODAY, YESTERDAY } from '../test/hooks';
+import { makeSettings, punchesAt, settle, T0, TODAY, YESTERDAY } from '../test/hooks';
 import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import { MAX_PUNCHES } from '../../../shared/punches.js';
 import type { Punch } from '../types';
@@ -57,7 +56,6 @@ const focus = (el: HTMLElement) => act(() => el.focus());
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
 });
 
 describe('Timeclock', () => {

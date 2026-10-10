@@ -4,16 +4,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import { withCategory, withCategoryPatch, withoutCategory } from '../../lib/board';
 import { BOARD, LOAD_FAILED } from '../../lib/copy';
-import { answered, makeBoard, makeCategory, makeSettings, settle, SettingsAndDays } from '../../test/hooks';
+import { ADMIN, answered, makeBoard, makeSettings, OLD_WORK, settle, SettingsAndDays, TICKETS } from '../../test/hooks';
 import type { Board } from '../../types';
 import { BoardTab } from './BoardTab';
 
 vi.mock('../../api');
 vi.mock('../../lib/alerts');
-
-const TICKETS = makeCategory('cat000000001', 'Tickets');
-const ADMIN = makeCategory('cat000000002', 'Admin', { color: 'teal' });
-const OLD = makeCategory('cat000000003', 'Old work', { color: 'gold', archived: true });
 
 let onServer: Board;
 /** Saves the dialog's header would call Not saved. */
@@ -45,8 +41,7 @@ const swatch = (category: string, colour: string) =>
 beforeEach(() => {
   vi.useFakeTimers();
   notSaved = 0;
-  onServer = { ...makeBoard(), categories: [TICKETS, ADMIN, OLD] };
-  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
+  onServer = { ...makeBoard(), categories: [TICKETS, ADMIN, OLD_WORK] };
   vi.mocked(api.getBoard).mockImplementation(() => Promise.resolve(answered(onServer)));
   vi.mocked(api.addCategory).mockImplementation((c) => Promise.resolve(answered((onServer = withCategory(onServer, c)))));
   vi.mocked(api.patchCategory).mockImplementation((uid, patch) => Promise.resolve(answered((onServer = withCategoryPatch(onServer, uid, patch)))));
@@ -209,7 +204,7 @@ describe('BoardTab', () => {
     fireEvent.change(newBox(), { target: { value: 'Old work' } });
     fireEvent.keyDown(newBox(), { key: 'Enter' });
     await settle();
-    expect(api.addCategory).toHaveBeenCalledExactlyOnceWith({ uid: OLD.uid, name: 'Old work', color: 'gold' });
+    expect(api.addCategory).toHaveBeenCalledExactlyOnceWith({ uid: OLD_WORK.uid, name: 'Old work', color: 'gold' });
     expect(names()).toEqual(['Tickets', 'Admin', 'Old work']);
     expect(screen.queryByRole('alert')).toBeNull();
   });

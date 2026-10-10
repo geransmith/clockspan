@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { addDays } from '../../../shared/dates.js';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
-import { answered, deferredAnswer, makeSettings, settle, TODAY, YESTERDAY } from '../test/hooks';
+import { deferredAnswer, makeSettings, settle, TODAY, YESTERDAY } from '../test/hooks';
 import type { Settings } from '../types';
 import { DateNav } from './DateNav';
 
@@ -28,7 +28,6 @@ function setShowPicker(value: (() => void) | undefined) {
 
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
 });
 afterEach(() => {
   cleanup();

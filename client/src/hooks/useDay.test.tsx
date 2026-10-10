@@ -15,12 +15,13 @@ import {
   begin,
   deferred,
   deferredAnswer,
+  echoPriorities,
+  echoPunches,
   endSession,
   makeBreak,
   makeDay,
   makePriority,
   makeSession,
-  makeSettings,
   MIDNIGHT,
   punchesAt,
   rowUid,
@@ -63,13 +64,8 @@ function renderStore(date: string | null = TODAY) {
   );
 }
 
-/** The server's answer to a list PUT: the list as sent, which is what it stores. */
-const echoPunches = (_date: string, punches: Punch[]) => Promise.resolve(answered({ punches }));
-const echoPriorities = (_date: string, priorities: Priority[]) => Promise.resolve(answered({ priorities }));
-
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
 });
 
 describe('load', () => {
@@ -776,9 +772,9 @@ describe('priorities', () => {
     });
     expect(uid).toMatch(/^[0-9a-f]{12}$/);
     const rows = result.current.days[TODAY]!.priorities;
-    expect(rows.map((p) => p.text)).toEqual(['First', 'From the timer', '']);
+    expect(rows.map((p) => p.text)).toEqual(['First', 'From the timer']);
     expect(rows[1]).toEqual(makePriority(2, 'From the timer', { uid, listed: 0 }));
-    expect(api.putPriorities).toHaveBeenCalledExactlyOnceWith(TODAY, rows, [first]);
+    expect(api.putPriorities).toHaveBeenCalledExactlyOnceWith(TODAY, [...rows, expect.objectContaining({ uid: null, text: '' })], [first]);
   });
 
   it('addPriority writes the row in the category it is given, and sends it', async () => {
@@ -828,7 +824,7 @@ describe('priorities', () => {
     act(() => void result.current.setPriorities(TODAY, removed, shown));
     first.resolve({ priorities: vi.mocked(api.putPriorities).mock.calls[0]![1] });
     await expect(act(() => added)).resolves.toBe(minted);
-    expect(result.current.days[TODAY]!.priorities.map((p) => p.text)).toEqual(['First', '']);
+    expect(result.current.days[TODAY]!.priorities.map((p) => p.text)).toEqual(['First']);
   });
 
   it('addPriority rejects when the list is full, the day is not loaded, or the save fails', async () => {

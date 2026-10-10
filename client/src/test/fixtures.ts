@@ -179,6 +179,11 @@ export function makeCategory(uid: string, name: string, patch: Partial<Category>
   return { uid, name, color: 'blue', archived: false, ...patch };
 }
 
+/** Two categories in use and a removed one, which the tests share. */
+export const TICKETS = makeCategory('cat000000001', 'Tickets');
+export const ADMIN = makeCategory('cat000000002', 'Admin', { color: 'teal' });
+export const OLD_WORK = makeCategory('cat000000003', 'Old work', { color: 'gold', archived: true });
+
 /**
  * The category chip's data over these categories, with `create` and `refresh` mocked: `create`
  * gives `NEW_CATEGORY` for a name that isn't blank, and null for a blank one.
@@ -197,6 +202,11 @@ export const NEW_CATEGORY = 'new000000001';
 export function makeRecurring(uid: string, title: string, patch: Partial<Recurring> = {}): Recurring {
   return { uid, title, categoryUid: null, note: '', weekdays: [1, 2, 3, 4, 5], ...patch };
 }
+
+/** Three recurring priorities, every weekday, which the tests share. */
+export const QUEUE = makeRecurring('rcur00000001', 'Monitor the queue');
+export const FOLLOW_UPS = makeRecurring('rcur00000002', 'Follow-ups');
+export const STANDUP = makeRecurring('rcur00000003', 'Standup notes');
 
 /** What `endSession` may set on the ended session. */
 export type EndPatch = Partial<CompletedSession | CancelledSession>;
@@ -279,6 +289,12 @@ export function deferred<T>() {
 export function answered<T>(value: T, revision = 0): Answer<T> {
   return { value, revision };
 }
+
+/** The server's answer to a priorities PUT: the list as sent, less the rows with no uid, which it doesn't store. */
+export const echoPriorities = (_date: string, priorities: Priority[]) => Promise.resolve(answered({ priorities: priorities.filter((p) => p.uid != null) }));
+
+/** The server's answer to a punches PUT: the list as sent, which is what it stores. */
+export const echoPunches = (_date: string, punches: Punch[]) => Promise.resolve(answered({ punches }));
 
 /** `deferred` for a data call's answer, which the test resolves with the body (and a revision). */
 export function deferredAnswer<T>() {

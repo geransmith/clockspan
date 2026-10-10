@@ -2,7 +2,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import * as api from '../api';
-import { answered, deferredAnswer, makeDay, makePriority, makeSettings, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
+import { answered, deferredAnswer, echoPriorities, makeDay, makePriority, settle, SettingsAndDays, T0, TODAY } from '../test/hooks';
 import type { Day } from '../types';
 import { useDayStore } from './useDay';
 import { useLeftOpen } from './useLeftOpen';
@@ -20,7 +20,6 @@ const render = (today = TODAY, wanted = true) =>
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
   localStorage.clear();
-  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
 });
 
 it("offers the last planned day's unticked rows from the two weeks before today", async () => {
@@ -104,7 +103,7 @@ it('keeps "Start fresh" for the rest of the day, across a reload', async () => {
 it("follows a row ticked on that day's sheet since, with no second fetch", async () => {
   vi.mocked(api.getRange).mockResolvedValue(answered({ days: [friday] }));
   vi.mocked(api.getDay).mockResolvedValue(answered(friday));
-  vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities })));
+  vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
   const { result } = render();
   await settle();
   expect(result.current.leftOpen?.rows).toEqual([makePriority(2, 'Review the PR')]);

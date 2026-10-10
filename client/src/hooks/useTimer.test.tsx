@@ -14,6 +14,7 @@ import {
   begin,
   deferred,
   deferredAnswer,
+  echoPriorities,
   endSession,
   makeDay,
   makePriority,
@@ -55,8 +56,6 @@ const startedAgo = (minutes: number, patch: Partial<RunningSession> = {}) => mak
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-  vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings()));
-  vi.mocked(api.getRunning).mockResolvedValue(answered({ session: null }));
   vi.mocked(api.getDay).mockResolvedValue(answered(makeDay()));
   localStorage.clear();
 });
@@ -172,7 +171,7 @@ describe("the running session's name", () => {
   /** Renders with `session` running and today's list holding `row`, whose saves the server takes as sent. */
   async function renderOnRow(session: Session | null) {
     vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: [row] })));
-    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities })));
+    vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
     return renderRunning(session);
   }
 
@@ -791,7 +790,7 @@ describe('Done', () => {
   /** Renders with `session` running and today's list holding `row`, whose saves the server takes as sent. */
   async function renderOnRow(session: Session) {
     vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: [row] })));
-    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities })));
+    vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
     return renderRunning(session);
   }
 

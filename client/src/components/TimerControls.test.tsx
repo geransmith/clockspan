@@ -5,7 +5,21 @@ import * as api from '../api';
 import { useDay } from '../hooks/useDay';
 import { unlockAudio } from '../lib/alerts';
 import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
-import { answered, AppProviders, endSession, makeDay, makePriority, makeSession, makeSettings, pressKey, settle, ShortcutKeys, T0, TODAY } from '../test/hooks';
+import {
+  answered,
+  AppProviders,
+  echoPriorities,
+  endSession,
+  makeDay,
+  makePriority,
+  makeSession,
+  makeSettings,
+  pressKey,
+  settle,
+  ShortcutKeys,
+  T0,
+  TODAY,
+} from '../test/hooks';
 import type { Session } from '../types';
 import { FinishChoice } from './FinishChoice';
 import { TimerControls } from './TimerControls';
@@ -88,7 +102,7 @@ describe('TimerControls', () => {
     const running = makeSession({ priorityUid: 'u1' });
     vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: [row] })));
     vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(running) }));
-    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities })));
+    vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
     await renderControls(false, running);
     fireEvent.click(button('Done'));
     expect(unlockAudio).toHaveBeenCalled();
