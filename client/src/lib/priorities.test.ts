@@ -108,11 +108,17 @@ describe('nudgeFor', () => {
 
   it('leaves the routines out of the threshold, and counts them in the kind', () => {
     const routines = [1, 2, 3].map((n) => makePriority(n, `Routine ${n}`, { uid: `rcur0000000${n}`, recurring: true, done: true }));
-    const oneOffs = (n: number) => Array.from({ length: n }, (_, i) => makePriority(4 + i, `One-off ${i + 1}`));
+    const oneOffs = (n: number, from = 4) => Array.from({ length: n }, (_, i) => makePriority(from + i, `One-off ${i + 1}`));
     expect(nudgeFor([...routines, ...oneOffs(2)], 3)).toBeNull();
     // Three open one-offs reach it; the three ticked routines make it a list with progress.
     expect(nudgeFor([...routines, ...oneOffs(3)], 3)).toBe('progress');
-    expect(nudgeFor(oneOffs(3), 3)).toBe('fresh');
+    expect(nudgeFor(oneOffs(3, 1), 3)).toBe('fresh');
+  });
+
+  it('stays quiet while the padded list has a free row, which the new row takes', () => {
+    const rows = [makePriority(1, 'A'), makePriority(2, 'B'), makePriority(4, 'D')];
+    expect(nudgeFor(rows, 3)).toBeNull();
+    expect(nudgeFor([...rows, makePriority(3, 'C')], 3)).toBe('fresh');
   });
 });
 

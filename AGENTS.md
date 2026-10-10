@@ -668,9 +668,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   use the first free row or a new one at the end; a row Add priority puts past the stored list stays
   on the card while it is free (`added`: the card pads the stored list to it until a stored task
   reaches it, × takes it, or the card mounts again), and `planNext` (Plan tomorrow, the left-open
-  Add) drops only free rows. The nudge (`nudgeFor`) counts the one-off rows with text (`isOneOff`),
-  while the warning's kind still counts every written row. Every reader of a list skips free rows
-  with `hasText` (`shared/priorities.ts`). `PUT /days/:date/priorities` takes the list and its
+  Add) drops only free rows. The nudge (`nudgeFor`) never asks while the padded list has a free
+  row, which the new row takes, and counts the one-off rows with text (`isOneOff`), while the
+  warning's kind still counts every written row. Every reader of a list skips free rows with
+  `hasText` (`shared/priorities.ts`). `PUT /days/:date/priorities` takes the list and its
   `base`, the list it was built on (the card's draft sends what its edits were made on, `PlanNext`
   and `addPriority` the day's shown copy), and stores `mergePriorities(stored, base, list)`, which
   the day store also shows while the save is out. Rows match by uid. Each field in `MERGED` (`text`,
@@ -864,21 +865,23 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   card goes at the top and Next's at the end (`laneStart`, `addItem`). In progress's text is a new
   task on today's list, a `place` move of `newTaskRow` through `move`, so on the board's queue,
   where it shows once its job starts (it has no item for `moving` to show); past the nudge it asks
-  as Add priority does, the text staying in the box until Add anyway, which closes the box and
-  focuses the new row. An edit of the box's text or category drops the question, and the next Enter
-  asks again. Later's and Next's + is `aria-disabled` at the cap (`boardFull`, `BOARD.full` under
-  it), and In progress's only on a full list (`hasRoom`, `ADD_PRIORITY_FAILED.full`), since its
-  task has no lane; a box open as its + shuts closes. A Delete that empties a column puts the focus
-  on its +, or on Done's heading. One `role="status"` slot above the columns holds the board notice
-  (a pull's or a typed row's nudge, the done-item notice or a refusal); what the store refuses once
-  a move is under way (`MoveRefused`) is a banner. A drag (`Board.tsx`, with dnd-kit's settings in
-  `components/board/dnd.ts`) starts at an item's grip; a planned task and a recurring row have none,
-  and an item whose move is on its way can't be picked up until the move lands. Where a drop lands
-  is `dropTarget`'s (see its doc), and what a screen reader hears comes from `BOARD_DRAG`,
-  `overAnnouncement` and `moveAnnouncement`. dnd-kit's own focus return is off, since it would take
-  the focus from the notice a drop brings: a keyboard drag puts it back on the item's grip, and so
-  does closing the notice (on the title where the grip is hidden or missing; for a row typed in In
-  progress's box, back in that box, which still holds the text).
+  as Add priority does (this nudge and a pull's count the rows still waiting on the board's queue,
+  as the sheet counts its draft), the text staying in the box until Add anyway, which closes the box
+  and focuses the new row. An edit of the box's text or category drops the question, and the next
+  Enter asks again. Later's and Next's + is `aria-disabled` at the cap (`boardFull`, `BOARD.full`
+  under it), and In progress's only on a full list (`hasRoom`, `ADD_PRIORITY_FAILED.full`), since
+  its task has no lane; a box open as its + shuts closes. A Delete that empties a column puts the
+  focus on its +, or on Done's heading. One `role="status"` slot above the columns holds the board
+  notice (a pull's or a typed row's nudge, the done-item notice or a refusal): its first button
+  takes the focus, and an Enter or Space still held from the press that raised it presses nothing.
+  What the store refuses once a move is under way (`MoveRefused`) is a banner. A drag (`Board.tsx`,
+  with dnd-kit's settings in `components/board/dnd.ts`) starts at an item's grip; a planned task and
+  a recurring row have none, and an item whose move is on its way can't be picked up until the move
+  lands. Where a drop lands is `dropTarget`'s (see its doc), and what a screen reader hears comes
+  from `BOARD_DRAG`, `overAnnouncement` and `moveAnnouncement`. dnd-kit's own focus return is off,
+  since it would take the focus from the notice a drop brings: a keyboard drag puts it back on the
+  item's grip, and so does closing the notice (on the title where the grip is hidden or missing; for
+  a row typed in In progress's box, back in that box, which still holds the text).
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started — one
   rule, no clock-in fallback. `GET /days/range` returns full days and the client does the rollup
