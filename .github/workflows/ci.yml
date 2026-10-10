@@ -102,7 +102,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/build-and-smoke
+      - uses: $/.github/actions/build-and-smoke
 
   image:
     if: github.event_name == 'push'
@@ -138,7 +138,7 @@ jobs:
       # to date" is off, so this commit may not be the one image-smoke booted on the pull request,
       # and a release moves `latest`. The push below rebuilds from the builder's cache and takes
       # seconds.
-      - uses: ./.github/actions/build-and-smoke
+      - uses: $/.github/actions/build-and-smoke
       # One tag set for both platforms: Docker pulls the one that matches the host. The cache is
       # written here, where both runtime stages are in one build.
       - name: Push the image
