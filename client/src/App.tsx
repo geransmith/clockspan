@@ -1,12 +1,14 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { AuthGate } from './auth/AuthGate';
 import { Banners } from './components/Banners';
+import { Burst } from './components/Burst';
 import { Header } from './components/Header';
 import { RunningTimerBar } from './components/RunningTimerBar';
 import { FinishChoice } from './components/FinishChoice';
 import { Shortcuts } from './components/Shortcuts';
 import { Sheet } from './components/Sheet';
 import { AppProviders } from './hooks/AppProviders';
+import { useCelebration } from './hooks/useCelebration';
 import { useClock } from './hooks/useClock';
 import { useLiveChanges } from './hooks/useLiveChanges';
 import { useRoute } from './hooks/useRoute';
@@ -42,7 +44,9 @@ function Shell() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [jumpTo, setJumpTo] = useState<CardId | null>(null);
   const { settings, loaded } = useSettings();
-  const { running, start, starting } = useTimer();
+  const { running, start, starting, ticked } = useTimer();
+  // Here, since the bar and the card Done is pressed on go with the session as it answers.
+  const { burst } = useCelebration(ticked, 'priorityDone');
   const now = useClock();
   // Here rather than in AppProviders, which the hook and component tests render: happy-dom has no EventSource.
   useLiveChanges();
@@ -122,6 +126,7 @@ function Shell() {
         </Suspense>
       )}
       <FinishChoice />
+      <Burst at={burst} />
       <Shortcuts />
     </div>
   );

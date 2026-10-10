@@ -778,6 +778,129 @@ describe('finish and cancel', () => {
   });
 });
 
+describe('Done', () => {
+  const row = makePriority(1, 'Ship the fix', { uid: 'u1' });
+  const rect = { left: 10, top: 20, width: 30, height: 40 } as DOMRect;
+  /** The row's tick as the last list sent carries it. */
+  const sentTick = () => vi.mocked(api.putPriorities).mock.lastCall?.[1].find((p) => p.uid === 'u1')?.done;
+
+  /** Renders with `session` running and today's list holding `row`, whose saves the server takes as sent. */
+  async function renderOnRow(session: Session) {
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: [row] })));
+    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities })));
+    return renderRunning(session);
+  }
+
+  it("is offered while the session's task has an open row on its day", async () => {
+    const { result } = await renderOnRow(startedAgo(5, { priorityUid: 'u1' }));
+    expect(result.current.timer.taskOpen).toBe(true);
+    // Ticked on the sheet, the board or another device: Finish is left.
+    act(() => void result.current.store.setPriorities(TODAY, [{ ...row, done: true }], [row]));
+    expect(result.current.timer.taskOpen).toBe(false);
+    await settle();
+    cleanup();
+    expect((await renderOnRow(startedAgo(5))).result.current.timer.taskOpen).toBe(false);
+    cleanup();
+    // A session from before midnight, after a reload: the store doesn't hold its day.
+    expect((await renderOnRow(startedAgo(5, { priorityUid: 'u1', date: YESTERDAY }))).result.current.timer.taskOpen).toBe(false);
+  });
+
+  it('finishes, then ticks the task and raises the moment from where it was pressed', async () => {
+    const session = startedAgo(5, { priorityUid: 'u1' });
+    const { result } = await renderOnRow(session);
+    const finishing = deferredAnswer<SessionResponse>();
+    vi.mocked(api.finishSession).mockReturnValueOnce(finishing.promise);
+    act(() => result.current.timer.requestDone(rect));
+    await settle();
+    expect(api.finishSession).toHaveBeenCalledWith(1, false);
+    expect(api.putPriorities).not.toHaveBeenCalled();
+    expect(result.current.timer.ticked).toBeNull();
+    finishing.resolve({ session: endSession(session, { durationSeconds: 300 }) });
+    await settle();
+    expect(sentTick()).toBe(true);
+    expect(result.current.store.days[TODAY]?.priorities[0]?.done).toBe(true);
+    expect(result.current.timer.ticked).toEqual({ at: rect });
+    expect(result.current.timer.finished).toMatchObject({ id: 1, status: 'completed' });
+    expect(result.current.timer.running).toBeNull();
+  });
+
+  it('asks how much to log a minute or more past the end, and only its answer ticks', async () => {
+    const session = startedAgo(27, { priorityUid: 'u1' });
+    vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(session, { durationSeconds: 27 * 60 }) }));
+    let { result } = await renderOnRow(session);
+    // Back, then Finish: the question Finish asks logs without the tick.
+    act(() => result.current.timer.requestDone(rect));
+    expect(result.current.timer.finishChoice).toBe(result.current.timer.running);
+    expect(api.finishSession).not.toHaveBeenCalled();
+    act(() => result.current.timer.dismissFinishChoice());
+    act(() => result.current.timer.requestFinish());
+    await act(() => result.current.timer.finish());
+    expect(api.finishSession).toHaveBeenCalledWith(1, false);
+    expect(api.putPriorities).not.toHaveBeenCalled();
+    expect(result.current.timer.ticked).toBeNull();
+    cleanup();
+
+    ({ result } = await renderOnRow(session));
+    act(() => result.current.timer.requestDone(rect));
+    await act(() => result.current.timer.finish(true));
+    expect(api.finishSession).toHaveBeenLastCalledWith(1, true);
+    await settle();
+    expect(sentTick()).toBe(true);
+    expect(result.current.timer.ticked).toEqual({ at: rect });
+  });
+
+  it('is not what Finish or − past the time worked does: both log without the tick', async () => {
+    const session = startedAgo(5, { priorityUid: 'u1' });
+    vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(session, { durationSeconds: 300 }) }));
+    let { result } = await renderOnRow(session);
+    act(() => result.current.timer.requestFinish());
+    await settle();
+    expect(result.current.timer.finished).toMatchObject({ id: 1 });
+    cleanup();
+    ({ result } = await renderOnRow(session));
+    await act(() => result.current.timer.adjust(-25 * 60));
+    expect(api.finishSession).toHaveBeenCalledTimes(2);
+    expect(api.putPriorities).not.toHaveBeenCalled();
+    expect(result.current.timer.ticked).toBeNull();
+  });
+
+  it('ticks nothing when the finish fails, and the session runs on with Done to press again', async () => {
+    const session = startedAgo(5, { priorityUid: 'u1' });
+    const { result } = await renderOnRow(session);
+    vi.mocked(api.finishSession).mockRejectedValueOnce(new Error('offline'));
+    act(() => result.current.timer.requestDone(rect));
+    await settle();
+    expect(warnSaveFailed).toHaveBeenCalledOnce();
+    expect(api.putPriorities).not.toHaveBeenCalled();
+    expect(result.current.timer.ticked).toBeNull();
+    expect(result.current.timer.running?.id).toBe(1);
+    expect(result.current.timer.taskOpen).toBe(true);
+
+    vi.mocked(api.finishSession).mockResolvedValueOnce(answered({ session: endSession(session, { durationSeconds: 300 }) }));
+    act(() => result.current.timer.requestDone(rect));
+    await settle();
+    expect(sentTick()).toBe(true);
+  });
+
+  it('ticks nothing when the finish answers the session cancelled elsewhere, or on no task', async () => {
+    const session = startedAgo(5, { priorityUid: 'u1' });
+    let { result } = await renderOnRow(session);
+    vi.mocked(api.finishSession).mockResolvedValueOnce(answered({ session: endSession(session, { status: 'cancelled' }) }));
+    act(() => result.current.timer.requestDone(rect));
+    await settle();
+    expect(result.current.timer.finished).toBeNull();
+    cleanup();
+    // Set to Unplanned on another device before the finish reached the server.
+    ({ result } = await renderOnRow(session));
+    vi.mocked(api.finishSession).mockResolvedValueOnce(answered({ session: endSession({ ...session, priorityUid: null }, { durationSeconds: 300 }) }));
+    act(() => result.current.timer.requestDone(rect));
+    await settle();
+    expect(result.current.timer.finished).toMatchObject({ id: 1, status: 'completed' });
+    expect(api.putPriorities).not.toHaveBeenCalled();
+    expect(result.current.timer.ticked).toBeNull();
+  });
+});
+
 describe("time's up", () => {
   it('announces once per planned end, with the chime and a button that adds time', async () => {
     const { result, unmount } = await renderRunning(startedAgo(24.9));

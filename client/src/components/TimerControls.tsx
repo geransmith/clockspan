@@ -1,22 +1,24 @@
 import { useSettings } from '../hooks/useSettings';
 import { useShortcut } from '../hooks/useShortcuts';
 import { useTimer } from '../hooks/useTimer';
+import { unlockAudio } from '../lib/alerts';
 import { CONFIRM } from '../lib/copy';
-import { Check, Minus, Pause, Play, Plus, X } from './Icons';
+import { Check, CheckSquare, Minus, Pause, Play, Plus, X } from './Icons';
 
 /**
  * The running timer's buttons, for the bar at the top (`compact`) and for the timer card: −/+
  * move the planned end by the adjust step, Pause and Resume hold the clock, Finish asks how much
- * to log once the timer ran a minute over, and Cancel asks first. Once due, − and Pause go while
- * +, Finish and Cancel stay; + is off at the longest plan the server takes. The bar shows the
- * icons and hides the words on a narrow screen, so there each button carries its name. − and +
- * carry theirs on the card too: the icons are hidden from screen readers and both say only the
- * step. Keys: P pauses or resumes, + adds the step, and F finishes only once time's up, so a
- * stray F can't end a session early; − has none. On the card, `takeFocus` lets the first of Pause,
- * Resume and Finish to mount take the focus a start from the card handed on.
+ * to log once the timer ran a minute over, Done (while the session's task is open on its day)
+ * finishes as Finish does and ticks the task, and Cancel asks first. Once due, − and Pause go
+ * while +, Finish, Done and Cancel stay; + is off at the longest plan the server takes. The bar
+ * shows the icons and hides the words on a narrow screen, so there each button carries its name.
+ * − and + carry theirs on the card too: the icons are hidden from screen readers and both say
+ * only the step. Keys: P pauses or resumes, + adds the step, and F finishes only once time's up,
+ * so a stray F can't end a session early; − and Done have none. On the card, `takeFocus` lets the
+ * first of Pause, Resume and Finish to mount take the focus a start from the card handed on.
  */
 export function TimerControls({ compact = false, takeFocus }: { compact?: boolean; takeFocus?: (el: HTMLElement | null) => void }) {
-  const { paused, due, canAdd, adjust, pause, resume, requestFinish, cancel } = useTimer();
+  const { paused, due, canAdd, taskOpen, adjust, pause, resume, requestFinish, requestDone, cancel } = useTimer();
   const { settings } = useSettings();
   const step = settings.adjustStepMinutes;
   const btn = compact ? 'btn btn-icon' : 'btn';
@@ -66,6 +68,20 @@ export function TimerControls({ compact = false, takeFocus }: { compact?: boolea
         <Check />
         {words('Finish')}
       </button>
+      {taskOpen && (
+        <button
+          className={btn}
+          onClick={(e) => {
+            // The tick's sound plays once the finish answers; iOS only allows that after a tap unlocked it.
+            unlockAudio();
+            requestDone(e.currentTarget.getBoundingClientRect());
+          }}
+          {...named('Done with this task', 'Finish and tick the task')}
+        >
+          <CheckSquare />
+          {words('Done')}
+        </button>
+      )}
       {compact ? (
         <button className="btn btn-icon running-cancel" onClick={onCancel} aria-label="Cancel session" title="Cancel">
           <X />

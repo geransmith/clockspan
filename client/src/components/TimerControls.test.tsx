@@ -2,25 +2,35 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
+import { useDay } from '../hooks/useDay';
+import { unlockAudio } from '../lib/alerts';
 import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
-import { answered, AppProviders, endSession, makeDay, makeSession, makeSettings, pressKey, settle, ShortcutKeys, T0 } from '../test/hooks';
+import { answered, AppProviders, endSession, makeDay, makePriority, makeSession, makeSettings, pressKey, settle, ShortcutKeys, T0, TODAY } from '../test/hooks';
 import type { Session } from '../types';
 import { TimerControls } from './TimerControls';
 
 vi.mock('../api');
 vi.mock('../lib/alerts');
 
+/** Today's day held in the store, as the app always holds it: Done looks for the task's row there. */
+function HoldToday() {
+  useDay(TODAY);
+  return null;
+}
+
 async function renderControls(compact: boolean, session: Session = makeSession()) {
   vi.mocked(api.getRunning).mockResolvedValue(answered({ session }));
   render(
     <AppProviders>
       <ShortcutKeys />
+      <HoldToday />
       <TimerControls compact={compact} />
     </AppProviders>,
   );
   await settle();
 }
 
+const row = makePriority(1, 'Ship the fix', { uid: 'u1' });
 const button = (name: string | RegExp) => screen.getByRole('button', { name });
 const keys = (name: string | RegExp) => button(name).getAttribute('aria-keyshortcuts');
 const names = () => screen.getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent!.trim());
@@ -57,6 +67,32 @@ describe('TimerControls', () => {
     fireEvent.click(button('Add 5 minutes'));
     await settle();
     expect(api.patchSession).toHaveBeenCalledWith(running.id, { plannedSeconds: running.plannedSeconds + 5 * 60 });
+  });
+
+  it("offers Done after Finish only while the session's task is open on its day", async () => {
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: [row] })));
+    await renderControls(false, makeSession({ priorityUid: 'u1' }));
+    expect(names()).toEqual(['Remove 5 minutes', 'Add 5 minutes', 'Pause', 'Finish', 'Done', 'Cancel']);
+    cleanup();
+    await renderControls(true, makeSession({ priorityUid: 'u1' }));
+    expect(names()).toEqual(['Remove 5 minutes', 'Add 5 minutes', 'Pause timer', 'Finish timer', 'Done with this task', 'Cancel session']);
+    cleanup();
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: [{ ...row, done: true }] })));
+    await renderControls(true, makeSession({ priorityUid: 'u1' }));
+    expect(names()).toEqual(['Remove 5 minutes', 'Add 5 minutes', 'Pause timer', 'Finish timer', 'Cancel session']);
+  });
+
+  it('unlocks the sound in the Done tap, finishes, then ticks the task', async () => {
+    const running = makeSession({ priorityUid: 'u1' });
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: [row] })));
+    vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(running) }));
+    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities })));
+    await renderControls(false, running);
+    fireEvent.click(button('Done'));
+    expect(unlockAudio).toHaveBeenCalled();
+    await settle();
+    expect(api.finishSession).toHaveBeenCalledWith(running.id, false);
+    expect(vi.mocked(api.putPriorities).mock.lastCall?.[1][0]).toEqual({ ...row, done: true });
   });
 
   it('cancels only once the confirm says yes', async () => {

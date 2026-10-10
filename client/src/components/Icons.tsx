@@ -72,6 +72,13 @@ export const Check = () => (
     <path d="m20 6-11 11-5-5" />
   </svg>
 );
+/** The timer's Done: a ticked box, told apart from Finish's tick on the phone's bar, which shows icons alone. */
+export const CheckSquare = () => (
+  <svg {...base}>
+    <rect x="3" y="3" width="18" height="18" rx="3" />
+    <path d="m8 12 3 3 5-6" />
+  </svg>
+);
 export const ArrowUp = () => (
   <svg {...base}>
     <path d="M12 19V5M5 12l7-7 7 7" />
