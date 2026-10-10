@@ -64,7 +64,8 @@ shared/                 imported by both sides, always with a `.js` suffix
                         punch save laid onto the stored list as the times changed since its base;
                         MAX_PUNCHES (the server's row cap; the card hides Add Extra Out / In at it)
   priorities.ts         hasText; isFree (a row no task is on: the client pads a list with these, and a new
-                        priority goes into one); mergePriorities: a priorities save laid onto the stored
+                        priority goes into one); FREE_ROW: a free row's fields, which every new row
+                        spreads; mergePriorities: a priorities save laid onto the stored
                         list as the changes made since its base, rows matched by their task's uid, field by
                         field as MERGED lists
   text.ts               sameText: the key a task typed again by hand is matched by (Review's Not Done),
@@ -163,7 +164,8 @@ client/                 Vite root → dist/client
                         them (WEEKDAYS, repeatDays: "Mon–Fri"), and the morning offer's
                         routines: which are due (dueRecurring, notOnList), which it ticks
                         (offerPicks, recurringCount), the list after Add to Today (acceptOffer;
-                        recurringRow, the recurring priority itself as a new row)
+                        seedRow, a leftover's or an Up Next task's row; recurringRow, the recurring
+                        priority itself as a new row)
     shortcuts.ts        the single-key shortcuts: the one key list (SHORTCUTS) and the guard that
                         leaves a key to a field, a dialog or a drag (shortcutFor)
   src/hooks/            state and effects (useDay, useTimer, useSettings, useBoard, useAlarms, …), each
@@ -1391,23 +1393,24 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `withItemPatch`, `RowPatch` and `itemPatchOf` (`lib/board.ts`: a row's edit on the board, and that
   edit as the task's PATCH), and in `hooks/useBoard.tsx` `patchItem`'s `taskChanged` condition and
   `setRow`'s patch type, so the held days that show it are read again → its default in `FREE_ROW`
-  (`shared/priorities.ts`; typecheck asks for it), which every row built on either side starts
-  from, and its value taken from the source in `seedRow`, `PrioritySeed` and `recurringRow`
-  (`lib/recurring.ts`), and `planMove`'s pull and `topOfNext` (`lib/board.ts`) → the seed (its
-  rows and `SEEDED_RECURRING`, which typecheck asks for; `insertItems`' INSERT, which it doesn't)
-  → `makePriority`, `makeCard` and `makeRecurring` (`client/src/test/fixtures.ts`). A field the server works out (like
-  `recurring` or `listed`) is read only: it goes in `ReadOnlyField` (`shared/priorities.ts`), never
-  in `MERGED` or `parsePriorityRows`, which neither reads nor refuses it; in the seed the row
-  builders set it (`recurring` in `oneOff` and `routineRows`, `archived` in `UNCOUNTED`), or
-  `withCounts` fills it once the days are built (`listed`, `earlier`, `logged`).
+  (`shared/priorities.ts`; typecheck asks for it), which every row the client builds, and each row
+  the list PUT reads, starts from, and its value taken from the source in `seedRow`, `PrioritySeed`
+  and `recurringRow` (`lib/recurring.ts`), and `planMove`'s pull and `topOfNext` (`lib/board.ts`)
+  → the seed (its rows and `SEEDED_RECURRING`, which typecheck asks for; `insertItems`' INSERT,
+  which it doesn't) → `makePriority`, `makeCard` and `makeRecurring`
+  (`client/src/test/fixtures.ts`). A field the server works out (like `recurring` or `listed`) is
+  read only: it goes in `ReadOnlyField` (`shared/priorities.ts`), never in `MERGED` or
+  `parsePriorityRows`, which neither reads nor refuses it; in the seed the row builders set it
+  (`recurring` in `oneOff` and `routineRows`, `archived` in `UNCOUNTED`), or `withCounts` fills it
+  once the days are built (`listed`, `earlier`, `logged`).
 - **An entry field** (like `done` or `addedAt`: a fact of one day's list): append a migration
   adding the column to `priorities` → the column in `ENTRIES` and `EntryRow`, read in
   `priorityJson` and written in the PUT's INSERT (`routes/days.ts`) → the field on `Priority`
   (`shared/api.ts`) and its `MERGED` entry (`shared/priorities.ts`, which typecheck asks for) →
   its rule in `parsePriorityRows` for a value of the wrong kind and for one left out → its
-  default in `FREE_ROW` (`shared/priorities.ts`; typecheck asks for it), which every row built on
-  either side starts from, and its value where a builder sets one: `newTaskRow`
-  (`lib/priorities.ts`) and `planMove`'s pull (`lib/board.ts`) → the seed
+  default in `FREE_ROW` (`shared/priorities.ts`; typecheck asks for it), which every row the
+  client builds, and each row the list PUT reads, starts from, and its value where a builder sets
+  one: `newTaskRow` (`lib/priorities.ts`) and `planMove`'s pull (`lib/board.ts`) → the seed
   (`server/dev/seed.ts`: its rows, typecheck asks; `insertDay`'s INSERT, it doesn't) →
   `makePriority` (`client/src/test/fixtures.ts`) → the padded-rows case in
   `server/routes/days.test.ts` ("takes the web app's rows as it pads and sends them").

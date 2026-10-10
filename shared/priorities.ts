@@ -10,7 +10,7 @@ export function isFree(p: Priority): boolean {
   return p.uid == null && !hasText(p);
 }
 
-/** A free row's fields but its place: every row built on either side starts from it and sets its own. */
+/** A free row's fields but its place: every row the client builds, and each row the list PUT reads, starts from it and sets its own. */
 export const FREE_ROW: Readonly<Omit<Priority, 'position'>> = {
   text: '',
   done: false,
