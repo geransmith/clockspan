@@ -249,9 +249,10 @@ export function reviewRange(
       plannedRows.push(r.total);
       doneRows.push(r.done);
     }
-    addRoutines(routines, r.planned, day.date);
-    addUnplanned(unplanned, r.unplanned, day);
+    const routineRows = r.planned.filter((p) => p.priority.recurring);
     const oneOffs = r.planned.filter((p) => !p.priority.recurring);
+    addRoutines(routines, routineRows, day.date);
+    addUnplanned(unplanned, r.unplanned, day);
     addToNotDone(notDone, groupOf, oneOffs, day.date, laned);
     const note = day.retroNote.trim();
     if (note) out.notes.push({ date: day.date, note, reviewedAt: day.retroAt });
@@ -277,7 +278,6 @@ export function reviewRange(
 /** One day's recurring rows laid onto `routines`, by their task's uid: each day counts on its own. */
 function addRoutines(routines: Map<string, RoutineReview>, rows: PriorityReview[], date: string): void {
   for (const { priority: p, focusedSeconds } of rows) {
-    if (!p.recurring) continue;
     const uid = p.uid!;
     let g = routines.get(uid);
     if (!g) routines.set(uid, (g = { uid, title: '', dates: [], done: 0, focusedSeconds: 0 }));
