@@ -197,7 +197,17 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
       case 'timer':
         return <FocusTimer date={date} isToday={isToday} priorities={day.priorities} pick={pick} />;
       case 'log':
-        return <SessionLog date={date} isToday={isToday} sessions={day.sessions} breaks={day.breaks} priorities={day.priorities} pick={pick} />;
+        return (
+          <SessionLog
+            date={date}
+            isToday={isToday}
+            sessions={day.sessions}
+            breaks={day.breaks}
+            priorities={day.priorities}
+            pick={pick}
+            total={!visible.some((l) => l.id === 'timeclock')}
+          />
+        );
       case 'retro':
         return (
           <Retro

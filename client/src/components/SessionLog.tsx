@@ -10,7 +10,7 @@ import { useTimeFormat } from '../hooks/useTimeFormat';
 import { breakSeconds } from '../lib/breaks';
 import { counted, formatDuration } from '../lib/format';
 import { isTaskRow } from '../lib/priorities';
-import { sessionCategory, sessionCategoryEdit, sessionName, sessionRow } from '../lib/retro';
+import { focusOf, sessionCategory, sessionCategoryEdit, sessionName, sessionRow } from '../lib/retro';
 import { timerView } from '../lib/timer';
 import type { Break, Priority, Session } from '../types';
 import { CategoryChip } from './CategoryChip';
@@ -27,11 +27,13 @@ interface Props {
   priorities: Priority[];
   /** The category chip's data: a session on no written row can be given a category. Null (before the board's first read) shows none. */
   pick: CategoryPick | null;
+  /** The day's focus total, shown only while the timeclock card, whose Focused tile has it, is hidden. */
+  total: boolean;
 }
 
 type Entry = { at: number; session: Session } | { at: number; brk: Break };
 
-export function SessionLog({ date, isToday, sessions, breaks, priorities, pick }: Props) {
+export function SessionLog({ date, isToday, sessions, breaks, priorities, pick, total }: Props) {
   const store = useDayStore();
   const { running, edit } = useTimer();
   // The log's own clock, to the second: a running break and session count here, while the sheet gets the minute.
@@ -55,8 +57,16 @@ export function SessionLog({ date, isToday, sessions, breaks, priorities, pick }
     );
   }
 
+  const focus = focusOf(sessions);
   return (
     <div>
+      {total && (
+        <div className="log-total">
+          <span className="muted">Total focused</span>
+          <strong>{formatDuration(focus.seconds)}</strong>
+          <span className="muted">· {counted(focus.count, 'session')}</span>
+        </div>
+      )}
       {breaks.length > 0 && (
         <div className="log-total">
           <span className="muted">On breaks</span>

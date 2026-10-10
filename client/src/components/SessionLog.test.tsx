@@ -39,7 +39,7 @@ const RUNNING = makeSession({ id: 2, label: 'Still going', startedAt: T0 + 26 * 
 /** The log on today's day store, wired as the sheet wires it, so an edit shows as the store lays it on. */
 function LogOnStore({ pick }: { pick: CategoryPick | null }) {
   const { day } = useDay(TODAY);
-  return day ? <SessionLog date={TODAY} isToday sessions={day.sessions} breaks={day.breaks} priorities={day.priorities} pick={pick} /> : null;
+  return day ? <SessionLog date={TODAY} isToday sessions={day.sessions} breaks={day.breaks} priorities={day.priorities} pick={pick} total={false} /> : null;
 }
 
 /** The log on the store, with `extra` beside it (a read again button, the bar's name). */
@@ -68,12 +68,12 @@ async function renderLog(
   sessions: Session[] = [DONE],
   breaks: Break[] = [],
   date = TODAY,
-  { priorities = PLANNED, pick = null }: { priorities?: Priority[]; pick?: CategoryPick | null } = {},
+  { priorities = PLANNED, pick = null, total = false }: { priorities?: Priority[]; pick?: CategoryPick | null; total?: boolean } = {},
 ) {
   render(
     <AppProviders>
       <BarLabel />
-      <SessionLog date={date} isToday={date === TODAY} sessions={sessions} breaks={breaks} priorities={priorities} pick={pick} />
+      <SessionLog date={date} isToday={date === TODAY} sessions={sessions} breaks={breaks} priorities={priorities} pick={pick} total={total} />
       <button>Elsewhere</button>
     </AppProviders>,
   );
@@ -169,7 +169,7 @@ describe('SessionLog', () => {
   it('saves a label typed into a row that goes before its blur check, once (◀ or Back tapped on a phone)', async () => {
     const log = (sessions: Session[]) => (
       <AppProviders>
-        <SessionLog date={TODAY} isToday sessions={sessions} breaks={[]} priorities={PLANNED} pick={null} />
+        <SessionLog date={TODAY} isToday sessions={sessions} breaks={[]} priorities={PLANNED} pick={null} total={false} />
       </AppProviders>
     );
     const { rerender } = render(log([DONE]));
@@ -569,6 +569,10 @@ describe('SessionLog', () => {
     expect(screen.queryByText('On breaks')).toBeNull();
     // The timeclock's Focused tile has the day's focus, so the log has no total of its own.
     expect(document.querySelector('.log-total')).toBeNull();
+    cleanup();
+    // With the timeclock card hidden, the log is where the day's focus shows.
+    await renderLog([DONE], [], TODAY, { total: true });
+    expect(screen.getByText('Total focused').parentElement!.textContent).toMatch(/^Total focused.+· 1 session$/);
   });
 
   it('says why the log is empty, today and on a past day', async () => {

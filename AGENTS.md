@@ -510,10 +510,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   Break's Over waits the same way on `useBreak`'s own loop, which reads the day the break is on
   (yesterday's for a break from before midnight, while it can still ring). A today whose first load
   failed is loaded again on the same ticks, so its alarms come back with the server. The sheet on
-  today and the board show that failure in place with Try Again; any other view gets the banner
-  `useTodayAlarms` raises (`todayShown`, from `Shell`), which goes once today loads or a view shows
-  it. No load raises a banner itself, so a failure is said once. Any day the store holds is also read again each time a view shows it (`useDay`; one whose
-  first load failed is asked for again then, quietly), and a range read (`store.readRange`) lands on
+  today and the board (once past the settings' wait, and beside its own read's failure) show that
+  failure in place with Try Again; any other view gets the banner `useTodayAlarms` raises
+  (`todayShown`, from `Shell`), which goes once today loads or a view shows it. No load raises a
+  banner itself, so a failure is said once. Any day the store holds is also read again each time a
+  view shows it (`useDay`; one whose first load failed is asked for again then, quietly), and a range read (`store.readRange`) lands on
   every day it holds loaded in the range when it answers, under the same `revision` rule (below). A
   change saved elsewhere also raises every held day's floor to its revision, so a read out from
   before it is asked for again.
@@ -1345,9 +1346,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   variants) → its name in `ALARM_NAMES`, which is the banner's whole kicker, and a `case` in
   `describeEvent()` (both in `lib/alarms.ts`; the type makes a missing name an error, and
   typecheck and the `switch-exhaustiveness-check` lint refuse a missing case), with a title for
-  each kind that says when (how long is left, that it is now, or how long past) and a body that
-  says where the deadline came from, leaving out a time another banner raised beside it already
-  gives (widen `EventContext`'s `Pick` if it needs another setting). A banner can
+  each kind that says when (how long is left, that it is now, or how long past; the
+  retrospective's warning, not a deadline, gives the end time in its body instead) and a body
+  that says where the deadline came from (widen `EventContext`'s `Pick` if it needs another
+  setting). A banner can
   carry one `action` button (see the clock-out alarm's "Overtime Approved" and the retro alarm's
   "Open Retrospective", chosen in `useAlarms` from the `AlarmDayState` callbacks).
 - **A per-day field** (like `overtimeApproved`, `retroNote`/`retroAt`): append a migration
