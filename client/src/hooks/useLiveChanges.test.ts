@@ -91,7 +91,7 @@ describe('useLiveChanges', () => {
     expect(raised()).toEqual([13]);
   });
 
-  it('judges a reconnected stream from where it left off, and a tab shown again from its new first message', async () => {
+  it('judges a reconnected stream, and one opened as the tab is shown again, from where the last left off', async () => {
     renderHook(() => useLiveChanges());
     latest().send(20);
     // The browser reconnects by itself: the same source, and its first message names 22.
@@ -100,14 +100,23 @@ describe('useLiveChanges', () => {
     await settle(2000);
     expect(raised()).toEqual([22]);
     expect(FakeSource.made).toHaveLength(1);
+    // Shown again with nothing new, or only this page's own write while hidden (an automatic finish).
     setVisibility('hidden');
     setVisibility('visible');
-    latest().send(30);
+    latest().send(22);
+    await settle(GATHER_MS);
+    setVisibility('hidden');
+    noteOwnWrite(23);
+    setVisibility('visible');
+    latest().send(23);
     await settle(GATHER_MS);
     expect(raised()).toEqual([22]);
-    latest().send(31);
+    // Another device saved while hidden: a tab back inside useRefreshLoop's throttle reads nothing.
+    setVisibility('hidden');
+    setVisibility('visible');
+    latest().send(24);
     await settle(GATHER_MS);
-    expect(raised()).toEqual([22, 31]);
+    expect(raised()).toEqual([22, 24]);
   });
 
   it('opens a stream the browser gave up on again after nextBackoff waits, and waits for the tab while hidden', async () => {
@@ -138,7 +147,7 @@ describe('useLiveChanges', () => {
     expect(open()).toHaveLength(1);
   });
 
-  it('drops a judgement still waiting when the tab is hidden', async () => {
+  it('puts off a judgement still waiting when the tab is hidden until it is shown again', async () => {
     renderHook(() => useLiveChanges());
     latest().send(50);
     latest().send(51);
@@ -146,5 +155,9 @@ describe('useLiveChanges', () => {
     setVisibility('hidden');
     await settle(GATHER_MS);
     expect(changed).not.toHaveBeenCalled();
+    setVisibility('visible');
+    latest().send(52);
+    await settle(GATHER_MS);
+    expect(raised()).toEqual([52]);
   });
 });

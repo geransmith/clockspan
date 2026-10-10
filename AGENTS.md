@@ -506,20 +506,22 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `hooks/useLiveChanges.ts`, `lib/ownWrites.ts`). Each shown tab holds one server-sent event stream,
   `GET /api/changes` (`useLiveChanges`, called in `Shell`, not `AppProviders`, since happy-dom has
   no `EventSource`), and a hidden tab closes it. The stream names the user's revision as it opens,
-  which is where the tab starts judging, and again after each of the user's writes has answered.
-  The revisions heard gather for `GATHER_MS` (300 ms); if the span holds one this page didn't write
-  (`changedElsewhere`: `request()` notes each write's revision, a refusal's included, and the
-  server moves it by one per write), `CHANGED_ELSEWHERE` is raised on the window with the newest
-  one as its detail. On it every `useRefreshLoop` runs at once, after the run out and once for a
-  burst, and the day store raises its held days' floors (above). A data write of this page refused
-  404 (gone) or 409 (changed) raises the same event from `request()`, at once and unjudged (the
-  stream would never call it foreign, since its revision is noted as this page's own), with the
+  which is where the page's first stream starts judging, and again after each of the user's writes
+  has answered. The revisions heard gather for `GATHER_MS` (300 ms); if the span holds one this page
+  didn't write (`changedElsewhere`: `request()` notes each write's revision, a refusal's included,
+  and the server moves it by one per write), `CHANGED_ELSEWHERE` is raised on the window with the
+  newest one as its detail. On it every `useRefreshLoop` runs at once, after the run out and once
+  for a burst, and the day store raises its held days' floors (above). A data write of this page
+  refused 404 (gone) or 409 (changed) raises the same event from `request()`, at once and unjudged
+  (the stream would never call it foreign, since its revision is noted as this page's own), with the
   refusal's revision as its detail, whether the stream is open or not; never for a read, whose
   answer the event asks for again (a refused read would loop), nor an auth route, which names no
   revision. A stream the browser gave up on (a 401, the 429 past `MAX_STREAMS`, a proxy's error
-  page) is opened again on `nextBackoff` and judged from where it left off; a tab shown again starts
-  from its new first message, since coming back reads everything anyway. The minute tick stays, for
-  a page with no stream (a buffering proxy), a change between a read and a stream's first message,
+  page) is opened again on `nextBackoff`, and a tab shown again opens one; each is judged from where
+  the last left off, a judgement the hide dropped included, since a tab back inside
+  `useRefreshLoop`'s 5 s throttle reads nothing (a change saved elsewhere while it was hidden is
+  then read twice if the come-back did read). The minute tick stays, for a page with no stream (a
+  buffering proxy), a change between the page's first reads and its first stream's first message,
   and the prune, whose revision no stream hears. A past day, History or Review on screen is read
   again the next time it is shown.
 - **The day store keeps the server's copy and this device's changes apart** (`lib/optimistic.ts`):
@@ -1506,8 +1508,9 @@ The browser pass for each surface (the logic under it is already tested):
   a row ticked, and a timer started and finished, in one window show in the other within a second.
   A tick in the page sends its PUT and no GET of `/api/days`, `/settings`, `/sessions/running` or
   `/board` after it, with one `/api/changes` pending in the Network panel. Switching to another tab
-  ends its `/api/changes`, and coming back opens exactly one. Under the `prod` config the same tick
-  in two windows leaves the console free of CSP violations, and `curl -sN
+  ends its `/api/changes`, and coming back opens exactly one; a row ticked in the other window
+  meanwhile shows within a second, however soon it comes back. Under the `prod` config the same
+  tick in two windows leaves the console free of CSP violations, and `curl -sN
   localhost:8090/api/changes` prints `data: N` at once and `: ping` within 25 s. No width or theme
   pass: nothing new is drawn.
 - **Punches**: a pair added before lunch, an early Clock out (done, celebration), "Add extra
