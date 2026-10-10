@@ -90,16 +90,12 @@ describe('navigate', () => {
     expect(window.location.search).toBe('');
   });
 
-  it('records a day on the current entry before pushing it, so Back returns there, and the push builds on it', () => {
+  it('opens a day by recording it on the History entry before pushing the sheet, so Back returns there', () => {
     visit('/?view=history');
     const { result } = render();
     const push = vi.spyOn(history, 'pushState');
     const replace = vi.spyOn(history, 'replaceState');
-    act(() => {
-      const nav = result.current[1];
-      nav({ date: '2026-07-14' }, { replace: true });
-      nav({ view: 'sheet' });
-    });
+    act(() => result.current[2]('2026-07-14', null));
     expect(replace).toHaveBeenCalledOnce();
     expect(replace).toHaveBeenCalledWith(null, '', '/?view=history&date=2026-07-14');
     expect(push).toHaveBeenCalledOnce();
@@ -113,11 +109,7 @@ describe('navigate', () => {
   it('records the review period a day was opened from, so Back reopens the review on it', () => {
     visit('/?view=history');
     const { result } = render();
-    act(() => {
-      const nav = result.current[1];
-      nav({ date: '2026-07-14', review: { kind: 'month', from: '2026-07-01' } }, { replace: true });
-      nav({ view: 'sheet' });
-    });
+    act(() => result.current[2]('2026-07-14', { kind: 'month', from: '2026-07-01' }));
     expect(window.location.search).toBe('?date=2026-07-14');
     expect(result.current[0]).toEqual({ view: 'sheet', date: '2026-07-14', review: null });
     act(() => history.back());

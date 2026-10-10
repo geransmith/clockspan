@@ -1112,8 +1112,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   calendar holds its month by its first day (`startOfMonth`) and Review its period by `from`,
   so neither moves at midnight. "Open Day" first records the picked day (and the Review period,
   `route.review`) on the History entry with `replace` and then pushes the sheet, so Back
-  reopens it there (`openDay` in `App.tsx`). Its cells count days by `hasContent` and its panel
-  uses `dayTimeclock`, the sheet's math. The switch names the view, so the Days and Review cards
+  reopens it there (`openDay` in `hooks/useRoute.ts`). Its cells count days by `hasContent`
+  and its panel uses `dayTimeclock`, the sheet's math. The switch names the view, so the Days and Review cards
   have no title of their own: each is a section named by `aria-label`, and Review's section
   headings are its h2s.
 - **The `retro` alarm target is the clock-out instant** ("warn before" = minutes before the

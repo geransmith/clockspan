@@ -7,6 +7,7 @@ import { unlockAudio } from '../lib/alerts';
 import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import { answered, AppProviders, endSession, makeDay, makePriority, makeSession, makeSettings, pressKey, settle, ShortcutKeys, T0, TODAY } from '../test/hooks';
 import type { Session } from '../types';
+import { FinishChoice } from './FinishChoice';
 import { TimerControls } from './TimerControls';
 
 vi.mock('../api');
@@ -25,6 +26,7 @@ async function renderControls(compact: boolean, session: Session = makeSession()
       <ShortcutKeys />
       <HoldToday />
       <TimerControls compact={compact} />
+      <FinishChoice />
     </AppProviders>,
   );
   await settle();
@@ -115,6 +117,29 @@ describe('TimerControls', () => {
     await renderControls(false, makeSession({ startedAt: T0 - 22 * MINUTE_MS }));
     expect(names()).toEqual(['Add 5 minutes', 'Finish', 'Cancel']);
     expect((button('Add 5 minutes') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('asks how much to log a minute or more past the end: Back sends nothing, Planned and Worked log their length', async () => {
+    // Two minutes past a 25-minute plan.
+    const due = makeSession({ startedAt: T0 - 22 * MINUTE_MS });
+    for (const [choice, countOverrun] of [
+      ['Planned · 25m', false],
+      ['Worked · 27m', true],
+    ] as const) {
+      await renderControls(false, due);
+      fireEvent.click(button('Finish'));
+      fireEvent.click(button('Back'));
+      await settle();
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(api.finishSession).not.toHaveBeenCalled();
+      fireEvent.click(button('Finish'));
+      vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(due) }));
+      fireEvent.click(button(choice));
+      await settle();
+      expect(api.finishSession, choice).toHaveBeenCalledExactlyOnceWith(due.id, countOverrun);
+      cleanup();
+      vi.mocked(api.finishSession).mockClear();
+    }
   });
 
   it('turns + off at the longest plan the server takes, running or run out', async () => {

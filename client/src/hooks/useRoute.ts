@@ -59,7 +59,7 @@ function toUrl(route: Route): string {
  * reloads and back/forward behave. `replace` rewrites the current entry instead of adding one,
  * to record where the user is before moving on.
  */
-export function useRoute(): [Route, (next: Partial<Route>, opts?: { replace?: boolean }) => void] {
+export function useRoute(): [Route, (next: Partial<Route>, opts?: { replace?: boolean }) => void, (date: string, review: ReviewPeriod | null) => void] {
   const [route, setRoute] = useState<Route>(read);
   useEffect(() => {
     const onPop = () => setRoute(read());
@@ -82,5 +82,16 @@ export function useRoute(): [Route, (next: Partial<Route>, opts?: { replace?: bo
     else history.pushState(null, '', url);
     setRoute(merged);
   }, []);
-  return [route, navigate];
+  // History's Open Day. The calendar's month and picked day are its own state and don't survive
+  // the unmount, so the opened day is written onto the History entry first and Back reopens the
+  // calendar on it. A day opened from Review records the period with it, so Back reopens the
+  // review there.
+  const openDay = useCallback(
+    (date: string, review: ReviewPeriod | null) => {
+      navigate({ date, review }, { replace: true });
+      navigate({ view: 'sheet' });
+    },
+    [navigate],
+  );
+  return [route, navigate, openDay];
 }
