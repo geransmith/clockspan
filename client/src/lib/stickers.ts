@@ -9,11 +9,11 @@ export type StickerId = 'clockedOut' | 'lunch' | 'priorities' | 'focus' | 'revie
 
 /** What a day can earn a sticker for, in the order the legend lists them. */
 export const STICKER_REASONS: { id: StickerId; label: string }[] = [
-  { id: 'clockedOut', label: 'Clocked out' },
-  { id: 'lunch', label: 'Lunch taken' },
-  { id: 'priorities', label: 'All priorities done' },
-  { id: 'focus', label: 'Focus session logged' },
-  { id: 'reviewed', label: 'Retrospective reviewed' },
+  { id: 'clockedOut', label: 'Clocked Out' },
+  { id: 'lunch', label: 'Lunch Taken' },
+  { id: 'priorities', label: 'All Priorities Done' },
+  { id: 'focus', label: 'Focus Session Logged' },
+  { id: 'reviewed', label: 'Retrospective Reviewed' },
 ];
 
 /** Each reason's label, for a cell's name and a sticker's tooltip. */

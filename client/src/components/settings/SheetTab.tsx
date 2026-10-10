@@ -31,7 +31,7 @@ export function SheetTab({ settings, set }: TabProps) {
           onCommit={(m) => set({ priorityCount: m })}
         />
       </Section>
-      <Section title="Focus timer">
+      <Section title="Focus Timer">
         <div className="setting-row">
           <span>Start buttons</span>
           <span className="inline-controls">
@@ -95,7 +95,7 @@ export function SheetTab({ settings, set }: TabProps) {
             {settings.layout.filter((l) => l.visible).length} of {settings.layout.length} cards visible
           </span>
           <button className="btn btn-ghost" onClick={() => set({ layout: DEFAULT_SETTINGS.layout })}>
-            Reset to default
+            Reset to Default
           </button>
         </div>
       </Section>

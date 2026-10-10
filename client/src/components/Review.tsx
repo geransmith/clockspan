@@ -5,7 +5,7 @@ import { useSettings } from '../hooks/useSettings';
 import { categoryOf } from '../lib/board';
 import { LOAD_FAILED } from '../lib/copy';
 import { counted, formatDateLong, formatDuration, formatWeekday } from '../lib/format';
-import { PERIOD_KINDS, periodRange, periodTarget, reviewRange, type CategoryTime, type PeriodKind, type ReviewPeriod } from '../lib/review';
+import { PERIOD_KINDS, PERIOD_LABELS, periodRange, periodTarget, reviewRange, type CategoryTime, type PeriodKind, type ReviewPeriod } from '../lib/review';
 import type { Category, Day } from '../types';
 import { CategoryDot } from './CategoryDot';
 import { Folded } from './Folded';
@@ -15,13 +15,11 @@ import { PeriodNav } from './PeriodNav';
 import { SessionLabel } from './SessionLabel';
 import { Tile } from './Tile';
 
-const PERIOD_LABELS: Record<PeriodKind, string> = { week: 'Week', month: 'Month', quarter: 'Quarter' };
-
 interface Props {
   today: string;
   now: number;
   /**
-   * Owned by History so the calendar's "Review this week" can point it at a week. A day opened
+   * Owned by History so the calendar's "Review This Week" can point it at a week. A day opened
    * from here takes the period along, so Back reopens the review on it.
    */
   period: ReviewPeriod;
@@ -71,7 +69,7 @@ export function Review({ today, now, period: { kind, from }, onPeriod, onOpen }:
 function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; now: number; kind: PeriodKind; onOpen: (date: string) => void }) {
   const { settings } = useSettings();
   const { board } = useBoardState();
-  // Before the board's first read answers, nothing is counted under a category, and Not done
+  // Before the board's first read answers, nothing is counted under a category, and Not Done
   // knows no task's lane. A removed category stays known, so the time logged under it keeps its
   // name. A done task keeps its lane but shows in Done, and the board stops sending it after a
   // while, so only the open ones count as laned.
@@ -129,7 +127,7 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
       {/* With no sessions the Focused tile says so. A total over one row would be that row's time. */}
       {r.sessions > 0 && (
         <section className="review-section">
-          <h2 className="section-heading">Off the plan {r.unplanned.length > 1 && <span className="muted">{formatDuration(r.offPlanSeconds)}</span>}</h2>
+          <h2 className="section-heading">Off the Plan {r.unplanned.length > 1 && <span className="muted">{formatDuration(r.offPlanSeconds)}</span>}</h2>
           {r.unplanned.length === 0 ? (
             <p className="muted small">Every logged session was for a priority.</p>
           ) : (
@@ -170,7 +168,7 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
       )}
 
       <section className="review-section">
-        <h2 className="section-heading">Not done {r.notDone.length > 0 && <span className="muted">{r.notDone.length}</span>}</h2>
+        <h2 className="section-heading">Not Done {r.notDone.length > 0 && <span className="muted">{r.notDone.length}</span>}</h2>
         {r.notDone.length === 0 ? (
           <p className="muted small">
             {r.routines.length > 0
@@ -231,7 +229,7 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
 
 const time = (seconds: number) => (seconds > 0 ? formatDuration(seconds) : <span className="muted">no time</span>);
 
-/** A row of Off the plan, Routines or Not done: what it is, when, its time, and a press opens its latest day. */
+/** A row of Off the Plan, Routines or Not Done: what it is, when, its time, and a press opens its latest day. */
 function ReviewRow({ text, meta, seconds, onOpen }: { text: ReactNode; meta: string; seconds: number; onOpen: () => void }) {
   return (
     <li>
@@ -256,7 +254,7 @@ function ByCategory({ byCategory, categories }: { byCategory: CategoryTime[]; ca
   const share = (part: number, whole: number) => `${(part / whole) * 100}%`;
   return (
     <section className="review-section">
-      <h2 className="section-heading">By category</h2>
+      <h2 className="section-heading">By Category</h2>
       <Folded
         className="review-list"
         items={byCategory.map((c) => {

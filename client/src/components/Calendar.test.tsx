@@ -41,7 +41,7 @@ describe('Calendar', () => {
     expect(picked().dataset.date).toBe(LAST);
     expect(picked().getAttribute('aria-current')).toBe('date');
     expect(screen.getByText('Worked')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'This month' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'This Month' })).toBeNull();
 
     view.rerender(calendar(FIRST, AFTER_MIDNIGHT));
     await settle();
@@ -50,7 +50,7 @@ describe('Calendar', () => {
     expect(screen.getByText('Worked')).toBeTruthy();
     expect(api.getRange).not.toHaveBeenCalledWith(FIRST, '2026-10-31');
 
-    fireEvent.click(screen.getByRole('button', { name: 'This month' }));
+    fireEvent.click(screen.getByRole('button', { name: 'This Month' }));
     await settle();
     expect(api.getRange).toHaveBeenLastCalledWith(FIRST, '2026-10-31');
     expect(screen.getByRole('group', { name: formatMonth(FIRST) })).toBeTruthy();
@@ -123,15 +123,15 @@ describe('Calendar', () => {
     const view = render(calendar(LAST, LAST_EVENING));
     await settle();
     const cell = () => view.container.querySelector('[data-date="2026-09-29"]')!.getAttribute('aria-label');
-    expect(cell()).toMatch(/, Clocked out, Lunch taken$/);
-    fireEvent.click(screen.getByRole('button', { name: /^Clocked out/ }));
-    expect(cell()).toMatch(/, Clocked out$/);
+    expect(cell()).toMatch(/, Clocked Out, Lunch Taken$/);
+    fireEvent.click(screen.getByRole('button', { name: /^Clocked Out/ }));
+    expect(cell()).toMatch(/, Clocked Out$/);
 
-    // Show hours turned off elsewhere: the next settings refresh takes the Clocked out chip away.
+    // Show hours turned off elsewhere: the next settings refresh takes the Clocked Out chip away.
     vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ stickers: true, trackHours: false })));
     await settle(MINUTE_MS);
-    expect(screen.queryByRole('button', { name: /^Clocked out/ })).toBeNull();
-    expect(cell()).toMatch(/, Lunch taken$/);
-    expect(screen.getByRole('button', { name: /^Lunch taken/ }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryByRole('button', { name: /^Clocked Out/ })).toBeNull();
+    expect(cell()).toMatch(/, Lunch Taken$/);
+    expect(screen.getByRole('button', { name: /^Lunch Taken/ }).getAttribute('aria-pressed')).toBe('false');
   });
 });

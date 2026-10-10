@@ -67,7 +67,7 @@ shared/                 imported by both sides, always with a `.js` suffix
                         priority goes into one); mergePriorities: a priorities save laid onto the stored
                         list as the changes made since its base, rows matched by their task's uid, field by
                         field as MERGED lists
-  text.ts               sameText: the key a task typed again by hand is matched by (Review's Not done),
+  text.ts               sameText: the key a task typed again by hand is matched by (Review's Not Done),
                         and category names are compared by; categoryName, taskTitle and taskNote: a
                         category's name, and a task's name and note, as the server stores them; cutText:
                         text cut to a limit with no half character left (a lone surrogate becomes U+FFFD,
@@ -392,7 +392,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   so a page that still holds a deleted task can't make it again, and any task nothing names
   (`collectItems`, which takes an archived task only here); never an open task in a lane or a
   recurring priority in use (`pruneDays`' doc has the steps). With retention off and no
-  `RETENTION_DAYS` cap only Delete old days now prunes, so tombstones and removed recurring
+  `RETENTION_DAYS` cap only Delete Old Days Now prunes, so tombstones and removed recurring
   priorities stay until then. It answers both counts (`Pruned`: days and tasks, tombstones
   included), and `POST /days/prune` reports the days; the Data tab reads the board again after its
   delete. `reclaimSpace` (VACUUM + WAL checkpoint) runs after a prune that deleted a day or a task
@@ -421,11 +421,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (`SettingsPatch` in `client/src/api.ts`), down to one alarm's field, and a save on one device
   never writes its stale copy of the rest over another device's change; lists (`timerMinutes`,
   `layout`) go whole. A changed default of an existing key reaches only users with no row (a
-  new user, or one who used Reset all settings). A change that must reach the others needs a
+  new user, or one who used Reset All Settings). A change that must reach the others needs a
   `mergeSettings` rule that reads the stored value (as `stickers` reads the old layout), and
   that rule can't tell a value left at the old default from one the user chose. Add settings by
   adding a default (shared) + validation there, never by migrating rows. `DELETE /api/settings`
-  drops the user's row, which is what "Reset all settings" does.
+  drops the user's row, which is what "Reset All Settings" does.
 - **Timeclock math lives only in `client/src/lib/timeclock.ts`; alarm scheduling only in
   `client/src/lib/alarms.ts`.** Both are pure functions of `(inputs, settings, now)` with tests.
   Components and hooks never re-derive these. A stored day, today's included, goes through
@@ -688,7 +688,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `lunchPunches: false` too the card hides the Lunch out / in rows, which stay in the data at
   positions 1 and 2: `lunchRowsShown` decides (never on a day with a lunch punched).
   `stickerReasons` and `lunchInPunchOrder` follow the same switches. `trackHours: false` only
-  hides hours outside the day's own tiles (the week line, History's hours, the Clocked out sticker
+  hides hours outside the day's own tiles (the week line, History's hours, the Clocked Out sticker
   via `stickerReasons`); the timeclock and the clock bar still run.
 - **A task is stored once** (`items`, `server/board.ts`): a one-off typed on a sheet or made on the
   board, or a recurring priority (`weekdays` set), each with one name, one category and one note
@@ -899,7 +899,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   from the item the dialog shows (`editItem`'s `task`). The first day (never a day toggled on a routine) waits for today's saves still
   out, so a row typed seconds ago has its task, and reads again the held days that name the task
   (`taskChanged`), since `Priority.recurring` is the task's: its past rows become a routine's from
-  then on (the sheet's mark, Review's Routines in place of Not done, the retro's routines count, no
+  then on (the sheet's mark, Review's Routines in place of Not Done, the retro's routines count, no
   left-open carry); entries, ticks and sessions stay as they were. The rows it adds are entries of
   it (`Priority.recurring`), so a rename or a category, on its card or its row on the sheet, reaches
   every day it is on, and the held days that name it are read again (`taskChanged`, see the day
@@ -1059,7 +1059,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   before today with a row written. Today is left out because it is still going, and it is null under
   two such days; Review shows it for a Week or a Month. The Days tile's target is `periodTarget`: a
   Week's is the Work week setting, as on the timeclock's week line, and a Month's or a Quarter's is
-  `targetSeconds`, the clocked-in days' own lengths added up through `daySettings`. Not done groups
+  `targetSeconds`, the clocked-in days' own lengths added up through `daySettings`. Not Done groups
   the one-off rows left open by their task (`addToNotDone`; `OpenPriority.key` is the uid of the
   task that opened the entry): a tick settles that task's earlier open days. A one-off typed again
   by hand on a later day is a new task, so a narrow text fallback keeps such rows together: a task
@@ -1070,7 +1070,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   groups by uid only, so two board tasks of one name stay two entries. An entry shows its latest
   task's name. A recurring priority's rows (`Priority.recurring`) are priorities in every count (the
   tiles, `midDay`, `typicalDay`, the retro card, the calendar and its stickers) but never a task in
-  Not done, which lists one-offs only: `reviewRange` groups them by uid into `routines` (the days a
+  Not Done, which lists one-offs only: `reviewRange` groups them by uid into `routines` (the days a
   row had text, how many of them it was ticked, its focus; most days first, then most focus, then by
   title), each day on its own, so a tick never settles another day's miss; a routine is titled by
   its rows' text, its current name on every day. `reviewDay`'s `routines` (`{ done, total }`) is the
@@ -1081,13 +1081,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   category. A row's category is its task's current one, so a category change moves the task's past
   time. A uid outside `known` (the board's categories, removed ones included) counts as none, there
   and in `midDay`. Most time first, then most ticks, none last; a category with neither is left out.
-  Review shows By category only while it lists more than one bucket, one of them with a category
-  (one bucket would say the Focused tile again), Off the plan only with a session (the tile says
-  none), and a section's muted count only where it adds something (Off the plan's total over two
-  rows or more, Not done's count above none). Review passes `known` and
+  Review shows By Category only while it lists more than one bucket, one of them with a category
+  (one bucket would say the Focused tile again), Off the Plan only with a session (the tile says
+  none), and a section's muted count only where it adds something (Off the Plan's total over two
+  rows or more, Not Done's count above none). Review passes `known` and
   `laned` (the uids of the tasks the board holds in Later or Next) from `useBoardState()` once the
   board has loaded, and empty ones before, so until then nothing is grouped by category and no task
-  counts as laned in Not done.
+  counts as laned in Not Done.
 - **A session is named and filed by its task.** `sessionName(s, rows)` and
   `sessionCategory(s, rows)` (`lib/retro.ts`) read the written row its task is on its day
   (`sessionRow`), so a rename or a chip changed on the sheet shows at once, else the server's
@@ -1095,7 +1095,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   the name is its `label`) and `Session.categoryUid` (the task's, else the session's own). Every
   surface names a session through them or `useTimer().name`: the day log, the timer card, the
   running bar, the tab title, the timer's alerts as they are raised (a "Time's Up" banner already up
-  keeps its name: see the timer rule), the retro's Not on the Plan and Review's Off the plan
+  keeps its name: see the timer rule), the retro's Not on the Plan and Review's Off the Plan
   (grouped by task, else by label). Every named start from the timer card is on a task: a pick
   from the label box's list (`LabelBox` in `FocusTimer.tsx`, today's open rows, numbered), or an
   open row's text typed (`sameText`), starts on that row, and any other name puts a new row on
@@ -1109,7 +1109,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   details.
 - **History opens on the route's date** (`route.date ?? today`), with that day picked. The
   calendar holds its month by its first day (`startOfMonth`) and Review its period by `from`,
-  so neither moves at midnight. "Open day" first records the picked day (and the Review period,
+  so neither moves at midnight. "Open Day" first records the picked day (and the Review period,
   `route.review`) on the History entry with `replace` and then pushes the sheet, so Back
   reopens it there (`openDay` in `App.tsx`). Its cells count days by `hasContent` and its panel
   uses `dayTimeclock`, the sheet's math. The switch names the view, so the Days and Review cards
@@ -1491,7 +1491,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (`--accent-ink`, `--ok-ink`, `--warn-ink`, `--danger-ink`), which keeps light-mode text at 4.5:1
   and up; the tone itself is for fills, borders, icons and bars. A category's colour (`--cat-<id>`,
   picked by `data-color`) is a fill only (see "A category colour" for its contrast): a dot, and
-  Review's By category bars, solid for the time on a priority and striped in the same colour for the
+  Review's By Category bars, solid for the time on a priority and striped in the same colour for the
   time off the plan (No category's bar is `--text-2`, not in the test). A category's name is never
   drawn in it, and its dot always sits beside the name, since the eight colours repeat
   (`nextColor`); the one exception is the day log's dot, named by its `label`. `CategoryChip` is the
@@ -1688,7 +1688,7 @@ The browser pass for each surface (the logic under it is already tested):
   label box and pick one in the chip at the end of its row (at 375 the box narrows and the row stays
   one line) and give an unplanned log session one (its dot before the label), then the same at 1280
   in the split's columns.
-- **Recurring priorities**: Settings → Board → Recurring priorities: Recurring rows per day with
+- **Recurring priorities**: Settings → Board → Recurring Priorities: Recurring rows per day with
   its hint beside the box, and nothing else. On the board at 1440: Later ends with Repeats (the
   seeded "Monitor the queue" ↻ Mon–Fri and "Follow-ups" ↻ Mon, Wed, Fri), counted in Later's number,
   below Later's Show N More once it folds. A Next card's Repeat row: its first day asks first (Cancel
@@ -1714,7 +1714,7 @@ The browser pass for each surface (the logic under it is already tested):
 - **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
   Month / Quarter). Today's card folded to its Open button at 1280, 1000 and 375: Open shows it
   with the focus in the note box, Now on Clock out opens it, and with the alarm recipe (see
-  "Alarms") the retro alarm's Open Retrospective lands on it opened, the focus in the note box. By category in
+  "Alarms") the retro alarm's Open Retrospective lands on it opened, the focus in the note box. By Category in
   Review → Week and Month (solid and striped bars, No category last), in light and dark. For
   Added mid-day's "mostly …", give the last weekday's "Reply to the recruiter" row a category with
   its chip (the seed files that task under none) and open the Week that holds that day (◀ on a
@@ -1785,8 +1785,8 @@ The browser pass for each surface (the logic under it is already tested):
   The list at 1000 and 375, light and dark; a screen reader reads its title and keys, and a
   button's key.
 - **The History calendar**: one month at the mobile preset: ◀ to a seeded month, tap a day,
-  **Open day**, browser Back lands on that month with the day picked, and back through the
-  header, **Review this week** lands on that week. Review → Month → ◀ → a row → Back lands on that
+  **Open Day**, browser Back lands on that month with the day picked, and back through the
+  header, **Review This Week** lands on that week. Review → Month → ◀ → a row → Back lands on that
   month's review. With the sticker chart on (`PUT /api/settings {"stickers":true}`), a chip narrows
   the grid to one sticker and a second tap clears it; with Show weekends off, five columns.
 - **Retention**: one look at Settings → Data (count line, toggle saves); drive the delete with

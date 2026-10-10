@@ -39,7 +39,7 @@ export function AlarmsTab({ settings, set }: TabProps) {
           onChange={(p) => setAlarm('retro', p)}
         />
       </Section>
-      <Section title="How you're alerted" hint="Every alarm also shows an in-app banner.">
+      <Section title="How You're Alerted" hint="Every alarm also shows an in-app banner.">
         <Toggle label="Sound" checked={settings.sound} onChange={(v) => set({ sound: v })} />
         <NotificationsRow enabled={settings.notifications} onChange={(v) => set({ notifications: v })} />
       </Section>

@@ -51,7 +51,7 @@ describe('AccountTab', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('disables every Delete and Add user while a request is out, so a confirmed press is never dropped', async () => {
+  it('disables every Delete and Add User while a request is out, so a confirmed press is never dropped', async () => {
     const kim = makeUser({ id: 3, name: 'kim', username: 'kim' });
     vi.mocked(api.listUsers).mockResolvedValue({ users: [admin, sam, kim] });
     vi.mocked(api.deleteUser).mockReturnValue(new Promise(() => {}));
@@ -62,7 +62,7 @@ describe('AccountTab', () => {
     const deleteKim = screen.getByRole('button', { name: 'Delete kim' }) as HTMLButtonElement;
     expect(deleteKim.disabled).toBe(true);
     expect((screen.getByRole('button', { name: 'Delete sam' }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole('button', { name: 'Add user' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Add User' }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(deleteKim);
     expect(confirm).toHaveBeenCalledTimes(1);
     expect(api.deleteUser).toHaveBeenCalledExactlyOnceWith(sam.id);

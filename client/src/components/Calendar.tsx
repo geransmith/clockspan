@@ -286,10 +286,10 @@ function DayDetail({
       {note && <p className="review-note">{note}</p>}
       <div className="calendar-actions">
         <button className="btn" onClick={() => onOpen(date)}>
-          Open day
+          Open Day
         </button>
         <button className="btn btn-ghost" onClick={() => onReviewWeek(date)}>
-          Review this week
+          Review This Week
         </button>
       </div>
     </>

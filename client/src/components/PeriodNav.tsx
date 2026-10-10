@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import { periodRange, type PeriodKind } from '../lib/review';
+import { PERIOD_LABELS, periodRange, type PeriodKind } from '../lib/review';
 import { ChevronLeft, ChevronRight } from './Icons';
 
 interface Props {
@@ -53,7 +53,7 @@ function PeriodReset({ kind, from, today, onFrom, prevRef }: Pick<Props, 'kind' 
         prevRef.current?.focus();
       }}
     >
-      This {kind}
+      This {PERIOD_LABELS[kind]}
     </button>
   );
 }

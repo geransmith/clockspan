@@ -16,7 +16,7 @@ export function DataTab({ settings, set, onReset }: TabProps & { onReset: () => 
   return (
     <>
       <Section
-        title="Automatic cleanup"
+        title="Automatic Cleanup"
         hint="Deletes days older than this, with their punches, priorities, sessions, breaks and notes, and tasks finished before then. Settings are kept. Runs on the server every few hours."
       >
         <Toggle label="Delete old days automatically" checked={settings.retention.enabled} onChange={(v) => set({ retention: { enabled: v } })} />
@@ -33,7 +33,7 @@ export function DataTab({ settings, set, onReset }: TabProps & { onReset: () => 
       <Section title="Reset" hint="Every setting goes back to its default. Days, punches and sessions are kept.">
         <div>
           <button className="btn btn-ghost btn-danger-text" onClick={onReset}>
-            Reset all settings
+            Reset All Settings
           </button>
         </div>
       </Section>
@@ -48,7 +48,7 @@ export function DataTab({ settings, set, onReset }: TabProps & { onReset: () => 
 }
 
 /**
- * Settings → Data → "Delete old days now". The count line is the server's answer for the
+ * Settings → Data → "Delete Old Days Now". The count line is the server's answer for the
  * chosen cutoff, so the confirm names exactly what will go. The delete goes through the day
  * store (`pruneBefore`), so the days on screen follow it, and the board is read again, since the
  * prune takes the tasks done before the cutoff. Not a settings save: nothing here goes through the
@@ -99,7 +99,7 @@ function DeleteOldDays() {
 
   return (
     <Section
-      title="Delete old days now"
+      title="Delete Old Days Now"
       hint="Removes every day before the date, with its punches, priorities, sessions, breaks and notes, and tasks finished before then. Today and a day with a running timer are always kept."
     >
       <div className="setting-row">
