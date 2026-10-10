@@ -36,24 +36,17 @@ export function PeriodNav({ kind, label, from, today, onFrom, prevRef }: Props) 
       <button className="btn btn-icon" onClick={next} aria-label={`Next ${kind}`} disabled={from >= current}>
         <ChevronRight />
       </button>
-      <PeriodReset kind={kind} from={from} today={today} onFrom={onFrom} prevRef={prevRef} />
+      {from < current && (
+        <button
+          className="btn btn-ghost"
+          onClick={() => {
+            onFrom(current);
+            prevRef.current?.focus();
+          }}
+        >
+          This {PERIOD_LABELS[kind]}
+        </button>
+      )}
     </div>
-  );
-}
-
-/** "This Week" / "This Month" / "This Quarter": back to today's period, shown once stepped back. It hands the focus to `prevRef` as it goes. */
-function PeriodReset({ kind, from, today, onFrom, prevRef }: Pick<Props, 'kind' | 'from' | 'today' | 'onFrom' | 'prevRef'>) {
-  const current = periodRange(kind, today, 0).from;
-  if (from >= current) return null;
-  return (
-    <button
-      className="btn btn-ghost"
-      onClick={() => {
-        onFrom(current);
-        prevRef.current?.focus();
-      }}
-    >
-      This {PERIOD_LABELS[kind]}
-    </button>
   );
 }
