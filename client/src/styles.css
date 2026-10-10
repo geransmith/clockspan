@@ -348,8 +348,7 @@ button {
 .running-label-input,
 .log-label-input,
 .log-plan-select,
-.board-title-input,
-.board-move-select {
+.board-title-input {
   min-height: 38px;
 }
 .checkbox {
@@ -2738,15 +2737,17 @@ button.log-label:hover {
   justify-content: space-between;
   gap: 4px 8px;
 }
-/* The timer card's length buttons, a line high: beside their label where they fit, wrapping in a
-   narrow column (the card's one-row grid can't shrink below its buttons). */
-.board-start .timer-quick {
+/* The timer card's length buttons, a line high, and Move to's columns: beside their label where
+   they fit, wrapping in a narrow column (the card's one-row grid can't shrink below its buttons). */
+.board-start .timer-quick,
+.board-move-targets {
   display: flex;
   flex-wrap: wrap;
   flex: 1 1 auto;
   gap: 6px;
 }
-.board-start .btn-quick {
+.board-start .btn-quick,
+.board-move-targets .btn {
   flex: 1 0 auto;
   min-height: 44px;
   flex-direction: row;
@@ -2754,9 +2755,6 @@ button.log-label:hover {
 }
 .board-start .timer-quick-num {
   font-size: 1rem;
-}
-.board-move-select {
-  max-width: 100%;
 }
 .board-editor-actions {
   display: flex;
@@ -3295,8 +3293,7 @@ kbd {
   .log-label-input,
   .log-plan-select,
   .running-label-input,
-  .board-title-input,
-  .board-move-select {
+  .board-title-input {
     min-height: 44px;
   }
   /* The running label clips its overflow (a long label ends in an ellipsis), which would cut

@@ -160,28 +160,19 @@ export function BoardCardView({
             <p className="muted small">{BOARD.plannedSheet}</p>
           ) : (
             targets.length > 0 && (
-              <label className="board-move">
-                <span className="muted small">Move to</span>
-                <select
-                  className="input select board-move-select"
-                  // Named outright: a select's own text is its picked option, which Chrome can take for its name.
-                  aria-label="Move to"
-                  value=""
-                  onChange={(e) => {
-                    const to = targets.find((c) => c === e.target.value);
-                    if (to) onMove(to, e.target);
-                  }}
-                >
-                  <option value="" disabled>
-                    Pick a column
-                  </option>
+              // Buttons, not a select: a select's arrow keys and typed letters change it, which moved the card.
+              <div className="board-move" role="group" aria-labelledby={`${editorId}-move`}>
+                <span id={`${editorId}-move`} className="muted small">
+                  Move to
+                </span>
+                <div className="board-move-targets">
                   {targets.map((c) => (
-                    <option key={c} value={c}>
+                    <button key={c} className="btn" onClick={(e) => onMove(c, e.currentTarget)}>
                       {COLUMN_NAMES[c]}
-                    </option>
+                    </button>
                   ))}
-                </select>
-              </label>
+                </div>
+              </div>
             )
           )}
           {(onRemove ?? onDelete) && (

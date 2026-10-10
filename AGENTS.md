@@ -1444,10 +1444,11 @@ The browser pass for each surface (the logic under it is already tested):
   the box, an empty Enter or Escape closes it, one with text stays open when left); a left-open
   task's "Left open from …" in Next, Move to from each column (a done item's notice), a park of a
   task typed seconds ago, a done-earlier task's editor, and this week's routine ticks in Done. At
-  1000, where the columns are narrowest: titles clamp to two lines, meta lines wrap, the Move to
-  select fits. At 375: the switch shows one column, the notice wraps, and with sign-in on
-  (`web-local`, `npm run seed -- --auth local --sessions`, the printed cookie set and the board
-  turned on in Settings → Sheet) the sheet's five header buttons fit with the brand's name gone.
+  1000, where the columns are narrowest: titles clamp to two lines, meta lines wrap, Move to's
+  buttons wrap under their label (four on a left-open task). At 375: the switch shows one column,
+  the notice wraps, and with sign-in on (`web-local`, `npm run seed -- --auth local --sessions`,
+  the printed cookie set and the board turned on in Settings → Sheet) the sheet's five header
+  buttons fit with the brand's name gone.
   Light and dark. The drag pass: at 1440, drag with the mouse between each pair of columns (Later
   and Next take the card where it is dropped), a done row onto Later (the notice), then by keyboard
   (Tab to a grip, Space, arrows, Space) with a screen reader, which hears where the card is and the

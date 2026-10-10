@@ -8,7 +8,7 @@ import { addDays, HOUR_MS, MINUTE_MS } from '../../../../shared/dates.js';
 import { MAX_PRIORITIES } from '../../../../shared/settings.js';
 import type { TimerCtx } from '../../hooks/useTimer';
 import { dismissByTag, unlockAudio, warnQuietly, warnSaveFailed } from '../../lib/alerts';
-import { withCategory, withItem, withItemPatch, withoutItem } from '../../lib/board';
+import { COLUMN_NAMES, withCategory, withItem, withItemPatch, withoutItem, type ColumnId } from '../../lib/board';
 import { ADD_PRIORITY_FAILED, BOARD, BOARD_DRAG, CONFIRM, DONE_STAYS, LOAD_FAILED, PRIORITY_WARNINGS, WARNING_ACTIONS } from '../../lib/copy';
 import { USER_KEYS } from '../../lib/storage';
 import {
@@ -87,11 +87,14 @@ const notice = () => document.querySelector<HTMLElement>('.board-notice[role="st
 const titlesIn = (name: string) => [...column(name).querySelectorAll('.board-card-title, .board-earlier')].map((b) => b.textContent);
 /** Opens an item's editor by its title. */
 const openEditor = (title: string) => fireEvent.click(screen.getByRole('button', { name: title }));
-const moveTo = (to: string) => fireEvent.change(screen.getByRole('combobox', { name: 'Move to' }), { target: { value: to } });
+/** The open editor's Move to, and its column buttons. */
+const moveGroup = () => screen.getByRole('group', { name: 'Move to' });
+const moveButton = (to: ColumnId) => within(moveGroup()).getByRole('button', { name: COLUMN_NAMES[to] });
+const moveTo = (to: ColumnId) => fireEvent.click(moveButton(to));
 const moveOptions = () =>
-  within(screen.getByRole('combobox', { name: 'Move to' }))
-    .getAllByRole('option')
-    .map((o) => o.textContent);
+  within(moveGroup())
+    .getAllByRole('button')
+    .map((b) => b.textContent);
 const putLists = () => vi.mocked(api.putPriorities).mock.calls.map(([date, list]) => ({ date, texts: list.map((p) => p.text) }));
 /** The tasks a lane's box and Add a new card sent: always to a lane. */
 const added = () => vi.mocked(api.addItem).mock.calls.map(([item]) => item as Extract<NewItem, { lane: unknown }>);
@@ -168,7 +171,7 @@ describe('Board', () => {
     expect(screen.getByRole('button', { name: 'Category for Check the logs: none' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Delete' })).toBeTruthy();
     // Next too: it has no place of its own there yet.
-    expect(moveOptions()).toEqual(['Pick a column', 'Later', 'Next', 'In progress', 'Done']);
+    expect(moveOptions()).toEqual(['Later', 'Next', 'In progress', 'Done']);
     moveTo('next');
     await settle();
     expect(api.editItem).toHaveBeenCalledExactlyOnceWith('left00000001', { lane: 'next', before: null });
@@ -179,7 +182,7 @@ describe('Board', () => {
   it('moves a task between Later and Next with Move to', async () => {
     await renderBoard();
     openEditor('Write a KB');
-    expect(moveOptions()).toEqual(['Pick a column', 'Next', 'In progress', 'Done']);
+    expect(moveOptions()).toEqual(['Next', 'In progress', 'Done']);
     moveTo('next');
     await settle();
     expect(api.editItem).toHaveBeenCalledExactlyOnceWith('later0000001', { lane: 'next', before: null });
@@ -199,8 +202,11 @@ describe('Board', () => {
   it('puts a Next task in Done as a ticked row of today, unlocking the sound in the tap', async () => {
     await renderBoard();
     openEditor('Follow up');
+    // The burst starts at the button pressed, measured before it goes with the editor.
+    moveButton('done').getBoundingClientRect = () => ({ left: 100, top: 200, width: 80, height: 44 }) as DOMRect;
     moveTo('done');
     expect(unlockAudio).toHaveBeenCalledTimes(1);
+    expect((document.querySelector('.burst') as HTMLElement).style).toMatchObject({ left: '140px', top: '222px' });
     await settle();
     expect(lists[WED]![2]).toMatchObject({ text: 'Follow up', done: true, uid: 'next00000001' });
     expect(titlesIn('Done')).toEqual(['Email', 'Follow up', 'Earlier this week · 2']);
@@ -234,7 +240,7 @@ describe('Board', () => {
     expect(within(editor).getByRole('textbox', { name: 'Title' })).toBeTruthy();
     expect(within(editor).getByRole('button', { name: 'Category for Shipped: none' })).toBeTruthy();
     expect(within(editor).getByRole('button', { name: 'Delete' })).toBeTruthy();
-    expect(moveOptions()).toEqual(['Pick a column', 'Later', 'Next', 'In progress']);
+    expect(moveOptions()).toEqual(['Later', 'Next', 'In progress']);
     moveTo('progress');
     await settle();
     expect(lists[WED]![2]).toMatchObject({ uid: 'done00000001', text: 'Shipped', done: false });
@@ -284,8 +290,8 @@ describe('Board', () => {
   it('puts the focus on the moved item once it lands, when the move left it nowhere', async () => {
     await renderBoard();
     openEditor('Report');
-    // The select goes with the editor, and the focus with it.
-    screen.getByRole('combobox', { name: 'Move to' }).focus();
+    // The button goes with the editor, and the focus with it.
+    moveButton('later').focus();
     moveTo('later');
     await settle();
     expect(titlesIn('Later')).toEqual(['Report', 'Write a KB']);
@@ -406,7 +412,7 @@ describe('Board', () => {
     lists[WED] = [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true })];
     await renderBoard();
     openEditor('Monitor the queue');
-    expect(moveOptions()).toEqual(['Pick a column', 'Done']);
+    expect(moveOptions()).toEqual(['Done']);
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Remove from today' }));
     await settle();
@@ -459,7 +465,7 @@ describe('Board', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Earlier this week · 2' }));
     openEditor('Tuesday row');
     expect(editorLines('Done')).toEqual([]);
-    expect(moveOptions()).toEqual(['Pick a column', 'In progress']);
+    expect(moveOptions()).toEqual(['In progress']);
     const title = screen.getByRole('textbox', { name: 'Title' });
     fireEvent.change(title, { target: { value: 'Tuesday task' } });
     fireEvent.keyDown(title, { key: 'Enter' });
@@ -478,7 +484,7 @@ describe('Board', () => {
     expect(column('Done').querySelector('.board-editor-title')?.textContent).toBe('Tuesday row');
     expect(editorLines('Done')).toEqual([]);
     // Removed, it doesn't go back on today's list.
-    expect(screen.queryByRole('combobox', { name: 'Move to' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Move to' })).toBeNull();
   });
 
   it('marks a recurring row on its meta line, and only that row', async () => {
@@ -499,7 +505,7 @@ describe('Board', () => {
     vi.stubGlobal('confirm', confirm);
     await renderBoard();
     openEditor('Plan B');
-    expect(screen.queryByRole('combobox', { name: 'Move to' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Move to' })).toBeNull();
     expect(editorLines('Next')).toEqual([BOARD.plannedSheet]);
     const title = screen.getByRole('textbox', { name: 'Title' });
     fireEvent.change(title, { target: { value: 'Plan C' } });
