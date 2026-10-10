@@ -69,11 +69,12 @@ describe('durations', () => {
     expect(formatDuration(-90)).toBe('1m');
   });
 
-  it('writes a length in minutes the way the alarm banners do', () => {
+  it('writes a length in minutes the way the alarm banners do, an hour or more as the tiles do', () => {
     expect(formatMinutes(15)).toBe('15 min');
-    expect(formatMinutes(60)).toBe('1h');
+    expect(formatMinutes(60)).toBe('1h 00m');
     expect(formatMinutes(90)).toBe('1h 30m');
-    expect(formatMinutes(605)).toBe('10h 5m');
+    expect(formatMinutes(425)).toBe('7h 05m');
+    expect(formatMinutes(605)).toBe('10h 05m');
   });
 
   it('writes hours and minutes on one line', () => {

@@ -76,6 +76,32 @@ describe('DataTab', () => {
     expect(status.textContent).toBe(DAYS_DELETED(2));
   });
 
+  it('deletes nothing when the confirm is answered no', async () => {
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal('confirm', confirm);
+    const { button } = await renderTab();
+    fireEvent.click(button);
+    await settle();
+    expect(confirm).toHaveBeenCalled();
+    expect(api.pruneDays).not.toHaveBeenCalled();
+  });
+
+  it('puts the focus on the date when Delete held it through a delete, and leaves a focus taken elsewhere', async () => {
+    vi.mocked(api.pruneDays).mockResolvedValue(answered({ deleted: 2 }));
+    vi.stubGlobal('confirm', () => true);
+    const { date, button } = await renderTab();
+    button.focus();
+    fireEvent.click(button);
+    await settle();
+    expect(document.activeElement).toBe(date);
+    const reset = screen.getByRole('button', { name: 'Reset All Settings' });
+    reset.focus();
+    fireEvent.click(button);
+    await settle();
+    expect(api.pruneDays).toHaveBeenCalledTimes(2);
+    expect(document.activeElement).toBe(reset);
+  });
+
   it("shows the new date's count when the date changes during a delete", async () => {
     const later = '2026-01-01';
     vi.mocked(api.getPruneInfo).mockImplementation((before) =>

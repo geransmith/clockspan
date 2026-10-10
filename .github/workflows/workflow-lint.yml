@@ -1,9 +1,10 @@
 name: Workflow lint
 
-# zizmor audits the workflows and dependabot.yml for security problems: template injection,
-# over-broad tokens, unpinned or impostor actions, risky triggers, missing cooldowns. It runs
-# only when something under .github/ changes, so other PRs pay nothing, and for the same
-# reason it is not a required check: a PR it never ran on must still be able to merge.
+# zizmor audits the workflows, the local actions and dependabot.yml for security problems:
+# template injection, over-broad tokens, unpinned or impostor actions, risky triggers, missing
+# cooldowns. It runs only when something under .github/ changes, so other PRs pay nothing, and
+# for the same reason it is not a required check: a PR it never ran on must still be able to
+# merge.
 on:
   pull_request:
     paths: ['.github/**']

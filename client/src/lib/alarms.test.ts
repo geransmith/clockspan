@@ -228,17 +228,17 @@ describe('describeEvent', () => {
     const lead = describeEvent(ev('clockOut', 'lead', 15, T), ctx);
     expect(lead.title).toBe('Clock Out in 15 min');
     expect(lead.tone).toBe('warn');
-    expect(lead.body).toContain('8h day');
+    expect(lead.body).toContain('8h 00m day');
     expect(lead.body).toContain('clocked in');
 
     const due = describeEvent(ev('clockOut', 'due', 0, T), ctx);
     expect(due.title).toBe('Time to Clock Out');
     expect(due.tone).toBe('danger');
-    expect(due.body).toBe(`You reached your 8h for today at ${formatTime(T, true)}. Punch out now.`);
+    expect(due.body).toBe(`You reached your 8h 00m for today at ${formatTime(T, true)}. Punch out now.`);
 
     const over = describeEvent(ev('clockOut', 'overdue', 10, T), ctx);
     expect(over.title).toBe('Clock-Out Is 10 min Overdue');
-    expect(over.body).toContain('past your 8h target');
+    expect(over.body).toContain('past your 8h 00m target');
   });
 
   it('frames the retrospective as a nudge before clock-out, never a deadline', () => {
@@ -255,7 +255,7 @@ describe('describeEvent', () => {
   it('explains the lunch deadline window', () => {
     const lead = describeEvent(ev('lunchBy', 'lead', 15, T), ctx);
     expect(lead.title).toBe('Lunch in 15 min');
-    expect(lead.body).toBe(`Lunch must start by ${formatTime(T, true)}, 4h after clocking in at ${formatTime(clockIn, true)}.`);
+    expect(lead.body).toBe(`Lunch must start by ${formatTime(T, true)}, 4h 00m after clocking in at ${formatTime(clockIn, true)}.`);
     const due = describeEvent(ev('lunchBy', 'due', 0, T), ctx);
     expect(due.title).toBe('Take Lunch Now');
     expect(due.body).toBe(`Your lunch deadline is ${formatTime(T, true)}. Punch Lunch out.`);
@@ -268,11 +268,11 @@ describe('describeEvent', () => {
     const lead = describeEvent(ev('secondMeal', 'lead', 15, T), ctx);
     expect(lead.kicker).toBe('Second meal alarm');
     expect(lead.title).toBe('Second Meal Period in 15 min');
-    expect(lead.body).toBe(`Your 10h of work ends at ${formatTime(T, true)}. A second meal period is due before then.`);
+    expect(lead.body).toBe(`Your 10h 00m of work ends at ${formatTime(T, true)}. A second meal period is due before then.`);
     expect(describeEvent(ev('secondMeal', 'due', 0, T), ctx).title).toBe('Take Your Second Meal Period');
     const over = describeEvent(ev('secondMeal', 'overdue', 5, T), ctx);
     expect(over.title).toBe('Second Meal Period Is 5 min Overdue');
-    expect(over.body).toBe(`Your 10h of work ended at ${formatTime(T, true)}. Take your second meal period as soon as you can.`);
+    expect(over.body).toBe(`Your 10h 00m of work ended at ${formatTime(T, true)}. Take your second meal period as soon as you can.`);
     expect(over.tone).toBe('danger');
   });
 
@@ -290,12 +290,12 @@ describe('describeEvent', () => {
   it('gives the time a due alarm was for, which stays true when it is seen late', () => {
     // The app opened 40 min after the end of the day, with overdue repeats off: the due event is what fires.
     const late = { ...ctx, now: T + 40 * MINUTE_MS };
-    expect(describeEvent(ev('clockOut', 'due', 0, T), late).body).toBe(`You reached your 8h for today at ${formatTime(T, true)}. Punch out now.`);
+    expect(describeEvent(ev('clockOut', 'due', 0, T), late).body).toBe(`You reached your 8h 00m for today at ${formatTime(T, true)}. Punch out now.`);
     expect(describeEvent(ev('retro', 'due', 0, T), late).body).toBe(
-      `You reached your 8h at ${formatTime(T, true)}. Two minutes on what went to plan and what didn't.`,
+      `You reached your 8h 00m at ${formatTime(T, true)}. Two minutes on what went to plan and what didn't.`,
     );
     expect(describeEvent(ev('secondMeal', 'due', 0, T), late).body).toBe(
-      `You reached 10h of work at ${formatTime(T, true)}. A second meal period was due by then.`,
+      `You reached 10h 00m of work at ${formatTime(T, true)}. A second meal period was due by then.`,
     );
   });
 
@@ -306,15 +306,15 @@ describe('describeEvent', () => {
     const clockOut = describeEvent(ev('clockOut', 'lead', 15, T), late);
     expect(clockOut.kicker).toBe('Clock-out alarm');
     expect(clockOut.title).toBe('Time to Clock Out');
-    expect(clockOut.body).toBe(`You reached your 8h for today at ${formatTime(T, true)}. Punch out now.`);
+    expect(clockOut.body).toBe(`You reached your 8h 00m for today at ${formatTime(T, true)}. Punch out now.`);
     const retro = describeEvent(ev('retro', 'lead', 30, T), late);
     expect(retro.kicker).toBe('Retrospective');
     expect(retro.title).toBe('Clocking Out? Do the Retrospective First.');
-    expect(retro.body).toBe(`You reached your 8h at ${formatTime(T, true)}. Two minutes on what went to plan and what didn't.`);
+    expect(retro.body).toBe(`You reached your 8h 00m at ${formatTime(T, true)}. Two minutes on what went to plan and what didn't.`);
     expect(describeEvent(ev('lunchBy', 'lead', 5, T), { ...ctx, now: T }).title).toBe('Take Lunch Now');
   });
 
-  it('formats a non-round work day', () => {
-    expect(describeEvent(ev('clockOut', 'lead', 5, T), { ...ctx, workMinutes: 450 }).body).toContain('7h 30m day');
+  it('writes a non-round work day as the Worked tile does', () => {
+    expect(describeEvent(ev('clockOut', 'lead', 5, T), { ...ctx, workMinutes: 425 }).body).toContain('7h 05m day');
   });
 });

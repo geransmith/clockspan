@@ -224,6 +224,7 @@ ca_profile.xml          the Community Apps profile. Both XML files link client/p
                         three shots (sheet-phone-dark, sheet-desktop, history). Moving or renaming
                         any of those breaks the listing
 .github/workflows/      ci.yml (check, image-smoke, image, release), codeql.yml, workflow-lint.yml (zizmor)
+.github/actions/        build-and-smoke: the image build and boot steps image-smoke and image share
 ```
 
 ## Commands
@@ -1113,10 +1114,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   calendar holds its month by its first day (`startOfMonth`) and Review its period by `from`,
   so neither moves at midnight. "Open Day" first records the picked day (and the Review period,
   `route.review`) on the History entry with `replace` and then pushes the sheet, so Back
-  reopens it there (`openDay` in `App.tsx`). Its cells count days by `hasContent` and its panel
-  uses `dayTimeclock`, the sheet's math. The switch names the view, so the Days and Review cards
-  have no title of their own: each is a section named by `aria-label`, and Review's section
-  headings are its h2s.
+  reopens it there (`openDay` in `hooks/useRoute.ts`). Its cells count days by `hasContent`
+  and its panel uses `dayTimeclock`, the sheet's math. The switch names the view, so the Days
+  and Review cards have no title of their own: each is a section named by `aria-label`, and
+  Review's section headings are its h2s.
 - **The `retro` alarm target is the clock-out instant** ("warn before" = minutes before the
   end of the day) and is **not** silenced by overtime approval; marking the day reviewed
   (`days.retro_at`), or hiding the retrospective card under Customize (`alarmTargets` reads
@@ -1433,11 +1434,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   answers `Answer<Type>`, so its store reads `.value`, and a hook or component test mocks it
   with `answered(…)` or `deferredAnswer<Type>()`; an auth route goes through `auth<Type>`) →
   cover it in that router's `*.test.ts`: happy path, each 400, and that another user gets a
-  404/empty result (the scoping test is not optional). A new `/:date` route also gets a row in the
-  bad-date table near the end of `server/routes/days.test.ts`, and a write route one in the
-  distance table after it. An event stream (`GET /changes`) is read by `EventSource`, not
-  `api.ts`: it has no call there and no `ROUTES` row, and its tests read it with the harness's
-  `stream()`. Only a route whose later messages are revisions may write after its handler returns.
+  404/empty result (the scoping test is not optional). A new `/:date` write route also gets a row
+  in `writes` near the end of `server/routes/days.test.ts`, which the bad-date and distance tests
+  both run; a read gets a line of its own in the bad-date test. An event stream (`GET /changes`)
+  is read by `EventSource`, not `api.ts`: it has no call there and no `ROUTES` row, and its tests
+  read it with the harness's `stream()`. Only a route whose later messages are revisions may write
+  after its handler returns.
 - **A schema change**: append to `MIGRATIONS` in `db.ts` and never edit an entry (see
   "Migrations are append-only"); a function migration's `db.test.ts` cases call
   `migrate(db, upTo)` to stop at the version before it, write the old rows, then run it. A new

@@ -5,6 +5,7 @@ import * as api from '../api';
 import { AuthGate } from '../auth/AuthGate';
 import { VIEWS, type Route } from '../hooks/useRoute';
 import { SettingsProvider } from '../hooks/useSettings';
+import { CONFIRM } from '../lib/copy';
 import { answered, DEFAULT_USER, makeAuth, makeSettings, pressKey, settle, ShortcutKeys } from '../test/hooks';
 import { Header } from './Header';
 
@@ -88,6 +89,16 @@ describe('Header', () => {
     pressKey('b');
     expect(onNavigate).toHaveBeenLastCalledWith({ view: 'board' });
     expect(document.activeElement).toBe(button('Board'));
+  });
+
+  it('sends no sign-out when the confirm is answered no', async () => {
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal('confirm', confirm);
+    await renderHeader('sheet', { auth: makeAuth({ user: DEFAULT_USER }) });
+    fireEvent.click(screen.getByRole('button', { name: /Sign Out/ }));
+    await settle();
+    expect(confirm).toHaveBeenCalledWith(CONFIRM.signOut);
+    expect(api.logout).not.toHaveBeenCalled();
   });
 
   // Board, History, Settings and Sign out leave no room on a narrow phone for the brand's name;

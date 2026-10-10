@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api';
 import { AuthGate } from '../../auth/AuthGate';
 import { notificationPermission, requestNotificationPermission } from '../../lib/alerts';
-import { LOAD_FAILED, SAVE_STATUS } from '../../lib/copy';
+import { CONFIRM, LOAD_FAILED, SAVE_STATUS } from '../../lib/copy';
 import { applySettingsPatch } from '../../lib/settings';
 import { SOUND_EVENT_LABELS } from '../../lib/sounds';
 import { answered, DEFAULT_USER, deferredAnswer, makeAuth, makeBoard, makeCategory, makeSettings, makeUser, settle, SettingsAndDays } from '../../test/hooks';
@@ -247,6 +247,23 @@ describe('SettingsDialog', () => {
     fireEvent.change(screen.getByRole('combobox', { name: `${SOUND_EVENT_LABELS.timer} sound`, hidden: true }), { target: { value: 'bell' } });
     await settle();
     expect(api.putSettings).toHaveBeenLastCalledWith({ sounds: { timer: 'bell' } });
+  });
+
+  it('resets every setting only once the confirm is answered yes', async () => {
+    vi.mocked(api.resetSettings).mockResolvedValue(answered(makeSettings()));
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal('confirm', confirm);
+    await renderDialog();
+    await openTab('Data');
+    const reset = screen.getByRole('button', { name: 'Reset All Settings', hidden: true });
+    fireEvent.click(reset);
+    await settle();
+    expect(confirm).toHaveBeenCalledWith(CONFIRM.resetSettings);
+    expect(api.resetSettings).not.toHaveBeenCalled();
+    confirm.mockReturnValue(true);
+    fireEvent.click(reset);
+    await settle();
+    expect(api.resetSettings).toHaveBeenCalledOnce();
   });
 
   it('holds the panel until the settings have loaded, then opens on the stored tab', async () => {

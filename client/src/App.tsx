@@ -17,7 +17,6 @@ import { useTimer } from './hooks/useTimer';
 import { useTodayAlarms } from './hooks/useTodayAlarms';
 import { todayKey } from '../../shared/dates.js';
 import { floorToMinute } from './lib/format';
-import type { ReviewPeriod } from './lib/review';
 import { applyTheme } from './lib/theme';
 import type { CardId } from './types';
 
@@ -39,7 +38,7 @@ export function App() {
 }
 
 function Shell() {
-  const [route, navigate] = useRoute();
+  const [route, navigate, openDay] = useRoute();
   const [customize, setCustomize] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [jumpTo, setJumpTo] = useState<CardId | null>(null);
@@ -71,17 +70,6 @@ function Shell() {
   // History and the sheet show nothing finer than a minute. Handed the clock floored to the
   // minute (and memoized), they render once a minute instead of every second.
   const minute = floorToMinute(now);
-  // The calendar's month and picked day are its own state and don't survive the unmount, so
-  // the opened day is written onto the History entry first and Back reopens the calendar on
-  // it. A day opened from Review records the period with it, so Back reopens the review
-  // there.
-  const openDay = useCallback(
-    (d: string, review: ReviewPeriod | null) => {
-      navigate({ date: d, review }, { replace: true });
-      navigate({ view: 'sheet' });
-    },
-    [navigate],
-  );
   // The sheet on today and the board (once it is past the settings' wait) show today's failed load
   // in place; elsewhere a banner says it.
   const { setEditingPunches } = useTodayAlarms(today, now, openRetro, (route.view === 'board' && loaded) || (route.view === 'sheet' && date === today));
