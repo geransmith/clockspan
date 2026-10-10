@@ -1,8 +1,8 @@
 import { LIMITS } from './api.js';
 
 /**
- * The key two texts are compared by, whatever their case or spacing: category names, a plan seed
- * against a day's rows, and Review's grouping by text.
+ * The key two texts are compared by, whatever their case or spacing: category names and Review's
+ * grouping by text.
  */
 export function sameText(text: string): string {
   return text.trim().replace(/\s+/g, ' ').toLowerCase();

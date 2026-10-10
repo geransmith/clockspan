@@ -71,7 +71,7 @@ describe('reviewRange', () => {
     expect(r.notes).toEqual([{ date: '2026-09-14', note: 'Slack ate the afternoon.', reviewedAt: d1.retroAt }]);
   });
 
-  it('leaves out a day after today, such as the next day planned tonight', () => {
+  it('leaves out a day after today, such as a list planned ahead by an older version', () => {
     const tomorrow = makeDay('2026-09-17', {
       priorities: [makePriority(1, 'Write the proposal'), makePriority(2, 'Plan ahead')],
       sessions: [session(9, '2026-09-17', at('2026-09-17', 9), 600, { label: 'Early' })],

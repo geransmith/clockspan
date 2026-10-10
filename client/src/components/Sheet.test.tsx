@@ -6,7 +6,7 @@ import * as api from '../api';
 import { useDayStore } from '../hooks/useDay';
 import { warnSaveFailed } from '../lib/alerts';
 import { ApiError } from '../lib/apiError';
-import { LEFT_OPEN, PLAN_NEXT, PUNCH_ORDER, REMOVE_TASK, TODAY_OFFER } from '../lib/copy';
+import { LEFT_OPEN, PUNCH_ORDER, REMOVE_TASK, TODAY_OFFER } from '../lib/copy';
 import { SPLIT_QUERY } from '../lib/layout';
 import { applySettingsPatch } from '../lib/settings';
 import { USER_KEYS } from '../lib/storage';
@@ -507,7 +507,7 @@ describe("Sheet: a category's chip, with the board on", () => {
     vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities })));
   });
 
-  it("gives a priority row, the timer's new row, the log and Plan tomorrow's rows the board's categories", async () => {
+  it("gives a priority row, the timer's new row and the log the board's categories", async () => {
     stored = makeSettings({ board: true });
     await renderSheet();
     expect(chips()).toEqual(['Category for priority 1: Tickets']);
@@ -521,13 +521,6 @@ describe("Sheet: a category's chip, with the board on", () => {
     fireEvent.click(screen.getByRole('button', { name: /^25\s*min$/ }));
     await settle();
     expect(vi.mocked(api.putPriorities).mock.lastCall![1][1]).toMatchObject({ text: 'Call the vendor', categoryUid: ADMIN.uid });
-
-    fireEvent.click(screen.getByRole('button', { name: PLAN_NEXT.open('tomorrow') }));
-    await settle();
-    const box = screen.getByRole('textbox', { name: PLAN_NEXT.placeholder });
-    fireEvent.change(box, { target: { value: 'Book flights' } });
-    fireEvent.keyDown(box, { key: 'Enter' });
-    expect(screen.getByRole('button', { name: 'Category for Book flights: none' })).toBeTruthy();
   });
 
   it('shows none of them with the board off', async () => {

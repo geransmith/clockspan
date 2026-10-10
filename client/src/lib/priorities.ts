@@ -3,7 +3,7 @@ import { hasText, isFree } from '../../../shared/priorities.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { PRIORITY_WARNINGS } from './copy';
 
-/** A row with text that isn't ticked: what the planner, the left-open offer and the timer's chips work from. */
+/** A row with text that isn't ticked: what the left-open offer and the timer's chips work from. */
 export const isOpen = (p: Priority) => hasText(p) && !p.done;
 
 /** A row with a task on it and its name written: what the board shows of a day's list, and what a session can be linked to. */
@@ -44,9 +44,8 @@ export function newTaskRow(text: string, categoryUid: string | null, now: number
 }
 
 /**
- * The stored list can be shorter than `count` (a day never edited, or one planned the evening
- * before), and its positions can have gaps where free rows sat, since the server stores only
- * rows with a task. The card shows at least `count` rows and every stored row beyond that, each
+ * The stored list can be shorter than `count` (a day never edited), and its positions can have
+ * gaps where free rows sat, since the server stores only rows with a task. The card shows at least `count` rows and every stored row beyond that, each
  * at its place, with free rows in the gaps.
  */
 export function padPriorities(rows: Priority[], count: number): Priority[] {
@@ -162,9 +161,9 @@ export interface LeftOpen {
 }
 
 /**
- * A row carried to another day (the left-open offer, Plan tomorrow): open, and neither a routine,
- * which comes back on its own weekdays, nor archived (a deleted card that
- * `server/migrations/oneItem.ts` kept for its rows), which would otherwise be carried every day.
+ * A row carried to another day (the left-open offer): open, and neither a routine, which comes
+ * back on its own weekdays, nor archived (a deleted card that `server/migrations/oneItem.ts` kept
+ * for its rows), which would otherwise be carried every day.
  */
 export const carriesOver = (p: Priority) => isOpen(p) && !p.recurring && !p.archived;
 

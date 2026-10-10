@@ -115,14 +115,11 @@ export interface Settings {
   trackHours: boolean;
   /** Which sound each event plays; `sound` above is the master switch over all of them. */
   sounds: Record<SoundEvent, SoundId>;
-  /** Emoji bursts when a priority is ticked, the day ends, the work week is reached or the next day is planned. */
+  /** Emoji bursts when a priority is ticked, the day ends or the work week is reached. */
   celebrations: boolean;
   /** Stickers on the History calendar: one per thing a day did. */
   stickers: boolean;
-  /**
-   * Saturday and Sunday columns on the History calendar. Off drops them and their stickers from
-   * the counts, and Plan tomorrow then lands on the next weekday.
-   */
+  /** Saturday and Sunday columns on the History calendar. Off drops them and their stickers from the counts. */
   showWeekends: boolean;
   /**
    * The Board page, for tasks that aren't for today, and its button in the header, and with them
@@ -214,7 +211,6 @@ export const DEFAULT_SETTINGS: Settings = deepFreeze({
     dayDone: 'yay',
     weekDone: 'tada',
     priorityDone: 'none',
-    planDone: 'none',
   },
   celebrations: true,
   stickers: false,

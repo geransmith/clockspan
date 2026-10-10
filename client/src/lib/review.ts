@@ -152,13 +152,12 @@ export interface RangeReview {
  * math as the sheet, frozen for past days, with a day whose punches are out of order left out of
  * it and of `targetSeconds`, and break time by the day log's math
  * (`breakSeconds`, a running break up to now); the plan and the focus reuse `reviewDay`. A day
- * after today is left out: all it can hold is a plan made the evening before (Plan tomorrow),
- * and none of it has happened yet. A day with nothing on it (`hasContent`) is left out too,
- * even with a break logged. A recurring priority's rows count as priorities in every total and
- * go to `routines` rather than Not done. `known` is the uids of the board's categories, removed
- * ones included: a category outside it (none while the board is off) counts as none, in
- * `byCategory` and in `midDay`. `laned` is the uids of the tasks the board holds in Later or Next,
- * which Not done never joins to another task by its text.
+ * after today is left out: none of it has happened yet. A day with nothing on it (`hasContent`)
+ * is left out too, even with a break logged. A recurring priority's rows count as priorities in
+ * every total and go to `routines` rather than Not done. `known` is the uids of the board's
+ * categories, removed ones included: a category outside it (none while the board is off)
+ * counts as none, in `byCategory` and in `midDay`. `laned` is the uids of the tasks the board
+ * holds in Later or Next, which Not done never joins to another task by its text.
  */
 export function reviewRange(
   days: Day[],

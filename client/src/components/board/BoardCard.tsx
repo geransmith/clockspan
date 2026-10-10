@@ -3,7 +3,6 @@ import { LIMITS } from '../../../../shared/api.js';
 import { hasNote } from '../../../../shared/text.js';
 import { useFollowedDraft } from '../../hooks/useFollowedDraft';
 import { categoryOf, COLUMN_NAMES, moveTargets, type BoardItem, type CategoryPick, type ColumnId } from '../../lib/board';
-import { BOARD } from '../../lib/copy';
 import { dayName } from '../../lib/format';
 import type { Category, Session } from '../../types';
 import { CategoryChip } from '../CategoryChip';
@@ -57,11 +56,10 @@ export interface ItemDrag {
 /**
  * A task on the board: its tick, its number on today's list, its title (a button that opens the
  * editor) and its note button, and a line with the timer running on it, its category, the Repeats
- * mark of a recurring row, and the day a later list holds it or it was left open on. The note
- * opens under that, apart from the editor, and saves 800 ms after the last key. The editor renames
- * it, sets its category, starts the focus timer on it, moves it to another column (Move to, the
- * way to move without dragging), and deletes it; a planned item's offers no Move to, since that
- * day's list decides where it shows.
+ * mark of a recurring row, and the day it was left open on. The note opens under that, apart from
+ * the editor, and saves 800 ms after the last key. The editor renames it, sets its category,
+ * starts the focus timer on it, moves it to another column (Move to, the way to move without
+ * dragging), and deletes it.
  */
 export function BoardCardView({
   item,
@@ -129,12 +127,11 @@ export function BoardCardView({
         </button>
         {noted && <NoteToggle boxId={noteBox} of={item.title} note={item.note} open={noteOpen} onToggle={setNoteOpen} />}
       </div>
-      {(running != null || category != null || item.planned != null || item.leftOpen != null || item.recurring) && (
+      {(running != null || category != null || item.leftOpen != null || item.recurring) && (
         <p className="board-card-meta muted small">
           {running && <RunningMark paused={running.pausedAt != null} id={markId} />}
           {category && <CategoryTag category={category} />}
           {item.recurring && <RepeatMark />}
-          {item.planned && <span>Planned for {dayName(item.planned, today, true)}</span>}
           {item.leftOpen && <span>Left open from {dayName(item.leftOpen, today, true)}</span>}
         </p>
       )}
@@ -156,24 +153,20 @@ export function BoardCardView({
               <TimerLengths onStart={start.onStart} disabled={start.disabled} />
             </div>
           )}
-          {item.planned ? (
-            <p className="muted small">{BOARD.plannedSheet}</p>
-          ) : (
-            targets.length > 0 && (
-              // Buttons, not a select: a select's arrow keys and typed letters change it, which moved the card.
-              <div className="board-move" role="group" aria-labelledby={`${editorId}-move`}>
-                <span id={`${editorId}-move`} className="muted small">
-                  Move to
-                </span>
-                <div className="board-move-targets">
-                  {targets.map((c) => (
-                    <button key={c} className="btn" onClick={(e) => onMove(c, e.currentTarget)}>
-                      {COLUMN_NAMES[c]}
-                    </button>
-                  ))}
-                </div>
+          {targets.length > 0 && (
+            // Buttons, not a select: a select's arrow keys and typed letters change it, which moved the card.
+            <div className="board-move" role="group" aria-labelledby={`${editorId}-move`}>
+              <span id={`${editorId}-move`} className="muted small">
+                Move to
+              </span>
+              <div className="board-move-targets">
+                {targets.map((c) => (
+                  <button key={c} className="btn" onClick={(e) => onMove(c, e.currentTarget)}>
+                    {COLUMN_NAMES[c]}
+                  </button>
+                ))}
               </div>
-            )
+            </div>
           )}
           {(onRemove ?? onDelete) && (
             <div className="board-editor-actions">

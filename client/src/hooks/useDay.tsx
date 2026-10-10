@@ -213,10 +213,9 @@ export function DayProvider({ children }: { children: ReactNode }) {
   );
 
   // `quiet`: a refresh, or asking again after a failed save or first load. A first load that
-  // fails is recorded (the sheet and the next-day planner show it with Try again) and, unless
-  // quiet, raised as a banner; a day already shown keeps its copy, and a failed save has
-  // already said the server is down. An answer that isn't a day fails the same way. Never
-  // rejects.
+  // fails is recorded (the sheet and the board show it with Try again) and, unless quiet,
+  // raised as a banner; a day already shown keeps its copy, and a failed save has already said
+  // the server is down. An answer that isn't a day fails the same way. Never rejects.
   const fetchDay = useCallback(
     function fetchDay(date: string, quiet = false): Promise<void> {
       const out = inflight.current.get(date);
@@ -452,9 +451,9 @@ export function DayProvider({ children }: { children: ReactNode }) {
   );
 
   // Every priorities save, the board's and the timer's included, shown as the server will merge
-  // it while it is out. A task the save put on the list or took off (Plan tomorrow, a carry, ×) is
-  // on another number of days (`listed`, `earlier`) wherever else it is, so the other held days
-  // holding it are read again: × asks from those counts. A row whose name, category or note
+  // it while it is out. A task the save put on the list or took off (the morning offer, a pull,
+  // ×) is on another number of days (`listed`, `earlier`) wherever else it is, so the other held
+  // days holding it are read again: × asks from those counts. A row whose name, category or note
   // differs from its base row's renamed, filed or noted its task on every day it is on
   // (`taskChanged`), which matters only when another day lists it or logged time on it (`listed`,
   // `logged`).

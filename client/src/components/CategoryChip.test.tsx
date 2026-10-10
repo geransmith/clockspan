@@ -23,13 +23,13 @@ function InDialog({ onClose, children }: { onClose: () => void; children: ReactN
  * The chip with a button beside it, in a dialog whose `onClose` it gives back, and `reread`,
  * which renders it again over other categories, as a board read landing does.
  */
-function renderChip(value: string | null = null, categories: Category[] = CATS, disabled = false) {
+function renderChip(value: string | null = null, categories: Category[] = CATS) {
   const onChange = vi.fn();
   const onClose = vi.fn();
   const pick = makePick(categories);
   const ui = (cats: Category[]) => (
     <InDialog onClose={onClose}>
-      <CategoryChip value={value} onChange={onChange} pick={{ ...pick, categories: cats }} label={LABEL} disabled={disabled} />
+      <CategoryChip value={value} onChange={onChange} pick={{ ...pick, categories: cats }} label={LABEL} />
       <button>Outside</button>
     </InDialog>
   );
@@ -74,18 +74,6 @@ describe('CategoryChip', () => {
     // A second press closes it.
     fireEvent.click(chip());
     expect(isOpen()).toBe(false);
-  });
-
-  it("doesn't open while disabled, on a press or from the keyboard", () => {
-    const { pick } = renderChip(ADMIN.uid, CATS, true);
-    expect((chip() as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(chip());
-    // A disabled button takes no focus, so no key reaches it.
-    chip().focus();
-    expect(document.activeElement).not.toBe(chip());
-    expect(isOpen()).toBe(false);
-    expect(screen.queryByRole('listbox', { hidden: true })).toBeNull();
-    expect(pick.refresh).not.toHaveBeenCalled();
   });
 
   it('leaves the focus where it is on a press, for the list to take as it opens and give back to the chip as it closes', () => {

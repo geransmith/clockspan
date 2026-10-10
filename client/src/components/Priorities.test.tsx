@@ -430,7 +430,7 @@ describe("Priorities: a row's category", () => {
 });
 
 /** A row left open on the last plan: its own task, named by its text, in no category unless patched. */
-const seed = (text: string, patch: Partial<PrioritySeed> = {}): PrioritySeed => ({ uid: `left:${text}`, text, categoryUid: null, ...patch });
+const seed = (text: string, patch: Partial<PrioritySeed> = {}): PrioritySeed => makePriority(1, text, { uid: `left:${text}`, listed: 0, ...patch });
 
 const QUEUE = makeRecurring('rcur00000001', 'Monitor the queue', { categoryUid: 'cafe00000001' });
 const FOLLOW_UPS = makeRecurring('rcur00000002', 'Follow-ups');

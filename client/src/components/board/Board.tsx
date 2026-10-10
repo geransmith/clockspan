@@ -147,7 +147,7 @@ export const Board = memo(function Board({
   const { shown, over, lifted, dropAnimation, context, onDragEnd, onDragCancel } = useBoardDrag(columns);
 
   // The focus on an item: on its grip when asked and it has one that takes the focus (none on a
-  // planned card or a recurring row; hidden on a phone in In progress and Done), else its title.
+  // recurring row; hidden on a phone in In progress and Done), else its title.
   const focusItem = (title: HTMLButtonElement, toGrip: boolean) => {
     const grip = toGrip ? title.closest('li')?.querySelector<HTMLElement>('.board-grip') : null;
     grip?.focus();
@@ -355,11 +355,11 @@ export const Board = memo(function Board({
     // Today's row, edited through the list; one shown in a lane is on its way off it (a park), and
     // its row's tick, title and category wait for the park to land.
     const throughRow = onToday(item, today) && !isLane(item.column);
-    // A task off today's list as the board has it: in a lane, left open, planned, or done earlier.
+    // A task off today's list as the board has it: in a lane, left open, or done earlier.
     const cardOnly = item.card != null && item.row == null;
     // Ticked on an earlier day: that day's sheet unticks it, since the board would rewrite a past
     // day; Move to In progress puts it on today's list to work on again.
-    const hint = cardOnly && !item.planned && item.card!.listDone ? BOARD.doneOn(dayName(item.card!.listDate!, today, true)) : undefined;
+    const hint = cardOnly && item.card!.listDone ? BOARD.doneOn(dayName(item.card!.listDate!, today, true)) : undefined;
     // Off today's list, a PATCH renames or files it on every day: any one-off task the board has,
     // and an earlier day's recurring row while its recurring priority is in Settings (one removed
     // there answers 404).
@@ -375,10 +375,10 @@ export const Board = memo(function Board({
       titles.current.get(item.id)?.focus();
       setOpen(null);
     };
-    // A timer starts on today's open row and on an unplanned card in Later or Next, which a pull puts
-    // on today's list first, the nudge asking as Move to's does. None while a timer runs (another
+    // A timer starts on today's open row and on a card in Later or Next, which a pull puts on
+    // today's list first, the nudge asking as Move to's does. None while a timer runs (another
     // device's too, once synced) or the item's move is on its way.
-    const startable = !running && !moving.has(item.id) && item.column !== 'done' && !item.planned;
+    const startable = !running && !moving.has(item.id) && item.column !== 'done';
     const onStart = (minutes: number) => {
       if (!throughRow) {
         run(item, 'progress', null, { minutes });

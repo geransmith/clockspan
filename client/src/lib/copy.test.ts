@@ -14,7 +14,6 @@ import {
   FINISH_CHOICE,
   LEFT_OPEN,
   LOAD_FAILED,
-  PLAN_NEXT,
   PRIORITY_WARNINGS,
   PUNCH_ORDER,
   REMOVE_TASK,
@@ -109,15 +108,6 @@ describe('copy builders', () => {
     expect(BREAK_SUGGESTION.body('1h 40m', true, 4)).toBe('For the 1h 40m logged over all 4.');
   });
 
-  it('names the day being planned and counts the rows added', () => {
-    expect(PLAN_NEXT.open('tomorrow')).toBe('Plan tomorrow');
-    expect(PLAN_NEXT.title('Mon, Sep 28')).toBe('Plan for Mon, Sep 28');
-    expect(PLAN_NEXT.already(2)).toBe('2 already on the list');
-    expect(PLAN_NEXT.save('tomorrow')).toBe('Add to tomorrow');
-    expect(PLAN_NEXT.done(1, 'tomorrow')).toBe('1 row added for tomorrow.');
-    expect(PLAN_NEXT.done(3, 'tomorrow')).toBe('3 rows added for tomorrow.');
-  });
-
   it('says when the second meal period is or was due', () => {
     expect(SECOND_MEAL_NOTE(false, '6:30 PM', '10h 00m')).toBe('Second meal period due by 6:30 PM (10h 00m worked)');
     expect(SECOND_MEAL_NOTE(true, '6:30 PM', '10h 00m')).toBe('Second meal period was due by 6:30 PM (10h 00m worked)');
@@ -163,10 +153,8 @@ describe('copy builders', () => {
   it('names the card and the day in the board refusals, and the cap in the full line', () => {
     expect(BOARD.full).toBe('Later and Next hold 300 cards at most.');
     expect(BOARD.recurringStays('Monitor the queue')).toBe("Monitor the queue stays on today's list. Use Remove from today.");
-    expect(BOARD.planned('Write a KB', 'tomorrow')).toBe("Write a KB is planned for tomorrow. Tick it or take it off on that day's sheet.");
     expect(BOARD.doneOn('yesterday')).toBe("Done yesterday. Untick it on that day's sheet.");
     expect(BOARD.doneOn('Mon, Oct 5')).toBe("Done Mon, Oct 5. Untick it on that day's sheet.");
-    expect(BOARD.plannedSheet).toBe("Tick it or take it off on that day's sheet.");
   });
 
   it('says a done item stays done and offers a new card in the lane it was moved to', () => {

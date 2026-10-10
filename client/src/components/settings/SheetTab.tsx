@@ -70,7 +70,7 @@ export function SheetTab({ settings, set }: TabProps) {
       <Section title="Celebrations">
         <Toggle
           label="Emoji bursts"
-          hint="A short burst when you tick a priority, finish the day, reach the work week or plan the next day."
+          hint="A short burst when you tick a priority, finish the day or reach the work week."
           checked={settings.celebrations}
           onChange={(v) => set({ celebrations: v })}
         />
@@ -84,7 +84,7 @@ export function SheetTab({ settings, set }: TabProps) {
         />
         <Toggle
           label="Show weekends"
-          hint="Off hides Saturday and Sunday from the calendar and its sticker counts, and Plan tomorrow on a Friday plans Monday."
+          hint="Off hides Saturday and Sunday from the calendar and its sticker counts."
           checked={settings.showWeekends}
           onChange={(v) => set({ showWeekends: v })}
         />

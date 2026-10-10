@@ -493,12 +493,12 @@ export function kindForDistance(distance: number): Exclude<DayKind, 'today'> {
   return 'normal';
 }
 
-/** `last` is the weekday before, whose retrospective planned today's list; none with no history. */
+/** `last` is the weekday before, whose first open one-off today's list carries over; none with no history. */
 function buildToday(today: string, now: number, running: boolean, last: Pick<DayDraft, 'priorities' | 'retroAt'> | undefined): DayDraft {
   // Two hours ago, on the minute, but never before today started (a seed run at 01:00) or after now.
   const clockIn = Math.min(now, Math.max(atTime(today, 0, 5), Math.floor((now - 2 * HOUR_MS) / MINUTE_MS) * MINUTE_MS));
-  // Planned the evening before with Plan next, which carries over what that day left open; the
-  // planner's save is what stored today's row. With no history, written on arrival.
+  // Before the day's first session, so it counts as planned, not added mid-day: just after the
+  // weekday before's retrospective, or with no history, on arrival.
   const plannedAt = last?.retroAt != null ? last.retroAt + 2 * MINUTE_MS : clockIn - 3 * MINUTE_MS;
   // The same task on the new day, with its own addedAt. A routine left open isn't carried over: it
   // comes back on its own weekdays.
