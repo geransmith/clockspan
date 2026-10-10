@@ -4,7 +4,6 @@ import { boxNumber, committedNumber } from './numberBox';
 const commit = (text: string) => committedNumber(boxNumber(text), 30, 3650, 365);
 
 it('gives the stored value back for a blank or non-numeric box', () => {
-  // Saving the minimum for a cleared "Keep the last" would let the next cleanup delete all but 30 days.
   expect(commit('')).toBe(365);
   expect(commit('  ')).toBe(365);
   expect(commit('9o')).toBe(365);
