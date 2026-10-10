@@ -532,7 +532,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   day's copy is raised to, so a read that left before it comes back stale and asks again. A writer
   off the Priorities card (the board) changes a list through `editPriorities(date, fn)`: `fn` gets
   the rows the store shows now (`current()`), padded, and it answers `'saved'`, `'notLoaded'`,
-  `'skipped'` (`fn` gave null) or `'failed'`, never rejecting. It saves through `setPriorities`, and
+  `'skipped'` (`fn` gave null) or `'failed'`, never rejecting, with the revision of the PUT that
+  carried its list (0 when none did): the board confirms a rename, category or note of today's row
+  at it, so a board read out from before is dropped. It saves through `setPriorities`, and
   `addPriority` goes through it. A delete or a break's end the server answers 404 for counts as
   done: another device removed the row already. A read's answer replaces the confirmed copy and
   never a change still on its way. Every data answer names the user's revision on the server

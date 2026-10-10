@@ -392,6 +392,23 @@ describe('moves', () => {
     expect(api.editItem).not.toHaveBeenCalled();
   });
 
+  it("keep today's row's new name when a board read sent before its save answers after it", async () => {
+    const queue = makeRecurring('rcur00000001', 'Monitor the queue');
+    onServer = { ...onServer, recurring: [queue] };
+    lists[TODAY] = [makePriority(1, 'Monitor the queue', { uid: queue.uid, recurring: true })];
+    const { result } = renderBoard();
+    await settle();
+    const old = deferredAnswer<Board>();
+    vi.mocked(api.getBoard).mockReturnValueOnce(old.promise);
+    act(() => void result.current.store.load());
+    vi.mocked(api.putPriorities).mockImplementationOnce((date, list) => Promise.resolve(answered({ priorities: (lists[date] = list) }, 1)));
+    await act(() => result.current.store.editRow(queue.uid, { text: 'Watch the queue' }));
+    // The read left before the save: the old name, at revision 0.
+    old.resolve(onServer);
+    await settle();
+    expect(result.current.board?.recurring[0]?.title).toBe('Watch the queue');
+  });
+
   it("rename a row gone from today's list meanwhile, or give it a category or a note, through its task", async () => {
     const { result } = renderBoard();
     await settle();

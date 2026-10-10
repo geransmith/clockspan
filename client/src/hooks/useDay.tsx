@@ -34,14 +34,14 @@ interface DayState {
  * confirmed yet (`lib/optimistic.ts`), and the sheet shows the one laid over the other. So a
  * change shows at once, a failed save leaves the stored copy on screen (the banner says so), and
  * a day read from the server can never hide a change still on its way. Every setter but
- * `addPriority` and `editPriorities` (which answers a `PrioritiesEdit`) resolves to whether the
- * server saved it and never rejects, so `void store.x()` is a complete call site; a caller that
- * chains on a save reads the answer. `addPriority` resolves to the new row's uid and rejects when
- * it can't be saved. Saves reach the server in the order they were made: punches and priorities
- * go as whole lists with the list they were built on, which the server merges with what it holds,
- * so one PUT per list and day is out and only the newest waiting list follows it; the day's other
- * fields, each session, and the breaks queue their writes one after another. `pruneBefore` alone
- * goes out on no queue.
+ * `addPriority` and `editPriorities` (which answers a `PrioritiesEdit` with its save's revision)
+ * resolves to whether the server saved it and never rejects, so `void store.x()` is a complete
+ * call site; a caller that chains on a save reads the answer. `addPriority` resolves to the new
+ * row's uid and rejects when it can't be saved. Saves reach the server in the order they were
+ * made: punches and priorities go as whole lists with the list they were built on, which the
+ * server merges with what it holds, so one PUT per list and day is out and only the newest
+ * waiting list follows it; the day's other fields, each session, and the breaks queue their
+ * writes one after another. `pruneBefore` alone goes out on no queue.
  * The object and its functions keep their identity for the provider's life, so effects and
  * callbacks may depend on it.
  */
@@ -95,9 +95,10 @@ interface DayStore {
    * A held day's priorities changed by `fn`, for a writer off the Priorities card (the board): `fn`
    * gets the rows the store shows now (`current()`, so a list a blur-flush just set), padded to the
    * user's count, and returns the list to save, or null for nothing to save. Saved as
-   * `setPriorities` saves. Never rejects.
+   * `setPriorities` saves. Never rejects. Answers with the revision of the PUT that carried its
+   * list (0 when none saved it): the board confirms its change at it.
    */
-  editPriorities: (date: string, fn: (rows: Priority[]) => Priority[] | null) => Promise<PrioritiesEdit>;
+  editPriorities: (date: string, fn: (rows: Priority[]) => Priority[] | null) => Promise<api.Answer<PrioritiesEdit>>;
   /**
    * Add a priority from outside the card (the timer), a task typed new in `categoryUid` if given.
    * Resolves to its uid once saved; rejects if it could not be saved.
@@ -166,6 +167,8 @@ interface ListSave<T> {
   ids: number[];
   /** How many of `ids` were set when the last PUT went out. */
   sent: number;
+  /** The revision each of `ids` was saved at, once the PUT carrying it answered: `editPriorities` answers its own. */
+  revisions: number[];
   /** Whether the newest list was saved, once none is out or waiting. */
   drained: Promise<boolean>;
 }
@@ -373,15 +376,17 @@ export function DayProvider({ children }: { children: ReactNode }) {
         waiting.ids.push(id);
         return waiting.drained;
       }
-      const q = { list, base, ids: [id], sent: 0 };
+      const q = { list, base, ids: [id], sent: 0, revisions: [] as number[] };
       const drained = (async () => {
         try {
           // Each set adds its id: any past the ones sent means a newer list is waiting.
           while (q.sent < q.ids.length) {
             q.sent = q.ids.length;
-            const { list: sending, base: builtOn } = q;
+            const { list: sending, base: builtOn, sent } = q;
             const run = async (): Promise<api.Answer<Commit>> => {
               const { value: saved, revision } = await send(sending, builtOn);
+              // The lists this PUT is the first to carry were saved at its revision.
+              while (q.revisions.length < sent) q.revisions.push(revision);
               return { value: (d) => ({ ...d, [field]: saved }), revision };
             };
             if (!(await persist(date, [...q.ids], run))) {
@@ -481,12 +486,16 @@ export function DayProvider({ children }: { children: ReactNode }) {
   );
 
   const editPriorities = useCallback(
-    async (date: string, fn: (rows: Priority[]) => Priority[] | null): Promise<PrioritiesEdit> => {
+    async (date: string, fn: (rows: Priority[]) => Priority[] | null): Promise<api.Answer<PrioritiesEdit>> => {
       const day = shownCopy(date);
-      if (!day) return 'notLoaded';
+      if (!day) return { value: 'notLoaded', revision: 0 };
       const next = fn(padPriorities(day.priorities, priorityCount.current));
-      if (!next) return 'skipped';
-      return (await setPriorities(date, next, day.priorities)) ? 'saved' : 'failed';
+      if (!next) return { value: 'skipped', revision: 0 };
+      const saved = setPriorities(date, next, day.priorities);
+      // The save this list just joined (sendLatest registers it before it returns), and its place there.
+      const q = listSaves.current.priorities.get(date)!;
+      const at = q.ids.length - 1;
+      return (await saved) ? { value: 'saved', revision: q.revisions[at]! } : { value: 'failed', revision: 0 };
     },
     [shownCopy, setPriorities, priorityCount],
   );
@@ -495,7 +504,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
   const addPriority = useCallback(
     async (date: string, text: string, categoryUid: string | null = null) => {
       const row = newTaskRow(text, categoryUid, Date.now());
-      const edit = await editPriorities(date, (rows) => placePriority(rows, priorityCount.current, row));
+      const { value: edit } = await editPriorities(date, (rows) => placePriority(rows, priorityCount.current, row));
       // A timer must not start against a uid the server never stored.
       if (edit !== 'saved')
         throw new Error(edit === 'notLoaded' ? ADD_PRIORITY_FAILED.notLoaded : edit === 'skipped' ? ADD_PRIORITY_FAILED.full : SAVE_FAILED.title);

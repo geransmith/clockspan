@@ -208,15 +208,16 @@ export function BoardProvider({ children }: { children: ReactNode }) {
     [write, patchItem],
   );
 
-  // Today's list changed by `fn`, inside a job: refused while the list isn't loaded, a failed save
-  // thrown, and a change that gave nothing to save thrown only with `whenSkipped` (a full list).
+  // Today's list changed by `fn`, inside a job, answered at its save's revision: refused while the
+  // list isn't loaded, a failed save thrown, and a change that gave nothing to save thrown only with
+  // `whenSkipped` (a full list).
   const editToday = useCallback(
-    async (today: string, fn: (rows: Priority[]) => Priority[] | null, whenSkipped?: string): Promise<'saved' | 'skipped'> => {
-      const edit = await dayStore.editPriorities(today, fn);
+    async (today: string, fn: (rows: Priority[]) => Priority[] | null, whenSkipped?: string): Promise<api.Answer<'saved' | 'skipped'>> => {
+      const { value: edit, revision } = await dayStore.editPriorities(today, fn);
       if (edit === 'notLoaded') throw new MoveRefused(ADD_PRIORITY_FAILED.notLoaded);
       if (edit === 'failed') throw new Error(SAVE_FAILED.title);
       if (edit === 'skipped' && whenSkipped) throw new MoveRefused(whenSkipped);
-      return edit;
+      return { value: edit, revision };
     },
     [dayStore],
   );
@@ -230,14 +231,18 @@ export function BoardProvider({ children }: { children: ReactNode }) {
 
   // A rename, category or note reaches every day the task is on, so a row gone from today's list
   // meanwhile (another device took it off) still has it: sent to the task itself, in this job,
-  // since the store's `editItem` would queue behind it.
+  // since the store's `editItem` would queue behind it. Saved through today's list, it is confirmed
+  // at that PUT's revision, so a board read out from before, which answers below it, is dropped.
   const editRow = useCallback(
     (uid: string, patch: RowPatch) => {
       const today = todayKey();
       const itemPatch = itemPatchOf(patch);
       return write(
         (b) => withItemPatch(b, uid, itemPatch),
-        async () => ((await setRow(today, uid, patch)) === 'skipped' ? patchItem(uid, itemPatch) : { value: null, revision: 0 }),
+        async () => {
+          const { value: edit, revision } = await setRow(today, uid, patch);
+          return edit === 'skipped' ? patchItem(uid, itemPatch) : { value: null, revision };
+        },
       );
     },
     [write, setRow, patchItem],
