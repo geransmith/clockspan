@@ -834,6 +834,13 @@ describe('Board', () => {
     expect(titlesIn('In Progress')).toEqual(['Report']);
   });
 
+  it("shows today's failed read beside the board's, since no banner says it on the board", async () => {
+    vi.mocked(api.getBoard).mockRejectedValue(new Error('offline'));
+    vi.mocked(api.getDay).mockRejectedValueOnce(new Error('offline'));
+    await renderBoard();
+    expect(screen.getAllByRole('alert').map((a) => a.querySelector('strong')?.textContent)).toEqual([`${LOAD_FAILED.board}.`, `${LOAD_FAILED.title}.`]);
+  });
+
   it('shows one column at a time from the switch, In Progress first', async () => {
     await renderBoard();
     expect(shownColumns()).toEqual(['In Progress']);

@@ -172,8 +172,7 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
         return {
           kicker,
           title: 'Look Back Before You Clock Out',
-          // The end time is the clock-out warning's and the Clock out at tile's.
-          body: "Compare what you planned with what you did while it's fresh.",
+          body: `Your day ends at ${target}. Compare what you planned with what you did while it's fresh.`,
           tone: 'warn',
         };
       }

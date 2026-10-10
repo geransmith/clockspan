@@ -75,5 +75,7 @@ describe('noteStart', () => {
     const lines = (n: number) => Array.from({ length: n }, (_, i) => `${i + 1}`).join('\n');
     expect(noteStart(lines(8))).toBe(lines(8));
     expect(noteStart(lines(9))).toBe(`${lines(8)}…`);
+    // An emoji the cut would split goes whole.
+    expect(noteStart(`${'x'.repeat(199)}😀`)).toBe(`${'x'.repeat(199)}…`);
   });
 });

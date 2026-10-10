@@ -189,16 +189,12 @@ export const Board = memo(function Board({
   // N is Later's +, while that would open the box. A hook, so bound above the returns below.
   const laterKey = useShortcut('new', board && day && pick && !boardFull(board) ? () => openAdd('later') : null);
 
-  if (failed && !board)
+  // Each failed read says so here, today's too, which no banner repeats on the board.
+  if ((failed && !board) || (dayFailed && !day))
     return (
       <div className="board">
-        <LoadFailed title={LOAD_FAILED.board} onRetry={() => void store.load()} />
-      </div>
-    );
-  if (dayFailed && !day)
-    return (
-      <div className="board">
-        <LoadFailed title={LOAD_FAILED.title} onRetry={() => void dayStore.load(today)} />
+        {failed && !board && <LoadFailed title={LOAD_FAILED.board} onRetry={() => void store.load()} />}
+        {dayFailed && !day && <LoadFailed title={LOAD_FAILED.title} onRetry={() => void dayStore.load(today)} />}
       </div>
     );
   if (!board || !day || !columns || !shown || !pick) return <div className="board loading" aria-busy="true" />;

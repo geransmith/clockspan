@@ -82,8 +82,9 @@ function Shell() {
     },
     [navigate],
   );
-  // The sheet on today and the board show today's failed load in place; elsewhere a banner says it.
-  const { setEditingPunches } = useTodayAlarms(today, now, openRetro, route.view === 'board' || (route.view === 'sheet' && date === today));
+  // The sheet on today and the board (once it is past the settings' wait) show today's failed load
+  // in place; elsewhere a banner says it.
+  const { setEditingPunches } = useTodayAlarms(today, now, openRetro, (route.view === 'board' && loaded) || (route.view === 'sheet' && date === today));
   const loading = <div className="loading" aria-busy="true" />;
 
   const page = () => {

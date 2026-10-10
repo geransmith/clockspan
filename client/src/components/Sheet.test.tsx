@@ -275,6 +275,18 @@ describe('Sheet', () => {
   });
 });
 
+describe("Sheet: the day's focus total", () => {
+  it('shows it in the Day Log only while the timeclock card, whose Focused tile has it, is hidden', async () => {
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { sessions: [completedSession(1, T0 - HOUR_MS, 25 * 60)] }), 1));
+    await renderSheet();
+    expect(document.querySelector('.log-total')).toBeNull();
+    cleanup();
+    stored = makeSettings({ layout: stored.layout.map((l) => (l.id === 'timeclock' ? { ...l, visible: false } : l)) });
+    await renderSheet();
+    expect(document.querySelector('.log-total')?.textContent).toMatch(/^Total focused.+· 1 session$/);
+  });
+});
+
 describe("Sheet: the timeclock card's state", () => {
   it('shows the state beside the title, and none while the punches are out of order', async () => {
     vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { punches: punchesAt(T0 - 3 * HOUR_MS) }), 1));

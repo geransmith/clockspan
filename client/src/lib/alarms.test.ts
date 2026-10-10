@@ -245,7 +245,8 @@ describe('describeEvent', () => {
     const lead = describeEvent(ev('retro', 'lead', 30, T), ctx);
     expect(lead.kicker).toBe('Retrospective');
     expect(lead.title).toBe('Look Back Before You Clock Out');
-    expect(lead.body).toBe("Compare what you planned with what you did while it's fresh.");
+    // It comes before the clock-out warning, so it gives the end time itself.
+    expect(lead.body).toBe(`Your day ends at ${formatTime(T, true)}. Compare what you planned with what you did while it's fresh.`);
     expect(lead.tone).toBe('warn');
     expect(describeEvent(ev('retro', 'due', 0, T), ctx).tone).toBe('warn');
     expect(describeEvent(ev('retro', 'overdue', 10, T), ctx).title).toBe('Retrospective Is 10 min Overdue');
