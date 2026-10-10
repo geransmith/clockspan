@@ -263,25 +263,6 @@ describe('PUT /api/days/:date/priorities', () => {
     for (const p of ok.body.priorities) expect(typeof p.addedAt).toBe('number');
   });
 
-  it('reads a row sent with no addedAt as keeping it, with a base or without, and stamps one new to the list', async () => {
-    await app.saveList('2026-09-01', [row('Report', 'aaaaaaaaaaa1', { addedAt: 1000 })]);
-    // curl ticking it, with no base: a new stamp would count it as added mid-day.
-    const bare = await app.saveList('2026-09-01', [{ text: 'Report', uid: 'aaaaaaaaaaa1', done: true }]);
-    expect(bare.body.priorities[0]).toMatchObject({ done: true, addedAt: 1000 });
-    const before = Date.now();
-    const based = await app.saveList(
-      '2026-09-01',
-      [
-        { text: 'Report', uid: 'aaaaaaaaaaa1', done: true },
-        { text: 'Email', uid: 'aaaaaaaaaaa2' },
-      ],
-      bare.body.priorities,
-    );
-    const [kept, added] = (based.body.priorities as Priority[]).map((p) => p.addedAt);
-    expect(kept).toBe(1000);
-    expect(added).toBeGreaterThanOrEqual(before);
-  });
-
   it('rejects duplicate ids and oversized lists', async () => {
     const dup = await app.api.put('/api/days/2026-09-01/priorities', {
       priorities: [
@@ -533,8 +514,8 @@ describe('PUT /api/days/:date/priorities: the tasks', () => {
     expect(app.item('aaaaaaaaaaa1')).toMatchObject({ title: 'Report v2', category_uid: 'cat000000003' });
   });
 
-  it('reads a row sent with no categoryUid or note as keeping them, with a base or without', async () => {
-    const kept = { categoryUid: 'cat000000001', note: 'From Kim' };
+  it('reads a row sent with no categoryUid, note or addedAt as keeping them, with a base or without', async () => {
+    const kept = { categoryUid: 'cat000000001', note: 'From Kim', addedAt: T0 };
     await app.saveList(MON, [row('Report', 'aaaaaaaaaaa1', kept)]);
     await app.saveList(TUE, [row('Report', 'aaaaaaaaaaa1')], []);
     // curl, with no base: the task keeps its category and note on every day.
@@ -548,8 +529,9 @@ describe('PUT /api/days/:date/priorities: the tasks', () => {
     const old = ({ note: _, ...p }: Priority) => p;
     await app.saveList(MON, [{ ...old(based.body.priorities[0]), text: 'Report v4' }], based.body.priorities.map(old));
     expect(app.item('aaaaaaaaaaa1')).toMatchObject({ title: 'Report v4', category_uid: 'cat000000001', note: 'From Kim' });
-    // A new task sent without them has none.
-    await app.saveList(WED, [{ text: 'Email', uid: 'aaaaaaaaaaa2' }]);
+    // A new task sent without them has none, and is stamped now.
+    const email = await app.saveList(WED, [{ text: 'Email', uid: 'aaaaaaaaaaa2' }]);
+    expect(email.body.priorities[0].addedAt).toBe(SEED_NOW);
     expect(app.item('aaaaaaaaaaa2')).toMatchObject({ category_uid: null, note: '' });
   });
 
