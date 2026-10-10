@@ -172,8 +172,10 @@ client/                 Vite root → dist/client
                         tab (BoardTab: the categories and recurring priorities, shown while the
                         board is on), and controls.tsx; board/ holds the Board page (Board,
                         BoardCard, Capture: a column's box, opened by the + in its head, ClockBar:
-                        today's times above the columns, and dnd.ts: its collision and keyboard
-                        settings for dnd-kit), its own lazy chunk
+                        today's times above the columns, useBoardDrag: the drag (what is dragged
+                        and where it would land, its handlers, what a screen reader hears, the
+                        grips and the copy under the pointer), and dnd.ts: its collision and
+                        keyboard settings for dnd-kit), its own lazy chunk
   src/auth/             AuthGate and the setup / login / new-password pages
   src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
   src/styles.css        design tokens and all component CSS
@@ -878,10 +880,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `role="status"` slot above the columns holds the board notice (a pull's or a typed row's nudge,
   the done-item notice or a refusal): its first button takes the focus, and an Enter or Space still
   held from the press that raised it presses nothing. What the store refuses once a move is under
-  way (`MoveRefused`) is a banner. A drag (`Board.tsx`, with dnd-kit's settings in
-  `components/board/dnd.ts`) starts at an item's grip; a planned task and a recurring row have none,
-  and an item whose move is on its way can't be picked up until the move lands. Where a drop lands
-  is `dropTarget`'s (see its doc), and what a screen reader hears comes from `BOARD_DRAG`,
+  way (`MoveRefused`) is a banner. A drag (`components/board/useBoardDrag.tsx`, with dnd-kit's
+  settings in `dnd.ts` beside it) starts at an item's grip; a planned task and a recurring row have
+  none, and an item whose move is on its way can't be picked up until the move lands. Where a drop
+  lands is `dropTarget`'s (see its doc), and what a screen reader hears comes from `BOARD_DRAG`,
   `overAnnouncement` and `moveAnnouncement`. dnd-kit's own focus return is off, since it would take
   the focus from the notice a drop brings: a keyboard drag puts it back on the item's grip, and so
   does closing the notice (on the title where the grip is hidden or missing; for a row typed in In
