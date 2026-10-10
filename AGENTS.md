@@ -150,11 +150,11 @@ client/                 Vite root → dist/client
                         does and which store it writes (planMove, moveTargets, MoveRefused), the cap
                         the store checks before it sends a lane (boardFull, addsToLanes), where a drop
                         lands and what a drag says (dropTarget, withDrag, overAnnouncement,
-                        moveAnnouncement), the left-open rows the offer brings back (offeredLeftovers),
-                        the category chip's data (CategoryPick) and what New category makes of a name
-                        (categoryForName, nextColor, categoryNameTaken), and the board as a write shows
-                        it (withItem, withItemPatch, withoutItem, withCategory, withCategoryPatch,
-                        withoutCategory)
+                        moveAnnouncement), the left-open rows the offer brings back (offeredLeftovers)
+                        and the top of Next it offers after them (topOfNext), the category chip's data
+                        (CategoryPick) and what New category makes of a name (categoryForName,
+                        nextColor, categoryNameTaken), and the board as a write shows it (withItem,
+                        withItemPatch, withoutItem, withCategory, withCategoryPatch, withoutCategory)
     popover.ts          placePopover: where the category chip's list goes on screen (under the chip or
                         above it, inside the viewport)
     recurring.ts        the morning offer's routines: which are due (dueRecurring, notOnList), which
@@ -285,13 +285,14 @@ two open support threads", on two lines. The board has four categories (`SEEDED_
 two recurring priorities (`SEEDED_RECURRING`: "Monitor the queue" Monday to Friday, "Follow-ups"
 Monday, Wednesday and Friday), listed on each past weekday they are due and never today. Today's
 sheet offers them on a weekday (`--today` a weekday if needed); today's seeded one-off rows hide
-"Still open from …", so for both groups take those rows off today's list and reload: × on today's
-sheet (Off this day where it asks), or, since today lists no routine,
+"Still open from …" and "Up next", so for the three groups take those rows off today's list and
+reload: × on today's sheet (Off this day where it asks), or, since today lists no routine,
 `curl -X PUT localhost:3000/api/days/<today>/priorities -H 'content-type: application/json' -d '{"priorities":[]}'`.
 A reseed leaves this device's answers to the offer, so if it was answered today, first run
 `localStorage.removeItem('focus:recurring-answered'); localStorage.removeItem('focus:left-open-dismissed')`
 in the page. The carried task stays on the last weekday's list, open (the board shows it in Next
-as left open), so "Still open from …" offers it.
+as left open), so "Still open from …" offers it, and "Up next" offers "Follow up on the Acme SLA"
+(add cards with Next's + on the board for more).
 
 `--running` leaves a 25-minute timer running, started ten minutes before *now*, for timer work;
 `--quarter` seeds every weekday since the start of last quarter, for Month / Quarter review
@@ -760,9 +761,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   task's row by uid alone, whatever its draft text, so a task is never placed twice and a row whose
   box is blank still stands for its task. A recurring row, or an archived one-off, is never
   carried: `leftOpen` skips it (`carriesOver`). A row the client builds before the server answers
-  takes the read-only fields from its source (a carried row its source row's counts, a pull the
-  board's `listed` and `logged`, a routine `recurring: true`), else the defaults (`emptyRow`,
-  `newTaskRow`), and the save's answer replaces them.
+  takes the read-only fields from its source (a carried row its source row's counts, a pull or a
+  task from Up next the board's `listed` and `logged`, a routine `recurring: true`), else the
+  defaults (`emptyRow`, `newTaskRow`), and the save's answer replaces them.
 - **A blank name is never saved, and × takes a task off a day** (`Priorities.tsx`). Emptying a box
   doesn't remove its task: while blank and focused the hint under it reads `BLANK_HINT(name)`,
   the list goes out with that row's name as it was (`named`; ticks and the other rows still save),
@@ -855,36 +856,44 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   done (an archived routine is one), and only the prune deletes it, once nothing names it. The
   server caps them at 100 in use (`BOARD_LIMITS`), a sanity cap with no product limit behind it, and
   the prune never takes one in use.
-- **Today's sheet offers what the last planned day left open and the recurring priorities due**
-  (`client/src/lib/recurring.ts`, `components/TodayOffer.tsx`), in one morning notice on Top
-  priorities, worked out on the client. "Still open from …" (the leftovers: `leftOpen`'s rows, over
-  the same `LOOKBACK_DAYS` the board's left-open group reads) shows while no one-off row has text
-  (`useLeftOpen`'s `wanted`, which a routine on the list doesn't count). They are
-  `offeredLeftovers`', which drops one whose task the board's copy has in Later or done (`listDone`)
-  and offers one the copy doesn't hold (a read behind), so nothing is offered until the board has
-  loaded (a failed read offers nothing until a later one lands; the board's refresh asks again every
-  minute, when the tab comes back and on a change saved elsewhere); a leftover in no lane shows in
-  Next as left open too until it is brought back. "Repeats today" lists the items due
-  (`dueRecurring`: the date's ISO weekday, `isoWeekday` in `shared/dates.ts`, computed in UTC from
-  the key; no row of the list is its task, `notOnList`, a row whose box is blank included; not
+- **Today's sheet offers what the last planned day left open, the top of Next and the recurring
+  priorities due** (`client/src/lib/recurring.ts`, `components/TodayOffer.tsx`), in one morning
+  notice on Top priorities, worked out on the client. "Still open from …" (the leftovers:
+  `leftOpen`'s rows, over the same `LOOKBACK_DAYS` the board's left-open group reads) shows while no
+  one-off row has text (`useLeftOpen`'s `wanted`, which a routine on the list doesn't count). They
+  are `offeredLeftovers`', which drops one whose task the board's copy has in Later or done
+  (`listDone`) and offers one the copy doesn't hold (a read behind), so nothing is offered until the
+  board has loaded (a failed read offers nothing until a later one lands; the board's refresh asks
+  again every minute, when the tab comes back and on a change saved elsewhere); a leftover in no
+  lane shows in Next as left open too until it is brought back. "Up next" lists the top of Next
+  (`topOfNext`, `lib/board.ts`: Next's own tasks that aren't done, in the board's order, less those
+  on the last plan's list, the first Rows per day of them), taken from the cards the server has
+  confirmed (`useBoardState().confirmedCards`), never one whose create is still on its way, which a
+  list save would make with no lane. It follows the leftovers' rule, so no task of Next is on
+  today's list, and waits for their read (`useLeftOpen`'s `planned`: the tasks on the last plan's
+  list, ticked or not), so a task left open is never offered there first, nor one ticked there
+  since the board was read, which the board's copy still has open. "Repeats today" lists the items
+  due (`dueRecurring`: the date's ISO weekday, `isoWeekday` in `shared/dates.ts`, computed in UTC
+  from the key; no row of the list is its task, `notOnList`, a row whose box is blank included; not
   answered on this device today), in Settings order, taken from the recurring priorities the server
   has confirmed (`useBoardState().confirmedRecurring`), never one whose create is still on its way,
-  which a list save would make a one-off. Both groups are judged on the stored list by the sheet and
+  which a list save would make a one-off. The groups are judged on the stored list by the sheet and
   again on the card's draft (`isOneOff`, `notOnList`), so a row typed or a save already sent counts
   at once. Each group is a `role="group"` named by its heading, and each item a box: the leftovers
-  start ticked, the routines up to `recurringPerDay` less the routines already on the list
-  (`offerPicks`), the rest unticked, and a box pressed keeps its answer while the groups change.
-  Ticking past the number says so (`TODAY_OFFER.over`, a live region always there under the group),
-  and Add to today adds them all the same. Add runs `acceptOffer` through the card's draft, so what
-  is typed goes out in the same save: each leftover through `placePriority`, in the first free row,
-  then each routine through `placePriority` with `end`, after every row of the padded list, so the
-  free rows stay for one-offs and no written row moves, and one that doesn't fit is skipped. Once
-  Add's save goes through, and at once for Not today (Start fresh while no routine shows), the
-  notice records every routine shown, ticked or not, under `USER_KEYS.recurringAnswered`
-  (`useRecurringAnswered`: per item, day and device, so another device still offers it and a new day
-  starts with none; an answer joins what is stored when it is given, so another tab's answers stay),
-  and leftovers shown hold Start fresh (`leftOpenDismissed`), so removing a row the notice added
-  brings nothing back.
+  start ticked, Up next up to Rows per day less the leftovers shown, the routines up to
+  `recurringPerDay` less the routines already on the list (`offerPicks`), the rest unticked, and a
+  box pressed keeps its answer while the groups change. Ticking more routines than that says so
+  (`TODAY_OFFER.over`, a live region always there under their group), and Add to today adds them all
+  the same. Add runs `acceptOffer` through the card's draft, so what is typed goes out in the same
+  save: each leftover, then each task from Up next (which keeps its lane, as a pull does), through
+  `placePriority`, in the first free row, then each routine through `placePriority` with `end`,
+  after every row of the padded list, so the free rows stay for one-offs and no written row moves,
+  and one that doesn't fit is skipped. Once Add's save goes through, and at once for Not today
+  (Start fresh while no routine shows), the notice records every routine shown, ticked or not, under
+  `USER_KEYS.recurringAnswered` (`useRecurringAnswered`: per item, day and device, so another device
+  still offers it and a new day starts with none; an answer joins what is stored when it is given,
+  so another tab's answers stay), and leftovers or Up next shown hold Start fresh
+  (`leftOpenDismissed`), so removing a row the notice added brings nothing back.
 - **In progress is today's list** (`client/src/lib/board.ts`, `hooks/useBoard.tsx`). The board
   shows the tasks `GET /board` sends (`boardJson`: the one-off tasks in Later or Next that aren't
   done, then every other one whose latest entry is from `LIST_WINDOW_DAYS` back to
@@ -1266,9 +1275,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   in `hooks/useBoard.tsx` `patchItem`'s `taskChanged` condition and `setRow`'s patch type, so the
   held days that show it are read again → its value on every row the client builds:
   `emptyRow` and `newTaskRow` (`lib/priorities.ts`), and, taken from the source,
-  `seedRow` and `PrioritySeed` (`lib/plan.ts`), `recurringRow` (`lib/recurring.ts`) and
-  `planMove`'s pull (`lib/board.ts`) → the seed (its rows and `SEEDED_RECURRING`, which typecheck
-  asks for; `insertItems`' INSERT, which it doesn't) → `makePriority`, `makeCard` and
+  `seedRow` and `PrioritySeed` (`lib/plan.ts`), `recurringRow` (`lib/recurring.ts`), and
+  `planMove`'s pull and `topOfNext` (`lib/board.ts`) → the seed (its rows and `SEEDED_RECURRING`,
+  which typecheck asks for; `insertItems`' INSERT, which it doesn't) → `makePriority`, `makeCard` and
   `makeRecurring` (`client/src/test/fixtures.ts`). A field the server works out (like `recurring`
   or `listed`) is read only: it goes in `ReadOnlyField` (`shared/priorities.ts`), never in `MERGED`
   or `parsePriorityRows`, which neither reads nor refuses it; in the seed the row builders set it
@@ -1534,9 +1543,11 @@ The browser pass for each surface (the logic under it is already tested):
   the row's chip, where Escape closes only the list and the dialog stays open; the days (on a
   touch screen each takes 44 × 44 px). At 375 the rows wrap and the seven days fit on one line.
   On the board, a recurring row's meta line has the Repeats mark. On the sheet, with a routine due
-  today (see "Dev data is disposable" for both groups): the morning notice with "Still open from …",
-  "Repeats today" and the line once more routines are ticked than Recurring rows per day; after Add
-  to today, the mark before the chip on a routine's row; at 1280 and 1000 the mark and a long
+  today (see "Dev data is disposable" for the three groups): the morning notice with "Still open
+  from …", "Up next" (ticked to fill Rows per day after the leftovers), "Repeats today" and the line
+  once more routines are ticked than Recurring rows per day; after Add to today, the leftovers then
+  Up next in the first rows and the routines after the padded rows, Up next's cards in In progress
+  on the board, and the mark before the chip on a routine's row; at 1280 and 1000 the mark and a long
   category in the chip's column, and at 375 the mark before the chip under the field.
 - **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
   Month / Quarter). By category in Review → Week and Month (solid and striped bars, No category

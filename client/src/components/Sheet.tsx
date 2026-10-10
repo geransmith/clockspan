@@ -11,7 +11,7 @@ import { LOAD_FAILED, PUNCH_ORDER } from '../lib/copy';
 import { startOfWeek } from '../../../shared/dates.js';
 import { dayName } from '../lib/format';
 import { unlessGone } from '../lib/apiError';
-import { offeredLeftovers, saved } from '../lib/board';
+import { offeredLeftovers, saved, topOfNext } from '../lib/board';
 import { CARD_TITLES, moveCard, patchCard, SPLIT_QUERY, splitColumns } from '../lib/layout';
 import { isOneOff, patchRow } from '../lib/priorities';
 import { dueRecurring } from '../lib/recurring';
@@ -56,13 +56,15 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
   const week = weekDays ? weekHours(weekDays, settings, today, now) : null;
   const focus = focusOf(day?.sessions ?? []);
   const orderNotice = useId();
-  // Today's list with no one-off written yet (a routine on it is no plan) offers what the last
-  // planned day left unticked, in the morning notice. A task the board holds in Later or as done
-  // stays there, and the rest come back beside the recurring priorities due today (those the
-  // server has confirmed); until the board has loaded, nothing is offered.
-  const { leftOpen, dismiss: dismissLeftOpen } = useLeftOpen(today, isToday && day != null && !day.priorities.some(isOneOff));
+  // Today's list with no one-off written yet (a routine on it is no plan) offers, in the morning
+  // notice, what the last planned day left unticked, the top of Next and the recurring priorities
+  // due today. A leftover the board holds in Later or as done stays there. Up next waits for the
+  // leftovers' read and leaves out the last plan's tasks, so no task is offered twice, and takes
+  // only the tasks the server has confirmed, as the routines do; until the board has loaded,
+  // nothing is offered.
+  const { leftOpen, planned, dismiss: dismissLeftOpen } = useLeftOpen(today, isToday && day != null && !day.priorities.some(isOneOff));
   const { answered, answer: answerRecurring } = useRecurringAnswered(today);
-  const { board, confirmedRecurring } = useBoardState();
+  const { board, confirmedRecurring, confirmedCards } = useBoardState();
   const boardStore = useBoardStore();
   // The category chip on the cards that offer one; null until the board's first read, and then no chip shows.
   const pick = useCategoryPick();
@@ -172,10 +174,11 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, jumpTo, 
               isToday
                 ? {
                     leftovers: leftOpen && leftovers?.length ? { from: dayName(leftOpen.date, today, true), rows: leftovers } : null,
+                    upNext: planned && confirmedCards ? topOfNext(confirmedCards, planned, settings.priorityCount) : [],
                     recurring: confirmedRecurring ? dueRecurring(confirmedRecurring, today, day.priorities, answered) : [],
-                    answer: (shownRecurring, leftoversShown) => {
+                    answer: (shownRecurring, oneOffsShown) => {
                       answerRecurring(shownRecurring);
-                      if (leftoversShown) dismissLeftOpen();
+                      if (oneOffsShown) dismissLeftOpen();
                     },
                   }
                 : null

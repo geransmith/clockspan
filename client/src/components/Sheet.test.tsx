@@ -30,7 +30,7 @@ import {
   TODAY,
   YESTERDAY,
 } from '../test/hooks';
-import type { Board, CardId, Settings } from '../types';
+import type { Board, CardId, Day, Settings } from '../types';
 import { Sheet } from './Sheet';
 import { SortableCards } from './SortableCards';
 
@@ -286,6 +286,56 @@ describe('Sheet: what the last day left open', () => {
     expect(screen.queryByText(LEFT_OPEN.title('yesterday'))).toBeNull();
     await settle(MINUTE_MS);
     expect(screen.getByText(LEFT_OPEN.title('yesterday'))).toBeTruthy();
+  });
+
+  it("offers the top of Next less the last plan's tasks once they are read, ticked to fill Rows per day, held by Start fresh, and added with each task kept in Next", async () => {
+    localStorage.clear();
+    vi.mocked(api.putPriorities).mockImplementation((_date, priorities) => Promise.resolve(answered({ priorities })));
+    // Ticked on yesterday's sheet since the board was read, which still has it open in Next.
+    const ticked = makePriority(2, 'Ticked yesterday', { uid: 'next00000001', done: true });
+    const yesterday = makeDay(YESTERDAY, { priorities: [makePriority(1, 'Left open', { uid: 'next00000002' }), ticked] });
+    const lookback = deferredAnswer<{ days: Day[] }>();
+    vi.mocked(api.getRange).mockImplementation((_from, to) => (to === YESTERDAY ? lookback.promise : Promise.resolve(answered({ days: [] }))));
+    const next = (n: number, title: string, patch = {}) => makeCard(`next0000000${n}`, title, { lane: 'next', position: n, ...patch });
+    vi.mocked(api.getBoard).mockResolvedValue(
+      answered(
+        makeBoard(
+          next(1, 'Ticked yesterday', { listDate: YESTERDAY }),
+          next(2, 'Left open', { listDate: YESTERDAY }),
+          makeCard('later0000001', 'Parked'),
+          next(3, 'Follow up on the Acme SLA'),
+          next(4, 'Draft the rota'),
+          next(5, 'Write a KB'),
+          next(6, 'Further down'),
+        ),
+      ),
+    );
+    await renderSheet();
+    // Until the leftovers are read, a task left open could show in Up next first.
+    expect(screen.queryByText(TODAY_OFFER.upNext)).toBeNull();
+    lookback.resolve({ days: [yesterday] });
+    await settle();
+    expect(screen.getByRole('group', { name: LEFT_OPEN.title('yesterday') }).textContent).toContain('Left open');
+    const upNext = within(screen.getByRole('group', { name: TODAY_OFFER.upNext })).getAllByRole('checkbox') as HTMLInputElement[];
+    expect(upNext.map((b) => [b.closest('li')!.textContent, b.checked])).toEqual([
+      ['Follow up on the Acme SLA', true],
+      ['Draft the rota', true],
+      ['Write a KB', false],
+    ]);
+    fireEvent.click(button(LEFT_OPEN.dismiss));
+    cleanup();
+    await renderSheet();
+    expect(document.querySelector('.today-offer')).toBeNull();
+
+    localStorage.clear();
+    serveRange([yesterday]);
+    cleanup();
+    await renderSheet();
+    fireEvent.click(button(LEFT_OPEN.add));
+    await settle();
+    expect(vi.mocked(api.putPriorities).mock.lastCall![1].map((p) => p.uid)).toEqual(['next00000002', 'next00000003', 'next00000004']);
+    // The list's save alone: the server keeps a task's lane when a list takes it up, as a pull does.
+    expect(api.editItem).not.toHaveBeenCalled();
   });
 });
 

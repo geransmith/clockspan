@@ -21,6 +21,7 @@ import {
   overAnnouncement,
   planMove,
   nextColor,
+  topOfNext,
   withCategory,
   withCategoryPatch,
   withDrag,
@@ -571,6 +572,30 @@ describe('offeredLeftovers', () => {
 
   it('offers nothing while the board has not loaded', () => {
     expect(offeredLeftovers(rows, undefined)).toBeNull();
+  });
+});
+
+describe('topOfNext', () => {
+  const cards = [
+    makeCard('third', 'Third', { lane: 'next', position: 4, categoryUid: 'cafe00000001', note: 'Ask Sam', listed: 2, logged: 600 }),
+    makeCard('parked', 'Parked', { lane: 'later', position: 1 }),
+    makeCard('leftOpen', 'Left open', { lane: null, listDate: TUE }),
+    makeCard('done', 'Done', { lane: 'next', position: 1, listDone: true, listDate: TUE }),
+    makeCard('first', 'First', { lane: 'next', position: 2 }),
+    makeCard('ticked', 'Ticked on the last plan since the read', { lane: 'next', position: 3 }),
+    makeCard('leftover', 'Yesterday', { lane: 'next', position: 5 }),
+    makeCard('fourth', 'Fourth', { lane: 'next', position: 6 }),
+  ];
+  const planned = new Set(['ticked', 'leftover']);
+
+  it("offers Next's own tasks that aren't done in the board's order, less the last plan's, up to the count", () => {
+    const before = [...cards];
+    expect(topOfNext(cards, planned, 2)).toEqual([
+      { uid: 'first', text: 'First', categoryUid: null, note: '', listed: 0, earlier: 0, logged: 0 },
+      { uid: 'third', text: 'Third', categoryUid: 'cafe00000001', note: 'Ask Sam', listed: 2, earlier: 0, logged: 600 },
+    ]);
+    expect(topOfNext(cards, planned, 3).map((s) => s.uid)).toEqual(['first', 'third', 'fourth']);
+    expect(cards).toEqual(before);
   });
 });
 
