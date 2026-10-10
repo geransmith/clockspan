@@ -1,6 +1,6 @@
 import type { DraggableAttributes, DraggableSyntheticListeners } from '@dnd-kit/core';
 import type { CSSProperties } from 'react';
-import { hasNote } from '../../../../shared/text.js';
+import { hasNote, noteStart } from '../../../../shared/text.js';
 import { categoryOf, type BoardItem, type CategoryPick } from '../../lib/board';
 import { dayName } from '../../lib/format';
 import { repeatDays } from '../../lib/recurring';
@@ -45,7 +45,7 @@ export interface ItemDrag {
  * running on it, its category, the Repeats mark of a recurring priority (and its days in Later's
  * Repeats), a mark for a note, and the day it was left open on. The title's button reaches over
  * the whole card (styles.css): a click or Enter opens the dialog, and it is what a mouse, a
- * finger's hold or Space drags.
+ * finger's hold or Space drags; its title is a note's start, else "Repeats" on a recurring task.
  */
 export function BoardCardView({ item, today, pick, onOpen, titleRef, tick, running, days, drag }: Props) {
   const category = categoryOf(pick.categories, item.categoryUid);
@@ -79,6 +79,9 @@ export function BoardCardView({ item, today, pick, onOpen, titleRef, tick, runni
           // dnd-kit's, for an item whose move is on its way: it still opens.
           aria-disabled={undefined}
           aria-haspopup="dialog"
+          // The meta line's marks lie under this button's ::before, so their own titles never
+          // show; with both, the note's start wins over Repeats.
+          title={noted ? noteStart(item.note) : item.recurring ? 'Repeats' : undefined}
           aria-describedby={[running && markId, drag?.attributes['aria-describedby']].filter(Boolean).join(' ') || undefined}
           onClick={onOpen}
           // Enter ends a keyboard drag, and a key still held from that (or from the title's Enter

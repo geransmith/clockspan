@@ -522,17 +522,22 @@ describe('Board', () => {
     expect(screen.queryByRole('group', { name: 'Move to' })).toBeNull();
   });
 
-  it('marks a recurring row on its meta line, and only that row', async () => {
-    lists[WED] = [row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true }), row(2, 'Report')];
+  it("marks a recurring row on its meta line, and only that row, with Repeats as its card's title, or the note's start on one with a note", async () => {
+    lists[WED] = [
+      row(1, 'Monitor the queue', { uid: 'rec000000001', recurring: true }),
+      row(2, 'Report'),
+      row(3, 'Follow-ups', { uid: 'rec000000002', recurring: true, note: 'Kim first.' }),
+    ];
     await renderBoard();
     const metas = [...column('In progress').querySelectorAll('.board-card-meta')];
-    expect(metas).toHaveLength(1);
-    expect(
-      within(metas[0] as HTMLElement)
-        .getByRole('img', { name: 'Repeats' })
-        .getAttribute('title'),
-    ).toBe('Repeats');
-    expect(metas[0]!.closest('.board-card')?.querySelector('.board-card-title')?.textContent).toBe('Monitor the queue');
+    expect(metas.map((m) => m.closest('.board-card')?.querySelector('.board-card-title')?.textContent)).toEqual(['Monitor the queue', 'Follow-ups']);
+    for (const m of metas) within(m as HTMLElement).getByRole('img', { name: 'Repeats' });
+    // The mark's own title lies under the card's button, which takes the hover.
+    expect([...column('In progress').querySelectorAll('.board-card-open')].map((b) => [b.textContent, b.getAttribute('title')])).toEqual([
+      ['Monitor the queue', 'Repeats'],
+      ['Report', null],
+      ['Follow-ups', 'Kim first.'],
+    ]);
   });
 
   it("treats a task a later day's list holds as any card: Move to, a rename by a PATCH, and Delete everywhere with a confirm that counts its days", async () => {
@@ -1141,12 +1146,15 @@ describe("a card's note", () => {
   const box = (title: string) => screen.queryByRole('textbox', { name: `Note for ${title}` }) as HTMLTextAreaElement | null;
   const withNote = () => ({ ...onServer, cards: onServer.cards.map((c) => (c.uid === 'later0000001' ? { ...c, note: 'From ticket 4821.' } : c)) });
 
-  it('marks a card with a note on its meta line, and no other, with no note button on any card', async () => {
+  it("marks a card with a note on its meta line, and no other, and gives its button the note's start as a title, with no note button on any card", async () => {
     onServer = withNote();
     await renderBoard();
     const marks = screen.getAllByRole('img', { name: 'Has a note' });
     expect(marks).toHaveLength(1);
     expect(marks[0]!.closest('.board-card-meta')?.closest('.board-card')?.querySelector('.board-card-title')?.textContent).toBe('Write a KB');
+    expect([...document.querySelectorAll('.board-card-open[title]')].map((b) => [b.textContent, b.getAttribute('title')])).toEqual([
+      ['Write a KB', 'From ticket 4821.'],
+    ]);
     expect(screen.queryByRole('button', { name: /note/i })).toBeNull();
   });
 

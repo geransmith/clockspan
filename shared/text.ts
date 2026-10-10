@@ -46,3 +46,14 @@ export function taskNote(text: string): string {
 
 /** Whether a stored note says anything: one of spaces and line breaks alone counts as none. */
 export const hasNote = (note: string): boolean => note.trim() !== '';
+
+/**
+ * A note's start, as a title on the sheet's note button and a board card shows it: trimmed, its
+ * first eight lines (as many as its box shows before it scrolls) cut to 200 units with no space
+ * left at the cut, and "…" where any was left out; '' for none.
+ */
+export function noteStart(note: string): string {
+  const text = note.trim();
+  const start = cutText(text.split('\n', 8).join('\n'), 200).trimEnd();
+  return start === text ? text : `${start}…`;
+}

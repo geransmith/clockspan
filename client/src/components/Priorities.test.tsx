@@ -1053,19 +1053,21 @@ describe("Priorities: a row's note", () => {
   const open = (n: number) => fireEvent.click(button(n));
   const rows = () => [makePriority(1, 'Report', { note: 'Kim has the numbers.\nDue Friday.' }), makePriority(2, 'Email')];
 
-  it('marks the button of a row with a note, and offers one on each written row, closed until it is pressed', async () => {
+  it("marks the button of a row with a note, its title the note's start, and offers one on each written row, closed until it is pressed", async () => {
     await renderCard([...rows(), emptyRow(3)]);
     expect([button(1).getAttribute('aria-label'), button(1).classList.contains('note-toggle--empty')]).toEqual(['Note for priority 1', false]);
     expect([button(2).getAttribute('aria-label'), button(2).classList.contains('note-toggle--empty')]).toEqual(['Add a note to priority 2', true]);
+    expect([button(1).getAttribute('title'), button(2).getAttribute('title')]).toEqual(['Kim has the numbers.\nDue Friday.', 'Add a note']);
     expect(screen.queryByRole('button', { name: /priority 3$/ })).toBeNull();
     expect(button(1).getAttribute('aria-expanded')).toBe('false');
     expect(box(1)).toBeNull();
   });
 
-  it('opens the box with the focus in it, and Escape closes it with the text kept and the focus back on its button', async () => {
+  it('opens the box with the focus in it, with no title on its button, and Escape closes it with the text kept and the focus back on its button', async () => {
     await renderCard(rows());
     open(1);
     expect(button(1).getAttribute('aria-expanded')).toBe('true');
+    expect(button(1).hasAttribute('title')).toBe(false);
     expect(button(1).getAttribute('aria-controls')).toBe(box(1)!.id);
     expect(document.activeElement).toBe(box(1));
     expect(box(1)!.value).toBe('Kim has the numbers.\nDue Friday.');

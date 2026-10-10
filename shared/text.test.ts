@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LIMITS } from './api.js';
-import { categoryName, cutText, hasNote, sameText, taskNote, taskTitle } from './text.js';
+import { categoryName, cutText, hasNote, noteStart, sameText, taskNote, taskTitle } from './text.js';
 
 describe('sameText', () => {
   it('keys text by its words, whatever the case or spacing', () => {
@@ -60,5 +60,20 @@ describe('taskNote', () => {
 describe('hasNote', () => {
   it('counts a note with words, not one of spaces and line breaks alone', () => {
     expect([hasNote('Ask Kim'), hasNote(' \n\t'), hasNote('')]).toEqual([true, false, false]);
+  });
+});
+
+describe('noteStart', () => {
+  it('trims a note and keeps its line breaks, and gives none for a blank one', () => {
+    expect(noteStart('\n  Acme: logs.\nGlobex: workaround. \n')).toBe('Acme: logs.\nGlobex: workaround.');
+    expect(noteStart(' \n\t')).toBe('');
+  });
+
+  it('cuts after 200 units or eight lines, with no space left at the cut, and ends a cut one in …', () => {
+    expect(noteStart('x'.repeat(200))).toBe('x'.repeat(200));
+    expect(noteStart(`${'x'.repeat(198)}  y`)).toBe(`${'x'.repeat(198)}…`);
+    const lines = (n: number) => Array.from({ length: n }, (_, i) => `${i + 1}`).join('\n');
+    expect(noteStart(lines(8))).toBe(lines(8));
+    expect(noteStart(lines(9))).toBe(`${lines(8)}…`);
   });
 });

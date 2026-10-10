@@ -71,7 +71,8 @@ shared/                 imported by both sides, always with a `.js` suffix
                         and category names are compared by; categoryName, taskTitle and taskNote: a
                         category's name, and a task's name and note, as the server stores them; cutText:
                         text cut to a limit with no half character left (a lone surrogate becomes U+FFFD,
-                        as SQLite stores it), which every cut of a name, label or note goes through
+                        as SQLite stores it), which every cut of a name, label or note goes through;
+                        noteStart: a note's start, a note button's and a board card's title
   backoff.ts            nextBackoff: the wait between retries of a request that must answer
 server/                 Express API → dist/server
   app.ts                createApp(): headers, /api/health, /api/auth/me for every mode, auth routers,
@@ -808,10 +809,14 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `useModalDialog`, the focus on the frame; `REMOVE_TASK`): Off this day (the × path), Delete
   everywhere (the × path, then the board store's `deleteItem`; its failure raises the "Change not
   saved" banner and leaves the task off that day only), or Cancel, which puts the focus back on ×.
-- **A task's note shows only when it is opened** (`components/Note.tsx`): by its button on the
-  sheet, and in its card's dialog on the board. On the sheet `NoteToggle` is the one sign a note is
-  there: drawn filled with one, and quiet with none (see Conventions), with `aria-expanded` and
-  `aria-controls`, named "Note for …" or "Add a note to …", so a screen reader hears both. Pressing
+- **A task's note shows in full only when it is opened** (`components/Note.tsx`): by its button on
+  the sheet, and in its card's dialog on the board. Before that, a mouse over it shows its start as
+  a title (`noteStart`, `shared/text.ts`: trimmed, its first eight lines, cut to 200 characters,
+  "…" where any was left out). On the sheet `NoteToggle` is the one sign a note is there: drawn
+  filled with one, and quiet with none (see Conventions), with `aria-expanded` and `aria-controls`,
+  named "Note for …" or "Add a note to …", so a screen reader hears both. Its title is the note's
+  start while the box is closed, which a screen reader also reads as the button's description;
+  none while it is open, since the box shows the note; and "Add a note" with no note. Pressing
   it opens `NoteField` with the focus in it; Escape closes it with the text kept and the focus back
   on the button, and nothing is open on a load. The box grows to eight lines and then scrolls,
   Enter adds a line, and a ticked row's isn't struck through. On the sheet `NoteField` stays
@@ -821,7 +826,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   hint; each row's note is a draft of its own, keyed by the task, apart from the list's, and saves
   400 ms after the last key through `onNote`, the day store's `editPriorities` (`Sheet.tsx`), whose
   `'failed'` keeps it. On the board a card with a note has a "Has a note" mark on its meta line
-  (`BoardCard`, `role="img"`, no control), and its dialog (`CardDialog`) holds the box, open, for
+  (`BoardCard`, `role="img"`, no control). Neither it nor a recurring task's Repeats mark
+  (`RepeatMark`) can show a tooltip, since the card's button lies over the meta line, so the
+  button's title is the note's start, else "Repeats": a mouse anywhere on the card but its tick
+  shows it. Its dialog (`CardDialog`) holds the box, open, for
   every task the board edits or that has a note, saving 800 ms after the last key and as the dialog
   closes (`closeCard` blurs it first); Escape there closes the dialog with the note kept. The box
   goes with the dialog, so `Board` keeps a note whose save failed (`notesKept`, by item, with the
@@ -1639,7 +1647,9 @@ The browser pass for each surface (the logic under it is already tested):
   carried row's name: where the hints under them sit (at 375, under the row's own chip, nearer it
   than the next row). × on the carried row: how "Remove …" renders, a long name included. Notes: row
   3's note button drawn filled and the others' quiet (shown on the row's hover or focus with a
-  mouse, always on a phone); open row 3's note under the row, after any hint, lined up with the
+  mouse, always on a phone); a mouse over row 3's button shows its note's two lines as a tooltip,
+  an empty one's shows "Add a note", and row 3's shows none while its box is open; open row 3's
+  note under the row, after any hint, lined up with the
   field; type past eight lines (it grows, then scrolls); a ticked row's note isn't struck through.
   Categories: pick a category on a row (an empty chip shows only on the row's hover or focus with a
   mouse, always on a phone; a long name ends in an ellipsis; at 375 the chip sits under the field,
@@ -1662,7 +1672,9 @@ The browser pass for each surface (the logic under it is already tested):
   the bottom sheet, the seven days fit on one line, each 44 × 44 px on a touch screen, with Stop
   repeating under them. A screen reader hears the Repeat group, each day's name and pressed state,
   the last day as unavailable, and a card of Repeats' "Repeats" and its days (check how "Mon–Fri"
-  reads). A recurring row's meta line has the Repeats mark. On the sheet, with a routine due today
+  reads). A recurring row's meta line has the Repeats mark, and at 1440 and 1000 a mouse anywhere
+  on a recurring card but its tick, the mark included, shows "Repeats" (its note's start once it
+  has a note). On the sheet, with a routine due today
   (see "Dev data is disposable" for the three groups): the morning notice with "Still open from …",
   "Up next" (ticked to fill Rows per day after the leftovers), "Repeats today" and the line once
   more routines are ticked than Recurring rows per day; after Add to today, the leftovers then Up
@@ -1715,7 +1727,8 @@ The browser pass for each surface (the logic under it is already tested):
   shows the timer, the row's meta line `running`, then `paused`), a Next card's with three rows
   open (no nudge: it pulls and starts), and with a timer running no dialog offers it.
   Notes, at 1440, 1000 and 375: the SSO card's "Has a note" mark on its meta line, and none on the
-  others; its dialog's box with the note, saved 800 ms after the last key and as the dialog closes
+  others; at 1440 and 1000, a mouse over the SSO card's title, padding or mark shows its note as a
+  tooltip, and no other card shows a note (a recurring card shows "Repeats"); its dialog's box with the note, saved 800 ms after the last key and as the dialog closes
   by Escape, × or a press outside; with a screen reader, the mark is read on the card; an earlier
   day's tick of a recurring priority that stopped repeating shows its note as text. A key typed into
   a note does nothing. Categories (with about 30 added by `curl` to `/api/board/categories` for a
