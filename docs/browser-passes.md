@@ -163,11 +163,12 @@ what `npm run seed` writes.
   the note, saved once typing stops (the wait is under AGENTS.md's Conventions) and as the dialog
   closes by Escape, × or a press outside; with a screen reader, the mark is read on the card; an
   earlier day's tick of a recurring priority that stopped repeating shows its note as text. A key
-  typed into a note does nothing. Categories (with about 30 added by `curl` to `/api/board/categories` for a
-  long list): a box's chip (a pick, New category, kept after a reload and in the other boxes), a
-  card dialog's chip with its list opening over the sheet, unclipped, scrolling inside with the box
-  in view, its Escape closing only the list, the cards' dot and name (a long name at 1000), and
-  Settings → Board (a rename, a name in use, the swatches wrapping at 375, Remove, the touch areas).
+  typed into a note does nothing. Categories (with about 30 added by `curl` to
+  `/api/board/categories` for a long list): a box's chip (a pick, New category, kept after a reload
+  and in the other boxes), a card dialog's chip with its list opening over the sheet, unclipped,
+  scrolling inside with the box in view, its Escape closing only the list, the cards' dot and name
+  (a long name at 1000), and Settings → Board (a rename, a name in use, the swatches wrapping at
+  375, Remove, the touch areas).
 - **Keyboard shortcuts**: after `npm run seed -- --running`, at 1280: ? opens
   the list with the focus on it, ? again does nothing and Escape gives the focus back; P pauses
   and resumes, + adds the step, and once the timer is a minute or more past its end (see "The

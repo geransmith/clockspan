@@ -78,10 +78,11 @@ client/                 Vite root → dist/client
   src/lib/              logic with no React, a test beside each file (lib/apiError.ts is covered through
                         the tests that use it)
   src/hooks/            state and effects, the stores among them (useDay, useTimer, useSettings, useBoard),
-                        each with a happy-dom test beside it (useLatest and AppProviders are covered
-                        through the tests that use them)
-  src/test/             fixtures.ts (factories, TEST_SETTINGS, mocked answers; no React), hooks.tsx
-                        (it re-exported, the provider stack, the key and act() helpers), setup.ts
+                        useClock (the app's one 1-second clock) and useMediaQuery (a media query for
+                        behaviour; looks stay in CSS), each with a happy-dom test beside it (useLatest
+                        and AppProviders are covered through the tests that use them)
+  src/test/             fixtures.ts (factories, TEST_SETTINGS, mocked answers; no React), setup.ts,
+                        hooks.tsx (fixtures.ts re-exported, the provider stack, key and act() helpers)
   src/components/       the cards, views and the pieces they share; settings/ (the dialog, a file per
                         tab, controls.tsx) and board/ (the Board page, its own lazy chunk)
   src/auth/             AuthGate and the setup / login / new-password pages
@@ -175,8 +176,8 @@ as left open), so "Still Open From …" offers it, and "Up Next" offers "Follow 
 
 The flags are in `server/dev/seed-cli.ts`'s usage comment: `--running` (a 25-minute timer, for
 timer work), `--quarter` or `--days N` (for Month / Quarter review), `--now HH:MM`, `--today
-YYYY-MM-DD`, `--fresh` (the seeded users' settings and logins too), `--auth local|oidc` (the
-`LOCAL_USERS` of `seed.ts`, or one "Dev User") and `--sessions`, which prints a
+YYYY-MM-DD`, `--fresh` (the seeded users' settings and logins too), `--auth none|local|oidc` (for
+`AUTH_MODE`: the `LOCAL_USERS` of `seed.ts`, or one "Dev User") and `--sessions`, which prints a
 `document.cookie = 'fs_session=…'` line per user: run it in the page and reload to be that user,
 with no password typed. A run never deletes users. `npm run screenshots` reseeds the dev DB and
 resets the default user's settings (see the script's header).
@@ -248,9 +249,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `WRITE_AHEAD_DAYS`, a year and a month of slack, since a list saved there would only grow the
   tables).
 - **Old-day deletion goes through `pruneDays` (`server/retention.ts`)**, from the Data tab's button
-  (`POST /days/prune`, sent through the day store's `pruneBefore`) and the scheduled `runRetention`.
-  What a prune deletes in its transaction, and what it never touches (a day with a running session,
-  settings, categories, recurring priorities in use, an open task in a lane), are the module's and
+  (`POST /days/prune`, sent through the day store's `pruneBefore`; `DataTab.tsx` then reads the
+  board again, since the prune takes tasks) and the scheduled `runRetention`. What a prune deletes
+  in its transaction, and what it never touches (a day with a running session, settings,
+  categories, recurring priorities in use, an open task in a lane), are the module's and
   `pruneDays`' docs. The per-user setting `retention { enabled, days }` is capped by
   `RETENTION_DAYS` (`effectiveKeepDays`), and a user with no settings row still gets the cap. With
   retention off and no cap only Delete Old Days Now prunes, so tombstones and removed recurring
@@ -357,22 +359,21 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   banner itself, so a failure is said once. Any day the store holds is also read again each time a
   view shows it (`useDay`; one whose first load failed is asked for again then, quietly), and a
   range read (`store.readRange`) lands on every day it holds loaded in the range when it answers,
-  under the same `revision` rule (below). A
-  change saved elsewhere also raises every held day's floor to its revision, so a read out from
-  before it is asked for again.
+  under the same `revision` rule (below). A change saved elsewhere also raises every held day's
+  floor to its revision, so a read out from before it is asked for again.
 - **Another device's save reaches a shown tab within a second** (`server/changes.ts`,
   `hooks/useLiveChanges.ts`, `lib/ownWrites.ts`, whose docs say how a stream is opened, judged and
   opened again). Each shown tab holds one server-sent event stream, `GET /api/changes`, and a hidden
   tab closes it; `useLiveChanges` is called in `Shell`, not `AppProviders`, since happy-dom has no
-  `EventSource`. A change this page didn't write raises `CHANGED_ELSEWHERE` on the window
-  (`client/src/api.ts`), on which every `useRefreshLoop` runs at once and the day store raises its
-  held days' floors. A data write of this page refused 404 or 409 raises it from `request()`, at
-  once and whether a stream is open or not (the stream would never call it foreign, since its
-  revision is noted as this page's own); never a read, which would loop, nor an auth route. A change
-  saved elsewhere while the tab was hidden is read twice if the come-back read too. The minute tick
-  stays, for a page with no stream (a buffering proxy), a change between the page's first reads and
-  the first message any stream brings, and the prune, whose revision no stream hears. A past day,
-  History or Review on screen is read again the next time it is shown.
+  `EventSource`. For a change this page didn't write, `useLiveChanges` raises `CHANGED_ELSEWHERE`
+  (defined in `client/src/api.ts`) on the window, on which every `useRefreshLoop` runs at once and
+  the day store raises its held days' floors. A data write of this page refused 404 or 409 raises it
+  from `request()`, at once and whether a stream is open or not (the stream would never call it
+  foreign, since its revision is noted as this page's own); never a read, which would loop, nor an
+  auth route. A change saved elsewhere while the tab was hidden is read twice if the come-back read
+  too. The minute tick stays, for a page with no stream (a buffering proxy), a change between the
+  page's first reads and the first message any stream brings, and the prune, whose revision no
+  stream hears. A past day, History or Review on screen is read again the next time it is shown.
 - **The day store keeps the server's copy and this device's changes apart** (`lib/optimistic.ts`
   and `hooks/useDay.tsx`, whose docs and comments have the rules: a failed write drops only its
   change and the day is read again, a read never replaces a change still on its way, the revision
@@ -454,12 +455,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   its state, so a remount ends the undo; see the comment there); removing any other pair drops its
   two rows (`removePunchPair`). Lunch semantics come only from positions 1 and 2. A punch save is
   merged with what another device saved since (`mergePunches`, whose doc has the rule). Punches out
-  of order (`outOfOrder`, from `orderSlip` in
-  `lib/timeclock.ts`: the first punch out of place and the one it should come after) are named by
-  the sheet's notice (`PUNCH_ORDER`), which describes that row's field; such a day counts in no
-  hours total (the week line, Review's worked time and target) and shows a dash and `CHECK_PUNCHES`
-  wherever its own hours would show (the sheet's tiles, the board's clock bar, History's cell and
-  day panel).
+  of order (`outOfOrder`, from `orderSlip` in `lib/timeclock.ts`: the first punch out of place and
+  the one it should come after) are named by the sheet's notice (`PUNCH_ORDER`), which describes
+  that row's field; such a day counts in no hours total (the week line, Review's worked time and
+  target) and shows a dash and `CHECK_PUNCHES` wherever its own hours would show (the sheet's tiles,
+  the board's clock bar, History's cell and day panel).
 - **A punch row saves only complete times.** `TimeField` (React Aria segments) commits the moment
   hour, minute and period are all filled, and throws a half-typed draft away when focus leaves the
   field or on Escape, which keeps focus in the field, so the row never shows a time the server
@@ -695,13 +695,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   later one lands; the board's refresh asks again every minute, when the tab comes back and on a
   change saved elsewhere); a leftover in no lane shows in Next as left open too until it is brought
   back. "Up Next" is taken from the cards the server has confirmed
-  (`useBoardState().confirmedCards`), never one whose create is still on its way, which a list save
-  would make with no lane, and "Repeats Today" from the recurring priorities the server has
-  confirmed (`useBoardState().confirmedRecurring`), never a task whose first day is still on its
-  way, which a list save would put on the list as a one-off. A routine is due by the date's ISO
-  weekday (`isoWeekday` in `shared/dates.ts`, computed in UTC from the key), and a row whose box is
-  blank still counts as its task on the list (`notOnList`). The groups are judged on the stored list
-  by the sheet and again on the card's draft (`isOneOff`, `notOnList`), so a row typed or a save
+  (`useBoardState().confirmedCards`) and "Repeats Today" from the recurring priorities it has
+  confirmed (`confirmedRecurring`), whose docs say why. A routine is due by the date's ISO weekday
+  (`isoWeekday` in `shared/dates.ts`, computed in UTC from the key), and a row whose box is blank
+  still counts as its task on the list (`notOnList`). The groups are judged on the stored list by
+  the sheet and again on the card's draft (`isOneOff`, `notOnList`), so a row typed or a save
   already sent counts at once. Each group is a `role="group"` named by its heading, and the line
   that says more routines are ticked than `recurringPerDay` (`TODAY_OFFER.over`) is a live region
   always there under their group. Add runs `acceptOffer` through the card's draft, so what is typed
@@ -726,19 +724,18 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   above it; a column's count holds both lists, and its empty line shows only while both are empty.
   A lane given on a full board is refused before it is sent (`boardFull`, `addsToLanes`,
   `BOARD.full`), the server's 400 being the backstop.
-  The page's own rules are in `components/board/`: `Board.tsx`'s doc and comments (the card
-  dialog, `CardDialog`, one at a time and closed before whatever it pressed moves, starts or
-  deletes, `closeCard`, since a modal leaves the page inert; where the focus goes after a move, a
-  Delete or the notice; what offers Start timer, and that a card's Start is a pull that asks no
-  nudge, since starting a timer never asks while Move to and a drag do; the column boxes and In
-  Progress's nudge; the one `role="status"` notice slot above the columns), `Capture`'s (a box's
-  keys), `BoardCard`'s (a card's face, and its button stretched over the card) and
-  `useBoardDrag.tsx`'s and `dnd.ts`'s (how a mouse, a finger or Space picks a card up, which items
-  drag, from 900 px for In Progress, Done and Repeats, and what a screen reader hears). `Board`
-  takes `running`, `start` and `starting` from `Shell` as props, since the timer's context changes
-  every second. A row typed in In Progress's box goes on the board's queue as a pull does and shows
-  once its job starts (it has no item for `moving` to show); Add Anyway on it closes the box and
-  focuses the new row. A box open as its + shuts closes, giving the focus it had to the +.
+  The page's own rules are in `components/board/`: `Board.tsx`'s doc and comments (the card dialog,
+  `CardDialog`, one at a time and closed before whatever it pressed moves, starts or deletes,
+  `closeCard`; where the focus goes after a move, a Delete or the notice; what offers Start timer,
+  and that a card's Start is a pull that asks no nudge; the column boxes and In Progress's nudge;
+  the one `role="status"` notice slot above the columns), `Capture`'s (a box's keys, and where the
+  focus goes when its + shuts), `BoardCard`'s (a card's face, and its button stretched over the
+  card) and `useBoardDrag.tsx`'s and `dnd.ts`'s (how a mouse, a finger or Space picks a card up,
+  which items drag, from 900 px for In Progress, Done and Repeats, and what a screen reader hears).
+  `Board` takes `running`, `start` and `starting` from `Shell` as props, since the timer's context
+  changes every second. A row typed in In Progress's box goes on the board's queue as a pull does
+  and shows once its job starts (it has no item for `moving` to show); Add Anyway on it closes the
+  box and focuses the new row.
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started — one
   rule, no clock-in fallback. `GET /days/range` returns full days and the client does the rollup
@@ -786,18 +783,18 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   the name is its `label`) and `Session.categoryUid` (the task's, else the session's own). Every
   surface names a session through them or `useTimer().name`: the day log, the timer card, the
   running bar, the tab title, the timer's alerts as they are raised (a "Time's Up" banner already up
-  keeps its name: see the timer rule), the retro's Not on the Plan and Review's Off the Plan
-  (grouped by task, else by label). Every named start from the timer card is on a task: a pick
-  from the label box's list (`LabelBox` in `FocusTimer.tsx`, today's open rows, numbered), or an
-  open row's text typed (`sameText`), starts on that row, and any other name puts a new row on
-  today's list (`addPriority`, with no nudge) and starts on it, a ticked row's name included,
-  unless the list has no room (`hasRoom`), where it starts on no task under its label. An empty box
-  starts an untitled session on no task. A session with a task has no name or category of its
-  own to edit until it is set to Unplanned, and `editedSession` shows an edit as the server will
-  store it while it is out; the day log picks a category only for a session not on a written row of
-  its day (`sessionCategoryEdit`), and shows it as a `CategoryDot` named by its `label`, the one dot
-  drawn without its name beside it. The functions' docs and `SessionLog`'s comments have the UI
-  details.
+  keeps its name: see the time's-up effect in `hooks/useTimer.tsx`), the retro's Not on the Plan
+  and Review's Off the Plan (grouped by task, else by label). Every named start from the timer card
+  is on a task: a pick from the label box's list (`LabelBox` in `FocusTimer.tsx`, today's open
+  rows, numbered), or an open row's text typed (`sameText`), starts on that row, and any other name
+  puts a new row on today's list (`addPriority`, with no nudge) and starts on it, a ticked row's
+  name included, unless the list has no room (`hasRoom`), where it starts on no task under its
+  label. An empty box starts an untitled session on no task. A session with a task has no name or
+  category of its own to edit until it is set to Unplanned, and `editedSession` shows an edit as the
+  server will store it while it is out; the day log picks a category only for a session not on a
+  written row of its day (`sessionCategoryEdit`), and shows it as a `CategoryDot` named by its
+  `label`, the one dot drawn without its name beside it. The functions' docs and `SessionLog`'s
+  comments have the UI details.
 - **History opens on the route's date** (`route.date ?? today`), with that day picked. The
   calendar holds its month by its first day (`startOfMonth`) and Review its period by `from`,
   so neither moves at midnight. "Open Day" first records the picked day (and the Review period,
@@ -1007,9 +1004,8 @@ fixture, a seed template): after it, fix what `npm run typecheck` lists.
   `shared/sounds.ts` → add its title, author and source line to `client/src/sounds/README.md`.
   Nothing else: the settings selects, the validator (`mergeSounds`), the `SoundId` type and the
   Test buttons read the catalog, and `client/src/lib/sounds.test.ts` fails if the folder and
-  the catalog disagree. A synthesized pattern is an entry with `kind: 'synth'`, whose `beep()`
-  sequence typecheck then asks for. A new event that can make a noise is an id in `SOUND_EVENTS`.
-  It plays through
+  the catalog disagree. A synthesized pattern is an entry with `kind: 'synth'`. A new event that
+  can make a noise is an id in `SOUND_EVENTS`. It plays through
   `alert({ chime: settings.sounds.<event>, sound: settings.sound, notifications: settings.notifications, … })`
   from `lib/alerts.ts`, raised only once `useSettings().loaded` is true (see "Nothing alerts
   before the settings have loaded"), or through a `useCelebration(moment, '<event>')` for a
