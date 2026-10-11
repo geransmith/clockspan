@@ -58,14 +58,15 @@ export default defineConfig({
     // metrics or the run fails. The set is what the suite is meant to prove: the server, shared,
     // the client's API calls, the pure client libs and the hooks (their tests run under
     // happy-dom). Vitest leaves out the test files themselves (everything `include` above
-    // matches). Also left out on purpose: the two process entrypoints (index.ts and cli.ts only
+    // matches). Also left out on purpose: the testkits (`*.testkit.*`, the setup the parts of a
+    // split test file share), the two process entrypoints (index.ts and cli.ts only
     // wire things up and call process.exit; what reset-password does is in auth/reset.ts, which
     // is covered), dev tooling (seed, harness), and the components. Some components have tests
     // for the logic they hold; how they look is checked in the browser. An unreachable branch is
     // deleted, never hidden behind a v8 ignore comment.
     coverage: {
       include: ['server/**', 'shared/**', 'client/src/api.ts', 'client/src/lib/**', 'client/src/hooks/**'],
-      exclude: ['server/dev/**', 'server/index.ts', 'server/cli.ts'],
+      exclude: ['**/*.testkit.*', 'server/dev/**', 'server/index.ts', 'server/cli.ts'],
       reporter: ['text', 'html'],
       // Only files short of 100% are listed, so a clean run prints one summary line.
       skipFull: true,

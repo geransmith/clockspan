@@ -1415,7 +1415,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   one: `newTaskRow` (`lib/priorities.ts`) and `planMove`'s pull (`lib/board.ts`) → the seed
   (`server/dev/seed.ts`: its rows, typecheck asks; `insertDay`'s INSERT, it doesn't) →
   `makePriority` (`client/src/test/fixtures.ts`) → the padded-rows case in
-  `server/routes/days.test.ts` ("takes the web app's rows as it pads and sends them").
+  `server/routes/days.priorities.test.ts` ("takes the web app's rows as it pads and sends them").
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
   `currentUser(req).id` (a `/:date` route goes on the days router, whose param handler checks
   the date; a `/:id` route on the sessions or breaks router, or a `/:uid` route on the
@@ -1589,6 +1589,14 @@ Prove a change at the cheapest level that can show it, and stop there:
      the defaults.
    - A test that needs a DOM (hooks, components, `api.ts`) starts with
      `// @vitest-environment happy-dom`; the rest of the suite runs under `node`.
+   - A test file split by topic is `<Name>.test.ts(x)` and `<Name>.<topic>.test.ts(x)` beside it
+     (`Board.drag.test.tsx`), with the setup the parts share in one `<Name>.testkit.ts(x)` beside
+     them, which the coverage run leaves out. Each part keeps its own `vi.mock` calls and
+     environment line, which apply only in the file that has them. A testkit may register its
+     `beforeEach` on import, as `test/hooks.tsx` does, since Vitest isolates each file. A route
+     test's parts share their setup through `startTestApp` (`server/dev/harness.ts`, which the
+     build leaves out), so they have no testkit: each starts its own app, as every route test
+     does (`days.priorities.test.ts`).
    - The suite runs in America/Los_Angeles (`test.env.TZ` in `vite.config.ts`), so a US DST
      case uses that zone's change days (2026-03-08, 2026-11-01). A case that needs another
      zone stubs it with `vi.stubEnv('TZ', …)`, as `shared/dates.test.ts` does for Santiago's
@@ -1621,10 +1629,10 @@ Every test, client or server, writes time spans with `MINUTE_MS`, `HOUR_MS` and 
 The gate, which a change passes before it is reported done or a PR is opened, is CONTRIBUTING.md's
 "Before opening" list. Its coverage run measures every file under `server/`, `shared/`,
 `client/src/lib/` and `client/src/hooks/`, and `client/src/api.ts` (minus the two process
-entrypoints and `server/dev/`), each of which must be 100% covered on statements, branches,
-functions and lines, so new code there ships with the tests that reach it. A branch that cannot
-be reached is deleted, never hidden behind a `v8 ignore` comment; `alerts.ts` shows how a
-browser-only module is tested (stub the globals).
+entrypoints, `server/dev/` and the testkits), each of which must be 100% covered on statements,
+branches, functions and lines, so new code there ships with the tests that reach it. A branch
+that cannot be reached is deleted, never hidden behind a `v8 ignore` comment; `alerts.ts` shows
+how a browser-only module is tested (stub the globals).
 
 The browser pass for each surface (the logic under it is already tested):
 
@@ -1860,7 +1868,7 @@ The browser pass for each surface (the logic under it is already tested):
 - A keydown inside a native modal `<dialog>` still bubbles to `window`, so the shortcut guard
   checks for `dialog[open]` itself. Its drag check reads the `aria-pressed` dnd-kit sets on what it
   drags by (a board card's button, a sheet card's grip; beside `aria-roledescription`) while it
-  drags; a dnd-kit upgrade that drops it lets keys through mid-drag, which `Board.test.tsx`'s
+  drags; a dnd-kit upgrade that drops it lets keys through mid-drag, which `Board.drag.test.tsx`'s
   keyboard-drag case catches. A page key (S, B, H) drops text left in a board box, as a click on
   the header does.
 - Prettier leaves `*.md` alone: wrap docs by hand.
