@@ -3,9 +3,9 @@
 
 ## Claude Code notes
 
-- Browser passes run in the built-in browser, in the order AGENTS.md's Verification step 4
-  gives: `preview_start` the `web` config from `.claude/launch.json` (AGENTS.md's Commands
-  section lists the others), `resize_window` to each width a pass names (the `mobile` preset for
+- Browser passes (`docs/browser-passes.md`) run in the built-in browser, in the order AGENTS.md's
+  Verification step 4 gives: `preview_start` the `web` config from `.claude/launch.json`
+  (AGENTS.md's Commands section lists the others), `resize_window` to each width a pass names (the `mobile` preset for
   375, a width and height for the others: the `desktop` preset only clears the emulation, leaving
   the pane's own width), reload,
   and `colorScheme: light` / `dark` for the themes.

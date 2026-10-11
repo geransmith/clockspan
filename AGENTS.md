@@ -43,183 +43,53 @@ description.
 
 ## Repo map
 
-File names say most of it. This lists where things live and the files a rule is attached to.
+File names say most of it, and a module's doc comment says the rest. This lists where things live
+and the files a rule is attached to.
 
 ```
 shared/                 imported by both sides, always with a `.js` suffix
-  settings.ts           Settings, DEFAULT_SETTINGS, CARD_IDS, DEFAULT_SIDE (each card's column), normalizeLayout,
-                        MAX_PRIORITIES, SETTING_LIMITS, RETENTION_LIMITS
-  api.ts                every wire type and `emptyDay`; the server's JSON builders and client/src/api.ts both use them,
-                        the input limits both sides check (LIMITS, USERNAME, PASSWORD_LENGTH), the board's
-                        open lanes (OPEN_LANES, OpenLane), how far back a task left open is offered and
-                        shown (LOOKBACK_DAYS), the server's caps on the board (BOARD_LIMITS), the category
-                        colours (CATEGORY_COLORS) and the headers naming the server's version
-                        (VERSION_HEADER) and the user's revision (REVISION_HEADER)
+  settings.ts           Settings, DEFAULT_SETTINGS, SETTING_LIMITS, the layout (CARD_IDS, DEFAULT_SIDE)
+  api.ts                every wire type, `emptyDay`, the limits and caps both sides check, the two headers
   sounds.ts             the sound catalog (SOUNDS, SOUND_EVENTS)
-  dates.ts, timer.ts    date keys, the time spans (MINUTE_MS, HOUR_MS, DAY_MS) and cutoffKey (the server's
-                        own date bounds); pause-aware session timing (activeMs, plannedEndAt,
-                        pausedSecondsAfter, PLANNED_SECONDS)
-  punches.ts            kindForPosition: a punch row's kind is its position's parity; punchesKey: a list's
-                        rows and times as one string, which two lists are compared by; mergePunches: a
-                        punch save laid onto the stored list as the times changed since its base;
-                        MAX_PUNCHES (the server's row cap; the card hides Add Extra Out / In at it)
-  priorities.ts         hasText; isFree (a row no task is on: the client pads a list with these, and a new
-                        priority goes into one); FREE_ROW: a free row's fields, which every new row
-                        spreads; mergePriorities: a priorities save laid onto the stored
-                        list as the changes made since its base, rows matched by their task's uid, field by
-                        field as MERGED lists
-  text.ts               sameText: the key a task typed again by hand is matched by (Review's Not Done),
-                        and category names are compared by; categoryName, taskTitle and taskNote: a
-                        category's name, and a task's name and note, as the server stores them; cutText:
-                        text cut to a limit with no half character left (a lone surrogate becomes U+FFFD,
-                        as SQLite stores it), which every cut of a name, label or note goes through;
-                        noteStart: a note's start, a note button's and a board card's title
+  dates.ts, timer.ts    date keys, MINUTE_MS / HOUR_MS / DAY_MS and cutoffKey; pause-aware session timing
+  punches.ts            a punch row's kind by position, mergePunches, MAX_PUNCHES
+  priorities.ts         free rows (isFree, FREE_ROW, hasText) and mergePriorities
+  text.ts               how names, notes and categories are compared, stored and cut (sameText, cutText)
   backoff.ts            nextBackoff: the wait between retries of a request that must answer
 server/                 Express API → dist/server
-  app.ts                createApp(): headers, /api/health, /api/auth/me for every mode, auth routers,
-                        data routers behind requireAuth (each answer naming the server's version
-                        and the user's revision), the live stream (GET /api/changes), static files
-                        and the SPA fallback; startBackgroundJobs() (the login purge, the retention
-                        schedule, the live streams' ping and, under OIDC, warming the `Discovery`
-                        index.ts passes in; started by index.ts only)
-  changes.ts            changeFeed: each user's open live streams (GET /api/changes, at most
-                        MAX_STREAMS), the revision sent when one opens and after each of the user's
-                        writes, the ping (PING_MS) startBackgroundJobs sends, and end() before the
-                        server closes
-  security.ts           every security header, rejectCrossSiteWrites (READ_METHODS: what isn't a write)
-                        and rejectUnknownHosts
-  config.ts, db.ts      env parsing (throws on bad config); pragmas, MIGRATIONS and migrate, the default user,
-                        a user's revision (readRevision, bumpRevision)
-  migrations/           the migrations that need code, frozen: oneItem.ts (13: each task stored once,
-                        items backfilled from the cards, recurring priorities and per-day rows)
-  settings.ts           mergeSettings (defaults + validation on every read and write), loadSettings
-  board.ts              tasks as the board sees them: boardJson (listDate and listDone read from the entries,
-                        listed and logged from itemCounts; the categories and the recurring priorities)
-                        and the window of tasks it sends (LIST_WINDOW_DAYS, PLANNED_WINDOW_DAYS),
-                        weekdayMask (a recurring priority's weekdays as the table's mask), placing and
-                        renumbering a lane, the one lane rule a save follows (nextFromLater), collectItems
-                        and deleteItem
-  retention.ts          old-day pruning (pruneDays, runRetention, the RETENTION_DAYS cap)
-  validate.ts           isWholeNumber: the one check for every bounded whole number the server takes;
-                        isOneOf: a value from a fixed list (a setting's choices, a category's colour);
-                        parseId: a route's numeric id
-  refuse.ts             refuse(): sends an ErrorResponse, which every API refusal goes through;
-                        STALE_CLIENT, the 409's message to a page loaded before tasks were stored once
-  auth/                 session cookie, scrypt passwords, the login limiter, publicUser, logName and the
-                        local-account queries (users.ts), middleware (currentUser), local + OIDC routes,
-                        resetPassword (reset.ts: what the reset-password command does)
-  routes/               the days, sessions, breaks, settings, items (a task's own create, edit and delete)
-                        and board (GET /board and the categories) routers; shared.ts has findDay,
-                        ownedRouter (rows of a day, by id), uidRouter (rows of a user, by uid: categories
-                        and tasks), parseUidField (an optional uid field) and the session and break row →
-                        JSON builders (dayJson is in days.ts)
-  dev/                  seed.ts + seed-cli.ts (`npm run seed`), harness.ts (startTestApp for route tests;
-                        a client reads an event stream with stream(path))
-  index.ts, cli.ts      the process entrypoints: the server (warns under AUTH_MODE=none), reset-password
-                        (reads the arguments and prints resetPassword's answer)
+  app.ts                createApp() (middleware, routers, static files, SPA fallback), startBackgroundJobs()
+  changes.ts            the live streams (GET /api/changes)
+  security.ts           every security header and request guard
+  config.ts, db.ts      env parsing; the database (MIGRATIONS, the default user, a user's revision)
+  migrations/           the migrations that need code, frozen (oneItem.ts: 13, each task stored once)
+  settings.ts           mergeSettings, loadSettings
+  board.ts              tasks as the board sees them (boardJson), lanes, collectItems, deleteItem
+  retention.ts          old-day pruning
+  validate.ts           the input checks every route shares (isWholeNumber, isOneOf, parseId)
+  refuse.ts             refuse(), which every API refusal goes through; STALE_CLIENT
+  auth/                 sessions and cookies, passwords, the login limiter, local + OIDC routes, reset.ts
+  routes/               the data routers; shared.ts has findDay, ownedRouter, uidRouter and row → JSON
+  dev/                  the seed (`npm run seed`) and the route tests' harness (startTestApp)
+  index.ts, cli.ts      the process entrypoints: the server, reset-password
 client/                 Vite root → dist/client
-  public/               manifest, sw.js, icons/icon.svg (the icon's one source; `npm run icons` renders
-                        the PNGs next to it)
-  src/App.tsx           Shell (route, settings dialog) inside AppProviders (hooks/AppProviders.tsx); today's
-                        alarms are hooks/useTodayAlarms.ts, and the live stream hooks/useLiveChanges.ts
-  src/api.ts            fetch wrapper (30 s timeout; UNAUTHENTICATED_EVENT on a 401 from anything but login and
-                        /me; the reload banner when an answer names another version, or a revision below
-                        one heard before it was asked (a restored backup); each write's revision, a
-                        refusal's included, noted as this page's own (lib/ownWrites.ts); a data call
-                        answers Answer<T>, its body as `value` and the user's revision the server named
-                        as `revision` (REVISION_HEADER; 0 when an answer names none), an auth call the
-                        body alone (auth()); throws lib/apiError.ts's ApiError (with the refusal's
-                        `revision`), which a caller checks with instanceof, and beside it unlessGone
-                        counts a delete answered 404 as done, and goneAt does the same for a data call,
-                        keeping the refusal's revision); CHANGED_ELSEWHERE, the event useLiveChanges
-                        raises, and request() too, its detail the refusal's revision, when a data
-                        write is refused 404 (gone) or 409 (changed elsewhere);
-                        src/types.ts re-exports the shared types (types only)
-  src/lib/              logic with no React, a test beside each file (the browser-facing ones stub the
-                        globals, as alerts.ts does; apiError is covered through api.test and the hook
-                        tests)
-    optimistic.ts       a server copy plus pending changes, which the stores are built on, and `serial()`,
-                        their write queue
-    ownWrites.ts        the revisions this page's writes were answered with (noteOwnWrite, from api.ts),
-                        and changedElsewhere: whether a span of revisions holds another tab's or device's
-    alerts.ts           the one place that plays sound, shows notifications and pushes banners
-    copy.ts             every line the app raises at the user; no logic
-    storage.ts          localStorage that never throws (private mode, quota); readDaySet / addToDaySet, a
-                        set kept for one date under one key; the per-user keys (USER_KEYS:
-                        fired alarms, Start Fresh, the break-over mark, the board boxes' category, the
-                        morning offer's answers) and adoptUser, which records who the app is open for
-                        under AUTH_USER_KEY and drops the last user's keys
-    board.ts            the board's columns from the tasks and today's rows (boardColumns), what a move
-                        does and which store it writes (planMove, moveTargets, MoveRefused), the cap
-                        the store checks before it sends a lane (boardFull, addsToLanes), where a drop
-                        lands and what a drag says (dropTarget, withDrag, overAnnouncement,
-                        moveAnnouncement), the left-open rows the offer brings back (offeredLeftovers)
-                        and the top of Next it offers after them (topOfNext), the category chip's data
-                        (CategoryPick) and what New category makes of a name (categoryForName,
-                        nextColor, categoryNameTaken), and the board as a write shows it (withItem,
-                        withItemPatch, withoutItem, withCategory, withCategoryPatch, withoutCategory)
-    popover.ts          placePopover: where the category chip's list and the timer's label suggestions
-                        go on screen (under the control or above it, inside the viewport)
-    recurring.ts        a recurring priority's days as a card's Repeat row and Later's Repeats show
-                        them (WEEKDAYS, repeatDays: "Mon–Fri"), and the morning offer's
-                        routines: which are due (dueRecurring, notOnList), which it ticks
-                        (offerPicks, recurringCount), the list after Add to Today (acceptOffer;
-                        seedRow, a leftover's or an Up Next task's row; recurringRow, the recurring
-                        priority itself as a new row)
-    shortcuts.ts        the single-key shortcuts: the one key list (SHORTCUTS) and the guard that
-                        leaves a key to a field, a dialog or a drag (shortcutFor)
-  src/hooks/            state and effects (useDay, useTimer, useSettings, useBoard, useAlarms, …), each
-                        with a happy-dom test beside it (useLatest is covered through the hooks that use
-                        it, and AppProviders through the tests that render it).
-                        useClock is the app's one 1-second clock; useSaveStatus
-                        (Saving… / Saved / Not saved) serves the settings dialog; useBoard is the
-                        board's store (BoardProvider and its refresh; its deleteItem is also the sheet's
-                        Delete Everywhere) and useCategoryPick, the category chip's data and inline
-                        create; useMediaQuery follows a media query for behaviour; useFollowedDraft is a
-                        text box's draft that follows the stored name or number; useRecurringAnswered
-                        keeps the recurring priorities the morning offer was answered for today on this
-                        device; useShortcuts binds a key beside its button (useShortcut) and is the one
-                        keydown listener (useShortcutListener); useLiveChanges keeps the server's live
-                        stream open while the tab is shown and raises CHANGED_ELSEWHERE (its detail the
-                        revision heard), as api.ts does for a write refused 404 or 409, on which every
-                        useRefreshLoop runs and the day store raises its held days' floors.
-                        src/test/fixtures.ts has the plain factories and TEST_SETTINGS (no React), the
-                        categories and recurring priorities the tests share (TICKETS, ADMIN, OLD_WORK;
-                        QUEUE, FOLLOW_UPS, STANDUP), and a mocked data call's answer (answered(value,
-                        revision = 0), deferredAnswer<T>() for one a case resolves by hand, and
-                        echoPriorities and echoPunches, a list PUT's answer as the server stores it);
-                        src/test/hooks.tsx re-exports fixtures.ts and AppProviders and has
-                        SettingsAndDays, serveRange (a mocked getRange that answers from a list of
-                        days), refused(status) (a mocked write refused 404 or 409 the way request()
-                        refuses it, CHANGED_ELSEWHERE first), ShortcutKeys and pressKey (the key
-                        listener, and a key pressed where the focus is) and the act() helpers; before
-                        each test of a file that mocks api, it answers getSettings with
-                        makeSettings(), getRunning with no session and getBoard with an empty board
-  src/components/       the cards, History (Calendar + Review), Banners, FinishChoice, RemoveTask (×'s Off
-                        This Day / Delete Everywhere), TodayOffer (Top Priorities' morning notice),
-                        Shortcuts (the key listener, and ? for the list of keys), DateNav (the
-                        sheet's date row and Customize; the header is the same on every view), and
-                        the pieces several of them share (Folded: a long list's Show N More; CategoryChip
-                        and CategoryDot; RepeatMark, a recurring priority's mark, and RunningMark, the
-                        running session's pill, kept here so the sheet can show them; Note, a task's
-                        note button and box, the button on a priority row and the box there and in
-                        a board card's dialog; TimerLengths, the timer's length buttons and their
-                        tap, on the timer card and a board card's dialog); settings/ holds
-                        SettingsDialog (the shell and tabs), a file per tab (BoardTab: the
-                        categories and Recurring rows per day), and controls.tsx; board/ holds the
-                        Board page (Board, BoardCard: a card's face, CardDialog: its details,
-                        opened by the card, Capture: a column's box, opened by the + in its head,
-                        ClockBar: today's times above the columns, useBoardDrag: the drag (what is
-                        dragged and where it would land, its handlers, what a screen reader hears,
-                        the sensors and the copy under the pointer), and dnd.ts: its collision and
-                        keyboard settings for dnd-kit), its own lazy chunk
+  public/               manifest, sw.js, icons/icon.svg (the icon's one source; `npm run icons`)
+  src/App.tsx           Shell (the route, the views, the settings dialog) inside hooks/AppProviders.tsx
+  src/api.ts            the fetch wrapper and every API call; src/types.ts re-exports the shared types
+  src/lib/              logic with no React, a test beside each file (lib/apiError.ts is covered through
+                        the tests that use it)
+  src/hooks/            state and effects, the stores among them (useDay, useTimer, useSettings, useBoard),
+                        each with a happy-dom test beside it (useLatest and AppProviders are covered
+                        through the tests that use them)
+  src/test/             fixtures.ts (factories, TEST_SETTINGS, mocked answers; no React), hooks.tsx
+                        (it re-exported, the provider stack, the key and act() helpers), setup.ts
+  src/components/       the cards, views and the pieces they share; settings/ (the dialog, a file per
+                        tab, controls.tsx) and board/ (the Board page, its own lazy chunk)
   src/auth/             AuthGate and the setup / login / new-password pages
   src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
   src/styles.css        design tokens and all component CSS
 scripts/                screenshots.mjs and icons.mjs (headless Chromium via browser.mjs), smoke-image.sh
-docs/screenshots/       the PNGs the README and the Unraid template embed, dark theme only (the
-                        light one is checked in the browser pass, not pictured; sheet-desktop.png
-                        is the template's alone)
+docs/                   browser-passes.md; screenshots/, the PNGs the README and the Unraid template
+                        embed, dark theme only (sheet-desktop.png is the template's alone)
 Dockerfile, docker/     the image; entrypoint.sh owns /data as PUID:PGID and drops root
 unraid/clockspan.xml    the Unraid template, a field per .env.example variable (config.test.ts checks);
                         Unraid reads it from main, so an edit reaches users when it merges
@@ -269,10 +139,8 @@ takes it up. A lean-code rule limits the diff, not the questions.
 
 ## Branches, PRs and releases
 
-`main` is protected: every change is a branch → PR → green checks → squash merge, and a release
-is a version-bump PR that CI tags and publishes. `CONTRIBUTING.md` has the PR requirements
-(title, one label, what must pass), the release checklist, the version rule and the Dependabot
-routine. Follow it as written; it is not advice.
+`CONTRIBUTING.md` has how a change lands (`main` is protected), the PR requirements, the release
+checklist, the version rule and the Dependabot routine. Follow it as written; it is not advice.
 
 ## Dev data is disposable
 
@@ -305,18 +173,13 @@ in the page. The carried task stays on the last weekday's list, open (the board 
 as left open), so "Still Open From …" offers it, and "Up Next" offers "Follow up on the Acme SLA"
 (add cards with Next's + on the board for more).
 
-`--running` leaves a 25-minute timer running, started ten minutes before *now*, for timer work;
-`--quarter` seeds every weekday since the start of last quarter, for Month / Quarter review
-(`--days N` for another count); `--now HH:MM` pins *now* to that time of day; `--today
-YYYY-MM-DD` moves the whole sample to that date at the current time of day (or `--now`'s);
-`--fresh` also deletes the seeded users' settings and logins. Under `AUTH_MODE=local` (or
-`--auth local`, which stands in for the env var) it creates `admin` and `sam` (password
-`clockspan-dev`; `sam` gets at most three past days and no timer); under `oidc`, one "Dev
-User". `--sessions` signs every seeded user in and prints a `document.cookie = 'fs_session=…'`
-line per user: run it in the page and reload to be that user, with no password typed and no
-provider. A run never deletes users and is safe while `npm run dev` is up (reload the page).
-`npm run screenshots` reseeds the dev DB and resets the default user's settings (see the
-script's header).
+The flags are in `server/dev/seed-cli.ts`'s usage comment: `--running` (a 25-minute timer, for
+timer work), `--quarter` or `--days N` (for Month / Quarter review), `--now HH:MM`, `--today
+YYYY-MM-DD`, `--fresh` (the seeded users' settings and logins too), `--auth local|oidc` (the
+`LOCAL_USERS` of `seed.ts`, or one "Dev User") and `--sessions`, which prints a
+`document.cookie = 'fs_session=…'` line per user: run it in the page and reload to be that user,
+with no password typed. A run never deletes users. `npm run screenshots` reseeds the dev DB and
+resets the default user's settings (see the script's header).
 
 The seed and the server migrate the file when they open it, so a new migration needs nothing
 done by hand. To look at or change the dev DB directly: `curl` against
@@ -384,25 +247,16 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   day may be written (the days router's `date` param handler refuses a write past
   `WRITE_AHEAD_DAYS`, a year and a month of slack, since a list saved there would only grow the
   tables).
-- **Old-day deletion goes through `pruneDays` (`server/retention.ts`)**, whether from the Data tab's
-  button (`POST /days/prune`) or the scheduled `runRetention`. It deletes `days` rows before a date
-  key (cascades take punches, entries, the old per-day rows in `priorities_v1`, sessions, breaks),
-  never a day with a running session, and never settings, categories or recurring priorities in use.
-  The Data tab sends it through the day store's `pruneBefore`, which reads the held days before the
-  cutoff again and moves `generation`, so the ranges on screen ask again. The per-user setting
-  `retention { enabled, days }` is capped by `RETENTION_DAYS` (`config.retentionDays`) via
-  `effectiveKeepDays`; a user with no settings row still gets the cap. The same prune, in its
-  transaction, also deletes the tasks it leaves done and named by nothing, the tombstones of tasks
-  deleted before the cutoff and at least `RETENTION_LIMITS.min` (30) days ago, whatever the cutoff,
-  so a page that still holds a deleted task can't make it again, and any task nothing names
-  (`collectItems`, which takes an archived task only here); never an open task in a lane or a
-  recurring priority in use (`pruneDays`' doc has the steps). With retention off and no
-  `RETENTION_DAYS` cap only Delete Old Days Now prunes, so tombstones and removed recurring
-  priorities stay until then. It answers both counts (`Pruned`: days and tasks, tombstones
-  included), and `POST /days/prune` reports the days; the Data tab reads the board again after its
-  delete. `reclaimSpace` (VACUUM + WAL checkpoint) runs after a prune that deleted a day or a task
-  and after an admin deletes a user (`DELETE /api/auth/users/:id`), so the file shrinks and deleted
-  text does not stay in free pages; it must not run inside a transaction.
+- **Old-day deletion goes through `pruneDays` (`server/retention.ts`)**, from the Data tab's button
+  (`POST /days/prune`, sent through the day store's `pruneBefore`) and the scheduled `runRetention`.
+  What a prune deletes in its transaction, and what it never touches (a day with a running session,
+  settings, categories, recurring priorities in use, an open task in a lane), are the module's and
+  `pruneDays`' docs. The per-user setting `retention { enabled, days }` is capped by
+  `RETENTION_DAYS` (`effectiveKeepDays`), and a user with no settings row still gets the cap. With
+  retention off and no cap only Delete Old Days Now prunes, so tombstones and removed recurring
+  priorities stay until then. `reclaimSpace` runs after a prune that deleted a day or a task and
+  after an admin deletes a user (`DELETE /api/auth/users/:id`), so the file shrinks and deleted text
+  does not stay in free pages; it must not run inside a transaction.
 - **Every data query is scoped by `req.user.id`** (`currentUser(req)`). In `AUTH_MODE=none` that is
   the single `kind='default'` user. Never add a data route outside the `requireAuth` router in
   `app.ts`. Every `/:date` route sits on the days router (`routes/days.ts`), whose `date` param
@@ -461,35 +315,17 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   The sound plays after the render, so a moment set by a tap calls `unlockAudio()` in that handler
   first.
 - **Timer remaining time is derived from the server's `startedAt`, `plannedSeconds` and pauses** on
-  every tick (`timerView()` in `client/src/lib/timer.ts`, on `shared/timer.ts`) — never a
-  client-side counter. A paused session is still `status = 'running'` with `pausedAt` set;
-  `pausedSeconds` holds the pauses that have ended, and the planned end moves forward while paused.
-  A finish while paused ends the session where the pause began, and a pause left for
-  `PAUSE_LIMIT_SECONDS` (an hour) is finished by the client with a quiet banner. **A timer that runs
-  out is not finished at once**: it is `due`, announced once per (session, planned end) — `dueKey`,
-  kept in the page and in `localStorage['focus:timer-due']` so a reload shows the banner again
-  without a second chime — and waits `DUE_GRACE_SECONDS` (10 min) for an answer before the
-  auto-finish (which chimes only if nothing has for that end). The auto-finish and the banner wait
-  while a come-back sync is out (`syncing`), as the alarms do, and the auto-finish sends the plan
-  and pause it judged by: the server refuses a session another device changed (409) or deleted (404)
-  since, and the refusal syncs the timer, as any write's 404 or 409 does (`api.ts`). The banner goes
-  while a press that took it away is on its way, and comes back, quietly, if that press fails. Plans
-  are whole minutes: `adjust` rounds the new plan up to one and stops at `PLANNED_SECONDS.max`
-  (8 h), where `canAdd` turns false, + is disabled and the "Time's Up" banner is raised again,
-  quietly, without its Add button. The banner names the session (`useTimer().name`) as it was when
-  raised, as its notification does: a rename while it is up shows in the bar, the timer card and the
-  tab title, and never raises it again, which would bring a closed banner back. The Finish buttons
-  call `requestFinish()`: it finishes unless the timer is due and the planned and worked lengths
-  differ in their whole minutes (a minute or more over), where `finishChoice` opens the
-  `FinishChoice` sheet (Planned · Nm / Worked · Mm / Back). A finish goes out behind any press still
-  on its way. The choice belongs to the due end it was asked for (`finishChoiceFor`, a `dueKey`):
-  once the timer is no longer due at that end (time added or a pause, here or on another device, or
-  the session ending however it ends), the sheet goes and stays gone. Done sits after Finish on the
-  bar and the card while the session's task has an open row on its day (`taskOpen`), and calls
-  `requestDone()`: the same finish, its question included, and once the server answers the session
-  completed, the task the answer names is ticked on the answer's day through `editPriorities` and
-  `ticked` is raised. A finish that fails or answers cancelled ticks nothing; Finish, the
-  auto-finish and − past the time worked never tick, and Done has no key. `useTimer` keeps the
+  every tick (`timerView()` in `client/src/lib/timer.ts`, on `shared/timer.ts`), never a
+  client-side counter. A paused session is still `status = 'running'` with `pausedAt` set, and
+  `pausedSeconds` holds the pauses that have ended. **A timer that runs out is not finished at
+  once**: it is `due`, announced once per (session, planned end) (`dueKey`, kept in the page and in
+  `localStorage['focus:timer-due']`), and waits `DUE_GRACE_SECONDS` for an answer before the
+  auto-finish; a pause left for `PAUSE_LIMIT_SECONDS` is finished the same way. Plans are whole
+  minutes up to `PLANNED_SECONDS.max`. Finish asks which length to log only when the timer is due a
+  minute or more over (`requestFinish`, `FinishChoice`), and Done (`requestDone`), shown while the
+  session's task has an open row on its day, is that finish and then the task's tick; nothing else
+  ticks, and Done has no key. `lib/timer.ts` and `hooks/useTimer.tsx` have the rest (the "Time's Up"
+  banner, the finish choice's life, the auto-finish's refusals, Done's tick). `useTimer` keeps the
   running session the way the day store keeps a day: a press (adjust, edit, pause, resume) shows at
   once, a failure drops only that press, and a sync's answer never hides a press still on its way.
   Keep that pattern for new mutations.
@@ -519,74 +355,37 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   failure in place with Try Again; any other view gets the banner `useTodayAlarms` raises
   (`todayShown`, from `Shell`), which goes once today loads or a view shows it. No load raises a
   banner itself, so a failure is said once. Any day the store holds is also read again each time a
-  view shows it (`useDay`; one whose first load failed is asked for again then, quietly), and a range read (`store.readRange`) lands on
-  every day it holds loaded in the range when it answers, under the same `revision` rule (below). A
+  view shows it (`useDay`; one whose first load failed is asked for again then, quietly), and a
+  range read (`store.readRange`) lands on every day it holds loaded in the range when it answers,
+  under the same `revision` rule (below). A
   change saved elsewhere also raises every held day's floor to its revision, so a read out from
   before it is asked for again.
 - **Another device's save reaches a shown tab within a second** (`server/changes.ts`,
-  `hooks/useLiveChanges.ts`, `lib/ownWrites.ts`). Each shown tab holds one server-sent event stream,
-  `GET /api/changes` (`useLiveChanges`, called in `Shell`, not `AppProviders`, since happy-dom has
-  no `EventSource`), and a hidden tab closes it. The stream names the user's revision as it opens,
-  which is where the page's first stream starts judging, and again after each of the user's writes
-  has answered. The revisions heard gather for `GATHER_MS` (300 ms); if the span holds one this page
-  didn't write (`changedElsewhere`: `request()` notes each write's revision, a refusal's included,
-  and the server moves it by one per write), `CHANGED_ELSEWHERE` is raised on the window with the
-  newest one as its detail. On it every `useRefreshLoop` runs at once, after the run out and once
-  for a burst, and the day store raises its held days' floors (above). A data write of this page
-  refused 404 (gone) or 409 (changed) raises the same event from `request()`, at once and unjudged
-  (the stream would never call it foreign, since its revision is noted as this page's own), with the
-  refusal's revision as its detail, whether the stream is open or not; never for a read, whose
-  answer the event asks for again (a refused read would loop), nor an auth route, which names no
-  revision. A stream the browser gave up on (a 401, the 429 past `MAX_STREAMS`, a proxy's error
-  page) is opened again on `nextBackoff`, and a tab shown again opens one; each is judged from where
-  the last left off, a judgement the hide dropped included, since a tab back inside
-  `useRefreshLoop`'s 5 s throttle reads nothing (a change saved elsewhere while it was hidden is
-  then read twice if the come-back did read). The minute tick stays, for a page with no stream (a
-  buffering proxy), a change between the page's first reads and the first message any stream brings,
-  and the prune, whose revision no stream hears. A past day, History or Review on screen is read
-  again the next time it is shown.
-- **The day store keeps the server's copy and this device's changes apart** (`lib/optimistic.ts`):
-  each day is its confirmed copy plus the changes not confirmed yet, and the sheet shows the one
-  laid over the other. The confirmed copy is the server's answers in the order they arrived (a
-  read's copy with each save's answer laid on it), so it is not always what the server holds now: a
-  save's answer can be older than a read that landed first. A failed write just drops its change, so
-  the screen is back on the confirmed copy at once (with the "Change Not Saved" banner), and the day
-  is asked for again, sharing a read already out; a refusal names the server's revision, which the
-  day's copy is raised to, so a read that left before it comes back stale and asks again. A writer
-  off the Priorities card (the board) changes a list through `editPriorities(date, fn)`: `fn` gets
-  the rows the store shows now (`current()`), padded, and it answers `'saved'`, `'notLoaded'`,
-  `'skipped'` (`fn` gave null) or `'failed'`, never rejecting, with the revision of the PUT that
-  carried its list (0 when none did): the board confirms a rename, category or note of today's row
-  at it, so a board read out from before is dropped. It saves through `setPriorities`, and
-  `addPriority` goes through it. A delete or a break's end the server answers 404 for counts as
-  done: another device removed the row already. A read's answer replaces the confirmed copy and
-  never a change still on its way. Every data answer names the user's revision on the server
-  (`Answer.revision`), and each value keeps the highest one laid on its confirmed copy
-  (`Tracked.revision`). A read below it is stale. A day read drops it (a day never loaded takes it
-  anyway) and asks again, whoever sent it, but not when the answer is below what the store knew as
-  it left: the server went back (a restored backup), and asking would loop. A range read's stale
-  day waits for the next read. The settings, the timer and the board just drop it. A save's whole
-  answer (the settings, the running session, the board) older than the confirmed copy only takes
-  its change off. A day save's answer is laid on whatever its revision, since it carries one part
-  of the day. An answer equal to the confirmed copy changes nothing, its revision included, so a
-  day that didn't change keeps its identity. A day not loaded yet keeps its changes until the
-  server's copy arrives, so nothing made up stands in for it. `pruneBefore` is the one store write
-  sent on no queue (the queues are keyed by day, session and breaks), so a change still on its way
-  for a day before the cutoff can land after the prune and re-create that day, which the re-read
-  after the prune shows. After a full delete (the board store's `deleteItem`), a new name,
-  category or note, or a one-off's first day (its `editItem`), or a priorities save whose row
-  renamed, filed or noted a task another day lists or logged time on, `taskChanged(uid, revision)`
-  reads again every held day whose list or log names the task, with the revision of the write that
-  changed it as each day's floor (a read already out below it is dropped and the day asked for
-  again), and moves `generation` as `pruneBefore` does, so no range on screen (the board's Done,
-  History, Review) shows the task from an older answer. A priorities save that puts a task on its
-  list or takes one off (the morning offer, a pull, ×) reads again, the same way, the other held
-  days whose lists hold that task, since their `listed` and `earlier` moved and × asks from them.
-  The day store, `useSettings`, `useTimer` and `useBoard` are all built on `useTracked`
-  (`hooks/useTracked.ts`); a board write rejects when it fails, like a settings save, and the board
-  is read again. A board read is never shared, so that read, like the one after a prune or a park,
-  left after the change; one still out from before answers lower and is dropped. `apply` and commit
-  functions are pure: read the clock outside them.
+  `hooks/useLiveChanges.ts`, `lib/ownWrites.ts`, whose docs say how a stream is opened, judged and
+  opened again). Each shown tab holds one server-sent event stream, `GET /api/changes`, and a hidden
+  tab closes it; `useLiveChanges` is called in `Shell`, not `AppProviders`, since happy-dom has no
+  `EventSource`. A change this page didn't write raises `CHANGED_ELSEWHERE` on the window
+  (`client/src/api.ts`), on which every `useRefreshLoop` runs at once and the day store raises its
+  held days' floors. A data write of this page refused 404 or 409 raises it from `request()`, at
+  once and whether a stream is open or not (the stream would never call it foreign, since its
+  revision is noted as this page's own); never a read, which would loop, nor an auth route. A change
+  saved elsewhere while the tab was hidden is read twice if the come-back read too. The minute tick
+  stays, for a page with no stream (a buffering proxy), a change between the page's first reads and
+  the first message any stream brings, and the prune, whose revision no stream hears. A past day,
+  History or Review on screen is read again the next time it is shown.
+- **The day store keeps the server's copy and this device's changes apart** (`lib/optimistic.ts`
+  and `hooks/useDay.tsx`, whose docs and comments have the rules: a failed write drops only its
+  change and the day is read again, a read never replaces a change still on its way, the revision
+  every answer names decides whether it is older than what is shown, and `taskChanged` reads again
+  the held days a task's change reaches; a delete or a break's end answered 404 counts as done,
+  `unlessGone` in `lib/apiError.ts`). The day store, `useSettings`, `useTimer` and `useBoard` are
+  all built on `useTracked` (`hooks/useTracked.ts`) and differ in what a stale read does: a day
+  read drops it (a day never loaded takes it anyway) and asks again, a range read's stale day waits
+  for the next read, and the settings, the timer and the board just drop it. A day not loaded yet
+  keeps its changes until the server's copy arrives, so nothing made up stands in for it. A board
+  write rejects when it fails, like a settings save, and the board is read again; a board read is
+  never shared, so the read after a change left after it. `apply` and commit functions are pure:
+  read the clock outside them.
 - **Suggested break lengths come only from `client/src/lib/breaks.ts`** (`suggestBreak`, pure, over
   a day's sessions); with Suggest breaks off the Break button runs `settings.breakMinutes`. With
   `suggestBreaks` on, `useBreak` offers today's suggestion on the Break button and as a quiet banner
@@ -598,11 +397,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   is ahead of now (`runningBreak`), and one that ended before its planned end was cut short, which
   is why only a full-length break rings "Break's Over" (once per break, keyed by its start in
   `localStorage['focus:break-over']`, since SQLite gives a new break the id of a deleted newest
-  one), and never while a timer runs. The server keeps breaks from overlapping sessions: a break
-  start ends a running break and is refused (409) while a focus timer runs, and a session start ends
-  a running break (`endRunningBreak`, `routes/shared.ts`). However a break ends, one that ran under
-  `MIN_BREAK_MS` is deleted, not logged (`POST /breaks/:id/end` answers `{ break: null }`). End
-  Break goes through `endRunningBreak` too, so the server has one copy of that rule. The client
+  one), and never while a timer runs. The server keeps breaks and sessions from overlapping, and
+  drops a break that ran under `MIN_BREAK_MS`, in one copy of each rule (`endRunningBreak` in
+  `routes/shared.ts`, which `routes/breaks.ts` and a session start call; their docs). The client
   mirrors both rules with `endBreaksAt` (in `useDay`'s break writes and `applySession`, which ends a
   running break on any loaded day, since one started before midnight sits on the day before), so it
   never sends an end after a session start: the break may already be gone. The timer card disables
@@ -635,19 +432,15 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   names the task once today's list holds it. Done's tick goes the other way, on the day store's list
   sends once its finish on the timer's queue has answered. `useSettings` sends its PUTs and resets
   one at a time.
-  The board (`useBoard`) sends each write as one job on its own queue, its change to the tasks shown
-  from the moment it is made; a job that changes today's list (a pull, a row typed in In Progress's
-  box, a tick, a rename, category or note of today's row, Remove From Today, which leaves a free row
-  as × does, `takeOffRow`) goes through `editPriorities`, and so on the day store's list sends, and
-  awaits that save inside the job. A park waits for today's save still out, PATCHes the task's
-  lane, then takes its row off today's list and reads the board again; Delete (`deleteItem`, the
-  board's and the sheet's) waits for today's save, then sends `DELETE /items/:uid`, which takes
-  every day's entry and leaves the tombstone; a one-off's first day (`editItem` with `weekday`)
-  waits for today's save too, so a row typed seconds ago has its task. `useBoard.tsx` says why each
-  goes in that order. Any other board PATCH of a task off today's list needs no wait: the board read
-  that task from the server. A new edit of a day's rows, the settings, the timer or the board goes
-  through one of these, never straight to `api`. Reads are not queued, and in every store a read's
-  answer never replaces a change still on its way, nor an answer with a higher revision.
+  The board (`useBoard`) sends each write as one job on its own queue (`useBoard.tsx` says what
+  each waits for, in what order, and why): a job that changes today's list (a pull, a row typed in
+  In Progress's box, a tick, a rename, category or note of today's row, Remove From Today) goes
+  through `editPriorities`, so on the day store's list sends, and awaits that save inside the job;
+  a park, Delete and a one-off's first day first wait for today's save still out. Any other board
+  PATCH of a task off today's list needs no wait: the board read that task from the server. A new
+  edit of a day's rows, the settings, the timer or the board goes through one of these, never
+  straight to `api`. Reads are not queued, and in every store a read's answer never replaces a
+  change still on its way, nor an answer with a higher revision.
 - **Punch positions are fixed**: 0 = clock in, 1 = lunch out, 2 = lunch in, 3+ = extra out/in pairs,
   and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches` enforces
   it). Kind is parity (`kindForPosition`, `shared/punches.ts`). The math evaluates *set* punches
@@ -660,9 +453,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   undoes the Add and gives the Clock out its time back (`Timeclock` keeps the rows from before it in
   its state, so a remount ends the undo; see the comment there); removing any other pair drops its
   two rows (`removePunchPair`). Lunch semantics come only from positions 1 and 2. A punch save is
-  merged with what another device saved since (`mergePunches`): each row takes the time sent where
-  it differs from the save's base and the stored one otherwise, and a pair added or removed on
-  either side sends the list as it is. Punches out of order (`outOfOrder`, from `orderSlip` in
+  merged with what another device saved since (`mergePunches`, whose doc has the rule). Punches out
+  of order (`outOfOrder`, from `orderSlip` in
   `lib/timeclock.ts`: the first punch out of place and the one it should come after) are named by
   the sheet's notice (`PUNCH_ORDER`), which describes that row's field; such a day counts in no
   hours total (the week line, Review's worked time and target) and shows a dash and `CHECK_PUNCHES`
@@ -816,77 +608,48 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `useModalDialog`, the focus on the frame; `REMOVE_TASK`): Off This Day (the × path), Delete
   Everywhere (the × path, then the board store's `deleteItem`; its failure raises the "Change Not
   Saved" banner and leaves the task off that day only), or Cancel, which puts the focus back on ×.
-- **A task's note shows in full only when it is opened** (`components/Note.tsx`): by its button on
-  the sheet, and in its card's dialog on the board. Before that, a mouse over it shows its start as
-  a title (`noteStart`, `shared/text.ts`: trimmed, its first eight lines, cut to 200 characters,
-  "…" where any was left out). On the sheet `NoteToggle` is the one sign a note is there: drawn
-  filled with one, and quiet with none (see Conventions), with `aria-expanded` and `aria-controls`,
-  named "Note for …" or "Add a note to …", so a screen reader hears both. Its title is the note's
-  start while the box is closed, which a screen reader also reads as the button's description;
-  none while it is open, since the box shows the note; and "Add a note" with no note. Pressing
-  it opens `NoteField` with the focus in it; Escape closes it with the text kept and the focus back
-  on the button, and nothing is open on a load. The box grows to eight lines and then scrolls,
-  Enter adds a line, and a ticked row's isn't struck through. On the sheet `NoteField` stays
-  mounted while closed, so a note whose save failed stays in its box, open or not, and goes again
-  on the next edit, blur or unmount; where the title can't be edited the note is plain text. The
-  button sits in a written row's end cell before the chip and the box under the row, after its
-  hint; each row's note is a draft of its own, keyed by the task, apart from the list's, and saves
-  400 ms after the last key through `onNote`, the day store's `editPriorities` (`Sheet.tsx`), whose
-  `'failed'` keeps it. On the board a card with a note has a "Has a note" mark on its meta line
-  (`BoardCard`, `role="img"`, no control). Neither it nor a recurring task's Repeats mark
-  (`RepeatMark`) can show a tooltip, since the card's button lies over the meta line, so the
-  button's title is the note's start, else "Repeats": a mouse anywhere on the card but its tick
-  shows it. Its dialog (`CardDialog`) holds the box, open, for
-  every task the board edits or that has a note, saving 800 ms after the last key and as the dialog
-  closes (`closeCard` blurs it first); Escape there closes the dialog with the note kept. The box
-  goes with the dialog, so `Board` keeps a note whose save failed (`notesKept`, by item, with the
-  stored note it was typed over, from `useDebouncedDraft`'s base) and the dialog's box starts from
-  it, unsaved (`useDebouncedDraft`'s `kept`, which a box already open takes up too when the save
-  from the dialog's last close fails): no typed text is lost, and it goes again on the next edit,
-  blur or close. A save that goes through drops it, and so does the item's note changing from the
-  one it was typed over (another device's change). `onNote` takes the path `onRename` does
-  (`editRow` for today's row, `editItem` for any other the board edits, none for an earlier day's
-  row of a recurring priority that stopped repeating), and `saved` (`lib/board.ts`) raises the
-  banner and answers false. A routine's note is one on every day it is on. Nothing else shows a
-  note: not Retro, Review, the morning notice, the timer, the day log or History. A note of spaces
-  and line breaks alone, stored untrimmed, counts as none (`hasNote`, `shared/text.ts`): its button
-  is quiet and × doesn't ask for it. On the sheet, a row gone from the list before its note's save
-  (another device took it off, or × did before the box saved) sends the note to the task through the
-  board store's `editItem`, as `editRow` does: a 404 (the task went with the row) counts as done
-  (`unlessGone`), and any other failure is the banner (`saved`).
+- **A task's note shows in full only when it is opened** (`components/Note.tsx`: `NoteToggle` and
+  `NoteField`, whose docs have how the button and the box behave): by its button on the sheet, and
+  in its card's dialog (`CardDialog`) on the board. Before that, a mouse over it shows its start as
+  a title (`noteStart`, `shared/text.ts`). On the sheet the button is the row's one sign of a note,
+  with `aria-expanded` and `aria-controls`, named "Note for …" or "Add a note to …", so a screen
+  reader hears both, and nothing is open on a load; the button sits in a written row's end cell
+  before the chip and the box under the row, after its hint. Each row's note is a draft of its own,
+  keyed by the task, apart from the list's, and saves through `onNote`, the day store's
+  `editPriorities` (`Sheet.tsx`, whose comment says where a row gone meanwhile sends it). On the
+  board a card with a note has a "Has a note" mark on its meta line (`BoardCard`, `role="img"`, no
+  control; its doc says why the card's button carries the title). The dialog holds the box, open,
+  for every task the board edits or that has a note, and saves it as the dialog closes too
+  (`closeCard` blurs it first). The box goes with the dialog, so `Board` keeps a note whose save
+  failed (`notesKept`), and the dialog's box starts from it, unsaved: no typed text is lost.
+  `onNote` takes the path `onRename` does, and `saved` (`lib/board.ts`) raises the banner. A
+  routine's note is one on every day it is on. Nothing else shows a note: not Retro, Review, the
+  morning notice, the timer, the day log or History. A note of spaces and line breaks alone, stored
+  untrimmed, counts as none (`hasNote`, `shared/text.ts`): its button is quiet and × doesn't ask for
+  it.
 - **A category is a row of its own, named by its uid** (`categories`, routes in `routes/board.ts`,
-  answered in `Board.categories`). Tasks and sessions point at one by `categoryUid`, a soft link
-  checked for shape only, so a category made on this device can reach the server after the row that
-  names it. Removing one archives it (`archived_at`), never deletes it, so the time logged under it
-  keeps its name; a `POST` of its uid brings it back with the name and colour sent. Names are unique
-  among a user's categories in use, whatever their case or spacing (`sameText`), checked by the
-  routes (the table has no UNIQUE on the name, which would stop the README's handover script), and a
-  new uid can't take a removed one's name either: the client brings that one back. The server caps
-  them at 100 in use and 1000 stored (`BOARD_LIMITS`), sanity caps with no product limit behind
-  them; colours (`CATEGORY_COLORS`, checked with `isOneOf`) repeat. A session with a task counts
-  under the task's category: the server answers `Session.categoryUid` worked out (the task's, else
-  the session's own), so its own `category_uid` is read only while it has no task: one picked in the
-  log (a pick for a session with a task takes it off the task too), or the task's, copied by a full
-  delete. A `PATCH /sessions/:id` that links a session to a task drops a category of its own, and a
-  category sent for a session that keeps its task is refused (400); the day store and the timer show
-  an edit as the server will store it while it is out (`editedSession`). On the client
-  `CategoryChip` is the one way a category is picked, fed by `useCategoryPick` (null before the
-  board's first read, and then no chip shows), which the board page and the sheet each call once and
-  pass down as `pick`: the sheet's goes to Top Priorities (a written row's chip, which saves at
-  once), the timer (the row a new name makes at Start, `addPriority(date, text, categoryUid)`, its
-  chip in the label box's row while the name matches no open row) and the day log (a session on no
-  written row, in the edit's one PATCH). A press on the chip keeps the focus where it is until the
-  list takes it, so the day log's edit doesn't end (the browser reasons are in `CategoryChip`'s
-  comments). Its New category box runs `categoryForName` (`lib/board.ts`): the category in use by
-  that name, else a removed one brought back under its own uid, else a new one in `nextColor` (the
-  colour the fewest categories in use have, so the eight repeat evenly). The chip sets that uid at
-  once and the create goes out as an optimistic board write; opening the list reads the board again,
-  and a create the server refuses (another device took the name, a cap) is taken off with the
-  "Change Not Saved" banner, so what picked it reads as no category. The board columns' boxes share
-  one category, the last picked on the device (`USER_KEYS.captureCategory`; a removed or unknown one
-  reads as none). Settings → Board (`BoardTab`) adds (`categoryForName` again), renames (refusing a
-  name in use, `categoryNameTaken`), recolours and removes categories, each through the dialog's
-  `save`; a category's Remove archives it and doesn't ask.
+  answered in `Board.categories`; the routes' doc and the table's comment in `db.ts` say how one is
+  removed, brought back and kept unique). Tasks and sessions point at one by `categoryUid`, a soft
+  link checked for shape only, so a category made on this device can reach the server after the row
+  that names it. The server's caps (100 in use, 1000 stored, `BOARD_LIMITS`) are sanity caps with no
+  product limit behind them; colours (`CATEGORY_COLORS`, checked with `isOneOf`) repeat. A session
+  with a task counts under the task's category: the server answers `Session.categoryUid` worked out
+  (the task's, else the session's own), and the session's own is read only while it has no task
+  (`routes/sessions.ts` says when it keeps one); the day store and the timer show an edit as the
+  server will store it while it is out (`editedSession`). On the client `CategoryChip` is the one
+  way a category is picked, fed by `useCategoryPick` (null before the board's first read, and then
+  no chip shows; its doc says how a new category goes out and a refused one comes off), which the
+  board page and the sheet each call once and pass down as `pick`: the sheet's goes to Top
+  Priorities (a written row's chip, which saves at once), the timer (the row a new name makes at
+  Start, `addPriority(date, text, categoryUid)`, its chip in the label box's row while the name
+  matches no open row) and the day log (a session on no written row, in the edit's one PATCH). A
+  press on the chip keeps the focus where it is until the list takes it, so the day log's edit
+  doesn't end (the browser reasons are in `CategoryChip`'s comments). Its New category box runs
+  `categoryForName` (`lib/board.ts`, whose doc says what a name makes). The board columns' boxes
+  share one category, the last picked on the device (`USER_KEYS.captureCategory`; a removed or
+  unknown one reads as none). Settings → Board (`BoardTab`) adds (`categoryForName` again), renames
+  (refusing a name in use, `categoryNameTaken`), recolours and removes categories, each through the
+  dialog's `save`; a category's Remove archives it and doesn't ask.
 - **A recurring priority is a task with weekdays** (`items.weekdays`, answered in `Board.recurring`
   in the order the tasks were made, by id, archived ones left out): a title, a category and the
   weekdays it is offered on, ISO 1 (Monday) to 7 on the wire and a mask in the table (bit 0 for
@@ -924,43 +687,28 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   day).
 - **Today's sheet offers what the last planned day left open, the top of Next and the recurring
   priorities due** (`client/src/lib/recurring.ts`, `components/TodayOffer.tsx`), in one morning
-  notice on Top Priorities, worked out on the client. "Still Open From …" (the leftovers:
-  `leftOpen`'s rows, over the same `LOOKBACK_DAYS` the board's left-open group reads) shows while no
-  one-off row has text (`useLeftOpen`'s `wanted`, which a routine on the list doesn't count). They
-  are `offeredLeftovers`', which drops one whose task the board's copy has in Later or done
-  (`listDone`) and offers one the copy doesn't hold (a read behind), so nothing is offered until the
-  board has loaded (a failed read offers nothing until a later one lands; the board's refresh asks
-  again every minute, when the tab comes back and on a change saved elsewhere); a leftover in no
-  lane shows in Next as left open too until it is brought back. "Up Next" lists the top of Next
-  (`topOfNext`, `lib/board.ts`: Next's own tasks that aren't done, in the board's order, less those
-  on the last plan's list, the first Rows per day of them), taken from the cards the server has
-  confirmed (`useBoardState().confirmedCards`), never one whose create is still on its way, which a
-  list save would make with no lane. It follows the leftovers' rule, so no task of Next is on
-  today's list, and waits for their read (`useLeftOpen`'s `planned`: the tasks on the last plan's
-  list, ticked or not), so a task left open is never offered there first, nor one ticked there
-  since the board was read, which the board's copy still has open. "Repeats Today" lists the items
-  due (`dueRecurring`: the date's ISO weekday, `isoWeekday` in `shared/dates.ts`, computed in UTC
-  from the key; no row of the list is its task, `notOnList`, a row whose box is blank included; not
-  answered on this device today), in the order they were made, as Later's Repeats lists them, taken
-  from the recurring priorities the server has confirmed (`useBoardState().confirmedRecurring`),
-  never a task whose first day is still on its way, which a list save would put on the list as a
-  one-off. The groups are judged on the stored list by the sheet and again on the card's draft
-  (`isOneOff`, `notOnList`), so a row typed or a save already sent counts at once. Each group is a
-  `role="group"` named by its heading, and each item a box: the leftovers start ticked, Up Next up
-  to Rows per day less the leftovers shown, the routines up to `recurringPerDay` less the routines
-  already on the list (`offerPicks`), the rest unticked, and a box pressed keeps its answer while
-  the groups change. Ticking more routines than that says so (`TODAY_OFFER.over`, a live region
-  always there under their group), and Add to Today adds them all the same. Add runs `acceptOffer`
-  through the card's draft, so what is typed goes out in the same save: each leftover, then each
-  task from Up Next (which keeps its lane, as a pull does), through `placePriority`, in the first
-  free row, then each routine through `placePriority` with `end`, after every row of the padded
-  list, so the free rows stay for one-offs and no written row moves, and one that doesn't fit is
-  skipped. Once Add's save goes through, and at once for Not Today (Start Fresh while no routine
-  shows), the notice records every routine shown, ticked or not, under `USER_KEYS.recurringAnswered`
-  (`useRecurringAnswered`: per item, day and device, so another device still offers it and a new day
-  starts with none; an answer joins what is stored when it is given, so another tab's answers stay),
-  and leftovers or Up Next shown hold Start Fresh (`leftOpenDismissed`), so removing a row the
-  notice added brings nothing back.
+  notice on Top Priorities, worked out on the client; the docs of `TodayOffer`, `useLeftOpen`,
+  `offeredLeftovers`, `topOfNext`, `dueRecurring`, `acceptOffer` and `useRecurringAnswered` say what
+  each group shows, ticks, adds and records. "Still Open From …" (the leftovers: `leftOpen`'s rows,
+  over the same `LOOKBACK_DAYS` the board's left-open group reads) shows while no one-off row has
+  text, and nothing is offered until the board has loaded (a failed read offers nothing until a
+  later one lands; the board's refresh asks again every minute, when the tab comes back and on a
+  change saved elsewhere); a leftover in no lane shows in Next as left open too until it is brought
+  back. "Up Next" is taken from the cards the server has confirmed
+  (`useBoardState().confirmedCards`), never one whose create is still on its way, which a list save
+  would make with no lane, and "Repeats Today" from the recurring priorities the server has
+  confirmed (`useBoardState().confirmedRecurring`), never a task whose first day is still on its
+  way, which a list save would put on the list as a one-off. A routine is due by the date's ISO
+  weekday (`isoWeekday` in `shared/dates.ts`, computed in UTC from the key), and a row whose box is
+  blank still counts as its task on the list (`notOnList`). The groups are judged on the stored list
+  by the sheet and again on the card's draft (`isOneOff`, `notOnList`), so a row typed or a save
+  already sent counts at once. Each group is a `role="group"` named by its heading, and the line
+  that says more routines are ticked than `recurringPerDay` (`TODAY_OFFER.over`) is a live region
+  always there under their group. Add runs `acceptOffer` through the card's draft, so what is typed
+  goes out in the same save, and a task from Up Next keeps its lane, as a pull does. Once Add's save
+  goes through, and at once for Not Today (Start Fresh while no routine shows), the notice records
+  every routine shown, ticked or not (`useRecurringAnswered`), and leftovers or Up Next shown hold
+  Start Fresh (`leftOpenDismissed`), so removing a row the notice added brings nothing back.
 - **In Progress is today's list** (`client/src/lib/board.ts`, `hooks/useBoard.tsx`). The board
   shows the tasks `GET /board` sends (`boardJson`: the one-off tasks in Later or Next that aren't
   done, then every other one whose latest entry is from `LIST_WINDOW_DAYS` back to
@@ -970,91 +718,27 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   no "Nothing done this week." meanwhile), read again by its Try Again (the focus to Done's
   heading, as History's goes to ◀), a new day, the board opening again or `generation` moving
   (`pruneBefore`, `taskChanged`). Nothing about In Progress or Done is stored, so the board and
-  the sheet show one list. Which column an item is in comes only from `boardColumns` (its doc has
-  the rules in order). Later ends with Repeats (`BoardColumns.repeats`, joined after Later's own cards
-  by `itemsIn`, as Done joins its two lists (today's, then Earlier This Week, folded, whose button
-  counts its cards only while today's show above it); the column's count holds both, and "Nothing
-  parked." shows only while both are empty): every recurring priority not on today's list, in the order they
-  were made, its card showing the repeat mark and its days (`repeatDays`: "Mon–Fri", "Mon, Wed,
-  Fri"), which no other item shows; one on today's list shows there alone, in In Progress or Done.
-  An item's id is `item:<uid>` wherever the task shows as itself (a card, today's row, a card of
-  Repeats), so it keeps its id as it starts repeating, and `row:<date>:<uid>` only for an earlier
-  day's tick of a recurring priority in Done. Every Move to and every drop goes through `planMove`,
-  which says what it writes: a task's lane or place (`editItem`, a PATCH), today's list through the
-  day store's `editPriorities` (a pull of the task itself, a card of Repeats included, which goes
-  where any pull goes and asks the same nudge, or a tick), a park of today's open row to Later or
-  Next (see "Saves reach the server in the order they were made"), or nothing: a done item moved to
-  Later or Next stays done and the notice offers a new task in its place, and a recurring priority
-  in Later or Next (`BOARD.recurringStays`, a card of Repeats dropped in Later included) and In
-  Progress for an earlier day's row of one that stopped repeating are refused. Move to offers a card
-  of Repeats In Progress and Done. A task whose latest entry is on a later day (a list an older
-  version planned ahead; a tick there comes from a device in a zone ahead, or curl) shows as any
-  other: in Done when that entry is ticked, with today's, since it is no earlier day's (its dialog
-  says `BOARD.doneAhead(when)`), else by its lane, and with no lane in no column until that day,
-  when it is today's row. A lane given on a full board
-  is refused before it is sent (`boardFull`, `addsToLanes`, `BOARD.full`), the server's 400 being
-  the backstop. A card (`BoardCard`: its tick on today's rows, In Progress's row number, its title
-  and a meta line, which on a routine's earlier tick ends with the day it was done) opens its dialog (`CardDialog`) on a click or Enter, one at a time, rendered by
-  `Board` outside the columns and keyed by its item, so a move made elsewhere updates it in place;
-  one whose item goes (deleted, gone from a read, a new day loading) closes for good. Whatever
-  pressed there moves, starts or deletes closes it first (`closeCard`: a blur, the dialog gone at
-  once, the focus on the card), since a modal leaves the page inert and the notice, the landed card
-  or the next card must take the focus, and acts under the title the box saved as it closed
-  (`renamed`: Safari leaves the focus in the box as a button is pressed); Escape, a press outside, ×
-  and Enter in the title close it the same way. A task ticked on an earlier day, off today's list,
-  has no checkbox, since the board would rewrite a past day (its dialog says `BOARD.doneOn(when)`),
-  and Move to In Progress puts it on today's list to work on again; taken off today again (a park
-  included), it is done again. The dialog's title and category chip rename or file the task on every
-  day: today's row through the row (`editRow`), any other task through a PATCH (`editItem`). Delete
-  is the full delete (`deleteItem`) on every one-off task; a recurring priority has Stop Repeating
-  instead (above), and today's recurring row Remove From Today (`removeFromToday`) too. The dialog's
-  Start timer (`TimerLengths`) is on today's open rows, recurring ones included, and on the cards of
-  Later and Next, left-open ones and Repeats included: none in Done or on an item whose move is on
-  its way (Move to is gone there too: a move planned from where it shows would be wrong), or while
-  any timer runs, and held while a start is out (`starting`). `Board` takes
-  `running`, `start` and `starting` from `Shell` as props, since the timer's context changes every
-  second. A row's Start closes the dialog, the focus on its card, and starts on its task; a card's
-  is a pull first (`run` with `minutes`, which asks no nudge: starting a timer never asks, while
-  Move to and a drag still do), whose promise of the task's uid the start awaits, so a refused pull
-  starts nothing and shows one banner. A start the server refuses (the task taken off the list
-  meanwhile) is the save banner, and a 409 is the `TIMER_ELSEWHERE` banner while the sync it brings
-  shows the other device's timer. The item the running session is on, on its day (a card, which has
-  none, by its task), starts its meta line with the day log's pill (`RunningMark`), which its title
-  is `aria-describedby`. The + at the end of Later's, Next's and In Progress's head opens that
-  column's box (`Capture`: a field and the category chip; `openAdd`, which also shows the column on
-  a phone). Enter adds and keeps the box open; an empty Enter or Escape closes it with the focus
-  back on the +, Escape dropping the text; leaving it closes it only while it is empty. Later's card
-  goes at the top and Next's at the end (`laneStart`, `addItem`). In Progress's text is a new task
-  on today's list, a `place` move of `newTaskRow` through `move`, so on the board's queue, where it
-  shows once its job starts (it has no item for `moving` to show); past the nudge it asks as Add
-  Priority does (this nudge and a pull's count the rows still waiting on the board's queue, as the
-  sheet counts its draft), the text staying in the box until Add Anyway, which closes the box and
-  focuses the new row. An edit of the box's text or category drops the question, and the next Enter
-  asks again. Later's and Next's + is `aria-disabled` at the cap (`boardFull`, `BOARD.full` under
-  it), and In Progress's only on a full list (`hasRoom`, `ADD_PRIORITY_FAILED.full`), since its task
-  has no lane; a box open as its + shuts closes, giving the focus it had to the +. A Delete or a
-  Remove From Today that empties a column puts the focus on its +, or on Done's heading. One
-  `role="status"` slot above the columns holds the board notice (a pull's or a typed row's nudge,
-  the done-item notice or a refusal): its first button takes the focus, and an Enter or Space still
-  held from the press that raised it presses nothing. What the store refuses once a move is under
-  way (`MoveRefused`) is a banner. A drag (`components/board/useBoardDrag.tsx`, with dnd-kit's
-  settings in `dnd.ts` beside it) starts on the card itself, whose button is dnd-kit's handle,
-  stretched over the card (`::before`): a mouse press that moves 6 px, a finger held 250 ms (one
-  that moves first scrolls the page, so `MouseSensor` and `TouchSensor`, not `PointerSensor`, which
-  needs `touch-action: none`), or Space (Enter opens the card, and a repeated Enter or Space's keyup
-  opens nothing). A recurring priority's row doesn't drag (`canDrag`), but its card in Later's
-  Repeats does, as a plain draggable that no lane sorts (`canSort`): onto In Progress as a pull,
-  onto Done ticked, and back with the refusal notice from Later or Next; shown in In Progress while
-  its pull is on its way, it is already the row it lands as, so its card doesn't mount again and
-  lose the focus. An item of In Progress or Done, and a card of Repeats, drags only from 900 px
-  (`BOARD_COLUMNS_QUERY`, `lib/layout.ts`; it drags only to another column, and below that one
-  column shows at a time), and an item whose move is on its way can't be picked up until the move
-  lands. The first over a drag hears is where it was picked up, so it says nothing. Where a drop
-  lands is `dropTarget`'s (see its doc), and what a screen reader hears comes from `BOARD_DRAG` (its
-  `instructions` in place of dnd-kit's), `overAnnouncement` and `moveAnnouncement`. dnd-kit's own
-  focus return is off, since it would take the focus from the notice a drop brings: a keyboard drag
-  puts it back on the item's card, and so does closing the notice (for a row typed in In Progress's
-  box, back in that box, which still holds the text).
+  the sheet show one list. Which column an item is in comes only from `boardColumns`, every Move to
+  and every drop goes through `planMove`, and where a drop lands is `dropTarget`'s: their docs, and
+  `Move`'s, `moveTargets`' and `BoardItem.id`'s, have the rules in order (a park's order is under
+  "Saves reach the server in the order they were made"). Later ends with Repeats and Done with
+  Earlier This Week (`itemsIn`), folded, whose button counts its cards only while today's show
+  above it; a column's count holds both lists, and its empty line shows only while both are empty.
+  A lane given on a full board is refused before it is sent (`boardFull`, `addsToLanes`,
+  `BOARD.full`), the server's 400 being the backstop.
+  The page's own rules are in `components/board/`: `Board.tsx`'s doc and comments (the card
+  dialog, `CardDialog`, one at a time and closed before whatever it pressed moves, starts or
+  deletes, `closeCard`, since a modal leaves the page inert; where the focus goes after a move, a
+  Delete or the notice; what offers Start timer, and that a card's Start is a pull that asks no
+  nudge, since starting a timer never asks while Move to and a drag do; the column boxes and In
+  Progress's nudge; the one `role="status"` notice slot above the columns), `Capture`'s (a box's
+  keys), `BoardCard`'s (a card's face, and its button stretched over the card) and
+  `useBoardDrag.tsx`'s and `dnd.ts`'s (how a mouse, a finger or Space picks a card up, which items
+  drag, from 900 px for In Progress, Done and Repeats, and what a screen reader hears). `Board`
+  takes `running`, `start` and `starting` from `Shell` as props, since the timer's context changes
+  every second. A row typed in In Progress's box goes on the board's queue as a pull does and shows
+  once its job starts (it has no item for `moving` to show); Add Anyway on it closes the box and
+  focuses the new row. A box open as its + shuts closes, giving the focus it had to the +.
 - **Plan-vs-actual math lives only in `client/src/lib/retro.ts` and `review.ts`** (pure, with
   tests). "Added mid-day" means `addedAt` is after the day's first completed session started — one
   rule, no clock-in fallback. `GET /days/range` returns full days and the client does the rollup
@@ -1174,24 +858,16 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   one list of keys: N is Add Priority on the sheet and Later's + on the board; S, B and H are the
   header's brand, Board and History; ? opens the list; P, + and F are the running timer's Pause or
   Resume, + and Finish; R is the timer card's Break. Each is bound by the component that renders
-  its button, with `useShortcut(id, run)` called before any early return, and `run` is null
-  whenever that button is hidden or wouldn't act (F before time's up, + at the longest plan, N
-  with Later's + shut, R while a start is out or off today's sheet), so a key never acts where its
-  button wouldn't, and R holds the start buttons as a tap on Break does. S, B and H put the focus
-  on their header button first, where a click leaves it, since the control it was on may go with
-  the page. The hook answers the button's `aria-keyshortcuts` while the key is bound and the
-  `shortcuts` setting is on. Two mounted bindings of one key (the bar's and the card's timer
-  buttons) run the newer, and a binding keeps its place while its `run` comes and goes.
-  `useShortcutListener`, mounted once by `Shortcuts` beside `FinishChoice` in `App.tsx`, is the
-  one keydown listener on the window (nothing else in the app listens for keys there or on the
-  document), attached once the settings have loaded and while `shortcuts` is on. Its guard,
-  `shortcutFor`, leaves a key alone when it was handled already, held down, composing or pressed
-  with Ctrl, Cmd or Alt, when it is typed into a field (a text box, a text area, a select, a time
-  segment, the category list), and while a dialog is open or an item is dragged. A key that acts
-  calls `preventDefault()`, so the letter isn't typed into the row it focused, and a timer key
-  calls `unlockAudio()` first. Letters match in either case, and + is matched on
-  `KeyboardEvent.key`. The list is a static dialog in `Shortcuts.tsx`, its labels beside it, not
-  a lazy chunk. The setting is on by default and turns every key off (WCAG 2.1.4).
+  its button, with `useShortcut(id, run)` (`hooks/useShortcuts.ts`, whose doc has the binding's
+  rules), `run` null whenever that button is hidden or wouldn't act (F before time's up, + at the
+  longest plan, N with Later's + shut, R while a start is out or off today's sheet), so a key never
+  acts where its button wouldn't, and R holds the start buttons as a tap on Break does. S, B and H
+  put the focus on their header button first, where a click leaves it, since the control it was on
+  may go with the page. `useShortcutListener`, mounted once by `Shortcuts` beside `FinishChoice` in
+  `App.tsx`, is the one keydown listener (nothing else in the app listens for keys on the window or
+  the document), and `shortcutFor` is its guard: their docs say which keys they leave alone and
+  why. The list is a static dialog in `Shortcuts.tsx`, its labels beside it, not a lazy chunk. The
+  setting is on by default and turns every key off (WCAG 2.1.4).
 - **History, the board, the settings dialog and drag and drop are lazy chunks** (`lazy()` in
   `App.tsx` for `History`, `Board` and `SettingsDialog`, in `Sheet.tsx` for `SortableCards`;
   `SortableCards` and `components/board/` hold every `@dnd-kit` import). A static import of one
@@ -1273,10 +949,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 
 ## How to add…
 
+Each checklist leaves out what the types already demand (an entry keyed by the new id, a test
+fixture, a seed template): after it, fix what `npm run typecheck` lists.
+
 - **A card**: add the id to `CARD_IDS` in `shared/settings.ts`, its column on a wide screen to
-  `DEFAULT_SIDE` there and to `TEST_SIDES` in `client/src/test/fixtures.ts`, and its title to
-  `CARD_TITLES` in `client/src/lib/layout.ts` (the types make a missing entry an error) → write
-  the component → add a `case` in `Sheet.tsx`'s `render()`. Existing users get it automatically
+  `DEFAULT_SIDE` there and to `TEST_SIDES` in `client/src/test/fixtures.ts` → write the
+  component → add a `case` in `Sheet.tsx`'s `render()`. Existing users get it automatically
   because every layout goes through `normalizeLayout` (`shared/settings.ts`; `mergeSettings`
   runs it on the server, `useSettings` on the client), which appends a missing card, shown, in
   its default column.
@@ -1308,36 +986,30 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (`settings/controls.tsx`) for one number, each with `{...SETTING_LIMITS.<key>}` for `min` and
   `max`; a `SelectField` (`settings/controls.tsx`) for one choice from a fixed list; a `Toggle` for
   a switch. `NumberInput` on its own puts several numbers on one row, like the timer's start
-  buttons. The new setting also goes in `TEST_SETTINGS` (`client/src/test/fixtures.ts`), and the
-  type makes a missing one an error. A setting that is an object edited a field at a time is merged
-  field by field in `mergeSettings` (as `mergeRetention` does), and gets a partial entry in
-  `SettingsPatch` (`client/src/api.ts`) and a merge in `applySettingsPatch`
-  (`client/src/lib/settings.ts`). Nothing else to mirror.
+  buttons. A setting that is an object edited a field at a time is merged field by field in
+  `mergeSettings` (as `mergeRetention` does), and gets a partial entry in `SettingsPatch`
+  (`client/src/api.ts`) and a merge in `applySettingsPatch` (`client/src/lib/settings.ts`).
+  Nothing else to mirror.
 - **A keyboard shortcut**: add its id to `ShortcutId` and its key and group to `SHORTCUTS`
   (`lib/shortcuts.ts`): the group is its heading in the ? list, and a key whose action can make a
   sound goes in `timer`, the one group the listener unlocks audio for; a test checks that no two
-  share a key → its label in `Shortcuts.tsx`'s list (the type makes a missing one an error) →
-  `useShortcut(id, run)` in the component that renders its button, before any early return, with
-  `run` null whenever the button wouldn't act, and the hook's answer on the button's
+  share a key → `useShortcut(id, run)` in the component that renders its button, before any early
+  return, with `run` null whenever the button wouldn't act, and the hook's answer on the button's
   `aria-keyshortcuts` → a case in that component's test, with `ShortcutKeys` in its wrapper and
   `pressKey` (`test/hooks.tsx`) → the key in the README's Keyboard paragraph (Features).
 - **A category colour** (the palette is eight on purpose, and colours repeat past that): add the
   id to `CATEGORY_COLORS` in `shared/api.ts` (the server's `isOneOf` check, `nextColor` and the
   swatches read it) → its `--cat-<id>` token in all three token blocks of `styles.css`, at 3:1 or
   more on `--surface` and `--surface-2` in both themes, and its `[data-color='<id>']` rule beside
-  the others → its name in `COLOR_NAMES` (`settings/BoardTab.tsx`; the type makes a missing one an
-  error). `theme-css.test.ts` fails on a missing token, one under 3:1 or a missing rule.
+  the others. `theme-css.test.ts` fails on a missing token, one under 3:1 or a missing rule.
 - **A sound**: drop the clip in as `client/src/sounds/<id>.mp3` (CC0 only, MP3 so Safari can
   decode it, a couple of seconds at most) → add `{ id, label, kind: 'clip' }` to `SOUNDS` in
   `shared/sounds.ts` → add its title, author and source line to `client/src/sounds/README.md`.
   Nothing else: the settings selects, the validator (`mergeSounds`), the `SoundId` type and the
   Test buttons read the catalog, and `client/src/lib/sounds.test.ts` fails if the folder and
-  the catalog disagree. A synthesized pattern is an entry with `kind: 'synth'` plus its
-  `beep()` sequence in the `SYNTH` map in `alerts.ts` (the type makes a missing one an error).
-  A new event that can make a noise is an id in `SOUND_EVENTS`, a default in
-  `DEFAULT_SETTINGS.sounds` and a label in `SOUND_EVENT_LABELS` (`lib/sounds.ts`; the types
-  make a missing default or label an error); its sound also goes in `TEST_SETTINGS.sounds`
-  (`client/src/test/fixtures.ts`), and the type makes a missing one an error. It plays through
+  the catalog disagree. A synthesized pattern is an entry with `kind: 'synth'`, whose `beep()`
+  sequence typecheck then asks for. A new event that can make a noise is an id in `SOUND_EVENTS`.
+  It plays through
   `alert({ chime: settings.sounds.<event>, sound: settings.sound, notifications: settings.notifications, … })`
   from `lib/alerts.ts`, raised only once `useSettings().loaded` is true (see "Nothing alerts
   before the settings have loaded"), or through a `useCelebration(moment, '<event>')` for a
@@ -1346,17 +1018,14 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `alarmTargets()` in `lib/alarms.ts`, with an `armed` rule and a test case (a rule the card also
   needs goes in a pure helper like `secondMealApplies`) → add its id to `ALARM_IDS` and its
   default under `alarms` in `shared/settings.ts` (`mergeSettings` and `applySettingsPatch` loop
-  over `ALARM_IDS`, so neither needs a line); its settings also go in `TEST_SETTINGS.alarms`
-  (`client/src/test/fixtures.ts`), and the type makes a missing one an error → add an
-  `AlarmEditor` in `settings/AlarmsTab.tsx`, and its name in that Alarms section's hint (both
-  variants) → its name in `ALARM_NAMES`, which is the banner's whole kicker, and a `case` in
-  `describeEvent()` (both in `lib/alarms.ts`; the type makes a missing name an error, and
-  typecheck and the `switch-exhaustiveness-check` lint refuse a missing case), with a title for
-  each kind that says when (how long is left, that it is now, or how long past; the
-  retrospective's warning, not a deadline, gives the end time in its body instead) and a body
-  that says where the deadline came from (widen `EventContext`'s `Pick` if it needs another
-  setting). A banner can
-  carry one `action` button (see the clock-out alarm's "Overtime Approved" and the retro alarm's
+  over `ALARM_IDS`, so neither needs a line) → add an `AlarmEditor` in `settings/AlarmsTab.tsx`,
+  and its name in that Alarms section's hint (both variants) → its name in `ALARM_NAMES`
+  (`lib/alarms.ts`) is the banner's whole kicker, and its `case` in `describeEvent()` there (the
+  `switch-exhaustiveness-check` lint refuses a missing one) needs a title for each kind that says
+  when (how long is left, that it is now, or how long past; the retrospective's warning, not a
+  deadline, gives the end time in its body instead) and a body that says where the deadline came
+  from (widen `EventContext`'s `Pick` if it needs another setting). A banner can carry one
+  `action` button (see the clock-out alarm's "Overtime Approved" and the retro alarm's
   "Open Retrospective", chosen in `useAlarms` from the `AlarmDayState` callbacks).
 - **A per-day field** (like `overtimeApproved`, `retroNote`/`retroAt`): append a migration
   adding the column to `days` → add the column to `DAY_COLUMNS` and to the `DayRow` interface
@@ -1371,11 +1040,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   the stored copy (mirror `setOvertimeApproved`; a failure drops the change, raises the "Change
   Not Saved" banner and reloads the day, so the setter resolves false and never rejects) → pass
   it from `Sheet.tsx` to the card, and from `useTodayAlarms` into `useAlarms` if alarms depend
-  on it. The seed's manifest types (`SeededDay` and the aliases beside it in
-  `server/dev/seed.ts`) are built from `Day`, `Session`, `Priority` and `Break`, so `typecheck`
-  fails there on a new field until the templates set it, or it is added to the type's `Omit`
-  list if the server derives it (like `durationSeconds`). Write its column in `insertDay` too;
-  typecheck does not check that.
+  on it → its column in the seed's `insertDay` (`server/dev/seed.ts`); a field the server derives
+  (like `durationSeconds`) goes in the `Omit` list of the seed's manifest types instead of the
+  templates.
 - **A task field** (like the name, `categoryUid` or `note`: one value for the task, which every
   day it is on shows): append a migration adding the column to `items`, and stop the existing
   migration cases in `server/db.test.ts` that read `items` at their own version
@@ -1385,35 +1052,29 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   each reader needs it, and on `BoardItem` (`lib/board.ts`: in `boardColumns`, `taskItem`, which
   every item is built on, and the earlier day's routine row, which takes its recurring priority's) →
   if the user wrote it, `deleteItem`'s tombstone UPDATE (`server/board.ts`) clears it → if the sheet
-  edits it, its `MERGED` entry (`shared/priorities.ts`; typecheck asks for
-  it there or in `ReadOnlyField`), its rule in `parsePriorityRows` for a value of the wrong kind and
-  for one left out (read as unchanged: its uids in `unsaid`, filled from the base), its write in the
-  PUT beside the rename: on the task a uid new to the user makes, and otherwise only where this
+  edits it, its rule in `parsePriorityRows` for a value of the wrong kind and for one left out
+  (read as unchanged: its uids in `unsaid`, filled from the base), its write in the PUT beside the
+  rename: on the task a uid new to the user makes, and otherwise only where this
   device's row differs from its base row, and `setPriorities`' `taskChanged` condition
   (`hooks/useDay.tsx`) → if the board edits it, `NewItem` and `ItemPatch`
   (`client/src/api.ts`), the `POST` and `PATCH` routes in `routes/items.ts`, `withItem`,
   `withItemPatch`, `RowPatch` and `itemPatchOf` (`lib/board.ts`: a row's edit on the board, and that
   edit as the task's PATCH), and in `hooks/useBoard.tsx` `patchItem`'s `taskChanged` condition and
-  `setRow`'s patch type, so the held days that show it are read again → its default in `FREE_ROW`
-  (`shared/priorities.ts`; typecheck asks for it), which every row the client builds, and each row
-  the list PUT reads, starts from, and its value taken from the source in `seedRow`, `PrioritySeed`
-  and `recurringRow` (`lib/recurring.ts`), and `planMove`'s pull and `topOfNext` (`lib/board.ts`)
-  → the seed (its rows and `SEEDED_RECURRING`, which typecheck asks for; `insertItems`' INSERT,
-  which it doesn't) → `makePriority`, `makeCard` and `makeRecurring`
-  (`client/src/test/fixtures.ts`). A field the server works out (like `recurring` or `listed`) is
-  read only: it goes in `ReadOnlyField` (`shared/priorities.ts`), never in `MERGED` or
-  `parsePriorityRows`, which neither reads nor refuses it; in the seed the row builders set it
-  (`recurring` in `oneOff` and `routineRows`, `archived` in `UNCOUNTED`), or `withCounts` fills it
-  once the days are built (`listed`, `earlier`, `logged`).
+  `setRow`'s patch type, so the held days that show it are read again → its value taken from the
+  source in `seedRow`, `PrioritySeed` and `recurringRow` (`lib/recurring.ts`), and `planMove`'s
+  pull and `topOfNext` (`lib/board.ts`) → the seed's `insertItems` INSERT → `makePriority`,
+  `makeCard` and `makeRecurring` (`client/src/test/fixtures.ts`). Typecheck asks for every
+  `Priority` field in `MERGED` or `ReadOnlyField` (`shared/priorities.ts`): one the sheet edits is
+  merged, and one the server works out (like `recurring` or `listed`) is read only, in
+  `ReadOnlyField`, never in `MERGED` or `parsePriorityRows`, which neither reads nor refuses it; in
+  the seed the row builders set it (`recurring` in `oneOff` and `routineRows`, `archived` in
+  `UNCOUNTED`), or `withCounts` fills it once the days are built (`listed`, `earlier`, `logged`).
 - **An entry field** (like `done` or `addedAt`: a fact of one day's list): append a migration
   adding the column to `priorities` → the column in `ENTRIES` and `EntryRow`, read in
   `priorityJson` and written in the PUT's INSERT (`routes/days.ts`) → the field on `Priority`
-  (`shared/api.ts`) and its `MERGED` entry (`shared/priorities.ts`, which typecheck asks for) →
-  its rule in `parsePriorityRows` for a value of the wrong kind and for one left out → its
-  default in `FREE_ROW` (`shared/priorities.ts`; typecheck asks for it), which every row the
-  client builds, and each row the list PUT reads, starts from, and its value where a builder sets
-  one: `newTaskRow` (`lib/priorities.ts`) and `planMove`'s pull (`lib/board.ts`) → the seed
-  (`server/dev/seed.ts`: its rows, typecheck asks; `insertDay`'s INSERT, it doesn't) →
+  (`shared/api.ts`) → its rule in `parsePriorityRows` for a value of the wrong kind and for one
+  left out → its value where a builder sets one: `newTaskRow` (`lib/priorities.ts`) and
+  `planMove`'s pull (`lib/board.ts`) → the seed's `insertDay` INSERT (`server/dev/seed.ts`) →
   `makePriority` (`client/src/test/fixtures.ts`) → the padded-rows case in
   `server/routes/days.priorities.test.ts` ("takes the web app's rows as it pads and sends them").
 - **An API route**: put it on the `api` router in `app.ts` (behind `requireAuth`), scope by
@@ -1484,7 +1145,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   it. Between the header and `main`, `.top-stack` spans the window: the running bar, and the banners
   hung under it (or under the header with no timer), sticky under the header and at the top of the
   window once it scrolls away. It is a direct child of `.app`, since a sticky box sticks only inside
-  its parent, and nothing above it may set `overflow` (but `clip`), or it stops sticking. `html`'s
+  its parent, and nothing above it may set `overflow` (but `clip`), or it stops sticking. The one
+  exception is `body.no-scroll`'s `overflow: hidden` under a dialog, which works only because
+  `html` sets none, so `body`'s value goes to the viewport: an `overflow` on `html` would make
+  `body` the scroller and stop the top stack sticking. `html`'s
   `scrollbar-gutter: stable` keeps a classic scrollbar's room on a page too short to scroll and
   under a dialog's scroll lock (`theme-css.test.ts` checks the width is set once). Every width
   rule is a window query, so a card in a column gets the wide-window rules at about half the width:
@@ -1518,8 +1182,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - Numeric settings inputs commit on blur or Enter, never on every keystroke (`NumberInput`);
   `DurationField` commits when focus leaves its hours / minutes pair or on Enter, so moving from
   hours to minutes saves nothing. A blank or non-numeric box puts the stored value back and
-  saves nothing; zero is typed as 0. Priorities and a row's note debounce 400 ms, a card's note
-  800 ms; punches and checkboxes save immediately.
+  saves nothing; zero is typed as 0. Priorities and a row's note debounce 400 ms, a board card's
+  note and the retrospective's note 800 ms; punches and checkboxes save immediately.
 - A form that sends a request submits through `useSubmit()` (`hooks/useSubmit.ts`), and a
   button that sends one calls its `run`: one send at a time with the button disabled, and one
   error line (`ErrorLine`), cleared when a send starts and filled with what it throws (a
@@ -1620,206 +1284,19 @@ Prove a change at the cheapest level that can show it, and stop there:
 4. The browser, only for what tests cannot show: how a card renders, drag/drop, banners, the
    timer bar, light/dark, the desktop and phone widths. Seed first (`--running` for timer work),
    scope it to the surface you touched, and make one pass at 1280 px (or the desktop widths the
-   surface's line below names), then one at the 375 px mobile preset, each in light and dark. Do not
-   re-walk flows a test already covers.
+   surface's line names), then one at the 375 px mobile preset, each in light and dark. Do not
+   re-walk flows a test already covers. What to look at for each surface is in
+   `docs/browser-passes.md`.
 
 Every test, client or server, writes time spans with `MINUTE_MS`, `HOUR_MS` and `DAY_MS` from
 `shared/dates.js`.
 
 The gate, which a change passes before it is reported done or a PR is opened, is CONTRIBUTING.md's
-"Before opening" list. Its coverage run measures every file under `server/`, `shared/`,
-`client/src/lib/` and `client/src/hooks/`, and `client/src/api.ts` (minus the two process
-entrypoints, `server/dev/` and the testkits), each of which must be 100% covered on statements,
-branches, functions and lines, so new code there ships with the tests that reach it. A branch
-that cannot be reached is deleted, never hidden behind a `v8 ignore` comment; `alerts.ts` shows
-how a browser-only module is tested (stub the globals).
-
-The browser pass for each surface (the logic under it is already tested):
-
-- **CSS or a component**: the touched surface, in the widths and themes of step 4. A sheet
-  card's desktop pass is two widths, since the split starts at 1100 px: 1280 (the card in its
-  column) and 1000 (one column, the widest a card gets). Resize, then reload: the sheet picks its
-  columns when it mounts.
-- **The sheet's columns** (the layout, `Sheet.tsx`, `CardFrame`): at 1280, Customize moves a
-  card to the other column and back, ↑/↓ and the grip stay inside a column, the date row spans
-  both columns with Customize at its end, and with a timer running (`--running`) the bar sits
-  under the header across the window, its contents lined up with the header's; at 1000 and at the
-  375 px preset, one column in the layout's order and no column buttons.
-- **`security.ts`, `index.html` or how assets load**: the `prod` config, with the console free
-  of CSP violations; `curl -sI localhost:8090/api/health` shows the headers.
-- **The timer**: make the seeded session run out (PATCH `plannedSeconds` to
-  `ceil((elapsed + 30) / 60) * 60`, since plans are whole minutes, then reload so the client
-  has the new plan). The bar and the card count below zero, the "Time's Up" banner offers
-  **Add 5 min**, and a minute or more over, **Finish** opens "How Much to Log?". Pause and
-  resume: the countdown holds and the log row's pill follows. Done, on the bar (the word from
-  640 px; at 375 the label keeps a readable start) and the card, on the seeded session's row 3:
-  the bar goes, the burst flies from Done (on the bar, from under it, whole on screen at 1280 and
-  375) and row 3 is ticked; a minute over, Done opens "How Much to Log?", and Back ticks nothing.
-  The bar sits under the header on the sheet, the board and History, and scrolled it stays at the
-  top of the window, cards passing under it; the "Time's Up" banner hangs under it, at rest and
-  scrolled, never over its buttons.
-- **Alarms**: after `npm run seed`, clear Clock in (×) on today's sheet. Set Lunch must start
-  within 3 min, Lunch length 0, Work day 10 min and Second meal due after 6 min, in Settings →
-  Timeclock or with
-  `curl -X PUT localhost:3000/api/settings -H 'content-type: application/json' -d '{"lunchDeadlineMinutes":3,"lunchMinutes":0,"workMinutes":10,"secondMealAfterMinutes":6}'`
-  and a reload. Press Now on Clock in: lunch is due at +3 min, the second meal at +6 and
-  clock-out at +10. The work day must be longer than the lunch window, or lunch reads "Not
-  needed today" and never rings, and longer than the second-meal threshold, or that alarm
-  waits for the day to run over or for overtime approval. At the mobile preset each target's
-  banner shows at once, the clock-out banner with its "Overtime Approved" button. When done,
-  `npm run seed -- --fresh` or `curl -X DELETE localhost:3000/api/settings` puts the default
-  settings back.
-- **Sounds**: Settings → Alarms → Sounds. Test on a clip row plays the clip.
-- **The update banner**: in the page, wrap `window.fetch` so each answer that has a
-  `Clockspan-Version` header names another version (a new `Response` over the same body, with
-  that header changed), then switch views, and look at the info banner with its Reload button.
-  That it shows once, stays, stays closed and reloads is `api.test.ts`'s.
-- **Live updates**: after `npm run seed`, the sheet at 1280 in two windows side by side (or one
-  window and `curl`). A settings save (`curl -X PUT localhost:3000/api/settings -H
-  'content-type: application/json' -d '{"theme":"dark"}'`) turns the other window dark within a
-  second, and `-d '{"theme":"auto"}'` puts it back; a row ticked, and a timer started and
-  finished, in one window show in the other within a second.
-  A tick in the page sends its PUT and no GET of `/api/days`, `/settings`, `/sessions/running` or
-  `/board` after it, with one `/api/changes` pending in the Network panel. Switching to another tab
-  ends its `/api/changes`, and coming back opens exactly one; a row ticked in the other window
-  meanwhile shows within a second, however soon it comes back. Under the `prod` config the same
-  tick in two windows leaves the console free of CSP violations, and `curl -sN
-  localhost:8090/api/changes` prints `data: N` at once and `: ping` within 25 s. No width or theme
-  pass: nothing new is drawn.
-- **Punches**: a pair added before lunch, an early Clock out (done, celebration), "Add Extra
-  Out / In" after it (the old Clock out becomes Out N) and removing that pair. In the time
-  field: clear Clock in and press `0` `7` `3` `0` (the hour advances, the period fills, the
-  tiles move with no further key), `p` flips the period and ↑/↓ on a segment saves each step. In
-  the browser pane send single `key` presses; the `type` action pastes the whole string into one
-  segment.
-- **Priorities or the timer card**: tick one row and press Add Priority (the notice lists the
-  ticked row); in the timer's label box, the list of open rows on a press and on Tab (not on the
-  focus Finish hands back), under the box at its width and over the card, whose height stays put as
-  it opens and as a break starts; pick one, start, and the log row shows the number; a new name,
-  started, lands on today's list and in the board's In Progress; the log row's edit of a session
-  on a written row shows its name as text, with no hover. Empty a written row's box and retype the
-  carried row's name: where the hints under them sit (at 375, under the row's own chip, nearer it
-  than the next row). × on the carried row: how "Remove …" renders, a long name included. Notes: row
-  3's note button drawn filled and the others' quiet (shown on the row's hover or focus with a
-  mouse, always on a phone); a mouse over row 3's button shows its note's two lines as a tooltip,
-  an empty one's shows "Add a note", and row 3's shows none while its box is open; open row 3's
-  note under the row, after any hint, lined up with the
-  field; type past eight lines (it grows, then scrolls); a ticked row's note isn't struck through.
-  Categories: pick a category on a row (an empty chip shows only on the row's hover or focus with a
-  mouse, always on a phone; a long name ends in an ellipsis; at 375 the chip sits under the field,
-  nearer it than the next row's, and the field keeps the row's width, beside the ×; from 640 it sits
-  beside the field, which ends in the same place written or empty), type a new name in the timer's
-  label box and pick one in the chip at the end of its row (at 375 the box narrows and the row stays
-  one line) and give an unplanned log session one (its dot before the label), then the same at 1280
-  in the split's columns.
-- **Recurring priorities**: Settings → Board → Recurring Priorities: Recurring rows per day with
-  its hint beside the box, and nothing else. On the board at 1440: Later ends with Repeats (the
-  seeded "Monitor the queue" ↻ Mon–Fri and "Follow-ups" ↻ Mon, Wed, Fri), counted in Later's number,
-  below Later's Show N More once it folds. A Next card's Repeat row: its first day asks first (Cancel
-  sends nothing), then the card moves under Repeats with its day, the dialog stays open with the
-  focus on that day and Stop Repeating in Delete's place; more days, and the last one staying on.
-  Today's one-off row made to repeat stays in In Progress with the mark, and its past day in History
-  and Review → Week (Routines) follow. A card of Repeats: Move to In Progress and Done (the burst),
-  Start timer, a drag onto In Progress, and one dropped in Next or Later snapping back with the
-  notice. Stop Repeating on a card of Repeats (the focus on the next card) and on today's row (the
-  row stays, its Repeat row gone). At 1000 the days and the mark wrap on the meta line; at 375, in
-  the bottom sheet, the seven days fit on one line, each 44 × 44 px on a touch screen, with Stop
-  Repeating under them. A screen reader hears the Repeat group, each day's name and pressed state,
-  the last day as unavailable, and a card of Repeats' "Repeats" and its days (check how "Mon–Fri"
-  reads). A recurring row's meta line has the Repeats mark, and at 1440 and 1000 a mouse anywhere
-  on a recurring card but its tick, the mark included, shows "Repeats" (its note's start once it
-  has a note). On the sheet, with a routine due today
-  (see "Dev data is disposable" for the three groups): the morning notice with "Still Open From …",
-  "Up Next" (ticked to fill Rows per day after the leftovers), "Repeats Today" and the line once
-  more routines are ticked than Recurring rows per day; after Add to Today, the leftovers then Up
-  Next in the first rows and the routines after the padded rows, Up Next's cards in In Progress on
-  the board, and the mark before the chip on a routine's row; at 1280 and 1000 the mark and a long
-  category in the chip's column, and at 375 the mark before the chip under the field.
-- **Retro or review**: one seeded day's retro card and History → Review → Week (`--quarter` for
-  Month / Quarter). Today's card folded to its Open button at 1280, 1000 and 375: Open shows it
-  with the focus in the note box, Now on Clock out opens it, and with the alarm recipe (see
-  "Alarms") the retro alarm's Open Retrospective lands on it opened, the focus in the note box. By Category in
-  Review → Week and Month (solid and striped bars, No category last), in light and dark. For
-  Added mid-day's "mostly …", give the last weekday's "Reply to the recruiter" row a category with
-  its chip (the seed files that task under none) and open the Week that holds that day (◀ on a
-  Monday): it is one task on every day the seed adds it mid-day, so the category reaches each of
-  them, and any period holding one of those days names it.
-- **The board**: after `npm run seed`, press Board. At 1440: the four columns; each +'s box (Later's
-  card at the top, Next's at the end, In Progress's row on today's sheet and asking past three rows;
-  Enter keeps the box, an empty Enter or Escape closes it, one with text stays open when left); a
-  left-open task's "Left open from …" in Next, Move to from each column (a done item's notice), a
-  park of a task typed seconds ago, a done-earlier task's dialog, this week's routine ticks in Done,
-  each with its day ("Done yesterday"), the fold's number gone while nothing is done today, and a
-  task ticked on a later day with today's, its dialog naming that day (in a second tab, DevTools →
-  Sensors → Location, Timezone ID Pacific/Kiritimati: Move to Done on a Next card, then reload the
-  first tab); with the earlier days' read failing (wrap `window.fetch` so `GET /api/days/range`
-  rejects, then press Board), Done ends with "Could not load these days" and Try Again, and no
-  banner. The dialog: a click on a card's title, its meta line or its padding opens it, and so does
-  Enter; the tick ticks and opens nothing. Enter in the title saves and closes, and the dialog stays
-  closed; Escape drops the edit; leaving the box saves. Move to from every column, Start timer,
-  Delete's confirm (Cancel keeps the dialog) and Remove From Today on a routine's row each leave the
-  focus on the card, or the next card after Delete; a Next card's Move to In Progress with three
-  rows open closes it with the nudge's first button focused, as a done row's Move to Later does
-  with its notice's, and Keep It Short or Leave It puts the focus back on the card. An alarm banner
-  with a dialog open. At 1000, where the columns are narrowest: titles clamp to two lines and meta
-  lines wrap. At 375: the switch shows one column, the notice wraps, the dialog is a bottom sheet
-  whose Move to and Start lengths wrap under their labels (four targets on a left-open task), and
-  with sign-in on (`web-local`, `npm run seed -- --auth local --sessions`, the printed cookie set)
-  the header's four buttons fit with the brand's name gone, the same as on the sheet.
-  Light and dark. The drag pass: at 1440, drag with the mouse from anywhere on a card between each
-  pair of columns (Later and Next take the card where it is dropped; a press that moves under 6 px
-  opens the dialog, and no click lands after a drag), a done row onto Later (the notice), then by
-  keyboard (Tab to a card, Space, arrows, Space; Enter opens its dialog) with a screen reader,
-  which hears where the card is, the done-item line and the card's instructions, and Escape puts
-  it back. In Chrome, Safari and Firefox: a click or drag from a card's padding and meta line, and
-  Space or Enter dropping a card with no dialog opening. With reduced motion on, nothing glides. At
-  1000 the copy under the pointer isn't clipped; on a phone (a real iPhone and Android phone) a tap
-  opens the bottom sheet, a hold of about a quarter second lifts a card of Later or Next, which
-  sorts within the column shown (one of In Progress or Done stays put), a finger that moves first
-  scrolls the page and the column, and no text selection
-  or callout shows on a long hold. The clock bar, at 1440, 1000 and 375: above the notice and the
-  columns with the seeded times and the time left, one line from 640 px and label over time over
-  line on a phone; Overtime approved, Overtime off and the meal periods off (no Lunch By, and the
-  switch's hint drops the lunch deadline) change it as they change the sheet's tiles; Settings →
-  Timeclock → Times on the board off hides it.
-  Start timer, at 1440, 1000 and 375 (the lengths wrap under their label): a row's Start (the bar
-  shows the timer, the row's meta line `running`, then `paused`), a Next card's with three rows
-  open (no nudge: it pulls and starts), and with a timer running no dialog offers it.
-  Notes, at 1440, 1000 and 375: the SSO card's "Has a note" mark on its meta line, and none on the
-  others; at 1440 and 1000, a mouse over the SSO card's title, padding or mark shows its note as a
-  tooltip, and no other card shows a note (a recurring card shows "Repeats"); its dialog's box with the note, saved 800 ms after the last key and as the dialog closes
-  by Escape, × or a press outside; with a screen reader, the mark is read on the card; an earlier
-  day's tick of a recurring priority that stopped repeating shows its note as text. A key typed into
-  a note does nothing. Categories (with about 30 added by `curl` to `/api/board/categories` for a
-  long list): a box's chip (a pick, New category, kept after a reload and in the other boxes), a
-  card dialog's chip with its list opening over the sheet, unclipped, scrolling inside with the box
-  in view, its Escape closing only the list, the cards' dot and name (a long name at 1000), and
-  Settings → Board (a rename, a name in use, the swatches wrapping at 375, Remove, the touch areas).
-- **Keyboard shortcuts**: after `npm run seed -- --running`, at 1280: ? opens
-  the list with the focus on it, ? again does nothing and Escape gives the focus back; P pauses
-  and resumes, + adds the step, and once the timer is a minute or more past its end (see "The
-  timer") F opens "How Much to Log?", where keys do nothing; after the finish, R starts a break and
-  R again does nothing; N puts the focus in a free row with no n typed, and with three written rows
-  leaves it on Add Priority beside the nudge; H and B there and back, S from History, each leaving
-  the focus on its header button. An h typed into a day log label (the Inbox row's edit), a
-  priority, Clock in's hour, the date picker and an open category list, or pressed with Settings
-  open, does nothing, and Option+B, Cmd+H and Ctrl+F do only what the browser does. On
-  the board at 1440, N opens Later's box (with a box already open too), R does nothing, and a key
-  pressed during a keyboard drag does nothing. With Settings → Sheet → Keyboard off no key acts.
-  The list at 1000 and 375, light and dark; a screen reader reads its title and keys, and a
-  button's key.
-- **The History calendar**: one month at the mobile preset: ◀ to a seeded month, tap a day,
-  **Open Day**, browser Back lands on that month with the day picked, and back through the
-  header, **Review This Week** lands on that week. Review → Month → ◀ → a row → Back lands on that
-  month's review. With the sticker chart on (`PUT /api/settings {"stickers":true}`), a chip narrows
-  the grid to one sticker and a second tap clears it; with Show weekends off, five columns.
-- **Retention**: one look at Settings → Data (count line, toggle saves); drive the delete with
-  curl (`POST /api/days/prune` with `{"before":"YYYY-MM-DD"}`) because of the confirm dialog.
-- **Auth**: no browser pass; the tests in `server/auth/` (`*.test.ts`) cover local and OIDC
-  sign-in, cookie sessions, passwords, the limiter, user management and the reset-password
-  command.
-- **Anything a README screenshot or the Unraid listing shows** (sheet, retro, history, review,
-  settings, the board): `npm run screenshots`, then CONTRIBUTING's screenshot step.
+"Before opening" list. Its coverage run holds every file under `server/`, `shared/`,
+`client/src/lib/` and `client/src/hooks/`, and `client/src/api.ts`, to 100% (`coverage` in
+`vite.config.ts`, whose comment says what is left out and why), so new code there ships with the
+tests that reach it, and an unreachable branch is deleted, never hidden behind `v8 ignore`;
+`alerts.ts` shows how a browser-only module is tested (stub the globals).
 
 ## Gotchas
 
@@ -1827,22 +1304,12 @@ The browser pass for each surface (the logic under it is already tested):
   dev machine, so `image-smoke` (`scripts/smoke-image.sh`) on each PR is the image's first run.
 - The preview harness exports `PORT=5173`, which is why `dev:server` pins `PORT=3000` and the
   `prod` config `PORT=8090`.
-- `client/public/sw.js` caches nothing, on purpose. It holds the `notificationclick` handler
-  for the notifications `alerts.ts` shows through it (Chrome on Android refuses
-  `new Notification()`). It has no fetch handler, because Chrome needs none to offer Install
-  and warns that an empty one is a no-op. It is registered only in a production build. No
-  caching without a versioning strategy, or users see stale assets.
-- OIDC: `loadConfig` normalizes `APP_URL` (only its scheme and host are kept, lowercased; a
-  path is dropped with a warning), and `${APP_URL}/auth/callback` in that form must match the
-  redirect URI registered with the provider exactly. The callback builds its URL from
-  `APP_URL`, not from request headers, so it works behind proxies. `OIDC_ISSUER` must be
-  `https://` (openid-client refuses plain http) and is checked but kept as written, since the
-  provider's tokens must match it.
-- `TRUST_PROXY` is a hop count (`1`), never `true`: `true` trusts the leftmost
-  `X-Forwarded-For`, which the client controls, and the login limiter keys on `req.ip`. Left
-  unset behind a proxy, every sign-in is the proxy's address; under `AUTH_MODE=local`,
-  `warnUntrustedProxy` (`auth/limiter.ts`) logs that once, the first time `X-Forwarded-For`
-  reaches `/api/auth`.
+- `client/public/sw.js` caches nothing, on purpose (its comments say why), and is registered only
+  in a production build. No caching without a versioning strategy.
+- OIDC: the callback builds its URL from `APP_URL`, not from request headers, so it works behind
+  proxies; `config.ts` says how `APP_URL` and `OIDC_ISSUER` are checked. `TRUST_PROXY` is a hop
+  count, never `true` (the README's variables table says why; `warnUntrustedProxy` in
+  `auth/limiter.ts` logs when it is missing behind a proxy).
 - `window` `focus` events fire on ordinary clicks in some embedded browsers, so the periodic
   and come-back refreshes (today's day, the settings, the timer's sync, the board) go through
   `useRefreshLoop`, which listens for `visibilitychange` and `CHANGED_ELSEWHERE` (another tab's or
@@ -1851,32 +1318,22 @@ The browser pass for each surface (the logic under it is already tested):
   (`useLiveChanges` follows `visibilitychange` too). A read tied to what is shown or to a change
   just made (a view showing a held day, a store's own re-read after its write) is not a refresh and
   stays outside the loop; the run a refusal's `CHANGED_ELSEWHERE` starts is a loop run.
-- Over HTTP/1.1 a browser holds six connections per host, and each live stream keeps one, so a tab
-  opens one stream and only while it is shown; several tabs shown at once over plain HTTP can use
-  them up (HTTPS through a proxy is usually HTTP/2, which carries them all on one connection).
 - The live stream is one long answer. Node's `requestTimeout` and `headersTimeout` cover only the
-  request, so they don't cut it, but `server.close()` waits for it, which is why `index.ts` calls
-  `changes.end()` first. A proxy's idle cut is kept off by the ping (`PING_MS`, under nginx's 60 s
-  and Cloudflare's 100 s) and its buffering by `X-Accel-Buffering: no`. A dev-server restart ends
-  the stream, and the browser or `nextBackoff` opens it again.
+  request, so they don't cut it; what does (`server.close()`, a proxy) is in `server/changes.ts`.
 - Every provider stack reads the settings and the board at once and on `useRefreshLoop`
   (`AppProviders` the running session too), so `test/hooks.tsx` answers an automocked
   `getSettings` with `makeSettings()`, `getRunning` with no session and `getBoard` with an empty
   board before each test; a file or test that needs another answer mocks it itself, which runs
   after. The hook is registered once per file because Vitest isolates each file (`isolate`, on by
   default).
-- A keydown inside a native modal `<dialog>` still bubbles to `window`, so the shortcut guard
-  checks for `dialog[open]` itself. Its drag check reads the `aria-pressed` dnd-kit sets on what it
-  drags by (a board card's button, a sheet card's grip; beside `aria-roledescription`) while it
-  drags; a dnd-kit upgrade that drops it lets keys through mid-drag, which `Board.drag.test.tsx`'s
-  keyboard-drag case catches. A page key (S, B, H) drops text left in a board box, as a click on
-  the header does.
+- A keydown inside a native modal `<dialog>` still bubbles to `window`, so `shortcutFor` checks
+  for `dialog[open]` itself. A dnd-kit upgrade that stops setting `aria-pressed` on what it drags
+  lets keys through mid-drag, which `Board.drag.test.tsx`'s keyboard-drag case catches. A page key
+  (S, B, H) drops text left in a board box, as a click on the header does.
 - Prettier leaves `*.md` alone: wrap docs by hand.
-- A workflow step that must trigger CI needs a GitHub App or personal token.
-- The Node floor (`engines` and `devEngines` in `package.json`) has no upper bound, and `.npmrc`
-  has no `engine-strict`, on purpose: Dependabot's updater reads both files and runs its own
-  Node. A cap it outgrows, or a package whose `engines` leaves its Node out under
-  `engine-strict`, stops its npm updates without failing any check: the PRs just stop coming. A
-  new Node major moves `.nvmrc`, both fields, the Dockerfile's two `FROM` lines and the
-  `@types/node` major together (Dependabot skips the majors of the last two), plus the docs that
-  name the version; CI and `.claude/launch.json` read `.nvmrc`.
+- The Node floor (`engines` and `devEngines` in `package.json`) has no upper bound, for the reason
+  `.npmrc` gives for having no `engine-strict`: Dependabot's updater runs its own Node, and a cap
+  it outgrows stops its npm updates without failing any check. A new Node major moves `.nvmrc`,
+  both fields, the Dockerfile's two `FROM` lines and the `@types/node` major together
+  (Dependabot skips the majors of the last two), plus the docs that name the version; CI and
+  `.claude/launch.json` read `.nvmrc`.
