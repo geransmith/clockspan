@@ -1589,12 +1589,14 @@ Prove a change at the cheapest level that can show it, and stop there:
      the defaults.
    - A test that needs a DOM (hooks, components, `api.ts`) starts with
      `// @vitest-environment happy-dom`; the rest of the suite runs under `node`.
-   - A test file split by topic is `<Name>.test.tsx` and `<Name>.<topic>.test.tsx` beside it
-     (`Board.drag.test.tsx`), with the setup the parts share in one `<Name>.testkit.tsx` beside
+   - A test file split by topic is `<Name>.test.ts(x)` and `<Name>.<topic>.test.ts(x)` beside it
+     (`Board.drag.test.tsx`), with the setup the parts share in one `<Name>.testkit.ts(x)` beside
      them, which the coverage run leaves out. Each part keeps its own `vi.mock` calls and
-     environment line, which apply only in the file that has them. A route test's parts have no
-     testkit, since a module under `server/` goes into the build: each starts its own app, as
-     every route test does (`days.priorities.test.ts`).
+     environment line, which apply only in the file that has them. A testkit may register its
+     `beforeEach` on import, as `test/hooks.tsx` does, since Vitest isolates each file. A route
+     test's parts share their setup through `startTestApp` (`server/dev/harness.ts`, which the
+     build leaves out), so they have no testkit: each starts its own app, as every route test
+     does (`days.priorities.test.ts`).
    - The suite runs in America/Los_Angeles (`test.env.TZ` in `vite.config.ts`), so a US DST
      case uses that zone's change days (2026-03-08, 2026-11-01). A case that needs another
      zone stubs it with `vi.stubEnv('TZ', …)`, as `shared/dates.test.ts` does for Santiago's
