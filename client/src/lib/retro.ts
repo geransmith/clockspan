@@ -59,6 +59,13 @@ export function loggedByUid(sessions: Session[], now: number): Map<string, numbe
 }
 
 /**
+ * The focus finished on a task that day, as its row on the sheet shows it: the retro's and
+ * Review's per-row figure (`reviewDay`'s `focusedSeconds`). A running or cancelled session counts
+ * nothing.
+ */
+export const rowFocus = (uid: string, sessions: Session[]) => focusOf(sessions.filter((s) => s.priorityUid === uid)).seconds;
+
+/**
  * The time logged on a task, as × and the board's Delete ask with it: `logged`, its other days'
  * (a row's or a card's), plus its day's own log at `now`, a timer running on it included.
  */

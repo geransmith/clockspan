@@ -99,7 +99,12 @@ what `npm run seed` writes.
   beside the field, which ends in the same place written or empty), type a new name in the timer's
   label box and pick one in the chip at the end of its row (at 375 the box narrows and the row stays
   one line) and give an unplanned log session one (its dot before the label), then the same at 1280
-  in the split's columns.
+  in the split's columns. Logged time (`--running`): row 2's "50m" first in its end cell, muted;
+  nothing on row 1 (no finished session) or row 3 (the running timer) until Finish lands, then row
+  3's time with no reload. A long category on row 2 ends in its ellipsis sooner, at 1280 in the
+  split's column and at 1000; at 375 the time sits on the line under the field. On the last weekday
+  each row shows that day's time, matching the open retro card's figures and named "… logged on
+  this day"; its "Monitor the queue" row reads time, repeat mark, note button, chip.
 - **Recurring priorities**: Settings → Board → Recurring Priorities: Recurring rows per day with
   its hint beside the box, and nothing else. On the board at 1440: Later ends with Repeats (the
   seeded "Monitor the queue" ↻ Mon–Fri and "Follow-ups" ↻ Mon, Wed, Fri), counted in Later's number,

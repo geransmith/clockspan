@@ -14,14 +14,30 @@ import type { MorningOffer } from './TodayOffer';
 // What the Priorities.*.test.tsx files share, the clock before each test included. Each one mocks
 // '../api' and '../lib/alerts' itself, since `vi.mock` applies only in the file that calls it.
 
-export async function renderCard(priorities: Priority[] = [], sessions: Session[] = [], pick: CategoryPick | null = null, offer: MorningOffer | null = null) {
+export async function renderCard(
+  priorities: Priority[] = [],
+  sessions: Session[] = [],
+  pick: CategoryPick | null = null,
+  offer: MorningOffer | null = null,
+  isToday = true,
+) {
   const onChange = vi.fn<(p: Priority[], base: Priority[]) => Promise<boolean>>(() => Promise.resolve(true));
   const onDeleteTask = vi.fn<(uid: string) => Promise<void>>(() => Promise.resolve());
   const onNote = vi.fn<(uid: string, note: string) => Promise<boolean>>(() => Promise.resolve(true));
   const card = (rows: Priority[], o: MorningOffer | null) => (
     <SettingsProvider>
       <ShortcutKeys />
-      <Priorities priorities={rows} sessions={sessions} now={T0} onChange={onChange} onDeleteTask={onDeleteTask} onNote={onNote} pick={pick} offer={o} />
+      <Priorities
+        priorities={rows}
+        sessions={sessions}
+        now={T0}
+        onChange={onChange}
+        onDeleteTask={onDeleteTask}
+        onNote={onNote}
+        pick={pick}
+        isToday={isToday}
+        offer={o}
+      />
     </SettingsProvider>
   );
   const view = render(card(priorities, offer));
@@ -47,6 +63,7 @@ function OnTheStore({ pick = null }: { pick?: CategoryPick | null }) {
       sessions={day.sessions}
       now={T0}
       pick={pick}
+      isToday
       onChange={(p, base) => store.setPriorities(TODAY, p, base)}
       onDeleteTask={(uid) => boardStore.deleteItem(uid)}
       onNote={() => Promise.resolve(true)}

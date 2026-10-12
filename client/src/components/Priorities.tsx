@@ -7,10 +7,10 @@ import { useShortcut } from '../hooks/useShortcuts';
 import { unlockAudio, warnSaveFailed } from '../lib/alerts';
 import type { CategoryPick } from '../lib/board';
 import { BLANK_HINT, RENAME_HINT, WARNING_ACTIONS } from '../lib/copy';
-import { formatDurationCeil } from '../lib/format';
+import { formatDuration, formatDurationCeil, formatDurationWords } from '../lib/format';
 import { editPriority, emptyRow, isOneOff, nudgeFor, padPriorities, pickWarning, takeOffRow, type WarningKind } from '../lib/priorities';
 import { acceptOffer, notOnList, type PrioritySeed } from '../lib/recurring';
-import { taskLogged } from '../lib/retro';
+import { rowFocus, taskLogged } from '../lib/retro';
 import { hasText, isFree } from '../../../shared/priorities.js';
 import { LIMITS } from '../../../shared/api.js';
 import { hasNote } from '../../../shared/text.js';
@@ -26,7 +26,11 @@ import { TodayOffer, type MorningOffer } from './TodayOffer';
 
 interface Props {
   priorities: Priority[];
-  /** The day's sessions: × asks first about a task with time logged on it, one finished since the day was read included. */
+  /**
+   * The day's sessions: each written row shows the time finished on its task that day, and × asks
+   * first about a task with time logged on it, one finished since the day was read included (×'s
+   * figure is the task's on every day, a running timer included).
+   */
   sessions: Session[];
   /** The sheet's clock, floored to the minute: × counts a running timer to it, as the board's Delete does. */
   now: number;
@@ -36,8 +40,13 @@ interface Props {
   onDeleteTask: (uid: string) => Promise<void>;
   /** Saves a row's note on its task, apart from the list's draft; resolves to whether it saved. */
   onNote: (uid: string, note: string) => Promise<boolean>;
-  /** The category chip's data: each row with text gets a chip. Null (before the board's first read) shows none. */
+  /**
+   * The category chip's data: each row with text gets a chip. Null (before the board's first read)
+   * shows none, and no repeat mark or logged time either, which wait for the chip's column.
+   */
   pick: CategoryPick | null;
+  /** Whether the logged time on a row is named "today" or "on this day". */
+  isToday: boolean;
   /**
    * Today's morning notice: the leftovers and the top of Next while the list has no one-off
    * written (a routine on it doesn't count), and the routines due today that no row holds yet.
@@ -80,7 +89,7 @@ interface Asked {
  * button and saves on its own, 400 ms after its last keystroke. Keyed by date in the sheet, so a
  * new day mounts fresh instead of carrying drafts over.
  */
-export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, onNote, pick, offer }: Props) {
+export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, onNote, pick, isToday, offer }: Props) {
   const { settings } = useSettings();
   const count = settings.priorityCount;
   // The rows Add Priority put past the stored list: the server keeps no free row, so the card pads
@@ -281,6 +290,7 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
         // Every row takes the grid with their column all the same, so on a wide screen a field
         // ends in the same place written or empty, and the first letter typed doesn't narrow it.
         const chip = pick != null && !empty;
+        const seconds = p.uid == null ? 0 : rowFocus(p.uid, sessions);
         const placeholder = p.position === 1 ? 'The one thing to get done' : 'Another priority';
         // While the box has the focus: retyped, a name that earlier days' lists hold renames it there
         // too; emptied, it says what happens to the name.
@@ -347,6 +357,16 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
               </span>
               {!empty && (
                 <span className="priority-end">
+                  {/* Under a minute it would read "0m". */}
+                  {chip && seconds >= 60 && (
+                    <span
+                      className="priority-logged muted small"
+                      role="img"
+                      aria-label={`${formatDurationWords(seconds)} logged ${isToday ? 'today' : 'on this day'}`}
+                    >
+                      {formatDuration(seconds)}
+                    </span>
+                  )}
                   {chip && p.recurring && <RepeatMark />}
                   <NoteToggle boxId={noteBox} of={`priority ${p.position}`} note={p.note} open={noteOpen} onToggle={(open) => showNote(p.uid!, open)} />
                   {/* A pick saves at once, as a tick does. Keyed by the row, since the rows are by
