@@ -115,3 +115,21 @@ export function lunchClash(lunchBy: number | null, rows: readonly MeetingRow[], 
   const row = rows.find((r) => !r.skipped && r.meeting.startsAt <= lunchBy && lunchBy < r.meeting.endsAt);
   return row ? { meeting: row.meeting, by: row.meeting.startsAt - lunchMinutes * MINUTE_MS } : null;
 }
+
+/**
+ * How many of a day's meetings (`dayMeetings`, by start) began before `until`, skipped ones aside,
+ * and their time up to it, an overlap counted once.
+ */
+export function meetingTime(rows: readonly MeetingRow[], until: number): { count: number; seconds: number } {
+  let count = 0;
+  let ms = 0;
+  let reached = -Infinity;
+  for (const { meeting, skipped } of rows) {
+    const end = Math.min(meeting.endsAt, until);
+    if (skipped || meeting.startsAt >= end) continue;
+    count++;
+    ms += Math.max(0, end - Math.max(meeting.startsAt, reached));
+    reached = Math.max(reached, end);
+  }
+  return { count, seconds: Math.round(ms / 1000) };
+}

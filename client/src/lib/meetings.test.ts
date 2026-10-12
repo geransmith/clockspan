@@ -8,6 +8,7 @@ import {
   defaultUntil,
   lunchClash,
   meetingAt,
+  meetingTime,
   minuteOfDay,
   nextMeeting,
   occurrence,
@@ -154,5 +155,13 @@ describe('lunchClash', () => {
     expect(lunchClash(at(MON, 13), rows, 30)).toEqual({ meeting: call(13), by: at(MON, 12, 30) });
     expect(lunchClash(at(MON, 14), rows, 30)).toBeNull();
     expect(lunchClash(null, rows, 30)).toBeNull();
+  });
+});
+
+describe('meetingTime', () => {
+  it('counts the meetings begun before a time and their time up to it, an overlap once, a skipped one not at all', () => {
+    const rows = dayMeetings(MON, { a: call(9), b: { ...call(9), endsAt: at(MON, 9, 30) }, c: call(11), d: call(13) }, [{ ...STANDUP, start: 600, end: 660 }]);
+    expect(meetingTime(rows, at(MON, 11, 30))).toEqual({ count: 4, seconds: (60 + 60 + 30) * 60 });
+    expect(meetingTime(dayMeetings(MON, { stand000: null }, [STANDUP]), at(MON, 23))).toEqual({ count: 0, seconds: 0 });
   });
 });

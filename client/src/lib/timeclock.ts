@@ -457,3 +457,8 @@ export function addPunchPair(punches: Punch[]): Punch[] {
 export function removePunchPair(punches: Punch[], outPosition: number): Punch[] {
   return punches.filter((p) => p.position !== outPosition && p.position !== outPosition + 1).map((p, i) => ({ ...p, position: i, kind: kindForPosition(i) }));
 }
+
+/** Where a day's time stops counting: its Clock out once reached, else now (a past day left clocked in runs on). */
+export function dayEnd(tc: Pick<TimeclockResult, 'state' | 'clockOutAt'>, now: number): number {
+  return tc.state === 'done' && tc.clockOutAt != null ? tc.clockOutAt : now;
+}

@@ -165,6 +165,13 @@ describe('Review', () => {
     expect(screen.queryByRole('button', { name: 'This Quarter' })).toBeNull();
   });
 
+  it("lists the period's meetings among the facts, before the breaks", async () => {
+    const meeting = { title: 'Standup', startsAt: atTime(MON, 9, 30), endsAt: atTime(MON, 9, 45) };
+    serveRange([{ ...mon, meetings: { a: meeting, b: { ...meeting, startsAt: atTime(MON, 13, 0), endsAt: atTime(MON, 14, 0) } } }, tue]);
+    await review({ kind: 'week', from: MON });
+    expect(facts()).toEqual(['Added mid-day: 1 · 0 done', 'Meetings: 2 · 1h 15m', 'Breaks: 1 · 10m', 'Typical day: 3 planned · 1 done']);
+  });
+
   it('holds a week to the Work week, counts its sessions and lists the facts under the tiles', async () => {
     serveRange([mon, tue]);
     await review({ kind: 'week', from: MON });

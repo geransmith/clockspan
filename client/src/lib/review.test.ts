@@ -117,6 +117,7 @@ describe('reviewRange', () => {
       sessions: 0,
       targetSeconds: 0,
       breaks: { count: 0, seconds: 0 },
+      meetings: { count: 0, seconds: 0 },
       midDay: { added: 0, done: 0, categoryUid: null },
       typicalDay: null,
       typicalRuns: [],
@@ -197,6 +198,28 @@ describe('reviewRange', () => {
       breaks: [brk(5, '2026-09-16', at('2026-09-16', 16, 54), 15)],
     });
     expect(reviewRange([today, breakOnly, mon], settings, '2026-09-16', now).breaks).toEqual({ count: 3, seconds: (5 + 4 + 6) * 60 });
+  });
+
+  it("counts the meetings, one-off and weekly, an overlap once, up to each day's Clock out and today's now", () => {
+    const meeting = (date: string, h: number, m: number, h2: number, m2: number) => ({ title: '', startsAt: at(date, h, m), endsAt: at(date, h2, m2) });
+    const standup = { uid: 'stand000', title: 'Standup', weekdays: [1, 2, 3, 4, 5], start: 570, end: 585, since: '2026-09-01', until: null };
+    // Monday, clocked out at 11:30: the 11:00 call counts half, and the 10:30 one overlaps the 10:00.
+    const mon = makeDay('2026-09-14', {
+      punches: punchesAt(at('2026-09-14', 8), null, null, at('2026-09-14', 11, 30)),
+      sessions: [session(1, '2026-09-14', at('2026-09-14', 8, 5), 1500)],
+      meetings: { a: meeting('2026-09-14', 10, 0, 11, 0), b: meeting('2026-09-14', 11, 0, 12, 0), c: meeting('2026-09-14', 10, 30, 11, 0) },
+    });
+    // Meetings only: nothing else on the day, so it isn't counted.
+    const meetingsOnly = makeDay('2026-09-15', { meetings: { d: meeting('2026-09-15', 10, 0, 11, 0) } });
+    // Today at 17:00: the standup, and half of a call that runs to 17:30; a skipped standup would count nothing.
+    const today = makeDay('2026-09-16', {
+      sessions: [session(2, '2026-09-16', at('2026-09-16', 16), 1500)],
+      meetings: { e: meeting('2026-09-16', 16, 30, 17, 30) },
+    });
+    const r = reviewRange([today, meetingsOnly, mon], { ...settings, meetings: [standup] }, '2026-09-16', now);
+    expect(r.meetings).toEqual({ count: 6, seconds: (15 + 60 + 30 + 15 + 30) * 60 });
+    const skipped = reviewRange([{ ...today, meetings: { stand000: null } }], { ...settings, meetings: [standup] }, '2026-09-16', now);
+    expect(skipped.meetings).toEqual({ count: 0, seconds: 0 });
   });
 
   it('counts the rows added mid-day and how many of those got ticked', () => {

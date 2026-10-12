@@ -17,6 +17,8 @@ interface Props {
   date: string;
   priorities: Priority[];
   sessions: Session[];
+  /** The day's meeting time (`meetingTime`), shown beside the plan's when there is some. */
+  meetingSeconds: number;
   note: string;
   reviewedAt: number | null;
   /**
@@ -35,7 +37,7 @@ interface Props {
  * for it (the day's totals are on the timeclock and Top Priorities). Keyed by date in the sheet,
  * so a new day mounts with its own note and its own fold.
  */
-export function Retro({ date, priorities, sessions, note, reviewedAt, open, onChange }: Props) {
+export function Retro({ date, priorities, sessions, meetingSeconds, note, reviewedAt, open, onChange }: Props) {
   const { formatTime } = useTimeFormat();
   const review = reviewDay(priorities, sessions);
   // A note typed back to `note` is sent too: `note` can hold a save still out, and a box let go
@@ -142,6 +144,11 @@ export function Retro({ date, priorities, sessions, note, reviewedAt, open, onCh
           <span>
             <span className="muted">Off plan</span> <strong>{formatDuration(review.offPlanSeconds)}</strong>
           </span>
+          {meetingSeconds > 0 && (
+            <span>
+              <span className="muted">Meetings</span> <strong>{formatDuration(meetingSeconds)}</strong>
+            </span>
+          )}
         </p>
       )}
 

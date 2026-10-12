@@ -1,11 +1,12 @@
-import type { CompletedSession, Day, Priority } from '../types';
+import type { CompletedSession, Day, Priority, Settings } from '../types';
 import { LOOKBACK_DAYS } from '../../../shared/api.js';
 import { addDays, addMonths, startOfQuarter, startOfWeek } from '../../../shared/dates.js';
 import { breakSeconds } from './breaks';
+import { dayMeetings, meetingTime } from './meetings';
 import { formatDateSpan, formatMonth } from './format';
 import { sameText } from '../../../shared/text.js';
 import { focusOf, hasContent, reviewDay, sessionCategory, sessionName, type PriorityReview } from './retro';
-import { dayTimeclock, daySettings, type TimeclockSettings } from './timeclock';
+import { dayEnd, dayTimeclock, daySettings, type TimeclockSettings } from './timeclock';
 
 export const PERIOD_KINDS = ['week', 'month', 'quarter'] as const;
 export type PeriodKind = (typeof PERIOD_KINDS)[number];
@@ -126,6 +127,8 @@ interface RangeReview {
   targetSeconds: number;
   /** Timer breaks, a running one so far. */
   breaks: { count: number; seconds: number };
+  /** Meetings, one-off and weekly, up to each day's Clock out (today's up to now): `meetingTime`. */
+  meetings: { count: number; seconds: number };
   /**
    * Rows added mid-day (`PriorityReview.addedMidDay`), how many of them got ticked, and the
    * category more than half of them had, if one did (a plurality short of half names none).
@@ -173,7 +176,7 @@ interface RangeReview {
  */
 export function reviewRange(
   days: Day[],
-  settings: TimeclockSettings,
+  settings: TimeclockSettings & Pick<Settings, 'meetings'>,
   today: string,
   now: number,
   known: ReadonlySet<string> = new Set(),
@@ -191,6 +194,7 @@ export function reviewRange(
     sessions: 0,
     targetSeconds: 0,
     breaks: { count: 0, seconds: 0 },
+    meetings: { count: 0, seconds: 0 },
     midDay: { added: 0, done: 0, categoryUid: null },
     typicalDay: null,
     typicalRuns: [],
@@ -242,6 +246,9 @@ export function reviewRange(
     if (day.retroAt != null) out.retrosDone++;
     out.breaks.count += day.breaks.length;
     for (const b of day.breaks) out.breaks.seconds += breakSeconds(b, now);
+    const met = meetingTime(dayMeetings(day.date, day.meetings, settings.meetings), dayEnd(tc, now));
+    out.meetings.count += met.count;
+    out.meetings.seconds += met.seconds;
     for (const p of r.planned) {
       const c = categoryTime(p.priority.categoryUid);
       c.seconds += p.focusedSeconds;

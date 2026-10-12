@@ -13,12 +13,22 @@ import { dayName } from '../lib/format';
 import { unlessGone } from '../lib/apiError';
 import { offeredLeftovers, saved, topOfNext } from '../lib/board';
 import { CARD_TITLES, moveCard, patchCard, SPLIT_QUERY, splitColumns } from '../lib/layout';
-import { dayMeetings, lunchClash } from '../lib/meetings';
+import { dayMeetings, lunchClash, meetingTime } from '../lib/meetings';
 import { isOneOff, patchRow } from '../lib/priorities';
 import { dueRecurring } from '../lib/recurring';
 import { CARD_SIDES } from '../../../shared/settings.js';
 import { focusOf } from '../lib/retro';
-import { clampToDay, dayTimeclock, punchLabel, shownPairs, type ExtraPair, type PairTyping, type TimeclockResult, type TimeclockState } from '../lib/timeclock';
+import {
+  clampToDay,
+  dayEnd,
+  dayTimeclock,
+  punchLabel,
+  shownPairs,
+  type ExtraPair,
+  type PairTyping,
+  type TimeclockResult,
+  type TimeclockState,
+} from '../lib/timeclock';
 import { weekHours } from '../lib/week';
 import type { CardId, CardSide, Punch } from '../types';
 import { CardFrame, type SheetCard } from './CardFrame';
@@ -246,6 +256,7 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
             date={date}
             priorities={day.priorities}
             sessions={day.sessions}
+            meetingSeconds={meetingTime(dayMeetings(date, day.meetings, settings.meetings), dayEnd(tc, now)).seconds}
             note={day.retroNote}
             reviewedAt={day.retroAt}
             // Today's card is folded to its Open button until the day is clocked out. The jump opens

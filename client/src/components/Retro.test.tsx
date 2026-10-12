@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
 import { RETRO_PROMPT } from '../lib/copy';
-import { DAY_MS } from '../../../shared/dates.js';
+import { DAY_MS, HOUR_MS } from '../../../shared/dates.js';
 import { formatDateShort, formatTime } from '../lib/format';
 import { answered, completedSession, deferred, makePriority, makeSettings, settle, T0, TODAY } from '../test/hooks';
 import type { Priority, Session } from '../types';
@@ -15,11 +15,11 @@ vi.mock('../lib/alerts');
 
 const PRIORITIES: Priority[] = [makePriority(1, 'Report', { uid: 'abcdef123456' })];
 
-async function renderCard(note = '', reviewedAt: number | null = null, priorities = PRIORITIES, sessions: Session[] = []) {
+async function renderCard(note = '', reviewedAt: number | null = null, priorities = PRIORITIES, sessions: Session[] = [], meetingSeconds = 0) {
   const onChange = vi.fn<(patch: api.RetroPatch) => Promise<boolean>>(() => Promise.resolve(true));
   const card = (n: string, r: number | null) => (
     <SettingsProvider>
-      <Retro date={TODAY} priorities={priorities} sessions={sessions} note={n} reviewedAt={r} open onChange={onChange} />
+      <Retro date={TODAY} priorities={priorities} sessions={sessions} meetingSeconds={meetingSeconds} note={n} reviewedAt={r} open onChange={onChange} />
     </SettingsProvider>
   );
   const view = render(card(note, reviewedAt));
@@ -36,7 +36,16 @@ async function renderCard(note = '', reviewedAt: number | null = null, prioritie
 async function renderFolded(priorities = PRIORITIES, sessions: Session[] = []) {
   const card = (open: boolean) => (
     <SettingsProvider>
-      <Retro date={TODAY} priorities={priorities} sessions={sessions} note="" reviewedAt={null} open={open} onChange={() => Promise.resolve(true)} />
+      <Retro
+        date={TODAY}
+        priorities={priorities}
+        sessions={sessions}
+        meetingSeconds={0}
+        note=""
+        reviewedAt={null}
+        open={open}
+        onChange={() => Promise.resolve(true)}
+      />
     </SettingsProvider>
   );
   const view = render(card(false));
@@ -52,6 +61,15 @@ beforeEach(() => {
 });
 
 describe('Retro', () => {
+  it("shows the day's meeting time beside the plan's, and none without any", async () => {
+    const session = completedSession(1, T0 - HOUR_MS, 25 * 60, { priorityUid: 'abcdef123456' });
+    const { unmount } = await renderCard('', null, PRIORITIES, [session], (2 * HOUR_MS) / 1000 + 15 * 60);
+    expect(document.querySelector('.retro-summary')?.textContent).toBe('On plan 25mOff plan 0mMeetings 2h 15m');
+    unmount();
+    await renderCard('', null, PRIORITIES, [session]);
+    expect(document.querySelector('.retro-summary')?.textContent).toBe('On plan 25mOff plan 0m');
+  });
+
   it("counts the routines among the day's rows and on their own, and leaves them out of a day with none", async () => {
     await renderCard('', null, [
       makePriority(1, 'Report', { done: true }),
