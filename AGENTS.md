@@ -520,13 +520,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (control characters but line breaks and tabs dropped, never trimmed), and `''` is none;
   `POST /items` makes a task with none, and the list PUT's create stores the row's; only the
   sheet's rows and the board's cards edit it (see "A task's note"). A task's lane (`later`,
-  `next`, or none) is the board's alone: the + of Later or Next, a park, a Move to or drop into
-  Later or Next, and the done notice's Add a New Card give one, and a task typed on a list has
-  none. Done is never stored: the server answers each task's `listDate` (its latest entry's day)
-  and `listDone` (that entry's tick), so the board and the days can't disagree. One lane rule
+  `next`, or none) is the board's alone: the + of Later or Next, the Later strip, a park, a Move to
+  or drop into Later or Next, and the done notice's Add a New Card give one, and a task typed on a
+  list has none. Done is never stored: the server answers each task's `listDate` (its latest entry's
+  day) and `listDone` (that entry's tick), so the board and the days can't disagree. One lane rule
   follows a save: a task in Later added open to its latest list (no entry on a later day) goes to
-  the top of Next (`nextFromLater`). A write sets the fields it changed and the last write wins:
-  the list PUT writes a task's name (trimmed), category and note only where this
+  the top of Next (`nextFromLater`). A write sets the fields it changed and the last write wins: the
+  list PUT writes a task's name (trimmed), category and note only where this
   device's row differs from its base row, reads a row sent without a category or a note (a page from
   before notes, curl) as keeping them (`unsaid`), makes a task for a uid new to the user (no lane),
   and writes nothing for a task new to that list (a carry, a pull, the offer), so a stale name never
@@ -536,24 +536,24 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   priorities, out of its lane (`lane` and `position` cleared before `weekdays` is written, as the
   table's CHECK wants), the lane it left renumbered, and a `before` sent with it ignored; a day
   cleared on a one-off is a 400. `POST /items` makes a task on the board (`lane`: Later's or Next's
-  +, or a done item's new task) or a recurring priority (`weekdays`: curl, or a tab from before the
-  upgrade; the app sends only `lane`), never both; a uid that exists answers the board as it is (a
-  retry), and an archived or deleted task's is a 404. The cap of 300 (`BOARD_LIMITS.openCards`)
-  counts the tasks in Later or Next whose latest entry isn't ticked; only board writes reach it
-  (`POST /items` with a lane, a PATCH giving a lane to a task in none), refused with a 400 (`FULL`,
-  `routes/items.ts`), and the board checks it first (`BOARD.full`). A task's row is deleted in two
-  places only: `collectItems`, which deletes the tasks no entry or session names that are a one-off
-  in no lane, or, in the prune alone, archived (the list PUT runs it on the tasks it took off, a
-  session delete, cancel or relink on the task the session left, the prune over everything), and the
-  prune's tombstone step. So a task typed and taken off again leaves nothing, a task in a lane
-  stays, and a task carried to a new day and taken off there keeps its earlier day. A cancel takes
-  its session off the task too, since a cancelled session counts nowhere. Archived (`archived_at`)
-  is a recurring priority that stopped repeating (its card's Stop Repeating), or a task the
-  migration archived: it still shows wherever an entry or session names it (`Priority.archived`), is
-  never in a lane or offered, and nothing unarchives it. A lane or an edit on it is a 404, and so is
-  a second Stop Repeating of an archived routine; a full delete of an archived one-off still goes
-  through. It stays until the prune, so a stale offer that adds it finds it archived and can't make
-  a one-off under its uid.
+  +, the Later strip, or a done item's new task) or a recurring priority (`weekdays`: curl, or a tab
+  from before the upgrade; the app sends only `lane`), never both; a uid that exists answers the
+  board as it is (a retry), and an archived or deleted task's is a 404. The cap of 300
+  (`BOARD_LIMITS.openCards`) counts the tasks in Later or Next whose latest entry isn't ticked; only
+  board writes reach it (`POST /items` with a lane, a PATCH giving a lane to a task in none),
+  refused with a 400 (`FULL`, `routes/items.ts`), and the board checks it first (`BOARD.full`). A
+  task's row is deleted in two places only: `collectItems`, which deletes the tasks no entry or
+  session names that are a one-off in no lane, or, in the prune alone, archived (the list PUT runs
+  it on the tasks it took off, a session delete, cancel or relink on the task the session left, the
+  prune over everything), and the prune's tombstone step. So a task typed and taken off again leaves
+  nothing, a task in a lane stays, and a task carried to a new day and taken off there keeps its
+  earlier day. A cancel takes its session off the task too, since a cancelled session counts
+  nowhere. Archived (`archived_at`) is a recurring priority that stopped repeating (its card's Stop
+  Repeating), or a task the migration archived: it still shows wherever an entry or session names it
+  (`Priority.archived`), is never in a lane or offered, and nothing unarchives it. A lane or an edit
+  on it is a 404, and so is a second Stop Repeating of an archived routine; a full delete of an
+  archived one-off still goes through. It stays until the prune, so a stale offer that adds it finds
+  it archived and can't make a one-off under its uid.
 - **A deleted task is a tombstone until the prune.** Delete, the board's and the sheet's × → Delete
   Everywhere, is `DELETE /items/:uid` on a one-off task, `deleteItem` in one transaction: every
   session on it stays on its day as unplanned time, with the task's name (cut to
@@ -664,15 +664,16 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   server will store it while it is out (`editedSession`). On the client `CategoryChip` is the one
   way a category is picked, fed by `useCategoryPick` (null before the board's first read, and then
   no chip shows; its doc says how a new category goes out and a refused one comes off), which the
-  board page and the sheet each call once and pass down as `pick`: the sheet's goes to Top
-  Priorities (a written row's chip, which saves at once), the timer (the row a new name makes at
-  Start, `addPriority(date, text, categoryUid)`, its chip in the label box's row while the name
-  matches no open row) and the day log (a session on no written row, in the edit's one PATCH). A
-  press on the chip keeps the focus where it is until the list takes it, so the day log's edit
-  doesn't end (the browser reasons are in `CategoryChip`'s comments). Its New category box runs
-  `categoryForName` (`lib/board.ts`, whose doc says what a name makes). The board columns' boxes
-  share one category, the last picked on the device (`USER_KEYS.captureCategory`; a removed or
-  unknown one reads as none). Settings → Board (`BoardTab`) adds (`categoryForName` again), renames
+  board page and the sheet each call once and pass down as `pick` (the Later strip calls it for its
+  own box): the sheet's goes to Top Priorities (a written row's chip, which saves at once), the
+  timer (the row a new name makes at Start, `addPriority(date, text, categoryUid)`, its chip in the
+  label box's row while the name matches no open row) and the day log (a session on no written row,
+  in the edit's one PATCH). A press on the chip keeps the focus where it is until the list takes it,
+  so the day log's edit doesn't end (the browser reasons are in `CategoryChip`'s comments). Its New
+  category box runs `categoryForName` (`lib/board.ts`, whose doc says what a name makes). The board
+  columns' boxes and the Later strip share one category, the last picked on the device
+  (`USER_KEYS.captureCategory`; a removed or unknown one reads as none), which the strip reads again
+  each time it shows. Settings → Board (`BoardTab`) adds (`categoryForName` again), renames
   (refusing a name in use, `categoryNameTaken`), recolours and removes categories, each through the
   dialog's `save`; a category's Remove archives it and doesn't ask.
 - **A recurring priority is a task with weekdays** (`items.weekdays`, answered in `Board.recurring`
@@ -753,10 +754,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `CardDialog`, one at a time and closed before whatever it pressed moves, starts or deletes,
   `closeCard`; where the focus goes after a move, a Delete or the notice; what offers Start timer,
   and that a card's Start is a pull that asks no nudge; the column boxes and In Progress's nudge;
-  the one `role="status"` notice slot above the columns), `Capture`'s (a box's keys, and where the
-  focus goes when its + shuts), `BoardCard`'s (a card's face, and its button stretched over the
-  card) and `useBoardDrag.tsx`'s and `dnd.ts`'s (how a mouse, a finger or Space picks a card up,
-  which items drag, from 900 px for In Progress, Done and Repeats, and what a screen reader hears).
+  the one `role="status"` notice slot above the columns), `BoardCard`'s (a card's face, and its
+  button stretched over the card) and `useBoardDrag.tsx`'s and `dnd.ts`'s (how a mouse, a finger or
+  Space picks a card up, which items drag, from 900 px for In Progress, Done and Repeats, and what a
+  screen reader hears). A column's box is `Capture` (`components/Capture.tsx`, beside the Later
+  strip, which shares it; its doc has a box's keys, and where the focus goes when its + shuts).
   `Board` takes `running`, `start` and `starting` from `Shell` as props, since the timer's context
   changes every second. A row typed in In Progress's box goes on the board's queue as a pull does
   and shows once its job starts (it has no item for `moving` to show); Add Anyway on it closes the
@@ -892,16 +894,19 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - Static assets are public; **all data is behind `/api/*`**. `/assets/*` is fingerprinted and
   cached immutable. The SPA fallback serves `index.html` for any other non-API path; a miss
   under `/assets` is a 404 (a page from before an upgrade asking for an old chunk).
-- **A keyboard shortcut is bound where its button is.** `SHORTCUTS` (`lib/shortcuts.ts`) is the
-  one list of keys: N is Add Priority on the sheet and Later's + on the board; S, B and H are the
-  header's brand, Board and History; ? opens the list; P, + and F are the running timer's Pause or
-  Resume, + and Finish; R is the timer card's Break. Each is bound by the component that renders
-  its button, with `useShortcut(id, run)` (`hooks/useShortcuts.ts`, whose doc has the binding's
-  rules), `run` null whenever that button is hidden or wouldn't act (F before time's up, + at the
-  longest plan, N with Later's + shut, R while a start is out or off today's sheet), so a key never
-  acts where its button wouldn't, and R holds the start buttons as a tap on Break does. S, B and H
-  put the focus on their header button first, where a click leaves it, since the control it was on
-  may go with the page. `useShortcutListener`, mounted once by `Shortcuts` beside `FinishChoice` in
+- **A keyboard shortcut is bound where its button is.** `SHORTCUTS` (`lib/shortcuts.ts`) is the one
+  list of keys: N is Add Priority on the sheet and Later's + on the board; L is the header's Add to
+  Later, and Later's + on the board; S, B and H are the header's brand, Board and History; ? opens
+  the list; P, + and F are the running timer's Pause or Resume, + and Finish; R is the timer card's
+  Break. Each is bound by the component that renders its button, with `useShortcut(id, run)`
+  (`hooks/useShortcuts.ts`, whose doc has the binding's rules), `run` null whenever that button is
+  hidden or wouldn't act (F before time's up, + at the longest plan, N with Later's + shut, R while
+  a start is out or off today's sheet), so a key never acts where its button wouldn't, and R holds
+  the start buttons as a tap on Break does. S, B and H put the focus on their header button first,
+  where a click leaves it, since the control it was on may go with the page. L is the one key that
+  doesn't act as its button does: with the Later strip open it puts the focus in its box (as Later's
+  + does with an open box) rather than closing it as the button does, since a key that closed it
+  would drop the text. `useShortcutListener`, mounted once by `Shortcuts` beside `FinishChoice` in
   `App.tsx`, is the one keydown listener that acts on a key (the only other on the window or the
   document is `main.tsx`'s audio unlock, which acts on none), and `shortcutFor` is its guard: their
   docs say which keys they leave alone and why. The list is a static dialog in `Shortcuts.tsx`, its
@@ -913,13 +918,14 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   of them from the first screen folds it back into the main chunk. Everything under
   `components/board/` loads only through `Board`'s chunk; what other views share with it
   (`lib/board.ts` and `hooks/useBoard.tsx` with the sheet, the settings and History's Review,
-  `Folded` with Review, the category pieces (`CategoryChip`, `CategoryDot`, which Review uses
-  too, and `lib/popover.ts`), `RepeatMark`, `RunningMark`, `Note` and `TimerLengths`, kept out so
-  the sheet can show them) stays out of that folder and imports no dnd-kit. The sheet renders plain
-  `CardFrame`s until the first Customize and stays on `SortableCards` after it, since swapping lists
-  remounts the cards. A chunk that fails to load (an upgrade while the page was open) reloads the
-  page once a minute at most (`vite:preloadError` in `main.tsx`, `lib/reload.ts`); the
-  `ErrorBoundary` card shows until the reload lands, and stays when no reload is made.
+  `Folded` with Review, the category pieces (`CategoryChip`, `CategoryDot`, which Review uses too,
+  and `lib/popover.ts`), `Capture` with the Later strip, `RepeatMark`, `RunningMark`, `Note` and
+  `TimerLengths`, kept out so the sheet can show them) stays out of that folder and imports no
+  dnd-kit. The sheet renders plain `CardFrame`s until the first Customize and stays on
+  `SortableCards` after it, since swapping lists remounts the cards. A chunk that fails to load (an
+  upgrade while the page was open) reloads the page once a minute at most (`vite:preloadError` in
+  `main.tsx`, `lib/reload.ts`); the `ErrorBoundary` card shows until the reload lands, and stays
+  when no reload is made.
 - **A page left open across an update asks to be reloaded.** Every answer of the data routes, a
   refusal included, names the server's version in `Clockspan-Version` (`VERSION_HEADER`,
   `shared/api.ts`), set in `app.ts` on the `api` router after `requireAuth` and
@@ -1009,10 +1015,11 @@ fixture, a seed template): after it, fix what `npm run typecheck` lists.
   `App.tsx`'s `lazy` consts → a toggle in `Header.tsx` that goes to the view, and back to the
   sheet from it, pressed only there (`aria-pressed={view === '<id>'}`), its name fixed. The header
   is the same on every view, so a page's own controls sit in the page, as the sheet's date row and
-  Customize do (`DateNav`). Then revisit Header's `crowded` (with sign-in on, the header holds four
-  buttons; every view takes the same rule) and check the header at 375 and 360. The page sits in the
-  one frame (Conventions, CSS) and sets no `--page-w`; one that reads better narrower caps its own
-  width, as History does. `useRoute.test.ts` reads and writes every id in `VIEWS`, and
+  Customize do (`DateNav`). Then check the header's widths: it holds five buttons with sign-in on
+  and four without, the same on every view and in every auth mode (the brand's name hides below
+  420 px and the buttons' words below 780 px, `styles.css`), at 320, 360, 375 and 780 px. The page
+  sits in the one frame (Conventions, CSS) and sets no `--page-w`; one that reads better narrower
+  caps its own width, as History does. `useRoute.test.ts` reads and writes every id in `VIEWS`, and
   `Header.test.tsx` checks History's toggle on each view; the new toggle gets its own case there.
 - **A per-user setting**: add it to the `Settings` type and `DEFAULT_SETTINGS` in
   `shared/settings.ts`, and a number's bounds to `SETTING_LIMITS` there → validate it in
@@ -1185,13 +1192,13 @@ fixture, a seed template): after it, fix what `npm run typecheck` lists.
   sits in one frame, `--page-w` (1240 px), which `.app`'s header and `main` take and the running
   bar's contents read too, so a page switch leaves the header where it was: History and the
   one-column sheet cap themselves at 828 px inside it, and the split sheet and the board take all of
-  it. Between the header and `main`, `.top-stack` spans the window: the running bar, and the banners
-  hung under it (or under the header with no timer), sticky under the header and at the top of the
-  window once it scrolls away. It is a direct child of `.app`, since a sticky box sticks only inside
-  its parent, and nothing above it may set `overflow` (but `clip`), or it stops sticking. The one
-  exception is `body.no-scroll`'s `overflow: hidden` under a dialog, which works only because
-  `html` sets none, so `body`'s value goes to the viewport: an `overflow` on `html` would make
-  `body` the scroller and stop the top stack sticking. `html`'s
+  it. Between the header and `main`, `.top-stack` spans the window: the running bar, the Later strip
+  under it, and the banners hung under them (or under the header with neither), sticky under the
+  header and at the top of the window once it scrolls away. It is a direct child of `.app`, since a
+  sticky box sticks only inside its parent, and nothing above it may set `overflow` (but `clip`), or
+  it stops sticking. The one exception is `body.no-scroll`'s `overflow: hidden` under a dialog,
+  which works only because `html` sets none, so `body`'s value goes to the viewport: an `overflow`
+  on `html` would make `body` the scroller and stop the top stack sticking. `html`'s
   `scrollbar-gutter: stable` keeps a classic scrollbar's room on a page too short to scroll and
   under a dialog's scroll lock (`theme-css.test.ts` checks the width is set once). Every width
   rule is a window query, so a card in a column gets the wide-window rules at about half the width:
@@ -1233,7 +1240,9 @@ fixture, a seed template): after it, fix what `npm run typecheck` lists.
   mismatched confirmation throws too), less a failed save the "Change Not Saved" banner has
   already said (the timer card's new row). A store write that shows at once (a lane's box, a card's
   Move to), or a board item's Start timer, whose dialog closes, is not a form send: it goes
-  through its store, and a failure is the banner.
+  through its store, and a failure is the banner. The Later strip is the exception: a failure of a
+  save from the strip that is open and shown is said in its own line (`saved`'s `say`), not the
+  banner.
 - A press that takes its own control off the page (its row or card goes, another control shows
   in its place, or the arrow at a column's end turns off) moves the focus itself: to the control
   in its place or the one that undoes the press, else the next control of its kind (the one
@@ -1374,7 +1383,8 @@ tests that reach it, and an unreachable branch is deleted, never hidden behind `
 - A keydown inside a native modal `<dialog>` still bubbles to `window`, so `shortcutFor` checks
   for `dialog[open]` itself. A dnd-kit upgrade that stops setting `aria-pressed` on what it drags
   lets keys through mid-drag, which `Board.drag.test.tsx`'s keyboard-drag case catches. A page key
-  (S, B, H) drops text left in a board box, as a click on the header does.
+  (S, B, H) drops text left in a board box, as a click on the header does; text in the Later strip
+  survives a trip to the Board, where the strip is hidden, not unmounted.
 - Prettier leaves `*.md` alone: wrap docs by hand.
 - The Node floor (`engines` and `devEngines` in `package.json`) has no upper bound, for the reason
   `.npmrc` gives for having no `engine-strict`: Dependabot's updater runs its own Node, and a cap

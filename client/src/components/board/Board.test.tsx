@@ -71,7 +71,7 @@ async function renderHeader() {
   render(
     <AuthGate>
       <SettingsProvider>
-        <Header view="board" onNavigate={vi.fn()} onOpenSettings={vi.fn()} />
+        <Header view="board" onNavigate={vi.fn()} onOpenSettings={vi.fn()} laterOpen={false} laterShut={false} onOpenLater={vi.fn()} onCloseLater={vi.fn()} />
       </SettingsProvider>
     </AuthGate>,
   );

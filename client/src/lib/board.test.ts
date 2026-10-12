@@ -1,8 +1,25 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { BOARD_LIMITS } from '../../../shared/api.js';
 import { FOLLOW_UPS, makeBoard, makeCard, makeDay, makePriority, makeRecurring, QUEUE, rowUid, T0 } from '../test/fixtures';
-import { addsToLanes, boardFull, findItem, laneStart, leavesNext, offeredLeftovers, onToday, topOfNext, type DropTarget } from './board';
+import { warnQuietly, warnSaveFailed } from './alerts';
+import {
+  addsToLanes,
+  boardFull,
+  findItem,
+  laneStart,
+  laterTop,
+  leavesNext,
+  MoveRefused,
+  offeredLeftovers,
+  onToday,
+  saved,
+  topOfNext,
+  type DropTarget,
+} from './board';
 import { columns, FRI, ids, MON, ROUTINE, THU, TUE, WED } from './board.testkit';
+import { BOARD, SAVE_FAILED } from './copy';
+
+vi.mock('./alerts');
 
 const EMPTY = { later: [], repeats: [], next: [], progress: [], doneToday: [], doneEarlier: [] };
 
@@ -262,6 +279,34 @@ describe('the small lookups', () => {
       moving: new Map([[`item:${rowUid(1)}`, { to: 'later' as const, before: 'first' }]]),
     });
     expect(laneStart(moving, 'later')).toBe('first');
+  });
+
+  it("laterTop: the first of Later's own tasks by position, from the board's cards", () => {
+    const cards = [makeCard('second', 'Second', { position: 2 }), makeCard('next', 'Next', { lane: 'next', position: 0 }), makeCard('first', 'First')];
+    expect(laterTop(cards)).toBe('first');
+    expect(laterTop([makeCard('next', 'Next', { lane: 'next' }), makeCard('none', 'None', { lane: null })])).toBeNull();
+  });
+});
+
+describe('saved', () => {
+  it("hands a failure to the caller's line, a refusal's message or the save one, and raises no banner when it takes it", async () => {
+    const say = vi.fn(() => true);
+    expect(await saved(Promise.reject(new MoveRefused(BOARD.full)), say)).toBe(false);
+    expect(await saved(Promise.reject(new Error('offline')), say)).toBe(false);
+    expect(say.mock.calls).toEqual([[BOARD.full], [SAVE_FAILED.body]]);
+    expect(await saved(Promise.resolve(), say)).toBe(true);
+    expect(say).toHaveBeenCalledTimes(2);
+    expect(warnQuietly).not.toHaveBeenCalled();
+    expect(warnSaveFailed).not.toHaveBeenCalled();
+  });
+
+  it('raises the banner when the line turns it down, or there is none', async () => {
+    const say = vi.fn(() => false);
+    await saved(Promise.reject(new MoveRefused(BOARD.full)), say);
+    await saved(Promise.reject(new Error('offline')), say);
+    await saved(Promise.reject(new Error('offline')));
+    expect(warnQuietly).toHaveBeenCalledExactlyOnceWith({ title: BOARD.full, tag: 'board-move' });
+    expect(warnSaveFailed).toHaveBeenCalledTimes(2);
   });
 });
 

@@ -1,5 +1,9 @@
-/** A single-key shortcut: each acts as its button does, and only while that button would. */
-export type ShortcutId = 'new' | 'sheet' | 'board' | 'history' | 'help' | 'pause' | 'finish' | 'more' | 'rest';
+/**
+ * A single-key shortcut: each acts as its button does, and only while that button would. The one
+ * exception is L with the Later strip open, which puts the focus in its box rather than closing it
+ * as the header's Add to Later does: a key that closed it would drop the text.
+ */
+export type ShortcutId = 'new' | 'later' | 'sheet' | 'board' | 'history' | 'help' | 'pause' | 'finish' | 'more' | 'rest';
 export type ShortcutGroup = 'add' | 'pages' | 'timer';
 
 /**
@@ -9,6 +13,7 @@ export type ShortcutGroup = 'add' | 'pages' | 'timer';
  */
 export const SHORTCUTS: Record<ShortcutId, { key: string; aria?: string; group: ShortcutGroup }> = {
   new: { key: 'N', group: 'add' },
+  later: { key: 'L', group: 'add' },
   sheet: { key: 'S', group: 'pages' },
   board: { key: 'B', group: 'pages' },
   history: { key: 'H', group: 'pages' },
