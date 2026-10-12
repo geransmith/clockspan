@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { atTime } from '../../../shared/dates.js';
+import { atTime, MINUTE_MS } from '../../../shared/dates.js';
 import * as api from '../api';
 import { LOAD_FAILED } from '../lib/copy';
 import type { ReviewPeriod } from '../lib/review';
@@ -266,6 +266,32 @@ describe('Review', () => {
     await review({ kind: 'quarter', from: '2026-07-01' });
     expect(screen.getByText('worked 11h 00m of 12h 00m')).toBeTruthy();
     expect(facts()).toEqual(['Added mid-day: 1 · 0 done', 'Breaks: 1 · 10m']);
+  });
+
+  it('says how long the most used timer length typically ran on a week or a month, never a quarter, from three sessions', async () => {
+    // Tuesday's 25-minute timers, finished by hand past their plan and logged at it, ran these minutes.
+    const timers = (...ran: number[]) => ({
+      ...tue,
+      sessions: ran.map((m, i) =>
+        completedSession(3 + i, atTime(TUE, 8, 0) + i * 40 * MINUTE_MS, 1500, { date: TUE, firstPlannedSeconds: 1500, ranSeconds: m * 60 }),
+      ),
+    });
+    serveRange([mon, timers(30, 37, 34)]);
+    await review({ kind: 'week', from: MON });
+    expect(facts().slice(-2)).toEqual(['Typical day: 3 planned · 1 done', '25m timers: typically ran 34m']);
+    cleanup();
+
+    await review({ kind: 'month', from: '2026-09-01' });
+    expect(facts().slice(-2)).toEqual(['Typical day: 3 planned · 1 done', '25m timers: typically ran 34m']);
+    cleanup();
+
+    await review({ kind: 'quarter', from: '2026-07-01' });
+    expect(facts().at(-1)).toBe('Breaks: 1 · 10m');
+    cleanup();
+
+    serveRange([mon, timers(30, 37)]);
+    await review({ kind: 'week', from: MON });
+    expect(facts().at(-1)).toBe('Typical day: 3 planned · 1 done');
   });
 
   it('counts a session that logged no time, with no on-plan share', async () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BOARD_LIMITS } from '../../../shared/api.js';
 import { FOLLOW_UPS, makeBoard, makeCard, makeDay, makePriority, makeRecurring, QUEUE, rowUid, T0 } from '../test/fixtures';
-import { addsToLanes, boardFull, findItem, laneStart, offeredLeftovers, onToday, topOfNext, type DropTarget } from './board';
+import { addsToLanes, boardFull, findItem, laneStart, leavesNext, offeredLeftovers, onToday, topOfNext, type DropTarget } from './board';
 import { columns, FRI, ids, MON, ROUTINE, THU, TUE, WED } from './board.testkit';
 
 const EMPTY = { later: [], repeats: [], next: [], progress: [], doneToday: [], doneEarlier: [] };
@@ -152,6 +152,13 @@ describe('boardColumns', () => {
       const c = columns({ cards });
       expect(ids(c)).toEqual({ ...EMPTY, next: ['item:own', 'item:first', 'item:later', 'item:old'] });
       expect(c.next.map((i) => i.leftOpen)).toEqual([null, TUE, TUE, '2026-09-16']);
+    });
+
+    it('leaves Next on the day leavesNext gives, and shows the day before', () => {
+      expect(leavesNext('2026-09-16')).toBe(THU);
+      const cards = [makeCard('old', 'Two weeks back', { lane: null, listDate: '2026-09-16' })];
+      expect(ids(columns({ cards, today: WED })).next).toEqual(['item:old']);
+      expect(ids(columns({ cards, today: THU })).next).toEqual([]);
     });
 
     it('is a task in no lane: one ticked, one with a lane, one on no list and a routine left open show where they are', () => {

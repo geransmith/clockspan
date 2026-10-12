@@ -6,7 +6,7 @@ import { AuthGate } from '../auth/AuthGate';
 import { VIEWS, type Route } from '../hooks/useRoute';
 import { SettingsProvider } from '../hooks/useSettings';
 import { CONFIRM } from '../lib/copy';
-import { DEFAULT_USER, makeAuth, pressKey, settle, ShortcutKeys } from '../test/hooks';
+import { answered, DEFAULT_USER, makeAuth, makeSettings, pressKey, settle, ShortcutKeys } from '../test/hooks';
 import { Header } from './Header';
 
 vi.mock('../api');
@@ -87,6 +87,18 @@ describe('Header', () => {
     pressKey('b');
     expect(onNavigate).toHaveBeenLastCalledWith({ view: 'board' });
     expect(document.activeElement).toBe(button('Board'));
+  });
+
+  // The words are hidden on a phone, so Board's and History's aria-label keeps the key out of their names.
+  it("names each page button's key in its title while the keys are on, and keeps the names fixed", async () => {
+    await renderHeader();
+    const titles = () => screen.getAllByRole('button').map((b) => b.title);
+    expect(titles()).toEqual(['Go to today (S)', 'Board (B)', 'History (H)', 'Settings']);
+    expect(['Board', 'History'].map((name) => screen.getByRole('button', { name }).getAttribute('aria-label'))).toEqual(['Board', 'History']);
+    cleanup();
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ shortcuts: false })));
+    await renderHeader();
+    expect(titles()).toEqual(['Go to today', 'Board', 'History', 'Settings']);
   });
 
   it('sends no sign-out when the confirm is answered no', async () => {

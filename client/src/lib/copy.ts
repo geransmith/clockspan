@@ -69,49 +69,50 @@ export const CELEBRATION_PHRASES = [
  */
 export const PRIORITY_WARNINGS = {
   fresh: [
-    "That's a full plate already. Sure about one more?",
-    'More rows means each one matters a little less.',
-    "Everything can't be the most important thing.",
-    'A long list is where priorities go to hide.',
-    'Is this for today, or for some day?',
-    'Fine, but if you could only do one today, which one?',
-    'Carrying a few plates is one thing. Juggling them is another.',
-    "The list doesn't get shorter by getting longer.",
-    'Done beats listed.',
+    'The list is full already. Sure about one more?',
+    'More rows means less time for each one.',
+    'Not everything can come first.',
+    'Is this for today, or another day?',
+    'If you could do only one today, which would it be?',
     'Sure? Tomorrow has room too.',
-    "That's another promise to yourself. Still want it?",
-    'The top of the list is prime real estate. The bottom is the suburbs.',
-    'Ambition noted. Energy budget also noted.',
-    'You could also just not.',
-    'This is where "top" quietly becomes "all".',
+    "That's one more thing to finish today. Still want it?",
     'Short lists get finished more often.',
-    'Adding is easy. Crossing off is the fun part.',
-    "If it won't make today a win, park it for tomorrow.",
-    'Is that a priority, or a worry in a to-do costume?',
+    'If today goes fine without it, it can wait.',
+    'Is this a priority, or just on your mind?',
+    "That's already a lot for one day.",
+    'Which row does this push down?',
+    'Could this go in Later instead?',
+    'Will you get to it today?',
+    'Is this urgent, or just new?',
+    'Does it need its own row, or a note on one?',
   ],
   progress: [
-    'Some of this is already done. Are you adding, or avoiding what is left?',
-    'You have cleared part of the list. The open rows still need the rest of the day.',
-    'A few are ticked. Do the open ones fit before this new one?',
-    'There is still an open row. Does this come before it?',
-    'You have done real work already. A new row does not count more than that.',
-    'Adding now, with rows still open, means one of them slips. Which one?',
-    'Part of the plan is done. Is this the rest of it, or a new plan?',
-    'Does this belong today, or is it leaking in from tomorrow?',
-    "The ticked ones are today's win. Don't bury them under new rows.",
+    "Some of this is done. Are you adding, or avoiding what's left?",
+    'The open rows still need the rest of the day.',
+    'Do the open rows still fit with this one added?',
+    'Does this come before the open rows?',
+    'With rows still open, adding one means another slips. Which one?',
+    "Is this part of the morning's plan, or a new one?",
+    'Does this belong today, or tomorrow?',
     'The open rows were the plan. Do them first?',
+    'Finish an open row first?',
+    "Is this more important than what's open?",
+    'Can it wait until the open rows are done?',
+    'Could it go in Later for now?',
   ],
   complete: [
     'Everything is ticked. Anything you add now is extra.',
-    "The plan is done. This one is a bonus, or it is tomorrow's first row.",
-    "You finished the list. Adding more means today can't end as a clean win.",
-    "All done. Sure you're not just filling the quiet?",
-    'Plan complete. A new row now is optional. Treat it that way.',
-    'Nothing is open. Is this urgent, or just available?',
-    "You did what you said you'd do. Stop there, or add one with a light grip.",
-    'List cleared. If you add this, it is allowed to stay unfinished.',
-    "Done means done. Tomorrow's sheet has empty rows.",
-    "You set the bar this morning. Don't raise it now.",
+    "The plan is done. This one is a bonus, or it's tomorrow's first row.",
+    'All done. Does this need to happen today?',
+    'Nothing is open. Is this urgent?',
+    'You did what you planned. You can stop here.',
+    'If you add this, it can stay unfinished.',
+    "Could this start tomorrow's list?",
+    'Will this fit before clock-out?',
+    'How much of the day is left for it?',
+    'Is it worth starting now?',
+    'Would it keep in Later until tomorrow?',
+    'Extra is fine. Keep it small.',
   ],
 };
 
@@ -142,7 +143,7 @@ const unplanned = (logged: string | null) => (logged ? ' The time stays in the l
  * applies.
  */
 export const REMOVE_TASK = {
-  title: (name: string) => `Remove ${name}`,
+  title: (name: string) => `Remove “${name}”?`,
   body: (otherDays: number, logged: string | null, note: boolean) => {
     // Asked for the note alone: nothing else names the task, so Off This Day deletes it too (collectItems), unless it has a lane.
     if (!otherDays && !logged) return 'It is on no other day, so Off This Day deletes it and its note too, unless the board keeps it in Later or Next.';
@@ -323,7 +324,8 @@ export const ADD_PRIORITY_FAILED = {
  * `nameTaken` is Settings → Board's line under a category named like another in use. `doneOn` is
  * a card dialog's line on a task ticked on an earlier day, which the board doesn't untick, and
  * `doneAhead` its line on one ticked on a later day's list, whose sheet opens only once that day
- * comes; `when` is `dayName`'s in-sentence word or date.
+ * comes; `when` is `dayName`'s in-sentence word or date. `leavesNext` is its line on a task left
+ * open, with the day it leaves Next (`leavesNext` in `lib/board.ts`) as `formatDateLong` writes it.
  */
 export const BOARD = {
   full: `Later and Next hold ${BOARD_LIMITS.openCards} cards at most.`,
@@ -333,6 +335,7 @@ export const BOARD = {
   nameTaken: 'There is already a category with that name.',
   doneOn: (when: string) => `Done ${when}. Untick it on that day's sheet.`,
   doneAhead: (when: string) => `Ticked on the list for ${when}. Untick it on that day's sheet once the day comes.`,
+  leavesNext: (day: string) => `Leaves Next on ${day}. Move it to Later to keep it.`,
 } as const;
 
 /**

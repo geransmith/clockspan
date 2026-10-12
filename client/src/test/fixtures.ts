@@ -170,6 +170,8 @@ export function makeSession(patch: Partial<RunningSession> = {}): RunningSession
     priorityUid: null,
     title: null,
     categoryUid: null,
+    firstPlannedSeconds: null,
+    ranSeconds: null,
     ...patch,
   };
 }

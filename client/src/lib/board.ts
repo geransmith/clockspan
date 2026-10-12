@@ -1,10 +1,10 @@
 /**
  * The board's logic, with no React and no dnd-kit: which column each task and each of today's
- * rows shows in (`boardColumns`), what a move does and which store it writes (`planMove`), a
- * write's failure as a banner (`saved`, which the sheet's note uses too), where a
- * drop lands and what a drag says (`dropTarget`, `withDrag`, `moveAnnouncement`), the leftovers
- * the left-open offer brings back (`offeredLeftovers`) and the top of Next it offers after them
- * (`topOfNext`), what New category makes of a name
+ * rows shows in (`boardColumns`) and the day a task left open leaves Next (`leavesNext`), what a
+ * move does and which store it writes (`planMove`), a write's failure as a banner (`saved`, which
+ * the sheet's note uses too), where a drop lands and what a drag says (`dropTarget`, `withDrag`,
+ * `moveAnnouncement`), the leftovers the left-open offer brings back (`offeredLeftovers`) and the
+ * top of Next it offers after them (`topOfNext`), what New category makes of a name
  * (`categoryForName`, `nextColor`), and the board as a write shows it before the server answers
  * (`withItem`, `withItemPatch`, `withoutItem`, `withCategory`, `withCategoryPatch`,
  * `withoutCategory`).
@@ -95,6 +95,11 @@ export function laneStart(columns: BoardColumns, lane: OpenLane): string | null 
 
 const byPosition = (a: BoardCard, b: BoardCard) => a.position - b.position;
 
+/** The first day a task left open on `leftOpen` no longer shows in Next, `LOOKBACK_DAYS` + 1 days on. */
+export function leavesNext(leftOpen: string): string {
+  return addDays(leftOpen, LOOKBACK_DAYS + 1);
+}
+
 export interface ColumnsInput {
   /** The board's one-off tasks. */
   cards: BoardCard[];
@@ -116,16 +121,14 @@ export interface ColumnsInput {
  * What each column shows. A task on today's list shows as its row: open in In Progress, ticked in
  * Done. Any other one-off task, by the first that applies: its latest entry is ticked (in Done:
  * with today's on today or a later day, with the earlier days' on an earlier day this week, else
- * nowhere); its lane; with no lane, its latest entry was
- * left open on an earlier day of the last `LOOKBACK_DAYS` (in Next after its own tasks, newest
- * day first, then oldest made first); else nowhere, which is where a task in no lane that a later
- * day's list holds (one an older version planned ahead) waits for that day. A recurring priority
- * not on today's list shows in Later's Repeats, and Done also holds each one ticked on an earlier
- * day this week, once a day.
+ * nowhere); its lane; with no lane, its latest entry was left open on an earlier day, until the
+ * day `leavesNext` gives (in Next after its own tasks, newest day first, then oldest made first);
+ * else nowhere, which is where a task in no lane that a later day's list holds (one an older
+ * version planned ahead) waits for that day. A recurring priority not on today's list shows in
+ * Later's Repeats, and Done also holds each one ticked on an earlier day this week, once a day.
  */
 export function boardColumns({ cards, today, todayRows, earlierDays, recurring, moving }: ColumnsInput): BoardColumns {
   const weekStart = startOfWeek(today);
-  const oldest = addDays(today, -LOOKBACK_DAYS);
   const byUid = new Map(cards.map((c) => [c.uid, c]));
   const written = todayRows.filter(isTaskRow);
   const listedToday = new Set(written.map((p) => p.uid));
@@ -173,7 +176,7 @@ export function boardColumns({ cards, today, todayRows, earlierDays, recurring, 
       else if (day! >= weekStart) earlier.push({ day: day!, item: cardItem(c, 'done') });
     } else if (c.lane === 'later') later.push(c);
     else if (c.lane === 'next') ownNext.push(c);
-    else if (day != null && day < today && day >= oldest) leftOpen.push(c);
+    else if (day != null && day < today && today < leavesNext(day)) leftOpen.push(c);
   }
   // Newest day first, then the one made first; the server keeps no order for them.
   leftOpen.sort((a, b) => b.listDate!.localeCompare(a.listDate!) || a.createdAt - b.createdAt);

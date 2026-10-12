@@ -31,7 +31,7 @@ interface Props {
   onDelete?: () => void;
   /** A recurring row's way off today's list. */
   onRemove?: () => void;
-  /** The line under the title: where a task done earlier is unticked. */
+  /** The line under the title: where a task done earlier is unticked, or the day a task left open leaves Next. */
   hint?: string;
   /** The timer card's length buttons; none where no timer can start on it (`Board`). */
   start?: { disabled: boolean; onStart: (minutes: number) => void };

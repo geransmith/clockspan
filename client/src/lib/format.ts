@@ -20,6 +20,11 @@ export function formatDateLong(key: string): string {
   return dateLongFmt.format(parseDateKey(key));
 }
 
+/** "Oct 10": month and day, no weekday. */
+export function formatDateShort(key: string): string {
+  return dayShortFmt.format(parseDateKey(key));
+}
+
 export function formatDateFull(key: string): string {
   return dateFullFmt.format(parseDateKey(key));
 }
