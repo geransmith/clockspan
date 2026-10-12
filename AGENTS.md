@@ -458,21 +458,21 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   the clock to reach it); a past day counts every time it has. A Clock out typed ahead is what
   Clock Out At shows (`typedClockOut`) until it is reached. Today ends only at the Clock out, when
   it is the latest punch reached, with the target met or not; an extra pair's Out is a break, the
-  second meal included, and never ends it. A
-  past day ends once it is off the clock. "Add Extra Out / In" appends two rows, so the old Clock
-  out becomes the new pair's Out. Removing the pair an Add just made, before any punch changes,
-  undoes the Add and gives the Clock out its time back (`Timeclock` keeps the rows from before it in
-  its state, so a remount ends the undo; see the comment there); removing any other pair drops its
-  two rows (`removePunchPair`). Lunch semantics come only from positions 1 and 2. A punch save is
-  merged with what another device saved since (`mergePunches`, whose doc has the rule). Punches out
-  of order (`outOfOrder`, from `orderSlip` in `lib/timeclock.ts`: the first punch out of place and
-  the one it should come after) are named by the sheet's notice (`PUNCH_ORDER`), which describes
-  that row's field; such a day counts in no hours total (the week line, Review's worked time and
-  target) and shows a dash and `CHECK_PUNCHES` wherever its own hours would show (the sheet's tiles,
-  the board's clock bar, History's cell and day panel). A past day still clocked in with its punches
-  in order (`unclosed`) also counts in no hours total, shows a dash and `NO_CLOCK_OUT` wherever its
-  own hours would show (the sheet's Worked tile, History's cell and day panel), and the week line
-  names it last ("· Tue has no clock-out").
+  second meal included, and never ends it. A past day ends once it is off the clock.
+  "Add Extra Out / In" appends two rows, so the old Clock out becomes the new pair's Out. Removing
+  the pair an Add just made, before any punch changes, undoes the Add and gives the Clock out its
+  time back (`Timeclock` keeps the rows from before it in its state, so a remount ends the undo; see
+  the comment there); removing any other pair drops its two rows (`removePunchPair`). Lunch
+  semantics come only from positions 1 and 2. A punch save is merged with what another device saved
+  since (`mergePunches`, whose doc has the rule). Punches out of order (`outOfOrder`, from
+  `orderSlip` in `lib/timeclock.ts`: the first punch out of place and the one it should come after)
+  are named by the sheet's notice (`PUNCH_ORDER`), which describes that row's field; such a day
+  counts in no hours total (the week line, Review's worked time and target) and shows a dash and
+  `CHECK_PUNCHES` wherever its own hours would show (the sheet's tiles, the board's clock bar,
+  History's cell and day panel). A past day still clocked in with its punches in order (`unclosed`)
+  also counts in no hours total, shows a dash and `NO_CLOCK_OUT` wherever its own hours would show
+  (the sheet's Worked tile, History's cell and day panel), and the week line names it last
+  ("· Tue has no clock-out").
 - **A punch row saves only complete times.** `TimeField` (React Aria segments) commits the moment
   hour, minute and period are all filled, and throws a half-typed draft away when focus leaves the
   field or on Escape, which keeps focus in the field, so the row never shows a time the server
@@ -485,12 +485,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   on an overtime day. Approval also arms the second meal on a day whose work day doesn't pass
   its threshold: `secondMealApplies` counts an approved day as one that will pass it, so the
   alarm and the card's note start when the switch is set, not when the day runs over. The
-  setting `overtimeApproval` shows/hides the switch and banner button, and with it off the
+  setting `overtimeApproval` shows/hides the switch and banner button (a warning for a Clock out
+  typed ahead has none, since that day ends at the typed time: `useAlarms`), and with it off the
   Clock Out At tile (and the board's clock bar, which takes its words) reads time past the day as
   "past your day" rather than a red "Over by" (the sheet's tile leaves its line to the card's pill
-  once the day is done or a past day was never clocked out; the bar keeps "Day complete"); a
-  flagged day counts only while the setting is on: `overtimeOn` (`lib/timeclock.ts`) decides, which `Timeclock` (the tiles get the flag from
-  it), `ClockBar` and `useTodayAlarms` call.
+  once the day is done or a past day was never clocked out; the bar keeps "Day complete"); a flagged
+  day counts only while the setting is on: `overtimeOn` (`lib/timeclock.ts`) decides, which
+  `Timeclock` (the tiles get the flag from it), `ClockBar` and `useTodayAlarms` call.
 - **`mealRules: false` turns the meal periods off in the math, not in the components.**
   `computeTimeclock` then never needs a lunch (`not-needed`, so no lunch alarm and no lunch added to
   the clock-out time) and `secondMealApplies` is false; a lunch that was punched still counts. The

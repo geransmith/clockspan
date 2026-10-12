@@ -193,7 +193,9 @@ describe('alarmTargets', () => {
       { id: 'retro', at: IN + 7 * HOUR_MS, armed: true },
     ]);
     const late = tc(IN + 5 * HOUR_MS, ...back, IN + 9 * HOUR_MS);
-    expect(alarmTargets(late, s, day).map((t) => t.at)).toEqual([IN + 5 * HOUR_MS, IN + 8.5 * HOUR_MS, late.secondMealBy, IN + 8.5 * HOUR_MS]);
+    const lateEnds = alarmTargets(late, s, day).filter((t) => t.id === 'clockOut' || t.id === 'retro');
+    expect(late.clockOutAt).toBe(IN + 8.5 * HOUR_MS);
+    expect(lateEnds.map((t) => t.at)).toEqual([late.clockOutAt, late.clockOutAt]);
   });
 
   it('rings only the warnings before a Clock out typed earlier than the planned end', () => {

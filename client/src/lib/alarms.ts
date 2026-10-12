@@ -142,8 +142,8 @@ export function dueEvents(
 /**
  * What the copy needs beyond the event itself: how the deadline was derived, the clock-in
  * ("clocked in at 8:32 AM"), whether times carry AM/PM (see `resolveHour12`), and when the event
- * is shown, since a warning seen late (the phone was asleep) says the time actually left, and the
- * Clock out typed ahead, which the clock-out warning names when it is the target.
+ * is shown, since a warning seen late (the phone was asleep) says the time actually left. Also the
+ * Clock out typed ahead (`typedClockOut`), which the clock-out warning names when it is the target.
  */
 type EventContext = Pick<TimeclockSettings, 'workMinutes' | 'lunchDeadlineMinutes' | 'secondMealAfterMinutes'> & {
   clockIn: number;
