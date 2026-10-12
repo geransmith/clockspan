@@ -20,8 +20,9 @@ function newest(id: ShortcutId): (() => void) | null {
  * button wouldn't act (hidden, disabled), so the key doesn't either. Where two mounted components
  * bind one key (the timer bar's and the timer card's buttons), the newest runs, and the older
  * takes over when it unmounts. A binding keeps its place while `run` comes and goes. Call it
- * before any early return. Answers the key for the button's `aria-keyshortcuts` while it is
- * bound and shortcuts are on.
+ * before any early return. Answers the key while it is bound and shortcuts are on: for the
+ * button's `aria-keyshortcuts`, and for a title or a line that shows it (the header's titles,
+ * Later's empty line).
  */
 export function useShortcut(id: ShortcutId, run: (() => void) | null): string | undefined {
   const key = useId();

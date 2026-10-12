@@ -3,15 +3,18 @@ import type { RetroPatch } from '../api';
 import { useDebouncedDraft } from '../hooks/useDebouncedDraft';
 import { RETRO_PROMPT } from '../lib/copy';
 import { useTimeFormat } from '../hooks/useTimeFormat';
-import { counted, formatDuration } from '../lib/format';
+import { counted, formatDateShort, formatDuration } from '../lib/format';
 import { reviewDay, sessionName } from '../lib/retro';
 import { LIMITS } from '../../../shared/api.js';
+import { todayKey } from '../../../shared/dates.js';
 import type { Priority, Session } from '../types';
 import { PassFocusOnLeave } from './FocusTimer';
 import { Check } from './Icons';
 import { SessionLabel } from './SessionLabel';
 
 interface Props {
+  /** The card's day: a stamp from another day names its date. */
+  date: string;
   priorities: Priority[];
   sessions: Session[];
   note: string;
@@ -32,7 +35,7 @@ interface Props {
  * for it (the day's totals are on the timeclock and Top Priorities). Keyed by date in the sheet,
  * so a new day mounts with its own note and its own fold.
  */
-export function Retro({ priorities, sessions, note, reviewedAt, open, onChange }: Props) {
+export function Retro({ date, priorities, sessions, note, reviewedAt, open, onChange }: Props) {
   const { formatTime } = useTimeFormat();
   const review = reviewDay(priorities, sessions);
   // A note typed back to `note` is sent too: `note` can hold a save still out, and a box let go
@@ -160,7 +163,8 @@ export function Retro({ priorities, sessions, note, reviewedAt, open, onChange }
       <div className="retro-foot">
         {reviewed && (
           <span className="pill pill--ok">
-            <Check /> Reviewed {formatTime(reviewedAt)}
+            <Check /> Reviewed {todayKey(reviewedAt) === date ? '' : `${formatDateShort(todayKey(reviewedAt))}, `}
+            {formatTime(reviewedAt)}
           </span>
         )}
         <button

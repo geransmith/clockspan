@@ -227,6 +227,7 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
         return (
           <Retro
             key={date}
+            date={date}
             priorities={day.priorities}
             sessions={day.sessions}
             note={day.retroNote}

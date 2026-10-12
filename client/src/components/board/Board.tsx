@@ -24,6 +24,7 @@ import {
   itemPatchOf,
   itemsIn,
   laneStart,
+  leavesNext,
   moveAnnouncement,
   onToday,
   planMove,
@@ -36,7 +37,7 @@ import {
   type StoreMove,
 } from '../../lib/board';
 import { ADD_PRIORITY_FAILED, BOARD, CONFIRM, DONE_STAYS, LOAD_FAILED, WARNING_ACTIONS } from '../../lib/copy';
-import { dayName, formatDurationCeil } from '../../lib/format';
+import { dayName, formatDateLong, formatDurationCeil } from '../../lib/format';
 import { BOARD_COLUMNS_QUERY } from '../../lib/layout';
 import { hasRoom, newTaskRow, newUid, nudgeFor, pickWarning, placePriority, type WarningKind } from '../../lib/priorities';
 import { taskLogged } from '../../lib/retro';
@@ -419,7 +420,13 @@ export const Board = memo(function Board({
     // day's list, and a later day's sheet opens only once that day comes; Move to In Progress puts
     // it on today's list to work on again.
     const doneDay = cardOnly && item.card!.listDone ? item.card!.listDate! : null;
-    const hint = doneDay == null ? undefined : (doneDay > today ? BOARD.doneAhead : BOARD.doneOn)(dayName(doneDay, today, true));
+    // A task left open is never done: its line is the day it leaves Next.
+    const hint =
+      doneDay != null
+        ? (doneDay > today ? BOARD.doneAhead : BOARD.doneOn)(dayName(doneDay, today, true))
+        : item.leftOpen != null
+          ? BOARD.leavesNext(formatDateLong(leavesNext(item.leftOpen)))
+          : undefined;
     // The recurring priority as the board has it, a task given its first day included: none for a
     // one-off, or one that stopped repeating.
     const routine = board.recurring.find((r) => r.uid === item.uid);
@@ -658,7 +665,12 @@ export const Board = memo(function Board({
                 wrap={(n, ul) => sorted('later', shown.later.slice(0, n), ul)}
               />
             ) : (
-              shown.repeats.length === 0 && <Empty>Nothing parked.</Empty>
+              shown.repeats.length === 0 && (
+                <Empty>
+                  {/* No key while N isn't bound (the keys off); a touch screen hides it (styles.css). */}
+                  Nothing parked. {laterKey && <span className="board-key">{laterKey} or </span>}+ adds a card.
+                </Empty>
+              )
             )}
             {shown.repeats.length > 0 && (
               <>
@@ -668,7 +680,11 @@ export const Board = memo(function Board({
             )}
           </Column>
           <Column id="next" shown={shownColumn} over={over} count={shown.next.length} headRef={headRef('next')} add={add('next', lanesFull, addCard('next'))}>
-            {shown.next.length > 0 ? sorted('next', shown.next, list(shown.next, 'next')) : <Empty>Nothing lined up.</Empty>}
+            {shown.next.length > 0 ? (
+              sorted('next', shown.next, list(shown.next, 'next'))
+            ) : (
+              <Empty>Tasks left open on earlier days wait here for two weeks.</Empty>
+            )}
           </Column>
           <Column
             id="progress"

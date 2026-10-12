@@ -56,11 +56,11 @@ describe('repeating', () => {
     onServer = { ...makeBoard(), recurring: [FOLLOW] };
     await renderBoard();
     expect(titlesIn('Later')).toEqual(['Follow-ups']);
-    expect(within(column('Later')).queryByText('Nothing parked.')).toBeNull();
+    expect(within(column('Later')).queryByText(/Nothing parked/)).toBeNull();
     cleanup();
     onServer = makeBoard();
     await renderBoard();
-    expect(within(column('Later')).getByText('Nothing parked.')).toBeTruthy();
+    expect(within(column('Later')).getByText(/Nothing parked/).textContent).toBe('Nothing parked. N or + adds a card.');
     expect(within(column('Later')).queryByRole('heading', { name: 'Repeats' })).toBeNull();
   });
 

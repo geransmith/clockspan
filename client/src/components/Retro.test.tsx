@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
 import { RETRO_PROMPT } from '../lib/copy';
-import { completedSession, deferred, makePriority, settle, T0 } from '../test/hooks';
+import { DAY_MS } from '../../../shared/dates.js';
+import { formatDateShort, formatTime } from '../lib/format';
+import { answered, completedSession, deferred, makePriority, makeSettings, settle, T0, TODAY } from '../test/hooks';
 import type { Priority, Session } from '../types';
 import { Retro } from './Retro';
 
@@ -17,7 +19,7 @@ async function renderCard(note = '', reviewedAt: number | null = null, prioritie
   const onChange = vi.fn<(patch: api.RetroPatch) => Promise<boolean>>(() => Promise.resolve(true));
   const card = (n: string, r: number | null) => (
     <SettingsProvider>
-      <Retro priorities={priorities} sessions={sessions} note={n} reviewedAt={r} open onChange={onChange} />
+      <Retro date={TODAY} priorities={priorities} sessions={sessions} note={n} reviewedAt={r} open onChange={onChange} />
     </SettingsProvider>
   );
   const view = render(card(note, reviewedAt));
@@ -34,7 +36,7 @@ async function renderCard(note = '', reviewedAt: number | null = null, prioritie
 async function renderFolded(priorities = PRIORITIES, sessions: Session[] = []) {
   const card = (open: boolean) => (
     <SettingsProvider>
-      <Retro priorities={priorities} sessions={sessions} note="" reviewedAt={null} open={open} onChange={() => Promise.resolve(true)} />
+      <Retro date={TODAY} priorities={priorities} sessions={sessions} note="" reviewedAt={null} open={open} onChange={() => Promise.resolve(true)} />
     </SettingsProvider>
   );
   const view = render(card(false));
@@ -166,6 +168,16 @@ describe('Retro', () => {
     markReviewed();
     await settle();
     expect(onChange.mock.calls).toEqual([[{ done: true }]]);
+  });
+
+  // A past day reviewed the next morning would read as reviewed on the day.
+  it("stamps a review with its time, and with its date too when it isn't the card's day", async () => {
+    vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ timeFormat: '12h' })));
+    const { again } = await renderCard('', T0);
+    const stamp = () => document.querySelector('.retro-foot .pill')?.textContent?.trim();
+    expect(stamp()).toBe(`Reviewed ${formatTime(T0, true)}`);
+    again('', T0 + DAY_MS);
+    expect(stamp()).toBe(`Reviewed ${formatDateShort('2026-09-29')}, ${formatTime(T0 + DAY_MS, true)}`);
   });
 
   it('keeps the focus on the button as Mark Reviewed turns to Undo and back', async () => {
