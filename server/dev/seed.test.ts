@@ -101,6 +101,9 @@ function expectConsistent(m: SeedManifest, now: number) {
       expect(s.plannedSeconds).toBeGreaterThanOrEqual(PLANNED_SECONDS.min);
       expect(s.plannedSeconds).toBeLessThanOrEqual(PLANNED_SECONDS.max);
       expect(s.label.length).toBeLessThanOrEqual(LIMITS.sessionLabel);
+      // Stopped by hand at or past its logged end; a running or cancelled session has no stop.
+      if (s.status === 'completed') expect(s.stoppedAt).toBeGreaterThanOrEqual(s.endedAt!);
+      else expect(s.stoppedAt).toBeNull();
     }
     for (const b of day.breaks) {
       expect(b.plannedSeconds).toBeGreaterThanOrEqual(BREAK_SECONDS.min);
@@ -110,9 +113,10 @@ function expectConsistent(m: SeedManifest, now: number) {
       expect(b.endedAt).toBeLessThanOrEqual(b.startedAt + b.plannedSeconds * 1000);
     }
 
-    // A running session runs until now; a break still running beside it is what the server refuses.
+    // A session runs until its stop, a running one until now; a break still running beside it is
+    // what the server refuses.
     const spans = [
-      ...day.sessions.map((s): [number, number] => [s.startedAt, s.endedAt ?? now]),
+      ...day.sessions.map((s): [number, number] => [s.startedAt, s.stoppedAt ?? s.endedAt ?? now]),
       ...day.breaks.map((b): [number, number] => [b.startedAt, b.endedAt]),
     ].sort((a, b) => a[0] - b[0]);
     const worked = workedSpans(day, now);
@@ -292,7 +296,12 @@ describe('seedDatabase', () => {
         priorityUid: null,
         title: null,
         categoryUid: 'cat000000001',
+        firstPlannedSeconds: 25 * 60,
+        ranSeconds: 22 * 60,
       });
+      // A finish by hand past the plan, logged at the plan: its run reads longer than its log.
+      const extra = (await app.api.get<Day>(`/api/days/${app.seeded!.days.find((d) => d.kind === 'extraPair')!.date}`)).body;
+      expect(extra.sessions.some((s) => s.status === 'completed' && s.ranSeconds != null && s.ranSeconds > s.durationSeconds)).toBe(true);
       expect(today.sessions).toEqual(
         app
           .seeded!.days.at(-1)!

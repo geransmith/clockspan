@@ -188,6 +188,13 @@ interface SessionFields {
   title: string | null;
   /** The category it counts under: its task's with one, else the one picked in the log or kept from a task it lost. */
   categoryUid: string | null;
+  /** Read only: the length it started with, which +, − and Add N min leave alone; null on rows from before it was stored. */
+  firstPlannedSeconds: number | null;
+  /**
+   * Read only: its focus from start to the real stop of a finish by hand, pauses left out, whatever
+   * it logged. Null while running, once cancelled, after an automatic finish and on older rows.
+   */
+  ranSeconds: number | null;
 }
 
 /** A session still going, paused or not: it has no end and no focus time yet. */

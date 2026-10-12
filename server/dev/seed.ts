@@ -17,7 +17,9 @@ import type { Board, Break, Category, Day, OpenLane, Priority, Punch, Recurring,
  * task that exists, at most one entry per task on a day, every session's task listed on its own
  * day, no cancelled session with a task, no two sessions or breaks of a day overlapping, a
  * recurring priority listed only on its weekdays and never in a lane, no task named by nothing
- * that isn't in a lane, and every `categoryUid` naming a seeded category.
+ * that isn't in a lane, every `categoryUid` naming a seeded category, and every stop
+ * (`stoppedAt`) at or after its logged end, less than the timer's auto-finish grace past it
+ * (the auto-finish stores none), and before the day's next session, break or punch.
  */
 
 export interface SeedOptions {
@@ -37,7 +39,10 @@ export interface SeedOptions {
 /** An entry: a task on a day's list, so it always has its uid and addedAt. */
 type SeededPriority = Priority & { uid: string; addedAt: number };
 
-type SeededSession = Omit<Session, 'date' | 'pausedAt' | 'durationSeconds'>;
+type SeededSession = Omit<Session, 'date' | 'pausedAt' | 'durationSeconds' | 'ranSeconds'> & {
+  /** Seed only, off the wire: the real stop of a finish by hand, which `ranSeconds` is read from. */
+  stoppedAt: number | null;
+};
 type SeededBreak = Omit<Break, 'date'>;
 
 export type SeededDay = Omit<Day, 'priorities' | 'sessions' | 'breaks'> & {
@@ -282,13 +287,26 @@ function insertDay(db: DB, userId: number, day: DayDraft, items: ReadonlyMap<str
   const entry = db.prepare(`INSERT INTO priorities (day_id, item_id, position, done, added_at) VALUES (?, ?, ?, ?, ?)`);
   for (const p of day.priorities) entry.run(dayId, items.get(p.uid), p.position, p.done ? 1 : 0, p.addedAt);
   const sess = db.prepare(
-    `INSERT INTO sessions (day_id, user_id, label, planned_seconds, started_at, ended_at, status, item_id, paused_seconds, category_uid)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO sessions (day_id, user_id, label, planned_seconds, first_planned_seconds, started_at, ended_at, stopped_at, status, item_id, paused_seconds, category_uid)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const sessions: SeededSession[] = day.sessions.map((s) => {
     // A session on a task counts under the task's category, so it keeps none of its own.
     const [itemId, own] = s.priorityUid == null ? [null, s.categoryUid] : [items.get(s.priorityUid), null];
-    const r = sess.run(dayId, userId, s.label, s.plannedSeconds, s.startedAt, s.endedAt, s.status, itemId, s.pausedSeconds, own);
+    const r = sess.run(
+      dayId,
+      userId,
+      s.label,
+      s.plannedSeconds,
+      s.firstPlannedSeconds,
+      s.startedAt,
+      s.endedAt,
+      s.stoppedAt,
+      s.status,
+      itemId,
+      s.pausedSeconds,
+      own,
+    );
     return { id: Number(r.lastInsertRowid), ...s };
   });
   const rest = db.prepare(`INSERT INTO breaks (day_id, user_id, planned_seconds, started_at, ended_at) VALUES (?, ?, ?, ?, ?)`);
@@ -307,16 +325,20 @@ function punchRows(times: (number | null)[]): Punch[] {
  * A finished session planned for `minutes`: on a task, which gives its label, its name and the
  * category it counts under, or unplanned under a label, with the label's category picked in the
  * log. Worked shorter, it was finished early; paused, its end moves out by the pause, which the
- * log leaves out, the way the finish route records it. The running row is this shape with
- * `status` set over it and `endedAt: null`, and the cancelled one is `cancelled`'s.
+ * log leaves out, the way the finish route records it. It was finished by hand, so it stopped
+ * where it ended (`ranOver` moves the stop past it). The running row is this shape with `status`
+ * set over it and `endedAt` and `stoppedAt` null, and the cancelled one is `cancelled`'s.
  */
 function completed(work: SeededPriority | string, startedAt: number, minutes: number, worked = minutes, paused = 0): Omit<SeededSession, 'id'> {
   const [label, task] = typeof work === 'string' ? [work, null] : [work.text, work];
+  const endedAt = startedAt + (worked + paused) * MINUTE_MS;
   return {
     label,
     plannedSeconds: minutes * 60,
+    firstPlannedSeconds: minutes * 60,
     startedAt,
-    endedAt: startedAt + (worked + paused) * MINUTE_MS,
+    endedAt,
+    stoppedAt: endedAt,
     status: 'completed',
     priorityUid: task?.uid ?? null,
     title: task?.text ?? null,
@@ -327,7 +349,12 @@ function completed(work: SeededPriority | string, startedAt: number, minutes: nu
 
 /** The session cancelled: it counts nowhere, and a cancel lets go of its task. */
 function cancelled(session: Omit<SeededSession, 'id'>): Omit<SeededSession, 'id'> {
-  return { ...session, status: 'cancelled', priorityUid: null, title: null, categoryUid: null };
+  return { ...session, status: 'cancelled', stoppedAt: null, priorityUid: null, title: null, categoryUid: null };
+}
+
+/** The session finished by hand `minutes` past its plan and logged at the plan, as Planned in How Much to Log? does. */
+function ranOver(session: Omit<SeededSession, 'id'>, minutes: number): Omit<SeededSession, 'id'> {
+  return { ...session, stoppedAt: session.endedAt! + minutes * MINUTE_MS };
 }
 
 /** A break planned for `minutes`; one `took` less was ended early. */
@@ -350,10 +377,11 @@ function buildPastDay(date: string, kind: Exclude<DayKind, 'today'>, rand: () =>
   const priority = (position: number, text: string, done: boolean, addedAt = createdAt) => oneOff(position, text, done, addedAt);
   // The routines due on the day, after its `after` one-off rows, written with them.
   const routines = (after: number, addedAt = createdAt) => routineRows(date, kind, after, addedAt);
-  // A 25-minute session on the routine titled so, in a gap the template leaves; none when it isn't due that day.
+  // A 25-minute session on the routine titled so, in a gap the template leaves, stopped 9 minutes
+  // past its plan; none when it isn't due that day.
   const onRoutine = (rows: SeededPriority[], title: string, startedAt: number) => {
     const row = rows.find((p) => p.text === title);
-    return row ? [completed(row, startedAt, 25)] : [];
+    return row ? [ranOver(completed(row, startedAt, 25), 9)] : [];
   };
 
   const base = { date, kind, createdAt, overtimeApproved: false, workMinutes: null };
@@ -372,13 +400,13 @@ function buildPastDay(date: string, kind: Exclude<DayKind, 'today'>, rand: () =>
       punches: punchRows([clockIn, lunchOut, lunchIn, extraOut, extraIn, clockOut + 10 * MINUTE_MS]),
       priorities: [...priorities, ...routine],
       sessions: [
-        completed(priorities[0]!, firstStart, 25),
+        ranOver(completed(priorities[0]!, firstStart, 25), 7),
         completed(priorities[1]!, firstStart + 45 * MINUTE_MS, 50),
         completed(priorities[3]!, lunchIn + 20 * MINUTE_MS, 25),
         ...onRoutine(routine, 'Monitor the queue', lunchIn + 50 * MINUTE_MS),
-        completed(pick(UNPLANNED_LABELS), extraIn + 15 * MINUTE_MS, 25),
+        ranOver(completed(pick(UNPLANNED_LABELS), extraIn + 15 * MINUTE_MS, 25), 6),
       ],
-      breaks: [rested(firstStart + 25 * MINUTE_MS, 5)],
+      breaks: [rested(firstStart + 35 * MINUTE_MS, 5)],
       retroNote: note(NOTES.extraPair),
       retroAt: clockOut + 15 * MINUTE_MS,
     };
@@ -420,10 +448,10 @@ function buildPastDay(date: string, kind: Exclude<DayKind, 'today'>, rand: () =>
       // The call took the routines too: on the list, no time, not ticked.
       priorities: [...priorities, ...routines(priorities.length)],
       sessions: [
-        completed(priorities[0]!, clockIn + 20 * MINUTE_MS, 25),
+        ranOver(completed(priorities[0]!, clockIn + 20 * MINUTE_MS, 25), 9),
         // Cancelled a few minutes in: must not count anywhere.
         cancelled(completed(priorities[1]!, clockIn + 60 * MINUTE_MS, 25, 5)),
-        completed(pick(UNPLANNED_LABELS), lunchIn + 30 * MINUTE_MS, 25),
+        ranOver(completed(pick(UNPLANNED_LABELS), lunchIn + 30 * MINUTE_MS, 25), 6),
       ],
       breaks: [],
       // Written, but the day was never marked reviewed.
@@ -464,14 +492,14 @@ function buildPastDay(date: string, kind: Exclude<DayKind, 'today'>, rand: () =>
     punches: punchRows([clockIn, lunchOut, lunchIn, clockOut]),
     priorities: [...priorities, ...routine],
     sessions: [
-      completed(priorities[0]!, clockIn + 15 * MINUTE_MS, 25),
+      ranOver(completed(priorities[0]!, clockIn + 15 * MINUTE_MS, 25), 8),
       completed(priorities[1]!, clockIn + 60 * MINUTE_MS, 50),
       completed(pick(UNPLANNED_LABELS), lunchIn + 30 * MINUTE_MS, 25),
       ...onRoutine(routine, 'Monitor the queue', lunchIn + 60 * MINUTE_MS),
       ...onRoutine(routine, 'Follow-ups', lunchIn + 100 * MINUTE_MS),
     ],
     // A fifth of each session before it, the way Suggest breaks sizes them.
-    breaks: [rested(clockIn + 40 * MINUTE_MS, 5), rested(clockIn + 110 * MINUTE_MS, 10)],
+    breaks: [rested(clockIn + 50 * MINUTE_MS, 5), rested(clockIn + 110 * MINUTE_MS, 10)],
     retroNote: note(twoDone ? NOTES.twoDone : NOTES.oneDone),
     retroAt: clockOut + 5 * MINUTE_MS,
   };
@@ -520,7 +548,7 @@ function buildToday(today: string, now: number, running: boolean, last: Pick<Day
     // Paused eight minutes for a question, then finished three minutes short of the plan.
     completed('Inbox', clockIn + 70 * MINUTE_MS, 25, 22, 8),
   ].filter((s) => s.endedAt! <= until);
-  if (running) sessions.push({ ...completed(priorities[2]!, runningFrom, 25), endedAt: null, status: 'running' });
+  if (running) sessions.push({ ...completed(priorities[2]!, runningFrom, 25), endedAt: null, stoppedAt: null, status: 'running' });
   return {
     date: today,
     kind: 'today',

@@ -135,6 +135,12 @@ interface RangeReview {
    */
   typicalDay: { planned: number; done: number } | null;
   /**
+   * How long sessions typically ran (the median `ranSeconds`, today's included) for the one or two
+   * lengths they started with (`firstPlannedSeconds`) that have three or more sessions finished by
+   * hand, the most used first.
+   */
+  typicalRuns: { firstPlannedSeconds: number; ranSeconds: number }[];
+  /**
    * The focus and the ticks by category, most time first, then the most ticks, and no category
    * last. A category with neither is left out; the sums are `focusedSeconds`, `offPlanSeconds`
    * and `prioritiesDone`.
@@ -184,6 +190,7 @@ export function reviewRange(
     breaks: { count: 0, seconds: 0 },
     midDay: { added: 0, done: 0, categoryUid: null },
     typicalDay: null,
+    typicalRuns: [],
     byCategory: [],
     unplanned: [],
     routines: [],
@@ -208,6 +215,8 @@ export function reviewRange(
   // Rows written and ticked on each finished day with a plan, for the typical day.
   const plannedRows: number[] = [];
   const doneRows: number[] = [];
+  // Each first length's runs, met first, first in the map: the sort keeps that order on a tie.
+  const runs = new Map<number, number[]>();
   let onPlan = 0;
   for (const day of days.filter((d) => d.date <= today).sort((a, b) => a.date.localeCompare(b.date))) {
     if (!hasContent(day)) continue;
@@ -249,6 +258,9 @@ export function reviewRange(
       plannedRows.push(r.total);
       doneRows.push(r.done);
     }
+    for (const s of day.sessions) {
+      if (s.firstPlannedSeconds != null && s.ranSeconds != null) runs.set(s.firstPlannedSeconds, [...(runs.get(s.firstPlannedSeconds) ?? []), s.ranSeconds]);
+    }
     const routineRows = r.planned.filter((p) => p.priority.recurring);
     const oneOffs = r.planned.filter((p) => !p.priority.recurring);
     addRoutines(routines, routineRows, day.date);
@@ -260,6 +272,11 @@ export function reviewRange(
   if (out.focusedSeconds > 0) out.onPlanPercent = Math.round((onPlan / out.focusedSeconds) * 100);
   // One planned day is that day, not a typical one.
   if (plannedRows.length > 1) out.typicalDay = { planned: median(plannedRows), done: median(doneRows) };
+  out.typicalRuns = [...runs]
+    .filter(([, ran]) => ran.length >= 3)
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 2)
+    .map(([firstPlannedSeconds, ran]) => ({ firstPlannedSeconds, ranSeconds: median(ran) }));
   // More than half, so at most one category can be named.
   for (const [uid, count] of midDayCategories) if (count * 2 > out.midDay.added) out.midDay.categoryUid = uid;
   const listed = [...byCategory.values()].filter((c) => c.seconds > 0 || c.done > 0);
@@ -361,7 +378,7 @@ export function periodTarget(kind: PeriodKind, r: Pick<RangeReview, 'targetSecon
 
 /**
  * The middle of `values`, or halfway between the middle two rounded half up, so a typical day
- * is whole rows. With an odd count both indexes are the middle one.
+ * is whole rows and a typical run whole seconds. With an odd count both indexes are the middle one.
  */
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);

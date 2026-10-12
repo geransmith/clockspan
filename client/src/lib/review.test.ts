@@ -119,6 +119,7 @@ describe('reviewRange', () => {
       breaks: { count: 0, seconds: 0 },
       midDay: { added: 0, done: 0, categoryUid: null },
       typicalDay: null,
+      typicalRuns: [],
       byCategory: [],
       unplanned: [],
       routines: [],
@@ -405,6 +406,40 @@ describe('reviewRange: Not done', () => {
     expect(notDone([day(MON, row('report', 'task00000002'), row('Report', 'task00000001', { done: true }))])).toEqual([]);
     expect(notDone([day(MON, row('Report', 'task00000001', { done: true }), row('report', 'task00000002'))], new Set(['task00000001']))).toEqual([
       ['task00000002', 'report', [MON]],
+    ]);
+  });
+});
+
+describe('reviewRange: Typical runs', () => {
+  const now = at('2026-09-16', 17);
+  const MON = '2026-09-14';
+  const TUE = '2026-09-15';
+  const WED = '2026-09-16';
+  /** A session that started at `first` seconds and ran `ran` before a finish by hand. */
+  const run = (id: number, date: string, first: number | null, ran: number | null) =>
+    session(id, date, at(date, 9) + id * MINUTE_MS, first ?? 1500, { firstPlannedSeconds: first, ranSeconds: ran });
+  const runs = (...days: Day[]) => reviewRange(days, settings, WED, now).typicalRuns;
+
+  it("gives a length's median run, halfway between the middle two rounded half up for an even count, today's sessions included", () => {
+    const mon = makeDay(MON, { sessions: [run(1, MON, 1500, 1800), run(2, MON, 1500, 1200)] });
+    const wed = makeDay(WED, { sessions: [run(3, WED, 1500, 2040)] });
+    expect(runs(mon)).toEqual([]);
+    expect(runs(mon, wed)).toEqual([{ firstPlannedSeconds: 1500, ranSeconds: 1800 }]);
+    const tue = makeDay(TUE, { sessions: [run(4, TUE, 1500, 1501)] });
+    expect(runs(mon, tue, wed)).toEqual([{ firstPlannedSeconds: 1500, ranSeconds: 1651 }]);
+  });
+
+  it('skips a session with no run or no first length, so a length short of three sessions has no entry', () => {
+    const day = makeDay(TUE, { sessions: [run(1, TUE, 1500, 1800), run(2, TUE, 1500, 1900), run(3, TUE, 1500, null), run(4, TUE, null, 2000)] });
+    expect(runs(day)).toEqual([]);
+  });
+
+  it('lists the two most used lengths, the most used first and a tie in the order met', () => {
+    const of = (first: number, count: number, from: number) => Array.from({ length: count }, (_, i) => run(from + i, TUE, first, first + 60));
+    const day = makeDay(TUE, { sessions: [...of(600, 3, 1), ...of(1500, 4, 10), ...of(3000, 3, 20)] });
+    expect(runs(day)).toEqual([
+      { firstPlannedSeconds: 1500, ranSeconds: 1560 },
+      { firstPlannedSeconds: 600, ranSeconds: 660 },
     ]);
   });
 });
