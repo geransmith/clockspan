@@ -69,9 +69,9 @@ describe('copy builders', () => {
     expect(TODAY_OFFER.over(1)).toBe('More than 1 recurring row today.');
   });
 
-  it('describes a finished timer with or without a label', () => {
-    expect(TIMER_DONE.body('Write the report', '25m')).toBe('Write the report · 25m logged.');
-    expect(TIMER_DONE.body('', '25m')).toBe('25m logged.');
+  it('describes a finished timer with or without a label, and the time past it not counted', () => {
+    expect(TIMER_DONE.body('Write the report', '25m', '10 min')).toBe("Write the report · 25m logged, the planned length. The 10 min after it aren't counted.");
+    expect(TIMER_DONE.body('', '25m', '3h 20m')).toBe("25m logged, the planned length. The 3h 20m after it aren't counted.");
   });
 
   it('asks what to do with a timer that ran out', () => {

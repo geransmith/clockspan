@@ -102,12 +102,15 @@ export function BreakProvider({ children }: { children: ReactNode }) {
     if (current) void endBreak(current.date, current.id);
   }, [endBreak, current]);
 
-  // A timer running means the break is over (the server ended it as the session started), and
-  // so is any banner about breaks: a suggestion or Break's Over.
+  // A timer running means the break is over (the server ended it as the session started), and a
+  // break running, here or on another device, has answered Break's Over: either takes the banners
+  // about breaks down (a suggestion or Break's Over). Two flags, not one: a timer started during a
+  // break ends it in the same render, and one flag would stay true through that render.
   const working = running != null;
+  const resting = current != null;
   useEffect(() => {
-    if (working) dismissByTag('break');
-  }, [working]);
+    if (working || resting) dismissByTag('break');
+  }, [working, resting]);
 
   const todaySessions = today?.sessions;
   const suggestion = useMemo(() => (settings.suggestBreaks && todaySessions ? suggestBreak(todaySessions) : null), [settings.suggestBreaks, todaySessions]);
@@ -150,11 +153,13 @@ export function BreakProvider({ children }: { children: ReactNode }) {
     writeStored(OVER_KEY, String(last.startedAt));
     if (last.endedAt < last.startedAt + last.plannedSeconds * 1000 || now - last.endedAt > STALE_MS) return;
     alert({
+      kicker: BREAK.kicker,
       title: BREAK.over,
       body: BREAK.overBody,
       tone: 'info',
       chime: settings.sounds.breakDone,
       tag: 'break',
+      sticky: true,
       sound: settings.sound,
       notifications: settings.notifications,
     });

@@ -419,7 +419,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   button's key, goes through the same `run`), since a break write goes out on the day store's
   queue, not the timer's, and the two could reach the server in either order; for the same reason
   a session start takes the break banners down in its tap (`dismissByTag('break')`, in
-  `TimerLengths`), whose Start Break those buttons don't cover.
+  `TimerLengths`), whose Start Break those buttons don't cover. The tap also takes the timer's
+  ending banners down (`dismissByTag('timer-complete')`), so the stack clears from the tap rather
+  than only once the start answers.
 - **Saves reach the server in the order they were made**, each store's on its own queue (`serial()`
   in `lib/optimistic.ts`, made by `useTracked`). In the day store, `setPunches` and `setPriorities`
   send a whole list, so one PUT per list and day is in flight and only the newest waiting list

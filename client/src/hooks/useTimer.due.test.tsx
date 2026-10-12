@@ -3,7 +3,7 @@ import { act } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { alert, dismissByTag, warnSaveFailed } from '../lib/alerts';
-import { TIMER_DONE, TIMER_DUE } from '../lib/copy';
+import { TIMER_DONE, TIMER_DUE, TIMER_KICKER } from '../lib/copy';
 import { dueKey } from '../lib/timer';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { answered, deferredAnswer, endSession, makeSession, makeSettings, refused, setVisibility, settle, T0 } from '../test/hooks';
@@ -109,7 +109,14 @@ describe("time's up", () => {
     // Nobody pressed Finish: nothing for a break suggestion to follow.
     expect(result.current.timer.finished).toBeNull();
     expect(alert).toHaveBeenLastCalledWith(
-      expect.objectContaining({ title: TIMER_DONE.title, body: TIMER_DONE.body('', '25m'), sound: false, notifications: false }),
+      expect.objectContaining({
+        kicker: TIMER_KICKER,
+        title: TIMER_DONE.title,
+        body: TIMER_DONE.body('', '25m', '10 min'),
+        sticky: true,
+        sound: false,
+        notifications: false,
+      }),
     );
   });
 
@@ -145,7 +152,25 @@ describe("time's up", () => {
     expect(result.current.timer.running).toBeNull();
     // Found past the grace: no due banner, just the completion.
     expect(alert).toHaveBeenCalledTimes(1);
-    expect(alert).toHaveBeenCalledWith(expect.objectContaining({ title: TIMER_DONE.title, body: TIMER_DONE.body('Write the report', '25m'), sound: true }));
+    expect(alert).toHaveBeenCalledWith(
+      expect.objectContaining({ title: TIMER_DONE.title, body: TIMER_DONE.body('Write the report', '25m', '20 min'), sound: true }),
+    );
+  });
+
+  it('names the whole time past the end of a session found hours later', async () => {
+    vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(startedAgo(225)) }));
+    await renderRunning(startedAgo(225));
+    await settle();
+    expect(alert).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ body: TIMER_DONE.body('Write the report', '25m', '3h 20m') }));
+  });
+
+  it('says nothing when a finish by hand on another device landed first, logging more than the plan', async () => {
+    vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(startedAgo(35), { durationSeconds: 2100 }) }));
+    const { result } = await renderRunning(startedAgo(35));
+    await settle();
+    expect(api.finishSession).toHaveBeenCalledOnce();
+    expect(result.current.timer.running).toBeNull();
+    expect(alert).not.toHaveBeenCalledWith(expect.objectContaining({ title: TIMER_DONE.title }));
   });
 
   it('says nothing when the server reports it was cancelled elsewhere', async () => {
