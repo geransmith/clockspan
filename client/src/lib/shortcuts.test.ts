@@ -31,6 +31,7 @@ describe('shortcutFor', () => {
   it('maps each key to one shortcut, a letter whatever its case', () => {
     expect(keyAt(document.body, 'n')).toBe('new');
     expect(keyAt(document.body, 'N', { shiftKey: true })).toBe('new');
+    expect(keyAt(document.body, 'l')).toBe('later');
     expect(keyAt(document.body, '?', { shiftKey: true })).toBe('help');
     expect(keyAt(document.body, '+')).toBe('more');
     expect(keyAt(document.body, 'r')).toBe('rest');

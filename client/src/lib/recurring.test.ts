@@ -9,7 +9,6 @@ import { acceptOffer, dueRecurring, notOnList, offerPicks, recurringCount, recur
 const QUEUE = makeRecurring('rcur00000001', 'Monitor the queue', { categoryUid: 'cafe00000001', note: 'Tier 2 too.' });
 const FOLLOW_UPS = makeRecurring('rcur00000002', 'Follow-ups', { weekdays: [1, 3, 5] });
 const SATURDAY = makeRecurring('rcur00000003', 'Water the plants', { weekdays: [6] });
-const NONE = new Set<string>();
 
 /** A routine's row on today's list, its box blank in the draft when given ''. */
 const routine = (position: number, item = QUEUE, text = item.title, patch: Partial<Priority> = {}) =>
@@ -40,19 +39,18 @@ describe('the days', () => {
 
 describe('dueRecurring', () => {
   it("offers the items whose weekdays hold the date's, in the order given", () => {
-    expect(dueRecurring([FOLLOW_UPS, SATURDAY, QUEUE], TODAY, [], NONE)).toEqual([FOLLOW_UPS, QUEUE]);
-    expect(dueRecurring([FOLLOW_UPS, SATURDAY, QUEUE], '2026-09-29', [], NONE)).toEqual([QUEUE]);
-    expect(dueRecurring([FOLLOW_UPS, SATURDAY, QUEUE], '2026-10-03', [], NONE)).toEqual([SATURDAY]);
+    expect(dueRecurring([FOLLOW_UPS, SATURDAY, QUEUE], TODAY, [])).toEqual([FOLLOW_UPS, QUEUE]);
+    expect(dueRecurring([FOLLOW_UPS, SATURDAY, QUEUE], '2026-09-29', [])).toEqual([QUEUE]);
+    expect(dueRecurring([FOLLOW_UPS, SATURDAY, QUEUE], '2026-10-03', [])).toEqual([SATURDAY]);
   });
 
   it('leaves out an item a row of the list is, its box blank in the draft or not', () => {
-    expect(dueRecurring([QUEUE, FOLLOW_UPS], TODAY, [routine(1)], NONE)).toEqual([FOLLOW_UPS]);
-    expect(dueRecurring([QUEUE, FOLLOW_UPS], TODAY, [routine(1, QUEUE, '')], NONE)).toEqual([FOLLOW_UPS]);
+    expect(dueRecurring([QUEUE, FOLLOW_UPS], TODAY, [routine(1)])).toEqual([FOLLOW_UPS]);
+    expect(dueRecurring([QUEUE, FOLLOW_UPS], TODAY, [routine(1, QUEUE, '')])).toEqual([FOLLOW_UPS]);
   });
 
-  it("leaves out an item answered today, and matches rows by uid alone: a one-off row of the title doesn't hide it", () => {
-    expect(dueRecurring([QUEUE, FOLLOW_UPS], TODAY, [], new Set([QUEUE.uid]))).toEqual([FOLLOW_UPS]);
-    expect(dueRecurring([QUEUE], TODAY, [makePriority(1, 'Monitor the queue')], NONE)).toEqual([QUEUE]);
+  it("matches rows by uid alone: a one-off row of the title doesn't hide it", () => {
+    expect(dueRecurring([QUEUE], TODAY, [makePriority(1, 'Monitor the queue')])).toEqual([QUEUE]);
   });
 });
 

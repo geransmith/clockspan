@@ -72,6 +72,14 @@ export function formatDuration(seconds: number): string {
   return `${h}h ${pad2(m)}m`;
 }
 
+/** "1 hour 40 minutes", "25 minutes": `formatDuration`'s figure in words, for a screen reader. A minute or more. */
+export function formatDurationWords(seconds: number): string {
+  const s = Math.round(seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return [h > 0 && counted(h, 'hour'), m > 0 && counted(m, 'minute')].filter(Boolean).join(' ');
+}
+
 /** "7:39": hours and minutes on one line, for a cell too narrow for "7h 39m". */
 export function formatHours(seconds: number): string {
   const s = Math.abs(Math.round(seconds));

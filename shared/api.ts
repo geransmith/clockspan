@@ -227,6 +227,8 @@ export interface Day {
   workMinutes: number | null;
   /** Each alarm's snooze on this day, by alarm id: the epoch ms it rings again. Set one alarm at a time. */
   snoozedUntil: Record<string, number>;
+  /** When the morning offer was first answered, from any device (null = not yet): a day stamped offers nothing. */
+  offerAnsweredAt: number | null;
   sessions: Session[];
   /** By start. */
   breaks: Break[];
@@ -259,6 +261,7 @@ export function emptyDay(date: string): Day {
     retroAt: null,
     workMinutes: null,
     snoozedUntil: {},
+    offerAnsweredAt: null,
     sessions: [],
     breaks: [],
   };
@@ -305,6 +308,9 @@ export type SnoozeResponse = Pick<Day, 'snoozedUntil'>;
 
 /** `PUT /days/:date/retro`: the note and the first reviewed-at, as stored. */
 export type RetroResponse = Pick<Day, 'retroNote' | 'retroAt'>;
+
+/** `PUT /days/:date/offer`: the first time the day's morning offer was answered, as stored. */
+export type OfferResponse = Pick<Day, 'offerAnsweredAt'>;
 
 /** `PUT /days/:date/target`: the day's own work-day length as stored (null = the usual one). */
 export type TargetResponse = Pick<Day, 'workMinutes'>;

@@ -3,7 +3,19 @@ import { LIMITS } from '../../../shared/api.js';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { completedSession, makeDay, makePriority, makeSession, punchesAt, rowUid } from '../test/fixtures';
 import type { Day } from '../types';
-import { editedSession, focusOf, hasContent, loggedByUid, reviewDay, sessionCategory, sessionCategoryEdit, sessionName, sessionRow, taskLogged } from './retro';
+import {
+  editedSession,
+  focusOf,
+  hasContent,
+  loggedByUid,
+  reviewDay,
+  rowFocus,
+  sessionCategory,
+  sessionCategoryEdit,
+  sessionName,
+  sessionRow,
+  taskLogged,
+} from './retro';
 
 describe('focusOf', () => {
   it('counts completed sessions only', () => {
@@ -43,6 +55,25 @@ describe('loggedByUid', () => {
     const running = makeSession({ id: 1, startedAt: 5000, plannedSeconds: 900, priorityUid: 'cccccccccccc' });
     expect(loggedByUid([running], 5000).get('cccccccccccc')).toBe(1);
     expect(loggedByUid([running], 4000).get('cccccccccccc')).toBe(1);
+  });
+});
+
+describe('rowFocus', () => {
+  it("adds up the task's completed sessions of the day, as the retro's row does, and nothing else", () => {
+    const priorities = [makePriority(1, 'Report'), makePriority(2, 'Email')];
+    const sessions = [
+      completedSession(1, 0, 600, { priorityUid: rowUid(1) }),
+      completedSession(2, 1, 300, { priorityUid: rowUid(1) }),
+      completedSession(3, 2, 120, { priorityUid: rowUid(2) }),
+      completedSession(4, 3, 900),
+      completedSession(5, 4, 100, { priorityUid: rowUid(1), status: 'cancelled' }),
+      makeSession({ id: 6, startedAt: 0, plannedSeconds: 900, priorityUid: rowUid(1) }),
+      makeSession({ id: 7, startedAt: 0, plannedSeconds: 900, priorityUid: rowUid(2), pausedAt: 60_000 }),
+    ];
+    expect(rowFocus(rowUid(1), sessions)).toBe(900);
+    expect(rowFocus(rowUid(2), sessions)).toBe(120);
+    expect(rowFocus(rowUid(3), sessions)).toBe(0);
+    expect(priorities.map((p) => rowFocus(p.uid!, sessions))).toEqual(reviewDay(priorities, sessions).planned.map((r) => r.focusedSeconds));
   });
 });
 

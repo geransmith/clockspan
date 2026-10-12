@@ -121,18 +121,22 @@ describe('adding from a column', () => {
     expect(document.activeElement).toBe(field('New card for Later'));
   });
 
-  it("opens Later's box on N, showing Later on a phone, with N named on Later's + while it would open", async () => {
-    await renderBoard();
-    expect(plus('Later').getAttribute('aria-keyshortcuts')).toBe('N');
-    expect(plus('Next').hasAttribute('aria-keyshortcuts')).toBe(false);
-    expect(pressKey('n')).toBe(false);
-    expect(shownColumns()).toEqual(['Later']);
-    expect(document.activeElement).toBe(field('New card for Later'));
-    cleanup();
+  // L is also the header's Add to Later, which presses Later's + by its id on the Board.
+  it("opens Later's box on N and on L, showing Later on a phone, with both named on Later's + while it would open", async () => {
+    for (const key of ['n', 'l']) {
+      await renderBoard();
+      expect(plus('Later').id).toBe('board-add-later-button');
+      expect(plus('Later').getAttribute('aria-keyshortcuts')).toBe('N L');
+      expect(plus('Next').hasAttribute('aria-keyshortcuts')).toBe(false);
+      expect(pressKey(key), key).toBe(false);
+      expect(shownColumns()).toEqual(['Later']);
+      expect(document.activeElement).toBe(field('New card for Later'));
+      cleanup();
+    }
     onServer = makeBoard(...fullBoard());
     await renderBoard();
     expect(plus('Later').hasAttribute('aria-keyshortcuts')).toBe(false);
-    expect(pressKey('n')).toBe(true);
+    expect([pressKey('n'), pressKey('l')]).toEqual([true, true]);
     expect(isOpen('New card for Later')).toBe(false);
   });
 

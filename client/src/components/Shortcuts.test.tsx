@@ -37,7 +37,7 @@ describe('Shortcuts', () => {
     expect(pressKey('?', { shiftKey: true })).toBe(false);
     expect(document.activeElement).toBe(dialog());
     expect(groups()).toEqual([
-      ['Add', 'N New priority on the sheet, new card in Later on the board'],
+      ['Add', 'N New priority on the sheet, new card in Later on the board', 'L New card at the top of Later, from any page'],
       ['Pages', "S Today's sheet", 'B Board, or back to the sheet', 'H History, or back to the sheet', '? This list'],
       ['Timer', 'P Pause or resume', "F Finish, once time's up", '+ Add 10 minutes', 'R Start a break from the timer card'],
     ]);

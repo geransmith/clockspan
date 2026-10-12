@@ -298,6 +298,8 @@ button {
    after it. */
 .btn-icon[aria-pressed='true'],
 .btn-icon[aria-pressed='true']:hover,
+.topbar-actions .btn-icon[aria-expanded='true'],
+.topbar-actions .btn-icon[aria-expanded='true']:hover,
 .chip[aria-pressed='true'] {
   background: var(--accent-soft);
   border-color: transparent;
@@ -898,10 +900,13 @@ button {
   display: flex;
   gap: 6px;
 }
-/* Four buttons (Board, History, Settings, the user) and the brand's name don't fit a 360 px
-   phone: the name goes from sight there, still the button's name, and the logo stays. From
-   640 px the buttons' words would overflow the row, so they wait for 760 px. */
-.topbar-row--crowded .brand-name {
+/* Board, History, Add to Later, Settings and, signed in, the user: the buttons and the brand's
+   name don't fit a 360 px phone, so the name goes from sight below 420 px, still the button's
+   name, and the logo stays. From 640 px the buttons' words would overflow the row, so they wait
+   for 780 px: signed in, the name and five worded buttons take 727 px, which the row has at 760
+   only with no classic scrollbar's gutter. The same in every auth mode, so the header doesn't
+   change with it. */
+.topbar-row .brand-name {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -910,7 +915,7 @@ button {
   white-space: nowrap;
 }
 @media (min-width: 420px) {
-  .topbar-row--crowded .brand-name {
+  .topbar-row .brand-name {
     position: static;
     width: auto;
     height: auto;
@@ -919,11 +924,11 @@ button {
     white-space: normal;
   }
 }
-.topbar-row--crowded .btn-text {
+.topbar-row .btn-text {
   display: none;
 }
-@media (min-width: 760px) {
-  .topbar-row--crowded .btn-text {
+@media (min-width: 780px) {
+  .topbar-row .btn-text {
     display: inline;
   }
 }
@@ -1364,8 +1369,8 @@ button {
 }
 /* A written row's note button, and its category chip after it, sit on a line of their own under
    the field, so the field keeps the row's width beside the ×, and they are nearer their own field
-   than the next row's. An empty row has neither and keeps one line. A routine's row has its
-   repeat mark first on that line, 6 px before the button. */
+   than the next row's. An empty row has neither and keeps one line. The time logged on the row
+   comes first on that line, then a routine's repeat mark, each 6 px before what follows. */
 .priority-end {
   grid-column: 3;
   grid-row: 2;
@@ -1374,6 +1379,11 @@ button {
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+.priority-logged {
+  flex: none;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 /* Line 1 of the last column, beside the field. From 640 px a free row has no button or chip,
    which would leave its × in their column. */
@@ -1388,9 +1398,9 @@ button {
    and 6 px: 10rem holds the widest chip, a name stopped at 9em of the chip's 0.82rem, plus 38 px
    of dot, gap, padding and border, is 156 px at a 16 px root font, with more to spare at a larger
    one.
-   A routine's repeat mark shares the column too, first: the cell takes the column's whole width
-   (not its content's, which would push past it), so the chip shrinks and a long name ends in its
-   ellipsis sooner. */
+   The logged time and a routine's repeat mark share the column too, first: the cell takes the
+   column's whole width (not its content's, which would push past it), so the chip shrinks and a
+   long name ends in its ellipsis sooner. */
 @media (min-width: 640px) {
   .priority-row {
     grid-template-columns: 24px 22px 1fr 28px minmax(44px, auto);
@@ -1630,11 +1640,11 @@ button {
 }
 
 /* ---------- running bar ---------- */
-/* The bar and the banners, under the header and stuck to the top once it scrolls away. Above the
-   page's own stacking (a board tick, a sheet card being dragged), level with the burst, which
-   comes later in the tree and so paints over a Done pressed on the bar; the category list (51)
-   and the board's lifted card (dnd-kit's overlay, 999) stay above. No padding or border here:
-   the bar's margin collapses through, so no gap sticks with it. */
+/* The bar, the Later strip and the banners, under the header and stuck to the top once it scrolls
+   away. Above the page's own stacking (a board tick, a sheet card being dragged), level with the
+   burst, which comes later in the tree and so paints over a Done pressed on the bar; the category
+   list (51) and the board's lifted card (dnd-kit's overlay, 999) stay above. No padding or border
+   here: the last band's margin collapses through, so no gap sticks with it. */
 .top-stack {
   position: sticky;
   top: var(--safe-top);
@@ -1751,9 +1761,46 @@ button.log-label:hover {
   }
 }
 
+/* ---------- Later strip ---------- */
+/* A band like the running bar, under it or under the header. No display here, or `hidden` (on the
+   Board) stops hiding it. The status line is always there (a live region) and the error line only
+   while it has words; an empty `p` has no height, so only a line with words takes room under the
+   box. */
+.later-strip {
+  margin-bottom: 16px;
+  background: var(--surface);
+  border-block: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.running-bar:has(+ .later-strip:not([hidden])) {
+  margin-bottom: 0;
+}
+.running-bar + .later-strip {
+  border-top: 0;
+}
+.later-strip-inner {
+  max-width: var(--page-w);
+  margin: 0 auto;
+  padding: 8px max(12px, var(--safe-right)) 8px max(12px, var(--safe-left));
+}
+@media (min-width: 640px) {
+  .later-strip-inner {
+    padding-inline: max(16px, var(--safe-left)) max(16px, var(--safe-right));
+  }
+}
+.later-strip .board-add-box {
+  flex-wrap: nowrap;
+}
+.later-strip-inner > p {
+  padding-inline: 2px;
+}
+.later-strip-inner > p:not(:empty) {
+  margin-top: 4px;
+}
+
 /* ---------- banners ---------- */
-/* Hung under the running bar, or under the header with no timer running, so a banner never covers
-   the bar's buttons. */
+/* Hung under the running bar and the Later strip, or under the header with neither, so a banner
+   never covers their buttons. */
 .banners {
   position: absolute;
   top: calc(100% + 8px);
@@ -3204,8 +3251,8 @@ kbd {
     --hit-inset: -5px -4px -13px;
   }
   /* On that line it reaches up and down as the chip does, half the 6 px to the chip after it, and
-     13 px back, where nothing on the line takes taps (the gap before the field's column, or the
-     repeat mark): 44 × 44 px. */
+     13 px back, where nothing on the line takes taps (the gap before the field's column, the
+     logged time or the repeat mark): 44 × 44 px. */
   .priority-end .note-toggle {
     --hit-inset: -5px -4px -13px -14px;
   }
@@ -3252,7 +3299,8 @@ kbd {
   .priority-end .category-chip {
     --hit-inset: -9px -4px;
   }
-  /* Beside the field, half the 10 px gap to it and half the 6 px to the chip: 36 × 44 px. */
+  /* Beside the field, half the 10 px gap to it and half the 6 px to the chip: 36 × 44 px. It reaches
+     back the same way after the logged time or the repeat mark, neither of which takes taps. */
   .priority-end .note-toggle {
     --hit-inset: -9px -4px -9px -6px;
   }

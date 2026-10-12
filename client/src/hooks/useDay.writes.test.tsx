@@ -23,7 +23,7 @@ import {
   TODAY,
   YESTERDAY,
 } from '../test/hooks';
-import type { BreakEndResponse, BreakResponse, Day, OkResponse, OvertimeResponse, Priority, Punch, PunchesResponse, Session } from '../types';
+import type { BreakEndResponse, BreakResponse, Day, OfferResponse, OkResponse, OvertimeResponse, Priority, Punch, PunchesResponse, Session } from '../types';
 import { OTHER, renderStore } from './useDay.testkit';
 
 vi.mock('../api');
@@ -203,6 +203,42 @@ describe('per-day fields', () => {
     act(() => void result.current.setRetro(TODAY, { done: false }));
     expect(result.current.days[TODAY]?.retroAt).toBeNull();
     await settle();
+  });
+
+  it("setOfferAnswered shows a stamp at once, takes the server's first stamp, and keeps one already there", async () => {
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay()));
+    const saved = deferredAnswer<OfferResponse>();
+    vi.mocked(api.putOffer)
+      .mockReturnValueOnce(saved.promise)
+      .mockResolvedValueOnce(answered({ offerAnsweredAt: T0 - 5 }));
+    const { result } = renderStore();
+    await settle();
+
+    const done = begin(() => result.current.setOfferAnswered(TODAY));
+    expect(result.current.days[TODAY]?.offerAnsweredAt).toBe(T0);
+    // Another device answered first: the server keeps its stamp.
+    saved.resolve({ offerAnsweredAt: T0 - 5 });
+    await act(async () => expect(await done).toBe(true));
+    expect(api.putOffer).toHaveBeenCalledWith(TODAY);
+    expect(result.current.days[TODAY]?.offerAnsweredAt).toBe(T0 - 5);
+
+    vi.advanceTimersByTime(MINUTE_MS);
+    act(() => void result.current.setOfferAnswered(TODAY));
+    expect(result.current.days[TODAY]?.offerAnsweredAt).toBe(T0 - 5);
+    await settle();
+  });
+
+  it('setOfferAnswered drops the stamp when the save fails, says so, reloads the day and resolves false', async () => {
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay()));
+    vi.mocked(api.putOffer).mockRejectedValueOnce(new Error('offline'));
+    const { result } = renderStore();
+    await settle();
+    const done = begin(() => result.current.setOfferAnswered(TODAY));
+    expect(result.current.days[TODAY]?.offerAnsweredAt).toBe(T0);
+    await act(async () => expect(await done).toBe(false));
+    expect(result.current.days[TODAY]?.offerAnsweredAt).toBeNull();
+    expect(warnSaveFailed).toHaveBeenCalledTimes(1);
+    expect(api.getDay).toHaveBeenCalledTimes(2);
   });
 
   it('setWorkMinutes is optimistic, and a failed save puts the stored length back', async () => {
