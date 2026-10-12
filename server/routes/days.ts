@@ -34,6 +34,7 @@ import {
   emptyDay,
   LIMITS,
   type Day,
+  type OfferResponse,
   type OvertimeResponse,
   type PrioritiesResponse,
   type Priority,
@@ -281,6 +282,7 @@ function dayJson(day: DayRow, rows: ChildRows): Day {
     retroAt: day.retro_at,
     workMinutes: day.work_minutes,
     snoozedUntil: snoozes(day),
+    offerAnsweredAt: day.offer_answered_at,
     sessions: of(rows.sessions).map(sessionRowToJson),
     breaks: of(rows.breaks).map(breakRowToJson),
   };
@@ -506,6 +508,15 @@ export function daysRouter(db: DB, config: Config): Router {
     }
     const day = findDay(db, user.id, date);
     res.json({ retroNote: day?.retro_note ?? '', retroAt: day?.retro_at ?? null } satisfies RetroResponse);
+  });
+
+  // The day's morning offer answered, from any device: the first stamp stays, so a second answer changes nothing.
+  r.put('/:date/offer', (req, res) => {
+    const dayId = ensureDay(db, currentUser(req).id, req.params.date);
+    const { offer_answered_at: offerAnsweredAt } = db
+      .prepare(`UPDATE days SET offer_answered_at = COALESCE(offer_answered_at, ?) WHERE id = ? RETURNING offer_answered_at`)
+      .get(Date.now(), dayId) as { offer_answered_at: number };
+    res.json({ offerAnsweredAt } satisfies OfferResponse);
   });
 
   r.post('/:date/sessions', startSession(db));

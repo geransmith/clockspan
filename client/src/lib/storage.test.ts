@@ -82,10 +82,8 @@ describe('adoptUser and otherUserStored', () => {
     'focus:alarms': '2026-09-30 lunchBy:lead:15:29833440',
     // Left by a version that kept a key per day.
     'focus:alarms:2026-09-29': '["x"]',
-    'focus:left-open-dismissed': '2026-09-30',
     'focus:break-over': '1790000000000',
     'focus:capture-category': 'cafe00000001',
-    'focus:recurring-answered': '2026-09-30 rcur00000001',
   };
 
   /** A localStorage over a Map, holding the device's keys, one user's, and `focus:auth-user` when given. */

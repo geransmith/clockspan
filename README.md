@@ -53,13 +53,13 @@
 
 **Salaried or exempt.** *Settings → Timeclock* has a switch for each part that may not apply: *Meal periods* (then *Lunch punches* to hide the lunch rows too), *Overtime* and *Show hours*. If you don't punch at all, hide the timeclock card; the rest of the sheet works without it.
 
-**Two devices.** With the app open on a laptop and a phone, a change saved on one shows on the other within a second. Priority lists merge row by row; for a task's name, category or note the later change wins. There is one timer, and each device raises its own alarms.
+**Two devices.** With the app open on a laptop and a phone, a change saved on one shows on the other within a second. Priority lists merge row by row; for a task's name, category or note the later change wins. There is one timer, and each device raises its own alarms. Answering the morning offer on one answers it on the other.
 
 **Sign-in and data.** Per-user sheets, history, boards, settings and layout. Sign-in is optional: run it open on your LAN, create local accounts, or sign in through an OIDC provider such as Authentik. Old days can be deleted by hand or pruned automatically after a number of days you choose, with an optional server-wide ceiling (`RETENTION_DAYS`). *Reset All Settings* puts the settings back and leaves days and the board alone.
 
 **Layout.** Each user can reorder or hide the sheet's cards. A window 1100 px wide or more shows them in two columns, and any card can move to the other one.
 
-**Keyboard.** Outside a text box: `N` adds a priority (on the board, a card in *Later*), `S`, `B` and `H` go to the sheet, the board and History, `P` pauses or resumes the timer until time's up, `+` adds time, `F` finishes it once time's up, and `R` starts a break. `?` lists them, and one switch turns them off.
+**Keyboard.** Outside a text box: `N` adds a priority (on the board, a card in *Later*), `L` adds a card to the top of *Later* from any page, `S`, `B` and `H` go to the sheet, the board and History, `P` pauses or resumes the timer until time's up, `+` adds time, `F` finishes it once time's up, and `R` starts a break. `?` lists them, and one switch turns them off.
 
 **Phones.** Mobile layout, 44 px touch targets, installable (Android *Install app*, iOS *Add to Home Screen*; iOS shows notifications only from the installed app), a *keep screen awake* option so the countdown and chime stay live, and a light or dark theme that follows the device unless you pick one in Settings.
 

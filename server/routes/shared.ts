@@ -14,10 +14,11 @@ export interface DayRow {
   retro_at: number | null;
   work_minutes: number | null;
   snoozed_until: string;
+  offer_answered_at: number | null;
 }
 
 /** The `days` columns a `Day` is built from. `findDay` below and `daysInRange` (`routes/days.ts`) both read these, so a new per-day column is added here once, and on `DayRow`. */
-export const DAY_COLUMNS = 'id, date, overtime_approved, retro_note, retro_at, work_minutes, snoozed_until';
+export const DAY_COLUMNS = 'id, date, overtime_approved, retro_note, retro_at, work_minutes, snoozed_until, offer_answered_at';
 
 export function findDay(db: DB, userId: number, date: string): DayRow | undefined {
   return db.prepare(`SELECT ${DAY_COLUMNS} FROM days WHERE user_id = ? AND date = ?`).get(userId, date) as DayRow | undefined;

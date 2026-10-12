@@ -50,6 +50,8 @@ interface Props {
   /**
    * Today's morning notice: the leftovers and the top of Next while the list has no one-off
    * written (a routine on it doesn't count), and the routines due today that no row holds yet.
+   * Null on another day's sheet, once the day's offer is answered, and until the leftovers' read
+   * has settled.
    */
   offer?: MorningOffer | null;
 }
@@ -207,27 +209,20 @@ export function Priorities({ priorities, sessions, now, onChange, onDeleteTask, 
     if (first) inputs.current.get(first.position)?.focus();
     else focusFree(next);
   };
-  // Every item shown is answered, ticked or not, so the notice doesn't come back for it today,
-  // even when a row it added is removed.
-  const answerOffer = (offer: MorningOffer) =>
-    offer.answer(
-      offerRecurring.map((r) => r.uid),
-      offerLeftovers !== null || offerUpNext.length > 0,
-    );
   // Each leftover, then each task from Up Next, brings its own task over, added to today now, so
   // the retro counts it as planned unless a session ran first; the routines go after the padded
-  // rows, which stay free for one-offs (`acceptOffer`). The answer waits for the save: a failed one
-  // puts the list back, and the notice with it.
+  // rows, which stay free for one-offs (`acceptOffer`). The answer waits for the save, since the
+  // stamp goes on another queue: a failed one puts the list back, and the notice with it.
   const acceptToday = (offer: MorningOffer, seeds: PrioritySeed[], recurring: Recurring[]) => {
     setAdding(true);
     fill(acceptOffer(local, count, seeds, recurring, Date.now()));
     void sent.current.then((ok) => {
-      if (ok) answerOffer(offer);
+      if (ok) offer.answer();
       setAdding(false);
     });
   };
   const skipToday = (offer: MorningOffer) => {
-    answerOffer(offer);
+    offer.answer();
     focusFree();
   };
   // Within Rows per day the row stays, free, with the focus in its box; past that it goes.

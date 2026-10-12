@@ -3,8 +3,8 @@
  * (`WEEKDAYS`, `repeatDays`), and the morning offer's recurring half: which are due on a day and
  * not on its list yet (`dueRecurring`, `notOnList`), which of them the offer ticks (`offerPicks`,
  * up to `recurringPerDay`) and the list after Add to Today (`acceptOffer`, which places the
- * leftovers and Up Next by `seedRow` too). The answers this device gave today are
- * `useRecurringAnswered`'s. Pure: the clock comes in as `now`.
+ * leftovers and Up Next by `seedRow` too). A day whose offer was answered offers nothing, and the
+ * sheet checks that (`Day.offerAnsweredAt`). Pure: the clock comes in as `now`.
  */
 import type { Priority, Recurring } from '../types';
 import { isoWeekday } from '../../../shared/dates.js';
@@ -43,13 +43,12 @@ export function notOnList(items: Recurring[], rows: Priority[]): Recurring[] {
 
 /**
  * The items due on `date` (its ISO weekday is one of theirs), in the order given (the order they
- * were made, as Later's Repeats lists them), less those answered on this device today and those on
- * `rows` already (`notOnList`).
+ * were made, as Later's Repeats lists them), less those on `rows` already (`notOnList`).
  */
-export function dueRecurring(items: Recurring[], date: string, rows: Priority[], answered: ReadonlySet<string>): Recurring[] {
+export function dueRecurring(items: Recurring[], date: string, rows: Priority[]): Recurring[] {
   const weekday = isoWeekday(date);
   return notOnList(
-    items.filter((r) => r.weekdays.includes(weekday) && !answered.has(r.uid)),
+    items.filter((r) => r.weekdays.includes(weekday)),
     rows,
   );
 }

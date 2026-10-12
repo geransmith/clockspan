@@ -1,13 +1,16 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { AuthGate } from './auth/AuthGate';
 import { Banners } from './components/Banners';
 import { Burst } from './components/Burst';
 import { Header } from './components/Header';
+import { LaterStrip } from './components/LaterStrip';
 import { RunningTimerBar } from './components/RunningTimerBar';
 import { FinishChoice } from './components/FinishChoice';
 import { Shortcuts } from './components/Shortcuts';
 import { Sheet } from './components/Sheet';
 import { AppProviders } from './hooks/AppProviders';
+import { useBoardState } from './hooks/useBoard';
 import { useCelebration } from './hooks/useCelebration';
 import { useBreak } from './hooks/useBreak';
 import { useClock } from './hooks/useClock';
@@ -18,6 +21,7 @@ import { useTabTitle } from './hooks/useTabTitle';
 import { useTimer } from './hooks/useTimer';
 import { useTodayAlarms } from './hooks/useTodayAlarms';
 import { todayKey } from '../../shared/dates.js';
+import { boardFull } from './lib/board';
 import { floorToMinute } from './lib/format';
 import { applyTheme } from './lib/theme';
 import type { CardId } from './types';
@@ -44,6 +48,10 @@ function Shell() {
   const [customize, setCustomize] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [jumpTo, setJumpTo] = useState<CardId | null>(null);
+  // Only whether the Later strip is open: its text, line and category are its own (LaterStrip).
+  const [laterOpen, setLaterOpen] = useState(false);
+  const laterBox = useRef<HTMLInputElement>(null);
+  const { board } = useBoardState();
   const { settings, loaded } = useSettings();
   const { running, start, starting, ticked } = useTimer();
   const { start: startBreak } = useBreak();
@@ -80,6 +88,12 @@ function Shell() {
     timerStarting: starting,
   });
   useTabTitle(today, now);
+  // The box takes the focus inside the tap, which is what lets iOS raise the keyboard; an open strip only takes the focus.
+  const openLater = () => {
+    flushSync(() => setLaterOpen(true));
+    laterBox.current?.focus();
+  };
+  const closeLater = () => setLaterOpen(false);
   const loading = <div className="loading" aria-busy="true" />;
 
   const page = () => {
@@ -118,12 +132,23 @@ function Shell() {
 
   return (
     <div className={`app${running ? ' app--has-bar' : ''}`}>
-      <Header view={route.view} onNavigate={navigate} onOpenSettings={() => setSettingsOpen(true)} />
-      {/* Under the header and sticking to the top once it scrolls away; a child of .app, since a sticky
-          box sticks only inside its parent. Always here: Banners is a live region. */}
+      <Header
+        view={route.view}
+        onNavigate={navigate}
+        onOpenSettings={() => setSettingsOpen(true)}
+        laterOpen={laterOpen}
+        laterShut={!board || boardFull(board)}
+        onOpenLater={openLater}
+        onCloseLater={closeLater}
+      />
+      {/* The running bar, the Later strip and the banners, under the header and sticking to the top
+          once it scrolls away; a child of .app, since a sticky box sticks only inside its parent.
+          Always here: Banners is a live region. */}
       <div className="top-stack">
         {/* Keyed by session: one another device swapped in must not inherit an open label draft. */}
         {running && <RunningTimerBar key={running.id} session={running} />}
+        {/* Hidden on the Board, whose Later has its own box, and kept, so its text is there on the way back. */}
+        {laterOpen && <LaterStrip hidden={route.view === 'board'} inputRef={laterBox} onClose={closeLater} />}
         <Banners />
       </div>
       <main>{page()}</main>

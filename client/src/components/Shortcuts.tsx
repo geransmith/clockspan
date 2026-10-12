@@ -24,6 +24,7 @@ function Help({ onClose }: { onClose: () => void }) {
   const { settings } = useSettings();
   const labels: Record<ShortcutId, string> = {
     new: 'New priority on the sheet, new card in Later on the board',
+    later: 'New card at the top of Later, from any page',
     sheet: "Today's sheet",
     board: 'Board, or back to the sheet',
     history: 'History, or back to the sheet',

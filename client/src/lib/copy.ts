@@ -363,6 +363,9 @@ export const BOARD = {
   leavesNext: (day: string) => `Leaves Next on ${day}. Move it to Later to keep it.`,
 } as const;
 
+/** The Later strip's status line once a card's save has answered. */
+export const LATER_ADDED = (title: string) => `Added “${title}” to Later.`;
+
 /**
  * The board notice when a done item is moved into Later or Next: it stays done, more work goes on
  * a new card, and work that keeps coming back can be a recurring priority. `announce` is what a
