@@ -252,6 +252,14 @@ export const ALARM_ACTIONS = {
   openRetro: 'Open Retrospective',
 } as const;
 
+/** The banner a session or break logged with no Clock in raises once a day (`useAlarms`), and its button. */
+export const MISSED_CLOCK_IN = {
+  kicker: 'Timeclock',
+  title: 'Not Clocked In',
+  body: (time: string) => `Today's alarms count from your clock-in. Your first session today started at ${time}.`,
+  action: (time: string) => `Clock In at ${time}`,
+} as const;
+
 /** Banner when a start finds a timer already running, started on another device. */
 export const TIMER_ELSEWHERE = {
   title: 'A Timer Is Already Running',
@@ -274,6 +282,9 @@ export const PUNCH_ORDER = (row: string, at: string, after: string, afterAt: str
 
 /** The Worked and Clock Out At tiles' line while the punches are out of order, where any number would be a guess. */
 export const CHECK_PUNCHES = 'Check punches';
+
+/** A past day left clocked in: its pill, and its line wherever its hours would show. */
+export const NO_CLOCK_OUT = 'No clock-out';
 
 /** A session logged without a label, wherever sessions are listed. */
 export const UNTITLED_SESSION = 'Untitled session';

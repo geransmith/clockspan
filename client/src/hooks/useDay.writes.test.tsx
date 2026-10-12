@@ -115,6 +115,36 @@ describe('setPunches', () => {
   });
 });
 
+describe('editPunches', () => {
+  const lunchOut = (rows: Punch[]) => rows.map((p) => (p.position === 1 ? { ...p, at: T0 + 180 * MINUTE_MS } : p));
+
+  it('hands fn the rows shown now, a list set while another is out included, and saves what it returns', async () => {
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay()));
+    const first = deferredAnswer<PunchesResponse>();
+    vi.mocked(api.putPunches).mockReturnValueOnce(first.promise).mockImplementation(echoPunches);
+    const { result } = renderStore();
+    await settle();
+    act(() => void result.current.setPunches(TODAY, punchesAt(T0)));
+    const fn = vi.fn(lunchOut);
+    const done = begin(() => result.current.editPunches(TODAY, fn));
+    expect(fn).toHaveBeenCalledWith(punchesAt(T0));
+    first.resolve({ punches: punchesAt(T0) });
+    expect(await act(() => done)).toBe(true);
+    expect(vi.mocked(api.putPunches).mock.calls.map(([, p]) => p)).toEqual([punchesAt(T0), punchesAt(T0, T0 + 180 * MINUTE_MS)]);
+  });
+
+  it('sends nothing and resolves false when fn answers null or the store holds no such day', async () => {
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay()));
+    const { result } = renderStore();
+    await settle();
+    await act(async () => expect(await result.current.editPunches(TODAY, () => null)).toBe(false));
+    const fn = vi.fn(lunchOut);
+    await act(async () => expect(await result.current.editPunches(OTHER, fn)).toBe(false));
+    expect(fn).not.toHaveBeenCalled();
+    expect(api.putPunches).not.toHaveBeenCalled();
+  });
+});
+
 describe('per-day fields', () => {
   it('setOvertimeApproved says whether the server saved it', async () => {
     vi.mocked(api.getDay).mockResolvedValue(answered(makeDay()));
