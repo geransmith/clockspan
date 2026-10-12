@@ -21,7 +21,18 @@ interface Props {
   day: AlarmDayState;
   settings: Settings;
 }
-const NO_DAY: AlarmDayState = { overtimeApproved: false, retroDone: false, openRetro: vi.fn(), missedClockIn: null, clockInAt: vi.fn(), lunchInNow: vi.fn() };
+const NO_DAY: AlarmDayState = {
+  overtimeApproved: false,
+  retroDone: false,
+  breaks: [],
+  timerRunning: false,
+  openRetro: vi.fn(),
+  missedClockIn: null,
+  clockInAt: vi.fn(),
+  lunchInNow: vi.fn(),
+  startBreak: vi.fn(),
+  timerStarting: false,
+};
 
 function renderAlarms(props: Partial<Props> = {}) {
   const initialProps: Props = { date: TODAY, tc: null, now: T0, day: NO_DAY, settings, ...props };
@@ -117,7 +128,7 @@ describe('lunch end', () => {
   it('leaves Lunch In Now off a warning, which only a hand-made PUT gives it', () => {
     const leads = makeSettings({ alarms: { ...settings.alarms, lunchEnd: { ...settings.alarms.lunchEnd, leadMinutes: [5] } } });
     const before = T0 - 5 * MINUTE_MS;
-    renderAlarms({ tc: lunchAt(before), now: before, settings: leads, day: { ...NO_DAY, lunchInNow: vi.fn() } });
+    renderAlarms({ tc: lunchAt(before), now: before, settings: leads });
     expect(vi.mocked(alert).mock.calls[0]![0]).toEqual(expect.objectContaining({ tag: 'alarm:lunchEnd', title: 'Lunch Ends in 5 min', action: undefined }));
   });
 });
@@ -154,14 +165,14 @@ describe('clock-out and retro', () => {
     expect(planned.action).toEqual({ label: 'Overtime Approved', run: approveOvertime });
   });
 
-  it('approving overtime while the clock-out banner is up clears that banner and no other', () => {
+  it("approving overtime while the clock-out banner is up clears that banner, and lifts the break alarm's hold", () => {
     const { rerender } = renderAlarms({ tc: overDay });
     expect(tags()).toEqual(['alarm:clockOut', 'alarm:retro']);
     vi.mocked(dismissByTag).mockClear();
     // Approved from the card's switch (the banner's own button closes its banner itself).
     rerender({ date: TODAY, tc: overDay, now: T0, day: { ...NO_DAY, overtimeApproved: true }, settings });
     // A clocked-in day takes "Not Clocked In" down on every judged tick.
-    expect(vi.mocked(dismissByTag).mock.calls).toEqual([['clock-in'], ['alarm:clockOut']]);
+    expect(vi.mocked(dismissByTag).mock.calls).toEqual([['clock-in'], ['alarm:clockOut'], ['alarm:noBreak']]);
   });
 
   it("takes the banners down when the clock-in is cleared or the day changes, and not while today's punches settle", () => {
@@ -176,6 +187,7 @@ describe('clock-out and retro', () => {
       'alarm:clockOut',
       'alarm:lunchBy',
       'alarm:lunchEnd',
+      'alarm:noBreak',
       'alarm:retro',
       'alarm:secondMeal',
       'clock-in',
@@ -190,6 +202,7 @@ describe('clock-out and retro', () => {
       'alarm:clockOut',
       'alarm:lunchBy',
       'alarm:lunchEnd',
+      'alarm:noBreak',
       'alarm:retro',
       'alarm:secondMeal',
       'clock-in',
@@ -203,6 +216,43 @@ describe('clock-out and retro', () => {
     const moved = { ...overDay, clockOutAt: overDay.clockOutAt! + 10 * MINUTE_MS };
     rerender({ date: TODAY, tc: moved, now: T0, day: { ...NO_DAY, retroDone: true }, settings });
     expect(dismissByTag).toHaveBeenCalledWith('alarm:clockOut');
+  });
+});
+
+describe('break alarm', () => {
+  const on = makeSettings({ alarms: { ...settings.alarms, noBreak: { ...settings.alarms.noBreak, enabled: true } } });
+  // Clocked in 95 min ago with no break: due 5 min ago.
+  const due = tcAt(T0, T0 - 95 * MINUTE_MS);
+  const props = (day: Partial<AlarmDayState> = {}, tc = due): Props => ({ date: TODAY, tc, now: T0, day: { ...NO_DAY, ...day }, settings: on });
+  const banner = () => vi.mocked(alert).mock.calls.find(([a]) => a.tag === 'alarm:noBreak')![0];
+
+  it('chimes the warning sound when due and on the hourly repeat', () => {
+    const { rerender } = renderAlarms(props());
+    expect(banner()).toMatchObject({ title: '1h 35m Without a Break', chime: on.sounds.lead, sticky: true });
+    vi.mocked(alert).mockClear();
+    // An hour on, with the same clock-in: the 60-min repeat.
+    const later = T0 + 60 * MINUTE_MS;
+    rerender({ ...props({}, tcAt(later, T0 - 95 * MINUTE_MS)), now: later });
+    expect(banner()).toMatchObject({ title: '2h 35m Without a Break', chime: on.sounds.lead });
+  });
+
+  it('offers Start Break for the break length, which does nothing once a timer start is out', () => {
+    const startBreak = vi.fn();
+    const { rerender } = renderAlarms(props({ startBreak }));
+    const { action } = banner();
+    expect(action?.label).toBe('Start Break · 5 min');
+    action!.run();
+    expect(startBreak).toHaveBeenCalledExactlyOnceWith(5);
+    rerender(props({ startBreak, timerStarting: true }));
+    action!.run();
+    expect(startBreak).toHaveBeenCalledOnce();
+  });
+
+  it('takes its banner down once a session runs', () => {
+    const { rerender } = renderAlarms(props());
+    vi.mocked(dismissByTag).mockClear();
+    rerender(props({ timerRunning: true }));
+    expect(dismissByTag).toHaveBeenCalledWith('alarm:noBreak');
   });
 });
 

@@ -10,6 +10,7 @@ import {
   deferred,
   deferredAnswer,
   echoPunches,
+  makeBreak,
   makeDay,
   makeSession,
   makeSettings,
@@ -38,12 +39,14 @@ async function judged(): Promise<void> {
 }
 
 const alerted = () => vi.mocked(alert).mock.calls.map(([a]) => a);
+/** The break alarm's Start Break and whether a timer start is out, which Shell hands in. */
+const TIMER = { startBreak: vi.fn(), timerStarting: false };
 const tags = () => alerted().map((a) => a.tag);
 
 function render(settings: Settings | Promise<Settings>, day: Day) {
   vi.mocked(api.getSettings).mockReturnValue(Promise.resolve(settings).then(answered));
   vi.mocked(api.getDay).mockResolvedValue(answered(day));
-  return renderHook(() => ({ alarms: useTodayAlarms(TODAY, Date.now(), vi.fn(), true), store: useDayStore() }), { wrapper: SettingsAndDays });
+  return renderHook(() => ({ alarms: useTodayAlarms(TODAY, Date.now(), vi.fn(), true, TIMER), store: useDayStore() }), { wrapper: SettingsAndDays });
 }
 
 /** Another device, from scratch: the alarms already fired here are remembered in storage. */
@@ -62,7 +65,7 @@ describe('useTodayAlarms', () => {
   it("raises a banner for today's failed load only while the page doesn't show today, and takes it down once today loads", async () => {
     vi.mocked(api.getDay).mockRejectedValue(new Error('offline'));
     const { result, rerender } = renderHook(
-      (p: { shown: boolean }) => ({ alarms: useTodayAlarms(TODAY, Date.now(), vi.fn(), p.shown), store: useDayStore() }),
+      (p: { shown: boolean }) => ({ alarms: useTodayAlarms(TODAY, Date.now(), vi.fn(), p.shown, TIMER), store: useDayStore() }),
       {
         initialProps: { shown: true },
         wrapper: SettingsAndDays,
@@ -192,6 +195,28 @@ describe('useTodayAlarms', () => {
     await settle(MINUTE_MS);
     expect(api.getDay).toHaveBeenCalledTimes(2);
     expect(alerted().find((a) => a.tag === 'alarm:clockOut')?.title).toBe('Time to Clock Out');
+  });
+
+  describe('break alarm', () => {
+    const on = makeSettings({ alarms: { ...makeSettings().alarms, noBreak: { ...makeSettings().alarms.noBreak, enabled: true } } });
+    // Clocked in 95 min ago.
+    const working = (patch: Partial<Day> = {}) => makeDay(TODAY, { punches: punchesAt(T0 - 95 * MINUTE_MS), ...patch });
+
+    it('rings 90 min after the clock-in with no break', async () => {
+      render(on, working());
+      await judged();
+      expect(tags()).toContain('alarm:noBreak');
+    });
+
+    it("stays quiet after a break that ended 30 min ago, or while a session runs on today's sheet", async () => {
+      render(on, working({ breaks: [makeBreak({ startedAt: T0 - 40 * MINUTE_MS, endedAt: T0 - 30 * MINUTE_MS })] }));
+      await judged();
+      expect(tags()).not.toContain('alarm:noBreak');
+      freshDevice();
+      render(on, working({ sessions: [makeSession({ startedAt: T0 - 20 * MINUTE_MS })] }));
+      await judged();
+      expect(tags()).not.toContain('alarm:noBreak');
+    });
   });
 
   describe('missed clock-in', () => {

@@ -7,10 +7,11 @@ import { alert, dismissByTag } from '../lib/alerts';
 import { ALARM_ACTIONS, MISSED_CLOCK_IN } from '../lib/copy';
 import { formatTime, resolveHour12 } from '../lib/format';
 import { addToDaySet, readDaySet, USER_KEYS } from '../lib/storage';
+import { useLatest } from './useLatest';
 
 /**
- * The day's switches (which targets are armed is `alarmTargets`), the minute the "Not Clocked In"
- * banner offers, and the banner buttons.
+ * The day's switches, breaks and running session (which targets are armed is `alarmTargets`), the
+ * minute the "Not Clocked In" banner offers, the banner buttons, and whether a timer start is out.
  */
 export interface AlarmDayState extends TargetDay {
   /** Left out while the Overtime approval setting is off. */
@@ -22,6 +23,10 @@ export interface AlarmDayState extends TargetDay {
   clockInAt: (at: number) => void;
   /** The "Lunch Is Over" banner's Lunch In Now, which fills an empty Lunch in with the minute of the press. */
   lunchInNow: () => void;
+  /** The break alarm's Start Break (`useBreak().start`). */
+  startBreak: (minutes: number) => Promise<void>;
+  /** A timer start is out (`useTimer().starting`), so Start Break does nothing. */
+  timerStarting: boolean;
 }
 
 // Not under ALARM_TAG: the banner is no alarm (no chime, no bell), and `clearBanners` sweeps
@@ -35,7 +40,10 @@ const CLOCK_IN_KEY = 'clockIn:missing';
  * stored under `USER_KEYS.alarms`) prevents repeats.
  */
 export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings: Settings, now: number, day: AlarmDayState): void {
-  const { overtimeApproved, retroDone, approveOvertime, openRetro, missedClockIn, clockInAt, lunchInNow } = day;
+  const { overtimeApproved, retroDone, breaks, timerRunning, approveOvertime, openRetro, missedClockIn, clockInAt, lunchInNow, startBreak, timerStarting } =
+    day;
+  // Read at the press, not when the banner went up.
+  const starting = useLatest(timerStarting);
   const fired = useRef<{ date: string; set: Set<string> } | null>(null);
   const lastTargets = useRef<Record<string, { at: number; armed: boolean }>>({});
 
@@ -84,7 +92,7 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     }
     dismissByTag(CLOCK_IN_TAG);
 
-    const targets = alarmTargets(tc, settings, { overtimeApproved, retroDone });
+    const targets = alarmTargets(tc, settings, { overtimeApproved, retroDone, breaks, timerRunning }, now);
 
     // A banner about a target that just disarmed (lunch taken) or moved (clock-out
     // pushed later) is stale; clear it before evaluating the new state.
@@ -104,6 +112,11 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     // still be there — saying which alarm and why — when the user looks up. The next
     // threshold replaces it (same tag) and a moved/disarmed target clears it (above).
     const ctx = { ...settings, clockIn: tc.clockIn, hour12: resolveHour12(settings.timeFormat), now, typedClockOut: tc.typedClockOut };
+    const minutes = settings.breakMinutes;
+    // The break goes out on the day store's queue and a timer start on the timer's, so either could land first.
+    const takeBreak = () => {
+      if (!starting.current) void startBreak(minutes);
+    };
     for (const e of fire) {
       const { kicker, title, body, tone } = describeEvent(e, ctx);
       // A warning for a typed Clock out has no overtime to approve: the day ends at that time.
@@ -115,19 +128,38 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
             : // Reached only: a tap on a warning would record a short lunch, and on a repeat a late time.
               e.id === 'lunchEnd' && e.kind === 'due'
               ? { label: ALARM_ACTIONS.lunchInNow, run: lunchInNow }
-              : undefined;
+              : e.id === 'noBreak'
+                ? { label: ALARM_ACTIONS.startBreak(minutes), run: takeBreak }
+                : undefined;
       alert({
         kicker,
         title,
         body,
         tone,
         sticky: true,
-        chime: settings.sounds[e.kind],
+        // The break alarm is a nudge, not a deadline: the softer warning sound at every stage.
+        chime: e.id === 'noBreak' ? settings.sounds.lead : settings.sounds[e.kind],
         tag: ALARM_TAG + e.id,
         action,
         sound: settings.sound,
         notifications: settings.notifications,
       });
     }
-  }, [dateKey, tc, settings, now, overtimeApproved, retroDone, approveOvertime, openRetro, missedClockIn, clockInAt, lunchInNow]);
+  }, [
+    dateKey,
+    tc,
+    settings,
+    now,
+    overtimeApproved,
+    retroDone,
+    breaks,
+    timerRunning,
+    approveOvertime,
+    openRetro,
+    missedClockIn,
+    clockInAt,
+    lunchInNow,
+    startBreak,
+    starting,
+  ]);
 }

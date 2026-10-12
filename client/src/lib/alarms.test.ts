@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import { makeBreak, makeDay, makeSession, punchesAt, T0, TEST_SETTINGS, TODAY } from '../test/fixtures';
-import { alarmTargets, describeEvent, dueEvents, eventKey, missedClockIn, type AlarmEvent, type AlarmTarget } from './alarms';
+import { alarmTargets, describeEvent, dueEvents, eventKey, missedClockIn, type AlarmEvent, type AlarmTarget, type TargetDay } from './alarms';
 import { formatTime } from './format';
 import { patchCard } from './layout';
 import { computeTimeclock } from './timeclock';
@@ -95,28 +95,29 @@ describe('alarmTargets', () => {
   // 8:00 clock-in, an 8 h day, lunch by 1 PM, a second meal after 10 h, every card shown.
   const s = TEST_SETTINGS;
   const IN = new Date(2026, 8, 16, 8, 0).getTime();
-  const day = { overtimeApproved: false, retroDone: false };
+  const day = { overtimeApproved: false, retroDone: false, breaks: [], timerRunning: false };
   const tc = (now: number, ...at: (number | null)[]) => computeTimeclock(punchesAt(...at), s, now);
   const armed = (targets: AlarmTarget[]) => Object.fromEntries(targets.map((t) => [t.id, t.armed]));
 
   it('has nothing armed before clock-in', () => {
-    const targets = alarmTargets(tc(IN), s, day);
+    const targets = alarmTargets(tc(IN), s, day, IN);
     expect(targets).toEqual([
       { id: 'lunchBy', at: 0, armed: false },
       { id: 'lunchEnd', at: 0, armed: false },
       { id: 'clockOut', at: 0, armed: false },
       { id: 'secondMeal', at: 0, armed: false },
       { id: 'retro', at: 0, armed: false },
+      { id: 'noBreak', at: 0, armed: false },
     ]);
   });
 
-  it('arms lunch, clock-out and the retrospective while working before lunch, and lunch while it is overdue', () => {
+  it('arms lunch, clock-out, the retrospective and the break alarm while working before lunch, and lunch while it is overdue', () => {
     const now = tc(IN + 2 * HOUR_MS, IN);
-    const targets = alarmTargets(now, s, day);
-    expect(targets.map((t) => t.at)).toEqual([IN + 5 * HOUR_MS, 0, now.clockOutAt, now.secondMealBy, now.clockOutAt]);
+    const targets = alarmTargets(now, s, day, IN + 2 * HOUR_MS);
+    expect(targets.map((t) => t.at)).toEqual([IN + 5 * HOUR_MS, 0, now.clockOutAt, now.secondMealBy, now.clockOutAt, IN + 90 * MINUTE_MS]);
     // An 8 h day never reaches the 10 h second meal.
-    expect(armed(targets)).toEqual({ lunchBy: true, lunchEnd: false, clockOut: true, secondMeal: false, retro: true });
-    expect(armed(alarmTargets(tc(IN + 5 * HOUR_MS + 10 * MINUTE_MS, IN), s, day)).lunchBy).toBe(true);
+    expect(armed(targets)).toEqual({ lunchBy: true, lunchEnd: false, clockOut: true, secondMeal: false, retro: true, noBreak: true });
+    expect(armed(alarmTargets(tc(IN + 5 * HOUR_MS + 10 * MINUTE_MS, IN), s, day, IN + 5 * HOUR_MS + 10 * MINUTE_MS)).lunchBy).toBe(true);
   });
 
   it('rings the clock-out warnings before the end of a day whose lunch was never taken', () => {
@@ -125,7 +126,7 @@ describe('alarmTargets', () => {
     for (let now = IN + 4 * HOUR_MS; now <= IN + 8 * HOUR_MS; now += MINUTE_MS) {
       // The lunch alarm repeats all afternoon.
       const r = dueEvents(
-        alarmTargets(tc(now, IN), s, day).filter((t) => t.id !== 'lunchBy'),
+        alarmTargets(tc(now, IN), s, day, now).filter((t) => t.id !== 'lunchBy'),
         s.alarms,
         fired,
         now,
@@ -147,31 +148,52 @@ describe('alarmTargets', () => {
     const half = { ...s, workMinutes: 240 };
     const short = computeTimeclock(punchesAt(IN), half, IN + 4 * HOUR_MS + 50 * MINUTE_MS);
     expect(short.lunchStatus).toBe('not-needed');
-    expect(armed(alarmTargets(short, half, day))).toEqual({ lunchBy: false, lunchEnd: false, clockOut: true, secondMeal: true, retro: true });
+    // The clock-out deadline 50 min past holds the break alarm.
+    expect(armed(alarmTargets(short, half, day, IN + 4 * HOUR_MS + 50 * MINUTE_MS))).toEqual({
+      lunchBy: false,
+      lunchEnd: false,
+      clockOut: true,
+      secondMeal: true,
+      retro: true,
+      noBreak: false,
+    });
   });
 
-  it('disarms clock-out and the retrospective at lunch, where the end of the day drifts, and lunch once taken', () => {
-    expect(armed(alarmTargets(tc(IN + 4 * HOUR_MS + 10 * MINUTE_MS, IN, IN + 4 * HOUR_MS), s, day))).toEqual({
+  it('disarms clock-out, the retrospective and the break alarm at lunch, where the end of the day drifts, and lunch once taken', () => {
+    expect(armed(alarmTargets(tc(IN + 4 * HOUR_MS + 10 * MINUTE_MS, IN, IN + 4 * HOUR_MS), s, day, IN + 4 * HOUR_MS + 10 * MINUTE_MS))).toEqual({
       lunchBy: false,
       lunchEnd: true,
       clockOut: false,
       secondMeal: false,
       retro: false,
+      noBreak: false,
     });
     const back = tc(IN + 5 * HOUR_MS, IN, IN + 4 * HOUR_MS, IN + 4 * HOUR_MS + 30 * MINUTE_MS);
-    expect(armed(alarmTargets(back, s, day))).toEqual({ lunchBy: false, lunchEnd: false, clockOut: true, secondMeal: false, retro: true });
+    expect(armed(alarmTargets(back, s, day, IN + 5 * HOUR_MS))).toEqual({
+      lunchBy: false,
+      lunchEnd: false,
+      clockOut: true,
+      secondMeal: false,
+      retro: true,
+      noBreak: true,
+    });
   });
 
   it('arms the end of lunch only at lunch, at Lunch out plus the lunch length', () => {
-    const lunchEnd = (t: ReturnType<typeof tc>) => alarmTargets(t, s, day).find((x) => x.id === 'lunchEnd');
-    expect(lunchEnd(tc(IN + 4 * HOUR_MS + 10 * MINUTE_MS, IN, IN + 4 * HOUR_MS))).toEqual({ id: 'lunchEnd', at: IN + 4.5 * HOUR_MS, armed: true });
+    const lunchEnd = (t: ReturnType<typeof tc>, now: number) => alarmTargets(t, s, day, now).find((x) => x.id === 'lunchEnd');
+    expect(lunchEnd(tc(IN + 4 * HOUR_MS + 10 * MINUTE_MS, IN, IN + 4 * HOUR_MS), IN + 4 * HOUR_MS + 10 * MINUTE_MS)).toEqual({
+      id: 'lunchEnd',
+      at: IN + 4.5 * HOUR_MS,
+      armed: true,
+    });
     // A Clock out typed ahead keeps clock-out and the retrospective off at lunch, as the repeat's body says.
-    expect(armed(alarmTargets(tc(IN + 5 * HOUR_MS, IN, IN + 4 * HOUR_MS, null, IN + 9 * HOUR_MS), s, day))).toEqual({
+    expect(armed(alarmTargets(tc(IN + 5 * HOUR_MS, IN, IN + 4 * HOUR_MS, null, IN + 9 * HOUR_MS), s, day, IN + 5 * HOUR_MS))).toEqual({
       lunchBy: false,
       lunchEnd: true,
       clockOut: false,
       secondMeal: false,
       retro: false,
+      noBreak: false,
     });
   });
 
@@ -180,7 +202,7 @@ describe('alarmTargets', () => {
     const rang: AlarmEvent[] = [];
     // Lunch out at 12:00 and Lunch in never punched, through to 1:05 PM.
     for (let now = IN + 4 * HOUR_MS; now <= IN + 5 * HOUR_MS + 5 * MINUTE_MS; now += MINUTE_MS) {
-      const r = dueEvents(alarmTargets(tc(now, IN, IN + 4 * HOUR_MS), s, day), s.alarms, fired, now);
+      const r = dueEvents(alarmTargets(tc(now, IN, IN + 4 * HOUR_MS), s, day, now), s.alarms, fired, now);
       r.crossed.forEach((k) => fired.add(k));
       rang.push(...r.fire);
     }
@@ -193,12 +215,13 @@ describe('alarmTargets', () => {
   });
 
   it('with overtime approved, silences only clock-out, and the second meal comes due', () => {
-    expect(armed(alarmTargets(tc(IN + 2 * HOUR_MS, IN), s, { ...day, overtimeApproved: true }))).toEqual({
+    expect(armed(alarmTargets(tc(IN + 2 * HOUR_MS, IN), s, { ...day, overtimeApproved: true }, IN + 2 * HOUR_MS))).toEqual({
       lunchBy: true,
       lunchEnd: false,
       clockOut: false,
       secondMeal: true,
       retro: true,
+      noBreak: true,
     });
   });
 
@@ -206,34 +229,36 @@ describe('alarmTargets', () => {
     // Clock out typed before Lunch out: the timeclock reads "working" while the day is over.
     const tangled = tc(IN + 9 * HOUR_MS, IN, IN + 8 * HOUR_MS + 25 * MINUTE_MS, null, IN + 8 * HOUR_MS + 20 * MINUTE_MS);
     expect([tangled.outOfOrder, tangled.state]).toEqual([{ position: 3, after: 1 }, 'working']);
-    expect(armed(alarmTargets(tangled, s, { ...day, overtimeApproved: true }))).toEqual({
+    expect(armed(alarmTargets(tangled, s, { ...day, overtimeApproved: true }, IN + 9 * HOUR_MS))).toEqual({
       lunchBy: false,
       lunchEnd: false,
       clockOut: false,
       secondMeal: false,
       retro: false,
+      noBreak: false,
     });
   });
 
   it('arms the end of the day with Lunch out and the Clock out typed ahead, which wait for the clock', () => {
-    expect(armed(alarmTargets(tc(IN + 2 * HOUR_MS, IN, IN + 4 * HOUR_MS, null, IN + 9 * HOUR_MS), s, day))).toEqual({
+    expect(armed(alarmTargets(tc(IN + 2 * HOUR_MS, IN, IN + 4 * HOUR_MS, null, IN + 9 * HOUR_MS), s, day, IN + 2 * HOUR_MS))).toEqual({
       lunchBy: true,
       lunchEnd: false,
       clockOut: true,
       secondMeal: false,
       retro: true,
+      noBreak: true,
     });
   });
 
   it('moves clock-out and the retrospective to a Clock out typed earlier than the planned end, never later', () => {
     const back = [IN, IN + 4 * HOUR_MS, IN + 4.5 * HOUR_MS] as const;
-    const early = alarmTargets(tc(IN + 5 * HOUR_MS, ...back, IN + 7 * HOUR_MS), s, day);
+    const early = alarmTargets(tc(IN + 5 * HOUR_MS, ...back, IN + 7 * HOUR_MS), s, day, IN + 5 * HOUR_MS);
     expect(early.filter((t) => t.id === 'clockOut' || t.id === 'retro')).toEqual([
       { id: 'clockOut', at: IN + 7 * HOUR_MS, armed: true },
       { id: 'retro', at: IN + 7 * HOUR_MS, armed: true },
     ]);
     const late = tc(IN + 5 * HOUR_MS, ...back, IN + 9 * HOUR_MS);
-    const lateEnds = alarmTargets(late, s, day).filter((t) => t.id === 'clockOut' || t.id === 'retro');
+    const lateEnds = alarmTargets(late, s, day, IN + 5 * HOUR_MS).filter((t) => t.id === 'clockOut' || t.id === 'retro');
     expect(late.clockOutAt).toBe(IN + 8.5 * HOUR_MS);
     expect(lateEnds.map((t) => t.at)).toEqual([late.clockOutAt, late.clockOutAt]);
   });
@@ -243,7 +268,7 @@ describe('alarmTargets', () => {
     const rang: AlarmEvent[] = [];
     // Lunch 12:00 to 12:30 and a Clock out typed for 15:00, through to past the 16:30 planned end.
     for (let now = IN + 5 * HOUR_MS; now <= IN + 9 * HOUR_MS; now += MINUTE_MS) {
-      const r = dueEvents(alarmTargets(tc(now, IN, IN + 4 * HOUR_MS, IN + 4.5 * HOUR_MS, IN + 7 * HOUR_MS), s, day), s.alarms, fired, now);
+      const r = dueEvents(alarmTargets(tc(now, IN, IN + 4 * HOUR_MS, IN + 4.5 * HOUR_MS, IN + 7 * HOUR_MS), s, day, now), s.alarms, fired, now);
       r.crossed.forEach((k) => fired.add(k));
       rang.push(...r.fire);
     }
@@ -259,32 +284,111 @@ describe('alarmTargets', () => {
     // Mid-morning, no lunch yet, and a Clock out typed as 2:00 AM: the typo must not mute the meal period.
     const typo = tc(IN + 3 * HOUR_MS, IN, null, null, IN - 6 * HOUR_MS);
     expect([typo.outOfOrder, typo.state, typo.lunchStatus]).toEqual([{ position: 3, after: 0 }, 'working', 'upcoming']);
-    expect(armed(alarmTargets(typo, s, day))).toEqual({ lunchBy: true, lunchEnd: false, clockOut: false, secondMeal: false, retro: false });
+    expect(armed(alarmTargets(typo, s, day, IN + 3 * HOUR_MS))).toEqual({
+      lunchBy: true,
+      lunchEnd: false,
+      clockOut: false,
+      secondMeal: false,
+      retro: false,
+      noBreak: false,
+    });
   });
 
   it('disarms the retrospective while its card is hidden', () => {
     const hidden = { ...s, layout: patchCard(s.layout, 'retro', { visible: false }) };
-    expect(armed(alarmTargets(tc(IN + 2 * HOUR_MS, IN), hidden, day))).toEqual({
+    expect(armed(alarmTargets(tc(IN + 2 * HOUR_MS, IN), hidden, day, IN + 2 * HOUR_MS))).toEqual({
       lunchBy: true,
       lunchEnd: false,
       clockOut: true,
       secondMeal: false,
       retro: false,
+      noBreak: true,
     });
   });
 
   it('disarms the retrospective once reviewed, and everything once the day is done', () => {
-    expect(armed(alarmTargets(tc(IN + 2 * HOUR_MS, IN), s, { ...day, retroDone: true }))).toEqual({
+    expect(armed(alarmTargets(tc(IN + 2 * HOUR_MS, IN), s, { ...day, retroDone: true }, IN + 2 * HOUR_MS))).toEqual({
       lunchBy: true,
       lunchEnd: false,
       clockOut: true,
       secondMeal: false,
       retro: false,
+      noBreak: true,
     });
     // Clocked out at 2 PM with no lunch: the missed lunch still reads overdue, but a done day rings nothing.
     const done = tc(IN + 6 * HOUR_MS + 5 * MINUTE_MS, IN, null, null, IN + 6 * HOUR_MS);
     expect([done.state, done.lunchStatus]).toEqual(['done', 'overdue']);
-    expect(armed(alarmTargets(done, s, day))).toEqual({ lunchBy: false, lunchEnd: false, clockOut: false, secondMeal: false, retro: false });
+    expect(armed(alarmTargets(done, s, day, IN + 6 * HOUR_MS + 5 * MINUTE_MS))).toEqual({
+      lunchBy: false,
+      lunchEnd: false,
+      clockOut: false,
+      secondMeal: false,
+      retro: false,
+      noBreak: false,
+    });
+  });
+
+  describe('the break alarm', () => {
+    const noBreak = (now: number, d: TargetDay, ...at: (number | null)[]) => alarmTargets(tc(now, ...at), s, d, now).find((t) => t.id === 'noBreak')!;
+    // Lunch 12:00 to 12:30.
+    const lunch = [IN, IN + 4 * HOUR_MS, IN + 4.5 * HOUR_MS] as const;
+
+    it('is due 90 min after the later of the last In reached and the end of the last break over', () => {
+      const breaks = [makeBreak({ startedAt: IN + 3 * HOUR_MS, endedAt: IN + 3 * HOUR_MS + 10 * MINUTE_MS })];
+      expect(noBreak(IN + 3.5 * HOUR_MS, { ...day, breaks }, IN)).toEqual({ id: 'noBreak', at: IN + 3 * HOUR_MS + 100 * MINUTE_MS, armed: true });
+      // Lunch in came after that break.
+      expect(noBreak(IN + 5 * HOUR_MS, { ...day, breaks }, ...lunch)).toEqual({ id: 'noBreak', at: IN + 6 * HOUR_MS, armed: true });
+    });
+
+    it('is disarmed on an extra Out, during a break or a session, and keeps its target through a session', () => {
+      expect(noBreak(IN + 2 * HOUR_MS, day, IN, null, null, IN + HOUR_MS, null, null).armed).toBe(false);
+      const running = [makeBreak({ startedAt: IN + HOUR_MS, endedAt: IN + HOUR_MS + 10 * MINUTE_MS })];
+      expect(noBreak(IN + HOUR_MS + 5 * MINUTE_MS, { ...day, breaks: running }, IN)).toEqual({ id: 'noBreak', at: IN + 90 * MINUTE_MS, armed: false });
+      const before = noBreak(IN + HOUR_MS, day, IN);
+      const during = noBreak(IN + 2 * HOUR_MS, { ...day, timerRunning: true }, IN);
+      const after = noBreak(IN + 2 * HOUR_MS, day, IN);
+      expect([before, during, after]).toEqual([before, { ...before, armed: false }, before]);
+    });
+
+    it('holds from 30 min before an armed lunch deadline, and while lunch is overdue', () => {
+      expect(noBreak(IN + 4.5 * HOUR_MS - MINUTE_MS, day, IN).armed).toBe(true);
+      expect(noBreak(IN + 4.5 * HOUR_MS, day, IN).armed).toBe(false);
+      expect(noBreak(IN + 5 * HOUR_MS + 10 * MINUTE_MS, day, IN).armed).toBe(false);
+    });
+
+    it('holds from 30 min before an armed clock-out until overtime is approved', () => {
+      // The day ends at 4:30 PM.
+      expect(noBreak(IN + 8 * HOUR_MS - MINUTE_MS, day, ...lunch).armed).toBe(true);
+      expect(noBreak(IN + 8 * HOUR_MS + 10 * MINUTE_MS, day, ...lunch).armed).toBe(false);
+      expect(noBreak(IN + 8 * HOUR_MS + 10 * MINUTE_MS, { ...day, overtimeApproved: true }, ...lunch).armed).toBe(true);
+    });
+
+    it('is not held by the second meal period', () => {
+      // Overtime approved: the second meal is due at 6:30 PM, 10 min from now.
+      const now = IN + 10 * HOUR_MS + 20 * MINUTE_MS;
+      expect(armed(alarmTargets(tc(now, ...lunch), s, { ...day, overtimeApproved: true }, now))).toMatchObject({ secondMeal: true, noBreak: true });
+    });
+
+    it('rings when due and every hour after, until 30 min before lunch', () => {
+      const on = { ...s, alarms: { ...s.alarms, noBreak: { ...s.alarms.noBreak, enabled: true } } };
+      const fired = new Set<string>();
+      const rang: AlarmEvent[] = [];
+      for (let now = IN; now <= IN + 6 * HOUR_MS; now += MINUTE_MS) {
+        const r = dueEvents(
+          alarmTargets(computeTimeclock(punchesAt(IN), on, now), on, day, now).filter((t) => t.id === 'noBreak'),
+          on.alarms,
+          fired,
+          now,
+        );
+        r.crossed.forEach((k) => fired.add(k));
+        rang.push(...r.fire);
+      }
+      expect(rang.map((e) => [e.kind, e.minutes, e.at])).toEqual([
+        ['due', 0, IN + 90 * MINUTE_MS],
+        ['overdue', 60, IN + 150 * MINUTE_MS],
+        ['overdue', 120, IN + 210 * MINUTE_MS],
+      ]);
+    });
   });
 });
 
@@ -299,6 +403,7 @@ describe('missedClockIn', () => {
     clockOut: { ...s.alarms.clockOut, enabled: on.includes('clockOut') },
     secondMeal: { ...s.alarms.secondMeal, enabled: on.includes('secondMeal') },
     retro: { ...s.alarms.retro, enabled: on.includes('retro') },
+    noBreak: { ...s.alarms.noBreak, enabled: on.includes('noBreak') },
   });
 
   it('offers the earliest start of a session or break, floored to the minute', () => {
@@ -471,6 +576,23 @@ describe('describeEvent', () => {
     expect(retro.title).toBe('Clocking Out? Do the Retrospective First.');
     expect(retro.body).toBe(`You reached your 8h 00m at ${formatTime(T, true)}. Two minutes on what went to plan and what didn't.`);
     expect(describeEvent(ev('lunchBy', 'lead', 5, T), { ...ctx, now: T }).title).toBe('Take Lunch Now');
+  });
+
+  it('says how long since the last rest for the break alarm, at every stage', () => {
+    const since = formatTime(T - 90 * MINUTE_MS, true);
+    expect(describeEvent(ev('noBreak', 'due', 0, T), { ...ctx, now: T })).toEqual({
+      kicker: 'Break alarm',
+      title: '1h 30m Without a Break',
+      body: `Working since ${since}.`,
+      tone: 'warn',
+    });
+    expect(since).toMatch(/AM$/);
+    const repeat = describeEvent(ev('noBreak', 'overdue', 60, T), { ...ctx, now: T + 60 * MINUTE_MS + 20_000 });
+    expect([repeat.title, repeat.tone]).toEqual(['2h 30m Without a Break', 'warn']);
+    // Raised 35 min late, once a timer that ran past the target was finished.
+    expect(describeEvent(ev('noBreak', 'due', 0, T), { ...ctx, now: T + 35 * MINUTE_MS }).title).toBe('2h 05m Without a Break');
+    // A warning only a hand-made PUT can set.
+    expect(describeEvent(ev('noBreak', 'lead', 10, T), { ...ctx, now: T - 10 * MINUTE_MS })).toMatchObject({ title: '1h 20m Without a Break', tone: 'warn' });
   });
 
   it('writes a non-round work day as the Worked tile does', () => {

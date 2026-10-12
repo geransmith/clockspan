@@ -26,7 +26,8 @@ export const SOUND_IDS: readonly SoundId[] = SOUNDS.map((s) => s.id);
 
 /**
  * What can make a noise. The alarm stages share their names with `AlarmKind`
- * (`client/src/lib/alarms.ts`) so a fired event's sound is `settings.sounds[event.kind]`.
+ * (`client/src/lib/alarms.ts`) so a fired event's sound is `settings.sounds[event.kind]`. The
+ * break alarm plays the warning sound (`lead`) at every stage instead, chosen in `useAlarms`.
  */
 export const SOUND_EVENTS = ['timer', 'breakDone', 'lead', 'due', 'overdue', 'dayDone', 'weekDone', 'priorityDone'] as const;
 export type SoundEvent = (typeof SOUND_EVENTS)[number];

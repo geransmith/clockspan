@@ -6,7 +6,7 @@ import type { Session, SessionResponse } from '../types';
 import { alert, dismissByTag, warnSaveFailed } from '../lib/alerts';
 import { ApiError } from '../lib/apiError';
 import { TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_KICKER, TIMER_PAUSED_OUT } from '../lib/copy';
-import { formatCountdown, formatDuration, formatMinutes } from '../lib/format';
+import { formatDuration, formatMinutes } from '../lib/format';
 import { addPending, fetched, settle, settleWith, shown, untracked, type Tracked } from '../lib/optimistic';
 import { patchRow } from '../lib/priorities';
 import { editedSession, sessionName, sessionRow } from '../lib/retro';
@@ -86,7 +86,6 @@ export interface TimerCtx extends Pick<TimerView, 'countdownSeconds' | 'elapsedS
 }
 
 const Ctx = createContext<TimerCtx | null>(null);
-const BASE_TITLE = 'Clockspan';
 const IDLE: TimerView = {
   elapsedSeconds: 0,
   countdownSeconds: 0,
@@ -298,21 +297,6 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   }, [live]);
 
   useWakeLock(running != null && !paused && !due && settings.keepScreenAwake);
-
-  // Written only when its text changes, never reset between ticks: a reset in this effect's
-  // cleanup would put "Clockspan" up between every two ticks, which a host that shows each
-  // title change (the desktop app's browser pane) paints as a flicker.
-  const tabTitle = running ? `${paused ? 'Paused ' : ''}${formatCountdown(countdownSeconds)}${name ? ` · ${name}` : ''} — ${BASE_TITLE}` : BASE_TITLE;
-  useEffect(() => {
-    document.title = tabTitle;
-  }, [tabTitle]);
-  // The error card unmounts the provider without a page load; the tab shouldn't keep a
-  // frozen countdown.
-  useEffect(() => {
-    return () => {
-      document.title = BASE_TITLE;
-    };
-  }, []);
 
   const start = useCallback(
     async (date: string, plannedSeconds: number, label: string, priorityUid: string | null | Promise<string | null> = null) => {

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { SOUND_EVENTS, SOUNDS } from '../../../../shared/sounds.js';
+import { BREAK_HOLD_MINUTES, NO_BREAK_MINUTES } from '../../lib/alarms';
 import { notificationPermission, playSound, requestNotificationPermission } from '../../lib/alerts';
 import { SOUND_EVENT_LABELS } from '../../lib/sounds';
 import type { AlarmId, AlarmSettings, SoundEvent, SoundId } from '../../types';
@@ -7,7 +8,7 @@ import { Toggle } from '../Toggle';
 import { Section, type TabProps } from './controls';
 
 const LEAD_CHOICES = [30, 15, 10, 5, 1];
-const REPEAT_CHOICES = [0, 1, 2, 5, 10, 15];
+const REPEAT_CHOICES = [0, 1, 2, 5, 10, 15, 60];
 
 export function AlarmsTab({ settings, set }: TabProps) {
   const setAlarm = (id: AlarmId, patch: Partial<AlarmSettings>) => set({ alarms: { [id]: patch } });
@@ -18,8 +19,8 @@ export function AlarmsTab({ settings, set }: TabProps) {
         title="Alarms"
         hint={
           settings.mealRules
-            ? 'Alerts as lunch, clock-out and the second meal period approach, when lunch is over, and a nudge to look back before the day ends.'
-            : 'Alerts as clock-out approaches, and a nudge to look back before the day ends.'
+            ? `Alerts as lunch, clock-out and the second meal period approach, when lunch is over, a nudge to look back before the day ends, and one after ${NO_BREAK_MINUTES} minutes without a break.`
+            : `Alerts as clock-out approaches, a nudge to look back before the day ends, and one after ${NO_BREAK_MINUTES} minutes without a break.`
         }
       >
         {settings.mealRules && (
@@ -43,6 +44,14 @@ export function AlarmsTab({ settings, set }: TabProps) {
           alarm={settings.alarms.retro}
           onChange={(p) => setAlarm('retro', p)}
         />
+        <AlarmEditor
+          title="Break"
+          hint={`Rings after ${NO_BREAK_MINUTES} minutes without a break, counted from your last break or your last In punch. Waits while a timer or a break runs.`}
+          hintTitle={`Stays quiet from ${BREAK_HOLD_MINUTES} min before a lunch or clock-out deadline until lunch is taken, the day ends or overtime is approved.`}
+          noWarnings
+          alarm={settings.alarms.noBreak}
+          onChange={(p) => setAlarm('noBreak', p)}
+        />
       </Section>
       <Section title="How You're Alerted" hint="Every alarm also shows an in-app banner. Alarms ring while Clockspan is open in a tab or the installed app.">
         <Toggle label="Sound" checked={settings.sound} onChange={(v) => set({ sound: v })} />
@@ -60,12 +69,14 @@ export function AlarmsTab({ settings, set }: TabProps) {
 function AlarmEditor({
   title,
   hint,
+  hintTitle,
   noWarnings,
   alarm,
   onChange,
 }: {
   title: string;
   hint?: string;
+  hintTitle?: string;
   noWarnings?: boolean;
   alarm: AlarmSettings;
   onChange: (p: Partial<AlarmSettings>) => void;
@@ -78,7 +89,7 @@ function AlarmEditor({
   // the group gives each set the alarm's name.
   return (
     <div className="alarm-editor" role="group" aria-label={title}>
-      <Toggle label={title} hint={hint} checked={alarm.enabled} onChange={(v) => onChange({ enabled: v })} />
+      <Toggle label={title} hint={hint} hintTitle={hintTitle} checked={alarm.enabled} onChange={(v) => onChange({ enabled: v })} />
       <div className="alarm-fields">
         {!noWarnings && (
           <div className="setting-row">

@@ -47,7 +47,7 @@ export function normalizeLayout(raw: readonly unknown[]): Settings['layout'] {
   return out;
 }
 
-export const ALARM_IDS = ['lunchBy', 'lunchEnd', 'clockOut', 'secondMeal', 'retro'] as const;
+export const ALARM_IDS = ['lunchBy', 'lunchEnd', 'clockOut', 'secondMeal', 'retro', 'noBreak'] as const;
 export type AlarmId = (typeof ALARM_IDS)[number];
 
 /** How times are written: the browser locale's way, or 12-hour / 24-hour regardless. */
@@ -83,7 +83,7 @@ export interface Settings {
   /** Single-key shortcuts (`client/src/lib/shortcuts.ts`); off for anyone a stray key gets in the way of (WCAG 2.1.4). */
   shortcuts: boolean;
   adjustStepMinutes: number;
-  /** The focus timer's Break button: how long a break runs, in minutes. */
+  /** The focus timer's Break button: how long a break runs, in minutes. The break alarm's Start Break runs it too. */
   breakMinutes: number;
   /**
    * After a session finished by hand, a banner offers a break sized to it on the Pomodoro
@@ -168,6 +168,8 @@ const DEFAULT_ALARM: AlarmSettings = { enabled: true, leadMinutes: [15, 5, 1], o
 const DEFAULT_RETRO_ALARM: AlarmSettings = { enabled: true, leadMinutes: [30], onDue: false, overdueEveryMinutes: 0 };
 // The end of lunch is a quiet catch for a Lunch in never punched: no warnings, a slower repeat.
 const DEFAULT_LUNCH_END_ALARM: AlarmSettings = { enabled: true, leadMinutes: [], onDue: true, overdueEveryMinutes: 15 };
+// The break alarm has no warnings, and a rest taken without the Break button isn't seen, so it repeats only hourly.
+const DEFAULT_NO_BREAK_ALARM: AlarmSettings = { enabled: true, leadMinutes: [], onDue: true, overdueEveryMinutes: 60 };
 
 /** Frozen all the way down: both sides hand this object out as-is when there is nothing to merge. */
 function deepFreeze<T>(value: T): T {
@@ -220,6 +222,7 @@ export const DEFAULT_SETTINGS: Settings = deepFreeze({
     clockOut: { ...DEFAULT_ALARM },
     secondMeal: { ...DEFAULT_ALARM },
     retro: { ...DEFAULT_RETRO_ALARM },
+    noBreak: { ...DEFAULT_NO_BREAK_ALARM },
   },
   layout: normalizeLayout([]),
   retention: { enabled: false, days: 365 },

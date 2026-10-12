@@ -9,10 +9,12 @@ import { Shortcuts } from './components/Shortcuts';
 import { Sheet } from './components/Sheet';
 import { AppProviders } from './hooks/AppProviders';
 import { useCelebration } from './hooks/useCelebration';
+import { useBreak } from './hooks/useBreak';
 import { useClock } from './hooks/useClock';
 import { useLiveChanges } from './hooks/useLiveChanges';
 import { useRoute } from './hooks/useRoute';
 import { useSettings } from './hooks/useSettings';
+import { useTabTitle } from './hooks/useTabTitle';
 import { useTimer } from './hooks/useTimer';
 import { useTodayAlarms } from './hooks/useTodayAlarms';
 import { todayKey } from '../../shared/dates.js';
@@ -44,6 +46,7 @@ function Shell() {
   const [jumpTo, setJumpTo] = useState<CardId | null>(null);
   const { settings, loaded } = useSettings();
   const { running, start, starting, ticked } = useTimer();
+  const { start: startBreak } = useBreak();
   // Here, since the bar and the card Done is pressed on go with the session as it answers.
   const { burst } = useCelebration(ticked, 'priorityDone');
   const now = useClock();
@@ -72,7 +75,11 @@ function Shell() {
   const minute = floorToMinute(now);
   // The sheet on today and the board (once it is past the settings' wait) show today's failed load
   // in place; elsewhere a banner says it.
-  const { setEditingPunches } = useTodayAlarms(today, now, openRetro, (route.view === 'board' && loaded) || (route.view === 'sheet' && date === today));
+  const { setEditingPunches } = useTodayAlarms(today, now, openRetro, (route.view === 'board' && loaded) || (route.view === 'sheet' && date === today), {
+    startBreak,
+    timerStarting: starting,
+  });
+  useTabTitle(today, now);
   const loading = <div className="loading" aria-busy="true" />;
 
   const page = () => {

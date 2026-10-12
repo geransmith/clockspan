@@ -368,7 +368,7 @@ describe('Board', () => {
       const { uid, ...item } = added()[0]!;
       expect(item).toEqual({ title: 'Email', categoryUid: 'cafe00000001', lane: 'next', before: null });
       // A task of its own, not the done one.
-      expect(uid).toMatch(/^[0-9a-f]{12}$/);
+      expect(uid).toMatch(/^[0-9a-f]{32}$/);
       expect(uid).not.toBe(EMAIL);
       expect(titlesIn('Done')).toContain('Email');
       expect(titlesIn('Next')).toEqual(['Follow up', 'Plan B', 'Email']);

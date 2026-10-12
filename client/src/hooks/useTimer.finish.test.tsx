@@ -36,7 +36,6 @@ describe('finish and cancel', () => {
     expect(result.current.timer.running).toBeNull();
     expect(result.current.store.days[TODAY]?.sessions[0]?.status).toBe('completed');
     expect(result.current.timer.finished).toMatchObject({ id: 1, status: 'completed', durationSeconds: 300 });
-    expect(document.title).toBe('Clockspan');
   });
 
   it('a finish that waited behind a press leaves a session another device started since', async () => {
