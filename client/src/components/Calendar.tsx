@@ -106,7 +106,7 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
               <div key={week[0]!.date} className="calendar-row">
                 {week.map((d) =>
                   d.outside ? (
-                    <div key={d.date} className="calendar-day is-outside" aria-hidden="true" />
+                    <div key={d.date} className="calendar-day" aria-hidden="true" />
                   ) : (
                     <DayCell
                       key={d.date}
@@ -176,7 +176,6 @@ function DayCell({
   onSelect: (date: string) => void;
 }) {
   const cls = ['calendar-day'];
-  if (!d.timeclock) cls.push('is-empty');
   if (d.isFuture) cls.push('is-future');
   if (d.date === today) cls.push('is-today');
   if (full) cls.push('is-full');

@@ -114,7 +114,7 @@ export function timeclockTiles(tc: TimeclockResult, o: TileOptions): { lunch: Ti
             : tc.state === 'done'
               ? `${formatDurationCeil(tc.remainingSeconds)} under target`
               : `${formatDurationCeil(tc.remainingSeconds)} to go`,
-    tone: tc.state === 'working' ? 'tile--live' : '',
+    tone: '',
   };
 
   return { lunch, worked, clockOut };

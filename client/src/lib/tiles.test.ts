@@ -110,15 +110,15 @@ describe('Back By', () => {
 });
 
 describe('Worked', () => {
-  it('is live while working, and says what is left, over or under', () => {
-    expect(tiles(clockedIn, at(9)).worked).toEqual({ value: '1h 00m', sub: '7h 00m to go', tone: 'tile--live' });
-    expect(tiles(afterLunch, at(17)).worked).toEqual({ value: '8h 30m', sub: '30m over target', tone: 'tile--live' });
+  it('says what is left, over or under', () => {
+    expect(tiles(clockedIn, at(9)).worked).toEqual({ value: '1h 00m', sub: '7h 00m to go', tone: '' });
+    expect(tiles(afterLunch, at(17)).worked).toEqual({ value: '8h 30m', sub: '30m over target', tone: '' });
     expect(tiles(punchesAt(at(8), null, null, at(14)), at(14)).worked).toEqual({ value: '6h 00m', sub: '2h 00m under target', tone: '' });
   });
 
   it('says On target at the target and for the first minute past it', () => {
     expect(tiles(punchesAt(at(8), at(12), at(12, 30), at(16, 30)), at(17)).worked).toEqual({ value: '8h 00m', sub: 'On target', tone: '' });
-    expect(tiles(afterLunch, at(16, 30) + 30_000).worked).toEqual({ value: '8h 00m', sub: 'On target', tone: 'tile--live' });
+    expect(tiles(afterLunch, at(16, 30) + 30_000).worked).toEqual({ value: '8h 00m', sub: 'On target', tone: '' });
     expect(tiles(afterLunch, at(16, 31)).worked.sub).toBe('1m over target');
   });
 });

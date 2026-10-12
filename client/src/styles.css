@@ -2,60 +2,58 @@
 :root {
   /* index.html's theme-color metas repeat --bg for each scheme, and the manifest's
      background_color the light one (theme-css.test.ts checks). */
-  --bg: #f4f5f8;
+  --bg: #f7f6f3;
   --surface: #ffffff;
-  --surface-2: #f0f2f6;
-  --surface-3: #e7eaf0;
-  --border: #e2e5ec;
-  --text: #171a20;
-  --text-2: #5b6473;
+  --surface-2: #f2f0ec;
+  --surface-3: #e9e6e0;
+  --border: #e4e1db;
+  --text: #1d1c1a;
+  --text-2: #615d56;
   /* About 3:1 on the surfaces: icons, placeholders and struck-through done rows. Other text uses
      --text-2 or a tone's -ink (4.5:1 and up). */
-  --text-3: #7d8797;
-  /* Words in a tone's colour use its -ink: in light mode the tone itself is 3.7 to 4.3:1 on its
+  --text-3: #86817a;
+  /* Words in a tone's colour use its -ink: in light mode the tone itself is 4 to 4.6:1 on its
      -soft, and the -ink is 5:1 and up there, on white and on --surface-2. The tone stays for
-     fills, borders, icons and bars. The dark tones pass as they are, so each dark -ink is its
-     tone. (--accent-text is the colour on an --accent fill.) */
-  --accent: #3b6cf6;
-  --accent-strong: #2a56cf;
-  --accent-soft: #e8eeff;
-  --accent-ink: var(--accent-strong);
-  --accent-text: #ffffff;
-  --ok: #178a4c;
-  --ok-soft: #e3f5ea;
-  --ok-ink: #147641;
-  --warn: #c2620a;
-  --warn-soft: #fff1dc;
-  --warn-ink: #a25208;
-  --danger: #d12f2f;
-  --danger-soft: #fde7e7;
-  --danger-ink: #bd2a2a;
+     fills, borders, icons and bars. The dark tones pass as they are, so their dark -ink is the
+     tone, but for the accent's, a step lighter. The accent is used sparingly: progress, ticks and
+     switches, the focus ring, Add links, a full day, a drop's edge and the day-complete notice; on
+     and selected states are ink, not accent.
+     (--accent-text is the colour on an --accent fill.) */
+  --accent: #23766d;
+  --accent-soft: #e4f0ee;
+  --accent-ink: #1d6159;
+  --accent-text: var(--surface);
+  --ok: #2f7a45;
+  --ok-soft: #e6f0e8;
+  --ok-ink: #2a6e3e;
+  --warn: #a8641c;
+  --warn-soft: #f6ece0;
+  --warn-ink: #8a5114;
+  --danger: #b2463b;
+  --danger-soft: #f7e6e3;
+  --danger-ink: #9a3a30;
   /* A category's colour (CategoryDot, the swatches, Review's By Category bars): a fill only, 3:1
      and up on --surface and --surface-2 in both themes (theme-css.test.ts checks). A category's
      name is never drawn in it, so these have no -ink. */
-  --cat-blue: #2563eb;
-  --cat-teal: #0d9488;
-  --cat-green: #15803d;
-  --cat-gold: #a16207;
-  --cat-orange: #ea580c;
-  --cat-pink: #db2777;
-  --cat-purple: #7c3aed;
-  --cat-grey: #64748b;
+  --cat-blue: #3f6690;
+  --cat-teal: #2b7d8c;
+  --cat-green: #587a2c;
+  --cat-gold: #8a6914;
+  --cat-orange: #a85d3c;
+  --cat-pink: #a8466e;
+  --cat-purple: #7a559e;
+  --cat-grey: #7a746b;
   /* Below these blocks every type size, weight, line, letter spacing, gap, corner, shadow, timing,
      layer and opacity is one of the tokens here, and no colour is written out (theme-css.test.ts
      checks). A value with a reason to sit off a scale is a token named for it, with the reason. */
-  --radius: 16px;
-  --radius-sm: 10px;
-  --radius-xs: 6px;
-  /* A circle on a square box, a pill, or a bar's round ends: a corner is never more than half a side. */
+  --radius: 6px;
+  --radius-sm: 4px;
+  --radius-xs: 2px;
+  /* A circle on a square box, or the switch's round track: a corner is never more than half a side. */
   --radius-full: 999px;
-  --shadow: 0 1px 2px rgba(20, 24, 40, 0.04), 0 6px 20px rgba(20, 24, 40, 0.06);
-  --shadow-thumb: 0 1px 3px rgba(0, 0, 0, 0.25);
-  --ring: 0 0 0 3px var(--accent-soft);
-  --ring-selected: 0 0 0 2px var(--accent);
+  --shadow: 0 4px 16px rgba(29, 28, 26, 0.12);
+  --ring: 0 0 0 var(--hairline) var(--accent);
   --ring-swatch: 0 0 0 2px var(--surface), 0 0 0 4px var(--text);
-  /* The switch's thumb, white in both themes. */
-  --switch-thumb: #ffffff;
   --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   /* Body text and every field, in px: iOS zooms into a field whose text is under 16 px. */
   --fs-field: 16px;
@@ -86,9 +84,8 @@
   --field-lh: 22px;
   /* A board card's line, which its title button grows to 44 px on a touch screen. */
   --board-card-lh: 24px;
-  /* A plan number's height, and its line, so the digits sit in the middle. */
+  /* A plan number's height, and its line, so the digits sit in the middle of its row. */
   --badge-h: 18px;
-  --tracking-caps: 0.04em;
   --hairline: 1px;
   --space-2: 2px;
   --space-4: 4px;
@@ -117,7 +114,6 @@
   --dur-pop: 0.5s;
   --ease-pop: cubic-bezier(0.2, 1.4, 0.4, 1);
   --dur-burst: 1.1s;
-  --dur-pulse: 2s;
   --opacity-disabled: 0.45;
   --opacity-lifted: 0.85;
   --opacity-dragged: 0.4;
@@ -135,77 +131,75 @@
 /* A dialog's backdrop inherits nothing from the page before Chrome 122 and Safari 17.4, so its
    colour is set on it. */
 ::backdrop {
-  --scrim: rgba(10, 12, 18, 0.45);
+  --scrim: rgba(25, 24, 23, 0.5);
 }
 /* Dark tokens: the system's choice unless Settings says light, or Settings says dark. The two
    blocks must stay the same (theme-css.test.ts checks). */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --bg: #0f1216;
-    --surface: #171b21;
-    --surface-2: #1e232b;
-    --surface-3: #262c36;
-    --border: #2a3038;
-    --text: #e9ebef;
-    --text-2: #a5adba;
-    --text-3: #6f7886;
-    --accent: #6b8ff8;
-    --accent-strong: #86a4ff;
-    --accent-soft: #1c2a4f;
-    --accent-ink: var(--accent);
-    --accent-text: #0b1020;
-    --ok: #46c27e;
-    --ok-soft: #12321f;
+    --bg: #191817;
+    --surface: #1f1e1c;
+    --surface-2: #252422;
+    --surface-3: #2c2a28;
+    --border: #34322f;
+    --text: #ebe9e4;
+    --text-2: #a8a49c;
+    --text-3: #77736c;
+    --accent: #5fa8a0;
+    --accent-soft: #1d2b29;
+    --accent-ink: #7cc2b9;
+    --accent-text: var(--surface);
+    --ok: #8cc79a;
+    --ok-soft: #1c2a20;
     --ok-ink: var(--ok);
-    --warn: #f0a23b;
-    --warn-soft: #3a2a10;
+    --warn: #d6a05c;
+    --warn-soft: #2e251a;
     --warn-ink: var(--warn);
-    --danger: #f36c6c;
-    --danger-soft: #3f1b1b;
+    --danger: #e08a7c;
+    --danger-soft: #34211e;
     --danger-ink: var(--danger);
-    --cat-blue: #60a5fa;
-    --cat-teal: #2dd4bf;
-    --cat-green: #4ade80;
-    --cat-gold: #facc15;
-    --cat-orange: #fb923c;
-    --cat-pink: #f472b6;
-    --cat-purple: #a78bfa;
-    --cat-grey: #94a3b8;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.35);
+    --cat-blue: #7d9cc0;
+    --cat-teal: #62b7c2;
+    --cat-green: #98b665;
+    --cat-gold: #cba552;
+    --cat-orange: #c98a6b;
+    --cat-pink: #d58aa9;
+    --cat-purple: #ae90d2;
+    --cat-grey: #a09a90;
+    --shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
   }
 }
 :root[data-theme='dark'] {
-  --bg: #0f1216;
-  --surface: #171b21;
-  --surface-2: #1e232b;
-  --surface-3: #262c36;
-  --border: #2a3038;
-  --text: #e9ebef;
-  --text-2: #a5adba;
-  --text-3: #6f7886;
-  --accent: #6b8ff8;
-  --accent-strong: #86a4ff;
-  --accent-soft: #1c2a4f;
-  --accent-ink: var(--accent);
-  --accent-text: #0b1020;
-  --ok: #46c27e;
-  --ok-soft: #12321f;
+  --bg: #191817;
+  --surface: #1f1e1c;
+  --surface-2: #252422;
+  --surface-3: #2c2a28;
+  --border: #34322f;
+  --text: #ebe9e4;
+  --text-2: #a8a49c;
+  --text-3: #77736c;
+  --accent: #5fa8a0;
+  --accent-soft: #1d2b29;
+  --accent-ink: #7cc2b9;
+  --accent-text: var(--surface);
+  --ok: #8cc79a;
+  --ok-soft: #1c2a20;
   --ok-ink: var(--ok);
-  --warn: #f0a23b;
-  --warn-soft: #3a2a10;
+  --warn: #d6a05c;
+  --warn-soft: #2e251a;
   --warn-ink: var(--warn);
-  --danger: #f36c6c;
-  --danger-soft: #3f1b1b;
+  --danger: #e08a7c;
+  --danger-soft: #34211e;
   --danger-ink: var(--danger);
-  --cat-blue: #60a5fa;
-  --cat-teal: #2dd4bf;
-  --cat-green: #4ade80;
-  --cat-gold: #facc15;
-  --cat-orange: #fb923c;
-  --cat-pink: #f472b6;
-  --cat-purple: #a78bfa;
-  --cat-grey: #94a3b8;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.35);
+  --cat-blue: #7d9cc0;
+  --cat-teal: #62b7c2;
+  --cat-green: #98b665;
+  --cat-gold: #cba552;
+  --cat-orange: #c98a6b;
+  --cat-pink: #d58aa9;
+  --cat-purple: #ae90d2;
+  --cat-grey: #a09a90;
+  --shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
   /* Form controls and scrollbars follow a forced theme too. */
   color-scheme: dark;
 }
@@ -227,6 +221,8 @@ html {
 }
 body {
   margin: 0;
+  /* Every digit one width, so times and counts line up and hold still as they change. */
+  font-variant-numeric: tabular-nums;
   font-family: var(--font);
   font-size: var(--fs-field);
   line-height: var(--lh-body);
@@ -242,6 +238,9 @@ h1,
 h2,
 h3 {
   margin: 0;
+  font-weight: var(--fw-semibold);
+}
+strong {
   font-weight: var(--fw-semibold);
 }
 h1 {
@@ -311,14 +310,10 @@ button {
   gap: var(--space-8);
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-caps);
-  color: var(--text-2);
+  color: var(--text);
 }
 .section-heading .muted {
   font-weight: normal;
-  text-transform: none;
-  letter-spacing: 0;
 }
 
 /* ---------- controls ---------- */
@@ -355,13 +350,13 @@ button {
   cursor: not-allowed;
 }
 .btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-text);
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--surface);
 }
 .btn-primary:hover:not(:disabled) {
-  background: var(--accent-strong);
-  border-color: var(--accent-strong);
+  background: var(--text-2);
+  border-color: var(--text-2);
 }
 .btn-ghost {
   background: transparent;
@@ -371,21 +366,18 @@ button {
   padding: 0 var(--space-10);
   min-width: var(--tap);
 }
-/* The pressed tint. The header buttons' :hover entry holds it under the pointer, and after a
-   tap on a phone, where :hover stays on the tapped button; it ties with .btn:hover and comes
-   after it. */
+/* On, a button, chip or segment is filled with ink, as the primary button is: it differs from off by
+   more than its hue. The header buttons' :hover entry holds it under the pointer, and after a tap
+   on a phone, where :hover stays on the tapped button; it ties with .btn:hover and comes after it. */
 .btn-icon[aria-pressed='true'],
 .btn-icon[aria-pressed='true']:hover,
 .topbar-actions .btn-icon[aria-expanded='true'],
 .topbar-actions .btn-icon[aria-expanded='true']:hover,
-.chip[aria-pressed='true'] {
-  background: var(--accent-soft);
-  border-color: transparent;
-  color: var(--accent-ink);
-}
-/* A pressed chip keeps an edge: beside chips with a border, one without read as off. */
-.chip[aria-pressed='true'] {
-  border-color: var(--accent);
+.chip[aria-pressed='true'],
+.segment[aria-pressed='true'] {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--surface);
 }
 .btn-lg {
   min-height: 50px;
@@ -462,7 +454,7 @@ button {
   height: 28px;
   border-radius: var(--radius-full);
   /* Off, the track is all that draws the control: 3:1 or more on a card in both themes, and the
-     white thumb on it too. */
+     thumb, in --surface, on it too. */
   background: var(--text-3);
   position: relative;
   flex: none;
@@ -477,8 +469,7 @@ button {
   width: 22px;
   height: 22px;
   border-radius: var(--radius-full);
-  background: var(--switch-thumb);
-  box-shadow: var(--shadow-thumb);
+  background: var(--surface);
   transition: transform var(--dur-fast);
 }
 .switch:checked {
@@ -494,15 +485,13 @@ button {
   font-size: var(--fs-sm);
   color: var(--text-2);
 }
+/* A status is its word, in its tone's ink, unfilled. */
 .pill {
   display: inline-flex;
   align-items: center;
   gap: var(--space-4);
-  padding: var(--space-2) var(--space-10);
-  border-radius: var(--radius-full);
   font-size: var(--fs-xs);
   font-weight: var(--fw-medium);
-  background: var(--surface-3);
   color: var(--text-2);
   white-space: nowrap;
 }
@@ -513,18 +502,17 @@ button {
   height: 14px;
 }
 .pill--ok {
-  background: var(--ok-soft);
   color: var(--ok-ink);
 }
 .pill--warn {
-  background: var(--warn-soft);
   color: var(--warn-ink);
 }
 .pill--accent {
-  background: var(--accent-soft);
-  color: var(--accent-ink);
+  color: var(--text);
 }
-.pill--danger,
+.pill--danger {
+  color: var(--danger-ink);
+}
 .notice--danger {
   background: var(--danger-soft);
   color: var(--danger-ink);
@@ -539,7 +527,7 @@ button {
   gap: var(--space-6);
   min-height: 36px;
   padding: 0 var(--space-12);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--surface);
   font-size: var(--fs-sm);
@@ -588,7 +576,7 @@ button {
   flex: none;
   width: 10px;
   height: 10px;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-xs);
   background: var(--cat);
   /* Forced colours would paint every dot alike. */
   forced-color-adjust: none;
@@ -615,15 +603,22 @@ button {
   width: 16px;
   height: 16px;
 }
-/* Drawn at 28 px to sit beside what it labels; 44 px to a tap (the coarse block). */
+/* Drawn at 28 px to sit beside what it labels; 44 px to a tap (the coarse block). Its swatch and
+   name are the chip; the empty one keeps a dashed edge, its only sign on a touch screen. */
 .category-chip {
   min-height: 28px;
   max-width: 100%;
   padding: 0 var(--space-10);
+  border-color: transparent;
+  background: none;
+  color: var(--text-2);
+}
+.category-chip:hover {
+  background: var(--surface-2);
 }
 .category-chip--empty {
+  border-color: var(--border);
   border-style: dashed;
-  color: var(--text-2);
 }
 .category-chip-name {
   max-width: 8.5em;
@@ -733,8 +728,8 @@ button {
   width: 28px;
   height: 28px;
   border-radius: var(--radius-full);
-  background: var(--accent-soft);
-  color: var(--accent-ink);
+  background: var(--surface-3);
+  color: var(--text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -748,10 +743,10 @@ button {
   font-size: var(--fs-sm);
   overflow-wrap: anywhere;
 }
-/* The Priorities nudge, the morning notice and the board notice: warm but not alarming, with the
+/* The Priorities nudge, the morning notice and the board notice: set apart but not alarming, with the
    buttons on the next line on phones. */
 .notice--gentle {
-  background: var(--warn-soft);
+  background: var(--surface-2);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -771,7 +766,7 @@ button {
   gap: var(--space-2);
   padding-bottom: var(--space-6);
   margin-bottom: var(--space-2);
-  border-bottom: 1px solid color-mix(in srgb, var(--warn) 25%, transparent);
+  border-bottom: 1px solid var(--border);
 }
 .notice-done li {
   display: flex;
@@ -878,7 +873,6 @@ button {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
   padding: var(--space-24);
   display: flex;
   flex-direction: column;
@@ -1073,12 +1067,11 @@ button {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
   overflow: hidden;
 }
 .card--customize {
   border-style: dashed;
-  border-color: var(--accent);
+  border-color: var(--text-3);
 }
 /* A head too wide for its card wraps: the timeclock's pill and the three Customize buttons don't
    fit beside the title on a phone. The title grows rather than taking an auto margin, which would
@@ -1143,11 +1136,13 @@ button {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
-  gap: var(--space-8);
+  /* The gaps, over the border's colour, are the hairlines between the tiles. */
+  gap: var(--hairline);
+  background: var(--border);
 }
 /* The timeclock's four (Lunch by joins the others with the meal periods on): a quarter of a
    phone is too narrow for "10:45 AM" and its sub-line, so two by two. Four across once a
-   quarter of the card holds "12h 59m" and the live dot at the desktop size, which is 760 px. */
+   quarter of the card holds "12h 59m" at the desktop size, which is 760 px. */
 .tiles--four {
   grid-auto-flow: row;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1163,9 +1158,7 @@ button {
   grid-template-rows: subgrid;
   row-gap: var(--space-2);
   align-content: start;
-  position: relative;
-  background: var(--surface-2);
-  border-radius: var(--radius-sm);
+  background: var(--surface);
   padding: var(--space-10) var(--space-8);
   border: 1px solid transparent;
 }
@@ -1173,14 +1166,11 @@ button {
 .clock-bar dt {
   font-size: var(--fs-xs);
   font-weight: var(--fw-medium);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-caps);
   color: var(--tile-ink, var(--text-2));
 }
 .tile-value {
   font-size: var(--fs-tile);
   font-weight: var(--fw-semibold);
-  font-variant-numeric: tabular-nums;
   line-height: var(--lh-tight);
   white-space: nowrap;
 }
@@ -1190,9 +1180,6 @@ button {
   color: var(--tile-ink, var(--text-2));
 }
 @media (min-width: 640px) {
-  .tiles {
-    gap: var(--space-10);
-  }
   .tile {
     padding: var(--space-12) var(--space-14);
     row-gap: var(--space-4);
@@ -1208,15 +1195,12 @@ button {
   }
 }
 .tile--ok {
-  background: var(--ok-soft);
   --tile-ink: var(--ok-ink);
 }
 .tile--warn {
-  background: var(--warn-soft);
   --tile-ink: var(--warn-ink);
 }
 .tile--danger {
-  background: var(--danger-soft);
   --tile-ink: var(--danger-ink);
 }
 /* Only an overdue tile colours its number too. */
@@ -1225,37 +1209,7 @@ button {
   color: var(--danger-ink);
 }
 .tile--accent {
-  background: var(--accent-soft);
-  --tile-ink: var(--accent-ink);
-}
-.tile--live .tile-value::after {
-  content: '';
-  /* In the corner on a phone: beside the number it would push "12h 59m" out of a third of the screen. */
-  position: absolute;
-  top: 12px;
-  right: 10px;
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-full);
-  background: var(--ok);
-  animation: pulse var(--dur-pulse) infinite;
-}
-@media (min-width: 640px) {
-  .tile--live .tile-value::after {
-    position: static;
-    display: inline-block;
-    margin-left: var(--space-8);
-    vertical-align: middle;
-  }
-}
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.3;
-  }
+  --tile-ink: var(--text);
 }
 
 .timeclock > .tiles {
@@ -1272,9 +1226,8 @@ button {
 .ot-row,
 .target-row {
   margin-top: var(--space-12);
-  padding: var(--space-4) var(--space-12);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
 }
 /* The Change / Done button stays beside the line, however narrow the card. */
 .target-row > .setting-row {
@@ -1315,7 +1268,6 @@ button {
   align-items: center;
   min-width: 0;
   padding: 0 var(--space-8);
-  font-variant-numeric: tabular-nums;
   cursor: text;
 }
 /* Some segments typed, some not: nothing is saved until every one is in. */
@@ -1357,18 +1309,16 @@ button {
   flex-direction: column;
   gap: var(--space-8);
 }
-/* One box per out/in pair. There is no room beside the rows on a phone, so the remove button
-   sits in the box's top-right corner; from 640 px it stands beside them and spans both rows, so
-   it clearly acts on the pair. */
+/* One group per out/in pair, ruled on its left. There is no room beside the rows on a phone, so
+   the remove button sits in the group's top-right corner; from 640 px it stands beside them and
+   spans both rows, so it clearly acts on the pair. */
 .punch-pair {
   display: grid;
   grid-template-columns: 1fr;
   align-items: center;
   gap: var(--space-6);
-  padding: var(--space-6) var(--space-8) var(--space-8) var(--space-12);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--surface-3);
-  border-radius: var(--radius-sm);
+  padding-left: var(--space-12);
+  border-left: 1px solid var(--border);
 }
 .punch-pair-rows {
   display: flex;
@@ -1401,7 +1351,6 @@ button {
   }
   .punch-pair {
     grid-template-columns: 1fr auto;
-    padding: var(--space-8) var(--space-8) var(--space-8) var(--space-12);
   }
   .punch-pair-rows {
     order: 0;
@@ -1457,7 +1406,6 @@ button {
 .priority-logged {
   flex: none;
   white-space: nowrap;
-  font-variant-numeric: tabular-nums;
 }
 /* Line 1 of the last column, beside the field. From 640 px a free row has no button or chip,
    which would leave its × in their column. */
@@ -1516,6 +1464,11 @@ button {
 .grow-field > textarea {
   resize: none;
   overflow: hidden;
+}
+/* At rest a row reads as its text: the box shows under the pointer and with the focus. Its number,
+   its tick and a free row's placeholder still mark it as a field. */
+.priority-input:not(:hover, :focus) {
+  border-color: transparent;
 }
 /* A done task's name, on a priority row and a board card. A blank box's placeholder isn't its
    task's name, so it isn't struck through. */
@@ -1578,8 +1531,6 @@ button {
 .log-plan {
   min-width: var(--badge-h);
   height: var(--badge-h);
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-full);
   font-size: var(--fs-xs);
   font-weight: var(--fw-medium);
   line-height: var(--badge-h);
@@ -1587,12 +1538,10 @@ button {
 }
 .chip-num {
   flex: none;
-  background: var(--surface-3);
   color: var(--text-2);
 }
 .chip[aria-pressed='true'] .chip-num {
-  background: var(--accent);
-  color: var(--accent-text);
+  color: inherit;
 }
 /* A break in progress: when it ends and what's left, with a way back early. As tall as End break
    (its two lines, set tighter, fit in it), which is as tall as the Break button it takes the place
@@ -1604,7 +1553,7 @@ button {
   gap: var(--space-10);
   padding: 0 var(--space-6) 0 var(--space-12);
   border-radius: var(--radius-sm);
-  background: var(--accent-soft);
+  background: var(--surface-2);
   font-size: var(--fs-sm);
 }
 .timer-break-text {
@@ -1614,7 +1563,6 @@ button {
 }
 .timer-break-text strong {
   font-size: var(--fs-lg);
-  font-variant-numeric: tabular-nums;
 }
 .timer-break-start {
   align-self: center;
@@ -1630,14 +1578,6 @@ button {
   flex-direction: column;
   gap: 0;
   min-height: 72px;
-  border-radius: var(--radius);
-  background: var(--accent-soft);
-  border-color: transparent;
-  color: var(--accent-ink);
-}
-.btn-quick:hover:not(:disabled) {
-  background: var(--accent);
-  color: var(--accent-text);
 }
 .timer-quick-num {
   font-size: var(--fs-2xl);
@@ -1647,6 +1587,7 @@ button {
 .timer-quick-unit {
   font-size: var(--fs-xs);
   font-weight: normal;
+  color: var(--text-2);
 }
 .timer--running {
   display: flex;
@@ -1666,14 +1607,13 @@ button {
 }
 .ring-track {
   fill: none;
-  stroke: var(--surface-3);
-  stroke-width: 8;
+  stroke: var(--border);
+  stroke-width: 3;
 }
 .ring-fill {
   fill: none;
   stroke: var(--accent);
-  stroke-width: 8;
-  stroke-linecap: round;
+  stroke-width: 3;
   transition: stroke-dashoffset var(--dur-tick) linear;
 }
 .timer--running.is-paused .ring-fill {
@@ -1696,7 +1636,6 @@ button {
 .countdown {
   font-size: var(--fs-display);
   font-weight: var(--fw-semibold);
-  font-variant-numeric: tabular-nums;
   line-height: 1;
 }
 .timer-running-label {
@@ -1727,7 +1666,6 @@ button {
   margin-bottom: var(--space-16);
   background: var(--surface);
   border-block: 1px solid var(--border);
-  box-shadow: var(--shadow);
 }
 .running-bar-inner {
   max-width: var(--page-w);
@@ -1738,20 +1676,8 @@ button {
   gap: var(--space-8);
   padding: 0 max(var(--space-12), var(--safe-right)) 0 max(var(--space-12), var(--safe-left));
 }
-.running-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: var(--radius-full);
-  background: var(--accent);
-  animation: pulse var(--dur-pulse) infinite;
-  flex: none;
-}
-.running-bar.is-paused .running-dot {
+.running-bar.is-paused .running-progress {
   background: var(--text-3);
-  animation: none;
-}
-.running-bar.is-due .running-dot {
-  background: var(--warn);
 }
 .running-bar.is-due .running-time {
   color: var(--warn-ink);
@@ -1766,7 +1692,7 @@ button {
   text-align: left;
   border: 0;
   background: none;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   font-weight: var(--fw-medium);
 }
 /* The button only: on the bar a session on a written row, and in the day log a linked session's
@@ -1789,7 +1715,6 @@ button.log-label:hover {
 .running-time {
   font-size: var(--fs-lg);
   font-weight: var(--fw-semibold);
-  font-variant-numeric: tabular-nums;
   flex: none;
 }
 .running-controls {
@@ -1841,7 +1766,6 @@ button.log-label:hover {
   margin-bottom: var(--space-16);
   background: var(--surface);
   border-block: 1px solid var(--border);
-  box-shadow: var(--shadow);
 }
 .running-bar:has(+ .later-strip:not([hidden])) {
   margin-bottom: 0;
@@ -1897,11 +1821,10 @@ button.log-label:hover {
   border-radius: var(--radius-sm);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-left: 4px solid var(--accent);
   box-shadow: var(--shadow);
   animation: slide-in var(--dur-base) ease-out;
 }
-/* Alarm banners are tinted like the matching tile so the two visibly agree. */
+/* An alarm's banner is tinted in its tone and edged in it, so it stands out from the page. */
 .banner--warn {
   background: var(--warn-soft);
   border-color: var(--warn);
@@ -1915,7 +1838,6 @@ button.log-label:hover {
   --banner-ink: var(--danger-ink);
 }
 .banner--success {
-  border-left-color: var(--ok);
   --banner-tone: var(--ok);
   --banner-ink: var(--ok-ink);
 }
@@ -1923,7 +1845,7 @@ button.log-label:hover {
   flex: none;
   display: inline-flex;
   margin-top: var(--space-2);
-  color: var(--banner-tone, var(--accent));
+  color: var(--banner-tone, var(--text-2));
 }
 .banner-text {
   flex: 1;
@@ -1943,14 +1865,13 @@ button.log-label:hover {
 .banner-kicker {
   font-size: var(--fs-xs);
   font-weight: var(--fw-medium);
-  color: var(--banner-ink, var(--accent-ink));
+  color: var(--banner-ink, var(--text-2));
 }
 .banner-time {
   flex: none;
   margin-left: auto;
   font-size: var(--fs-xs);
   color: var(--text-2);
-  font-variant-numeric: tabular-nums;
 }
 .banner-title {
   font-size: var(--fs-base);
@@ -1967,11 +1888,12 @@ button.log-label:hover {
   gap: var(--space-8) var(--space-6);
   margin-top: var(--space-4);
 }
+/* Its edge in --text-3, 3:1 and up on every tint. */
 .banner-action {
   min-height: 36px;
   padding: 0 var(--space-10);
-  border: 1px solid var(--banner-tone, var(--accent));
-  color: var(--banner-ink, var(--accent-ink));
+  border: 1px solid var(--text-3);
+  color: var(--text);
 }
 .banner-close {
   min-height: 32px;
@@ -1982,6 +1904,10 @@ button.log-label:hover {
 }
 .banners-more {
   align-self: flex-end;
+  padding: var(--space-2) var(--space-8);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
   box-shadow: var(--shadow);
 }
 @keyframes slide-in {
@@ -2018,13 +1944,19 @@ ul:first-child > .log-row:first-child {
   border-top: 0;
 }
 .log-row.is-running {
-  background: linear-gradient(90deg, var(--accent-soft), transparent);
+  background: var(--surface-2);
   margin: 0 calc(-1 * var(--space-16));
   padding: var(--space-8) var(--space-16);
 }
+/* On the --surface-2 panels a hover takes --surface-3, or it would match the panel. */
+.notice--gentle .btn-ghost:hover:not(:disabled, [aria-disabled='true']),
+.timer-break .btn-ghost:hover:not(:disabled, [aria-disabled='true']),
+.log-row.is-running button.log-label:hover,
+.log-row.is-running .category-chip:hover {
+  background: var(--surface-3);
+}
 .log-time {
   grid-area: time;
-  font-variant-numeric: tabular-nums;
   color: var(--text-2);
   font-size: var(--fs-sm);
   white-space: nowrap;
@@ -2059,8 +1991,7 @@ ul:first-child > .log-row:first-child {
   display: inline-block;
   vertical-align: 1px;
   margin-right: var(--space-6);
-  background: var(--accent-soft);
-  color: var(--accent-ink);
+  color: var(--text-2);
 }
 /* The running pill goes under the time so a long label keeps the width. */
 .log-duration {
@@ -2069,7 +2000,6 @@ ul:first-child > .log-row:first-child {
   flex-direction: column-reverse;
   align-items: flex-end;
   gap: var(--space-2);
-  font-variant-numeric: tabular-nums;
   font-weight: var(--fw-medium);
   white-space: nowrap;
 }
@@ -2180,7 +2110,6 @@ ul:first-child > .log-row:first-child {
   min-width: 18px;
   margin-right: var(--space-6);
   color: var(--text-2);
-  font-variant-numeric: tabular-nums;
   font-weight: var(--fw-medium);
   font-size: var(--fs-sm);
 }
@@ -2189,7 +2118,6 @@ ul:first-child > .log-row:first-child {
 }
 .retro-time {
   grid-area: time;
-  font-variant-numeric: tabular-nums;
   font-size: var(--fs-sm);
   color: var(--text-2);
 }
@@ -2199,14 +2127,7 @@ ul:first-child > .log-row:first-child {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-6) var(--space-16);
-  padding: var(--space-10) var(--space-14);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
   font-size: var(--fs-sm);
-}
-.retro-summary strong,
-.review-facts strong {
-  font-variant-numeric: tabular-nums;
 }
 .retro-textarea {
   min-height: 88px;
@@ -2239,22 +2160,17 @@ ul:first-child > .log-row:first-child {
   display: inline-flex;
   align-self: flex-start;
   padding: var(--space-2);
-  border-radius: var(--radius-full);
-  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
 .segment {
   min-height: 36px;
   padding: 0 var(--space-16);
   border: 0;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-xs);
   background: none;
   color: var(--text-2);
   font-weight: var(--fw-medium);
-}
-.segment[aria-pressed='true'] {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: var(--shadow);
 }
 .history-reviewed {
   display: inline-flex;
@@ -2278,7 +2194,6 @@ ul:first-child > .log-row:first-child {
   min-width: 9ch;
   text-align: center;
   font-weight: var(--fw-medium);
-  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 /* "This Week" ("This Month", "This Quarter") sits at the right, or drops to its own line when a
@@ -2307,15 +2222,14 @@ ul:first-child > .log-row:first-child {
   font-weight: var(--fw-medium);
   color: var(--text-2);
   text-align: center;
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-caps);
 }
 .calendar-day {
   min-height: 52px;
   padding: var(--space-4) var(--space-2) var(--space-2);
-  border: 1px solid var(--border);
+  /* Unboxed; the edge is there for a full day's and for forced colours. */
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  background: none;
   color: var(--text);
   text-align: left;
   display: flex;
@@ -2326,29 +2240,27 @@ ul:first-child > .log-row:first-child {
 .calendar-day:disabled {
   cursor: default;
 }
-.calendar-day.is-outside {
-  border-color: transparent;
-  background: none;
-}
-.calendar-day.is-empty,
-.calendar-day.is-future {
-  background: transparent;
+button.calendar-day:hover:not(:disabled, [aria-pressed='true']) {
+  background: var(--surface-2);
 }
 /* Faded only where it is shut: an empty past day still opens, and its number keeps its contrast. */
 .calendar-day.is-future {
   opacity: var(--opacity-disabled);
 }
 .calendar-day.is-today .calendar-daynum {
-  color: var(--accent-ink);
+  color: var(--text);
+  font-weight: var(--fw-semibold);
 }
 /* Every sticker earned: the whole cell is filled in. */
 .calendar-day.is-full {
   background: var(--accent-soft);
   border-color: var(--accent);
 }
+/* The picked day is filled with ink, as a pressed chip is. */
 .calendar-day[aria-pressed='true'] {
-  border-color: var(--accent);
-  box-shadow: var(--ring-selected);
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--surface);
   opacity: 1;
 }
 .calendar-daynum {
@@ -2362,7 +2274,6 @@ ul:first-child > .log-row:first-child {
 .calendar-worked {
   font-size: var(--fs-cal-320);
   font-weight: var(--fw-medium);
-  font-variant-numeric: tabular-nums;
   line-height: var(--lh-tight);
   white-space: nowrap;
   color: var(--text-2);
@@ -2388,6 +2299,18 @@ ul:first-child > .log-row:first-child {
 }
 .calendar-bar.is-met > span {
   background: var(--ok);
+}
+/* On the picked day's ink, after today's number and a met day's bar, which they would lose to. */
+.calendar-day[aria-pressed='true'] .calendar-daynum,
+.calendar-day[aria-pressed='true'] .calendar-worked {
+  color: inherit;
+}
+.calendar-day[aria-pressed='true'] .calendar-bar {
+  background: var(--text-3);
+}
+.calendar-day[aria-pressed='true'] .calendar-dot,
+.calendar-day[aria-pressed='true'] .calendar-bar > span {
+  background: currentColor;
 }
 /* Two stickers per line in a phone-width cell (three from 640px), whichever emoji font the browser has. */
 .sticker-row {
@@ -2486,7 +2409,7 @@ ul:first-child > .log-row:first-child {
   padding: var(--space-8) var(--space-6);
   margin: 0 calc(-1 * var(--space-6));
   border: 0;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   background: none;
   text-align: left;
 }
@@ -2509,7 +2432,6 @@ ul:first-child > .log-row:first-child {
   min-width: 4.5ch;
   text-align: right;
   font-weight: var(--fw-medium);
-  font-variant-numeric: tabular-nums;
 }
 .fold-more {
   align-self: flex-start;
@@ -2581,7 +2503,7 @@ ul:first-child > .log-row:first-child {
 .category-bar-off {
   background: repeating-linear-gradient(135deg, var(--cat) 0 3px, transparent 3px 6px);
   box-shadow: inset 0 0 0 var(--hairline) var(--cat);
-  /* Its own round end, so the outline follows the bar's curve rather than being cut by its clip. */
+  /* Its own corners, so the outline follows the bar's rather than being cut by its clip. */
   border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
 }
 .category-bar-off:only-child {
@@ -2613,9 +2535,8 @@ ul:first-child > .log-row:first-child {
   flex-direction: column;
   gap: var(--space-12);
 }
-/* Today's times (ClockBar.tsx): the running bar's surface and border, with no shadow, dot or
-   progress line, scrolling with the page. An item carries its tile's tone class for --tile-ink,
-   without the tile's fill. On a phone each item is a column, label over time over line, on rows
+/* Today's times (ClockBar.tsx): the running bar's surface and border, with no progress line,
+   scrolling with the page. An item carries its tile's tone class for --tile-ink. On a phone each item is a column, label over time over line, on rows
    the items share (subgrid, as .tiles), so a wrapped line doesn't move the others; from 640 px
    each item reads on one line. */
 .clock-bar {
@@ -2636,14 +2557,12 @@ ul:first-child > .log-row:first-child {
   grid-row: span 3;
   grid-template-rows: subgrid;
   align-content: start;
-  background: none;
 }
 .clock-bar dd {
   margin: 0;
 }
 .clock-bar-value {
   font-weight: var(--fw-semibold);
-  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 @media (min-width: 640px) {
@@ -2672,8 +2591,8 @@ ul:first-child > .log-row:first-child {
   gap: var(--space-8);
   min-width: 0;
   padding: var(--space-12);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  /* Unfilled; the edge is there for a drop's highlight and for forced colours. */
+  border: 1px solid transparent;
   border-radius: var(--radius);
 }
 .board-col[data-shown] {
@@ -2687,16 +2606,13 @@ ul:first-child > .log-row:first-child {
   min-height: 32px;
 }
 /* A column's +, drawn small at the end of its head; its touch area is in the pointer: coarse
-   block. The hover takes --surface-3, since .btn's --surface-2 is the column's own fill. */
+   block. */
 .board-add {
   width: 32px;
   min-height: 32px;
   padding: 0;
   margin-left: auto;
   color: var(--text-2);
-}
-.board-add:hover:not([aria-disabled='true']) {
-  background: var(--surface-3);
 }
 /* A column's box: the field, with the category chip beside it or, in a narrow column, under it. */
 .board-add-box {
@@ -2726,7 +2642,7 @@ ul:first-child > .log-row:first-child {
   padding: var(--space-8) var(--space-10);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
 }
 .board-card-row {
   display: flex;
@@ -2946,8 +2862,8 @@ dialog.dialog::backdrop {
   color: var(--text);
 }
 .tab[aria-selected='true'] {
-  color: var(--accent-ink);
-  border-bottom-color: var(--accent);
+  color: var(--text);
+  border-bottom-color: var(--text);
 }
 .dialog-body {
   flex: 1;
@@ -3016,7 +2932,7 @@ kbd {
   padding: 0 var(--space-6);
   border: 1px solid var(--border);
   border-bottom-width: 2px;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   background: var(--surface-2);
   color: var(--text);
   font: inherit;
@@ -3061,9 +2977,8 @@ kbd {
   cursor: pointer;
 }
 .alarm-editor {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: var(--space-4) var(--space-12) var(--space-10);
+  border-top: 1px solid var(--border);
+  padding: var(--space-4) 0 var(--space-10);
 }
 .alarm-fields {
   display: flex;
@@ -3153,8 +3068,8 @@ kbd {
     grid-template-columns: 1fr 1fr auto;
   }
 }
-/* The Data tab's last line keeps its muted colour for the link and marks it with the underline:
-   the accent is only just 4.5:1 on white, too close at this size. */
+/* The Data tab's last line keeps its muted colour for the link and marks it with the underline,
+   as the accent is kept for the few things it marks. */
 .about-link {
   color: inherit;
   text-decoration: underline;
@@ -3390,8 +3305,8 @@ kbd {
 
 /* ---------- forced colors ---------- */
 /* The switch, the pressed and selected states and the marks drawn only as a background (the
-   calendar's dots and bars, the running dot and progress, the live dot, the retro's dash and dot)
-   use backgrounds and shadows, which forced-colors mode repaints or drops. The !important outranks
+   calendar's dots and bars, the running bar's progress, the retro's dash and dot) use
+   backgrounds, which forced-colors mode repaints or drops. The !important outranks
    each control's own, more specific, state rule and the tints on what is inside it. */
 @media (forced-colors: active) {
   .switch {
@@ -3414,16 +3329,9 @@ kbd {
   [aria-selected='true'] * {
     color: inherit !important;
   }
-  [aria-pressed='true'] .chip-num,
-  [aria-selected='true'] .chip-num {
-    background: HighlightText !important;
-    color: Highlight !important;
-  }
   .calendar-dot,
   .calendar-bar > span,
-  .running-dot,
   .running-progress,
-  .tile--live .tile-value::after,
   .retro-tick::before {
     forced-color-adjust: none;
     background: CanvasText !important;

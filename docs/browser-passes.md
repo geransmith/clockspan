@@ -199,7 +199,7 @@ what `npm run seed` writes.
   left open on earlier days wait here for two weeks."; each wraps cleanly in its column.
 - **The Later strip**: after `npm run seed -- --running`, at 1280 and the 375 preset, light and
   dark: the strip under the running bar and, with no timer, under the header; Add to Later's pressed
-  tint while it is open; L and the button open it with the focus in the box, on the sheet and on
+  ink fill while it is open; L and the button open it with the focus in the box, on the sheet and on
   History; Enter puts the card at the top of Later and shows "Added …"; Escape, × and an empty
   Enter put the focus back on the button with a scrolled page left where it was; in Chrome and
   Safari, Add to Later pressed on an open strip, empty and then with text, closes it (clearing the
