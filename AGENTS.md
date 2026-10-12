@@ -836,7 +836,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   never re-fires. Today's fired keys live in `localStorage` under `focus:alarms`, one set for one
   date (`readDaySet`, `addToDaySet` in `lib/storage.ts`), so a new day starts with none. The
   missed clock-in banner's key, `clockIn:missing`, sits in the same set with no minute, so that
-  banner shows once a day per device.
+  banner shows once a day per device, in a tab that is shown: a hidden tab neither raises it nor
+  writes the key.
 - **Today's alarms wait while a punch is being typed.** Today's punches are held while a punch time
   field on today's sheet has focus (`Timeclock`'s `onEditingChange`; Now, × and the pair buttons
   save at once and never hold), for at most five minutes after the last change or move to another
